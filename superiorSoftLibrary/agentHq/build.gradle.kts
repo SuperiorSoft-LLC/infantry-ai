@@ -119,7 +119,7 @@ dependencies {
     testImplementation(project(":daemon-plugin-official-Infantry_Roles"))
     // HARNESS H7b-3: the daemon tests load the Infantry_Claude plugin (the claude harness now lives only there).
     testImplementation(project(":harness-plugin-official-Infantry_Claude"))
-    // HARNESS H8b-2: the OpenCode parity test runs the plugin next to the core copy.
+    // HARNESS H8b-3: the daemon tests load the Infantry_OpenCode plugin (the opencode harness now lives only there).
     testImplementation(project(":harness-plugin-official-Infantry_OpenCode"))
     testImplementation(kotlin("test"))
     // BUILD-VB-1: VerifyBaseTaskTest runs preflight/verify-base.gradle.kts in a throwaway build.

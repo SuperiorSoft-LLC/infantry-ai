@@ -57,10 +57,9 @@ class SessionStatsService(private val home: File = File(System.getProperty("user
         val psid = providerSessionId?.takeIf { SAFE_ID.matches(it) && ".." !in it } ?: return base
         return try {
             when (harness) {
-                OPENCODE -> readOpenCode(psid, base)
-                // A harness id that is an OpenCode variant (`opencode-go`, ...) shares OpenCode's record.
+                // A harness id that is an OpenCode variant (`opencode-go`, ...) shares OpenCode's record (H8b-3: read by the opencode module).
                 else -> if (piStoreRoots.containsKey(harness)) piStoreRoots.getValue(harness).let { root -> resolve(harness, psid) { piFile(root, psid) }?.let { readPi(root, it, base) } }
-                else if (harness.startsWith("$OPENCODE-")) readOpenCode(psid, base) else pluginStats(harness)?.read(psid)?.let { base.withPlugin(it) }
+                else (pluginStats(harness) ?: if (harness.startsWith("$OPENCODE-")) pluginStats(OPENCODE) else null)?.read(psid)?.let { base.withPlugin(it) }
             } ?: base
         } catch (e: Exception) {
             base
@@ -135,53 +134,6 @@ class SessionStatsService(private val home: File = File(System.getProperty("user
                 ?.let { (it as JsonObject).longOrNull("contextWindow") }
         }
         return acc.build(base, limit ?: anyCatalogLimit(model)).let { if (tags.isEmpty()) it else it.copy(tags = tags.toList()) }
-    }
-
-    // ------------------------------------------------------------------ OpenCode
-
-    // H8b-3: becomes the plugin's HarnessStats (it already reads only through ReadOnlyDb)
-    private fun readOpenCode(psid: String, base: SessionStats): SessionStats? {
-        val db = File(home, ".local/share/opencode/opencode.db")
-        if (!db.isFile) return null
-        // H8b-1: every read goes through the daemon's read-only query (the same one a plugin gets as HarnessHost.queryDb).
-        fun q(sql: String) = ReadOnlyDb.query(db, sql, listOf(psid)) ?: throw java.sql.SQLException("opencode.db unreadable")
-        val acc = StatsAccumulator()
-        var provider: String? = null
-        var model: String? = null
-        val head = q("SELECT time_created AS a, time_updated AS b FROM session WHERE id = ?").firstOrNull() ?: return null
-        acc.seen((head["a"] as Number).toLong()); acc.seen((head["b"] as Number).toLong())
-        for (row in q("SELECT data FROM message WHERE session_id = ? ORDER BY time_created, id")) {
-            val m = parse(row["data"] as? String) ?: continue
-            when (m.str("role")) {
-                "user" -> acc.prompt()
-                "assistant" -> {
-                    acc.turn(m.str("modelID"))
-                    provider = m.str("providerID") ?: provider
-                    model = m.str("modelID") ?: model
-                }
-            }
-        }
-        // A tool part belongs to the step whose step-finish follows it: buffer, then credit after that request.
-        val stepTools = ArrayList<String>()
-        for (row in q("SELECT time_created AS at, data FROM part WHERE session_id = ? ORDER BY time_created, id")) {
-            val at = (row["at"] as Number).toLong()
-            val p = parse(row["data"] as? String) ?: continue
-            when (p.str("type")) {
-                "tool" -> stepTools += p.str("tool") ?: "unknown"
-                "step-finish" -> {
-                    val t = p["tokens"] as? JsonObject ?: continue
-                    acc.request(UsageAdapters.openCode(t, p.doubleOrNull("cost"), at, model))
-                    stepTools.forEach(acc::tool)
-                    stepTools.clear()
-                }
-            }
-        }
-        stepTools.forEach(acc::tool)
-        val limit = catalogLimit(File(home, ".cache/opencode/models.json"), provider, model) { root, p, id ->
-            (((root[p] as? JsonObject)?.get("models") as? JsonObject)?.get(id) as? JsonObject)
-                ?.let { (it["limit"] as? JsonObject)?.longOrNull("context") }
-        }
-        return acc.build(base, limit ?: anyCatalogLimit(model))
     }
 
     // ------------------------------------------------------------------ helpers

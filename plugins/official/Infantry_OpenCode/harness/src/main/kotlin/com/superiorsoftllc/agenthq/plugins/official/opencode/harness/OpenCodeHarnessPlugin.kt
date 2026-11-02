@@ -15,6 +15,7 @@ import com.superiorsoftllc.agenthq.harness.api.HarnessProcessListener
 import com.superiorsoftllc.agenthq.harness.api.HarnessRegistrar
 import com.superiorsoftllc.agenthq.harness.api.HarnessRequest
 import com.superiorsoftllc.agenthq.harness.api.HarnessSession
+import com.superiorsoftllc.agenthq.harness.api.HarnessStats
 import com.superiorsoftllc.agenthq.harness.api.HarnessTranslator
 import com.superiorsoftllc.agenthq.harness.api.ToolApproval
 import java.util.concurrent.CompletableFuture
@@ -25,7 +26,7 @@ import java.util.concurrent.TimeUnit
  * ([OpenCodeTranslator]), the persistent `opencode serve` session over HTTP/SSE ([OpenCodeServeSession]), the permission mapping
  * ([OpenCodePermissions]), the inline-config merge (MCP server, tool allow rule, watch plugin), the `/` command catalog and the model list
  * (the user's config files first, `opencode models` when they name none). Construction and [register] have no side effects (the CLI is resolved
- * only when a run starts). NOT used in production yet: the daemon's built-in `opencode` harness still runs (H8b-3 switches).
+ * only when a run starts). H8b-3: the daemon's only opencode harness (the core copy is deleted); also reads the session store ([OpenCodeStats]).
  */
 class OpenCodeHarnessPlugin : HarnessPlugin {
     override val pluginId: String = "Infantry_OpenCode"
@@ -79,6 +80,8 @@ class OpenCodeHarness internal constructor(
     override fun mergeConfig(existing: String?, parts: ConfigParts): String = OpenCodeConfig.merge(existing, parts)
 
     override fun session(): HarnessSession = OpenCodeServeSession(host, executable)
+
+    override fun stats(): HarnessStats = HarnessStats { psid -> OpenCodeStats.read(host, java.io.File(System.getProperty("user.home")), psid) }
 
     override fun models(): List<HarnessModels> = OpenCodeCommand.models(modelLister(), notes())
 

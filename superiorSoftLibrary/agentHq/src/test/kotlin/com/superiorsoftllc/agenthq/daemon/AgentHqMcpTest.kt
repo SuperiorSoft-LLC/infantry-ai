@@ -1,8 +1,6 @@
 package com.superiorsoftllc.agenthq.daemon
 
 import com.superiorsoftllc.agenthq.harness.ToolApproval
-import com.superiorsoftllc.agenthq.opencode.OpenCodePermissions
-import com.superiorsoftllc.agenthq.opencode.OpenCodeServeAdapter
 import com.superiorsoftllc.agenthq.provider.RunRequest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -112,69 +110,5 @@ class AgentHqMcpTest {
         val a = AgentHqMcp.configFile("""{"a":1}""", configDir)
         assertEquals(a, AgentHqMcp.configFile("""{"a":1}""", configDir))
         assertFalse(a == AgentHqMcp.configFile("""{"a":2}""", configDir))
-    }
-
-    // ---- opencode ------------------------------------------------------------------------------------------------
-
-    private val userOpenCode = """{"model":"m","mcp":{"mine":{"type":"local","command":["x"]}},"permission":{"*":"deny","bash":"ask"}}"""
-
-    private fun assertOpenCodeMerged(config: String, label: String) {
-        val root = parse(config)
-        assertEquals("m", root["model"]!!.jsonPrimitive.content, "$label: user keys kept")
-        val mcp = root["mcp"]!!.jsonObject
-        assertNotNull(mcp["mine"], "$label: user mcp server kept")
-        val agenthq = mcp["agenthq"]!!.jsonObject
-        assertEquals("local", agenthq["type"]!!.jsonPrimitive.content)
-        assertEquals("mcp", agenthq["command"]!!.jsonArray.map { it.jsonPrimitive.content }.dropLast(1).last(), label)
-        assertEquals("sess-1", agenthq["environment"]!!.jsonObject[AccessPolicy.SESSION_ID_ENV]!!.jsonPrimitive.content, label)
-        val permission = root["permission"]!!.jsonObject
-        assertEquals("deny", permission["*"]!!.jsonPrimitive.content, "$label: user rule kept")
-        assertEquals("allow", permission[AgentHqMcp.OPENCODE_TOOL_PATTERN]!!.jsonPrimitive.content, label)
-        assertEquals(AgentHqMcp.OPENCODE_TOOL_PATTERN, permission.keys.last(), "$label: the allow goes last")
-        assertEquals("allow", permission["bash"]!!.jsonObject[OpenCodePermissions.AGENTHQ_BASH_PATTERN]!!.jsonPrimitive.content, "$label: BUG-PERM-5 kept")
-    }
-
-    @Test
-    fun `opencode serve and run configs carry mcp agenthq in every mode, merged`() {
-        for (mode in ToolApproval.entries) {
-            assertOpenCodeMerged(OpenCodePermissions.serveConfig(mode, userOpenCode, sessionEnv), "serve ${mode.wire}")
-            assertOpenCodeMerged(
-                OpenCodePermissions.runEnv(mode, userOpenCode, sessionEnv).getValue(OpenCodePermissions.CONFIG_CONTENT_ENV),
-                "run ${mode.wire}",
-            )
-            assertNotNull(parse(OpenCodePermissions.serveConfig(mode, null, sessionEnv))["mcp"]!!.jsonObject["agenthq"], "blank inherited")
-        }
-    }
-
-    @Test
-    fun `opencode keeps a user's own mcp agenthq entry`() {
-        val own = """{"mcp":{"agenthq":{"type":"remote","url":"http://x"}}}"""
-        val agenthq = parse(OpenCodePermissions.serveConfig(ToolApproval.DENY, own, sessionEnv))["mcp"]!!.jsonObject["agenthq"]!!.jsonObject
-        assertEquals("remote", agenthq["type"]!!.jsonPrimitive.content)
-    }
-
-    @Test
-    fun `opencode permission given as one string keeps it as the fallback`() {
-        val permission = parse(AgentHqMcp.mergeOpenCode("""{"permission":"ask"}""", AgentHqMcp.launch(sessionEnv)))["permission"]!!.jsonObject
-        assertEquals("ask", permission["*"]!!.jsonPrimitive.content)
-        assertEquals("allow", permission[AgentHqMcp.OPENCODE_TOOL_PATTERN]!!.jsonPrimitive.content)
-    }
-
-    private fun mcpAsk(tool: String) = (Json.parseToJsonElement(
-        """{"properties":{"id":"per_9","sessionID":"ses_1","permission":"$tool","patterns":["*"],"metadata":{}}}""",
-    ) as JsonObject)["properties"] as JsonObject
-
-    @Test
-    fun `opencode serve answers an agenthq mcp tool ask once in every mode and never asks the owner`() {
-        for (mode in ToolApproval.entries) {
-            val d = OpenCodeServeAdapter.permissionDecision(mcpAsk("agenthq_agenthq_ticket_create"), mode)!!
-            assertEquals("""{"reply":"once"}""", d.replyBody, mode.wire)
-            assertNull(d.deniedTool, mode.wire)
-            assertFalse(OpenCodeServeAdapter.needsOwner(mcpAsk("agenthq_agenthq_ticket_create"), mode), mode.wire)
-        }
-        // Nothing else is widened.
-        val other = OpenCodeServeAdapter.permissionDecision(mcpAsk("othermcp_tool"), ToolApproval.DENY)!!
-        assertEquals("""{"reply":"reject"}""", other.replyBody)
-        assertTrue(OpenCodeServeAdapter.needsOwner(mcpAsk("othermcp_tool"), ToolApproval.ASK))
     }
 }

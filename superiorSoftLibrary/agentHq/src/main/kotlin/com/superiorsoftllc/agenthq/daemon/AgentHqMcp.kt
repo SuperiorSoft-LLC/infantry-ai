@@ -29,12 +29,6 @@ object AgentHqMcp {
     /** Claude's `--allowedTools` rule for every tool of [SERVER_NAME] (`mcp__<server>__<tool>`). */
     const val CLAUDE_TOOL_RULE = "mcp__${SERVER_NAME}__*"
 
-    /**
-     * opencode's permission key for the server's tools. opencode names an MCP tool `<server>_<tool>`, and every AgentHQ
-     * tool is itself `agenthq_<x>`, so `agenthq_*` covers them however the client prefixes.
-     */
-    const val OPENCODE_TOOL_PATTERN = "${SERVER_NAME}_*"
-
     /** The session-identity variables written into the entry's env when the session env has them. */
     val IDENTITY_ENV: List<String> = listOf(
         AccessPolicy.SESSION_ID_ENV,
@@ -113,37 +107,6 @@ object AgentHqMcp {
         }
         return file.absolutePath
     }
-
-    // ---- opencode ------------------------------------------------------------------------------------------------
-
-    /**
-     * [existing] (`OPENCODE_CONFIG_CONTENT`) with `mcp.agenthq` set to [launch] as a local server and
-     * `permission."agenthq_*"` = `allow` (every Tool approval mode, like BUG-PERM-5's bash rule). Every other key is
-     * kept; an `mcp.agenthq` the user already defined is kept as is. The permission rule goes LAST (opencode resolves
-     * the last matching pattern); a `permission` given as one string becomes `{"*": <it>, "agenthq_*": "allow"}`.
-     */
-    // H8b: moves into the opencode plugin (mcp hook)
-    fun mergeOpenCode(existing: String?, launch: Launch): String {
-        val root = parse(existing) ?: JsonObject(emptyMap())
-        val mcp = (root["mcp"] as? JsonObject) ?: JsonObject(emptyMap())
-        val mergedMcp = if (SERVER_NAME in mcp) mcp else JsonObject(mcp + (SERVER_NAME to JsonObject(mapOf(
-            "type" to JsonPrimitive("local"),
-            "command" to JsonArray(launch.argv.map(::JsonPrimitive)),
-            "environment" to JsonObject(launch.env.mapValues { JsonPrimitive(it.value) }),
-            "enabled" to JsonPrimitive(true),
-        ))))
-        val allow = OPENCODE_TOOL_PATTERN to JsonPrimitive("allow")
-        val permission: JsonElement = when (val p = root["permission"]) {
-            is JsonObject -> JsonObject((p - OPENCODE_TOOL_PATTERN) + allow)
-            is JsonPrimitive -> JsonObject(mapOf("*" to p, allow))
-            else -> JsonObject(mapOf(allow))
-        }
-        return JsonObject(root + ("mcp" to mergedMcp) + ("permission" to permission)).toString()
-    }
-
-    /** Whether an opencode permission ask names an AgentHQ MCP tool (allowed in every mode, never asked). */
-    fun isOpenCodeAgentHqTool(permission: String?): Boolean =
-        permission?.trim()?.lowercase()?.startsWith("${SERVER_NAME}_") == true
 
     private fun parse(text: String?): JsonObject? =
         text?.takeIf { it.isNotBlank() }?.let { runCatching { Json.parseToJsonElement(it) as? JsonObject }.getOrNull() }

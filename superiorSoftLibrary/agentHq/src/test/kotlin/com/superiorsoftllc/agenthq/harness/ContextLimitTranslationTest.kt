@@ -1,7 +1,6 @@
 package com.superiorsoftllc.agenthq.harness
 
 import com.superiorsoftllc.agenthq.provider.HarnessProvider
-import com.superiorsoftllc.agenthq.provider.OpenCodeProvider
 import com.superiorsoftllc.agenthq.provider.RunRequest
 import com.superiorsoftllc.agenthq.runner.ProcessListener
 import com.superiorsoftllc.agenthq.runner.ProcessRunner
@@ -27,14 +26,6 @@ class ContextLimitTranslationTest {
 
 
 
-
-    @Test
-    fun opencode_reportsUnsupported_andSaysWhy() {
-        val cap = OpenCodeProvider(modelLister = { emptyList() }).contextLimit()
-        assertEquals(ContextLimitSupport.UNSUPPORTED, cap.support)
-        assertFalse(cap.applies)
-        assertTrue(cap.how.isNotBlank())
-    }
 
     @Test
     fun theWireNamesOfTheSupportLevels() {

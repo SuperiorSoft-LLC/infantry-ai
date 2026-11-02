@@ -1,10 +1,13 @@
-package com.superiorsoftllc.agenthq.opencode
+package com.superiorsoftllc.agenthq.harness
 
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import com.superiorsoftllc.agenthq.provider.AgentProvider
-import com.superiorsoftllc.agenthq.provider.OpenCodeProvider
+import com.superiorsoftllc.agenthq.plugins.official.opencode.harness.OpenCodeCommand
+import com.superiorsoftllc.agenthq.plugins.official.opencode.harness.OpenCodePermissions
+import com.superiorsoftllc.agenthq.plugins.official.opencode.harness.OpenCodeServeSession
 import com.superiorsoftllc.agenthq.provider.RunRequest
+import com.superiorsoftllc.agenthq.harness.ToolApproval
 import com.superiorsoftllc.agenthq.runner.ProcessListener
 import com.superiorsoftllc.agenthq.runner.ProcessRunner
 import com.superiorsoftllc.agenthq.runner.ProcessSpec
@@ -21,7 +24,6 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
-import com.superiorsoftllc.agenthq.harness.ToolApproval
 import com.superiorsoftllc.agenthq.prompts.PendingPrompts
 import com.superiorsoftllc.agenthq.protocol.EventNormalizer
 import com.superiorsoftllc.agenthq.protocol.PromptRequest
@@ -39,12 +41,12 @@ import kotlin.test.assertTrue
 import kotlin.test.fail
 
 /**
- * BUG-M2-11b-2: the `opencode serve` PROTOCOL ([OpenCodeServeAdapter]), driven by the daemon's session host through a real
+ * BUG-M2-11b-2: the `opencode serve` PROTOCOL ([OpenCodeServeSession], H8b-3: moved from the core serve adapter test; the plugin session runs behind the core ApiSessionAdapter), driven by the daemon's session host through a real
  * [SessionManager]. The lifecycle rules (reuse, crash restart, close, delete, shutdown, boot lines) belong to the host,
  * proven for every harness in `session/host/SessionHostTest` and `SessionManagerHostTest` over a fake adapter. The
  * `opencode serve` child is a fake too: a counting launcher that answers the HTTP + SSE API in-process.
  */
-class OpenCodeServeAdapterTest {
+class OpenCodeServeHostTest {
 
     /** One fake `opencode serve` process: the slice of the HTTP API the transport uses, plus `/event` SSE. */
     private class FakeServe(port: Int, private val password: String?, private val listener: ProcessListener) : RunningProcess {
@@ -162,7 +164,7 @@ class OpenCodeServeAdapterTest {
             specs += spec
             check(spec.command.getOrNull(1) == "serve") { "only serve is faked: ${spec.command}" }
             val port = spec.command[spec.command.indexOf("--port") + 1].toInt()
-            return FakeServe(port, spec.env[OpenCodeServeAdapter.PASSWORD_ENV], listener).also { servers += it }
+            return FakeServe(port, spec.env[OpenCodeServeSession.PASSWORD_ENV], listener).also { servers += it }
         }
     }
 
@@ -197,15 +199,17 @@ class OpenCodeServeAdapterTest {
         val launcher = CountingLauncher()
         val oneShot = OneShotRunner()
         val events: MutableList<SessionEvent> = Collections.synchronizedList(mutableListOf())
-        private val real = OpenCodeProvider(
-            modelLister = { emptyList() },
-            sessionAdapter = OpenCodeServeAdapter(executable = { "opencode.exe" }, bootTimeoutMs = 5_000, modelFor = { it ?: "fake/model" }),
+        private val adapter = ApiSessionAdapter(
+            "opencode", "Infantry_OpenCode",
+            OpenCodeServeSession(null, { "opencode.exe" }, bootTimeoutMs = 5_000, modelFor = { it ?: "fake/model" }), {},
         )
-        /** The real provider and adapter, with a one-shot argv that needs no installed opencode.exe. */
-        val provider = object : AgentProvider by real {
+        /** The plugin's serve session behind the daemon's adapter, with a one-shot argv that needs no installed opencode.exe. */
+        val provider = object : AgentProvider {
+            override val id = "opencode"
             override fun spec(request: RunRequest) =
                 ProcessSpec(OpenCodeCommand.command("opencode.exe", request.model ?: "fake/model", request.resumeSessionId), request.workingDir)
             override fun defaultModel() = "fake/model"
+            override fun sessionAdapter() = adapter
         }
         val manager = SessionManager(
             provider, oneShot, JsonSessionStore(File.createTempFile("agenthq-serve", ".json").also { it.delete() }),
@@ -226,8 +230,9 @@ class OpenCodeServeAdapterTest {
             }
         }
 
+        // H8b-3: the generic adapter forwards every raw stdout line, so the server banner ("opencode server listening on ...") is an event too; only JSON lines are run lines.
         fun stdoutLines(): List<JsonObject> = synchronized(events) { events.filterIsInstance<SessionEvent.Stdout>().map { it.line } }
-            .map { Json.parseToJsonElement(it) as JsonObject }
+            .filter { it.startsWith("{") }.map { Json.parseToJsonElement(it) as JsonObject }
 
         fun awaitState(id: String, state: SessionState) {
             val deadline = System.currentTimeMillis() + 10_000
@@ -238,7 +243,7 @@ class OpenCodeServeAdapterTest {
         }
 
         fun texts(): List<JsonObject> = synchronized(events) { events.filterIsInstance<SessionEvent.Stdout>().map { it.line } }
-            .map { Json.parseToJsonElement(it) as JsonObject }.filter { it["type"]?.jsonPrimitive?.content == "text" }
+            .filter { it.startsWith("{") }.map { Json.parseToJsonElement(it) as JsonObject }.filter { it["type"]?.jsonPrimitive?.content == "text" }
 
         fun awaitTexts(count: Int) {
             val deadline = System.currentTimeMillis() + 10_000
@@ -460,7 +465,7 @@ class OpenCodeServeAdapterTest {
 
     @Test
     fun askIsPartOfTheFingerprint() {
-        val adapter = OpenCodeServeAdapter(executable = { "opencode.exe" })
+        val adapter = ApiSessionAdapter("opencode", "Infantry_OpenCode", OpenCodeServeSession(null, { "opencode.exe" }), {})
         val env = mapOf("A" to "1")
         val deny = adapter.fingerprint(RunRequest("x", toolApproval = ToolApproval.DENY), env)
         assertTrue(adapter.fingerprint(RunRequest("x", toolApproval = ToolApproval.ASK), env) != deny, "switching into ask restarts the server")
@@ -470,17 +475,17 @@ class OpenCodeServeAdapterTest {
     @Test
     fun runLineType_mapsFinishedServerPartsOntoRunLines() {
         fun part(json: String) = Json.parseToJsonElement(json) as JsonObject
-        assertEquals("step_start", OpenCodeServeAdapter.runLineType(part("""{"type":"step-start"}""")))
-        assertEquals("step_finish", OpenCodeServeAdapter.runLineType(part("""{"type":"step-finish"}""")))
-        assertEquals(null, OpenCodeServeAdapter.runLineType(part("""{"type":"text","time":{"start":1}}""")))
-        assertEquals("text", OpenCodeServeAdapter.runLineType(part("""{"type":"text","time":{"start":1,"end":2}}""")))
-        assertEquals("tool_start", OpenCodeServeAdapter.runLineType(part("""{"type":"tool","state":{"status":"running"}}""")))
-        assertEquals(null, OpenCodeServeAdapter.runLineType(part("""{"type":"tool","state":{"status":"pending"}}""")))
-        assertEquals(null, OpenCodeServeAdapter.runLineType(part("""{"type":"reasoning","time":{"start":1}}""")))
-        assertEquals("reasoning", OpenCodeServeAdapter.runLineType(part("""{"type":"reasoning","time":{"start":1,"end":2}}""")))
-        assertEquals("tool_use", OpenCodeServeAdapter.runLineType(part("""{"type":"tool","state":{"status":"completed"}}""")))
-        assertEquals("tool_use", OpenCodeServeAdapter.runLineType(part("""{"type":"tool","state":{"status":"error"}}""")))
-        assertEquals("opencode-go" to "step-5-preview-free", OpenCodeServeAdapter.splitModel("opencode-go/step-5-preview-free"))
-        assertEquals(null, OpenCodeServeAdapter.splitModel("nomodel"))
+        assertEquals("step_start", OpenCodeServeSession.runLineType(part("""{"type":"step-start"}""")))
+        assertEquals("step_finish", OpenCodeServeSession.runLineType(part("""{"type":"step-finish"}""")))
+        assertEquals(null, OpenCodeServeSession.runLineType(part("""{"type":"text","time":{"start":1}}""")))
+        assertEquals("text", OpenCodeServeSession.runLineType(part("""{"type":"text","time":{"start":1,"end":2}}""")))
+        assertEquals("tool_start", OpenCodeServeSession.runLineType(part("""{"type":"tool","state":{"status":"running"}}""")))
+        assertEquals(null, OpenCodeServeSession.runLineType(part("""{"type":"tool","state":{"status":"pending"}}""")))
+        assertEquals(null, OpenCodeServeSession.runLineType(part("""{"type":"reasoning","time":{"start":1}}""")))
+        assertEquals("reasoning", OpenCodeServeSession.runLineType(part("""{"type":"reasoning","time":{"start":1,"end":2}}""")))
+        assertEquals("tool_use", OpenCodeServeSession.runLineType(part("""{"type":"tool","state":{"status":"completed"}}""")))
+        assertEquals("tool_use", OpenCodeServeSession.runLineType(part("""{"type":"tool","state":{"status":"error"}}""")))
+        assertEquals("opencode-go" to "step-5-preview-free", OpenCodeServeSession.splitModel("opencode-go/step-5-preview-free"))
+        assertEquals(null, OpenCodeServeSession.splitModel("nomodel"))
     }
 }

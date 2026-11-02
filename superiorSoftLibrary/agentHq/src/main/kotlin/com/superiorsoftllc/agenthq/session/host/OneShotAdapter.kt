@@ -92,7 +92,7 @@ class OneShotAdapter(private val provider: AgentProvider) : HarnessSessionAdapte
                     // opencode exiting 0 having printed no text, tool call or error is no answer: say so, never "succeeded".
                     if (exitCode == 0 && !current.abortRequested.get() && provider.id == "opencode" && !current.produced) {
                         val model = request.model?.takeIf { it.isNotBlank() } ?: runCatching { provider.defaultModel() }.getOrNull() ?: "default"
-                        current.end(TurnEnd.FAILED, null, com.superiorsoftllc.agenthq.opencode.OpenCodeServeAdapter.noReply(model, current.stderrTail.toList()))
+                        current.end(TurnEnd.FAILED, null, noReply(provider.id, model, current.stderrTail.toList()))
                         return
                     }
                     current.end(
@@ -146,6 +146,11 @@ class OneShotAdapter(private val provider: AgentProvider) : HarnessSessionAdapte
 
     private companion object {
         const val FINGERPRINT = "one-shot"
+        /** H8b-3: the "no reply" reason (moved from the opencode serve adapter): names the model asked and the raw stderr, so a silent turn is never a plain success. */
+        fun noReply(harness: String, model: String, stderr: List<String> = emptyList()): String =
+            "no reply from $model: the turn ended with no assistant output" +
+                stderr.filter { it.isNotBlank() }.takeIf { it.isNotEmpty() }?.joinToString(" | ", prefix = " ($harness stderr: ", postfix = ")").orEmpty()
+
         val OUTPUT_MARKER = Regex(""""type"\s*:\s*"(text|tool_use|error)"""")
     }
 }

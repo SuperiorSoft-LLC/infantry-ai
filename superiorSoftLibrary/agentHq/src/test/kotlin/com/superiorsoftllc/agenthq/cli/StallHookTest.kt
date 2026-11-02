@@ -138,24 +138,6 @@ class StallHookTest {
         assertEquals("{}", post("never-rewritten", "ls").body, "a call we did not rewrite is not ours to judge")
     }
 
-    @Test
-    fun opencodeGetsThePluginAppended_userPluginsKept() {
-        val plugin = File("agenthq-watch.js").absoluteFile
-        val env = mapOf("AGENTHQ_WATCH" to "on", "AGENTHQ_MAIL_BASE" to "http://127.0.0.1:9")
-        val merged = Json.parseToJsonElement(WatchHooks.mergeOpenCodePlugin("""{"plugin":["opencode-snip@latest"],"mcp":{}}""", env, plugin)).jsonObject
-        val list = merged["plugin"]!!.jsonArray.map { it.jsonPrimitive.content }
-        assertEquals("opencode-snip@latest", list.first())
-        assertTrue(list.last().startsWith("file:///") && list.last().endsWith("agenthq-watch.js"), list.toString())
-        assertTrue(merged.containsKey("mcp"))
-        assertEquals("{}", WatchHooks.mergeOpenCodePlugin("{}", env + ("AGENTHQ_WATCH" to "off"), plugin))
-    }
-
-    @Test
-    fun theHookClientsShipAsResources() {
-        val js = WatchHooks::class.java.getResource(WatchHooks.OPENCODE_RESOURCE)!!.readText()
-        assertTrue(js.contains("\"tool.execute.before\"") && js.contains("output.args.command = out.command"))
-    }
-
     // ---- a hooked script really runs through the runner ----
 
     private val reqs = CopyOnWriteArrayList<BgJobRequest>()

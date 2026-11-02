@@ -999,17 +999,12 @@ class AgentHqDaemon(
             val projectStore = ProjectStore(persistence = SqlProjectPersistence((store as SqlAgentHqStore).database))
             projectStore.laneDefault = { settings.limitCap(LimitRegistry.LANE_DEFAULT) }
             // EXPERIMENTS-1: the pi tool bridge (off unless the project setting or the env override says on). Removing it = this line.
-            com.superiorsoftllc.agenthq.harness.HarnessConfigMerge.pluginMerge = harnesses::mergeConfig // HARNESS H8b-1
+            com.superiorsoftllc.agenthq.harness.HarnessConfigMerge.pluginMerge = harnesses::mergeConfig
             sessionStats.pluginStats = harnesses::statsSource // HARNESS H5d: plugin harness rows, no harness branch in the service
             com.superiorsoftllc.agenthq.experiments.pitoolbridge.PiToolBridgeRegistration.register({ sandboxConfig().enabled || projectStore.experimentOn(it, "piToolBridge") }, sessionStats)
             // TODO-PROGRESS-1: every pi session loads the daemon's `todowrite` extension (pi has no to-do tool of its own).
             // STALL-2: and the watch hook extension (`tool_call` -> the watched runner) when the session's watch is on.
             CoreHarnessContributions.register()
-            // STALL-2: the opencode watch plugin, named in every serve's inline config while its session's watch is on.
-            // H2: it belongs to the opencode harness, so it is written only when opencode is present (no `opencode/` dir otherwise).
-            val opencodePresent = (listOf(provider) + additionalProviders).any { it.id == "opencode" } || "opencode" in harnesses.harnessIds()
-            WatchHooks.openCodePlugin = if (!opencodePresent) null else runCatching { WatchHooks.install(File(stateDir(), "opencode"), WatchHooks.OPENCODE_RESOURCE, "agenthq-watch.js") }
-                .onFailure { System.err.println("[agentHq] opencode watch plugin not written: ${it.message}") }.getOrNull()
             // BASE-1a: `project_base` checks a branch in the repo ticket starts cut in -- the board plugin's, asked through the board port at
             // answer time -- with the same resolver a cut uses.
             val baseCheck = com.superiorsoftllc.agenthq.mvp.ProjectBaseCheck(
