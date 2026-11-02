@@ -9,7 +9,7 @@ import com.superiorsoftllc.agenthq.daemon.api.board.BoardRuntime
 import com.superiorsoftllc.agenthq.mvp.ProjectStore
 import com.superiorsoftllc.agenthq.persistence.AgentHqStore
 import com.superiorsoftllc.agenthq.protocol.RoutingRule
-import com.superiorsoftllc.agenthq.role.RoleIds
+import com.superiorsoftllc.agenthq.protocol.RoleIds
 import com.superiorsoftllc.agenthq.role.RoleService
 import com.superiorsoftllc.agenthq.settings.LimitRegistry
 import com.superiorsoftllc.agenthq.settings.SettingsService

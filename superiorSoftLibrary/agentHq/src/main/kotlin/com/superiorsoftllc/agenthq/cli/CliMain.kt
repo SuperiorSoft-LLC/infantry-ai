@@ -25,7 +25,7 @@ import com.superiorsoftllc.agenthq.protocol.PromptOption
 import com.superiorsoftllc.agenthq.prompts.QuestionSpec
 import com.superiorsoftllc.agenthq.epics.Epic
 import com.superiorsoftllc.agenthq.epics.EpicSave
-import com.superiorsoftllc.agenthq.role.RoleIds
+import com.superiorsoftllc.agenthq.protocol.RoleIds
 import com.superiorsoftllc.agenthq.mailbox.MailRefused
 import com.superiorsoftllc.agenthq.mailbox.MailSendRequest
 import com.superiorsoftllc.agenthq.mailbox.Message
@@ -3940,7 +3940,7 @@ internal object Cli {
             roles.forEach { out.appendLine("${it.id}	${it.name}	${it.source.name.lowercase()}	${it.description}") }
             return 0
         }
-        val role = roles.firstOrNull { it.id == com.superiorsoftllc.agenthq.role.RoleIds.normalize(id) }
+        val role = roles.firstOrNull { it.id == com.superiorsoftllc.agenthq.protocol.RoleIds.normalize(id) }
         if (role == null) {
             err.appendLine("error: unknown role '$id'")
             return 1
@@ -3973,7 +3973,7 @@ internal object Cli {
                     err.appendLine("error: role delete needs a non-agent caller: an agent may only change a role's notes and description")
                     return 1
                 }
-                val reset = role.id in com.superiorsoftllc.agenthq.role.RoleIds.BUILT_IN
+                val reset = role.id in com.superiorsoftllc.agenthq.protocol.RoleIds.BUILT_IN
                 stream.request(
                     Envelope(Envelope.ROLE_DELETE, role.id),
                     answerType = if (reset) Envelope.ROLE else Envelope.ROLE_REMOVED, what = "role_delete", idempotent = false,

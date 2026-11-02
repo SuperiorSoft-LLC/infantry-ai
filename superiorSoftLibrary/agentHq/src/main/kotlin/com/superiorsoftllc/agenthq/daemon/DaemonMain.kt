@@ -165,9 +165,9 @@ import com.superiorsoftllc.agenthq.daemon.api.usage.UsageMeters
 import com.superiorsoftllc.agenthq.usage.UsagePacing
 import com.superiorsoftllc.agenthq.daemon.api.usage.UsageReport
 import com.superiorsoftllc.agenthq.role.Role
-import com.superiorsoftllc.agenthq.role.RoleIds
+import com.superiorsoftllc.agenthq.protocol.RoleIds
 import com.superiorsoftllc.agenthq.role.RoleService
-import com.superiorsoftllc.agenthq.role.RoleBinding
+import com.superiorsoftllc.agenthq.protocol.RoleBinding
 import com.superiorsoftllc.agenthq.role.RoleBindingHandler
 import com.superiorsoftllc.agenthq.protocol.PromptSave
 import com.superiorsoftllc.agenthq.protocol.PromptView

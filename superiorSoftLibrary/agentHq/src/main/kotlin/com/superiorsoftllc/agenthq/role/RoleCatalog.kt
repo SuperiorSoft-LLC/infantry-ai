@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.role
 
+import com.superiorsoftllc.agenthq.protocol.RoleIds
+
 import java.io.File
 
 /**

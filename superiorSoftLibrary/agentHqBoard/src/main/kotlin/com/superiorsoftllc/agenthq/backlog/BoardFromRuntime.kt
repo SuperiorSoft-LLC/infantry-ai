@@ -8,7 +8,7 @@ import com.superiorsoftllc.agenthq.daemon.api.board.StoredLink
 import com.superiorsoftllc.agenthq.daemon.api.board.StoredTicket
 import com.superiorsoftllc.agenthq.ticketfiles.RelatedDescription
 import com.superiorsoftllc.agenthq.protocol.RoutingRule
-import com.superiorsoftllc.agenthq.role.RoleIds
+import com.superiorsoftllc.agenthq.protocol.RoleIds
 import com.superiorsoftllc.agenthq.settings.WeightContext
 import com.superiorsoftllc.agenthq.settings.WeightExecutors
 import com.superiorsoftllc.agenthq.usage.PacingVerdict

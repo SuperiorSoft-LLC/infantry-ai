@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.role
 
+import com.superiorsoftllc.agenthq.protocol.RoleBinding
+
 import com.superiorsoftllc.agenthq.persistence.RoleBindingRepository
 import com.superiorsoftllc.agenthq.protocol.RoleBindingSave
 

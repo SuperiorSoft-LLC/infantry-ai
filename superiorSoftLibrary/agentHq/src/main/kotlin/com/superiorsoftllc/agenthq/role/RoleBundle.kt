@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.role
 
+import com.superiorsoftllc.agenthq.protocol.RoleIds
+
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.io.File

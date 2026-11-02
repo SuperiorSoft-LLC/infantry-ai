@@ -1,5 +1,11 @@
 package com.superiorsoftllc.agenthq.role
 
+import com.superiorsoftllc.agenthq.protocol.ValidatedAvatar
+
+import com.superiorsoftllc.agenthq.protocol.ImageFormat
+
+import com.superiorsoftllc.agenthq.protocol.RoleIds
+
 import java.io.File
 
 /**

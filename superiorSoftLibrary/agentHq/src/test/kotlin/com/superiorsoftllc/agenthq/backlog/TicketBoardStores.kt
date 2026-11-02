@@ -52,7 +52,7 @@ import com.superiorsoftllc.agenthq.settings.requireKnownSkills
 import com.superiorsoftllc.agenthq.protocol.TicketStart
 import com.superiorsoftllc.agenthq.protocol.TicketStatus
 import com.superiorsoftllc.agenthq.protocol.TicketType
-import com.superiorsoftllc.agenthq.role.RoleIds
+import com.superiorsoftllc.agenthq.protocol.RoleIds
 import com.superiorsoftllc.agenthq.session.SessionManager
 import com.superiorsoftllc.agenthq.worktree.BaseScope
 import com.superiorsoftllc.agenthq.worktree.TicketBaseRef

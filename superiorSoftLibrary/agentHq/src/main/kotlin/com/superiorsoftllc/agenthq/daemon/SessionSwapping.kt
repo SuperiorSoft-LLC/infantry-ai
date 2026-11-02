@@ -1,7 +1,7 @@
 package com.superiorsoftllc.agenthq.daemon
 
 import com.superiorsoftllc.agenthq.protocol.SessionSwap
-import com.superiorsoftllc.agenthq.role.RoleIds
+import com.superiorsoftllc.agenthq.protocol.RoleIds
 import com.superiorsoftllc.agenthq.protocol.SessionSwapped
 import com.superiorsoftllc.agenthq.protocol.SwapExecutor
 import com.superiorsoftllc.agenthq.session.SessionManager

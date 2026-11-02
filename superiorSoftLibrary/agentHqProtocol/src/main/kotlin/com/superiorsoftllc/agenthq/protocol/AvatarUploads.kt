@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.role
+package com.superiorsoftllc.agenthq.protocol
 
 /** The only two image formats an avatar upload may be. */
 enum class ImageFormat(val extension: String, val mediaType: String) {

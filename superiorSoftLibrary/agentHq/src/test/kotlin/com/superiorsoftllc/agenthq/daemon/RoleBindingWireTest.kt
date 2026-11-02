@@ -1,7 +1,7 @@
 package com.superiorsoftllc.agenthq.daemon
 
 import com.superiorsoftllc.agenthq.protocol.Envelope
-import com.superiorsoftllc.agenthq.role.RoleBinding
+import com.superiorsoftllc.agenthq.protocol.RoleBinding
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import kotlin.test.Test

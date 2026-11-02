@@ -10,7 +10,7 @@ import com.superiorsoftllc.agenthq.protocol.SpawnOptions
 import com.superiorsoftllc.agenthq.protocol.TicketMove
 import com.superiorsoftllc.agenthq.protocol.TicketSave
 import com.superiorsoftllc.agenthq.protocol.TicketStatus
-import com.superiorsoftllc.agenthq.role.RoleBinding
+import com.superiorsoftllc.agenthq.protocol.RoleBinding
 import com.superiorsoftllc.agenthq.session.SessionManager
 import java.io.File
 import java.nio.file.Files

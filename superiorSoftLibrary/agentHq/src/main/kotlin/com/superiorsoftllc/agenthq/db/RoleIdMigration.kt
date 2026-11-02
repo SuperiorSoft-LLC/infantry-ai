@@ -1,4 +1,6 @@
-package com.superiorsoftllc.agenthq.role
+package com.superiorsoftllc.agenthq.db
+
+import com.superiorsoftllc.agenthq.protocol.RoleIds
 
 import app.cash.sqldelight.db.QueryResult
 import app.cash.sqldelight.db.SqlDriver
@@ -21,6 +23,10 @@ import app.cash.sqldelight.db.SqlDriver
  * runs in one transaction, so a crash never leaves a half-renamed file.
  */
 object RoleIdMigration {
+    // TODO(AR-4a): the `tickets.agent_id` statements belong in the board plugin's migrations (Infantry_Board, through api.storage).
+    // Left here because this runs on EVERY open and catches rows an older client writes after the upgrade, and the board's
+    // migration path is not yet an on-open data pass; moving it would stop healing those rows. Core tables stay here.
+
 
     /** True when any role-bearing column still holds a retired id. Read-only. */
     fun needed(driver: SqlDriver): Boolean {

@@ -157,3 +157,9 @@ TEST-TODO: ROLE-NOTE-1 (bcdfcce6): set `context.includeFinishInstructions` false
 TEST-TODO: KILL-TIMEOUT-1 (1e4f25f0): finish a ticket so the done hook runs agenthq_session_remove force=true; it must answer at once (no "kill got no answer in 30000 ms" mail). Not run against a live daemon.
 
 TEST-TODO: CMD-1 (0f16650d): Run tab on a real daemon: save a command, run it (pty and a piped one), type into the console, resize, stop it (child tree gone), restart the daemon and check commands.json is still read; a restricted policy still refuses interactive runs/run_input. RunsSurfaceTest (LocalRuns): a cwd with `..`, absolute or a link leaving the project is refused before start; stop (killTree) ends a child and its grandchild. Unit-level only; the daemon-level classes CommandSaveDaemonTest / RunStubProviderDaemonTest / PolicySwitchDaemonTest need the built Infantry_Run-daemon jar and were not run by hand.
+
+## AR-4a (ticket c510e4e3): role vocabulary moved to agentHqProtocol
+TEST-TODO:
+- Behaviour: `protocol.RoleIds.RETIRED` equals `daemon.api.roles.RetiredRoleIds.MAP`; ids normalise the same. Class: RoleIdsTest. Inputs: "git","bot","architect". Expected: version-control, automation, architect.
+- Behaviour: open-time migration still rewrites retired ids. Class: db.RoleIdMigrationTest. Inputs: rows with role "git". Expected: rewritten once, idempotent.
+- Behaviour: user-portrait setting still refuses a bad image. Class: AvatarUploadsTest / settings. Inputs: non-PNG bytes. Expected: IllegalArgumentException "setting 'user_portrait': ...".

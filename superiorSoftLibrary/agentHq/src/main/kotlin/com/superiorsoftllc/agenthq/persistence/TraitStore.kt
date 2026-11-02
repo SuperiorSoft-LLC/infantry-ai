@@ -3,7 +3,7 @@ package com.superiorsoftllc.agenthq.persistence
 import com.superiorsoftllc.agenthq.protocol.TraitCheck
 import com.superiorsoftllc.agenthq.protocol.TraitSave
 import com.superiorsoftllc.agenthq.protocol.TraitView
-import com.superiorsoftllc.agenthq.role.RoleIds
+import com.superiorsoftllc.agenthq.protocol.RoleIds
 
 /**
  * TRAITS-T1 (docs/AGENTHQ-ROLE-TRAITS.md section 2, D1): the trait library. Owns every rule -- the slug id, the

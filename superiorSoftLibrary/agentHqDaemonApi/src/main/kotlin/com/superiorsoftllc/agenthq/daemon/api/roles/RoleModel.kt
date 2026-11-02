@@ -30,13 +30,7 @@ data class RoleSaveRequest(
 
 /** Role ids renamed by the id redraw (contract 1.90.0): the one table, read by the daemon's `RoleIds` and the roles tools. */
 object RetiredRoleIds {
-    val MAP: Map<String, String> = mapOf(
-        "git" to "version-control",
-        "i18n" to "localization",
-        "brainstormer" to "ideation",
-        "bot" to "automation",
-        "chief-of-staff" to "assistant",
-    )
+    val MAP: Map<String, String> = com.superiorsoftllc.agenthq.protocol.RoleIds.RETIRED
 
     /** [id] under its current name. */
     fun normalize(id: String): String = MAP[id] ?: id

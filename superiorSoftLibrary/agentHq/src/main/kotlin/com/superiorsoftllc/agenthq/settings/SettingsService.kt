@@ -111,8 +111,8 @@ class SettingsService(
             throw IllegalArgumentException("setting '$USER_PORTRAIT' is not valid base64")
         }
         try {
-            com.superiorsoftllc.agenthq.role.AvatarUploads.validate(bytes)
-        } catch (e: com.superiorsoftllc.agenthq.role.InvalidAvatarException) {
+            com.superiorsoftllc.agenthq.protocol.AvatarUploads.validate(bytes)
+        } catch (e: com.superiorsoftllc.agenthq.protocol.InvalidAvatarException) {
             throw IllegalArgumentException("setting '$USER_PORTRAIT': ${e.message}")
         }
         return text
