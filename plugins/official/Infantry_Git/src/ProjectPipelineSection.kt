@@ -135,6 +135,7 @@ private fun CommitRow(e: PipelineEntryView, stages: List<String>, now: Long) {
             itemVerticalAlignment = Alignment.CenterVertically,
         ) {
             Text(shortCommit(e.commit), color = Palette.Accent, fontFamily = Mono, fontSize = 11.sp)
+            CopyValueButton(e.commit)
             Text(
                 e.stage, color = stageColor(e.stage), fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.testTag(PIPELINE_CHIP_TAG + e.commit),

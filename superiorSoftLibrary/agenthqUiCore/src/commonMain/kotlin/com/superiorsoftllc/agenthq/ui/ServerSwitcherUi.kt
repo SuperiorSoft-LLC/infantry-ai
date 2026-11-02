@@ -122,6 +122,7 @@ fun ServersDialog(switcher: ServerSwitcher, onRemoved: (wasActive: Boolean) -> U
                                 Text(c.name, color = Palette.Text, fontSize = 12.sp)
                                 Text(c.url.orEmpty() + if (c.token != null) "  (token saved)" else "", color = Palette.Muted, fontSize = 10.sp)
                             }
+                            CopyValueButton(c.url.orEmpty())
                             TextButton({ open(c) }) { Text("Edit") }
                             TextButton({ onRemoved(switcher.remove(c.url!!)) }) { Text("Remove") }
                         }

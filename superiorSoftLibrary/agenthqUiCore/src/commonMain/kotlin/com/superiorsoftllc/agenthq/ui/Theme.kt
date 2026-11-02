@@ -5,7 +5,10 @@ import androidx.compose.material3.Typography
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
+import androidx.compose.foundation.text.selection.LocalTextSelectionColors
+import androidx.compose.foundation.text.selection.TextSelectionColors
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -91,11 +94,26 @@ private fun schemeFor(theme: ThemeSettings): ColorScheme {
 
 val Mono = FontFamily.Monospace
 
+/**
+ * Selected text must stay visible and copyable (ticket d0b9bdcf). Compose's default selection tint is the accent at
+ * low alpha, which vanishes on the near-black dark background. The highlight is an accent tint strong enough to read
+ * as a block behind the unchanged text colour, and the handles take the accent itself.
+ */
+private fun selectionColorsFor(theme: ThemeSettings): TextSelectionColors {
+    val accent = Color(theme.accent.argb)
+    return TextSelectionColors(
+        handleColor = accent,
+        backgroundColor = accent.copy(alpha = if (theme.dark) 0.55f else 0.35f),
+    )
+}
+
 @Composable
 fun AgentHqTheme(content: @Composable () -> Unit) {
     val base = Typography()
     val theme = Palette.theme
     val scheme = remember(theme) { schemeFor(theme) }
+    val selection = remember(theme) { selectionColorsFor(theme) }
+    CompositionLocalProvider(LocalTextSelectionColors provides selection) {
     MaterialTheme(
         colorScheme = scheme,
         typography = base.copy(
@@ -106,4 +124,5 @@ fun AgentHqTheme(content: @Composable () -> Unit) {
         ),
         content = content,
     )
+    }
 }

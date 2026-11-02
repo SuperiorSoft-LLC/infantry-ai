@@ -21,8 +21,6 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -87,11 +85,10 @@ object DefaultChatBlockRenderer : ChatBlockRenderer {
                 },
             )
             is ChatBlock.Code -> {
-                val clip = LocalClipboardManager.current
                 Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(Palette.Raised).border(1.dp, Palette.Border, RoundedCornerShape(6.dp)).padding(8.dp)) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text(block.language, color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.weight(1f))
-                        TextButton(onClick = { clip.setText(AnnotatedString(block.body)) }) { Text("Copy", fontSize = 11.sp) }
+                        CopyValueButton(block.body)
                     }
                     Text(block.body, color = Palette.Text, fontFamily = Mono, fontSize = 12.sp, modifier = Modifier.horizontalScroll(rememberScrollState()))
                 }
