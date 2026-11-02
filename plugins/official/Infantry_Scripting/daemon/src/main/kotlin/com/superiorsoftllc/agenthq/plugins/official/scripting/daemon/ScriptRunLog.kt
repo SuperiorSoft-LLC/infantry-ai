@@ -25,6 +25,8 @@ data class RunRecord(
     val outcome: String, val ok: Boolean, val actions: List<RunAction>, val log: List<String>, val summary: String, val error: String? = null,
     /** The mail id a mail hook ran for (lets a lost verdict find its record), else null. */
     val ref: String? = null,
+    /** SCRIPT-LINE-TS-1: wall-clock run time, null when unknown (older records, a run that never started). */
+    val durationMs: Long? = null,
 ) {
     /** The compact automation line a session view shows (never the agent's own output). */
     fun line(): String = "AUTOMATION · $script · $summary${if (!ok) " · FAILED" else ""}"
@@ -35,6 +37,7 @@ data class RunRecord(
         return buildJsonObject {
             put("id", "run-$project-$id"); put("sessionId", sid); put("at", at); put("source", "automation")
             put("label", "AUTOMATION · $script"); put("text", line()); put("ok", ok)
+            durationMs?.let { put("meta", buildJsonObject { put("durationMs", it.toString()) }) }
             put("details", buildJsonArray {
                 add(JsonPrimitive("trigger: $trigger"))
                 actions.forEach { a -> add(JsonPrimitive("${a.tool} ${when (a.ok) { true -> "ok"; false -> "FAILED"; null -> "planned" }}${a.text?.let { ": ${it.take(160)}" }.orEmpty()}")) }
@@ -47,6 +50,7 @@ data class RunRecord(
     fun toJson(): JsonObject = buildJsonObject {
         put("id", id); put("at", at); put("project", project); put("script", script); put("trigger", trigger)
         session?.let { put("session", it) }
+        durationMs?.let { put("durationMs", it) }
         put("outcome", outcome); put("ok", ok); put("line", line()); put("summary", summary)
         error?.let { put("error", it) }
         ref?.let { put("ref", it) }
@@ -76,7 +80,7 @@ object RunRecords {
     fun encode(r: RunRecord): String = buildJsonObject {
         put("id", r.id); put("at", r.at); put("project", r.project); put("script", r.script); put("trigger", r.trigger)
         r.session?.let { put("session", it) }; put("outcome", r.outcome); put("ok", r.ok); put("summary", r.summary)
-        r.error?.let { put("error", it) }; r.ref?.let { put("ref", it) }
+        r.error?.let { put("error", it) }; r.ref?.let { put("ref", it) }; r.durationMs?.let { put("durationMs", it) }
         put("actions", buildJsonArray { r.actions.forEach { a -> add(buildJsonObject { put("tool", a.tool); a.ok?.let { put("ok", it) }; a.text?.let { put("text", it.take(300)) } }) } })
         put("log", buildJsonArray { r.log.forEach { add(JsonPrimitive(it.take(300))) } })
     }.toString()
@@ -86,7 +90,7 @@ object RunRecords {
         fun s(k: String) = (o[k] as? JsonPrimitive)?.contentOrNull
         RunRecord(
             id = s("id")!!.toLong(), at = s("at")!!.toLong(), project = s("project")!!, script = s("script")!!, trigger = s("trigger").orEmpty(), session = s("session"),
-            outcome = s("outcome").orEmpty(), ok = s("ok") == "true", summary = s("summary").orEmpty(), error = s("error"), ref = s("ref"),
+            durationMs = s("durationMs")?.toLongOrNull(), outcome = s("outcome").orEmpty(), ok = s("ok") == "true", summary = s("summary").orEmpty(), error = s("error"), ref = s("ref"),
             actions = (o["actions"] as? kotlinx.serialization.json.JsonArray).orEmpty().mapNotNull { e ->
                 val a = e as? JsonObject ?: return@mapNotNull null
                 RunAction((a["tool"] as? JsonPrimitive)?.contentOrNull.orEmpty(), (a["ok"] as? JsonPrimitive)?.contentOrNull?.toBooleanStrictOrNull(), (a["text"] as? JsonPrimitive)?.contentOrNull)
@@ -125,7 +129,7 @@ class ScriptRunLog(private val limit: () -> Int = { 200 }, private val clock: ()
 
     fun record(project: String, script: String, trigger: String, session: String?, report: RunReport?, outcome: String, summary: String, error: String? = null, ref: String? = null, quiet: Boolean = false): RunRecord {
         val actions = report?.records?.map { RunAction(it.tool, it.ok, it.text) }.orEmpty()
-        val rec = RunRecord(seq.incrementAndGet(), clock(), project, script, trigger, session, outcome, error == null && report?.ok != false, actions, report?.logs.orEmpty(), summary, error ?: report?.error, ref)
+        val rec = RunRecord(seq.incrementAndGet(), clock(), project, script, trigger, session, outcome, error == null && report?.ok != false, actions, report?.logs.orEmpty(), summary, error ?: report?.error, ref, report?.durationMs)
         session?.let { sessionProject[it] = project }
         val max = limit().coerceAtLeast(0)
         val q = runs.computeIfAbsent(project) { ArrayDeque() }

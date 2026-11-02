@@ -23,6 +23,8 @@ data class RunReport(
     val handled: Boolean = false,
     /** MAIL-HOOK-1: the script queued `deliver_text{text=...}`: the text to deliver instead. */
     val deliverText: String? = null,
+    /** SCRIPT-LINE-TS-1: how long the run took (wall clock), for the chat line. */
+    val durationMs: Long? = null,
 ) {
     val ok: Boolean get() = error == null
 
@@ -61,6 +63,15 @@ class ScriptDispatcher(
     private val sessionProject: (String) -> String? = { null },
 ) {
     fun run(
+        engine: ScriptEngine, source: String, args: Map<String, Any?>, limits: ScriptLimits, caller: ScriptCaller,
+        invoker: ToolInvoker, dryRun: Boolean, progressTo: String? = null, onPlanned: (List<ActionRecord>) -> Unit = {},
+    ): RunReport {
+        val started = System.nanoTime()
+        return runUntimed(engine, source, args, limits, caller, invoker, dryRun, progressTo, onPlanned)
+            .copy(durationMs = (System.nanoTime() - started) / 1_000_000)
+    }
+
+    private fun runUntimed(
         engine: ScriptEngine, source: String, args: Map<String, Any?>, limits: ScriptLimits, caller: ScriptCaller,
         invoker: ToolInvoker, dryRun: Boolean,
         /** SCRIPT-TICK-1: the session a hook acts for (its `to`); `agenthq_progress` from the script lands on its card unless the call names a `sessionId`. */

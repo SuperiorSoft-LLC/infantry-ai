@@ -41,8 +41,13 @@ class AutomationVisUiTest {
 
     @Test fun theAutomationRowShowsTheRunTimeLikeAMessageCard() = runDesktopComposeUiTest(900, 600) {
         setContent { AgentChat(agent(), contributions = listOf(run.copy(at = 1_700_000_000_000L))) }
-        onNodeWithTag(CARD_TIMESTAMP_TAG).assertExists()
+        onNodeWithTag(CARD_TIMESTAMP_TAG, useUnmergedTree = true).assertExists()
         onNodeWithText(activityTimestamp(1_700_000_000_000L)).assertExists()
+    }
+
+    @Test fun theAutomationRowShowsTheRunDurationNextToTheTime() = runDesktopComposeUiTest(900, 600) {
+        setContent { AgentChat(agent(), contributions = listOf(run.copy(id = "run-9", at = 1_700_000_000_000L, meta = mapOf("durationMs" to "400")))) }
+        onNodeWithText(activityTimestamp(1_700_000_000_000L) + " · 0.4 s").assertExists()
     }
 
     @Test fun thePanelShowsTurnsSavedAndWakeReasonsButNoRow() = runDesktopComposeUiTest(900, 600) {
