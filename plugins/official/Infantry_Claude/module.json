@@ -12,6 +12,6 @@
     "ids": ["claude"],
     "cli": { "id": "claude", "command": "claude", "label": "Claude Code" },
     "settings": [],
-    "hooks": ["watch", "session", "models", "stats", "usage"]
+    "hooks": ["watch", "mcp", "session", "models", "stats", "usage"]
   }
 }
