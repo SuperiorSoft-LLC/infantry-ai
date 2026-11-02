@@ -1349,6 +1349,8 @@ class AgentHqDaemon(
                 dedupe = { settings.limit(LimitRegistry.WATCH_NOTICE_DEDUPE) != 0L },
                 keepMs = { settings.limit(LimitRegistry.WATCH_HANDLED_KEEP_MINUTES) * 60_000L },
                 hangGraceMs = { settings.limit(LimitRegistry.WATCH_HANG_GRACE_SECONDS) * 1000L },
+                foldIntoTurn = { settings.limit(LimitRegistry.BG_NOTICE_FOLD_INTO_TURN) != 0L },
+                skipIfResultRead = { settings.limit(LimitRegistry.BG_NOTICE_SKIP_IF_RESULT_READ) != 0L },
                 endTree = { _, job ->
                     ProcessHandle.of(job.cmdPid ?: job.pid).ifPresent { h ->
                         h.descendants().forEach { runCatching { it.destroyForcibly() } }

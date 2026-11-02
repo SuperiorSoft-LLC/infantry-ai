@@ -77,7 +77,15 @@ class BgJobNotifier(
     private val hangGraceMs: () -> Long = { 30_000L },
     /** BG-NATIVE-1: ends [job]'s process tree; its normal finished note then fires. */
     private val endTree: (sessionId: String, job: BgJob) -> Unit = { _, _ -> },
+    /** BG-FOLD-1 `bg.notice.foldIntoTurn`: a notice that lands while the session is mid-turn waits for that turn's end instead of queueing a standalone wake. */
+    private val foldIntoTurn: () -> Boolean = { true },
+    /** BG-FOLD-1 `bg.notice.skipIfResultRead`: a waiting or later notice is dropped when the owner already read the job's result. */
+    private val skipIfResultRead: () -> Boolean = { true },
 ) : BgJobListener {
+    /** BG-FOLD-1: notices parked because their session was mid-turn; sent on the scan pass once it is idle and the result is still unread. */
+    private class Parked(val sessionId: String, val job: BgJob, val req: MailSendRequest, val kind: String?)
+    private val parked = ConcurrentHashMap<String, Parked>()
+
     /** Where the watcher is in one watched file: only the bytes appended since are read. */
     private class Cursor {
         var offset = -1L
@@ -124,6 +132,7 @@ class BgJobNotifier(
     fun ack(sessionId: String, jobId: String): Int {
         handled[jobId] = clock()
         finished[jobId]?.handled = true
+        parked.remove(jobId)
         return runCatching { drop("bg:$jobId", sessionId, "handled: the job's result was already read", null) }.getOrDefault(0)
     }
 
@@ -144,10 +153,14 @@ class BgJobNotifier(
     private fun deliver(sessionId: String, job: BgJob, req: MailSendRequest, meter: () -> Unit = WatchMeter::event, kind: String? = null) {
         if (!deliverable(sessionId, job)) return
         if (dedupe()) {
-            if (handled.containsKey(job.id)) return
+            if (skipIfResultRead() && handled.containsKey(job.id)) return
             // One 'closed output' and one 'finished' notice per job; a 'closed output' notice after the end is stale.
             if (kind == KIND_EOF && finished.containsKey(job.id)) return
             if (kind != null && !sentKinds.computeIfAbsent(job.id) { ConcurrentHashMap.newKeySet() }.add(kind)) return
+        }
+        if (foldIntoTurn() && kind == KIND_END && runCatching { inTurn(sessionId) }.getOrDefault(false)) {
+            parked[job.id] = Parked(sessionId, job, req, kind)
+            return
         }
         if (kind == KIND_END && gate.handled(NudgeGate.BG_DONE, mapOf("sessionId" to sessionId, "jobId" to job.id, "label" to job.label, "subject" to req.subject, "text" to req.body))) return
         meter()
@@ -261,7 +274,20 @@ class BgJobNotifier(
         )
     }
 
+    /** BG-FOLD-1: parked notices whose session went idle are sent (wake as before) unless the result was read meanwhile. */
+    private fun flushParked() {
+        for ((id, p) in parked) {
+            if (runCatching { inTurn(p.sessionId) }.getOrDefault(false)) continue
+            if (!parked.remove(id, p)) continue
+            if (skipIfResultRead() && handled.containsKey(id)) continue
+            if (p.kind == KIND_END && gate.handled(NudgeGate.BG_DONE, mapOf("sessionId" to p.sessionId, "jobId" to id, "label" to p.job.label, "subject" to p.req.subject, "text" to p.req.body))) continue
+            WatchMeter.event()
+            send(p.req)
+        }
+    }
+
     override fun scanned() {
+        flushParked()
         val now = clock()
         val all = jobs()
         val live = all.filter { it.second.notify != null }
