@@ -96,6 +96,7 @@ class DaemonPluginHost private constructor(
         @Volatile var routeCount = 0
 
         fun <T> call(what: String, timeoutMs: Long = callTimeoutMs, block: () -> T): Result<T> = guard.call(what, timeoutMs, block)
+        suspend fun <T> callSuspending(what: String, timeoutMs: Long = callTimeoutMs, block: () -> T): Result<T> = guard.callSuspending(what, timeoutMs, block)
     }
 
     private class Registered<T>(val owner: Loaded, val value: T)
@@ -422,7 +423,11 @@ class DaemonPluginHost private constructor(
      * `plugin_tool_call`: runs tool [name] with [arguments] as [caller]; [request] dispatches a frame on the caller's own
      * connection and waits for its answer. The policy has already gated the call by the tool's action.
      */
-    fun callTool(name: String, arguments: JsonObject, caller: Caller, client: JsonObject = JsonObject(emptyMap()), request: (Envelope, Long) -> Envelope): ToolResult {
+    fun callTool(name: String, arguments: JsonObject, caller: Caller, client: JsonObject = JsonObject(emptyMap()), request: (Envelope, Long) -> Envelope): ToolResult =
+        kotlinx.coroutines.runBlocking { callToolSuspending(name, arguments, caller, client, request) }
+
+    /** BOARD-STALL-2: [callTool] for the daemon's request path: suspends while the plugin works, holding no Dispatchers.IO thread. */
+    suspend fun callToolSuspending(name: String, arguments: JsonObject, caller: Caller, client: JsonObject = JsonObject(emptyMap()), request: (Envelope, Long) -> Envelope): ToolResult {
         if (name == EVENT_EMIT_TOOL) return emitTool(arguments, client)
         if (name == TESTS_TOOL) return testsTool(arguments, client)
         val entry = toolEntries[name] ?: return ToolResult("Unknown tool: $name", isError = true)
@@ -437,7 +442,7 @@ class DaemonPluginHost private constructor(
             override fun request(type: String, data: String, sessionId: String?, timeoutMs: Long): Frame =
                 request(Envelope(type, data, sessionId), timeoutMs).toFrame()
         }
-        return entry.owner.call("tool($name)", toolTimeoutMs(entry.owner, entry.tool)) { entry.tool.call(call) }
+        return entry.owner.callSuspending("tool($name)", toolTimeoutMs(entry.owner, entry.tool)) { entry.tool.call(call) }
             .getOrElse { ToolResult("$name failed: ${it.message ?: it::class.simpleName}", isError = true) }
     }
 
@@ -553,7 +558,7 @@ class DaemonPluginHost private constructor(
         val loader = URLClassLoader("plugin-$id", arrayOf(jar.toURI().toURL()), DaemonApiClassLoader(DaemonPluginHost::class.java.classLoader))
         val cpu = d.limits.cpuMsPerCall ?: maxOf(d.limits.callTimeoutMs ?: services.limit(LimitRegistry.PLUGIN_CALL_TIMEOUT_MS), d.limits.toolTimeoutMs ?: services.limit(LimitRegistry.PLUGIN_TOOL_TIMEOUT_MS))
         lateinit var p: Loaded
-        val guard = PluginGuard(id, loader, cpu, log, hangCeilingMs = services.limit(LimitRegistry.PLUGIN_HANG_CEILING_MS), onDisabled = { why -> unregister(p); announceFailure(id, why) })
+        val guard = PluginGuard(id, loader, cpu, log, hangCeilingMs = services.limit(LimitRegistry.PLUGIN_HANG_CEILING_MS), poolSize = services.limit(LimitRegistry.PLUGIN_POOL_SIZE).toInt(), queueLimit = services.limit(LimitRegistry.PLUGIN_QUEUE_LIMIT).toInt(), onDisabled = { why -> unregister(p); announceFailure(id, why) })
         p = Loaded(id, status.tier, d, setting, guard, loader)
         loaded += p
         val api = Api(p)

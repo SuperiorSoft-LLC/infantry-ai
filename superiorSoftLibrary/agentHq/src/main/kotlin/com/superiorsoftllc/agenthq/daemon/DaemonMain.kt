@@ -3770,7 +3770,7 @@ private suspend fun handleConnection(
                         val arguments = call["arguments"] as? JsonObject ?: JsonObject(emptyMap())
                         val requestId = envelope.requestId
                         session.launch(kotlinx.coroutines.Dispatchers.IO) {
-                            val result = plugins.callTool(name, arguments, caller, call["client"] as? JsonObject ?: JsonObject(emptyMap())) { request, timeoutMs ->
+                            val result = plugins.callToolSuspending(name, arguments, caller, call["client"] as? JsonObject ?: JsonObject(emptyMap())) { request, timeoutMs ->
                                 val id = "plugin:" + UUID.randomUUID()
                                 val waiter = kotlinx.coroutines.CompletableDeferred<Envelope>()
                                 pluginWaiters[id] = waiter
