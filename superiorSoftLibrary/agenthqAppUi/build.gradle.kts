@@ -41,7 +41,7 @@ fun writeModuleList(base: File, core: Set<File>, official: Set<File>, demo: Set<
         check(name == f.parentFile.name) { "${f.path}: name $name is not its folder's" }
         // A daemon-only plugin (a `daemon` block, no UI part such as Infantry_Lua or Infantry_Scripting) has no
         // ModuleSource to compile into the UI, so it is left out of the list; a UI manifest still needs its entry.
-        if (m["entry"] == null && m["daemon"] != null) return@mapNotNull null
+        if (m["entry"] == null && (m["daemon"] != null || m["harness"] != null)) return@mapNotNull null
         val entry = (m["entry"] as? String)?.takeIf { it.isNotBlank() } ?: error("${f.path}: no entry (its ModuleSource)")
         listOf(name, entry, (m["buildOrder"] as? Number)?.toInt() ?: Int.MAX_VALUE, official, m["config"] ?: emptyList<Any>())
     }
