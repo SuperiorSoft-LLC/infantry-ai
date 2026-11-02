@@ -1079,7 +1079,7 @@ fun ContributionRow(item: TimelineItem) {
             Text(item.text.ifBlank { item.label }, color = tint, fontFamily = Mono, fontSize = 12.sp, modifier = Modifier.weight(1f))
             // SCRIPT-LINE-TS-1: the run's time, top right, same formatter/font as the message cards.
             if (item.at > 0) Text(
-                activityTimestamp(item.at) + (item.meta["durationMs"]?.toLongOrNull()?.let { " · %.1f s".format(it / 1000.0) } ?: ""),
+                activityTimestamp(item.at) + (item.meta["durationMs"]?.toLongOrNull()?.let { " · ${it / 1000}.${(it % 1000) / 100} s" } ?: ""),
                 color = Palette.Muted, fontFamily = Mono, fontSize = 10.sp,
                 maxLines = 1, softWrap = false, textAlign = TextAlign.End,
                 modifier = Modifier.padding(horizontal = 8.dp).testTag(CARD_TIMESTAMP_TAG),
