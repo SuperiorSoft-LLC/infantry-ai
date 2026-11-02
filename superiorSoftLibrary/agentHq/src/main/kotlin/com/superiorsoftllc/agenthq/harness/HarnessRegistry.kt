@@ -77,6 +77,12 @@ class HarnessRegistry(
     fun statsSource(harnessId: String): com.superiorsoftllc.agenthq.stats.PluginStatsSource? =
         runCatching { resolve(harnessId)?.statsSource() }.getOrNull()
 
+    /** HARNESS H5e: [spec] with harness [harnessId]'s watch contribution applied for a session with [env]; [spec] unchanged when there is none. */
+    fun applyWatch(harnessId: String, env: Map<String, String>, spec: com.superiorsoftllc.agenthq.runner.ProcessSpec): com.superiorsoftllc.agenthq.runner.ProcessSpec {
+        val w = runCatching { resolve(harnessId)?.watchContribution(env) }.getOrNull() ?: return spec
+        return spec.copy(command = spec.command + w.extraArgs, env = spec.env + w.env)
+    }
+
     fun pluginIds(): List<String> = synchronized(lock) { plugins.keys.toList() }
 
     fun resolve(harnessId: String): Harness? = synchronized(lock) {

@@ -154,6 +154,9 @@ interface Harness {
     /** HARNESS H5d (API 2.5.0): reads this harness's own session store into the session stats; null = none. Isolated by the implementor. */
     fun statsSource(): com.superiorsoftllc.agenthq.stats.PluginStatsSource? = null
 
+    /** HARNESS H5e (API 2.6.0): extra argv / env that route this harness's tool calls through the watched runner for a session with [env]; null = none. Isolated by the implementor. */
+    fun watchContribution(env: Map<String, String>): PluginWatch? = null
+
     /** Implementors produce the event stream here. Must emit incrementally, never only at completion. */
     fun events(request: HarnessRequest): Flow<HarnessEvent>
 
@@ -169,3 +172,6 @@ interface Harness {
         if (capability !in capabilities) throw MissingCapabilityException(capability, id)
     }
 }
+
+/** HARNESS H5e: what a plugin harness adds to its launch so a watched session's tool calls run through the watched runner. */
+data class PluginWatch(val extraArgs: List<String> = emptyList(), val env: Map<String, String> = emptyMap())
