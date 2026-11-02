@@ -62,6 +62,7 @@ import com.superiorsoftllc.agenthq.ui.block.layout.NodeSelector
 import com.superiorsoftllc.agenthq.ui.block.layout.PlaceholderBlock
 import com.superiorsoftllc.agenthq.ui.block.layout.admitInjections
 import com.superiorsoftllc.agenthq.ui.block.layout.Resolved
+import com.superiorsoftllc.agenthq.ui.model.AgentView
 import com.superiorsoftllc.agenthq.ui.model.AppState
 import com.superiorsoftllc.agenthq.ui.model.DiffTarget
 import com.superiorsoftllc.agenthq.ui.net.Controller
@@ -262,6 +263,18 @@ class TabInterceptor(
     )
 }
 
+/** AR-7b: the colour family of a session-row badge; core maps it to the palette. */
+enum class BadgeTone { INFO, MUTED, ACCENT, OK, WARN, DANGER }
+
+/** AR-7b: one badge on a session row: data only (label, tone, tooltip), no plugin names in core. */
+data class SessionBadge(val label: String, val tone: BadgeTone = BadgeTone.INFO, val tooltip: String? = null, val testTag: String? = null)
+
+/**
+ * AR-7b: a module's contribution to every session row. [badge] returns the badge for one session, or null for none;
+ * it reads live state, so a title or count stays current. Providers draw in [order], then [id].
+ */
+data class SessionBadgeProvider(val id: String, val order: Int = 0, val badge: (AppState, AgentView) -> SessionBadge?)
+
 /** A block a module adds to a named slot (see [Slots]); bound by the module.json `blocks` entry. */
 class SlotBlock(val content: @Composable (TabContext) -> Unit)
 
@@ -298,6 +311,8 @@ class AgentHqModule(
     val fieldTypes: Map<String, FieldType> = emptyMap(),
     /** S7: runs once when the host unloads the module (a soft restart replaces the module set, or the app closes it). */
     val onStop: () -> Unit = {},
+    /** AR-7b: the session-row badges the module contributes (`UiRegistrar.sessionBadge`). */
+    val sessionBadges: List<SessionBadgeProvider> = emptyList(),
 )
 
 /**
@@ -337,6 +352,8 @@ interface UiRegistrar {
     fun blockType(type: String, blockType: BlockType) {}
     /** CONFIG-5: config field type [id] (editor + validate); declare it under `fieldTypes` in module.json. */
     fun fieldType(id: String, type: FieldType) {}
+    /** AR-7b: a badge on every session row (label, tone, tooltip as data). */
+    fun sessionBadge(provider: SessionBadgeProvider) {}
 }
 
 /** Runs [plugin]'s registration into a module of [tier]. */
@@ -353,6 +370,7 @@ fun registerModule(manifest: ModuleManifest, tier: Tier, services: PluginService
     val implementations = LinkedHashMap<String, LinkedHashMap<String, Any>>()
     val blockTypes = LinkedHashMap<String, BlockType>()
     val fieldTypes = LinkedHashMap<String, FieldType>()
+    val sessionBadges = mutableListOf<SessionBadgeProvider>()
     plugin.register(object : UiRegistrar {
         override val services = services
         override fun tab(provider: TabProvider) { tabs += provider }
@@ -367,8 +385,9 @@ fun registerModule(manifest: ModuleManifest, tier: Tier, services: PluginService
         override fun implementation(registry: String, key: String, value: Any) { implementations.getOrPut(registry) { LinkedHashMap() }[key] = value }
         override fun blockType(type: String, blockType: BlockType) { blockTypes[type] = blockType }
         override fun fieldType(id: String, type: FieldType) { fieldTypes[id] = type }
+        override fun sessionBadge(provider: SessionBadgeProvider) { sessionBadges += provider }
     })
-    return AgentHqModule(manifest, tabs, interceptors, blocks, observers, tier, panels, shell, inject, fills, tabTrees, implementations, blockTypes, fieldTypes = fieldTypes, onStop = plugin::stop)
+    return AgentHqModule(manifest, tabs, interceptors, blocks, observers, tier, panels, shell, inject, fills, tabTrees, implementations, blockTypes, fieldTypes = fieldTypes, onStop = plugin::stop, sessionBadges = sessionBadges)
 }
 
 /**
@@ -838,6 +857,10 @@ class TabFactory(
             bottom.forEach { (owner, b) -> ModuleTier(byModule[owner]?.tier.isCoreTier()) { ModuleScope(owner) { b.content(context.forModule(services(owner))) } } }
         }
     }
+
+    /** AR-7b: the badges every module contributes to session row [agent], in provider order. */
+    fun sessionBadgesFor(state: AppState, agent: AgentView): List<SessionBadge> =
+        modules.flatMap { it.sessionBadges }.sortedWith(compareBy({ it.order }, { it.id })).mapNotNull { it.badge(state, agent) }
 
     /** PLUGINS-3: a side panel's sections, in order. */
     fun panels(panel: String): List<PanelProvider> =

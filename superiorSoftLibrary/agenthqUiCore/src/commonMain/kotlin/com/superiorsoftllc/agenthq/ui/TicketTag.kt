@@ -21,6 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.superiorsoftllc.agenthq.ui.plugin.BadgeTone
 import com.superiorsoftllc.agenthq.ui.model.AgentView
 import com.superiorsoftllc.agenthq.ui.model.AppState
 import com.superiorsoftllc.agenthq.ui.model.ticketTagFull
@@ -59,6 +60,30 @@ fun TicketTag(a: AgentView, state: AppState, onOpen: ((String) -> Unit)?, modifi
             ticketTagLabel(id, title), color = Palette.Info, fontSize = 10.sp, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis,
             modifier = modifier.then(if (onOpen != null) Modifier.clickable { onOpen(id) } else Modifier).semantics { contentDescription = full },
         )
+    }
+}
+
+/** AR-7b: the badges modules contribute to session row [a] (display-only; the whole row selects the agent). */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SessionRowBadges(a: AgentView, state: AppState) {
+    val factory = LocalTabFactory.current
+    factory.sessionBadgesFor(state, a).forEach { b ->
+        val color = when (b.tone) {
+            BadgeTone.INFO -> Palette.Info; BadgeTone.MUTED -> Palette.Muted; BadgeTone.ACCENT -> Palette.Accent
+            BadgeTone.OK -> Palette.Ok; BadgeTone.WARN -> Palette.Warn; BadgeTone.DANGER -> Palette.Danger
+        }
+        val tip = b.tooltip ?: b.label
+        TooltipBox(
+            positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+            tooltip = { PlainTooltip { Text(tip, fontSize = 11.sp) } },
+            state = rememberTooltipState(),
+        ) {
+            Text(
+                b.label, color = color, fontSize = 10.sp, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis,
+                modifier = (b.testTag?.let { Modifier.testTag(it) } ?: Modifier).semantics { contentDescription = tip },
+            )
+        }
     }
 }
 
