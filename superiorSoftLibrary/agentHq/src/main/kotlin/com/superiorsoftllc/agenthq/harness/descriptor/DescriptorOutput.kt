@@ -3,7 +3,7 @@ package com.superiorsoftllc.agenthq.harness.descriptor
 import com.superiorsoftllc.agenthq.harness.HarnessEvent
 import com.superiorsoftllc.agenthq.harness.HarnessTranslator
 import com.superiorsoftllc.agenthq.harness.claude.ClaudeStreamTranslator
-import com.superiorsoftllc.agenthq.harness.pi.PiStreamTranslator
+import com.superiorsoftllc.agenthq.harness.EventStreamTranslator
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -45,7 +45,7 @@ class DescriptorOutput internal constructor(private val format: Format, private 
         Format.JSONL -> MappedTranslator(cliName, rules)
         // The shipped translators, reused as they are: the descriptor adds no second reading of either stream.
         Format.CLAUDE -> ClaudeStreamTranslator()
-        Format.PI -> PiStreamTranslator()
+        Format.PI -> EventStreamTranslator()
     }
 
     internal companion object {

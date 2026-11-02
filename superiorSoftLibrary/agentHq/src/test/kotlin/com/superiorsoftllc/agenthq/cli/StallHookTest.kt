@@ -177,8 +177,6 @@ class StallHookTest {
     fun theHookClientsShipAsResources() {
         val js = WatchHooks::class.java.getResource(WatchHooks.OPENCODE_RESOURCE)!!.readText()
         assertTrue(js.contains("\"tool.execute.before\"") && js.contains("output.args.command = out.command"))
-        val ts = WatchHooks::class.java.getResource(WatchHooks.PI_RESOURCE)!!.readText()
-        assertTrue(ts.contains("pi.on(\"tool_call\"") && ts.contains("event.input.command = out.command"))
     }
 
     // ---- a hooked script really runs through the runner ----

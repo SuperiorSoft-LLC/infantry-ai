@@ -1,7 +1,5 @@
-package com.superiorsoftllc.agenthq.harness.pi
+package com.superiorsoftllc.agenthq.harness
 
-import com.superiorsoftllc.agenthq.harness.HarnessEvent
-import com.superiorsoftllc.agenthq.harness.HarnessTranslator
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -10,7 +8,9 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 
 /**
- * The TRANSLATION step for Pi: one JSONL record of `pi --mode json` in, zero or more typed [HarnessEvent]s out. The
+ * HARNESS H6c: the daemon's reader of the "event stream" JSONL wire format that descriptor harnesses name as `output.format` "pi".
+ * The pi harness module (plugins/official/Infantry_Pi) keeps an identical copy written against the harness API (a plugin sees only that API);
+ * EventStreamTranslatorCopyTest fails when the two drift. The TRANSLATION step for Pi: one JSONL record of `pi --mode json` in, zero or more typed [HarnessEvent]s out. The
  * only code in the plugin that knows Pi's wire schema (docs/json.md and docs/message-types.md of pi 1.3.0).
  *
  * One instance per run: it accumulates usage across the run's assistant messages and remembers how the run ended,
@@ -42,7 +42,7 @@ import kotlinx.serialization.json.contentOrNull
  *  - `agent_settled` means Pi has no automatic work left. Exit 0 without it is a truncated stream and is an Error.
  *  - `stopReason: "length"` (cut off at the output limit) completes with reason `length`, not `stop`.
  */
-internal class PiStreamTranslator : HarnessTranslator {
+internal class EventStreamTranslator : HarnessTranslator {
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
     @Volatile private var sessionAnnounced = false

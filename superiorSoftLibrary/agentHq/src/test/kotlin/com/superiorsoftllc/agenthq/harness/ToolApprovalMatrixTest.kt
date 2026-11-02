@@ -5,8 +5,6 @@ import com.superiorsoftllc.agenthq.daemon.loadHarnesses
 import com.superiorsoftllc.agenthq.harness.claude.ClaudeHarness
 import com.superiorsoftllc.agenthq.harness.descriptor.DescriptorHarness
 import com.superiorsoftllc.agenthq.harness.descriptor.HarnessDescriptorLoader
-import com.superiorsoftllc.agenthq.harness.pi.PiHarness
-import com.superiorsoftllc.agenthq.harness.pi.PiSessionAdapter
 import com.superiorsoftllc.agenthq.opencode.OpenCodePermissions
 import com.superiorsoftllc.agenthq.opencode.OpenCodeServeAdapter
 import com.superiorsoftllc.agenthq.protocol.EventNormalizer
@@ -66,7 +64,7 @@ class ToolApprovalMatrixTest {
         machineDescriptorDir()?.let { dir ->
             HarnessDescriptorLoader(dir).loadInto(registry).notes.forEach { println("[matrix] machine descriptor ${it.source}: ${it.reason} ${it.detail}") }
         }
-        assertTrue(registry.harnessIds().containsAll(listOf("claude", "pi", "codex", "gemini")), "registered: ${registry.harnessIds()}")
+        assertTrue(registry.harnessIds().containsAll(listOf("claude", "codex", "gemini")), "registered: ${registry.harnessIds()}")
 
         // 1. every configured provider name, as the daemon resolves it first.
         for (id in ProviderFactory.ids()) {
@@ -115,7 +113,6 @@ class ToolApprovalMatrixTest {
 
     private fun kindOf(provider: AgentProvider, harness: Harness?): String = when {
         harness is ClaudeHarness || provider is ClaudeCodeProvider -> "claude"
-        harness is PiHarness -> "pi"
         harness is DescriptorHarness -> "descriptor"
         provider is OpenCodeProvider -> "opencode"
         provider is StubProvider -> "stub"
@@ -199,7 +196,7 @@ class ToolApprovalMatrixTest {
                 if (ok) null else "serve answers '$permission' with $reply (denied=${d.deniedTool}), expected ${if (allowed) "once" else "reject + denial"}"
             }
         }
-        if (adapter !is ClaudeSessionAdapter && adapter !is PiSessionAdapter) return "unmapped session adapter ${adapter.javaClass.name} (label ${adapter.label})"
+        if (adapter !is ClaudeSessionAdapter) return "unmapped session adapter ${adapter.javaClass.name} (label ${adapter.label})"
         val launched = launch(adapter, model, mode).getOrElse { return "launch threw ${it::class.simpleName}: ${it.message}" }
         return when (kind) {
             "claude" -> claudeProblem(launched, mode)

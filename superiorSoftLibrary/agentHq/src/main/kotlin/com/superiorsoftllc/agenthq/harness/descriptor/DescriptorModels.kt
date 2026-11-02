@@ -1,6 +1,6 @@
 package com.superiorsoftllc.agenthq.harness.descriptor
 
-import com.superiorsoftllc.agenthq.harness.pi.PiModelCatalog
+import com.superiorsoftllc.agenthq.harness.BoundedCommand
 import com.superiorsoftllc.agenthq.protocol.ProviderModels
 import com.superiorsoftllc.agenthq.provider.HarnessModelCatalog
 import kotlinx.serialization.json.JsonArray
@@ -104,8 +104,8 @@ sealed interface DescriptorModels {
 class DescriptorModelCatalog(
     private val harnessId: String,
     private val section: DescriptorModels,
-    private val run: (List<String>) -> String = { PiModelCatalog.runBounded(it) },
-    private val ttlMs: Long = PiModelCatalog.DEFAULT_TTL_MS,
+    private val run: (List<String>) -> String = { BoundedCommand.runBounded(it) },
+    private val ttlMs: Long = BoundedCommand.DEFAULT_TTL_MS,
     private val clock: () -> Long = System::currentTimeMillis,
 ) : HarnessModelCatalog {
     private val lock = Any()
@@ -129,7 +129,7 @@ class DescriptorModelCatalog(
             when {
                 listed.isEmpty() -> noted("modelsCommand listed no models")
                 listed.size > DescriptorModels.MAX_ROWS -> rows(listed.take(DescriptorModels.MAX_ROWS)) +
-                    ProviderModels(harnessId, PiModelCatalog.NOTES_GROUP, "notes", emptyList(), "modelsCommand listed more than ${DescriptorModels.MAX_ROWS} models; the rest are not shown")
+                    ProviderModels(harnessId, BoundedCommand.NOTES_GROUP, "notes", emptyList(), "modelsCommand listed more than ${DescriptorModels.MAX_ROWS} models; the rest are not shown")
                 else -> rows(listed)
             }
         }

@@ -90,11 +90,8 @@ class ApiCliHarness(
     specFor = { request ->
         guarded(pluginId, onFailure) { api.process(request.toApi()) }.let { p ->
             // H6b: the harness's own watch and sandbox contributions, applied where its spec is built (the harness is known here, the runner's spec has no id).
-            val self = holder.get()
             val base = ProcessSpec(p.command, p.workingDir, p.env)
-            val watched = if (self == null) base else base.let { b -> self.watchContribution(b.env)?.let { w -> b.copy(command = b.command + w.extraArgs, env = b.env + w.env) } ?: b }
-            val sb = p.workingDir?.let { self?.sandboxContribution(it) }
-            if (sb == null) watched else watched.copy(extraReadDirs = sb.readDirs.map { it.absolutePath }, extraWriteDirs = sb.writeDirs.map { it.absolutePath })
+            holder.get()?.decorate(base) ?: base
         }
     },
     translatorFactory = { GuardedTranslator(pluginId, guarded(pluginId, onFailure) { api.newTranslator() }, onFailure) },
@@ -103,6 +100,13 @@ class ApiCliHarness(
     override val id: String = api.id
 
     init { holder.set(this) }
+
+    /** H6b / H6c: [base] with this harness's watch contribution (for the session env [sessionEnv]) and sandbox addition applied. */
+    internal fun decorate(base: ProcessSpec, sessionEnv: Map<String, String> = base.env): ProcessSpec {
+        val watched = watchContribution(sessionEnv)?.let { w -> base.copy(command = base.command + w.extraArgs, env = base.env + w.env) } ?: base
+        val sb = base.workingDir?.let { sandboxContribution(it) }
+        return if (sb == null) watched else watched.copy(extraReadDirs = sb.readDirs.map { it.absolutePath }, extraWriteDirs = sb.writeDirs.map { it.absolutePath })
+    }
     override val capabilities: Set<HarnessCapability> =
         runCatching { api.capabilities }.getOrDefault(emptySet()).mapTo(LinkedHashSet()) { HarnessCapability.valueOf(it.name) }
 
@@ -185,7 +189,8 @@ class ApiCliHarness(
     override fun sessionAdapter(): com.superiorsoftllc.agenthq.session.host.HarnessSessionAdapter? {
         if (!hookAllowed("session")) return null
         val s = try { api.session() } catch (t: Throwable) { onFailure(PluginFailure(pluginId, PluginFailurePhase.RUN, t)); null } ?: return null
-        return ApiSessionAdapter(api.id, pluginId, s, onFailure)
+        // H6c: the persistent process gets the same watch / sandbox contributions as a one-shot spec, plus the daemon's generic launch extras for this id.
+        return ApiSessionAdapter(api.id, pluginId, s, onFailure) { spec, env -> HarnessLaunchExtras.apply(api.id, decorate(spec, env), env) }
     }
 
     /** H6a: the plugin's model listing behind the `harness.hook.models` grant; a throw is isolated into one noted row by the caller. */
@@ -241,18 +246,6 @@ class ApiCliHarness(
             },
             contextLimit,
         )
-
-        fun ApiEvent.toInternal(): HarnessEvent = when (this) {
-            is ApiEvent.SessionStarted -> HarnessEvent.SessionStarted(sessionId)
-            is ApiEvent.TextDelta -> HarnessEvent.TextDelta(text)
-            is ApiEvent.ToolCall -> HarnessEvent.ToolCall(callId, name, arguments)
-            is ApiEvent.ToolResult -> HarnessEvent.ToolResult(callId, output, isError)
-            is ApiEvent.Reasoning -> HarnessEvent.Reasoning(text)
-            is ApiEvent.Usage -> HarnessEvent.Usage(inputTokens, outputTokens)
-            is ApiEvent.Completion -> HarnessEvent.Completion(reason)
-            is ApiEvent.Error -> HarnessEvent.Error(message)
-            is ApiEvent.Denial -> if (tool.isBlank()) HarnessEvent.Error("harness plugin emitted a denial with no tool name") else HarnessEvent.Denial(tool, reason)
-        }
     }
 }
 
@@ -294,3 +287,16 @@ internal class PluginLimitSource(
 
     private fun failed(now: Long) = com.superiorsoftllc.agenthq.usage.ProviderLimits.unknown(provider, now, com.superiorsoftllc.agenthq.usage.LimitReason.SOURCE_FAILED)
 }
+
+internal fun ApiEvent.toInternal(): HarnessEvent = when (this) {
+    is ApiEvent.SessionStarted -> HarnessEvent.SessionStarted(sessionId)
+    is ApiEvent.TextDelta -> HarnessEvent.TextDelta(text)
+    is ApiEvent.ToolCall -> HarnessEvent.ToolCall(callId, name, arguments)
+    is ApiEvent.ToolResult -> HarnessEvent.ToolResult(callId, output, isError)
+    is ApiEvent.Reasoning -> HarnessEvent.Reasoning(text)
+    is ApiEvent.Usage -> HarnessEvent.Usage(inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens)
+    is ApiEvent.Completion -> HarnessEvent.Completion(reason)
+    is ApiEvent.Error -> HarnessEvent.Error(message)
+    is ApiEvent.Denial -> if (tool.isBlank()) HarnessEvent.Error("harness plugin emitted a denial with no tool name") else HarnessEvent.Denial(tool, reason)
+}
+

@@ -1,6 +1,6 @@
 package com.superiorsoftllc.agenthq.harness.descriptor
 
-import com.superiorsoftllc.agenthq.harness.pi.PiModelCatalog
+import com.superiorsoftllc.agenthq.harness.BoundedCommand
 import com.superiorsoftllc.agenthq.protocol.ProviderModels
 import com.superiorsoftllc.agenthq.provider.HarnessModelCatalogs
 import kotlinx.serialization.json.Json
@@ -112,7 +112,7 @@ class DescriptorModelsTest {
         val big = (1..DescriptorModels.MAX_ROWS + 5).joinToString("\n") { "p/m$it" }
         val rows = DescriptorModelCatalog("acme", DescriptorModels.Command(listOf("x")), run = { big }).models()
         assertEquals(DescriptorModels.MAX_ROWS, rows.first { it.group == "p" }.models.size)
-        assertEquals(PiModelCatalog.NOTES_GROUP, rows.last().group)
+        assertEquals(BoundedCommand.NOTES_GROUP, rows.last().group)
     }
 
     @Test

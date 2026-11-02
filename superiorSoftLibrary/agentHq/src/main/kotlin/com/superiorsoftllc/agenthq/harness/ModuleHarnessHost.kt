@@ -68,9 +68,10 @@ class ModuleHarnessHost(
     }
 
     override fun resolveCli(tool: String): String? = when {
-        declared.cliId == null || tool != declared.cliId -> refused("cli $tool is not the declared harness.cli.id")
+        // H6c: `node` is the runtime of a JS CLI (CLIPATH-2); a module that declares a CLI may ask where the daemon resolves it.
+        declared.cliId == null || (tool != declared.cliId && tool != NODE_RUNTIME) -> refused("cli $tool is not the declared harness.cli.id")
         !granted(CLI_GRANT) -> refused("cli $tool is not granted ($CLI_GRANT)")
-        else -> services.resolveCli(tool, declared.cliCommand ?: tool)
+        else -> services.resolveCli(tool, if (tool == declared.cliId) declared.cliCommand ?: tool else tool)
     }
 
     override fun start(process: HarnessProcess, listener: HarnessProcessListener): HarnessRunningProcess {
@@ -112,6 +113,9 @@ class ModuleHarnessHost(
 
     companion object {
         const val CLI_GRANT = "harness.cli"
+
+        /** H6c: the one extra tool [resolveCli] answers beside the declared CLI: the node runtime that runs a JS CLI. */
+        const val NODE_RUNTIME = "node"
 
         /** The hook kinds module.json `harness.hooks` may name. watch/mcp/ask are host calls; sandbox/stats/usage are H5 contributions. */
         val HOOK_KINDS: Set<String> = setOf("watch", "mcp", "ask", "sandbox", "stats", "usage", "session", "models")

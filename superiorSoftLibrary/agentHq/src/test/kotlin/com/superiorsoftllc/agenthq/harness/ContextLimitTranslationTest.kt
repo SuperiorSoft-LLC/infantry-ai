@@ -4,7 +4,6 @@ import com.superiorsoftllc.agenthq.claude.ClaudeCommand
 import com.superiorsoftllc.agenthq.claude.ClaudeContextLimit
 import com.superiorsoftllc.agenthq.claude.ClaudeSessionAdapter
 import com.superiorsoftllc.agenthq.harness.claude.ClaudeHarness
-import com.superiorsoftllc.agenthq.harness.pi.PiHarness
 import com.superiorsoftllc.agenthq.provider.HarnessProvider
 import com.superiorsoftllc.agenthq.provider.OpenCodeProvider
 import com.superiorsoftllc.agenthq.provider.RunRequest
@@ -73,16 +72,6 @@ class ContextLimitTranslationTest {
         assertEquals(ContextLimitSupport.UNSUPPORTED, cap.support)
         assertFalse(cap.applies)
         assertTrue(cap.how.isNotBlank())
-    }
-
-    @Test
-    fun anUnsupportedHarnessIsNeverHandedTheLimit() {
-        var seen: HarnessRequest? = null
-        // One-shot pi (no session adapter) declares no mapping.
-        val provider = HarnessProvider(PiHarness(NoRunner, { r -> seen = r; ProcessSpec(listOf("pi")) }))
-        assertEquals(ContextLimitSupport.UNSUPPORTED, provider.contextLimit().support)
-        provider.spec(RunRequest("p", contextLimit = 300_000))
-        assertNull(seen!!.contextLimit, "recorded on the session, not passed to a harness that cannot apply it")
     }
 
     @Test

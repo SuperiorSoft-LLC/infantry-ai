@@ -2,8 +2,6 @@ package com.superiorsoftllc.agenthq.harness
 
 import com.superiorsoftllc.agenthq.claude.ClaudeCommand
 import com.superiorsoftllc.agenthq.harness.claude.ClaudeHarness
-import com.superiorsoftllc.agenthq.harness.pi.PiCommand
-import com.superiorsoftllc.agenthq.harness.pi.PiHarness
 import com.superiorsoftllc.agenthq.provider.HarnessProvider
 import com.superiorsoftllc.agenthq.provider.OpenCodeProvider
 import com.superiorsoftllc.agenthq.provider.RunRequest
@@ -38,19 +36,9 @@ class EffortTranslationTest {
     }
 
     @Test
-    fun pi_theLevelIsTheThinkingFlag_andNoLevelAddsNoFlag() {
-        val withEffort = PiCommand.command(listOf("pi"), "m", null, "medium")
-        val without = PiCommand.command(listOf("pi"), "m", null, null)
-        val at = withEffort.indexOf("--thinking")
-        assertTrue(at >= 0 && withEffort[at + 1] == "medium", "argv: $withEffort")
-        assertFalse("--thinking" in without, "default behaviour unchanged: $without")
-    }
-
-    @Test
     fun everyLevelOfTheDataListIsAccepted_byBothBuiltIns() {
         for (level in EffortLevels.ids) {
             assertTrue(level in ClaudeCommand.spec(executable = "claude.exe", effort = level).command)
-            assertTrue(level in PiCommand.command(listOf("pi"), null, null, level))
         }
     }
 
@@ -58,7 +46,6 @@ class EffortTranslationTest {
     fun theBuiltInsReportSupported_andOpencodeUnsupportedWithAReason() {
         assertEquals(EffortSupport.SUPPORTED, ClaudeHarness(NoRunner).effort.support)
         assertEquals(EffortSupport.SUPPORTED, com.superiorsoftllc.agenthq.claude.ClaudeEffort.CAPABILITY.support, "the session provider's capability")
-        assertEquals(EffortSupport.SUPPORTED, PiHarness(NoRunner).effort.support)
         val opencode = OpenCodeProvider(modelLister = { emptyList() }).effort()
         assertEquals(EffortSupport.UNSUPPORTED, opencode.support)
         assertFalse(opencode.applies)

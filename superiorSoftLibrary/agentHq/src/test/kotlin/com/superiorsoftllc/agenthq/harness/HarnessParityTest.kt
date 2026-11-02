@@ -2,8 +2,6 @@ package com.superiorsoftllc.agenthq.harness
 
 import com.superiorsoftllc.agenthq.harness.claude.ClaudeHarness
 import com.superiorsoftllc.agenthq.harness.claude.ClaudeHarnessPlugin
-import com.superiorsoftllc.agenthq.harness.pi.PiHarness
-import com.superiorsoftllc.agenthq.harness.pi.PiHarnessPlugin
 import com.superiorsoftllc.agenthq.runner.ProcessListener
 import com.superiorsoftllc.agenthq.runner.ProcessRunner
 import com.superiorsoftllc.agenthq.runner.ProcessSpec
@@ -202,6 +200,31 @@ private class RecordingRunner(private val delegate: ProcessRunner) : ProcessRunn
     }
 }
 
+/**
+ * HARNESS H6c: pi is a harness module now (plugins/official/Infantry_Pi, tested there). Here a pi-LIKE harness stands in for it: it reads
+ * its stream with the harness API's shared event-stream translator (the one reader the pi plugin and the descriptor `pi` format use), so the
+ * Claude <-> event-stream parity of the neutral events stays asserted in core.
+ */
+private class PiLikeHarness(
+    runner: ProcessRunner,
+    specFor: (HarnessRequest) -> ProcessSpec = { piLikeSpec(it) },
+    translatorFactory: () -> HarnessTranslator = { EventStreamTranslator() },
+) : CliHarness(runner, specFor, translatorFactory, cliName = "pi") {
+    override val id: String = "pi"
+    override val contractVersion: String = HARNESS_CONTRACT_VERSION
+    override val capabilities: Set<HarnessCapability> = HarnessCapability.entries.toSet()
+}
+
+private class PiLikePlugin(private val runner: ProcessRunner, private val specFor: (HarnessRequest) -> ProcessSpec) : HarnessPlugin {
+    override val pluginId: String = "agenthq-pi-like-test"
+    override val contractVersion: String = HARNESS_CONTRACT_VERSION
+    override fun register(registrar: HarnessRegistrar) = registrar.register(PiLikeHarness(runner, specFor))
+}
+
+private fun piLikeSpec(r: HarnessRequest) = ProcessSpec(
+    listOf("pi-test") + listOfNotNull(r.model?.let { "--model" to it }, r.sessionId?.let { "--session" to it }).flatMap { it.toList() },
+)
+
 private fun request(harnessId: String, sessionId: String? = null, model: String? = null) =
     HarnessRequest(prompt = "say hello", harnessId = harnessId, project = "proj", model = model, sessionId = sessionId)
 
@@ -215,7 +238,7 @@ class HarnessParityTest {
                 registry.register(ClaudeHarnessPlugin(scripted(s.claude, s.stderr, s.claudeExit)) { ProcessSpec(listOf("claude-test")) }),
             )
             assertIs<PluginOutcome.Accepted>(
-                registry.register(PiHarnessPlugin(scripted(s.pi, s.stderr, s.piExit)) { ProcessSpec(listOf("pi-test")) }),
+                registry.register(PiLikePlugin(scripted(s.pi, s.stderr, s.piExit)) { ProcessSpec(listOf("pi-test")) }),
             )
         }
 
@@ -269,7 +292,7 @@ class HarnessParityTest {
             val piRunner = RecordingRunner(scripted(s.pi, emptyList(), 0))
             val registry = HarnessRegistry(onFailure = { failures += it })
             registry.register(ClaudeHarnessPlugin(claudeRunner) { ClaudeHarness.defaultSpec(it, executable = { "claude-test" }) })
-            registry.register(PiHarnessPlugin(piRunner) { PiHarness.defaultSpec(it, launcher = { listOf("pi-test") }) })
+            registry.register(PiLikePlugin(piRunner) { piLikeSpec(it) })
             val recorder = if (harnessId == "claude") claudeRunner else piRunner
 
             val first = runBlocking { registry.run(request(harnessId)).toList() }
@@ -291,7 +314,7 @@ class HarnessParityTest {
         val piRunner = RecordingRunner(scripted(s.pi, emptyList(), 0))
         val registry = HarnessRegistry(onFailure = { failures += it })
         registry.register(ClaudeHarnessPlugin(claudeRunner) { ClaudeHarness.defaultSpec(it, executable = { "claude-test" }) })
-        registry.register(PiHarnessPlugin(piRunner) { PiHarness.defaultSpec(it, launcher = { listOf("pi-test") }) })
+        registry.register(PiLikePlugin(piRunner) { piLikeSpec(it) })
         runBlocking { registry.run(request("claude", model = "m-1")).toList() }
         runBlocking { registry.run(request("pi", model = "m-1")).toList() }
         assertTrue(claudeRunner.specs.single().command.zipWithNext().contains("--model" to "m-1"), claudeRunner.specs.toString())
@@ -299,15 +322,6 @@ class HarnessParityTest {
     }
 
     // ---- declared capability / divergence differences ---------------------------------------
-
-    @Test
-    fun bothHarnessesDeclareTheSameCapabilitiesSoThereIsNoCapabilityDivergenceToExplain() {
-        val none = scripted(emptyList(), emptyList(), 0)
-        val claude = ClaudeHarness(none).capabilities
-        val pi = PiHarness(none, { ProcessSpec(listOf("pi-test")) }).capabilities
-        assertEquals(HarnessCapability.entries.toSet(), claude, "claude")
-        assertEquals(claude, pi, "an undeclared capability difference between the two harnesses")
-    }
 
     @Test
     fun theOnlyDeclaredDivergenceIsStreamGranularity() {
@@ -363,7 +377,7 @@ class HarnessParityTest {
         val lines = listOf("one", "two")
         val spec = { _: HarnessRequest -> ProcessSpec(listOf("x")) }
         val claude = ClaudeHarness(scripted(lines, emptyList(), 0), spec, ::SentinelTranslator)
-        val pi = PiHarness(scripted(lines, emptyList(), 0), spec, ::SentinelTranslator)
+        val pi = PiLikeHarness(scripted(lines, emptyList(), 0), spec, ::SentinelTranslator)
         assertEquals(expected, runBlocking { claude.run(request("claude")).toList() }, "claude emitted something the translator did not produce")
         assertEquals(expected, runBlocking { pi.run(request("pi")).toList() }, "pi emitted something the translator did not produce")
     }
@@ -385,11 +399,10 @@ class HarnessParityTest {
     // ---- both are found by the one standard mechanism ---------------------------------------------
 
     @Test
-    fun bothPluginsAreDiscoveredByTheStandardSourceWithNoDaemonCode() {
+    fun theBuiltInPluginIsDiscoveredByTheStandardSourceWithNoDaemonCode() {
         val registry = HarnessRegistry(onFailure = { failures += it })
         val report = registry.discover(ServiceLoaderPluginSource())
         assertEquals(listOf("claude"), report.accepted.single { it.pluginId == ClaudeHarnessPlugin.PLUGIN_ID }.harnessIds)
-        assertEquals(listOf("pi"), report.accepted.single { it.pluginId == PiHarnessPlugin.PLUGIN_ID }.harnessIds)
         assertTrue(report.refused.isEmpty() && report.failed.isEmpty(), "discovery report: $report")
     }
 }

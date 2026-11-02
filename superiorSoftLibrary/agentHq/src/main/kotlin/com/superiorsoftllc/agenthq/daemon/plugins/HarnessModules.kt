@@ -175,7 +175,7 @@ class HarnessModules(
         h.hooks.firstOrNull { it !in ModuleHarnessHost.HOOK_KINDS }?.let { return "unknown harness hook '${it.take(40)}' (known: ${ModuleHarnessHost.HOOK_KINDS.joinToString()})" }
         h.aliases.entries.firstOrNull { (a, target) -> target !in h.ids || !ID.matches(a) || a in h.ids }?.let { return "harness.aliases '${it.key.take(40)}' must name one of harness.ids and not be one" }
         h.cli?.let { cli ->
-            ManifestHarnessCli.refusal(cli)?.let { return it }
+            ManifestHarnessCli.refusal(cli, allowBuiltIn = tier != Tier.COMMUNITY && cli.id in h.ids)?.let { return it }
             if (synchronized(lock) { loaded.values.any { it.declaration.cli?.id == cli.id } }) return "harness.cli.id '${cli.id}' is already declared by another loaded harness module"
         }
         val taken = registry.harnessIds().toSet() + reserved()

@@ -1003,7 +1003,7 @@ class AgentHqDaemon(
             com.superiorsoftllc.agenthq.experiments.pitoolbridge.PiToolBridgeRegistration.register({ sandboxConfig().enabled || projectStore.experimentOn(it, "piToolBridge") }, sessionStats)
             // TODO-PROGRESS-1: every pi session loads the daemon's `todowrite` extension (pi has no to-do tool of its own).
             // STALL-2: and the watch hook extension (`tool_call` -> the watched runner) when the session's watch is on.
-            CoreHarnessContributions.register(stateDir())
+            CoreHarnessContributions.register()
             // STALL-2: the opencode watch plugin, named in every serve's inline config while its session's watch is on.
             // H2: it belongs to the opencode harness, so it is written only when opencode is present (no `opencode/` dir otherwise).
             val opencodePresent = (listOf(provider) + additionalProviders).any { it.id == "opencode" } || "opencode" in harnesses.harnessIds()

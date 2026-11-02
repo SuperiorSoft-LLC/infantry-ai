@@ -27,7 +27,7 @@ import java.io.File
  *    `updatedInput` with no `permissionDecision` and then runs its normal permission check on the rewritten input.
  *  - opencode: the plugin `opencode/agenthq-watch.js` (`tool.execute.before`, mutates `output.args.command`), named in
  *    the serve's inline config `plugin` list ([mergeOpenCodePlugin]).
- *  - pi: the extension `pi/agenthq-watch.ts` (`tool_call`, mutates `event.input.command`), loaded with `-e`.
+ *  - pi: the extension `agenthq-watch.ts` (`tool_call`, mutates `event.input.command`), shipped by the pi harness module (Infantry_Pi) and loaded with `-e` through its `watch()` contribution.
  *
  * PERMISSIONS: the rewritten command starts with `agenthq`, which every harness allows in every mode (BUG-PERM-5). So a
  * rewrite is only made where the original would have run without asking anyway: claude in `bypassPermissions`, opencode
@@ -38,7 +38,6 @@ object WatchHooks {
     const val PATH = "/watch/rewrite"
     const val SESSION_HEADER = "X-Agenthq-Session"
     const val OPENCODE_RESOURCE = "/opencode/agenthq-watch.js"
-    const val PI_RESOURCE = "/pi/agenthq-watch.ts"
 
     /** Set by the daemon at start: the installed opencode plugin file (null = not installed, no plugin entry). */
     @Volatile var openCodePlugin: File? = null
@@ -124,12 +123,6 @@ object WatchHooks {
             file.writeText(text)
         }
         return file
-    }
-
-    /** The pi `-e` contributor (like [com.superiorsoftllc.agenthq.harness.pi.PiTodoExtension.launchArgs]); nothing when the watch is off. */
-    fun piLaunchArgs(dir: File): (File?, Map<String, String>) -> List<String> = { _, env ->
-        if (!on(env)) emptyList()
-        else runCatching { install(dir, PI_RESOURCE, "agenthq-watch.ts") }.getOrNull()?.let { listOf("-e", it.absolutePath) } ?: emptyList()
     }
 
     /**

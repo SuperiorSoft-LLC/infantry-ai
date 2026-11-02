@@ -1,10 +1,9 @@
 package com.superiorsoftllc.agenthq.daemon
 
 import com.superiorsoftllc.agenthq.harness.HarnessRegistry
-import com.superiorsoftllc.agenthq.harness.pi.PiHarnessPlugin
-import com.superiorsoftllc.agenthq.harness.pi.PiModelCatalog
 import com.superiorsoftllc.agenthq.protocol.Envelope
 import com.superiorsoftllc.agenthq.protocol.ProviderModels
+import com.superiorsoftllc.agenthq.provider.HarnessModelCatalog
 import com.superiorsoftllc.agenthq.provider.HarnessModelCatalogs
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
@@ -29,16 +28,13 @@ class ModelsHeadOfLineDaemonTest {
     fun aSlowPiListingDoesNotBlockTheRequestsSentAfterModels() {
         val release = CountDownLatch(1)
         val entered = CountDownLatch(1)
-        val slowPi = PiModelCatalog(
-            listModels = {
-                entered.countDown()
-                // Stands in for `pi --list-models` under load; released by the test, bounded so a bug cannot hang CI.
-                release.await(30, TimeUnit.SECONDS)
-                "provider model\nacme m1\n"
-            },
-            storeFile = { null },
-        )
-        val registry = HarnessRegistry().also { it.register(PiHarnessPlugin()) }
+        val slowPi = HarnessModelCatalog {
+            entered.countDown()
+            // Stands in for `pi --list-models` under load; released by the test, bounded so a bug cannot hang CI.
+            release.await(30, TimeUnit.SECONDS)
+            listOf(ProviderModels("pi", "acme", "acme", listOf("acme/m1")))
+        }
+        val registry = HarnessRegistry().also { it.register(StubPiPlugin) }
         val fixture = DaemonFixture.launch(harnesses = registry, modelCatalogs = HarnessModelCatalogs(mapOf("pi" to slowPi)))
         try {
             fixture.client.await(Envelope.READY)
@@ -65,16 +61,12 @@ class ModelsHeadOfLineDaemonTest {
         val calls = java.util.concurrent.atomic.AtomicInteger()
         val release = CountDownLatch(1)
         // ttl 0: every request re-lists, so the two answers differ and their order is observable.
-        val pi = PiModelCatalog(
-            listModels = {
-                val n = calls.incrementAndGet()
-                if (n == 1) release.await(30, TimeUnit.SECONDS)
-                "provider model\nacme m$n\n"
-            },
-            storeFile = { null },
-            ttlMs = 0,
-        )
-        val registry = HarnessRegistry().also { it.register(PiHarnessPlugin()) }
+        val pi = HarnessModelCatalog {
+            val n = calls.incrementAndGet()
+            if (n == 1) release.await(30, TimeUnit.SECONDS)
+            listOf(ProviderModels("pi", "acme", "acme", listOf("acme/m$n")))
+        }
+        val registry = HarnessRegistry().also { it.register(StubPiPlugin) }
         val fixture = DaemonFixture.launch(harnesses = registry, modelCatalogs = HarnessModelCatalogs(mapOf("pi" to pi)))
         try {
             fixture.client.await(Envelope.READY)
@@ -94,4 +86,26 @@ class ModelsHeadOfLineDaemonTest {
             fixture.deleteState()
         }
     }
+}
+
+/** A "pi" harness for the registry only (pi is a module now): the models frame asks the catalog of every registered harness. */
+private object StubPiPlugin : com.superiorsoftllc.agenthq.harness.HarnessPlugin {
+    override val pluginId = "stub-pi"
+    override val contractVersion = com.superiorsoftllc.agenthq.harness.HARNESS_CONTRACT_VERSION
+    override fun register(registrar: com.superiorsoftllc.agenthq.harness.HarnessRegistrar) = registrar.register(
+        object : com.superiorsoftllc.agenthq.harness.CliHarness(
+            com.superiorsoftllc.agenthq.runner.PipedProcessRunner(), { com.superiorsoftllc.agenthq.runner.ProcessSpec(listOf("x")) },
+            {
+                object : com.superiorsoftllc.agenthq.harness.HarnessTranslator {
+                    override fun translate(line: String) = emptyList<com.superiorsoftllc.agenthq.harness.HarnessEvent>()
+                    override fun terminal(exitCode: Int, stderrTail: String): com.superiorsoftllc.agenthq.harness.HarnessEvent = com.superiorsoftllc.agenthq.harness.HarnessEvent.Completion()
+                }
+            },
+            "pi",
+        ) {
+            override val id = "pi"
+            override val contractVersion = com.superiorsoftllc.agenthq.harness.HARNESS_CONTRACT_VERSION
+            override val capabilities = emptySet<com.superiorsoftllc.agenthq.harness.HarnessCapability>()
+        },
+    )
 }

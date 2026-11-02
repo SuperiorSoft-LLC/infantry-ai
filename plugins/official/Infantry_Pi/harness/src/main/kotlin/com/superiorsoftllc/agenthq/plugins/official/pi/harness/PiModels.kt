@@ -1,7 +1,6 @@
-package com.superiorsoftllc.agenthq.harness.pi
+package com.superiorsoftllc.agenthq.plugins.official.pi.harness
 
-import com.superiorsoftllc.agenthq.protocol.ProviderModels
-import com.superiorsoftllc.agenthq.provider.HarnessModelCatalog
+import com.superiorsoftllc.agenthq.harness.api.HarnessModels
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -11,50 +10,46 @@ import java.io.File
 import java.util.concurrent.TimeUnit
 
 /**
- * ROLE-FIRST S4: Pi's providers and models for the `models` frame.
+ * ROLE-FIRST S4 / HARNESS H6c: Pi's providers and models for the `models` frame (harness API 2.8 `models()`).
  *
  * Source order (docs/AGENTHQ-ROLE-FIRST.md 5.2/5.3):
- *  1. `pi --list-models` -- authoritative (includes models reachable through logged-in providers). It prints a table
- *     `provider  model  context  max-out  thinking  images`; the first column is the provider (row group), and the
- *     id handed back is `provider/model`, the spelling Pi's own `--model` documents ("supports provider/id") and the
- *     only one that is unambiguous (the same model name is listed under several providers).
- *  2. When that fails (Pi not installed, timeout, non-zero exit, oversized output): Pi's per-provider cache
- *     `~/.pi/agent/models-store.json` (`{ <provider>: { models: [ { id } ] } }`), plus a NOTE row saying why.
- *     `auth.json` (secrets) is never read.
+ *  1. `pi --list-models` -- authoritative. It prints a table `provider  model  context  max-out  thinking  images`; the first column is the
+ *     provider (row group), and the id handed back is `provider/model`, the spelling Pi's own `--model` documents.
+ *  2. When that fails (Pi not installed, timeout, non-zero exit, oversized output): Pi's per-provider cache `~/.pi/agent/models-store.json`,
+ *     plus a NOTE row saying why. `auth.json` (secrets) is never read.
  *  3. Both fail: one noted empty row.
  *
- * Errors are surfaced as notes built from fixed reasons -- never the command's output or a file's content (the CP-1
- * leak rule). The result is cached for [ttlMs] so a burst of `models` requests spawns Pi once.
+ * Errors are surfaced as notes built from fixed reasons -- never the command's output or a file's content (the CP-1 leak rule). The result is
+ * cached for [ttlMs] so a burst of `models` requests spawns Pi once.
  */
-class PiModelCatalog(
-    private val listModels: () -> String = { runListModels() },
+internal class PiModels(
+    private val listModels: () -> String,
     private val storeFile: () -> File? = { defaultStoreFile() },
     private val ttlMs: Long = DEFAULT_TTL_MS,
     private val clock: () -> Long = System::currentTimeMillis,
-) : HarnessModelCatalog {
-
+) {
     private val lock = Any()
-    private var cached: List<ProviderModels>? = null
+    private var cached: List<HarnessModels>? = null
     private var cachedAt = 0L
 
-    override fun models(): List<ProviderModels> = synchronized(lock) {
+    fun models(): List<HarnessModels> = synchronized(lock) {
         val now = clock()
         cached?.takeIf { now - cachedAt < ttlMs }?.let { return it }
         compute().also { cached = it; cachedAt = now }
     }
 
-    private fun compute(): List<ProviderModels> {
+    private fun compute(): List<HarnessModels> {
         val listed = try {
             parseListModels(listModels())
         } catch (e: Exception) {
             return fallback("pi --list-models failed: ${reason(e)}")
         }
         // LIMITS: a Pi with no models cannot run anything, so pickers show it dimmed instead of selectable.
-        if (listed.isEmpty()) return listOf(ProviderModels(ID, "", ID, emptyList(), "pi --list-models listed no models", unavailable = true))
+        if (listed.isEmpty()) return listOf(HarnessModels("", HARNESS_ID, emptyList(), "pi --list-models listed no models", unavailable = true))
         return rows(listed)
     }
 
-    private fun fallback(why: String): List<ProviderModels> {
+    private fun fallback(why: String): List<HarnessModels> {
         val stored = try {
             val file = storeFile() ?: return noted("$why; no models-store.json")
             if (!file.isFile) return noted("$why; no models-store.json")
@@ -63,16 +58,16 @@ class PiModelCatalog(
             return noted("$why; models-store.json unreadable")
         }
         if (stored.isEmpty()) return noted("$why; models-store.json lists no models")
-        return rows(stored) + ProviderModels(ID, NOTES_GROUP, "notes", emptyList(), "$why; showing Pi's cached models-store.json")
+        return rows(stored) + HarnessModels(NOTES_GROUP, "notes", emptyList(), "$why; showing Pi's cached models-store.json")
     }
 
-    private fun noted(why: String) = listOf(ProviderModels(ID, "", ID, emptyList(), "could not list models: $why"))
+    private fun noted(why: String) = listOf(HarnessModels("", HARNESS_ID, emptyList(), "could not list models: $why"))
 
-    private fun rows(byProvider: Map<String, List<String>>): List<ProviderModels> =
-        byProvider.map { (provider, ids) -> ProviderModels(ID, provider, provider, ids) }
+    private fun rows(byProvider: Map<String, List<String>>): List<HarnessModels> =
+        byProvider.map { (provider, ids) -> HarnessModels(provider, provider, ids) }
 
     companion object {
-        private const val ID = PiHarness.HARNESS_ID
+        private const val HARNESS_ID = "pi"
         const val NOTES_GROUP = "notes"
         const val DEFAULT_TTL_MS = 30_000L
         const val DEFAULT_TIMEOUT_MS = 20_000L
@@ -136,8 +131,8 @@ class PiModelCatalog(
             return names.filter { inherited[it] != home }.associateWith { home }
         }
 
-        /** The real listing: Pi's own launcher (see [PiCommand.resolveLauncher]) + `--list-models`, bounded. */
-        fun runListModels(): String = runBounded(PiCommand.resolveLauncher() + "--list-models")
+        /** The real listing: [argv] is Pi's own launcher + `--list-models`, bounded. */
+        fun runListModels(argv: List<String>): String = runBounded(argv)
 
         /**
          * Runs [argv] as a child process (an argv list, never a shell), stdin closed, stderr discarded, and returns
