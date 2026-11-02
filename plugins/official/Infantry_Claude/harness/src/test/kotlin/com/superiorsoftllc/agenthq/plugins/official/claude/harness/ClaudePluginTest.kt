@@ -109,4 +109,12 @@ class ClaudePluginTest {
         val cut = events(listOf("""{"type":"system","subtype":"init","session_id":"s-3"}"""), exit = 3, err = "boom").last()
         assertTrue("boom" in cut || "3" in cut, cut)
     }
+
+    @Test fun `blank optional values add no flag and the model list is the catalog`() {
+        val argv = ClaudeCommand.command("claude", " ", " ", emptyList(), false, " ", effort = "")
+        for (flag in listOf("--model", "--effort", "--permission-mode", "--resume", "--mcp-config")) assertFalse(flag in argv, flag)
+        val models = ClaudeCommand.models().single()
+        assertEquals("claude", models.group)
+        assertTrue(models.models.isNotEmpty() && models.models == ClaudeCommand.MODELS.distinct())
+    }
 }
