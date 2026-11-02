@@ -14,7 +14,11 @@ object AgentsWiring {
     /** What [build] builds. */
     class Built(val registry: AgentRegistry, val modules: AgentModules, val profiles: AgentProfiles)
 
-    fun build(store: AgentHqStore, manager: SessionManager, roles: RolesLookup): Built {
+    fun build(
+        store: AgentHqStore, manager: SessionManager, roles: RolesLookup,
+        /** AR-4b-ii-a: bindings and trait lists are read through their ports (looked up per call); absent = none. */
+        bindings: com.superiorsoftllc.agenthq.daemon.RoleLists = com.superiorsoftllc.agenthq.daemon.RoleLists({ null }, { null }),
+    ): Built {
         // AGENT-REGISTRY-1 (docs/AGENT-REGISTRY.md): the ONE agent registry. The role catalog is its first contributor (each role
         // one agent), modules' `agents` blocks are synced in later; with no user override every agent is enabled, as before.
         val agentRegistry = AgentRegistry(
@@ -29,8 +33,8 @@ object AgentsWiring {
         // Contract 1.4.0: profiles are validated against the providers [manager] was configured with.
         val agents = AgentProfiles(
             // AGENT-REGISTRY-1: a module's agent is a role id a session may start as (additive: catalog ids resolve as before).
-            store.agents, manager, roleBindings = store.roleBindings, roleExists = { roles.role(it) != null || agentRegistry.contains(it) },
-            traitExists = { store.traits.get(it) != null }, roleTraits = store.roleTraits::get, trait = store.traits::get,
+            store.agents, manager, roleBindings = bindings::binding, roleExists = { roles.role(it) != null || agentRegistry.contains(it) },
+            traitExists = { store.traits.get(it) != null }, roleTraits = bindings::traits, trait = store.traits::get,
             requireKnownSkills = { ids -> com.superiorsoftllc.agenthq.settings.requireKnownSkills(store, ids, "skillIds") },
             // ROLE-EDIT-1: a role's (possibly edited) instructions reach every session started for it after the save.
             rolePersona = { id -> (roles.role(id)?.persona ?: agentRegistry.instructionsOf(id)).let { p -> if (id == AssistantService.ROLE) AssistantService.instructions(p) else p } },

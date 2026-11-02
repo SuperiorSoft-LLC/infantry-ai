@@ -41,7 +41,7 @@ class RoleBindingSpawnTest {
     private fun rig(): Rig {
         val store = SqlAgentHqStore.open(File(dir, "agenthq.db").absolutePath).also { opened += it }
         val manager = SessionManager(FakeAgentProvider(), ScriptedRunner(autoExit = false), tempSessionStore(), killGraceMs = 50, defaultWorkingDir = dir)
-        return Rig(store, manager, AgentProfiles(store.agents, manager, roleBindings = store.roleBindings))
+        return Rig(store, manager, AgentProfiles(store.agents, manager, roleBindings = store.roleBindings::get))
     }
 
     private fun Rig.bind(model: String?, effort: String? = null, at: Long = 1) =

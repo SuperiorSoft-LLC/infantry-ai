@@ -17,3 +17,12 @@ class RolesLookup(private val source: () -> Roles?) {
     fun all(): List<RoleRecord> = port()?.all().orEmpty()
     fun role(id: String): RoleRecord? = port()?.role(id)
 }
+
+/** AR-4b-ii-a: how core reads a role's binding and trait list, through the ports on every call. No provider = none. */
+class RoleLists(
+    private val bindings: () -> com.superiorsoftllc.agenthq.daemon.api.roles.RoleBindings?,
+    private val traits: () -> com.superiorsoftllc.agenthq.daemon.api.roles.RoleTraitLists?,
+) {
+    fun binding(roleId: String): com.superiorsoftllc.agenthq.protocol.RoleBinding? = runCatching { bindings()?.get(roleId) }.getOrNull()
+    fun traits(roleId: String): com.superiorsoftllc.agenthq.protocol.RoleTraits? = runCatching { traits()?.get(roleId) }.getOrNull()
+}
