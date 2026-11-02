@@ -110,7 +110,13 @@ sealed interface HarnessEvent {
     data class Usage(val inputTokens: Long, val outputTokens: Long, val cacheReadTokens: Long = 0, val cacheWriteTokens: Long = 0) : HarnessEvent
     data class Completion(val reason: String = "stop") : HarnessEvent
     data class Error(val message: String) : HarnessEvent
+    /** H5b: the harness refused [tool]; the host turns it into the existing denial notice. Not terminal. */
+    data class Denial(val tool: String, val reason: String = "") : HarnessEvent
 }
+
+/** H5b: the existing denial line (what a built-in harness's denial becomes) for a plugin harness's [HarnessEvent.Denial]; the daemon renders it with its denial notice. */
+fun HarnessEvent.Denial.toLine(harnessId: String): com.superiorsoftllc.agenthq.protocol.EventNormalizer.Line.Denial =
+    com.superiorsoftllc.agenthq.protocol.EventNormalizer.Line.Denial(harnessId, tool)
 
 enum class HarnessCapability { MODEL_SELECTION, SESSION_RESUME, TOOL_CALLS, REASONING, USAGE, EFFORT_SELECTION }
 

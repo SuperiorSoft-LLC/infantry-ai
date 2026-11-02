@@ -146,6 +146,7 @@ class ApiCliHarness(
             is ApiEvent.Usage -> HarnessEvent.Usage(inputTokens, outputTokens)
             is ApiEvent.Completion -> HarnessEvent.Completion(reason)
             is ApiEvent.Error -> HarnessEvent.Error(message)
+            is ApiEvent.Denial -> if (tool.isBlank()) HarnessEvent.Error("harness plugin emitted a denial with no tool name") else HarnessEvent.Denial(tool, reason)
         }
     }
 }

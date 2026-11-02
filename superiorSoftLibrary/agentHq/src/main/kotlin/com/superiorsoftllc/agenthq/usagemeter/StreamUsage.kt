@@ -150,6 +150,10 @@ class StreamUsageAccumulator {
         if (c != null) cost = (cost ?: 0.0) + c
     }
 
+    /** H5b: usage a plugin harness's translator reported as a neutral event (its stdout is in no format [accept] knows). */
+    fun acceptEvent(input: Long, output: Long, cacheRead: Long = 0, cacheWrite: Long = 0) =
+        turn(input, output, cacheRead, cacheWrite, null, TurnUsage(model, input, output, cacheRead, cacheWrite, null))
+
     /** Null when the run reported no usage at all (never a zero row). */
     fun totals(): RunTotals? {
         if (!any) return null

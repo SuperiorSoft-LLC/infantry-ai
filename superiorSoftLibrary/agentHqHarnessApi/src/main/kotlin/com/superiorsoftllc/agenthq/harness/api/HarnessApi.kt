@@ -31,8 +31,11 @@ import java.io.File
  * one of low / medium / high / xhigh / max). Before 2.2.0 the request field existed but a harness could not say whether it
  * applies it. A 2.0 / 2.1 plugin keeps [EffortSupport.UNSUPPORTED] (the default): an effort set on its session is reported as
  * not applied and never passed (docs/EFFORT.md).
+ *
+ * 2.3.0 (HARNESS H5b, additive): [HarnessEvent.Denial], a tool the harness refused to run because the run's tool approval did not
+ * allow it. The host shows it as the same chat notice a built-in harness's denial gets. A 2.0 - 2.2 plugin never emits it and is unaffected.
  */
-const val HARNESS_API_VERSION: String = "2.2.0"
+const val HARNESS_API_VERSION: String = "2.3.0"
 
 /** What a harness jar ships: registers its harnesses, given the [HarnessHost] scoped to its module. */
 interface HarnessPlugin {
@@ -155,6 +158,8 @@ sealed interface HarnessEvent {
     data class Usage(val inputTokens: Long, val outputTokens: Long) : HarnessEvent
     data class Completion(val reason: String = "stop") : HarnessEvent
     data class Error(val message: String) : HarnessEvent
+    /** 2.3.0: [tool] was refused by the harness (approval did not allow it); [reason] is the harness's own words, for logs. Not terminal. */
+    data class Denial(val tool: String, val reason: String = "") : HarnessEvent
 }
 
 /** The only place a harness's wire schema is known. One instance per run. */

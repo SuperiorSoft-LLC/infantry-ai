@@ -173,3 +173,6 @@ TEST-TODO (AR-3b): TicketBindingPolicy: twin() same ticket / same agent with a t
 
 ## AR-7 (f794f8de)
 TEST-TODO: Board button comes from Infantry_Board. Class NoBoardSidebarTest (written, not run: agentHqUi test sources do not compile at base, RunConsoleEndToEndTest imports com.superiorsoftllc.agenthq.commands). Input: Sidebar with no left.board contributor. Expected: search shown, no "sidebar-board-button". Also run with Board jar: button first in left.board, click opens board (BoardUiTest, UxPolishLayoutUiTest).
+
+## H5b (HarnessEvent.Denial, API 2.3.0)
+TEST-TODO: HarnessDenialTest - a 2.3 plugin translator emitting Denial("shell") -> Denial.toLine("denier") == EventNormalizer.Line.Denial("denier","shell"); blank tool -> attributed Error; 2.0.0/2.2.0 plugins register on 2.3; a plugin Usage(100,20) via UsageMeter.eventTranslatorFor reaches the meter report (input 100, output 20). Manual: run a real plugin-harness session and confirm a usage row appears.

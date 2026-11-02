@@ -87,6 +87,13 @@ class UsageMeter private constructor(
         else -> "worker"
     }
 
+    /**
+     * H5b: a translator for a session whose harness is a plugin (its stdout is in no format the accumulator reads), or null.
+     * Its [com.superiorsoftllc.agenthq.harness.HarnessEvent.Usage] events are charged like a native harness's usage lines.
+     */
+    @Volatile var eventTranslatorFor: ((SessionRecord) -> com.superiorsoftllc.agenthq.harness.HarnessTranslator?)? = null
+    private val translators = java.util.concurrent.ConcurrentHashMap<String, com.superiorsoftllc.agenthq.harness.HarnessTranslator>()
+
     fun onSessionEvent(event: SessionEvent, sessions: (String) -> SessionRecord?) {
         when (event) {
             is SessionEvent.Turn -> {
@@ -99,22 +106,27 @@ class UsageMeter private constructor(
             }
             is SessionEvent.Stdout -> {
                 val line = event.line
+                val tr = eventTranslatorFor?.let { f ->
+                    translators[event.sessionId] ?: sessions(event.sessionId)?.let(f)?.also { translators[event.sessionId] = it }
+                }
+                if (tr != null) {
+                    val usage = runCatching { tr.translate(line) }.getOrDefault(emptyList())
+                        .filterIsInstance<com.superiorsoftllc.agenthq.harness.HarnessEvent.Usage>()
+                    if (usage.isNotEmpty()) {
+                        val p = pendingFor(event.sessionId, sessions)
+                        usage.forEach { p.acc.acceptEvent(it.inputTokens, it.outputTokens, it.cacheReadTokens, it.cacheWriteTokens) }
+                    }
+                    return
+                }
                 if (line.length < 4 || ("usage" !in line && "tokens" !in line && "compact" !in line)) return
                 // USAGE-GAP-1: a live harness also speaks with no Turn event before it (a background-task or mail wake of a
                 // kept process, a turn after the previous Exit dropped the accumulator). Those lines were dropped, so a long
                 // lived session was undercounted. Open an accumulator on the first usage line instead, whatever started it.
-                val p = pending[event.sessionId] ?: run {
-                    val rec = sessions(event.sessionId)
-                    Pending(sourceOf(rec, MessageOrigin.Owner), rec).also { np ->
-                        np.acc.onTurn = { t -> recordTurn(event.sessionId, np, t) }
-                        np.acc.onCompaction = { c -> recordCompaction(event.sessionId, np, c) }
-                        np.acc.onOutputUpdate = { id, out, th -> updateOutput(event.sessionId, id, out, th) }
-                        pending.putIfAbsent(event.sessionId, np)
-                    }.let { pending[event.sessionId] ?: it }
-                }
+                val p = pendingFor(event.sessionId, sessions)
                 p.acc.accept(line)
             }
             is SessionEvent.Exit -> {
+                translators.remove(event.sessionId)
                 val p = pending.remove(event.sessionId) ?: return
                 val t = p.acc.totals() ?: return
                 val rec = sessions(event.sessionId) ?: return
@@ -123,6 +135,16 @@ class UsageMeter private constructor(
             }
             else -> Unit
         }
+    }
+
+    private fun pendingFor(sessionId: String, sessions: (String) -> SessionRecord?): Pending = pending[sessionId] ?: run {
+        val rec = sessions(sessionId)
+        Pending(sourceOf(rec, MessageOrigin.Owner), rec).also { np ->
+            np.acc.onTurn = { t -> recordTurn(sessionId, np, t) }
+            np.acc.onCompaction = { c -> recordCompaction(sessionId, np, c) }
+            np.acc.onOutputUpdate = { id, out, th -> updateOutput(sessionId, id, out, th) }
+            pending.putIfAbsent(sessionId, np)
+        }.let { pending[sessionId] ?: it }
     }
 
     private fun recordTurn(sessionId: String, p: Pending, t: TurnUsage) {
