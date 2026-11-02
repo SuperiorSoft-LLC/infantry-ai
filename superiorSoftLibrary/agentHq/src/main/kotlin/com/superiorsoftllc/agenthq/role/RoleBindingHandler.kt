@@ -2,7 +2,8 @@ package com.superiorsoftllc.agenthq.role
 
 import com.superiorsoftllc.agenthq.protocol.RoleBinding
 
-import com.superiorsoftllc.agenthq.persistence.RoleBindingRepository
+import com.superiorsoftllc.agenthq.daemon.api.roles.RoleBindings
+import com.superiorsoftllc.agenthq.daemon.api.roles.RoleEnvironment
 import com.superiorsoftllc.agenthq.protocol.RoleBindingSave
 
 /**
@@ -11,12 +12,10 @@ import com.superiorsoftllc.agenthq.protocol.RoleBindingSave
  * instead of silently pinning a role to a provider that can never spawn. Only future spawns see the change.
  */
 class RoleBindingHandler(
-    private val repository: RoleBindingRepository,
+    private val repository: RoleBindings,
     private val roles: RoleService,
-    private val providerIds: () -> Set<String>,
-    private val effortLevels: Set<String>,
-    /** LIMITS: refuses a model the allowlist does not name (throws [IllegalArgumentException]); default = any. */
-    private val modelCheck: (String) -> Unit = {},
+    /** AR-4b-ii-a: providers, effort levels and the model allowlist, read through the port. */
+    private val env: RoleEnvironment,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     fun all(): List<RoleBinding> = repository.all()
@@ -29,11 +28,11 @@ class RoleBindingHandler(
         val roleId = save.roleId.trim()
         require(roles.all().any { it.id == roleId }) { "unknown role '$roleId'" }
         val provider = save.provider?.trim()?.ifEmpty { null }
-        require(provider == null || provider in providerIds()) { "unknown provider '$provider': the daemon lists ${providerIds().sorted()}" }
+        require(provider == null || provider in env.providerIds()) { "unknown provider '$provider': the daemon lists ${env.providerIds().sorted()}" }
         val effort = save.effort?.trim()?.ifEmpty { null }
-        require(effort == null || effort in effortLevels) { "unknown effort '$effort': one of ${effortLevels.toList()}" }
+        require(effort == null || effort in env.effortLevels()) { "unknown effort '$effort': one of ${env.effortLevels().toList()}" }
         val model = save.model?.trim()?.ifEmpty { null }
-        model?.let(modelCheck)
+        model?.let(env::checkModel)
         val binding = RoleBinding(roleId, provider, model, effort)
         val at = clock()
         repository.set(binding, at)

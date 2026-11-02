@@ -2,7 +2,7 @@ package com.superiorsoftllc.agenthq.agents
 
 import com.superiorsoftllc.agenthq.daemon.AccessPolicy
 import com.superiorsoftllc.agenthq.persistence.AgentRepository
-import com.superiorsoftllc.agenthq.persistence.RoleBindingRepository
+import com.superiorsoftllc.agenthq.protocol.RoleBinding
 import com.superiorsoftllc.agenthq.protocol.AgentProfile
 import com.superiorsoftllc.agenthq.protocol.RoleTraits
 import com.superiorsoftllc.agenthq.protocol.TraitView
@@ -33,7 +33,7 @@ class AgentProfiles(
     private val clock: () -> Long = System::currentTimeMillis,
     private val idFactory: () -> String = { "agent-" + UUID.randomUUID().toString().take(8) },
     /** ROLE-1b: what a role runs on when neither the spawn nor the profile pins it. Null = no bindings. */
-    private val roleBindings: RoleBindingRepository? = null,
+    private val roleBindings: ((String) -> RoleBinding?)? = null,
     /** Role-first S1: whether a role id exists. Default = the built-in catalog ids; the daemon passes its live catalog. */
     private val roleExists: (String) -> Boolean = { it in RoleIds.BUILT_IN },
     /** Role-first S2: the effort levels a profile may pin; the same set the role-binding check uses. */
@@ -291,7 +291,7 @@ class AgentProfiles(
      * session that already started, and nothing here writes a binding.
      */
     fun executorFor(profile: AgentProfile?, provider: String?, model: String?, effort: String?, role: String? = null): Executor {
-        val binding = (profile?.role ?: role)?.let { roleBindings?.get(it) }
+        val binding = (profile?.role ?: role)?.let { roleBindings?.invoke(it) }
         val resolvedProvider = provider ?: profile?.provider ?: binding?.provider
         val profileProvider = profile?.provider ?: binding?.provider
         val profileModelApplies = provider == null || provider == (profileProvider ?: sessions.providerId)

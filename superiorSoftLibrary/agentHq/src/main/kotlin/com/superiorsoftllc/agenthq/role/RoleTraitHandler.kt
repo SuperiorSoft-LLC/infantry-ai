@@ -1,7 +1,7 @@
 package com.superiorsoftllc.agenthq.role
 
-import com.superiorsoftllc.agenthq.persistence.RoleTraitRepository
-import com.superiorsoftllc.agenthq.persistence.TraitRepository
+import com.superiorsoftllc.agenthq.daemon.api.roles.RoleEnvironment
+import com.superiorsoftllc.agenthq.daemon.api.roles.RoleTraitLists
 import com.superiorsoftllc.agenthq.protocol.RoleTraits
 import com.superiorsoftllc.agenthq.protocol.RoleTraitsSave
 
@@ -12,8 +12,8 @@ import com.superiorsoftllc.agenthq.protocol.RoleTraitsSave
  * `[]` clears the list. A refusal is an [IllegalArgumentException] naming the problem, nothing written.
  */
 class RoleTraitHandler(
-    private val repository: RoleTraitRepository,
-    private val traits: TraitRepository,
+    private val repository: RoleTraitLists,
+    private val env: RoleEnvironment,
     private val roleExists: (String) -> Boolean,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
@@ -31,7 +31,7 @@ class RoleTraitHandler(
             throw IllegalArgumentException("trait '${it.first().take(40)}' is listed twice")
         }
         return repository.set(roleId, ids, clock()) {
-            ids.firstOrNull { traits.get(it) == null }?.let { throw IllegalArgumentException("unknown trait '${it.take(40)}' (trait_list shows the library)") }
+            ids.firstOrNull { !env.traitExists(it) }?.let { throw IllegalArgumentException("unknown trait '${it.take(40)}' (trait_list shows the library)") }
         }
     }
 

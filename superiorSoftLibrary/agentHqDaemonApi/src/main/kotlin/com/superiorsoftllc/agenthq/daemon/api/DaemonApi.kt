@@ -148,8 +148,9 @@ interface DaemonApi {
         // 1.4.0 (RUNTIME-LOAD-4, additive): BOARD_API_VERSION 1.3.0 (daemon.api.board.TicketRefs / TicketPlacement).
         /** The DaemonApi version (semver). A module's `daemon.apiAtLeast` above it is refused. */
         // 1.32.0 (AR-4b, additive): daemon.api.roles.Roles (read-only role catalog service) and RoleRecord response fields.
+        // 1.33.0 (AR-4b-ii-a, additive): daemon.api.roles.RoleBindings / RoleTraitLists / RoleEnvironment.
         // 1.14.0 (DP-5h-3e-b, additive): BoardRuntime.attachCore / detachCore and BoardCoreAccess (core consumers reach the plugin-built board).
-        const val VERSION = "1.32.0"
+        const val VERSION = "1.33.0"
     }
 }
 

@@ -870,7 +870,7 @@ class AgentHqDaemon(
             if (settings.allowedRoles().restricts) println("[agentHq] role allowlist in force: ${settings.allowedRoles().patterns.joinToString()}")
             manager.maxSessions = { settings.limitCap(LimitRegistry.MAX_SESSIONS) }
             if (settings.allowedModels().restricts) println("[agentHq] model allowlist in force: ${settings.allowedModels().patterns.joinToString()}")
-            val agentsWired = com.superiorsoftllc.agenthq.daemon.wiring.AgentsWiring.build(store, manager, rolesLookup)
+            val agentsWired = com.superiorsoftllc.agenthq.daemon.wiring.AgentsWiring.build(store, manager, rolesLookup, com.superiorsoftllc.agenthq.daemon.RoleLists({ pluginHost.get().serviceRegistry.find(com.superiorsoftllc.agenthq.daemon.api.roles.RoleBindings::class) }, { pluginHost.get().serviceRegistry.find(com.superiorsoftllc.agenthq.daemon.api.roles.RoleTraitLists::class) }))
             val agentRegistry = agentsWired.registry
             val agentModules = agentsWired.modules
             val agents = agentsWired.profiles
@@ -1626,6 +1626,10 @@ class AgentHqDaemon(
                 pluginHost.set(host)
                 // SCRIPT-HOOK-3: a script's tool calls reach the core frames through the daemon's own /ws (see LoopbackFrames).
                 host.serviceRegistry.provide("core", com.superiorsoftllc.agenthq.daemon.api.roles.Roles::class, com.superiorsoftllc.agenthq.role.LocalRoles(roles))
+                val rolePorts = RolePorts.of(store, manager, harnesses)
+                host.serviceRegistry.provide("core", com.superiorsoftllc.agenthq.daemon.api.roles.RoleBindings::class, rolePorts.bindings)
+                host.serviceRegistry.provide("core", com.superiorsoftllc.agenthq.daemon.api.roles.RoleTraitLists::class, rolePorts.traits)
+                host.serviceRegistry.provide("core", com.superiorsoftllc.agenthq.daemon.api.roles.RoleEnvironment::class, rolePorts.environment)
                 host.loopback = com.superiorsoftllc.agenthq.daemon.plugins.LoopbackFrames(loopbackHost, boundPort, token, ownerToken)
                 foundAttention.flush()
                 testKnowledge?.let { host.serviceRegistry.provide("core", com.superiorsoftllc.agenthq.daemon.api.knowledge.Knowledge::class, it) }
@@ -1833,11 +1837,11 @@ class AgentHqDaemon(
                             providerStates,
                             triggers,
                             harnesses,
-                            RoleBindingHandler(store.roleBindings, roles, { providerInfos(manager, harnesses).map { it.id }.toSet() }, com.superiorsoftllc.agenthq.harness.claude.ClaudeCommands.EFFORT_LEVELS.toSet(), modelCheck = { manager.requireAllowedModel(it, null) }),
+                            RolePorts.of(store, manager, harnesses).let { RoleBindingHandler(it.bindings, roles, it.environment) },
                             com.superiorsoftllc.agenthq.persistence.PromptStore(store.prompts),
                             com.superiorsoftllc.agenthq.persistence.SkillStore(store.skills),
                             com.superiorsoftllc.agenthq.persistence.TraitStore(store.traits, { roles.role(it) != null }, boundBy = { id -> store.traitReferences(id) }),
-                            RoleTraitHandler(store.roleTraits, store.traits, { roles.role(it) != null }),
+                            RolePorts.of(store, manager, harnesses).let { p -> RoleTraitHandler(p.traits, p.environment, { roles.role(it) != null }) },
                             knowledge,
                             modelCatalogs,
                             skillsSource,
