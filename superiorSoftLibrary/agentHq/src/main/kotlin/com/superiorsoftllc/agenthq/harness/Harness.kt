@@ -151,6 +151,9 @@ interface Harness {
     /** HARNESS H5c (API 2.4.0): this harness's plan/quota poll for the usage frame; null = none. Calls into plugin code are isolated by the implementor. */
     fun limitSource(): com.superiorsoftllc.agenthq.usage.LimitSource? = null
 
+    /** HARNESS H5d (API 2.5.0): reads this harness's own session store into the session stats; null = none. Isolated by the implementor. */
+    fun statsSource(): com.superiorsoftllc.agenthq.stats.PluginStatsSource? = null
+
     /** Implementors produce the event stream here. Must emit incrementally, never only at completion. */
     fun events(request: HarnessRequest): Flow<HarnessEvent>
 

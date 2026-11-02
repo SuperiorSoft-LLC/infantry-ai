@@ -41,6 +41,9 @@ class SessionStatsService(private val home: File = File(System.getProperty("user
 
     fun addTagger(tagger: (JsonObject) -> String?) { taggers += tagger }
 
+    /** HARNESS H5d: a plugin harness's stats source by harness id (the daemon points this at its registry); null = none. */
+    @Volatile var pluginStats: (harnessId: String) -> PluginStatsSource? = { null }
+
     private val paths = ConcurrentHashMap<String, File>()
     private val limitCache = ConcurrentHashMap<String, Pair<Long, Long?>>()
 
@@ -54,7 +57,7 @@ class SessionStatsService(private val home: File = File(System.getProperty("user
                 OMP -> resolve(harness, psid) { piFile(OMP_ROOT, psid) }?.let { readPi(OMP_ROOT, it, base) }
                 OPENCODE -> readOpenCode(psid, base)
                 // A harness id that is an OpenCode variant (`opencode-go`, ...) shares OpenCode's record.
-                else -> if (harness.startsWith("$OPENCODE-")) readOpenCode(psid, base) else null
+                else -> if (harness.startsWith("$OPENCODE-")) readOpenCode(psid, base) else pluginStats(harness)?.read(psid)?.let { base.withPlugin(it) }
             } ?: base
         } catch (e: Exception) {
             base

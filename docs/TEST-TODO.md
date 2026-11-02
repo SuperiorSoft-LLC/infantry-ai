@@ -179,3 +179,6 @@ TEST-TODO: HarnessDenialTest - a 2.3 plugin translator emitting Denial("shell") 
 
 ## H5c (Harness.usageSource, API 2.4.0)
 TEST-TODO: HarnessUsageSourceTest - a granted+declared usage source shows in LimitService.snapshot tagged by harness id; undeclared/ungranted -> no source; throwing source -> unknown/source_failed + attributed PluginFailure; slow source (PluginLimitSource, 200 ms timeout) -> source_failed + "timed out"; empty reading -> unknown, never 0%. Manual: load a real plugin with a usage source and see its row in the usage frame.
+
+## H5d (Harness.stats, API 2.5.0)
+TEST-TODO: HarnessStatsSourceTest - a granted+declared stats row (start 1000/end 4000, 2 prompts, 55 tokens) is read by SessionStatsService for an unknown harness id with no branch (duration 3000); ungranted/undeclared -> identity-only; throwing source -> identity-only + attributed PluginFailure. Manual: real plugin harness session, open its stats view.

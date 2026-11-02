@@ -109,6 +109,23 @@ class ApiCliHarness(
         PluginLimitSource(api.id, pluginId, src, usageTimeoutMs, onFailure)
     }
 
+    private val statsAdapter: com.superiorsoftllc.agenthq.stats.PluginStatsSource? by lazy {
+        if (!hookAllowed("stats")) return@lazy null
+        val src = guarded(pluginId, onFailure) { api.stats() } ?: return@lazy null
+        com.superiorsoftllc.agenthq.stats.PluginStatsSource { psid ->
+            try {
+                src.read(psid)?.let {
+                    com.superiorsoftllc.agenthq.stats.PluginStatsRow(it.startedAt, it.endedAt, it.userPrompts, it.assistantTurns, it.toolUses, it.models, it.lastContextTokens, it.billedTokens, it.costTotal)
+                }
+            } catch (t: Throwable) {
+                onFailure(PluginFailure(pluginId, PluginFailurePhase.RUN, t)); null
+            }
+        }
+    }
+
+    /** H5d: the module's stats source behind the `harness.hook.stats` grant; a throw in `stats()` or `read` is attributed and yields no row. */
+    override fun statsSource(): com.superiorsoftllc.agenthq.stats.PluginStatsSource? = try { statsAdapter } catch (_: HarnessPluginCallException) { null }
+
     /** H5c: the module's usage source behind the `harness.hook.usage` grant; a throwing `usageSource()` is attributed and contributes none. */
     override fun limitSource(): com.superiorsoftllc.agenthq.usage.LimitSource? = try { usageAdapter } catch (_: HarnessPluginCallException) { null }
 

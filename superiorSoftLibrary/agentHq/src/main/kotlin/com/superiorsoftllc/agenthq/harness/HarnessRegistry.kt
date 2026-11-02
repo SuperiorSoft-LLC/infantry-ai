@@ -73,6 +73,10 @@ class HarnessRegistry(
         return all.mapNotNull { runCatching { it.limitSource() }.getOrNull() }
     }
 
+    /** HARNESS H5d: the stats source of harness [harnessId], or null (unknown id, none, or a throwing `statsSource()`). */
+    fun statsSource(harnessId: String): com.superiorsoftllc.agenthq.stats.PluginStatsSource? =
+        runCatching { resolve(harnessId)?.statsSource() }.getOrNull()
+
     fun pluginIds(): List<String> = synchronized(lock) { plugins.keys.toList() }
 
     fun resolve(harnessId: String): Harness? = synchronized(lock) {

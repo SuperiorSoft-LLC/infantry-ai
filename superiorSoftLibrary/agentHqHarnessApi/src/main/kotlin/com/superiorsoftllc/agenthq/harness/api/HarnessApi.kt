@@ -37,8 +37,11 @@ import java.io.File
  *
  * 2.4.0 (HARNESS H5c, additive): [Harness.usageSource], a plan/quota poll whose rows join the daemon's usage frame tagged by the harness id.
  * Needs module.json `harness.hooks` "usage" (and, for a community module, the `harness.hook.usage` grant).
+ *
+ * 2.5.0 (HARNESS H5d, additive): [Harness.stats], the harness's own session store read into the daemon's session stats.
+ * Needs module.json `harness.hooks` "stats" (and, for a community module, the `harness.hook.stats` grant).
  */
-const val HARNESS_API_VERSION: String = "2.4.0"
+const val HARNESS_API_VERSION: String = "2.5.0"
 
 /** What a harness jar ships: registers its harnesses, given the [HarnessHost] scoped to its module. */
 interface HarnessPlugin {
@@ -92,6 +95,9 @@ interface Harness {
 
     /** 2.4.0: a plan/quota poll for this harness, or null (default). The host calls [HarnessUsageSource.read] off its own threads, with a timeout; a throw or a timeout is isolated and attributed to this plugin. */
     fun usageSource(): HarnessUsageSource? = null
+
+    /** 2.5.0: reads this harness's own session store for the daemon's session stats, or null (default). A throw is isolated and attributed. */
+    fun stats(): HarnessStats? = null
 }
 
 /** 2.4.0: one harness's plan limits. [read] may block on I/O (the host bounds it with a timeout) and may throw. */
@@ -104,6 +110,25 @@ data class HarnessUsageReading(val windows: List<HarnessUsageWindow>, val reason
 
 /** One limit window: [percent] used (0-100, null = unknown), [resetsAt] epoch millis (null = unknown). */
 data class HarnessUsageWindow(val label: String, val windowMinutes: Int, val percent: Double?, val resetsAt: Long? = null)
+
+/** 2.5.0: reads one session of this harness from its own store. */
+fun interface HarnessStats {
+    /** The row for the harness's own session id, or null when its store has none. May throw. */
+    fun read(providerSessionId: String): HarnessStatsRow?
+}
+
+/** Every field optional; null = the store does not say (never guessed). Times are epoch millis. */
+data class HarnessStatsRow(
+    val startedAt: Long? = null,
+    val endedAt: Long? = null,
+    val userPrompts: Int? = null,
+    val assistantTurns: Int? = null,
+    val toolUses: Int? = null,
+    val models: List<String>? = null,
+    val lastContextTokens: Long? = null,
+    val billedTokens: Long? = null,
+    val costTotal: Double? = null,
+)
 
 /**
  * 2.2.0 (EFFORT-1): how a harness honours a reasoning effort. Same states as [ContextLimitSupport].
