@@ -91,6 +91,7 @@ class ScriptingDaemonPlugin : DaemonPlugin {
         val exec = ExecTools(
             { api.config(it) }, { project -> runCatching { File(api.files(project).absolutePath("x")).parentFile.parentFile }.getOrNull() },
             { name, payload -> api.events.publish(name, payload) }, { api.log(it) }, marks,
+            { session, project, args -> api.tools.invoke("agenthq_progress", args, com.superiorsoftllc.agenthq.daemon.api.ToolInvoker(com.superiorsoftllc.agenthq.daemon.api.Caller(owner = true, agent = true, activeSession = session), session, null, project, "exec-progress")) },
         )
         api.tools.register(exec.exec)
         api.tools.register(exec.status)

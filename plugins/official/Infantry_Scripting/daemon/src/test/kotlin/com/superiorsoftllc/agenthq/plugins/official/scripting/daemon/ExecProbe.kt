@@ -12,6 +12,7 @@ object ExecProbe {
             "env" -> println(System.getenv(args[1]))
             "stdin" -> print(System.`in`.readBytes().decodeToString().uppercase())
             "sleep" -> Thread.sleep(args[1].toLong())
+            "say" -> args.drop(1).forEach { println(it) }
             "tree" -> {
                 val cp = System.getProperty("java.class.path")
                 val child = ProcessBuilder(File(System.getProperty("java.home"), "bin/java").path, "-cp", cp, ExecProbe::class.java.name, "sleep", "60000").inheritIO().start()
