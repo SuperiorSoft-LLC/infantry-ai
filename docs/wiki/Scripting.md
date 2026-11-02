@@ -1,0 +1,211 @@
+# Scripting with Lua
+
+Scripts encode your process: what happens when a ticket is done, when mail arrives, when a build ends. They are
+Lua 5.2 (LuaJ 3.0.1), sandboxed, and live in your project's `.agenthq/scripts/` folder. Any agent or role may
+author and run them. The engine is a plugin (`Infantry_Lua`) behind the `Infantry_Scripting` plugin, which owns
+hooks, limits and the tools.
+
+## How a script runs
+
+A script does not do things itself. It **queues actions**; after it ends, the daemon runs them in order **as the
+caller**, and the first failure stops the run. Globals: base, string, table, math, `os.time`, `os.clock`, `ih`, `input`.
+There is no `io`, `require`, `load` or `debug`.
+
+```lua
+-- move a ticket, then comment with what happened
+if not input.results then
+  ih.move{ticket = input.args.ticket, status = "done"}
+  ih.again()
+else
+  ih.comment{ticket = input.args.ticket, text = "moved: " .. input.results[1].text}
+end
+```
+
+- `input.args`: the run's arguments (the hook's fixed args merged under the event payload).
+- `input.phase`: `1`, then `2..` after `ih.again()`. `input.caller`: `{id, role}`.
+- `input.results` (phase 2+): one entry per executed action, in order: `{name, tool, ok, text, json}` (`json` is the
+  tool's answer when it is JSON).
+- `ih.log("text")` adds to the run log.
+
+### `ih.again` phases
+
+A script cannot read a tool's answer in the same run. Queue the reads, call `ih.again()`, and the script re-runs
+with `input.results`. Branch on `input.phase` (or `input.results == nil`). The cap is the setting
+`scripting.maxPhases` (default 3, hard maximum 10); past it the run ends with `PHASES_EXHAUSTED`. A dry run
+(`dryRun true`) shows the first phase's plan and runs nothing.
+
+### Calling tools
+
+Every tool the daemon has is callable: `ih.call("agenthq_ticket_move", {ticket = "t1", status = "done"})`, or
+`ih.<toolname>{...}`, or by alias. Arguments are always ONE table of named values. Aliases come from the setting
+`scripting.aliases` (short name to tool name; defaults: `move`, `comment`, `message`, `start`, `close_session`,
+`kill`, `prompt`, `ask`, `ticket_get`, `ticket_update`, `ticket_create`, `board`, `emit`) plus built-ins every project
+has: `exec`, `cli`, `exec_status`, `progress`, `chat_note`, `chat_image`, `session_read`, `session_act`,
+`notice_suppress`.
+
+The live list of tools, aliases and engine notes: `agenthq_script_api` (MCP tool; optional `tool` argument for one
+tool in full). It is generated from the registry on each call, so it is always current.
+
+## Saving, running, listing
+
+MCP tools (preferred) and CLI:
+
+| Tool | CLI |
+|---|---|
+| `agenthq_script_save {name, source}` (parse-checked, runs at once) | `agenthq script save <name> --file <path>` (or `--body -`) |
+| `agenthq_script_list` | `agenthq script list` |
+| `agenthq_script_delete {name}` (refused while a hook uses it) | `agenthq script delete <name>` |
+| `agenthq_script_run {name, args, dryRun}` | (MCP) |
+| `agenthq_script_hook {action: list\|add\|remove, on, script, args, id, to}` | `agenthq script hook list \| add <on> <script> [--payload <json>\|-] \| remove <id>` |
+| `agenthq_script_stats` (turns saved, wakes by reason, latest runs) | (MCP) |
+
+## Hooks
+
+A hook says "when this happens, run this script with these fixed args". The `on` values:
+
+| `on` | Fires | Payload keys (merged into `input.args`) |
+|---|---|---|
+| `lane enter <lane>` / `lane exit <lane>` | a ticket enters or leaves a lane (`todo`, `in_progress`, `pending`, `done`, or your own); case-insensitive | `ticketId`, `title`, `branch`, `tipSha`, `workerSession`, `from`, `to`, `lane` |
+| `mail.incoming` | before a mail is delivered, synchronously; attaches to ONE session (`to=<session id>`, default yours) | `id`, `from`, `to`, `role`, `sessionId`, `subject`, `body`, `threadId` |
+| `exec.done` | a background exec ends | `id`, `exitCode`, `script`, `session`, `timedOut` |
+| `exec.tick` | every `scripting.exec.tickSec` seconds while a background exec runs | `id`, `script`, `session`, `elapsedMs`, `stdoutTail`, `stderrTail`, `bytesSinceLast` |
+| `every <N>s` | a timer; minimum `scripting.hooks.minEverySec` (default 10) | `tick`, `at`, `hookId` |
+| any event name | a named event: `ticket.commented`, `merge.done`, `ticket.*`, or your own via `agenthq_event_emit` | the event's payload |
+
+Examples:
+
+```
+agenthq script hook add "lane enter done" on-ticket-done --payload '{"devBranch":"main"}'
+agenthq script hook add "every 180s" worker-watch --payload '{"exemptRoles":["pm"]}'
+```
+
+`to` on `every <N>s` and `exec.tick` names a session the script acts for (its `progress` lands on that card).
+
+### Intercepting mail
+
+`mail.incoming` runs before any wake, bounded by the plugin call timeout (a couple of seconds), so keep it cheap.
+
+- `ih.handled()`: the mail is marked read and wakes nobody.
+- `ih.deliver_text{text = "..."}`: deliver this text instead of the notify line.
+- Anything else, an error, or a timeout: delivered as usual. A mail is never dropped.
+
+```lua
+-- pong: answer "PING <nonce>" without waking the recipient
+local nonce = input.args.body and input.args.body:match("^PING (%S+)")
+if not nonce then return end
+ih.message{to = input.args.from, subject = "PONG", body = "PONG " .. nonce}
+ih.handled()
+```
+
+### Loop guards
+
+Hooks can trigger events that trigger hooks. Guards (settings): `scripting.hooks.maxDepth` (3),
+`scripting.hooks.maxRuns` per hook per `scripting.hooks.windowMs` (10 per 60 s), and `scripting.hooks.attributionMs`
+(5 s, follow-up events attributed to the hook that caused them). Turn all hooks off with `scripting.hooks.enabled`.
+
+## exec: running a process
+
+A script is sandboxed and runs nothing itself; it queues `ih.exec{...}` (same as `ih.cli`; MCP tool `agenthq_exec`)
+and the daemon runs the process as the caller. The bridge is **off by default**.
+
+Args: `command` (an argv list, run directly; or one string split on spaces/quotes, no shell), `cwd` (default the
+project root), `env`, `stdin`, `timeoutSec`, `script` (label), `background`. A non-zero exit is a result, not a
+failure. Result in `input.results[i].json`: `{exitCode, durationMs, stdoutTail, stderrTail, timedOut}`.
+`background = true` answers `{id, state = "running"}`; read it with `agenthq_exec_status {id}` or continue from an
+`exec.done` hook.
+
+```lua
+if not input.results then
+  ih.exec{command = input.args.cmd, timeoutSec = 300, script = "check"}
+  ih.again()
+else
+  local r = input.results[1].json
+  if r.exitCode ~= 0 then
+    ih.prompt{session = input.caller.id, text = "command failed (" .. r.exitCode .. "): " .. r.stderrTail}
+  end
+end
+```
+
+### The allow-list
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `scripting.exec.enabled` | `false` | Master switch; when off the tool refuses and says how to enable it |
+| `scripting.exec.allow` | empty (= all) | JSON array or one per line; an entry is a command-line **prefix**, or `re:<regex>` matching the whole line |
+| `scripting.exec.roles` | empty (= any) | Comma-separated roles allowed |
+| `scripting.exec.defaultTimeoutSec` / `maxTimeoutSec` | 60 / 600 | A timeout kills the whole process tree |
+| `scripting.exec.tailChars` | 8000 | Output tail kept |
+| `scripting.exec.tickSec` | 10 | Seconds between `exec.tick` events |
+
+Enable it narrowly: `agenthq settings set scripting.exec.enabled true` and
+`agenthq settings set scripting.exec.allow git`. Each run is logged once (session, role, script, command, exit code,
+duration).
+
+## Chat notes
+
+`ih.chat_note{sessionId = ..., text = ..., level = "ok"}` posts a status line into a session's chat as an automation
+card (level `info`, `ok` or `fail`; optional `image`). No turn and no mail, unless `wake = true`, which also prompts
+the agent: use that for real exceptions only. Same project only, rate limited per minute, text length capped.
+
+## Progress
+
+`ih.progress{...}` (`agenthq_progress`) shows a live bar on a session's card. From a hook with `to`, it lands on
+that session; otherwise on the caller, or the `sessionId` you name (same project only). Agents use the CLI form:
+`agenthq progress 40 "compiling"`, `progress plan "a" "b"`, `progress step`, `progress done`, `progress fail`.
+`agenthq run --label tests -- <cmd>` runs a command with progress reported on exit.
+
+## The session bridge
+
+Scripts can watch and steer sessions with built-in aliases:
+
+- `session_read{sessionId}`: state, `lastAction`, `lastOutputAt`, `lastEventAt`, recent chat lines (capped).
+- `session_act{sessionId, action = "interrupt" | "end_turn"}`: stop the turn in flight. `end_turn` is a no-op on an
+  idle session.
+- `notice_suppress{name, seconds}`: suppress a built-in daemon notice (e.g. `nudge.worker_idle`, or `*`) for up to
+  3600 s so a hook can replace it.
+- `prompt{session = ..., text = ...}` wakes a session; `close_session` removes one.
+
+## Settings that govern scripting
+
+Limits per run: `scripting.maxSteps` (5,000,000), `scripting.timeoutMs` (2000), `scripting.maxAllocBytes`
+(64 MiB), `scripting.maxPhases` (3), `scripting.defaultEngine` (`lua`). Hooks and exec: see above. All are daemon
+settings: `agenthq settings get scripting.timeoutMs`, `agenthq settings set <key> <value>`.
+
+## Worked examples
+
+Process rules as data: keep project-specific values in hook args, never in the Lua.
+
+**Park a ticket's worker when it leaves a lane** (hooks `lane enter backlog`, `lane exit in_progress`):
+
+```lua
+local a = input.args
+local ticket = a.ticketId or error("no ticketId")
+local done = a.doneLane or error("needs doneLane")
+if a.to and a.to:lower() == done:lower() then return end
+if input.phase == 1 and a.workerSession then
+  ih.agenthq_session_remove{sessionId = a.workerSession, force = true}
+  ih.again()
+else
+  ih.agenthq_ticket_comment{ticketId = ticket, body = "moved " .. tostring(a.from) .. " -> " .. tostring(a.to)}
+end
+```
+
+```
+agenthq script hook add "lane enter backlog" lane-park --payload '{"doneLane":"done"}'
+agenthq script hook add "lane exit in_progress" lane-park --payload '{"doneLane":"done"}'
+```
+
+**Run a build in the background and report** (an `exec` with `background = true` plus hooks on `exec.tick` for the
+progress bar and `exec.done` for the result comment and chat note). The pattern: the starting script launches the
+exec and puts a plan on the builder's card; the tick hook sets the percent from the output lines; the done hook posts
+`chat_note` ok/fail and moves the ticket.
+
+More shipped scripts: `plugins/official/Infantry_Scripting/project-scripts/` (`on-ticket-done.lua`,
+`on-mail-sent.lua`) and its README.
+
+## Notes on the code vs older docs
+
+- An exec id can reach an `exec.done` hook as a number in older builds; compare as a string before calling
+  `exec_status`.
+- The script CLI lives in `ScriptCli.kt`; its usage line is
+  `agenthq script hook list | add <on> <script> [--payload <args json>|-] | remove <id> | save <name> [--file <path> | --body -] | list | delete <name>`.
