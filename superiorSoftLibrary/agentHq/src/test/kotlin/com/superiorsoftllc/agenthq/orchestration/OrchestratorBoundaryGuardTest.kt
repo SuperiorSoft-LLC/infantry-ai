@@ -14,13 +14,15 @@ import kotlin.test.assertTrue
  */
 class OrchestratorBoundaryGuardTest {
     private val main = File(TestDaemonPlugins.repo, "superiorSoftLibrary/agentHq/src/main/kotlin/com/superiorsoftllc/agenthq")
+    // CORE-SPLIT-4b: the STAYS packages moved to :agentHqCore; both roots are scanned.
+    private val core = File(TestDaemonPlugins.repo, "superiorSoftLibrary/agentHqCore/src/main/kotlin/com/superiorsoftllc/agenthq")
 
     @Test fun `runner and orchestrator packages only cross by the known baseline`() {
         val seen = HashMap<String, Int>()
         // DP-7a: a name declared in agentHqProtocol is a wire type, not a crossing into the orchestrator's implementation.
         val wire = wireNames()
-        main.walkTopDown().filter { it.isFile && it.extension == "kt" }.forEach { f ->
-            val pkg = f.relativeTo(main).path.replace('\\', '/').substringBefore('/')
+        listOf(main, core).flatMap { root -> root.walkTopDown().filter { it.isFile && it.extension == "kt" }.map { root to it }.toList() }.forEach { (root, f) ->
+            val pkg = f.relativeTo(root).path.replace('\\', '/').substringBefore('/')
             f.forEachLine { l ->
                 val m = IMPORT.matchEntire(l.trim()) ?: return@forEachLine
                 val to = m.groupValues[1]

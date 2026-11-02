@@ -3423,7 +3423,7 @@ private suspend fun handleConnection(
                         }
                         "done" -> {
                             require(sid != null && req.jobId != null) { "done expects a sessionId and a jobId" }
-                            manager.bgJobDone(sid, req.jobId)?.let { job ->
+                            manager.bgJobDone(sid, req.jobId!!)?.let { job ->
                                 (manager.bgJobListener as? com.superiorsoftllc.agenthq.mailbox.BgJobNotifier)?.let { n ->
                                     runCatching { n.done(sid, job, req.exitCode, req.tail, req.bytes, req.eof, req.survivors, req.marker, req.pipeNoFail) }
                                         .onFailure { System.err.println("[agentHq] bg notify failed for ${job.id}: ${it.message}") }
@@ -3441,7 +3441,7 @@ private suspend fun handleConnection(
                         }
                         "ack" -> {
                             require(sid != null && req.jobId != null) { "ack expects a sessionId and a jobId" }
-                            (manager.bgJobListener as? com.superiorsoftllc.agenthq.mailbox.BgJobNotifier)?.ack(sid, req.jobId)
+                            (manager.bgJobListener as? com.superiorsoftllc.agenthq.mailbox.BgJobNotifier)?.ack(sid, req.jobId!!)
                         }
                         "list" -> Unit
                         else -> throw IllegalArgumentException("unknown op '${req.op.take(40)}'")

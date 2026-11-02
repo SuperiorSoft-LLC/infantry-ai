@@ -19,8 +19,11 @@ class DaemonCoreGuardTest {
     /** CORE-SPLIT-1/2: the packages that now live in their own leaf Gradle module (module -> its source root). */
     private val leaves = LEAF_MODULES.mapValues { (m, _) -> File(root, "superiorSoftLibrary/$m/src/main/kotlin/com/superiorsoftllc/agenthq") }
 
+    /** CORE-SPLIT-4b: the STAYS packages live in :agentHqCore (depends on no feature module). */
+    private val core = File(root, "superiorSoftLibrary/agentHqCore/src/main/kotlin/com/superiorsoftllc/agenthq")
+
     private val daemonApi = File(root, "superiorSoftLibrary/agentHqDaemonApi/src/main/kotlin/com/superiorsoftllc/agenthq")
-    private fun sources() = (listOf(main, daemonApi) + leaves.values).flatMap { r -> r.walkTopDown().filter { it.isFile && it.extension == "kt" }.toList() }
+    private fun sources() = (listOf(main, core, daemonApi) + leaves.values).flatMap { r -> r.walkTopDown().filter { it.isFile && it.extension == "kt" }.toList() }
     private fun code(f: File) = f.readLines().withIndex().filter { (_, l) ->
         val t = l.trim(); !t.startsWith("//") && !t.startsWith("*") && !t.startsWith("/*")
     }
@@ -35,7 +38,7 @@ class DaemonCoreGuardTest {
     }
 
     @Test fun `session depends on the harness SPI only, never on provider or a concrete harness package`() {
-        val files = File(main, "session").walkTopDown().filter { it.isFile && it.extension == "kt" }.toList()
+        val files = File(core, "session").walkTopDown().filter { it.isFile && it.extension == "kt" }.toList()
         assertTrue(files.size > 20, "session sources not found under $main")
         val banned = listOf("agenthq.provider.", "agenthq.claude.", "agenthq.opencode.", "agenthq.experiments.")
         val hits = files.flatMap { f -> code(f).filter { (_, l) -> banned.any { it in l } }.map { (i, l) -> "${f.name}:${i + 1}: ${l.trim().take(110)}" } }
@@ -54,7 +57,7 @@ class DaemonCoreGuardTest {
 
     @Test fun `every top-level package is classified with a reason, none stale`() {
         val board = File(TestDaemonPlugins.repo, "superiorSoftLibrary/agentHqBoard/src/main/kotlin/com/superiorsoftllc/agenthq") // DP-5e: epics, brief, ledger, context, ticketfiles
-        val actual = (listOf(main, board) + leaves.values).flatMap { r -> r.listFiles { f -> f.isDirectory }!!.map { it.name } }.toSet()
+        val actual = (listOf(main, core, board) + leaves.values).flatMap { r -> r.listFiles { f -> f.isDirectory }!!.map { it.name } }.toSet()
         val lists = listOf(CORE, STAYS, PLUGIN_NOW, PLUGIN_LATER)
         val listed = lists.flatMap { it.keys }
         assertEquals(emptySet<String>(), actual - listed.toSet(), "unclassified package(s): add each to exactly one list with a reason")
@@ -143,6 +146,7 @@ class DaemonCoreGuardTest {
             "stats" to "harness-neutral RequestUsage records (STATS-2 contract)",
             "testrun" to "background full-suite runner and its ledger behind the agenthq_tests tool (FULLSUITE-2); runner side of the staging gate",
             "tokens" to "usage ledger behind the meter",
+            "archive" to "ArchiveService stores archived tickets and sessions for the board; stays in the app shell until the board plugin owns archiving",
             "executables" to "resolves harness and tool binaries for the runner",
             "update" to "self-update of the daemon install; DaemonMain wires it directly",
             "notify" to "the spoken-push frame helper of the protocol",

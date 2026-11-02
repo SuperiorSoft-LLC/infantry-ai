@@ -211,3 +211,7 @@ TEST-TODO: HarnessCoreGuardTest - add `class X : Harness {}` under core main -> 
 
 ## CORE-SPLIT-3 (ticket 88a2fc64)
 TEST-TODO: session imports no provider/claude/opencode/experiments package. Class DaemonCoreGuardTest, `session depends on the harness SPI only...`. Input: sources under agentHq/session. Expected: no line names those packages. Also: AgentProvider/RunRequest/HarnessProvider/NoHarnessProvider now live in agenthq.harness (provider keeps catalog/factory); no behaviour change.
+
+## CORE-SPLIT-4b (ticket c682d8a5)
+TEST-TODO: behaviour: the desktop app and the installed daemon still start with the core in its own jar. Class/function: installDist + launch the daemon with a fresh state dir. Inputs: default settings. Expected: daemon ready, `agenthq version` answers, SQLDelight migrations create the db (class AgentHQDatabase now generated in :agentHqCore).
+TEST-TODO: behaviour: friend-path test access. Class: agentHq test compile (compileTestKotlin). Inputs: none. Expected: tests that use core `internal` members (ProviderFactory, AgentHQDatabaseFactory) compile.
