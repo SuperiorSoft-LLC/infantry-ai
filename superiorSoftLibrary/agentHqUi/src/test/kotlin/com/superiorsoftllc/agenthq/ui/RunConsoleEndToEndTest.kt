@@ -11,8 +11,9 @@ import com.jediterm.terminal.model.StyleState
 import com.jediterm.terminal.model.TerminalSelection
 import com.jediterm.terminal.model.TerminalTextBuffer
 import com.jediterm.terminal.TerminalDisplay
-import com.superiorsoftllc.agenthq.commands.CommandRegistry
-import com.superiorsoftllc.agenthq.commands.RunManager
+import com.superiorsoftllc.agenthq.plugins.official.run.daemon.CommandRegistry
+import com.superiorsoftllc.agenthq.plugins.official.run.daemon.RunManager
+import com.superiorsoftllc.agenthq.daemon.plugins.LocalRuns
 import com.superiorsoftllc.agenthq.protocol.Envelope
 import com.superiorsoftllc.agenthq.runner.PipedProcessRunner
 import com.superiorsoftllc.agenthq.runner.Pty4jTerminalRunner
@@ -80,12 +81,13 @@ class RunConsoleEndToEndTest {
         // The daemon side, with every frame it would send to a client.
         val frames = CopyOnWriteArrayList<Envelope>()
         lateinit var console: RunConsoleFeed
-        val manager = RunManager({ registry }, PipedProcessRunner(), { env ->
+        val runs = LocalRuns(repo, repo, { null }, PipedProcessRunner(), Pty4jTerminalRunner(), { null })
+        val manager = RunManager({ registry }, runs, { env ->
             frames += env
             if (env.type == Envelope.RUN_BYTES) console.accept(json.decodeFromString(RunBytesPayload.serializer(), env.data))
-        }, terminal = Pty4jTerminalRunner())
+        })
         val started = manager.start("""{"commandId":"loader","cols":100,"rows":12}""")
-        val runId = json.decodeFromString(com.superiorsoftllc.agenthq.commands.RunRecord.serializer(), started.reply.data).runId
+        val runId = json.decodeFromString(com.superiorsoftllc.agenthq.plugins.official.run.daemon.RunRecord.serializer(), started.reply.data).runId
         console = RunConsoleFeed(runId, connector::feed) {}
         // The window asks for the replay as it opens (empty here, sequence 0), then the live bytes follow.
         console.accept(json.decodeFromString(RunBytesPayload.serializer(), manager.attach("""{"runId":"$runId"}""").data))
