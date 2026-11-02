@@ -485,6 +485,16 @@ object LimitRegistry {
         "The ceiling for a plugin tool's own declared timeoutMs (a long tool such as a harness install opts in; it can never wait longer than this).",
         min = 1, zeroIsUnlimited = false,
     )
+    val PLUGIN_POOL_SIZE = LimitDef(
+        "limits.plugins.poolSize", 8, "threads",
+        "BOARD-STALL-2: worker threads each daemon plugin gets for its calls; more calls wait in the queue. Read at plugin load.",
+        min = 1, zeroIsUnlimited = false,
+    )
+    val PLUGIN_QUEUE_LIMIT = LimitDef(
+        "limits.plugins.queueLimit", 256, "calls",
+        "BOARD-STALL-2: calls that may wait for a free plugin worker; a call beyond it is refused at once as busy. Read at plugin load.",
+        min = 1, zeroIsUnlimited = false,
+    )
     val PLUGIN_ROUTE_RATE = LimitDef(
         "limits.plugins.routeRequestsPerMinute", 600, "requests",
         "HTTP requests a minute one daemon plugin's routes answer before 429 (daemon.limits.routeRequestsPerMinute overrides it).",
@@ -602,7 +612,7 @@ object LimitRegistry {
         WATCH_READ_MAX_KB, WATCH_TAIL_READ_KB, WATCH_SPACE_CHECK_SECONDS,
         TICKET_FILES_MAX_LINES, TICKET_FILES_RELATED_TOP,
         RELATED_BRIEF_TICKETS, RELATED_BRIEF_FILES, RELATED_BRIEF_CHARS, RELATED_BLOCK_TICKETS, RELATED_BLOCK_FILES, RELATED_BLOCK_CHARS,
-        PLUGIN_CALL_TIMEOUT_MS, PLUGIN_HANG_CEILING_MS, PLUGIN_TOOL_TIMEOUT_MS, PLUGIN_TOOL_MAX_TIMEOUT_MS, PLUGIN_ROUTE_RATE, PLUGIN_START_TIMEOUT_MS, PLUGIN_STOP_TIMEOUT_MS,
+        PLUGIN_CALL_TIMEOUT_MS, PLUGIN_HANG_CEILING_MS, PLUGIN_POOL_SIZE, PLUGIN_QUEUE_LIMIT, PLUGIN_TOOL_TIMEOUT_MS, PLUGIN_TOOL_MAX_TIMEOUT_MS, PLUGIN_ROUTE_RATE, PLUGIN_START_TIMEOUT_MS, PLUGIN_STOP_TIMEOUT_MS,
         RUN_MAX_SECRETS, KEYSTORE_MAX_FIELDS, KEYSTORE_MAX_SECRETS,
         SANDBOX_MODE,
         HEALTH_DB_TIMEOUT_SECONDS, HEALTH_WATCHDOG_FAILURES, HEALTH_WATCHDOG_INTERVAL_SECONDS, HEALTH_WATCHDOG_TIMEOUT_SECONDS,

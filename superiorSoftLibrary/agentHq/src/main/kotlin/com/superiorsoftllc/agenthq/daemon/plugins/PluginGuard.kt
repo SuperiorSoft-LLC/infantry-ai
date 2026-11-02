@@ -1,10 +1,14 @@
 package com.superiorsoftllc.agenthq.daemon.plugins
 
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
 import java.lang.management.ManagementFactory
 import java.util.concurrent.Callable
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicInteger
@@ -26,6 +30,10 @@ class PluginGuard(
     private val timeoutStrikes: Int = 3,
     /** GUARD-1: the hard wall-clock ceiling for a call with no result (a true hang); [call]'s timeout is only the "slow" mark. */
     private val hangCeilingMs: Long = 30_000,
+    /** BOARD-STALL-2: worker threads for this plugin (limits.plugins.poolSize); calls beyond it queue. */
+    private val poolSize: Int = 8,
+    /** BOARD-STALL-2: calls allowed to wait for a worker (limits.plugins.queueLimit); a full queue is refused at once. */
+    private val queueLimit: Int = 256,
 ) {
     private val consecutiveTimeouts = AtomicInteger()
     @Volatile var disabledReason: String? = null
@@ -33,14 +41,22 @@ class PluginGuard(
     val disabled: Boolean get() = disabledReason != null
 
     private val threads = AtomicInteger()
-    private val pool: ExecutorService = Executors.newCachedThreadPool { r ->
-        Thread(r, "plugin-$moduleId-${threads.incrementAndGet()}").apply { isDaemon = true; contextClassLoader = classLoader }
-    }
+    private val pool: ExecutorService = ThreadPoolExecutor(
+        poolSize.coerceAtLeast(1), poolSize.coerceAtLeast(1), 30, TimeUnit.SECONDS, LinkedBlockingQueue(queueLimit.coerceAtLeast(0).coerceAtLeast(1)),
+        { r -> Thread(r, "plugin-$moduleId-${threads.incrementAndGet()}").apply { isDaemon = true; contextClassLoader = classLoader } },
+    ).apply { allowCoreThreadTimeOut(true) }
     private val cpu = ManagementFactory.getThreadMXBean()
     private val pollMs = 50L
 
-    /** [block] under the limits: its value, or a failure (the plugin is then disabled; a disabled plugin fails at once). */
-    fun <T> call(what: String, timeoutMs: Long, block: () -> T): Result<T> {
+    /** Blocking form for plugin-internal threads; daemon request paths use [callSuspending]. */
+    fun <T> call(what: String, timeoutMs: Long, block: () -> T): Result<T> = runBlocking { callSuspending(what, timeoutMs, block) }
+
+    /**
+     * [block] under the limits: its value, or a failure (the plugin is then disabled; a disabled plugin fails at once).
+     * BOARD-STALL-2: the caller SUSPENDS while it waits (no thread held), the plugin runs on its own bounded pool, and a
+     * full queue fails at once with a "busy" refusal (no strike, the plugin stays loaded).
+     */
+    suspend fun <T> callSuspending(what: String, timeoutMs: Long, block: () -> T): Result<T> {
         disabledReason?.let { return Result.failure(IllegalStateException("plugin $moduleId is disabled: $it")) }
         val worker = java.util.concurrent.atomic.AtomicReference<Thread?>()
         val future = try {
@@ -54,6 +70,8 @@ class PluginGuard(
                 }
                 value
             })
+        } catch (e: RejectedExecutionException) {
+            return Result.failure(IllegalStateException("plugin $moduleId is busy ($poolSize running, $queueLimit queued); $what refused"))
         } catch (e: Exception) {
             return Result.failure(e)
         }
@@ -86,13 +104,14 @@ class PluginGuard(
      * milliseconds into seconds). A strike needs a true hang: no result by the hang ceiling. A call whose own thread burns more
      * than [cpuMsPerCall] of CPU is a runaway and disables the plugin at once, wherever the wall clock stands.
      */
-    private fun <T> await(future: java.util.concurrent.Future<T>, worker: java.util.concurrent.atomic.AtomicReference<Thread?>, what: String, timeoutMs: Long): T {
+    private suspend fun <T> await(future: java.util.concurrent.Future<T>, worker: java.util.concurrent.atomic.AtomicReference<Thread?>, what: String, timeoutMs: Long): T {
         val began = System.nanoTime()
         val ceilingMs = maxOf(hangCeilingMs, timeoutMs)
         var warned = false
         var base = -1L
         while (true) {
-            try { return future.get(pollMs, TimeUnit.MILLISECONDS) } catch (_: TimeoutException) { }
+            if (future.isDone) return future.get()
+            delay(pollMs)
             val elapsedMs = (System.nanoTime() - began) / 1_000_000
             val t = worker.get()
             if (t != null && cpu.isThreadCpuTimeSupported) {
