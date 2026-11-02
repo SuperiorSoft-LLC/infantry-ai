@@ -151,7 +151,8 @@ interface DaemonApi {
         // 1.33.0 (AR-4b-ii-a, additive): daemon.api.roles.RoleBindings / RoleTraitLists / RoleEnvironment.
         // 1.34.0 (AR-4b-ii-b, additive): RoleBindingRecord / RoleTraitsRecord replace the protocol types on the role binding / trait ports (a plugin cannot link protocol types).
         // 1.14.0 (DP-5h-3e-b, additive): BoardRuntime.attachCore / detachCore and BoardCoreAccess (core consumers reach the plugin-built board).
-        const val VERSION = "1.34.0"
+        // 1.35.0 (AR-3a, additive): daemon.api.sessions.SessionBinding / FirstTurnContextProvider (core composes the first turn from a provider list).
+        const val VERSION = "1.35.0"
     }
 }
 

@@ -1127,7 +1127,7 @@ class AgentHqDaemon(
             ).also { it.start() }
             // DP-5h-3e-b: the board is the plugin's; every consumer below reaches it through [boardPorts], resolved at call time.
             val handover = SessionHandover(manager, { boardPorts.brief(it.id) }, handoffTimeoutMs)
-            manager.briefFor = { boardPorts.brief(it.id) }
+            manager.addFirstTurnProvider { sessionId, _ -> boardPorts.brief(sessionId) }
             val workerSweepCloser = WorkerSweep(boardPorts, { LimitRegistry.minutesMs(settings.limit(LimitRegistry.UNBRIEFED_GRACE_MINUTES), LimitRegistry.UNBRIEFED_GRACE_MINUTES) }) { ticketId, sessionId, detail ->
                 println("[agentHq] ticket worker sweep: $ticketId: $detail")
                 attentionSvc.raise(kind = AttentionKinds.STALLED, ticketId = ticketId, podId = null, sessionId = sessionId, outcome = "unbriefed", detail = detail)
