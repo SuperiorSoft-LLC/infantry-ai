@@ -75,6 +75,8 @@ class ExecTools(
     private val rootOf: (String) -> File?,
     private val publish: (name: String, payload: String) -> Unit,
     private val log: (String) -> Unit,
+    /** SCRIPT-ACTIVE-1: lights the calling session's card while a command runs. */
+    private val marks: AutomationMarks = AutomationMarks({ _, _ -> }),
 ) {
     private class Run(val id: String, val command: String, val script: String, val session: String, val project: String? = null) {
         val started = System.currentTimeMillis()
@@ -148,7 +150,7 @@ class ExecTools(
         val script = (a["script"] as? JsonPrimitive)?.contentOrNull.orEmpty()
         val background = (a["background"] as? JsonPrimitive)?.booleanOrNull == true
         val run = Run(UUID.randomUUID().toString().take(8), line, script, call.clientSessionId.orEmpty(), project)
-        val work = { execute(run, argv, cwd, env, timeout, stdin, s.tailChars, role, background) }
+        val work = { marks.begin(run.session, run.script.ifBlank { "exec" }, "exec").use { execute(run, argv, cwd, env, timeout, stdin, s.tailChars, role, background) } }
         if (!background) return ToolResult(work().toString())
         pruneRuns()
         runs[run.id] = run

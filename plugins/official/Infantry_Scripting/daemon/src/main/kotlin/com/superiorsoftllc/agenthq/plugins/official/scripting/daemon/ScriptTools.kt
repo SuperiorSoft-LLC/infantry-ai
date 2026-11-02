@@ -22,6 +22,8 @@ class ScriptTools(
     private val maxPhases: () -> Int,
     /** SCRIPT-VIS-1: every manual run is recorded here. */
     private val runLog: ScriptRunLog = ScriptRunLog(),
+    /** SCRIPT-ACTIVE-1: lights the invoker's card while the script runs. */
+    private val marks: AutomationMarks = AutomationMarks({ _, _ -> }),
 ) {
     private val dispatcher = ScriptDispatcher(tools, aliases, maxPhases)
 
@@ -76,7 +78,7 @@ class ScriptTools(
         val engine = engines.byExtension(script.extension) ?: return ToolResult("$RUN: no engine loaded for .${script.extension}", isError = true)
         val who = ScriptCaller(call.clientSessionId.orEmpty(), call.clientRole.orEmpty())
         val invoker = ToolInvoker(call.caller, call.clientSessionId, call.clientRole, project, "script:$name")
-        val report = dispatcher.run(engine, script.source, args, limits.current(), who, invoker, dry)
+        val report = (if (dry) AutoCloseable { } else marks.begin(call.clientSessionId, name, "manual")).use { dispatcher.run(engine, script.source, args, limits.current(), who, invoker, dry) }
         if (!dry) runLog.record(project, name, "manual", call.clientSessionId, report, if (report.ok) "ok" else "failed", "ran ${report.records.size} action(s)", report.error)
         return ToolResult(report.render(name), isError = !report.ok)
     }
