@@ -22,7 +22,6 @@ import com.superiorsoftllc.agenthq.plugin.host.ModuleStatus
 import com.superiorsoftllc.agenthq.plugin.host.PluginFolders
 import com.superiorsoftllc.agenthq.plugins.core.CoreModules
 import com.superiorsoftllc.agenthq.provider.StubProvider
-import com.superiorsoftllc.agenthq.role.RoleService
 import com.superiorsoftllc.agenthq.runner.StubScript
 import com.superiorsoftllc.agenthq.session.JsonSessionStore
 import com.superiorsoftllc.agenthq.stories.JsonStoryStore
@@ -99,7 +98,6 @@ class ConfigDaemonScopeRealDaemonUiTest {
             store = SqlAgentHqStore.open(File(state, "agenthq.db").absolutePath),
             mailBaseUrl = "http://127.0.0.1:1", token = null,
             storyStore = JsonStoryStore(File(state, "stories.json")),
-            roles = RoleService(File(state, "roles")),
             modelCatalogs = com.superiorsoftllc.agenthq.provider.HarnessModelCatalogs.EMPTY,
             workingDir = state,
             // POLICY-1 gap 9: never the defaults, which read the process's state dir; this test's own temp one only.

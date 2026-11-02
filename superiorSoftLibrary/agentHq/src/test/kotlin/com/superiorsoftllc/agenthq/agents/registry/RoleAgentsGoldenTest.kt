@@ -1,9 +1,10 @@
 package com.superiorsoftllc.agenthq.agents.registry
 
-import com.superiorsoftllc.agenthq.role.RoleAgents
-import com.superiorsoftllc.agenthq.role.RoleCatalog
+import com.superiorsoftllc.agenthq.daemon.wiring.RoleAgents
+import com.superiorsoftllc.agenthq.plugins.official.roles.daemon.ServiceRoles
+import com.superiorsoftllc.agenthq.plugins.official.roles.daemon.RoleCatalog
 import com.superiorsoftllc.agenthq.protocol.RoleIds
-import com.superiorsoftllc.agenthq.role.RoleService
+import com.superiorsoftllc.agenthq.plugins.official.roles.daemon.RoleService
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -16,7 +17,7 @@ import kotlin.test.assertTrue
  */
 class RoleAgentsGoldenTest {
     private val catalog = RoleCatalog.load()
-    private val registry = AgentRegistry({ RoleAgents.all(catalog.all()) }, { catalog.role(it)?.persona })
+    private val registry = AgentRegistry({ RoleAgents.allRecords(catalog.all().map(ServiceRoles::record)) }, { catalog.role(it)?.persona })
 
     @Test fun `the built-in agents are the bundled roles, in catalog order`() {
         assertEquals(RoleIds.BUILT_IN, registry.list().map { it.definition.id })
@@ -46,7 +47,7 @@ class RoleAgentsGoldenTest {
     @Test fun `a custom role is an agent too, and a role edit reaches the registry at once`() {
         val dir = Files.createTempDirectory("role-agents").toFile()
         val roles = RoleService(dir)
-        val live = AgentRegistry({ RoleAgents.all(roles.all()) }, { roles.role(it)?.persona })
+        val live = AgentRegistry({ RoleAgents.allRecords(roles.all().map(ServiceRoles::record)) }, { roles.role(it)?.persona })
         roles.save(com.superiorsoftllc.agenthq.protocol.RoleSave(id = "editor", name = "Editor", persona = "You edit copy."))
         assertEquals("You edit copy.", live.instructionsOf("editor"))
         roles.save(com.superiorsoftllc.agenthq.protocol.RoleSave(id = "editor", name = "Editor", persona = "You edit copy, tersely."))

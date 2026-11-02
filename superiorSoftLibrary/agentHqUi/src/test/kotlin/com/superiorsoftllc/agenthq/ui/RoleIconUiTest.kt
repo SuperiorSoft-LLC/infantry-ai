@@ -15,7 +15,7 @@ import com.superiorsoftllc.agenthq.daemon.AgentHqDaemon
 import com.superiorsoftllc.agenthq.mailbox.JsonMailStore
 import com.superiorsoftllc.agenthq.persistence.SqlAgentHqStore
 import com.superiorsoftllc.agenthq.provider.StubProvider
-import com.superiorsoftllc.agenthq.role.RoleService
+import com.superiorsoftllc.agenthq.plugins.official.roles.daemon.RoleService
 import com.superiorsoftllc.agenthq.runner.StubScript
 import com.superiorsoftllc.agenthq.session.JsonSessionStore
 import com.superiorsoftllc.agenthq.stories.JsonStoryStore
@@ -61,7 +61,7 @@ class RoleIconUiTest {
             store = SqlAgentHqStore.open(File(dir, "agenthq.db").absolutePath),
             mailBaseUrl = "http://127.0.0.1:1", token = null,
             storyStore = JsonStoryStore(File(dir, "stories.json")),
-            roles = roles,
+            pluginEnv = { n -> if (n == "AGENTHQ_ROLES_DIR") File(dir, "roles").path else null },
             modelCatalogs = com.superiorsoftllc.agenthq.provider.HarnessModelCatalogs.EMPTY,
         )
         var saved: AppState? = null

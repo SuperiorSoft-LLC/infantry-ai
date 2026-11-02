@@ -1,11 +1,9 @@
-package com.superiorsoftllc.agenthq.role
+package com.superiorsoftllc.agenthq.plugins.official.roles.daemon
 
 import com.superiorsoftllc.agenthq.protocol.RoleIds
 
-import com.superiorsoftllc.agenthq.session.InfantryEnv
 
 import com.superiorsoftllc.agenthq.protocol.RoleSave
-import com.superiorsoftllc.agenthq.session.stateDir
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
@@ -116,8 +114,5 @@ class RoleService(private val dir: File) {
         /** ROLE-ICON-1: an icon key, the role-id alphabet, so it is safe as a front-matter value. */
         val ICON = Regex("[a-z0-9][a-z0-9-]{0,31}")
 
-        /** `AGENTHQ_ROLES_DIR`, else `roles/` inside the daemon's state directory. */
-        fun defaultDir(): File =
-            InfantryEnv.get(ENV)?.takeIf { it.isNotBlank() }?.let(::File) ?: File(stateDir(), "roles")
     }
 }

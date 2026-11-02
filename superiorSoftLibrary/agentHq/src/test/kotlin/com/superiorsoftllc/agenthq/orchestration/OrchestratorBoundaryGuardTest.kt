@@ -53,15 +53,15 @@ class OrchestratorBoundaryGuardTest {
         private val KNOWLEDGE = setOf("memory", "issues", "decisions")
         private val IMPORT = Regex("""import com\.superiorsoftllc\.agenthq\.(\w+)\..*""")
         val RUNNER = setOf("session", "harness", "provider", "claude", "opencode", "executables", "runner", "worktree", "projectgit", "commands", "images", "update", "keystore", "cli", "client")
-        val ORCHESTRATOR = setOf("backlog", "epics", "stories", "mvp", "pipeline", "ticketfiles", "context", "brief", "ledger", "orchestration", "role", "agents", "prompts", "triggers", "attention", "questions", "decisions", "issues", "memory")
+        val ORCHESTRATOR = setOf("backlog", "epics", "stories", "mvp", "pipeline", "ticketfiles", "context", "brief", "ledger", "orchestration", "agents", "prompts", "triggers", "attention", "questions", "decisions", "issues", "memory")
 
         /** Today's crossings, "from>to" -> import count (51 in 30 pairs). Lower an entry when you remove an import; never raise one. */
         val BASELINE = mapOf(
             "agents>session" to 4, "backlog>images" to 0, "backlog>session" to 3, "backlog>worktree" to 0, "brief>session" to 0,
             "claude>prompts" to 2, "cli>agents" to 1, "cli>decisions" to 0, "cli>epics" to 2, "cli>issues" to 0, "cli>memory" to 0,
-            "cli>orchestration" to 3, "cli>pipeline" to 5, "cli>prompts" to 1, "cli>role" to 0, "cli>ticketfiles" to 3,
+            "cli>orchestration" to 3, "cli>pipeline" to 5, "cli>prompts" to 1, "cli>ticketfiles" to 3,
             "context>session" to 0, "images>mvp" to 0, "memory>session" to 0, "mvp>worktree" to 1, "opencode>prompts" to 1,
-            "orchestration>session" to 7, "projectgit>mvp" to 1, "prompts>session" to 2, "role>session" to 3, "session>agents" to 1,
+            "orchestration>session" to 7, "projectgit>mvp" to 1, "prompts>session" to 2, "session>agents" to 1,
             "session>prompts" to 1, "stories>session" to 0, "ticketfiles>worktree" to 2, "triggers>session" to 0,
         )
     }

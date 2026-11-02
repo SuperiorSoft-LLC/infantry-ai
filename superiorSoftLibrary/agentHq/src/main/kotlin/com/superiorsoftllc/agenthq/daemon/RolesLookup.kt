@@ -23,6 +23,6 @@ class RoleLists(
     private val bindings: () -> com.superiorsoftllc.agenthq.daemon.api.roles.RoleBindings?,
     private val traits: () -> com.superiorsoftllc.agenthq.daemon.api.roles.RoleTraitLists?,
 ) {
-    fun binding(roleId: String): com.superiorsoftllc.agenthq.protocol.RoleBinding? = runCatching { bindings()?.get(roleId) }.getOrNull()
-    fun traits(roleId: String): com.superiorsoftllc.agenthq.protocol.RoleTraits? = runCatching { traits()?.get(roleId) }.getOrNull()
+    fun binding(roleId: String): com.superiorsoftllc.agenthq.protocol.RoleBinding? = runCatching { bindings()?.get(roleId)?.let { com.superiorsoftllc.agenthq.protocol.RoleBinding(it.roleId, it.provider, it.model, it.effort, it.updatedAt) } }.getOrNull()
+    fun traits(roleId: String): com.superiorsoftllc.agenthq.protocol.RoleTraits? = runCatching { traits()?.get(roleId)?.let { com.superiorsoftllc.agenthq.protocol.RoleTraits(it.roleId, it.traitIds, it.updatedAt) } }.getOrNull()
 }

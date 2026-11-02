@@ -21,7 +21,6 @@ import com.superiorsoftllc.agenthq.provider.AgentProvider
 import com.superiorsoftllc.agenthq.runner.ProcessSpec
 import com.superiorsoftllc.agenthq.provider.RunRequest
 import com.superiorsoftllc.agenthq.provider.StubProvider
-import com.superiorsoftllc.agenthq.role.RoleService
 import com.superiorsoftllc.agenthq.runner.StubScript
 import com.superiorsoftllc.agenthq.session.JsonSessionStore
 import com.superiorsoftllc.agenthq.stories.JsonStoryStore
@@ -66,7 +65,6 @@ class ComposerNewlineUiTest {
             store = SqlAgentHqStore.open(File(dir, "agenthq.db").absolutePath),
             mailBaseUrl = "http://127.0.0.1:1", token = null,
             storyStore = JsonStoryStore(File(dir, "stories.json")),
-            roles = RoleService(File(dir, "roles")),
             modelCatalogs = com.superiorsoftllc.agenthq.provider.HarnessModelCatalogs.EMPTY,
         )
         try {

@@ -348,8 +348,6 @@ class DaemonFixture private constructor(
                 additionalProviders = additionalProviders,
                 repo = repo,
                 fixedFirstTurn = context?.let { c -> { c.compose(com.superiorsoftllc.agenthq.context.ContextInput(null, "", "", emptyList(), null)).let { r -> r.prompt to r.sources.map { it.source to it.chars } } } },
-                // Contract 1.12.0: custom roles live in the fixture's OWN state dir, never in ~/.agenthq/roles.
-                roles = com.superiorsoftllc.agenthq.role.RoleService(File(stateDir, "roles")),
                 budget = budget ?: com.superiorsoftllc.agenthq.usage.OperatorBudget(maxRunsPerDay = null, maxTokensPerDay = null),
                 commandsFile = commandsFile,
                 harnesses = harnesses,
@@ -372,9 +370,10 @@ class DaemonFixture private constructor(
                 handoffTimeoutMs = handoffTimeoutMs,
                 webBundle = webBundle,
                 ownerToken = OwnerCredential.ensure(stateDir),
-                pluginsRoot = pluginsRoot ?: if (withBoard) TestDaemonPlugins.boardRoot("official/Infantry_Attention") else TestDaemonPlugins.none(stateDir),
+                pluginsRoot = pluginsRoot ?: if (withBoard) TestDaemonPlugins.boardRoot("official/Infantry_Attention", "official/Infantry_Roles") else TestDaemonPlugins.rolesRoot(),
                 pluginTrust = pluginTrust ?: TestDaemonPlugins.trustAll,
-                pluginEnv = pluginEnv,
+                // AR-4b-ii-b: custom roles live in the fixture's OWN state dir, never in ~/.agenthq/roles.
+                pluginEnv = { name -> if (name == "AGENTHQ_ROLES_DIR") File(stateDir, "roles").path else pluginEnv(name) },
                 orchestratorBindings = orchestratorBindings,
                 policies = policies?.invoke(stateDir) ?: com.superiorsoftllc.agenthq.policy.PolicyRuntime(emptyList(), { null }, null, stateDir),
             )

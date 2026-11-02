@@ -29,6 +29,9 @@ object TestDaemonPlugins {
      */
     fun boardRoot(vararg more: String): File = root("official/Infantry_Board", *more).also { boardRoots += it }
 
+    /** AR-4b-ii-b: a plugins root holding only the built Infantry_Roles daemon jar (the roles every daemon test assumes); deleted when the JVM exits. */
+    fun rolesRoot(): File = root("official/Infantry_Roles").also { boardRoots += it }
+
     /** An empty plugins root under [stateDir]: the daemon loads no plugin and never reads the environment's root. */
     fun none(stateDir: File): File = File(stateDir, "no-plugins").apply {
         mkdirs()

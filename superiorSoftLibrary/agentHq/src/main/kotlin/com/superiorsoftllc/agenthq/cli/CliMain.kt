@@ -3933,11 +3933,11 @@ internal object Cli {
         val sub = parsed.args.first()
         val id = parsed.args.getOrNull(1)?.trim().orEmpty()
         val roles = json.decodeFromString(
-            kotlinx.serialization.builtins.ListSerializer(com.superiorsoftllc.agenthq.role.Role.serializer()),
+            kotlinx.serialization.builtins.ListSerializer(com.superiorsoftllc.agenthq.daemon.api.roles.RoleRecord.serializer()),
             stream.request(Envelope(Envelope.ROLE_LIST, ""), answerType = Envelope.ROLES, what = "role_list", idempotent = true).data,
         )
         if (sub == "list") {
-            roles.forEach { out.appendLine("${it.id}	${it.name}	${it.source.name.lowercase()}	${it.description}") }
+            roles.forEach { out.appendLine("${it.id}	${it.name}	${it.source.lowercase()}	${it.description}") }
             return 0
         }
         val role = roles.firstOrNull { it.id == com.superiorsoftllc.agenthq.protocol.RoleIds.normalize(id) }
@@ -3949,7 +3949,7 @@ internal object Cli {
             "show" -> {
                 out.appendLine("ID: ${role.id}")
                 out.appendLine("NAME: ${role.name}")
-                out.appendLine("SOURCE: ${role.source.name.lowercase()}")
+                out.appendLine("SOURCE: ${role.source.lowercase()}")
                 out.appendLine("DESCRIPTION: ${role.description}")
                 out.appendLine()
                 out.appendLine(role.persona)

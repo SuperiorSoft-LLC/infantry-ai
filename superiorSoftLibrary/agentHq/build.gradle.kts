@@ -115,6 +115,8 @@ dependencies {
     // Pinned to 0.13.x: 0.14 needs kotlin-stdlib 2.4, this build is on 2.3.
     implementation("org.jetbrains.pty4j:pty4j:0.13.13")
 
+    // AR-4b-ii-b: the role catalog classes (Role, RoleService, RoleCatalog) live in the Infantry_Roles daemon half; tests read them.
+    testImplementation(project(":daemon-plugin-official-Infantry_Roles"))
     testImplementation(kotlin("test"))
     // BUILD-VB-1: VerifyBaseTaskTest runs preflight/verify-base.gradle.kts in a throwaway build.
     testImplementation(gradleTestKit())
@@ -166,16 +168,6 @@ tasks.register<JavaExec>("runDaemon") {
     systemProperty("agenthq.build", rootProject.extra["agenthqBuild"] as String) // BUILD-STAMP-1
 }
 
-// Phase 10a: dump the bundled role catalog and the avatar resolution chain, so the shipped data
-// (roles/index.json + the persona files) is verifiable without a UI. Pass a custom-role directory
-// with -Proles=<dir>.
-tasks.register<JavaExec>("roleCatalog") {
-    group = "application"
-    description = "Prints the AgentHQ role catalog and the avatar resolution chain (Phase 10a)."
-    mainClass.set("com.superiorsoftllc.agenthq.role.RoleCatalogProbeKt")
-    classpath = sourceSets["main"].runtimeClasspath
-    providers.gradleProperty("roles").orNull?.takeIf { it.isNotBlank() }?.let { args(it) }
-}
 
 // VerifyMigrationTask proves a hand-written .sqm migration reproduces the .sq schema. It is
 // disabled repo-wide BY DESIGN (same line as superiorSoftLibrary/build.gradle.kts:97): the

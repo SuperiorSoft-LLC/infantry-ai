@@ -1,7 +1,8 @@
-package com.superiorsoftllc.agenthq.role
+package com.superiorsoftllc.agenthq.plugins.official.roles.daemon
 
 import com.superiorsoftllc.agenthq.protocol.RoleBinding
 
+import com.superiorsoftllc.agenthq.daemon.api.roles.RoleBindingRecord
 import com.superiorsoftllc.agenthq.daemon.api.roles.RoleBindings
 import com.superiorsoftllc.agenthq.daemon.api.roles.RoleEnvironment
 import com.superiorsoftllc.agenthq.protocol.RoleBindingSave
@@ -18,10 +19,10 @@ class RoleBindingHandler(
     private val env: RoleEnvironment,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
-    fun all(): List<RoleBinding> = repository.all()
+    fun all(): List<RoleBinding> = repository.all().map { it.toWire() }
 
     /** The stored binding, or an unpinned one for a role that has none: a get never fails on "no binding yet". */
-    fun get(roleId: String): RoleBinding = repository.get(roleId) ?: RoleBinding(roleId)
+    fun get(roleId: String): RoleBinding = repository.get(roleId)?.toWire() ?: RoleBinding(roleId)
 
     /** Stores [save] and returns it as stored. Throws [IllegalArgumentException] naming the problem; nothing is written then. */
     fun set(save: RoleBindingSave): RoleBinding {
@@ -35,7 +36,9 @@ class RoleBindingHandler(
         model?.let(env::checkModel)
         val binding = RoleBinding(roleId, provider, model, effort)
         val at = clock()
-        repository.set(binding, at)
+        repository.set(RoleBindingRecord(binding.roleId, binding.provider, binding.model, binding.effort), at)
         return binding.copy(updatedAt = at)
     }
 }
+
+private fun RoleBindingRecord.toWire() = RoleBinding(roleId, provider, model, effort, updatedAt)

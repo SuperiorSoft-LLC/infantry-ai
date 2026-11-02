@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.role
+package com.superiorsoftllc.agenthq.plugins.official.roles.daemon
 
 import com.superiorsoftllc.agenthq.protocol.ValidatedAvatar
 
@@ -77,7 +77,7 @@ class AvatarOverrides(private val dataDir: File) {
          * the UI on purpose -- it is not the daemon's `~/.agenthq`, because uploads are the client's.
          */
         fun defaultDataDir(): File {
-            val override = com.superiorsoftllc.agenthq.session.agentHqSetting("AGENTHQ_UI_DATA_DIR")
+            val override = System.getenv("AGENTHQ_UI_DATA_DIR")
             return if (!override.isNullOrBlank()) File(override) else File(System.getProperty("user.home"), ".agenthq-ui")
         }
     }

@@ -22,7 +22,7 @@ object AgentsWiring {
         // AGENT-REGISTRY-1 (docs/AGENT-REGISTRY.md): the ONE agent registry. The role catalog is its first contributor (each role
         // one agent), modules' `agents` blocks are synced in later; with no user override every agent is enabled, as before.
         val agentRegistry = AgentRegistry(
-            roleAgents = { com.superiorsoftllc.agenthq.role.RoleAgents.allRecords(roles.all()) },
+            roleAgents = { RoleAgents.allRecords(roles.all()) },
             rolePersona = { id -> roles.role(id)?.persona },
             // Owner O5: the interim override store; the unified config JSON replaces it here (AgentOverrides is the swap point).
             overrides = com.superiorsoftllc.agenthq.agents.registry.FileAgentOverrides.inStateDir(stateDir()),
@@ -41,4 +41,25 @@ object AgentsWiring {
         )
         return Built(agentRegistry, agentModules, agents)
     }
+}
+
+/**
+ * AGENT-REGISTRY-1 (docs/AGENT-REGISTRY.md section 4), AR-4b-ii-b: the role catalog as agent-registry contributions, the Roles-to-agents
+ * seam. Each role is one agent whose instructions are its role's persona, referenced (not copied), so a role edit reaches the next
+ * session exactly as before. Lives in core because the Infantry_Roles plugin cannot compile against the plugin SDK's AgentDefinition.
+ */
+object RoleAgents {
+    private val HEX_COLOR = Regex("#[0-9a-fA-F]{6}")
+
+    fun ofRecord(role: com.superiorsoftllc.agenthq.daemon.api.roles.RoleRecord): com.superiorsoftllc.agenthq.plugin.api.AgentDefinition =
+        com.superiorsoftllc.agenthq.plugin.api.AgentDefinition(
+            id = role.id,
+            name = role.name,
+            description = role.description,
+            role = role.id,
+            ui = com.superiorsoftllc.agenthq.plugin.api.AgentUiHints(color = role.color.takeIf { HEX_COLOR.matches(it) }, icon = role.icon.ifBlank { null }),
+        )
+
+    fun allRecords(roles: List<com.superiorsoftllc.agenthq.daemon.api.roles.RoleRecord>): List<com.superiorsoftllc.agenthq.plugin.api.AgentDefinition> =
+        roles.map(::ofRecord)
 }

@@ -20,7 +20,6 @@ import com.superiorsoftllc.agenthq.provider.providerconfig.ClaudeConfigLocations
 import com.superiorsoftllc.agenthq.provider.providerconfig.ClaudeConfigReader
 import com.superiorsoftllc.agenthq.provider.providerconfig.OpenCodeConfigLocations
 import com.superiorsoftllc.agenthq.provider.providerconfig.OpenCodeConfigReader
-import com.superiorsoftllc.agenthq.role.RoleService
 import com.superiorsoftllc.agenthq.runner.StubScript
 import com.superiorsoftllc.agenthq.session.JsonSessionStore
 import com.superiorsoftllc.agenthq.stories.JsonStoryStore
@@ -91,7 +90,6 @@ class ConfigCatalogPickerWiringTest {
             store = SqlAgentHqStore.open(File(dir, "agenthq.db").absolutePath),
             mailBaseUrl = "http://127.0.0.1:1", token = null,
             storyStore = JsonStoryStore(File(dir, "stories.json")),
-            roles = RoleService(File(dir, "roles")),
             additionalProviders = listOf(claude),
             // Hermetic (BUG-ModelsHeadOfLine): not build()'s builtIn(), which runs this host's `pi --list-models`.
             modelCatalogs = com.superiorsoftllc.agenthq.provider.HarnessModelCatalogs.EMPTY,
