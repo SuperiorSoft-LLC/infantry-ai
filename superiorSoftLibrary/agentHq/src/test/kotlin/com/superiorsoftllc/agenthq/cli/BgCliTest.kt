@@ -96,6 +96,23 @@ class BgCliTest {
         assertFalse(out.contains("started detached"), out.toString())
     }
 
+    // ---- BG-EXIT-1 (ticket 36f744fb): the done request and the .exit file carry the command's real exit code ----
+
+    @Test fun `a failing command reports its real exit code in done and the exit file`() {
+        val win = File.separatorChar == '\\'
+        listOf(listOf("cmd", "/c", "exit 3"), listOf("sh", "-c", "exit 3")).filter { win == (it[0] == "cmd") }.forEach { cmd ->
+            val sent = ArrayList<BgJobRequest>()
+            val id = "x" + System.nanoTime().toString().takeLast(8)
+            val code = BgCli.runJob(
+                BgCli.Parsed.Run("job", cmd, notify = true, jobId = id), "s1",
+                System::getenv, StringBuilder(), StringBuilder(), tmp(),
+            ) { BgCli.Reporter({ sent += it }, { }) }
+            assertEquals(3, code)
+            assertEquals(3, sent.last { it.op == "done" }.exitCode)
+            assertEquals("3", File(BgCli.logDir(), "$id.exit").readText())
+        }
+    }
+
     @Test fun `a wrapper whose command cannot start still registers and reports exit 127`() {
         val sent = ArrayList<BgJobRequest>()
         var closed = false
