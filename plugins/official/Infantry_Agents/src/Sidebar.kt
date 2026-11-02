@@ -312,8 +312,8 @@ fun AgentRow(a: AgentView, state: AppState, selected: Boolean, onClick: () -> Un
                     )
                 }
             }
-            // Display-only in the row: a click anywhere on the row (tag included) selects the agent.
-            TicketTag(a, state, null, Modifier.testTag("agent-row-ticket-${a.id}"))
+            // AR-7b: badges modules contribute (the ticket tag is Infantry_Board's); a click anywhere on the row selects the agent.
+            SessionRowBadges(a, state)
             // Contract 1.117.0: the agent's own progress report on its long job, as a slim live bar.
             a.session.progress?.let { ProgressMeter(it, "row-${a.id}", Modifier.padding(top = 3.dp), compact = true) }
             // STALL-2: the daemon's watch state for this session (watching X, watch OFF: reason, busy silent, stalled).

@@ -15,6 +15,11 @@ import com.superiorsoftllc.agenthq.ui.plugin.PanelProvider
 import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
 import com.superiorsoftllc.agenthq.ui.plugin.Panels
 import com.superiorsoftllc.agenthq.ui.plugin.UiRegistrar
+import com.superiorsoftllc.agenthq.ui.plugin.BadgeTone
+import com.superiorsoftllc.agenthq.ui.plugin.SessionBadge
+import com.superiorsoftllc.agenthq.ui.plugin.SessionBadgeProvider
+import com.superiorsoftllc.agenthq.ui.model.ticketTagFull
+import com.superiorsoftllc.agenthq.ui.model.ticketTagLabel
 import com.superiorsoftllc.agenthq.ui.protocol.TicketColumns
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
@@ -51,6 +56,13 @@ val BoardBlockTypeDeclarations: List<BlockTypeDeclaration> = listOf(
     BlockTypeDeclaration(BoardTypes.CARD_ACTIONS, "Card actions", parents = listOf(BoardTypes.CARD)),
 )
 
+/** AR-7b: the session row's ticket tag (short id + truncated title, full title on hover), contributed by the board. */
+val TicketBadge = SessionBadgeProvider("infantry.board.ticket") { state, a ->
+    val id = a.session.ticketId?.takeIf { it.isNotBlank() } ?: return@SessionBadgeProvider null
+    val title = state.ticket(id)?.title
+    SessionBadge(ticketTagLabel(id, title), BadgeTone.INFO, ticketTagFull(id, title), "agent-row-ticket-${a.id}")
+}
+
 /** The board overlay's empty shell slot (opened from the sidebar's Board button), which this module fills itself. */
 const val BOARD_FILL_ID = BOARD_NODE
 
@@ -72,7 +84,9 @@ val InfantryBoard: AgentHqModule = AgentHqModule(
     ),
     fills = mapOf(BOARD_FILL_ID to ShellBoard),
     blockTypes = BoardTypes.all,
+    sessionBadges = listOf(TicketBadge),
 )
+
 
 /**
  * RUNTIME-15: the entry of Infantry_Board (module.json `entry`), an official module. It fills the board overlay's slot and
@@ -84,6 +98,7 @@ class BoardPlugin : UiPlugin, ModuleSource {
     override fun register(registrar: UiRegistrar) {
         registrar.fill(BOARD_FILL_ID, ShellBoard)
         BoardTypes.all.forEach { (type, blockType) -> registrar.blockType(type, blockType) }
+        registrar.sessionBadge(TicketBadge)
         // AR-7: the sidebar's Board button, in the left panel's left.board slot (first).
         registrar.panel(PanelProvider(id = BOARD_BUTTON_PANEL, panel = Panels.LEFT_BOARD, order = 0, testTag = "sidebar-board-slot") { ctx ->
             val chat = LocalShellContext.current?.chat
