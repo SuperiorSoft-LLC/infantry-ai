@@ -165,8 +165,8 @@ class TicketImagesUiTest {
             }
             onAllNodes(hasTestTag(TICKET_IMAGE_ERROR_TAG)).fetchSemanticsNodes().firstOrNull()?.let { error("upload refused: ${it.config}") }
             save()
-            waitUntil(timeoutMillis = daemonWaitMs) { daemon.board.get(id).images.isNotEmpty() }
-            val relPath = daemon.board.get(id).images.single()
+            waitUntil(timeoutMillis = daemonWaitMs) { daemon.boardPorts.ops()!!.get(id).images.isNotEmpty() }
+            val relPath = daemon.boardPorts.ops()!!.get(id).images.single()
             assertTrue(relPath.startsWith(".agenthq/uploads/ticket/") && relPath.endsWith(".png"), "stored relPath: $relPath")
             val stored = File(repo, relPath)
             assertTrue(stored.isFile, "the upload is on disk: $stored")
@@ -187,8 +187,8 @@ class TicketImagesUiTest {
             onNodeWithTag(TICKET_IMAGE_REMOVE_TAG_PREFIX + relPath).performClick()
             onNodeWithTag(TICKET_IMAGE_THUMB_TAG_PREFIX + relPath).assertDoesNotExist()
             save()
-            waitUntil(timeoutMillis = daemonWaitMs) { daemon.board.get(id).images.isEmpty() }
-            assertEquals(emptyList(), daemon.board.get(id).images)
+            waitUntil(timeoutMillis = daemonWaitMs) { daemon.boardPorts.ops()!!.get(id).images.isEmpty() }
+            assertEquals(emptyList(), daemon.boardPorts.ops()!!.get(id).images)
             // The UI's remove only drops the relPath from the list it saves; it never deletes a file. The DAEMON does:
             // IMG-3's TicketBoard releases an image no remaining ticket references (TicketImages.release). The IMG-4
             // brief asked for the file to stay on disk, which contradicts that; raised with the PM, not changed here.

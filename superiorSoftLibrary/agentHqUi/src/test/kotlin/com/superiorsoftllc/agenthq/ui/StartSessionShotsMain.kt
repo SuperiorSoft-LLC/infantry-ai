@@ -10,6 +10,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import com.superiorsoftllc.agenthq.backlog.TicketBoard
+import com.superiorsoftllc.agenthq.daemon.plugins.LocalBoardHost
 import com.superiorsoftllc.agenthq.daemon.AgentHqDaemon
 import com.superiorsoftllc.agenthq.mailbox.JsonMailStore
 import com.superiorsoftllc.agenthq.persistence.SqlAgentHqStore
@@ -39,7 +40,7 @@ fun main(args: Array<String>) {
     val dir = Files.createTempDirectory("agenthq-start-shots").toFile()
     val provider = StubProvider(StubScript.default(), delayMs = 0)
     val store = SqlAgentHqStore.open(File(dir, "agenthq.db").absolutePath)
-    val ticket = TicketBoard(store, idFactory = { "ticket-e13c0aa3" })
+    val ticket = TicketBoard(LocalBoardHost(store, { null }), idFactory = { "ticket-e13c0aa3" })
         .save(TicketSave(title = "Fix the board's drag and drop", agentId = "role:backend")).ticket
     val worktree = File(dir, "worktrees/ticket-e13c0aa3").apply { mkdirs() }
     fun session(id: String, state: SessionState, psid: String?, ticketId: String?, at: Long) = SessionRecord(
