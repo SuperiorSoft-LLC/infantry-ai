@@ -14,7 +14,7 @@ import com.superiorsoftllc.agenthq.runner.StubScript
 import com.superiorsoftllc.agenthq.session.JsonSessionStore
 import com.superiorsoftllc.agenthq.stories.JsonStoryStore
 import com.superiorsoftllc.agenthq.role.RoleService
-import com.superiorsoftllc.agenthq.attention.AttentionKind
+import com.superiorsoftllc.agenthq.daemon.api.attention.AttentionKinds
 import com.superiorsoftllc.agenthq.ui.protocol.AgentProfile
 import com.superiorsoftllc.agenthq.ui.protocol.NodeSpec
 import com.superiorsoftllc.agenthq.ui.protocol.TicketColumns
@@ -471,17 +471,17 @@ class DaemonIntegrationTest {
         val c = Controller(scope)
         c.connect("ws://127.0.0.1:$port/ws", null)
         until("connected", c) { it.connection.isLive }
-        val raised = daemon!!.attention.raise(kind = AttentionKind.STALLED, sessionId = "s-1", outcome = "stalled", detail = "no output for 15 minutes")
+        val raisedId = daemon!!.attention.raise(kind = AttentionKinds.STALLED, sessionId = "s-1", outcome = "stalled", detail = "no output for 15 minutes")!!
 
-        until("pushed live", c) { s -> s.attention.any { it.id == raised.id } }
+        until("pushed live", c) { s -> s.attention.any { it.id == raisedId } }
         assertEquals(1, c.state.value.attentionOpenCount)
-        assertIs<CommandResult.Sent>(runBlocking { c.ackAttention(raised.id) })
-        until("acknowledged", c) { s -> s.attention.single { it.id == raised.id }.ackedAt != null }
+        assertIs<CommandResult.Sent>(runBlocking { c.ackAttention(raisedId) })
+        until("acknowledged", c) { s -> s.attention.single { it.id == raisedId }.ackedAt != null }
         assertEquals(0, c.state.value.attentionOpenCount)
 
         val late = Controller(scope)
         late.connect("ws://127.0.0.1:$port/ws", null)
-        val history = until("history on connect", late) { s -> s.attention.any { it.id == raised.id } }
+        val history = until("history on connect", late) { s -> s.attention.any { it.id == raisedId } }
         assertEquals("stalled", history.attention.single().kind)
         assertTrue(history.attention.single().ackedAt != null)
     }

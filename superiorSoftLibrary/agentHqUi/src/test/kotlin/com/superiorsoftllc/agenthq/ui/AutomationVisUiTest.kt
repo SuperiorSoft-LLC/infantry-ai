@@ -12,6 +12,7 @@ import com.superiorsoftllc.agenthq.plugins.official.chat.*
 import com.superiorsoftllc.agenthq.ui.model.AgentView
 import com.superiorsoftllc.agenthq.ui.model.AppState
 import com.superiorsoftllc.agenthq.ui.model.TimelineItem
+import com.superiorsoftllc.agenthq.ui.model.activityTimestamp
 import com.superiorsoftllc.agenthq.ui.model.withTimeline
 import com.superiorsoftllc.agenthq.ui.protocol.AutomationView
 import com.superiorsoftllc.agenthq.ui.protocol.SessionRecord
@@ -36,6 +37,17 @@ class AutomationVisUiTest {
         onNodeWithText("AUTOMATION - pong - handled").performClick()
         onNodeWithTag(CONTRIBUTION_DETAILS_TAG).assertExists()
         onNodeWithText("AUTOMATION - pong - FAILED").assertExists()
+    }
+
+    @Test fun theAutomationRowShowsTheRunTimeLikeAMessageCard() = runDesktopComposeUiTest(900, 600) {
+        setContent { AgentChat(agent(), contributions = listOf(run.copy(at = 1_700_000_000_000L))) }
+        onNodeWithTag(CARD_TIMESTAMP_TAG, useUnmergedTree = true).assertExists()
+        onNodeWithText(activityTimestamp(1_700_000_000_000L)).assertExists()
+    }
+
+    @Test fun theAutomationRowShowsTheRunDurationNextToTheTime() = runDesktopComposeUiTest(900, 600) {
+        setContent { AgentChat(agent(), contributions = listOf(run.copy(id = "run-9", at = 1_700_000_000_000L, meta = mapOf("durationMs" to "400")))) }
+        onNodeWithText(activityTimestamp(1_700_000_000_000L) + " · 0.4 s").assertExists()
     }
 
     @Test fun thePanelShowsTurnsSavedAndWakeReasonsButNoRow() = runDesktopComposeUiTest(900, 600) {
