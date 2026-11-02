@@ -21,17 +21,37 @@ class PluginGuardTimeoutTest {
     }
 
     @Test
-    fun `a success resets the strikes and repeated timeouts disable the plugin once with a notice`() {
-        val told = mutableListOf<String>()
-        val g = PluginGuard("Slow", null, 10_000, {}, onDisabled = { told += it }, timeoutStrikes = 2, hangCeilingMs = 50)
+    fun `repeated timeouts open the breaker with one notice and a probe after the cooldown closes it with one notice`() {
+        val tripped = mutableListOf<String>(); var recovered = 0; var disabledTold = 0
+        val g = PluginGuard("Slow", null, 10_000, {}, onDisabled = { disabledTold++ }, timeoutStrikes = 2, hangCeilingMs = 50, cooldownMs = 600,
+            onTripped = { tripped += it }, onRecovered = { recovered++ })
         g.call("slow", 50) { Thread.sleep(2_000) }
         assertEquals(1, g.call("ok", 2_000) { 1 }.getOrNull())
         g.call("slow", 50) { Thread.sleep(2_000) }
-        assertFalse(g.disabled, "strikes were reset by the success")
+        assertFalse(g.cooling, "strikes were reset by the success")
         g.call("slow", 50) { Thread.sleep(2_000) }
-        assertTrue(g.disabled)
-        assertEquals(1, told.size)
-        assertTrue(g.call("after", 2_000) { 1 }.isFailure)
+        assertTrue(g.cooling)
+        assertFalse(g.disabled)
+        repeat(3) { assertTrue(g.call("refused", 2_000) { 1 }.exceptionOrNull()!!.message!!.contains("cooling down")) }
+        assertEquals(1, tripped.size)
+        Thread.sleep(700)
+        assertEquals(1, g.call("probe", 2_000) { 1 }.getOrNull())
+        assertFalse(g.cooling)
+        assertEquals(1, recovered)
+        assertEquals(0, disabledTold)
+        g.shutdown()
+    }
+
+    @Test
+    fun `a failed probe reopens the breaker without a second notice`() {
+        val tripped = mutableListOf<String>()
+        val g = PluginGuard("Slow", null, 10_000, {}, timeoutStrikes = 1, hangCeilingMs = 50, cooldownMs = 300, onTripped = { tripped += it })
+        g.call("slow", 50) { Thread.sleep(2_000) }
+        Thread.sleep(400)
+        g.call("probe", 50) { Thread.sleep(2_000) }
+        assertTrue(g.cooling)
+        assertTrue(g.call("refused", 2_000) { 1 }.exceptionOrNull()!!.message!!.contains("cooling down"))
+        assertEquals(1, tripped.size)
         g.shutdown()
     }
 
@@ -51,7 +71,7 @@ class PluginGuardTimeoutTest {
         assertTrue(g.call("hung", 100) { Thread.sleep(5_000) }.isFailure)
         assertFalse(g.disabled)
         assertTrue(g.call("hung", 100) { Thread.sleep(5_000) }.isFailure)
-        assertTrue(g.disabled)
+        assertTrue(g.cooling)
         g.shutdown()
     }
 

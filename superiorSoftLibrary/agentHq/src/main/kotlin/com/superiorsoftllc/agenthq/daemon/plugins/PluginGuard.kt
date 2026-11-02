@@ -34,7 +34,19 @@ class PluginGuard(
     private val poolSize: Int = 8,
     /** BOARD-STALL-2: calls allowed to wait for a worker (limits.plugins.queueLimit); a full queue is refused at once. */
     private val queueLimit: Int = 256,
+    /** PLUGIN-RECOVER-1: how long the circuit stays open after [timeoutStrikes] timeouts; 0 = probe at once. */
+    private val cooldownMs: Long = 30_000,
+    /** Told once when the breaker opens (not per refused call). */
+    private val onTripped: (String) -> Unit = {},
+    /** Told once when a probe succeeds and the breaker closes. */
+    private val onRecovered: () -> Unit = {},
 ) {
+    /** PLUGIN-RECOVER-1 breaker: nanoTime the circuit reopens for a probe. */
+    @Volatile private var openUntilNs = 0L
+    @Volatile private var tripped = false
+    private val probing = java.util.concurrent.atomic.AtomicBoolean()
+    val cooling: Boolean get() = tripped
+
     private val consecutiveTimeouts = AtomicInteger()
     @Volatile var disabledReason: String? = null
         private set
@@ -58,6 +70,17 @@ class PluginGuard(
      */
     suspend fun <T> callSuspending(what: String, timeoutMs: Long, block: () -> T): Result<T> {
         disabledReason?.let { return Result.failure(IllegalStateException("plugin $moduleId is disabled: $it")) }
+        var probe = false
+        if (tripped) {
+            val leftMs = (openUntilNs - System.nanoTime()) / 1_000_000
+            if (leftMs > 0) return Result.failure(IllegalStateException("plugin $moduleId is cooling down, retry in ${(leftMs + 999) / 1000}s; $what refused"))
+            if (!probing.compareAndSet(false, true)) return Result.failure(IllegalStateException("plugin $moduleId is cooling down (probe in flight), retry in 1s; $what refused"))
+            probe = true
+        }
+        try { return guarded(what, timeoutMs, block) } finally { if (probe) probing.set(false) }
+    }
+
+    private suspend fun <T> guarded(what: String, timeoutMs: Long, block: () -> T): Result<T> {
         val worker = java.util.concurrent.atomic.AtomicReference<Thread?>()
         val future = try {
             pool.submit(Callable {
@@ -76,7 +99,7 @@ class PluginGuard(
             return Result.failure(e)
         }
         return try {
-            Result.success(await(future, worker, what, timeoutMs)).also { consecutiveTimeouts.set(0) }
+            Result.success(await(future, worker, what, timeoutMs)).also { consecutiveTimeouts.set(0); recover() }
         } catch (e: kotlinx.coroutines.CancellationException) {
             // BOARD-STALL-3: the caller gave up (its own timeout/cancel): drop the job so a queued one never runs later.
             future.cancel(true)
@@ -89,7 +112,7 @@ class PluginGuard(
             future.cancel(true)
             // BOARD-DOWN-1: a slow call (a DB lock, a git call) fails only itself; a plugin that keeps timing out is disabled.
             val n = consecutiveTimeouts.incrementAndGet()
-            if (n >= timeoutStrikes) disable("$what timed out after $timeoutMs ms ($n in a row)")
+            if (n >= timeoutStrikes || tripped) trip("$what timed out after $timeoutMs ms ($n in a row)")
             else log("[plugins] daemon plugin $moduleId: $what timed out after $timeoutMs ms (strike $n of $timeoutStrikes; plugin stays loaded)")
             Result.failure(e)
         } catch (e: ExecutionException) {
@@ -132,6 +155,24 @@ class PluginGuard(
                 log("[plugins] daemon plugin $moduleId: $what is slow ($elapsedMs ms, host busy?); still waiting up to $ceilingMs ms, no strike")
             }
         }
+    }
+
+    @Synchronized
+    private fun trip(reason: String) {
+        openUntilNs = System.nanoTime() + cooldownMs * 1_000_000
+        if (tripped) return
+        tripped = true
+        log("[plugins] daemon plugin $moduleId TRIPPED (cooling down ${cooldownMs / 1000}s, then probes): $reason")
+        runCatching { onTripped(reason) }
+    }
+
+    @Synchronized
+    private fun recover() {
+        if (!tripped) return
+        tripped = false
+        openUntilNs = 0
+        log("[plugins] daemon plugin $moduleId recovered after a successful probe")
+        runCatching { onRecovered() }
     }
 
     @Synchronized

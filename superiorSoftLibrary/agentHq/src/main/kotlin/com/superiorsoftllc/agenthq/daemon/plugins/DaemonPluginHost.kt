@@ -531,6 +531,17 @@ class DaemonPluginHost private constructor(
         }
     }
 
+    private fun announceTrip(id: String, why: String) = announceNotice("Daemon plugin $id cooling down", "Daemon plugin $id timed out repeatedly ($why). Its calls are refused for a short cooldown, then it is probed and comes back by itself; no restart needed.")
+
+    private fun announceRecovered(id: String) = announceNotice("Daemon plugin $id recovered", "Daemon plugin $id answered a probe call and is back in service.")
+
+    private fun announceNotice(subject: String, body: String) {
+        observerQueue.execute {
+            runCatching { services.projects.list().forEach { services.sessionNotifier.notifyRole(it.id, "pm", subject, body) } }
+                .onFailure { log("[plugins] could not announce '$subject': ${it.message}") }
+        }
+    }
+
     private fun unregister(p: Loaded) {
         toolEntries.entries.removeIf { it.value.owner === p }
         frameHandlers.entries.removeIf { it.value.owner === p }
@@ -559,7 +570,7 @@ class DaemonPluginHost private constructor(
         val loader = URLClassLoader("plugin-$id", arrayOf(jar.toURI().toURL()), DaemonApiClassLoader(DaemonPluginHost::class.java.classLoader))
         val cpu = d.limits.cpuMsPerCall ?: maxOf(d.limits.callTimeoutMs ?: services.limit(LimitRegistry.PLUGIN_CALL_TIMEOUT_MS), d.limits.toolTimeoutMs ?: services.limit(LimitRegistry.PLUGIN_TOOL_TIMEOUT_MS))
         lateinit var p: Loaded
-        val guard = PluginGuard(id, loader, cpu, log, hangCeilingMs = services.limit(LimitRegistry.PLUGIN_HANG_CEILING_MS), poolSize = services.limit(LimitRegistry.PLUGIN_POOL_SIZE).toInt(), queueLimit = services.limit(LimitRegistry.PLUGIN_QUEUE_LIMIT).toInt(), onDisabled = { why -> unregister(p); announceFailure(id, why) })
+        val guard = PluginGuard(id, loader, cpu, log, hangCeilingMs = services.limit(LimitRegistry.PLUGIN_HANG_CEILING_MS), poolSize = services.limit(LimitRegistry.PLUGIN_POOL_SIZE).toInt(), queueLimit = services.limit(LimitRegistry.PLUGIN_QUEUE_LIMIT).toInt(), timeoutStrikes = services.limit(LimitRegistry.PLUGIN_GUARD_STRIKES).toInt(), cooldownMs = services.limit(LimitRegistry.PLUGIN_GUARD_COOLDOWN_MS), onTripped = { why -> announceTrip(id, why) }, onRecovered = { announceRecovered(id) }, onDisabled = { why -> unregister(p); announceFailure(id, why) })
         p = Loaded(id, status.tier, d, setting, guard, loader)
         loaded += p
         val api = Api(p)

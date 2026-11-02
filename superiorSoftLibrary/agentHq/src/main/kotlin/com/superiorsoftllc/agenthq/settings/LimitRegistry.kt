@@ -471,9 +471,19 @@ object LimitRegistry {
         min = 1, zeroIsUnlimited = false,
     )
     val PLUGIN_HANG_CEILING_MS = LimitDef(
-        "limits.plugins.hangCeilingMs", 30_000, "ms",
+        "plugin.guard.timeoutMs", 30_000, "ms",
         "GUARD-1: the hard wall-clock ceiling for one daemon plugin call (never lower than the call's own timeout); a call with no result by then is a true hang and counts one strike. Read at plugin load.",
         min = 1, zeroIsUnlimited = false,
+    )
+    val PLUGIN_GUARD_STRIKES = LimitDef(
+        "plugin.guard.strikes", 3, "timeouts",
+        "PLUGIN-RECOVER-1: consecutive hang-ceiling timeouts that open a daemon plugin's circuit breaker (calls then refuse fast until plugin.guard.cooldownMs passes). Read at plugin load.",
+        min = 1, zeroIsUnlimited = false,
+    )
+    val PLUGIN_GUARD_COOLDOWN_MS = LimitDef(
+        "plugin.guard.cooldownMs", 30_000, "ms",
+        "PLUGIN-RECOVER-1: how long an open circuit refuses calls before one probe call is let through; a successful probe closes it again, no restart needed. Read at plugin load.",
+        min = 0, zeroIsUnlimited = false,
     )
     val PLUGIN_TOOL_TIMEOUT_MS = LimitDef(
         "limits.plugins.toolTimeoutMs", 60_000, "ms",
@@ -619,7 +629,7 @@ object LimitRegistry {
         WATCH_READ_MAX_KB, WATCH_TAIL_READ_KB, WATCH_SPACE_CHECK_SECONDS,
         TICKET_FILES_MAX_LINES, TICKET_FILES_RELATED_TOP,
         RELATED_BRIEF_TICKETS, RELATED_BRIEF_FILES, RELATED_BRIEF_CHARS, RELATED_BLOCK_TICKETS, RELATED_BLOCK_FILES, RELATED_BLOCK_CHARS,
-        PLUGIN_CALL_TIMEOUT_MS, PLUGIN_HANG_CEILING_MS, PLUGIN_POOL_SIZE, PLUGIN_QUEUE_LIMIT, PLUGIN_TOOL_TIMEOUT_MS, PLUGIN_TOOL_MAX_TIMEOUT_MS, PLUGIN_ROUTE_RATE, PLUGIN_START_TIMEOUT_MS, PLUGIN_STOP_TIMEOUT_MS,
+        PLUGIN_CALL_TIMEOUT_MS, PLUGIN_HANG_CEILING_MS, PLUGIN_GUARD_STRIKES, PLUGIN_GUARD_COOLDOWN_MS, PLUGIN_POOL_SIZE, PLUGIN_QUEUE_LIMIT, PLUGIN_TOOL_TIMEOUT_MS, PLUGIN_TOOL_MAX_TIMEOUT_MS, PLUGIN_ROUTE_RATE, PLUGIN_START_TIMEOUT_MS, PLUGIN_STOP_TIMEOUT_MS,
         RUN_MAX_SECRETS, KEYSTORE_MAX_FIELDS, KEYSTORE_MAX_SECRETS,
         SANDBOX_MODE,
         HEALTH_DB_TIMEOUT_SECONDS, HEALTH_WATCHDOG_FAILURES, HEALTH_WATCHDOG_INTERVAL_SECONDS, HEALTH_WATCHDOG_TIMEOUT_SECONDS,
