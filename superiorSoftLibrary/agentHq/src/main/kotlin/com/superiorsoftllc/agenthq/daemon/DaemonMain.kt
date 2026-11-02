@@ -66,6 +66,8 @@ import com.superiorsoftllc.agenthq.mvp.StoryHandler
 import com.superiorsoftllc.agenthq.mvp.StoryHandler.Companion.asStory
 import com.superiorsoftllc.agenthq.mailbox.MailSendRequest
 import com.superiorsoftllc.agenthq.session.isInSession
+import com.superiorsoftllc.agenthq.daemon.ComponentBindings
+import com.superiorsoftllc.agenthq.daemon.UnknownComponentProviderException
 import com.superiorsoftllc.agenthq.mailbox.Mailbox
 import com.superiorsoftllc.agenthq.mailbox.Message
 import com.superiorsoftllc.agenthq.mailbox.MessageState
@@ -350,6 +352,9 @@ fun main() {
         AgentHqDaemon.fromEnv()
     } catch (refused: AccessConfigurationException) {
         // Refused before anything was opened: the message names the setting to change.
+        System.err.println("[agentHq] refusing to start: ${refused.message}")
+        exitProcess(2)
+    } catch (refused: UnknownComponentProviderException) {
         System.err.println("[agentHq] refusing to start: ${refused.message}")
         exitProcess(2)
     } catch (refused: PortInUseException) {
@@ -1129,6 +1134,8 @@ class AgentHqDaemon(
             // to an offline agent is never lost, and the router hands queued messages to a session
             // whenever that session comes to rest (see MailRouter's delivery policy). Built before the
             // triggers (TRIGGER-NUDGE): a schedule's catch-up fire on boot mails through it.
+            // DAEMON-CORE-2: an unknown core.<component>.provider id refuses the start (no silent fallback); only `local` ships.
+            ComponentBindings({ k -> store.settings.get(k)?.value?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content } }, { null }).verifyAll()
             val mailbox = Mailbox(mailStore)
             // BUG-S3: mail to an agent swapped onto another harness opens a fresh session there (4.2, lazily).
             val bindFreshSession = { agentId: String ->

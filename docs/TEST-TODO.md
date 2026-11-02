@@ -215,3 +215,7 @@ TEST-TODO: session imports no provider/claude/opencode/experiments package. Clas
 ## CORE-SPLIT-4b (ticket c682d8a5)
 TEST-TODO: behaviour: the desktop app and the installed daemon still start with the core in its own jar. Class/function: installDist + launch the daemon with a fresh state dir. Inputs: default settings. Expected: daemon ready, `agenthq version` answers, SQLDelight migrations create the db (class AgentHQDatabase now generated in :agentHqCore).
 TEST-TODO: behaviour: friend-path test access. Class: agentHq test compile (compileTestKotlin). Inputs: none. Expected: tests that use core `internal` members (ProviderFactory, AgentHQDatabaseFactory) compile.
+
+## DAEMON-CORE-2 bindings (ticket 46483d24)
+TEST-TODO: behaviour: core components resolve by core.<component>.provider. Class ComponentBindingsTest. Inputs: no setting / swapped fake OrchestratorLink / unknown id on core.mailbox.provider. Expected: local built / fake returned / UnknownComponentProviderException naming the setting.
+TEST-TODO: behaviour: daemon refuses to start on an unknown provider id. Class/function: manual launch with setting core.mailbox.provider=nope. Expected: '[agentHq] refusing to start' line, exit 2.

@@ -139,9 +139,7 @@ this directory list first.
 top-level (official/core tier) daemon plugin can add frames, tools, hooks, routes, policy presets, limits and top-level/public
 routes, so a product can ship its own board, policy or demo lock on the stock core (Demo_Lock is the worked example). What it
 cannot do is replace a core component (SessionManager, the mailbox, the store, the harness registry, the transport): they are
-constructed by `DaemonMain`, not resolved through the host. Gap, named as a blocker: **DAEMON-CORE-2: component bindings**
-(resolve `SessionManager`, `Mailbox`, `OrchestratorLink`, store by a setting such as `core.<component>.provider`, same shape
-as `orchestrator.provider` below). Until then "own core" means "own plugins on the shared core" or a fork of `DaemonMain`.
+constructed by `DaemonMain`, not resolved through the host. **DAEMON-CORE-2: component bindings** (seam landed): `ComponentBindings` (agentHqCore, `daemon`) reads `core.<component>.provider` (component = sessionManager | mailbox | orchestratorLink | store; default `local`) and resolves a provider offered through `ComponentProviders` (published in the AR-5 service registry). An unknown id makes the daemon refuse to start (`[agentHq] refusing to start: ...`, exit 2), never a silent fallback. Only `local` ships; at default nothing changes. `DaemonMain` verifies the settings at start; each component's construction switches to `resolve(...)` as its alternative provider appears.
 
 ## 6. Orchestrator vs runner
 
