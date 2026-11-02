@@ -193,3 +193,6 @@ TEST-TODO: HarnessSandboxContributionTest - a granted+declared sandbox contribut
 TEST-TODO:
 - Behaviour: a plugin's `Harness.session()` runs as the daemon's persistent session adapter, behind `harness.hook.session`; `Harness.models()` feeds the `models` frame, behind `harness.hook.models`. Class: HarnessSessionModelsContributionTest. Inputs: echo plugin with a fake runner. Expected: launch argv from the plugin, resume id absent from the fingerprint, stdout lines forwarded verbatim and to the connection, turnEnded/providerSession reach the sink; undeclared or ungranted hook gives no adapter / no catalog; models rows stamped with the harness id; a throw is attributed to the plugin.
 - Manual QA: with a real pi, open the model picker: pi's rows are the same as before (now served through `PiHarness.catalog()`); a pi session keeps one `--mode rpc` process between turns.
+
+## HARNESS H7a (ticket edf20ad3)
+TEST-TODO: ClaudeFoldParityTest.providerSpecIsTheHarnessSpec / modelsAndDefaultComeFromTheHarness — RunRequest(model, resume) and a ClaudeCatalog — provider.spec/models/defaultModel equal ClaudeHarness.specFor/models/defaultModel (argv, env, MCP file unchanged).

@@ -57,6 +57,7 @@ class SessionStatsService(private val home: File = File(System.getProperty("user
         val psid = providerSessionId?.takeIf { SAFE_ID.matches(it) && ".." !in it } ?: return base
         return try {
             when (harness) {
+                // H7b: claude stats branch moves with the plugin
                 CLAUDE -> resolve(harness, psid) { claudeFile(psid) }?.let { readClaude(it, base) }
                 OPENCODE -> readOpenCode(psid, base)
                 // A harness id that is an OpenCode variant (`opencode-go`, ...) shares OpenCode's record.
