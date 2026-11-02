@@ -27,7 +27,6 @@ import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.LocalDensity
 import org.jetbrains.compose.resources.decodeToImageBitmap
-import org.jetbrains.compose.resources.decodeToSvgPainter
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathFillType
@@ -167,7 +166,7 @@ fun HarnessIcon(harnessId: String, size: Int = 11, tint: Color = Palette.Muted, 
             val cached = manifestIconCache.getOrPut(p) {
                 runCatching {
                     val bytes = host.readBytes(p) ?: return@runCatching null
-                    if (com.superiorsoftllc.agenthq.ui.model.HarnessManifestIcons.isSvg(p)) bytes.decodeToSvgPainter(density) else BitmapPainter(bytes.decodeToImageBitmap())
+                    if (com.superiorsoftllc.agenthq.ui.model.HarnessManifestIcons.isSvg(p)) decodeSvgPainter(bytes, density) else BitmapPainter(bytes.decodeToImageBitmap())
                 }.getOrNull()
             }
             cached as? Painter
