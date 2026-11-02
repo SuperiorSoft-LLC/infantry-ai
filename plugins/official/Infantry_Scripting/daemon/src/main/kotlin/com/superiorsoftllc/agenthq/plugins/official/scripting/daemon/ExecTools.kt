@@ -204,6 +204,7 @@ class ExecTools(
         var failure: String? = null
         try {
             val pb = ProcessBuilder(argv).directory(cwd)
+            pb.environment().putIfAbsent("INFANTRY_PROGRESS", "1") // PROGRESS-GRADLE-1
             pb.environment().putAll(env)
             val p = pb.start()
             val readers = listOf(
