@@ -1649,7 +1649,16 @@ class TicketBoard(
     }
 
     /** Every ticket as the wire shows it, with dependency and executor/context views derived by the daemon. */
+    /** BOARD-STALL-1: the agents read once for one [views] pass (callers hold the board lock), not once per ticket. */
+    private var agentsSnapshot: List<BoardAgent>? = null
+
     private fun views(rows: Map<String, TicketRow>, links: List<TicketLinkRow>): Map<String, Ticket> {
+        val outer = agentsSnapshot
+        if (outer == null) agentsSnapshot = host.agents.list()
+        try { return viewsOf(rows, links) } finally { if (outer == null) agentsSnapshot = null }
+    }
+
+    private fun viewsOf(rows: Map<String, TicketRow>, links: List<TicketLinkRow>): Map<String, Ticket> {
         val own = HashMap<String, MutableList<TicketLink>>()
         val prerequisites = HashMap<String, MutableList<String>>()
         for (link in links) {
@@ -1829,7 +1838,7 @@ class TicketBoard(
         if (agentId.startsWith("role:")) "role:" + RoleIds.normalize(agentId.removePrefix("role:")) else agentId
 
     private fun ticketProfile(agentId: String): BoardAgent? = when {
-        agentId.startsWith("role:") -> host.agents.list().firstOrNull { it.role == agentId.removePrefix("role:") }
+        agentId.startsWith("role:") -> (agentsSnapshot ?: host.agents.list()).firstOrNull { it.role == agentId.removePrefix("role:") }
         else -> host.agents.get(agentId)
     }
 
