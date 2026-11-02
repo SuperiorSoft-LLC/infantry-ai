@@ -25,8 +25,8 @@ import java.io.File
  *
  *  - claude: a PreToolUse `http` hook in a settings file passed with `--settings` (written by the Infantry_Claude module's watch()); Claude Code 2.1.312 applies a hook's
  *    `updatedInput` with no `permissionDecision` and then runs its normal permission check on the rewritten input.
- *  - opencode: the plugin `opencode/agenthq-watch.js` (`tool.execute.before`, mutates `output.args.command`), named in
- *    the serve's inline config `plugin` list ([mergeOpenCodePlugin]).
+ *  - opencode: the plugin `agenthq-watch.js` (`tool.execute.before`, mutates `output.args.command`), shipped by the opencode harness module (Infantry_OpenCode) and named in
+ *    the serve's inline config `plugin` list by its config merge.
  *  - pi: the extension `agenthq-watch.ts` (`tool_call`, mutates `event.input.command`), shipped by the pi harness module (Infantry_Pi) and loaded with `-e` through its `watch()` contribution.
  *
  * PERMISSIONS: the rewritten command starts with `agenthq`, which every harness allows in every mode (BUG-PERM-5). So a
@@ -37,11 +37,6 @@ import java.io.File
 object WatchHooks {
     const val PATH = "/watch/rewrite"
     const val SESSION_HEADER = "X-Agenthq-Session"
-    const val OPENCODE_RESOURCE = "/opencode/agenthq-watch.js"
-
-    /** Set by the daemon at start: the installed opencode plugin file (null = not installed, no plugin entry). */
-    @Volatile var openCodePlugin: File? = null
-
     private val json = Json { ignoreUnknownKeys = true }
 
     /** BG-NATIVE-1: harnesses with their own background tasks; their `run_in_background` is not rewritten in native mode. */
@@ -51,21 +46,6 @@ object WatchHooks {
     @Volatile var nativeBackground: () -> Boolean = { false }
 
     internal fun on(env: Map<String, String>) = env["AGENTHQ_WATCH"] == "on" && !env[AccessPolicy.MAIL_BASE_ENV].isNullOrBlank()
-
-    /** [config] (an `OPENCODE_CONFIG_CONTENT`) with the watch plugin appended to its `plugin` list, when the watch is on. */
-    // H8b: moves into the opencode plugin (watch contribution)
-    fun mergeOpenCodePlugin(config: String, env: Map<String, String>, plugin: File? = openCodePlugin): String {
-        if (plugin == null || !on(env)) return config
-        return appendOpenCodePlugin(config, plugin)
-    }
-
-    /** H8b-1: [config] with [plugin] appended to its `plugin` list (no watch check: the caller decided). */
-    fun appendOpenCodePlugin(config: String, plugin: File): String {
-        val root = runCatching { json.parseToJsonElement(config) as? JsonObject }.getOrNull() ?: JsonObject(emptyMap())
-        val spec = plugin.absoluteFile.toPath().toUri().toString() // file:///C:/... ; opencode takes a file URL as a local plugin
-        val list = (root["plugin"] as? JsonArray).orEmpty().filterNot { (it as? JsonPrimitive)?.contentOrNull == spec }
-        return JsonObject(root + ("plugin" to JsonArray(list + JsonPrimitive(spec)))).toString()
-    }
 
     /** Writes [resource] into [dir] as [name] (only when missing or different) and returns the file. */
     fun install(dir: File, resource: String, name: String): File {

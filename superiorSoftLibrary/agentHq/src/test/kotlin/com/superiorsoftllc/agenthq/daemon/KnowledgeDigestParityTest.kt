@@ -3,7 +3,6 @@ package com.superiorsoftllc.agenthq.daemon
 import com.superiorsoftllc.agenthq.agents.KNOWLEDGE_DIGEST_HEADING
 import com.superiorsoftllc.agenthq.protocol.Envelope
 import com.superiorsoftllc.agenthq.provider.AgentProvider
-import com.superiorsoftllc.agenthq.provider.OpenCodeProvider
 import com.superiorsoftllc.agenthq.runner.ProcessRunner
 import com.superiorsoftllc.agenthq.runner.ScriptedRunner
 import com.superiorsoftllc.agenthq.runner.StubScript
@@ -92,13 +91,20 @@ class KnowledgeDigestParityTest {
     }
 
     /** A real CLI provider whose child is the scripted one: everything else (id, spec, `deliver`) is the real provider's. */
+    /** H8b-3: a provider with opencode's id (the real one is a harness module); what is tested is the first-turn digest, not the harness. */
+    private object OpenCodeLike : com.superiorsoftllc.agenthq.provider.AgentProvider {
+        override val id = "opencode"
+        override fun spec(request: com.superiorsoftllc.agenthq.provider.RunRequest) = com.superiorsoftllc.agenthq.runner.ProcessSpec(listOf("opencode", "run"), request.workingDir)
+        override fun defaultModel() = "opencode/test"
+    }
+
     private class Scripted(real: AgentProvider, private val runner: ProcessRunner) : AgentProvider by real {
         override fun transport(): ProcessRunner = runner
     }
 
     private fun withDaemon(block: (DaemonFixture, ScriptedRunner) -> Unit) {
         val runner = ScriptedRunner(StubScript.default(), delayMs = 0)
-        val opencode = Scripted(OpenCodeProvider(modelLister = { emptyList() }), runner)
+        val opencode = Scripted(OpenCodeLike, runner)
         records = FakeKnowledgeRecords().install()
         val fixture = DaemonFixture.launch(StubScript.default(), runner = runner, additionalProviders = listOf(opencode))
         try {

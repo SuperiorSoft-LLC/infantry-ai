@@ -1,6 +1,5 @@
 package com.superiorsoftllc.agenthq.provider
 
-import com.superiorsoftllc.agenthq.opencode.OpenCodeCommand
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -15,10 +14,10 @@ class ProviderSpecTest {
     // --- selection -----------------------------------------------------------
 
     @Test
-    fun factoryDefaultsToOpenCode() {
-        assertEquals("opencode", ProviderFactory.fromFlag(null).id)
-        assertEquals("opencode", ProviderFactory.fromFlag("").id)
-        assertEquals("opencode", ProviderFactory.fromFlag("opencode").id)
+    fun factoryHasNoOpenCodeDefaultAnyMore() {
+        // H8b-3: with no harness module loaded the default is the zero-harness provider, never opencode.
+        assertEquals("none", ProviderFactory.fromFlag(null).id)
+        assertTrue(runCatching { ProviderFactory.fromFlag("opencode") }.exceptionOrNull() is IllegalStateException)
     }
 
     @Test
@@ -31,28 +30,7 @@ class ProviderSpecTest {
 
 
 
-    // --- opencode argv -------------------------------------------------------
-
-    @Test
-    fun openCodeBaselineArgv() {
-        val argv = OpenCodeCommand.command("opencode.exe", "opencode/space-bunny-free", null)
-        assertEquals(
-            listOf("opencode.exe", "run", "--format", "json", "-m", "opencode/space-bunny-free"),
-            argv,
-        )
-    }
-
-    @Test
-    fun openCodeResumeAddsSession() {
-        val argv = OpenCodeCommand.command("opencode.exe", "opencode/space-bunny-free", "ses_123")
-        assertEquals(
-            listOf(
-                "opencode.exe", "run", "--format", "json",
-                "-m", "opencode/space-bunny-free", "--session", "ses_123",
-            ),
-            argv,
-        )
-    }
+    // --- opencode argv: H8b-3 moved to the Infantry_OpenCode plugin (OpenCodeMovedTest) ---
 
     // --- session-id extraction ----------------------------------------------
 

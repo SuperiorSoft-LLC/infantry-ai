@@ -1,6 +1,5 @@
 package com.superiorsoftllc.agenthq.provider
 
-import com.superiorsoftllc.agenthq.opencode.OpenCodeCommand
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -14,7 +13,8 @@ import kotlin.test.assertTrue
  */
 class ProviderSelectionTest {
 
-    private val opencode = OpenCodeProvider()
+    /** H8b-3: opencode is a harness module; the default these tests pass is the stub (a core builder). */
+    private val opencode: AgentProvider = StubProvider()
 
     // --- AGENTHQ_PROVIDERS ------------------------------------------------------------------------
 
@@ -28,13 +28,13 @@ class ProviderSelectionTest {
     @Test
     fun entriesKeepTheirOrderAndTheDefaultIsNotListedTwice() {
         val ids = ProviderFactory.additionalFromFlag("claude, OpenCode ,stub", opencode).map { it.id }
-        assertEquals(listOf("stub"), ids, "the default is always available, so it is dropped")
+        assertEquals(emptyList(), ids, "the default (stub) is always available, so it is dropped; claude and opencode are served by modules")
     }
 
     @Test
     fun aliasesCollapseToOneEntry() {
         val ids = ProviderFactory.additionalFromFlag("cc,claude,claude-code,scripted,stub", opencode).map { it.id }
-        assertEquals(listOf("stub"), ids, "H7b-3: claude is served by the Infantry_Claude module, so its names add no builder")
+        assertEquals(emptyList(), ids, "H7b-3: the default (stub) is dropped and claude is served by the Infantry_Claude module, so its names add no builder")
     }
 
     @Test
@@ -45,9 +45,18 @@ class ProviderSelectionTest {
     }
 
     @Test
+    fun opencodeIsNoLongerABuiltInProvider_aDefaultNamingItIsRefusedByName() {
+        assertTrue("opencode" !in ProviderFactory.ids(), "core registers no opencode provider; the Infantry_OpenCode module serves it")
+        val failure = assertFailsWith<IllegalStateException> { ProviderFactory.fromFlag("opencode") }
+        assertTrue(failure.message!!.contains("opencode"), failure.message)
+        assertFailsWith<IllegalStateException> { ProviderFactory.fromFlag("oc") }
+        assertEquals(emptyList(), ProviderFactory.additionalFromFlag("oc,opencode", opencode), "an AGENTHQ_PROVIDERS entry naming it is satisfied by the module")
+    }
+
+    @Test
     fun anUnknownHarnessNameIsRefusedWithTheKnownIds() {
         val failure = assertFailsWith<IllegalStateException> { ProviderFactory.fromFlag("no-such-harness") }
-        assertTrue(failure.message!!.contains("no-such-harness") && failure.message!!.contains("opencode"), failure.message)
+        assertTrue(failure.message!!.contains("no-such-harness") && failure.message!!.contains("stub"), failure.message)
     }
 
     @Test
@@ -59,53 +68,5 @@ class ProviderSelectionTest {
         assertTrue(failure.message!!.contains("gemini"), failure.message)
     }
 
-    // --- the model on the command line -------------------------------------------------------------
-
-
-
-
-
-    @Test
-    fun theStubEchoesASessionModelOnItsLabelAndOnlyThen() {
-        val stub = StubProvider()
-        val chosen = stub.spec(RunRequest(prompt = "hi", model = "m-1")).command
-        assertEquals(listOf("--model", "m-1"), chosen.takeLast(2))
-        val none = stub.spec(RunRequest(prompt = "hi")).command
-        assertTrue("--model" !in none, "no model chosen, no model echoed: $none")
-    }
-
-    // --- AGENT-UX-7: the model list a provider reports for save-time validation -------------------
-
-    @Test
-    fun opencodeParsesItsPlainTextModelList() {
-        // `opencode models` prints one `provider/model` id per line: no JSON, no headers, one entry
-        // may carry a `:tag` (ollama). This is the real shape, verified against the installed CLI.
-        val output = """
-            opencode/space-bunny-free
-            opencode/claude-sonnet-4
-            opencode-go/deepseek-v4.1-flash
-            ollama/qwen2.5:7b
-        """.trimIndent()
-        assertEquals(
-            listOf(
-                "opencode/space-bunny-free",
-                "opencode/claude-sonnet-4",
-                "opencode-go/deepseek-v4.1-flash",
-                "ollama/qwen2.5:7b",
-            ),
-            opencode.parseModels(output),
-        )
-    }
-
-    @Test
-    fun opencodeDropsBlankLinesAndCommandHelpText() {
-        // A rejected invocation makes yargs print its help; none of that is a model id.
-        val output = "\nopencode/big-pickle\n\nopencode models [provider]\n list all available models\n"
-        assertEquals(listOf("opencode/big-pickle"), opencode.parseModels(output))
-    }
-
-    @Test
-    fun anUnparseableModelListMeansUnknownSoAnythingIsAccepted() {
-        assertEquals(null, opencode.parseModels("   \n\n"), "no ids = cannot validate, accept any model")
-    }
+    // H8b-3: the opencode model-list parsing tests (plain-text list, blank/help lines, unparseable) moved to the Infantry_OpenCode plugin (OpenCodeMovedTest).
 }

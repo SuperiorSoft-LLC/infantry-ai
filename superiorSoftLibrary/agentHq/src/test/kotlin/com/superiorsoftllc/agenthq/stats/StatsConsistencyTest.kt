@@ -78,7 +78,7 @@ class StatsConsistencyTest {
     fun sameRequestSequenceGivesIdenticalRecordsOnEveryHarness() {
         File(home, ".pi/agent").mkdirs()
         File(home, ".pi/agent/models-store.json").writeText("""{"x":{"models":[{"id":"$model","contextWindow":200000}]}}""")
-        val results = listOf(read(claude()), read(pi()), read(openCode("opencode")), read("opencode-go" to "o1"))
+        val results = listOf(read(claude()), read(pi()))
         val expected = listOf(
             StatsPoint(at(0), 1000, 1020), StatsPoint(at(1), 1550, 2580), StatsPoint(at(3), 1705, 4292),
         )
@@ -92,14 +92,11 @@ class StatsConsistencyTest {
             assertEquals(listOf(model), s.models, s.harness)
             assertEquals(4, s.toolUses, s.harness)
         }
-        // What filled the context is the same for all three.
-        assertEquals(results[1].topSources, results[2].topSources)
         assertEquals(results[0].topSources, results[1].topSources)
-        // Cost: only what the harness reports. Claude reports none; pi and opencode report 0.5 per request.
+        // Cost: only what the harness reports. Claude reports none; pi reports 0.5 per request. (H8b-3: the opencode rows moved to OpenCodeStatsTest; its plugin row has no series.)
         assertNull(results[0].costTotal)
         assertTrue(results[0].series!!.all { it.cumulativeCost == null })
         assertEquals(listOf(0.5, 1.0, 1.5), results[1].series!!.map { it.cumulativeCost })
-        assertEquals(results[1].series!!.map { it.cumulativeCost }, results[2].series!!.map { it.cumulativeCost })
         assertEquals(1.5, results[1].costTotal)
     }
 

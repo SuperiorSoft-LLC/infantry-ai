@@ -18,20 +18,11 @@ import kotlin.test.assertTrue
 class HarnessConfigMergeTest {
     @Test fun apiVersionIs2_12() = assertEquals("2.12.0", HARNESS_API_VERSION)
 
-    @Test fun opencodeMergeThroughTheSlotEqualsTheDirectMerge() {
+    @Test fun opencodeMergeIsNoLongerRegisteredByTheCore() {
+        // H8b-3: the merge lives in the Infantry_OpenCode module (its mergeConfig); the core registers none for the id.
         CoreHarnessContributions.register()
-        val launch = AgentHqMcp.Launch("agenthq", listOf("mcp", "serve"), mapOf("A" to "b"))
-        val existing = """{"model":"x","permission":"ask"}"""
-        val viaSlot = HarnessConfigMerge.merge("opencode", existing, ConfigParts(mcp = HarnessProcess(launch.argv, env = launch.env)))
-        assertEquals(AgentHqMcp.mergeOpenCode(existing, launch), viaSlot)
-    }
-
-    @Test fun watchPluginIsAppendedOnlyWhenGiven() {
-        CoreHarnessContributions.register()
-        val plain = HarnessConfigMerge.merge("opencode", """{"a":1}""", ConfigParts())
-        assertEquals("""{"a":1}""", plain)
-        val withPlugin = HarnessConfigMerge.merge("opencode", """{"a":1}""", ConfigParts(watchPlugin = File("w.js").absoluteFile))
-        assertTrue("\"plugin\"" in withPlugin!! && "w.js" in withPlugin)
+        assertEquals("""{"a":1}""", HarnessConfigMerge.merge("opencode", """{"a":1}""", ConfigParts()), "no registration: the config is left alone")
+        assertEquals("""{"a":1}""", HarnessConfigMerge.merge("opencode", """{"a":1}""", ConfigParts(mcp = HarnessProcess(listOf("agenthq", "mcp")))))
     }
 
     @Test fun unknownHarnessLeavesTheConfigAlone() {

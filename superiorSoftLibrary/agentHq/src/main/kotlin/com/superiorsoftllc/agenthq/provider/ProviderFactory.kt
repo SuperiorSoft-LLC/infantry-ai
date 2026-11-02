@@ -24,8 +24,8 @@ object ProviderFactory {
     const val ENV = "AGENTHQ_PROVIDER"
 
     /**
-     * H2: there is no hard-coded default. With no `AGENTHQ_PROVIDER` the default is the first registered harness (built-ins
-     * register `opencode` first, so a normal install is unchanged), else [NoHarnessProvider]. `stub` is a test provider and
+     * H2: there is no hard-coded default. With no `AGENTHQ_PROVIDER` the default is the first registered harness (harness modules
+     * register first), else [NoHarnessProvider]. `stub` is a test provider and
      * is never picked as a default.
      */
     internal fun defaultId(ids: Collection<String> = builders.keys): String =
@@ -33,8 +33,6 @@ object ProviderFactory {
 
     private val builders = LinkedHashMap<String, () -> AgentProvider>(
         mapOf(
-            // H8b: becomes the plugin's session(). BUG-M2-11b-2: opencode's persistent mode; whether it is used is `session.keepAliveMinutes`'s call (SessionHost).
-            "opencode" to { OpenCodeProvider(sessionAdapter = com.superiorsoftllc.agenthq.harness.opencode.OpenCodeHarness.sessionAdapter()) },
             "stub" to { StubProvider(delayMs = stubDelayMs(InfantryEnv.get(STUB_DELAY_ENV))) },
         ),
     )
@@ -101,8 +99,8 @@ object ProviderFactory {
 
     const val PROVIDERS_ENV = "AGENTHQ_PROVIDERS"
 
-    /** H7b-3: ids a harness MODULE serves (Infantry_Claude); an [PROVIDERS_ENV] entry naming one is satisfied by the module, not a builder. */
-    private val MODULE_SERVED = setOf("claude")
+    /** H7b-3/H8b-3: ids a harness MODULE serves (Infantry_Claude, Infantry_OpenCode); an [PROVIDERS_ENV] entry naming one is satisfied by the module, not a builder. */
+    private val MODULE_SERVED = setOf("claude", "opencode")
 
     /**
      * Pure parse of [additionalFromEnv]. The default's own id is dropped (it is always available),

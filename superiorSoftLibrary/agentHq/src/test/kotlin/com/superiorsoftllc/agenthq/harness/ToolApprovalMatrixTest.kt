@@ -3,13 +3,10 @@ package com.superiorsoftllc.agenthq.harness
 import com.superiorsoftllc.agenthq.daemon.loadHarnesses
 import com.superiorsoftllc.agenthq.harness.descriptor.DescriptorHarness
 import com.superiorsoftllc.agenthq.harness.descriptor.HarnessDescriptorLoader
-import com.superiorsoftllc.agenthq.opencode.OpenCodePermissions
-import com.superiorsoftllc.agenthq.opencode.OpenCodeServeAdapter
 import com.superiorsoftllc.agenthq.protocol.EventNormalizer
 import com.superiorsoftllc.agenthq.provider.AgentProvider
 import com.superiorsoftllc.agenthq.provider.HarnessModelCatalogs
 import com.superiorsoftllc.agenthq.provider.HarnessProvider
-import com.superiorsoftllc.agenthq.provider.OpenCodeProvider
 import com.superiorsoftllc.agenthq.provider.ProviderFactory
 import com.superiorsoftllc.agenthq.provider.RunRequest
 import com.superiorsoftllc.agenthq.provider.StubProvider
@@ -85,7 +82,8 @@ class ToolApprovalMatrixTest {
 
         writeReport()
         val failures = cells.filter { it.problem != null }
-        assertTrue(cells.size > 100, "the matrix checked only ${cells.size} cells")
+        assertTrue(cells.size > 20, // H8b-3: opencode rows moved to the plugin; stub, pi and descriptor cells remain
+             "the matrix checked only ${cells.size} cells")
         if (failures.isNotEmpty()) {
             fail("${failures.size} of ${cells.size} Tool approval cells failed:\n" + failures.take(40).joinToString("\n") {
                 "  ${it.target} via ${it.via} [${it.kind}/${it.path}] model=${it.model ?: "(default)"} mode=${it.mode.wire}: ${it.problem}"
@@ -97,7 +95,7 @@ class ToolApprovalMatrixTest {
 
     private fun check(id: String, via: String, provider: AgentProvider, offered: List<String>, harness: Harness? = null) {
         val kind = kindOf(provider, harness)
-        val models = (listOf<String?>(null, PROBE_MODEL) + offered.distinct() + if (kind == "opencode") listOf(LUNA_6) else emptyList()).distinct()
+        val models = (listOf<String?>(null, PROBE_MODEL) + offered.distinct()).distinct()
         for (model in models) {
             val oneShot = ToolApproval.entries.associateWith { mode -> runCatching { provider.spec(request(model, mode)) } }
             for (mode in ToolApproval.entries) {
@@ -110,25 +108,12 @@ class ToolApprovalMatrixTest {
 
     private fun kindOf(provider: AgentProvider, harness: Harness?): String = when {
         harness is DescriptorHarness -> "descriptor"
-        provider is OpenCodeProvider -> "opencode"
         provider is StubProvider -> "stub"
         else -> "unmapped"
     }
 
     /** Null when [spec] carries [kind]'s mapping for [mode]. */
     private fun oneShotProblem(kind: String, harness: Harness?, spec: ProcessSpec, deny: ProcessSpec?, mode: ToolApproval): String? = when (kind) {
-        "opencode" -> {
-            val auto = "--auto" in spec.command
-            val cfg = spec.env[OpenCodePermissions.CONFIG_CONTENT_ENV]
-            // BUG-PERM-5: every mode carries `bash."agenthq *" = allow` (AgentHQ's own CLI), and nothing else widens deny.
-            if (!agentHqAllowed(cfg)) "every mode must allow bash \"agenthq *\" in ${OpenCodePermissions.CONFIG_CONTENT_ENV}, got $cfg"
-            else when (mode) {
-                // PROMPT-1: no harness can prompt yet, so `ask` must be exactly `deny`.
-                ToolApproval.DENY, ToolApproval.ASK -> if (auto) "deny must not add --auto" else if (editAllowed(cfg)) "deny must not allow edit, got $cfg" else null
-                ToolApproval.ALLOW_EDITS -> if (auto) "allowEdits must not add --auto" else if (!editAllowed(cfg)) "allowEdits must set permission.edit=allow, got $cfg" else null
-                ToolApproval.ALLOW_ALL -> if (!auto) "allowAll must add --auto" else if (editAllowed(cfg)) "allowAll must not set permission.edit (it has --auto), got $cfg" else null
-            }
-        }
         // PM decision (BUG-PERM-3): pi has no approval prompt, all its tools run in every mode, so no mode adds a flag.
         "pi" -> piProblem(spec.command, deny?.command)
         "descriptor" -> descriptorProblem((harness as DescriptorHarness), spec.command, deny?.command, mode)
@@ -157,25 +142,6 @@ class ToolApprovalMatrixTest {
 
     /** The persistent mode, launched for real against a capturing runner (no process starts). */
     private fun sessionProblem(kind: String, adapter: HarnessSessionAdapter, model: String?, mode: ToolApproval): String? {
-        if (adapter is OpenCodeServeAdapter) {
-            // serve answers each ask itself; edit is the only permission allowEdits lets through.
-            val expected = mapOf(
-                "edit" to (mode.withoutPrompt() != ToolApproval.DENY),
-                "bash" to (mode == ToolApproval.ALLOW_ALL),
-            )
-            // BUG-PERM-5: a bash ask for the agenthq CLI is answered `once` in every mode; `git status` follows the mode.
-            val agentHq = buildJsonObject { put("id", "per_matrix"); put("permission", "bash"); put("patterns", kotlinx.serialization.json.JsonArray(listOf(JsonPrimitive("agenthq ticket create --title x")))) }
-            val a = OpenCodeServeAdapter.permissionDecision(agentHq, mode) ?: return "no decision for agenthq"
-            if ((Json.parseToJsonElement(a.replyBody).jsonObject["reply"] as JsonPrimitive).content != "once" || a.deniedTool != null)
-                return "serve must answer an agenthq bash ask with once in ${mode.wire}, got ${a.replyBody}"
-            return expected.entries.firstNotNullOfOrNull { (permission, allowed) ->
-                val props = buildJsonObject { put("id", "per_matrix"); put("permission", permission); if (permission == "bash") put("patterns", kotlinx.serialization.json.JsonArray(listOf(JsonPrimitive("git status")))) }
-                val d = OpenCodeServeAdapter.permissionDecision(props, mode) ?: return@firstNotNullOfOrNull "no decision for $permission"
-                val reply = (Json.parseToJsonElement(d.replyBody).jsonObject["reply"] as JsonPrimitive).content
-                val ok = if (allowed) reply == "once" && d.deniedTool == null else reply == "reject" && d.deniedTool == permission
-                if (ok) null else "serve answers '$permission' with $reply (denied=${d.deniedTool}), expected ${if (allowed) "once" else "reject + denial"}"
-            }
-        }
         if (kind != "pi") return "unmapped session adapter ${adapter.javaClass.name} (label ${adapter.label})"
         val launched = launch(adapter, model, mode).getOrElse { return "launch threw ${it::class.simpleName}: ${it.message}" }
         return when (kind) {
@@ -191,27 +157,7 @@ class ToolApprovalMatrixTest {
         runner.specs.single().command
     }
 
-    // --- carried over from PERM-2 / PERM-3 ----------------------------------------------------------------------
-
-    @Test
-    fun openCodeAllowEditsMergesIntoTheUsersInlineConfigInsteadOfReplacingIt() {
-        val merged = Json.parseToJsonElement(OpenCodePermissions.mergeAllowEdits("""{"model":"x/y","permission":{"bash":"ask"}}""")).jsonObject
-        assertEquals("\"x/y\"", merged["model"].toString())
-        assertEquals("""{"bash":"ask","edit":"allow"}""", merged["permission"].toString())
-        // The single-string shorthand keeps its meaning as the fallback rule.
-        assertEquals("""{"*":"deny","edit":"allow"}""", Json.parseToJsonElement(OpenCodePermissions.mergeAllowEdits("""{"permission":"deny"}""")).jsonObject["permission"].toString())
-        // Nothing usable to merge into: ours alone.
-        for (bad in listOf(null, "", "  ", "not json", "[1]")) assertEquals(OpenCodePermissions.ALLOW_EDITS_CONFIG, OpenCodePermissions.mergeAllowEdits(bad))
-        assertEquals(
-            mapOf(OpenCodePermissions.CONFIG_CONTENT_ENV to OpenCodePermissions.withAgentHqMcp("""{"username":"u","permission":{"edit":"allow","bash":{"agenthq *":"allow"}}}""", emptyMap())), // MCP-1
-            OpenCodePermissions.runEnv(ToolApproval.ALLOW_EDITS, existing = """{"username":"u"}"""),
-        )
-        // BUG-PERM-5: deny merges the agenthq allow only, and keeps the user's keys.
-        assertEquals(
-            mapOf(OpenCodePermissions.CONFIG_CONTENT_ENV to OpenCodePermissions.withAgentHqMcp("""{"username":"u","permission":{"bash":{"agenthq *":"allow"}}}""", emptyMap())), // MCP-1
-            OpenCodePermissions.runEnv(ToolApproval.DENY, existing = """{"username":"u"}"""),
-        )
-    }
+    // --- carried over from PERM-2 / PERM-3 (H8b-3: the opencode mergeAllowEdits/runEnv test and the opencode matrix rows moved to the Infantry_OpenCode plugin tests) ------
 
     @Test
     fun anOpenCodeRunAutoRejectBecomesTheDenialNoticeOnce() {
@@ -314,8 +260,6 @@ class ToolApprovalMatrixTest {
         val SAMPLES_DIR = File("docs/harnesses")
         const val PROBE_MODEL = "matrix/probe-model"
 
-        /** The demo model the owner named for OpenCode (Luna 6). */
-        const val LUNA_6 = "opencode-go/gpt-6-luna"
         /** BUG-PERM-5: verified live against claude 2.1.304 (`-p --allowedTools`). */
         val CLAUDE_AGENTHQ_RULES = listOf("Bash(agenthq:*)", "PowerShell(agenthq:*)")
         val PI_TOOL_FLAGS = setOf("--no-tools", "--tools", "--exclude-tools")

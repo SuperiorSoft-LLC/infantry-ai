@@ -1,6 +1,8 @@
-package com.superiorsoftllc.agenthq.opencode
+package com.superiorsoftllc.agenthq.harness
 
-import com.superiorsoftllc.agenthq.provider.OpenCodeProvider
+import com.superiorsoftllc.agenthq.harness.api.SessionOutput
+import com.superiorsoftllc.agenthq.harness.api.SessionTurnEnd
+import com.superiorsoftllc.agenthq.plugins.official.opencode.harness.OpenCodeServeSession
 import com.superiorsoftllc.agenthq.provider.RunRequest
 import com.superiorsoftllc.agenthq.runner.ProcessListener
 import com.superiorsoftllc.agenthq.runner.ProcessRunner
@@ -17,7 +19,17 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** An opencode turn that ends with no assistant output is a visible "no reply from <model>", never a plain success. */
-class OpenCodeNoReplyTest {
+class OpenCodeNoReplyHostTest {
+    /** The plugin session's output, recorded into a [Sink]. */
+    private class TurnOut(private val sink: Sink) : SessionOutput {
+        override fun write(text: String) = true
+        override fun closeInput() {}
+        override fun detail(text: String) {}
+        override fun providerSession(id: String) {}
+        override fun output(line: String) { sink.output(line) }
+        override fun turnEnded(end: SessionTurnEnd, exitCode: Int?, reason: String?) = sink.turnEnded(TurnEnd.valueOf(end.name), exitCode, reason)
+    }
+
     private class Sink : AdapterSink {
         val lines = mutableListOf<String>()
         var end: TurnEnd? = null
@@ -30,9 +42,16 @@ class OpenCodeNoReplyTest {
         override fun turnEnded(end: TurnEnd, exitCode: Int?, reason: String?) { this.end = end; exit = exitCode; this.reason = reason }
     }
 
+    /** H8b-3: the one-shot path serves the opencode id too (a session with keepAlive 0); a bare provider with that id is what the adapter needs. */
+    private object OpenCodeProviderStub : com.superiorsoftllc.agenthq.provider.AgentProvider {
+        override val id = "opencode"
+        override fun spec(request: RunRequest) = ProcessSpec(listOf("opencode", "run"), request.workingDir)
+        override fun defaultModel() = "opencode-go/beam-free"
+    }
+
     private fun obj(s: String) = Json.parseToJsonElement(s) as JsonObject
 
-    private fun feed(turn: OpenCodeServeAdapter.Turn, vararg events: String) {
+    private fun feed(turn: OpenCodeServeSession.Turn, vararg events: String) {
         for (e in events) {
             val o = obj(e)
             val props = o["properties"] as JsonObject
@@ -50,7 +69,7 @@ class OpenCodeNoReplyTest {
     @Test
     fun `serve turn that goes idle with no text is a no-reply failure naming the model`() {
         val sink = Sink()
-        val turn = OpenCodeServeAdapter.Turn(sink, "opencode-go/beam-free") { listOf("boom on stderr") }
+        val turn = OpenCodeServeSession.Turn(TurnOut(sink), "opencode-go/beam-free") { listOf("boom on stderr") }
         feed(turn, busy, idle)
         assertEquals(TurnEnd.FAILED, sink.end)
         assertNull(sink.exit)
@@ -61,7 +80,7 @@ class OpenCodeNoReplyTest {
     @Test
     fun `a stale idle after the prompt echo is not taken for an answer (regression for the empty turn)`() {
         val sink = Sink()
-        val turn = OpenCodeServeAdapter.Turn(sink, "m/x")
+        val turn = OpenCodeServeSession.Turn(TurnOut(sink), "m/x")
         // The user's own part arrives, then a late idle from an aborted turn: no busy was seen, so the turn stays open.
         feed(turn, userMsg, userPart, idle)
         assertNull(sink.end)
@@ -73,7 +92,7 @@ class OpenCodeNoReplyTest {
     @Test
     fun `serve turn with text completes`() {
         val sink = Sink()
-        val turn = OpenCodeServeAdapter.Turn(sink, "m/x")
+        val turn = OpenCodeServeSession.Turn(TurnOut(sink), "m/x")
         feed(turn, busy, answer, idle)
         assertEquals(TurnEnd.COMPLETED, sink.end)
     }
@@ -94,7 +113,7 @@ class OpenCodeNoReplyTest {
     }
 
     private fun oneShot(runner: ScriptedRunner, model: String? = "opencode-go/beam-free"): Sink {
-        val adapter = OneShotAdapter(OpenCodeProvider { listOf("opencode-go/beam-free") })
+        val adapter = OneShotAdapter(OpenCodeProviderStub)
         val sink = Sink()
         val handle = adapter.launch(RunRequest(prompt = "hello", model = model), emptyMap(), runner, sink)
         adapter.sendTurn(handle, RunRequest(prompt = "hello", model = model))

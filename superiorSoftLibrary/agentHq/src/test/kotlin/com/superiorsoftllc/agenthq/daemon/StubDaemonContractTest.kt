@@ -1,6 +1,5 @@
 package com.superiorsoftllc.agenthq.daemon
 
-import com.superiorsoftllc.agenthq.provider.OpenCodeProvider
 import com.superiorsoftllc.agenthq.provider.ProviderFactory
 import com.superiorsoftllc.agenthq.runner.StubScript
 import com.superiorsoftllc.agenthq.session.SessionRecord
@@ -165,22 +164,21 @@ class StubDaemonContractTest {
         // The alias table must never steal a name a caller registers. `ProviderSeamTest` registers
         // a vendor-neutral fake under `fake`, and that is exactly the collision this guards: an
         // alias claiming `fake` would hand back the stub and look like a broken registration.
-        ProviderFactory.register("alias-probe") { OpenCodeProvider() }
+        ProviderFactory.register("alias-probe") { object : com.superiorsoftllc.agenthq.provider.AgentProvider { override val id = "probe-harness"; override fun spec(request: com.superiorsoftllc.agenthq.provider.RunRequest) = com.superiorsoftllc.agenthq.runner.ProcessSpec(listOf("x")) } }
         assertEquals(
-            "opencode",
+            "probe-harness",
             ProviderFactory.fromFlag("alias-probe").id,
             "a registered name must win over any alias resolution",
         )
     }
 
     @Test
-    fun realProvidersAreUnchanged() {
-        assertEquals("opencode", ProviderFactory.fromFlag(null).id, "the default is untouched")
-        assertEquals("opencode", ProviderFactory.fromFlag("").id)
-        assertEquals("claude", ProviderFactory.fromFlag("claude").id)
-        // A real CLI spawns a child, so it brings no transport of its own: `AGENTHQ_RUNNER` keeps
-        // deciding the pipes-vs-PTY question exactly as it did before this phase.
-        assertNull(ProviderFactory.fromFlag("opencode").transport())
-        assertNull(ProviderFactory.fromFlag("claude").transport())
+    fun realProvidersAreModulesNotBuilders() {
+        // H8b-3: opencode and claude are harness modules; core has no builder for either, so the default is the zero-harness provider.
+        assertEquals("none", ProviderFactory.fromFlag(null).id, "no harness module loaded: the zero-harness provider")
+        assertEquals("none", ProviderFactory.fromFlag("").id)
+        for (id in listOf("opencode", "claude")) {
+            assertTrue(runCatching { ProviderFactory.fromFlag(id) }.exceptionOrNull() is IllegalStateException, "$id has no core builder")
+        }
     }
 }

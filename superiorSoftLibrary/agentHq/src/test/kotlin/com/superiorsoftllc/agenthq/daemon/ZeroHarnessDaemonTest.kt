@@ -57,9 +57,9 @@ class ZeroHarnessDaemonTest {
             ProviderFactory.register("stub") { com.superiorsoftllc.agenthq.provider.StubProvider() }
             assertEquals(NoHarnessProvider.ID, ProviderFactory.defaultId())
         }
-        // With the built-ins registered the default is unchanged.
-        assertEquals("opencode", ProviderFactory.defaultId())
-        assertEquals("opencode", ProviderFactory.fromFlag(null).id)
+        // H8b-3: the built-ins are the stub alone (opencode and claude are harness modules), so the default is still none.
+        assertEquals(NoHarnessProvider.ID, ProviderFactory.defaultId())
+        assertEquals(NoHarnessProvider.ID, ProviderFactory.fromFlag(null).id)
     }
 
     @Test

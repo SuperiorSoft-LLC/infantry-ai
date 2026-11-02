@@ -237,38 +237,59 @@ class SessionStatsReadersTest {
         }
     }
 
+    /** H8b-3: the opencode reader is the Infantry_OpenCode module's HarnessStats; this host answers its read-only db query with the daemon's reader. */
+    private val dbHost = object : com.superiorsoftllc.agenthq.harness.api.HarnessHost {
+        override val moduleId = "Infantry_OpenCode"
+        override val apiVersion = com.superiorsoftllc.agenthq.harness.api.HARNESS_API_VERSION
+        override val stateDir: File = File(home, "state")
+        override fun log(line: String) = Unit
+        override fun setting(key: String): String? = null
+        override fun resolveCli(tool: String): String? = null
+        override fun start(process: com.superiorsoftllc.agenthq.harness.api.HarnessProcess, listener: com.superiorsoftllc.agenthq.harness.api.HarnessProcessListener): com.superiorsoftllc.agenthq.harness.api.HarnessRunningProcess = error("not used")
+        override fun mcpLaunch(sessionEnv: Map<String, String>): com.superiorsoftllc.agenthq.harness.api.HarnessProcess? = null
+        override fun watchLauncher(sessionEnv: Map<String, String>): String? = null
+        override suspend fun ask(sessionId: String, question: com.superiorsoftllc.agenthq.harness.api.HarnessQuestion) = com.superiorsoftllc.agenthq.harness.api.HarnessAnswer.NONE
+        override fun queryDb(file: File, sql: String, params: List<String>) = ReadOnlyDb.query(file, sql, params)
+    }
+
     @Test
     fun openCodeFixtureGivesExpectedStats() {
         writeOpenCode()
-        File(home, ".cache/opencode").mkdirs()
-        File(home, ".cache/opencode/models.json").writeText(
-            """{"zai":{"id":"zai","models":{"glm-5":{"id":"glm-5","limit":{"context":200000,"output":8192}}}}}""",
-        )
-        val s = SessionStatsService(home).read("hq-3", "opencode", "ses_1", "idle")
-
+        // H8b-3: read by the module; its row has the counts, models, last context, billed total and cost (no per-request series, top sources or catalogue limit).
+        val s = com.superiorsoftllc.agenthq.plugins.official.opencode.harness.OpenCodeStats.read(dbHost, home, "ses_1")!!
         assertEquals(1_000_000L, s.startedAt)
-        assertEquals(9_000L, s.durationMs)
+        assertEquals(1_009_000L, s.endedAt)
         assertEquals(2, s.userPrompts)
         assertEquals(2, s.assistantTurns)
         assertEquals(1, s.toolUses, "another session's tool part never leaks in")
         assertEquals(listOf("glm-5"), s.models)
         assertEquals(710L, s.lastContextTokens)
-        assertEquals(200_000L, s.modelContextLimit)
         assertEquals(1905L, s.billedTokens)
-        assertEquals(
-            listOf(StatsPoint(1_001_200, 500, 510, 0.0), StatsPoint(1_002_000, 660, 1190, 0.0), StatsPoint(1_005_000, 710, 1905, 0.0)),
-            s.series,
-        )
-        assertEquals(listOf(ContextSource("bash", 1, 160)), s.topSources)
+        assertEquals(0.0, s.costTotal)
     }
 
     @Test
     fun openCodeMissingDatabaseGivesNullStatsAndCreatesNothing() {
+        assertNull(com.superiorsoftllc.agenthq.plugins.official.opencode.harness.OpenCodeStats.read(dbHost, home, "ses_1"))
+        assertTrue(!File(home, ".local/share/opencode/opencode.db").exists(), "a read-only open must never create the db")
+        // And through the service with no module loaded: base stats only.
         val s = SessionStatsService(home).read("hq-3", "opencode", "ses_1", "idle")
         assertNull(s.assistantTurns)
-        assertNull(s.series)
         assertEquals("idle", s.status)
-        assertTrue(!File(home, ".local/share/opencode/opencode.db").exists(), "a read-only open must never create the db")
+    }
+
+    @Test
+    fun openCodeVariantIdsShareTheOpenCodeModulesRecord() {
+        writeOpenCode()
+        val service = SessionStatsService(home)
+        service.pluginStats = { id ->
+            if (id == "opencode") PluginStatsSource { psid ->
+                com.superiorsoftllc.agenthq.plugins.official.opencode.harness.OpenCodeStats.read(dbHost, home, psid)
+                    ?.let { PluginStatsRow(it.startedAt, it.endedAt, it.userPrompts, it.assistantTurns, it.toolUses, it.models, it.lastContextTokens, it.billedTokens, it.costTotal) }
+            } else null
+        }
+        assertEquals(2, service.read("hq-3", "opencode", "ses_1", "idle").assistantTurns)
+        assertEquals(2, service.read("hq-3", "opencode-go", "ses_1", "idle").assistantTurns)
     }
 
     @Test
