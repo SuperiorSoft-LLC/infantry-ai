@@ -1,0 +1,17 @@
+{
+  "name": "Infantry_OpenCode",
+  "version": "1.0.0",
+  "apiVersion": 2,
+  "author": "Infantry AI",
+  "license": "NOASSERTION",
+  "tier": "official",
+  "description": "The opencode harness (HARNESS H8b-2): launches opencode (run --format json, or the persistent opencode serve over HTTP/SSE), maps tool approval to its permissions, merges the session's MCP server and the watch plugin into its inline config, lists its models and carries the / command catalog.",
+  "harness": {
+    "jar": "harness/build/libs/Infantry_OpenCode-harness.jar",
+    "contract": "2.12.0",
+    "ids": ["opencode"],
+    "cli": { "id": "opencode", "command": "opencode", "label": "OpenCode" },
+    "settings": [],
+    "hooks": ["watch", "mcp", "config", "session", "models"]
+  }
+}
