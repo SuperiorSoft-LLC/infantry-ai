@@ -114,6 +114,6 @@ class ModuleHarnessHost(
         const val CLI_GRANT = "harness.cli"
 
         /** The hook kinds module.json `harness.hooks` may name. watch/mcp/ask are host calls; sandbox/stats/usage are H5 contributions. */
-        val HOOK_KINDS: Set<String> = setOf("watch", "mcp", "ask", "sandbox", "stats", "usage")
+        val HOOK_KINDS: Set<String> = setOf("watch", "mcp", "ask", "sandbox", "stats", "usage", "session", "models")
     }
 }

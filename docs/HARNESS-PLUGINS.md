@@ -338,3 +338,10 @@ resolver and the same trust rules gives one install story with two narrow APIs.
   no longer listed or launched, but it is not deleted.
 * H5a: the UI reads icon files from this client's own plugins folder. A remote daemon's modules are not drawn with their
   icons unless the same module is installed locally.
+
+### 3.9 H6a as built (API 2.8.0, ticket dfd2a49c)
+
+* `Harness.session(): HarnessSession?` (persistent line protocol; the host keeps the lifecycle, `ApiSessionAdapter` bridges it to `HarnessSessionAdapter`) and `Harness.models(): List<HarnessModels>?` (picker groups). Both additive with defaults; wire unchanged.
+* module.json `harness.hooks` gains `session` and `models`; a community module needs `harness.hook.session` / `harness.hook.models`.
+* Core: `Harness.catalog()` (1.x interface) is the one lookup the `models` frame uses; `PiHarness` and `DescriptorHarness` return their catalog there, pi is no longer in `HarnessModelCatalogs.builtIn()`. `CliHarness.sessionAdapter()` already carried pi's persistent mode, so nothing else moved.
+* Left for H6b-H6d: watch/sandbox/launch-extras call sites, moving the pi files and deleting the core branches, desktop staging.

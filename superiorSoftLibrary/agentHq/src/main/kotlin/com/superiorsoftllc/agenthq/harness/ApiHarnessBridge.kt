@@ -168,6 +168,22 @@ class ApiCliHarness(
         return PluginSandbox(read, write, c.envNames)
     }
 
+    /** H6a: the plugin's persistent mode behind the `harness.hook.session` grant; a throwing `session()` is attributed and yields none (one-shot). */
+    override fun sessionAdapter(): com.superiorsoftllc.agenthq.session.host.HarnessSessionAdapter? {
+        if (!hookAllowed("session")) return null
+        val s = try { api.session() } catch (t: Throwable) { onFailure(PluginFailure(pluginId, PluginFailurePhase.RUN, t)); null } ?: return null
+        return ApiSessionAdapter(api.id, pluginId, s, onFailure)
+    }
+
+    /** H6a: the plugin's model listing behind the `harness.hook.models` grant; a throw is isolated into one noted row by the caller. */
+    override fun catalog(): com.superiorsoftllc.agenthq.provider.HarnessModelCatalog? {
+        if (!hookAllowed("models")) return null
+        return com.superiorsoftllc.agenthq.provider.HarnessModelCatalog {
+            val groups = try { api.models() } catch (t: Throwable) { onFailure(PluginFailure(pluginId, PluginFailurePhase.RUN, t)); throw t } ?: emptyList()
+            groups.map { com.superiorsoftllc.agenthq.protocol.ProviderModels(api.id, it.group, it.label, it.models, it.note, it.unavailable) }
+        }
+    }
+
     /** H5d: the module's stats source behind the `harness.hook.stats` grant; a throw in `stats()` or `read` is attributed and yields no row. */
     override fun statsSource(): com.superiorsoftllc.agenthq.stats.PluginStatsSource? = try { statsAdapter } catch (_: HarnessPluginCallException) { null }
 

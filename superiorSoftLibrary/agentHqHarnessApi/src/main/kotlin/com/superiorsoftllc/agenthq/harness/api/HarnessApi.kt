@@ -47,8 +47,11 @@ import java.io.File
  * 2.7.0 (HARNESS H5f, additive): [Harness.sandbox], extra readable / writable dirs and env names for the session sandbox. The daemon still
  * builds and applies the sandbox and checks every path: a dir outside the module's own data folder and the session worktree is refused.
  * Needs module.json `harness.hooks` "sandbox" (and, for a community module, the `harness.hook.sandbox` grant).
+ *
+ * 2.8.0 (HARNESS H6a, additive): [Harness.session], a persistent line-protocol session (one process kept between turns, the daemon owns its lifecycle),
+ * and [Harness.models], the harness's model listing. Need module.json `harness.hooks` "session" / "models" (and, for a community module, `harness.hook.session` / `harness.hook.models`).
  */
-const val HARNESS_API_VERSION: String = "2.7.0"
+const val HARNESS_API_VERSION: String = "2.8.0"
 
 /** What a harness jar ships: registers its harnesses, given the [HarnessHost] scoped to its module. */
 interface HarnessPlugin {
@@ -117,6 +120,79 @@ interface Harness {
      * Anything outside them is refused by the daemon and never applied. A throw is isolated and attributed.
      */
     fun sandbox(dirs: SandboxRoots): SandboxContribution? = null
+
+    /**
+     * 2.8.0: a persistent mode, or null (default = the host runs [process] one-shot per turn). When set, the host keeps ONE process per session
+     * between turns (it owns start, reuse, restart after a crash, idle stop and shutdown); the plugin owns only the line protocol.
+     * Needs module.json `harness.hooks` "session".
+     */
+    fun session(): HarnessSession? = null
+
+    /**
+     * 2.8.0: the models this harness's `model` accepts, grouped for a picker, or null (default = a free-text model field). May block on I/O
+     * (bounded by the host) and may throw (attributed). Needs module.json `harness.hooks` "models".
+     */
+    fun models(): List<HarnessModels>? = null
+}
+
+/** 2.8.0: one picker group of model ids. [unavailable] = the harness cannot run anything right now ([note] says why). */
+data class HarnessModels(
+    val group: String,
+    val label: String,
+    val models: List<String>,
+    val note: String? = null,
+    val unavailable: Boolean = false,
+)
+
+/** 2.8.0: how a persistent turn ended. A crash or a failed launch is FAILED; only the host's own abort makes INTERRUPTED. */
+enum class SessionTurnEnd { COMPLETED, FAILED, INTERRUPTED }
+
+/** 2.8.0: the plugin's persistent-mode protocol for one harness. Stateless; per-process state lives in [SessionConnection]. */
+interface HarnessSession {
+    /** Named in the one chat line. */
+    val label: String
+
+    val bootTimeoutMs: Long get() = 60_000
+
+    /** What a live process is bound to. A different value on the next turn = the host restarts the process and resumes. */
+    fun fingerprint(request: HarnessRequest, env: Map<String, String>): String
+
+    /** The persistent process (its stdin stays open); [HarnessRequest.sessionId] is the harness session to resume. */
+    fun launch(request: HarnessRequest, env: Map<String, String>): HarnessProcess
+
+    /** A fresh connection for one launched process; [out] writes to it and reports. */
+    fun connect(out: SessionOutput): SessionConnection
+}
+
+/** 2.8.0: the plugin's handle on one launched process. Thread-safe. */
+interface SessionOutput {
+    /** Write [text] to the process's stdin; false = it could not be written. */
+    fun write(text: String): Boolean
+    fun closeInput()
+
+    /** Plumbing for the Activity view; never a chat line. */
+    fun detail(text: String)
+
+    /** The harness's own session id once known. */
+    fun providerSession(id: String)
+
+    /** Exactly once per [SessionConnection.sendTurn]. */
+    fun turnEnded(end: SessionTurnEnd, exitCode: Int? = null, reason: String? = null)
+}
+
+/** 2.8.0: one launched process's protocol state. */
+interface SessionConnection {
+    /** Every stdout line of the process (the host also forwards it verbatim to the raw stream). */
+    fun onStdout(line: String)
+
+    /** Send one turn; its end comes back through [SessionOutput.turnEnded]. */
+    fun sendTurn(request: HarnessRequest)
+
+    /** Stop the current turn and KEEP the process. false = it cannot; the host kills. */
+    fun abortTurn(): Boolean
+
+    /** Ask the process to exit (usually [SessionOutput.closeInput]). false (default) = no graceful exit; the host kills at once. */
+    fun close(): Boolean = false
 }
 
 /** 2.7.0: the only roots a contributed sandbox dir may sit under: the module's own data folder and the session worktree. */

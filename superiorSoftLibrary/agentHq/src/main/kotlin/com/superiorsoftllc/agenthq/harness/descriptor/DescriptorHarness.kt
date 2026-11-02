@@ -51,6 +51,8 @@ class DescriptorHarness(
      * daemon through [com.superiorsoftllc.agenthq.provider.HarnessModelCatalogs], not by the plugin contract.
      */
     val modelCatalog: HarnessModelCatalog? = descriptor.models?.let { DescriptorModelCatalog(descriptor.id, it) }
+
+    override fun catalog(): HarnessModelCatalog? = modelCatalog
 }
 
 /** BUG-PERM-3: "id/mode" pairs already logged as unmapped, so the line appears once per daemon, not once per run. */
