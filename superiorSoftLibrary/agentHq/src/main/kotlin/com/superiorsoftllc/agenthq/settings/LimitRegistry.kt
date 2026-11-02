@@ -537,6 +537,12 @@ object LimitRegistry {
         max = 10_000,
     )
 
+    val SKILLS_INLINE_MAX_CHARS = LimitDef(
+        "limits.skills.inlineMaxChars", 1500, "chars",
+        "A layered skill (global/project/role) whose body is at most this long is written into the first-turn brief; a longer one appears as a description line with the command that shows it.",
+        max = 1_000_000, zeroMeans = "never inline",
+    )
+
     val MCP_MAX_RESULT_CHARS = LimitDef(
         "limits.mcp.maxResultChars", 8000, "chars",
         "The most characters one MCP tool result may carry to an agent; a longer one is cut with a note saying how to narrow the call.",
@@ -599,6 +605,7 @@ object LimitRegistry {
         MAIL_INJECT_MAX_CHARS, MAIL_INJECT_TOTAL_CHARS,
         MCP_BODY_CHARS,
         MCP_DEFAULT_DETAIL,
+        SKILLS_INLINE_MAX_CHARS,
         MCP_MAX_RESULT_CHARS,
         TOOLS_INBOX_LIMIT, TOOLS_LIST_LIMIT, TOOLS_SESSION_TAIL_LINES, TOOLS_BOARD_QUEUE_SHOWN, TOOLS_BOARD_DONE_SHOWN,
         MAX_PER_POD, MAX_SESSIONS, MAX_DEPTH, MCP_MAX_SPAWNS, LANE_DEFAULT, PACING_CEILING,

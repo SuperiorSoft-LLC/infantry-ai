@@ -30,7 +30,7 @@ import kotlinx.serialization.json.put
  */
 class RolesDaemonPlugin : DaemonPlugin {
     override fun start(api: DaemonApi) {
-        listOf(RoleListTool, RoleGetTool, RoleUpdateTool, RoleCreateTool, RoleDeleteTool).forEach { api.tools.register(it) }
+        listOf(RoleListTool, RoleGetTool, RoleUpdateTool, RoleCreateTool, RoleDeleteTool, SkillListTool, SkillSaveTool, SkillDeleteTool).forEach { api.tools.register(it) }
     }
 }
 
@@ -211,4 +211,61 @@ object RoleDeleteTool : DaemonTool {
             refused(e.message ?: "role_delete failed")
         }
     }
+}
+
+// SKILLS-GLOBAL-1b: the three skill layers (global / project / role) over the daemon's layer_skill_* frames.
+private val SCOPE = "scope" to "global, project or role."
+private val SKILL_NAME = "name" to "The skill name."
+private val SKILL_PROJECT = "projectId" to "Project id for project/role scope (default: the caller's project)."
+private val SKILL_ROLE = "role" to "Role id for role scope (default: the caller's role)."
+
+private fun ToolCall.skillRequest(op: String, extra: Map<String, String?> = emptyMap()): ToolResult = try {
+    val a = arguments
+    val data = buildJsonObject {
+        put("scope", a.string("scope") ?: "global")
+        (a.string("projectId") ?: clientProjectId)?.let { put("projectId", it) }
+        (a.string("role") ?: clientRole)?.let { put("role", it) }
+        extra.forEach { (k, v) -> if (v != null) put(k, v) }
+    }.toString()
+    val reply = request("layer_skill_$op", data, timeoutMs = ANSWER_TIMEOUT_MS)
+    when (reply.type) {
+        "layer_skills" -> ToolResult(reply.data)
+        "error" -> refused(reply.data.ifBlank { "layer_skill_$op failed" })
+        else -> refused("layer_skill_$op: unexpected answer ${reply.type}")
+    }
+} catch (e: Exception) {
+    refused(e.message ?: "layer_skill_$op failed")
+}
+
+object SkillListTool : DaemonTool {
+    const val NAME = "agenthq_skill_list"
+    private val shape = shape(true, false, listOf(SCOPE, SKILL_PROJECT, SKILL_ROLE), listOf("scope"))
+    override val name = NAME
+    override val description = "List the skills of one layer (global, project or role) in full."
+    override val inputSchema = shape.first
+    override val annotations = shape.second
+    override fun call(call: ToolCall) = call.skillRequest("list")
+}
+
+object SkillSaveTool : DaemonTool {
+    const val NAME = "agenthq_skill_save"
+    private val shape = shape(false, false, listOf(SCOPE, SKILL_NAME, "description" to "One line.", "body" to "The skill text.", SKILL_PROJECT, SKILL_ROLE), listOf("scope", "name", "body"))
+    override val name = NAME
+    override val description = "Create or replace a skill (by name) in one layer. A narrower layer overrides a wider one of the same name."
+    override val inputSchema = shape.first
+    override val annotations = shape.second
+    override fun call(call: ToolCall): ToolResult {
+        val a = call.arguments
+        return call.skillRequest("save", mapOf("name" to a.string("name"), "description" to a.string("description"), "body" to a.string("body")))
+    }
+}
+
+object SkillDeleteTool : DaemonTool {
+    const val NAME = "agenthq_skill_delete"
+    private val shape = shape(false, true, listOf(SCOPE, SKILL_NAME, SKILL_PROJECT, SKILL_ROLE), listOf("scope", "name"))
+    override val name = NAME
+    override val description = "Delete a skill from one layer."
+    override val inputSchema = shape.first
+    override val annotations = shape.second
+    override fun call(call: ToolCall) = call.skillRequest("delete", mapOf("name" to call.arguments.string("name")))
 }

@@ -28,7 +28,16 @@ data class LayerSkillView(
     val role: String? = null,
 )
 
+/** The `layer_skills` answer: one scope's skills (the scope is named so an empty list still says which list it is). */
+@Serializable
+data class LayerSkillList(
+    val scope: String,
+    val projectId: String? = null,
+    val role: String? = null,
+    val skills: List<LayerSkillView> = emptyList(),
+)
+
 object LayerSkillFrames {
     /** Setting key of the inline-length cutoff (chars); absent = 1500. */
-    const val INLINE_MAX_SETTING = "skills.layer.inlineMaxChars"
+    const val INLINE_MAX_SETTING = "limits.skills.inlineMaxChars"
 }

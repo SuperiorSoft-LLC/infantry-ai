@@ -4,8 +4,6 @@ import com.superiorsoftllc.agenthq.persistence.SettingRow
 import com.superiorsoftllc.agenthq.persistence.SqlAgentHqStore
 import com.superiorsoftllc.agenthq.policy.ActionCatalog
 import com.superiorsoftllc.agenthq.protocol.Envelope
-import com.superiorsoftllc.agenthq.protocol.LayerSkillView
-import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import java.io.File
 import java.nio.file.Files
@@ -25,7 +23,7 @@ class LayerSkillWireTest {
     fun cleanUp() { runCatching { db.close() }; dir.deleteRecursively() }
 
     private fun send(type: String, json: String) = wire.handle(Envelope(type, json))
-    private fun views(e: Envelope) = Json.decodeFromString(ListSerializer(LayerSkillView.serializer()), e.data)
+    private fun views(e: Envelope) = Json.decodeFromString(com.superiorsoftllc.agenthq.protocol.LayerSkillList.serializer(), e.data).skills
 
     @Test
     fun saveListDeleteRoundTripPerScope() {
@@ -57,7 +55,7 @@ class LayerSkillWireTest {
     @Test
     fun inlineCutoffSettingAndPolicy() {
         assertEquals(1_500, LayerSkillWire.inlineMax(db))
-        db.settings.put(SettingRow("skills.layer.inlineMaxChars", "200", 1))
+        db.settings.put(SettingRow("limits.skills.inlineMaxChars", "200", 1))
         assertEquals(200, LayerSkillWire.inlineMax(db))
         for (t in listOf(Envelope.LAYER_SKILL_SAVE, Envelope.LAYER_SKILL_LIST, Envelope.LAYER_SKILL_DELETE)) {
             assertTrue(ActionCatalog.ACTIONS.any { t in it.frames }, t)

@@ -763,6 +763,9 @@ interface SkillsContext {
     /** Saves by [name] (an existing one is updated); [tagsCsv] comma separated. */
     suspend fun save(name: String, description: String, body: String, tagsCsv: String): CommandResult
     suspend fun delete(id: String): CommandResult
+    /** SKILLS-GLOBAL-1b: the app state and controller behind the layered-skills panel; null = no layered panel. */
+    val appState: com.superiorsoftllc.agenthq.ui.model.AppState? get() = null
+    val appController: com.superiorsoftllc.agenthq.ui.net.Controller? get() = null
 }
 
 /** RUNTIME-9: no skills: none, every request refused. */

@@ -377,6 +377,12 @@ data class Envelope(
         const val SKILL_ITEM = "skill_item"
         const val SKILLS = "skills"
 
+        // SKILLS-GLOBAL-1b: layered skills; request = LayerSkillRequest, answer/push = LayerSkillList.
+        const val LAYER_SKILL_SAVE = "layer_skill_save"
+        const val LAYER_SKILL_LIST = "layer_skill_list"
+        const val LAYER_SKILL_DELETE = "layer_skill_delete"
+        const val LAYER_SKILLS = "layer_skills"
+
         // Contract 1.48.0 (TRAITS-T1): the trait library. `trait_save` (TraitSave, save-as-update by id) -> `trait_item`,
         // pushed to all; `trait_list` -> `traits`; `trait_get` (data = id) -> `trait_item`; `trait_delete` (data = id) -> `traits`.
         const val TRAIT_SAVE = "trait_save"
@@ -1733,6 +1739,34 @@ data class PromptSave(val name: String, val body: String, val tags: List<String>
 @Serializable
 data class SkillSave(val name: String, val description: String = "", val body: String, val tags: List<String> = emptyList())
 
+/** SKILLS-GLOBAL-1b: a layered-skill request (scope = global|project|role). */
+@Serializable
+data class LayerSkillRequest(
+    val scope: String,
+    val projectId: String? = null,
+    val role: String? = null,
+    val name: String? = null,
+    val description: String = "",
+    val body: String? = null,
+)
+
+@Serializable
+data class LayerSkillItem(val scope: String, val name: String, val description: String = "", val body: String = "")
+
+/** The `layer_skills` frame: one scope's skills. */
+@Serializable
+data class LayerSkillList(
+    val scope: String,
+    val projectId: String? = null,
+    val role: String? = null,
+    val skills: List<LayerSkillItem> = emptyList(),
+) {
+    /** The key [AppState.layerSkills] stores this list under. */
+    val key: String get() = layerSkillKey(scope, projectId, role)
+}
+
+fun layerSkillKey(scope: String, projectId: String?, role: String?): String = listOf(scope, projectId.orEmpty(), role.orEmpty()).joinToString("|")
+
 /** Contract 1.45.0 (P10-B): one saved skill, as the `skill_item` and `skills` frames carry it. */
 @Serializable
 data class SkillView(
@@ -2331,6 +2365,9 @@ object WireRequests {
         Envelope.SKILL_SAVE,
         json.encodeToString(SkillSave.serializer(), SkillSave(name = name, description = description, body = body, tags = tags)),
     )
+
+    /** SKILLS-GLOBAL-1b: `layer_skill_list|save|delete` for one scope; answered by `layer_skills` (pushed to all on a change). */
+    fun layerSkill(type: String, r: LayerSkillRequest): Envelope = Envelope(type, json.encodeToString(LayerSkillRequest.serializer(), r))
 
     /** `skill_delete` (1.45.0): the raw id; the daemon pushes the remaining `skills`. */
     fun skillDelete(id: String): Envelope = Envelope(Envelope.SKILL_DELETE, id)

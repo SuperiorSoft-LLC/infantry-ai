@@ -3,15 +3,14 @@ package com.superiorsoftllc.agenthq.agents
 import com.superiorsoftllc.agenthq.persistence.AgentHqStore
 import com.superiorsoftllc.agenthq.protocol.Envelope
 import com.superiorsoftllc.agenthq.protocol.LayerSkillFrames
+import com.superiorsoftllc.agenthq.protocol.LayerSkillList
 import com.superiorsoftllc.agenthq.protocol.LayerSkillRequest
 import com.superiorsoftllc.agenthq.protocol.LayerSkillView
-import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 
 /** SKILLS-GLOBAL-1b: the daemon handler of `layer_skill_save|list|delete`. [push] gets every changed-scope answer. */
 class LayerSkillWire(private val store: LayeredSkillStore, private val push: (Envelope) -> Unit = {}) {
     private val json = Json { ignoreUnknownKeys = true }
-    private val ser = ListSerializer(LayerSkillView.serializer())
 
     /** The reply envelope; null when the answer was pushed to every client instead. */
     fun handle(envelope: Envelope): Envelope? {
@@ -48,7 +47,7 @@ class LayerSkillWire(private val store: LayeredSkillStore, private val push: (En
         val views = store.list(scope).map {
             LayerSkillView(scope.layer.label, it.name, it.description, it.body, scope.projectId, scope.role)
         }
-        return Envelope(Envelope.LAYER_SKILLS, json.encodeToString(ser, views))
+        return Envelope(Envelope.LAYER_SKILLS, json.encodeToString(LayerSkillList.serializer(), LayerSkillList(scope.layer.label, scope.projectId, scope.role, views)))
     }
 
     companion object {

@@ -112,6 +112,14 @@ fun SkillsPane(link: LinkContext, ctx: SkillsContext, onInsert: (String) -> Unit
                 Text(it, color = Palette.Danger, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp).testTag("skills-error"))
             }
 
+            // SKILLS-GLOBAL-1b: the global layer and its inline-length setting (project and role layers: Project Settings).
+            val appState = ctx.appState
+            val appController = ctx.appController
+            if (appState != null && appController != null) {
+                Column(Modifier.padding(top = 10.dp, bottom = 4.dp)) {
+                    LayerSkillsPanel(appState, appController, "global", canWrite = canWrite, showCutoff = true)
+                }
+            }
             val shown = filterSkills(ctx.all, query)
             Column(Modifier.padding(top = 8.dp)) {
                 when {

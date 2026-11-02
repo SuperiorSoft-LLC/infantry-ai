@@ -4018,7 +4018,7 @@ internal object Cli {
             Envelope(type, json.encodeToString(com.superiorsoftllc.agenthq.protocol.LayerSkillRequest.serializer(), r))
         val ser = ListSerializer(com.superiorsoftllc.agenthq.protocol.LayerSkillView.serializer())
         suspend fun listed(): List<com.superiorsoftllc.agenthq.protocol.LayerSkillView> =
-            json.decodeFromString(ser, stream.request(frame(Envelope.LAYER_SKILL_LIST, request(null, "")), answerType = Envelope.LAYER_SKILLS, what = "layer_skill_list", idempotent = true).data)
+            json.decodeFromString(com.superiorsoftllc.agenthq.protocol.LayerSkillList.serializer(), stream.request(frame(Envelope.LAYER_SKILL_LIST, request(null, "")), answerType = Envelope.LAYER_SKILLS, what = "layer_skill_list", idempotent = true).data).skills
         when (sub) {
             "list" -> {
                 val all = listed()

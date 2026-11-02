@@ -24,6 +24,7 @@ object ProjectSettingsRegistry {
     const val GENERAL = "general"
     const val PIPELINE = "pipeline"
     const val LANES = "lanes"
+    const val SKILLS = "skills"
 
     /** The `Project.experiments` key behind the watchdog switch; the daemon reads the same key. */
     const val WATCHDOG_KEY = "agentWatchdog"
@@ -32,6 +33,7 @@ object ProjectSettingsRegistry {
         SettingsSection(GENERAL, "General", "project-config-tab-general"),
         SettingsSection(PIPELINE, "Pipeline", "project-config-tab-pipeline"),
         SettingsSection(LANES, "Lanes / Roles", "project-config-tab-lanes"),
+        SettingsSection(SKILLS, "Skills", "project-config-tab-skills"),
     )
 
     val toggles: List<SettingToggle> = listOf(

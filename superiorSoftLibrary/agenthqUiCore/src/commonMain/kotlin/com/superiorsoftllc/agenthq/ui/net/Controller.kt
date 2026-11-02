@@ -56,6 +56,7 @@ import com.superiorsoftllc.agenthq.ui.model.withUserLine
 import com.superiorsoftllc.agenthq.ui.protocol.AgentProfile
 import com.superiorsoftllc.agenthq.ui.protocol.CommandCatalogAnswer
 import com.superiorsoftllc.agenthq.ui.protocol.Envelope
+import com.superiorsoftllc.agenthq.ui.protocol.LayerSkillRequest
 import com.superiorsoftllc.agenthq.ui.restartPlan
 import com.superiorsoftllc.agenthq.ui.protocol.ImageStored
 import com.superiorsoftllc.agenthq.ui.protocol.ImageUploadWire
@@ -1748,6 +1749,22 @@ class Controller(
     /** Save (create or update by name) a skill; [tagsCsv] is the comma separated tag field. The daemon answers `skill_item`. */
     suspend fun saveSkill(name: String, description: String, body: String, tagsCsv: String): CommandResult =
         report(send(WireRequests.skillSave(name.trim(), description.trim(), body, parsePromptTags(tagsCsv))))
+
+    // --- layered skills (SKILLS-GLOBAL-1b) -------------------------------------------------------
+
+    /** Ask for one scope's skills; the daemon answers `layer_skills`. */
+    suspend fun loadLayerSkills(scope: String, projectId: String? = null, role: String? = null): CommandResult =
+        report(send(WireRequests.layerSkill(Envelope.LAYER_SKILL_LIST, LayerSkillRequest(scope, projectId, role))))
+
+    suspend fun saveLayerSkill(scope: String, projectId: String?, role: String?, name: String, description: String, body: String): CommandResult =
+        report(send(WireRequests.layerSkill(Envelope.LAYER_SKILL_SAVE, LayerSkillRequest(scope, projectId, role, name.trim(), description.trim(), body))))
+
+    suspend fun deleteLayerSkill(scope: String, projectId: String?, role: String?, name: String): CommandResult =
+        report(send(WireRequests.layerSkill(Envelope.LAYER_SKILL_DELETE, LayerSkillRequest(scope, projectId, role, name))))
+
+    /** The inline-length cutoff (`limits.skills.inlineMaxChars`): a layered skill body this short is written into the brief. */
+    suspend fun setSkillInlineMax(chars: Int): CommandResult =
+        report(send(WireRequests.settingsSet("limits.skills.inlineMaxChars", kotlinx.serialization.json.JsonPrimitive(chars))))
 
     /** Delete a skill by id; the daemon pushes the remaining `skills`. */
     suspend fun deleteSkill(id: String): CommandResult = report(send(WireRequests.skillDelete(id)))

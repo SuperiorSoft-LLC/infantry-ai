@@ -46,7 +46,7 @@ class BuiltinToolsListGuardTest {
     /** RUNTIME-LOAD-3: the roles, ask and project config tools are daemon halves of Infantry_Roles / _Attention / _Settings, wired nowhere in core. */
     @Test fun `roles ask and project config tools are not wired in core and their modules declare them`() {
         val moved = mapOf(
-            "Infantry_Roles" to listOf("agenthq_role_list", "agenthq_role_get", "agenthq_role_update", "agenthq_role_create", "agenthq_role_delete"),
+            "Infantry_Roles" to listOf("agenthq_role_list", "agenthq_role_get", "agenthq_role_update", "agenthq_role_create", "agenthq_role_delete", "agenthq_skill_list", "agenthq_skill_save", "agenthq_skill_delete"),
             "Infantry_Attention" to listOf("agenthq_ask"),
             // RUNTIME-LOAD-4: the session's own progress report moved with the Agents family.
             // RUNTIME-LOAD-5: the session reads, over the host's sessions read model.
