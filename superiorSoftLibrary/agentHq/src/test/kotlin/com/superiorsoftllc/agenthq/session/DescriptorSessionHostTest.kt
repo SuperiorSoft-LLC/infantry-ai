@@ -3,7 +3,7 @@ package com.superiorsoftllc.agenthq.session
 import com.superiorsoftllc.agenthq.harness.descriptor.DescriptorHarness
 import com.superiorsoftllc.agenthq.harness.descriptor.EchoCliFixture
 import com.superiorsoftllc.agenthq.harness.descriptor.HarnessDescriptor
-import com.superiorsoftllc.agenthq.provider.HarnessProvider
+import com.superiorsoftllc.agenthq.harness.HarnessProvider
 import com.superiorsoftllc.agenthq.runner.ScriptedRunner
 import com.superiorsoftllc.agenthq.runner.StubScript
 import com.superiorsoftllc.agenthq.session.host.LifecyclePolicy

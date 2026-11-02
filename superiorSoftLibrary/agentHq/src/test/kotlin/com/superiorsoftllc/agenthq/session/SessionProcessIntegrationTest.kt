@@ -1,7 +1,7 @@
 package com.superiorsoftllc.agenthq.session
 
-import com.superiorsoftllc.agenthq.provider.AgentProvider
-import com.superiorsoftllc.agenthq.provider.RunRequest
+import com.superiorsoftllc.agenthq.harness.AgentProvider
+import com.superiorsoftllc.agenthq.harness.RunRequest
 import com.superiorsoftllc.agenthq.runner.PipedProcessRunner
 import com.superiorsoftllc.agenthq.runner.ProcessSpec
 import java.io.File

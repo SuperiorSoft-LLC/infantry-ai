@@ -3,7 +3,7 @@ package com.superiorsoftllc.agenthq.daemon
 import com.superiorsoftllc.agenthq.protocol.Envelope
 import com.superiorsoftllc.agenthq.protocol.EventVocabulary
 import com.superiorsoftllc.agenthq.protocol.ProviderInfo
-import com.superiorsoftllc.agenthq.provider.AgentProvider
+import com.superiorsoftllc.agenthq.harness.AgentProvider
 import com.superiorsoftllc.agenthq.provider.StubProvider
 import com.superiorsoftllc.agenthq.runner.StubScript
 import com.superiorsoftllc.agenthq.session.SessionState

@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.provider
+package com.superiorsoftllc.agenthq.harness
 
 import com.superiorsoftllc.agenthq.runner.ProcessSpec
 import com.superiorsoftllc.agenthq.runner.RunningProcess

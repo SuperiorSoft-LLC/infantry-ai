@@ -1,8 +1,8 @@
 package com.superiorsoftllc.agenthq.daemon
 
 import com.superiorsoftllc.agenthq.protocol.ProviderInfo
-import com.superiorsoftllc.agenthq.provider.AgentProvider
-import com.superiorsoftllc.agenthq.provider.RunRequest
+import com.superiorsoftllc.agenthq.harness.AgentProvider
+import com.superiorsoftllc.agenthq.harness.RunRequest
 import com.superiorsoftllc.agenthq.runner.ProcessSpec
 import kotlin.test.Test
 import kotlin.test.assertEquals

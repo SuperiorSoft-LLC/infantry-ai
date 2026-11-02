@@ -1,6 +1,6 @@
 package com.superiorsoftllc.agenthq.session
 
-import com.superiorsoftllc.agenthq.provider.AgentProvider
+import com.superiorsoftllc.agenthq.harness.AgentProvider
 import com.superiorsoftllc.agenthq.provider.StubProvider
 import com.superiorsoftllc.agenthq.runner.ScriptedRunner
 import com.superiorsoftllc.agenthq.runner.StubScript

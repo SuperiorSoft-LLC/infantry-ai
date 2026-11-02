@@ -5,7 +5,7 @@ import com.superiorsoftllc.agenthq.context.TicketContext
 import com.superiorsoftllc.agenthq.persistence.AgentHqStore
 import com.superiorsoftllc.agenthq.persistence.SqlAgentHqStore
 import com.superiorsoftllc.agenthq.protocol.Envelope
-import com.superiorsoftllc.agenthq.provider.AgentProvider
+import com.superiorsoftllc.agenthq.harness.AgentProvider
 import com.superiorsoftllc.agenthq.provider.StubProvider
 import com.superiorsoftllc.agenthq.runner.ProcessRunner
 import com.superiorsoftllc.agenthq.runner.StubScript
@@ -328,7 +328,7 @@ class DaemonFixture private constructor(
              * the process's, gap 9), so the operator's AGENTHQ_POLICY / policy.preset never leaks in.
              */
             policies: ((File) -> com.superiorsoftllc.agenthq.policy.PolicyRuntime)? = null,
-            /** H2: the default provider; the stub unless a test boots the zero-harness daemon ([com.superiorsoftllc.agenthq.provider.NoHarnessProvider]). */
+            /** H2: the default provider; the stub unless a test boots the zero-harness daemon ([com.superiorsoftllc.agenthq.harness.NoHarnessProvider]). */
             defaultProvider: AgentProvider? = null,
         ): DaemonFixture {
             val opened: AgentHqStore = store ?: SqlAgentHqStore.open(storePath, holderLabel, busyTimeoutMs)

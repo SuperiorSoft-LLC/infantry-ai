@@ -6,7 +6,7 @@ import com.superiorsoftllc.agenthq.prompts.Decision
 import com.superiorsoftllc.agenthq.harness.api.SessionConnection
 import com.superiorsoftllc.agenthq.harness.api.SessionOutput
 import com.superiorsoftllc.agenthq.harness.api.SessionTurnEnd
-import com.superiorsoftllc.agenthq.provider.RunRequest
+import com.superiorsoftllc.agenthq.harness.RunRequest
 import com.superiorsoftllc.agenthq.runner.ProcessListener
 import com.superiorsoftllc.agenthq.runner.ProcessRunner
 import com.superiorsoftllc.agenthq.runner.ProcessSpec

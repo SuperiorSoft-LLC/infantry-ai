@@ -81,7 +81,7 @@ import com.superiorsoftllc.agenthq.session.RoleInstance
 import com.superiorsoftllc.agenthq.persistence.AgentHqStore
 import com.superiorsoftllc.agenthq.persistence.SqlAgentHqStore
 import com.superiorsoftllc.agenthq.persistence.traitReferences
-import com.superiorsoftllc.agenthq.provider.AgentProvider
+import com.superiorsoftllc.agenthq.harness.AgentProvider
 import com.superiorsoftllc.agenthq.provider.ProviderFactory
 import com.superiorsoftllc.agenthq.runner.ProcessRunner
 import com.superiorsoftllc.agenthq.runner.RunnerFactory
@@ -316,7 +316,7 @@ private val TERMINAL = setOf(SessionState.EXITED, SessionState.FAILED, SessionSt
  * and resumed, and every state change is broadcast to connected clients as a `session` frame.
  *
  * The provider seam is untouched: the daemon never names a CLI, it asks [SessionManager] to manage
- * whatever [com.superiorsoftllc.agenthq.provider.AgentProvider] it was configured with.
+ * whatever [com.superiorsoftllc.agenthq.harness.AgentProvider] it was configured with.
  *
  * Phase 9 freezes the boundary in [com.superiorsoftllc.agenthq.protocol.EventVocabulary]: the raw
  * provider stream keeps flowing on `stdout`/`stderr`/`exit`, and a normalised
@@ -555,7 +555,7 @@ class AgentHqDaemon(
         fun build(
             port: Int = configuredPort(),
             host: String = RemoteAccess.resolveHost(stateDir()),
-            provider: com.superiorsoftllc.agenthq.provider.AgentProvider =
+            provider: com.superiorsoftllc.agenthq.harness.AgentProvider =
                 com.superiorsoftllc.agenthq.provider.ProviderFactory.fromEnv(),
             runner: ProcessRunner = provider.transport()
                 ?: com.superiorsoftllc.agenthq.runner.RunnerFactory.fromFlag(),
@@ -3770,7 +3770,7 @@ private fun agentsEnvelope(agents: AgentProfiles): Envelope =
  */
 internal fun providerInfos(manager: SessionManager, harnesses: HarnessRegistry? = null): List<ProviderInfo> {
     // H2: the placeholder default of a zero-harness daemon is not a harness and is never listed.
-    val configured = manager.providers.filter { it !is com.superiorsoftllc.agenthq.provider.NoHarnessProvider }
+    val configured = manager.providers.filter { it !is com.superiorsoftllc.agenthq.harness.NoHarnessProvider }
         .map { p -> providerInfo(p, p.id == manager.providerId) }
     // WIRE-1: a harness a plugin registered is listed beside the providers (a configured provider of
     // the same id wins, so `claude` appears once).

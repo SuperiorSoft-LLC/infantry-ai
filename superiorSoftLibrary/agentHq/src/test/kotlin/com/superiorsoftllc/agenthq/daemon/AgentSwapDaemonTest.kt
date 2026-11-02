@@ -7,7 +7,7 @@ import com.superiorsoftllc.agenthq.protocol.AgentSwapped
 import com.superiorsoftllc.agenthq.protocol.Envelope
 import com.superiorsoftllc.agenthq.protocol.SwapExecutor
 import com.superiorsoftllc.agenthq.protocol.SwapSession
-import com.superiorsoftllc.agenthq.provider.AgentProvider
+import com.superiorsoftllc.agenthq.harness.AgentProvider
 import com.superiorsoftllc.agenthq.provider.StubProvider
 import com.superiorsoftllc.agenthq.runner.ProcessListener
 import com.superiorsoftllc.agenthq.runner.ProcessRunner

@@ -3,8 +3,8 @@ package com.superiorsoftllc.agenthq.mailbox
 import com.superiorsoftllc.agenthq.agents.AgentProfiles
 import com.superiorsoftllc.agenthq.persistence.AgentRepository
 import com.superiorsoftllc.agenthq.protocol.AgentProfile
-import com.superiorsoftllc.agenthq.provider.AgentProvider
-import com.superiorsoftllc.agenthq.provider.RunRequest
+import com.superiorsoftllc.agenthq.harness.AgentProvider
+import com.superiorsoftllc.agenthq.harness.RunRequest
 import com.superiorsoftllc.agenthq.runner.ProcessListener
 import com.superiorsoftllc.agenthq.runner.ProcessRunner
 import com.superiorsoftllc.agenthq.runner.ProcessSpec

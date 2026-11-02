@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.provider
+package com.superiorsoftllc.agenthq.harness
 
 import com.superiorsoftllc.agenthq.harness.CliHarness
 import com.superiorsoftllc.agenthq.harness.HarnessEvent

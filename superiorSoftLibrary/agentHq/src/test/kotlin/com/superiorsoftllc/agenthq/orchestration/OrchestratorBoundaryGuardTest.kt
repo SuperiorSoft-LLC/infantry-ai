@@ -58,9 +58,9 @@ class OrchestratorBoundaryGuardTest {
         /** Today's crossings, "from>to" -> import count (51 in 30 pairs). Lower an entry when you remove an import; never raise one. */
         val BASELINE = mapOf(
             "agents>session" to 4, "backlog>images" to 0, "backlog>session" to 3, "backlog>worktree" to 0, "brief>session" to 0,
-            "claude>prompts" to 2, "cli>agents" to 1, "cli>decisions" to 0, "cli>epics" to 2, "cli>issues" to 0, "cli>memory" to 0,
+            "claude>prompts" to 0, "harness>prompts" to 1, "cli>agents" to 1, "cli>decisions" to 0, "cli>epics" to 2, "cli>issues" to 0, "cli>memory" to 0,
             "cli>orchestration" to 3, "cli>pipeline" to 5, "cli>prompts" to 1, "cli>ticketfiles" to 3,
-            "context>session" to 0, "images>mvp" to 0, "memory>session" to 0, "mvp>worktree" to 1, "opencode>prompts" to 1,
+            "context>session" to 0, "images>mvp" to 0, "memory>session" to 0, "mvp>worktree" to 1, "opencode>prompts" to 0,
             "orchestration>session" to 7, "projectgit>mvp" to 1, "prompts>session" to 2, "session>agents" to 1,
             "session>prompts" to 1, "stories>session" to 0, "ticketfiles>worktree" to 2, "triggers>session" to 0,
         )

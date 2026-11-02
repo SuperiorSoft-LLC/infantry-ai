@@ -2,8 +2,8 @@ package com.superiorsoftllc.agenthq.harness
 
 import com.superiorsoftllc.agenthq.harness.api.HARNESS_API_VERSION
 import com.superiorsoftllc.agenthq.harness.api.HarnessProcess
-import com.superiorsoftllc.agenthq.provider.HarnessProvider
-import com.superiorsoftllc.agenthq.provider.RunRequest
+import com.superiorsoftllc.agenthq.harness.HarnessProvider
+import com.superiorsoftllc.agenthq.harness.RunRequest
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import java.io.File

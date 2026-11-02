@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.provider
 
+import com.superiorsoftllc.agenthq.harness.AgentProvider
+
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith

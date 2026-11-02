@@ -208,3 +208,6 @@ TEST-TODO: HarnessConfigMergeTest.opencodeMergeThroughTheSlotEqualsTheDirectMerg
 
 ## HARNESS H9 (ticket 21d8bace)
 TEST-TODO: HarnessCoreGuardTest - add `class X : Harness {}` under core main -> `no core class implements the Harness SPI...` fails; add a `"claude"` literal in a new core file -> `built-in harness id literals...` fails naming it; remove a listed literal -> stale-entry failure.
+
+## CORE-SPLIT-3 (ticket 88a2fc64)
+TEST-TODO: session imports no provider/claude/opencode/experiments package. Class DaemonCoreGuardTest, `session depends on the harness SPI only...`. Input: sources under agentHq/session. Expected: no line names those packages. Also: AgentProvider/RunRequest/HarnessProvider/NoHarnessProvider now live in agenthq.harness (provider keeps catalog/factory); no behaviour change.

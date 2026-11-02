@@ -34,6 +34,14 @@ class DaemonCoreGuardTest {
         assertTrue(hits.isEmpty(), "core names a plugin-owned package (a plugin may depend on core's API, never the reverse):\n${hits.joinToString("\n")}")
     }
 
+    @Test fun `session depends on the harness SPI only, never on provider or a concrete harness package`() {
+        val files = File(main, "session").walkTopDown().filter { it.isFile && it.extension == "kt" }.toList()
+        assertTrue(files.size > 20, "session sources not found under $main")
+        val banned = listOf("agenthq.provider.", "agenthq.claude.", "agenthq.opencode.", "agenthq.experiments.")
+        val hits = files.flatMap { f -> code(f).filter { (_, l) -> banned.any { it in l } }.map { (i, l) -> "${f.name}:${i + 1}: ${l.trim().take(110)}" } }
+        assertTrue(hits.isEmpty(), "session names provider/claude/opencode/experiments (CORE-SPLIT-3):\n${hits.joinToString("\n")}")
+    }
+
     @Test fun `the daemon module depends on no plugin module`() {
         val deps = File(root, "superiorSoftLibrary/agentHq/build.gradle.kts").readLines().filter { l ->
             val t = l.trim()

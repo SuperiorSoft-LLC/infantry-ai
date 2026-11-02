@@ -21,9 +21,9 @@ import androidx.compose.ui.test.runDesktopComposeUiTest
 import com.superiorsoftllc.agenthq.daemon.AgentHqDaemon
 import com.superiorsoftllc.agenthq.mailbox.JsonMailStore
 import com.superiorsoftllc.agenthq.persistence.SqlAgentHqStore
-import com.superiorsoftllc.agenthq.provider.AgentProvider
+import com.superiorsoftllc.agenthq.harness.AgentProvider
 import com.superiorsoftllc.agenthq.provider.OpenCodeProvider
-import com.superiorsoftllc.agenthq.provider.RunRequest
+import com.superiorsoftllc.agenthq.harness.RunRequest
 import com.superiorsoftllc.agenthq.runner.ProcessSpec
 import com.superiorsoftllc.agenthq.runner.RunnerFactory
 import com.superiorsoftllc.agenthq.session.JsonSessionStore

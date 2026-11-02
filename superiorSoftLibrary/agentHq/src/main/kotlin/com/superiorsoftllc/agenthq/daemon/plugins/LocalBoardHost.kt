@@ -335,7 +335,7 @@ class LocalBoardHost(
 
     private fun detailOf(r: com.superiorsoftllc.agenthq.session.SessionRecord) = BoardSessionDetail(SessionViews.of(r), r.lastHeartbeat, r.isBusy(), r.spawnedAt, r.providerSessionId)
 
-    private fun com.superiorsoftllc.agenthq.provider.AgentProvider.toInfo() = BoardProviderInfo(
+    private fun com.superiorsoftllc.agenthq.harness.AgentProvider.toInfo() = BoardProviderInfo(
         id, defaultModel(), contextLimit().support.wire, contextLimit().how, effort().support.wire, effort().how, ::knownModels,
     )
 

@@ -4,7 +4,7 @@ import com.superiorsoftllc.agenthq.cli.Cli
 import com.superiorsoftllc.agenthq.harness.HarnessRegistry
 import com.superiorsoftllc.agenthq.protocol.Envelope
 import com.superiorsoftllc.agenthq.protocol.ProviderInfo
-import com.superiorsoftllc.agenthq.provider.NoHarnessProvider
+import com.superiorsoftllc.agenthq.harness.NoHarnessProvider
 import com.superiorsoftllc.agenthq.provider.ProviderFactory
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json

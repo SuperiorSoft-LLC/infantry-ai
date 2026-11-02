@@ -164,7 +164,7 @@ class StubDaemonContractTest {
         // The alias table must never steal a name a caller registers. `ProviderSeamTest` registers
         // a vendor-neutral fake under `fake`, and that is exactly the collision this guards: an
         // alias claiming `fake` would hand back the stub and look like a broken registration.
-        ProviderFactory.register("alias-probe") { object : com.superiorsoftllc.agenthq.provider.AgentProvider { override val id = "probe-harness"; override fun spec(request: com.superiorsoftllc.agenthq.provider.RunRequest) = com.superiorsoftllc.agenthq.runner.ProcessSpec(listOf("x")) } }
+        ProviderFactory.register("alias-probe") { object : com.superiorsoftllc.agenthq.harness.AgentProvider { override val id = "probe-harness"; override fun spec(request: com.superiorsoftllc.agenthq.harness.RunRequest) = com.superiorsoftllc.agenthq.runner.ProcessSpec(listOf("x")) } }
         assertEquals(
             "probe-harness",
             ProviderFactory.fromFlag("alias-probe").id,

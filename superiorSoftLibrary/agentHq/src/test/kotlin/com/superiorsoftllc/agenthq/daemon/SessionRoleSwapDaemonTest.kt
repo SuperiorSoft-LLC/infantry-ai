@@ -2,7 +2,7 @@ package com.superiorsoftllc.agenthq.daemon
 
 import com.superiorsoftllc.agenthq.protocol.Envelope
 import com.superiorsoftllc.agenthq.protocol.SessionSwapped
-import com.superiorsoftllc.agenthq.provider.AgentProvider
+import com.superiorsoftllc.agenthq.harness.AgentProvider
 import com.superiorsoftllc.agenthq.provider.StubProvider
 import com.superiorsoftllc.agenthq.runner.ProcessRunner
 import com.superiorsoftllc.agenthq.runner.ScriptedRunner

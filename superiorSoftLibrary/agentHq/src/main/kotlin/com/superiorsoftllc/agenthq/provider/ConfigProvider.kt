@@ -1,5 +1,9 @@
 package com.superiorsoftllc.agenthq.provider
 
+import com.superiorsoftllc.agenthq.harness.RunRequest
+
+import com.superiorsoftllc.agenthq.harness.AgentProvider
+
 import com.superiorsoftllc.agenthq.runner.ProcessSpec
 
 /**
