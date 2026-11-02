@@ -21,9 +21,16 @@ class LiveRelatedWork(
 ) : RelatedWorkSource {
     private val resolver = RelatedTickets(files, hubShare, minTicketsForHubs)
 
+    override fun mode(): String = runCatching { config().mode }.getOrDefault(RelatedConfig.MODE_FILES_COMMAND)
+
     override fun block(ticketId: String, description: String): String? = runCatching {
         val cfg = config()
         if (!cfg.brief || RelatedDescriptionBlock.optedOut(description)) return@runCatching null
+        if (cfg.mode == RelatedConfig.MODE_FILES_COMMAND) return@runCatching FILES_COMMAND_LINE
+        if (cfg.mode == RelatedConfig.MODE_FILES_INLINE) {
+            val paths = files.relatedPaths(ticketId)
+            return@runCatching if (paths.isEmpty()) FILES_COMMAND_LINE else "Files changed by related work (${paths.size}):\n" + paths.joinToString("\n")
+        }
         val row = ticket(ticketId) ?: return@runCatching null
         val all = rows().let { list -> if (list.any { it.id == ticketId }) list else list + row }
         // A ticket named in the text or found in the index that the board listing missed is still resolved by id.
@@ -47,6 +54,9 @@ class LiveRelatedWork(
     companion object {
         /** A path that at least this share of the recorded tickets touch is a hub (CONTRACT.md style): not shown. */
         const val HUB_SHARE = 0.25
+
+        /** RELATED-SHAPE-1: the whole related section of a brief in the default mode. */
+        const val FILES_COMMAND_LINE = "Files changed by related work: run `agenthq ticket files <id> --related` (MCP: agenthq_ticket_related_files)"
         const val MIN_TICKETS_FOR_HUBS = 8
 
         private val ID = Regex("\\bticket-[0-9a-f]{8}\\b")

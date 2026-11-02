@@ -17,6 +17,10 @@ data class RelatedConfig(
     val familyPattern: String = DEFAULT_FAMILY_PATTERN,
     /** `related.suggestNumber`: a title with a known label and no number gets the next number suggested. */
     val suggestNumber: Boolean = true,
+    /** `brief.related.mode`: `files-command` (default, one line naming the command), `files-inline` (the full path list in the brief: one line per file re-read every turn), `tickets` (the old per-ticket block + linked list: the most tokens). */
+    val mode: String = MODE_FILES_COMMAND,
+    /** `related.files.format`: `paths` (default, bare paths) | `detailed` (ticket ids, status, counts per path: several times the tokens). */
+    val filesFormat: String = FORMAT_PATHS,
     val briefTickets: Int = 5,
     val briefFiles: Int = 5,
     val briefChars: Int = 1500,
@@ -30,6 +34,13 @@ data class RelatedConfig(
         const val DEFAULT_FAMILY_PATTERN = "^([A-Z][A-Z0-9]*(?:-[A-Z][A-Z0-9]*)*)-(\\d+)\\b"
         const val DEFAULT_INSTRUCTION = "Read these files first; call agenthq_ticket_related_files and agenthq_ticket_files " +
             "(CLI `agenthq ticket files <id> [--related]`) before you grep or read broadly."
+        const val MODE_FILES_COMMAND = "files-command"
+        const val MODE_FILES_INLINE = "files-inline"
+        const val MODE_TICKETS = "tickets"
+        val MODES = listOf(MODE_FILES_COMMAND, MODE_FILES_INLINE, MODE_TICKETS)
+        const val FORMAT_PATHS = "paths"
+        const val FORMAT_DETAILED = "detailed"
+        val FORMATS = listOf(FORMAT_PATHS, FORMAT_DETAILED)
         val DEFAULT = RelatedConfig()
     }
 }

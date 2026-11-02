@@ -91,6 +91,10 @@ class TicketFiles(
         return chosen to byPath
     }
 
+    /** RELATED-SHAPE-1: every path changed by any ticket related to [ticketId] (archived ones included: their rows stay), sorted, unique. */
+    fun relatedPaths(ticketId: String): List<String> =
+        related(ticketId).flatMap { forTicket(it.ticketId) }.map { it.path }.distinct().sorted()
+
     fun recordedTicketIds(): Set<String> = q.recordedTickets()
 
     /** DAEMON-CONTEXT-1: how many recorded tickets changed [path]. */

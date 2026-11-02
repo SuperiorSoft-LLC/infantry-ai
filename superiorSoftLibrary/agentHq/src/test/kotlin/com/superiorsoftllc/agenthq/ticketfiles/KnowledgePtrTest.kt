@@ -169,6 +169,8 @@ class KnowledgePtrTest {
 
     // ---- (A) the start block ----------------------------------------------------------------------------------------
 
+    private val TICKETS = RelatedConfig.DEFAULT.copy(mode = RelatedConfig.MODE_TICKETS)
+
     private object NoSettings : ProjectSettings {
         override fun all() = JsonObject(emptyMap())
         override fun set(key: String, value: JsonElement) = all()
@@ -191,7 +193,7 @@ class KnowledgePtrTest {
         // Done tickets whose worktrees are gone: only the index rows remain.
         put(s, "ticket-00000001", "abcdef1234567890", "${lib}Usage.kt")
         put(s, "ticket-00000002", "1234567890abcdef", "${lib}Pace.kt")
-        var cfg = RelatedConfig.DEFAULT
+        var cfg = TICKETS
         val source = LiveRelatedWork(files, { rows[it] }, rows = { rows.values }, config = { cfg })
         val composer = TicketContextComposer(NoSettings, related = source)
         val t = rows.getValue("ticket-00000009")
@@ -205,18 +207,64 @@ class KnowledgePtrTest {
         assertFalse("stored line" in composed.prompt, "the live block replaces the stored one in the prompt")
         assertTrue("human brief" in composed.prompt)
 
-        cfg = RelatedConfig.DEFAULT.copy(brief = false)
+        cfg = TICKETS.copy(brief = false)
         val off = composer.compose(input(t.id, t.title, t.description))
         assertFalse(RelatedBlock.HEADER in off.prompt)
         assertFalse(RelatedConfig.DEFAULT_INSTRUCTION in off.prompt)
         assertTrue("stored line" in off.prompt, "with the block off the description is the prompt's, as stored")
 
-        cfg = RelatedConfig.DEFAULT.copy(briefTickets = 1, instruction = "")
+        cfg = TICKETS.copy(briefTickets = 1, instruction = "")
         val capped = assertNotNull(source.block(t.id, t.description))
         assertTrue("ticket-00000002" in capped && "ticket-00000001" !in capped, "nearest number first: $capped")
         assertFalse(RelatedConfig.DEFAULT_INSTRUCTION in capped)
 
-        cfg = RelatedConfig.DEFAULT
+        cfg = TICKETS
         assertNull(source.block(t.id, "human brief\nrelated: off"), "per-ticket opt-out")
+    }
+
+    @Test
+    fun relatedShapeModesDefaultIsOneCommandLineNoTicketsAndLinkedListOnlyInTicketsMode() {
+        val s = store()
+        val files = TicketFiles(s.database, { s.tickets.all().map { it.toInfo() } }, { null })
+        val rows = mutableMapOf<String, TicketInfo>()
+        rows["ticket-00000001"] = row("ticket-00000001", "USAGE-1 meters")
+        rows["ticket-00000002"] = row("ticket-00000002", "USAGE-2 pacing")
+        rows["ticket-00000009"] = row("ticket-00000009", "USAGE-3 next", TicketStatus.IN_PROGRESS, desc = "human brief")
+        put(s, "ticket-00000001", "abcdef1234567890", "${lib}Usage.kt")
+        put(s, "ticket-00000002", "1234567890abcdef", "${lib}Pace.kt")
+        var cfg = RelatedConfig.DEFAULT
+        val source = LiveRelatedWork(files, { rows[it] }, rows = { rows.values }, config = { cfg })
+        val composer = TicketContextComposer(NoSettings, related = source)
+        val t = rows.getValue("ticket-00000009")
+        val link = com.superiorsoftllc.agenthq.context.LinkLine("relates", "ticket-00000001", "USAGE-1 meters", "done")
+        fun prompt() = composer.compose(input(t.id, t.title, t.description).copy(links = listOf(link), includeLinkedOverride = true)).prompt
+
+        // default: no block, no ids/titles/shas, no linked list, the one line
+        val d = prompt()
+        assertTrue(LiveRelatedWork.FILES_COMMAND_LINE in d, d)
+        assertFalse(RelatedBlock.HEADER in d)
+        assertFalse("ticket-00000001" in d || "USAGE-1 meters" in d || "git show" in d, d)
+        assertFalse("Before you start, check the related tickets" in d)
+
+        cfg = RelatedConfig.DEFAULT.copy(mode = RelatedConfig.MODE_FILES_INLINE)
+        val inline = prompt()
+        assertTrue("Files changed by related work (" !in inline || "ticket-00000001" !in inline, inline)
+        assertFalse(RelatedBlock.HEADER in inline)
+
+        cfg = TICKETS
+        val old = prompt()
+        assertTrue(RelatedBlock.HEADER in old && "ticket-00000001 | USAGE-1 meters" in old, old)
+        assertTrue("Before you start, check the related tickets" in old)
+    }
+
+    @Test
+    fun relatedModeAndFormatSettingsAcceptOnlyTheirValues() {
+        val s = com.superiorsoftllc.agenthq.settings.SettingsService(store())
+        assertEquals("files-command", s.relatedConfig().mode)
+        assertEquals("paths", s.relatedConfig().filesFormat)
+        for (m in RelatedConfig.MODES) { s.set("brief.related.mode", kotlinx.serialization.json.JsonPrimitive(m)); assertEquals(m, s.relatedConfig().mode) }
+        for (f in RelatedConfig.FORMATS) { s.set("related.files.format", kotlinx.serialization.json.JsonPrimitive(f)); assertEquals(f, s.relatedConfig().filesFormat) }
+        kotlin.test.assertFailsWith<IllegalArgumentException> { s.set("brief.related.mode", kotlinx.serialization.json.JsonPrimitive("nope")) }
+        kotlin.test.assertFailsWith<IllegalArgumentException> { s.set("related.files.format", kotlinx.serialization.json.JsonPrimitive("nope")) }
     }
 }

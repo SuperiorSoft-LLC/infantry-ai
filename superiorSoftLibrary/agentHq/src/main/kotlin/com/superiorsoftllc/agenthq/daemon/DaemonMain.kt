@@ -4109,7 +4109,7 @@ class TicketServices private constructor(val files: TicketFiles, val filesText: 
             )
             // KNOWLEDGE-PTR-1 (C): the stored RELATED (auto) block a ticket save writes at the top of its description.
             relatedDescriptionRef.set(com.superiorsoftllc.agenthq.ticketfiles.RelatedDescriptionWriter(files, settings::relatedConfig))
-            val filesText = TicketFilesText(files) { id -> store.tickets.get(id)?.title ?: store.ticketArchive.info(id)?.title }
+            val filesText = TicketFilesText(files, { settings.relatedConfig().filesFormat }) { id -> store.tickets.get(id)?.title ?: store.ticketArchive.info(id)?.title }
             val ticketFilesExec = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
                 Thread(r, "agenthq-ticket-files").also { it.isDaemon = true }
             }

@@ -29,9 +29,12 @@ class TicketContextComposer(
         val description = if (relatedBlock != null) com.superiorsoftllc.agenthq.ticketfiles.RelatedDescriptionBlock.strip(input.description) else input.description
         val core = input.title + "\n\n" + description
         val switches = effective(input.includeLinkedOverride, input.includeSkillsOverride)
-        val includeLinked = switches.includeLinkedTasksContext.value
+        // RELATED-SHAPE-1: only the opt-in `tickets` mode names related tickets (RELATED_TICKETS_LINE, linked list, old files line).
+        val ticketsMode = runCatching { related.mode() }.getOrDefault(com.superiorsoftllc.agenthq.ticketfiles.RelatedConfig.MODE_TICKETS) ==
+            com.superiorsoftllc.agenthq.ticketfiles.RelatedConfig.MODE_TICKETS
+        val includeLinked = switches.includeLinkedTasksContext.value && ticketsMode
         val sections = buildList {
-            add("agenthq" to "You are running inside Infantry AI. Ticket: ${input.ticketId}. Project: ${input.projectId ?: "none"}. Infantry AI tickets, agents, mail and project knowledge live in the Infantry AI daemon and are reached with the `agenthq` CLI, never through files. See superiorSoftLibrary/agentHq/docs/AGENT-QUICKREF.md.\n" + ticketMoveLine(input.ticketId) + "\n" + MCP_LINE + "\n" + RELATED_TICKETS_LINE)
+            add("agenthq" to "You are running inside Infantry AI. Ticket: ${input.ticketId}. Project: ${input.projectId ?: "none"}. Infantry AI tickets, agents, mail and project knowledge live in the Infantry AI daemon and are reached with the `agenthq` CLI, never through files. See superiorSoftLibrary/agentHq/docs/AGENT-QUICKREF.md.\n" + ticketMoveLine(input.ticketId, emptyList(), ticketsMode) + "\n" + MCP_LINE + (if (ticketsMode) "\n" + RELATED_TICKETS_LINE else ""))
             // ROLE-NOTE-1: the built-in report-by-mail text yields to the project (setting off = neither line; role notes govern).
             val finish = settings.includeFinishInstructions() ?: true
             add("team" to if (finish) ((input.reportTo?.let { TEAM_BLOCK + "\n" + reportToLine(it) } ?: TEAM_BLOCK) + "\n" + FINISH_LINE) else TEAM_BLOCK)
@@ -91,12 +94,12 @@ class TicketContextComposer(
          * BUG-E2E-2: the agent closes its own ticket. Blocked work is NOT moved to pending: the board sets pending
          * itself from an open blocked_by prerequisite and refuses that move by hand, so the agent reports instead.
          */
-        fun ticketMoveLine(ticketId: String?, watchedPrograms: List<String> = emptyList()): String {
+        fun ticketMoveLine(ticketId: String?, watchedPrograms: List<String> = emptyList(), relatedFilesLine: Boolean = true): String {
             val id = ticketId ?: "<ticket id>"
             return "When the work is done, run `agenthq ticket move $id done`. If you are blocked, leave the ticket " +
                 "in_progress and mail what blocks you (Team, below) " +
                 "(pending is set by the daemon from a blocked_by link; a move there by hand is refused).\n" +
-                DESC_FILE_LINE + BG_RUN_LINE + watchLine(watchedPrograms) + RELATED_FILES_LINE
+                DESC_FILE_LINE + BG_RUN_LINE + watchLine(watchedPrograms) + (if (relatedFilesLine) RELATED_FILES_LINE else "")
         }
 
         /** `agenthq bg run`: a long gate the agent starts is flagged to the daemon, so the session reads Running, not idle. */
