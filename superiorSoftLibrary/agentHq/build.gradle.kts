@@ -117,6 +117,8 @@ dependencies {
 
     // AR-4b-ii-b: the role catalog classes (Role, RoleService, RoleCatalog) live in the Infantry_Roles daemon half; tests read them.
     testImplementation(project(":daemon-plugin-official-Infantry_Roles"))
+    // HARNESS H7b-2: ClaudePluginParityTest runs the Infantry_Claude plugin next to the core claude harness.
+    testImplementation(project(":harness-plugin-official-Infantry_Claude"))
     testImplementation(kotlin("test"))
     // BUILD-VB-1: VerifyBaseTaskTest runs preflight/verify-base.gradle.kts in a throwaway build.
     testImplementation(gradleTestKit())
