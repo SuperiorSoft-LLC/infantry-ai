@@ -16,20 +16,36 @@ import kotlinx.serialization.json.jsonPrimitive
  * A refused value prints the daemon's refusal, which names the accepted range.
  */
 internal object SettingsCli {
-    const val USAGE = "usage: agenthq settings [get [<key>]] | set <key> <value> | limits"
+    const val USAGE = "usage: agenthq settings [get [<key>] [--project p] [--role r] [--session s]] | set <key> <value> [--scope app|project|role|session] [--project p] [--role r] [--session s] | explain <key> [--project p] [--role r] [--session s] | limits"
 
     private val json = Json { ignoreUnknownKeys = true }
 
     /** The usage error for [args], or null when they are valid. */
     fun usageError(args: List<String>): String? {
+        val (positional, flags) = split(args.drop(1))
         val ok = when (args.firstOrNull()?.lowercase()) {
             null -> true
-            "get" -> args.size in 1..2
-            "set" -> args.size == 3
+            "get" -> positional.size in 0..1
+            "set" -> positional.size == 2
+            "explain" -> positional.size == 1
             "limits" -> args.size == 1
             else -> false
-        }
+        } && flags.keys.all { it in FLAGS }
         return if (ok) null else USAGE
+    }
+
+    private val FLAGS = setOf("scope", "project", "role", "session")
+
+    /** SETTINGS-SCOPES-1: positional words and `--name value` flags of [args]. */
+    fun split(args: List<String>): Pair<List<String>, Map<String, String>> {
+        val positional = mutableListOf<String>()
+        val flags = linkedMapOf<String, String>()
+        var i = 0
+        while (i < args.size) {
+            val a = args[i]
+            if (a.startsWith("--") && a.length > 2 && i + 1 < args.size) { flags[a.drop(2)] = args[i + 1]; i += 2 } else { positional += a; i++ }
+        }
+        return positional to flags
     }
 
     /** A typed value as JSON: a number, `true`/`false`, a JSON array/object, else a plain string. */
@@ -42,18 +58,39 @@ internal object SettingsCli {
     suspend fun run(stream: FrameStream, args: List<String>, out: Appendable, err: Appendable): Int {
         return try {
             when (args.firstOrNull()?.lowercase()) {
-                null, "get" -> {
-                    val key = args.getOrNull(1)?.trim().orEmpty()
-                    val answer = stream.request(Envelope(Envelope.SETTINGS_GET, key), Envelope.SETTINGS, "settings_get", idempotent = true)
-                    render(json.parseToJsonElement(answer.data).jsonObject, out)
+                null, "get", "explain" -> {
+                    val explain = args.firstOrNull()?.lowercase() == "explain"
+                    val (positional, flags) = split(args.drop(1))
+                    val key = positional.firstOrNull()?.trim().orEmpty()
+                    val scoped = explain || flags.keys.any { it != "scope" }
+                    val data = if (!scoped) key else JsonObject(
+                        buildMap {
+                            put("key", JsonPrimitive(key))
+                            flags.forEach { (k, v) -> if (k != "scope") put(k, JsonPrimitive(v)) }
+                            if (explain) put("explain", JsonPrimitive("true"))
+                        },
+                    ).toString()
+                    val answer = stream.request(Envelope(Envelope.SETTINGS_GET, data), Envelope.SETTINGS, "settings_get", idempotent = true)
+                    val body = json.parseToJsonElement(answer.data).jsonObject
+                    if (explain) out.appendLine(body["explain"]?.jsonPrimitive?.contentOrNull ?: body.toString())
+                    else if (scoped) out.appendLine("$key = ${body["value"]}  (from ${body["scope"]?.jsonPrimitive?.contentOrNull})")
+                    else render(body, out)
                     0
                 }
                 "set" -> {
-                    val key = args[1].trim()
-                    val body = JsonObject(mapOf("key" to JsonPrimitive(key), "value" to parseValue(args[2])))
-                    val answer = stream.request(Envelope(Envelope.SETTINGS_SET, body.toString()), Envelope.SETTINGS, "settings_set", idempotent = true)
+                    val (positional, flags) = split(args.drop(1))
+                    val key = positional[0].trim()
+                    val scope = flags["scope"] ?: "app"
+                    val fields = buildMap<String, JsonElement> {
+                        put("key", JsonPrimitive(key))
+                        put("value", parseValue(positional[1]))
+                        if (scope != "app") put("scope", JsonPrimitive(scope))
+                        listOf("project", "role", "session").forEach { f -> flags[f]?.let { put(f, JsonPrimitive(it)) } }
+                    }
+                    val answer = stream.request(Envelope(Envelope.SETTINGS_SET, JsonObject(fields).toString()), Envelope.SETTINGS, "settings_set", idempotent = true)
                     val all = json.parseToJsonElement(answer.data).jsonObject
-                    out.appendLine("$key = ${all[key] ?: "(set)"}")
+                    if (scope == "app") out.appendLine("$key = ${all[key] ?: "(set)"}")
+                    else out.appendLine("$key = ${all["value"]}  (from ${all["scope"]?.jsonPrimitive?.contentOrNull}; set at $scope)")
                     0
                 }
                 "limits" -> {

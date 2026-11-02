@@ -27,6 +27,8 @@ class SettingsDaemonPlugin : DaemonPlugin {
     override fun start(api: DaemonApi) {
         api.tools.register(ProjectConfigGetTool)
         api.tools.register(ProjectConfigSetTool)
+        api.tools.register(SettingsGetTool)
+        api.tools.register(SettingsSetTool)
     }
 }
 
@@ -156,5 +158,61 @@ object ProjectConfigSetTool : DaemonTool {
         role ?: return refused("$NAME needs a role (with a cap), autoRemoveDoneWorkers, or routingRules")
         val cap = arguments.string("cap")?.toIntOrNull()?.takeIf { it >= 1 } ?: return refused("$NAME needs a cap of 1 or more")
         return call.send(ProjectConfigPatch(projectId, mapOf(role to cap), autoRemove, rules))
+    }
+}
+
+/** SETTINGS-SCOPES-1: send a `settings_get` / `settings_set` frame; the answer is the daemon's JSON text. */
+private fun ToolCall.settingsFrame(type: String, data: JsonObject): ToolResult = try {
+    val reply = request(type, data.toString(), timeoutMs = ANSWER_TIMEOUT_MS)
+    when (reply.type) {
+        "settings" -> ToolResult(reply.data)
+        "error" -> refused(reply.data.ifBlank { "$type failed" })
+        else -> refused("$type: unexpected answer ${reply.type}")
+    }
+} catch (e: Exception) {
+    refused(e.message ?: "$type failed")
+}
+
+private val SCOPE_PROPS = listOf(
+    "scope" to "app (default) | project | role | session. Resolution: session > role > project > app > default.",
+    "project" to "The project id (scope project, or the project of a role).",
+    "role" to "The role id (scope role, with project).",
+    "session" to "The session id (scope session).",
+)
+
+object SettingsGetTool : DaemonTool {
+    const val NAME = "agenthq_settings_get"
+    private val shape = shape(true, listOf("key" to "The setting key, e.g. related.brief.", "explain" to "true: also print which scope wins and every layer.") + SCOPE_PROPS.drop(1), listOf("key"))
+    override val name = NAME
+    override val description = "Read a setting's effective value and the scope it comes from (session > role > project > app > default) for the given project, role and session."
+    override val inputSchema = shape.first
+    override val annotations = shape.second
+
+    override fun call(call: ToolCall): ToolResult {
+        val key = call.arguments.string("key") ?: return refused("$NAME needs a key")
+        return call.settingsFrame("settings_get", buildJsonObject {
+            put("key", key)
+            listOf("project", "role", "session", "explain").forEach { f -> call.arguments.string(f)?.let { put(f, it) } }
+        })
+    }
+}
+
+object SettingsSetTool : DaemonTool {
+    const val NAME = "agenthq_settings_set"
+    private val shape = shape(false, listOf("key" to "The setting key.", "value" to "The value as JSON text (true, 5, \"notify\", [..]); null clears it at a non-app scope.") + SCOPE_PROPS, listOf("key", "value"))
+    override val name = NAME
+    override val description = "Set a setting at a scope (app, project, role or session) with the target ids; a scope the setting does not allow is refused. Answers with the effective value and its scope."
+    override val inputSchema = shape.first
+    override val annotations = shape.second
+
+    override fun call(call: ToolCall): ToolResult {
+        val key = call.arguments.string("key") ?: return refused("$NAME needs a key")
+        val raw = call.arguments.string("value") ?: return refused("$NAME needs a value")
+        val value = runCatching { json.parseToJsonElement(raw) }.getOrNull() ?: JsonPrimitive(raw)
+        return call.settingsFrame("settings_set", buildJsonObject {
+            put("key", key)
+            put("value", value)
+            listOf("scope", "project", "role", "session").forEach { f -> call.arguments.string(f)?.let { put(f, it) } }
+        })
     }
 }
