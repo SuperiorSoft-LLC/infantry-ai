@@ -33,6 +33,10 @@ class ChatDaemonPlugin : DaemonPlugin {
         api.tools.register(MailTools.ReadTool)
         api.tools.register(MailTools.MessageTool)
         ImageFrames.install(api)
+        api.tools.register(ChatImageTool(
+            { api.sessions.get(it)?.projectId }, { id -> api.projects.list().firstOrNull { it.id == id }?.directory }, api::files,
+            { args, who -> api.tools.invoke("agenthq_chat_note", args, who) },
+        ).tool)
     }
 
     override fun stop() = ImageFrames.stop()
