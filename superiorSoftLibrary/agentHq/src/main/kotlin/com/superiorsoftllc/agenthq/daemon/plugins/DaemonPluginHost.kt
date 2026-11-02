@@ -442,6 +442,7 @@ class DaemonPluginHost private constructor(
             override fun request(type: String, data: String, sessionId: String?, timeoutMs: Long): Frame =
                 request(Envelope(type, data, sessionId), timeoutMs).toFrame()
         }
+        if (entry.owner.id == "Infantry_Board" || entry.owner.id == "Board") log("[plugins] board tool call: $name caller=${caller.owner} session=${call.clientSessionId ?: "-"} role=${call.clientRole ?: "-"}")
         return entry.owner.callSuspending("tool($name)", toolTimeoutMs(entry.owner, entry.tool)) { entry.tool.call(call) }
             .getOrElse { ToolResult("$name failed: ${it.message ?: it::class.simpleName}", isError = true) }
     }
