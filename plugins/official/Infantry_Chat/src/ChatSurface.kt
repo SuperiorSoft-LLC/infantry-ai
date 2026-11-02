@@ -1077,6 +1077,12 @@ fun ContributionRow(item: TimelineItem) {
             Text("⚙", color = tint, fontSize = 13.sp)
             Spacer(Modifier.width(8.dp))
             Text(item.text.ifBlank { item.label }, color = tint, fontFamily = Mono, fontSize = 12.sp, modifier = Modifier.weight(1f))
+            // SCRIPT-LINE-TS-1: the run's time, top right, same formatter/font as the message cards.
+            if (item.at > 0) Text(
+                activityTimestamp(item.at), color = Palette.Muted, fontFamily = Mono, fontSize = 10.sp,
+                maxLines = 1, softWrap = false, textAlign = TextAlign.End,
+                modifier = Modifier.padding(horizontal = 8.dp).testTag(CARD_TIMESTAMP_TAG),
+            )
             if (item.details.isNotEmpty()) Text(if (open) "▴" else "▾", color = Palette.Muted, fontSize = 12.sp)
         }
         if (open) Column(Modifier.padding(start = 21.dp, top = 3.dp).testTag(CONTRIBUTION_DETAILS_TAG)) {
