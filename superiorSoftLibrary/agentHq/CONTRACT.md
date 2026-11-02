@@ -27,6 +27,10 @@ A daemon plugin tool runs in the daemon, which cannot open the agent's files. `a
 A client below 1.147.0 sends plain strings and no `client.projectId`: such a tool sees no local files (a path it cannot read is refused as
 "does not exist") and no default project. A daemon below 1.147.0 never lists `localFiles`, and ignores `client.projectId`.
 
+### ARCHIVE-1 (contract 1.149.0, additive): the ticket archive
+
+An archived ticket leaves the live board tables (`tickets`, `ticket_links`) and lives in `archived_tickets` with every column, its links, and a snapshot of its epic and project; board reads never scan it. `ticket_files` is untouched, so related-file lists (`ticket_files --related`, the RELATED brief block) still find archived tickets. `archive_query` (`list|show|search|count`) and `archive_apply` (`archive`: ids, an epic, or a lane filter `status` + `olderThanDays`; `restore`: puts a ticket back exactly as it was, same lane and position, links whose other end is live again) are answered by `archive_report`. An in-progress ticket is never archived. Setting `board.archive.doneAfterDays` (project value `board.archive.doneAfterDays.<projectId>`; absent or 0 = off) archives done tickets after N days. Clients below 1.149.0 never see the frames.
+
 ### EFFORT-1 (contract 1.148.0, additive): a reasoning effort on tickets, with the harness capability
 
 See `docs/EFFORT.md`. `new` (`SpawnOptions.effort`), `AgentProfile.effort`, role bindings and routing rules already carried an effort (1.39.0 / 1.46.0); this adds:
@@ -2268,6 +2272,9 @@ apart from the 1.3.0, 1.4.0, 1.5.0, 1.6.0 and 1.28.0 additions marked in the tab
 | `usage_meter` | `{rows, keepWeeks, generatedAt}` (JSON), answering `usage_meter_get` (1.141.0, USAGE-1) | daemon → client |
 | `ticket_files` | `TicketFilesQuery` (JSON) `{ticketId?, paths?, related?, backfill?, all?, limit?, top?}`: the files a ticket changed / the tickets a path glob was changed by / related tickets' files / backfill (1.137.0) | client → daemon |
 | `ticket_files_report` | `TicketFilesReport` (JSON) `{text}`, capped compact lines, answering `ticket_files` (1.137.0) | daemon → client |
+| `archive_query` | `ArchiveRequest` (JSON) `{op: list\|show\|search\|count, ids?, projectId?, epicId?, text?, limit?, offset?}`, answered by `archive_report` (1.149.0) | client → daemon |
+| `archive_apply` | `ArchiveRequest` (JSON) `{op: archive\|restore, ids?, epicId?, projectId?, status?, olderThanDays?, dryRun?}`, answered by `archive_report` (1.149.0) | client → daemon |
+| `archive_report` | `ArchiveReport` (JSON) `{text, items[], count}`, answering `archive_query` / `archive_apply` (1.149.0) | daemon → client |
 | `usage_set` | `UsageSet` (JSON): a meter's manual percent / override set or cleared, and/or the pacing rule; refused = `error` `usage_set refused: ...` (1.121.0) | client → daemon |
 | `providers` | — (request the list; 1.3.0) | client → daemon |
 | `providers` | list of `ProviderInfo` (JSON), the default first (1.3.0) | daemon → client |

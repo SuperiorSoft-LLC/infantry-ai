@@ -338,6 +338,11 @@ fun BoardFiltersSection(board: BoardPaneHost, modifier: Modifier = Modifier) {
             ticketCountLabel(shown, tickets.visible.size, active == EpicFilter.All),
             color = Palette.Muted, fontSize = 11.sp, maxLines = 1, softWrap = false, modifier = Modifier.weight(1f),
         )
+        // ARCHIVE-1: the read-only Archive view of the project, with search and Restore.
+        var showArchive by remember { mutableStateOf(false) }
+        OutlinedButton(onClick = { showArchive = true }, modifier = Modifier.testTag(ARCHIVE_BUTTON_TAG)) { Text("Archive", fontSize = 12.sp) }
+        if (showArchive) BoardArchiveDialog(board.deps) { showArchive = false }
+        Spacer(Modifier.width(6.dp))
         OutlinedButton(onClick = { board.startNext() }, enabled = board.can("board.ticket.start", com.superiorsoftllc.agenthq.plugin.api.ActionKind.SPAWN) && tickets.column(TicketColumns.TODO).isNotEmpty()) {
             Text("Start next", fontSize = 12.sp)
         }

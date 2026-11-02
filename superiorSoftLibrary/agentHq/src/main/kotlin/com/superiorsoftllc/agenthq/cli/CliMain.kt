@@ -432,6 +432,7 @@ internal object Cli {
                 "tickets" -> tickets(stream, parsed, out, err, getenv)
                 "board" -> board(stream, parsed, out, err, getenv)
                 "ticket" -> ticket(stream, parsed, out, err, getenv)
+                "archive" -> runBlocking { archiveCommand(stream, parsed, out, err, getenv) }
                 "harnesses" -> harnesses(stream, out, err)
                 "harness-status" -> harnessStatus(stream, parsed, out, err)
                 "agent-def" -> AgentDefCli.run(stream, parsed.args, out, err, getenv)
@@ -1195,9 +1196,30 @@ internal object Cli {
             "start" -> startTicket(stream, parsed, out, err, getenv)
             "link" -> linkTicket(stream, parsed, out, err, getenv)
             "files" -> ticketFiles(stream, parsed, out, err, getenv)
+            "archive", "restore" -> archiveCommand(stream, parsed, out, err, getenv)
             "comment" -> TicketCommentCli.run(stream, parsed.args.drop(1), out, err, getenv)
             "related" -> relatedTicket(stream, parsed, out, err, getenv)
             else -> showTicket(stream, parsed, out, err, getenv)
+        }
+    }
+
+    /** ARCHIVE-1: `ticket archive|restore ...` and `archive list|show|search|count|restore ...`. */
+    private suspend fun archiveCommand(
+        stream: FrameStream,
+        parsed: ParsedArgs,
+        out: Appendable,
+        err: Appendable,
+        getenv: (String) -> String?,
+    ): Int {
+        checkContract(stream, err)
+        val verb = parsed.args.firstOrNull() ?: return 1
+        return try {
+            val (query, req) = ArchiveCli.build(verb, parsed.args.drop(1), parsed.project, parsed.epic, parsed.filter, parsed.limit, parsed.offset, parsed.dryRun)
+            out.appendLine(ArchiveCli.request(stream, query, req).text)
+            0
+        } catch (e: Exception) {
+            err.appendLine("error: ${e.message}")
+            1
         }
     }
 
@@ -4701,6 +4723,9 @@ internal object Cli {
         val suggest: Boolean = false,
         val backfill: Boolean = false,
         val limit: String? = null,
+        /** ARCHIVE-1: `--filter <lane>[:<days>]` and `--dry-run`. */
+        val filter: String? = null,
+        val dryRun: Boolean = false,
         /** TOKEN-1: `board --columns a,b`, `inbox --offset n` / `--previews`. */
         val columns: String? = null,
         val offset: String? = null,
@@ -4826,6 +4851,8 @@ internal object Cli {
         var related = false
         var backfill = false
         var limit: String? = null
+        var filter: String? = null
+        var dryRun = false
         var columns: String? = null
         var offset: String? = null
         var previews = false
@@ -5188,6 +5215,14 @@ internal object Cli {
                     previews = true
                     i++
                 }
+                "--filter" -> {
+                    filter = flagValue(args, ++i) ?: return fail(err, "--filter expects <lane>[:<days>]")
+                    i++
+                }
+                "--dry-run" -> {
+                    dryRun = true
+                    i++
+                }
                 "--limit" -> {
                     limit = flagValue(args, ++i) ?: return fail(err, "--limit expects a whole number of lines")
                     i++
@@ -5297,6 +5332,8 @@ internal object Cli {
             related = related,
             backfill = backfill,
             limit = limit,
+            filter = filter,
+            dryRun = dryRun,
             columns = columns,
             offset = offset,
             previews = previews,
@@ -5437,6 +5474,7 @@ internal object Cli {
             null
         }
         "ticket" -> ticketUsageError(parsed)
+        "archive" -> ArchiveCli.usageError(parsed.args.firstOrNull(), parsed.args.drop(1), parsed.epic, parsed.filter)
         "harnesses" -> if (parsed.args.isNotEmpty()) "harnesses takes no arguments: agenthq harnesses" else null
         "harness-status" -> if (parsed.args.isNotEmpty()) "harness-status takes no arguments: agenthq harness-status [--check]" else null
         "harness-install" -> null
@@ -5578,6 +5616,7 @@ internal object Cli {
                 null
             }
             "comment" -> TicketCommentCli.usageError(args.drop(1))
+            "archive", "restore" -> ArchiveCli.usageError(args.first(), args.drop(1), parsed.epic, parsed.filter)
             "files" -> TicketFilesCli.usageError(args.getOrNull(1)?.takeIf { it.isNotBlank() }, parsed.filePaths, parsed.backfill, parsed.limit)
             "show" -> if (blank(1)) {
                 "ticket show requires a ticket id: agenthq ticket show <id|prefix> (see: agenthq tickets)"

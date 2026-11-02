@@ -152,4 +152,22 @@ class ArchiveServiceTest {
             assertEquals("Epic epic-1", svc.query(ArchiveRequest(op = "show", ids = listOf("ticket-e1"))).items.single().epicName)
         }
     }
+
+    @Test
+    fun `cost of a board read with 1000 done tickets before and after archiving them`() {
+        store().use { s ->
+            for (i in 1..1000) s.put("ticket-%08x".format(i), "done", i - 1, updated = now - 40 * day, desc = "x".repeat(2000))
+            for (i in 1..20) s.put("ticket-live%03d".format(i), "todo", i - 1)
+            for (i in 2..1000 step 2) s.tickets.link(TicketLinkRow("ticket-%08x".format(i), "ticket-%08x".format(i - 1), "relates_to", 1))
+            fun read(): Long { val t = System.nanoTime(); repeat(20) { s.tickets.all(); s.tickets.links() }; return (System.nanoTime() - t) / 20 / 1000 }
+            read()
+            val before = read()
+            val moved = service(s).apply(ArchiveRequest(op = "archive", status = "done", olderThanDays = 30)).count
+            read()
+            val after = read()
+            println("ARCHIVE-1 board read (tickets.all + links), 1000 done + 20 live: before=${before}us after=${after}us moved=$moved")
+            assertEquals(1000, moved)
+            assertTrue(after < before, "after $after must be below before $before")
+        }
+    }
 }
