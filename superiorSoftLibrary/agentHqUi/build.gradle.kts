@@ -964,3 +964,12 @@ apply(from = rootProject.file("gradle/packaging-guard.gradle.kts"))
 
 // GATE-LOCK-1: one test run per build dir (see the script).
 apply(from = rootProject.file("gradle/test-run-lock.gradle.kts"))
+
+// LAUNCH-QA-1: the UI tests' in-process daemons (AgentHqDaemon.build with no pluginsRoot) read AGENTHQ_PLUGINS_ROOT; with none they loaded
+// 0 plugins, so roles/profiles/board frames (daemon plugins since AR-4b) never answered. Point them at the repo's plugins/ with every built
+// daemon half. A test that passes its own pluginsRoot is unaffected.
+tasks.withType<Test>().matching { it.name in setOf("test", "testFast", "testSlow", "testOfficialJars") }.configureEach {
+    officialDaemonHalves.keys.forEach { name -> dependsOn(":daemon-plugin-official-$name:jar") }
+    environment("AGENTHQ_PLUGINS_ROOT", repoPluginsRoot.absolutePath)
+    systemProperty("agenthq.plugins.devTrust", "true")
+}
