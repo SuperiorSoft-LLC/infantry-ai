@@ -7,6 +7,7 @@ import com.superiorsoftllc.agenthq.protocol.TicketStatus
 import com.superiorsoftllc.agenthq.worktree.newGitRepo
 import com.superiorsoftllc.agenthq.worktree.testGit
 import java.io.File
+import com.superiorsoftllc.agenthq.ticketfiles.RelatedConfig
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -56,6 +57,9 @@ class TicketFilesTest {
 
         val text = TicketFilesText(files) { id -> rows.firstOrNull { it.id == id }?.title }
             .answer(TicketFilesQuery(ticketId = "ticket-bbbb2222", related = true), maxLines = 1, top = 5)
-        assertTrue(text.contains("ticket-aaaa1111") && text.contains("1 more lines"), text)
+        assertEquals(listOf("src/Board.kt", "src/Only.kt"), text.lines().map { it.trim() }, "paths only, whole list, no ids or truncation")
+        val detailed = TicketFilesText(files, { RelatedConfig.FORMAT_DETAILED }) { id -> rows.firstOrNull { it.id == id }?.title }
+            .answer(TicketFilesQuery(ticketId = "ticket-bbbb2222", related = true), maxLines = 1, top = 5)
+        assertTrue(detailed.contains("ticket-aaaa1111") && detailed.contains("1 more lines"), detailed)
     }
 }

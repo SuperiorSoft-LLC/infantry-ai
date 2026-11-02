@@ -39,7 +39,12 @@ data class TicketFilesReport(val text: String) {
 }
 
 /** Renders [TicketFiles] answers as the compact lines every caller prints. */
-class TicketFilesText(private val files: TicketFiles, private val titleOf: (String) -> String?) {
+class TicketFilesText(
+    private val files: TicketFiles,
+    /** `related.files.format`: `paths` (default) or `detailed`. */
+    private val format: () -> String = { RelatedConfig.FORMAT_PATHS },
+    private val titleOf: (String) -> String?,
+) {
 
     fun answer(query: TicketFilesQuery, maxLines: Int, top: Int): String {
         val limit = (query.limit ?: maxLines).coerceAtLeast(1)
@@ -74,6 +79,7 @@ class TicketFilesText(private val files: TicketFiles, private val titleOf: (Stri
     }
 
     private fun related(id: String, top: Int, limit: Int): String {
+        if (format() != RelatedConfig.FORMAT_DETAILED) return relatedPaths(id)
         val (chosen, byPath) = files.filesForRelated(id, top)
         if (files.forTicket(id).isEmpty()) return "$id: no files recorded, so no related tickets (`agenthq ticket files --backfill`)"
         if (chosen.isEmpty()) return "$id: no other ticket changed any of its files"
@@ -83,6 +89,14 @@ class TicketFilesText(private val files: TicketFiles, private val titleOf: (Stri
         val lines = byPath.entries.sortedWith(compareByDescending<Map.Entry<String, List<TicketFile>>> { it.value.size }.thenBy { it.key })
             .map { (path, changes) -> "$path  ${changes.joinToString(" ") { "${it.ticketId}:${it.status}" }}" }
         return capped(head, lines, limit)
+    }
+
+    /** RELATED-SHAPE-1: paths only, whole list, no ids / counts / truncation; over 500 paths a first line gives the count. */
+    private fun relatedPaths(id: String): String {
+        if (files.forTicket(id).isEmpty()) return "$id: no files recorded, so no related tickets (`agenthq ticket files --backfill`)"
+        val paths = files.relatedPaths(id)
+        if (paths.isEmpty()) return "$id: no other ticket changed any of its files"
+        return (if (paths.size > BIG_LIST) listOf("${paths.size} files") else emptyList()).plus(paths).joinToString("\n")
     }
 
     private fun backfill(r: BackfillReport, limit: Int): String =
@@ -99,6 +113,8 @@ class TicketFilesText(private val files: TicketFiles, private val titleOf: (Stri
             .joinToString("\n")
 
     companion object {
+        const val BIG_LIST = 500
+
         fun fileLine(f: TicketFile): String {
             val counts = if (f.added == null && f.removed == null) "bin" else "+${f.added ?: 0} -${f.removed ?: 0}"
             return "${f.status} $counts  ${f.path}" + (f.oldPath?.let { " (from $it)" } ?: "")

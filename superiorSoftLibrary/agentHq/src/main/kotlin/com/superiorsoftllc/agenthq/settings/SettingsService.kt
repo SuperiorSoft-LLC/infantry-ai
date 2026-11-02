@@ -90,6 +90,8 @@ class SettingsService(
             WATCH_FOLLOW_REDIRECTS to JsonPrimitive(watchFollowRedirects()),
             RELATED_BRIEF to JsonPrimitive(relatedConfig().brief),
             RELATED_BRIEF_INSTRUCTION to JsonPrimitive(relatedConfig().instruction),
+            RELATED_BRIEF_MODE to JsonPrimitive(relatedConfig().mode),
+            RELATED_FILES_FORMAT to JsonPrimitive(relatedConfig().filesFormat),
             RELATED_DESCRIPTION_BLOCK to JsonPrimitive(relatedConfig().descriptionBlock),
             RELATED_FAMILY_PATTERN to JsonPrimitive(relatedConfig().familyPattern),
             RELATED_SUGGEST_NUMBER to JsonPrimitive(relatedConfig().suggestNumber),
@@ -414,6 +416,8 @@ class SettingsService(
                 (value as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.length <= 1000 && '\n' !in it }
                     ?: throw IllegalArgumentException("setting '$key' must be one line of text, at most 1000 characters (\"\" = no instruction line)"),
             )
+            RELATED_BRIEF_MODE -> JsonPrimitive(requireOneOf(key, value, com.superiorsoftllc.agenthq.ticketfiles.RelatedConfig.MODES))
+            RELATED_FILES_FORMAT -> JsonPrimitive(requireOneOf(key, value, com.superiorsoftllc.agenthq.ticketfiles.RelatedConfig.FORMATS))
             RELATED_FAMILY_PATTERN -> JsonPrimitive(requireFamilyPattern(value))
             MAIL_AUTOMATION_FOOTER -> JsonPrimitive(requireFooterText(key, value))
             MAIL_WAKE_MODE -> JsonPrimitive(requireWakeMode(key, value))
@@ -449,6 +453,8 @@ class SettingsService(
             descriptionBlock = bool(RELATED_DESCRIPTION_BLOCK, d.descriptionBlock),
             familyPattern = text(RELATED_FAMILY_PATTERN, d.familyPattern).takeIf { it.isEmpty() || validFamilyPattern(it) } ?: d.familyPattern,
             suggestNumber = bool(RELATED_SUGGEST_NUMBER, d.suggestNumber),
+            mode = text(RELATED_BRIEF_MODE, d.mode).takeIf { it in com.superiorsoftllc.agenthq.ticketfiles.RelatedConfig.MODES } ?: d.mode,
+            filesFormat = text(RELATED_FILES_FORMAT, d.filesFormat).takeIf { it in com.superiorsoftllc.agenthq.ticketfiles.RelatedConfig.FORMATS } ?: d.filesFormat,
             briefTickets = cap(LimitRegistry.RELATED_BRIEF_TICKETS),
             briefFiles = cap(LimitRegistry.RELATED_BRIEF_FILES),
             briefChars = cap(LimitRegistry.RELATED_BRIEF_CHARS),
@@ -457,6 +463,10 @@ class SettingsService(
             blockChars = cap(LimitRegistry.RELATED_BLOCK_CHARS),
         )
     }
+
+    private fun requireOneOf(key: String, value: JsonElement, allowed: List<String>): String =
+        (value as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it in allowed }
+            ?: throw IllegalArgumentException("setting '$key' must be one of $allowed")
 
     private fun requireDeliveryMode(key: String, value: JsonElement): String =
         (value as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it in DELIVERY_MODES }
@@ -836,6 +846,10 @@ class SettingsService(
         /** KNOWLEDGE-PTR-1 (b8ca2bf7): see [relatedConfig]; all default on. */
         const val RELATED_BRIEF = "related.brief"
         const val RELATED_BRIEF_INSTRUCTION = "related.briefInstruction"
+        /** RELATED-SHAPE-1: `files-command` (default) | `files-inline` | `tickets`. */
+        const val RELATED_BRIEF_MODE = "brief.related.mode"
+        /** RELATED-SHAPE-1: `paths` (default) | `detailed`. */
+        const val RELATED_FILES_FORMAT = "related.files.format"
         const val RELATED_DESCRIPTION_BLOCK = "related.descriptionBlock"
         const val RELATED_FAMILY_PATTERN = "related.familyPattern"
         const val RELATED_SUGGEST_NUMBER = "related.suggestNumber"

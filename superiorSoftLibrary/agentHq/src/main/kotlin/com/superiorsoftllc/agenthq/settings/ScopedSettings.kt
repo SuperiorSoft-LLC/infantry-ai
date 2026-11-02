@@ -50,6 +50,8 @@ object SettingScopes {
 
     private val specs: Map<String, SettingSpec> = mapOf(
         SettingsService.RELATED_BRIEF to SettingSpec(ALL, "Put the related-tickets file list into a started ticket's brief.", "on adds the list to every worker's first turn"),
+        SettingsService.RELATED_BRIEF_MODE to SettingSpec(ALL, "How a ticket's brief shows related work: files-command (one line naming the command), files-inline, or tickets.", "files-inline puts every related path in each worker's brief, re-read every turn; tickets adds ids, titles, statuses and file snippets, the most tokens"),
+        SettingsService.RELATED_FILES_FORMAT to SettingSpec(ALL, "What `ticket files <id> --related` prints: paths (bare list) or detailed.", "detailed adds ticket ids, status and counts per path, several times the output tokens"),
         SettingsService.RELATED_BRIEF_INSTRUCTION to SettingSpec(ALL, "The one instruction line printed above the related-files list."),
         SettingsService.RELATED_DESCRIPTION_BLOCK to SettingSpec(ALL, "Paste the related-files block into a new ticket's description.", "on makes every ticket description longer"),
         SettingsService.RELATED_SUGGEST_NUMBER to SettingSpec(ALL, "Suggest the next number of a ticket family when a ticket is created."),

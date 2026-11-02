@@ -22,6 +22,9 @@ fun interface RelatedWorkSource {
     /** The block for [ticketId] (null = nothing to add). Never throws into a start. */
     fun block(ticketId: String, description: String): String?
 
+    /** RELATED-SHAPE-1: `brief.related.mode` in force; the legacy default keeps a host with no live source as it was. */
+    fun mode(): String = RelatedConfig.MODE_TICKETS
+
     companion object {
         val NONE = RelatedWorkSource { _, _ -> null }
     }
