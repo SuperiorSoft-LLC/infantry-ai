@@ -138,7 +138,7 @@ class TicketBranches(
      * The main checkout's root, even when [repo] is itself a linked worktree (`--git-common-dir`): where a ticket's
      * worktree goes and where its base ref resolves. The daemon's boot line names it through here (BUG-REGRESS-1).
      */
-    internal fun mainRoot(repo: File): File {
+    fun mainRoot(repo: File): File {
         val result = git.run(repo, listOf("rev-parse", "--path-format=absolute", "--git-common-dir"))
         val common = if (result.ok) result.out().lineSequence().firstOrNull()?.trim().orEmpty() else ""
         if (common.isNotEmpty()) {

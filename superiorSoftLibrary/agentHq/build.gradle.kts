@@ -11,7 +11,6 @@
 plugins {
     kotlin("jvm")
     alias(libs.plugins.kotlinSerialization)
-    alias(libs.plugins.sqldelight)
     application
 }
 
@@ -22,14 +21,6 @@ plugins {
 // beyond the catalog" constraint. sqlite-driver is a multiplatform artifact
 // whose JVM variant is what resolves here; consuming it from a kotlin("jvm")
 // module adds NO compilation targets to this module.
-sqldelight {
-    databases {
-        create("AgentHQDatabase") {
-            packageName.set("com.superiorsoftllc.agenthq.db")
-            srcDirs.setFrom("src/main/sqldelight")
-        }
-    }
-}
 
 kotlin {
     jvmToolchain(21)
@@ -66,6 +57,7 @@ dependencies {
     // DAEMON-PLUGINS-1: the API daemon plugins compile against (docs/DAEMON-PLUGINS.md).
     implementation(project(":superiorSoftLibrary:agentHqDaemonApi"))
     // DP-5e: epics, brief, ledger, context, ticketfiles live in :agentHqBoard (still one daemon jar).
+    api(project(":superiorSoftLibrary:agentHqCore"))
     api(project(":superiorSoftLibrary:agentHqBoard"))
     // HARNESS-PLUGIN-3 H3: the API harness plugins compile against (docs/HARNESS-PLUGINS.md section 3.1); a leaf.
     implementation(project(":superiorSoftLibrary:agentHqHarnessApi"))
@@ -111,7 +103,7 @@ dependencies {
     // object, so the daemon calls Kernel32 through JNA (SetPriorityClass + a per-session Job with a priority-class limit).
     implementation("net.java.dev.jna:jna-platform:5.18.1")
     // RUN-CONSOLE (ticket 67f117b6): saved-command runs get a real pseudo-terminal (ConPTY / winpty on Windows, the
-    // POSIX pty elsewhere), so tools print their colours, spinners and  progress. EPL-1.0, see THIRD-PARTY-NOTICES.md.
+    // POSIX pty elsewhere), so tools print their colours, spinners and  progress. EPL-1.0, see THIRD-PARTY-NOTICES.md.
     // Pinned to 0.13.x: 0.14 needs kotlin-stdlib 2.4, this build is on 2.3.
     implementation("org.jetbrains.pty4j:pty4j:0.13.13")
 
@@ -177,9 +169,6 @@ tasks.register<JavaExec>("runDaemon") {
 // disabled repo-wide BY DESIGN (same line as superiorSoftLibrary/build.gradle.kts:97): the
 // `runs` table is brand new, there is no shipped v0 to migrate, and a false mismatch here would
 // fail a green test run for no product reason. Do NOT re-enable.
-tasks.withType<app.cash.sqldelight.gradle.VerifyMigrationTask>().configureEach {
-    enabled = false
-}
 
 // ---- Base-commit preflight ------------------------------------------------------------------
 // The verifyBase task is defined in preflight/verify-base.gradle.kts (BUILD-VB-1), shared with its test.
@@ -549,3 +538,11 @@ tasks.register("headlessDist") {
 
 // GATE-LOCK-1: one test run per build dir (see the script).
 apply(from = rootProject.file("gradle/test-run-lock.gradle.kts"))
+
+// CORE-SPLIT-4b: the tests of the packages that moved to :agentHqCore still reach their `internal` members; the friend path grants
+// the test compilation the same visibility it had when both lived in one module (tests only; main code sees the public API).
+tasks.named<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>("compileTestKotlin") {
+    val coreJar = project(":superiorSoftLibrary:agentHqCore").tasks.named<Jar>("jar")
+    dependsOn(coreJar)
+    compilerOptions.freeCompilerArgs.add(coreJar.flatMap { it.archiveFile }.map { "-Xfriend-paths=" + it.asFile.absolutePath })
+}

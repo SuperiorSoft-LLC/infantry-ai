@@ -31,6 +31,7 @@ include(":superiorSoftLibrary:agentHq")
 // CORE-SPLIT-1/2 (docs/DAEMON-CORE.md): leaf modules carved out of agentHq; package names unchanged.
 include(":superiorSoftLibrary:agentHqProtocol")
 include(":superiorSoftLibrary:agentHqRunner")
+include(":superiorSoftLibrary:agentHqCore")
 // DP-5e: the board's lower-level packages (epics, brief, ledger, context, ticketfiles); depends on the daemon API, never on agentHq.
 include(":superiorSoftLibrary:agentHqBoard")
 include(":superiorSoftLibrary:agenthqUiCore")
