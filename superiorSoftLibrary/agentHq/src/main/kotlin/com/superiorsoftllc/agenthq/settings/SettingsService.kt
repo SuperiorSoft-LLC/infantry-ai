@@ -80,6 +80,7 @@ class SettingsService(
             SANDBOX_ALLOWED_DIRS to JsonArray(sandboxAllowedDirs().map(::JsonPrimitive)),
             ALLOWED_MODELS to JsonArray(allowedModels().patterns.map(::JsonPrimitive)),
             ALLOWED_ROLES to JsonArray(allowedRoles().patterns.map(::JsonPrimitive)),
+            NUDGE_DEFER to JsonArray(nudgeDefer().map(::JsonPrimitive)),
             TOOL_PROFILES to toolProfileOverrides(),
             WATCH_NOTICES to JsonObject(watchNotices().mapValues { JsonPrimitive(it.value) }),
             WATCH_ESCALATE_TO to JsonPrimitive(watchEscalateTo()),
@@ -170,6 +171,18 @@ class SettingsService(
             ?.let { runCatching { (Json.parseToJsonElement(it) as? JsonArray)?.mapNotNull { e -> (e as? JsonPrimitive)?.content } }.getOrNull() }
             ?.let { return ModelAllowlist.parse(it.joinToString(",")) }
         return ModelAllowlist.parse(env(ModelAllowlist.ENV))
+    }
+
+    /** NUDGE-SCRIPT-1: the built-in nudges (event names) that defer to script hooks; default none = today's behaviour. */
+    fun nudgeDefer(): List<String> = store.settings.get(NUDGE_DEFER)?.value
+        ?.let { runCatching { (Json.parseToJsonElement(it) as? JsonArray)?.mapNotNull { e -> (e as? JsonPrimitive)?.content } }.getOrNull() }.orEmpty()
+
+    private fun requireNudgeNames(value: JsonElement): List<String> {
+        val items = (value as? JsonArray)?.map { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }
+        require(items != null && items.all { it != null && it in com.superiorsoftllc.agenthq.mailbox.NudgeGate.ALL }) {
+            "setting '$NUDGE_DEFER' must be a JSON array of ${com.superiorsoftllc.agenthq.mailbox.NudgeGate.ALL.joinToString { "\"$it\"" }}; [] = every built-in nudge is sent as today"
+        }
+        return items!!.filterNotNull().distinct()
     }
 
     /** LIMITS: the role allowlist: stored `limits.roles.allowed` (`[]` = all, beats the env) > env AGENTHQ_ALLOWED_ROLES > all. */
@@ -371,6 +384,7 @@ class SettingsService(
             SANDBOX_ALLOWED_DIRS -> JsonArray(requireAllowedDirs(value).map(::JsonPrimitive))
             ALLOWED_MODELS -> JsonArray(requireAllowedModels(value).map(::JsonPrimitive))
             ALLOWED_ROLES -> JsonArray(requireAllowedModels(value, ALLOWED_ROLES).map { JsonPrimitive(it.lowercase()) })
+            NUDGE_DEFER -> JsonArray(requireNudgeNames(value).map(::JsonPrimitive))
             TOOL_PROFILES -> requireToolProfiles(value)
             WATCH_NOTICES -> requireWatchNotices(value)
             WATCH_ESCALATE_TO -> JsonPrimitive(
@@ -870,6 +884,8 @@ class SettingsService(
         /** LIMITS: the model allowlist, see [ModelAllowlist]. */
         const val ALLOWED_MODELS = ModelAllowlist.SETTING
         const val ALLOWED_ROLES = ModelAllowlist.ROLES_SETTING
+        /** NUDGE-SCRIPT-1: built-in nudge event names that defer to script hooks. */
+        const val NUDGE_DEFER = com.superiorsoftllc.agenthq.mailbox.NudgeGate.SETTING
         val LIMITS_BUILD_MAX_WORKERS = LimitRegistry.BUILD_MAX_WORKERS.key
         val LIMITS_BUILD_MAX_PARALLEL_FORKS = LimitRegistry.BUILD_MAX_PARALLEL_FORKS.key
         val LIMITS_CPU_ALERT_PERCENT = LimitRegistry.CPU_ALERT_PERCENT.key

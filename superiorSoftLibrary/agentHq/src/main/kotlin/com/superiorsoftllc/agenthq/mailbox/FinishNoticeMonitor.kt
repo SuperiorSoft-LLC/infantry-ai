@@ -48,6 +48,8 @@ class FinishNoticeMonitor(
     private val reports: () -> TicketReports? = { null },
     private val idleComment: () -> Boolean = { true },
     private val gitState: (File?, String?) -> GitState? = { d, b -> d?.let { gitStateOf(it, b) } },
+    /** NUDGE-SCRIPT-1: emits each built-in notice as a named event; deferred ones are left to script hooks. */
+    private val gate: NudgeGate = NudgeGate.NONE,
 ) {
     /** Tip (8 chars), commits since the start ref (null = unknown) and whether the worktree has uncommitted changes. */
     data class GitState(val tip: String, val newCommits: Int?, val dirty: Boolean)
@@ -142,6 +144,10 @@ class FinishNoticeMonitor(
             failed -> "exit code ${event.code ?: "unknown"}"
             else -> null
         }
+        if (gate.handled(if (failed) NudgeGate.TICKET_FAILED else NudgeGate.TICKET_FINISHED, mapOf(
+                "ticketId" to ticket.id, "title" to ticket.title, "status" to ticket.status.toString(), "sessionId" to session.id, "starter" to starter,
+                "branch" to (branch ?: ""), "commit" to (commit ?: ""), "exitCode" to (event.code?.toString() ?: ""), "reason" to (reason ?: ""),
+            ))) return
         send(
             MailSendRequest(
                 from = SYSTEM,
@@ -186,6 +192,7 @@ class FinishNoticeMonitor(
         val body = "Worker ${session.id.take(8)} went idle without a report. Branch ${ticket.branch ?: session.worktreeBranch ?: "none"} " +
             (git?.let { "tip ${it.tip} (${it.newCommits?.let { n -> "$n new commits since start" } ?: "commits since start unknown"}; worktree ${if (it.dirty) "dirty" else "clean"})" } ?: "tip unknown") +
             ". Last output: ${last.replace(Regex("[ \t\r\n]+"), " ").take(300)}"
+        if (gate.handled(NudgeGate.WORKER_NO_REPORT, mapOf("ticketId" to ticket.id, "sessionId" to session.id, "starter" to starter, "text" to body))) { commentedRun[session.id] = since; return }
         if (port.postDaemonIssue(ticket.id, body)) commentedRun[session.id] = since
     }
 
@@ -217,6 +224,7 @@ class FinishNoticeMonitor(
             if (nudgeAfter != Long.MAX_VALUE && period.nudgedAt == 0L) {
                 if (now - quietSince < nudgeAfter) continue
                 period.nudgedAt = now
+                if (gate.handled(NudgeGate.WORKER_IDLE, mapOf("ticketId" to ticket.id, "sessionId" to session.id, "starter" to starter))) continue
                 send(
                     MailSendRequest(
                         from = SYSTEM, to = session.id, threadId = "idle-nudge:${session.id}",
@@ -230,6 +238,7 @@ class FinishNoticeMonitor(
                 if (now - period.nudgedAt < limit) continue
             } else if (now - quietSince < limit) continue
             period.noticed = true
+            if (gate.handled(NudgeGate.WORKER_WAITING, mapOf("ticketId" to ticket.id, "sessionId" to session.id, "starter" to starter, "quietMinutes" to ((now - quietSince) / 60_000).toString()))) continue
             send(
                 MailSendRequest(
                     from = SYSTEM,
