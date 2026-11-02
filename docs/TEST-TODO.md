@@ -163,3 +163,5 @@ TEST-TODO:
 - Behaviour: `protocol.RoleIds.RETIRED` equals `daemon.api.roles.RetiredRoleIds.MAP`; ids normalise the same. Class: RoleIdsTest. Inputs: "git","bot","architect". Expected: version-control, automation, architect.
 - Behaviour: open-time migration still rewrites retired ids. Class: db.RoleIdMigrationTest. Inputs: rows with role "git". Expected: rewritten once, idempotent.
 - Behaviour: user-portrait setting still refuses a bad image. Class: AvatarUploadsTest / settings. Inputs: non-PNG bytes. Expected: IllegalArgumentException "setting 'user_portrait': ...".
+
+TEST-TODO (AR-4b-i): RolesLookup with no provider: `all()` empty, `role("backend")` null, one stderr line; LocalRoles.record maps Role fields (incl. responseDetail/MaxChars/BodyChars) to RoleRecord. Pre-existing failures seen on this branch, unrelated: AgentRegistryLayerGuardTest (Infantry_Agents SpawnTools board imports), BuiltinToolsListGuardTest (agenthq_read).

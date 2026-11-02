@@ -696,6 +696,8 @@ class AgentHqDaemon(
             // DAEMON-PLUGINS-1: the daemon plugins, loaded once the managers they reach exist (below); every seam reads this
             // holder, so until then (and with no daemon plugin) each answers neutrally.
             val pluginHost = java.util.concurrent.atomic.AtomicReference(com.superiorsoftllc.agenthq.daemon.plugins.DaemonPluginHost.empty())
+            // AR-4b: core reads roles through the Roles port (no provider = no persona), looked up at call time.
+            val rolesLookup = com.superiorsoftllc.agenthq.daemon.RolesLookup { pluginHost.get().serviceRegistry.find(com.superiorsoftllc.agenthq.daemon.api.roles.Roles::class) }
             // DAEMON-PLUGINS-1 (`admission`): the guest tokens an official plugin admits NOW (read per request).
             val policy = AccessPolicy.of(host, token, agentToken = agentToken).withGuestTokens { pluginHost.get().guestTokens() }
             // SEC-FIX-1: built once; refused when it equals the access token every agent is handed.
@@ -847,7 +849,7 @@ class AgentHqDaemon(
                     // STACK-NEUTRAL-2: core's base env (watch off, the profiles, the runner's space limits), then every plugin's
                     // contributions (the process-watch plugin adds the build limits, the shims and `AGENTHQ_WATCH=on`).
                     // TOKEN-1: the role's response-size fields reach the tool layer as the settings' env names; absent = the global limits.
-                    val role = info.role?.let { roles.role(it) }
+                    val role = info.role?.let { rolesLookup.role(it) }
                     val detail = when (role?.responseDetail) { "ack" -> 1L; "summary" -> 2L; "full" -> 3L; else -> null }
                     launchEnvHost.collect(info) + listOfNotNull(
                         detail?.let { LimitRegistry.MCP_DEFAULT_DETAIL.env to it.toString() },
@@ -868,7 +870,7 @@ class AgentHqDaemon(
             if (settings.allowedRoles().restricts) println("[agentHq] role allowlist in force: ${settings.allowedRoles().patterns.joinToString()}")
             manager.maxSessions = { settings.limitCap(LimitRegistry.MAX_SESSIONS) }
             if (settings.allowedModels().restricts) println("[agentHq] model allowlist in force: ${settings.allowedModels().patterns.joinToString()}")
-            val agentsWired = com.superiorsoftllc.agenthq.daemon.wiring.AgentsWiring.build(store, manager, roles)
+            val agentsWired = com.superiorsoftllc.agenthq.daemon.wiring.AgentsWiring.build(store, manager, rolesLookup)
             val agentRegistry = agentsWired.registry
             val agentModules = agentsWired.modules
             val agents = agentsWired.profiles
@@ -1041,7 +1043,7 @@ class AgentHqDaemon(
                     com.superiorsoftllc.agenthq.settings.RoutingRules.validate(
                         rules,
                         checkExecutor = { provider, model, effort -> agents.validateExecutor(provider, model, effort) },
-                        roleKnown = { roles.role(it) != null },
+                        roleKnown = { rolesLookup.role(it) != null },
                     )
                 },
             )
@@ -1538,7 +1540,7 @@ class AgentHqDaemon(
                         // DP-5h-3a: the board runtime (the plugin builds the board).
                         boardRuntimeService = boardSeam.host?.let { _ ->
                             com.superiorsoftllc.agenthq.daemon.plugins.LocalBoardRuntime(
-                                hostSource = boardSeam::require, store = store, settings = settings, projectStore = projectStore, roles = roles,
+                                hostSource = boardSeam::require, store = store, settings = settings, projectStore = projectStore, roles = rolesLookup,
                                 pacingCheck = { providerId, model ->
                                     val pid = providerId ?: manager.providers.firstOrNull()?.id ?: com.superiorsoftllc.agenthq.daemon.api.usage.UsageMeters.CLAUDE
                                     usagePacing.check(com.superiorsoftllc.agenthq.daemon.api.usage.UsageMeters.meterFor(pid, model ?: manager.providerFor(pid)?.defaultModel()))
@@ -1623,6 +1625,7 @@ class AgentHqDaemon(
                 )
                 pluginHost.set(host)
                 // SCRIPT-HOOK-3: a script's tool calls reach the core frames through the daemon's own /ws (see LoopbackFrames).
+                host.serviceRegistry.provide("core", com.superiorsoftllc.agenthq.daemon.api.roles.Roles::class, com.superiorsoftllc.agenthq.role.LocalRoles(roles))
                 host.loopback = com.superiorsoftllc.agenthq.daemon.plugins.LoopbackFrames(loopbackHost, boundPort, token, ownerToken)
                 foundAttention.flush()
                 testKnowledge?.let { host.serviceRegistry.provide("core", com.superiorsoftllc.agenthq.daemon.api.knowledge.Knowledge::class, it) }
