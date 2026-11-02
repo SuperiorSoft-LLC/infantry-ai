@@ -3,6 +3,8 @@ package com.superiorsoftllc.agenthq.commands
 import com.superiorsoftllc.agenthq.daemon.DaemonFixture
 import com.superiorsoftllc.agenthq.protocol.Envelope
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.AfterTest
@@ -29,7 +31,7 @@ class RunStubProviderDaemonTest {
     }
 
     @Test fun `a saved command runs a real process when the provider is the stub`() {
-        val d = DaemonFixture.launch(repo = repoDir, commandsFile = file).also { fixture = it }
+        val d = DaemonFixture.launch(repo = repoDir, commandsFile = file, pluginsRoot = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.boardRoot("official/Infantry_Run")).also { fixture = it }
         d.client.await(Envelope.READY)
         val argv = if (windows) """["cmd.exe","/c","echo hello-run"]""" else """["sh","-c","echo hello-run"]"""
         d.send(Envelope.COMMAND_SAVE, """{"id":"echo","name":"Echo","argv":$argv,"graceMillis":2000}""")
@@ -37,14 +39,14 @@ class RunStubProviderDaemonTest {
 
         d.send(Envelope.RUN_START, """{"commandId":"echo"}""")
         d.client.await(Envelope.RUN)
-        val finished = Json.decodeFromString(RunFinished.serializer(), d.client.await(Envelope.RUN_FINISHED).data)
+        val finished = Json.parseToJsonElement(d.client.await(Envelope.RUN_FINISHED).data).jsonObject
 
         val stdout = d.client.of(Envelope.RUN_OUTPUT)
-            .map { Json.decodeFromString(RunOutput.serializer(), it.data) }
-            .filter { it.stream == "stdout" }
-            .map { it.line.trim() }
+            .map { Json.parseToJsonElement(it.data).jsonObject }
+            .filter { it["stream"]?.jsonPrimitive?.content == "stdout" }
+            .map { it["line"]!!.jsonPrimitive.content.trim() }
         assertEquals(listOf("hello-run"), stdout, "the real child's stdout, not the stub script's lines")
-        assertEquals(0, finished.exitCode, finished.toString())
-        assertTrue(finished.outcome == "SUCCEEDED", finished.toString())
+        assertEquals("0", finished["exitCode"]?.jsonPrimitive?.content, finished.toString())
+        assertTrue(finished["outcome"]?.jsonPrimitive?.content == "SUCCEEDED", finished.toString())
     }
 }

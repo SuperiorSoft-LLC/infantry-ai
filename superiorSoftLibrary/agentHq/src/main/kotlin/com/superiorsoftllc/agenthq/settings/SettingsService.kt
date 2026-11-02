@@ -648,6 +648,7 @@ class SettingsService(
      */
     fun forPlugins(): com.superiorsoftllc.agenthq.daemon.api.processes.PluginSettings = object : com.superiorsoftllc.agenthq.daemon.api.processes.PluginSettings {
         override fun limit(key: String): Long? = LimitRegistry.ALL.firstOrNull { it.key == key }?.let { this@SettingsService.limit(it) }
+        override fun hint(key: String): String = LimitRegistry.ALL.firstOrNull { it.key == key }?.hint().orEmpty()
         override fun stored(key: String): String? =
             if (PLUGIN_READABLE.any { key.startsWith(it) }) store.settings.get(key)?.value else null
     }

@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.commands
+package com.superiorsoftllc.agenthq.plugins.official.run.daemon
 
 import com.superiorsoftllc.agenthq.protocol.Envelope
 import com.superiorsoftllc.agenthq.runner.ProcessSpec
@@ -59,7 +59,7 @@ class RunManagerTerminalTest {
         terminal = t,
         limits = RunManager.RunLimits(
             scrollbackBytes = { scrollback }, history = { history }, inputBytesPerSecond = { rate }, inputMaxFrameBytes = { maxFrame },
-            inputQueueBytes = { queue }, maxCols = { maxCols }, maxRows = { maxRows },
+            inputQueueBytes = { queue }, maxCols = { maxCols }, maxRows = { maxRows }, hint = { "Setting $it." },
         ),
         restricted = { demo },
     )

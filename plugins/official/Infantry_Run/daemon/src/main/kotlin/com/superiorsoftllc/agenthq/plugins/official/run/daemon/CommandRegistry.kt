@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.commands
+package com.superiorsoftllc.agenthq.plugins.official.run.daemon
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -61,7 +61,10 @@ const val MAX_GRACE_MILLIS = 600_000L
 
 /** SECRETS-2: the most secrets one command (or one run_start) may name; setting `limits.secrets.maxPerRun` (SEC-FIX-2a). */
 val maxRunSecrets: Int
-    get() = com.superiorsoftllc.agenthq.settings.LimitRegistry.let { it.cap(it.RUN_MAX_SECRETS.default, it.RUN_MAX_SECRETS) }
+    get() = maxRunSecretsSource()
+
+/** Where [maxRunSecrets] is read from: the plugin points it at the daemon setting `limits.secrets.maxPerRun` at start. */
+@Volatile var maxRunSecretsSource: () -> Int = { 16 }
 
 /**
  * The daemon's saved commands, loaded once from `<AGENTHQ_HOME>/commands.json` (design sections 2-3).
@@ -81,6 +84,10 @@ class CommandRegistry private constructor(
     fun specsJson(): String = wire.encodeToString(ListSerializer(CommandSpec.serializer()), specs())
 
     companion object {
+        private val SECRET_NAME = Regex("^[a-z0-9][a-z0-9._-]{0,63}$")
+        /** A keystore secret name (the keystore own rule). */
+        fun isSecretName(name: String): Boolean = SECRET_NAME.matches(name)
+
         private val wire = Json { encodeDefaults = true }
         private val reader = Json { ignoreUnknownKeys = true }
         private val fileWriter = Json { encodeDefaults = true; prettyPrint = true }
@@ -133,7 +140,7 @@ class CommandRegistry private constructor(
             if (e.graceMillis <= 0) return no("$where ('${e.id}') has a non-positive graceMillis")
             if (e.graceMillis > MAX_GRACE_MILLIS) return no("$where ('${e.id}') has a graceMillis over $MAX_GRACE_MILLIS")
             if (e.secrets.size > maxRunSecrets) return no("$where ('${e.id}') names more than $maxRunSecrets secrets")
-            if (e.secrets.any { !com.superiorsoftllc.agenthq.keystore.Keystore.isName(it) }) return no("$where ('${e.id}') names an invalid secret")
+            if (e.secrets.any { !CommandRegistry.isSecretName(it) }) return no("$where ('${e.id}') names an invalid secret")
             val cwd = e.cwd?.takeIf { it.isNotBlank() }
             val dir = resolveCwd(root, cwd) ?: return no("$where ('${e.id}') has a cwd outside the repo")
             return Result.success(SavedCommand(e.id, e.name?.takeIf { it.isNotBlank() } ?: e.id, e.argv.toList(), cwd, dir, e.graceMillis, e.secrets.distinct()))

@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.commands
+package com.superiorsoftllc.agenthq.plugins.official.run.daemon
 
 /**
  * SECRETS-2: masks the secret values a run was given (as environment variables) in what the run prints, before any of it

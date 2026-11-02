@@ -58,6 +58,9 @@ interface DaemonServices {
     /** STACK-NEUTRAL-2: read access to `limits.*` / `watch.*` / `processes.*` settings. */
     val pluginSettings: com.superiorsoftllc.agenthq.daemon.api.processes.PluginSettings get() = com.superiorsoftllc.agenthq.daemon.api.processes.NoPluginSettings
 
+    /** CMD-1: the cwd-bound run surface ([LocalRuns]); default: none (every call refuses). */
+    val runs: com.superiorsoftllc.agenthq.daemon.api.runs.Runs get() = com.superiorsoftllc.agenthq.daemon.api.runs.NoRuns
+
     /** PACE-TREND-1: the plan meters (current readings); default: none. */
     val meters: com.superiorsoftllc.agenthq.daemon.api.usage.Meters get() = com.superiorsoftllc.agenthq.daemon.api.usage.NoMeters
 

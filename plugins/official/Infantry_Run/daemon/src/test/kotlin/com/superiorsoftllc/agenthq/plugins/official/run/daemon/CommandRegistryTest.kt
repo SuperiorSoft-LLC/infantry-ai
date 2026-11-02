@@ -1,6 +1,5 @@
-package com.superiorsoftllc.agenthq.commands
+package com.superiorsoftllc.agenthq.plugins.official.run.daemon
 
-import com.superiorsoftllc.agenthq.daemon.DaemonFixture
 import com.superiorsoftllc.agenthq.protocol.Envelope
 import java.io.File
 import java.nio.file.Files
@@ -92,19 +91,5 @@ class CommandRegistryTest {
         val reg = CommandRegistry.load(File(tmp, "nope.json"), repoDir)
         assertTrue(reg.commands.isEmpty())
         assertNull(reg.refusal)
-    }
-
-    @Test fun `the daemon answers command_list with id name cwd and the argv`() {
-        val file = File(tmp, "commands.json").also { it.writeText("[${entry("build")}]") }
-        val fixture = DaemonFixture.launch(repo = repoDir, commandsFile = file)
-        try {
-            fixture.client.await(Envelope.READY)
-            fixture.send(Envelope.COMMAND_LIST, "")
-            val reply = fixture.client.await(Envelope.COMMANDS)
-            assertTrue(reply.data.contains("\"argv\":[\"cmd.exe\",\"/c\",\"$secret\"]"), reply.data)
-            assertTrue(reply.data.contains("\"id\":\"build\"") && reply.data.contains("\"cwd\":\"sub\""), reply.data)
-        } finally {
-            fixture.stop(); fixture.deleteState()
-        }
     }
 }

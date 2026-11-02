@@ -62,7 +62,10 @@ class CoreDaemonServices(
     override val storageHandle: com.superiorsoftllc.agenthq.db.AgentHQDatabaseHandle? = null,
     /** ATTN-2a: sends one frame to every connected client; null = none. */
     private val clientBroadcast: ((type: String, data: String) -> Unit)? = null,
+    /** CMD-1: the run surface; null = none. */
+    private val runService: com.superiorsoftllc.agenthq.daemon.api.runs.Runs? = null,
 ) : DaemonServices {
+    override val runs get() = runService ?: com.superiorsoftllc.agenthq.daemon.api.runs.NoRuns
     override fun broadcast(type: String, data: String) { clientBroadcast?.invoke(type, data) }
     override val sessionNotifier get() = notifier ?: com.superiorsoftllc.agenthq.daemon.api.sessions.NoSessionNotifier
     override val boardRuntime get() = boardRuntimeService ?: com.superiorsoftllc.agenthq.daemon.api.board.NoBoardRuntime

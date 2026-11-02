@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.commands
+package com.superiorsoftllc.agenthq.plugins.official.run.daemon
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json

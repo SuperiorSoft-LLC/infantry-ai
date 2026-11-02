@@ -793,6 +793,11 @@ class DaemonPluginHost private constructor(
             require(java.io.File(dir).isDirectory) { "project '${project.id}' directory does not exist: $dir" }
             return com.superiorsoftllc.agenthq.daemon.api.files.DirectoryProjectFiles(java.io.File(dir))
         }
+        // CMD-1: the run surface; official / core, or a community module with the grant `runs`.
+        override val runs: com.superiorsoftllc.agenthq.daemon.api.runs.Runs get() {
+            check(!p.community || "runs" in p.setting.allow) { "missing grant 'runs' in modules.json" }
+            return hostServices.runs
+        }
         // AR-5: typed optional hostServices. Publishing: official / core, or the grant `hostServices.provide`; lookup is open. Unload closes the handle.
         override val services: com.superiorsoftllc.agenthq.daemon.api.ServicesApi =
             ScopedServices(serviceRegistry, p.id, { !p.community || ScopedServices.GRANT in p.setting.allow }) { p.closeables += it }

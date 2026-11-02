@@ -113,7 +113,11 @@ interface DaemonApi {
     /** TRIG-1 (1.28.0, additive): the ports the triggers service runs on (daemon.api.triggers). A daemon without them answers nothing. */
     val triggerHost: com.superiorsoftllc.agenthq.daemon.api.triggers.TriggerHost? get() = null
 
+    /** CMD-1 (1.31.0, additive): the cwd-bound run surface (daemon.api.runs). Official / core tier, or a community module with the grant `runs`. */
+    val runs: com.superiorsoftllc.agenthq.daemon.api.runs.Runs get() = com.superiorsoftllc.agenthq.daemon.api.runs.NoRuns
+
     companion object {
+        // 1.31.0 (CMD-1, additive): `runs` (daemon.api.runs.Runs) and `PluginSettings.hint`.
         // 1.30.0 (MAIL-HOOK-1, additive): `hooks.incomingMail` (IncomingMailHook, IncomingMail, MailVerdict): a pre-delivery look at each accepted mail.
         // 1.29.0 (TRIG-2a, additive): template routes (`{name}` segments, HttpCall.pathParams) and `hooks.status` (StatusHook).
         // 1.28.0 (TRIG-1, additive): `triggerHost` (daemon.api.triggers.TriggerHost): trigger store, sessions, mail, spawn-with-binding, run events.
@@ -144,7 +148,7 @@ interface DaemonApi {
         // 1.4.0 (RUNTIME-LOAD-4, additive): BOARD_API_VERSION 1.3.0 (daemon.api.board.TicketRefs / TicketPlacement).
         /** The DaemonApi version (semver). A module's `daemon.apiAtLeast` above it is refused. */
         // 1.14.0 (DP-5h-3e-b, additive): BoardRuntime.attachCore / detachCore and BoardCoreAccess (core consumers reach the plugin-built board).
-        const val VERSION = "1.30.0"
+        const val VERSION = "1.31.0"
     }
 }
 
