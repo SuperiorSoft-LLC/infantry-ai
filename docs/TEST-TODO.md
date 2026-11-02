@@ -168,3 +168,5 @@ TEST-TODO (AR-4b-i): RolesLookup with no provider: `all()` empty, `role("backend
 
 
 TEST-TODO (AR-3a): FirstTurnProvidersTest: two providers + a throwing one on a ticket-bound first turn -> sections joined in registration order by `---`, throwing/blank skipped, unbound session unchanged.
+
+TEST-TODO (AR-3b): TicketBindingPolicy: twin() same ticket / same agent with a ticket -> refusal text "start refused: session X already runs ticket T ..." (unchanged); ticketless sessions of one agent not restricted; deadlineMs(binding) = ticket deadline, null binding = null (generic deadline); lockHeld false when gate lock throws. Pre-existing/unrelated failure seen: BacklogLaneE2eTest (role:backend "valid role ids:" empty, roles plugin).

@@ -12,7 +12,7 @@ import kotlin.test.assertTrue
 class TicketIdleCommentTest {
     private class Rig(enabled: Boolean = true) {
         var now = System.currentTimeMillis() + 1_000
-        val manager = SessionManager(FakeAgentProvider(), ScriptedRunner(autoExit = true), tempSessionStore(), killGraceMs = 50)
+        val manager = SessionManager(FakeAgentProvider(), ScriptedRunner(autoExit = true), tempSessionStore(), killGraceMs = 50, bindingPolicy = com.superiorsoftllc.agenthq.daemon.plugins.TicketBindingPolicy())
         val mailbox = Mailbox(MemMailStore(), MailLimits(), clock = { now })
         val sent = mutableListOf<MailSendRequest>()
         val posted = mutableListOf<String>()

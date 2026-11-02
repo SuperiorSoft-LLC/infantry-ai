@@ -130,6 +130,7 @@ class TicketBoardTest {
             tempSessionStore(),
             killGraceMs = 50,
             defaultWorkingDir = dir,
+            bindingPolicy = com.superiorsoftllc.agenthq.daemon.plugins.TicketBindingPolicy(),
         )
         val profiles = AgentProfiles(store.agents, manager)
         val worker = profiles.save(AgentProfile(name = "Backend", role = "backend"))
@@ -191,7 +192,7 @@ class TicketBoardTest {
                 return real.writeTransaction(block)
             }
         }
-        val manager = SessionManager(FakeAgentProvider(), ScriptedRunner(autoExit = false), tempSessionStore(), killGraceMs = 50, defaultWorkingDir = dir)
+        val manager = SessionManager(FakeAgentProvider(), ScriptedRunner(autoExit = false), tempSessionStore(), killGraceMs = 50, defaultWorkingDir = dir, bindingPolicy = com.superiorsoftllc.agenthq.daemon.plugins.TicketBindingPolicy())
         val profiles = AgentProfiles(real.agents, manager)
         val worker = profiles.save(AgentProfile(name = "Backend", role = "backend"))
         val ids = ('a'..'z').map { it.toString() }.iterator()
@@ -234,7 +235,7 @@ class TicketBoardTest {
             // writes runs, so iterations sharing one SQLite file would race each other's transactions.
             val store = SqlAgentHqStore.open(File(dir, "race-$iteration.db").absolutePath).also { opened += it }
             val runner = ScriptedRunner(autoExit = false)
-            val manager = SessionManager(FakeAgentProvider(), runner, tempSessionStore(), killGraceMs = 50, defaultWorkingDir = dir)
+            val manager = SessionManager(FakeAgentProvider(), runner, tempSessionStore(), killGraceMs = 50, defaultWorkingDir = dir, bindingPolicy = com.superiorsoftllc.agenthq.daemon.plugins.TicketBindingPolicy())
             val profiles = AgentProfiles(store.agents, manager)
             val worker = profiles.save(AgentProfile(name = "Worker-$iteration", role = "backend"))
             val otherWorker = profiles.save(AgentProfile(name = "Other-$iteration", role = "backend"))
@@ -357,7 +358,7 @@ class TicketBoardTest {
     fun aRoleTriggerStartsATodoTicketAssignedToAProfileOfThatRole() {
         val store = openStore()
         val runner = ScriptedRunner(autoExit = false)
-        val manager = SessionManager(FakeAgentProvider(), runner, tempSessionStore(), killGraceMs = 50, defaultWorkingDir = dir)
+        val manager = SessionManager(FakeAgentProvider(), runner, tempSessionStore(), killGraceMs = 50, defaultWorkingDir = dir, bindingPolicy = com.superiorsoftllc.agenthq.daemon.plugins.TicketBindingPolicy())
         val profiles = AgentProfiles(store.agents, manager)
         val worker = profiles.save(AgentProfile(name = "Backend", role = "backend"))
         val ids = ('a'..'z').map { it.toString() }.iterator()
@@ -393,7 +394,7 @@ class TicketBoardTest {
     ): Ticket {
         val store = openStore()
         val runner = ScriptedRunner(autoExit = false, emitSessionId = providerSession)
-        val manager = SessionManager(FakeAgentProvider(), runner, tempSessionStore(), killGraceMs = 50, defaultWorkingDir = dir)
+        val manager = SessionManager(FakeAgentProvider(), runner, tempSessionStore(), killGraceMs = 50, defaultWorkingDir = dir, bindingPolicy = com.superiorsoftllc.agenthq.daemon.plugins.TicketBindingPolicy())
         val profiles = AgentProfiles(store.agents, manager)
         val worker = profiles.save(AgentProfile(name = "Backend", role = "backend"))
         val ids = ('a'..'z').map { it.toString() }.iterator()
@@ -503,6 +504,7 @@ class TicketBoardTest {
             tempSessionStore(),
             killGraceMs = 50,
             defaultWorkingDir = projectFolder,
+            bindingPolicy = com.superiorsoftllc.agenthq.daemon.plugins.TicketBindingPolicy(),
         )
         val profiles = AgentProfiles(store.agents, manager)
         val worker = profiles.save(AgentProfile(name = "Backend", role = "backend"))
@@ -617,6 +619,7 @@ class TicketBoardTest {
             tempSessionStore(),
             killGraceMs = 50,
             defaultWorkingDir = daemonDir,
+            bindingPolicy = com.superiorsoftllc.agenthq.daemon.plugins.TicketBindingPolicy(),
         )
         val profiles = AgentProfiles(store.agents, manager)
         val worker = profiles.save(AgentProfile(name = "Backend", role = "backend"))

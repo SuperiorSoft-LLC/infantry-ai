@@ -816,6 +816,7 @@ class AgentHqDaemon(
                 sessionStore,
                 worktrees = worktrees,
                 childEnv = childEnv,
+                bindingPolicy = com.superiorsoftllc.agenthq.daemon.plugins.TicketBindingPolicy(),
                 additionalProviders = additionalProviders,
                 cliRunner = sandboxed(cliRunner),
                 lineRunner = sandboxed(com.superiorsoftllc.agenthq.runner.PipedProcessRunner()),
@@ -951,8 +952,8 @@ class AgentHqDaemon(
                 runner = object : com.superiorsoftllc.agenthq.daemon.api.orchestrator.RunnerLink { override fun ticketIdOf(sessionId: String): String? = manager.get(sessionId)?.ticketId },
             )
             val orchestratorLink: com.superiorsoftllc.agenthq.daemon.api.orchestrator.OrchestratorLink = orchestratorHub.link
-            manager.launchGate = { providerId, origin, ticketId ->
-                when (val v = orchestratorLink.launchDecision(providerId, origin == LaunchOrigin.UNATTENDED, ticketId).valueOr(com.superiorsoftllc.agenthq.daemon.api.orchestrator.LaunchVerdict.Allow)) {
+            manager.launchGate = { providerId, origin, binding ->
+                when (val v = orchestratorLink.launchDecision(providerId, origin == LaunchOrigin.UNATTENDED, binding?.id).valueOr(com.superiorsoftllc.agenthq.daemon.api.orchestrator.LaunchVerdict.Allow)) {
                     com.superiorsoftllc.agenthq.daemon.api.orchestrator.LaunchVerdict.Allow -> GateDecision.Allow
                     else -> when (v.kind) {
                         com.superiorsoftllc.agenthq.daemon.api.orchestrator.LaunchVerdict.WARN -> GateDecision.Warn(v.reason)
@@ -1095,11 +1096,11 @@ class AgentHqDaemon(
             val relatedRef = java.util.concurrent.atomic.AtomicReference(com.superiorsoftllc.agenthq.ticketfiles.RelatedWorkSource.NONE)
             val relatedDescriptionRef = java.util.concurrent.atomic.AtomicReference(com.superiorsoftllc.agenthq.ticketfiles.RelatedDescription.NONE)
             // P10-K13: the effective skill ids each bound spawn freezes on its instance (K-D9 / K-D11), read once, at spawn.
-            manager.skillsFor = { agentId, ticketId ->
+            manager.skillsFor = { agentId, binding ->
                 com.superiorsoftllc.agenthq.agents.SkillAttachment.effective(
                     agent = agentId?.let(agents::get),
                     project = com.superiorsoftllc.agenthq.agents.SkillAttachment.Project(settings.skillIds(), settings.includeSkillsContext()),
-                    ticket = ticketId?.let(store.tickets::get),
+                    ticket = binding?.id?.let(store.tickets::get),
                 )
             }
             // USAGE-PACE (1.119.0 read, 1.121.0 manual / override / rule): plan meters -> allowance of ticket workers.
@@ -1679,7 +1680,7 @@ class AgentHqDaemon(
             // A guest token present at start is checked now, so a bad one still stops the daemon starting.
             plugins.guestTokens().forEach { policy.guestDigestOf(it) }
             // AGENT-REGISTRY-1: a disabled agent starts no new session (no override = nothing refused), then the plugins' gates.
-            manager.spawnGate = { role, projectId -> agentRegistry.spawnRefusal(role) ?: plugins.spawnRefusal(role, projectId) }
+            manager.spawnGate = { role, projectId, _ -> agentRegistry.spawnRefusal(role) ?: plugins.spawnRefusal(role, projectId) }
             policies.attach(object : com.superiorsoftllc.agenthq.policy.PolicyRuntime.Extensions {
                 override fun presets() = plugins.presets()
                 override fun seatsClaimed() = plugins.seatsClaimed

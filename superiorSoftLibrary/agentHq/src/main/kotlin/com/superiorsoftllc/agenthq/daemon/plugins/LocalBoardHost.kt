@@ -207,7 +207,7 @@ class LocalBoardHost(
         }
 
         override fun launchGate(providerId: String?, origin: String, ticketId: String?): LaunchVerdict =
-            when (val d = sessionManager()?.launchCheck(providerId, origin(origin), ticketId)) {
+            when (val d = sessionManager()?.launchCheck(providerId, origin(origin), sessionManager()?.bindingPolicy?.bindingFor(ticketId))) {
                 is GateDecision.Refused -> LaunchVerdict(refusal = d.reason, disposition = d.disposition)
                 is GateDecision.Warn -> LaunchVerdict(warning = d.reason)
                 else -> LaunchVerdict()
@@ -285,7 +285,7 @@ class LocalBoardHost(
         override fun instanceFor(profileId: String?, role: String?) = agentProfiles?.instanceFor(profileId, role)?.toBoard()
         override fun withSkills(instance: BoardRoleInstance, ticketId: String?): BoardRoleInstance {
             val manager = sessionManager() ?: return instance
-            return manager.withSkills(instance.toCore(), ticketId).toBoard()
+            return manager.withSkills(instance.toCore(), manager.bindingPolicy.bindingFor(ticketId)).toBoard()
         }
 
         override fun roleKnown(role: String) = agentProfiles?.roleKnown(role) ?: false

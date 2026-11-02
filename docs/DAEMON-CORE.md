@@ -361,3 +361,5 @@ The Scripting plugin (not core) registers `agenthq_exec` and `agenthq_exec_statu
 
 
 **AR-3a (DaemonApi 1.35.0, additive):** `daemon.api.sessions.SessionBinding` (opaque id + kind + plain facts) and `FirstTurnContextProvider`. `SessionManager` keeps an ordered provider list (`addFirstTurnProvider`) and composes a bound session's first turn from it; the board registers the ticket brief as its provider (replaces `briefFor`). `SessionRecord` fields stay on the wire.
+
+**AR-3b (no DaemonApi change):** `session.SessionBindingPolicy` (generic: `bindingFor`, `twin`/`twinRefusal`, `deadlineMs`/`deadlineSetting`, `lockHeld`, `progressCount`; `None` binds nothing) is installed on `SessionManager(bindingPolicy = ...)`. The ticket rules (busy-twin one-agent-one-ticket + refusal text, ticket deadline, gate lock, PROGRESS-ALL commit counts) live in `daemon.plugins.TicketBindingPolicy`, installed by DaemonMain. The hooks take the binding: `spawnGate(role, projectId, binding)`, `launchGate(provider, origin, binding)`, `skillsFor(agentId, binding)`, `busyTwin(exceptId, agentId, binding)`. `SessionRecord` still carries `ticketId` and the worktree fields (wire unchanged).

@@ -71,10 +71,10 @@ class SkillAttachmentTest {
     // --- the freeze at spawn ------------------------------------------------------------------------------------
 
     private fun manager(instances: InMemorySessionInstances, tickets: Map<String, TicketRow>) =
-        SessionManager(FakeAgentProvider(), ScriptedRunner(autoExit = false), tempSessionStore(), killGraceMs = 50, instances = instances).apply {
+        SessionManager(FakeAgentProvider(), ScriptedRunner(autoExit = false), tempSessionStore(), killGraceMs = 50, instances = instances, bindingPolicy = com.superiorsoftllc.agenthq.daemon.plugins.TicketBindingPolicy()).apply {
             instanceFor = { agentId, role -> RoleInstance(agentId, role, "persona") }
-            skillsFor = { agentId, ticketId ->
-                SkillAttachment.effective(agentId?.let { if (it == agent.id) agent else null }, project, ticketId?.let(tickets::get))
+            skillsFor = { agentId, binding ->
+                SkillAttachment.effective(agentId?.let { if (it == agent.id) agent else null }, project, binding?.id?.let(tickets::get))
             }
         }
 

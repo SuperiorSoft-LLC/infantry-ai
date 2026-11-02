@@ -10,7 +10,7 @@ import kotlin.test.assertEquals
 /** AR-3a: the first turn is composed from an ordered provider list over the session's binding. */
 class FirstTurnProvidersTest {
     private val dir = Files.createTempDirectory("ft-providers").toFile()
-    private fun manager() = SessionManager(FakeAgentProvider(), ScriptedRunner(autoExit = false), tempSessionStore(), defaultWorkingDir = dir)
+    private fun manager() = SessionManager(FakeAgentProvider(), ScriptedRunner(autoExit = false), tempSessionStore(), defaultWorkingDir = dir, bindingPolicy = com.superiorsoftllc.agenthq.daemon.plugins.TicketBindingPolicy())
     private fun record(ticketId: String?) = SessionRecord(
         id = "s1", provider = "fake", workingDir = dir.path, spawnedAt = 0, lastHeartbeat = 0, state = SessionState.IDLE, ticketId = ticketId,
     )

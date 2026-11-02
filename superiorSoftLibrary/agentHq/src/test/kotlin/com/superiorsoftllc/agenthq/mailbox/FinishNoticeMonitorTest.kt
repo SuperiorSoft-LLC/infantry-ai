@@ -18,7 +18,7 @@ import kotlin.test.assertTrue
 class FinishNoticeMonitorTest {
     private class Rig(idleMinutes: Long = IDLE_MIN, exempt: Boolean = true, nudgeMinutes: Long? = null) {
         var now = System.currentTimeMillis() + 1_000
-        val manager = SessionManager(FakeAgentProvider(), ScriptedRunner(autoExit = true), tempSessionStore(), killGraceMs = 50)
+        val manager = SessionManager(FakeAgentProvider(), ScriptedRunner(autoExit = true), tempSessionStore(), killGraceMs = 50, bindingPolicy = com.superiorsoftllc.agenthq.daemon.plugins.TicketBindingPolicy())
         val mailbox = Mailbox(MemMailStore(), MailLimits(), clock = { now })
         val sent = mutableListOf<MailSendRequest>()
         val sessionId = manager.startNew("work", ticketId = "t1").id

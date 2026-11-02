@@ -39,9 +39,9 @@ class SessionSilentSweepTest {
     private fun manager(store: SessionStore = JsonSessionStore(File.createTempFile("silent", ".json").apply { delete() })) =
         SessionManager(
             provider = Prov, runner = Hang(), store = store, killGraceMs = 10, clock = now::get,
-            deadlineMs = 1_000 * min, stallMs = 1_000 * min, ticketDeadlineMs = 1_000 * min, watchdogPollMs = 1_000_000,
+            deadlineMs = 1_000 * min, stallMs = 1_000 * min, watchdogPollMs = 1_000_000,
             backgroundPollMs = 0, idleSweepMs = 0, silentMs = 20 * min, silentPollMs = 0,
-            pidProbe = { true }, gateLock = GateLock(dir = { null }),
+            pidProbe = { true }, bindingPolicy = com.superiorsoftllc.agenthq.daemon.plugins.TicketBindingPolicy(ticketDeadlineMs = 1_000 * min, gateLock = GateLock(dir = { null })),
         ).also { m -> m.silentSink = { s, mins -> flagged += s.id to mins } }
 
     @Test fun `a silent run with a live process is flagged once and never stopped`() {

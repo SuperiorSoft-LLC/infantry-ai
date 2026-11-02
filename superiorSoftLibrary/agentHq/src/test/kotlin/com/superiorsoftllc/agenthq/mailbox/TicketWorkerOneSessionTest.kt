@@ -33,7 +33,7 @@ class TicketWorkerOneSessionTest {
 
     /** The agent `fe`'s profile names harness `other`; every session here runs on the manager's `fake` provider. */
     private fun harness(runner: ScriptedRunner): Harness {
-        val manager = SessionManager(FakeAgentProvider(), runner, tempSessionStore(), killGraceMs = 50)
+        val manager = SessionManager(FakeAgentProvider(), runner, tempSessionStore(), killGraceMs = 50, bindingPolicy = com.superiorsoftllc.agenthq.daemon.plugins.TicketBindingPolicy())
         val mailbox = Mailbox(MemMailStore(), MailLimits())
         val repo = Repo().apply { save(AgentProfile(id = "fe", name = "Frontend", role = "frontend", provider = "other"), 0) }
         val binds = mutableListOf<String>()
