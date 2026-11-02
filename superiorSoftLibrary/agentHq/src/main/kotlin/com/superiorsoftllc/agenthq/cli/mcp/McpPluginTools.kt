@@ -38,6 +38,9 @@ internal class McpPluginTools(
     /** Tools whose schema has a `verbose` property (`detail: full` sets it). */
     private val verboseTools = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
 
+    /** Tools whose own schema declares `detail` (their own levels): the argument reaches the tool instead of being read here. */
+    private val ownDetailTools = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
     /** The daemon's plugin tools, as MCP descriptors (the daemon's bookkeeping keys stripped). */
     suspend fun descriptors(stream: FrameStream): JsonArray {
         val answer = stream.request(Envelope(PLUGIN_TOOLS), PLUGIN_TOOLS, PLUGIN_TOOLS, idempotent = true)
@@ -51,6 +54,7 @@ internal class McpPluginTools(
             val files = (d[LocalFiles.DESCRIPTOR_KEY] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
             if (name != null && !files.isNullOrEmpty()) localFiles[name] = files
             if (name != null && ((d["inputSchema"] as? JsonObject)?.get("properties") as? JsonObject)?.containsKey("verbose") == true) verboseTools.add(name)
+            if (name != null && ((d["inputSchema"] as? JsonObject)?.get("properties") as? JsonObject)?.containsKey("detail") == true) ownDetailTools.add(name)
             withDetail(JsonObject(d - setOf("module", "action", "timeoutMs", LocalFiles.DESCRIPTOR_KEY)))
         } })
     }
@@ -60,7 +64,7 @@ internal class McpPluginTools(
         val schema = d["inputSchema"] as? JsonObject ?: return d
         val props = schema["properties"] as? JsonObject ?: return d
         val extra = JsonObject(mapOf(
-            "detail" to JsonObject(mapOf("type" to JsonPrimitive("string"), "description" to JsonPrimitive("How much to send back: ack (tiny), summary (compact), full. Default: the tool's own, or setting limits.mcp.defaultDetail."))),
+            "detail" to (props["detail"] ?: JsonObject(mapOf("type" to JsonPrimitive("string"), "description" to JsonPrimitive("How much to send back: ack (tiny), summary (compact), full. Default: the tool's own, or setting limits.mcp.defaultDetail.")))),
             "maxChars" to JsonObject(mapOf("type" to JsonPrimitive("integer"), "description" to JsonPrimitive("Cut this call's result at this many characters (default: setting limits.mcp.maxResultChars)."))),
         ))
         return JsonObject(d + ("inputSchema" to JsonObject(schema + ("properties" to JsonObject(props + extra)))))
@@ -72,7 +76,7 @@ internal class McpPluginTools(
         val maxChars = (arguments["maxChars"] as? JsonPrimitive)?.longOrNull
         val bodyChars = LimitRegistry.fromEnv(LimitRegistry.MCP_BODY_CHARS, System::getenv)
         val withBody = if (name == "agenthq_read" && "bodyChars" !in arguments && bodyChars > 0) arguments + ("bodyChars" to JsonPrimitive(bodyChars)) else arguments
-        val bare = JsonObject(withBody - setOf("detail", "maxChars") + (if (detail == "full" && "verbose" !in arguments && name in verboseTools) mapOf("verbose" to JsonPrimitive(true)) else emptyMap()))
+        val bare = JsonObject(withBody - (if (name in ownDetailTools) setOf("maxChars") else setOf("detail", "maxChars")) + (if (detail == "full" && "verbose" !in arguments && name in verboseTools) mapOf("verbose" to JsonPrimitive(true)) else emptyMap()))
         val result = callTool(stream, name, bare)
         return if (maxChars != null) ToolResult(result.capped(maxChars), result.isError) else result
     }

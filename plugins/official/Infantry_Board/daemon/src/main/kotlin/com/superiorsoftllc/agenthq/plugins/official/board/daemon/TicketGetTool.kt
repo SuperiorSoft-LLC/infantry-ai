@@ -35,6 +35,10 @@ class TicketGetTool(private val api: DaemonApi, private val comments: TicketComm
                 put("type", "string")
                 put("description", "Full ticket id, or its 8-char suffix.")
             })
+            put("detail", buildJsonObject {
+                put("type", "string")
+                put("description", "summary = id, title, status, role, model, branch, epic, open comment count, first chars of the description (default; setting limits.ticket.getDefaultDetail); full = every field and the whole description.")
+            })
             put("related", ToolArgs.boolProp("true = keep the stored RELATED (auto) block in the description (default false; use agenthq_ticket_related_files)."))
         })
         put("required", buildJsonArray { add(JsonPrimitive("ticketId")) })
@@ -50,18 +54,29 @@ class TicketGetTool(private val api: DaemonApi, private val comments: TicketComm
         val requested = (call.arguments["ticketId"] as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
             ?: return ToolResult("$GET needs a ticketId", isError = true)
         val by = call.caller.copy(activeSession = call.clientSessionId ?: call.caller.activeSession)
+        val asked = (call.arguments["detail"] as? JsonPrimitive)?.contentOrNull?.trim()?.lowercase()
+        val full = when (asked) {
+            "full" -> true
+            "summary" -> false
+            else -> (api.settings.limit("limits.ticket.getDefaultDetail") ?: 0L) == 1L
+        }
         return when (val r = api.tickets.get(requested, by)) {
-            is BoardResult.Ok -> ToolResult(Json.encodeToString(JsonObject.serializer(), withComments(r.value, summary(r.value, ToolArgs.flag(call.arguments, "related")))))
+            is BoardResult.Ok -> {
+                val chars = (api.settings.limit("limits.ticket.summaryDescriptionChars") ?: DEFAULT_SUMMARY_CHARS.toLong()).toInt()
+                val base = if (full) summary(r.value, ToolArgs.flag(call.arguments, "related")) else compact(r.value, chars)
+                ToolResult(Json.encodeToString(JsonObject.serializer(), withComments(r.value, base, full)))
+            }
             is BoardResult.Refused -> ToolResult(r.text, isError = true)
             is BoardResult.Unavailable -> ToolResult("$GET is unavailable: ${r.reason}", isError = true)
         }
     }
 
     /** TICKET-COMMENTS-2: createdBy, the notify list, the open comment count, the latest open comment's first line and who was not reached. */
-    private fun withComments(ticket: TicketInfo, base: JsonObject): JsonObject {
+    private fun withComments(ticket: TicketInfo, base: JsonObject, full: Boolean = true): JsonObject {
         val c = comments ?: return base
-        val meta = c.meta(ticket.id)
         val sum = c.summary(ticket.id)
+        if (!full) return JsonObject(base + buildJsonObject { put("openComments", sum.open) })
+        val meta = c.meta(ticket.id)
         return JsonObject(base + buildJsonObject {
             put("createdBy", meta?.createdBy)
             put("notify", buildJsonArray { meta?.notify.orEmpty().forEach { add(JsonPrimitive(it)) } })
@@ -73,6 +88,20 @@ class TicketGetTool(private val api: DaemonApi, private val comments: TicketComm
 
     companion object {
         const val GET = "agenthq_ticket_get"
+        const val DEFAULT_SUMMARY_CHARS = 300
+
+        /** TICKET-COMPACT-1: the board-wide read: identity, status, routing and the description's first [chars] chars only. */
+        internal fun compact(ticket: TicketInfo, chars: Int) = buildJsonObject {
+            val body = stripRelated(ticket.description)
+            put("ticketId", ticket.id)
+            put("title", ticket.title)
+            put("status", ticket.status)
+            put("role", ticket.agentId?.takeIf { it.startsWith("role:") }?.removePrefix("role:"))
+            put("model", ticket.model)
+            put("branch", ticket.branch)
+            put("epicId", ticket.epicId)
+            put("description", if (chars <= 0 || body.length <= chars) body else body.take(chars) + "... [cut at $chars chars; detail=full for all]")
+        }
 
         private const val RELATED_BEGIN = "<!-- RELATED (auto) -->"
         private const val RELATED_END = "<!-- /RELATED -->"
