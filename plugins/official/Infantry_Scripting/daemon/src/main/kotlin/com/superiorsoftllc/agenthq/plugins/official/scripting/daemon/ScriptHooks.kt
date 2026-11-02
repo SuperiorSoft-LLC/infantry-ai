@@ -79,7 +79,10 @@ class ScriptHooks(
     fun onEvent(e: NamedEvent) {
         if (!enabled()) return
         if (!firstDelivery(e)) { log("hooks: event ${e.name} ${e.id} already handled, not re-run"); return }
-        executor { runCatching { dispatch(e) }.onFailure { log("hooks: event ${e.name} failed: ${it.javaClass.simpleName}: ${it.message?.take(200)}") } }
+        val job = { runCatching { dispatch(e) }.onFailure { log("hooks: event ${e.name} failed: ${it.javaClass.simpleName}: ${it.message?.take(200)}") }; Unit }
+        // START-FAST-1: the default executor is keyed by ticket: a slow hook of one ticket (the done flow, 20 s) no longer holds the next
+        // ticket's hooks (pin-check, kick) behind it; events of ONE ticket still run in publish order. Injected executors run as given.
+        if (executor === DEFAULT_EXECUTOR) Keyed.run(str(parse(e.payload), "ticketId") ?: "-", job) else executor(job)
     }
 
     /**
@@ -407,6 +410,19 @@ class ScriptHooks(
         /** SCRIPT-TICK-1: the internal event an `every <N>s` hook runs for (not published on the bus). */
         const val TIMER_EVENT = "timer.tick"
         private val pool by lazy { Executors.newSingleThreadExecutor { r -> Thread(r, "script-hooks").apply { isDaemon = true } } }
+        /** Serial per key, parallel across keys. */
+        private object Keyed {
+            private val cached = Executors.newCachedThreadPool { r -> Thread(r, "script-hooks").apply { isDaemon = true } }
+            private val tails = ConcurrentHashMap<String, java.util.concurrent.CompletableFuture<Void?>>()
+            fun run(key: String, job: () -> Unit) {
+                lateinit var mine: java.util.concurrent.CompletableFuture<Void?>
+                tails.compute(key) { _, prev ->
+                    mine = (prev ?: java.util.concurrent.CompletableFuture.completedFuture(null)).handleAsync({ _, _ -> runCatching { job() }; null }, cached)
+                    mine
+                }
+                mine.thenRun { tails.remove(key, mine) }
+            }
+        }
         val DEFAULT_EXECUTOR: (() -> Unit) -> Unit = { job -> pool.execute { runCatching { job() } } }
 
         fun matches(on: HookOn, eventName: String, payload: JsonObject): Boolean = when (on) {

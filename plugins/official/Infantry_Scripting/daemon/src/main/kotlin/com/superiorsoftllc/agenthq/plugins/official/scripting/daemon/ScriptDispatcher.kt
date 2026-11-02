@@ -116,7 +116,10 @@ class ScriptDispatcher(
             for (p in planned) {
                 // An action may say `_optional = true`: its failure is recorded (ok=false in input.results) but does not stop the run.
                 val optional = p.args[OPTIONAL] == true
+                val t0 = System.nanoTime()
                 val res = if (p.tool == PROGRESS) progress(p, optional, invoker, progressTo) else tools.invoke(p.tool, toObject(if (optional) p.args - OPTIONAL else p.args), invoker)
+                // START-FAST-1: per-action wall time in the run log, so a slow hook names its slow step.
+                logs += "timing ${p.tool} ${(System.nanoTime() - t0) / 1_000_000}ms"
                 records += p.copy(ok = !res.isError, text = res.text)
                 results += mapOf("name" to p.requested, "tool" to p.tool, "ok" to !res.isError, "text" to res.text, "json" to jsonOf(res.text))
                 if (res.isError && !optional) return RunReport("ACTION_FAILED", records, logs, phase, false, "action ${records.size} (${p.tool}) failed: ${res.text.take(300)}", records.size)
