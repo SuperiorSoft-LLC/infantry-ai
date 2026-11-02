@@ -77,6 +77,10 @@ class PluginGuard(
         }
         return try {
             Result.success(await(future, worker, what, timeoutMs)).also { consecutiveTimeouts.set(0) }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // BOARD-STALL-3: the caller gave up (its own timeout/cancel): drop the job so a queued one never runs later.
+            future.cancel(true)
+            throw e
         } catch (e: RunawayException) {
             future.cancel(true)
             disable(e.message ?: "$what ran away")

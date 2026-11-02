@@ -44,3 +44,22 @@ class PluginGuardStarvationTest {
         assertTrue(refused.isFailure && refused.exceptionOrNull()?.message?.contains("busy") == true)
     }
 }
+
+/** BOARD-STALL-3: a caller that gives up while its job is still queued must not leave the job to run later. */
+class PluginGuardAbandonedJobTest {
+    @Test
+    fun `a queued call whose caller timed out never runs`() = runBlocking {
+        val latch = CountDownLatch(1)
+        val ran = java.util.concurrent.atomic.AtomicInteger()
+        val g = PluginGuard("Board", null, 60_000, {}, hangCeilingMs = 60_000, poolSize = 1, queueLimit = 10)
+        val blocker = async(Dispatchers.IO) { g.callSuspending("blocker", 60_000) { latch.await(); 1 } }
+        kotlinx.coroutines.delay(200)
+        val abandoned = withTimeoutOrNull(300) { g.callSuspending("list", 60_000) { ran.incrementAndGet() } }
+        latch.countDown()
+        blocker.await()
+        kotlinx.coroutines.delay(300)
+        g.shutdown()
+        assertEquals(null, abandoned)
+        assertEquals(0, ran.get(), "the abandoned queued job ran after its caller timed out")
+    }
+}
