@@ -1308,6 +1308,11 @@ class AgentHqDaemon(
             )
             // Tells a ticket's starter when its worker's run ends, so a silent or crashed worker never stalls the pipeline.
             // Ticket ef3356ae: a clean end of turn is waiting, not failing; one calm note after limits.watchdog.idleNoticeMinutes.
+            // NUDGE-SCRIPT-1: built-in nudges emit a named event; those listed in `nudges.deferToHooks` are left to script hooks.
+            val nudgeGate = com.superiorsoftllc.agenthq.mailbox.NudgeGate(
+                emit = { name, payload -> pluginHost.get().namedEvents.publish(name, kotlinx.serialization.json.JsonObject(payload.mapValues { kotlinx.serialization.json.JsonPrimitive(it.value) }).toString(), "daemon") },
+                defers = { name -> name in settings.nudgeDefer() },
+            )
             val finishNotice = com.superiorsoftllc.agenthq.mailbox.FinishNoticeMonitor(
                 sessions = manager, mailbox = mailbox, send = mail::send,
                 ticketOf = { id -> store.transaction { store.tickets.get(id) } },
@@ -1316,6 +1321,7 @@ class AgentHqDaemon(
                 exemptWhenDone = { settings.limit(LimitRegistry.WATCH_EXEMPT_WHEN_TICKET_DONE) != 0L },
                 reports = { pluginHost.get().serviceRegistry.find(com.superiorsoftllc.agenthq.daemon.api.tickets.TicketReports::class) },
                 idleComment = { settings.limit(LimitRegistry.IDLE_COMMENT) != 0L },
+                gate = nudgeGate,
             ).also { it.start() }
             // STALL-4: the watch's recipient rule (`watch.escalateTo`): `starter` = the ticket's starter session, else the
             // user through the UI; `user` = always the user; `none` = nobody. No role is assumed to exist.
@@ -1346,6 +1352,7 @@ class AgentHqDaemon(
             // BG-NOTIFY (ticket 245a7d31): `bg run --notify` jobs mail their session on exit / pattern / timeout, waking it.
             val bgNotifier = com.superiorsoftllc.agenthq.mailbox.BgJobNotifier(
                 jobs = { manager.list().flatMap { r -> r.bgJobs.map { r.id to it } } },
+                gate = nudgeGate,
                 send = watchSend,
                 defaultTailLines = { settings.limit(LimitRegistry.BG_NOTIFY_TAIL_LINES).toInt() },
                 defaultTimeoutMs = { LimitRegistry.minutesMs(settings.limit(LimitRegistry.BG_NOTIFY_TIMEOUT_MINUTES), LimitRegistry.BG_NOTIFY_TIMEOUT_MINUTES) },
@@ -1373,6 +1380,7 @@ class AgentHqDaemon(
             // STALL-1 item 5: idle or BUSY-but-silent ticket workers are nudged and their PM told; no model call, no kill.
             val stallDetector = com.superiorsoftllc.agenthq.mailbox.StallDetector(
                 sessions = manager, send = watchSend,
+                gate = nudgeGate,
                 ticketInProgress = { id -> store.transaction { store.tickets.get(id) }?.status == com.superiorsoftllc.agenthq.protocol.TicketStatus.IN_PROGRESS },
                 deliberateWait = { s ->
                     mailbox.waiting().any { it.session == s.id } ||

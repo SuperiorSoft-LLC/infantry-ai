@@ -47,6 +47,8 @@ class BgJobNotifier(
     private val defaultTimeoutMs: () -> Long,
     private val patternGraceMs: () -> Long,
     private val clock: () -> Long = System::currentTimeMillis,
+    /** NUDGE-SCRIPT-1: a job-end notice (KIND_END) first goes through the gate. */
+    private val gate: NudgeGate = NudgeGate.NONE,
     /** No new output for this long = one QUIET notice; [Long.MAX_VALUE] = never. */
     private val quietMs: () -> Long = { 5 * 60_000L },
     /** The heartbeat interval stops growing here; the first beat at it is also told to [recipientOf]. */
@@ -147,6 +149,7 @@ class BgJobNotifier(
             if (kind == KIND_EOF && finished.containsKey(job.id)) return
             if (kind != null && !sentKinds.computeIfAbsent(job.id) { ConcurrentHashMap.newKeySet() }.add(kind)) return
         }
+        if (kind == KIND_END && gate.handled(NudgeGate.BG_DONE, mapOf("sessionId" to sessionId, "jobId" to job.id, "label" to job.label, "subject" to req.subject, "text" to req.body))) return
         meter()
         send(req)
     }

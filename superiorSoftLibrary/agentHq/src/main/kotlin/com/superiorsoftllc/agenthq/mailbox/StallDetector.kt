@@ -38,6 +38,8 @@ class StallDetector(
     /** STALL-4: who gets the one line (the daemon's recipient rule, [WatchNotices.USER] = the user); null = nobody. */
     private val recipientOf: (SessionRecord) -> String?,
     private val clock: () -> Long = System::currentTimeMillis,
+    /** NUDGE-SCRIPT-1 */
+    private val gate: NudgeGate = NudgeGate.NONE,
     /** STALL-3: `limits.watch.foregroundStallMinutes` (10); [Long.MAX_VALUE] = never. */
     private val foregroundStallMs: () -> Long = { Long.MAX_VALUE },
     /** STALL-5: `limits.watch.exemptWhenTicketDone` (1); off = a done ticket or a delivered final report is watched like any other. */
@@ -133,6 +135,7 @@ class StallDetector(
 
     private fun nudge(s: SessionRecord, key: String, subject: String, body: String, line: String) {
         WatchMeter.stall()
+        if (gate.handled(NudgeGate.WORKER_STALLED, mapOf("sessionId" to s.id, "key" to key, "subject" to subject, "line" to line))) { println("[agentHq] stall detector: ${s.id} $key (left to hooks)"); return }
         send(MailSendRequest(from = FinishNoticeMonitor.SYSTEM, to = s.id, subject = subject, threadId = "stall:${s.id}", body = body + "\n"))
         runCatching { recipientOf(s) }.getOrNull()?.takeIf { it != s.id }?.let { to ->
             send(MailSendRequest(from = FinishNoticeMonitor.SYSTEM, to = to, subject = "[AUTOMATIC] $line".take(200), threadId = "stall:${s.id}:watch", body = line + "\n"))
