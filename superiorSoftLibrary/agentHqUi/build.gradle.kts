@@ -356,6 +356,8 @@ val uiTestState = layout.buildDirectory.dir("test-state-dir").get().asFile
 val forkAgentJar = project(":superiorSoftLibrary:agentHq").layout.buildDirectory.file("testForkAgent/agenthq-test-fork-agent.jar")
 tasks.withType<Test>().matching { it.name in setOf("test", "testFast", "testSlow", "testOfficialJars") }.configureEach {
     dependsOn(":superiorSoftLibrary:agentHq:testForkAgentJar")
+    dependsOn(":daemon-plugin-official-Infantry_Chat:jar")
+    dependsOn(":daemon-plugin-official-Infantry_Board:jar") // TICKET-IMAGES-UI-TEST-1: TicketImagesUiTest loads the board daemon jar
     inputs.file(forkAgentJar).withPropertyName("testForkAgent").withNormalizer(ClasspathNormalizer::class.java)
     systemProperty("AGENTHQ_STATE_DIR", uiTestState.absolutePath)
     jvmArgs("-Djava.io.tmpdir=${uiTestTmp.absolutePath}")
