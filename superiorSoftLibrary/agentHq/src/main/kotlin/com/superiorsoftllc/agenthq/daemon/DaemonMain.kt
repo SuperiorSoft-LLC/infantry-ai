@@ -624,7 +624,7 @@ class AgentHqDaemon(
             podSpawnCap: Int? = null,
             podSpawnDepth: Int? = null,
             /** U1 (contract 1.59.0): the plan-limit meters; `AGENTHQ_LIMITS_LIVE=false` turns the live HTTP reads off. */
-            limits: LimitService = LimitService.fromEnv(),
+            limits: LimitService = LimitService.fromEnv(extraSources = { harnesses.limitSources() }),
             /**
              * E1-a: the `stories.json` folded into the ticket board at startup ([StoryMigration]); null = no migration.
              * Only [fromEnv] (the real daemon) passes the state dir's file, so a test never migrates the operator's state.
@@ -999,6 +999,7 @@ class AgentHqDaemon(
             val projectStore = ProjectStore(persistence = SqlProjectPersistence((store as SqlAgentHqStore).database))
             projectStore.laneDefault = { settings.limitCap(LimitRegistry.LANE_DEFAULT) }
             // EXPERIMENTS-1: the pi tool bridge (off unless the project setting or the env override says on). Removing it = this line.
+            sessionStats.pluginStats = harnesses::statsSource // HARNESS H5d: plugin harness rows, no harness branch in the service
             com.superiorsoftllc.agenthq.experiments.pitoolbridge.PiToolBridgeRegistration.register({ sandboxConfig().enabled || projectStore.experimentOn(it, "piToolBridge") }, sessionStats)
             // TODO-PROGRESS-1: every pi session loads the daemon's `todowrite` extension (pi has no to-do tool of its own).
             // STALL-2: and the watch hook extension (`tool_call` -> the watched runner) when the session's watch is on.

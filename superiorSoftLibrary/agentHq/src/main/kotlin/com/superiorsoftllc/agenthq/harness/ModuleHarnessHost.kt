@@ -100,6 +100,9 @@ class ModuleHarnessHost(
         else -> true
     }
 
+    /** H5c / H5d: true when hook [kind] is declared AND granted (logs the refusal otherwise); used by the daemon-side contribution adapters. */
+    fun hookAllowed(kind: String): Boolean = hook(kind)
+
     override fun mcpLaunch(sessionEnv: Map<String, String>): HarnessProcess? = if (hook("mcp")) services.mcpLaunch(sessionEnv) else null
 
     override fun watchLauncher(sessionEnv: Map<String, String>): String? = if (hook("watch")) services.watchLauncher(sessionEnv) else null

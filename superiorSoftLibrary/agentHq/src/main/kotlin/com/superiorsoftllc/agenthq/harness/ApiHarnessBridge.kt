@@ -56,7 +56,7 @@ class ApiHarnessPluginBridge(
         api.register(object : ApiRegistrar {
             override val host: HarnessHost get() = this@ApiHarnessPluginBridge.host
             override fun register(harness: ApiHarness) {
-                val adapted = ApiCliHarness(id, harness, runner, onFailure)
+                val adapted = ApiCliHarness(id, harness, runner, onFailure, hookAllowed = { kind -> (host as? ModuleHarnessHost)?.hookAllowed(kind) ?: false })
                 check(declaredIds == null || adapted.id in declaredIds) { "registers harness '${adapted.id.take(40)}', which module.json harness.ids does not declare (${declaredIds.orEmpty().sorted()})" }
                 registered += adapted.id
                 registrar.register(adapted)
@@ -76,7 +76,10 @@ class ApiCliHarness(
     val pluginId: String,
     val api: ApiHarness,
     runner: ProcessRunner,
-    onFailure: (PluginFailure) -> Unit,
+    private val onFailure: (PluginFailure) -> Unit,
+    /** H5c / H5d: whether hook [kind] is declared and granted for this plugin's module; the default refuses (no host to ask). */
+    private val hookAllowed: (String) -> Boolean = { false },
+    private val usageTimeoutMs: Long = USAGE_TIMEOUT_MS,
 ) : CliHarness(
     runner,
     specFor = { request -> guarded(pluginId, onFailure) { api.process(request.toApi()) }.let { ProcessSpec(it.command, it.workingDir, it.env) } },
@@ -100,6 +103,32 @@ class ApiCliHarness(
             ?: if (HarnessCapability.EFFORT_SELECTION in capabilities) EffortCapability(EffortSupport.SUPPORTED, "the harness declares EFFORT_SELECTION")
             else EffortCapability.UNSUPPORTED
 
+    private val usageAdapter: com.superiorsoftllc.agenthq.usage.LimitSource? by lazy {
+        if (!hookAllowed("usage")) return@lazy null
+        val src = guarded(pluginId, onFailure) { api.usageSource() } ?: return@lazy null
+        PluginLimitSource(api.id, pluginId, src, usageTimeoutMs, onFailure)
+    }
+
+    private val statsAdapter: com.superiorsoftllc.agenthq.stats.PluginStatsSource? by lazy {
+        if (!hookAllowed("stats")) return@lazy null
+        val src = guarded(pluginId, onFailure) { api.stats() } ?: return@lazy null
+        com.superiorsoftllc.agenthq.stats.PluginStatsSource { psid ->
+            try {
+                src.read(psid)?.let {
+                    com.superiorsoftllc.agenthq.stats.PluginStatsRow(it.startedAt, it.endedAt, it.userPrompts, it.assistantTurns, it.toolUses, it.models, it.lastContextTokens, it.billedTokens, it.costTotal)
+                }
+            } catch (t: Throwable) {
+                onFailure(PluginFailure(pluginId, PluginFailurePhase.RUN, t)); null
+            }
+        }
+    }
+
+    /** H5d: the module's stats source behind the `harness.hook.stats` grant; a throw in `stats()` or `read` is attributed and yields no row. */
+    override fun statsSource(): com.superiorsoftllc.agenthq.stats.PluginStatsSource? = try { statsAdapter } catch (_: HarnessPluginCallException) { null }
+
+    /** H5c: the module's usage source behind the `harness.hook.usage` grant; a throwing `usageSource()` is attributed and contributes none. */
+    override fun limitSource(): com.superiorsoftllc.agenthq.usage.LimitSource? = try { usageAdapter } catch (_: HarnessPluginCallException) { null }
+
     private class GuardedTranslator(
         private val pluginId: String,
         private val inner: com.superiorsoftllc.agenthq.harness.api.HarnessTranslator,
@@ -120,6 +149,8 @@ class ApiCliHarness(
     }
 
     private companion object {
+        const val USAGE_TIMEOUT_MS = 10_000L
+
         fun <T> guarded(pluginId: String, onFailure: (PluginFailure) -> Unit, block: () -> T): T = try {
             block()
         } catch (t: Throwable) {
@@ -149,4 +180,43 @@ class ApiCliHarness(
             is ApiEvent.Denial -> if (tool.isBlank()) HarnessEvent.Error("harness plugin emitted a denial with no tool name") else HarnessEvent.Denial(tool, reason)
         }
     }
+}
+
+/**
+ * HARNESS H5c: a plugin's [com.superiorsoftllc.agenthq.harness.api.HarnessUsageSource] as a daemon `LimitSource`. The call runs on
+ * its own daemon thread and is bounded by [timeoutMs]; a throw or a timeout becomes `unknown` / `source_failed` for this harness
+ * only (never the other providers) and is reported to [onFailure] with the plugin's name. The plugin's reason text never reaches the wire.
+ */
+internal class PluginLimitSource(
+    override val provider: String,
+    private val pluginId: String,
+    private val source: com.superiorsoftllc.agenthq.harness.api.HarnessUsageSource,
+    private val timeoutMs: Long,
+    private val onFailure: (PluginFailure) -> Unit,
+) : com.superiorsoftllc.agenthq.usage.LimitSource {
+    override fun read(now: Long): com.superiorsoftllc.agenthq.usage.ProviderLimits {
+        val box = java.util.concurrent.atomic.AtomicReference<Result<com.superiorsoftllc.agenthq.harness.api.HarnessUsageReading>>()
+        val t = Thread({ box.set(runCatching { source.read(now) }) }, "agentHq-usage-$provider").apply { isDaemon = true; start() }
+        t.join(timeoutMs)
+        val result = box.get()
+        if (result == null) {
+            t.interrupt()
+            onFailure(PluginFailure(pluginId, PluginFailurePhase.RUN, IllegalStateException("usage source of $provider timed out after $timeoutMs ms")))
+            return failed(now)
+        }
+        val reading = result.getOrElse {
+            onFailure(PluginFailure(pluginId, PluginFailurePhase.RUN, it))
+            return failed(now)
+        }
+        val windows = reading.windows.map { w ->
+            com.superiorsoftllc.agenthq.daemon.api.usage.LimitWindow(
+                provider, w.label, w.windowMinutes, w.percent, w.resetsAt, now, "live",
+                com.superiorsoftllc.agenthq.usage.LimitPace.delta(w.percent, w.resetsAt, w.windowMinutes, now),
+            )
+        }
+        return if (windows.isEmpty()) com.superiorsoftllc.agenthq.usage.ProviderLimits.unknown(provider, now, com.superiorsoftllc.agenthq.usage.LimitReason.BAD_RESPONSE)
+        else com.superiorsoftllc.agenthq.usage.ProviderLimits(provider, "ok", windows, null, now)
+    }
+
+    private fun failed(now: Long) = com.superiorsoftllc.agenthq.usage.ProviderLimits.unknown(provider, now, com.superiorsoftllc.agenthq.usage.LimitReason.SOURCE_FAILED)
 }

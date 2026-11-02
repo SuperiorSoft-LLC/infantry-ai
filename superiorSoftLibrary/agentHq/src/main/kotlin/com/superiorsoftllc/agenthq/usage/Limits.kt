@@ -262,7 +262,10 @@ class LimitService(
     private val clock: () -> Long = System::currentTimeMillis,
     private val minIntervalMs: Long = DEFAULT_MIN_INTERVAL_MS,
     private val log: (String) -> Unit = { System.err.println(it) },
+    /** HARNESS H5c: usage sources contributed by harness plugins, read on every call (a module may load or unload). */
+    private val extraSources: () -> List<LimitSource> = { emptyList() },
 ) {
+    private fun allSources(): List<LimitSource> = sources + runCatching(extraSources).getOrDefault(emptyList())
     private var cached: List<ProviderLimits>? = null
     private var cachedAt = 0L
     /** One thread at most; it ends when idle (ticket 3b30398d: a daemon's limit service never kept a thread after it stopped). */
@@ -275,9 +278,9 @@ class LimitService(
     @Synchronized
     fun snapshot(force: Boolean = false): List<ProviderLimits> {
         val now = clock()
-        if (!liveEnabled()) return sources.map { ProviderLimits.unknown(it.provider, now, LimitReason.LIVE_SOURCES_OFF) }
+        if (!liveEnabled()) return allSources().map { ProviderLimits.unknown(it.provider, now, LimitReason.LIVE_SOURCES_OFF) }
         if (!force) cached?.let { if (now - cachedAt < minIntervalMs) return it }
-        val fresh = sources.map { s ->
+        val fresh = allSources().map { s ->
             runCatching { s.read(now) }.getOrElse { ProviderLimits.unknown(s.provider, now, LimitReason.SOURCE_FAILED) }
         }
         // The reason is a fixed code, never an exception message: nothing here can echo a credential.
@@ -294,7 +297,7 @@ class LimitService(
      */
     fun cachedOrRefresh(): List<ProviderLimits> {
         val now = clock()
-        if (!liveEnabled()) return sources.map { ProviderLimits.unknown(it.provider, now, LimitReason.LIVE_SOURCES_OFF) }
+        if (!liveEnabled()) return allSources().map { ProviderLimits.unknown(it.provider, now, LimitReason.LIVE_SOURCES_OFF) }
         val (last, at) = synchronized(this) { cached to cachedAt }
         if (last == null || now - at >= minIntervalMs) snapshotAsync {}
         return last ?: sources.map { ProviderLimits.unknown(it.provider, now, LimitReason.NOT_READ_YET) }
@@ -302,7 +305,7 @@ class LimitService(
 
     /** [snapshot] off the caller's thread (a live read can take 12 s per source), then [onReady]. */
     fun snapshotAsync(onReady: (List<ProviderLimits>) -> Unit) {
-        if (sources.isEmpty()) return
+        if (allSources().isEmpty()) return
         worker.execute { runCatching { onReady(snapshot()) } }
     }
 
@@ -318,7 +321,7 @@ class LimitService(
         fun liveFromEnv(env: (String) -> String? = InfantryEnv::get): Boolean =
             env(LIVE_ENV)?.trim()?.lowercase() !in setOf("false", "0", "off", "no")
 
-        fun fromEnv(env: (String) -> String? = InfantryEnv::get, http: LimitHttp = JdkLimitHttp): LimitService =
-            LimitService(listOf(ClaudeOAuthUsageSource(http), OpenCodeGoUsageSource(http)), liveEnabled = { liveFromEnv(env) })
+        fun fromEnv(env: (String) -> String? = InfantryEnv::get, http: LimitHttp = JdkLimitHttp, extraSources: () -> List<LimitSource> = { emptyList() }): LimitService =
+            LimitService(listOf(ClaudeOAuthUsageSource(http), OpenCodeGoUsageSource(http)), liveEnabled = { liveFromEnv(env) }, extraSources = extraSources)
     }
 }
