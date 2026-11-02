@@ -17,6 +17,13 @@ class LuaScriptEngineTest {
         assertEquals(QueuedAction("assign", mapOf("role" to "qa", "n" to 2L, "tags" to listOf("a", "b"))), r.actions.single())
     }
 
+    @Test fun numericLookingStringIdsStayStrings() {
+        val r = engine.run("""for _, id in ipairs({"39e65168", "1e5", "123"}) do ih.call("x", {id=id}) end; ih.call("y", {id=input.id, t=type(input.id)})""", mapOf("id" to "39e65168"), small)
+        assertEquals(ScriptOutcome.OK, r.outcome, r.error)
+        assertEquals(listOf("39e65168", "1e5", "123"), r.actions.take(3).map { it.args["id"] })
+        assertEquals(mapOf("id" to "39e65168", "t" to "string"), r.actions[3].args)
+    }
+
     @Test fun dangerousGlobalsAbsent() {
         val r = engine.run("""
             local bad = {}
