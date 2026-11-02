@@ -83,13 +83,26 @@ class ApiCliHarness(
     private val usageTimeoutMs: Long = USAGE_TIMEOUT_MS,
     /** H5e: the module's host (its launcher and its own state folder); null = none, so no watch contribution. */
     private val host: HarnessHost? = null,
+    /** H6b: lets the spec builder (passed to the super constructor) reach this instance's contributions. */
+    private val holder: java.util.concurrent.atomic.AtomicReference<ApiCliHarness?> = java.util.concurrent.atomic.AtomicReference(),
 ) : CliHarness(
     runner,
-    specFor = { request -> guarded(pluginId, onFailure) { api.process(request.toApi()) }.let { ProcessSpec(it.command, it.workingDir, it.env) } },
+    specFor = { request ->
+        guarded(pluginId, onFailure) { api.process(request.toApi()) }.let { p ->
+            // H6b: the harness's own watch and sandbox contributions, applied where its spec is built (the harness is known here, the runner's spec has no id).
+            val self = holder.get()
+            val base = ProcessSpec(p.command, p.workingDir, p.env)
+            val watched = if (self == null) base else base.let { b -> self.watchContribution(b.env)?.let { w -> b.copy(command = b.command + w.extraArgs, env = b.env + w.env) } ?: b }
+            val sb = p.workingDir?.let { self?.sandboxContribution(it) }
+            if (sb == null) watched else watched.copy(extraReadDirs = sb.readDirs.map { it.absolutePath }, extraWriteDirs = sb.writeDirs.map { it.absolutePath })
+        }
+    },
     translatorFactory = { GuardedTranslator(pluginId, guarded(pluginId, onFailure) { api.newTranslator() }, onFailure) },
     cliName = runCatching { api.id }.getOrDefault(pluginId),
 ) {
     override val id: String = api.id
+
+    init { holder.set(this) }
     override val capabilities: Set<HarnessCapability> =
         runCatching { api.capabilities }.getOrDefault(emptySet()).mapTo(LinkedHashSet()) { HarnessCapability.valueOf(it.name) }
 

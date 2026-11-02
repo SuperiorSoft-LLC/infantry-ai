@@ -189,6 +189,6 @@ class ManifestHarnessInstallTest {
         )
         assertEquals(setOf(".js"), tool.extraExtensions, "a .js bin is launchable as such")
         val pi = com.superiorsoftllc.agenthq.executables.CliTools.PI
-        assertEquals(HarnessPrefix.locations(e, pi.id, "C:\\t"), HarnessPrefix.locations(e, pi, "C:\\t"), "built-ins keep their table")
+        assertEquals(listOf(e.join("C:\\t", "node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js"), e.join("C:\\t", "pi.cmd")), HarnessPrefix.locations(e, pi, "C:\\t"), "built-ins carry their own prefixBin")
     }
 }
