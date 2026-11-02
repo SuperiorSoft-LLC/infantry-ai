@@ -18,11 +18,11 @@ class MailIncomingHookTest {
         override fun delete(id: String) = p.remove(id) != null
     }
 
-    private class H {
+    private class H(mode: String = "real") {
         val runner = ScriptedRunner(autoExit = true)
         val manager = SessionManager(FakeAgentProvider(), runner, tempSessionStore(), killGraceMs = 50)
         val mailbox = Mailbox(MemMailStore(), MailLimits(perSenderPerWindow = 1000))
-        val router = MailRouter(manager, mailbox, AgentProfiles(Repo(), manager), wakeMode = { _, _ -> "real" }, wakeDebounceMs = { 0L })
+        val router = MailRouter(manager, mailbox, AgentProfiles(Repo(), manager), wakeMode = { _, _ -> mode }, wakeDebounceMs = { 0L })
             .also { r -> manager.eventSink = { e -> r.onSessionEvent(e) } }
         val agent = manager.startNew("bootstrap")
         val turns get() = runner.processes.size
@@ -39,6 +39,16 @@ class MailIncomingHookTest {
         assertEquals(MessageState.READ, h.mailbox.message(sent.message.id)!!.state)
         assertEquals(h.agent.id, seen!!.recipientSessionId)
         assertEquals("routine", seen!!.message.body)
+    }
+
+    @Test
+    fun `MAIL-HANDLED-WAKE-1 a pump of the recipient while the hook runs does not deliver the mail the hook then handles`() {
+        val h = H("all")
+        h.router.onIncoming = { i -> h.router.pump(h.agent.id); h.router.pump(i.message.to); MailRouter.MailVerdictInfo(handled = true) }
+        val before = h.turns
+        val sent = h.router.send(MailSendRequest(from = "system", to = h.agent.id, subject = "[AUTOMATIC] done", body = "routine")) as MailResult.Sent
+        assertEquals(before, h.turns, "no wake")
+        assertEquals(MessageState.READ, h.mailbox.message(sent.message.id)!!.state)
     }
 
     @Test

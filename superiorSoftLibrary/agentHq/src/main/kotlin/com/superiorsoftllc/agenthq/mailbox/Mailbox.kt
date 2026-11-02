@@ -359,11 +359,16 @@ class Mailbox(
      *
      * Order across threads is by send time; within a thread [Message.seq] already orders it.
      */
+    /** MAIL-HANDLED-WAKE-1: ids a pre-delivery hook is still deciding; no pump may deliver or fold them meanwhile. */
+    private val held = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    fun hold(messageId: String) { held.add(messageId) }
+    fun release(messageId: String) { held.remove(messageId) }
+
     fun deliverQueued(recipient: String, delivery: MailDelivery) {
         while (true) {
             val queued = synchronized(lock) {
                 messages.values
-                    .filter { it.to == recipient && it.state == MessageState.QUEUED }
+                    .filter { it.to == recipient && it.state == MessageState.QUEUED && it.id !in held }
                     .sortedWith(compareBy({ it.sentAt }, { it.seq }))
             }
             // USAGE-REGRESS-1: only a message that may wake the recipient starts a delivery; the others stay QUEUED

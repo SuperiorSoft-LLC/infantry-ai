@@ -208,7 +208,9 @@ class MailRouter(
         if (result is MailResult.Sent) {
             runCatching { onSent?.invoke(result.message) }
             if (request.allowCrossProject) crossAllowed.add(result.message.id)
-            val verdict = incomingVerdict(result.message)
+            // MAIL-HANDLED-WAKE-1: while the hook decides, a pump (session rest, debounce, bound timer) must not hand this mail over.
+            mailbox.hold(result.message.id)
+            val verdict = try { incomingVerdict(result.message) } finally { mailbox.release(result.message.id) }
             if (verdict != null && verdict.handled) {
                 if (mailbox.markHandled(result.message.id) != null) {
                     // SCRIPT-VIS-1: a mail a hook handled saved the recipient a turn.
