@@ -157,6 +157,9 @@ interface Harness {
     /** HARNESS H5e (API 2.6.0): extra argv / env that route this harness's tool calls through the watched runner for a session with [env]; null = none. Isolated by the implementor. */
     fun watchContribution(env: Map<String, String>): PluginWatch? = null
 
+    /** HARNESS H5f (API 2.7.0): extra sandbox dirs / env names for a session in [worktree], already checked against the allowed roots; null = none. */
+    fun sandboxContribution(worktree: java.io.File): PluginSandbox? = null
+
     /** Implementors produce the event stream here. Must emit incrementally, never only at completion. */
     fun events(request: HarnessRequest): Flow<HarnessEvent>
 
@@ -175,3 +178,6 @@ interface Harness {
 
 /** HARNESS H5e: what a plugin harness adds to its launch so a watched session's tool calls run through the watched runner. */
 data class PluginWatch(val extraArgs: List<String> = emptyList(), val env: Map<String, String> = emptyMap())
+
+/** HARNESS H5f: a checked sandbox addition: every dir is canonical and under the module's data folder or the session worktree. */
+data class PluginSandbox(val readDirs: List<java.io.File> = emptyList(), val writeDirs: List<java.io.File> = emptyList(), val envNames: Set<String> = emptySet())

@@ -83,6 +83,10 @@ class HarnessRegistry(
         return spec.copy(command = spec.command + w.extraArgs, env = spec.env + w.env)
     }
 
+    /** HARNESS H5f: harness [harnessId]'s checked sandbox addition for a session in [worktree]; null when there is none or it was refused. */
+    fun sandboxFor(harnessId: String, worktree: java.io.File): PluginSandbox? =
+        runCatching { resolve(harnessId)?.sandboxContribution(worktree) }.getOrNull()
+
     fun pluginIds(): List<String> = synchronized(lock) { plugins.keys.toList() }
 
     fun resolve(harnessId: String): Harness? = synchronized(lock) {
