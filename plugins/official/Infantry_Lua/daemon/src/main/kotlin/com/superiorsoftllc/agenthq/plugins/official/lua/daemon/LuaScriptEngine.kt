@@ -183,6 +183,7 @@ class LuaScriptEngine : ScriptEngine {
         return when {
             v.isnil() -> null
             v.isboolean() -> v.toboolean()
+            v.type() == LuaValue.TSTRING -> v.tojstring()
             v.isnumber() -> v.todouble().let { if (it == Math.rint(it) && Math.abs(it) < 1e15) it.toLong() else it }
             v.isstring() -> v.tojstring()
             v.istable() -> {
