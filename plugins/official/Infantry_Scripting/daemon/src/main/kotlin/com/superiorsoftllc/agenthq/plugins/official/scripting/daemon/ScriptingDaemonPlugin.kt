@@ -43,7 +43,8 @@ class ScriptingDaemonPlugin : DaemonPlugin {
             val items = runLog.timelineItems().filter { wanted == null || (it["sessionId"] as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull == wanted }
             Frame(TIMELINE_ITEMS, kotlinx.serialization.json.JsonArray(items).toString(), frame.sessionId, frame.requestId)
         }
-        val tools = ScriptTools(api.tools, engines, store, limits, aliases, maxPhases, runLog)
+        val marks = AutomationMarks({ session, mark -> api.sessions.setAutomation(session, mark) })
+        val tools = ScriptTools(api.tools, engines, store, limits, aliases, maxPhases, runLog, marks)
         api.tools.register(runLog.tool())
         api.tools.register(tools.run)
         api.tools.register(tools.api)
@@ -57,7 +58,7 @@ class ScriptingDaemonPlugin : DaemonPlugin {
             guard = { HookSettings.guard { api.config(it) } }, enabled = { HookSettings.enabled { api.config(it) } },
             tip = { project, branch -> ScriptHooks.gitTip(File(api.files(project).absolutePath("x")).parentFile.parentFile, branch) },
             log = { api.log(it) }, runLog = runLog,
-            automation = { session, mark -> api.sessions.setAutomation(session, mark) },
+            automation = marks.setter,
         )
         // SCRIPT-VIS-1: why each session was woken (and mails a hook handled instead), from the daemon's session.woken event.
         wakeWatch = api.events.subscribe("session.woken") { e ->
@@ -77,7 +78,7 @@ class ScriptingDaemonPlugin : DaemonPlugin {
         // SCRIPT-CMD-1: the process bridge (off until scripting.exec.enabled).
         val exec = ExecTools(
             { api.config(it) }, { project -> runCatching { File(api.files(project).absolutePath("x")).parentFile.parentFile }.getOrNull() },
-            { name, payload -> api.events.publish(name, payload) }, { api.log(it) },
+            { name, payload -> api.events.publish(name, payload) }, { api.log(it) }, marks,
         )
         api.tools.register(exec.exec)
         api.tools.register(exec.status)

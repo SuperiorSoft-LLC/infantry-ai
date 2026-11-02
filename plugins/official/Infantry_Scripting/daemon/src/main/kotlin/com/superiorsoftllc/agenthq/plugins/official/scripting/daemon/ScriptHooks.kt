@@ -298,6 +298,7 @@ class ScriptHooks(
 
     private fun execute(project: String, hook: Hook, e: NamedEvent, ticketId: String?, args: Map<String, Any?>, run: Run) {
         var markedSession: String? = null
+        var hookTo: String? = null
         try {
             val script = try { scripts.read(project, hook.script) } catch (ex: IllegalArgumentException) { return fail(project, hook, ticketId, "script name refused: ${ex.message}") }
                 ?: return fail(project, hook, ticketId, "no script '${hook.script}' in .agenthq/scripts/")
@@ -306,6 +307,7 @@ class ScriptHooks(
             val who = ScriptCaller(hook.ownerSession.orEmpty(), hook.ownerRole.orEmpty())
             markedSession = (args["workerSession"] ?: args["sessionId"]) as? String
             markedSession?.let { mark(it, hook) }
+            hookTo = hook.to?.takeIf { it != markedSession }?.also { mark(it, hook) }
             val report = dispatcher.run(engine, script.source, args, limits(), who, invoker, false, progressTo = hook.to) { planned ->
                 run.touchedAt = clock()
                 planned.forEach { a -> flatten(a.args).forEach { run.touched += it } }
@@ -319,6 +321,7 @@ class ScriptHooks(
             fail(project, hook, ticketId, "script crashed: ${t.javaClass.simpleName}: ${t.message?.take(300)}")
         } finally {
             markedSession?.let { unmark(it) }
+            hookTo?.let { unmark(it) }
             run.endedAt = clock()
         }
     }
