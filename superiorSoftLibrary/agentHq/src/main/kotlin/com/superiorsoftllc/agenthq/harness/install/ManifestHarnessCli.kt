@@ -22,9 +22,10 @@ object ManifestHarnessCli {
     fun builtInIds(): Set<String> = CliTools.KNOWN.map { it.id }.toSet() + HarnessInstaller.NPM.id
 
     /** Why [cli] may not be used; null = it may. */
-    fun refusal(cli: HarnessCliDeclaration): String? {
+    fun refusal(cli: HarnessCliDeclaration, allowBuiltIn: Boolean = false): String? {
         if (!CLI_ID.matches(cli.id)) return "harness.cli.id '${cli.id.take(40)}' must match ${CLI_ID.pattern}"
-        if (cli.id in builtInIds()) return "harness.cli.id '${cli.id}' is a built-in CLI of the daemon"
+        // H6c: a bundled/official module whose harness id IS the CLI id (the pi plugin) may name the CLI the daemon's table already holds: the table's entry resolves it.
+        if (!allowBuiltIn && cli.id in builtInIds()) return "harness.cli.id '${cli.id}' is a built-in CLI of the daemon"
         cli.command?.let { if (!COMMAND.matches(it)) return "harness.cli.command '${it.take(40)}' must be a bare command name (${COMMAND.pattern}), not a path" }
         val install = cli.install ?: return null
         val npm = install.npm ?: return if (install.bin != null) "harness.cli.install.bin without harness.cli.install.npm" else null

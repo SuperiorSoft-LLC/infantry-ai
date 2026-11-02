@@ -1,0 +1,17 @@
+{
+  "name": "Infantry_Pi",
+  "version": "1.0.0",
+  "apiVersion": 2,
+  "author": "Infantry AI",
+  "license": "NOASSERTION",
+  "tier": "official",
+  "description": "The pi coding agent harness (HARNESS H6c): launches pi (--mode json, or the persistent --mode rpc), reads its event stream, lists its models, routes its tool calls through the watched runner and carries the to-do extension.",
+  "harness": {
+    "jar": "harness/build/libs/Infantry_Pi-harness.jar",
+    "contract": "2.9.0",
+    "ids": ["pi"],
+    "cli": { "id": "pi", "command": "pi", "label": "Pi" },
+    "settings": [],
+    "hooks": ["watch", "sandbox", "session", "models"]
+  }
+}

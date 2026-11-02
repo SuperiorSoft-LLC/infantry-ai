@@ -1,6 +1,6 @@
 package com.superiorsoftllc.agenthq.experiments.pitoolbridge
 
-import com.superiorsoftllc.agenthq.harness.pi.PiLaunchExtras
+import com.superiorsoftllc.agenthq.harness.HarnessLaunchExtras
 import com.superiorsoftllc.agenthq.stats.SessionStatsService
 
 /**
@@ -10,7 +10,7 @@ import com.superiorsoftllc.agenthq.stats.SessionStatsService
 object PiToolBridgeRegistration {
     fun register(projectSwitch: (projectId: String?) -> Boolean, stats: SessionStatsService) {
         PiToolBridge.projectSwitch = projectSwitch
-        PiLaunchExtras.args = PiToolBridge::launchArgs
+        HarnessLaunchExtras.add("pi", PiToolBridge::launchArgs)
         stats.addTagger(PiToolBridge::tagOf)
     }
 }

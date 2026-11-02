@@ -27,8 +27,8 @@ object HarnessModulesWiring {
         HarnessHostServices(
             setting = { module, key -> daemonConfig.value(module, key) },
             resolveCli = { cliId, command ->
-                // H5a: the module's own manifest tool (its place in the installer's prefix included), else PATH.
-                val tool = modulesRef.get()?.cliTool(cliId) ?: CliTools.forCommand(cliId, cliId, command)
+                // H6c: the daemon's own table first (the pi plugin names its entry); H5a: else the module's own manifest tool (its place in the installer's prefix included), else PATH.
+                val tool = CliTools.KNOWN.firstOrNull { it.id == cliId } ?: modulesRef.get()?.cliTool(cliId) ?: CliTools.forCommand(cliId, cliId, command)
                 executableResolver.resolve(tool).path
             },
             mcpLaunch = { env -> AgentHqMcp.launch(env).let { HarnessProcess(it.argv, env = it.env) } },

@@ -26,6 +26,8 @@ internal class ApiSessionAdapter(
     private val pluginId: String,
     private val session: HarnessSession,
     private val onFailure: (PluginFailure) -> Unit,
+    /** H6c: the daemon's additions to the launched spec (watch, sandbox, launch extras) for a session with env `env`. */
+    private val decorate: (ProcessSpec, Map<String, String>) -> ProcessSpec = { spec, _ -> spec },
 ) : HarnessSessionAdapter {
     override val label: String = runCatching { session.label }.getOrDefault(harnessId)
     override val bootTimeoutMs: Long = runCatching { session.bootTimeoutMs }.getOrDefault(60_000L)
@@ -39,7 +41,7 @@ internal class ApiSessionAdapter(
         val process = Hosted()
         val out = Output(process, sink)
         process.connection = attributed { session.connect(out) }
-        process.start(runner, ProcessSpec(spec.command, spec.workingDir ?: request.workingDir, env + spec.env), sink)
+        process.start(runner, decorate(ProcessSpec(spec.command, spec.workingDir ?: request.workingDir, env + spec.env), env), sink)
         return process
     }
 

@@ -1,8 +1,6 @@
 package com.superiorsoftllc.agenthq.experiments.pitoolbridge
 
-import com.superiorsoftllc.agenthq.harness.ToolApproval
-import com.superiorsoftllc.agenthq.harness.pi.PiCommand
-import com.superiorsoftllc.agenthq.harness.pi.PiLaunchExtras
+import com.superiorsoftllc.agenthq.harness.HarnessLaunchExtras
 import com.superiorsoftllc.agenthq.stats.SessionStatsService
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -36,7 +34,7 @@ class PiToolBridgeTest {
 
     @AfterTest fun cleanup() {
         PiToolBridge.projectSwitch = { false }
-        PiLaunchExtras.args = { _, _ -> emptyList() }
+        HarnessLaunchExtras.clear("pi")
         dir.deleteRecursively()
     }
 
@@ -45,10 +43,7 @@ class PiToolBridgeTest {
         val args = PiToolBridge.launchArgs(dir, env())
         assertEquals(emptyList(), args)
         assertFalse(mcpFile.exists(), "off must not write a config file")
-        // The pi command line itself never carries MCP or trust args: the seam is only the extras.
-        val command = PiCommand.command(listOf("pi"), "m", null, rpc = true, toolApproval = ToolApproval.DENY)
-        assertTrue(command.none { it.contains("mcp", ignoreCase = true) || it == "--approve" }, command.toString())
-        assertEquals(emptyList(), PiLaunchExtras.args(dir, env()), "an unregistered seam adds nothing")
+        assertEquals(emptyList(), HarnessLaunchExtras.extras("pi", dir, env()), "an unregistered seam adds nothing")
     }
 
     @Test
@@ -104,8 +99,8 @@ class PiToolBridgeTest {
     fun registrationInstallsTheHooksAndNothingOutsideTheSwitch() {
         val stats = SessionStatsService(dir)
         PiToolBridgeRegistration.register({ it == "p1" }, stats)
-        assertEquals(listOf("--approve"), PiLaunchExtras.args(dir, env()))
-        assertEquals(emptyList(), PiLaunchExtras.args(dir, env().plus("AGENTHQ_PROJECT_ID" to "other")))
+        assertEquals(listOf("--approve"), HarnessLaunchExtras.extras("pi", dir, env()))
+        assertEquals(emptyList(), HarnessLaunchExtras.extras("pi", dir, env().plus("AGENTHQ_PROJECT_ID" to "other")))
     }
 
     @Test

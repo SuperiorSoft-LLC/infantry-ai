@@ -1,6 +1,5 @@
 package com.superiorsoftllc.agenthq.executables
 
-import com.superiorsoftllc.agenthq.harness.pi.PiCommand
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -152,8 +151,6 @@ class ExecutableResolverTest {
 
         val pi = ExecutableResolver(env).resolve(CliTools.PI)
         assertEquals(cliJs, pi.path, "the bundled cli.js comes before the .cmd shim")
-        assertEquals(listOf("node", cliJs), PiCommand.launcherFor(pi.path!!, node = { "node" }))
-        assertEquals(listOf("C:\\x\\pi.cmd"), PiCommand.launcherFor("C:\\x\\pi.cmd", node = { "node" }))
 
         val git = ExecutableResolver(env).resolve(CliTools.GIT)
         assertEquals("C:\\Program Files\\Git\\cmd\\git.exe", git.path)
@@ -221,19 +218,6 @@ class ExecutableResolverTest {
         assertTrue("/opt/homebrew/bin/node" in thrown.message.orEmpty(), "the failure lists the tried paths: ${thrown.message}")
     }
 
-    /** CLIPATH-2: Pi's `.js` entry point runs on the node the INSTALLED resolver picks, not on a bare `node`. */
-    @Test
-    fun piRunsItsCliJsOnTheResolvedNode() {
-        val restore = CliExecutables.install(
-            ExecutableResolver(linux("/opt/node/bin/node"), ExecutableOverrides.InMemory(mapOf("node" to "/opt/node/bin/node"))),
-        )
-        try {
-            assertEquals(listOf("/opt/node/bin/node", "/x/cli.js"), PiCommand.launcherFor("/x/cli.js"))
-            assertEquals(listOf("/x/pi"), PiCommand.launcherFor("/x/pi"), "a native pi needs no node")
-        } finally {
-            restore()
-        }
-    }
 
     @Test
     fun nodeIsListedInTheBuiltInTableAfterTheExistingTools() {

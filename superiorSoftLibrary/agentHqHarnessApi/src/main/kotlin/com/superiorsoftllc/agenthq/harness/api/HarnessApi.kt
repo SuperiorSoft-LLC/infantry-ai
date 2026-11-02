@@ -50,8 +50,11 @@ import java.io.File
  *
  * 2.8.0 (HARNESS H6a, additive): [Harness.session], a persistent line-protocol session (one process kept between turns, the daemon owns its lifecycle),
  * and [Harness.models], the harness's model listing. Need module.json `harness.hooks` "session" / "models" (and, for a community module, `harness.hook.session` / `harness.hook.models`).
+ *
+ * 2.9.0 (HARNESS H6c, additive): [HarnessEvent.Usage] carries the prompt-cache buckets ([HarnessEvent.Usage.cacheReadTokens] / [HarnessEvent.Usage.cacheWriteTokens],
+ * default 0; the old two-argument constructor stays), so a plugin that reads the provider's cache split (pi) does not lose it. `resolveCli("node")` answers for a module that declares a CLI.
  */
-const val HARNESS_API_VERSION: String = "2.8.0"
+const val HARNESS_API_VERSION: String = "2.9.0"
 
 /** What a harness jar ships: registers its harnesses, given the [HarnessHost] scoped to its module. */
 interface HarnessPlugin {
@@ -312,7 +315,14 @@ sealed interface HarnessEvent {
     data class ToolCall(val callId: String, val name: String, val arguments: String) : HarnessEvent
     data class ToolResult(val callId: String, val output: String, val isError: Boolean = false) : HarnessEvent
     data class Reasoning(val text: String) : HarnessEvent
-    data class Usage(val inputTokens: Long, val outputTokens: Long) : HarnessEvent
+    data class Usage @JvmOverloads constructor(
+        val inputTokens: Long,
+        val outputTokens: Long,
+        /** 2.9.0: prompt tokens read from the provider's cache (0 = none or not reported). */
+        val cacheReadTokens: Long = 0,
+        /** 2.9.0: prompt tokens written to the provider's cache (0 = none or not reported). */
+        val cacheWriteTokens: Long = 0,
+    ) : HarnessEvent
     data class Completion(val reason: String = "stop") : HarnessEvent
     data class Error(val message: String) : HarnessEvent
     /** 2.3.0: [tool] was refused by the harness (approval did not allow it); [reason] is the harness's own words, for logs. Not terminal. */

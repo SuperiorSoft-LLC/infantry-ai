@@ -1,28 +1,22 @@
 package com.superiorsoftllc.agenthq.daemon
 
-import com.superiorsoftllc.agenthq.harness.pi.PiHarness
-import com.superiorsoftllc.agenthq.harness.pi.PiLaunchExtras
-import com.superiorsoftllc.agenthq.harness.pi.PiTodoExtension
-import java.io.File
-
 /**
- * HARNESS H6b: the daemon's own implementations of the harness contributions (launch extras, watch, approval exemption),
- * registered in ONE place. DaemonMain names no harness; a harness id appears here only through its module's constant.
+ * HARNESS H6b / H6c: the daemon's own constants for harness contributions, in ONE place. DaemonMain names no harness. The pi harness is
+ * a module now (plugins/official/Infantry_Pi): its launch extras (to-do and watch extensions) and sandbox dir come from the plugin's own
+ * `session()` / `watch()` / `sandbox()` contributions, so nothing pi-specific is registered here any more; only ids as data remain.
  */
 object CoreHarnessContributions {
-    /** Harnesses whose usage the meter reads from their own session store, so no event translator applies. */
+    /** Harnesses whose usage the meter reads from their own session store, so no event translator applies (ids are data). */
     val meterReadsOwnStore: Set<String> = setOf(
         com.superiorsoftllc.agenthq.harness.claude.ClaudeHarness.HARNESS_ID,
-        PiHarness.HARNESS_ID,
+        com.superiorsoftllc.agenthq.stats.SessionStatsService.PI,
         com.superiorsoftllc.agenthq.stats.SessionStatsService.OPENCODE,
     )
 
-    fun register(stateDir: File) {
-        val dir = File(stateDir, PiHarness.HARNESS_ID)
-        val todo = PiTodoExtension.launchArgs(dir)
-        val watch = WatchHooks.piLaunchArgs(dir)
-        PiLaunchExtras.builtIn = { d, env -> todo(d, env) + watch(d, env) }
-        // The pi watch hook runs whatever the approval mode (pi has no approval prompt of its own).
-        WatchHooks.approvalExempt = setOf(PiHarness.HARNESS_ID)
+    /** Harnesses whose watch hook runs whatever the approval mode (pi has no approval prompt of its own). */
+    val watchApprovalExempt: Set<String> = setOf(com.superiorsoftllc.agenthq.stats.SessionStatsService.PI)
+
+    fun register() {
+        WatchHooks.approvalExempt = watchApprovalExempt
     }
 }

@@ -143,7 +143,6 @@ class SandboxPlan(
                 home.absolutePath,
                 executableDir(spec.command.firstOrNull()),
                 env("AGENTHQ_BIN"),
-                File(stateDir, "pi").absolutePath, // the daemon's pi extensions (todowrite)
                 File(stateDir, "harness-tools").absolutePath, // CLIs installed by `agenthq harness-install`
                 File(System.getProperty("java.io.tmpdir"), "agenthq-mcp").absolutePath, // claude --mcp-config files
             ) + spec.extraReadDirs
