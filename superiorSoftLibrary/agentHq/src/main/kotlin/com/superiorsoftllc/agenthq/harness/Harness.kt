@@ -160,6 +160,9 @@ interface Harness {
     /** HARNESS H5f (API 2.7.0): extra sandbox dirs / env names for a session in [worktree], already checked against the allowed roots; null = none. */
     fun sandboxContribution(worktree: java.io.File): PluginSandbox? = null
 
+    /** HARNESS H6a (API 2.8.0): this harness's own model listing for the `models` frame; null = none (the daemon then notes a free-text field). Isolated by the implementor. */
+    fun catalog(): com.superiorsoftllc.agenthq.provider.HarnessModelCatalog? = null
+
     /** Implementors produce the event stream here. Must emit incrementally, never only at completion. */
     fun events(request: HarnessRequest): Flow<HarnessEvent>
 

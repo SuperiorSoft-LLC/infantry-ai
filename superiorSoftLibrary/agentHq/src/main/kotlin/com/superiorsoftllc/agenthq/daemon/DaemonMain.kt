@@ -3918,7 +3918,7 @@ private fun modelCatalog(
     val covered = manager.providers.map { it.id }.toSet()
     // ROLE-FIRST S5: a descriptor harness's `models` section is its catalog, so it needs no Kotlin source.
     val rows = fromProviders + catalogs.rows(harnesses?.harnessIds().orEmpty(), covered) { id ->
-        (harnesses?.resolve(id) as? com.superiorsoftllc.agenthq.harness.descriptor.DescriptorHarness)?.modelCatalog
+        harnesses?.resolve(id)?.catalog()
     }
     // CLIPATH-1: a row whose CLI cannot be found says so (appended, so an existing note is kept), resolved once per id.
     val tools = cliTools(harnesses).associateBy { it.id }

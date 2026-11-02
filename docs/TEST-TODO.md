@@ -188,3 +188,8 @@ TEST-TODO: HarnessWatchContributionTest - a granted+declared watch contribution 
 
 ## H5f (Harness.sandbox, API 2.7.0)
 TEST-TODO: HarnessSandboxContributionTest - a granted+declared sandbox contribution with dirs under plugin-data/<Module>/ and the worktree is returned by HarnessRegistry.sandboxFor (canonical paths, env names kept); a dir outside (or ../ escape) refuses the whole contribution; AGENTHQ_* env name refused; ungranted/undeclared -> null; throwing sandbox -> null + attributed PluginFailure. Manual: real plugin harness with a sandbox contribution, check the agent sees only the dirs it asked for.
+
+## HARNESS H6a (ticket dfd2a49c): harness API 2.8.0 session + models contributions
+TEST-TODO:
+- Behaviour: a plugin's `Harness.session()` runs as the daemon's persistent session adapter, behind `harness.hook.session`; `Harness.models()` feeds the `models` frame, behind `harness.hook.models`. Class: HarnessSessionModelsContributionTest. Inputs: echo plugin with a fake runner. Expected: launch argv from the plugin, resume id absent from the fingerprint, stdout lines forwarded verbatim and to the connection, turnEnded/providerSession reach the sink; undeclared or ungranted hook gives no adapter / no catalog; models rows stamped with the harness id; a throw is attributed to the plugin.
+- Manual QA: with a real pi, open the model picker: pi's rows are the same as before (now served through `PiHarness.catalog()`); a pi session keeps one `--mode rpc` process between turns.

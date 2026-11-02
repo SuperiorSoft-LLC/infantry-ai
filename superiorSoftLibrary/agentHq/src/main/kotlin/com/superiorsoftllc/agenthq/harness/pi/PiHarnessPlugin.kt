@@ -32,6 +32,11 @@ class PiHarness(
 
     override fun sessionAdapter(): HarnessSessionAdapter? = sessionAdapter
 
+    /** H6a: one catalog per harness, so its TTL cache survives repeated `models` requests. */
+    private val modelCatalog = PiModelCatalog()
+
+    override fun catalog(): com.superiorsoftllc.agenthq.provider.HarnessModelCatalog? = modelCatalog
+
     /**
      * EFFORT-1: pi calls the reasoning effort "thinking" and takes `--thinking <level>` (off, minimal, low, medium, high, xhigh,
      * max) in both modes ([PiCommand]). Verified on pi 1.3.0: `pi --help` lists the flag and `pi --thinking low -p "say ok"` ran.

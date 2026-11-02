@@ -2,8 +2,6 @@ package com.superiorsoftllc.agenthq.provider
 
 import com.superiorsoftllc.agenthq.harness.claude.ClaudeHarness
 import com.superiorsoftllc.agenthq.harness.claude.ClaudeModelCatalog
-import com.superiorsoftllc.agenthq.harness.pi.PiHarness
-import com.superiorsoftllc.agenthq.harness.pi.PiModelCatalog
 import com.superiorsoftllc.agenthq.protocol.ProviderModels
 
 /**
@@ -58,7 +56,6 @@ class HarnessModelCatalogs(private val sources: Map<String, HarnessModelCatalog>
         fun builtIn(): HarnessModelCatalogs = HarnessModelCatalogs(
             mapOf(
                 ClaudeHarness.HARNESS_ID to ClaudeModelCatalog(),
-                PiHarness.HARNESS_ID to PiModelCatalog(),
             ),
         )
     }
