@@ -73,7 +73,7 @@ class TicketWorkerInvariantTest {
             if (event is SessionEvent.Turn) turns += event
             board.localHost?.publish(event)
         }
-        manager.briefFor = { board.brief(it.id) }
+        manager.addFirstTurnProvider { sessionId, _ -> board.brief(sessionId) }
         val ticket = board.save(TicketSave(title = "Add login", agentId = worker.id)).ticket
         return Rig(board, manager, runner, turns, ticket.id)
     }

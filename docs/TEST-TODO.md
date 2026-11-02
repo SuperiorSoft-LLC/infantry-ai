@@ -165,3 +165,6 @@ TEST-TODO:
 - Behaviour: user-portrait setting still refuses a bad image. Class: AvatarUploadsTest / settings. Inputs: non-PNG bytes. Expected: IllegalArgumentException "setting 'user_portrait': ...".
 
 TEST-TODO (AR-4b-i): RolesLookup with no provider: `all()` empty, `role("backend")` null, one stderr line; LocalRoles.record maps Role fields (incl. responseDetail/MaxChars/BodyChars) to RoleRecord. Pre-existing failures seen on this branch, unrelated: AgentRegistryLayerGuardTest (Infantry_Agents SpawnTools board imports), BuiltinToolsListGuardTest (agenthq_read).
+
+
+TEST-TODO (AR-3a): FirstTurnProvidersTest: two providers + a throwing one on a ticket-bound first turn -> sections joined in registration order by `---`, throwing/blank skipped, unbound session unchanged.

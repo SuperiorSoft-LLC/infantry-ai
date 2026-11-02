@@ -1031,18 +1031,32 @@ class SessionManager(
     }
 
     /**
-     * GAP-006b: the composed start brief of the ticket a session works on (wired to the board's own brief), or null.
-     * Read by [resumeHeld] for a first turn of a worker whose brief never landed.
+     * AR-3a: the first-turn context providers, in registration order. A layer above the core registers one (the board adds the
+     * ticket's start brief, GAP-006b); a session with no binding gets none. Read by [resumeHeld] for a first turn.
      */
-    @Volatile
-    var briefFor: ((SessionRecord) -> String?)? = null
+    private val firstTurnProviders = java.util.concurrent.CopyOnWriteArrayList<com.superiorsoftllc.agenthq.daemon.api.sessions.FirstTurnContextProvider>()
 
-    private fun withBrief(session: SessionRecord, prompt: String): String {
-        if (session.ticketId.isNullOrBlank()) return prompt
-        val brief = runCatching { briefFor?.invoke(session) }
-            .onFailure { System.err.println("[agentHq] brief for ${session.id} not composed: ${it.message}") }
-            .getOrNull()?.takeIf { it.isNotBlank() } ?: return prompt
-        return "$brief\n\n---\n\n$prompt"
+    fun addFirstTurnProvider(provider: com.superiorsoftllc.agenthq.daemon.api.sessions.FirstTurnContextProvider) {
+        firstTurnProviders += provider
+    }
+
+    /** The binding of [session]: today its ticket (the fields stay on the wire; re-homed later), null when it has none. */
+    private fun bindingOf(session: SessionRecord): com.superiorsoftllc.agenthq.daemon.api.sessions.SessionBinding? =
+        session.ticketId?.takeIf { it.isNotBlank() }?.let {
+            com.superiorsoftllc.agenthq.daemon.api.sessions.SessionBinding(id = it, kind = "ticket", facts = mapOf("ticketId" to it))
+        }
+
+    private val SEP = "\n\n---\n\n"
+
+    internal fun withBrief(session: SessionRecord, prompt: String): String {
+        val binding = bindingOf(session) ?: return prompt
+        val sections = firstTurnProviders.mapNotNull { p ->
+            runCatching { p.section(session.id, binding) }
+                .onFailure { System.err.println("[agentHq] first-turn section for ${session.id} not composed: ${it.message}") }
+                .getOrNull()?.takeIf { it.isNotBlank() }
+        }
+        if (sections.isEmpty()) return prompt
+        return sections.joinToString(SEP) + SEP + prompt
     }
 
     /**
