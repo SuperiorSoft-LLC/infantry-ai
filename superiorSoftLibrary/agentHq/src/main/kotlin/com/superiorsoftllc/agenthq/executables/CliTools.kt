@@ -46,6 +46,7 @@ object CliTools {
         label = "Claude Code",
         commandNames = listOf("claude"),
         envVar = "AGENTHQ_CLAUDE_EXE",
+        prefixBin = "node_modules/@anthropic-ai/claude-code/bin/claude.exe",
         defaults = { e ->
             val home = e.home()
             when (e.os) {
@@ -78,6 +79,7 @@ object CliTools {
         label = "OpenCode",
         commandNames = listOf("opencode"),
         envVar = "AGENTHQ_OPENCODE_EXE",
+        prefixBin = "node_modules/opencode-ai/bin/opencode.exe",
         defaults = { e ->
             val home = e.home()
             val installDir = e.env("OPENCODE_INSTALL_DIR")?.takeIf { it.isNotBlank() }
@@ -118,6 +120,7 @@ object CliTools {
         label = "Pi",
         commandNames = listOf("pi"),
         envVar = "AGENTHQ_PI_EXE",
+        prefixBin = PI_CLI_JS,
         extraExtensions = setOf(".js"),
         defaults = { e ->
             val home = e.home()

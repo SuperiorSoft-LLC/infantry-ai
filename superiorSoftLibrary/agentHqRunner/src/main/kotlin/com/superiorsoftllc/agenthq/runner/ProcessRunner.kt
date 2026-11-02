@@ -7,6 +7,9 @@ data class ProcessSpec(
     val command: List<String>,
     val workingDir: File? = null,
     val env: Map<String, String> = emptyMap(),
+    /** HARNESS H6b: sandbox additions a harness contributed (already checked by the daemon); read by [SandboxPlan] when the sandbox is on. */
+    val extraReadDirs: List<String> = emptyList(),
+    val extraWriteDirs: List<String> = emptyList(),
 )
 
 /**

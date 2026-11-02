@@ -145,6 +145,9 @@ object WatchHooks {
      */
     const val CLAUDE_POST = "claude-post"
 
+    /** Harness ids whose watch hook runs whatever the approval mode; registered by [CoreHarnessContributions]. */
+    @Volatile var approvalExempt: Set<String> = emptySet()
+
     /** tool_use_id -> our rewritten command, for [CLAUDE_POST]; bounded (a call whose post never comes ages out). */
     private val rewritten = object : LinkedHashMap<String, String>() {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?) = size > 512
@@ -189,7 +192,7 @@ object WatchHooks {
             Decision(out.toString(), r)
         } else {
             val shell = shellOf(root["tool"]?.str() ?: return Decision.none) ?: return Decision.none
-            if (harness != "pi" && approval != ToolApproval.ALLOW_ALL) return Decision.none
+            if (harness !in approvalExempt && approval != ToolApproval.ALLOW_ALL) return Decision.none
             val command = root["command"]?.str() ?: return Decision.none
             val bg = (root["background"] as? JsonPrimitive)?.booleanOrNull == true
             val r = WatchRewrite.rewrite(WatchRewrite.Request(command, shell, bg, harness, launcher, windows)) ?: return Decision.none

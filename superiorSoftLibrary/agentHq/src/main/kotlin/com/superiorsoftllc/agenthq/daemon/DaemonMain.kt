@@ -1003,11 +1003,7 @@ class AgentHqDaemon(
             com.superiorsoftllc.agenthq.experiments.pitoolbridge.PiToolBridgeRegistration.register({ sandboxConfig().enabled || projectStore.experimentOn(it, "piToolBridge") }, sessionStats)
             // TODO-PROGRESS-1: every pi session loads the daemon's `todowrite` extension (pi has no to-do tool of its own).
             // STALL-2: and the watch hook extension (`tool_call` -> the watched runner) when the session's watch is on.
-            run {
-                val todo = com.superiorsoftllc.agenthq.harness.pi.PiTodoExtension.launchArgs(File(stateDir(), "pi"))
-                val watch = WatchHooks.piLaunchArgs(File(stateDir(), "pi"))
-                com.superiorsoftllc.agenthq.harness.pi.PiLaunchExtras.builtIn = { dir, env -> todo(dir, env) + watch(dir, env) }
-            }
+            CoreHarnessContributions.register(stateDir())
             // STALL-2: the opencode watch plugin, named in every serve's inline config while its session's watch is on.
             // H2: it belongs to the opencode harness, so it is written only when opencode is present (no `opencode/` dir otherwise).
             val opencodePresent = (listOf(provider) + additionalProviders).any { it.id == "opencode" } || "opencode" in harnesses.harnessIds()
@@ -1394,7 +1390,7 @@ class AgentHqDaemon(
                 val push = com.superiorsoftllc.agenthq.usagemeter.PushDebounce { val f = Envelope(Envelope.USAGE_METER, m.reportJson()); for (c in clients) c.trySend(f) }
                 m.onRecorded = push::poke
                 // H5b: a plugin harness's Usage events (its stdout is in no format the meter reads) are charged too.
-                m.eventTranslatorFor = { rec -> if (rec.provider in setOf("claude", "pi", "opencode")) null else (harnesses.resolve(rec.provider) as? com.superiorsoftllc.agenthq.harness.CliHarness)?.newTranslator() }
+                m.eventTranslatorFor = { rec -> if (rec.provider in CoreHarnessContributions.meterReadsOwnStore) null else (harnesses.resolve(rec.provider) as? com.superiorsoftllc.agenthq.harness.CliHarness)?.newTranslator() }
             }
             // DP-5h-3b/3c: session events reach the board through the BoardSeam (a SwapFeed): events during a plugin attach /
             // reload are queued (drop-oldest, bounded), not lost. The board attaches to it below, once, before the host loads.

@@ -44,6 +44,11 @@ class SessionStatsService(private val home: File = File(System.getProperty("user
     /** HARNESS H5d: a plugin harness's stats source by harness id (the daemon points this at its registry); null = none. */
     @Volatile var pluginStats: (harnessId: String) -> PluginStatsSource? = { null }
 
+    /** Harnesses that keep a pi-layout session store (`<home>/<root>/agent/sessions`): harness id -> store root. Data, extended with [registerPiStore]. */
+    private val piStoreRoots = ConcurrentHashMap<String, String>(mapOf(PI to PI_ROOT, OMP to OMP_ROOT))
+
+    fun registerPiStore(harnessId: String, root: String) { piStoreRoots[harnessId] = root }
+
     private val paths = ConcurrentHashMap<String, File>()
     private val limitCache = ConcurrentHashMap<String, Pair<Long, Long?>>()
 
@@ -53,11 +58,10 @@ class SessionStatsService(private val home: File = File(System.getProperty("user
         return try {
             when (harness) {
                 CLAUDE -> resolve(harness, psid) { claudeFile(psid) }?.let { readClaude(it, base) }
-                PI -> resolve(harness, psid) { piFile(PI_ROOT, psid) }?.let { readPi(PI_ROOT, it, base) }
-                OMP -> resolve(harness, psid) { piFile(OMP_ROOT, psid) }?.let { readPi(OMP_ROOT, it, base) }
                 OPENCODE -> readOpenCode(psid, base)
                 // A harness id that is an OpenCode variant (`opencode-go`, ...) shares OpenCode's record.
-                else -> if (harness.startsWith("$OPENCODE-")) readOpenCode(psid, base) else pluginStats(harness)?.read(psid)?.let { base.withPlugin(it) }
+                else -> if (piStoreRoots.containsKey(harness)) piStoreRoots.getValue(harness).let { root -> resolve(harness, psid) { piFile(root, psid) }?.let { readPi(root, it, base) } }
+                else if (harness.startsWith("$OPENCODE-")) readOpenCode(psid, base) else pluginStats(harness)?.read(psid)?.let { base.withPlugin(it) }
             } ?: base
         } catch (e: Exception) {
             base
