@@ -39,7 +39,7 @@ class CommandSaveDaemonTest {
     }
 
     private fun launch(): DaemonFixture =
-        DaemonFixture.launch(repo = repoDir, commandsFile = file).also { fixtures += it; it.client.await(Envelope.READY) }
+        DaemonFixture.launch(repo = repoDir, commandsFile = file, pluginsRoot = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.boardRoot("official/Infantry_Run")).also { fixtures += it; it.client.await(Envelope.READY) }
 
     private fun save(id: String, cwd: String? = "sub", argv: String = """["cmd.exe","/c","$secret"]""", grace: Long = 2000): String {
         val cwdJson = cwd?.let { "\"" + it.replace(bs, bs + bs) + "\"" } ?: "null"

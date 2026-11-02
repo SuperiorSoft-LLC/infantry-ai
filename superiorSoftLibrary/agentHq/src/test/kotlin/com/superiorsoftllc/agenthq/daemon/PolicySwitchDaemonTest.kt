@@ -53,7 +53,7 @@ class PolicySwitchDaemonTest {
         policies = { state -> PolicyRuntime(listOf(PolicyProvider { listOf(seated) }), { null }, File(state, PolicyRuntime.SELECTION_FILE), state) },
         // DAEMON-PLUGINS-1: the seats are the Demo_Lock daemon plugin's, loaded from its built jar. The deployment's visitor
         // token is configured all along; only the active preset decides its admission.
-        pluginsRoot = TestDaemonPlugins.root("demo/Demo_Lock").also { roots += it },
+        pluginsRoot = TestDaemonPlugins.root("demo/Demo_Lock", "official/Infantry_Run").also { roots += it },
         pluginEnv = { name -> if (name == PUBLIC_TOKEN_ENV) visitor else null },
     ).also { fixtures += it; it.client.await(Envelope.READY) }
 

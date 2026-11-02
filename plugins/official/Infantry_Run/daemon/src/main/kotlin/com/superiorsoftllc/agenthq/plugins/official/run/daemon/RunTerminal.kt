@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.commands
+package com.superiorsoftllc.agenthq.plugins.official.run.daemon
 
 import java.nio.ByteBuffer
 import java.nio.CharBuffer

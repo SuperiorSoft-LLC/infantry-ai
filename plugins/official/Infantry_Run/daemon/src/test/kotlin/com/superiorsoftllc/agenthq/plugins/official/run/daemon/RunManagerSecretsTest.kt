@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.commands
+package com.superiorsoftllc.agenthq.plugins.official.run.daemon
 
 import com.superiorsoftllc.agenthq.protocol.Envelope
 import com.superiorsoftllc.agenthq.runner.ProcessSpec
@@ -56,7 +56,7 @@ class RunManagerSecretsTest {
 
     private fun manager(t: TerminalRunner, demo: Boolean = false) = RunManager(
         { registry }, ScriptedRunner(StubScript(stdoutLines = listOf("x"))), { frames += it },
-        terminal = t, restricted = { demo }, secrets = com.superiorsoftllc.agenthq.keystore.KeystoreHandler.runSecrets({ store[it] }),
+        terminal = t, restricted = { demo }, secrets = { name -> require(name != "update-token") { "secret '$name' is built in and never goes to a run" }; store[name] },
     )
 
     private fun everyFrame() = frames.joinToString("\n") { f ->

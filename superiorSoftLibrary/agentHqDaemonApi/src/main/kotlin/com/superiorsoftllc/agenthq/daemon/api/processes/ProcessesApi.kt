@@ -167,6 +167,9 @@ interface PluginSettings {
 
     /** The stored value of [key] as JSON text, null when unset. */
     fun stored(key: String): String?
+
+    /** CMD-1 (1.31.0, additive): the sentence a refusal of limit [key] ends with (which setting, where to change it); empty when unknown. */
+    fun hint(key: String): String = ""
 }
 
 object NoProcesses : Processes {

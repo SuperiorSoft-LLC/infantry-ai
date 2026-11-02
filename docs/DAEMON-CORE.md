@@ -49,6 +49,7 @@ that is renamed or deleted must leave the table. Lines in PLUGIN_NOW/PLUGIN_LATE
 | `worktree` | git working copies, runner side, used by SessionManager and the board alike |
 | `projectgit` | git status/diff/commit helpers over worktree, runner side; moves with the Git plugin once DaemonApi has a git surface |
 | `usage`, `usagemeter`, `stats`, `tokens` | limits, metering and the harness-neutral RequestUsage record are fed by every harness stream |
+| `testrun` | background full-suite runner and its ledger behind the `agenthq_tests` tool (FULLSUITE-2); runner side of the staging gate |
 | `executables` | resolves harness and tool binaries for the runner |
 | `update` | self-update of the install; DaemonMain wires it directly |
 | `notify` | the spoken-push frame helper of the protocol |
@@ -70,7 +71,7 @@ DAEMON-PLUGINS-3: `probe` (a one-off provider comparison `main()` and its `probe
 | `role`, `agents` | roles and profiles are bound into SessionManager spawn and mail addressing; needs a DaemonApi role surface / spawn-binding hook |
 | `questions`, `attention` | DONE (ATTN-2b / ATTN-2c): core has neither package. Infantry_Attention's daemon half owns the attention store and the owner questions (store, sweep, `question_*` frames, answer mail, connect replay); core keeps `FoundAttention` (package `daemon`), the consumer lookup of the `Attention` service |
 | `triggers` | DaemonApi has `schedule()` but no spawn-with-binding or ticket-transition events |
-| `commands` | RunManager needs a pty/runner surface in DaemonApi |
+| `commands` | DONE (CMD-1): core has no `commands` package. Infantry_Run's daemon half owns the saved commands (`commands.json`), RunManager and the run frames over `api.runs` (DaemonApi 1.31.0, additive: `Runs.start(RunSpec, RunListener)` returns a `RunHandle` with write/resize/terminate/killTree; the cwd is bound to the project's directory and a `..`, absolute or linked escape is refused before anything starts; official tier or the grant `runs`). The owner-credential gate on the run frames stays in core's FrameGate (same action/kind in the module's `daemon.frames`). With the plugin absent the run frames refuse like any unhandled frame |
 | `experiments` | the pi tool bridge hooks `PiLaunchExtras`, `SessionStatsService` taggers and reads `AgentHqMcp`/`AccessPolicy` internals; needs a harness launch-extras hook and an MCP tool-exposure surface in DaemonApi |
 | `cli`, `client` | the `agenthq` CLI/MCP server and console client are clients of the daemon, not daemon, but import protocol/session/daemon types; they leave with the agentHqCore split (section 4) |
 

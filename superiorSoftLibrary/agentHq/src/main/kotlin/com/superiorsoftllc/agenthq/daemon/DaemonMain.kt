@@ -441,8 +441,6 @@ class AgentHqDaemon(
     val triggers: TriggerService,
     /** PW-3: the workspaces, stored in [store] and checked against the project store. */
     val workspaces: WorkspaceStore,
-    /** IN-APP BUILD T2 (contract 1.33.0) + RUN-CMD-1 (1.108.0): saved commands from commands.json, editable; empty when absent or refused. */
-    val commands: com.superiorsoftllc.agenthq.commands.CommandStore? = null,
     /** PORT-1: where [start] records the bound port (`<stateDir>/daemon.port`); null = recorded nowhere. */
     val portFile: File? = null,
     /** CLIPATH-1: puts back the executable resolver that was installed before this daemon's (see `CliExecutables.install`). */
@@ -708,7 +706,6 @@ class AgentHqDaemon(
             val boundPort = portChoice.port
             val mailBase = mailBaseUrl ?: "http://${AccessPolicy.agentReachableHost(host)}:$boundPort"
             val loopbackHost = AccessPolicy.agentReachableHost(host)
-            val commandStore = com.superiorsoftllc.agenthq.commands.CommandStore(commandsFile, repo)
             val worktrees = GitWorktreeManager()
             // Every agent this daemon spawns receives the token as AGENTHQ_TOKEN, so the curl a delivered
             // prompt carries can authenticate, AND the daemon's agent-facing mail base as AGENTHQ_MAIL_BASE,
@@ -902,20 +899,11 @@ class AgentHqDaemon(
             manager.onSessionClosed = { c -> localProcesses.fireSessionClosed(c) }
             val pendingPrompts = com.superiorsoftllc.agenthq.daemon.wiring.PromptsWiring.build(object : com.superiorsoftllc.agenthq.daemon.api.ApprovalRulesHook { override fun match(projectId: String?, tool: String, input: String) = pluginHost.get().approvalRules.match(projectId, tool, input); override fun remember(projectId: String?, tool: String, input: String) = pluginHost.get().approvalRules.remember(projectId, tool, input) }, settings, manager, clients)
             // IN-APP BUILD T3: one saved command at a time; every frame it produces goes to every client.
-            // BUG-RUN-STUB-1: a saved command is a real process whatever the provider; [runner] is the stub's
-            // ScriptedRunner under AGENTHQ_PROVIDER=stub and would only replay the script.
-            // RUN-CONSOLE (1.134.0): the run gets a pty (pipes if pty4j cannot load here); its scrollback and the run
-            // history follow `limits.run.*`; a restricted policy refuses interactive runs and run_input (no raw shell).
-            // SECRETS-1: the daemon-owned keystore, in the state dir. SECRETS-2: a run reads its secrets' fields from it.
+            // SECRETS-1: the daemon-owned keystore, in the state dir.
             val keystore = Keystore(stateDir())
             // POLICY-1: "restricted" follows the ACTIVE preset (a Settings switch included), read per call. A seated preset is
-            // always restricted (secrets and interactive runs locked), as the seated lockdown was before it became a plugin.
+            // always restricted (secrets locked), as the seated lockdown was before it became a plugin.
             val locked: () -> Boolean = { policies.current.let { it.restricted == true || it.seats != null } }
-            val runManager = com.superiorsoftllc.agenthq.daemon.wiring.CommandsWiring.buildRunManager(
-                registry = { commandStore.registry },
-                emit = { env -> for (c in clients.toList()) c.trySend(env) },
-                settings = settings, locked = locked, keystore = keystore,
-            )
             val foundAttention = com.superiorsoftllc.agenthq.daemon.FoundAttention { pluginHost.get().serviceRegistry.find(com.superiorsoftllc.agenthq.daemon.api.attention.Attention::class) }
             val attentionSvc: com.superiorsoftllc.agenthq.daemon.api.attention.Attention = foundAttention
             // Ticket 66153313 (via `api.processes.raiseAlert`): the process-watch plugin reports agent CPU held above the limit.
@@ -1520,6 +1508,15 @@ class AgentHqDaemon(
                         processHost = localProcesses, launchEnvHost = launchEnvHost,
                         pluginSettings = settings.forPlugins(),
                         noticeSuppressor = { name, session, ms -> nudgeGate.suppress(name, session, ms) },
+                        // CMD-1: api.runs, a cwd-bound child process over the runner (pty and pipes).
+                        runService = com.superiorsoftllc.agenthq.daemon.plugins.LocalRuns(
+                            workRoot = repo, configDir = commandsFile.absoluteFile.parentFile ?: File("."),
+                            projectDirectory = { id -> runCatching { projectStore.get(id).directory }.getOrNull() },
+                            pipes = com.superiorsoftllc.agenthq.runner.PipedProcessRunner(),
+                            pty = com.superiorsoftllc.agenthq.runner.Pty4jTerminalRunner(),
+                            // SEC-FIX-1 H1(b): user secrets only; a built-in (the update token) never reaches a run.
+                            secrets = KeystoreHandler.runSecrets(keystore::fields),
+                        ),
                         // PACE-TREND-1: api.meters, the current reading of every provider window (the cached live read).
                         meters = com.superiorsoftllc.agenthq.usage.PacingMeters(usagePacing, requestSource = { since -> usageMeter?.requestsSince(since).orEmpty() }),
                         // DP-7e: api.sessionNotifier, over the mail router.
@@ -1828,8 +1825,6 @@ class AgentHqDaemon(
                             roles,
                             providerStates,
                             triggers,
-                            commandStore,
-                            runManager,
                             harnesses,
                             RoleBindingHandler(store.roleBindings, roles, { providerInfos(manager, harnesses).map { it.id }.toSet() }, com.superiorsoftllc.agenthq.harness.claude.ClaudeCommands.EFFORT_LEVELS.toSet(), modelCheck = { manager.requireAllowedModel(it, null) }),
                             com.superiorsoftllc.agenthq.persistence.PromptStore(store.prompts),
@@ -1894,7 +1889,6 @@ class AgentHqDaemon(
                 providerStates = providerStates,
                 triggers = triggers,
                 workspaces = workspaces,
-                commands = commandStore,
                 portFile = portFile,
                 // BUG-PERM-1: the Tool approval reader is put back with the executable resolver (both read this store).
                 restoreExecutables = { restoreToolApproval(); restoreExecutables() },
@@ -2372,8 +2366,6 @@ private suspend fun handleConnection(
     roles: RoleService,
     providerStates: ProviderStateTracker,
     triggers: TriggerService,
-    commands: com.superiorsoftllc.agenthq.commands.CommandStore,
-    runManager: com.superiorsoftllc.agenthq.commands.RunManager,
     harnesses: HarnessRegistry,
     roleBindings: RoleBindingHandler,
     prompts: com.superiorsoftllc.agenthq.persistence.PromptStore,
@@ -3185,39 +3177,6 @@ private suspend fun handleConnection(
                 } catch (e: IllegalArgumentException) {
                     Envelope(Envelope.ERROR, "agent_list refused: ${e.message ?: "invalid request"}")
                 }
-
-                // IN-APP BUILD T2 (contract 1.33.0): id, name, cwd; argv + graceMillis since 1.108.0 (RUN-CMD-1).
-                Envelope.COMMAND_LIST -> Envelope(Envelope.COMMANDS, commands.registry.specsJson())
-
-                // RUN-CMD-1 (contract 1.108.0): write commands.json, then push the new list to EVERY client (the
-                // requester included). Never while that command's run is in flight; a refusal names the id only.
-                Envelope.COMMAND_SAVE, Envelope.COMMAND_DELETE -> {
-                    val refusal = if (envelope.type == Envelope.COMMAND_SAVE) commands.save(envelope.data, runManager::unlessRunning)
-                    else commands.delete(envelope.data, runManager::unlessRunning)
-                    if (refusal != null) Envelope(Envelope.ERROR, "${envelope.type} refused: $refusal")
-                    else {
-                        val list = Envelope(Envelope.COMMANDS, commands.registry.specsJson())
-                        for (client in clients) client.trySend(list)
-                        null
-                    }
-                }
-
-                // IN-APP BUILD T3: the `run` answer goes out first, then the child starts and streams.
-                Envelope.RUN_START -> {
-                    val started = runManager.start(envelope.data)
-                    outgoing.trySend(started.reply)
-                    started.launch()
-                    null
-                }
-
-                // IN-APP BUILD T4: the answer to a stop is the run's run_finished; only a bad request answers here.
-                Envelope.RUN_STOP -> runManager.stop(envelope.data)
-
-                // RUN-CONSOLE (contract 1.134.0): the pills' list, a console's replay, its size and (interactive runs) keys.
-                Envelope.RUN_LIST -> runManager.list()
-                Envelope.RUN_ATTACH -> runManager.attach(envelope.data)
-                Envelope.RUN_RESIZE -> runManager.resize(envelope.data)
-                Envelope.RUN_INPUT -> runManager.input(envelope.data)
 
                 Envelope.AGENT_DELETE -> try {
                     agents.delete(envelope.data)

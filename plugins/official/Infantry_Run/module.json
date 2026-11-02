@@ -9,6 +9,22 @@
   "entry": "com.superiorsoftllc.agenthq.plugins.official.run.RunPlugin",
   "jar": "build/libs/Infantry_Run.jar",
   "buildOrder": 90,
+  "daemon": {
+    "entry": "com.superiorsoftllc.agenthq.plugins.official.run.daemon.RunDaemonPlugin",
+    "jar": "daemon/build/libs/Infantry_Run-daemon.jar",
+    "apiAtLeast": "1.31.0",
+    "frames": [
+      { "type": "command_list", "action": "commands.read", "kind": "read" },
+      { "type": "command_save", "action": "commands.save", "kind": "write" },
+      { "type": "command_delete", "action": "commands.save", "kind": "write" },
+      { "type": "run_list", "action": "runs.read", "kind": "read" },
+      { "type": "run_start", "action": "runs.start", "kind": "spawn" },
+      { "type": "run_attach", "action": "runs.start", "kind": "spawn" },
+      { "type": "run_resize", "action": "runs.start", "kind": "spawn" },
+      { "type": "run_input", "action": "runs.start", "kind": "spawn" },
+      { "type": "run_stop", "action": "runs.stop", "kind": "destructive" }
+    ]
+  },
   "tabs": [
     {
       "id": "infantry.run",
