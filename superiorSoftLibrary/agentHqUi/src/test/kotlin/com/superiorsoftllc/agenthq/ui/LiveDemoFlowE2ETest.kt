@@ -22,7 +22,6 @@ import com.superiorsoftllc.agenthq.daemon.AgentHqDaemon
 import com.superiorsoftllc.agenthq.mailbox.JsonMailStore
 import com.superiorsoftllc.agenthq.persistence.SqlAgentHqStore
 import com.superiorsoftllc.agenthq.harness.AgentProvider
-import com.superiorsoftllc.agenthq.provider.OpenCodeProvider
 import com.superiorsoftllc.agenthq.harness.RunRequest
 import com.superiorsoftllc.agenthq.runner.ProcessSpec
 import com.superiorsoftllc.agenthq.runner.RunnerFactory
@@ -230,8 +229,8 @@ class LiveDemoFlowE2ETest {
     }
 
     /** OpenCode with this test's model as the default, so a profile that names none still uses Luna. */
-    private class ModelPinned(private val model: String) : AgentProvider by OpenCodeProvider() {
-        private val inner = OpenCodeProvider()
+    private class ModelPinned(private val model: String) : AgentProvider by TestOpenCodeProvider() {
+        private val inner = TestOpenCodeProvider()
         // An EMPTY config dir keeps the user's global opencode config (MCP servers, plugins, instructions) out of
         // the child, so the run is a plain model call. Credentials live in the data dir, which is left alone.
         private val isolatedConfig = Files.createTempDirectory("agenthq-live-e2e-xdgcfg").toFile().apply { deleteOnExit() }
