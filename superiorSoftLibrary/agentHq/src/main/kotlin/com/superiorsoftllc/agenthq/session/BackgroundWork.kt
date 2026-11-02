@@ -59,7 +59,9 @@ object OsProcessSource : ProcessSource {
 
 object BackgroundWorkScanner {
     /** A process the harness itself keeps (console hosts, its MCP servers) is never "work". */
-    private val HELPER = Regex("""(?i)conhost|werfault|openconsole|\bmcp\b|\bagenthq\b""")
+    // BG-IDLE-1: `agenthq` must be the program itself, not a path segment: a build under `...\agenthq-standalone\...`
+    // matched `\bagenthq\b` on its command line and its whole subtree was ignored, so the worker read IDLE.
+    private val HELPER = Regex("""(?i)conhost|werfault|openconsole|\bmcp\b|(?:^|[\\/\s"'])agenthq(?:\.(?:exe|cmd|bat))?(?=$|[\s"'])|\.agenthq\.""")
 
     /** Processes that started within this long of the harness process are its launch helpers. */
     const val LAUNCH_GRACE_MS = 20_000L
