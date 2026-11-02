@@ -15,7 +15,6 @@ import com.superiorsoftllc.agenthq.persistence.SqlAgentHqStore
 import com.superiorsoftllc.agenthq.provider.AgentProvider
 import com.superiorsoftllc.agenthq.provider.RunRequest
 import com.superiorsoftllc.agenthq.provider.StubProvider
-import com.superiorsoftllc.agenthq.role.RoleService
 import com.superiorsoftllc.agenthq.runner.ProcessRunner
 import com.superiorsoftllc.agenthq.runner.ProcessSpec
 import com.superiorsoftllc.agenthq.runner.StubScript
@@ -76,7 +75,6 @@ class ProviderPickerUiTest {
             store = SqlAgentHqStore.open(File(dir, "agenthq.db").absolutePath),
             mailBaseUrl = "http://127.0.0.1:1", token = null,
             storyStore = JsonStoryStore(File(dir, "stories.json")),
-            roles = RoleService(File(dir, "roles")),
             // Hermetic (BUG-ModelsHeadOfLine): not build()'s builtIn(), which runs this host's `pi --list-models`.
             modelCatalogs = com.superiorsoftllc.agenthq.provider.HarnessModelCatalogs.EMPTY,
         )

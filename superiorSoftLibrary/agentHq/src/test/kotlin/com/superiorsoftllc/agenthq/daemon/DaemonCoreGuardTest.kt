@@ -159,7 +159,6 @@ class DaemonCoreGuardTest {
             "ledger" to "blocker: DaemonApi has no ticket/board/epic surface and DaemonMain, TicketBoard, the story handlers and the mailbox name each other directly; see docs/DAEMON-BOARD-API.md",
             "claude" to "blocker: concrete Claude adapter is already a HarnessPlugin, but ProviderFactory, HarnessModelCatalogs, Sandbox and DaemonMain name it, so built-ins are not registered through the SPI",
             "opencode" to "blocker: same as claude (ProviderFactory and DaemonMain name OpenCodeServeAdapter)",
-            "role" to "blocker: roles are bound into SessionManager spawn and mail addressing; needs a DaemonApi role surface",
             "agents" to "blocker: AgentProfiles is wired into MailRouter and SessionManager spawn binding; needs a spawn-binding hook",
             "triggers" to "blocker: DaemonApi has schedule() but no spawn-with-binding or ticket-transition events",
             "cli" to "blocker: the agenthq CLI and MCP server import protocol, session and daemon types; needs the agentHqCore module split first",

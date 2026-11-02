@@ -6,6 +6,9 @@ import com.superiorsoftllc.agenthq.daemon.api.DaemonTool
 import com.superiorsoftllc.agenthq.daemon.api.ToolCall
 import com.superiorsoftllc.agenthq.daemon.api.ToolResult
 import com.superiorsoftllc.agenthq.daemon.api.roles.RetiredRoleIds
+import com.superiorsoftllc.agenthq.daemon.api.roles.RoleBindings
+import com.superiorsoftllc.agenthq.daemon.api.roles.RoleTraitLists
+import com.superiorsoftllc.agenthq.daemon.api.roles.Roles
 import com.superiorsoftllc.agenthq.daemon.api.roles.RoleRecord
 import com.superiorsoftllc.agenthq.daemon.api.roles.RoleSaveRequest
 import kotlinx.serialization.builtins.ListSerializer
@@ -30,6 +33,12 @@ import kotlinx.serialization.json.put
  */
 class RolesDaemonPlugin : DaemonPlugin {
     override fun start(api: DaemonApi) {
+        // AR-4b-ii-b: the catalog, its frames and the role binding / trait stores are this plugin's; core reads them through the ports.
+        val service = RoleService(RolesFrames.rolesDir(api))
+        api.services.provide(Roles::class, ServiceRoles(service))
+        api.services.provide(RoleBindings::class, StorageRoleBindings(api.storage))
+        api.services.provide(RoleTraitLists::class, StorageRoleTraitLists(api.storage))
+        RolesFrames.register(api, service)
         listOf(RoleListTool, RoleGetTool, RoleUpdateTool, RoleCreateTool, RoleDeleteTool, SkillListTool, SkillSaveTool, SkillDeleteTool).forEach { api.tools.register(it) }
     }
 }

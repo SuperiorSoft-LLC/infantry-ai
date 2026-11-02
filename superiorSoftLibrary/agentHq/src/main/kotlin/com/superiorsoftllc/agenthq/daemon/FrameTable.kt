@@ -49,6 +49,15 @@ object BoardFrames {
     /** DP-7f: a memory frame with no plugin answering: a refusal, never a hang. */
     fun noMemory(type: String): Envelope = Envelope(Envelope.ERROR, "$type refused: this daemon has no memory")
 
+    /** AR-4b-ii-b: the role frames, owned by the roles plugin (module.json `daemon.frames`). */
+    val ROLE_TYPES: Set<String> = setOf(
+        Envelope.ROLE_LIST, Envelope.ROLE_SAVE, Envelope.ROLE_DELETE, Envelope.ROLE_BINDING_LIST, Envelope.ROLE_BINDING_GET, Envelope.ROLE_BINDING_SET,
+        Envelope.ROLE_TRAITS_LIST, Envelope.ROLE_TRAITS_GET, Envelope.ROLE_TRAITS_SET,
+    )
+
+    /** AR-4b-ii-b: a role frame with no plugin answering: a refusal, never a hang. */
+    fun noRoles(type: String): Envelope = Envelope(Envelope.ERROR, "$type refused: this daemon has no roles")
+
     /** DP-6: a pipeline frame with no plugin answering: a refusal, never a hang. */
     fun noPipeline(type: String): Envelope = Envelope(Envelope.ERROR, "$type refused: this daemon has no pipeline")
 

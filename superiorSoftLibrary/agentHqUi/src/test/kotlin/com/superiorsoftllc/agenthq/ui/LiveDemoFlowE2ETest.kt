@@ -24,7 +24,6 @@ import com.superiorsoftllc.agenthq.persistence.SqlAgentHqStore
 import com.superiorsoftllc.agenthq.provider.AgentProvider
 import com.superiorsoftllc.agenthq.provider.OpenCodeProvider
 import com.superiorsoftllc.agenthq.provider.RunRequest
-import com.superiorsoftllc.agenthq.role.RoleService
 import com.superiorsoftllc.agenthq.runner.ProcessSpec
 import com.superiorsoftllc.agenthq.runner.RunnerFactory
 import com.superiorsoftllc.agenthq.session.JsonSessionStore
@@ -94,7 +93,6 @@ class LiveDemoFlowE2ETest {
                 store = store,
                 mailBaseUrl = "http://127.0.0.1:1", token = null, repo = null, additionalProviders = emptyList(),
                 storyStore = JsonStoryStore(File(dir, "stories.json")),
-                roles = RoleService(File(dir, "roles")),
                 // Hermetic (BUG-ModelsHeadOfLine): not build()'s builtIn(), which runs this host's `pi --list-models`.
                 modelCatalogs = com.superiorsoftllc.agenthq.provider.HarnessModelCatalogs.EMPTY,
             )

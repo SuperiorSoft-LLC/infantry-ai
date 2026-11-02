@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.role
+package com.superiorsoftllc.agenthq.plugins.official.roles.daemon
 
 import com.superiorsoftllc.agenthq.daemon.api.roles.RoleEnvironment
 import com.superiorsoftllc.agenthq.daemon.api.roles.RoleTraitLists
@@ -17,10 +17,10 @@ class RoleTraitHandler(
     private val roleExists: (String) -> Boolean,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
-    fun all(): List<RoleTraits> = repository.all()
+    fun all(): List<RoleTraits> = repository.all().map { it.toWire() }
 
     /** The stored list, or an empty one for a role that has none: a get never fails on "no traits yet". */
-    fun get(roleId: String): RoleTraits = repository.get(roleId) ?: RoleTraits(roleId)
+    fun get(roleId: String): RoleTraits = repository.get(roleId)?.toWire() ?: RoleTraits(roleId)
 
     fun set(save: RoleTraitsSave): RoleTraits {
         val roleId = save.roleId.trim()
@@ -32,10 +32,12 @@ class RoleTraitHandler(
         }
         return repository.set(roleId, ids, clock()) {
             ids.firstOrNull { !env.traitExists(it) }?.let { throw IllegalArgumentException("unknown trait '${it.take(40)}' (trait_list shows the library)") }
-        }
+        }.toWire()
     }
 
     companion object {
         const val MAX_TRAITS = 8
     }
 }
+
+private fun com.superiorsoftllc.agenthq.daemon.api.roles.RoleTraitsRecord.toWire() = RoleTraits(roleId, traitIds, updatedAt)

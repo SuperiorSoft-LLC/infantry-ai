@@ -4,7 +4,7 @@ import com.superiorsoftllc.agenthq.mailbox.FakeAgentProvider
 import com.superiorsoftllc.agenthq.mailbox.ScriptedRunner
 import com.superiorsoftllc.agenthq.mailbox.tempSessionStore
 import com.superiorsoftllc.agenthq.persistence.SqlAgentHqStore
-import com.superiorsoftllc.agenthq.role.RoleCatalog
+import com.superiorsoftllc.agenthq.plugins.official.roles.daemon.RoleCatalog
 import com.superiorsoftllc.agenthq.session.SessionManager
 import java.io.File
 import java.nio.file.Files

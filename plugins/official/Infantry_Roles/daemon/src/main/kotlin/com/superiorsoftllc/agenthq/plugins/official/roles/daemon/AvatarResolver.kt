@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.role
+package com.superiorsoftllc.agenthq.plugins.official.roles.daemon
 
 import com.superiorsoftllc.agenthq.protocol.ImageFormat
 

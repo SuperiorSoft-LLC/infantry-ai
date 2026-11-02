@@ -164,11 +164,8 @@ import com.superiorsoftllc.agenthq.usage.ProviderLimits
 import com.superiorsoftllc.agenthq.daemon.api.usage.UsageMeters
 import com.superiorsoftllc.agenthq.usage.UsagePacing
 import com.superiorsoftllc.agenthq.daemon.api.usage.UsageReport
-import com.superiorsoftllc.agenthq.role.Role
 import com.superiorsoftllc.agenthq.protocol.RoleIds
-import com.superiorsoftllc.agenthq.role.RoleService
 import com.superiorsoftllc.agenthq.protocol.RoleBinding
-import com.superiorsoftllc.agenthq.role.RoleBindingHandler
 import com.superiorsoftllc.agenthq.protocol.PromptSave
 import com.superiorsoftllc.agenthq.protocol.PromptView
 import com.superiorsoftllc.agenthq.protocol.SkillSave
@@ -176,9 +173,6 @@ import com.superiorsoftllc.agenthq.protocol.SkillView
 import com.superiorsoftllc.agenthq.protocol.TraitSave
 import com.superiorsoftllc.agenthq.protocol.TraitView
 import com.superiorsoftllc.agenthq.protocol.RoleTraits
-import com.superiorsoftllc.agenthq.protocol.RoleTraitsSave
-import com.superiorsoftllc.agenthq.role.RoleTraitHandler
-import com.superiorsoftllc.agenthq.protocol.RoleBindingSave
 import java.util.ArrayDeque
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -433,8 +427,6 @@ class AgentHqDaemon(
     val boardPorts: BoardPorts,
     /** ATTN-2b: the attention service as consumers hold it (the provider is Infantry_Attention's plugin). */
     val attention: com.superiorsoftllc.agenthq.daemon.api.attention.Attention,
-    /** Contract 1.12.0: the role catalog served by `role_list`, extended by `role_save`. */
-    val roles: RoleService,
     /** Story 9.7b: the operator budget the launch gate reads. */
     val budget: OperatorBudget,
     /** Story 9.7b: observed limit state per provider. */
@@ -604,8 +596,6 @@ class AgentHqDaemon(
              */
             additionalProviders: List<AgentProvider> = ProviderFactory.additionalFromEnv(provider),
             fixedFirstTurn: (() -> Pair<String, List<Pair<String, Int>>>)? = null,
-            /** Contract 1.12.0: the role catalog and where custom roles are written (`AGENTHQ_ROLES_DIR`). */
-            roles: RoleService = RoleService(RoleService.defaultDir()),
             /** Story 9.7b: the operator budget (`AGENTHQ_BUDGET_RUNS_PER_DAY` / `_TOKENS_PER_DAY`; unset = none). */
             budget: OperatorBudget = OperatorBudget.fromEnv(),
             /**
@@ -1625,11 +1615,9 @@ class AgentHqDaemon(
                 )
                 pluginHost.set(host)
                 // SCRIPT-HOOK-3: a script's tool calls reach the core frames through the daemon's own /ws (see LoopbackFrames).
-                host.serviceRegistry.provide("core", com.superiorsoftllc.agenthq.daemon.api.roles.Roles::class, com.superiorsoftllc.agenthq.role.LocalRoles(roles))
-                val rolePorts = RolePorts.of(store, manager, harnesses)
-                host.serviceRegistry.provide("core", com.superiorsoftllc.agenthq.daemon.api.roles.RoleBindings::class, rolePorts.bindings)
-                host.serviceRegistry.provide("core", com.superiorsoftllc.agenthq.daemon.api.roles.RoleTraitLists::class, rolePorts.traits)
-                host.serviceRegistry.provide("core", com.superiorsoftllc.agenthq.daemon.api.roles.RoleEnvironment::class, rolePorts.environment)
+                // AR-4b-ii-b: the Infantry_Roles plugin provides Roles / RoleBindings / RoleTraitLists; core keeps the environment port.
+                host.serviceRegistry.provide("core", com.superiorsoftllc.agenthq.daemon.api.roles.RoleEnvironment::class, RolePorts.environment(store, manager, harnesses))
+                testRoles?.let { host.serviceRegistry.provide("core", com.superiorsoftllc.agenthq.daemon.api.roles.Roles::class, it) }
                 host.loopback = com.superiorsoftllc.agenthq.daemon.plugins.LoopbackFrames(loopbackHost, boundPort, token, ownerToken)
                 foundAttention.flush()
                 testKnowledge?.let { host.serviceRegistry.provide("core", com.superiorsoftllc.agenthq.daemon.api.knowledge.Knowledge::class, it) }
@@ -1833,15 +1821,12 @@ class AgentHqDaemon(
                             keystoreFrames,
                             settings,
                             identity,
-                            roles,
                             providerStates,
                             triggers,
                             harnesses,
-                            RolePorts.of(store, manager, harnesses).let { RoleBindingHandler(it.bindings, roles, it.environment) },
                             com.superiorsoftllc.agenthq.persistence.PromptStore(store.prompts),
                             com.superiorsoftllc.agenthq.persistence.SkillStore(store.skills),
-                            com.superiorsoftllc.agenthq.persistence.TraitStore(store.traits, { roles.role(it) != null }, boundBy = { id -> store.traitReferences(id) }),
-                            RolePorts.of(store, manager, harnesses).let { p -> RoleTraitHandler(p.traits, p.environment, { roles.role(it) != null }) },
+                            com.superiorsoftllc.agenthq.persistence.TraitStore(store.traits, { rolesLookup.role(it) != null }, boundBy = { id -> store.traitReferences(id, runCatching { pluginHost.get().serviceRegistry.find(com.superiorsoftllc.agenthq.daemon.api.roles.RoleTraitLists::class)?.all() }.getOrNull().orEmpty()) }),
                             knowledge,
                             modelCatalogs,
                             skillsSource,
@@ -1897,7 +1882,6 @@ class AgentHqDaemon(
                 agents = agents,
                 boardPorts = boardPorts,
                 attention = attentionSvc,
-                roles = roles,
                 budget = budget,
                 providerStates = providerStates,
                 triggers = triggers,
@@ -2343,10 +2327,6 @@ private fun configSchemaEnvelope(config: DaemonConfig) =
 private fun configValuesEnvelope(values: com.superiorsoftllc.agenthq.plugin.api.ConfigValuesFrame) =
     Envelope(Envelope.CONFIG_VALUES, json.encodeToString(com.superiorsoftllc.agenthq.plugin.api.ConfigValuesFrame.serializer(), values))
 
-private fun broadcastRole(clients: List<Channel<Envelope>>, role: Role) {
-    val envelope = Envelope(Envelope.ROLE, json.encodeToString(Role.serializer(), role))
-    for (client in clients) client.trySend(envelope)
-}
 
 /**
  * Contract 1.22.0: push an epic whose ordered `storyIds` just changed to every connected client,
@@ -2376,15 +2356,12 @@ private suspend fun handleConnection(
     keystoreFrames: KeystoreHandler,
     settings: ProjectSettings,
     identity: DaemonIdentity,
-    roles: RoleService,
     providerStates: ProviderStateTracker,
     triggers: TriggerService,
     harnesses: HarnessRegistry,
-    roleBindings: RoleBindingHandler,
     prompts: com.superiorsoftllc.agenthq.persistence.PromptStore,
     skills: com.superiorsoftllc.agenthq.persistence.SkillStore,
     traits: com.superiorsoftllc.agenthq.persistence.TraitStore,
-    roleTraits: RoleTraitHandler,
     knowledge: KnowledgeCounter,
     modelCatalogs: com.superiorsoftllc.agenthq.provider.HarnessModelCatalogs = com.superiorsoftllc.agenthq.provider.HarnessModelCatalogs.EMPTY,
     /** P10-K15: the `skills` section every first turn renders after `knowledge`. */
@@ -2882,10 +2859,6 @@ private suspend fun handleConnection(
                     }
                 }
 
-                // Contract 1.12.0 -- the role catalog. `role_save` is answered by the push of the stored `role`
-                // to EVERY client (this one included); a refusal is an `error` naming the problem, nothing written.
-                Envelope.ROLE_LIST -> Envelope(Envelope.ROLES, json.encodeToString(ListSerializer(Role.serializer()), roles.all()))
-
                 // Contract 1.14.0 -- triggers. A change is pushed to every client by the service's sink, and for
                 // the requester that push is the answer; `trigger_fire` also answers its sender directly.
                 Envelope.TRIGGER_SAVE -> triggerRequest(envelope.type) { triggers.save(TriggerSave.decode(envelope.data)); null }
@@ -2914,21 +2887,6 @@ private suspend fun handleConnection(
                             .map { providerStates.state(it) },
                     ),
                 )
-
-                // Contract 1.40.0 (ROLE-1c): what a role runs on. A set is answered by the push of the stored `role_binding`
-                // to EVERY client (this one included); a refusal is an `error`, nothing written.
-                Envelope.ROLE_BINDING_LIST -> Envelope(Envelope.ROLE_BINDINGS, json.encodeToString(ListSerializer(RoleBinding.serializer()), roleBindings.all()))
-                Envelope.ROLE_BINDING_GET -> Envelope(Envelope.ROLE_BINDING, json.encodeToString(RoleBinding.serializer(), roleBindings.get(envelope.data.trim())))
-                Envelope.ROLE_BINDING_SET -> try {
-                    val stored = roleBindings.set(RoleBindingSave.decode(envelope.data))
-                    val push = Envelope(Envelope.ROLE_BINDING, json.encodeToString(RoleBinding.serializer(), stored))
-                    for (client in clients) client.trySend(push)
-                    null
-                } catch (e: IllegalArgumentException) {
-                    Envelope(Envelope.ERROR, "role_binding_set refused: ${e.message ?: "invalid binding"}")
-                } catch (e: Exception) {
-                    Envelope(Envelope.ERROR, "role_binding_set failed: ${e.message ?: e::class.simpleName}")
-                }
 
                 // Contract 1.44.0 (P10-A): the prompt library. A save pushes `prompt_item` and a delete pushes `prompts` to EVERY client;
                 // a refusal is an `error`, nothing written.
@@ -3019,49 +2977,6 @@ private suspend fun handleConnection(
                     Envelope(Envelope.ERROR, "trait_delete refused: ${e.message ?: "trait is bound"}")
                 } catch (e: Exception) {
                     Envelope(Envelope.ERROR, "trait_delete failed: ${e.message ?: e::class.simpleName}")
-                }
-
-                // Contract 1.49.0 (TRAITS-T2): a role's ordered trait list. A set is answered by the push of the stored
-                // `role_traits` to EVERY client (this one included); a refusal is an `error`, nothing written.
-                Envelope.ROLE_TRAITS_SET -> try {
-                    val stored = roleTraits.set(RoleTraitsSave.decode(envelope.data))
-                    val push = Envelope(Envelope.ROLE_TRAITS, json.encodeToString(RoleTraits.serializer(), stored))
-                    for (client in clients) client.trySend(push)
-                    null
-                } catch (e: IllegalArgumentException) {
-                    Envelope(Envelope.ERROR, "role_traits_set refused: ${e.message ?: "invalid trait list"}")
-                } catch (e: Exception) {
-                    Envelope(Envelope.ERROR, "role_traits_set failed: ${e.message ?: e::class.simpleName}")
-                }
-                Envelope.ROLE_TRAITS_GET -> Envelope(Envelope.ROLE_TRAITS, json.encodeToString(RoleTraits.serializer(), roleTraits.get(envelope.data.trim())))
-                Envelope.ROLE_TRAITS_LIST -> Envelope(Envelope.ROLE_TRAITS_ALL, json.encodeToString(ListSerializer(RoleTraits.serializer()), roleTraits.all()))
-
-                Envelope.ROLE_SAVE -> try {
-                    val saved = roles.save(RoleSave.decode(envelope.data))
-                    broadcastRole(clients, saved)
-                    // RUNTIME-LOAD-3: a plugin tool waits for its own request id; the broadcast above carries none.
-                    if (wantsDirectAck(envelope)) Envelope(Envelope.ROLE, json.encodeToString(Role.serializer(), saved)) else null
-                } catch (e: IllegalArgumentException) {
-                    Envelope(Envelope.ERROR, "role_save refused: ${e.message ?: "invalid role"}")
-                } catch (e: Exception) {
-                    Envelope(Envelope.ERROR, "role_save failed: ${e.message ?: e::class.simpleName}")
-                }
-
-                // Contract 1.108.0 (ROLE-EDIT-1): a reset override is pushed as `role`, a removed custom role as `role_removed`.
-                Envelope.ROLE_DELETE -> try {
-                    val id = envelope.data.trim()
-                    val live = manager.list()
-                        .filter { it.state != SessionState.EXITED && it.state != SessionState.FAILED && it.state != SessionState.ORPHANED }
-                        .mapNotNull { it.role?.let(RoleIds::normalize) }.toSet()
-                    val remaining = roles.delete(id, live)
-                    val push = if (remaining != null) Envelope(Envelope.ROLE, json.encodeToString(Role.serializer(), remaining))
-                    else Envelope(Envelope.ROLE_REMOVED, id)
-                    for (client in clients) client.trySend(push)
-                    if (wantsDirectAck(envelope)) push else null
-                } catch (e: IllegalArgumentException) {
-                    Envelope(Envelope.ERROR, "role_delete refused: ${e.message ?: "invalid role"}")
-                } catch (e: Exception) {
-                    Envelope(Envelope.ERROR, "role_delete failed: ${e.message ?: e::class.simpleName}")
                 }
 
                 Envelope.COMMAND_CATALOG -> SlashCommands.catalog(envelope, manager, harnesses)
@@ -3797,6 +3712,8 @@ private suspend fun handleConnection(
                 else if (envelope.type in BoardFrames.KNOWLEDGE_RECORD_TYPES) BoardFrames.noKnowledgeRecords(envelope.type)
                 // DP-7f: the memory frames belong to the Infantry_Notes plugin too.
                 else if (envelope.type in BoardFrames.MEMORY_TYPES) BoardFrames.noMemory(envelope.type)
+                // AR-4b-ii-b: the role frames belong to the Infantry_Roles plugin; without it the daemon says so.
+                else if (envelope.type in BoardFrames.ROLE_TYPES) BoardFrames.noRoles(envelope.type)
                 // DP-10a: image_upload belongs to the Infantry_Chat plugin (project-scoped files); without it the daemon says so.
                 else if (envelope.type == Envelope.IMAGE_UPLOAD) Envelope(Envelope.ERROR, "image_upload refused: this daemon stores no uploads")
                 else Envelope(Envelope.ERROR, "unknown frame type '${envelope.type}'")
@@ -4185,3 +4102,7 @@ internal var testKnowledge: com.superiorsoftllc.agenthq.daemon.api.knowledge.Kno
  */
 internal fun wantsDirectAck(envelope: Envelope): Boolean =
     envelope.requestId?.let { it.startsWith("plugin:") || it.startsWith("loopback:") } == true
+
+/** AR-4b-ii-b: test seam only. A Roles provider core tests install in place of the Infantry_Roles plugin (no frames; the port only). */
+@Volatile
+internal var testRoles: com.superiorsoftllc.agenthq.daemon.api.roles.Roles? = null

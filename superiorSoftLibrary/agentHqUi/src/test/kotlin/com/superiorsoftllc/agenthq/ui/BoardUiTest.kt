@@ -17,7 +17,6 @@ import com.superiorsoftllc.agenthq.mailbox.JsonMailStore
 import com.superiorsoftllc.agenthq.persistence.SqlAgentHqStore
 import com.superiorsoftllc.agenthq.provider.HarnessModelCatalogs
 import com.superiorsoftllc.agenthq.provider.StubProvider
-import com.superiorsoftllc.agenthq.role.RoleService
 import com.superiorsoftllc.agenthq.runner.StubScript
 import com.superiorsoftllc.agenthq.session.JsonSessionStore
 import com.superiorsoftllc.agenthq.stories.JsonStoryStore
@@ -52,7 +51,6 @@ class BoardUiTest {
             store = SqlAgentHqStore.open(File(dir, "agenthq.db").absolutePath),
             mailBaseUrl = "http://127.0.0.1:1", token = null,
             storyStore = JsonStoryStore(File(dir, "stories.json")),
-            roles = RoleService(File(dir, "roles")),
             // Hermetic: build()'s default, HarnessModelCatalogs.builtIn(), runs this host's `pi --list-models`
             // (seconds, up to 20 s on a loaded machine) when the window's connect burst asks for `models`. The
             // daemon answers a connection's requests one at a time, so the test's first create queued behind

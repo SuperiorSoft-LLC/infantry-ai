@@ -2,9 +2,9 @@ package com.superiorsoftllc.agenthq.daemon
 
 import com.superiorsoftllc.agenthq.protocol.Envelope
 import com.superiorsoftllc.agenthq.protocol.EventVocabulary
-import com.superiorsoftllc.agenthq.role.Role
+import com.superiorsoftllc.agenthq.plugins.official.roles.daemon.Role
 import com.superiorsoftllc.agenthq.protocol.RoleIds
-import com.superiorsoftllc.agenthq.role.RoleSource
+import com.superiorsoftllc.agenthq.plugins.official.roles.daemon.RoleSource
 import com.superiorsoftllc.agenthq.runner.StubScript
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json

@@ -80,6 +80,6 @@ class TraitStore(
 }
 
 /** TRAITS-T2/T3: what still binds trait [id] -- `role 'x'` for each role row listing it, then `agent 'y'` for each profile adding it. */
-fun AgentHqStore.traitReferences(id: String): List<String> =
-    roleTraits.all().filter { id in it.traitIds }.map { "role '${it.roleId}'" } +
+fun AgentHqStore.traitReferences(id: String, roleTraits: List<com.superiorsoftllc.agenthq.daemon.api.roles.RoleTraitsRecord> = emptyList()): List<String> =
+    roleTraits.filter { id in it.traitIds }.map { "role '${it.roleId}'" } +
         agents.all().filter { id in it.traitIds.orEmpty() }.map { "agent '${it.id}'" }

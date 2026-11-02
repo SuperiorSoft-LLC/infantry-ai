@@ -25,6 +25,7 @@ dependencies {
     // compile against it: they drive the app UI's panes.
     runtimeOnly(project(":superiorSoftLibrary:agenthqAppUi"))
     testImplementation(project(":superiorSoftLibrary:agenthqAppUi"))
+    testImplementation(project(":daemon-plugin-official-Infantry_Roles")) // AR-4b-ii-b: RoleService, read by the role edit tests
     testImplementation(project(":superiorSoftLibrary:agentHqDaemonApi")) // the usage model (LimitWindow) the pacing test builds
     // RUNTIME-3: the app loads the official Infantry_Cli jar at run time (plugins/official); the UI tests, which start
     // from an empty plugins root, carry it on their class path instead (its jar's ServiceLoader entry), so they see the

@@ -259,7 +259,7 @@ class RoleSpawnIdentityTest {
     private companion object {
         /** ROLE-EDIT-1: a role-only spawn now carries its role's persona (the bundled qa.md) ahead of the identity. */
         // b7a55d4: every role instance's instructions end with the shipped KNOWLEDGE.md, ahead of the identity.
-        val QA_PERSONA: String = SharedKnowledge.withKnowledge(com.superiorsoftllc.agenthq.role.RoleCatalog.load().persona("qa"))!!
+        val QA_PERSONA: String = SharedKnowledge.withKnowledge(com.superiorsoftllc.agenthq.plugins.official.roles.daemon.RoleCatalog.load().persona("qa"))!!
         val BACKEND_PERSONA: String = SharedKnowledge.withKnowledge("You are the backend agent.")!!
         const val ROLE_ONLY_IDENTITY =
             "You are running inside Infantry AI as role 'qa'. " +

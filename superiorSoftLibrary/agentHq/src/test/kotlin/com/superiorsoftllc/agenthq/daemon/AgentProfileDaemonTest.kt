@@ -198,7 +198,7 @@ class AgentProfileDaemonTest {
         assertEquals(
             // ROLE-EDIT-1: a profile with no instructions of its own falls back to its role's persona (the bundled qa.md).
             // b7a55d4: the shipped KNOWLEDGE.md follows the persona.
-            SharedKnowledge.withKnowledge(com.superiorsoftllc.agenthq.role.RoleCatalog.load().persona("qa"))!! + "\n\n" +
+            SharedKnowledge.withKnowledge(com.superiorsoftllc.agenthq.plugins.official.roles.daemon.RoleCatalog.load().persona("qa"))!! + "\n\n" +
             "You are running inside Infantry AI as role 'qa', agent id 'qa'. " +
                 "Your environment carries the same identity (AGENTHQ_ROLE, AGENTHQ_AGENT_ID, AGENTHQ_SESSION_ID).\n\n" +
                 // P10-K9: the spawn names project p1, whose knowledge base is empty, so it gets the empty form.

@@ -19,7 +19,6 @@ import com.superiorsoftllc.agenthq.plugins.core.CoreModules
 import com.superiorsoftllc.agenthq.policy.DirectoryPolicyProvider
 import com.superiorsoftllc.agenthq.policy.PolicyRuntime
 import com.superiorsoftllc.agenthq.provider.StubProvider
-import com.superiorsoftllc.agenthq.role.RoleService
 import com.superiorsoftllc.agenthq.runner.StubScript
 import com.superiorsoftllc.agenthq.session.JsonSessionStore
 import com.superiorsoftllc.agenthq.stories.JsonStoryStore
@@ -98,7 +97,6 @@ class PolicyOneSwitchRealDaemonUiTest {
             store = SqlAgentHqStore.open(File(state, "agenthq.db").absolutePath),
             mailBaseUrl = "http://127.0.0.1:1", token = null, ownerToken = owner,
             storyStore = JsonStoryStore(File(state, "stories.json")),
-            roles = RoleService(File(state, "roles")),
             modelCatalogs = com.superiorsoftllc.agenthq.provider.HarnessModelCatalogs.EMPTY,
             workingDir = state,
             policies = policies,

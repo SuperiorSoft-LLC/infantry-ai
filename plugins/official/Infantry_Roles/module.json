@@ -12,7 +12,20 @@
   "daemon": {
     "entry": "com.superiorsoftllc.agenthq.plugins.official.roles.daemon.RolesDaemonPlugin",
     "jar": "daemon/build/libs/Infantry_Roles-daemon.jar",
-    "apiAtLeast": "1.1.0",
+    "apiAtLeast": "1.34.0",
+    "env": ["AGENTHQ_ROLES_DIR"],
+    "storage": { "adopt": ["role_bindings", "role_traits"] },
+    "frames": [
+      { "type": "role_list", "action": "roles.read", "kind": "read" },
+      { "type": "role_save", "action": "roles.save", "kind": "write" },
+      { "type": "role_delete", "action": "roles.delete", "kind": "destructive" },
+      { "type": "role_binding_list", "action": "roles.read", "kind": "read" },
+      { "type": "role_binding_get", "action": "roles.read", "kind": "read" },
+      { "type": "role_binding_set", "action": "roles.save", "kind": "write" },
+      { "type": "role_traits_list", "action": "roles.read", "kind": "read" },
+      { "type": "role_traits_get", "action": "roles.read", "kind": "read" },
+      { "type": "role_traits_set", "action": "roles.save", "kind": "write" }
+    ],
     "tools": [
       { "name": "agenthq_role_list", "action": "roles.read", "kind": "read", "description": "Every role: id, name, description, source." },
       { "name": "agenthq_role_get", "action": "roles.read", "kind": "read", "description": "One role in full, with its persona." },

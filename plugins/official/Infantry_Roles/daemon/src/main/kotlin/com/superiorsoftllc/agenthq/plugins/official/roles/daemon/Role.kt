@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.role
+package com.superiorsoftllc.agenthq.plugins.official.roles.daemon
 
 /**
  * One role: its id, a display [name], the [color] used for the badge, its [persona] markdown and its [icon] key.
