@@ -67,8 +67,13 @@ class ScriptDispatcher(
         invoker: ToolInvoker, dryRun: Boolean, progressTo: String? = null, onPlanned: (List<ActionRecord>) -> Unit = {},
     ): RunReport {
         val started = System.nanoTime()
-        return runUntimed(engine, source, args, limits, caller, invoker, dryRun, progressTo, onPlanned)
-            .copy(durationMs = (System.nanoTime() - started) / 1_000_000)
+        System.err.println("[agentHq] script run start (dryRun=$dryRun)")
+        return try {
+            runUntimed(engine, source, args, limits, caller, invoker, dryRun, progressTo, onPlanned)
+                .copy(durationMs = (System.nanoTime() - started) / 1_000_000)
+        } finally {
+            System.err.println("[agentHq] script run end after ${(System.nanoTime() - started) / 1_000_000} ms")
+        }
     }
 
     private fun runUntimed(
