@@ -36,6 +36,7 @@
 param(
   [string]$Sha,
   [switch]$DryRun,
+  [switch]$SwitchCurrent,    # PKG-DIST-1: opt in to replacing <build.root>\current after a verified build (default: never)
   [switch]$BackupState,
   [string]$StateDir,
   [string]$Keystore,
@@ -50,8 +51,11 @@ param(
 $repo = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'plugin-selection.ps1')
 
+$script:Step = 'start'
+$script:BuildOk = $false
+$script:DestCreated = $null
 function Fail([string]$Message) {
-  [Console]::Error.WriteLine("PACKAGE-DIST refused: $Message")
+  [Console]::Error.WriteLine("PACKAGE-DIST refused at step '$($script:Step)': $Message")
   exit 2
 }
 
@@ -141,9 +145,11 @@ try {
   $selection = Resolve-PluginSelection @(Get-PluginInventory $pluginsRoot) $pluginsRoot $Include $Exclude $Preset
 } catch { Fail "plugin selection: $($_.Exception.Message)" }
 
+Write-Output "PACKAGE-DIST step 1/7: resolve"
 $root = Get-BuildRoot
 $buildsDir = Join-Path $root.Path 'builds'
-$dest = Join-Path $buildsDir $full
+$folderName = (Get-Date).ToString('yyyyMMdd-HHmmss') + '-' + $full.Substring(0, 8)  # PKG-DIST-1: every build gets its own folder
+$dest = Join-Path $buildsDir $folderName
 $current = Join-Path $root.Path 'current'
 
 if ($Keystore) {
@@ -157,7 +163,7 @@ if ($Keystore) {
   $signArgs = @('-Pihq.devSign=true')
 }
 $gradleArgs = @(':superiorSoftLibrary:agentHqUi:createDistributable', '--no-parallel', '--no-daemon',
-  '-Dorg.gradle.jvmargs=-XX:MaxMetaspaceSize=2g -Xmx3g',
+  '-Dorg.gradle.jvmargs=-XX:MaxMetaspaceSize=2g -Xmx3g',  # quoted per argument when run (Invoke-Gradle)
   # the worktree is detached, so the packaging guard sees HEAD; the sha was checked to be on $ReleaseBranch above
   '-PallowAnyBranch=true') + $signArgs
 if ($selection.Excluded.Count -gt 0) { $gradleArgs += @("-Pihq.excludePlugins=$($selection.Excluded -join ',')", '-Pihq.optionalOut=true') }
@@ -169,7 +175,7 @@ if ($DryRun) {
   Write-Output "  current=$current"
   Write-Output "  manifest=$dest\MANIFEST.txt"
   Write-Output "  plugins: preset=$(if ($Preset) { $Preset } else { 'full' }) included=$($selection.Included.Count) excluded=[$($selection.Excluded -join ', ')]"
-  Write-Output "  build-manifest=$buildsDir\$full.build-manifest.json optional-plugins=$buildsDir\$full.optional-plugins\ (when anything is excluded)"
+  Write-Output "  build-manifest=$buildsDir\$folderName.build-manifest.json optional-plugins=$buildsDir\$folderName.optional-plugins\ (when anything is excluded)"
   Write-Output "  signing=$signing$(if ($signing -eq 'devSign') { ' (no key given: throwaway dev key, not for release)' })"
   Write-Output "  worktree=<TEMP>\package-dist-<sha8>-<rand> (removed after)"
   Write-Output "  gradle: .\gradlew.bat $($gradleArgs -join ' ')"
@@ -178,6 +184,7 @@ if ($DryRun) {
 }
 
 if (-not (Test-Path -LiteralPath $buildsDir)) { New-Item -ItemType Directory -Path $buildsDir | Out-Null }
+Write-Output "PACKAGE-DIST step 2/7: worktree"
 $tmp = Join-Path ([IO.Path]::GetTempPath()) ("package-dist-" + $full.Substring(0, 8) + '-' + [guid]::NewGuid().ToString('N').Substring(0, 6))
 git -C $repo worktree add --detach $tmp $full | Out-Null
 if ($LASTEXITCODE -ne 0) { Fail "could not create the worktree for $full" }
@@ -185,26 +192,41 @@ if ($LASTEXITCODE -ne 0) { Fail "could not create the worktree for $full" }
 try {
   Write-Output "PACKAGE-DIST building $full ($signing) in $tmp"
   Push-Location $tmp
-  try { & .\gradlew.bat @gradleArgs; $gradleExit = $LASTEXITCODE } finally { Pop-Location }
+Write-Output "PACKAGE-DIST step 3/7: gradle"
+  $script:Step = 'gradle createDistributable'
+  # Every argument is double-quoted into one cmd.exe line: gradlew.bat splits unquoted -Pname=value on '=' and a jvmargs value on spaces.
+  $quoted = ($gradleArgs | ForEach-Object { '"' + ($_ -replace '"', '\"') + '"' }) -join ' '
+  # Start-Process passes the command line verbatim (a direct call re-escapes the inner quotes).
+  $cmdLine = '/d /s /c ""' + $tmp + '\gradlew.bat" ' + $quoted + '"'
+  try { $gp = Start-Process -FilePath cmd.exe -ArgumentList $cmdLine -NoNewWindow -Wait -PassThru; $gradleExit = $gp.ExitCode } finally { Pop-Location }
   if ($gradleExit -ne 0) { Fail "gradle createDistributable failed (exit $gradleExit). Nothing was copied." }
 
+  $script:Step = 'locate app image'
   $imageRoot = Join-Path $tmp 'superiorSoftLibrary\agentHqUi\build\compose\binaries\main\app'
   $image = Get-ChildItem -LiteralPath $imageRoot -Directory -ErrorAction SilentlyContinue | Select-Object -First 1
   if (-not $image) { Fail "no app image under $imageRoot" }
   $srcExe = Get-ChildItem -LiteralPath $image.FullName -Filter '*.exe' -File | Select-Object -First 1
   if (-not $srcExe) { Fail "no .exe at the top of $($image.FullName)" }
 
+  Write-Output "PACKAGE-DIST step 4/7: copy"
+  $script:Step = 'copy image'
   # Copy into builds\<sha>\ (a re-run replaces that sha's folder only).
   if (Test-Path -LiteralPath $dest) { Remove-Item -LiteralPath $dest -Recurse -Force }
+  $script:DestCreated = $dest
   Invoke-Robocopy $image.FullName $dest
+  $script:Step = 'write BUILD-INFO/MANIFEST/README'
   $stampUtc = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
   $info = @("sha=$full", "built=$stampUtc", "signing=$signing", "source=$($image.Name)")
-  Set-Content -LiteralPath (Join-Path $dest 'BUILD-INFO.txt') -Value $info -Encoding ASCII
+  $infoPath = Join-Path $dest 'BUILD-INFO.txt'
+  if (Test-Path -LiteralPath $infoPath) { Add-Content -LiteralPath $infoPath -Value (@('', '# package-dist') + $info) -Encoding ASCII }  # keep the image's own record
+  else { Set-Content -LiteralPath $infoPath -Value $info -Encoding ASCII }
   Set-Content -LiteralPath (Join-Path $dest 'MANIFEST.txt') -Value "$full $stampUtc $signing" -Encoding ASCII
   # README.txt is generated per build (never copied from an earlier build), so it names this sha and folder.
   $readme = @("Infantry AI build $($full.Substring(0, 7))", "sha=$full", "folder=$(Split-Path -Leaf $dest)", "built=$stampUtc", "signing=$signing", "See BUILD-INFO.txt for the full record.")
   Set-Content -LiteralPath (Join-Path $dest 'README.txt') -Value $readme -Encoding ASCII
 
+  Write-Output "PACKAGE-DIST step 5/7: integrity"
+  $script:Step = 'copy-integrity checks'
   # Copy-integrity checks: all must pass before current\ is touched.
   $destExe = Join-Path $dest $srcExe.Name
   if (-not (Test-Path -LiteralPath $destExe)) { Fail "integrity: $($srcExe.Name) missing in $dest" }
@@ -224,13 +246,15 @@ try {
   }
   if (-not ((Get-Content -LiteralPath (Join-Path $dest 'BUILD-INFO.txt')) -contains "sha=$full")) { Fail "integrity: BUILD-INFO sha does not match $full" }
 
+  Write-Output "PACKAGE-DIST step 6/7: plugins"
+  $script:Step = 'plugin report'
   # BUILD-PLUGINS-1: the included/excluded report and the left-out plugins' packages, next to the build.
   $inventory = @(Get-PluginInventory (Join-Path $tmp 'plugins'))
-  $manifestPath = Join-Path $buildsDir "$full.build-manifest.json"
-  $optionalDest = Join-Path $buildsDir "$full.optional-plugins"
+  $manifestPath = Join-Path $buildsDir "$folderName.build-manifest.json"
+  $optionalDest = Join-Path $buildsDir "$folderName.optional-plugins"
   if (Test-Path -LiteralPath $optionalDest) { Remove-Item -LiteralPath $optionalDest -Recurse -Force }
   if ($selection.Excluded.Count -gt 0) {
-    $optionalSrc = Join-Path $tmp 'superiorSoftLibrarygentHqUiuild\official-modules\optional-plugins'
+    $optionalSrc = Join-Path $tmp 'superiorSoftLibrary\agentHqUi\build\official-modules\optional-plugins'
     if (-not (Test-Path -LiteralPath $optionalSrc)) { Fail "no optional-plugins output at $optionalSrc" }
     Invoke-Robocopy (Join-Path $optionalSrc 'official') $optionalDest
     $catalog = New-OptionalCatalog $optionalDest $inventory
@@ -238,25 +262,34 @@ try {
     $catalog | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $optionalDest 'catalog.json') -Encoding UTF8
   }
   $report = New-BuildManifest $inventory $selection $full $signing $Preset
-  $stagedOfficial = @(Get-ChildItem -LiteralPath (Join-Path $dest 'app
-esources\modules\official') -Directory -ErrorAction SilentlyContinue | ForEach-Object { $_.Name })
+  $stagedOfficial = @(Get-ChildItem -LiteralPath (Join-Path $dest 'app\resources\modules\official') -Directory -ErrorAction SilentlyContinue | ForEach-Object { $_.Name })
   foreach ($x in $selection.Excluded) { if ($stagedOfficial -contains $x) { Fail "integrity: excluded plugin $x is still in the build" } }
   $report | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
   Write-Output "PACKAGE-DIST plugins: included=$($selection.Included.Count) excluded=[$($selection.Excluded -join ', ')] report=$manifestPath$(if ($selection.Excluded.Count) { " optional=$optionalDest" })"
 
-  # Only now replace current\.
-  # BUILD-SWAP-1: never delete-then-copy. swap-current.ps1 copies, verifies, then renames; a running app only blocks the switch.
-  $swap = Join-Path $PSScriptRoot 'swap-current.ps1'
-  & powershell -NoProfile -ExecutionPolicy Bypass -File $swap -Sha $full -BuildRoot $root.Path
-  $swapExit = $LASTEXITCODE
-  if ($swapExit -eq 3) {
-    Write-Output "PACKAGE-DIST ok (NOT switched): sha=$full signing=$signing files=$($destCount.Files) output=$dest. current\ is untouched because the app is running; to switch run: powershell -File `"$swap`" -BuildRoot `"$($root.Path)`" (see $($root.Path)\READY-TO-SWITCH.txt)"
-  } elseif ($swapExit -ne 0) {
-    Fail "swap of current\ failed (exit $swapExit); the build is complete and verified in $dest"
+  $script:Step = 'finish'
+  Write-Output "PACKAGE-DIST step 7/7: finish"
+  if ($SwitchCurrent) {
+    # BUILD-SWAP-1: never delete-then-copy. swap-current.ps1 copies, verifies, then renames; a running app only blocks the switch.
+    $swap = Join-Path $PSScriptRoot 'swap-current.ps1'
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $swap -Sha $folderName -BuildRoot $root.Path
+    $swapExit = $LASTEXITCODE
+    if ($swapExit -eq 3) {
+      Write-Output "PACKAGE-DIST ok (NOT switched): sha=$full signing=$signing files=$($destCount.Files) output=$dest. current\ is untouched because the app is running; to switch run: powershell -File `"$swap`" -Sha $folderName -BuildRoot `"$($root.Path)`""
+    } elseif ($swapExit -ne 0) {
+      Fail "swap of current\ failed (exit $swapExit); the build is complete and verified in $dest"
+    } else {
+      Write-Output "PACKAGE-DIST ok: sha=$full signing=$signing files=$($destCount.Files) output=$dest current=$current"
+    }
   } else {
-    Write-Output "PACKAGE-DIST ok: sha=$full signing=$signing files=$($destCount.Files) output=$dest current=$current"
+    Write-Output "PACKAGE-DIST ok: sha=$full signing=$signing files=$($destCount.Files) output=$dest (current\ untouched; add -SwitchCurrent to switch)"
   }
+  $script:BuildOk = $true
 } finally {
+  if (-not $script:BuildOk -and $script:DestCreated -and (Test-Path -LiteralPath $script:DestCreated)) {
+    Remove-Item -LiteralPath $script:DestCreated -Recurse -Force -ErrorAction SilentlyContinue  # never leave a half build
+    Remove-Item -LiteralPath $manifestPath -Force -ErrorAction SilentlyContinue
+  }
   git -C $repo worktree remove --force $tmp 2>$null
   if (Test-Path -LiteralPath $tmp) { Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue }
 }

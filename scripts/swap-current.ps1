@@ -60,10 +60,18 @@ if (-not $Sha) {
 if (-not $Sha) { Fail "no build found under $buildsDir. Nothing was touched." }
 $src = Join-Path $buildsDir $Sha
 if (-not (Test-Path -LiteralPath $src -PathType Container)) {
-  $m = @(Get-ChildItem -LiteralPath $buildsDir -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "$Sha*" })
-  if ($m.Count -ne 1) { Fail "builds\$Sha not found (or ambiguous). Nothing was touched." }
-  $src = $m[0].FullName; $Sha = $m[0].Name
+  # PKG-DIST-1: folders are builds\<yyyyMMdd-HHmmss>-<sha8>; -Sha may be a sha (prefix) or a folder name. Several builds of one sha: the newest.
+  $m = @(Get-ChildItem -LiteralPath $buildsDir -Directory -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -like "$Sha*" -or $_.Name -like "*-$($Sha.Substring(0, [Math]::Min(8, $Sha.Length)))*" } | Sort-Object Name -Descending)
+  if ($m.Count -lt 1) { Fail "no build named or containing '$Sha' under $buildsDir. Nothing was touched." }
+  $src = $m[0].FullName
 }
+$Folder = Split-Path -Leaf $src
+$infoSha = $null
+$infoFile = Join-Path $src 'BUILD-INFO.txt'
+if (Test-Path -LiteralPath $infoFile) { foreach ($l in (Get-Content -LiteralPath $infoFile)) { if ($l -match '^sha=([0-9a-f]{40})\s*$') { $infoSha = $Matches[1]; break } } }
+if (-not $infoSha) { Fail "no sha= line in $infoFile. Nothing was touched." }
+$Sha = $infoSha  # from here on $Sha is the full commit sha; $Folder names the build folder
 
 function Get-Count([string]$Dir) {
   $files = @(Get-ChildItem -LiteralPath $Dir -Recurse -File -Force)
@@ -99,14 +107,14 @@ function Get-Leftovers {
 }
 
 Write-Output "SWAP-CURRENT plan: build.root=$root sha=$Sha"
-Write-Output "  1 copy  builds\$Sha -> current.next (current\ untouched)"
+Write-Output "  1 copy  builds\$Folder -> current.next (current\ untouched)"
 Write-Output "  2 verify current.next (BUILD-INFO sha, file count, bytes, exe size)"
 Write-Output "  3 rename current -> current.old (fails while the app runs: then stop, nothing changed, exit 3)"
 Write-Output "  4 rename current.next -> current, verify current"
 Write-Output "  5 delete after verification: $((@(Get-Leftovers | ForEach-Object { Split-Path -Leaf $_ }) -join ', '))"
 $blockers = Get-Blockers
 Write-Output "  running from this root now: $(if ($blockers) { $blockers -join '; ' } else { 'none' })"
-if (-not $PSCmdlet.ShouldProcess("$root\current", "switch to builds\$Sha")) { Write-Output "WhatIf: nothing changed."; exit 0 }
+if (-not $PSCmdlet.ShouldProcess("$root\current", "switch to builds\$Folder")) { Write-Output "WhatIf: nothing changed."; exit 0 }
 
 # Already current and complete: only clean up.
 if ((Test-Path -LiteralPath $current) -and -not (Test-SameAsBuild $current)) {
@@ -114,7 +122,7 @@ if ((Test-Path -LiteralPath $current) -and -not (Test-SameAsBuild $current)) {
 } else {
   if (Test-Path -LiteralPath $next) { Remove-Item -LiteralPath $next -Recurse -Force -ErrorAction Stop }
   & robocopy $src $next /E /R:1 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
-  if ($LASTEXITCODE -ge 8) { Fail "robocopy builds\$Sha -> current.next failed (exit $LASTEXITCODE). current\ untouched." }
+  if ($LASTEXITCODE -ge 8) { Fail "robocopy builds\$Folder -> current.next failed (exit $LASTEXITCODE). current\ untouched." }
   $bad = Test-SameAsBuild $next
   if ($bad) { Fail "verification of current.next: $bad. current\ untouched." }
 
@@ -125,7 +133,7 @@ if ((Test-Path -LiteralPath $current) -and -not (Test-SameAsBuild $current)) {
       $who = Get-Blockers
       $why = if ($who) { "blocked by running process " + ($who -join '; ') } else { "blocked: $($_.Exception.Message)" }
       Set-Content -LiteralPath $readyFile -Encoding ASCII -Value @(
-        "sha=$Sha", "ready=builds\$Sha (complete and verified; current.next holds a verified copy)",
+        "sha=$Sha", "ready=builds\$Folder (complete and verified; current.next holds a verified copy)",
         "current\ was NOT changed because: $why",
         "Close Infantry AI, then run:  powershell -File `"$PSScriptRoot\swap-current.ps1`" -BuildRoot `"$root`"")
       [Console]::Error.WriteLine("SWAP-CURRENT blocked: $why. Nothing was changed. See $readyFile")
