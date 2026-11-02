@@ -80,6 +80,7 @@ class StallHookTest {
 
     @Test
     fun theDaemonAnswers_claudeOnlyInBypass_opencodeOnlyInAllowAll_piAlways() {
+        WatchHooks.approvalExempt = setOf("pi") // what CoreHarnessContributions registers
         fun claude(mode: String, bg: Boolean = false) = WatchHooks.decide(
             "claude",
             """{"hook_event_name":"PreToolUse","tool_name":"Bash","permission_mode":"$mode","tool_input":{"command":"./gradlew test","description":"tests","run_in_background":$bg}}""",
