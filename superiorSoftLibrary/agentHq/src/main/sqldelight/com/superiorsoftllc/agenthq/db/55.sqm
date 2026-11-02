@@ -3,7 +3,7 @@
 -- (docs/EFFORT.md). Both nullable with no default: every existing ticket and run keeps "harness default" (current behaviour).
 -- The columns are exactly tickets.sq's and usage.sq's.
 --
--- NEXT MIGRATION: 56.sqm
+-- NEXT MIGRATION: 57.sqm (56 is ARCHIVE-1 archived_tickets)
 
 ALTER TABLE tickets ADD COLUMN effort TEXT;
 

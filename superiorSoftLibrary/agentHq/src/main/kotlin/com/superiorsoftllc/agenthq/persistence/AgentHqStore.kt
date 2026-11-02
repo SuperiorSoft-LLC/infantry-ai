@@ -233,6 +233,8 @@ interface AgentHqStore : Closeable {
     /** TRAITS-T4: the frozen role instance of each agent/role session (29.sqm; its skill ids since P10-K13, 35.sqm). */
     val sessionInstances: com.superiorsoftllc.agenthq.session.SessionInstanceRepository
     val tickets: TicketRepository
+    /** ARCHIVE-1: the archived tickets (out of the live board tables). */
+    val ticketArchive: TicketArchiveRepository
     val settings: SettingsRepository
     val ticketRuns: TicketRunRepository
     val usage: UsageRepository
@@ -570,6 +572,8 @@ class SqlAgentHqStore(val handle: AgentHQDatabaseHandle) : AgentHqStore {
             existed
         }
     }
+
+    override val ticketArchive: TicketArchiveRepository by lazy { SqlTicketArchive(handle, this) }
 
     override val tickets: TicketRepository = object : TicketRepository {
         private val q = db.ticketsQueries
@@ -974,7 +978,7 @@ private fun Agents.toProfile() = AgentProfile(
     skillIds = kotlinx.serialization.json.Json.decodeFromString(TRAIT_IDS_JSON, skill_ids),
 )
 
-private val TRAIT_IDS_JSON = kotlinx.serialization.builtins.ListSerializer(kotlinx.serialization.serializer<String>())
+internal val TRAIT_IDS_JSON = kotlinx.serialization.builtins.ListSerializer(kotlinx.serialization.serializer<String>())
 
 private fun Tickets.toRow() = TicketRow(
     id = id,

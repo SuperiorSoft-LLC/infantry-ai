@@ -1,0 +1,53 @@
+-- ARCHIVE-1 (ticket 719fcaf4) -- migration v56 -> v57: the archive. An archived ticket leaves `tickets` (and its links leave
+-- `ticket_links`) and lives here with every column intact, plus its epic's and project's snapshot, so board reads never scan it.
+-- ticket_files is NOT moved: the related-ticket file lists keep finding an archived ticket's changed files.
+--
+-- NEXT MIGRATION: 57.sqm
+
+CREATE TABLE IF NOT EXISTS archived_tickets (
+    id TEXT NOT NULL PRIMARY KEY,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    ticket_type TEXT,
+    status TEXT NOT NULL,
+    position INTEGER NOT NULL,
+    wont_fix INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    agent_id TEXT,
+    provider TEXT,
+    model TEXT,
+    use_worktree INTEGER,
+    worktree_branch TEXT,
+    include_linked_tasks_context INTEGER,
+    queued_for TEXT,
+    queued_at INTEGER,
+    session_id TEXT,
+    project_id TEXT,
+    epic_id TEXT,
+    branch_name TEXT,
+    base_commit TEXT,
+    skill_ids TEXT NOT NULL DEFAULT '[]',
+    skills_mode TEXT NOT NULL DEFAULT 'merge',
+    include_skills_context INTEGER,
+    started_by TEXT,
+    images TEXT NOT NULL DEFAULT '[]',
+    weight INTEGER,
+    context_limit INTEGER,
+    effort TEXT,
+    archived_at INTEGER NOT NULL,
+    epic_json TEXT,
+    project_json TEXT
+);
+
+CREATE INDEX IF NOT EXISTS index_archived_tickets_on_project ON archived_tickets(project_id, archived_at);
+
+CREATE TABLE IF NOT EXISTS archived_ticket_links (
+    ticket_id TEXT NOT NULL,
+    related_id TEXT NOT NULL,
+    type TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (ticket_id, related_id, type)
+);
+
+CREATE INDEX IF NOT EXISTS index_archived_ticket_links_on_related ON archived_ticket_links(related_id);
