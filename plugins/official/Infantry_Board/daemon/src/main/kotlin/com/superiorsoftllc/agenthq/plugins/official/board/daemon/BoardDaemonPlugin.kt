@@ -51,6 +51,10 @@ class BoardDaemonPlugin : DaemonPlugin {
         }
         api.tools.register(TicketFilesTools.Files)
         api.tools.register(TicketFilesTools.Related)
+        // ARCHIVE-1: archive / restore / read the ticket archive.
+        api.tools.register(ArchiveTools.Archive)
+        api.tools.register(ArchiveTools.Restore)
+        api.tools.register(ArchiveTools.Query)
         // RUNTIME-LOAD-4 (F5): the board's write tools, moved out of the CLI's MCP server.
         api.tools.register(EpicBaseTool)
         api.tools.register(TicketMoveTool(api))

@@ -1,0 +1,113 @@
+-- ARCHIVE-1 (ticket 719fcaf4): see 56.sqm. Same tables; archive/unarchive move rows with INSERT ... SELECT, so no column is lost.
+
+CREATE TABLE IF NOT EXISTS archived_tickets (
+    id TEXT NOT NULL PRIMARY KEY,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    ticket_type TEXT,
+    status TEXT NOT NULL,
+    position INTEGER NOT NULL,
+    wont_fix INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    agent_id TEXT,
+    provider TEXT,
+    model TEXT,
+    use_worktree INTEGER,
+    worktree_branch TEXT,
+    include_linked_tasks_context INTEGER,
+    queued_for TEXT,
+    queued_at INTEGER,
+    session_id TEXT,
+    project_id TEXT,
+    epic_id TEXT,
+    branch_name TEXT,
+    base_commit TEXT,
+    skill_ids TEXT NOT NULL DEFAULT '[]',
+    skills_mode TEXT NOT NULL DEFAULT 'merge',
+    include_skills_context INTEGER,
+    started_by TEXT,
+    images TEXT NOT NULL DEFAULT '[]',
+    weight INTEGER,
+    context_limit INTEGER,
+    effort TEXT,
+    archived_at INTEGER NOT NULL,
+    epic_json TEXT,
+    project_json TEXT
+);
+
+CREATE INDEX IF NOT EXISTS index_archived_tickets_on_project ON archived_tickets(project_id, archived_at);
+
+CREATE TABLE IF NOT EXISTS archived_ticket_links (
+    ticket_id TEXT NOT NULL,
+    related_id TEXT NOT NULL,
+    type TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (ticket_id, related_id, type)
+);
+
+CREATE INDEX IF NOT EXISTS index_archived_ticket_links_on_related ON archived_ticket_links(related_id);
+
+archive:
+INSERT OR REPLACE INTO archived_tickets(id, title, description, ticket_type, status, position, wont_fix, created_at, updated_at, agent_id, provider, model, use_worktree, worktree_branch, include_linked_tasks_context, queued_for, queued_at, session_id, project_id, epic_id, branch_name, base_commit, skill_ids, skills_mode, include_skills_context, started_by, images, weight, context_limit, effort, archived_at, epic_json, project_json)
+SELECT id, title, description, ticket_type, status, position, wont_fix, created_at, updated_at, agent_id, provider, model, use_worktree, worktree_branch, include_linked_tasks_context, queued_for, queued_at, session_id, project_id, epic_id, branch_name, base_commit, skill_ids, skills_mode, include_skills_context, started_by, images, weight, context_limit, effort, :archived_at, :epic_json, :project_json FROM tickets WHERE id = :id;
+
+archiveLinks:
+INSERT OR REPLACE INTO archived_ticket_links(ticket_id, related_id, type, created_at)
+SELECT ticket_id, related_id, type, created_at FROM ticket_links WHERE ticket_id = :id OR related_id = :id;
+
+-- RESTORE: make room at the original position (clamped to the lane's size) before the row comes back.
+makeRoom:
+UPDATE tickets SET position = position + 1 WHERE status = (SELECT status FROM archived_tickets WHERE id = :id)
+  AND position >= MIN((SELECT position FROM archived_tickets WHERE id = :id), (SELECT COUNT(*) FROM tickets t WHERE t.status = (SELECT status FROM archived_tickets WHERE id = :id)));
+
+restore:
+INSERT OR REPLACE INTO tickets(id, title, description, ticket_type, status, position, wont_fix, created_at, updated_at, agent_id, provider, model, use_worktree, worktree_branch, include_linked_tasks_context, queued_for, queued_at, session_id, project_id, epic_id, branch_name, base_commit, skill_ids, skills_mode, include_skills_context, started_by, images, weight, context_limit, effort)
+SELECT id, title, description, ticket_type, status, MIN(position, (SELECT COUNT(*) FROM tickets t WHERE t.status = archived_tickets.status)), wont_fix, created_at, updated_at, agent_id, provider, model, use_worktree, worktree_branch, include_linked_tasks_context, queued_for, queued_at, session_id, project_id, epic_id, branch_name, base_commit, skill_ids, skills_mode, include_skills_context, started_by, images, weight, context_limit, effort
+FROM archived_tickets WHERE id = :id;
+
+-- Only links whose other end is live again (the live table has foreign keys).
+restoreLinks:
+INSERT OR IGNORE INTO ticket_links(ticket_id, related_id, type, created_at)
+SELECT l.ticket_id, l.related_id, l.type, l.created_at FROM archived_ticket_links l
+WHERE (l.ticket_id = :id OR l.related_id = :id)
+  AND l.ticket_id IN (SELECT id FROM tickets) AND l.related_id IN (SELECT id FROM tickets);
+
+deleteArchivedLinksOf:
+DELETE FROM archived_ticket_links WHERE (ticket_id = :id OR related_id = :id)
+  AND ticket_id IN (SELECT id FROM tickets) AND related_id IN (SELECT id FROM tickets);
+
+removeArchived:
+DELETE FROM archived_tickets WHERE id = ?;
+
+-- A done column keeps contiguous positions after rows leave it.
+renumberStatus:
+UPDATE tickets SET position = (SELECT COUNT(*) FROM tickets t2 WHERE t2.status = tickets.status AND (t2.position < tickets.position OR (t2.position = tickets.position AND t2.id < tickets.id)))
+WHERE status = :status;
+
+getArchived:
+SELECT * FROM archived_tickets WHERE id = ?;
+
+archivedIds:
+SELECT id FROM archived_tickets;
+
+countArchived:
+SELECT COUNT(*) FROM archived_tickets WHERE (:project_id IS NULL OR project_id = :project_id);
+
+listArchived:
+SELECT * FROM archived_tickets WHERE (:project_id IS NULL OR project_id = :project_id) AND (:epic_id IS NULL OR epic_id = :epic_id)
+ORDER BY archived_at DESC, id ASC LIMIT :lim OFFSET :off;
+
+searchArchived:
+SELECT * FROM archived_tickets WHERE (:project_id IS NULL OR project_id = :project_id)
+  AND (title LIKE :q ESCAPE '\' OR description LIKE :q ESCAPE '\' OR id LIKE :q ESCAPE '\')
+ORDER BY archived_at DESC, id ASC LIMIT :lim;
+
+archivedLinks:
+SELECT * FROM archived_ticket_links WHERE ticket_id = :id OR related_id = :id;
+
+allArchivedInfo:
+SELECT id, title, description, status, project_id, branch_name, base_commit FROM archived_tickets WHERE (:project_id IS NULL OR project_id = :project_id);
+
+archivedInfo:
+SELECT id, title, description, status, project_id, branch_name, base_commit FROM archived_tickets WHERE id = ?;

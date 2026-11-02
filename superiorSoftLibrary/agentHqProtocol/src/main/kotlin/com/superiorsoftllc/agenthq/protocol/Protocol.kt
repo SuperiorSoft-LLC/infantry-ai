@@ -369,6 +369,12 @@ data class Envelope(
         const val TICKET_FILES = "ticket_files"
         const val TICKET_FILES_REPORT = "ticket_files_report"
 
+        // Contract 1.149.0 (ARCHIVE-1): `archive_query` (an `ArchiveRequest`: list / show / search / count) and `archive_apply` (archive / unarchive
+        // a ticket, an epic or a lane filter) are both answered by `archive_report` (an `ArchiveReport`: capped text plus the items).
+        const val ARCHIVE_QUERY = "archive_query"
+        const val ARCHIVE_APPLY = "archive_apply"
+        const val ARCHIVE_REPORT = "archive_report"
+
         // Contract 1.14.0 -- story 9.5: triggers. Changes are pushed to every client.
         const val TRIGGER_SAVE = "trigger_save"
         const val TRIGGER_LIST = "trigger_list"

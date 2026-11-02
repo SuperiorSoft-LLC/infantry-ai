@@ -61,7 +61,9 @@ class BuiltinToolsListGuardTest {
             "Infantry_Board" to listOf("agenthq_ticket_get", "agenthq_ticket_files", "agenthq_ticket_related_files", "agenthq_epic_base", "agenthq_ticket_move", "agenthq_ticket_delete",
                 "agenthq_ticket_create", "agenthq_ticket_update", "agenthq_board", "agenthq_ticket_start",
                 // DP-6: the pipeline tools moved here from Infantry_Git with the pipeline frames.
-                "agenthq_pipeline", "agenthq_pipeline_record"),
+                "agenthq_pipeline", "agenthq_pipeline_record",
+                // ARCHIVE-1
+                "agenthq_ticket_archive", "agenthq_ticket_restore", "agenthq_archive"),
         )
         val sources = mcp.walkTopDown().filter { it.isFile && it.extension == "kt" }.map { it.readText() }.toList()
         moved.forEach { (module, tools) ->

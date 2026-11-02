@@ -1199,6 +1199,12 @@ class AgentHqDaemon(
             val ticketEvents: com.superiorsoftllc.agenthq.backlog.TicketEventLog? = ticketCore?.events
             val ticketServices = ticketCore?.services
             val ticketFilesText = ticketServices?.filesText
+            // ARCHIVE-1: archive / restore service, and the optional auto policy (board.archive.doneAfterDays, off by default), hourly.
+            val archiveService = com.superiorsoftllc.agenthq.archive.ArchiveService(
+                store,
+                setting = { key -> (store.settings.get(key)?.value as? kotlinx.serialization.json.JsonPrimitive)?.content },
+            )
+            scheduledTicker(3_600_000L) { runCatching { archiveService.autoArchive() } }
             val coreHost = com.superiorsoftllc.agenthq.daemon.wiring.BoardWiring.buildHost(
                 events = ticketEvents, store = store, manager = manager,
                 // BASE-1c: the ticket's epic's base branch, then its project's (BASE-1a), then the daemon's.
@@ -1556,7 +1562,9 @@ class AgentHqDaemon(
                                     relatedDescriptionRef.get().describe(
                                         com.superiorsoftllc.agenthq.ticketfiles.RelatedDraft(
                                             d.ticketId, d.title, d.description, d.projectId,
-                                            d.rows.map { com.superiorsoftllc.agenthq.ticketfiles.TicketInfo(it.id, it.title, it.description, it.status, it.projectId, it.branch, it.base) },
+                                            d.rows.map { com.superiorsoftllc.agenthq.ticketfiles.TicketInfo(it.id, it.title, it.description, it.status, it.projectId, it.branch, it.base) } +
+                                                // ARCHIVE-1: archived tickets stay in the related set (series, named ids)
+                                                store.ticketArchive.infos(d.projectId).map { it.toTicketInfo() },
                                             d.links.map { com.superiorsoftllc.agenthq.ticketfiles.TicketLinkInfo(it.ticketId, it.relatedId) },
                                         ),
                                     )
@@ -1837,6 +1845,7 @@ class AgentHqDaemon(
                                     )
                                 }
                             },
+                            archive = archiveService,
                             cliLocations = cliLocations,
                             harnessInstaller = harnessInstaller,
                             toolApproval = toolApproval,
@@ -2370,6 +2379,8 @@ private suspend fun handleConnection(
     usagePacing: UsagePacing = UsagePacing({ emptyList() }, { com.superiorsoftllc.agenthq.daemon.api.usage.PacingRule.DEFAULT }, { emptyMap() }, { emptyMap() }, { emptyList() }),
     /** TICKET-FILES (contract 1.137.0): answers `ticket_files` (query -> capped text); null = this daemon serves none. */
     ticketFiles: ((com.superiorsoftllc.agenthq.ticketfiles.TicketFilesQuery) -> String)? = null,
+    /** ARCHIVE-1 (contract 1.149.0): answers `archive_query` / `archive_apply`; null = this daemon serves none. */
+    archive: com.superiorsoftllc.agenthq.archive.ArchiveService? = null,
     /** CLIPATH-1 (contract 1.73.0): `cli_locations` / `cli_location_set`; null = this daemon serves neither. */
     cliLocations: com.superiorsoftllc.agenthq.executables.CliLocationService? = null,
     /** HARNESS-INSTALL-1 (contract 1.100.0): `harness_install_status` / `harness_install`; null = this daemon serves neither. */
@@ -3006,6 +3017,24 @@ private suspend fun handleConnection(
                             Envelope(Envelope.ERROR, "ticket_files failed: ${e.message ?: e::class.simpleName}")
                         }
                         // DAEMON-PLUGINS-1: echoes the request's id, so a correlated caller (a plugin tool) gets its own answer.
+                        outgoing.trySend(answer.copy(requestId = envelope.requestId))
+                    }
+                    null
+                }
+
+                // ARCHIVE-1 (1.149.0): reads and moves are SQL, answered off the request loop.
+                Envelope.ARCHIVE_QUERY, Envelope.ARCHIVE_APPLY -> {
+                    session.launch(kotlinx.coroutines.Dispatchers.IO) {
+                        val answer = try {
+                            val svc = archive ?: throw IllegalArgumentException("this daemon has no archive")
+                            val req = com.superiorsoftllc.agenthq.archive.ArchiveRequest.decode(envelope.data)
+                            val report = if (envelope.type == Envelope.ARCHIVE_QUERY) svc.query(req) else svc.apply(req)
+                            Envelope(Envelope.ARCHIVE_REPORT, report.encode())
+                        } catch (e: IllegalArgumentException) {
+                            Envelope(Envelope.ERROR, "archive refused: ${e.message ?: "invalid request"}")
+                        } catch (e: Exception) {
+                            Envelope(Envelope.ERROR, "archive failed: ${e.message ?: e::class.simpleName}")
+                        }
                         outgoing.trySend(answer.copy(requestId = envelope.requestId))
                     }
                     null
@@ -4052,16 +4081,16 @@ class TicketServices private constructor(val files: TicketFiles, val filesText: 
             val database = (store as SqlAgentHqStore).database
             // TICKET-FILES (55476f3c): a ticket that goes done records the files it changed (one git diff, off the board's lock, on its own
             // thread) and pins its tip under refs/agenthq/tickets/<id>.
-            val files = TicketFiles(db = database, tickets = { store.tickets.all().map { it.toTicketInfo() } }, repoFor = repoFor)
+            val files = TicketFiles(db = database, tickets = { store.tickets.all().map { it.toTicketInfo() } + store.ticketArchive.infos(null).map { it.toTicketInfo() } }, repoFor = repoFor)
             relatedRef.set(
                 com.superiorsoftllc.agenthq.ticketfiles.LiveRelatedWork(
-                    files, ticket = { id -> store.tickets.get(id)?.toTicketInfo() },
-                    rows = { store.tickets.all().map { it.toTicketInfo() } }, links = { store.tickets.links().map { it.toTicketInfo() } }, config = settings::relatedConfig,
+                    files, ticket = { id -> store.tickets.get(id)?.toTicketInfo() ?: store.ticketArchive.info(id)?.toTicketInfo() },
+                    rows = { store.tickets.all().map { it.toTicketInfo() } + store.ticketArchive.infos(null).map { it.toTicketInfo() } }, links = { store.tickets.links().map { it.toTicketInfo() } }, config = settings::relatedConfig,
                 ),
             )
             // KNOWLEDGE-PTR-1 (C): the stored RELATED (auto) block a ticket save writes at the top of its description.
             relatedDescriptionRef.set(com.superiorsoftllc.agenthq.ticketfiles.RelatedDescriptionWriter(files, settings::relatedConfig))
-            val filesText = TicketFilesText(files) { id -> store.tickets.get(id)?.title }
+            val filesText = TicketFilesText(files) { id -> store.tickets.get(id)?.title ?: store.ticketArchive.info(id)?.title }
             val ticketFilesExec = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
                 Thread(r, "agenthq-ticket-files").also { it.isDaemon = true }
             }
@@ -4081,6 +4110,8 @@ class TicketServices private constructor(val files: TicketFiles, val filesText: 
 }
 
 private fun com.superiorsoftllc.agenthq.persistence.TicketRow.toTicketInfo() =
+    com.superiorsoftllc.agenthq.ticketfiles.TicketInfo(id, title, description, status, projectId, branch, base)
+private fun com.superiorsoftllc.agenthq.persistence.ArchivedInfo.toTicketInfo() =
     com.superiorsoftllc.agenthq.ticketfiles.TicketInfo(id, title, description, status, projectId, branch, base)
 private fun com.superiorsoftllc.agenthq.persistence.TicketLinkRow.toTicketInfo() =
     com.superiorsoftllc.agenthq.ticketfiles.TicketLinkInfo(ticketId, relatedId)
