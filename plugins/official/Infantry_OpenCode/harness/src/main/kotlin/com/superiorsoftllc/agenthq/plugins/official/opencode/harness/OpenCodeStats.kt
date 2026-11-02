@@ -1,6 +1,7 @@
 package com.superiorsoftllc.agenthq.plugins.official.opencode.harness
 
 import com.superiorsoftllc.agenthq.harness.api.HarnessHost
+import com.superiorsoftllc.agenthq.harness.api.HarnessStatEvent
 import com.superiorsoftllc.agenthq.harness.api.HarnessStatsRow
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -28,14 +29,17 @@ object OpenCodeStats {
         fun seen(at: Long) { if (first == null || at < first!!) first = at; if (last == null || at > last!!) last = at }
         val head = q("SELECT time_created AS a, time_updated AS b FROM session WHERE id = ?").firstOrNull() ?: return null
         seen((head["a"] as Number).toLong()); seen((head["b"] as Number).toLong())
+        val events = ArrayList<HarnessStatEvent>().apply { add(HarnessStatEvent.Seen(first)); add(HarnessStatEvent.Seen(last)) }
+        var model: String? = null
+        val stepTools = ArrayList<String>()
         var prompts = 0
         var turns = 0
         val models = LinkedHashSet<String>()
         for (row in q("SELECT data FROM message WHERE session_id = ? ORDER BY time_created, id")) {
             val m = parse(row["data"] as? String) ?: continue
             when (m.str("role")) {
-                "user" -> prompts++
-                "assistant" -> { turns++; m.str("modelID")?.takeIf { it.isNotBlank() }?.let { models += it } }
+                "user" -> { prompts++; events += HarnessStatEvent.Prompt }
+                "assistant" -> { turns++; m.str("modelID")?.takeIf { it.isNotBlank() }?.let { models += it; model = it }; events += HarnessStatEvent.Turn(m.str("modelID")) }
             }
         }
         var tools = 0
@@ -46,13 +50,17 @@ object OpenCodeStats {
         for (row in q("SELECT time_created AS at, data FROM part WHERE session_id = ? ORDER BY time_created, id")) {
             val p = parse(row["data"] as? String) ?: continue
             when (p.str("type")) {
-                "tool" -> tools++
+                "tool" -> { tools++; stepTools += p.str("tool") ?: "unknown" }
                 "step-finish" -> {
                     val t = p["tokens"] as? JsonObject ?: continue
                     val cache = t["cache"] as? JsonObject
                     val context = t.long("input") + (cache?.long("read") ?: 0L) + (cache?.long("write") ?: 0L)
                     val total = context + t.long("output")
                     if (total == 0L) continue // an all-zero request is not a request
+                    val at = (row["at"] as? Number)?.toLong()
+                    events += HarnessStatEvent.Request(at, model, t.long("input"), t.long("output"), cache?.long("read") ?: 0L, cache?.long("write") ?: 0L, (p["cost"] as? JsonPrimitive)?.takeIf { !it.isString }?.doubleOrNull)
+                    stepTools.forEach { events += HarnessStatEvent.Tool(it, at) }
+                    stepTools.clear()
                     billed += total
                     lastContext = context
                     (p["cost"] as? JsonPrimitive)?.takeIf { !it.isString }?.doubleOrNull?.let { cost += it; anyCost = true }
@@ -61,7 +69,7 @@ object OpenCodeStats {
         }
         return HarnessStatsRow(
             startedAt = first, endedAt = last, userPrompts = prompts, assistantTurns = turns, toolUses = tools,
-            models = models.toList(), lastContextTokens = lastContext, billedTokens = billed, costTotal = if (anyCost) cost else null,
+            models = models.toList(), lastContextTokens = lastContext, billedTokens = billed, costTotal = if (anyCost) cost else null, events = events + stepTools.map { HarnessStatEvent.Tool(it, null) },
         )
     }
 
