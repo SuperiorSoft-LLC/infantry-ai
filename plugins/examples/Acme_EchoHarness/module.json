@@ -7,7 +7,7 @@
   "description": "Reference harness plugin (HARNESS-PLUGIN-3): one harness, 'echo', whose agent process prints the prompt back. Harness half only; copy it as a community module and grant it in modules.json (harness.code, harness.setting:echo.prefix, harness.cli, harness.cli.install). Its cli block is the H5a reference: the harness installer offers and installs @acme/echo-harness-cli from it (the echo run itself needs no CLI).",
   "harness": {
     "jar": "harness/build/libs/Acme_EchoHarness-harness.jar",
-    "contract": "2.2.0",
+    "contract": "2.3.0",
     "ids": ["echo"],
     "aliases": { "echo-agent": "echo" },
     "cli": { "id": "acme-echo", "command": "acme-echo", "label": "Acme Echo CLI", "install": { "npm": "@acme/echo-harness-cli", "bin": "bin/acme-echo.js" } },

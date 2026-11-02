@@ -1392,6 +1392,8 @@ class AgentHqDaemon(
             usageMeter?.let { m ->
                 val push = com.superiorsoftllc.agenthq.usagemeter.PushDebounce { val f = Envelope(Envelope.USAGE_METER, m.reportJson()); for (c in clients) c.trySend(f) }
                 m.onRecorded = push::poke
+                // H5b: a plugin harness's Usage events (its stdout is in no format the meter reads) are charged too.
+                m.eventTranslatorFor = { rec -> if (rec.provider in setOf("claude", "pi", "opencode")) null else (harnesses.resolve(rec.provider) as? com.superiorsoftllc.agenthq.harness.CliHarness)?.newTranslator() }
             }
             // DP-5h-3b/3c: session events reach the board through the BoardSeam (a SwapFeed): events during a plugin attach /
             // reload are queued (drop-oldest, bounded), not lost. The board attaches to it below, once, before the host loads.
