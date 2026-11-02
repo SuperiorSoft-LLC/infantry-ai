@@ -33,8 +33,8 @@ object ProviderFactory {
 
     private val builders = LinkedHashMap<String, () -> AgentProvider>(
         mapOf(
-            // BUG-M2-11b-2: opencode's persistent mode; whether it is used is `session.keepAliveMinutes`'s call (SessionHost).
-            "opencode" to { OpenCodeProvider(sessionAdapter = com.superiorsoftllc.agenthq.opencode.OpenCodeServeAdapter()) },
+            // H8b: becomes the plugin's session(). BUG-M2-11b-2: opencode's persistent mode; whether it is used is `session.keepAliveMinutes`'s call (SessionHost).
+            "opencode" to { OpenCodeProvider(sessionAdapter = com.superiorsoftllc.agenthq.harness.opencode.OpenCodeHarness.sessionAdapter()) },
             "stub" to { StubProvider(delayMs = stubDelayMs(InfantryEnv.get(STUB_DELAY_ENV))) },
         ),
     )

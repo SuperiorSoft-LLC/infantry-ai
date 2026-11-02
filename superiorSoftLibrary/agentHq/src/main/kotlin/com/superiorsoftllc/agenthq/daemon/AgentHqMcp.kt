@@ -122,6 +122,7 @@ object AgentHqMcp {
      * kept; an `mcp.agenthq` the user already defined is kept as is. The permission rule goes LAST (opencode resolves
      * the last matching pattern); a `permission` given as one string becomes `{"*": <it>, "agenthq_*": "allow"}`.
      */
+    // H8b: moves into the opencode plugin (mcp hook)
     fun mergeOpenCode(existing: String?, launch: Launch): String {
         val root = parse(existing) ?: JsonObject(emptyMap())
         val mcp = (root["mcp"] as? JsonObject) ?: JsonObject(emptyMap())

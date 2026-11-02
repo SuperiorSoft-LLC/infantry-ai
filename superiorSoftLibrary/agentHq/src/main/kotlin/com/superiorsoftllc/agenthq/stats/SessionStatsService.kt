@@ -139,6 +139,7 @@ class SessionStatsService(private val home: File = File(System.getProperty("user
 
     // ------------------------------------------------------------------ OpenCode
 
+    // H8b: moves into the opencode plugin (HarnessStats)
     private fun readOpenCode(psid: String, base: SessionStats): SessionStats? {
         val db = File(home, ".local/share/opencode/opencode.db")
         if (!db.isFile) return null

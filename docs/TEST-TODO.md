@@ -198,3 +198,6 @@ TEST-TODO:
 TEST-TODO: ClaudeFoldParityTest.providerSpecIsTheHarnessSpec / modelsAndDefaultComeFromTheHarness — RunRequest(model, resume) and a ClaudeCatalog — provider.spec/models/defaultModel equal ClaudeHarness.specFor/models/defaultModel (argv, env, MCP file unchanged).
 
 TEST-TODO (H7b-1, b7051b65): HarnessApprovalCommandsRuleTest. A plugin harness returning approvalArgs(ALLOW_ALL)=["--yes"], one NATIVE command and mcpToolRule("agenthq")="mcp__agenthq__*" shows all three on the daemon Harness; a 2.9-style plugin shows none; core ClaudeHarness.approvalArgs(ALLOW_EDITS)=["--permission-mode","acceptEdits"].
+
+## HARNESS H8a (ticket 7984dc08)
+TEST-TODO: OpenCodeFoldParityTest.providerSpecIsTheHarnessSpec / modelsDefaultAndAnswersComeFromTheHarness — RunRequest(model, resume) and a model id list — OpenCodeProvider.spec/models/defaultModel/contextLimit/effort/commands equal OpenCodeHarness (argv, env, grouping unchanged). Manual QA: with a real opencode, the model picker and a serve-mode session behave as before.

@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.provider
 
+import com.superiorsoftllc.agenthq.harness.opencode.OpenCodeHarness
 import com.superiorsoftllc.agenthq.opencode.OpenCodeCommand
 import com.superiorsoftllc.agenthq.protocol.ProviderModels
 import com.superiorsoftllc.agenthq.runner.ProcessSpec
@@ -35,39 +36,21 @@ class OpenCodeProvider(
      * `limit.input - compaction.reserved` (or `limit.context - output`), and an inline override of a model's limit is refused
      * unless it also names `limit.output` ("Missing key ...limit.output"), which the daemon does not know per model.
      */
-    override fun contextLimit(): com.superiorsoftllc.agenthq.harness.ContextLimitCapability =
-        com.superiorsoftllc.agenthq.harness.ContextLimitCapability(
-            com.superiorsoftllc.agenthq.harness.ContextLimitSupport.UNSUPPORTED,
-            "opencode sets its window only through a full per-model limit override (context + output); not mapped yet",
-        )
+    // H8a: the harness layer owns these answers; the provider only adapts them to AgentProvider.
+    override fun contextLimit(): com.superiorsoftllc.agenthq.harness.ContextLimitCapability = OpenCodeHarness.contextLimit
 
-    /**
-     * EFFORT-1: not mapped, reported honestly. `opencode run --help` (1.18.35) lists `--variant` ("provider-specific reasoning
-     * effort"), but a live `opencode run --variant high` did not finish within 60 s here, so the flag is not verified and the
-     * persistent (serve) mode has no variant input the daemon uses.
-     */
-    override fun effort(): com.superiorsoftllc.agenthq.harness.EffortCapability =
-        com.superiorsoftllc.agenthq.harness.EffortCapability(
-            com.superiorsoftllc.agenthq.harness.EffortSupport.UNSUPPORTED,
-            "opencode has only a provider-specific --variant flag, not verified end to end; not mapped yet",
-        )
+    override fun effort(): com.superiorsoftllc.agenthq.harness.EffortCapability = OpenCodeHarness.effort
 
-    override val commands: List<com.superiorsoftllc.agenthq.harness.HarnessCommand> =
-        com.superiorsoftllc.agenthq.opencode.OpenCodeCommands.catalog
+    override val commands: List<com.superiorsoftllc.agenthq.harness.HarnessCommand> = OpenCodeHarness.commands
 
-    override fun spec(request: RunRequest): ProcessSpec = OpenCodeCommand.spec(
-        workingDir = request.workingDir,
-        sessionId = request.resumeSessionId,
-        model = request.model,
-        toolApproval = request.toolApproval,
-    )
+    override fun spec(request: RunRequest): ProcessSpec = OpenCodeHarness.specFor(request)
 
     override fun sessionIdFromLine(line: String): String? = SessionId.fromLine(line)
 
     override fun sessionAdapter(): com.superiorsoftllc.agenthq.session.host.HarnessSessionAdapter? = sessionAdapter
 
     /** `AGENTHQ_OPENCODE_MODEL`, else the free [OpenCodeCommand.DEFAULT_MODEL]. Never null: opencode always gets `-m`. */
-    override fun defaultModel(): String = OpenCodeCommand.model()
+    override fun defaultModel(): String = OpenCodeHarness.defaultModel()
 
     /**
      * The SAME list [models] groups, so the picker and the profile validation can never disagree about
@@ -87,23 +70,10 @@ class OpenCodeProvider(
             .toList()
             .takeIf { it.isNotEmpty() }
 
-    override fun models(): List<ProviderModels> {
-        val byVendor = LinkedHashMap<String, MutableList<String>>()
-        for (line in modelLister().map { it.trim() }) {
-            val vendor = line.substringBefore('/').takeIf { '/' in line && it.isNotEmpty() } ?: continue
-            byVendor.getOrPut(vendor) { mutableListOf() }.add(line)
-        }
-        val notes = (modelLister as? ConfigFirstModels)?.notes().orEmpty()
-        if (byVendor.isEmpty()) {
-            val why = (listOf("opencode reported no configured models") + notes).joinToString("; ")
-            return listOf(ProviderModels(id, "", id, emptyList(), why))
-        }
-        val groups = byVendor.map { (vendor, ids) -> ProviderModels(id, vendor, vendor, ids) }
-        // A broken config file must be VISIBLE in the picker, not read as a smaller catalogue.
-        return if (notes.isEmpty()) groups else groups + ProviderModels(id, "config", "config notes", emptyList(), notes.joinToString("; "))
-    }
+    override fun models(): List<ProviderModels> =
+        OpenCodeHarness.models(modelLister(), (modelLister as? ConfigFirstModels)?.notes().orEmpty())
 
-    private fun isModelId(s: String) = s.isNotEmpty() && s.contains('/') && s.none(Char::isWhitespace)
+    private fun isModelId(s: String) = OpenCodeHarness.isModelId(s)
 }
 
 /**
