@@ -43,8 +43,12 @@ import java.io.File
  *
  * 2.6.0 (HARNESS H5e, additive): [Harness.watch], the extra argv / env a harness needs so its tool calls run through the watched runner,
  * and files it writes in its own [HarnessHost.stateDir]. Needs module.json `harness.hooks` "watch" (and, for a community module, the `harness.hook.watch` grant).
+ *
+ * 2.7.0 (HARNESS H5f, additive): [Harness.sandbox], extra readable / writable dirs and env names for the session sandbox. The daemon still
+ * builds and applies the sandbox and checks every path: a dir outside the module's own data folder and the session worktree is refused.
+ * Needs module.json `harness.hooks` "sandbox" (and, for a community module, the `harness.hook.sandbox` grant).
  */
-const val HARNESS_API_VERSION: String = "2.6.0"
+const val HARNESS_API_VERSION: String = "2.7.0"
 
 /** What a harness jar ships: registers its harnesses, given the [HarnessHost] scoped to its module. */
 interface HarnessPlugin {
@@ -107,7 +111,23 @@ interface Harness {
      * (called only when watch is ON for that session), or null (default). A throw is isolated and attributed.
      */
     fun watch(env: Map<String, String>, launcher: String): WatchContribution? = null
+
+    /**
+     * 2.7.0: extra dirs / env names this harness needs inside the session sandbox, or null (default). [dirs] names the only roots a dir may sit under.
+     * Anything outside them is refused by the daemon and never applied. A throw is isolated and attributed.
+     */
+    fun sandbox(dirs: SandboxRoots): SandboxContribution? = null
 }
+
+/** 2.7.0: the only roots a contributed sandbox dir may sit under: the module's own data folder and the session worktree. */
+data class SandboxRoots(val dataDir: File, val worktree: File)
+
+/** 2.7.0: dirs added to the sandbox (read-only / read-write) and names of environment variables to let through. */
+data class SandboxContribution(
+    val readDirs: List<File> = emptyList(),
+    val writeDirs: List<File> = emptyList(),
+    val envNames: Set<String> = emptySet(),
+)
 
 /**
  * 2.6.0: [extraArgs] are appended to the harness argv, [env] is added to its environment, [files] are written by the host under the

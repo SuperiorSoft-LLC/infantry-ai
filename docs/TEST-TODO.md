@@ -185,3 +185,6 @@ TEST-TODO: HarnessStatsSourceTest - a granted+declared stats row (start 1000/end
 
 ## H5e (Harness.watch, API 2.6.0)
 TEST-TODO: HarnessWatchContributionTest - a granted+declared watch contribution with launcher "L" gives HarnessRegistry.applyWatch argv `echo --runner L` and env W=L; file hook/a.js is written under plugin-data/<Module>/ and ../../evil.txt is refused; ungranted/undeclared/watch-off (launcher null) -> spec unchanged; throwing watch -> spec unchanged + attributed PluginFailure. Manual: real plugin harness with watch ON, check tool calls go through the watched runner.
+
+## H5f (Harness.sandbox, API 2.7.0)
+TEST-TODO: HarnessSandboxContributionTest - a granted+declared sandbox contribution with dirs under plugin-data/<Module>/ and the worktree is returned by HarnessRegistry.sandboxFor (canonical paths, env names kept); a dir outside (or ../ escape) refuses the whole contribution; AGENTHQ_* env name refused; ungranted/undeclared -> null; throwing sandbox -> null + attributed PluginFailure. Manual: real plugin harness with a sandbox contribution, check the agent sees only the dirs it asked for.

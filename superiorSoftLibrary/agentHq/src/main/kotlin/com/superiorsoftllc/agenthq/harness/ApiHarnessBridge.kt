@@ -147,6 +147,27 @@ class ApiCliHarness(
         return PluginWatch(c.extraArgs, c.env)
     }
 
+    /**
+     * H5f: the plugin's sandbox addition behind the `harness.hook.sandbox` grant. Every dir is canonicalised and must sit under the module's
+     * own data folder or the session worktree, else the WHOLE contribution is refused (logged, never applied). Env names must be plain
+     * identifiers and not AGENTHQ_*. A throw is attributed and yields no contribution.
+     */
+    override fun sandboxContribution(worktree: File): PluginSandbox? {
+        if (!hookAllowed("sandbox")) return null
+        val h = host ?: return null
+        val roots = listOf(h.stateDir.canonicalFile, worktree.canonicalFile)
+        val c = try { api.sandbox(com.superiorsoftllc.agenthq.harness.api.SandboxRoots(h.stateDir, worktree)) } catch (t: Throwable) { onFailure(PluginFailure(pluginId, PluginFailurePhase.RUN, t)); null } ?: return null
+        fun checked(f: File): File? = try {
+            val cf = f.canonicalFile
+            if (roots.any { cf.path == it.path || cf.path.startsWith(it.path + File.separator) }) cf else null
+        } catch (_: Exception) { null }
+        val read = c.readDirs.map { checked(it) ?: run { h.log("refused sandbox dir outside its allowed roots: ${it.path.take(80)}"); return null } }
+        val write = c.writeDirs.map { checked(it) ?: run { h.log("refused sandbox dir outside its allowed roots: ${it.path.take(80)}"); return null } }
+        val badEnv = c.envNames.firstOrNull { !Regex("[A-Za-z_][A-Za-z0-9_]*").matches(it) || it.startsWith("AGENTHQ_") }
+        if (badEnv != null) { h.log("refused sandbox env name: ${badEnv.take(40)}"); return null }
+        return PluginSandbox(read, write, c.envNames)
+    }
+
     /** H5d: the module's stats source behind the `harness.hook.stats` grant; a throw in `stats()` or `read` is attributed and yields no row. */
     override fun statsSource(): com.superiorsoftllc.agenthq.stats.PluginStatsSource? = try { statsAdapter } catch (_: HarnessPluginCallException) { null }
 
