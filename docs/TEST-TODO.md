@@ -205,3 +205,6 @@ TEST-TODO: OpenCodeFoldParityTest.providerSpecIsTheHarnessSpec / modelsDefaultAn
 ## HARNESS H8b-1 (ticket 14c420e2)
 TEST-TODO: HarnessConfigMergeTest.opencodeMergeThroughTheSlotEqualsTheDirectMerge / readOnlyDbQueriesAndRefusesBadInput / hostQueryDbNeedsTheStatsHook — mcp+config via HarnessConfigMerge("opencode"), a sqlite file via ReadOnlyDb and ModuleHarnessHost.queryDb — merge equals AgentHqMcp.mergeOpenCode; INSERT and missing file answer null; no `stats` hook answers null.
 
+
+## HARNESS H9 (ticket 21d8bace)
+TEST-TODO: HarnessCoreGuardTest - add `class X : Harness {}` under core main -> `no core class implements the Harness SPI...` fails; add a `"claude"` literal in a new core file -> `built-in harness id literals...` fails naming it; remove a listed literal -> stale-entry failure.

@@ -214,7 +214,7 @@ installed harnesses.
 | H6 | pi -> `plugins/official/Infantry_Pi` (incl. `PiLaunchExtras`, todo extension, tool-bridge experiment). | M |
 | H7 | claude -> `Infantry_Claude`, one layer (fold `ClaudeCodeProvider` into the plugin). | L |
 | H8 | opencode -> `Infantry_OpenCode` as a `HarnessPlugin` (serve adapter, permissions, MCP merge, watch plugin). | L |
-| H9 | Guard test: core jar has no harness class and no harness id literal (extend `DaemonCoreGuardTest`). | S |
+| H9 | Guard test: core jar has no harness class and no harness id literal (extend `DaemonCoreGuardTest`). | S (done: HarnessCoreGuardTest) |
 
 ### 3.8 H5 split into slices (HARNESS-PLUGIN-4)
 
