@@ -1,6 +1,14 @@
 package com.superiorsoftllc.agenthq.ui.plugin
 
 import androidx.compose.foundation.background
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import com.superiorsoftllc.agenthq.plugin.host.PluginTree
+import com.superiorsoftllc.agenthq.ui.plugin.config.NodeConfigLoad
+import com.superiorsoftllc.agenthq.ui.plugin.config.NodeFieldGroups
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -74,6 +82,11 @@ const val MODULE_TOGGLE_TAG_PREFIX = "plugin-module-toggle-"
 const val MODULE_MESSAGE_TAG_PREFIX = "plugin-module-message-"
 /** S7: Remove on an installed community module (outside safe mode; the soft restart follows). */
 const val MODULE_REMOVE_TAG_PREFIX = "plugin-module-remove-"
+const val MODULE_EDIT_TAG_PREFIX = "plugin-module-edit-"
+const val MODULE_USED_BY_TAG_PREFIX = "plugin-module-used-by-"
+const val MODULE_CRUMBS_TAG = "plugin-crumbs"
+const val MODULE_CRUMB_TAG_PREFIX = "plugin-crumb-"
+const val MODULE_BACK_TAG = "plugin-crumb-back"
 const val MODULE_CASCADE_TAG = "plugin-modules-cascade"
 const val MODULE_EMPTY_TAG = "plugin-modules-empty"
 
@@ -104,7 +117,36 @@ fun ModulesSection(
     val restart = com.superiorsoftllc.agenthq.ui.shell.LocalSoftRestart.current
     val removeNotes = remember(factory) { mutableStateMapOf<String, String>() }
 
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    val tree = remember(factory) { PluginTree(factory.statuses.mapNotNull { it.manifest }) }
+    // The path of plugins stepped into; empty = the top level. The same view is drawn at every level.
+    var path by remember(factory) { mutableStateOf(emptyList<String>()) }
+    val here = path.lastOrNull()
+    val shown = if (here == null) tree.roots() else tree.childrenOf(here)
+    val visible = factory.statuses.filter { it.name in shown }
+    val ready = factory.config.load == NodeConfigLoad.LOADED
+    Column(
+        Modifier.onPreviewKeyEvent { e ->
+            if (e.type == KeyEventType.KeyDown && e.key == Key.Escape && path.isNotEmpty()) { path = path.dropLast(1); true } else false
+        },
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (path.isNotEmpty()) {
+            Row(Modifier.testTag(MODULE_CRUMBS_TAG), verticalAlignment = Alignment.CenterVertically) {
+                TextButton({ path = emptyList() }, Modifier.testTag(MODULE_CRUMB_TAG_PREFIX + "root")) { Text("Plugins") }
+                path.forEachIndexed { i, n ->
+                    Text(">", color = Palette.Muted, fontSize = 12.sp)
+                    TextButton({ path = path.take(i + 1) }, Modifier.testTag(MODULE_CRUMB_TAG_PREFIX + n), enabled = i < path.lastIndex) { Text(n) }
+                }
+                Spacer(Modifier.weight(1f))
+                TextButton({ path = path.dropLast(1) }, Modifier.testTag(MODULE_BACK_TAG)) { Text("Back") }
+            }
+            // This plugin's own configuration: its module.json config fields, through the same field view at every level.
+            val nodes = factory.statuses.firstOrNull { it.name == here }?.manifest?.config?.map { it.node }?.distinct().orEmpty()
+            for (node in nodes) {
+                val fields = factory.configTree.fields[node].orEmpty()
+                if (fields.isNotEmpty()) NodeFieldGroups(factory, node, fields, editable = ready, locked = false)
+            }
+        }
         if (factory.statuses.isEmpty()) {
             Text("No modules were found under the plugins root.", color = Palette.Muted, fontSize = 12.sp, modifier = Modifier.testTag(MODULE_EMPTY_TAG))
         } else if (changes != null) {
@@ -116,7 +158,7 @@ fun ModulesSection(
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             val columns = columnsFor(maxWidth)
             Column(verticalArrangement = Arrangement.spacedBy(CardGap)) {
-                for (row in factory.statuses.chunked(columns)) {
+                for (row in visible.chunked(columns)) {
                     // Intrinsic height: the cards of one row stretch to the tallest, so their footers line up.
                     Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(CardGap)) {
                         for (s in row) {
@@ -129,8 +171,15 @@ fun ModulesSection(
                                 onRemove = dropIn?.takeIf { s.tier == Tier.COMMUNITY && s.name in it.installed() }?.let { d ->
                                     { val e = d.remove(s.name); if (e != null) removeNotes[s.name] = e; restart?.invoke() }
                                 },
+                                parents = tree.parentsOf(s.name),
+                                hasChildren = tree.childrenOf(s.name).isNotEmpty(),
+                                onEdit = { path = path + s.name },
                                 onToggle = changes?.let { c ->
                                     { on: Boolean ->
+                                        val refusal = if (on) null else tree.disableRefusal(s.name) { p ->
+                                            enabledNow[p] ?: (factory.statuses.firstOrNull { it.name == p }?.state != ModuleState.DISABLED)
+                                        }
+                                        if (refusal != null) { messages[s.name] = ModuleChange.Refused(refusal); return@let }
                                         val answer = c.request(ModuleRequest(s.name, on, cascade))
                                         messages[s.name] = answer
                                         if (answer is ModuleChange.Applied) for (n in answer.changed) enabledNow[n] = on
@@ -168,7 +217,7 @@ internal fun moduleByline(m: ModuleManifest): String? =
         .takeIf { it.isNotEmpty() }?.joinToString(" · ")
 
 @Composable
-private fun ModuleCard(s: ModuleStatus, graph: DependencyGraph, enabled: Boolean, message: ModuleChange?, removeNote: String?, onRemove: (() -> Unit)?, onToggle: ((Boolean) -> Unit)?, modifier: Modifier, harnessStatus: String? = null) {
+private fun ModuleCard(s: ModuleStatus, graph: DependencyGraph, enabled: Boolean, message: ModuleChange?, removeNote: String?, onRemove: (() -> Unit)?, onToggle: ((Boolean) -> Unit)?, modifier: Modifier, harnessStatus: String? = null, parents: List<String> = emptyList(), hasChildren: Boolean = false, onEdit: () -> Unit = {}) {
     Column(
         modifier.clip(RoundedCornerShape(6.dp)).background(Palette.Raised).padding(10.dp).testTag(MODULE_ROW_TAG_PREFIX + s.name),
         verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -202,6 +251,9 @@ private fun ModuleCard(s: ModuleStatus, graph: DependencyGraph, enabled: Boolean
         if (needs.isNotEmpty()) {
             Text("Needs: " + needs.joinToString(", ") { DependencyGraph.label(it) }, Modifier.testTag(MODULE_NEEDS_TAG_PREFIX + s.name), color = Palette.Muted, fontSize = 11.sp)
         }
+        if (parents.isNotEmpty()) {
+            Text("Used by: " + parents.joinToString(", "), Modifier.testTag(MODULE_USED_BY_TAG_PREFIX + s.name), color = Palette.Muted, fontSize = 11.sp)
+        }
         val requiredBy = graph.requiredBy(s.name)
         if (requiredBy.isNotEmpty()) {
             Text("Required by: " + requiredBy.joinToString(", "), Modifier.testTag(MODULE_REQUIRED_BY_TAG_PREFIX + s.name), color = Palette.Muted, fontSize = 11.sp)
@@ -223,6 +275,11 @@ private fun ModuleCard(s: ModuleStatus, graph: DependencyGraph, enabled: Boolean
         Row(verticalAlignment = Alignment.CenterVertically) {
             Chip(stateLabel(s.state), if (s.state == ModuleState.LOADED) Palette.Accent else Palette.Muted, textModifier = Modifier.testTag(MODULE_STATE_TAG_PREFIX + s.name))
             Spacer(Modifier.weight(1f))
+            if (s.manifest != null && (hasChildren || s.manifest?.config?.isNotEmpty() == true || parents.isNotEmpty())) TextButton(
+                onClick = onEdit,
+                modifier = Modifier.height(28.dp).testTag(MODULE_EDIT_TAG_PREFIX + s.name),
+                contentPadding = PaddingValues(horizontal = 8.dp),
+            ) { Text("Edit", fontSize = 12.sp) }
             if (onRemove != null) TextButton(
                 onClick = onRemove,
                 modifier = Modifier.height(28.dp).testTag(MODULE_REMOVE_TAG_PREFIX + s.name),

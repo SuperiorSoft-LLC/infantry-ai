@@ -68,6 +68,8 @@ data class ModuleManifest(
     val panels: List<PanelDeclaration> = emptyList(),
     /** SLOTS-1: named child slots this module (the host) draws with `ChildSlot`; any module may add `panels` sections to one by name. */
     val slots: List<String> = emptyList(),
+    /** PLUGIN-TREE-UI-1: modules this one is a child of, besides the owners of the slots its `panels` fill. */
+    val parents: List<String> = emptyList(),
     val preferences: List<PreferenceDeclaration> = emptyList(),
     val interceptors: List<InterceptorDeclaration> = emptyList(),
     val observers: List<ObserverDeclaration> = emptyList(),
