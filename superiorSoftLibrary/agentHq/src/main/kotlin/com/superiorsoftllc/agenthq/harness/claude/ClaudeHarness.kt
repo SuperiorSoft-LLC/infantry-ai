@@ -51,6 +51,12 @@ class ClaudeHarness(
 
     override val commands: List<HarnessCommand> = ClaudeCommands.catalog
 
+    /** H7b-1: the slots the harness API 2.10 gives every harness, filled in place from Claude's own mapping. */
+    override fun approvalArgs(approval: com.superiorsoftllc.agenthq.harness.ToolApproval): List<String> =
+        com.superiorsoftllc.agenthq.claude.ClaudePermissionMode.forApproval(approval)?.let { listOf("--permission-mode", it) } ?: emptyList()
+
+    override fun mcpToolRule(serverName: String): String? = "mcp__${serverName}__*"
+
     override val effort: com.superiorsoftllc.agenthq.harness.EffortCapability = com.superiorsoftllc.agenthq.claude.ClaudeEffort.CAPABILITY
 
     override val contextLimit: com.superiorsoftllc.agenthq.harness.ContextLimitCapability =

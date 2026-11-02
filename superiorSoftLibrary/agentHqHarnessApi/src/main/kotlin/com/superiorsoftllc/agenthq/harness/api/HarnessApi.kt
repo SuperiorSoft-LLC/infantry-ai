@@ -53,8 +53,12 @@ import java.io.File
  *
  * 2.9.0 (HARNESS H6c, additive): [HarnessEvent.Usage] carries the prompt-cache buckets ([HarnessEvent.Usage.cacheReadTokens] / [HarnessEvent.Usage.cacheWriteTokens],
  * default 0; the old two-argument constructor stays), so a plugin that reads the provider's cache split (pi) does not lose it. `resolveCli("node")` answers for a module that declares a CLI.
+ *
+ * 2.10.0 (HARNESS H7b-1, additive): three slots a harness fills so the daemon names no harness for them: [Harness.approvalArgs] (the argv a run's
+ * [ToolApproval] adds), [Harness.commands] (the `/` command catalog, [HarnessCommandSpec]) and [Harness.mcpToolRule] (the allow rule for the
+ * session's own MCP server). A 2.0 - 2.9 plugin keeps the defaults: no extra argv, no commands, no rule.
  */
-const val HARNESS_API_VERSION: String = "2.9.0"
+const val HARNESS_API_VERSION: String = "2.10.0"
 
 /** What a harness jar ships: registers its harnesses, given the [HarnessHost] scoped to its module. */
 interface HarnessPlugin {
@@ -136,7 +140,29 @@ interface Harness {
      * (bounded by the host) and may throw (attributed). Needs module.json `harness.hooks` "models".
      */
     fun models(): List<HarnessModels>? = null
+
+    /** 2.10.0: the argv [approval] adds to [process] (a permission-mode flag), or empty (default). The host appends it to every run and session launch. */
+    fun approvalArgs(approval: ToolApproval): List<String> = emptyList()
+
+    /** 2.10.0: the `/` commands this harness offers a user (model, effort, its own compact...), or empty (default). Declarative: serving it executes nothing. */
+    fun commands(): List<HarnessCommandSpec> = emptyList()
+
+    /** 2.10.0: the tool-allow rule that covers every tool of the session's own MCP server named [serverName], or null (default = none needed). */
+    fun mcpToolRule(serverName: String): String? = null
 }
+
+/** 2.10.0: what the daemon does with a [HarnessCommandSpec]: set the next run's model, set its effort, or hand [HarnessCommandSpec.native] to the harness as the next turn. */
+enum class HarnessCommandAction { SET_MODEL, SET_EFFORT, NATIVE }
+
+/** 2.10.0: one `/` command: [name] is a bare word, [argument] a hint, [values] the accepted (or suggested) values, [native] the text for [HarnessCommandAction.NATIVE] only. */
+data class HarnessCommandSpec(
+    val name: String,
+    val description: String,
+    val action: HarnessCommandAction,
+    val argument: String? = null,
+    val values: List<String> = emptyList(),
+    val native: String? = null,
+)
 
 /** 2.8.0: one picker group of model ids. [unavailable] = the harness cannot run anything right now ([note] says why). */
 data class HarnessModels(

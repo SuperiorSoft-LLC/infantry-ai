@@ -163,6 +163,12 @@ interface Harness {
     /** HARNESS H6a (API 2.8.0): this harness's own model listing for the `models` frame; null = none (the daemon then notes a free-text field). Isolated by the implementor. */
     fun catalog(): com.superiorsoftllc.agenthq.provider.HarnessModelCatalog? = null
 
+    /** HARNESS H7b-1 (API 2.10.0): the argv a run's [approval] adds (a permission-mode flag); empty = none. */
+    fun approvalArgs(approval: ToolApproval): List<String> = emptyList()
+
+    /** HARNESS H7b-1 (API 2.10.0): the allow rule covering every tool of the session's own MCP server [serverName]; null = none. */
+    fun mcpToolRule(serverName: String): String? = null
+
     /** Implementors produce the event stream here. Must emit incrementally, never only at completion. */
     fun events(request: HarnessRequest): Flow<HarnessEvent>
 

@@ -123,6 +123,22 @@ class ApiCliHarness(
             ?: if (HarnessCapability.EFFORT_SELECTION in capabilities) EffortCapability(EffortSupport.SUPPORTED, "the harness declares EFFORT_SELECTION")
             else EffortCapability.UNSUPPORTED
 
+    /** H7b-1: API 2.10 [ApiHarness.commands]; a 2.0 - 2.9 plugin (or a throwing or invalid entry) offers none. */
+    override val commands: List<HarnessCommand> =
+        runCatching {
+            api.commands().map { HarnessCommand(it.name, it.description, CommandAction.valueOf(it.action.name), it.argument, it.values, it.native) }
+        }.getOrDefault(emptyList())
+
+    /** H7b-1: API 2.10 [ApiHarness.approvalArgs]; a throw is attributed and adds nothing. */
+    override fun approvalArgs(approval: ToolApproval): List<String> = try {
+        api.approvalArgs(approval.toApi())
+    } catch (t: Throwable) { onFailure(PluginFailure(pluginId, PluginFailurePhase.RUN, t)); emptyList() }
+
+    /** H7b-1: API 2.10 [ApiHarness.mcpToolRule]; a throw is attributed and yields no rule. */
+    override fun mcpToolRule(serverName: String): String? = try {
+        api.mcpToolRule(serverName)
+    } catch (t: Throwable) { onFailure(PluginFailure(pluginId, PluginFailurePhase.RUN, t)); null }
+
     private val usageAdapter: com.superiorsoftllc.agenthq.usage.LimitSource? by lazy {
         if (!hookAllowed("usage")) return@lazy null
         val src = guarded(pluginId, onFailure) { api.usageSource() } ?: return@lazy null
@@ -238,14 +254,16 @@ class ApiCliHarness(
 
         fun HarnessRequest.toApi() = ApiRequest(
             prompt, harnessId, project, model, sessionId, effort,
-            when (toolApproval) {
-                ToolApproval.DENY -> ApiToolApproval.DENY
-                ToolApproval.ALLOW_EDITS -> ApiToolApproval.ALLOW_EDITS
-                ToolApproval.ALLOW_ALL -> ApiToolApproval.ALLOW_ALL
-                ToolApproval.ASK -> ApiToolApproval.ASK
-            },
+            toolApproval.toApi(),
             contextLimit,
         )
+
+        fun ToolApproval.toApi(): ApiToolApproval = when (this) {
+            ToolApproval.DENY -> ApiToolApproval.DENY
+            ToolApproval.ALLOW_EDITS -> ApiToolApproval.ALLOW_EDITS
+            ToolApproval.ALLOW_ALL -> ApiToolApproval.ALLOW_ALL
+            ToolApproval.ASK -> ApiToolApproval.ASK
+        }
     }
 }
 

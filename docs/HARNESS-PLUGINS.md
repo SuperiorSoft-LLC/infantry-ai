@@ -345,3 +345,6 @@ resolver and the same trust rules gives one install story with two narrow APIs.
 * module.json `harness.hooks` gains `session` and `models`; a community module needs `harness.hook.session` / `harness.hook.models`.
 * Core: `Harness.catalog()` (1.x interface) is the one lookup the `models` frame uses; `PiHarness` and `DescriptorHarness` return their catalog there, pi is no longer in `HarnessModelCatalogs.builtIn()`. `CliHarness.sessionAdapter()` already carried pi's persistent mode, so nothing else moved.
 * Left for H6b-H6d: watch/sandbox/launch-extras call sites, moving the pi files and deleting the core branches, desktop staging.
+
+### 3.10 H7b-1 as built (API 2.10.0, ticket b7051b65)
+Additive harness API slots, so the claude harness can leave core without the daemon naming it: `Harness.approvalArgs(ToolApproval)` (the argv a run's approval adds, e.g. a permission-mode flag), `Harness.commands()` (`HarnessCommandSpec`, the `/` catalog) and `Harness.mcpToolRule(serverName)` (the allow rule for the session's own MCP server). Defaults add nothing. The bridge forwards them to the daemon `Harness` (`approvalArgs`, `commands`, `mcpToolRule`); core `ClaudeHarness` fills them in place. No behaviour change. Next: H7b-2 (the Infantry_Claude plugin), H7b-3 (delete the core claude branches).
