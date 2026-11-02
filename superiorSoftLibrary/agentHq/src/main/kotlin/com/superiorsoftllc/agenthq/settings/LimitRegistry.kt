@@ -557,6 +557,18 @@ object LimitRegistry {
         max = 10_000,
     )
 
+    val TICKET_GET_DEFAULT_DETAIL = LimitDef(
+        "limits.ticket.getDefaultDetail", 0, "level",
+        "What agenthq_ticket_get returns when the call gives no `detail`: 0 = summary (id, title, status, role, model, branch, epic, open comment count, the description's first chars), 1 = full (every field and the whole description; costs ~2-4K chars per ticket).",
+        max = 1, zeroMeans = "summary",
+    )
+
+    val TICKET_SUMMARY_DESCRIPTION_CHARS = LimitDef(
+        "limits.ticket.summaryDescriptionChars", 300, "chars",
+        "How much of the description a summary-detail agenthq_ticket_get shows (the rest is cut with a marker); more costs that many chars per ticket read.",
+        max = 1_000_000,
+    )
+
     val SKILLS_INLINE_MAX_CHARS = LimitDef(
         "limits.skills.inlineMaxChars", 1500, "chars",
         "A layered skill (global/project/role) whose body is at most this long is written into the first-turn brief; a longer one appears as a description line with the command that shows it.",
@@ -625,6 +637,7 @@ object LimitRegistry {
         MAIL_INJECT_MAX_CHARS, MAIL_INJECT_TOTAL_CHARS,
         MCP_BODY_CHARS,
         MCP_DEFAULT_DETAIL,
+        TICKET_GET_DEFAULT_DETAIL, TICKET_SUMMARY_DESCRIPTION_CHARS,
         SKILLS_INLINE_MAX_CHARS,
         MCP_MAX_RESULT_CHARS,
         TOOLS_INBOX_LIMIT, TOOLS_LIST_LIMIT, TOOLS_SESSION_TAIL_LINES, TOOLS_BOARD_QUEUE_SHOWN, TOOLS_BOARD_DONE_SHOWN,
