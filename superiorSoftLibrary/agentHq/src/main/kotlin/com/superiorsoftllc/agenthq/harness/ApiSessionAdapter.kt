@@ -1,6 +1,8 @@
 package com.superiorsoftllc.agenthq.harness
 
+import com.superiorsoftllc.agenthq.harness.api.ApprovalReply
 import com.superiorsoftllc.agenthq.harness.api.HarnessSession
+import com.superiorsoftllc.agenthq.prompts.Decision
 import com.superiorsoftllc.agenthq.harness.api.SessionConnection
 import com.superiorsoftllc.agenthq.harness.api.SessionOutput
 import com.superiorsoftllc.agenthq.harness.api.SessionTurnEnd
@@ -40,7 +42,7 @@ internal class ApiSessionAdapter(
         val spec = attributed { session.launch(request.toApi(request.resumeSessionId?.takeIf { it.isNotBlank() }), env) }
         val process = Hosted()
         val out = Output(process, sink)
-        process.connection = attributed { session.connect(out) }
+        process.connection = attributed { session.connect(out, spec) }
         process.start(runner, decorate(ProcessSpec(spec.command, spec.workingDir ?: request.workingDir, env + spec.env), env), sink)
         return process
     }
@@ -75,6 +77,15 @@ internal class ApiSessionAdapter(
         override fun write(text: String): Boolean = process.child?.let { runCatching { it.writeInput(text) }.isSuccess } ?: false
         override fun closeInput() { process.child?.let { runCatching { it.closeInput() } } }
         override fun detail(text: String) = sink.detail(text)
+        // H8b-2 (API 2.12): a record the plugin read off its own channel (opencode serve's SSE), as if the process printed it.
+        override fun output(line: String) = sink.output(line)
+        override fun diagnostic(line: String) = sink.diagnostic(line)
+        override fun requestApproval(tool: String, input: String): ApprovalReply = when (sink.requestApproval(tool, input)) {
+            Decision.ALLOW_ONCE -> ApprovalReply.ALLOW_ONCE
+            Decision.ALLOW_SESSION -> ApprovalReply.ALLOW_SESSION
+            Decision.ALLOW_ALWAYS -> ApprovalReply.ALLOW_ALWAYS
+            Decision.DENY -> ApprovalReply.DENY
+        }
         override fun providerSession(id: String) = sink.providerSession(id)
         override fun turnEnded(end: SessionTurnEnd, exitCode: Int?, reason: String?) {
             sink.turnEnded(TurnEnd.valueOf(end.name), exitCode, reason)
@@ -112,7 +123,10 @@ internal class ApiSessionAdapter(
                     try { connection.onStdout(line) } catch (t: Throwable) { fail(t) }
                 }
 
-                override fun onStderr(line: String) = sink.diagnostic(line)
+                override fun onStderr(line: String) {
+                    sink.diagnostic(line)
+                    try { connection.onStderr(line) } catch (t: Throwable) { fail(t) }
+                }
 
                 override fun onExit(exitCode: Int) {
                     val hs = synchronized(lock) {

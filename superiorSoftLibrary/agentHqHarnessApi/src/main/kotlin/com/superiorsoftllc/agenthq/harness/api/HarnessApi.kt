@@ -61,8 +61,12 @@ import java.io.File
  * 2.11.0 (HARNESS H8b-1, additive): [Harness.mergeConfig] (a harness that is configured by an inline config document merges the session's MCP
  * server, its tool-allow rule and the watch plugin into it) and [HarnessHost.queryDb] (a host-provided read-only query on a harness-local
  * sqlite file, behind the `stats` hook, so a plugin jar carries no database driver). A 2.0 - 2.10 plugin keeps the defaults.
+ *
+ * 2.12.0 (HARNESS H8b-2, additive): a persistent session whose protocol is not the process's own stdin/stdout (opencode serve: HTTP + server-sent
+ * events). [SessionOutput.output] (a record as if the process had printed it: raw stream + translator), [SessionOutput.diagnostic],
+ * [SessionOutput.requestApproval] (ask the owner about one tool call, blocking), [SessionConnection.onStderr] and [HarnessSession.connect] with the launched process. A 2.8 - 2.11 plugin keeps the defaults.
  */
-const val HARNESS_API_VERSION: String = "2.11.0"
+const val HARNESS_API_VERSION: String = "2.12.0"
 
 /** What a harness jar ships: registers its harnesses, given the [HarnessHost] scoped to its module. */
 interface HarnessPlugin {
@@ -207,6 +211,12 @@ interface HarnessSession {
 
     /** A fresh connection for one launched process; [out] writes to it and reports. */
     fun connect(out: SessionOutput): SessionConnection
+
+    /**
+     * 2.12.0: like [connect], also given the [launched] process [launch] returned for this connection (its env carries what the plugin put there,
+     * e.g. a per-process password). Default: [connect]. The host always calls this one.
+     */
+    fun connect(out: SessionOutput, launched: HarnessProcess): SessionConnection = connect(out)
 }
 
 /** 2.8.0: the plugin's handle on one launched process. Thread-safe. */
@@ -223,12 +233,31 @@ interface SessionOutput {
 
     /** Exactly once per [SessionConnection.sendTurn]. */
     fun turnEnded(end: SessionTurnEnd, exitCode: Int? = null, reason: String? = null)
+
+    /** 2.12.0: [line] as if the process had printed it to stdout: the host forwards it to the raw stream and reads it with [Harness.newTranslator]. Default: dropped. */
+    fun output(line: String) {}
+
+    /** 2.12.0: [line] as if the process had printed it to stderr. Default: dropped. */
+    fun diagnostic(line: String) {}
+
+    /**
+     * 2.12.0: ask the session's owner whether one [tool] call ([input] = a short summary of it) may run (Tool approval [ToolApproval.ASK]). BLOCKS until the owner
+     * answers, the prompt times out or the session ends (all of which but an approval are [ApprovalReply.DENY]); call it off the protocol's event thread.
+     * Default: nobody can prompt, so DENY.
+     */
+    fun requestApproval(tool: String, input: String): ApprovalReply = ApprovalReply.DENY
 }
+
+/** 2.12.0: the owner's answer to [SessionOutput.requestApproval]. */
+enum class ApprovalReply { ALLOW_ONCE, ALLOW_SESSION, ALLOW_ALWAYS, DENY }
 
 /** 2.8.0: one launched process's protocol state. */
 interface SessionConnection {
     /** Every stdout line of the process (the host also forwards it verbatim to the raw stream). */
     fun onStdout(line: String)
+
+    /** 2.12.0: every stderr line of the process (the host also forwards it as a diagnostic). Default: ignored. */
+    fun onStderr(line: String) {}
 
     /** Send one turn; its end comes back through [SessionOutput.turnEnded]. */
     fun sendTurn(request: HarnessRequest)
