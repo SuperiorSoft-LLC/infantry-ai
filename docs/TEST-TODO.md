@@ -201,3 +201,7 @@ TEST-TODO (H7b-1, b7051b65): HarnessApprovalCommandsRuleTest. A plugin harness r
 
 ## HARNESS H8a (ticket 7984dc08)
 TEST-TODO: OpenCodeFoldParityTest.providerSpecIsTheHarnessSpec / modelsDefaultAndAnswersComeFromTheHarness — RunRequest(model, resume) and a model id list — OpenCodeProvider.spec/models/defaultModel/contextLimit/effort/commands equal OpenCodeHarness (argv, env, grouping unchanged). Manual QA: with a real opencode, the model picker and a serve-mode session behave as before.
+
+## HARNESS H8b-1 (ticket 14c420e2)
+TEST-TODO: HarnessConfigMergeTest.opencodeMergeThroughTheSlotEqualsTheDirectMerge / readOnlyDbQueriesAndRefusesBadInput / hostQueryDbNeedsTheStatsHook — mcp+config via HarnessConfigMerge("opencode"), a sqlite file via ReadOnlyDb and ModuleHarnessHost.queryDb — merge equals AgentHqMcp.mergeOpenCode; INSERT and missing file answer null; no `stats` hook answers null.
+

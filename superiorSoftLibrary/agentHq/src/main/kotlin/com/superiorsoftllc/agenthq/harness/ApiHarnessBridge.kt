@@ -164,6 +164,12 @@ class ApiCliHarness(
      * launcher says watch is ON. Files are written under the module's own state folder; a path that leaves it is refused and skipped.
      * A throw is attributed and yields no contribution.
      */
+    /** H8b-1: the module's config merge behind the `harness.hook.config` grant; a throw is attributed and leaves the config alone (null). */
+    override fun mergeConfig(existing: String?, parts: com.superiorsoftllc.agenthq.harness.api.ConfigParts): String? {
+        if (!hookAllowed("config")) return null
+        return try { api.mergeConfig(existing, parts) } catch (t: Throwable) { onFailure(PluginFailure(pluginId, PluginFailurePhase.RUN, t)); null }
+    }
+
     override fun watchContribution(env: Map<String, String>): PluginWatch? {
         if (!hookAllowed("watch")) return null
         val h = host ?: return null

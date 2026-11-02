@@ -91,7 +91,10 @@ object OpenCodePermissions {
      * (`permission."agenthq_*"`), in every mode. Merged, never overwritten ([AgentHqMcp.mergeOpenCode]).
      */
     internal fun withAgentHqMcp(config: String, sessionEnv: Map<String, String>): String =
-        AgentHqMcp.mergeOpenCode(config, AgentHqMcp.launch(sessionEnv))
+        com.superiorsoftllc.agenthq.harness.HarnessConfigMerge.merge(
+            "opencode", config,
+            com.superiorsoftllc.agenthq.harness.api.ConfigParts(mcp = AgentHqMcp.launch(sessionEnv).let { com.superiorsoftllc.agenthq.harness.api.HarnessProcess(it.argv, env = it.env) }),
+        ) ?: config
 
     /**
      * PROMPT-4: [existing] with every [ASK_PERMISSIONS] key set to `"ask"`, every other key kept. A `permission` given as

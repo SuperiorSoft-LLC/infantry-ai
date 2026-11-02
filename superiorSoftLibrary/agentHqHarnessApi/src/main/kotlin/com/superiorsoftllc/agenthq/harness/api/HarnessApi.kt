@@ -57,8 +57,12 @@ import java.io.File
  * 2.10.0 (HARNESS H7b-1, additive): three slots a harness fills so the daemon names no harness for them: [Harness.approvalArgs] (the argv a run's
  * [ToolApproval] adds), [Harness.commands] (the `/` command catalog, [HarnessCommandSpec]) and [Harness.mcpToolRule] (the allow rule for the
  * session's own MCP server). A 2.0 - 2.9 plugin keeps the defaults: no extra argv, no commands, no rule.
+ *
+ * 2.11.0 (HARNESS H8b-1, additive): [Harness.mergeConfig] (a harness that is configured by an inline config document merges the session's MCP
+ * server, its tool-allow rule and the watch plugin into it) and [HarnessHost.queryDb] (a host-provided read-only query on a harness-local
+ * sqlite file, behind the `stats` hook, so a plugin jar carries no database driver). A 2.0 - 2.10 plugin keeps the defaults.
  */
-const val HARNESS_API_VERSION: String = "2.10.0"
+const val HARNESS_API_VERSION: String = "2.11.0"
 
 /** What a harness jar ships: registers its harnesses, given the [HarnessHost] scoped to its module. */
 interface HarnessPlugin {
@@ -147,9 +151,21 @@ interface Harness {
     /** 2.10.0: the `/` commands this harness offers a user (model, effort, its own compact...), or empty (default). Declarative: serving it executes nothing. */
     fun commands(): List<HarnessCommandSpec> = emptyList()
 
+    /**
+     * 2.11.0: [existing] (the inline config document the harness's process would inherit, or null) with [parts] merged in, or null (default =
+     * leave the config alone). Merge, never overwrite: every key the user set survives. Needs module.json `harness.hooks` "config". A throw is isolated and attributed.
+     */
+    fun mergeConfig(existing: String?, parts: ConfigParts): String? = null
+
     /** 2.10.0: the tool-allow rule that covers every tool of the session's own MCP server named [serverName], or null (default = none needed). */
     fun mcpToolRule(serverName: String): String? = null
 }
+
+/**
+ * 2.11.0: what the daemon offers a harness to merge into its config: the session's own MCP server ([mcp], from [HarnessHost.mcpLaunch]; null =
+ * none) and the installed watch plugin file ([watchPlugin]; null = watch is off or the harness has none).
+ */
+data class ConfigParts(val mcp: HarnessProcess? = null, val watchPlugin: File? = null)
 
 /** 2.10.0: what the daemon does with a [HarnessCommandSpec]: set the next run's model, set its effort, or hand [HarnessCommandSpec.native] to the harness as the next turn. */
 enum class HarnessCommandAction { SET_MODEL, SET_EFFORT, NATIVE }

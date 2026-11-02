@@ -9,7 +9,7 @@ import java.io.File
  * A call the module did not declare (or, for a community module, was not granted in modules.json) is refused: the
  * getters answer null, [start] throws [SecurityException], [ask] answers [HarnessAnswer.NONE]; each refusal is logged with
  * the module's name. Grants: `harness.cli` ([resolveCli], [start]), `harness.setting:<key>` ([setting]),
- * `harness.hook.mcp` ([mcpLaunch]), `harness.hook.watch` ([watchLauncher]), `harness.hook.ask` ([ask]).
+ * `harness.hook.mcp` ([mcpLaunch]), `harness.hook.watch` ([watchLauncher]), `harness.hook.ask` ([ask]), `harness.hook.stats` ([queryDb]).
  */
 interface HarnessHost {
     /** The module this host belongs to (module.json `name`). */
@@ -44,6 +44,12 @@ interface HarnessHost {
 
     /** The watched-runner launcher a harness hook rewrites commands to, when watch is ON for that session; else null. */
     fun watchLauncher(sessionEnv: Map<String, String>): String?
+
+    /**
+     * 2.11.0: a READ-ONLY query on the sqlite file [file] (the host opens it read-only with a busy timeout): each row as column -> value
+     * (text, number or null). [params] bind the `?`s in order. Null when not granted (`harness.hook.stats`), the file is missing or the query fails.
+     */
+    fun queryDb(file: File, sql: String, params: List<String> = emptyList()): List<Map<String, Any?>>? = null
 
     /** Ask the owner a question on behalf of [sessionId]; suspends until answered, timed out or the session ends. */
     suspend fun ask(sessionId: String, question: HarnessQuestion): HarnessAnswer

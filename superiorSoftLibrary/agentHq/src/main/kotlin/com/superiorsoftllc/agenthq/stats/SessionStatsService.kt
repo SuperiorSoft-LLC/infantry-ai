@@ -139,63 +139,44 @@ class SessionStatsService(private val home: File = File(System.getProperty("user
 
     // ------------------------------------------------------------------ OpenCode
 
-    // H8b: moves into the opencode plugin (HarnessStats)
+    // H8b-3: becomes the plugin's HarnessStats (it already reads only through ReadOnlyDb)
     private fun readOpenCode(psid: String, base: SessionStats): SessionStats? {
         val db = File(home, ".local/share/opencode/opencode.db")
         if (!db.isFile) return null
-        val props = Properties().apply {
-            setProperty("open_mode", SQLITE_OPEN_READONLY.toString())
-            setProperty("busy_timeout", BUSY_TIMEOUT_MS.toString())
-        }
+        // H8b-1: every read goes through the daemon's read-only query (the same one a plugin gets as HarnessHost.queryDb).
+        fun q(sql: String) = ReadOnlyDb.query(db, sql, listOf(psid)) ?: throw java.sql.SQLException("opencode.db unreadable")
         val acc = StatsAccumulator()
         var provider: String? = null
         var model: String? = null
-        DriverManager.getConnection("jdbc:sqlite:${db.absolutePath}", props).use { c ->
-            c.prepareStatement("SELECT time_created, time_updated FROM session WHERE id = ?").use { st ->
-                st.setString(1, psid)
-                st.executeQuery().use { rs ->
-                    if (!rs.next()) return null
-                    acc.seen(rs.getLong(1)); acc.seen(rs.getLong(2))
+        val head = q("SELECT time_created AS a, time_updated AS b FROM session WHERE id = ?").firstOrNull() ?: return null
+        acc.seen((head["a"] as Number).toLong()); acc.seen((head["b"] as Number).toLong())
+        for (row in q("SELECT data FROM message WHERE session_id = ? ORDER BY time_created, id")) {
+            val m = parse(row["data"] as? String) ?: continue
+            when (m.str("role")) {
+                "user" -> acc.prompt()
+                "assistant" -> {
+                    acc.turn(m.str("modelID"))
+                    provider = m.str("providerID") ?: provider
+                    model = m.str("modelID") ?: model
                 }
             }
-            c.prepareStatement("SELECT data FROM message WHERE session_id = ? ORDER BY time_created, id").use { st ->
-                st.setString(1, psid)
-                st.executeQuery().use { rs ->
-                    while (rs.next()) {
-                        val m = parse(rs.getString(1)) ?: continue
-                        when (m.str("role")) {
-                            "user" -> acc.prompt()
-                            "assistant" -> {
-                                acc.turn(m.str("modelID"))
-                                provider = m.str("providerID") ?: provider
-                                model = m.str("modelID") ?: model
-                            }
-                        }
-                    }
-                }
-            }
-            // A tool part belongs to the step whose step-finish follows it: buffer, then credit after that request.
-            val stepTools = ArrayList<String>()
-            c.prepareStatement("SELECT time_created, data FROM part WHERE session_id = ? ORDER BY time_created, id").use { st ->
-                st.setString(1, psid)
-                st.executeQuery().use { rs ->
-                    while (rs.next()) {
-                        val at = rs.getLong(1)
-                        val p = parse(rs.getString(2)) ?: continue
-                        when (p.str("type")) {
-                            "tool" -> stepTools += p.str("tool") ?: "unknown"
-                            "step-finish" -> {
-                                val t = p["tokens"] as? JsonObject ?: continue
-                                acc.request(UsageAdapters.openCode(t, p.doubleOrNull("cost"), at, model))
-                                stepTools.forEach(acc::tool)
-                                stepTools.clear()
-                            }
-                        }
-                    }
-                }
-            }
-            stepTools.forEach(acc::tool)
         }
+        // A tool part belongs to the step whose step-finish follows it: buffer, then credit after that request.
+        val stepTools = ArrayList<String>()
+        for (row in q("SELECT time_created AS at, data FROM part WHERE session_id = ? ORDER BY time_created, id")) {
+            val at = (row["at"] as Number).toLong()
+            val p = parse(row["data"] as? String) ?: continue
+            when (p.str("type")) {
+                "tool" -> stepTools += p.str("tool") ?: "unknown"
+                "step-finish" -> {
+                    val t = p["tokens"] as? JsonObject ?: continue
+                    acc.request(UsageAdapters.openCode(t, p.doubleOrNull("cost"), at, model))
+                    stepTools.forEach(acc::tool)
+                    stepTools.clear()
+                }
+            }
+        }
+        stepTools.forEach(acc::tool)
         val limit = catalogLimit(File(home, ".cache/opencode/models.json"), provider, model) { root, p, id ->
             (((root[p] as? JsonObject)?.get("models") as? JsonObject)?.get(id) as? JsonObject)
                 ?.let { (it["limit"] as? JsonObject)?.longOrNull("context") }

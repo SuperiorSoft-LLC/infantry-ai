@@ -150,7 +150,7 @@ class OpenCodeServeAdapter(
             val served = OpenCodePermissions.serveConfig(request.toolApproval, inherited, env) // MCP-1: + mcp.agenthq
             // STALL-2: + the watch plugin (allowAll only: a rewrite must never widen what the session may run).
             val config = OpenCodePermissions.CONFIG_CONTENT_ENV to
-                (if (request.toolApproval == ToolApproval.ALLOW_ALL) com.superiorsoftllc.agenthq.daemon.WatchHooks.mergeOpenCodePlugin(served, env) else served)
+                (if (request.toolApproval == ToolApproval.ALLOW_ALL) com.superiorsoftllc.agenthq.harness.HarnessConfigMerge.merge("opencode", served, com.superiorsoftllc.agenthq.harness.api.ConfigParts(watchPlugin = com.superiorsoftllc.agenthq.daemon.WatchHooks.openCodePlugin?.takeIf { com.superiorsoftllc.agenthq.daemon.WatchHooks.on(env) })) ?: served else served)
             process = runner.start(ProcessSpec(command, request.workingDir, env + config + (PASSWORD_ENV to password)), object : ProcessListener {
                 override fun onStdout(line: String) {
                     LISTENING.find(line)?.let { urlFuture.complete(it.groupValues[1].trimEnd('/')) }

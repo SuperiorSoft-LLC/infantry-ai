@@ -18,5 +18,12 @@ object CoreHarnessContributions {
 
     fun register() {
         WatchHooks.approvalExempt = watchApprovalExempt
+        // H8b-1: opencode's inline-config merge, registered through the same slot a plugin harness fills (H8b-3 moves it into the plugin).
+        com.superiorsoftllc.agenthq.harness.HarnessConfigMerge.register(com.superiorsoftllc.agenthq.stats.SessionStatsService.OPENCODE) { existing, parts ->
+            var c = existing ?: "{}"
+            parts.mcp?.let { c = AgentHqMcp.mergeOpenCode(c, AgentHqMcp.Launch(it.command.first(), it.command.drop(1), it.env)) }
+            parts.watchPlugin?.let { c = WatchHooks.appendOpenCodePlugin(c, it) }
+            c
+        }
     }
 }

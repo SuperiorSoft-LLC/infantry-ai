@@ -33,6 +33,7 @@ object HarnessModulesWiring {
             },
             mcpLaunch = { env -> AgentHqMcp.launch(env).let { HarnessProcess(it.argv, env = it.env) } },
             watchLauncher = { env -> if (WatchHooks.on(env)) WatchHooks.launcher(agentHqBin) ?: "agenthq" else null },
+            queryDb = { file, sql, params -> com.superiorsoftllc.agenthq.stats.ReadOnlyDb.query(file, sql, params) },
             ask = { sessionId, q ->
                 val answer = pendingPrompts.askQuestion(sessionId, QuestionSpec(
                     q.question, q.options.map { PromptOption(it) }, timeoutMillis = q.timeoutMillis, recommended = q.recommended,
