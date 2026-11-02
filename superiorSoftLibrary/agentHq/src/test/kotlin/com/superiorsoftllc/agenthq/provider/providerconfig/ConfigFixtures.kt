@@ -36,9 +36,6 @@ class ConfigFixture : AutoCloseable {
         env = env,
     )
 
-    fun claudeLocations(env: Map<String, String> = emptyMap()) =
-        ClaudeConfigLocations(listOf(claudeSettings), env)
-
     override fun close() {
         root.deleteRecursively()
     }

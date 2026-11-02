@@ -3,9 +3,7 @@ package com.superiorsoftllc.agenthq.daemon
 import com.superiorsoftllc.agenthq.agents.KNOWLEDGE_DIGEST_HEADING
 import com.superiorsoftllc.agenthq.protocol.Envelope
 import com.superiorsoftllc.agenthq.provider.AgentProvider
-import com.superiorsoftllc.agenthq.provider.ClaudeCodeProvider
 import com.superiorsoftllc.agenthq.provider.OpenCodeProvider
-import com.superiorsoftllc.agenthq.provider.providerconfig.ClaudeCatalog
 import com.superiorsoftllc.agenthq.runner.ProcessRunner
 import com.superiorsoftllc.agenthq.runner.ScriptedRunner
 import com.superiorsoftllc.agenthq.runner.StubScript
@@ -19,7 +17,7 @@ import kotlin.test.assertTrue
 /**
  * BUG-G2e-1 over the real daemon: the knowledge digest is composed by the SHARED first-turn path, so every harness
  * receives it byte for byte: the stub, the real [OpenCodeProvider] (on its `opencode serve` session-transport slot, the
- * wiring the QA-G2e runs used) and the real [ClaudeCodeProvider]. Only the OS process is replaced by a scripted one,
+ * wiring the QA-G2e runs used) . Only the OS process is replaced by a scripted one,
  * so what is asserted is exactly what each harness's `deliver` writes to its child.
  *
  * The QA-G2e "run 1 FAIL" was an evidence error, not a skipped path: the exported session (ses_eabb17f2...) was created
@@ -101,9 +99,8 @@ class KnowledgeDigestParityTest {
     private fun withDaemon(block: (DaemonFixture, ScriptedRunner) -> Unit) {
         val runner = ScriptedRunner(StubScript.default(), delayMs = 0)
         val opencode = Scripted(OpenCodeProvider(modelLister = { emptyList() }), runner)
-        val claude = Scripted(ClaudeCodeProvider { ClaudeCatalog(emptyList(), null, false, emptyList()) }, runner)
         records = FakeKnowledgeRecords().install()
-        val fixture = DaemonFixture.launch(StubScript.default(), runner = runner, additionalProviders = listOf(opencode, claude))
+        val fixture = DaemonFixture.launch(StubScript.default(), runner = runner, additionalProviders = listOf(opencode))
         try {
             block(fixture, runner)
         } finally {
@@ -118,7 +115,7 @@ class KnowledgeDigestParityTest {
         const val TASK = "We need transcript export. State which archive format you will use and why, then stop."
         const val D1 = "Exported transcripts ship as .zip archives of per-session JSONL files with a manifest.json"
         const val D2 = "Exported transcripts ship as a .tar.gz archive of per-session JSONL files"
-        val HARNESSES = listOf("stub", "opencode", "claude")
+        val HARNESSES = listOf("stub", "opencode")
 
         /** The label the digest carries; pinned here as text, so removing it from [renderKnowledge] fails this test. */
         const val AUTHORITY = "This digest is authoritative"

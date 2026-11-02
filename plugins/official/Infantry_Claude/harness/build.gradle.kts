@@ -1,4 +1,4 @@
-// HARNESS H7b-2: the claude harness plugin, compiled against the harness API only (compileOnly: the daemon provides it at run time through
+// HARNESS H7b-3: the claude harness (production) plugin, compiled against the harness API only (compileOnly: the daemon provides it at run time through
 // HarnessApiClassLoader). `:harness-plugin-official-Infantry_Claude:jar`.
 plugins {
     kotlin("jvm")

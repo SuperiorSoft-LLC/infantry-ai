@@ -14,7 +14,7 @@ import com.superiorsoftllc.agenthq.session.SessionState
 object RolePorts {
     fun environment(store: AgentHqStore, manager: SessionManager, harnesses: HarnessRegistry?): RoleEnvironment = object : RoleEnvironment {
         override fun providerIds() = providerInfos(manager, harnesses).map { it.id }.toSet()
-        override fun effortLevels() = com.superiorsoftllc.agenthq.harness.claude.ClaudeCommands.EFFORT_LEVELS.toSet()
+        override fun effortLevels() = com.superiorsoftllc.agenthq.session.EffortLevels.ids.toSet()
         override fun checkModel(model: String) = manager.requireAllowedModel(model, null)
         override fun traitExists(traitId: String) = store.traits.get(traitId) != null
         override fun liveRoleIds(): Set<String> =

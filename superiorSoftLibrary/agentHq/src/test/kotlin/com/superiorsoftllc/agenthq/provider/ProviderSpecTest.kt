@@ -1,6 +1,5 @@
 package com.superiorsoftllc.agenthq.provider
 
-import com.superiorsoftllc.agenthq.claude.ClaudeCommand
 import com.superiorsoftllc.agenthq.opencode.OpenCodeCommand
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -23,73 +22,14 @@ class ProviderSpecTest {
     }
 
     @Test
-    fun factorySelectsClaude() {
-        assertEquals("claude", ProviderFactory.fromFlag("claude").id)
-        assertEquals("claude", ProviderFactory.fromFlag("Claude-Code").id)
-    }
-
-    @Test
     fun factoryRejectsUnknown() {
         assertTrue(runCatching { ProviderFactory.fromFlag("gemini") }.exceptionOrNull() is IllegalStateException)
     }
 
     // --- claude argv ---------------------------------------------------------
 
-    @Test
-    fun claudeBaselineArgv() {
-        val argv = ClaudeCommand.command(
-            executable = "claude.exe",
-            model = null,
-            permissionMode = null,
-            mcpConfigs = emptyList(),
-            strictMcp = false,
-            resumeSessionId = null,
-        )
-        assertEquals(
-            listOf("claude.exe", "-p", "--output-format", "stream-json", "--verbose", "--thinking", "adaptive", "--thinking-display", "summarized", "--allowedTools", "Bash(agenthq:*),PowerShell(agenthq:*),mcp__agenthq__*"), // BUG-PERM-5
-            argv,
-        )
-    }
 
-    @Test
-    fun claudeFullArgvIncludingResume() {
-        val argv = ClaudeCommand.command(
-            executable = "claude.exe",
-            model = "haiku",
-            permissionMode = "default",
-            mcpConfigs = listOf("mcp.json", "{\"mcpServers\":{}}"),
-            strictMcp = true,
-            resumeSessionId = "sess-1",
-        )
-        assertEquals(
-            listOf(
-                "claude.exe", "-p", "--output-format", "stream-json", "--verbose",
-                "--thinking", "adaptive", "--thinking-display", "summarized", // 4b02c01: summarized thinking, else empty thinking blocks
-                "--model", "haiku",
-                "--permission-mode", "default",
-                "--allowedTools", "Bash(agenthq:*),PowerShell(agenthq:*),mcp__agenthq__*", // BUG-PERM-5
-                "--mcp-config", "mcp.json", "{\"mcpServers\":{}}", "--strict-mcp-config",
-                "--resume", "sess-1",
-            ),
-            argv,
-        )
-    }
 
-    @Test
-    fun claudeOmitsBlankOptionalValues() {
-        val argv = ClaudeCommand.command(
-            executable = "claude.exe",
-            model = "  ",
-            permissionMode = "",
-            mcpConfigs = emptyList(),
-            strictMcp = true,
-            resumeSessionId = "   ",
-        )
-        assertEquals(
-            listOf("claude.exe", "-p", "--output-format", "stream-json", "--verbose", "--thinking", "adaptive", "--thinking-display", "summarized", "--allowedTools", "Bash(agenthq:*),PowerShell(agenthq:*),mcp__agenthq__*"), // BUG-PERM-5
-            argv,
-        )
-    }
 
     // --- opencode argv -------------------------------------------------------
 
@@ -132,13 +72,4 @@ class ProviderSpecTest {
 
     // --- mcp config parsing ---------------------------------------------------
 
-    @Test
-    fun mcpConfigsSplitOnCommaAndNewline() {
-        assertEquals(
-            listOf("a.json", "b.json", "c.json"),
-            ClaudeCommand.parseMcpConfigs("a.json, b.json\nc.json"),
-        )
-        assertEquals(emptyList(), ClaudeCommand.parseMcpConfigs(null))
-        assertEquals(emptyList(), ClaudeCommand.parseMcpConfigs("  \n , "))
-    }
 }

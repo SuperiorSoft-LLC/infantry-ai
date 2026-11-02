@@ -5,7 +5,7 @@
   "author": "Infantry AI",
   "license": "NOASSERTION",
   "tier": "official",
-  "description": "The Claude Code harness (HARNESS H7b-2): launches claude (-p stream-json, or the persistent --input-format stream-json), reads its event stream, maps tool approval to permission modes, routes its tool calls through the watched runner, lists its models, and reads its session store and plan limits. Not yet used in production: the daemon's built-in claude harness still runs.",
+  "description": "The Claude Code harness (HARNESS H7b-2/3): launches claude (-p stream-json, or the persistent --input-format stream-json), reads its event stream, maps tool approval to permission modes, routes its tool calls through the watched runner, lists its models, and reads its session store and plan limits.",
   "harness": {
     "jar": "harness/build/libs/Infantry_Claude-harness.jar",
     "contract": "2.10.0",

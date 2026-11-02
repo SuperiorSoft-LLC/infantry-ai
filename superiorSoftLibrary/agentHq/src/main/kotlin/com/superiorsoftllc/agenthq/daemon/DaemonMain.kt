@@ -1009,8 +1009,6 @@ class AgentHqDaemon(
             val opencodePresent = (listOf(provider) + additionalProviders).any { it.id == "opencode" } || "opencode" in harnesses.harnessIds()
             WatchHooks.openCodePlugin = if (!opencodePresent) null else runCatching { WatchHooks.install(File(stateDir(), "opencode"), WatchHooks.OPENCODE_RESOURCE, "agenthq-watch.js") }
                 .onFailure { System.err.println("[agentHq] opencode watch plugin not written: ${it.message}") }.getOrNull()
-            // STALL-2: claude's watch hook settings go to a file here (inline JSON loses its quotes through the Windows .cmd shim).
-            WatchHooks.settingsDir = File(stateDir(), "watch")
             // BASE-1a: `project_base` checks a branch in the repo ticket starts cut in -- the board plugin's, asked through the board port at
             // answer time -- with the same resolver a cut uses.
             val baseCheck = com.superiorsoftllc.agenthq.mvp.ProjectBaseCheck(

@@ -8,7 +8,7 @@ package com.superiorsoftllc.agenthq.daemon
 object CoreHarnessContributions {
     /** Harnesses whose usage the meter reads from their own session store, so no event translator applies (ids are data). */
     val meterReadsOwnStore: Set<String> = setOf(
-        com.superiorsoftllc.agenthq.harness.claude.ClaudeHarness.HARNESS_ID,
+        com.superiorsoftllc.agenthq.stats.SessionStatsService.CLAUDE,
         com.superiorsoftllc.agenthq.stats.SessionStatsService.PI,
         com.superiorsoftllc.agenthq.stats.SessionStatsService.OPENCODE,
     )

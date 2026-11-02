@@ -136,6 +136,16 @@ class ProviderSpawnDaemonTest {
 
     // --- refusing --------------------------------------------------------------------------------
 
+    /** H7b-3: claude is a harness MODULE now; without Infantry_Claude loaded a start naming it is refused out loud, and nothing starts. */
+    @Test
+    fun claudeWithoutItsModuleIsRefusedWithAClearMessageAndStartsNothing() = withDaemon { fixture ->
+        fixture.send(Envelope(Envelope.NEW, """{"provider":"claude"}"""))
+        val refusal = fixture.client.await(Envelope.ERROR)
+        assertTrue(refusal.data.startsWith("new refused:"), refusal.data)
+        assertTrue(refusal.data.contains("claude") && refusal.data.contains("not installed"), refusal.data)
+        assertEquals(0, fixture.daemon.manager.list().size)
+    }
+
     @Test
     fun anUnknownProviderIsRefusedAndTheNextPromptStartsNothing() = withDaemon { fixture ->
         fixture.send(Envelope(Envelope.NEW, """{"provider":"gemini"}"""))

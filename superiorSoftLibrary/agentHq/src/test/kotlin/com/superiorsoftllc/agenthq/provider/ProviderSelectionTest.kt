@@ -1,6 +1,5 @@
 package com.superiorsoftllc.agenthq.provider
 
-import com.superiorsoftllc.agenthq.claude.ClaudeCommand
 import com.superiorsoftllc.agenthq.opencode.OpenCodeCommand
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -29,13 +28,26 @@ class ProviderSelectionTest {
     @Test
     fun entriesKeepTheirOrderAndTheDefaultIsNotListedTwice() {
         val ids = ProviderFactory.additionalFromFlag("claude, OpenCode ,stub", opencode).map { it.id }
-        assertEquals(listOf("claude", "stub"), ids, "the default is always available, so it is dropped")
+        assertEquals(listOf("stub"), ids, "the default is always available, so it is dropped")
     }
 
     @Test
     fun aliasesCollapseToOneEntry() {
         val ids = ProviderFactory.additionalFromFlag("cc,claude,claude-code,scripted,stub", opencode).map { it.id }
-        assertEquals(listOf("claude", "stub"), ids)
+        assertEquals(listOf("stub"), ids, "H7b-3: claude is served by the Infantry_Claude module, so its names add no builder")
+    }
+
+    @Test
+    fun claudeIsNoLongerABuiltInProvider_aDefaultNamingItIsRefusedByName() {
+        assertTrue("claude" !in ProviderFactory.ids(), "core registers no claude provider; the Infantry_Claude module serves it")
+        val failure = assertFailsWith<IllegalStateException> { ProviderFactory.fromFlag("claude") }
+        assertTrue(failure.message!!.contains("claude"), failure.message)
+    }
+
+    @Test
+    fun anUnknownHarnessNameIsRefusedWithTheKnownIds() {
+        val failure = assertFailsWith<IllegalStateException> { ProviderFactory.fromFlag("no-such-harness") }
+        assertTrue(failure.message!!.contains("no-such-harness") && failure.message!!.contains("opencode"), failure.message)
     }
 
     @Test
@@ -49,45 +61,9 @@ class ProviderSelectionTest {
 
     // --- the model on the command line -------------------------------------------------------------
 
-    @Test
-    fun aSessionModelWinsOverTheConfiguredOne() {
-        assertEquals("anthropic/claude-sonnet-4-5", OpenCodeCommand.effectiveModel("anthropic/claude-sonnet-4-5"))
-        assertEquals("sonnet", ClaudeCommand.effectiveModel("sonnet"))
-    }
 
-    @Test
-    fun noSessionModelFallsBackToTheConfiguredDefault() {
-        // Whatever the environment says, "none" and "blank" mean the configured default -- the
-        // pre-1.3.0 behaviour, so a session that never chose a model runs exactly as it always did.
-        assertEquals(OpenCodeCommand.model(), OpenCodeCommand.effectiveModel(null))
-        assertEquals(OpenCodeCommand.model(), OpenCodeCommand.effectiveModel("  "))
-        assertEquals(ClaudeCommand.model(), ClaudeCommand.effectiveModel(null))
-        assertEquals(ClaudeCommand.model(), ClaudeCommand.effectiveModel(""))
-    }
 
-    @Test
-    fun theSessionModelLandsBehindTheModelFlag() {
-        assertEquals(
-            listOf("opencode.exe", "run", "--format", "json", "-m", "ollama/qwen2.5-coder:7b"),
-            OpenCodeCommand.command("opencode.exe", OpenCodeCommand.effectiveModel("ollama/qwen2.5-coder:7b"), null),
-        )
-        val claude = ClaudeCommand.command(
-            executable = "claude.exe",
-            model = ClaudeCommand.effectiveModel("haiku"),
-            permissionMode = null,
-            mcpConfigs = emptyList(),
-            strictMcp = false,
-            resumeSessionId = null,
-        )
-        assertEquals(listOf("--model", "haiku"), claude.subList(claude.indexOf("--model"), claude.indexOf("--model") + 2))
-    }
 
-    @Test
-    fun eachProviderReportsItsConfiguredDefaultModel() {
-        assertEquals(OpenCodeCommand.model(), OpenCodeProvider().defaultModel(), "opencode always names a model")
-        assertEquals(ClaudeCommand.model(), ClaudeCodeProvider().defaultModel(), "claude: AGENTHQ_CLAUDE_MODEL or none")
-        assertNull(StubProvider().defaultModel(), "the stub has no model")
-    }
 
     @Test
     fun theStubEchoesASessionModelOnItsLabelAndOnlyThen() {

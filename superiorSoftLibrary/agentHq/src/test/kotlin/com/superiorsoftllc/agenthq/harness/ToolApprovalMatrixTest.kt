@@ -1,15 +1,12 @@
 package com.superiorsoftllc.agenthq.harness
 
-import com.superiorsoftllc.agenthq.claude.ClaudeSessionAdapter
 import com.superiorsoftllc.agenthq.daemon.loadHarnesses
-import com.superiorsoftllc.agenthq.harness.claude.ClaudeHarness
 import com.superiorsoftllc.agenthq.harness.descriptor.DescriptorHarness
 import com.superiorsoftllc.agenthq.harness.descriptor.HarnessDescriptorLoader
 import com.superiorsoftllc.agenthq.opencode.OpenCodePermissions
 import com.superiorsoftllc.agenthq.opencode.OpenCodeServeAdapter
 import com.superiorsoftllc.agenthq.protocol.EventNormalizer
 import com.superiorsoftllc.agenthq.provider.AgentProvider
-import com.superiorsoftllc.agenthq.provider.ClaudeCodeProvider
 import com.superiorsoftllc.agenthq.provider.HarnessModelCatalogs
 import com.superiorsoftllc.agenthq.provider.HarnessProvider
 import com.superiorsoftllc.agenthq.provider.OpenCodeProvider
@@ -64,7 +61,7 @@ class ToolApprovalMatrixTest {
         machineDescriptorDir()?.let { dir ->
             HarnessDescriptorLoader(dir).loadInto(registry).notes.forEach { println("[matrix] machine descriptor ${it.source}: ${it.reason} ${it.detail}") }
         }
-        assertTrue(registry.harnessIds().containsAll(listOf("claude", "codex", "gemini")), "registered: ${registry.harnessIds()}")
+        assertTrue(registry.harnessIds().containsAll(listOf("codex", "gemini")), "registered: ${registry.harnessIds()}")
 
         // 1. every configured provider name, as the daemon resolves it first.
         for (id in ProviderFactory.ids()) {
@@ -112,7 +109,6 @@ class ToolApprovalMatrixTest {
     }
 
     private fun kindOf(provider: AgentProvider, harness: Harness?): String = when {
-        harness is ClaudeHarness || provider is ClaudeCodeProvider -> "claude"
         harness is DescriptorHarness -> "descriptor"
         provider is OpenCodeProvider -> "opencode"
         provider is StubProvider -> "stub"
@@ -121,7 +117,6 @@ class ToolApprovalMatrixTest {
 
     /** Null when [spec] carries [kind]'s mapping for [mode]. */
     private fun oneShotProblem(kind: String, harness: Harness?, spec: ProcessSpec, deny: ProcessSpec?, mode: ToolApproval): String? = when (kind) {
-        "claude" -> claudeProblem(spec.command, mode)
         "opencode" -> {
             val auto = "--auto" in spec.command
             val cfg = spec.env[OpenCodePermissions.CONFIG_CONTENT_ENV]
@@ -139,21 +134,6 @@ class ToolApprovalMatrixTest {
         "descriptor" -> descriptorProblem((harness as DescriptorHarness), spec.command, deny?.command, mode)
         "stub" -> null // a scripted replay with no tools at all: there is nothing to approve.
         else -> "unmapped harness/provider: no Tool approval mapping is known for it"
-    }
-
-    private fun claudeProblem(command: List<String>, mode: ToolApproval): String? {
-        val at = command.indexOf("--permission-mode")
-        val actual = if (at < 0) null else command.getOrNull(at + 1)
-        val expected = when (mode) {
-            ToolApproval.DENY, ToolApproval.ASK -> null // PROMPT-1: Claude `-p` cannot prompt; ask = deny
-            ToolApproval.ALLOW_EDITS -> "acceptEdits"
-            ToolApproval.ALLOW_ALL -> "bypassPermissions"
-        }
-        if (actual != expected) return "--permission-mode expected $expected, got $actual"
-        // BUG-PERM-5: the agenthq CLI is AgentHQ's own control plane, allowed in EVERY mode (deny included).
-        val allowed = command.indexOf("--allowedTools").takeIf { it >= 0 }?.let { command.getOrNull(it + 1) }
-            ?.split(',')?.map { it.trim() }.orEmpty()
-        return if (allowed.containsAll(CLAUDE_AGENTHQ_RULES)) null else "--allowedTools must carry $CLAUDE_AGENTHQ_RULES, got $allowed"
     }
 
     private fun piProblem(command: List<String>, deny: List<String>?): String? = when {
@@ -196,10 +176,9 @@ class ToolApprovalMatrixTest {
                 if (ok) null else "serve answers '$permission' with $reply (denied=${d.deniedTool}), expected ${if (allowed) "once" else "reject + denial"}"
             }
         }
-        if (adapter !is ClaudeSessionAdapter) return "unmapped session adapter ${adapter.javaClass.name} (label ${adapter.label})"
+        if (kind != "pi") return "unmapped session adapter ${adapter.javaClass.name} (label ${adapter.label})"
         val launched = launch(adapter, model, mode).getOrElse { return "launch threw ${it::class.simpleName}: ${it.message}" }
         return when (kind) {
-            "claude" -> claudeProblem(launched, mode)
             "pi" -> piProblem(launched, launch(adapter, model, ToolApproval.DENY).getOrNull())
             else -> "session adapter ${adapter.label} on a $kind target"
         }
