@@ -23,7 +23,7 @@ import java.io.File
  * asks ONE endpoint, `POST /watch/rewrite/{harness}` (bearer like every route; the session id in [SESSION_HEADER]), so
  * the rules live once ([WatchRewrite]) and no process is spawned per shell call:
  *
- *  - claude: a PreToolUse `http` hook in a settings file passed with `--settings` ([claudeSettingsArg]); Claude Code 2.1.312 applies a hook's
+ *  - claude: a PreToolUse `http` hook in a settings file passed with `--settings` (written by the Infantry_Claude module's watch()); Claude Code 2.1.312 applies a hook's
  *    `updatedInput` with no `permissionDecision` and then runs its normal permission check on the rewritten input.
  *  - opencode: the plugin `opencode/agenthq-watch.js` (`tool.execute.before`, mutates `output.args.command`), named in
  *    the serve's inline config `plugin` list ([mergeOpenCodePlugin]).
@@ -51,59 +51,6 @@ object WatchHooks {
     @Volatile var nativeBackground: () -> Boolean = { false }
 
     internal fun on(env: Map<String, String>) = env["AGENTHQ_WATCH"] == "on" && !env[AccessPolicy.MAIL_BASE_ENV].isNullOrBlank()
-
-    /**
-     * The `--settings` JSON for a claude session whose env is [env], or null when its watch is off. The header values are
-     * expanded by Claude Code from the session's own env (`allowedEnvVars`), so the token never sits in the argv.
-     */
-    fun claudeSettings(env: Map<String, String>): String? {
-        if (!on(env)) return null
-        val url = env.getValue(AccessPolicy.MAIL_BASE_ENV).trimEnd('/') + "$PATH/claude"
-        val hook = JsonObject(
-            mapOf(
-                "type" to JsonPrimitive("http"),
-                "url" to JsonPrimitive(url),
-                "timeout" to JsonPrimitive(5),
-                "onFailure" to JsonPrimitive("continue"),
-                "headers" to JsonObject(
-                    mapOf(
-                        "Authorization" to JsonPrimitive("Bearer \$${AccessPolicy.TOKEN_ENV}"),
-                        SESSION_HEADER to JsonPrimitive("\$${AccessPolicy.SESSION_ID_ENV}"),
-                    ),
-                ),
-                "allowedEnvVars" to JsonArray(listOf(JsonPrimitive(AccessPolicy.TOKEN_ENV), JsonPrimitive(AccessPolicy.SESSION_ID_ENV))),
-            ),
-        )
-        val entry = JsonObject(mapOf("matcher" to JsonPrimitive("Bash|PowerShell"), "hooks" to JsonArray(listOf(hook))))
-        // The same hook after the call: says so when another PreToolUse hook's rewrite replaced ours ([CLAUDE_POST]).
-        val post = JsonObject(hook + ("url" to JsonPrimitive("$url-post")))
-        val postEntry = JsonObject(mapOf("matcher" to JsonPrimitive("Bash|PowerShell"), "hooks" to JsonArray(listOf(post))))
-        return JsonObject(mapOf("hooks" to JsonObject(mapOf("PreToolUse" to JsonArray(listOf(entry)), "PostToolUse" to JsonArray(listOf(postEntry)))))).toString()
-    }
-
-    /** Set by the daemon at start: where [claudeSettingsArg] writes the settings file (null = pass the JSON inline). */
-    @Volatile var settingsDir: File? = null
-
-    /**
-     * What `--settings` gets: a FILE path. Inline JSON does not survive Windows: `claude` is an npm `.cmd` shim, and
-     * cmd.exe strips the JSON's double quotes, so Claude Code reads the rest as a file name and exits 1 (found in the
-     * STALL-2 live run). The file holds no secret (the token is expanded from the session's env) and is named by its
-     * content, so sessions on one daemon share it and a changed URL writes a new one.
-     */
-    fun claudeSettingsArg(env: Map<String, String>, dir: File? = settingsDir): String? {
-        val settings = claudeSettings(env) ?: return null
-        if (dir == null) return settings
-        return runCatching {
-            dir.mkdirs()
-            val f = File(dir, "claude-watch-${Integer.toHexString(settings.hashCode())}.json")
-            if (!f.isFile || f.readText() != settings) {
-                val tmp = File(dir, f.name + ".tmp")
-                tmp.writeText(settings)
-                java.nio.file.Files.move(tmp.toPath(), f.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.StandardCopyOption.ATOMIC_MOVE)
-            }
-            f.absolutePath
-        }.getOrDefault(settings)
-    }
 
     /** [config] (an `OPENCODE_CONFIG_CONTENT`) with the watch plugin appended to its `plugin` list, when the watch is on. */
     fun mergeOpenCodePlugin(config: String, env: Map<String, String>, plugin: File? = openCodePlugin): String {

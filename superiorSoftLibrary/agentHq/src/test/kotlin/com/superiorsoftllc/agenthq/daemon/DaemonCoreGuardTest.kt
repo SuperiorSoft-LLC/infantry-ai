@@ -119,7 +119,7 @@ class DaemonCoreGuardTest {
             "settings" to "SettingsService and LimitRegistry: configuration and the tools to modify it",
             "db" to "the one place that opens the SQLite database: the storage abstraction",
             "keystore" to "secret storage behind the secrets the plugin API grants",
-            "harness" to "the Harness / HarnessPlugin / HarnessRegistry abstraction (its claude, pi, descriptor and install subfolders are not core)",
+            "harness" to "the Harness / HarnessPlugin / HarnessRegistry abstraction (its pi, descriptor and install subfolders are not core; claude lives in Infantry_Claude)",
             "runner" to "process-runner and watch mechanism; ToolProfiles are data on top of it",
         )
 
@@ -138,7 +138,7 @@ class DaemonCoreGuardTest {
             "executables" to "resolves harness and tool binaries for the runner",
             "update" to "self-update of the daemon install; DaemonMain wires it directly",
             "notify" to "the spoken-push frame helper of the protocol",
-            "provider" to "AgentProvider abstraction used by SessionManager; ClaudeCodeProvider and OpenCodeProvider inside it are concrete (see claude, opencode)",
+            "provider" to "AgentProvider abstraction used by SessionManager; OpenCodeProvider inside it is concrete (see opencode)",
             "orchestration" to "the pod/node DAG scheduler; the scheduler is orchestrator side (the orchestrator seam, OrchestratorLink, lives in agentHqDaemonApi since ORCH-1)",
         )
 
@@ -157,8 +157,7 @@ class DaemonCoreGuardTest {
             "context" to "blocker: DaemonApi has no ticket/board/epic surface and DaemonMain, TicketBoard, the story handlers and the mailbox name each other directly; see docs/DAEMON-BOARD-API.md",
             "brief" to "blocker: DaemonApi has no ticket/board/epic surface and DaemonMain, TicketBoard, the story handlers and the mailbox name each other directly; see docs/DAEMON-BOARD-API.md",
             "ledger" to "blocker: DaemonApi has no ticket/board/epic surface and DaemonMain, TicketBoard, the story handlers and the mailbox name each other directly; see docs/DAEMON-BOARD-API.md",
-            "claude" to "blocker: concrete Claude adapter is already a HarnessPlugin, but ProviderFactory, HarnessModelCatalogs, Sandbox and DaemonMain name it, so built-ins are not registered through the SPI",
-            "opencode" to "blocker: same as claude (ProviderFactory and DaemonMain name OpenCodeServeAdapter)",
+            "opencode" to "blocker: ProviderFactory and DaemonMain name OpenCodeServeAdapter, so it is not registered through the SPI",
             "agents" to "blocker: AgentProfiles is wired into MailRouter and SessionManager spawn binding; needs a spawn-binding hook",
             "triggers" to "blocker: DaemonApi has schedule() but no spawn-with-binding or ticket-transition events",
             "cli" to "blocker: the agenthq CLI and MCP server import protocol, session and daemon types; needs the agentHqCore module split first",

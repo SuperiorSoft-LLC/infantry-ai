@@ -35,7 +35,6 @@ object ProviderFactory {
         mapOf(
             // BUG-M2-11b-2: opencode's persistent mode; whether it is used is `session.keepAliveMinutes`'s call (SessionHost).
             "opencode" to { OpenCodeProvider(sessionAdapter = com.superiorsoftllc.agenthq.opencode.OpenCodeServeAdapter()) },
-            "claude" to { ClaudeCodeProvider(sessionAdapter = com.superiorsoftllc.agenthq.claude.ClaudeSessionAdapter()) },
             "stub" to { StubProvider(delayMs = stubDelayMs(InfantryEnv.get(STUB_DELAY_ENV))) },
         ),
     )
@@ -65,6 +64,7 @@ object ProviderFactory {
      */
     private val aliases = mapOf(
         "oc" to "opencode",
+        // H7b-3: claude is served by the Infantry_Claude harness module; its old names still resolve to the id, which is no builder.
         "claude-code" to "claude",
         "claudecode" to "claude",
         "cc" to "claude",
@@ -101,6 +101,9 @@ object ProviderFactory {
 
     const val PROVIDERS_ENV = "AGENTHQ_PROVIDERS"
 
+    /** H7b-3: ids a harness MODULE serves (Infantry_Claude); an [PROVIDERS_ENV] entry naming one is satisfied by the module, not a builder. */
+    private val MODULE_SERVED = setOf("claude")
+
     /**
      * Pure parse of [additionalFromEnv]. The default's own id is dropped (it is always available),
      * duplicates collapse after alias resolution (`cc,claude` is one entry), and an unknown name fails
@@ -111,6 +114,7 @@ object ProviderFactory {
         return raw.orEmpty().split(',')
             .map { it.trim().lowercase() }
             .filter { it.isNotEmpty() }
+            .filter { aliases[it] ?: it !in MODULE_SERVED }
             .map { name ->
                 val builder = builderFor(name)
                     ?: error("Unknown $PROVIDERS_ENV entry '$name' (known: ${builders.keys.sorted()}).")

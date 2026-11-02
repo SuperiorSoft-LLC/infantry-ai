@@ -57,8 +57,6 @@ class SessionStatsService(private val home: File = File(System.getProperty("user
         val psid = providerSessionId?.takeIf { SAFE_ID.matches(it) && ".." !in it } ?: return base
         return try {
             when (harness) {
-                // H7b: claude stats branch moves with the plugin
-                CLAUDE -> resolve(harness, psid) { claudeFile(psid) }?.let { readClaude(it, base) }
                 OPENCODE -> readOpenCode(psid, base)
                 // A harness id that is an OpenCode variant (`opencode-go`, ...) shares OpenCode's record.
                 else -> if (piStoreRoots.containsKey(harness)) piStoreRoots.getValue(harness).let { root -> resolve(harness, psid) { piFile(root, psid) }?.let { readPi(root, it, base) } }
@@ -76,78 +74,12 @@ class SessionStatsService(private val home: File = File(System.getProperty("user
         return scan()?.also { paths[key] = it }
     }
 
-    // ------------------------------------------------------------------ Claude Code
-
-    private fun claudeFile(psid: String): File? =
-        File(home, ".claude/projects").listFiles { f -> f.isDirectory }
-            ?.map { File(it, "$psid.jsonl") }
-            ?.firstOrNull { it.isFile }
-
-    private fun readClaude(file: File, base: SessionStats): SessionStats {
-        val acc = StatsAccumulator()
-        val seenMessages = HashSet<String>()
-        val seenTools = HashSet<String>()
-        file.bufferedReader().useLines { lines ->
-            for (line in lines) {
-                if (line.isBlank()) continue
-                // Only user/assistant lines are parsed; the rest (attachments, snapshots) only lend a timestamp.
-                if ("\"user\"" !in line && "\"assistant\"" !in line) {
-                    TIMESTAMP.find(line)?.let { acc.seen(isoMillis(it.groupValues[1])) }
-                    continue
-                }
-                val o = parse(line) ?: continue
-                val at = isoMillis(o.str("timestamp"))
-                acc.seen(at)
-                val message = o["message"] as? JsonObject ?: continue
-                when (o.str("type")) {
-                    "user" -> { claudeToolResults(message["content"], acc, at); if (o.bool("isMeta") != true && o.bool("isCompactSummary") != true && o.bool("isSidechain") != true &&
-                        isClaudePrompt(message["content"])
-                    ) acc.prompt() }
-                    "assistant" -> {
-                        val id = message.str("id")
-                        acc.assistantAt(at)
-                        if (id != null && seenMessages.add(id)) {
-                            acc.turn(message.str("model"))
-                            val u = message["usage"] as? JsonObject
-                            if (u != null) {
-                                acc.request(UsageAdapters.claude(u, at, message.str("model")))
-                            }
-                        }
-                        (message["content"] as? JsonArray)?.forEach { block ->
-                            val b = block as? JsonObject ?: return@forEach
-                            if (b.str("type") == "tool_use") {
-                                val toolId = b.str("id")
-                                if (toolId == null || seenTools.add(toolId)) acc.tool(b.str("name") ?: "unknown", at)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        return acc.build(base, anyCatalogLimit(acc.lastModel))
-    }
-
-    /** EXPERIMENTS-1: each `tool_result` block of a Claude user record is one tool result; its size is the text it carries. */
-    private fun claudeToolResults(content: JsonElement?, acc: StatsAccumulator, at: Long?) {
-        (content as? JsonArray)?.forEach { block ->
-            val b = block as? JsonObject ?: return@forEach
-            if (b.str("type") != "tool_result") return@forEach
-            acc.toolResult(textLength(b["content"]), at)
-        }
-    }
+    // H7b-3: the Claude Code session-store reader moved to the Infantry_Claude plugin (HarnessStats); [textLength] stays for Pi.
 
     private fun textLength(content: JsonElement?): Int = when (content) {
         is JsonPrimitive -> content.content.length
         is JsonArray -> content.sumOf { (it as? JsonObject)?.str("text")?.length ?: 0 }
         else -> 0
-    }
-
-    /** A real prompt: plain string content, or text blocks with no tool_result (that is a tool's answer). */
-    private fun isClaudePrompt(content: JsonElement?): Boolean = when (content) {
-        is JsonPrimitive -> content.isString
-        is JsonArray -> content.none { (it as? JsonObject)?.str("type") == "tool_result" } &&
-            content.any { (it as? JsonObject)?.str("type") == "text" }
-        else -> false
     }
 
     // ------------------------------------------------------------------ Pi

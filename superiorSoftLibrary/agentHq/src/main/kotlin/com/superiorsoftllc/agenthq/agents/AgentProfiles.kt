@@ -37,7 +37,7 @@ class AgentProfiles(
     /** Role-first S1: whether a role id exists. Default = the built-in catalog ids; the daemon passes its live catalog. */
     private val roleExists: (String) -> Boolean = { it in RoleIds.BUILT_IN },
     /** Role-first S2: the effort levels a profile may pin; the same set the role-binding check uses. */
-    private val effortLevels: Set<String> = com.superiorsoftllc.agenthq.harness.claude.ClaudeCommands.EFFORT_LEVELS.toSet(),
+    private val effortLevels: Set<String> = com.superiorsoftllc.agenthq.session.EffortLevels.ids.toSet(),
     /** TRAITS-T3: whether a trait id is in the library. Default = none is, so a profile can add no trait unless the daemon wires it. */
     private val traitExists: (String) -> Boolean = { false },
     /** TRAITS-T4: a role's bound trait list (null = none). Default = no role binds any trait. */

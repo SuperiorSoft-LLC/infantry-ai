@@ -1,6 +1,5 @@
 package com.superiorsoftllc.agenthq.harness
 
-import com.superiorsoftllc.agenthq.harness.claude.ClaudeHarness
 import com.superiorsoftllc.agenthq.runner.ScriptedRunner
 import com.superiorsoftllc.agenthq.runner.StubScript
 import kotlin.test.Test
@@ -11,7 +10,6 @@ import kotlin.test.assertTrue
 
 /** CP-4 slice (a): a harness declares its command catalog, and the pure rules that read and filter it. */
 class HarnessCommandTest {
-    private val claude = ClaudeHarness(ScriptedRunner(StubScript.default(), delayMs = 0))
 
     @Test
     fun aHarnessThatDeclaresNothingOffersNoCommands() {
@@ -24,15 +22,6 @@ class HarnessCommandTest {
         assertEquals(emptyList(), bare.commands)
     }
 
-    @Test
-    fun claudeOffersModelEffortAndItsOwnCompaction() {
-        val byName = claude.commands.associateBy { it.name }
-        assertEquals(listOf("model", "effort", "compact"), claude.commands.map { it.name })
-        assertEquals(CommandAction.SET_MODEL, byName.getValue("model").action)
-        assertEquals(listOf("low", "medium", "high", "xhigh", "max"), byName.getValue("effort").values)
-        assertEquals("/compact", byName.getValue("compact").native, "compaction is handed to the harness, not reimplemented")
-        assertTrue(claude.commands.all { it.description.isNotBlank() }, "every entry says what it does")
-    }
 
     @Test
     fun onlyANativeCommandCarriesNativeTextAndNamesAreBareWords() {
@@ -53,7 +42,7 @@ class HarnessCommandTest {
 
     @Test
     fun theCatalogIsFilteredByNamePrefixThenByValuePrefix() {
-        val catalog = claude.commands
+        val catalog = StandardCommands.catalog(efforts = com.superiorsoftllc.agenthq.session.EffortLevels.ids)
         assertEquals(listOf("model", "effort", "compact"), CommandLines.complete(catalog, "").map { it.name })
         assertEquals(listOf("effort"), CommandLines.complete(catalog, "/E").map { it.name })
         assertEquals(emptyList(), CommandLines.complete(catalog, "zzz"))

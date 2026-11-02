@@ -1,7 +1,5 @@
 package com.superiorsoftllc.agenthq.provider
 
-import com.superiorsoftllc.agenthq.harness.claude.ClaudeHarness
-import com.superiorsoftllc.agenthq.harness.claude.ClaudeModelCatalog
 import com.superiorsoftllc.agenthq.protocol.ProviderModels
 
 /**
@@ -52,11 +50,7 @@ class HarnessModelCatalogs(private val sources: Map<String, HarnessModelCatalog>
         /** The note on the row of a registered harness that has no model source: type the id its `--model` takes. */
         const val NO_CATALOG_NOTE = "this harness lists no models; type the model id its --model accepts"
 
-        /** The built-in sources: Claude Code (static list) and Pi. Descriptor harnesses bring their own (S5), through `rows(lookup = ...)`. */
-        fun builtIn(): HarnessModelCatalogs = HarnessModelCatalogs(
-            mapOf(
-                ClaudeHarness.HARNESS_ID to ClaudeModelCatalog(),
-            ),
-        )
+        /** The built-in sources: none (H7b-3: Claude Code and Pi list their own models through their modules). Descriptor harnesses bring their own (S5), through `rows(lookup = ...)`. */
+        fun builtIn(): HarnessModelCatalogs = EMPTY
     }
 }

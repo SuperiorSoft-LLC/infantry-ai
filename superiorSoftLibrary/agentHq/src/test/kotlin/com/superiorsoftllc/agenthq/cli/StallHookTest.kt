@@ -136,29 +136,6 @@ class StallHookTest {
         assertTrue(out["additionalContext"]!!.jsonPrimitive.content.contains("UNWATCHED"))
         assertEquals("{}", post("t2", "rtk gradle test").body, "said once per call")
         assertEquals("{}", post("never-rewritten", "ls").body, "a call we did not rewrite is not ours to judge")
-        val s = Json.parseToJsonElement(assertNotNull(WatchHooks.claudeSettings(mapOf("AGENTHQ_WATCH" to "on", "AGENTHQ_MAIL_BASE" to "http://127.0.0.1:1")))).jsonObject
-        assertTrue(s["hooks"]!!.jsonObject["PostToolUse"]!!.toString().contains("/watch/rewrite/claude-post"))
-    }
-
-    @Test
-    fun claudeGetsAnHttpPreToolUseHook_onlyWhileItsWatchIsOn() {
-        val env = mapOf("AGENTHQ_WATCH" to "on", "AGENTHQ_MAIL_BASE" to "http://127.0.0.1:9123/")
-        val s = Json.parseToJsonElement(assertNotNull(WatchHooks.claudeSettings(env))).jsonObject
-        val entry = s["hooks"]!!.jsonObject["PreToolUse"]!!.jsonArray.single().jsonObject
-        assertEquals("Bash|PowerShell", entry["matcher"]!!.jsonPrimitive.content)
-        val hook = entry["hooks"]!!.jsonArray.single().jsonObject
-        assertEquals("http", hook["type"]!!.jsonPrimitive.content)
-        assertEquals("http://127.0.0.1:9123/watch/rewrite/claude", hook["url"]!!.jsonPrimitive.content)
-        assertEquals("Bearer \$AGENTHQ_TOKEN", hook["headers"]!!.jsonObject["Authorization"]!!.jsonPrimitive.content, "the token stays out of the argv")
-        assertNull(WatchHooks.claudeSettings(env + ("AGENTHQ_WATCH" to "off")))
-        // Live-run finding: inline JSON loses its quotes through claude's Windows .cmd shim, so a file path is passed.
-        val dir = java.nio.file.Files.createTempDirectory("watch-settings").toFile().apply { deleteOnExit() }
-        val arg = assertNotNull(WatchHooks.claudeSettingsArg(env, dir))
-        assertEquals(WatchHooks.claudeSettings(env), java.io.File(arg).readText())
-        assertEquals(arg, WatchHooks.claudeSettingsArg(env, dir), "same content, same file")
-        assertNull(WatchHooks.claudeSettingsArg(env + ("AGENTHQ_WATCH" to "off"), dir))
-        val argv = com.superiorsoftllc.agenthq.claude.ClaudeCommand.command("claude", null, null, emptyList(), false, null, settings = "{}")
-        assertEquals("{}", argv[argv.indexOf("--settings") + 1])
     }
 
     @Test

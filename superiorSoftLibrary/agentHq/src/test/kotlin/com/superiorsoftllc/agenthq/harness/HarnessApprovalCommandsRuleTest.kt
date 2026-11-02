@@ -60,9 +60,4 @@ class HarnessApprovalCommandsRuleTest {
         assertNull(h.mcpToolRule("agenthq"))
     }
 
-    @Test fun `the claude harness fills the slots in place`() {
-        val c = com.superiorsoftllc.agenthq.harness.claude.ClaudeHarness(com.superiorsoftllc.agenthq.runner.PipedProcessRunner())
-        assertEquals(listOf("--permission-mode", "acceptEdits"), c.approvalArgs(ToolApproval.ALLOW_EDITS))
-        assertEquals(com.superiorsoftllc.agenthq.daemon.AgentHqMcp.CLAUDE_TOOL_RULE, c.mcpToolRule(com.superiorsoftllc.agenthq.daemon.AgentHqMcp.SERVER_NAME))
-    }
 }

@@ -1,6 +1,5 @@
 package com.superiorsoftllc.agenthq.provider
 
-import com.superiorsoftllc.agenthq.harness.claude.ClaudeModelCatalog
 import com.superiorsoftllc.agenthq.protocol.ProviderModels
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -35,16 +34,6 @@ class HarnessModelCatalogsTest {
         assertEquals("pi", HarnessModelCatalogs(mapOf("pi" to liar)).rows(listOf("pi"), emptySet()).single().provider)
     }
 
-    /** PICKER-ALL-1: Claude Code is a built-in source, one provider `claude`, the `--model` values the CLI takes. */
-    @Test
-    fun builtInListsClaudeCodeModelsWhenNoClaudeProviderIsConfigured() {
-        val claude = HarnessModelCatalogs.builtIn().rows(listOf("claude"), covered = emptySet()).single()
-        assertEquals("claude", claude.provider)
-        assertEquals(ClaudeModelCatalog.PROVIDER, claude.group)
-        assertEquals(ClaudeModelCatalog.MODELS.map { it.id }, claude.models)
-        assertTrue(listOf("opus", "sonnet", "haiku", "opus[1m]", "claude-opus-5-5").all { it in claude.models }, "${claude.models}")
-        assertTrue(HarnessModelCatalogs.builtIn().rows(listOf("claude"), covered = setOf("claude")).isEmpty(), "a configured claude provider wins")
-    }
 
     /** PICKER-ALL-1: a registered harness with no source is one noted empty row, never no row (a bare text box). */
     @Test

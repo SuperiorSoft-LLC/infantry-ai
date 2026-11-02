@@ -37,8 +37,8 @@ class StubProvider(
 
     /** The stub honours the whole standard catalog, so a client can be exercised end to end with no CLI installed. */
     override val commands: List<com.superiorsoftllc.agenthq.harness.HarnessCommand> =
-        if (modelIds.isEmpty()) com.superiorsoftllc.agenthq.harness.claude.ClaudeCommands.catalog
-        else com.superiorsoftllc.agenthq.harness.claude.ClaudeCommands.catalog.map {
+        if (modelIds.isEmpty()) com.superiorsoftllc.agenthq.harness.StandardCommands.catalog(efforts = com.superiorsoftllc.agenthq.session.EffortLevels.ids)
+        else com.superiorsoftllc.agenthq.harness.StandardCommands.catalog(efforts = com.superiorsoftllc.agenthq.session.EffortLevels.ids).map {
             if (it.action == com.superiorsoftllc.agenthq.harness.CommandAction.SET_MODEL) it.copy(values = modelIds) else it
         }
 

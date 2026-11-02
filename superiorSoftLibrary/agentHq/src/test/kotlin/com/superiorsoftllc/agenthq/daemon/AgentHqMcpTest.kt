@@ -1,7 +1,5 @@
 package com.superiorsoftllc.agenthq.daemon
 
-import com.superiorsoftllc.agenthq.claude.ClaudeCommand
-import com.superiorsoftllc.agenthq.claude.ClaudeSessionAdapter
 import com.superiorsoftllc.agenthq.harness.ToolApproval
 import com.superiorsoftllc.agenthq.opencode.OpenCodePermissions
 import com.superiorsoftllc.agenthq.opencode.OpenCodeServeAdapter
@@ -114,42 +112,6 @@ class AgentHqMcpTest {
         val a = AgentHqMcp.configFile("""{"a":1}""", configDir)
         assertEquals(a, AgentHqMcp.configFile("""{"a":1}""", configDir))
         assertFalse(a == AgentHqMcp.configFile("""{"a":2}""", configDir))
-    }
-
-    /** The real persistent-session launch argv (the fingerprint is built from it). */
-    private fun claudeArgv(mode: ToolApproval): List<String> =
-        ClaudeSessionAdapter(executable = { "claude" })
-            .fingerprint(RunRequest(prompt = "", toolApproval = mode), sessionEnv)
-            .split('\u0000')
-
-    @Test
-    fun `claude argv carries the agenthq mcp config and allows its tools in every mode`() {
-        for (mode in ToolApproval.entries) {
-            val argv = claudeArgv(mode)
-            val allowed = argv[argv.indexOf("--allowedTools") + 1].split(',')
-            assertTrue(AgentHqMcp.CLAUDE_TOOL_RULE in allowed, "${mode.wire}: $allowed")
-            assertTrue("Bash(agenthq:*)" in allowed && "PowerShell(agenthq:*)" in allowed, "${mode.wire}: BUG-PERM-5 kept")
-            val at = argv.indexOf("--mcp-config")
-            assertTrue(at >= 0, "${mode.wire}: no --mcp-config in $argv")
-            val agenthq = argv.drop(at + 1).takeWhile { !it.startsWith("--") }
-                .map { File(it) }.firstOrNull { it.isFile && "\"agenthq\"" in it.readText() }
-            assertNotNull(agenthq, "${mode.wire}: no agenthq entry among the --mcp-config values")
-            assertTrue("sess-1" in agenthq.readText(), mode.wire)
-        }
-    }
-
-    @Test
-    fun `claude command keeps the user's mcp config ahead of the agenthq one`() {
-        val user = """{"mcpServers":{"other":{"command":"x"}}}"""
-        for (mode in ToolApproval.entries) {
-            val argv = ClaudeCommand.command(
-                executable = "claude", model = null, permissionMode = ClaudeCommand.permissionMode(mode),
-                mcpConfigs = ClaudeCommand.sessionMcpConfigs(sessionEnv, listOf(user)), strictMcp = false, resumeSessionId = null,
-            )
-            val at = argv.indexOf("--mcp-config")
-            assertEquals(user, argv[at + 1], mode.wire)
-            assertTrue("\"agenthq\"" in File(argv[at + 2]).readText(), mode.wire)
-        }
     }
 
     // ---- opencode ------------------------------------------------------------------------------------------------

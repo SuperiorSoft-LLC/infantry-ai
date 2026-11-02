@@ -1,7 +1,5 @@
 package com.superiorsoftllc.agenthq.session
 
-import com.superiorsoftllc.agenthq.claude.ClaudeCommand
-import com.superiorsoftllc.agenthq.claude.ClaudePermissionMode
 import com.superiorsoftllc.agenthq.daemon.denialEnvelope
 import com.superiorsoftllc.agenthq.harness.ToolApproval
 import com.superiorsoftllc.agenthq.protocol.Envelope
@@ -21,67 +19,6 @@ import kotlin.test.assertTrue
 class ToolApprovalTest {
     private val none: (String) -> String? = { null }
     private fun only(name: String, value: String): (String) -> String? = { if (it == name) value else null }
-
-    /** The real argv for [approval], with the legacy env unset. */
-    private fun claudeArgv(approval: ToolApproval): List<String> = ClaudeCommand.command(
-        executable = "claude",
-        model = null,
-        permissionMode = ClaudePermissionMode.forApproval(approval, none, none),
-        mcpConfigs = emptyList(),
-        strictMcp = false,
-        resumeSessionId = null,
-    )
-
-    private fun permissionFlag(argv: List<String>): String? =
-        argv.indexOf("--permission-mode").takeIf { it >= 0 }?.let { argv[it + 1] }
-
-    // --- Claude argv, one per mode ---------------------------------------------------------------------------------
-
-    @Test
-    fun denyPassesNoPermissionFlag() {
-        val argv = claudeArgv(ToolApproval.DENY)
-        assertFalse("--permission-mode" in argv, "deny = Claude's own default, no flag: $argv")
-    }
-
-    /** BUG-PERM-5: the agenthq CLI is allowed in every mode; nothing else (e.g. `git status`) is. */
-    @Test
-    fun everyModeAllowsTheAgentHqCliAndNothingElse() {
-        for (mode in ToolApproval.entries) {
-            val argv = claudeArgv(mode)
-            val at = argv.indexOf("--allowedTools")
-            assertTrue(at >= 0, "${mode.wire}: no --allowedTools in $argv")
-            val rules = argv[at + 1].split(',')
-            assertEquals(listOf("Bash(agenthq:*)", "PowerShell(agenthq:*)", "mcp__agenthq__*"), rules, mode.wire) // MCP-1: + its MCP tools
-            assertFalse(rules.any { "git" in it || it == "Bash" || it == "PowerShell" || "(*)" in it }, "${mode.wire} widened beyond agenthq: $rules")
-            assertEquals(1, argv.count { it == "--allowedTools" }, mode.wire)
-        }
-    }
-
-    @Test
-    fun allowEditsPassesAcceptEdits() {
-        assertEquals("acceptEdits", permissionFlag(claudeArgv(ToolApproval.ALLOW_EDITS)))
-    }
-
-    @Test
-    fun allowAllPassesBypassPermissions() {
-        assertEquals("bypassPermissions", permissionFlag(claudeArgv(ToolApproval.ALLOW_ALL)))
-    }
-
-    @Test
-    fun theLegacyClaudeVariableStillWinsForClaude() {
-        val legacy = only(ClaudePermissionMode.LEGACY_ENV, "plan")
-        assertEquals("plan", ClaudePermissionMode.forApproval(ToolApproval.DENY, none, legacy))
-        assertEquals("plan", ClaudePermissionMode.forApproval(ToolApproval.ALLOW_ALL, none, legacy))
-    }
-
-    @Test
-    fun theRunRequestHookReachesTheClaudeSpec() {
-        // spec() is what the provider path calls with RunRequest.toolApproval. The legacy env would override it, so the
-        // assertion only holds where it is unset (it is unset on every CI and dev box this board uses).
-        if (com.superiorsoftllc.agenthq.session.agentHqSetting(ClaudePermissionMode.LEGACY_ENV) != null) return
-        val argv = ClaudeCommand.spec(executable = "claude", toolApproval = ToolApproval.ALLOW_ALL).command
-        assertEquals("bypassPermissions", permissionFlag(argv))
-    }
 
     // --- resolution order ------------------------------------------------------------------------------------------
 
