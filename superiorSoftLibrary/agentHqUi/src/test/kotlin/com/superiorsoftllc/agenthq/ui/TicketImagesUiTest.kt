@@ -11,6 +11,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import com.superiorsoftllc.agenthq.daemon.AgentHqDaemon
@@ -83,6 +84,23 @@ class TicketImagesUiTest {
         check(p.waitFor(30, TimeUnit.SECONDS) && p.exitValue() == 0) { "git ${args.toList()} failed: $out" }
     }
 
+    /** A plugins root under [dir] holding the built Infantry_Board (the board) and Infantry_Chat (image_upload) daemon jars. */
+    private fun boardPluginsRoot(dir: File): File {
+        val repo = generateSequence(File("").absoluteFile) { it.parentFile }.first { File(it, "plugins/modules.json").isFile }
+        File(dir, "plugins").mkdirs()
+        File(dir, "plugins/modules.json").writeText("""{"folders":[{"path":"official","tier":"official"}],"modules":{}}""")
+        for (m in listOf("Infantry_Board", "Infantry_Chat")) {
+            val src = File(repo, "plugins/official/$m")
+            val dst = File(dir, "plugins/official/$m")
+            File(src, "module.json").copyTo(File(dst, "module.json"), overwrite = true)
+            File(src, "policies").takeIf { it.isDirectory }?.copyRecursively(File(dst, "policies"), overwrite = true)
+            val jar = "daemon/build/libs/$m-daemon.jar"
+            check(File(src, jar).isFile) { "$jar is not built (:daemon-plugin-official-$m:jar)" }
+            File(src, jar).copyTo(File(dst, jar), overwrite = true)
+        }
+        return File(dir, "plugins")
+    }
+
     private fun boot(): AgentHqDaemon {
         val dir = Files.createTempDirectory("agenthq-ui-img-daemon").toFile()
         val provider = StubProvider(StubScript.default(), delayMs = 0)
@@ -95,6 +113,8 @@ class TicketImagesUiTest {
             mailBaseUrl = "http://127.0.0.1:1", token = null,
             storyStore = JsonStoryStore(File(dir, "stories.json")),
             modelCatalogs = com.superiorsoftllc.agenthq.provider.HarnessModelCatalogs.EMPTY,
+            pluginsRoot = boardPluginsRoot(dir),
+            pluginTrust = com.superiorsoftllc.agenthq.daemon.plugins.DaemonPluginHost.Trust(emptyList(), devTrust = true, bundledRoot = null),
         )
         daemon.server.start(wait = false)
         closers += { daemon.server.stop(0, 200); daemon.close(); dir.deleteRecursively() }
@@ -149,7 +169,8 @@ class TicketImagesUiTest {
                 waitUntil(timeoutMillis = daemonWaitMs) { onAllNodes(hasTestTag(TICKET_IMAGES_TAG)).fetchSemanticsNodes().isNotEmpty() }
             }
             fun save() {
-                onNodeWithTag(TICKET_EDIT_SAVE_TAG).performClick()
+                // The form is taller than the window once a thumbnail is in it: a pointer click can land off-screen, so fire the action.
+                onNodeWithTag(TICKET_EDIT_SAVE_TAG).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
                 waitUntil(timeoutMillis = daemonWaitMs) {
                     onAllNodes(hasTestTag(TICKET_EDIT_SAVE_TAG)).fetchSemanticsNodes().isEmpty() || c.state.value.ticketError != null
                 }
