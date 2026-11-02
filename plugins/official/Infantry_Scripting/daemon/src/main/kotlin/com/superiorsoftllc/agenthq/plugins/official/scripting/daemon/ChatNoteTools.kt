@@ -1,0 +1,75 @@
+package com.superiorsoftllc.agenthq.plugins.official.scripting.daemon
+
+import com.superiorsoftllc.agenthq.daemon.api.DaemonTool
+import com.superiorsoftllc.agenthq.daemon.api.ToolCall
+import com.superiorsoftllc.agenthq.daemon.api.ToolResult
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.put
+
+/**
+ * SCRIPT-CHAT-1: `agenthq_chat_note` (script alias `chat_note`): a script posts one status card into a session's chat. It is an automation
+ * timeline item (same look as the run lines), pushed through [push] and kept in [store] so a reload shows it again. wake=false (default) means
+ * no turn, no inbox entry, no mail; wake=true also hands [wakeSession] the text as a short prompt. Same project only, rate limited, text capped.
+ */
+class ChatNoteTools(
+    private val projectOf: (String) -> String?,
+    private val push: (JsonObject) -> Unit,
+    private val store: (JsonObject) -> Unit,
+    private val wakeSession: (String, String) -> Unit,
+    private val clock: () -> Long = System::currentTimeMillis,
+    private val maxChars: Int = 400,
+    private val perMinute: Int = 20,
+) {
+    private val seq = java.util.concurrent.atomic.AtomicLong()
+    private val recent = java.util.concurrent.ConcurrentHashMap<String, java.util.ArrayDeque<Long>>()
+
+    val tool: DaemonTool = object : DaemonTool {
+        override val name = NAME
+        override val description = "Post a status line into a session's chat as an automation card (cog icon, time, coloured by level), stored in its history. " +
+            "No turn, no inbox entry, no mail unless wake=true (then the agent also gets the text as a short prompt: use it for real exceptions only). Same project only, " +
+            "rate limited, text capped at $maxChars characters. Script: ih.chat_note{sessionId=..., text=..., level='ok'}."
+        override val inputSchema: JsonObject = Json.parseToJsonElement(
+            """{"type":"object","properties":{"sessionId":{"type":"string","description":"target session (default: the caller's own)"},"text":{"type":"string","description":"the status line"},"level":{"type":"string","description":"info (default) | ok | fail"},"wake":{"type":"boolean","description":"also prompt the agent with the text (default false)"}},"required":["text"]}""",
+        ).jsonObject
+        override fun call(call: ToolCall): ToolResult = handle(call)
+    }
+
+    fun handle(call: ToolCall): ToolResult {
+        val a = call.arguments
+        fun s(k: String) = (a[k] as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
+        val text = s("text") ?: return refuse("needs text")
+        val level = (s("level") ?: "info").lowercase().also { if (it !in LEVELS) return refuse("level must be info, ok or fail (got '$it')") }
+        val target = s("sessionId") ?: call.clientSessionId ?: return refuse("needs sessionId")
+        val targetProject = projectOf(target) ?: return refuse("unknown session $target")
+        val callerProject = call.clientProjectId ?: call.clientSessionId?.let(projectOf) ?: return refuse("needs a project context")
+        if (targetProject != callerProject) return refuse("session $target is in another project")
+        val now = clock()
+        val q = recent.computeIfAbsent(callerProject) { java.util.ArrayDeque() }
+        synchronized(q) {
+            while (q.isNotEmpty() && now - q.first() > 60_000) q.removeFirst()
+            if (q.size >= perMinute) return refuse("rate limit: at most $perMinute notes per minute per project")
+            q.addLast(now)
+        }
+        val shown = text.take(maxChars)
+        val item = buildJsonObject {
+            put("id", "note-$callerProject-$now-${seq.incrementAndGet()}"); put("sessionId", target); put("at", now); put("source", "automation")
+            put("label", "AUTOMATION · note"); put("text", "AUTOMATION · $shown${if (level == "fail") " · FAILED" else ""}"); put("ok", level != "fail")
+            put("meta", buildJsonObject { put("level", level) })
+        }
+        runCatching { store(item) }
+        runCatching { push(item) }
+        val wake = (a["wake"] as? JsonPrimitive)?.booleanOrNull == true
+        if (wake) runCatching { wakeSession(target, shown) }.onFailure { return ToolResult("noted in chat, but the wake failed: ${it.message}", isError = true) }
+        return ToolResult("noted in $target ($level${if (wake) ", woken" else ""})")
+    }
+
+    private fun refuse(why: String) = ToolResult("$NAME refused: $why", isError = true)
+
+    companion object { const val NAME = "agenthq_chat_note"; val LEVELS = setOf("info", "ok", "fail") }
+}

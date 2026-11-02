@@ -210,8 +210,16 @@ class ScriptRunLog(private val limit: () -> Int = { 200 }, private val clock: ()
 
     /** The newest contributions for the chat of every session (all projects), oldest first, at most [n]; the stats items come last. */
     fun timelineItems(n: Int = 500): List<JsonObject> =
-        runs.values.flatMap { q -> synchronized(q) { q.toList() } }.sortedBy { it.at }.mapNotNull { it.timelineJson() }.takeLast(n) +
+        (runs.values.flatMap { q -> synchronized(q) { q.toList() } }.mapNotNull { r -> r.timelineJson()?.let { r.at to it } } + synchronized(notes) { notes.toList() }).sortedBy { it.first }.map { it.second }.takeLast(n) +
             wakes.keys.sorted().mapNotNull { statsItem(it) }
+
+    private val notes = ArrayDeque<Pair<Long, JsonObject>>()
+
+    /** SCRIPT-CHAT-1: a chat note (agenthq_chat_note) kept so a reload of the chat shows it again; memory only, newest 200. */
+    fun addNote(item: JsonObject) {
+        val at = (item["at"] as? JsonPrimitive)?.contentOrNull?.toLongOrNull() ?: clock()
+        synchronized(notes) { notes.addLast(at to item); while (notes.size > 200) notes.removeFirst() }
+    }
 
     /** [project] ties the session to a project for the project summary (the first sight wins); null when unknown. */
     fun wake(session: String, reason: String, ref: String?, project: String? = null) {
