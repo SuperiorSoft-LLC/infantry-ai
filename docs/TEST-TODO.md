@@ -196,3 +196,5 @@ TEST-TODO:
 
 ## HARNESS H7a (ticket edf20ad3)
 TEST-TODO: ClaudeFoldParityTest.providerSpecIsTheHarnessSpec / modelsAndDefaultComeFromTheHarness — RunRequest(model, resume) and a ClaudeCatalog — provider.spec/models/defaultModel equal ClaudeHarness.specFor/models/defaultModel (argv, env, MCP file unchanged).
+
+TEST-TODO (H7b-1, b7051b65): HarnessApprovalCommandsRuleTest. A plugin harness returning approvalArgs(ALLOW_ALL)=["--yes"], one NATIVE command and mcpToolRule("agenthq")="mcp__agenthq__*" shows all three on the daemon Harness; a 2.9-style plugin shows none; core ClaudeHarness.approvalArgs(ALLOW_EDITS)=["--permission-mode","acceptEdits"].
