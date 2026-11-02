@@ -481,17 +481,17 @@ object LimitRegistry {
         min = 1, zeroIsUnlimited = false,
     )
     val PLUGIN_HANG_CEILING_MS = LimitDef(
-        "plugin.guard.timeoutMs", 30_000, "ms",
+        "limits.plugin.guard.timeoutMs", 30_000, "ms",
         "GUARD-1: the hard wall-clock ceiling for one daemon plugin call (never lower than the call's own timeout); a call with no result by then is a true hang and counts one strike. Read at plugin load.",
         min = 1, zeroIsUnlimited = false,
     )
     val PLUGIN_GUARD_STRIKES = LimitDef(
-        "plugin.guard.strikes", 3, "timeouts",
+        "limits.plugin.guard.strikes", 3, "timeouts",
         "PLUGIN-RECOVER-1: consecutive hang-ceiling timeouts that open a daemon plugin's circuit breaker (calls then refuse fast until plugin.guard.cooldownMs passes). Read at plugin load.",
         min = 1, zeroIsUnlimited = false,
     )
     val PLUGIN_GUARD_COOLDOWN_MS = LimitDef(
-        "plugin.guard.cooldownMs", 30_000, "ms",
+        "limits.plugin.guard.cooldownMs", 30_000, "ms",
         "PLUGIN-RECOVER-1: how long an open circuit refuses calls before one probe call is let through; a successful probe closes it again, no restart needed. Read at plugin load.",
         min = 0, zeroIsUnlimited = false,
     )

@@ -65,7 +65,7 @@ class NodeRegistryTest {
             "center.chat", "center.newAgent", "right", "right.body", "footer", "assistant", "assistant.body", "board", "board.pane",
             "board.pane.columns", "board.card", "board.card.summary", "diff", "windowLayer", "config", "config.settings", "roles",
             "roles.form", "notes", "notes.hits", "notes.list", "changes", "changes.files", "changes.branchFiles",
-            "changes.history", "run", "git", // RUNTIME-6/7/8: the official modules' own trees, in load order
+            "changes.history", "stats", "run", "git", // RUNTIME-6/7/8: the official modules' own trees, in load order
         ).map { "$shell.$it" }
         val hosts = NodeRegistry.of(TabFactory(coreAndGit))
         assertEquals(listOf("$shell.center.chat.tabs", "$shell.right.body.strip") + tree, hosts.map { it.id })

@@ -92,6 +92,7 @@ class StallE2eTest {
     }
 
     private fun assertResumedWith(r: Rig, startsBefore: Int, exit: String, tail: String) {
+        r.notifier.scanned() // BG-FOLD-1: a notice parked mid-turn is sent on the scan pass once the session is idle
         assertEquals(startsBefore + 1, r.runner.processes.size, "the worker was resumed exactly once")
         val prompt = r.lastPrompt()
         assertTrue(prompt.contains("finished, $exit"), prompt)

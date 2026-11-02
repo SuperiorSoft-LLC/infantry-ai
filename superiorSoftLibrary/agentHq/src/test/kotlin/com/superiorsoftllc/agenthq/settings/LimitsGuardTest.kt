@@ -16,7 +16,9 @@ class LimitsGuardTest {
     val timeout: org.junit.rules.Timeout = org.junit.rules.Timeout.seconds(60)
 
     // CORE-SPLIT-1/2: protocol and runner live in leaf modules; the rule still covers them (relative paths are per module root).
-    private val roots = listOf(File("src/main/kotlin"), File("../agentHqProtocol/src/main/kotlin"), File("../agentHqRunner/src/main/kotlin"))
+    private val roots = listOf(File("src/main/kotlin"), File("../agentHqProtocol/src/main/kotlin"), File("../agentHqRunner/src/main/kotlin"),
+        // CORE-SPLIT-4b: the STAYS packages moved to agentHqCore, agentHqBoard and the API modules.
+        File("../agentHqCore/src/main/kotlin"), File("../agentHqBoard/src/main/kotlin"), File("../agentHqDaemonApi/src/main/kotlin"), File("../agentHqHarnessApi/src/main/kotlin"))
     private val constant = Regex("""^\s*(?:(?:private|internal|public) )?(?:const )?val ([A-Z][A-Z0-9_]*)\s*(?::\s*[A-Za-z]+)?\s*=\s*[0-9]""")
     private val limitLike = Regex("[A-Z0-9_]*(MAX|LIMIT|CAP|TIMEOUT|DEADLINE|GRACE|FLOOR|THRESHOLD|STALL|QUIET|TTL|RETENTION|BUDGET|WINDOW|INTERVAL|DEFAULT_|_MS$|_MIN$|_MB$|_SEC$|_MILLIS$|KEEP|FOLD|CAPACITY|LINES|BYTES|CHARS|WIDTH)[A-Z0-9_]*")
 

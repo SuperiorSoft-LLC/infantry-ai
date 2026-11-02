@@ -35,7 +35,7 @@ class SelectionPolicyTest {
     }
 
     @Test fun centrePaneOffersAStartSessionAction() {
-        val app = File("../../plugins/official/Infantry_Chat/src/ChatSurface.kt").readText() // S4d: the chat tree moved to the app UI
+        val app = File("../../plugins/official/Infantry_ChatFeed/src/ChatFeedSurface.kt").readText() // S4d: the chat tree moved to the app UI
         assertTrue("\"Start a session\"" in app, "the empty output pane must offer a visible Start a session action")
     }
 }

@@ -193,6 +193,8 @@ class CoreShellTreeTest {
     @Test fun `the core tab trees keep every node id, in order, unique across the window tree`() {
         val git = "infantry.shell.git"
         val run = "infantry.shell.run"
+        val stats = "infantry.shell.stats"
+        val expectedStats = listOf(stats, "  $stats.body")
         val expectedGit = listOf(git) + listOf("base", "directory", "tree", "diff", "branches", "pipeline", "history").map { "  $git.$it" }
         val expectedRun = listOf(run) + listOf("empty", "toolbar", "pills", "confirm", "editor", "notices", "output").map { "  $run.$it" }
         val notes = "infantry.shell.notes"
@@ -234,16 +236,17 @@ class CoreShellTreeTest {
         // RUNTIME-6/7/8: Infantry_Notes, Infantry_Changes, Infantry_Run and Infantry_Git (official jars) register their own trees.
         val factory = TabFactory(CoreModules.all + InfantryRoles + InfantryBoard + InfantryPods + InfantryProfiles + InfantryTriggers + InfantryAttention + InfantryNotes + InfantryChanges + InfantryStats + InfantryUsage + InfantryEpics + InfantryReview + InfantryRun + InfantryGit)
         val tabs = factory.tabTreeRoots
-        assertEquals(listOf(notes, changes, run, git), tabs.map { it.id })
+        assertEquals(listOf(notes, changes, stats, run, git), tabs.map { it.id })
         assertEquals(expectedNotes.joinToString("\n"), tabs[0].walk().joinToString("\n"))
         assertEquals(expectedChanges.joinToString("\n"), tabs[1].walk().joinToString("\n"))
-        assertEquals(expectedRun.joinToString("\n"), tabs[2].walk().joinToString("\n"))
-        assertEquals(expectedGit.joinToString("\n"), tabs[3].walk().joinToString("\n"))
+        assertEquals(expectedStats.joinToString("\n"), tabs[2].walk().joinToString("\n"))
+        assertEquals(expectedRun.joinToString("\n"), tabs[3].walk().joinToString("\n"))
+        assertEquals(expectedGit.joinToString("\n"), tabs[4].walk().joinToString("\n"))
         val all = (listOf(factory.baseRoot) + tabs).flatMap { it.walk() }.map { it.trim() }
         assertEquals(all.size, all.toSet().size, "node ids are unique across the trees")
         // P1 (f60f4d97): the tab that draws each tree, as Configuration > Plugins > Registered names it.
         assertEquals(
-            mapOf(git to "infantry.git", run to "infantry.run", notes to "infantry.notes", changes to "infantry.changes"),
+            mapOf(git to "infantry.git", run to "infantry.run", stats to "infantry.stats", notes to "infantry.notes", changes to "infantry.changes"),
             factory.tabTreeTabs,
         )
     }

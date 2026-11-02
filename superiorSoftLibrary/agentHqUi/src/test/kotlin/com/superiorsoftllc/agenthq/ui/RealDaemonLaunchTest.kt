@@ -33,12 +33,12 @@ import kotlin.test.assertTrue
 class RealDaemonLaunchTest {
     private val entry = File("src/main/kotlin/com/superiorsoftllc/agenthq/ui/RealDaemonMain.kt")
 
-    @Test fun unsetProviderDefaultsToOpenCode() {
-        assertEquals("opencode", RealDaemonLaunch.providerId { null })
+    @Test fun unsetProviderDefaultsToNone() {
+        assertEquals("none", RealDaemonLaunch.providerId { null })
     }
 
-    @Test fun blankProviderDefaultsToOpenCode() {
-        assertEquals("opencode", RealDaemonLaunch.providerId { "   " })
+    @Test fun blankProviderDefaultsToNone() {
+        assertEquals("none", RealDaemonLaunch.providerId { "   " })
     }
 
     @Test fun explicitProviderIsHonoured() {
