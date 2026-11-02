@@ -11,7 +11,7 @@ import kotlin.test.assertTrue
 class ChatIndicatorHarnessNeutralTest {
     private val core = File("../agenthqUiCore/src/commonMain/kotlin/com/superiorsoftllc/agenthq/ui")
     // S4d: the chat tree (ChatSurface.kt) is the official Infantry_Chat's (RUNTIME-22); a file is read from there.
-    private val app = File("../../plugins/official/Infantry_Chat/src")
+    private val app = File("../../plugins/official/Infantry_ChatFeed/src")
 
     /** The text of [file] from the line containing [from] up to (not including) the line containing [to]. */
     private fun region(file: String, from: String, to: String): String {
@@ -28,7 +28,7 @@ class ChatIndicatorHarnessNeutralTest {
             region("model/Model.kt", "sealed interface ChatStatus", "data class AgentActivity("),
             region("model/Model.kt", "data class RunActivityView(", "\n}"),
             region("model/Model.kt", "fun chatStatusOf(", "const val STALE_AFTER_MS"),
-            region("ChatSurface.kt", "fun ChatStatusRow(", "/** Renders parsed assistant markdown"),
+            region("ChatFeedSurface.kt", "fun ChatStatusRow(", "/** Renders parsed assistant markdown"),
         ).joinToString("\n")
         // Comments may cite history; only code counts.
         val codeOnly = code.lineSequence().map { it.substringBefore("//") }.filterNot { it.trimStart().startsWith("*") || it.trimStart().startsWith("/**") }.joinToString("\n")

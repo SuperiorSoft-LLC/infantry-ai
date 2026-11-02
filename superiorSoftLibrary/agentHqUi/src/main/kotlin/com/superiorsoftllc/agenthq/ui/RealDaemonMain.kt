@@ -171,7 +171,7 @@ internal class ActiveServerFile(dir: File) {
 
 /** Pure launch rules for the real-daemon entry, separated from the Window so they are testable without a model. */
 object RealDaemonLaunch {
-    /** The provider the daemon will run: `AGENTHQ_PROVIDER` as configured, blank or unset is OpenCode. */
+    /** The provider the daemon will run: `AGENTHQ_PROVIDER` as configured, blank or unset is the no-harness provider. */
     fun providerId(env: (String) -> String?): String = ProviderFactory.fromFlag(env(ProviderFactory.ENV)).id
 
     /**

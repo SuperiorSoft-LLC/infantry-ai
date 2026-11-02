@@ -7,6 +7,7 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -53,7 +54,8 @@ class InstalledCliTest {
         // must not reach the daemon: AgentHqBin never reads it.
         assertFalse(LaunchProfile.isInstalled(mapOf<String, String>()::get))
         val runProperties = mapOf(InstalledCli.RESOURCES_DIR_PROPERTY to installedResources().path)
-        assertNull(AgentHqBin.resolve(env = runProperties::get, codeSource = null), "no AGENTHQ_BIN, no installDist = PATH untouched")
+        // BG-WAKE-1: with no launcher found the daemon falls back to its own executable's directory (never the Compose resources dir).
+        assertNotEquals(File(installedResources().path).absoluteFile, AgentHqBin.resolve(env = runProperties::get, codeSource = null), "the Compose resources property alone must not reach the daemon")
         assertTrue(AgentHqBin.childEnv(null, env = mapOf("PATH" to "/usr/bin").let { it::get }).isEmpty(), "the child inherits PATH untouched")
 
         // And the dev installDist lookup is unchanged: classes under build/classes give build/install/agenthq/bin.

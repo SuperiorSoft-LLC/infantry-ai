@@ -81,7 +81,7 @@ class RelatedWorkTest {
         put(db, "ticket-aaaaaaa2", "${lib}Board.kt")
         put(db, "ticket-aaaaaaa3", "${lib}Other.kt")
         rows["ticket-bbbbbbb1"] = row("ticket-bbbbbbb1", "Fix the Board in ${lib}Board.kt, see ticket-aaaaaaa3", TicketStatus.IN_PROGRESS)
-        val source = LiveRelatedWork(tf, { rows[it] })
+        val source = LiveRelatedWork(tf, { rows[it] }, config = { RelatedConfig.DEFAULT.copy(mode = RelatedConfig.MODE_TICKETS) })
         val text = assertNotNull(source.block("ticket-bbbbbbb1", rows.getValue("ticket-bbbbbbb1").description))
         assertTrue("ticket-aaaaaaa3" in text, text) // named by id, first
         assertTrue("ticket-aaaaaaa1" in text && "ticket-aaaaaaa2" in text, text)
@@ -92,7 +92,7 @@ class RelatedWorkTest {
     @Test
     fun liveSourceWithNothingKnownGivesNoBlock() {
         val rows = mapOf("ticket-bbbbbbb1" to row("ticket-bbbbbbb1", "nothing to see", TicketStatus.IN_PROGRESS))
-        val source = LiveRelatedWork(TicketFiles(db(), { rows.values.toList() }, { null }), { rows[it] })
+        val source = LiveRelatedWork(TicketFiles(db(), { rows.values.toList() }, { null }), { rows[it] }, config = { RelatedConfig.DEFAULT.copy(mode = RelatedConfig.MODE_TICKETS) })
         assertNull(source.block("ticket-bbbbbbb1", "nothing to see"))
         assertNull(source.block("ticket-missing", ""))
     }

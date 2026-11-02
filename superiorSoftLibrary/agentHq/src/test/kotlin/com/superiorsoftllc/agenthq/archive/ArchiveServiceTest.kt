@@ -4,6 +4,7 @@ import com.superiorsoftllc.agenthq.persistence.SqlAgentHqStore
 import com.superiorsoftllc.agenthq.persistence.TicketLinkRow
 import com.superiorsoftllc.agenthq.persistence.TicketRow
 import com.superiorsoftllc.agenthq.ticketfiles.LiveRelatedWork
+import com.superiorsoftllc.agenthq.ticketfiles.RelatedConfig
 import com.superiorsoftllc.agenthq.ticketfiles.TicketFiles
 import com.superiorsoftllc.agenthq.ticketfiles.TicketInfo
 import java.nio.file.Files
@@ -131,7 +132,7 @@ class ArchiveServiceTest {
             fun infos() = s.ticketArchive.infos(null).map { TicketInfo(it.id, it.title, it.description, it.status, it.projectId, it.branch, it.base) }
             val files = TicketFiles(db, { infos() }, { null })
             val source = LiveRelatedWork(files, ticket = { id -> if (id == cur.id) cur else s.ticketArchive.info(id)?.let { a -> TicketInfo(a.id, a.title, a.description, a.status, a.projectId, a.branch, a.base) } },
-                rows = { listOf(cur) + infos() })
+                rows = { listOf(cur) + infos() }, config = { RelatedConfig.DEFAULT.copy(mode = RelatedConfig.MODE_TICKETS) })
             val text = assertNotNull(source.block("ticket-cur", cur.description))
             assertTrue("ticket-arch" in text, text)
             assertTrue("Board.kt" in text, text)
