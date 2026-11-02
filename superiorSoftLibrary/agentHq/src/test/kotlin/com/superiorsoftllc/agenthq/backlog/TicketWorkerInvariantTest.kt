@@ -56,7 +56,7 @@ class TicketWorkerInvariantTest {
     private fun rig(briefed: Boolean, clock: () -> Long = System::currentTimeMillis): Rig {
         val store = SqlAgentHqStore.open(File(dir, "agenthq-${opened.size}.db").absolutePath).also { opened += it }
         val runner = ScriptedRunner(autoExit = false, emitSessionId = briefed)
-        val manager = SessionManager(FakeAgentProvider(), runner, tempSessionStore(), killGraceMs = 50, defaultWorkingDir = dir)
+        val manager = SessionManager(FakeAgentProvider(), runner, tempSessionStore(), killGraceMs = 50, defaultWorkingDir = dir, bindingPolicy = com.superiorsoftllc.agenthq.daemon.plugins.TicketBindingPolicy())
         val profiles = AgentProfiles(store.agents, manager)
         val worker = profiles.save(AgentProfile(name = "Backend", role = "backend"))
         val prompting = object : TicketContext {

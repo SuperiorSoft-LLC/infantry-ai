@@ -24,7 +24,7 @@ class RoleInstanceTest {
     private val tdd = TraitSnapshot("tdd", 1, "TDD", "red first")
 
     private fun manager(instances: InMemorySessionInstances = InMemorySessionInstances()) =
-        SessionManager(FakeAgentProvider(), ScriptedRunner(autoExit = false), tempSessionStore(), killGraceMs = 50, instances = instances)
+        SessionManager(FakeAgentProvider(), ScriptedRunner(autoExit = false), tempSessionStore(), killGraceMs = 50, instances = instances, bindingPolicy = com.superiorsoftllc.agenthq.daemon.plugins.TicketBindingPolicy())
 
     @Test
     fun aCallerThatPassesNoInstanceStillFreezesOneThroughTheInjectedResolver() {

@@ -21,7 +21,7 @@ class DoneWorkerReaperTest {
 
     private fun rig(enabled: Boolean, autoExit: Boolean, tickets: MutableMap<String, Pair<String?, String?>>): Rig {
         val runner = ScriptedRunner(autoExit = autoExit)
-        val manager = SessionManager(FakeAgentProvider(), runner, tempSessionStore(), killGraceMs = 50)
+        val manager = SessionManager(FakeAgentProvider(), runner, tempSessionStore(), killGraceMs = 50, bindingPolicy = com.superiorsoftllc.agenthq.daemon.plugins.TicketBindingPolicy())
         val removed = mutableListOf<String>()
         val reaper = DoneWorkerReaper(manager, { enabled }, { tickets[it] }, direct) { removed += it }
         manager.eventSink = { reaper.onSessionEvent(it) }

@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.session
 
+import com.superiorsoftllc.agenthq.daemon.api.sessions.SessionBinding
 import com.superiorsoftllc.agenthq.protocol.MessageOrigin
 import com.superiorsoftllc.agenthq.daemon.AccessPolicy
 import com.superiorsoftllc.agenthq.provider.AgentProvider
@@ -103,12 +104,10 @@ class SessionManager(
     private val deadlineMs: Long = DEFAULT_UNATTENDED_DEADLINE_MS,
     private val stallMs: Long = DEFAULT_UNATTENDED_STALL_MS,
     private val watchdogPollMs: Long = DEFAULT_WATCHDOG_POLL_MS,
-    /** Ticket 7e9bed2a: the deadline of an unattended TICKET worker (a gate run alone takes longer than the 60 min default). Setting AGENTHQ_TICKET_DEADLINE_MIN. */
-    private val ticketDeadlineMs: Long = defaultTicketDeadlineMs(),
+    /** AR-3b: what the layer that binds sessions to work answers (twin rule, deadline, lock, progress); [SessionBindingPolicy.None] = nothing is bound. */
+    val bindingPolicy: SessionBindingPolicy = SessionBindingPolicy.None,
     /** Ticket 7e9bed2a: how long after a watchdog kill the run may stay registered before the kill is retried with force. */
     private val killRetryMs: Long = DEFAULT_KILL_RETRY_MS,
-    /** Ticket 7e9bed2a: the machine-wide gate lock; a live gate run for a session keeps it from counting as stalled. */
-    private val gateLock: GateLock = GateLock(),
     /** Ticket 7e9bed2a: a BUSY session with no output for this long is FLAGGED (never killed for it). */
     private val silentMs: Long = DEFAULT_SILENT_MS,
     /** How often [sweepSilent] runs on its own; 0 = only when a test calls it. */
@@ -137,7 +136,7 @@ class SessionManager(
     private val buildEnv: (com.superiorsoftllc.agenthq.daemon.api.processes.LaunchInfo) -> Map<String, String> = { emptyMap() },
     /**
      * No-hard-coded-limits S2: the live `limits.watchdog.*` settings, read at every pass so a change applies at once. Null
-     * (tests) = the fixed [deadlineMs], [stallMs], [ticketDeadlineMs], [killRetryMs] and [silentMs] above.
+     * (tests) = the fixed [deadlineMs], [stallMs], [killRetryMs] and [silentMs] above.
      */
     private val limitSource: ((com.superiorsoftllc.agenthq.settings.LimitDef) -> Long)? = null,
 ) {
@@ -303,7 +302,7 @@ class SessionManager(
      * ever warned, and the caller asks [launchCheck] for that warning itself.
      */
     @Volatile
-    var launchGate: ((provider: String, origin: LaunchOrigin, ticketId: String?) -> GateDecision)? = null
+    var launchGate: ((provider: String, origin: LaunchOrigin, binding: SessionBinding?) -> GateDecision)? = null
 
     /**
      * INSTALL-CWD-1: set (installed app only) = a session given no worktree, no repo and no explicit dir runs in its
@@ -319,9 +318,9 @@ class SessionManager(
     var namedProjectFolders: ProjectFolders? = null
 
     /** What the launch gate says about starting a run on [providerId] (null = the default provider) now. */
-    fun launchCheck(providerId: String?, origin: LaunchOrigin, ticketId: String? = null): GateDecision {
+    fun launchCheck(providerId: String?, origin: LaunchOrigin, binding: SessionBinding? = null): GateDecision {
         val provider = resolveProvider(providerId).provider.id
-        return launchGate?.invoke(provider, origin, ticketId) ?: GateDecision.Allow
+        return launchGate?.invoke(provider, origin, binding) ?: GateDecision.Allow
     }
 
     /**
@@ -344,7 +343,7 @@ class SessionManager(
      * instance and never recomputed. Null = none installed: the instance keeps the skill ids it was built with.
      */
     @Volatile
-    var skillsFor: ((agentId: String?, ticketId: String?) -> List<String>)? = null
+    var skillsFor: ((agentId: String?, binding: SessionBinding?) -> List<String>)? = null
 
     /** P10-K13: the skill ids [sessionId] was spawned with -- the frozen instance's, never the live ticket's. */
     fun skillIds(sessionId: String): List<String> = instance(sessionId)?.skillIds.orEmpty()
@@ -368,7 +367,7 @@ class SessionManager(
         instances.get(sessionId)?.let { return it }
         val session = sessions[sessionId] ?: return null
         val legacy = resolveInstance(session.agentId, session.role) ?: return null
-        instances.insert(sessionId, withSkills(legacy.copy(agentId = session.agentId, role = session.role), session.ticketId), clock())
+        instances.insert(sessionId, withSkills(legacy.copy(agentId = session.agentId, role = session.role), bindingOf(session)), clock())
         return instances.get(sessionId)
     }
 
@@ -376,18 +375,18 @@ class SessionManager(
      * Writes the spawn's instance once; an anonymous spawn (no agent, no role) writes nothing, so it has no skills either
      * (K-D11). P10-K13: the effective skill ids for [ticketId] are resolved here, at spawn, and frozen with the row.
      */
-    private fun freezeInstance(sessionId: String, at: Long, agentId: String?, role: String?, given: RoleInstance?, ticketId: String?) {
+    private fun freezeInstance(sessionId: String, at: Long, agentId: String?, role: String?, given: RoleInstance?, binding: SessionBinding?) {
         if (agentId.isNullOrBlank() && role.isNullOrBlank()) return
         val frozen = given ?: resolveInstance(agentId, role) ?: return
-        instances.insert(sessionId, withSkills(frozen.copy(agentId = agentId, role = role), ticketId), at)
+        instances.insert(sessionId, withSkills(frozen.copy(agentId = agentId, role = role), binding), at)
     }
 
     /**
      * P10-K13: [instance] with the skill ids [skillsFor] resolves now; unchanged when no resolver is installed.
      * P10-K15: public so a caller that renders the first turn BEFORE [startNew] renders the skills the row will freeze.
      */
-    fun withSkills(instance: RoleInstance, ticketId: String?): RoleInstance =
-        skillsFor?.invoke(instance.agentId, ticketId)?.let { instance.copy(skillIds = it) } ?: instance
+    fun withSkills(instance: RoleInstance, binding: SessionBinding?): RoleInstance =
+        skillsFor?.invoke(instance.agentId, binding)?.let { instance.copy(skillIds = it) } ?: instance
 
     private val sessions = ConcurrentHashMap<String, SessionRecord>()
 
@@ -503,12 +502,10 @@ class SessionManager(
      * flag; a change is pushed as a `session` frame (the bar itself is derived on every read, see [AutoProgress]).
      */
     fun refreshAutoProgress() {
-        val live = sessions.values.filter { it.ticketId != null && (it.state == SessionState.BUSY || it.state == SessionState.STARTING) }
+        val live = sessions.values.filter { bindingOf(it) != null && (it.state == SessionState.BUSY || it.state == SessionState.STARTING) }
         autoSeen.keys.retainAll(live.map { it.id }.toSet())
         for (r in live) {
-            val dir = r.worktreePath
-            val base = r.worktreeBaseRef
-            if (dir != null && base != null) AutoProgress.commitCount(dir, base)?.let { AutoProgress.commits[r.id] = it }
+            bindingPolicy.progressCount(r)?.let { AutoProgress.commits[r.id] = it }
             val seen = r.id to (SessionActivityLog.overlay(r).progress?.stale to AutoProgress.commits[r.id])
             val before = autoSeen.put(seen.first, seen.second)
             if (before != null && before != seen.second) eventSink?.invoke(SessionEvent.Status(r))
@@ -779,7 +776,7 @@ class SessionManager(
      * DAEMON-PLUGINS-1 (`spawnGate` hook): asked before [startNew] creates anything (role, project); a non-null answer is the
      * refusal. The default refuses nothing.
      */
-    @Volatile var spawnGate: (role: String?, projectId: String?) -> String? = { _, _ -> null }
+    @Volatile var spawnGate: (role: String?, projectId: String?, binding: SessionBinding?) -> String? = { _, _, _ -> null }
 
     fun list(): List<SessionRecord> = sessions.values.sortedBy { it.spawnedAt }
 
@@ -851,8 +848,9 @@ class SessionManager(
         contextLimit: Int? = null,
     ): SessionRecord {
         // DAEMON-PLUGINS-1: a plugin's spawn gate binds every path (frame, mail, trigger, ticket) that creates a session.
-        spawnGate(role, projectId)?.let { throw IllegalArgumentException(it) }
-        busyTwin(null, agentId, ticketId)?.let { throw IllegalArgumentException(twinRefusal("start", agentId, ticketId, it)) }
+        val binding = bindingPolicy.bindingFor(ticketId)
+        spawnGate(role, projectId, binding)?.let { throw IllegalArgumentException(it) }
+        busyTwin(null, agentId, binding)?.let { throw IllegalArgumentException(bindingPolicy.twinRefusal("start", agentId, binding, it)) }
         val chosen = resolveProvider(providerId).provider
         val sessionModel = spawnModel(model)
         // LIMITS: both refused BEFORE anything exists (no-ops while neither setting is set).
@@ -866,7 +864,7 @@ class SessionManager(
         val limitSupport = contextLimit?.let { chosen.contextLimit().support.wire }
         val effortSupport = sessionEffort?.let { chosen.effort().support.wire } // EFFORT-1
         if (launchOrigin == LaunchOrigin.UNATTENDED) {
-            val decision = launchGate?.invoke(chosen.id, LaunchOrigin.UNATTENDED, ticketId)
+            val decision = launchGate?.invoke(chosen.id, LaunchOrigin.UNATTENDED, binding)
             if (decision is GateDecision.Refused) throw IllegalArgumentException("launch gate refused: ${decision.reason}")
         }
         // INSTALL-CWD-1: resolved BEFORE anything exists, so a project with no directory leaves nothing behind.
@@ -907,7 +905,7 @@ class SessionManager(
                     global = global,
                     isProcessAlive = false,
                 )
-                freezeInstance(id, now, agentId, role, instance, ticketId)
+                freezeInstance(id, now, agentId, role, instance, binding)
                 sessions[id] = failed
                 persist(id, force = true)
                 eventSink?.invoke(SessionEvent.Status(failed))
@@ -944,7 +942,7 @@ class SessionManager(
             isProcessAlive = false,
         )
         // P10-K13: frozen BEFORE the record is visible, so nobody who can see the session sees it without its instance.
-        freezeInstance(record.id, now, agentId, role, instance, ticketId)
+        freezeInstance(record.id, now, agentId, role, instance, binding)
         sessions[record.id] = record
         // TRAITS-T6: an unattended clone of a role with a `report` trait owes a REPORT BACK from spawn (`pending`).
         ReportBack.initial(instances.get(record.id), unattended)?.let { sessions[record.id] = record.copy(report = it) }
@@ -988,8 +986,8 @@ class SessionManager(
     fun resumeHeld(sessionId: String, prompt: String, origin: MessageOrigin = MessageOrigin.Owner, wakeReason: String? = null, wakeRef: String? = null): SessionRecord {
         val session = sessions[sessionId] ?: error("unknown session $sessionId")
         if (runs.containsKey(sessionId)) throw RunInFlightException(sessionId, "session $sessionId already has a run in flight")
-        busyTwin(sessionId, session.agentId, session.ticketId)?.let {
-            throw RunInFlightException(it.id, twinRefusal("resume of $sessionId", session.agentId, session.ticketId, it))
+        busyTwin(sessionId, session.agentId, bindingOf(session))?.let {
+            throw RunInFlightException(it.id, bindingPolicy.twinRefusal("resume of $sessionId", session.agentId, bindingOf(session), it))
         }
         // GAP-006b: a session AT REST (IDLE) that never opened a provider session has no conversation to lose, so its next
         // turn is a FIRST turn (never refused as "not resumable"); a ticket worker's carries the ticket's brief ahead of the
@@ -1040,11 +1038,8 @@ class SessionManager(
         firstTurnProviders += provider
     }
 
-    /** The binding of [session]: today its ticket (the fields stay on the wire; re-homed later), null when it has none. */
-    private fun bindingOf(session: SessionRecord): com.superiorsoftllc.agenthq.daemon.api.sessions.SessionBinding? =
-        session.ticketId?.takeIf { it.isNotBlank() }?.let {
-            com.superiorsoftllc.agenthq.daemon.api.sessions.SessionBinding(id = it, kind = "ticket", facts = mapOf("ticketId" to it))
-        }
+    /** The binding of [session] as the policy names it (the record keeps its wire fields), null when it has none. */
+    fun bindingOf(session: SessionRecord): SessionBinding? = bindingPolicy.bindingFor(session.ticketId)
 
     private val SEP = "\n\n---\n\n"
 
@@ -1162,7 +1157,7 @@ class SessionManager(
         val wanted = role?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
         if (wanted == session.role?.takeIf { it.isNotBlank() }) return session
         requireAllowedRole(wanted)
-        val next = resolveInstance(session.agentId, wanted)?.let { withSkills(it.copy(agentId = session.agentId, role = wanted), session.ticketId) }
+        val next = resolveInstance(session.agentId, wanted)?.let { withSkills(it.copy(agentId = session.agentId, role = wanted), bindingOf(session)) }
         host.stop(sessionId)
         instances.delete(sessionId)
         next?.let { instances.insert(sessionId, it, clock()) }
@@ -1195,7 +1190,7 @@ class SessionManager(
         if (busy) killRun(sessionId, force = true)
         host.stop(sessionId)
         closed(sessionId, "session restarted")
-        val next = resolveInstance(session.agentId, session.role)?.let { withSkills(it.copy(agentId = session.agentId, role = session.role), session.ticketId) }
+        val next = resolveInstance(session.agentId, session.role)?.let { withSkills(it.copy(agentId = session.agentId, role = session.role), bindingOf(session)) }
         instances.delete(sessionId)
         next?.let { instances.insert(sessionId, it, clock()) }
         return changeSetting(sessionId) {
@@ -1348,7 +1343,7 @@ class SessionManager(
             if (!session.isBusy()) { flaggedSilent.remove(session.id); continue }
             if (now - session.lastHeartbeat < silentMs) continue
             if (session.bgJobs.isNotEmpty() or (session.backgroundWork != null)) continue
-            if (runCatching { gateLock.liveFor(session.id, session.ticketId) }.getOrDefault(false)) continue
+            if (bindingPolicy.lockHeld(session.id, bindingOf(session))) continue
             val pid = session.childPid
             val runPresent = runs.containsKey(session.id)
             val provablyDead = if (!runPresent) isStaleLive(session.id, session) else pid != null && !pidProbe(pid)
@@ -1369,7 +1364,6 @@ class SessionManager(
         val now = clock()
         val killRetryMs = liveMs(com.superiorsoftllc.agenthq.settings.LimitRegistry.KILL_RETRY_MINUTES, killRetryMs)
         val stallMs = liveMs(com.superiorsoftllc.agenthq.settings.LimitRegistry.STALL_MINUTES, stallMs)
-        val ticketDeadlineMs = liveMs(com.superiorsoftllc.agenthq.settings.LimitRegistry.TICKET_DEADLINE_MINUTES, ticketDeadlineMs)
         val deadlineMs = liveMs(com.superiorsoftllc.agenthq.settings.LimitRegistry.UNATTENDED_DEADLINE_MINUTES, deadlineMs)
         for ((sessionId, run) in runs) {
             val session = sessions[sessionId] ?: continue
@@ -1382,9 +1376,9 @@ class SessionManager(
                 }
                 continue
             }
-            val deadline = if (session.ticketId != null) ticketDeadlineMs else deadlineMs
+            val deadline = bindingPolicy.deadlineMs(bindingOf(session), ::liveMs) ?: deadlineMs
             // Ticket 7e9bed2a: silence is not a stall while a registered bg job or a live gate run for this session works.
-            val alive = session.bgJobs.isNotEmpty() or runCatching { gateLock.liveFor(session.id, session.ticketId) }.getOrDefault(false)
+            val alive = session.bgJobs.isNotEmpty() or bindingPolicy.lockHeld(session.id, bindingOf(session))
             val expiry = UnattendedRunWatchdog.expiry(
                 UnattendedRunWatchdog.Run(run.startedAt, session.lastHeartbeat, session.unattended),
                 now, deadline, stallMs, alive,
@@ -1394,7 +1388,7 @@ class SessionManager(
             val why = when (expiry) {
                 WatchdogExpiry.STALLED -> "stalled: no output for ${(now - session.lastHeartbeat) / 60_000} min (limit ${minutesText(stallMs)}, setting limits.watchdog.stallMinutes)"
                 WatchdogExpiry.DEADLINE -> "deadline: running for ${(now - run.startedAt) / 60_000} min (limit ${minutesText(deadline)}, setting " +
-                    (if (session.ticketId != null) "limits.watchdog.ticketDeadlineMinutes" else "limits.watchdog.deadlineMinutes") + ")"
+                    (bindingPolicy.deadlineSetting(bindingOf(session)) ?: "limits.watchdog.deadlineMinutes") + ")"
             }
             runCatching { watchdogSink?.invoke(session, expiry) }
                 .onFailure { System.err.println("[agentHq] watchdog attention failed: ${it.message}") }
@@ -1704,24 +1698,9 @@ class SessionManager(
     fun isStaleLive(sessionId: String, record: SessionRecord = sessions[sessionId] ?: error("unknown session $sessionId")): Boolean =
         record.live && !runs.containsKey(sessionId) && record.childPid.let { it == null || !pidProbe(it) }
 
-    /**
-     * BASICS-KILL-1: the OTHER session with a turn in flight that a start or resume for [agentId] / [ticketId] would run
-     * next to, or null. A ticket's work is exclusive: two sessions may not run the same ticket, nor the same agent while
-     * either of them works a ticket (they would share its worktree). Ticketless sessions of one agent (pod nodes) are not
-     * restricted.
-     */
-    fun busyTwin(exceptId: String?, agentId: String?, ticketId: String?): SessionRecord? = sessions.values.firstOrNull { other ->
-        other.id != exceptId && other.isBusy() && (
-            (ticketId != null && other.ticketId == ticketId) ||
-                (agentId != null && other.agentId == agentId && (ticketId != null || other.ticketId != null))
-            )
-    }
-
-    private fun twinRefusal(what: String, agentId: String?, ticketId: String?, twin: SessionRecord) =
-        "$what refused: session ${twin.id} already runs " +
-            (if (ticketId != null && twin.ticketId == ticketId) "ticket $ticketId" else "agent $agentId") +
-            " (${twin.state}, ${twin.provider}${twin.model?.let { " / $it" } ?: ""}); one agent works one ticket in one session. " +
-            "Wait for it, or kill it first (agenthq kill ${twin.id})"
+    /** BASICS-KILL-1 (rule now the binding policy's, AR-3b): the OTHER busy session a start or resume under [binding] would run next to, or null. */
+    fun busyTwin(exceptId: String?, agentId: String?, binding: SessionBinding?): SessionRecord? =
+        bindingPolicy.twin(exceptId, agentId, binding, sessions.values)
 
     @Synchronized
     private fun markKilled(
@@ -1994,13 +1973,9 @@ class SessionManager(
         val DEFAULT_SILENT_MS = com.superiorsoftllc.agenthq.settings.LimitRegistry.SILENT_MINUTES.default * 60_000L
         const val DEFAULT_SILENT_POLL_MS = 60_000L
         val DEFAULT_KILL_RETRY_MS = com.superiorsoftllc.agenthq.settings.LimitRegistry.KILL_RETRY_MINUTES.default * 60_000L
-        val DEFAULT_TICKET_DEADLINE_MS = com.superiorsoftllc.agenthq.settings.LimitRegistry.TICKET_DEADLINE_MINUTES.default * 60_000L
         const val KILLED_BY_WATCHDOG = "watchdog"
         const val KILLED_BY_CLIENT = "client request"
 
-        /** AGENTHQ_TICKET_DEADLINE_MIN (minutes, > 0), else 3 h. */
-        fun defaultTicketDeadlineMs(): Long =
-            agentHqSetting("AGENTHQ_TICKET_DEADLINE_MIN")?.trim()?.toLongOrNull()?.takeIf { it > 0 }?.let { it * 60_000L } ?: DEFAULT_TICKET_DEADLINE_MS
         const val DEFAULT_BACKGROUND_POLL_MS = 2_000L
 
         /** A registered bg job whose heartbeat is older than this is dropped (the wrapper beats every 15 s). */

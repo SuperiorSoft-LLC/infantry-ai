@@ -94,7 +94,7 @@ class UnattendedRunWatchdogTest {
             provider = FakeProvider(), runner = HangingRunner(HangingProcess(stopped)),
             store = JsonSessionStore(File.createTempFile("watchdog", ".json").apply { delete() }),
             killGraceMs = 10, clock = now::get, deadlineMs = 100, stallMs = 50, watchdogPollMs = 5,
-            ticketDeadlineMs = 100_000, gateLock = GateLock(dir = { lockDir }, pidAlive = { holderAlive.get() }),
+            bindingPolicy = com.superiorsoftllc.agenthq.daemon.plugins.TicketBindingPolicy(ticketDeadlineMs = 100_000, gateLock = GateLock(dir = { lockDir }, pidAlive = { holderAlive.get() })),
         )
         try {
             val session = manager.startNew("gate", unattended = true, ticketId = "ticket-abc")

@@ -13,7 +13,7 @@ class NudgeGateTest {
     private class Rig(val deferred: Set<String>) {
         var now = System.currentTimeMillis() + 1_000
         val events = mutableListOf<Pair<String, Map<String, String>>>()
-        val manager = SessionManager(FakeAgentProvider(), ScriptedRunner(autoExit = true), tempSessionStore(), killGraceMs = 50)
+        val manager = SessionManager(FakeAgentProvider(), ScriptedRunner(autoExit = true), tempSessionStore(), killGraceMs = 50, bindingPolicy = com.superiorsoftllc.agenthq.daemon.plugins.TicketBindingPolicy())
         val mailbox = Mailbox(MemMailStore(), MailLimits(), clock = { now })
         val sent = mutableListOf<MailSendRequest>()
         val sessionId = manager.startNew("work", ticketId = "t1").id

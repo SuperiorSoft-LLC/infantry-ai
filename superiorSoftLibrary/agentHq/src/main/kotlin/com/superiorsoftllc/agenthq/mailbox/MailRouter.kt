@@ -361,7 +361,7 @@ class MailRouter(
             return DeliveryOutcome.Retry("recipient '${session.id}' is switching harness")
         }
         // BASICS-KILL-1: waking this session would run it next to another session of the same agent / ticket: queue.
-        manager.busyTwin(session.id, session.agentId, session.ticketId)?.let {
+        manager.busyTwin(session.id, session.agentId, manager.bindingOf(session))?.let {
             return DeliveryOutcome.Retry("session ${it.id} of the same agent / ticket has a run in flight")
         }
         // LIMITS: the daemon already runs limits.concurrency.maxSessions sessions: queue until one finishes.

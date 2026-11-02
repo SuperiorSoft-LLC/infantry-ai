@@ -211,7 +211,7 @@ class StallWatchTest {
     // ---- stall detector -------------------------------------------------------------------------------------------
 
     private class StallRig(autoExit: Boolean, foregroundMin: Long? = null) {
-        val manager = SessionManager(FakeAgentProvider(), ScriptedRunner(autoExit = autoExit), tempSessionStore(), killGraceMs = 50)
+        val manager = SessionManager(FakeAgentProvider(), ScriptedRunner(autoExit = autoExit), tempSessionStore(), killGraceMs = 50, bindingPolicy = com.superiorsoftllc.agenthq.daemon.plugins.TicketBindingPolicy())
         val sent = mutableListOf<MailSendRequest>()
         var offsetMin = 0L
         var ended: Long? = null

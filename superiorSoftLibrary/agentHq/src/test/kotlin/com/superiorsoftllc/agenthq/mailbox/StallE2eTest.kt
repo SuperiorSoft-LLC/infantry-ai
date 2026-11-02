@@ -64,7 +64,7 @@ class StallE2eTest {
     private class Rig(harness: String, autoExit: Boolean, storeFile: File = tempSessionStoreFile(), pidAlive: (Long) -> Boolean = { true }) {
         val provider = HarnessStub(harness)
         val runner = TalkingRunner(autoExit)
-        val manager = SessionManager(provider, runner, JsonSessionStore(storeFile), killGraceMs = 50, pidProbe = pidAlive)
+        val manager = SessionManager(provider, runner, JsonSessionStore(storeFile), killGraceMs = 50, pidProbe = pidAlive, bindingPolicy = com.superiorsoftllc.agenthq.daemon.plugins.TicketBindingPolicy())
         val mailbox = Mailbox(MemMailStore(), MailLimits())
         val router = MailRouter(manager = manager, mailbox = mailbox, agentProfiles = AgentProfiles(NoAgents(), manager))
         var now = System.currentTimeMillis()
