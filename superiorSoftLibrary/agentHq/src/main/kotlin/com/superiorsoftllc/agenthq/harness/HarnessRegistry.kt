@@ -77,6 +77,10 @@ class HarnessRegistry(
     fun statsSource(harnessId: String): com.superiorsoftllc.agenthq.stats.PluginStatsSource? =
         runCatching { resolve(harnessId)?.statsSource() }.getOrNull()
 
+    /** HARNESS H8b-1: harness [harnessId]'s config merge of [parts] into [existing]; null (unknown id, none, or a throwing `mergeConfig`). */
+    fun mergeConfig(harnessId: String, existing: String?, parts: com.superiorsoftllc.agenthq.harness.api.ConfigParts): String? =
+        runCatching { resolve(harnessId)?.mergeConfig(existing, parts) }.getOrNull()
+
     /** HARNESS H5e: [spec] with harness [harnessId]'s watch contribution applied for a session with [env]; [spec] unchanged when there is none. */
     fun applyWatch(harnessId: String, env: Map<String, String>, spec: com.superiorsoftllc.agenthq.runner.ProcessSpec): com.superiorsoftllc.agenthq.runner.ProcessSpec {
         val w = runCatching { resolve(harnessId)?.watchContribution(env) }.getOrNull() ?: return spec

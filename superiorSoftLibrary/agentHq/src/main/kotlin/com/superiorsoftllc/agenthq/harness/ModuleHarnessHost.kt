@@ -25,6 +25,8 @@ class HarnessHostServices(
     val runner: ProcessRunner = PipedProcessRunner(),
     val mcpLaunch: (sessionEnv: Map<String, String>) -> HarnessProcess? = { null },
     val watchLauncher: (sessionEnv: Map<String, String>) -> String? = { null },
+    /** H8b-1: a read-only query on a sqlite file (the daemon's one reader); null = refused / unreadable. */
+    val queryDb: (file: File, sql: String, params: List<String>) -> List<Map<String, Any?>>? = { _, _, _ -> null },
     val ask: suspend (sessionId: String, question: HarnessQuestion) -> HarnessAnswer = { _, _ -> HarnessAnswer.NONE },
 ) {
     companion object {
@@ -108,6 +110,9 @@ class ModuleHarnessHost(
 
     override fun watchLauncher(sessionEnv: Map<String, String>): String? = if (hook("watch")) services.watchLauncher(sessionEnv) else null
 
+    override fun queryDb(file: File, sql: String, params: List<String>): List<Map<String, Any?>>? =
+        if (hook("stats")) services.queryDb(file, sql, params) else null
+
     override suspend fun ask(sessionId: String, question: HarnessQuestion): HarnessAnswer =
         if (hook("ask")) services.ask(sessionId, question) else HarnessAnswer.NONE
 
@@ -118,6 +123,6 @@ class ModuleHarnessHost(
         const val NODE_RUNTIME = "node"
 
         /** The hook kinds module.json `harness.hooks` may name. watch/mcp/ask are host calls; sandbox/stats/usage are H5 contributions. */
-        val HOOK_KINDS: Set<String> = setOf("watch", "mcp", "ask", "sandbox", "stats", "usage", "session", "models")
+        val HOOK_KINDS: Set<String> = setOf("watch", "mcp", "ask", "sandbox", "stats", "usage", "session", "models", "config")
     }
 }

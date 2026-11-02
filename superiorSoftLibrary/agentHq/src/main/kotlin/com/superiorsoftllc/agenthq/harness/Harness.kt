@@ -157,6 +157,9 @@ interface Harness {
     /** HARNESS H5e (API 2.6.0): extra argv / env that route this harness's tool calls through the watched runner for a session with [env]; null = none. Isolated by the implementor. */
     fun watchContribution(env: Map<String, String>): PluginWatch? = null
 
+    /** HARNESS H8b-1 (API 2.11.0): [existing] inline config with [parts] merged in; null = this harness has no config merge. Isolated by the implementor. */
+    fun mergeConfig(existing: String?, parts: com.superiorsoftllc.agenthq.harness.api.ConfigParts): String? = null
+
     /** HARNESS H5f (API 2.7.0): extra sandbox dirs / env names for a session in [worktree], already checked against the allowed roots; null = none. */
     fun sandboxContribution(worktree: java.io.File): PluginSandbox? = null
 

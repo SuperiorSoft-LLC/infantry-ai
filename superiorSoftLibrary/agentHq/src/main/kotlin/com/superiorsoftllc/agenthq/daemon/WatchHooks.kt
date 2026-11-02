@@ -56,6 +56,11 @@ object WatchHooks {
     // H8b: moves into the opencode plugin (watch contribution)
     fun mergeOpenCodePlugin(config: String, env: Map<String, String>, plugin: File? = openCodePlugin): String {
         if (plugin == null || !on(env)) return config
+        return appendOpenCodePlugin(config, plugin)
+    }
+
+    /** H8b-1: [config] with [plugin] appended to its `plugin` list (no watch check: the caller decided). */
+    fun appendOpenCodePlugin(config: String, plugin: File): String {
         val root = runCatching { json.parseToJsonElement(config) as? JsonObject }.getOrNull() ?: JsonObject(emptyMap())
         val spec = plugin.absoluteFile.toPath().toUri().toString() // file:///C:/... ; opencode takes a file URL as a local plugin
         val list = (root["plugin"] as? JsonArray).orEmpty().filterNot { (it as? JsonPrimitive)?.contentOrNull == spec }

@@ -17,7 +17,7 @@ import com.superiorsoftllc.agenthq.session.host.HarnessSessionAdapter
  * HARNESS H8a: the opencode harness as ONE layer, still in core (H8b moves it to a plugin). Everything the
  * [com.superiorsoftllc.agenthq.provider.OpenCodeProvider] used to decide itself (argv, default model, model grouping,
  * the honest context-limit / effort answers, the `/` catalog, the persistent serve adapter) lives here; the provider only
- * adapts it to `AgentProvider`. Behaviour identical; opencode is kept for testing/demo, so no feature work.
+ * adapts it to `AgentProvider`. Behaviour identical; opencode is kept for testing, so no feature work.
  *
  * Contributions that stay where they are until H8b (marked `// H8b` at the call sites): the serve adapter's permission
  * mapping ([com.superiorsoftllc.agenthq.opencode.OpenCodePermissions]), the MCP config merge
