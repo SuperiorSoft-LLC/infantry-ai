@@ -161,7 +161,34 @@ class DaemonPluginMechanismTest {
         assertEquals(true, second.callTool(TOOL, "{}")["isError"]!!.jsonPrimitive.content.toBoolean())
     }
 
+    /** PLUGIN-RECOVER-1: three slow calls used to unregister the plugin until a restart; now the breaker opens, refuses fast, probes and closes. */
+    @Test
+    fun `three timed-out tool calls trip the breaker, the plugin recovers after the cooldown without a restart`() {
+        val state = Files.createTempDirectory("agenthq-plugin-recover").toFile()
+        val root = root()
+        val (first, _) = launch(root, stateDir = state)
+        for ((k, v) in listOf("limits.plugins.toolTimeoutMs" to 300, "$GUARD.timeoutMs" to 300, "$GUARD.strikes" to 3, "$GUARD.cooldownMs" to 2000)) {
+            first.send(Envelope(Envelope.SETTINGS_SET, """{"key":"$k","value":$v}"""))
+            first.client.awaitWhere("settings frame with $k") { it.type == Envelope.SETTINGS && json.parseToJsonElement(it.data).jsonObject[k]?.jsonPrimitive?.content == v.toString() }
+        }
+        first.stop(); fixtures.remove(first)
+        val (daemon, _) = launch(root, stateDir = state)   // the limits are read at plugin load
+
+        repeat(3) { assertEquals(true, daemon.callTool(TOOL, """{"sleepMs":3000}""")["isError"]!!.jsonPrimitive.content.toBoolean()) }
+        val status = daemon.module()!!["daemon"]!!.jsonPrimitive.content
+        assertEquals("loaded", status, "the plugin must not be unregistered for good: $status")
+        val refused = daemon.callTool(TOOL, """{"name":"Ada"}""")
+        assertTrue("cooling down" in refused["text"]!!.jsonPrimitive.content, "$refused")
+        assertTrue(TOOL in daemon.tools(), "the tool stays registered while cooling down")
+
+        Thread.sleep(2_300)
+        val probe = daemon.callTool(TOOL, """{"name":"Ada"}""")
+        assertEquals(false, probe["isError"]!!.jsonPrimitive.content.toBoolean(), "$probe")
+        assertEquals("Hello, Ada! This daemon has 0 session(s).", probe["text"]!!.jsonPrimitive.content)
+    }
+
     private companion object {
+        const val GUARD = "plugin.guard"
         const val MODULE = "Acme_DaemonHello"
         const val TOOL = "acme_hello"
     }

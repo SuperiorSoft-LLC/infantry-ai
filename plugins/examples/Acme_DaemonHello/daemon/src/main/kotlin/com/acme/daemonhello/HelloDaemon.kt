@@ -44,12 +44,14 @@ class HelloDaemon : DaemonPlugin {
             put("type", "object")
             put("properties", buildJsonObject {
                 put("name", buildJsonObject { put("type", "string"); put("description", "who to greet (default: world)") })
+                put("sleepMs", buildJsonObject { put("type", "integer"); put("description", "test aid: block this long before answering (shows the guard's timeout handling)") })
             })
             put("required", buildJsonArray {})
             put("additionalProperties", false)
         }
 
         override fun call(call: ToolCall): ToolResult {
+            (call.arguments["sleepMs"] as? JsonPrimitive)?.contentOrNull?.toLongOrNull()?.takeIf { it > 0 }?.let { Thread.sleep(it.coerceAtMost(60_000)) }
             val who = (call.arguments["name"] as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() } ?: "world"
             return ToolResult("Hello, $who! This daemon has ${api.sessions.list().size} session(s).")
         }
