@@ -17,5 +17,15 @@ object RoleAgents {
         ui = AgentUiHints(color = role.color.takeIf { Regex("#[0-9a-fA-F]{6}").matches(it) }, icon = role.icon.ifBlank { null }),
     )
 
+    fun ofRecord(role: com.superiorsoftllc.agenthq.daemon.api.roles.RoleRecord): AgentDefinition = AgentDefinition(
+        id = role.id,
+        name = role.name,
+        description = role.description,
+        role = role.id,
+        ui = AgentUiHints(color = role.color.takeIf { Regex("#[0-9a-fA-F]{6}").matches(it) }, icon = role.icon.ifBlank { null }),
+    )
+
+    fun allRecords(roles: List<com.superiorsoftllc.agenthq.daemon.api.roles.RoleRecord>): List<AgentDefinition> = roles.map(::ofRecord)
+
     fun all(roles: List<Role>): List<AgentDefinition> = roles.map(::of)
 }

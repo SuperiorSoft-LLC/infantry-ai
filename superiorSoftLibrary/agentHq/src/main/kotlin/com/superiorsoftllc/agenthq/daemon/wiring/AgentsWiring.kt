@@ -5,7 +5,7 @@ import com.superiorsoftllc.agenthq.agents.registry.AgentRegistry
 import com.superiorsoftllc.agenthq.daemon.AssistantService
 import com.superiorsoftllc.agenthq.daemon.plugins.AgentModules
 import com.superiorsoftllc.agenthq.persistence.AgentHqStore
-import com.superiorsoftllc.agenthq.role.RoleService
+import com.superiorsoftllc.agenthq.daemon.RolesLookup
 import com.superiorsoftllc.agenthq.session.SessionManager
 import com.superiorsoftllc.agenthq.session.stateDir
 
@@ -14,11 +14,11 @@ object AgentsWiring {
     /** What [build] builds. */
     class Built(val registry: AgentRegistry, val modules: AgentModules, val profiles: AgentProfiles)
 
-    fun build(store: AgentHqStore, manager: SessionManager, roles: RoleService): Built {
+    fun build(store: AgentHqStore, manager: SessionManager, roles: RolesLookup): Built {
         // AGENT-REGISTRY-1 (docs/AGENT-REGISTRY.md): the ONE agent registry. The role catalog is its first contributor (each role
         // one agent), modules' `agents` blocks are synced in later; with no user override every agent is enabled, as before.
         val agentRegistry = AgentRegistry(
-            roleAgents = { com.superiorsoftllc.agenthq.role.RoleAgents.all(roles.all()) },
+            roleAgents = { com.superiorsoftllc.agenthq.role.RoleAgents.allRecords(roles.all()) },
             rolePersona = { id -> roles.role(id)?.persona },
             // Owner O5: the interim override store; the unified config JSON replaces it here (AgentOverrides is the swap point).
             overrides = com.superiorsoftllc.agenthq.agents.registry.FileAgentOverrides.inStateDir(stateDir()),

@@ -10,7 +10,7 @@ import com.superiorsoftllc.agenthq.mvp.ProjectStore
 import com.superiorsoftllc.agenthq.persistence.AgentHqStore
 import com.superiorsoftllc.agenthq.protocol.RoutingRule
 import com.superiorsoftllc.agenthq.protocol.RoleIds
-import com.superiorsoftllc.agenthq.role.RoleService
+import com.superiorsoftllc.agenthq.daemon.RolesLookup
 import com.superiorsoftllc.agenthq.settings.LimitRegistry
 import com.superiorsoftllc.agenthq.settings.SettingsService
 import com.superiorsoftllc.agenthq.usage.PacingVerdict
@@ -29,7 +29,7 @@ class LocalBoardRuntime(
     private val store: AgentHqStore,
     private val settings: SettingsService,
     private val projectStore: ProjectStore,
-    private val roles: RoleService,
+    private val roles: RolesLookup,
     private val pacingCheck: (providerId: String?, model: String?) -> PacingVerdict,
     private val attention: Attention,
     private val pushToClients: (List<Frame>) -> Unit,
