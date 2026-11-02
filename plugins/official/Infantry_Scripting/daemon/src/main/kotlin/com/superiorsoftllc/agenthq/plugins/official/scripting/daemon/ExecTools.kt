@@ -5,6 +5,8 @@ import com.superiorsoftllc.agenthq.daemon.api.ToolCall
 import com.superiorsoftllc.agenthq.daemon.api.ToolResult
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
@@ -77,6 +79,9 @@ class ExecTools(
     private val log: (String) -> Unit,
     /** SCRIPT-ACTIVE-1: lights the calling session's card while a command runs. */
     private val marks: AutomationMarks = AutomationMarks({ _, _ -> }),
+    /** SCRIPT-JOB-1: delivers one `agenthq_progress` argument object for (session, project); runs on the job's reader thread. */
+    private val report: (session: String, project: String?, args: JsonObject) -> Unit = { _, _, _ -> },
+    private val clock: () -> Long = System::currentTimeMillis,
 ) {
     private class Run(val id: String, val command: String, val script: String, val session: String, val project: String? = null) {
         val started = System.currentTimeMillis()
@@ -85,6 +90,19 @@ class ExecTools(
         @Volatile var err: Tail? = null
         @Volatile var state = "running"
         @Volatile var result: JsonObject? = null
+        @Volatile var label: String = ""
+        @Volatile var progress: JobProgress? = null
+        /** Lines since the last tick (reader threads append, tick drains). */
+        val newLines = java.util.ArrayDeque<String>()
+        /** A small JSON object a tick script stored with agenthq_exec_status (id + state) and gets back on the next tick. */
+        @Volatile var jobState: JsonElement? = null
+        @Volatile var ended = 0L
+
+        fun onLine(line: String) {
+            synchronized(newLines) { newLines.addLast(line.take(MAX_LINE)); while (newLines.size > MAX_NEW_LINES) newLines.removeFirst() }
+            progress?.line(line)
+        }
+        fun drainLines(): List<String> = synchronized(newLines) { newLines.toList().also { newLines.clear() } }
     }
 
     private class Refusal(msg: String) : Exception(msg)
@@ -98,7 +116,7 @@ class ExecTools(
             "cwd (default: the project root), env, timeoutSec, stdin. background=true returns a run id at once (read it with $STATUS; event exec.done fires on its end). " +
             "Off by default: setting scripting.exec.enabled; allow-list scripting.exec.allow, roles scripting.exec.roles. Open to every role unless those say otherwise."
         override val inputSchema: JsonObject = Json.parseToJsonElement(
-            """{"type":"object","properties":{"command":{"description":"argv array, or one command-line string"},"cwd":{"type":"string"},"env":{"type":"object"},"timeoutSec":{"type":"integer"},"stdin":{"type":"string"},"background":{"type":"boolean"},"script":{"type":"string","description":"label carried in exec.done (the calling script's name)"},"project":{"type":"string"}},"required":["command"]}""",
+            """{"type":"object","properties":{"command":{"description":"argv array, or one command-line string"},"cwd":{"type":"string"},"env":{"type":"object"},"timeoutSec":{"type":"integer"},"stdin":{"type":"string"},"background":{"type":"boolean"},"script":{"type":"string","description":"label carried in exec.done (the calling script's name)"},"project":{"type":"string"},"progress":{"type":"object","description":"background only: {label, session?, steps?: [names], markers?: true, percentRegex?, stepRegex?}. The daemon reads every output line (##infantry markers; stepRegex groups n,N,name for 'step n/N: name'; percentRegex group 1 = the percent) and drives that session's progress bar; done/fail from the exit code."}},"required":["command"]}""",
         ).jsonObject
         override val timeoutMs: Long = 620_000
         override fun call(call: ToolCall): ToolResult = try { runExec(call) } catch (e: Refusal) { ToolResult("$EXEC refused: ${e.message}", true) }
@@ -106,12 +124,17 @@ class ExecTools(
 
     val status: DaemonTool = object : DaemonTool {
         override val name = STATUS
-        override val description = "State of a background $EXEC run: running|done|timeout, exitCode and the output tails once it ended."
-        override val inputSchema: JsonObject = Json.parseToJsonElement("""{"type":"object","properties":{"id":{"type":"string"}},"required":["id"]}""").jsonObject
+        override val description = "State of a background $EXEC run: running|done|timeout, exitCode and the output tails once it ended. No id: lists the running and recent jobs {id, label, session, percent, step, elapsedMs, state}. With id and state (a small object): stores the job's state, returned in its next exec.tick."
+        override val inputSchema: JsonObject = Json.parseToJsonElement("""{"type":"object","properties":{"id":{"type":"string"},"state":{"type":"object"}}}""").jsonObject
         override val annotations: JsonObject = Json.parseToJsonElement("""{"readOnlyHint":true}""").jsonObject
         override fun call(call: ToolCall): ToolResult {
             val id = (call.arguments["id"] as? JsonPrimitive)?.contentOrNull.orEmpty()
+            if (id.isBlank()) return ToolResult(jobList().toString())
             val r = runs[id] ?: return ToolResult("$STATUS: no run '$id'", true)
+            (call.arguments["state"] as? JsonObject)?.let { st ->
+                if (st.toString().length > MAX_STATE) return ToolResult("$STATUS: state is over $MAX_STATE characters", true)
+                r.jobState = st
+            }
             return ToolResult(buildJsonObject {
                 put("id", r.id)
                 put("state", r.state)
@@ -150,6 +173,19 @@ class ExecTools(
         val script = (a["script"] as? JsonPrimitive)?.contentOrNull.orEmpty()
         val background = (a["background"] as? JsonPrimitive)?.booleanOrNull == true
         val run = Run(UUID.randomUUID().toString().take(8), line, script, call.clientSessionId.orEmpty(), project)
+        run.label = script.ifBlank { argv[0].substringAfterLast('/').substringAfterLast('\\') }
+        val pa = a["progress"] as? JsonObject
+        if (background && pa != null) {
+            val session = (pa["session"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() } ?: run.session
+            val label = (pa["label"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() } ?: run.label
+            run.label = label
+            if (session.isNotBlank()) run.progress = JobProgress(
+                label, (pa["steps"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }.orEmpty(),
+                (pa["markers"] as? JsonPrimitive)?.booleanOrNull != false,
+                (pa["percentRegex"] as? JsonPrimitive)?.contentOrNull, (pa["stepRegex"] as? JsonPrimitive)?.contentOrNull,
+                { report(session, project, it) }, clock,
+            )
+        }
         val work = { marks.begin(run.session, run.script.ifBlank { "exec" }, "exec").use { execute(run, argv, cwd, env, timeout, stdin, s.tailChars, role, background) } }
         if (!background) return ToolResult(work().toString())
         pruneRuns()
@@ -171,8 +207,8 @@ class ExecTools(
             pb.environment().putAll(env)
             val p = pb.start()
             val readers = listOf(
-                Thread { p.inputStream.bufferedReader().use { r -> out.pump(r) } },
-                Thread { p.errorStream.bufferedReader().use { r -> err.pump(r) } },
+                Thread { p.inputStream.bufferedReader().use { r -> out.pump(r, run::onLine) } },
+                Thread { p.errorStream.bufferedReader().use { r -> err.pump(r, run::onLine) } },
             ).onEach { it.isDaemon = true; it.start() }
             Thread { runCatching { p.outputStream.use { o -> if (stdin != null) o.write(stdin.toByteArray()) } } }.apply { isDaemon = true }.start()
             if (!p.waitFor(timeoutSec, TimeUnit.SECONDS)) {
@@ -197,6 +233,8 @@ class ExecTools(
         log("exec by session=${run.session.ifBlank { "-" }} role=${role.ifBlank { "-" }} script=${run.script.ifBlank { "-" }} cmd=[${run.command.take(200)}] exit=$exit timedOut=$timedOut ms=$ms")
         if (background) {
             run.result = result
+            run.ended = clock()
+            run.progress?.finish(if (timedOut) -1 else exit, if (timedOut) "timed out" else failure?.let { "could not start: $it" })
             run.state = if (timedOut) "timeout" else "done"
             publish("exec.done", buildJsonObject { put("id", run.id); put("exitCode", exit); put("script", run.script); put("session", run.session); put("timedOut", timedOut); run.project?.let { put("projectId", it) } }.toString())
         }
@@ -219,9 +257,21 @@ class ExecTools(
             runCatching {
                 publish("exec.tick", buildJsonObject {
                     put("id", r.id); put("script", r.script); put("session", r.session); r.project?.let { put("projectId", it) }
-                    put("elapsedMs", now - r.started); put("stdoutTail", o?.text().orEmpty()); put("stderrTail", e?.text().orEmpty()); put("bytesSinceLast", since)
+                    put("elapsedMs", now - r.started); put("newLines", buildJsonArray { r.drainLines().forEach { add(JsonPrimitive(it)) } }); r.jobState?.let { put("state", it) }; put("stdoutTail", o?.text().orEmpty()); put("stderrTail", e?.text().orEmpty()); put("bytesSinceLast", since)
                 }.toString())
             }
+        }
+    }
+
+    private fun jobList() = buildJsonArray {
+        val now = clock()
+        runs.values.sortedByDescending { it.started }.forEach { r ->
+            add(buildJsonObject {
+                put("id", r.id); put("label", r.label); put("session", r.session); put("state", r.state)
+                r.progress?.percentNow?.let { put("percent", it) }; r.progress?.stepNow?.let { put("step", it) }
+                put("elapsedMs", (if (r.ended > 0) r.ended else now) - r.started)
+                r.jobState?.let { put("jobState", it) }
+            })
         }
     }
 
@@ -234,13 +284,19 @@ class ExecTools(
         private val sb = StringBuilder()
         @Volatile private var count = 0L
         fun total(): Long = count
-        fun pump(r: java.io.Reader) {
+        fun pump(r: java.io.Reader, onLine: (String) -> Unit = {}) {
             val buf = CharArray(4096)
+            val line = StringBuilder()
             while (true) {
                 val n = r.read(buf)
                 if (n < 0) break
                 synchronized(sb) { count += n; sb.append(buf, 0, n); if (sb.length > cap * 2) sb.delete(0, sb.length - cap) }
+                for (i in 0 until n) {
+                    val c = buf[i]
+                    if (c == '\n') { onLine(line.toString().trimEnd('\r')); line.setLength(0) } else if (line.length < MAX_LINE * 2) line.append(c)
+                }
             }
+            if (line.isNotEmpty()) onLine(line.toString())
         }
         fun text(): String = synchronized(sb) { if (sb.length > cap) sb.substring(sb.length - cap) else sb.toString() }
     }
@@ -249,6 +305,9 @@ class ExecTools(
         const val EXEC = "agenthq_exec"
         const val STATUS = "agenthq_exec_status"
         private const val MAX_RUNS = 100
+        private const val MAX_NEW_LINES = 500
+        private const val MAX_LINE = 1000
+        private const val MAX_STATE = 4000
 
         /** Seconds between exec.tick events: setting scripting.exec.tickSec, default 10, 1..3600. */
         fun tickSec(config: (String) -> String?): Long = config("scripting.exec.tickSec")?.trim()?.toLongOrNull()?.takeIf { it in 1L..3600L } ?: 10L
