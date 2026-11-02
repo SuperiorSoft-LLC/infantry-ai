@@ -33,6 +33,9 @@ class DaemonEventPublisher(private val publish: (name: String, payload: String) 
         val p = obj("sessionId" to sessionId, "state" to state, "role" to role, "projectId" to projectId)
         if (prev == null) publish("session.started", p)
         if (state == "IDLE" && prev != "IDLE") publish("session.idle", p)
+        // SCRIPT-SESSION-1: a turn is the time spent BUSY.
+        if (state == "BUSY" && prev != "BUSY") publish("session.turn_started", p)
+        if (prev == "BUSY" && state != "BUSY") publish("session.turn_ended", p)
     }
 
     fun sessionEnded(sessionId: String) {

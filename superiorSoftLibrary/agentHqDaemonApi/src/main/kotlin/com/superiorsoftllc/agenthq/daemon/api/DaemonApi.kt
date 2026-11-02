@@ -203,7 +203,19 @@ interface Sessions {
      * the session shows [AutomationMark] on its record and the UI groups it under Running; its state (BUSY/IDLE) is not touched. Memory only.
      */
     fun setAutomation(id: String, mark: AutomationMark?) {}
+
+    /** SCRIPT-SESSION-1 (additive): the session's state and last-activity facts, or null for an unknown session. */
+    fun status(id: String): SessionStatus? = null
+    /** SCRIPT-SESSION-1 (additive): the last [max] chat lines (assistant text, `[tool]` and `[error]` lines), oldest first; capped by the daemon. */
+    fun recentLines(id: String, max: Int): List<String> = emptyList()
+    /** SCRIPT-SESSION-1 (additive): stops the turn in flight now. False when the session is unknown or has no turn running. */
+    fun interrupt(id: String): Boolean = false
+    /** SCRIPT-SESSION-1 (additive): the daemon's built-in notice [name] (or `*`) sends nothing for [ms] millis, for [sessionId] or (null) any session. */
+    fun suppressNotice(name: String, sessionId: String?, ms: Long) {}
 }
+
+/** SCRIPT-SESSION-1: [state] is the state name; [lastAction] a short text; the times are epoch millis (null = none yet). */
+data class SessionStatus(val id: String, val state: String, val lastAction: String?, val lastOutputAt: Long?, val lastEventAt: Long?)
 
 /** SCRIPT-VIS-1b: which script is running for a session ([hookId] names the hook, [since] is epoch millis). */
 data class AutomationMark(val script: String, val hookId: String, val since: Long)
