@@ -18,6 +18,7 @@
     "tools": [
       { "name": "agenthq_script_run", "action": "script.run", "kind": "write", "description": "Run a named project script as the caller (the daemon runs its queued tool calls), or plan it with dryRun." },
       { "name": "agenthq_script_api", "action": "script.api", "kind": "read", "description": "Every tool a script can call (live registry), the alias table and the engine bindings." },
+      { "name": "agenthq_chat_note", "action": "script.chat_note", "kind": "write", "description": "Post a status line into a session's chat (no turn, no mail unless wake=true)." },
       { "name": "agenthq_script_hook", "action": "script.hook", "kind": "write", "description": "List, add or remove the project's script hooks (lane enter / named event -> stored script)." },
       { "name": "agenthq_script_save", "action": "script.save", "kind": "write", "description": "Save a project script (parse-checked) so agenthq_script_run and agenthq_script_hook can use it at once." },
       { "name": "agenthq_script_list", "action": "script.list", "kind": "read", "description": "The project's stored scripts: engine, size, modified time, who saved them, hooks using them." },

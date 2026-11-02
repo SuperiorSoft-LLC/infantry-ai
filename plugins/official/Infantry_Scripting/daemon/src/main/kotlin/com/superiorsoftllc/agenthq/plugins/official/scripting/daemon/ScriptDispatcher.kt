@@ -152,7 +152,7 @@ class ScriptDispatcher(
         const val HANDLED = "handled"
         const val DELIVER_TEXT = "deliver_text"
         /** Names every project has without configuring: the process bridge (SCRIPT-CMD-1). */
-        val BUILTIN_ALIASES = mapOf("exec" to "agenthq_exec", "cli" to "agenthq_exec", "exec_status" to "agenthq_exec_status", "progress" to "agenthq_progress")
+        val BUILTIN_ALIASES = mapOf("exec" to "agenthq_exec", "cli" to "agenthq_exec", "exec_status" to "agenthq_exec_status", "progress" to "agenthq_progress", "chat_note" to "agenthq_chat_note")
         const val OPTIONAL = "_optional"
         const val PROGRESS = "agenthq_progress"
         const val SESSION_ID = "sessionId"

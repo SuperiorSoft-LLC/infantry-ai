@@ -46,6 +46,10 @@ class ScriptingDaemonPlugin : DaemonPlugin {
         val marks = AutomationMarks({ session, mark -> api.sessions.setAutomation(session, mark) })
         val tools = ScriptTools(api.tools, engines, store, limits, aliases, maxPhases, runLog, marks)
         api.tools.register(runLog.tool())
+        api.tools.register(ChatNoteTools(
+            { api.sessions.get(it)?.projectId }, { runCatching { api.events.broadcast(TIMELINE_ITEM, it.toString()) } }, runLog::addNote,
+            { id, text -> api.sessions.resume(id, text) },
+        ).tool)
         api.tools.register(tools.run)
         api.tools.register(tools.api)
         // SCRIPT-5: hooks are data (hooks.json); one subscription on the named-event bus runs them.
