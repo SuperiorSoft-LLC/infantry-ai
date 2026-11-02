@@ -53,6 +53,7 @@ object WatchHooks {
     internal fun on(env: Map<String, String>) = env["AGENTHQ_WATCH"] == "on" && !env[AccessPolicy.MAIL_BASE_ENV].isNullOrBlank()
 
     /** [config] (an `OPENCODE_CONFIG_CONTENT`) with the watch plugin appended to its `plugin` list, when the watch is on. */
+    // H8b: moves into the opencode plugin (watch contribution)
     fun mergeOpenCodePlugin(config: String, env: Map<String, String>, plugin: File? = openCodePlugin): String {
         if (plugin == null || !on(env)) return config
         val root = runCatching { json.parseToJsonElement(config) as? JsonObject }.getOrNull() ?: JsonObject(emptyMap())

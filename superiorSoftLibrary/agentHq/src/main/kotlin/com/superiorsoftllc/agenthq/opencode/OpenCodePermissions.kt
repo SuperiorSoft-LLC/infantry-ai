@@ -27,6 +27,7 @@ import kotlinx.serialization.json.put
  *    it merged into `OPENCODE_CONFIG_CONTENT` ([mergeAllowAgentHq]), and the serve adapter also answers `once` to an ask
  *    whose every bash pattern [isAgentHqCommand]. Nothing else is widened.
  */
+// H8b: moves into the opencode plugin with the serve adapter
 object OpenCodePermissions {
     /** opencode reads an inline JSON config from here, merged over the user's config files. */
     const val CONFIG_CONTENT_ENV = "OPENCODE_CONFIG_CONTENT"
