@@ -990,7 +990,7 @@ class SchemaMigrationTest {
         assertEquals(listOf(listOf("0")), rows(path, "SELECT COUNT(*) FROM role_bindings;"), "role_bindings starts empty")
         assertEquals(listOf(listOf("ag-v20", "Old", "backend")), rows(path, "SELECT id, name, role FROM agents;"))
         SqlAgentHqStore.open(path).use { store ->
-            store.roleBindings.set(com.superiorsoftllc.agenthq.role.RoleBinding("backend", "claude", "opus"), 5)
+            store.roleBindings.set(com.superiorsoftllc.agenthq.protocol.RoleBinding("backend", "claude", "opus"), 5)
             assertEquals("opus", store.roleBindings.get("backend")!!.model)
         }
     }

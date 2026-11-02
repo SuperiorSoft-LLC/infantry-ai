@@ -2,7 +2,7 @@ package com.superiorsoftllc.agenthq.agents.registry
 
 import com.superiorsoftllc.agenthq.role.RoleAgents
 import com.superiorsoftllc.agenthq.role.RoleCatalog
-import com.superiorsoftllc.agenthq.role.RoleIds
+import com.superiorsoftllc.agenthq.protocol.RoleIds
 import com.superiorsoftllc.agenthq.role.RoleService
 import java.nio.file.Files
 import kotlin.test.Test

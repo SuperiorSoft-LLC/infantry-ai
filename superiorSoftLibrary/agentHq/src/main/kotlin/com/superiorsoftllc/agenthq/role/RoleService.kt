@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.role
 
+import com.superiorsoftllc.agenthq.protocol.RoleIds
+
 import com.superiorsoftllc.agenthq.session.InfantryEnv
 
 import com.superiorsoftllc.agenthq.protocol.RoleSave

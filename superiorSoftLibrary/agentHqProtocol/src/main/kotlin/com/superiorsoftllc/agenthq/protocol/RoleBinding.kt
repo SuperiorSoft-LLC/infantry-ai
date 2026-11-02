@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.role
+package com.superiorsoftllc.agenthq.protocol
 
 /**
  * ROLE-1a: what a [Role] runs on. The role owns its [provider], [model] and [effort]; a null field means

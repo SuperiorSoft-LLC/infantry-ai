@@ -192,7 +192,7 @@ class JsonSessionStore(private val file: File) : SessionStore {
         val array = root["sessions"] as? JsonArray ?: return emptyList()
         // ORIGIN-SCRUB-1a: a session saved under a retired role id reads back under the id that replaced it.
         return array.map { json.decodeFromJsonElement(SessionRecord.serializer(), it) }
-            .map { r -> com.superiorsoftllc.agenthq.role.RoleIds.normalizeOrNull(r.role).let { if (it == r.role) r else r.copy(role = it) } }
+            .map { r -> com.superiorsoftllc.agenthq.protocol.RoleIds.normalizeOrNull(r.role).let { if (it == r.role) r else r.copy(role = it) } }
     }
 
     @Synchronized

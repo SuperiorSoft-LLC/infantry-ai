@@ -20,8 +20,8 @@ import com.superiorsoftllc.agenthq.db.Settings
 import com.superiorsoftllc.agenthq.db.Tickets
 import com.superiorsoftllc.agenthq.db.Ticket_runs
 import com.superiorsoftllc.agenthq.protocol.AgentProfile
-import com.superiorsoftllc.agenthq.role.RoleBinding
-import com.superiorsoftllc.agenthq.role.RoleIds
+import com.superiorsoftllc.agenthq.protocol.RoleBinding
+import com.superiorsoftllc.agenthq.protocol.RoleIds
 import com.superiorsoftllc.agenthq.protocol.EventVocabulary
 import com.superiorsoftllc.agenthq.protocol.FinishedPayload
 import com.superiorsoftllc.agenthq.session.SessionState

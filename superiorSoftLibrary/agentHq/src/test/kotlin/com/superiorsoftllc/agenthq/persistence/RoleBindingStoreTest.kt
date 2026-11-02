@@ -1,6 +1,6 @@
 package com.superiorsoftllc.agenthq.persistence
 
-import com.superiorsoftllc.agenthq.role.RoleBinding
+import com.superiorsoftllc.agenthq.protocol.RoleBinding
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals

@@ -9,7 +9,7 @@ import com.superiorsoftllc.agenthq.protocol.TraitView
 import com.superiorsoftllc.agenthq.session.RoleInstance
 import com.superiorsoftllc.agenthq.session.TraitSnapshot
 import com.superiorsoftllc.agenthq.protocol.SpawnOptions
-import com.superiorsoftllc.agenthq.role.RoleIds
+import com.superiorsoftllc.agenthq.protocol.RoleIds
 import com.superiorsoftllc.agenthq.session.SessionManager
 import java.util.UUID
 

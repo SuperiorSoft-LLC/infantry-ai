@@ -1,5 +1,11 @@
 package com.superiorsoftllc.agenthq.role
 
+import com.superiorsoftllc.agenthq.protocol.InvalidAvatarException
+
+import com.superiorsoftllc.agenthq.protocol.ImageFormat
+
+import com.superiorsoftllc.agenthq.protocol.AvatarUploads
+
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse

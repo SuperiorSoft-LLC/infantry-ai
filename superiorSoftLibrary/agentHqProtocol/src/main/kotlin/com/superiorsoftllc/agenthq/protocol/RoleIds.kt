@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.role
+package com.superiorsoftllc.agenthq.protocol
 
 /**
  * The canonical role-id set: AgentHQ's own, and a **stable contract**.
@@ -50,10 +50,16 @@ object RoleIds {
 
     /**
      * Retired id -> the canonical id that replaced it (contract 1.90.0). Read side only: a stored row is rewritten
-     * once by [RoleIdMigration] when the database opens, and a request from an older client naming a retired id is
+     * once by the open-time role-id migration when the database opens, and a request from an older client naming a retired id is
      * accepted through [normalize]. A retired id is never published again.
      */
-    val RETIRED: Map<String, String> = com.superiorsoftllc.agenthq.daemon.api.roles.RetiredRoleIds.MAP
+    val RETIRED: Map<String, String> = mapOf(
+        "git" to "version-control",
+        "i18n" to "localization",
+        "brainstormer" to "ideation",
+        "bot" to "automation",
+        "chief-of-staff" to "assistant",
+    )
 
     /** The built-in id for a user-defined role (its real id is its file's name). */
     const val CUSTOM: String = "custom"
