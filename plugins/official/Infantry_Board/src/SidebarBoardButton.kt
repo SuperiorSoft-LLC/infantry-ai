@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.plugins.official.agents
+package com.superiorsoftllc.agenthq.plugins.official.board
 
 import com.superiorsoftllc.agenthq.ui.*
 import androidx.compose.foundation.background
@@ -22,7 +22,7 @@ import androidx.compose.ui.unit.sp
 import com.superiorsoftllc.agenthq.ui.model.AppState
 import com.superiorsoftllc.agenthq.ui.protocol.TicketColumns
 
-// S4c: the sidebar's own entry to the board and the watchdog flag, out of core BoardSidebar.kt with the sidebar.
+// AR-7: the Board button is Infantry_Board's own, contributed to the sidebar's left.board slot (no Board plugin, no button).
 const val SIDEBAR_BOARD_BUTTON_TAG = "sidebar-board-button"
 
 /**
