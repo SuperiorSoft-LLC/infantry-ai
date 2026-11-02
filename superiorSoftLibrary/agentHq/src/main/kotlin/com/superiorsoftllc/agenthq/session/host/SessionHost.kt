@@ -1,7 +1,7 @@
 package com.superiorsoftllc.agenthq.session.host
 
-import com.superiorsoftllc.agenthq.provider.AgentProvider
-import com.superiorsoftllc.agenthq.provider.RunRequest
+import com.superiorsoftllc.agenthq.harness.AgentProvider
+import com.superiorsoftllc.agenthq.harness.RunRequest
 import com.superiorsoftllc.agenthq.runner.ProcessRunner
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService

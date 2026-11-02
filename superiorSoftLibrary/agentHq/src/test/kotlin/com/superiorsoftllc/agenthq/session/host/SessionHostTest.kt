@@ -1,6 +1,6 @@
 package com.superiorsoftllc.agenthq.session.host
 
-import com.superiorsoftllc.agenthq.provider.RunRequest
+import com.superiorsoftllc.agenthq.harness.RunRequest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -179,7 +179,7 @@ class SessionHostTest {
 
     @Test
     fun noAdapter_runsOneShot() {
-        val plain = object : com.superiorsoftllc.agenthq.provider.AgentProvider by provider {
+        val plain = object : com.superiorsoftllc.agenthq.harness.AgentProvider by provider {
             override fun sessionAdapter(): HarnessSessionAdapter? = null
         }
         host.runTurn("s1", plain, RunRequest("one"), emptyMap())

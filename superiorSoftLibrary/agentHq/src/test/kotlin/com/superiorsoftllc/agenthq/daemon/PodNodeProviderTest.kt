@@ -4,7 +4,7 @@ import com.superiorsoftllc.agenthq.orchestration.NodeSpec
 import com.superiorsoftllc.agenthq.orchestration.PodStatus
 import com.superiorsoftllc.agenthq.orchestration.PodSubmitRequest
 import com.superiorsoftllc.agenthq.protocol.Envelope
-import com.superiorsoftllc.agenthq.provider.AgentProvider
+import com.superiorsoftllc.agenthq.harness.AgentProvider
 import com.superiorsoftllc.agenthq.provider.StubProvider
 import com.superiorsoftllc.agenthq.runner.StubScript
 import kotlinx.serialization.json.Json

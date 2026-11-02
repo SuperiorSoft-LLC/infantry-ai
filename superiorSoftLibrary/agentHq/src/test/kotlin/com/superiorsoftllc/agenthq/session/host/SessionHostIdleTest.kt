@@ -1,6 +1,6 @@
 package com.superiorsoftllc.agenthq.session.host
 
-import com.superiorsoftllc.agenthq.provider.RunRequest
+import com.superiorsoftllc.agenthq.harness.RunRequest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse

@@ -3,8 +3,8 @@ package com.superiorsoftllc.agenthq.orchestration
 import com.superiorsoftllc.agenthq.persistence.RunEvent
 import com.superiorsoftllc.agenthq.persistence.SqlAgentHqStore
 import com.superiorsoftllc.agenthq.protocol.FinishedPayload.Outcome
-import com.superiorsoftllc.agenthq.provider.AgentProvider
-import com.superiorsoftllc.agenthq.provider.RunRequest
+import com.superiorsoftllc.agenthq.harness.AgentProvider
+import com.superiorsoftllc.agenthq.harness.RunRequest
 import com.superiorsoftllc.agenthq.runner.PipedProcessRunner
 import com.superiorsoftllc.agenthq.runner.ProcessSpec
 import com.superiorsoftllc.agenthq.session.JsonSessionStore

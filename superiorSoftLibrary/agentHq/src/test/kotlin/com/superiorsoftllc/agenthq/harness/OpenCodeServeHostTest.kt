@@ -2,11 +2,11 @@ package com.superiorsoftllc.agenthq.harness
 
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
-import com.superiorsoftllc.agenthq.provider.AgentProvider
+import com.superiorsoftllc.agenthq.harness.AgentProvider
 import com.superiorsoftllc.agenthq.plugins.official.opencode.harness.OpenCodeCommand
 import com.superiorsoftllc.agenthq.plugins.official.opencode.harness.OpenCodePermissions
 import com.superiorsoftllc.agenthq.plugins.official.opencode.harness.OpenCodeServeSession
-import com.superiorsoftllc.agenthq.provider.RunRequest
+import com.superiorsoftllc.agenthq.harness.RunRequest
 import com.superiorsoftllc.agenthq.harness.ToolApproval
 import com.superiorsoftllc.agenthq.runner.ProcessListener
 import com.superiorsoftllc.agenthq.runner.ProcessRunner

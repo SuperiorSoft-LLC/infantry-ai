@@ -3,7 +3,7 @@ package com.superiorsoftllc.agenthq.harness
 import com.superiorsoftllc.agenthq.harness.api.SessionOutput
 import com.superiorsoftllc.agenthq.harness.api.SessionTurnEnd
 import com.superiorsoftllc.agenthq.plugins.official.opencode.harness.OpenCodeServeSession
-import com.superiorsoftllc.agenthq.provider.RunRequest
+import com.superiorsoftllc.agenthq.harness.RunRequest
 import com.superiorsoftllc.agenthq.runner.ProcessListener
 import com.superiorsoftllc.agenthq.runner.ProcessRunner
 import com.superiorsoftllc.agenthq.runner.ProcessSpec
@@ -43,7 +43,7 @@ class OpenCodeNoReplyHostTest {
     }
 
     /** H8b-3: the one-shot path serves the opencode id too (a session with keepAlive 0); a bare provider with that id is what the adapter needs. */
-    private object OpenCodeProviderStub : com.superiorsoftllc.agenthq.provider.AgentProvider {
+    private object OpenCodeProviderStub : com.superiorsoftllc.agenthq.harness.AgentProvider {
         override val id = "opencode"
         override fun spec(request: RunRequest) = ProcessSpec(listOf("opencode", "run"), request.workingDir)
         override fun defaultModel() = "opencode-go/beam-free"

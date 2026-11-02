@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.provider
 
+import com.superiorsoftllc.agenthq.harness.AgentProvider
+
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.Test

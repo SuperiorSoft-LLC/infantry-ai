@@ -3,7 +3,7 @@ package com.superiorsoftllc.agenthq.harness
 /**
  * BUG-PERM-1 (harness contract 1.5.0, daemon contract 1.76.0): how freely a session's tools may run without a human
  * approving each call. It is HARNESS-NEUTRAL: the daemon resolves one value per run and hands it to every harness
- * ([HarnessRequest.toolApproval], [com.superiorsoftllc.agenthq.provider.RunRequest.toolApproval]); each harness maps
+ * ([HarnessRequest.toolApproval], [com.superiorsoftllc.agenthq.harness.RunRequest.toolApproval]); each harness maps
  * it to its own mechanism (Claude: `--permission-mode`; OpenCode: its `permission.asked` reply; ...).
  *
  * No AgentHQ harness can relay an approval prompt to the UI yet, so a call the mode does not allow is DENIED, and the

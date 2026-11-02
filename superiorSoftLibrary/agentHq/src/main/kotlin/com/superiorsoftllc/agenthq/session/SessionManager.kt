@@ -3,8 +3,8 @@ package com.superiorsoftllc.agenthq.session
 import com.superiorsoftllc.agenthq.daemon.api.sessions.SessionBinding
 import com.superiorsoftllc.agenthq.protocol.MessageOrigin
 import com.superiorsoftllc.agenthq.daemon.AccessPolicy
-import com.superiorsoftllc.agenthq.provider.AgentProvider
-import com.superiorsoftllc.agenthq.provider.RunRequest
+import com.superiorsoftllc.agenthq.harness.AgentProvider
+import com.superiorsoftllc.agenthq.harness.RunRequest
 import com.superiorsoftllc.agenthq.runner.ProcessRunner
 import com.superiorsoftllc.agenthq.runner.PipedProcessRunner
 import com.superiorsoftllc.agenthq.runner.RunningProcess
@@ -178,7 +178,7 @@ class SessionManager(
      */
     fun checkSpawn(providerId: String?, model: String?) {
         // H2: naming no provider on a zero-harness daemon is saveable (a profile, a role binding); only the START refuses.
-        if (!(providerId.isNullOrBlank() && provider is com.superiorsoftllc.agenthq.provider.NoHarnessProvider)) resolveProvider(providerId)
+        if (!(providerId.isNullOrBlank() && provider is com.superiorsoftllc.agenthq.harness.NoHarnessProvider)) resolveProvider(providerId)
         spawnModel(model)?.let { requireAllowedModel(it, null) }
     }
 
@@ -1844,7 +1844,7 @@ class SessionManager(
             return harnessAliases(id)?.takeIf { it != id && (it in configured || harnesses?.resolve(it) != null) }?.let { lookup(it) }
         }
         adopted[id]?.let { (h, c) -> if (h === harness) return c }
-        val p = com.superiorsoftllc.agenthq.provider.HarnessProvider(harness)
+        val p = com.superiorsoftllc.agenthq.harness.HarnessProvider(harness)
         val c = Configured(p, p.transport() ?: cliRunnerForHarnesses)
         adopted[id] = harness to c
         return c
@@ -1855,17 +1855,17 @@ class SessionManager(
         val wanted = id?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
             ?: return configured.getValue(provider.id).also {
                 // H2: the default is "none" when no harness is installed; say what to do instead of failing in a launch.
-                if (it.provider is com.superiorsoftllc.agenthq.provider.NoHarnessProvider) {
-                    throw IllegalArgumentException(com.superiorsoftllc.agenthq.provider.NoHarnessProvider.NOT_INSTALLED)
+                if (it.provider is com.superiorsoftllc.agenthq.harness.NoHarnessProvider) {
+                    throw IllegalArgumentException(com.superiorsoftllc.agenthq.harness.NoHarnessProvider.NOT_INSTALLED)
                 }
             }
         return lookup(wanted) ?: throw IllegalArgumentException(
-            if (provider is com.superiorsoftllc.agenthq.provider.NoHarnessProvider && configured.size == 1) {
-                "harness '${wanted.take(80)}' is not installed. ${com.superiorsoftllc.agenthq.provider.NoHarnessProvider.NOT_INSTALLED}"
+            if (provider is com.superiorsoftllc.agenthq.harness.NoHarnessProvider && configured.size == 1) {
+                "harness '${wanted.take(80)}' is not installed. ${com.superiorsoftllc.agenthq.harness.NoHarnessProvider.NOT_INSTALLED}"
             } else {
                 // H2: "not installed" is the truth (the old "not configured" wording stays for callers that match on it).
                 "provider '${wanted.take(80)}' is not configured on this daemon: harness '${wanted.take(80)}' is not installed " +
-                    "(configured: ${configured.keys.filter { it != com.superiorsoftllc.agenthq.provider.NoHarnessProvider.ID }.joinToString()})"
+                    "(configured: ${configured.keys.filter { it != com.superiorsoftllc.agenthq.harness.NoHarnessProvider.ID }.joinToString()})"
             },
         )
     }

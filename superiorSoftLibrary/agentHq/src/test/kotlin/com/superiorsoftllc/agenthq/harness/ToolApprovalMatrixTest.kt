@@ -4,11 +4,11 @@ import com.superiorsoftllc.agenthq.daemon.loadHarnesses
 import com.superiorsoftllc.agenthq.harness.descriptor.DescriptorHarness
 import com.superiorsoftllc.agenthq.harness.descriptor.HarnessDescriptorLoader
 import com.superiorsoftllc.agenthq.protocol.EventNormalizer
-import com.superiorsoftllc.agenthq.provider.AgentProvider
+import com.superiorsoftllc.agenthq.harness.AgentProvider
 import com.superiorsoftllc.agenthq.provider.HarnessModelCatalogs
-import com.superiorsoftllc.agenthq.provider.HarnessProvider
+import com.superiorsoftllc.agenthq.harness.HarnessProvider
 import com.superiorsoftllc.agenthq.provider.ProviderFactory
-import com.superiorsoftllc.agenthq.provider.RunRequest
+import com.superiorsoftllc.agenthq.harness.RunRequest
 import com.superiorsoftllc.agenthq.provider.StubProvider
 import com.superiorsoftllc.agenthq.runner.ProcessListener
 import com.superiorsoftllc.agenthq.runner.ProcessRunner

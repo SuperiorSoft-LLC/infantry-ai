@@ -34,7 +34,7 @@ object HarnessApiVersion {
 
 /**
  * HARNESS-PLUGIN-3 H3: a harness API 2.x plugin seen by the 1.x [HarnessRegistry], so registration, the atomic commit,
- * `unload`, `providers` and the session path ([com.superiorsoftllc.agenthq.provider.HarnessProvider]) stay ONE mechanism.
+ * `unload`, `providers` and the session path ([com.superiorsoftllc.agenthq.harness.HarnessProvider]) stay ONE mechanism.
  * The registry checks [contractVersion] with [HarnessApiVersion] for a bridge (the 1.x exact-match set for anything else).
  *
  * Every call into plugin code is caught here and reported to [onFailure] with the plugin's name, so a throwing plugin

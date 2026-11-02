@@ -8,8 +8,8 @@ import com.superiorsoftllc.agenthq.context.ComposedContext
 import com.superiorsoftllc.agenthq.context.ContextInput
 import com.superiorsoftllc.agenthq.context.TicketContext
 import com.superiorsoftllc.agenthq.mailbox.FakeAgentProvider
-import com.superiorsoftllc.agenthq.provider.AgentProvider
-import com.superiorsoftllc.agenthq.provider.RunRequest
+import com.superiorsoftllc.agenthq.harness.AgentProvider
+import com.superiorsoftllc.agenthq.harness.RunRequest
 import com.superiorsoftllc.agenthq.runner.ProcessSpec
 import com.superiorsoftllc.agenthq.protocol.TicketMove
 import com.superiorsoftllc.agenthq.mailbox.ScriptedRunner
