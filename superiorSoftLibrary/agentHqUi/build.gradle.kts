@@ -505,7 +505,7 @@ val officialProjects = allOfficialProjects.filter { it.name !in excludedPluginId
 // SCRIPT-HOOK-1: daemon-only official plugins (a `daemon` block, no UI project: Infantry_Lua, Infantry_Scripting) have no jvmJar, so the
 // desktop package used to leave them out (the installed app had no script tools). They are staged with their daemon half only.
 val daemonOnlyOfficial = rootProject.file("plugins/official").listFiles { f -> f.isDirectory && !f.name.startsWith("_") && File(f, "module.json").isFile && !File(f, "build.gradle.kts").isFile }
-    .orEmpty().filter { d -> d.name !in excludedPluginIds && (groovy.json.JsonSlurper().parse(File(d, "module.json")) as Map<*, *>)["daemon"] != null }.sortedBy { it.name }
+    .orEmpty().filter { d -> d.name !in excludedPluginIds && (groovy.json.JsonSlurper().parse(File(d, "module.json")) as Map<*, *>)["daemon"] != null || (groovy.json.JsonSlurper().parse(File(d, "module.json")) as Map<*, *>)["harness"] != null }.sortedBy { it.name }
 val optionalOut = providers.gradleProperty("ihq.optionalOut").orNull?.trim()?.lowercase() == "true"
 val optionalProjects = if (optionalOut) allOfficialProjects.filter { it.name in excludedPluginIds } else emptyList()
 val optionalStageDir = layout.buildDirectory.dir("official-modules/optional-plugins")
@@ -514,10 +514,15 @@ val officialStageDir = layout.buildDirectory.dir("official-modules/modules")
 @Suppress("UNCHECKED_CAST")
 val ihqDaemonJar = rootProject.extra["ihqDaemonJar"] as (File) -> String?
 @Suppress("UNCHECKED_CAST")
+val ihqHarnessJar = rootProject.extra["ihqHarnessJar"] as (File) -> String? // HARNESS H6d: module.json's harness.jar, staged and signed like daemon.jar
+@Suppress("UNCHECKED_CAST")
 val ihqVerifyDaemonHalves = rootProject.extra["ihqVerifyDaemonHalves"] as (File, String, List<String>) -> Unit
 // Official modules with a daemon half, and the jar task that builds it (:daemon-plugin-official-<Name>:jar).
 val officialDaemonHalves = (officialProjects.map { it.projectDir } + daemonOnlyOfficial).mapNotNull { d -> ihqDaemonJar(d)?.let { d.name to it } }.toMap()
 val optionalDaemonHalves = optionalProjects.mapNotNull { p -> ihqDaemonJar(p.projectDir)?.let { p.name to it } }.toMap()
+// HARNESS H6d: a harness plugin's daemon-side half (module.json harness.jar, built by :harness-plugin-official-<Name>:jar), generic for any harness plugin.
+val officialHarnessHalves = (officialProjects.map { it.projectDir } + daemonOnlyOfficial).mapNotNull { d -> ihqHarnessJar(d)?.let { d.name to it } }.toMap()
+val optionalHarnessHalves = optionalProjects.mapNotNull { p -> ihqHarnessJar(p.projectDir)?.let { p.name to it } }.toMap()
 val stageOfficialModules = tasks.register("stageOfficialModules") {
     group = "distribution"
     description = "Builds every plugins/official jar, signs it (-Pihq.keystore/-Pihq.alias + IHQ_STOREPASS, or -Pihq.devSign=true) and lays out build/official-modules/modules."
@@ -527,7 +532,13 @@ val stageOfficialModules = tasks.register("stageOfficialModules") {
         checkNotNull(rootProject.findProject(producer)) { "PACKAGE-1: plugins/official/$name declares a daemon half but $producer does not exist" }
         dependsOn("$producer:jar")
     }
+    (officialHarnessHalves.keys + optionalHarnessHalves.keys).forEach { name ->
+        val producer = ":harness-plugin-official-$name"
+        checkNotNull(rootProject.findProject(producer)) { "HARNESS H6d: plugins/official/$name declares a harness half but $producer does not exist" }
+        dependsOn("$producer:jar")
+    }
     val daemonHalves = officialDaemonHalves
+    val harnessHalves = officialHarnessHalves
     val modules = officialProjects.map { p -> p.name to p.projectDir } + daemonOnlyOfficial.map { it.name to it }
     val optionalModules = optionalProjects.map { p -> p.name to p.projectDir }
     val jars = (officialProjects + optionalProjects).associate { p -> p.name to p.tasks.named<Jar>("jvmJar").flatMap { it.archiveFile } }
@@ -538,6 +549,7 @@ val stageOfficialModules = tasks.register("stageOfficialModules") {
     inputs.files(jars.values).withPropertyName("officialJars")
     inputs.files(modules.map { File(it.second, "module.json") }).withPropertyName("moduleJsons")
     inputs.files(modules.mapNotNull { (name, dir) -> daemonHalves[name]?.let { File(dir, it) } }).withPropertyName("daemonJars")
+    inputs.files(modules.mapNotNull { (name, dir) -> harnessHalves[name]?.let { File(dir, it) } }).withPropertyName("harnessJars")
     inputs.files(modules.map { File(it.second, "policies") }).withPropertyName("policies")
     inputs.property("excluded", excludedPluginIds.sorted().joinToString(","))
     inputs.property("optionalOut", optionalOut)
@@ -583,7 +595,7 @@ val stageOfficialModules = tasks.register("stageOfficialModules") {
         }
         val root = out.get().asFile
         root.deleteRecursively()
-        fun stage(root: File, name: String, dir: File, halves: Map<String, String>) {
+        fun stage(root: File, name: String, dir: File, halves: Map<String, String>, harnesses: Map<String, String>) {
             val json = File(dir, "module.json")
             val manifest = groovy.json.JsonSlurper().parse(json) as Map<*, *>
             val moduleDir = File(root, "official/$name")
@@ -600,16 +612,23 @@ val stageOfficialModules = tasks.register("stageOfficialModules") {
                 val daemonJar = built.copyTo(File(moduleDir, daemonJarPath))
                 tool("jarsigner", "-keystore", keystore.path, "-storepass", storePass, daemonJar.path, alias)
             }
+            // HARNESS H6d: the harness half, signed by the same key.
+            harnesses[name]?.let { harnessJarPath ->
+                val built = File(dir, harnessJarPath)
+                check(built.isFile) { "HARNESS H6d: $name's harness half $built was not built" }
+                val harnessJar = built.copyTo(File(moduleDir, harnessJarPath))
+                tool("jarsigner", "-keystore", keystore.path, "-storepass", storePass, harnessJar.path, alias)
+            }
             File(dir, "policies").takeIf { it.isDirectory }?.copyRecursively(File(moduleDir, "policies"))
         }
-        for ((name, dir) in modules) stage(root, name, dir, daemonHalves)
+        for ((name, dir) in modules) stage(root, name, dir, daemonHalves, harnessHalves)
         optionalOutDir.get().asFile.also { it.deleteRecursively() }.let { opt ->
-            for ((name, dir) in optionalModules) stage(opt, name, dir, optionalDaemonHalves)
+            for ((name, dir) in optionalModules) stage(opt, name, dir, optionalDaemonHalves, optionalHarnessHalves)
         }
         val keys = File(root, "trusted-keys").apply { mkdirs() }
         tool("keytool", "-exportcert", "-rfc", "-alias", alias, "-keystore", keystore.path, "-storepass", storePass, "-file", File(keys, "infantry.cer").path)
         logger.lifecycle("PACKAGING: staged ${modules.size} official module(s) into $root" + if (excludedPluginIds.isEmpty()) "" else " (left out: ${excludedPluginIds.sorted()}${if (optionalOut) ", packaged under optional-plugins" else ""})")
-        ihqVerifyDaemonHalves(root, "stageOfficialModules", daemonHalves.keys.toList())
+        ihqVerifyDaemonHalves(root, "stageOfficialModules", (daemonHalves.keys + harnessHalves.keys).toList())
     }
 }
 // The package tasks' resources: Compose's prepareAppResources (shared with `run`, left as it is) plus modules/.
@@ -622,7 +641,7 @@ val prepareDistributableResources = tasks.register<Sync>("prepareDistributableRe
     from(officialStageDir) { into("modules") }
     into(layout.buildDirectory.dir("compose/tmp/distributableResources"))
     // PACKAGE-1: what every package task (createDistributable, packageMsi/Exe, release variants) puts in the app image.
-    val expected = officialDaemonHalves.keys.toList()
+    val expected = (officialDaemonHalves.keys + officialHarnessHalves.keys).toList()
     doLast { ihqVerifyDaemonHalves(destinationDir.resolve("modules"), "prepareDistributableResources (the desktop app image)", expected) }
 }
 val bundledLauncherArg = "-Dagenthq.plugins.bundled=\$APPDIR/resources/modules"
@@ -651,6 +670,7 @@ tasks.register("verifyOfficialModulesPackaged") {
     description = "PACKAGING: the distributable input carries every official module, signed, and the launcher sets agenthq.plugins.bundled."
     dependsOn(prepareDistributableResources)
     val names = officialProjects.map { it.name }
+    val harnessHalfNames = officialHarnessHalves.keys.toList() // HARNESS H6d: harness-only modules (no UI jar) are checked too
     val dist = tasks.named<org.jetbrains.compose.desktop.application.tasks.AbstractJPackageTask>("createDistributable")
     val launcherArgs = dist.flatMap { it.launcherJvmArgs }
     val resources = dist.flatMap { it.appResourcesDir }.map { it.asFile }
@@ -696,6 +716,19 @@ tasks.register("verifyOfficialModulesPackaged") {
                 }
                 logger.lifecycle("PACKAGE-1: modules/official/$name/$daemonJarPath (daemon half) signed")
             }
+        }
+        for (name in harnessHalfNames) {
+            val dir = File(modules, "official/$name")
+            val harnessJarPath = ihqHarnessJar(dir) ?: error("HARNESS H6d: $dir/module.json declares no harness half")
+            JarFile(File(dir, harnessJarPath), true).use { j ->
+                val files = j.entries().toList().filter { !it.isDirectory && !it.name.startsWith("META-INF/") }
+                check(files.isNotEmpty()) { "HARNESS H6d: $dir/$harnessJarPath is empty" }
+                for (e in files) {
+                    j.getInputStream(e).use { it.readBytes() }
+                    check(e.codeSigners?.firstOrNull()?.signerCertPath?.certificates?.firstOrNull() == cert) { "HARNESS H6d: ${e.name} in $dir/$harnessJarPath is not signed by trusted-keys/infantry.cer" }
+                }
+            }
+            logger.lifecycle("HARNESS H6d: modules/official/$name/$harnessJarPath (harness half) signed")
         }
         logger.lifecycle("PACKAGING: launcher sets $bundledLauncherArg; resources $res")
     }
