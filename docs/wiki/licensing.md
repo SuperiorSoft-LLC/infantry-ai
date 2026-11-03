@@ -2,7 +2,7 @@
 
 > **DRAFT. Not legal advice. Not yet in effect.** No license is applied to this repository today: the root `LICENSE`
 > is still a placeholder and all rights stay with SuperiorSoft LLC. This page explains the split the owner is
-> deciding on. The source of truth is [`docs/LICENSE-MAP.md`](../LICENSE-MAP.md); where this page and the map differ,
+> deciding on. The source of truth is `docs/LICENSE-MAP.md`; where this page and the map differ,
 > the map wins.
 
 ## The short version
@@ -44,7 +44,7 @@ Not covered by either license: the hosted orchestrator, if it ships, is a separa
 
 ## 3. The line, module by module
 
-From [`docs/LICENSE-MAP.md`](../LICENSE-MAP.md) section 2. "Interim" means the map flags it for the owner to decide.
+From `docs/LICENSE-MAP.md` section 2. "Interim" means the map flags it for the owner to decide.
 
 | Module / path | License | Why |
 |---|---|---|
