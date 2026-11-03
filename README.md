@@ -96,6 +96,8 @@ agent CLI harness, is a plugin with a `module.json`. Write your own in a few min
 
 - [Wiki home](docs/wiki/Home.md)
 - [Plugins](docs/wiki/Plugins.md): `module.json`, UI and daemon halves, config, building, installing, signing, a hello plugin
+- [Make a plugin](docs/wiki/make-a-plugin.md): from the template to a built UI + daemon plugin, every `module.json` field
+- [UI plugin API](docs/wiki/plugin-api.md) and [daemon plugin API](docs/wiki/daemon-plugin-api.md): the full references
 - [Scripting](docs/wiki/Scripting.md): the Lua API, hooks, exec, chat notes, progress, the session bridge
 - [Harnesses and providers](docs/wiki/Harnesses.md): the harness API, adding a harness or a provider
 - [Settings](docs/wiki/Settings.md): scopes and the cost-saving defaults

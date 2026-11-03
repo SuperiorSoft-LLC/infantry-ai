@@ -209,3 +209,66 @@ More shipped scripts: `plugins/official/Infantry_Scripting/project-scripts/` (`o
   `exec_status`.
 - The script CLI lives in `ScriptCli.kt`; its usage line is
   `agenthq script hook list | add <on> <script> [--payload <args json>|-] | remove <id> | save <name> [--file <path> | --body -] | list | delete <name>`.
+
+## Reference: hooks.json, engine limits, adding a language
+
+Added by DOCS-2. Sources: `plugins/official/Infantry_Scripting/daemon/src/main/kotlin/com/superiorsoftllc/agenthq/plugins/official/scripting/daemon/ScriptEngine.kt`,
+`ScriptEngineWire.kt` (same folder), `plugins/official/Infantry_Lua/daemon/.../LuaScriptEngine.kt`,
+`plugins/official/Infantry_Scripting/module.json`.
+
+### hooks.json
+
+Hooks live in `<project>/.agenthq/scripts/hooks.json`:
+
+```json
+{ "version": 1, "hooks": [
+  { "id": "h1", "on": "lane enter review", "script": "notify-review", "args": { "text": "ready" }, "enabled": true }
+] }
+```
+
+Fields per hook: `id`, `on`, `script`, `args`, `enabled`, `ownerSession`, `ownerRole`, `ownerIsOwner`, `to`.
+`on` forms: `lane enter <lane>` and `lane exit <lane>` (the named event `ticket.moved`), a named event
+(`mail.incoming`, `exec.done`, `exec.tick`, ticket events), a prefix ending in `.*` or `*`, and `every <N>s` (a timer).
+Manage them with `agenthq script hook list | add | remove` (see above) rather than editing the file by hand.
+
+### Engine limits
+
+| Limit | Value | Where |
+|---|---|---|
+| Queued actions per run | 100 (`MAX_ACTIONS`) | `LuaScriptEngine` |
+| Log lines per run | 200 (`MAX_LOGS`), each cut to 2000 chars (`MAX_LOG_LEN`) | `LuaScriptEngine` |
+| `ih.again` / nested depth | 16 (`MAX_DEPTH`) | `LuaScriptEngine` |
+| Step check interval | every 1000 VM instructions (`HOOK_EVERY`) | `LuaScriptEngine` |
+| Steps / time / memory | 5,000,000 steps, 2000 ms, 64 MiB (`ScriptLimits` defaults; the `scripting.*` settings change them) | `ScriptEngine.kt` |
+| Run log kept | `limits.scripting.runLogMax` (default 200) | settings |
+
+Going over a limit ends the run with `BUDGET_EXCEEDED`, `TIMEOUT` or `ALLOC_EXCEEDED`; a Lua error gives `ERROR`.
+`string.rep` is guarded so a script cannot allocate past the memory limit.
+
+### Adding a language (the `ScriptEngine` interface)
+
+An engine plugin implements:
+
+```kotlin
+interface ScriptEngine {
+    val id: String                      // "lua"
+    val extensions: List<String>        // ["lua"], no dot, lower case
+    val binding: String get() = ""      // how this language binds ih; shown to agents by script_api
+    fun check(source: String): String? = null   // parse error, or null when it loads
+    fun run(source: String, input: Map<String, Any?> = emptyMap(),
+            limits: ScriptLimits = ScriptLimits(), caller: ScriptCaller = ScriptCaller()): ScriptResult
+}
+```
+
+`run` never performs actions: it returns `ScriptResult(outcome, actions: List<QueuedAction(name, args)>, logs, error)`
+and the caller runs the actions. Publish the engine with `ScriptEngineWire.publish(services, engine)`
+(it registers the string endpoint `scripting.engine/<id>`). Scripting finds every published engine and routes by id or
+file extension. Plugins have separate class loaders, so the wire is JSON: operation `describe` answers
+`{id, extensions}`, `binding` answers the text, `check` answers the error or an empty string, `run` takes
+`{source, input, limits, caller}` and answers `{outcome, actions:[{name,args}], logs, error}`. A third-party engine may
+speak that directly or copy `ScriptEngineWire.kt`.
+
+### Open questions
+
+- `MAX_ACTIONS`, `MAX_LOGS`, `MAX_LOG_LEN` and `MAX_DEPTH` are constants in `LuaScriptEngine`; no `scripting.*` setting changes them (not checked beyond the module.json list).
+- Whether `mail.incoming` and `exec.tick` hooks can use the `lane` form is not stated in the code; only `ticket.moved` is mapped to it.

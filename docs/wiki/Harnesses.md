@@ -145,3 +145,53 @@ A model provider is a group in a harness's picker. Three routes, from simplest:
 Routing by ticket weight and per-role pins are data, not code: `infantry project routing <projectId> --file rules.json`
 (rules `{name, weights?, ticketTypes?, role?, provider, model, effort?}`, first match wins; a provider or model the
 harness does not list is refused).
+
+## Reference: HarnessHost, translator, a worked example
+
+Added by DOCS-2. Sources: `superiorSoftLibrary/agentHqHarnessApi/src/main/kotlin/com/superiorsoftllc/agenthq/harness/api/HarnessApi.kt`
+and `HarnessHost.kt`, `plugins/examples/Acme_EchoHarness/`.
+
+### HarnessHost (what a plugin can ask the daemon)
+
+| Member | Meaning |
+|---|---|
+| `moduleId`, `apiVersion` | Your module name and the harness API version the daemon implements (2.12.0). |
+| `stateDir` | `<state>/plugin-data/<Module>/`, created on first use. |
+| `log(line)` | One line in the daemon log, prefixed with your module name. |
+| `setting(key)` | A value of a setting you declared in `harness.settings`; null when unset or undeclared. |
+| `resolveCli(tool)` | Where your declared CLI (`harness.cli.id`) is installed; null if not. |
+| `start(process, listener)` | Start a helper process (model listing, version probe). Not for the agent run. Throws `SecurityException` when not declared or granted. |
+| `mcpLaunch(sessionEnv)` | The command that starts the agenthq MCP server for a session; null when not granted. |
+| `watchLauncher(sessionEnv)` | The watched-runner launcher, when watch is on; else null. |
+| `queryDb(file, sql, params)` | Read-only sqlite query (2.11.0, grant `harness.hook.stats`); null when not granted or it fails. |
+| `ask(sessionId, question)` | Suspends until the owner answers, it times out, or the session ends. |
+
+### The run contract
+
+The daemon calls `Harness.process(request)` to get a `HarnessProcess` (command, env), launches it under the session's
+policy, and feeds each stdout line to a fresh `HarnessTranslator` from `newTranslator()`:
+
+```kotlin
+interface HarnessTranslator {
+    fun translate(line: String): List<HarnessEvent>
+    fun terminal(exitCode: Int, stderrTail: String): HarnessEvent
+}
+```
+
+Events include `SessionStarted(id)`, `TextDelta(text)`, `Denial(tool, reason)`, `Completion(reason)` and `Error(message)`.
+`terminal` runs when the process exits and returns `Completion` or `Error`. A harness that keeps one process for many
+turns implements `HarnessSession` instead of a one-shot `process`.
+
+### Worked example: `Acme_EchoHarness`
+
+`EchoHarnessPlugin` (a `HarnessPlugin` with `pluginId` and `contractVersion = HARNESS_API_VERSION`) registers one
+harness, `echo`, in `register(registrar)`. `EchoHarness.process` returns the daemon's own Java running a small
+`EchoCli` class, with `ECHO_PREFIX` taken from `host.setting("echo.prefix")`. `EchoTranslator` turns a line starting
+`session: ` into `SessionStarted`, any other line into `TextDelta`, and the exit code into `Completion` or `Error`.
+Its `module.json` `harness` block sets `jar`, `contract` `2.12.0`, `ids` `["echo"]`, `aliases`, `cli`, `icon`,
+`settings` `["echo.prefix"]` and `hooks` `[]`; a community copy needs the grants `harness.code`,
+`harness.setting:echo.prefix`, `harness.cli` and `harness.cli.install` in `modules.json`.
+
+### Open questions
+
+- The `HarnessSession` turn protocol (persistent sessions) was not traced for this page; read `HarnessApi.kt` (`interface HarnessSession`) before relying on it.
