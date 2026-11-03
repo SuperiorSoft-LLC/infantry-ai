@@ -22,7 +22,7 @@ class SharedDocsGuardTest {
     private fun pages(): List<File> =
         listOf(File(root, "README.md")) + File(root, "docs/wiki").walkTopDown().filter { it.isFile && it.extension == "md" }.toList()
 
-    private fun norm(s: String) = s.replace(Regex("\s+"), " ").trim()
+    private fun norm(s: String) = s.replace(Regex("""\s+"""), " ").trim()
 
     @Test
     fun markedFactsMatchTheSharedSource() {

@@ -7,6 +7,8 @@
 
 ## The short version
 
+<!-- shared:license_line -->The core (the daemon) is the foundation: it is licensed MPL-2.0 to protect its integrity, so apps and plugins can rely on a stable base that does not break, with backward compatibility as the promise. Everything built on top (the SDKs, the UI core, the apps and every plugin) is free under Apache-2.0: build, fork, sell and extend it without copyleft.<!-- /shared:license_line -->
+
 **The core is the foundation. It is MPL-2.0 to protect its integrity.** Apps and plugins stand on the core, so the
 core has to stay a stable base that does not break under them. MPL-2.0 keeps every change to a core file open, so a
 fork of the core cannot quietly break the base everyone depends on, or close it. Backward compatibility is the promise
