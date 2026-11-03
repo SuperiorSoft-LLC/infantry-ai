@@ -1,0 +1,43 @@
+/* Infantry AI brand: values from agenthqUiCore Theme.kt (DarkTones/LightTones) and ThemeAccent.RED. */
+:root > * { --md-text-font: "Inter"; --md-code-font: "JetBrains Mono"; }
+[data-md-color-scheme="slate"] {
+  --md-hue: 220;
+  --md-default-bg-color: #0e0f12;
+  --md-default-bg-color--light: #15171b;
+  --md-default-fg-color: #e6e7ea;
+  --md-default-fg-color--light: #8b909a;
+  --md-default-fg-color--lighter: #5c616b;
+  --md-default-fg-color--lightest: #262a31;
+  --md-primary-fg-color: #15171b;
+  --md-primary-bg-color: #e6e7ea;
+  --md-accent-fg-color: #ef4444;
+  --md-typeset-a-color: #ef4444;
+  --md-typeset-color: #e6e7ea;
+  --md-code-bg-color: #15171b;
+  --md-code-fg-color: #e6e7ea;
+  --md-footer-bg-color: #0e0f12;
+  --md-typeset-table-color: #262a31;
+}
+[data-md-color-scheme="default"] {
+  --md-default-bg-color: #f4f5f7;
+  --md-default-fg-color: #1a1c20;
+  --md-default-fg-color--light: #5e6470;
+  --md-primary-fg-color: #ffffff;
+  --md-primary-bg-color: #1a1c20;
+  --md-accent-fg-color: #dc2626;
+  --md-typeset-a-color: #dc2626;
+  --md-code-bg-color: #e9ebef;
+}
+.md-header { border-bottom: 1px solid #262a31; box-shadow: none; }
+[data-md-color-scheme="default"] .md-header { border-bottom-color: #d3d7de; }
+.md-header__button.md-logo img { height: 1.6rem; }
+.md-sidebar { border-right: 1px solid #262a31; }
+[data-md-color-scheme="slate"] .md-sidebar { background: #15171b; }
+[data-md-color-scheme="slate"] .md-nav__link--active { color: #ef4444; }
+.md-typeset code, .md-typeset pre > code { border-radius: 6px; }
+.md-typeset .highlight, .md-typeset pre { border-radius: 8px; border: 1px solid #262a31; }
+.md-typeset .admonition, .md-typeset details { border-radius: 8px; }
+.md-typeset table:not([class]) { border-radius: 8px; border: 1px solid #262a31; overflow: hidden; }
+[data-md-color-scheme="slate"] .md-typeset table:not([class]) th { background: #1c1f25; }
+[data-md-color-scheme="slate"] .md-typeset table:not([class]) td { border-top-color: #262a31; }
+.md-typeset small, .md-footer-meta { color: var(--md-default-fg-color--light); }

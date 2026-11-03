@@ -5,11 +5,15 @@ use_directory_urls: false
 theme:
   name: material
   features: [navigation.sections, navigation.top, search.suggest, search.highlight, content.code.copy]
+  logo: assets/icon.png
+  favicon: assets/icon.png
+  font: {text: Inter, code: JetBrains Mono}
   palette:
-    - scheme: default
-      toggle: {icon: material/weather-night, name: Dark mode}
     - scheme: slate
       toggle: {icon: material/weather-sunny, name: Light mode}
+    - scheme: default
+      toggle: {icon: material/weather-night, name: Dark mode}
+extra_css: [stylesheets/extra.css]
 repo_url: ""
 edit_uri: ""
 validation:
