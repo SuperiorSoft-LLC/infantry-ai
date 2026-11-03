@@ -1,5 +1,6 @@
 package com.superiorsoftllc.infantry.plugins.official.chatfeed
 
+import com.superiorsoftllc.infantry.ui.model.SessionPaneAction
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.rememberCoroutineScope
@@ -46,7 +47,8 @@ internal fun FeedSection(ctx: TabContext) {
             contributions = agent?.let { state.timeline[it.id] }.orEmpty(),
             onStartSession = onStartSession,
             // GAP-006b: Start session (its own settings, Apply / Cancel) or Resume, for the session on screen.
-            paneAction = agent?.takeIf { !it.session.global }?.let { sessionPaneAction(it.session, state.tickets) },
+            // CHAT-ONE-1: the Assistant (global) gets the same Resume splash after End session; it never offers Start (the daemon makes it).
+            paneAction = agent?.let { feedPaneAction(it, state.tickets) },
             onApplyStart = onApplyStart,
             onResume = onResume,
         ) {
@@ -61,3 +63,7 @@ internal fun FeedSection(ctx: TabContext) {
         }
     }
 }
+
+/** CHAT-ONE-1: the pane action for a session in the shared feed; the Assistant (global) gets Resume only, never Start (the daemon makes it). */
+fun feedPaneAction(agent: com.superiorsoftllc.infantry.ui.model.AgentView, tickets: List<com.superiorsoftllc.infantry.ui.protocol.Ticket>): SessionPaneAction? =
+    sessionPaneAction(agent.session, tickets)?.takeIf { !agent.session.global || it is SessionPaneAction.Resume }
