@@ -128,3 +128,33 @@ class QueueStuckReproTest {
         assertEquals("one\n\ntwo\n\nnew", queuedTurnText(listOf(QueuedPrompt("one", 1), QueuedPrompt("two", 2)), "new"))
     }
 }
+
+/** QUEUE-STUCK-2: a queued message the agent took by another path (an interrupt) leaves the queue and is never re-sent. */
+class QueueDeliveredMidTurnTest {
+    private fun busy() = AppState(
+        agents = mapOf("a" to AgentView(
+            session = SessionRecord("a", "stub", "/w", spawnedAt = 1, lastHeartbeat = 1, state = SessionState.BUSY, providerSessionId = "p", turnActive = true),
+            entries = emptyList(),
+        )),
+    ).withQueue("a", listOf(QueuedPrompt("vue", 1), QueuedPrompt("like a auto message", 2)))
+
+    @Test fun `a turn carrying the queued text mid-turn removes it from the queue`() {
+        val after = reduce(busy(), Envelope(Envelope.TURN, "vue", "a", sequence = 5), 10)
+        assertEquals(listOf("like a auto message"), after.queuedFor("a").map { it.text })
+    }
+
+    @Test fun `an interrupt turn that carries the text after the marker removes it too`() {
+        val after = reduce(busy(), Envelope(Envelope.TURN, "[Request interrupted by user]\n\nlike a auto message", "a", sequence = 5), 10)
+        assertEquals(listOf("vue"), after.queuedFor("a").map { it.text })
+    }
+
+    @Test fun `delivered messages are not drained at rest afterwards`() {
+        val delivered = reduce(busy(), Envelope(Envelope.TURN, "vue\n\nlike a auto message", "a", sequence = 5), 10)
+        assertTrue(delivered.queued.isEmpty())
+        assertEquals(emptyList(), queueDrainTargets(delivered, delivered, tracksSends = true))
+    }
+
+    @Test fun `an unrelated turn leaves the queue alone`() {
+        assertEquals(2, reduce(busy(), Envelope(Envelope.TURN, "mail for you", "a", sequence = 5), 10).queuedFor("a").size)
+    }
+}

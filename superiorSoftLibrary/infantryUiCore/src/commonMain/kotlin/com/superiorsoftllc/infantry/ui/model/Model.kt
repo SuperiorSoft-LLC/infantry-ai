@@ -1350,6 +1350,9 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
     Envelope.TURN -> s.stream(env) { a, _ -> a.withEntry(TranscriptEntry(env.sequence, LineKind.USER, env.data, now, origin = env.origin ?: LegacyOriginAdapter.originOf(env.data))) }
         // A queued message on the stream was taken: its wait for a refusal is over.
         .let { t -> t.copy(queueSending = t.queueSending.filterValues { it.sessionId != env.sessionId || it.prompt.text != env.data }) }
+        // QUEUE-STUCK-2: a turn the agent took by ANY path (an interrupt, an injected input, another window) delivers the
+        // queued messages whose text it carries: they leave the queue now, so the at-rest drain never sends them twice.
+        .let { t -> env.sessionId?.let { id -> t.withQueue(id, queueAfterTurn(t.queuedFor(id), env.data)) } ?: t }
 
     Envelope.TEXT_DELTA -> s.stream(env) { a, _ -> a.withEntry(TranscriptEntry(env.sequence, LineKind.TEXT, env.data, now)) }
 
@@ -2281,3 +2284,13 @@ fun AppState.withTimeline(items: List<TimelineItem>): AppState {
 
 /** QUEUE-STUCK-1: the queued messages, oldest first, then the newly typed [text], as the one turn a send delivers. */
 fun queuedTurnText(held: List<QueuedPrompt>, text: String): String = (held.map { it.text } + text).joinToString("\n\n")
+
+/**
+ * QUEUE-STUCK-2: the queue left after the agent took a turn reading [turn]. A queued message is delivered when the turn
+ * is its text, or a "\n\n"-joined turn (see [queuedTurnText]) or an interrupt that carries it as one of its parts.
+ */
+fun queueAfterTurn(held: List<QueuedPrompt>, turn: String): List<QueuedPrompt> {
+    if (held.isEmpty()) return held
+    val parts = turn.trim().split("\n\n").map { it.trim() }
+    return held.filter { q -> q.text.trim() !in parts }
+}
