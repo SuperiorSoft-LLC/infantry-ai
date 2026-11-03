@@ -73,7 +73,12 @@ class ChatNoteTools(
         runCatching { store(item) }
         runCatching { push(item) }
         val wake = (a["wake"] as? JsonPrimitive)?.booleanOrNull == true
-        if (wake) runCatching { wakeSession(target, shown) }.onFailure { return ToolResult("noted in chat, but the wake failed: ${it.message}", isError = true) }
+        if (wake) runCatching { wakeSession(target, shown) }.onFailure {
+            // CHAT-NOTE-WAKE-1: a busy session is not an error; it sees the note in its chat when its turn ends (same as mail to a busy session).
+            if (it.javaClass.simpleName == "RunInFlightException" || it.message?.contains("already has a run in flight") == true)
+                return ToolResult("noted in $target ($level, session busy: it will see the note when its turn ends)")
+            return ToolResult("noted in chat, but the wake failed: ${it.message}", isError = true)
+        }
         return ToolResult("noted in $target ($level${if (wake) ", woken" else ""})")
     }
 
