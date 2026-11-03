@@ -33,7 +33,7 @@ import kotlinx.coroutines.withContext
 import kotlin.time.Clock
 
 const val INCOMING_SOUND_TITLE = "Incoming comms sound"
-const val INCOMING_SOUND_APPLIES_TO = "Applies to: a short sound when a message from an agent, an outside sender or AgentHQ itself reaches you. Your own messages and the history loaded on connect never play it; a burst plays once. Remembered across launches."
+const val INCOMING_SOUND_APPLIES_TO = "Applies to: a short sound when a message from an agent, an outside sender or Infantry AI itself reaches you. Your own messages and the history loaded on connect never play it; a burst plays once. Remembered across launches."
 const val INCOMING_SOUND_ENABLED_TAG = "incoming-sound-enabled"
 const val INCOMING_SOUND_TEST_TAG = "incoming-sound-test"
 const val INCOMING_SOUND_CHOOSE_TAG = "incoming-sound-choose"

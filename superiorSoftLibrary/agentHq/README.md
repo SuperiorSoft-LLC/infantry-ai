@@ -1,16 +1,16 @@
-# AgentHQ
+# Infantry AI
 
 > **DRAFT (RELEASE-1).** Written for the first public GitHub release. Module paths below are the ones
-> in the current monorepo (`:superiorSoftLibrary:agentHq`, ...); they change when AgentHQ is extracted
+> in the current monorepo (`:superiorSoftLibrary:agentHq`, ...); they change when Infantry AI is extracted
 > into its own repository. See `docs/RELEASE-AUDIT.md` for what still blocks publishing.
 
-AgentHQ runs a team of AI coding agents on your own machine. A small local daemon starts and supervises
+Infantry AI runs a team of AI coding agents on your own machine. A small local daemon starts and supervises
 agent CLI sessions (Claude Code, pi, opencode, or any CLI you describe in a JSON file), gives each one its
 own git worktree, a ticket board, COMMS to talk to the other agents, and shared project memory. A
 desktop app shows every agent, what it is doing, and what it needs from you.
 
 - **Local first.** The daemon binds `127.0.0.1` by default. Your code and your provider credentials stay
-  where they already are: AgentHQ drives the CLIs you have installed and logged into.
+  where they already are: Infantry AI drives the CLIs you have installed and logged into.
 - **Bring your own harness.** Claude Code and pi are built in; opencode is a configured provider; any
   other CLI can be added with a JSON descriptor, no code change.
 - **One agent, one worktree.** A ticket start cuts its own branch, so agents never edit each other's
@@ -19,10 +19,10 @@ desktop app shows every agent, what it is doing, and what it needs from you.
   ([`CONTRACT.md`](CONTRACT.md)); the desktop app and the `agenthq` CLI are clients of it.
 
 <!-- SCREENSHOT: main window, agents list grouped by status + chat pane -->
-![AgentHQ desktop: agents list and chat](docs/images/screenshot-main.png)
+![Infantry AI desktop: agents list and chat](docs/images/screenshot-main.png)
 
 <!-- SCREENSHOT: ticket board modal -->
-![AgentHQ ticket board](docs/images/screenshot-board.png)
+![Infantry AI ticket board](docs/images/screenshot-board.png)
 
 ## Requirements
 
@@ -97,7 +97,7 @@ The full list, the port fallback rules and troubleshooting are in [`docs/QUICKST
 | **opencode** (`opencode`) | Configured provider (`AGENTHQ_PROVIDER=opencode`). | Supported. |
 | **Anything else** | A JSON descriptor in `~/.agenthq/harnesses/*.json`. | See [`docs/harnesses/`](docs/harnesses/) and QUICKSTART §4. |
 
-AgentHQ never stores provider API keys: each CLI uses its own login.
+Infantry AI never stores provider API keys: each CLI uses its own login.
 
 ## Project layout
 
