@@ -200,3 +200,14 @@ Deeper guides in the repo: `plugins/GUIDE.md`, `plugins/README.md`, `plugins/_te
 `docs/PLUGIN-HELLO.md`, `docs/PLUGIN-ENDPOINTS-DESIGN.md`.
 
 Screenshot: `docs/img/hello-plugin.png` in the repo.
+
+## Run tab commands as tools (Infantry_Run)
+
+The Run tab's saved commands are also daemon tools of `plugins/official/Infantry_Run/daemon`, so agents and Lua scripts can use them:
+`infantry_run_commands` (list), `infantry_run_command_save` (id, name, `argv` or a shell `command`, `cwd` inside the repo),
+`infantry_run_command_delete`, `infantry_run_start` (returns the run id) and `infantry_run_stop`. They run through the same
+`CommandStore` and `RunManager` as the frames and are gated by the same actions (`commands.read`, `commands.save`, `runs.start`,
+`runs.stop`). A call that names a `project` other than the caller's is refused unless `allowCrossProject` is true.
+
+CLI: `infantry run-cmd list | save <id> <cwd|.> "<command line>" [--name N] | delete <id> | start <id> | stop <runId> [--force]`
+(add `--project <id> --cross-project` to act on another project). Lua: `ih.call("infantry_run_command_save", {id = "site", command = "npm run build"})`.

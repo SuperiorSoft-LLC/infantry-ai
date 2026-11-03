@@ -228,6 +228,7 @@ fun main(args: Array<String>) {
  * infantry ticket move <id> --before <id>|--after <id>|--top|--bottom|--position <n>   reorder inside its column (order = priority)
  * infantry ticket start <id>                    start ticket work (never with a spawn): its role/provider/model, its own branch
  * infantry agent-def list|show <id>|enable <id>|disable <id>   the agent registry (AGENT-REGISTRY-1): built-in and plugin agents
+ * infantry run-cmd list|save|delete|start|stop   the Run tab's saved commands (RUN-CMD-TOOL-1); see RunCmdCli.USAGE
  * infantry harnesses                            the harnesses (provider ids) a ticket can pin, and each one's models
  * infantry harness-status [--check]            which harness CLIs (claude, opencode, pi) are installed / missing / outdated (--check asks npm for the latest)
  * infantry harness-install [id...] [--update]  npm-install the missing harness CLIs into the app prefix (--update refreshes outdated ones)
@@ -437,6 +438,7 @@ internal object Cli {
                 "harnesses" -> harnesses(stream, out, err)
                 "harness-status" -> harnessStatus(stream, parsed, out, err)
                 "agent-def" -> AgentDefCli.run(stream, parsed.args, out, err, getenv)
+                "run-cmd" -> RunCmdCli.run(stream, parsed.args, parsed.name, parsed.project, parsed.crossProject, parsed.force, out, err, getenv)
                 "harness-install" -> harnessInstall(stream, parsed, out, err)
                 "processes" -> processes(stream, parsed, out, err)
                 "agents" -> agents(stream, parsed, out, err, getenv)
@@ -5499,6 +5501,7 @@ internal object Cli {
         "harness-status" -> if (parsed.args.isNotEmpty()) "harness-status takes no arguments: infantry harness-status [--check]" else null
         "harness-install" -> null
         "agent-def" -> AgentDefCli.usageError(parsed.args)
+        "run-cmd" -> RunCmdCli.usageError(parsed.args)
         "processes" -> ProcessesCli.usageError(parsed.args, parsed.all)
         "epic" -> epicUsageError(parsed, getenv)
         "project" -> projectUsageError(parsed)
@@ -5715,7 +5718,7 @@ internal object Cli {
         "submit", "watch", "pods", "runs", "logs", "cancel", "tickets", "board", "ticket", "agents", "send", "inbox",
         "read", "threads", "thread", "waiting", "epics", "stories", "epic", "project", "mcp", "knowledge", "memory", "decision", "pipeline", "notify", "issue",
         "trait", "skill", "role", "ask", "harnesses", "harness-status", "archive", "harness-install", "image", "session", "remote", "bg", "kill", "usage",
-        "processes", "settings", "agent-def", "event", "tests", "tool", "script",
+        "processes", "settings", "agent-def", "run-cmd", "event", "tests", "tool", "script",
     )
 
     /** `infantry remote on|off|status`: edits `<stateDir>/network.properties`; takes effect on the next daemon restart. */

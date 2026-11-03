@@ -24,6 +24,9 @@ class RunDaemonPlugin : DaemonPlugin {
             secrets = runs::secretFields,
         )
 
+        RunCommandTools(store, manager, { api.events.broadcast(Envelope.COMMANDS, store.registry.specsJson()) }, { api.events.broadcast(it.type, it.data) })
+            .all().forEach(api.tools::register)
+
         fun reply(e: Envelope?): Frame? = e?.let { Frame(it.type, it.data) }
         fun commandsFrame() = Frame(Envelope.COMMANDS, store.registry.specsJson())
 

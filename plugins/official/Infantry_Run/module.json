@@ -13,6 +13,13 @@
     "entry": "com.superiorsoftllc.infantry.plugins.official.run.daemon.RunDaemonPlugin",
     "jar": "daemon/build/libs/Infantry_Run-daemon.jar",
     "apiAtLeast": "1.31.0",
+    "tools": [
+      { "name": "infantry_run_commands", "action": "commands.read", "kind": "read", "description": "List the saved Run-tab commands." },
+      { "name": "infantry_run_command_save", "action": "commands.save", "kind": "write", "description": "Add or edit a saved command." },
+      { "name": "infantry_run_command_delete", "action": "commands.save", "kind": "write", "description": "Delete a saved command." },
+      { "name": "infantry_run_start", "action": "runs.start", "kind": "spawn", "description": "Start a saved command; returns the run id." },
+      { "name": "infantry_run_stop", "action": "runs.stop", "kind": "destructive", "description": "Stop a run." }
+    ],
     "frames": [
       { "type": "command_list", "action": "commands.read", "kind": "read" },
       { "type": "command_save", "action": "commands.save", "kind": "write" },
