@@ -1,14 +1,7 @@
 # Funding links shown by the "Sponsor" button on the repository page.
-# Docs: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/displaying-a-sponsor-button-in-your-repository
+# Keys: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/displaying-a-sponsor-button-in-your-repository
 #
-# [PLACEHOLDER] OWNER TODO: none of the accounts below exist yet. Uncomment a line only after the account is live,
-# and replace <handle> with the real name. GitHub hides the Sponsor button while every line is commented out.
-#
-# github: [<handle>]            # GitHub Sponsors: enroll the SuperiorSoft-LLC org (or a personal account) first
-# open_collective: <handle>     # Open Collective project slug
-# ko_fi: <handle>               # Ko-fi username
-# patreon: <handle>             # Patreon username
-# buy_me_a_coffee: <handle>     # Buy Me a Coffee username
-# liberapay: <handle>           # Liberapay username
-# polar: <handle>               # Polar.sh organization
-# custom: ["https://<your-donation-page>"]   # any other URL, up to 4
+# [PLACEHOLDER] OWNER TODO: replace SPONSORS_ACCOUNT and STRIPE_PAYMENT_LINK before the repo goes public.
+# The same two values live in docs/shared/product.md (sponsor_url, donate_url); change them there too.
+github: [SPONSORS_ACCOUNT]
+custom: ["https://buy.stripe.com/STRIPE_PAYMENT_LINK"]
