@@ -3,7 +3,7 @@
 A `.ihq` is a zip: `module.json` (its `jar` is `lib/<jar>`), `lib/*.jar`, and a jarsigner signature over the **whole zip**
 (`META-INF/*.SF`, `*.RSA`), so `module.json` is covered too. Nothing else is accepted.
 
-- Build: `./gradlew :plugins:_template:ihq` (script `gradle/ihq.gradle.kts`, apply it to any plugin module). Signing is
+- Build: `./gradlew :plugins:_template:ihq` (Gradle plugin `com.superiorsoftllc.infantry.plugin` from `build-logic/`: `plugins { id("com.superiorsoftllc.infantry.plugin") }`; it packs the UI, daemon and harness jars, and `catalogEntry` writes `build/ihq/catalog-entry.json`; the older script `gradle/ihq.gradle.kts` still serves the modules not yet moved). Signing is
   optional: `-Pihq.keystore=<file> -Pihq.alias=<a>` and env `IHQ_STOREPASS`. No key is in the repo.
 - Install: `IhqInstaller.install(file, pluginsRoot)` (infantryPlugins, jvmMain only; Android/wasm do not see it).
   Unpacks into `<root>/_install-<uuid>` (the scan skips `_` folders), checks, then one atomic rename to

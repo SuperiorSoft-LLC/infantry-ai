@@ -5,6 +5,7 @@
 // module's classes: the app provides the plugin API, Compose and the Kotlin runtime when it loads the jar.
 plugins {
     kotlin("jvm")
+    id("com.superiorsoftllc.infantry.plugin")
     alias(libs.plugins.composeCompiler)
     alias(libs.plugins.composeMultiplatform)
 }
@@ -37,4 +38,3 @@ tasks.jar {
 tasks.test {
     useJUnitPlatform()
 }
-apply(from = rootProject.file("gradle/ihq.gradle.kts"))

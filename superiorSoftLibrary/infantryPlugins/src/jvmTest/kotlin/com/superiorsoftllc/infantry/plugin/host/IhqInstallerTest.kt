@@ -256,6 +256,15 @@ class IhqInstallerTest {
         assertFalse(stage.exists())
     }
 
+    /** PLUGIN-GRADLE-1: the shape the Gradle plugin's `ihq` task packs for a module with a daemon half (module.json + both jars under lib/). */
+    @Test fun `a package with a daemon half packed by the gradle plugin installs`() {
+        val m = """{"name":"Test_Mod","version":"1.0.0","entry":"x.Y","jar":"lib/Test_Mod.jar","daemon":{"entry":"x.D","jar":"lib/Test_Mod-daemon.jar","apiAtLeast":"1.8.0"}}"""
+        val p = zip("Test_Mod.ihq", mapOf("module.json" to m.toByteArray(), "lib/Test_Mod.jar" to ByteArray(50) { it.toByte() }, "lib/Test_Mod-daemon.jar" to ByteArray(60) { it.toByte() }))
+        val r = IhqInstaller.install(p, root, settings = InstallSettings(allowUnsigned = true))
+        assertIs<IhqResult.Installed>(r, r.toString())
+        assertTrue(File(root, "community/Test_Mod/lib/Test_Mod-daemon.jar").isFile)
+    }
+
     @Test fun `not a zip is refused`() {
         val f = File(tmp, "junk.ihq").also { it.writeText("hello") }
         assertRefused(IhqInstaller.install(f, root), IhqRefusal.NOT_A_ZIP)
