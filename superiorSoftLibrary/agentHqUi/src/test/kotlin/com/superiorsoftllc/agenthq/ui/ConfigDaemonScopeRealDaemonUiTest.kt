@@ -99,7 +99,7 @@ class ConfigDaemonScopeRealDaemonUiTest {
             mailBaseUrl = "http://127.0.0.1:1", token = null,
             storyStore = JsonStoryStore(File(state, "stories.json")),
             modelCatalogs = com.superiorsoftllc.agenthq.provider.HarnessModelCatalogs.EMPTY,
-            workingDir = state,
+            workingDir = state, pluginsRoot = File(state, "plugins"),
             // POLICY-1 gap 9: never the defaults, which read the process's state dir; this test's own temp one only.
             ownerToken = com.superiorsoftllc.agenthq.daemon.OwnerCredential.ensure(state),
             policies = com.superiorsoftllc.agenthq.policy.PolicyRuntime(emptyList(), { null }, null, state),

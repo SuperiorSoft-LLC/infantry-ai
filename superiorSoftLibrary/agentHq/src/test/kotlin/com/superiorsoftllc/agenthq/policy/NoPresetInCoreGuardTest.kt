@@ -13,7 +13,7 @@ class NoPresetInCoreGuardTest {
     /** plugins/demo/Demo_Lock/policies/demo.json -> the repo root. */
     private val repo = generateSequence(DemoPresetFixture.file.absoluteFile) { it.parentFile }.drop(5).first()
     private val core = listOf(
-        "superiorSoftLibrary/agentHq/src/main/kotlin/com/superiorsoftllc/agenthq/policy",
+        "superiorSoftLibrary/agentHqCore/src/main/kotlin/com/superiorsoftllc/agenthq/policy",
         "superiorSoftLibrary/agentHq/src/main/kotlin/com/superiorsoftllc/agenthq/daemon/plugins",
         "superiorSoftLibrary/agenthqPlugins/src/commonMain/kotlin/com/superiorsoftllc/agenthq/plugin/api/ActionPolicy.kt",
     ).map { File(repo, it) }.flatMap { f -> if (f.isDirectory) f.walkTopDown().filter { it.isFile && it.extension == "kt" }.toList() else listOf(f) }
