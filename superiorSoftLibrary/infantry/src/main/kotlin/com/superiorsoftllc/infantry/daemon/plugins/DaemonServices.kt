@@ -63,6 +63,9 @@ interface DaemonServices {
     /** CMD-1: the cwd-bound run surface ([LocalRuns]); default: none (every call refuses). */
     val runs: com.superiorsoftllc.infantry.daemon.api.runs.Runs get() = com.superiorsoftllc.infantry.daemon.api.runs.NoRuns
 
+    /** PLUGIN-MCP-1: the read-only plugin manager view; default: none. */
+    val plugins: com.superiorsoftllc.infantry.daemon.api.plugins.PluginCatalogReader get() = com.superiorsoftllc.infantry.daemon.api.plugins.NoPluginCatalog
+
     /** PACE-TREND-1: the plan meters (current readings); default: none. */
     val meters: com.superiorsoftllc.infantry.daemon.api.usage.Meters get() = com.superiorsoftllc.infantry.daemon.api.usage.NoMeters
 

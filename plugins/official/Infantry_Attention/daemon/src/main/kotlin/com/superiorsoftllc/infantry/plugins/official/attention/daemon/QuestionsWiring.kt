@@ -6,6 +6,7 @@ import com.superiorsoftllc.infantry.daemon.api.Caller
 import com.superiorsoftllc.infantry.daemon.api.ConnectedHook
 import com.superiorsoftllc.infantry.daemon.api.DaemonApi
 import com.superiorsoftllc.infantry.daemon.api.Frame
+import com.superiorsoftllc.infantry.daemon.api.attention.OwnerAsks
 import com.superiorsoftllc.infantry.daemon.api.attention.QuestionsOpen
 import com.superiorsoftllc.infantry.daemon.api.sessions.SessionView
 import com.superiorsoftllc.infantry.daemon.api.sessions.SessionsResult
@@ -48,7 +49,28 @@ internal object QuestionsWiring {
                 (sec * 1_000L).takeIf { it > 0 }?.let { ((it + 59_999) / 60_000).toInt() }
             },
         )
-        questions.sink = { api.events.broadcast("question", QuestionJson.questionText(it)) }
+        // PLUGIN-MCP-1: OwnerAsks listeners hear each resolution (answered / cancelled); the push to clients is unchanged.
+        val resolvedListeners = java.util.concurrent.CopyOnWriteArrayList<(String, String?) -> Unit>()
+        questions.sink = { q ->
+            api.events.broadcast("question", QuestionJson.questionText(q))
+            if (q.state == QuestionStates.ANSWERED || q.state == QuestionStates.CANCELLED) {
+                for (l in resolvedListeners) runCatching { l(q.id, if (q.state == QuestionStates.ANSWERED) q.answer else null) }
+            }
+        }
+        api.services.provide(OwnerAsks::class, object : OwnerAsks {
+            override fun ask(sessionId: String, question: String, options: List<Pair<String, String>>, recommended: String, reason: String): String {
+                val record = session(sessionId) ?: throw IllegalArgumentException("unknown session '${sessionId.take(80)}'")
+                return questions.ask(
+                    Asker(sessionId, record.agentId, record.role, record.projectId),
+                    QuestionAsk(question = question, options = options.map { QuestionOption(it.first, it.second) }, recommended = recommended, reason = reason),
+                ).id
+            }
+
+            override fun onResolved(listener: (questionId: String, answer: String?) -> Unit): AutoCloseable {
+                resolvedListeners += listener
+                return AutoCloseable { resolvedListeners -= listener }
+            }
+        })
 
         api.services.provide(QuestionsOpen::class, object : QuestionsOpen {
             override fun hasOpen(sessionId: String): Boolean =
