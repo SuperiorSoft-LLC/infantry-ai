@@ -52,6 +52,9 @@ file("plugins/demo").listFiles { f -> f.isDirectory && !f.name.startsWith("_") &
 }
 // PLUGINS-1: the plugin API and the host's loading rules (no Compose, shared by the UI and the daemon).
 include(":superiorSoftLibrary:infantryPlugins")
+// SDK-PUB-1: the published SDK BOM and version catalog (docs/PLUGIN-REPO-DESIGN.md 1.1).
+include(":superiorSoftLibrary:infantrySdkBom")
+include(":superiorSoftLibrary:infantrySdkCatalog")
 include(":superiorSoftLibrary:infantryUi")
 // WEB-1: browser (wasmJs) client over infantryUiCore; the daemon serves its bundle at /.
 include(":superiorSoftLibrary:infantryWeb")

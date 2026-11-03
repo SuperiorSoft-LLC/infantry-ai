@@ -1,0 +1,43 @@
+# SDK-PUB-1 (docs/PLUGIN-REPO-DESIGN.md 1.4): publish the plugin SDK. Job 1 compiles and dry-runs into build/m2; job 2 publishes to
+# GitHub Packages only after the owner approves the `sdk-release` environment (required reviewers).
+name: sdk-publish
+
+on:
+  push:
+    tags: ['sdk-v*']
+  workflow_dispatch:
+
+jobs:
+  dry-run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Compile the SDK modules
+        run: ./gradlew :superiorSoftLibrary:infantryPlugins:compileKotlinJvm :superiorSoftLibrary:infantryProtocol:compileKotlin :superiorSoftLibrary:infantryDaemonApi:compileKotlin :superiorSoftLibrary:infantryHarnessApi:compileKotlin :superiorSoftLibrary:infantryUiCore:compileKotlinJvm --console=plain
+      - name: Dry-run publish into build/m2
+        run: ./gradlew publishAllPublicationsToDryRunRepository --console=plain
+
+  publish:
+    needs: dry-run
+    runs-on: ubuntu-latest
+    environment: sdk-release
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Publish to GitHub Packages
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./gradlew publishAllPublicationsToGitHubPackagesRepository --console=plain

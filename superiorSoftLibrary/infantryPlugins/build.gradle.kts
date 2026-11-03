@@ -9,6 +9,9 @@ plugins {
     alias(libs.plugins.kotlinSerialization)
 }
 
+// SDK-PUB-1: published to Maven (gradle/sdk-publish.gradle.kts).
+apply(from = rootProject.file("gradle/sdk-publish.gradle.kts"))
+
 kotlin {
     jvmToolchain(21)
     jvm()
