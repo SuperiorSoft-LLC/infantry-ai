@@ -150,3 +150,56 @@ class TicketDeleteTool(private val api: DaemonApi) : DaemonTool {
         private const val TICKETS = "tickets"
     }
 }
+
+/**
+ * AGENT-TASKS-2: `infantry_ticket_unassign`. Takes ONE in_progress ticket off its worker: the ticket goes back to the top of todo with
+ * its branch and work kept (`infantry ticket unassign`), and the board writes a handoff note. The worker is ended after its current
+ * turn (or at once with `now`). Over the `ticket_unassign` frame, naming the calling session.
+ */
+class TicketUnassignTool(private val api: DaemonApi) : DaemonTool {
+    override val name = UNASSIGN
+    override val description =
+        "Take ONE in_progress ticket off its worker (full id or 8-char id): the ticket goes back to todo, at the top, with its " +
+            "branch and work kept, so a second start continues where the first stopped. The board writes a handoff comment " +
+            "(branch, tip, commits ahead, the worker's last message, your note) that the next worker's brief carries. A busy " +
+            "worker finishes its current turn first (bounded by limits.agentTasks.unassignWaitSeconds); now ends it at once. " +
+            "Same as `infantry ticket unassign <id> [--now] [--note <text>]`. Refused unless the ticket is in_progress."
+    override val inputSchema = buildJsonObject {
+        put("type", "object")
+        put("properties", buildJsonObject {
+            put("ticketId", ToolArgs.prop("Full ticket id, or its 8-char suffix."))
+            put("now", ToolArgs.boolProp("End the worker at once instead of after its current turn."))
+            put("note", ToolArgs.prop("A note for the next worker, added to the handoff comment."))
+            put("verbose", ToolArgs.verboseProp())
+        })
+        put("required", buildJsonArray { add(JsonPrimitive("ticketId")) })
+        put("additionalProperties", false)
+    }
+    override val annotations = ToolArgs.annotations(readOnly = false)
+
+    override fun call(call: ToolCall): ToolResult {
+        val args = call.arguments
+        val requested = ToolArgs.string(args, "ticketId") ?: return refused("$UNASSIGN needs a ticketId")
+        val ticket = WireTickets.find(api, call, requested).getOrElse { return refused("$UNASSIGN refused: ${it.message ?: "no ticket '$requested'"}") }
+        val body = buildJsonObject {
+            put("id", ticket.id)
+            if (ToolArgs.flag(args, "now")) put("now", true)
+            ToolArgs.string(args, "note")?.let { put("note", it) }
+        }
+        // NOT idempotent: sent once; a lost answer is reported, never re-sent.
+        val answer = WireTickets.request(call, TICKET_UNASSIGN, json.encodeToString(JsonObject.serializer(), body), TICKET, sessionId = call.clientSessionId)
+            .getOrElse { return refused("$UNASSIGN refused: ${it.message}") }
+        val moved = runCatching { WireTickets.ticket(answer.data) }
+            .getOrElse { return refused("$UNASSIGN: malformed ticket answer from the daemon: ${it.message}") }
+        if (!ToolArgs.flag(args, "verbose")) return ToolResult("ok ${WireTickets.shortId(moved.id)} ${moved.status}")
+        return ToolResult(json.encodeToString(JsonObject.serializer(), JsonObject(TicketGetTool.answer(moved, true) + buildJsonObject {
+            put("message", "Unassigned ticket ${WireTickets.shortId(moved.id)} -> ${moved.status}")
+        })))
+    }
+
+    companion object {
+        const val UNASSIGN = "infantry_ticket_unassign"
+        private const val TICKET_UNASSIGN = "ticket_unassign"
+        private const val TICKET = "ticket"
+    }
+}

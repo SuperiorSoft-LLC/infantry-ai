@@ -212,7 +212,7 @@ class TicketComments(
     companion object {
         const val OPEN = "open"
         const val RESOLVED = "resolved"
-        val KINDS = listOf("done", "issue", "note")
+        val KINDS = listOf("done", "issue", "note", "handoff")
         val STATES = listOf(OPEN, RESOLVED)
         val WHICH = listOf("latestOpen", "latest", "first", "all")
     }

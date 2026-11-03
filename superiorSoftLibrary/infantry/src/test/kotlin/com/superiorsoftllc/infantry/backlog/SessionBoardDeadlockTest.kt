@@ -136,6 +136,37 @@ class SessionBoardDeadlockTest {
         assertEquals(emptyList(), rig.underLock, "no event reached the sink while the SessionManager lock was held")
     }
 
+    /** AGENT-TASKS-2: an unassign (which ends its worker) racing that worker's turn end and another ticket's start never deadlocks. */
+    @Test
+    fun anUnassignRacingATurnEndAndATicketStartNeverDeadlocks() {
+        val rig = rig()
+        var ticket = rig.ticket(0)
+        assertEquals("started", rig.board.move(TicketMove(ticket, IN_PROGRESS)).ticket.start?.reason)
+        var running: ScriptedProcess = rig.runner.processes.last()
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(TIME_LIMIT_SECONDS)
+        for (round in 1..UNASSIGN_ROUNDS) {
+            val next = rig.ticket(round)
+            val ending = running
+            val barrier = CyclicBarrier(3)
+            val turnEnd = pool.submit { barrier.await(); ending.exit(0) }
+            val unassign = pool.submit { barrier.await(); rig.board.unassign(ticket, now = round % 2 == 0) }
+            val start = pool.submit<String?> { barrier.await(); rig.board.move(TicketMove(next, IN_PROGRESS)).ticket.start?.reason }
+            try {
+                turnEnd.get((deadline - System.nanoTime()).coerceAtLeast(1), TimeUnit.NANOSECONDS)
+                unassign.get((deadline - System.nanoTime()).coerceAtLeast(1), TimeUnit.NANOSECONDS)
+                assertEquals("started", start.get((deadline - System.nanoTime()).coerceAtLeast(1), TimeUnit.NANOSECONDS))
+            } catch (e: java.util.concurrent.TimeoutException) {
+                hung = true
+                val stuck = ManagementFactory.getThreadMXBean().findDeadlockedThreads()?.size ?: 0
+                fail("round $round of $UNASSIGN_ROUNDS did not finish within $TIME_LIMIT_SECONDS s; deadlocked threads: $stuck")
+            }
+            running = rig.runner.processes.last()
+            ticket = next
+        }
+        assertNull(ManagementFactory.getThreadMXBean().findDeadlockedThreads(), "no thread is deadlocked")
+        assertEquals(emptyList(), rig.underLock, "no event reached the sink while the SessionManager lock was held")
+    }
+
     @Test
     fun everySessionEventReachesTheSinkWithTheManagerLockFree() {
         val rig = rig()
@@ -236,6 +267,7 @@ class SessionBoardDeadlockTest {
     private companion object {
         const val ROUNDS = 500
         const val HOOK_ROUNDS = 200
+        const val UNASSIGN_ROUNDS = 40 // each round also ends and removes a worker, so it is slower than a plain race round
         const val TIME_LIMIT_SECONDS = 120L
     }
 }

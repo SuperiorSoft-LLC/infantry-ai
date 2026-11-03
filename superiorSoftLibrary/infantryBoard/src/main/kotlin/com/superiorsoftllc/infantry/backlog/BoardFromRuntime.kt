@@ -24,6 +24,10 @@ import kotlinx.serialization.json.JsonPrimitive
 object BoardFromRuntime {
     const val EXIT_BEHAVIOR = "tickets.exitBehavior"
     const val AUTO_DONE_MIN_OUTPUTS = "limits.tickets.autoDoneMinOutputs"
+    const val HANDOFF_NOTE = "tickets.agentTasks.handoffNote"
+    const val UNASSIGN_WAIT_SECONDS = "limits.agentTasks.unassignWaitSeconds"
+    const val HANDOFF_COMMITS = "limits.agentTasks.handoffCommits"
+    const val HANDOFF_CHARS = "limits.agentTasks.handoffChars"
     private val EXIT_BEHAVIORS = setOf("leave", "done")
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -77,6 +81,13 @@ object BoardFromRuntime {
             },
             routingRefused = runtime::routingRefused,
             unknownSkills = runtime::unknownSkills,
+            handoffMode = {
+                val parsed = runtime.setting(HANDOFF_NOTE)?.let { runCatching { (json.parseToJsonElement(it) as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }.getOrNull() }
+                parsed?.takeIf { it in setOf("auto", "worker", "off") } ?: "auto"
+            },
+            unassignWaitSeconds = { runtime.limit(UNASSIGN_WAIT_SECONDS) ?: 120L },
+            handoffCommits = { runtime.limit(HANDOFF_COMMITS) ?: 10L },
+            handoffChars = { runtime.limit(HANDOFF_CHARS) ?: 1500L },
             relatedDescription = RelatedDescription { d ->
                 runtime.relatedDescription(
                     BoardRelatedDraft(

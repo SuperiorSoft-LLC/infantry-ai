@@ -37,6 +37,8 @@ import com.superiorsoftllc.infantry.daemon.api.board.BoardSessions
 import com.superiorsoftllc.infantry.daemon.api.board.BoardSettings
 import com.superiorsoftllc.infantry.daemon.api.board.BoardStorage
 import com.superiorsoftllc.infantry.daemon.api.board.BoardTables
+import com.superiorsoftllc.infantry.daemon.api.board.BranchHandoffFacts
+import com.superiorsoftllc.infantry.protocol.MessageOrigin
 import com.superiorsoftllc.infantry.daemon.api.board.BranchOutcome
 import com.superiorsoftllc.infantry.daemon.api.board.BranchRequest
 import com.superiorsoftllc.infantry.daemon.api.board.LaunchVerdict
@@ -160,6 +162,17 @@ class LocalBoardHost(
         override fun resolveBase(repo: String, ref: String): String? = branches.resolveBase(File(repo), ref)
         override fun projectDirectory(projectId: String?): String? = this@LocalBoardHost.projectDirectory(projectId)
         override fun defaultRepo(): String? = this@LocalBoardHost.defaultRepo?.path
+        override fun ahead(repo: String, branch: String, base: String): Int? = branches.ahead(File(repo), branch, base)
+        override fun handoffFacts(repo: String, branch: String, base: String, worktree: String?, maxCommits: Int): BranchHandoffFacts? {
+            val root = File(repo)
+            val tip = branches.tip(root, branch) ?: return null
+            return BranchHandoffFacts(
+                tip = tip,
+                ahead = branches.ahead(root, branch, base) ?: 0,
+                subjects = branches.subjects(root, branch, base, maxCommits),
+                dirtyFiles = worktree?.let { branches.dirtyFiles(File(it)) },
+            )
+        }
         override fun projectFolders(): Boolean = sessionManager()?.projectFolders != null
         override fun projectFolderFind(projectId: String?): String? = sessionManager()?.projectFolders?.find(projectId)?.path
         override fun projectFolderRequire(projectId: String?): String =
@@ -221,6 +234,15 @@ class LocalBoardHost(
             if (manager.get(sessionId) == null) return false
             manager.kill(sessionId, force, by, reason)
             return true
+        }
+
+        override fun lastAssistantText(sessionId: String): String? = sessionManager()?.lastReply(sessionId)
+
+        override fun prompt(sessionId: String, text: String): Boolean {
+            val manager = sessionManager() ?: return false
+            val record = manager.get(sessionId) ?: return false
+            if (!record.live || record.isBusy()) return false
+            return runCatching { manager.resume(sessionId, text, MessageOrigin.Owner) }.isSuccess
         }
 
         override fun providers() = sessionManager()?.providers.orEmpty().map { it.toInfo() }

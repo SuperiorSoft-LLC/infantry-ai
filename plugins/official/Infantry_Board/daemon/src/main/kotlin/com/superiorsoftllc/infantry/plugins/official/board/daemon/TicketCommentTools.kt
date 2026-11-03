@@ -124,7 +124,7 @@ class TicketCommentsTool(private val api: DaemonApi, private val store: TicketCo
     override val name = READ
     override val description =
         "Read a ticket's comments, one compact line each (id, kind/state, author, time, text). which = latestOpen (default: the newest " +
-            "unresolved one), latest, first or all; kind filters done|issue|note; limit keeps the newest N of all. latestOpen/latest/first and limit show full text for one comment."
+            "unresolved one), latest, first or all; kind filters done|issue|note|handoff; limit keeps the newest N of all. latestOpen/latest/first and limit show full text for one comment."
     override val inputSchema = TicketSave.schema("ticketId") {
         put("ticketId", TicketSave.prop("Full ticket id, or its 8-char suffix."))
         put("which", TicketSave.prop("latestOpen (default) | latest | first | all."))

@@ -136,9 +136,12 @@ fun TicketBoard(
     projectDirectory: (projectId: String?) -> String? = { null },
     /** KNOWLEDGE-PTR-1 (C): the stored RELATED (auto) block a save or a `relates_to` link writes atop the description. */
     relatedDescription: RelatedDescription = RelatedDescription.NONE,
+    /** AGENT-TASKS-2: `tickets.agentTasks.handoffNote` and `limits.agentTasks.unassignWaitSeconds`. */
+    handoffMode: () -> String = { "auto" },
+    unassignWaitSeconds: () -> Long = { 120 },
 ): TicketBoard = TicketBoard(
         host = LocalBoardHost(store, { sessions }, branches, baseRef, projectDirectory, repo, { null }, clock, agents, knowledge, skills, images),
-        clock = clock, idFactory = idFactory, context = context, profilesAvailable = agents != null, roleIds = roleIds, exitBehavior = exitBehavior, autoDoneMinOutputs = autoDoneMinOutputs, weightExecutors = weightExecutors, weightContext = weightContext, laneCap = laneCap, routingRules = routingRules, routingRefused = routingRefused, pacing = pacing, relatedDescription = relatedDescription,
+        clock = clock, idFactory = idFactory, context = context, profilesAvailable = agents != null, roleIds = roleIds, exitBehavior = exitBehavior, autoDoneMinOutputs = autoDoneMinOutputs, weightExecutors = weightExecutors, weightContext = weightContext, laneCap = laneCap, routingRules = routingRules, routingRefused = routingRefused, pacing = pacing, relatedDescription = relatedDescription, handoffMode = handoffMode, unassignWaitSeconds = unassignWaitSeconds,
         unknownSkills = { ids -> store.transaction { ids.filter { store.skills.get(it) == null } } },
 )
 

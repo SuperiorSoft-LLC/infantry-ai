@@ -11,7 +11,7 @@ import kotlinx.serialization.json.JsonPrimitive
  */
 internal object TicketCommentCli {
     const val USAGE = "infantry ticket comment <id> [done|issue|note] <text...> | infantry ticket comment resolve <commentId> | infantry ticket comment list <id> [latestOpen|latest|first|all] [done|issue|note]"
-    private val kinds = setOf("done", "issue", "note")
+    private val kinds = setOf("done", "issue", "note", "handoff")
 
     /** [args] are the words after `ticket comment`. */
     fun usageError(args: List<String>): String? = when (args.firstOrNull()) {

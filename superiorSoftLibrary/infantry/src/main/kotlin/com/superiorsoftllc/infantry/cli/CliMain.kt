@@ -72,6 +72,7 @@ import com.superiorsoftllc.infantry.protocol.Ticket
 import com.superiorsoftllc.infantry.protocol.TicketLinkRequest
 import com.superiorsoftllc.infantry.protocol.TicketLinkType
 import com.superiorsoftllc.infantry.protocol.TicketMove
+import com.superiorsoftllc.infantry.protocol.TicketUnassign
 import com.superiorsoftllc.infantry.protocol.TicketSave
 import com.superiorsoftllc.infantry.protocol.TicketListQuery
 import com.superiorsoftllc.infantry.protocol.TicketStatus
@@ -1196,6 +1197,7 @@ internal object Cli {
             "create" -> createTicket(stream, parsed, out, err, getenv)
             "update" -> updateTicket(stream, parsed, out, err, getenv)
             "move" -> moveTicket(stream, parsed, out, err, getenv)
+            "unassign" -> unassignTicket(stream, parsed, out, err, getenv)
             "start" -> startTicket(stream, parsed, out, err, getenv)
             "link" -> linkTicket(stream, parsed, out, err, getenv)
             "files" -> ticketFiles(stream, parsed, out, err, getenv)
@@ -1261,6 +1263,35 @@ internal object Cli {
      * `moved <id> -> todo`; a queued start says so. A ticket already in progress moves as before. A start prints
      * what its branch was cut from and any launch warning under the moved line, as `ticket start` does.
      */
+    /** AGENT-TASKS-2: `ticket unassign <id|prefix> [--now] [--note <text>]`: back to todo, work kept; prints `unassigned <fullId> -> todo`. */
+    private suspend fun unassignTicket(
+        stream: FrameStream,
+        parsed: ParsedArgs,
+        out: Appendable,
+        err: Appendable,
+        getenv: (String) -> String?,
+    ): Int {
+        checkContract(stream, err)
+        val id = parsed.args.getOrNull(1)?.trim()?.takeIf { it.isNotEmpty() } ?: run { err.appendLine("usage: infantry ticket unassign <id|prefix> [--now] [--note <text>]"); return 1 }
+        val ticket = resolveTicket(stream, id, boardProjectOf(parsed, getenv), err) ?: return 1
+        val session = getenv(AccessPolicy.SESSION_ID_ENV)?.trim()?.takeIf { it.isNotEmpty() }
+        val request = TicketUnassign(id = ticket.id, now = parsed.now, note = parsed.unassignNote)
+        val answer = stream.request(
+            Envelope(Envelope.TICKET_UNASSIGN, json.encodeToString(TicketUnassign.serializer(), request), session),
+            answerType = Envelope.TICKET,
+            what = "ticket_unassign",
+            idempotent = false,
+        )
+        val moved = try {
+            json.decodeFromString(Ticket.serializer(), answer.data)
+        } catch (e: Exception) {
+            err.appendLine("error: malformed ticket answer from the daemon: ${e.message}")
+            return 1
+        }
+        out.appendLine("unassigned ${ticket.id} -> ${moved.status}")
+        return 0
+    }
+
     private suspend fun moveTicket(
         stream: FrameStream,
         parsed: ParsedArgs,
@@ -4519,6 +4550,7 @@ internal object Cli {
                                   in_progress is a start (see ticket start): a refused or held one exits 1 with the reason
               ticket move <id|prefix> [<status>] --before <id|prefix> | --after <id|prefix> | --top | --bottom | --position <n>   Reorder: ticket order is priority
                                   (the board and `tickets` list a column in that order; new tickets go to the bottom)
+              ticket unassign <id|prefix> [--now] [--note <text>]   Take an in_progress ticket off its worker: back to todo (top), branch and work kept, with a handoff comment
               ticket start <id|prefix>       Start ticket work this way, never with a spawn: the worker runs the ticket's
                                   role, provider and model on its own ticket/<short-id>-<slug> branch; the ticket goes
                                   In Progress. A refused or held start exits 1 with the reason
@@ -4748,6 +4780,9 @@ internal object Cli {
         /** ARCHIVE-1: `--filter <lane>[:<days>]` and `--dry-run`. */
         val filter: String? = null,
         val dryRun: Boolean = false,
+        /** AGENT-TASKS-2: `ticket unassign --now` ends the worker at once; `--note <text>` joins the handoff comment. */
+        val now: Boolean = false,
+        val unassignNote: String? = null,
         /** TOKEN-1: `board --columns a,b`, `inbox --offset n` / `--previews`. */
         val columns: String? = null,
         val offset: String? = null,
@@ -4875,6 +4910,8 @@ internal object Cli {
         var limit: String? = null
         var filter: String? = null
         var dryRun = false
+        var now = false
+        var unassignNote: String? = null
         var columns: String? = null
         var offset: String? = null
         var previews = false
@@ -5241,6 +5278,14 @@ internal object Cli {
                     filter = flagValue(args, ++i) ?: return fail(err, "--filter expects <lane>[:<days>]")
                     i++
                 }
+                "--now" -> {
+                    now = true
+                    i++
+                }
+                "--note" -> {
+                    unassignNote = flagValue(args, ++i) ?: return fail(err, "--note expects the note text")
+                    i++
+                }
                 "--dry-run" -> {
                     dryRun = true
                     i++
@@ -5356,6 +5401,8 @@ internal object Cli {
             limit = limit,
             filter = filter,
             dryRun = dryRun,
+            now = now,
+            unassignNote = unassignNote,
             columns = columns,
             offset = offset,
             previews = previews,

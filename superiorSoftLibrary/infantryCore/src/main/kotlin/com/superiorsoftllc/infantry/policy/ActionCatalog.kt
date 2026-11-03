@@ -112,7 +112,7 @@ object ActionCatalog {
 
         // Board, triggers, epics, stories, knowledge.
         a("board.ticket.save", WRITE, E.TICKET_SAVE, E.TICKET_LINK, E.TICKET_UNLINK),
-        a("board.ticket.move", WRITE, E.TICKET_MOVE, E.TICKET_REORDER),
+        a("board.ticket.move", WRITE, E.TICKET_MOVE, E.TICKET_REORDER, E.TICKET_UNASSIGN),
         a("board.ticket.delete", DESTRUCTIVE, E.TICKET_DELETE),
         a("board.archive.write", WRITE, E.ARCHIVE_APPLY),
         a("board.ticket.start", SPAWN, E.TICKET_START_NEXT),

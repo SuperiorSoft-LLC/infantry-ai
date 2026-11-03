@@ -175,10 +175,22 @@ interface BoardGit {
     /** DP-5f-3b3 (1.10.0): [projectFolderFind], or an [IllegalArgumentException] naming why the project has no directory; never the daemon's cwd. */
     fun projectFolderRequire(projectId: String?): String = throw IllegalArgumentException(NO_GIT)
 
+    /** AGENT-TASKS-2: commits [branch] is ahead of [base] in [repo] (`git rev-list --count base..branch`); null = unknown (no git, no such ref). */
+    fun ahead(repo: String, branch: String, base: String): Int? = null
+
+    /**
+     * AGENT-TASKS-2: where [branch] stands against [base] for a handoff note: tip sha, commits ahead (newest [maxCommits] subjects) and the
+     * count of changed files in [worktree] (`git status --short`; null worktree = unknown). Null when the host cannot tell.
+     */
+    fun handoffFacts(repo: String, branch: String, base: String, worktree: String?, maxCommits: Int): BranchHandoffFacts? = null
+
     companion object {
         const val NO_GIT = "this daemon has no git access"
     }
 }
+
+/** AGENT-TASKS-2: [BoardGit.handoffFacts]' answer. */
+data class BranchHandoffFacts(val tip: String, val ahead: Int, val subjects: List<String>, val dirtyFiles: Int?)
 
 /** The ref a start cuts from and the setting that named it (e.g. `epic epic-1a2b3c4d`; null = unlabelled). */
 data class BaseChoice(val ref: String, val source: String? = null)
@@ -256,6 +268,12 @@ interface BoardSessions {
 
     /** Kills a session; false when it is unknown. */
     fun kill(sessionId: String, force: Boolean = false, by: String = "board", reason: String? = null): Boolean = false
+
+    /** AGENT-TASKS-2: the worker's last assistant message (null = none or unknown), for the auto handoff note. */
+    fun lastAssistantText(sessionId: String): String? = null
+
+    /** AGENT-TASKS-2: prompts the (idle) session once; false when it cannot be (unknown, not idle). Used by handoffNote=worker. */
+    fun prompt(sessionId: String, text: String): Boolean = false
 
     /** Removes an ended session's record; a text when it cannot (still running, unknown), else null. */
     fun remove(sessionId: String): String? = NO_SESSIONS

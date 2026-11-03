@@ -128,6 +128,28 @@ class TicketBranches(
         return common.takeIf { it.isNotEmpty() }?.let { File(it).canonicalFile }
     }
 
+    /** AGENT-TASKS-2: commits [branch] is ahead of [base] (`rev-list --count base..branch`), or null when either ref is unknown. */
+    fun ahead(repo: File, branch: String, base: String): Int? {
+        val result = git.run(mainRoot(repo), listOf("rev-list", "--count", "$base..$branch"))
+        return if (result.ok) result.out().lineSequence().firstOrNull()?.trim()?.toIntOrNull() else null
+    }
+
+    /** AGENT-TASKS-2: the branch tip (full sha) in [repo], or null. */
+    fun tip(repo: File, branch: String): String? = resolveCommit(mainRoot(repo), "refs/heads/$branch")
+
+    /** AGENT-TASKS-2: the newest [max] commit subjects of [base]..[branch], newest first. */
+    fun subjects(repo: File, branch: String, base: String, max: Int): List<String> {
+        val result = git.run(mainRoot(repo), listOf("log", "--format=%h %s", "-n", max.coerceAtLeast(0).toString(), "$base..$branch"))
+        return if (result.ok) result.out().lines().map { it.trim() }.filter { it.isNotEmpty() } else emptyList()
+    }
+
+    /** AGENT-TASKS-2: files `git status --short` lists in [dir], or null when it is not a checkout. */
+    fun dirtyFiles(dir: File): Int? {
+        if (!dir.isDirectory) return null
+        val result = git.run(dir, listOf("status", "--short"))
+        return if (result.ok) result.out().lines().count { it.isNotBlank() } else null
+    }
+
     private fun resolveCommit(cwd: File, ref: String): String? {
         val result = git.run(cwd, listOf("rev-parse", "--verify", "--quiet", "$ref^{commit}"))
         if (!result.ok) return null
