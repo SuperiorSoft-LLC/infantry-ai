@@ -1,6 +1,6 @@
 # agentHqWeb
 
-The AgentHQ browser client: agenthqUiCore compiled to Kotlin/WASM. It talks to a real daemon over the daemon's
+The Infantry AI browser client: agenthqUiCore compiled to Kotlin/WASM. It talks to a real daemon over the daemon's
 WebSocket. An offline "Try the demo" mode runs on a built-in fake daemon instead.
 
 Build the static bundle (no webpack):

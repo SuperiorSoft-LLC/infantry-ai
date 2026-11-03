@@ -1,7 +1,7 @@
-# `agenthq mcp serve` — AgentHQ as an MCP server (Phase 11, slices P11-A to P11-D)
+# `agenthq mcp serve` — Infantry AI as an MCP server (Phase 11, slices P11-A to P11-D)
 
 `agenthq mcp serve` runs an [MCP](https://modelcontextprotocol.io) server on **stdio**, so an MCP-capable
-agent CLI can read the state of an AgentHQ daemon (P11-A) and act on it — spawn, prompt, message, kill —
+agent CLI can read the state of an Infantry AI daemon (P11-A) and act on it — spawn, prompt, message, kill —
 within guardrails (P11-B). Project-scoped defaults and per-CLI registration are P11-C (below);
 [Orchestrating agents](#orchestrating-agents-p11-d) at the end walks through a full run (P11-D).
 
@@ -34,7 +34,7 @@ Each result is one content block `{type: "text", text: "<JSON>"}`. Each call ope
 connection, so the server starts (and handshakes) with no daemon running; a call that cannot reach the
 daemon returns `isError: true` with the fixed text `McpTools.DAEMON_UNREACHABLE`:
 
-> AgentHQ daemon is not reachable. Start it with \`agenthq daemon\` (or check --url / --port), then retry.
+> Infantry AI daemon is not reachable. Start it with \`agenthq daemon\` (or check --url / --port), then retry.
 
 A refused token returns `isError: true` with the CLI's own refusal message.
 
@@ -267,7 +267,7 @@ commit it got (BUG-REGRESS-1).
 
 ## Every daemon-spawned session gets this server (MCP-1)
 
-No registration is needed inside AgentHQ. The daemon adds `agenthq mcp serve` to every session it spawns. The
+No registration is needed inside Infantry AI. The daemon adds `agenthq mcp serve` to every session it spawns. The
 launcher is the one it already puts on the session's `PATH` (`AGENTHQ_BIN`; on Windows `cmd /c <agenthq.bat|.cmd>`).
 The entry names the session identity (`AGENTHQ_SESSION_ID`, `_PROJECT_ID`, `_AGENT_ID`, `_ROLE`, `_URL`,
 `_MAIL_BASE`). The token is never written into it; the server inherits it. Code: `daemon/AgentHqMcp.kt`.
@@ -394,7 +394,7 @@ environment variables go under `"environment"`, not `"env"`.
       "command": "agenthq",
       "args": ["mcp", "serve", "--max-depth", "2", "--max-spawns", "4"],
       "timeout": 120,
-      "description": "AgentHQ daemon: sessions, pod state, guarded spawn/prompt/message/kill"
+      "description": "Infantry AI daemon: sessions, pod state, guarded spawn/prompt/message/kill"
     }
   }
 }

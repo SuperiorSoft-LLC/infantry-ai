@@ -1,5 +1,5 @@
 /**
- * AgentHQ to-do tool for pi (TODO-PROGRESS-1). Written by the AgentHQ daemon and loaded with `-e` on every pi session.
+ * Infantry AI to-do tool for pi (TODO-PROGRESS-1). Written by the Infantry AI daemon and loaded with `-e` on every pi session.
  *
  * pi has no built-in to-do tool. This registers `todowrite` with the same shape as opencode's: every call sends the FULL
  * list, so the daemon reads the list straight from the call's arguments (it drives the to-do box and the progress bar).

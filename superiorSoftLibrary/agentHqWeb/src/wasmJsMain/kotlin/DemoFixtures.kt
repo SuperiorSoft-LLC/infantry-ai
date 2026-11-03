@@ -16,7 +16,7 @@ object DemoFixtures {
 
     val history: Map<String, List<Pair<String, String>>> = mapOf(
         firstId to listOf(
-            Envelope.TURN to "Design a browser client for AgentHQ.",
+            Envelope.TURN to "Design a browser client for Infantry AI.",
             Envelope.TEXT_DELTA to "Run the UI in WebAssembly, keep the daemon headless, and let the page talk to it over a websocket. ",
         ),
         "demo-developer" to listOf(Envelope.TEXT_DELTA to "Working on the wasmJs target..."),
