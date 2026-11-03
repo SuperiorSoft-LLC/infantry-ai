@@ -39,6 +39,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ButtonColors
+import androidx.compose.material3.Icon
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
@@ -357,17 +360,18 @@ fun InterruptButton(agent: AgentView, live: Boolean, controller: Controller) {
 @Composable
 fun QueuedMessages(queue: List<QueuedPrompt>) {
     if (queue.isEmpty()) return
-    Column(Modifier.fillMaxWidth().testTag(QUEUED_MESSAGES_TAG).padding(bottom = 6.dp)) {
-        Text("Queued (${queue.size}), waiting for the current turn:", color = Palette.Muted, fontSize = 11.sp)
-        queue.forEachIndexed { i, q ->
-            Text("${i + 1}. ${q.text}", color = Palette.Muted, fontFamily = Mono, fontSize = 12.sp)
-        }
-    }
+    // CHAT-COMPACT-1: one line, not a stack: the count and the first message, the rest in the tooltip-free tail "+n".
+    val first = queue.first().text.lineSequence().first()
+    Text(
+        "Queued (${queue.size}): $first" + if (queue.size > 1) "  +${queue.size - 1}" else "",
+        color = Palette.Muted, fontFamily = Mono, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.fillMaxWidth().testTag(QUEUED_MESSAGES_TAG).padding(bottom = 4.dp),
+    )
 }
 
 @Composable
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
-internal fun PromptBox(
+fun PromptBox(
     value: String,
     onValue: (String) -> Unit,
     onSubmit: () -> Unit,
@@ -386,6 +390,8 @@ internal fun PromptBox(
     onRemoveAttachment: (String) -> Unit = {},
     /** ATTACH-INLINE-1: the box's text as a PROMPT (its tags turned into references), for Resume. */
     wire: (String) -> String = { it },
+    /** CHAT-COMPACT-1: the composer's plugin slot. Draws inline in the one row (a chip, icon or menu item), never a new row. */
+    extras: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {},
 ) {
     val actionScope = rememberCoroutineScope()
     val host = LocalPlatformHost.current
@@ -477,71 +483,70 @@ internal fun PromptBox(
         SlashSuggestions(slashTitle, slashRows, slashIndex, onPick = { onValue(it) })
         // ATTACH-INLINE-1: each tag's one character is drawn as its pill "📎 name".
         val tags = remember(attachments) { ComposerTags.transformation(attachments, SpanStyle(color = Palette.Accent, background = Palette.Raised)) }
-        OutlinedTextField(
-            value = shown,
-            onValueChange = { next -> field = next; if (next.text != value) onValue(next.text) },
-            visualTransformation = tags,
-            // ATTACH-INLINE-1: the paperclip sits in the box, next to the text; paste (Ctrl+V) and drop attach too.
-            trailingIcon = {
-                IconAction(
-                    AhqIcons.AttachFile, ATTACH_FILE_LABEL, onClick = pick, shortcut = ATTACH_FILE_SHORTCUT,
-                    enabled = live && host.canPickAttachment, style = IconActionStyle.TEXT,
-                    modifier = Modifier.testTag(CHAT_IMAGE_ATTACH_TAG),
-                )
-            },
-            placeholder = {
-                Text(
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+        // CHAT-COMPACT-1: one row. Wide: every action inline. Narrow (phone): Send and Stop stay, the rest sit in the "..." menu.
+        val narrow = maxWidth < COMPOSER_NARROW_DP.dp
+        var menuOpen by remember { mutableStateOf(false) }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.Bottom) {
+            OutlinedTextField(
+                value = shown,
+                onValueChange = { next -> field = next; if (next.text != value) onValue(next.text) },
+                visualTransformation = tags,
+                // ATTACH-INLINE-1: the paperclip sits in the box, next to the text; paste (Ctrl+V) and drop attach too.
+                trailingIcon = {
+                    IconAction(
+                        AhqIcons.AttachFile, ATTACH_FILE_LABEL, onClick = pick, shortcut = ATTACH_FILE_SHORTCUT,
+                        enabled = live && host.canPickAttachment, style = IconActionStyle.TEXT,
+                        modifier = Modifier.testTag(CHAT_IMAGE_ATTACH_TAG),
+                    )
+                },
+                placeholder = {
+                    Text(
+                        when {
+                            // DEMO-MERGE-1: no new agents while writes are refused; with none selected the box says what to do.
+                            !spawn.allowed && (spawnMode || a == null) -> "Pick an agent to message it"
+                            spawnMode || a == null -> "Task for a NEW agent. Enter to spawn, Shift+Enter for a new line"
+                            isBusy(a) -> "Agent is busy. Enter to queue: sent as its next turn when this one ends"
+                            blocker != null -> "Waiting: $blocker"
+                            else -> "Message ${a.session.worktreeBranch ?: a.id.take(8)}. Enter to send"
+                        },
+                        color = Palette.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
+                },
+                modifier = Modifier.weight(1f).focusRequester(focus).testTag(PROMPT_BOX_TAG).onPreviewKeyEvent { e ->
+                    if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    val listOpen = slashRows.isNotEmpty()
                     when {
-                        // DEMO-MERGE-1: no new agents while writes are refused; with none selected the box says what to do.
-                        !spawn.allowed && (spawnMode || a == null) -> "Pick an agent to message it"
-                        spawnMode || a == null -> "Task for a NEW agent. Enter to spawn, Shift+Enter for a new line"
-                        isBusy(a) -> "Agent is busy. Enter to queue: sent as its next turn when this one ends"
-                        blocker != null -> "Waiting: $blocker"
-                        else -> "Message ${a.session.worktreeBranch ?: a.id.take(8)}. Enter to send"
-                    },
-                    color = Palette.Muted,
-                )
-            },
-            modifier = Modifier.fillMaxWidth().focusRequester(focus).testTag(PROMPT_BOX_TAG).onPreviewKeyEvent { e ->
-                if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                val listOpen = slashRows.isNotEmpty()
-                when {
-                    listOpen && e.key == Key.DirectionDown -> { slashIndex = moveSlashSelection(slashIndex, 1, slashRows.size); true }
-                    listOpen && e.key == Key.DirectionUp -> { slashIndex = moveSlashSelection(slashIndex, -1, slashRows.size); true }
-                    listOpen && e.key == Key.Escape -> { dismissedFor = value; true }
-                    // Tab always belongs to the list while it is open; Enter picks unless the row is already in the box.
-                    listOpen && e.key == Key.Tab -> { slashPick(slashRows, slashIndex, value)?.let(pickRow); true }
-                    // CMD-MODEL-1: a filter narrowed to one value: Enter picks it and sends the line in one go.
-                    listOpen && e.key == Key.Enter && !e.isShiftPressed && !e.isCtrlPressed && slashSubmitOnEnter(slashRows, value) != null ->
-                        { onValue(slashSubmitOnEnter(slashRows, value)!!.replacement); onSubmit(); true }
-                    listOpen && e.key == Key.Enter && !e.isShiftPressed && !e.isCtrlPressed && slashPick(slashRows, slashIndex, value) != null ->
-                        { pickRow(slashPick(slashRows, slashIndex, value)!!); true }
-                    // COMPOSER-NEWLINE-1: Shift+Enter is a new line at the caret (replacing any selection), never a send.
-                    e.key == Key.Enter && e.isShiftPressed && !e.isCtrlPressed -> {
-                        val text = shown.text.replaceRange(shown.selection.min, shown.selection.max, "\n")
-                        field = TextFieldValue(text, TextRange(shown.selection.min + 1))
-                        onValue(text)
-                        true
+                        listOpen && e.key == Key.DirectionDown -> { slashIndex = moveSlashSelection(slashIndex, 1, slashRows.size); true }
+                        listOpen && e.key == Key.DirectionUp -> { slashIndex = moveSlashSelection(slashIndex, -1, slashRows.size); true }
+                        listOpen && e.key == Key.Escape -> { dismissedFor = value; true }
+                        // Tab always belongs to the list while it is open; Enter picks unless the row is already in the box.
+                        listOpen && e.key == Key.Tab -> { slashPick(slashRows, slashIndex, value)?.let(pickRow); true }
+                        // CMD-MODEL-1: a filter narrowed to one value: Enter picks it and sends the line in one go.
+                        listOpen && e.key == Key.Enter && !e.isShiftPressed && !e.isCtrlPressed && slashSubmitOnEnter(slashRows, value) != null ->
+                            { onValue(slashSubmitOnEnter(slashRows, value)!!.replacement); onSubmit(); true }
+                        listOpen && e.key == Key.Enter && !e.isShiftPressed && !e.isCtrlPressed && slashPick(slashRows, slashIndex, value) != null ->
+                            { pickRow(slashPick(slashRows, slashIndex, value)!!); true }
+                        // COMPOSER-NEWLINE-1: Shift+Enter is a new line at the caret (replacing any selection), never a send.
+                        e.key == Key.Enter && e.isShiftPressed && !e.isCtrlPressed -> {
+                            val text = shown.text.replaceRange(shown.selection.min, shown.selection.max, "\n")
+                            field = TextFieldValue(text, TextRange(shown.selection.min + 1))
+                            onValue(text)
+                            true
+                        }
+                        e.key == Key.Enter && !e.isShiftPressed && !e.isCtrlPressed -> { if (!promptLocked) onSubmit(); true }
+                        // ATTACH-INLINE-1: Ctrl+Shift+A is the paperclip.
+                        e.isCtrlPressed && e.isShiftPressed && e.key == Key.A -> { pick(); true }
+                        // IMG-2: Ctrl+V with a file or an image on the clipboard attaches it (a tag at the caret);
+                        // anything else pastes as text.
+                        e.isCtrlPressed && !e.isShiftPressed && e.key == Key.V -> host.clipboardFile()?.let { insertPicked(listOf(it)); true } ?: false
+                        else -> false
                     }
-                    e.key == Key.Enter && !e.isShiftPressed && !e.isCtrlPressed -> { if (!promptLocked) onSubmit(); true }
-                    // ATTACH-INLINE-1: Ctrl+Shift+A is the paperclip.
-                    e.isCtrlPressed && e.isShiftPressed && e.key == Key.A -> { pick(); true }
-                    // IMG-2: Ctrl+V with a file or an image on the clipboard attaches it (a tag at the caret);
-                    // anything else pastes as text.
-                    e.isCtrlPressed && !e.isShiftPressed && e.key == Key.V -> host.clipboardFile()?.let { insertPicked(listOf(it)); true } ?: false
-                    else -> false
-                }
-            },
-            // Grows with its content up to 8 lines, then scrolls.
-            minLines = 2, maxLines = 8, textStyle = TextStyle(fontFamily = Mono, fontSize = 13.sp),
-        )
-        Spacer(Modifier.height(6.dp))
-        // MOBILE-TRANSCRIPT-1: a FlowRow, not a Row. On a phone the buttons fill the width, and in a Row the Resume hint
-        // after them was measured a few pixels wide, wrapped a character per line and grew the composer over the whole
-        // column, leaving the transcript 0dp tall. Here a button or the hint that does not fit starts a new line, and the
-        // hint keeps to two lines whatever width it gets.
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            // UX-ICON-1: the action row is icons; each tooltip names the action and its shortcut.
+                },
+                // CHAT-COMPACT-1: one line by default, grows to 5 lines, then scrolls.
+                minLines = 1, maxLines = COMPOSER_MAX_LINES, textStyle = TextStyle(fontFamily = Mono, fontSize = 13.sp),
+            )
+            extras()
             IconAction(
                 AhqIcons.Send,
                 when {
@@ -556,9 +561,55 @@ internal fun PromptBox(
                     !(!spawn.allowed && (spawnMode || a == null)) && !(writeLocked && value.trimStart().startsWith("/")) && !promptLocked,
                 style = IconActionStyle.FILLED,
             )
+            var confirmingRemove by remember(a?.id) { mutableStateOf(false) }
+            var confirmingRestart by remember(a?.id) { mutableStateOf(false) }
             if (a != null && !spawnMode) {
-                // DEMO-MERGE-1: switching changes the agent's harness/model (a write), so it stays visible but dimmed.
-                IconAction(AhqIcons.SwapHoriz, swap.label(SWITCH_AGENT_LABEL), onSwitchAgent, shortcut = SWITCH_AGENT_SHORTCUT, enabled = swap.allowed)
+                val resume = com.superiorsoftllc.infantry.ui.shell.rememberGate("chat.resume")
+                val canResume = live && resume.allowed && resumeEnabled(a.session)
+                val ended = a.session.state in ENDED_STATES
+                val dangerColors = ButtonDefaults.outlinedButtonColors(contentColor = Palette.Danger)
+                val acts = listOf(
+                    ComposerAct(AhqIcons.SwapHoriz, swap.label(SWITCH_AGENT_LABEL), SWITCH_AGENT_SHORTCUT, swap.allowed, run = onSwitchAgent),
+                    ComposerAct(AhqIcons.PlayArrow, resume.label("Resume"), "Ctrl+R", canResume, run = {
+                        actionScope.launch { if (controller.resume(a.id, wire(value).trim()) is CommandResult.Sent) onValue("") }
+                    }),
+                    // Ticket a7f33ba2: the old Kill slot reaps this session's background jobs and leaves the session alive.
+                    ComposerAct(AhqIcons.Cancel, reap.label(STOP_BACKGROUND_LABEL), STOP_BACKGROUND_SHORTCUT, live && reap.allowed && backgroundProcessPids(a.session).isNotEmpty(), danger = true, run = {
+                        actionScope.launch { controller.stopBackgroundProcesses(a.id) }
+                    }),
+                    // SESSION-RM-1: an ended session's trash removes it from the list (after confirm); otherwise End session.
+                    if (ended) ComposerAct(AhqIcons.DeleteForever, remove.label(REMOVE_AGENT_LABEL), null, live && remove.allowed, danger = true, run = { confirmingRemove = true })
+                    else ComposerAct(AhqIcons.DeleteForever, kill.label(END_SESSION_LABEL), END_SESSION_SHORTCUT, live && kill.allowed, danger = true, filled = true, run = {
+                        actionScope.launch { controller.endSession(a.id) }
+                    }),
+                    ComposerAct(AhqIcons.Refresh, restart.label(RESTART_SESSION_LABEL), null, live && restart.allowed, run = { confirmingRestart = true }),
+                )
+                InterruptButton(a, live, controller)
+                if (!narrow) acts.forEach { it.Button(dangerColors) }
+                else Box {
+                    IconAction(AhqIcons.MoreVert, COMPOSER_MORE_LABEL, { menuOpen = true }, modifier = Modifier.testTag(COMPOSER_MORE_TAG))
+                    DropdownMenu(menuOpen, { menuOpen = false }) {
+                        acts.forEach { act ->
+                            DropdownMenuItem(
+                                text = { Text(act.label, color = if (act.danger) Palette.Danger else Palette.Text) },
+                                leadingIcon = { Icon(act.icon, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                                enabled = act.enabled, onClick = { menuOpen = false; act.run() },
+                            )
+                        }
+                    }
+                }
+                if (confirmingRemove) {
+                    RemoveAgentDialog(
+                        a, snapshot, onDismiss = { confirmingRemove = false },
+                        onRemove = { confirmingRemove = false; actionScope.launch { controller.removeSession(a.id) } },
+                    )
+                }
+                if (confirmingRestart) {
+                    RestartSessionDialog(
+                        a, snapshot, onDismiss = { confirmingRestart = false },
+                        onRestart = { confirmingRestart = false; actionScope.launch { controller.restartSession(a.id, confirmed = true) } },
+                    )
+                }
             } else {
                 IconAction(
                     if (spawnMode) AhqIcons.Close else AhqIcons.PersonAdd,
@@ -568,70 +619,44 @@ internal fun PromptBox(
                     enabled = spawnMode || spawn.allowed,
                 )
             }
-            if (a != null && !spawnMode) {
-                val resume = com.superiorsoftllc.infantry.ui.shell.rememberGate("chat.resume")
-                val canResume = live && resume.allowed && resumeEnabled(a.session)
-                IconAction(AhqIcons.PlayArrow, resume.label("Resume"), onClick = {
-                    actionScope.launch {
-                        if (controller.resume(a.id, wire(value).trim()) is CommandResult.Sent) onValue("")
-                    }
-                }, shortcut = "Ctrl+R", enabled = canResume)
-                val running = a.session.state in setOf(SessionState.STARTING, SessionState.BUSY, SessionState.WAITING_INPUT)
-                // Ticket a7f33ba2: the old Kill slot reaps this session's background jobs and leaves the session alive.
-                IconAction(
-                    AhqIcons.Cancel, reap.label(STOP_BACKGROUND_LABEL),
-                    onClick = { actionScope.launch { controller.stopBackgroundProcesses(a.id) } }, shortcut = STOP_BACKGROUND_SHORTCUT,
-                    enabled = live && reap.allowed && backgroundProcessPids(a.session).isNotEmpty(),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Palette.Danger),
-                )
-                // SESSION-RM-1: on an ended session there is nothing left to end, so the same trash button removes it
-                // from the list (after the card menu's confirm). A session that has not ended keeps End session, enabled
-                // whatever its state (it used to need a running turn, so an IDLE session could not be ended).
-                if (a.session.state in ENDED_STATES) {
-                    var confirmingRemove by remember(a.id) { mutableStateOf(false) }
-                    IconAction(
-                        // DEMO-MERGE-1: the delete is a write.
-                        AhqIcons.DeleteForever, remove.label(REMOVE_AGENT_LABEL),
-                        onClick = { confirmingRemove = true }, enabled = live && remove.allowed,
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Palette.Danger),
-                    )
-                    if (confirmingRemove) {
-                        RemoveAgentDialog(
-                            a, snapshot, onDismiss = { confirmingRemove = false },
-                            onRemove = { confirmingRemove = false; actionScope.launch { controller.removeSession(a.id) } },
-                        )
-                    }
-                } else {
-                    IconAction(
-                        AhqIcons.DeleteForever, kill.label(END_SESSION_LABEL),
-                        onClick = { actionScope.launch { controller.endSession(a.id) } }, shortcut = END_SESSION_SHORTCUT, enabled = live && kill.allowed,
-                        style = IconActionStyle.FILLED,
-                        colors = ButtonDefaults.buttonColors(containerColor = Palette.Danger, contentColor = androidx.compose.ui.graphics.Color.White),
-                    )
-                }
-                var confirmingRestart by remember(a.id) { mutableStateOf(false) }
-                IconAction(AhqIcons.Refresh, restart.label(RESTART_SESSION_LABEL), onClick = { confirmingRestart = true }, enabled = live && restart.allowed)
-                if (confirmingRestart) {
-                    RestartSessionDialog(
-                        a, snapshot, onDismiss = { confirmingRestart = false },
-                        onRestart = { confirmingRestart = false; actionScope.launch { controller.restartSession(a.id, confirmed = true) } },
-                    )
-                }
-                InterruptButton(a, live, controller)
-                if (!a.session.resumable && !running) {
-                    Text(Controller.resumeBlocker(a.session), color = Palette.Muted, fontSize = 11.sp,
-                        maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.align(Alignment.CenterVertically),
-                    )
-                } else if (a.session.resumable && value.isBlank()) {
-                    Text("Resume with empty box sends: \"${Controller.RESUME_DEFAULT_PROMPT}\"", color = Palette.Muted, fontSize = 11.sp,
-                        maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.align(Alignment.CenterVertically),
-                    )
-                }
-            }
-            if (!live) Text("Not connected: commands are disabled.", color = Palette.Danger, fontSize = 11.sp)
         }
+        }
+        // A hint shows as one short line under the row only when there is something to say; it never stacks.
+        val busyNow = a != null && a.session.state in setOf(SessionState.STARTING, SessionState.BUSY, SessionState.WAITING_INPUT)
+        val hint = when {
+            !live -> "Not connected: commands are disabled."
+            a != null && !spawnMode && !a.session.resumable && !busyNow -> Controller.resumeBlocker(a.session)
+            else -> null
+        }
+        if (hint != null) Text(hint, color = if (!live) Palette.Danger else Palette.Muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
+
+/** CHAT-COMPACT-1: one composer action, drawn as an inline icon button (wide) or a "..." menu item (narrow). */
+private class ComposerAct(
+    val icon: androidx.compose.ui.graphics.vector.ImageVector, val label: String, val shortcut: String?, val enabled: Boolean,
+    val danger: Boolean = false, val filled: Boolean = false, val run: () -> Unit,
+) {
+    @Composable
+    fun Button(dangerColors: ButtonColors) {
+        IconAction(
+            icon, label, run, shortcut = shortcut, enabled = enabled,
+            style = if (filled) IconActionStyle.FILLED else IconActionStyle.OUTLINED,
+            colors = when {
+                filled -> ButtonDefaults.buttonColors(containerColor = Palette.Danger, contentColor = androidx.compose.ui.graphics.Color.White)
+                danger -> dangerColors
+                else -> null
+            },
+        )
+    }
+}
+
+/** CHAT-COMPACT-1: the most lines the input grows to before it scrolls. */
+const val COMPOSER_MAX_LINES = 5
+/** CHAT-COMPACT-1: below this width (dp) the secondary actions move into the "..." menu. */
+const val COMPOSER_NARROW_DP = 560
+const val COMPOSER_MORE_LABEL = "More actions"
+const val COMPOSER_MORE_TAG = "composer-more"
 
 /** The one-line strip that shows the latest notice: a refused `/command`, or what a `/command` did. */
 const val NOTICE_TAG = "notice-strip"
