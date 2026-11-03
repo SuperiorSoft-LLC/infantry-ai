@@ -10,6 +10,9 @@ repo: https://github.com/SuperiorSoft-LLC/infantry-ai
 wiki: https://github.com/SuperiorSoft-LLC/infantry-ai/tree/feature-agenthq-mvp/docs/wiki
 plugins_page: https://github.com/SuperiorSoft-LLC/infantry-ai/blob/feature-agenthq-mvp/docs/wiki/make-a-plugin.md
 licensing_page: https://github.com/SuperiorSoft-LLC/infantry-ai/blob/feature-agenthq-mvp/docs/wiki/licensing.md
+sponsor_url: https://github.com/sponsors/SPONSORS_ACCOUNT
+donate_url: https://buy.stripe.com/STRIPE_PAYMENT_LINK
+support_line: The core (MPL-2.0) is the community foundation. Sponsorship and donations pay for keeping it stable and backward compatible.
 features:
   - account_tree | One branch per ticket | Lanes To Do, In Progress, Pending and Done. Role, type and weight per ticket.
   - extension | Plugins inside plugins | Tabs, panels, daemon tools and harnesses are plugins with a module.json.

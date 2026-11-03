@@ -20,3 +20,10 @@ Start with the `README.md` for install and first run.
 
 Commands in these pages were checked against `infantry --help` (`agenthq` is a deprecated alias of `infantry`) and the CLI
 source. Screenshots are listed in `docs/img/README.md`.
+
+## Support Infantry AI
+
+<!-- shared:support_line -->The core (MPL-2.0) is the community foundation. Sponsorship and donations pay for keeping it stable and backward compatible.<!-- /shared:support_line -->
+
+- [Sponsor on GitHub](https://github.com/sponsors/SPONSORS_ACCOUNT) (monthly)
+- [Donate once](https://buy.stripe.com/STRIPE_PAYMENT_LINK) (you choose the amount)

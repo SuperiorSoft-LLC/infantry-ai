@@ -351,13 +351,11 @@ Everyone taking part follows the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Support the project
 
-If Infantry AI saves you time, you can support its development. The **Sponsor** button at the top of this repository
-lists the ways to contribute money.
+<!-- shared:support_line -->The core (MPL-2.0) is the community foundation. Sponsorship and donations pay for keeping it stable and backward compatible.<!-- /shared:support_line -->
 
-<!-- OWNER TODO: replace the placeholder below once GitHub Sponsors (and any other platform) is set up, and fill in
-     .github/FUNDING.yml with the real handles. Do not publish links to accounts that do not exist yet. -->
-- GitHub Sponsors: _coming soon_ (`[PLACEHOLDER: github.com/sponsors/<handle>]`)
-- Other platforms: _to be announced_ (`[PLACEHOLDER]`)
+<!-- OWNER TODO: replace SPONSORS_ACCOUNT and STRIPE_PAYMENT_LINK (docs/shared/product.md and .github/FUNDING.yml) before the repo goes public. -->
+- [Sponsor on GitHub](https://github.com/sponsors/SPONSORS_ACCOUNT) (monthly)
+- [Donate once](https://buy.stripe.com/STRIPE_PAYMENT_LINK) (you choose the amount)
 
 Starring the repository and filing good bug reports help too.
 
