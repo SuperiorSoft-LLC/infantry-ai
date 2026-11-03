@@ -305,6 +305,28 @@ class MailboxTest {
     }
 
     @Test
+    fun replyTo_accepts_full_id_and_unique_prefix_but_refuses_ambiguous_and_unknown() {
+        val ids = ArrayDeque(listOf("df422723-aaaa", "df422999-bbbb", "ab123456-cccc", "r1", "r2", "r3", "r4"))
+        val mb = Mailbox(MemStore(), MailLimits(), idFactory = { ids.removeFirst() })
+        // a cross-project sender/recipient pair: the lookup is by message id, never by project
+        val m1 = (mb.send(MailSendRequest(from = "p1:pm", to = "p2:pm", body = "ping")) as MailResult.Sent).message
+        mb.send(MailSendRequest(from = "p1:pm", to = "p2:pm", body = "ping2"))
+        val m3 = (mb.send(MailSendRequest(from = "p1:pm", to = "p2:pm", body = "ping3")) as MailResult.Sent).message
+
+        val ambiguous = mb.send(MailSendRequest(from = "p2:pm", to = "x", body = "r", replyTo = "df422"))
+        assertTrue(ambiguous is MailResult.Refused && ambiguous.reason.contains("ambiguous"))
+        val unknown = mb.send(MailSendRequest(from = "p2:pm", to = "x", body = "r", replyTo = "zz"))
+        assertTrue(unknown is MailResult.Refused && unknown.reason.contains("unknown replyTo"))
+        val byPrefix = mb.send(MailSendRequest(from = "p2:pm", to = "x", body = "r", replyTo = "ab123456")) as MailResult.Sent
+        assertEquals(m3.id, byPrefix.message.replyTo)
+        assertEquals("p1:pm", byPrefix.message.to)
+        val byFull = mb.send(MailSendRequest(from = "p2:pm", to = "x", body = "r", replyTo = m1.id)) as MailResult.Sent
+        assertEquals(m1.id, byFull.message.replyTo)
+        val byUniquePrefix = mb.send(MailSendRequest(from = "p2:pm", to = "x", body = "r", replyTo = "df422723")) as MailResult.Sent
+        assertEquals(m1.id, byUniquePrefix.message.replyTo)
+    }
+
+    @Test
     fun invalid_send_is_refused() {
         val (mb, _) = mailbox()
         assertTrue(mb.send(MailSendRequest(from = "A", to = "A", body = "self")) is MailResult.Refused)

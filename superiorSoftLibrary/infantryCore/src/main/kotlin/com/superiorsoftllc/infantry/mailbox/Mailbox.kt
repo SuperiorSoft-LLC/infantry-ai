@@ -150,9 +150,21 @@ class Mailbox(
         val events = mutableListOf<MailEvent>()
 
         // A reply inherits its thread and its recipient from the message it answers.
-        val original = request.replyTo?.let { messages[it] }
-        if (request.replyTo != null && original == null) {
-            return refuse(from, to, null, "unknown replyTo '${request.replyTo}'")
+        // The id may be the full id or a unique prefix (mail notices print only 8 characters), as `read` accepts.
+        val wanted = request.replyTo?.trim()
+        var original = wanted?.let { messages[it] }
+        if (wanted != null && original == null) {
+            val matches = if (wanted.isEmpty()) emptyList() else messages.values.filter { it.id.startsWith(wanted) }
+            if (matches.size > 1) {
+                return refuse(
+                    from, to, null,
+                    "replyTo '$wanted' is ambiguous: " + matches.joinToString(", ") { it.id.take(12) } + "; use a longer id",
+                )
+            }
+            original = matches.singleOrNull()
+        }
+        if (wanted != null && original == null) {
+            return refuse(from, to, null, "unknown replyTo '$wanted'")
         }
         val replyTo = original?.id
         val recipient = original?.from ?: to
