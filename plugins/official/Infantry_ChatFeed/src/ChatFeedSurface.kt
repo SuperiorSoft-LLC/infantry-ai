@@ -63,6 +63,7 @@ import com.superiorsoftllc.infantry.ui.net.ImageUploadOutcome
 import com.superiorsoftllc.infantry.ui.protocol.ImageUploadWire
 import com.superiorsoftllc.infantry.ui.pair.applyPairing
 import com.superiorsoftllc.infantry.ui.shell.LocalPlatformHost
+import com.superiorsoftllc.infantry.ui.shell.LocalShellContext
 import com.superiorsoftllc.infantry.ui.shell.ServerChoice
 import com.superiorsoftllc.infantry.ui.shell.ServerSwitcher
 import com.superiorsoftllc.infantry.ui.shell.PickedImage
@@ -291,17 +292,27 @@ fun AgentChat(agent: AgentView, nowProvider: () -> Long = { Clock.System.now().t
     }
 }
 
+/** The open/closed choice the user made on the Activity header, remembered for the window (ACTIVITY-BOX-1). */
+private var activityBoxChoice by mutableStateOf<Boolean?>(null)
+
+/** Forget the remembered open/closed choice (a fresh window; tests). */
+fun resetActivityBoxChoice() { activityBoxChoice = null }
+
+private const val ACTIVITY_AUTO_OPEN_KEY = "activityBox.autoOpenWhileRunning"
+
 /**
  * UI-ACT-2: the selected session's tool activity, newest first, above the chat input. Collapsible; it
- * starts expanded while the session is running and collapsed once it is idle.
+ * starts collapsed (ACTIVITY-BOX-1). A click on the header is remembered for the window, across turns and session
+ * switches. The `activityBox.autoOpenWhileRunning` setting (default off) restores opening while the session runs.
  */
 @Composable
 fun ActivityBox(agent: AgentView) {
     val entries = agent.activityLog
     if (entries.isEmpty()) return
-    // UI-ACT-2: starts expanded while the session is running and collapsed once it is idle; the user
-    // can still toggle it. Keyed on the agent so switching sessions re-reads that session's run state.
-    var expanded by remember(agent.id) { mutableStateOf(isRunning(agent.session.state)) }
+    // ACTIVITY-BOX-1: collapsed unless the user chose otherwise (remembered per window) or the setting asks for
+    // auto-open while the session runs.
+    val autoOpen = LocalShellContext.current?.config?.values("infantry.chatfeed")?.boolean(ACTIVITY_AUTO_OPEN_KEY) ?: false
+    val expanded = activityBoxChoice ?: (autoOpen && isRunning(agent.session.state))
     Column(Modifier.fillMaxWidth().background(Palette.Panel).testTag(ACTIVITY_BOX_TAG)) {
         Text(
             "Activity (${entries.size})",
@@ -309,7 +320,7 @@ fun ActivityBox(agent: AgentView) {
             fontFamily = Mono,
             fontSize = 11.sp,
             fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded }.padding(horizontal = 14.dp, vertical = 6.dp),
+            modifier = Modifier.fillMaxWidth().clickable { activityBoxChoice = !expanded }.padding(horizontal = 14.dp, vertical = 6.dp),
         )
         if (expanded) {
             // Newest first, capped at ~160dp, scrollable, monospace.
@@ -387,7 +398,7 @@ fun ReasoningBlock(lines: List<OutputLine>) {
             fontFamily = Mono,
             fontSize = 11.sp,
             fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.testTag(REASONING_HEADER_TAG).clickable { expanded = !expanded },
+            modifier = Modifier.testTag(REASONING_HEADER_TAG).clickable { activityBoxChoice = !expanded },
         )
         if (expanded) {
             Text(
