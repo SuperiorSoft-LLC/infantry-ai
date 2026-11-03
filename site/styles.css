@@ -45,3 +45,5 @@ pre{margin:0;padding:20px;overflow:auto;font-size:.82rem;line-height:1.6;backgro
 footer{border-top:1px solid var(--border);padding:32px 20px;text-align:center;color:var(--muted)}footer a{color:var(--accent)}footer p{margin:6px}
 @media(max-width:900px){.app{grid-template-columns:180px 1fr}.app>div:last-child{display:none}.lanes{grid-template-columns:repeat(2,1fr)}.plugins,.features{grid-template-columns:1fr 1fr}}
 @media(max-width:600px){.app{grid-template-columns:1fr}.app>div:first-child{display:none}.lanes,.plugins,.features{grid-template-columns:1fr}.nav a.l.opt{display:none}.hero{padding-top:44px}}
+
+.shot{display:block;max-width:100%;height:auto}

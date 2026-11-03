@@ -12,3 +12,5 @@ Max 8. Most match files already named in docs/img/README.md.
 8. **harness-pick.png**: a ticket with provider and model selection (Claude Code / opencode / pi). Why: multi-harness in one frame.
 
 Before capture: use a demo project; no personal paths, emails, tokens or real customer names.
+
+Done: **main app shot** (agents, chat, usage; real build 52828423, cropped with rounded transparent corners): `docs/img/app-screenshot.png` (README) and `site/assets/app-screenshot.webp` (home page, first tab).
