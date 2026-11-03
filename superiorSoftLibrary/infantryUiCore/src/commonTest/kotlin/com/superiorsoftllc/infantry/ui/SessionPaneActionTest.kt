@@ -63,4 +63,11 @@ class SessionPaneActionTest {
         assertIs<SessionPaneAction.Start>(sessionPaneAction(rec(SessionState.FAILED, ticketId = ticket.id), listOf(ticket)))
         assertNull(sessionPaneAction(rec(SessionState.FAILED), emptyList()), "the daemon refuses it: nothing to start or resume")
     }
+
+    @Test fun `END-SESSION-1 a session that ends while open shows the Resume splash, a live one does not`() {
+        for (st in SessionState.values()) {
+            val r = rec(st, psid = "p")
+            assertEquals(st in ENDED_STATES, com.superiorsoftllc.infantry.ui.model.showsResumeSplash(r, sessionPaneAction(r, emptyList())), "state $st")
+        }
+    }
 }
