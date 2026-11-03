@@ -1005,6 +1005,12 @@ class InfantryDaemon(
             // `Epic.storyIds`, appended below when the create named an epic).
             val projectStore = ProjectStore(persistence = SqlProjectPersistence((store as SqlInfantryStore).database))
             projectStore.laneDefault = { settings.limitCap(LimitRegistry.LANE_DEFAULT) }
+            // SPAWN-HARNESS-1: a spawn naming no provider is routed like a ticket start: the project's routing rule for the role first.
+            agents.spawnRoute = { pid, role ->
+                pid?.let { id -> runCatching { com.superiorsoftllc.infantry.settings.RoutingRules.match(projectStore.routingRulesOf(id), null, null, role) }.getOrNull() }
+                    ?.takeIf { !it.provider.isNullOrBlank() || !it.model.isNullOrBlank() }
+                    ?.let { com.superiorsoftllc.infantry.protocol.RoleBinding(role ?: "", it.provider, it.model, it.effort) }
+            }
             // EXPERIMENTS-1: the pi tool bridge (off unless the project setting or the env override says on). Removing it = this line.
             com.superiorsoftllc.infantry.harness.HarnessConfigMerge.pluginMerge = harnesses::mergeConfig
             sessionStats.pluginStats = harnesses::statsSource // HARNESS H5d: plugin harness rows, no harness branch in the service
