@@ -257,6 +257,6 @@ in this order (ids in brackets).
 6. REGISTRY-1b (190708ef): `registry/` scaffold for the `infantry-plugins` repo with validate/publish workflows.
 7. PLUGIN-VERSION-WIN-1 (c2ba55f5): higher version wins between bundled and installed copies.
 8. PLUGIN-MCP-1 (07a41012): DaemonApi plugin-manager read seam + `Infantry_Plugins` daemon tools + owner-ask request.
-9. PLUGIN-HOTLOAD-1: load/unload one daemon half without a restart (shared with BOARD-DOWN-2).
+9. PLUGIN-HOTLOAD-1 (cae8a6fc): load/unload one daemon half without a restart (shared with BOARD-DOWN-2).
 10. PLUGIN-UI-1 (7988ce17, PM-8): desktop Settings > Plugins screen with the consent dialog and the not-sandboxed warning.
 11. DECL-UI-0 (b4681a4a, design, Opus): declarative plugin UI for Android/web.
