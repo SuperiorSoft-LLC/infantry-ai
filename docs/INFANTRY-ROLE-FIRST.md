@@ -27,9 +27,9 @@ resolution order in `AgentProfiles.executorFor`).
 
 ## Status (2026-10-18, S14)
 
-The daemon half (S1-S5) is merged into `"feature-agenthq"-mvp`; the wire summary is the "What changed in role-first
+The daemon half (S1-S5) is merged into `feature-agenthq-mvp`; the wire summary is the "What changed in role-first
 (1.4x)" section of [`superiorSoftLibrary/infantry/CONTRACT.md`](../superiorSoftLibrary/infantry/CONTRACT.md). SHAs are
-from `git log --oneline "feature-agenthq"-mvp` (merge commit / feature commit).
+from `git log --oneline feature-agenthq-mvp` (merge commit / feature commit).
 
 Where the build differs from the plan below: `NEXT` became three versions (1.43.0 for S1, 1.46.0 for S2, 1.47.0 for
 S3); S4/S5/PICKER-ALL-1 needed no bump (same `models` frame shape, served by 1.45.0); the effort migration is

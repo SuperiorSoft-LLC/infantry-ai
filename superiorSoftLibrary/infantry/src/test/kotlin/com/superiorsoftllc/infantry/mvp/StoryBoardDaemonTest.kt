@@ -18,7 +18,7 @@ import kotlin.test.assertTrue
  * SLICE 0 of ticket b2fbb94d froze the seam: the `Story` / `StorySave` / `StoryMove` types, the
  * `StoryStatus` vocabulary (`todo`, `doing`, `done`, in that frozen order), and the `story_save` /
  * `story_get` / `story_move` / `story_list` frames. This test suite is what the implementing slice
- * (branch `"feature-agenthq"-mvp-board`) must turn GREEN.
+ * (branch `feature-agenthq-mvp-board`) must turn GREEN.
  *
  * Every test here touches ONLY the story half of the MVP. The project id is carried as a plain
  * string: no test needs slice A's `project_save` to work, so slice B can be built without the

@@ -150,7 +150,7 @@ data class TicketLink(
  *   `ticket_start_next`, or a queue drain): [TicketStart].
  *
  * MVP Sprint-Zero adds [projectId]: the key a ticket uses to name the project it belongs to
- * (slice 0 of ticket b2fbb94d freezes it; MVP slice A, branch "feature-agenthq"-mvp-scope,
+ * (slice 0 of ticket b2fbb94d freezes it; MVP slice A, branch feature-agenthq-mvp-scope,
  * implements it). Null = unassigned to a project; the daemon stores and echoes whatever project
  * id the ticket carries, so an MVP board can draw a boundary around part of the backlog. The key
  * is Project-oriented on purpose: `Story.projectId` spells the same join, and the ordered list of

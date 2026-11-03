@@ -1,6 +1,6 @@
 # BLOCKS-INJECTORS: additive extension of a node's children (design only)
 
-Ticket 90588545. Base: `"feature-agenthq"-mvp` @5a1098d. Read-only check plus design; no code changed.
+Ticket 90588545. Base: `feature-agenthq-mvp` @5a1098d. Read-only check plus design; no code changed.
 
 Owner ask (2026-10-27): the CMS client's "block injectors" **add** blocks into a section, as a second extension method
 next to override. Replace and wrap allow one winner per node. Injection lets several plugins add to the same node

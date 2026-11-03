@@ -16,7 +16,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 /**
- * MVP Sprint-Zero, slice B leaf B2 (ticket `20ce1d7c`, branch `"feature-agenthq"-mvp-board`) -- status
+ * MVP Sprint-Zero, slice B leaf B2 (ticket `20ce1d7c`, branch `feature-agenthq-mvp-board`) -- status
  * MOVES and restart PERSISTENCE.
  *
  * What this suite proves on top of B1's ([StoryStoreTest], which stays intact above it):

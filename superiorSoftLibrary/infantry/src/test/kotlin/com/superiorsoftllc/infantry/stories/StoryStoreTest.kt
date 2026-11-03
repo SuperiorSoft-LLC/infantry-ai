@@ -12,7 +12,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 /**
- * MVP Sprint-Zero, slice B leaf B1 (ticket `eb034b36`, branch `"feature-agenthq"-mvp-board`) -- RED by design.
+ * MVP Sprint-Zero, slice B leaf B1 (ticket `eb034b36`, branch `feature-agenthq-mvp-board`) -- RED by design.
  *
  * Slice 0 (`b2fbb94d`) froze the seam this store serves and the corrected seam (`0822d8f`) then made a
  * story deliberately minimal: `{ id, projectId, title, status }` and nothing else. This suite pins the

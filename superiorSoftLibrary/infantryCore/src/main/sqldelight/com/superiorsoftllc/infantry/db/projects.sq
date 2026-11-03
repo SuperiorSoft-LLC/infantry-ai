@@ -18,7 +18,7 @@
 -- NOTE FOR INTEGRATION (I0): the daemon's database migrates with numbered .sqm files, and that
 -- numbering belongs to I0. The migration that ADDS this table to an existing file is drafted,
 -- unnumbered, next to this file (projects-migration-draft.sql) so it can be dropped in as the
--- next .sqm on the "feature-agenthq"-mvp integration.
+-- next .sqm on the feature-agenthq-mvp integration.
 
 CREATE TABLE IF NOT EXISTS projects (
     id TEXT NOT NULL PRIMARY KEY,

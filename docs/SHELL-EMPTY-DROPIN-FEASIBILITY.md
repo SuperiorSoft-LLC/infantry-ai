@@ -1,6 +1,6 @@
 # SHELL-EMPTY-DROPIN: Windows empty shell + a drop box that loads the whole app UI (feasibility, read-only)
 
-Ticket c6290fde. Base: `"feature-agenthq"-mvp` @ 25d1980 (L15 step 1). Scope: the **Windows desktop JVM only**. Nothing was
+Ticket c6290fde. Base: `feature-agenthq-mvp` @ 25d1980 (L15 step 1). Scope: the **Windows desktop JVM only**. Nothing was
 built or changed; every figure below is from reading the tree (`wc -l`, the BLOCKS-NEXT-SPLITS survey, LICENSE-0).
 
 Vocabulary: *plugin / subplugin* are relative (a parent is a plugin to its children; the app root is the top plugin).

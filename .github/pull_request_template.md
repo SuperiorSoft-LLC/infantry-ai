@@ -14,7 +14,7 @@ Security fixes: report privately first (SECURITY.md), do not open a public PR.
 
 ## Checklist
 
-- [ ] One logical change; branched from `"feature-agenthq"-mvp`.
+- [ ] One logical change; branched from `feature-agenthq-mvp`.
 - [ ] Tests added or updated for the behaviour change (or: docs only).
 - [ ] `CONTRACT.md` and its version updated if the wire protocol changed.
 - [ ] No secrets, tokens, keystores or personal paths in the diff.

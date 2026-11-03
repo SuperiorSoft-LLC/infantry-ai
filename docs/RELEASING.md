@@ -19,7 +19,7 @@ powershell -File scripts/package-dist.ps1 -Sha <sha> -Keystore <p12> -KeyAlias <
 powershell -File scripts/package-dist.ps1 -BackupState -StateDir <owner state dir> -DryRun  # -DryRun first, then without it
 ```
 
-What a build does: the sha must be on `"feature-agenthq"-mvp`; it is built in a clean detached worktree under `%TEMP%` with
+What a build does: the sha must be on `feature-agenthq-mvp`; it is built in a clean detached worktree under `%TEMP%` with
 `:superiorSoftLibrary:infantryUi:createDistributable --no-parallel --no-daemon` and `-Dorg.gradle.jvmargs=-XX:MaxMetaspaceSize=2g -Xmx3g`.
 The app image is copied to `builds\<sha>\`, which gets `BUILD-INFO.txt` and a one-line `MANIFEST.txt` (sha, UTC time,
 `signed` or `devSign`). Integrity checks (exe present and same size, file count and bytes, BUILD-INFO sha) run before

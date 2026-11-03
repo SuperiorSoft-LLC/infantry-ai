@@ -1,6 +1,6 @@
 # BLOCKS-LAYOUT: layout is a block type (design only)
 
-Ticket fa41d42d. Read on "feature-agenthq"-mvp @ 21b5905, plus the BLOCKS-SHELL-3 tip 64de8b1 (a3923bd0, not merged yet).
+Ticket fa41d42d. Read on feature-agenthq-mvp @ 21b5905, plus the BLOCKS-SHELL-3 tip 64de8b1 (a3923bd0, not merged yet).
 Inputs: `ui/block/Block.kt`, `ui/AppShell.kt`, `ui/shell/blocks/*`, `App.kt:380-410` and `:898-929` (StatusBar), BLOCKS-1 note
 (f706b748), LAYOUT-1 note (2f71cd83), superPayload `BlockComponent.kt`, `RowBlock`, `ColumnBlock`, `SectionBlock`.
 

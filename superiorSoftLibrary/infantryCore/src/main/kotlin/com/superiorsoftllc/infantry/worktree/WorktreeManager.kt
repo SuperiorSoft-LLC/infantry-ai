@@ -30,7 +30,7 @@ class WorktreeException(message: String) : RuntimeException(message)
  *    the session's own unique id. Two concurrent sessions on one repository therefore CANNOT derive
  *    the same branch, so two agents are never handed one tree.
  *  - The path is `<repo>/.worktrees/<branch with '/' replaced by '-'>`, matching the convention this
- *    repository already uses (`.worktrees/"feature-agenthq"-phase3`).
+ *    repository already uses (`.worktrees/feature-agenthq-phase3`).
  *  - If that path or branch already exists (a leftover, a reused id), creation RETRIES with a numeric
  *    suffix up to [maxAttempts], then fails LOUDLY. It never reuses or deletes another agent's
  *    worktree or branch.

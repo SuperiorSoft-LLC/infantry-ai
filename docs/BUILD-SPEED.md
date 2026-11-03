@@ -2,8 +2,8 @@
 
 Measurement only. No build file was changed. Build target: `:superiorSoftLibrary:infantryUi:createDistributable`.
 Source: detached worktree at `a8ce8a21` (dev tip at measurement time), `-Pihq.devSign=true`, `-PallowAnyBranch=true`
-(the packaging guard refuses a detached HEAD that is not `"feature-agenthq"-mvp` or a `v*` tag; the sha is on
-`"feature-agenthq"-mvp`). Host: 16 logical cores, 32 GB RAM, about 8.9 GB free at start (see the RAM note below).
+(the packaging guard refuses a detached HEAD that is not `feature-agenthq-mvp` or a `v*` tag; the sha is on
+`feature-agenthq-mvp`). Host: 16 logical cores, 32 GB RAM, about 8.9 GB free at start (see the RAM note below).
 
 ## Results
 

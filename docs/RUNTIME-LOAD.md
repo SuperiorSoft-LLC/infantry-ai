@@ -1,6 +1,6 @@
 # RUNTIME-LOAD-1: what loads at runtime, measured
 
-Ticket 3e3186b5. Base `"feature-agenthq"-mvp` @ 55ebe83a. Builds on `RUNTIME-PLUGINS-AUDIT.md` (be38a342), `CONFIG-FIELDS.md` G13
+Ticket 3e3186b5. Base `feature-agenthq-mvp` @ 55ebe83a. Builds on `RUNTIME-PLUGINS-AUDIT.md` (be38a342), `CONFIG-FIELDS.md` G13
 (aa17b1d2) and `SHELL-LEAKS.md`. The old audits were not trusted: every row below was measured on this tree.
 
 ## 1. How it was measured

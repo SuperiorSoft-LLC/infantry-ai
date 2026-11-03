@@ -5,7 +5,7 @@ import kotlinx.serialization.Serializable
 /*
  * MVP Sprint-Zero (slice 0 freeze): the STORY + STATUS wire types -- the minimal scrum board.
  *
- * IMPLEMENTED BY: MVP slice B (branch `"feature-agenthq"-mvp-board`, worktree ticket d273f528).
+ * IMPLEMENTED BY: MVP slice B (branch `feature-agenthq-mvp-board`, worktree ticket d273f528).
  * This file is the frozen SEAM only: it names the types and carries NO behaviour. Slice B builds
  * that half behind these names; slice A builds its half without talking to B. Neither may rename
  * or reshape a type here: the RED tests of slice 0 pin them.

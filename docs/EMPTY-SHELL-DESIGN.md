@@ -2,7 +2,7 @@
 
 **Revision 5** (RUNTIME-26 / F10, 2026-10-28). Rev 4: ticket d78395b1. Revisions 1-3: ticket 73b920ff (rev 3 = c6f23fa5).
 Revs 1-4 were design only; rev 5 records what the RUNTIME-6..26 extraction built (see "Rev 5: the extraction is done").
-Base: `"feature-agenthq"-mvp` @ 758149a5, after 4dc8b33f.
+Base: `feature-agenthq-mvp` @ 758149a5, after 4dc8b33f.
 
 **Decisions applied in rev 4:**
 - **D3** (owner, 2026-10-28): "official" = plugins made by the app's own developer/company. They are NOT required and
