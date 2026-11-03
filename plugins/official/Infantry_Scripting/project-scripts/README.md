@@ -6,7 +6,9 @@ When a ticket enters `done`: asks the version-control role to merge the branch t
 Install on a project:
 
     mkdir -p <project>/.infantry/scripts && cp on-ticket-done.lua <project>/.infantry/scripts/
-    infantry script hook add "lane enter done" on-ticket-done --payload '{"devBranch":"<dev branch>","vcRole":"<vc role id>","skipMarkers":["[HOLD]","[PARKED]"]}'
+    infantry script hook add "lane enter done" on-ticket-done --payload '{"devBranch":"<dev branch>","vcRole":"<vc role id>","skipMarkers":["[HOLD]","[PARKED]","[Q:"]}'
+
+Per-agent queue: `"[Q:"` in `skipMarkers` keeps a ticket queued to an agent from being picked as the next todo ticket (use the same marker in `worker-watch`). When the done payload carries `agentQueueNext`, the script starts no todo ticket at all: the board starts that agent's queue head when the worker exits, and the comment says so. The worker close still runs.
 
 Try it first: `infantry_script_run` name `on-ticket-done`, dryRun true, args `{"ticketId":"<id>","branch":"<b>","tipSha":"<sha>","devBranch":"..","vcRole":".."}`.
 
