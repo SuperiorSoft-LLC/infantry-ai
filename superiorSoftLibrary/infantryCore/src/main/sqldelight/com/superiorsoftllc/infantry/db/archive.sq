@@ -31,6 +31,8 @@ CREATE TABLE IF NOT EXISTS archived_tickets (
     weight INTEGER,
     context_limit INTEGER,
     effort TEXT,
+    queued_agent TEXT,
+    queue_rank INTEGER,
     archived_at INTEGER NOT NULL,
     epic_json TEXT,
     project_json TEXT
@@ -49,8 +51,8 @@ CREATE TABLE IF NOT EXISTS archived_ticket_links (
 CREATE INDEX IF NOT EXISTS index_archived_ticket_links_on_related ON archived_ticket_links(related_id);
 
 archive:
-INSERT OR REPLACE INTO archived_tickets(id, title, description, ticket_type, status, position, wont_fix, created_at, updated_at, agent_id, provider, model, use_worktree, worktree_branch, include_linked_tasks_context, queued_for, queued_at, session_id, project_id, epic_id, branch_name, base_commit, skill_ids, skills_mode, include_skills_context, started_by, images, weight, context_limit, effort, archived_at, epic_json, project_json)
-SELECT id, title, description, ticket_type, status, position, wont_fix, created_at, updated_at, agent_id, provider, model, use_worktree, worktree_branch, include_linked_tasks_context, queued_for, queued_at, session_id, project_id, epic_id, branch_name, base_commit, skill_ids, skills_mode, include_skills_context, started_by, images, weight, context_limit, effort, :archived_at, :epic_json, :project_json FROM tickets WHERE id = :id;
+INSERT OR REPLACE INTO archived_tickets(id, title, description, ticket_type, status, position, wont_fix, created_at, updated_at, agent_id, provider, model, use_worktree, worktree_branch, include_linked_tasks_context, queued_for, queued_at, session_id, project_id, epic_id, branch_name, base_commit, skill_ids, skills_mode, include_skills_context, started_by, images, weight, context_limit, effort, queued_agent, queue_rank, archived_at, epic_json, project_json)
+SELECT id, title, description, ticket_type, status, position, wont_fix, created_at, updated_at, agent_id, provider, model, use_worktree, worktree_branch, include_linked_tasks_context, queued_for, queued_at, session_id, project_id, epic_id, branch_name, base_commit, skill_ids, skills_mode, include_skills_context, started_by, images, weight, context_limit, effort, queued_agent, queue_rank, :archived_at, :epic_json, :project_json FROM tickets WHERE id = :id;
 
 archiveLinks:
 INSERT OR REPLACE INTO archived_ticket_links(ticket_id, related_id, type, created_at)
@@ -62,8 +64,8 @@ UPDATE tickets SET position = position + 1 WHERE status = (SELECT status FROM ar
   AND position >= MIN((SELECT position FROM archived_tickets WHERE id = :id), (SELECT COUNT(*) FROM tickets t WHERE t.status = (SELECT status FROM archived_tickets WHERE id = :id)));
 
 restore:
-INSERT OR REPLACE INTO tickets(id, title, description, ticket_type, status, position, wont_fix, created_at, updated_at, agent_id, provider, model, use_worktree, worktree_branch, include_linked_tasks_context, queued_for, queued_at, session_id, project_id, epic_id, branch_name, base_commit, skill_ids, skills_mode, include_skills_context, started_by, images, weight, context_limit, effort)
-SELECT id, title, description, ticket_type, status, MIN(position, (SELECT COUNT(*) FROM tickets t WHERE t.status = archived_tickets.status)), wont_fix, created_at, updated_at, agent_id, provider, model, use_worktree, worktree_branch, include_linked_tasks_context, queued_for, queued_at, session_id, project_id, epic_id, branch_name, base_commit, skill_ids, skills_mode, include_skills_context, started_by, images, weight, context_limit, effort
+INSERT OR REPLACE INTO tickets(id, title, description, ticket_type, status, position, wont_fix, created_at, updated_at, agent_id, provider, model, use_worktree, worktree_branch, include_linked_tasks_context, queued_for, queued_at, session_id, project_id, epic_id, branch_name, base_commit, skill_ids, skills_mode, include_skills_context, started_by, images, weight, context_limit, effort, queued_agent, queue_rank)
+SELECT id, title, description, ticket_type, status, MIN(position, (SELECT COUNT(*) FROM tickets t WHERE t.status = archived_tickets.status)), wont_fix, created_at, updated_at, agent_id, provider, model, use_worktree, worktree_branch, include_linked_tasks_context, queued_for, queued_at, session_id, project_id, epic_id, branch_name, base_commit, skill_ids, skills_mode, include_skills_context, started_by, images, weight, context_limit, effort, queued_agent, queue_rank
 FROM archived_tickets WHERE id = :id;
 
 -- Only links whose other end is live again (the live table has foreign keys).

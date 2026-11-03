@@ -14,6 +14,8 @@ import com.superiorsoftllc.infantry.protocol.TicketLinkRequest
 import com.superiorsoftllc.infantry.protocol.TicketListQuery
 import com.superiorsoftllc.infantry.protocol.TicketMove
 import com.superiorsoftllc.infantry.protocol.TicketUnassign
+import com.superiorsoftllc.infantry.protocol.AgentQueueRequest
+import com.superiorsoftllc.infantry.protocol.AgentQueueState
 import com.superiorsoftllc.infantry.protocol.TicketReorder
 import com.superiorsoftllc.infantry.protocol.TicketSave
 import kotlinx.serialization.builtins.ListSerializer
@@ -76,6 +78,13 @@ fun registerBoardFrames(
         boardRequest(e.type) {
             val req = TicketUnassign.decode(e.data)
             board.unassign(req.id, req.now, req.note).reply(direct)
+        }
+    }
+    reg(Envelope.AGENT_QUEUE) { e, _ ->
+        boardRequest(e.type) {
+            val req = AgentQueueRequest.decode(e.data)
+            val state = board.queue(req.agentId, req.action, req.ticketId, req.at)
+            Envelope(Envelope.AGENT_QUEUE, kotlinx.serialization.json.Json.encodeToString(AgentQueueState.serializer(), state))
         }
     }
     reg(Envelope.TICKET_LINK) { e, direct -> boardRequest(e.type) { board.link(TicketLinkRequest.decode(e.data, e.type)).reply(direct) } }

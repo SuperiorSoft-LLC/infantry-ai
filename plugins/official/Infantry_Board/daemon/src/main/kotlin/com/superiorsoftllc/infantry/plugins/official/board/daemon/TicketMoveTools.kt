@@ -205,3 +205,59 @@ class TicketUnassignTool(private val api: DaemonApi) : DaemonTool {
         private const val TICKET = "ticket"
     }
 }
+
+/**
+ * AGENT-TASKS-3: `infantry_agent_queue`, one agent's persistent ticket queue (list, add, remove, move, clear). Over the `agent_queue`
+ * frame. The queue never starts anything itself: the agent's worker ending does.
+ */
+class AgentQueueTool(private val api: DaemonApi) : DaemonTool {
+    override val name = QUEUE
+    override val description =
+        "List or change ONE agent's persistent ticket queue. action list (default), add (ticketId, optional at = 1-based place), " +
+            "remove (ticketId), move (ticketId, at) or clear. agentId is a profile id or a unique agent name. Only todo tickets can be " +
+            "queued, a ticket is in one queue, and a queue holds at most limits.agentTasks.queueMax tickets. When the agent's worker " +
+            "ends, the lowest-place ticket starts on that agent; `startNext` never picks a queued ticket. " +
+            "Same as `infantry agent queue <agent> [add <id> [--at n] | rm <id> | mv <id> <n> | clear]`."
+    override val inputSchema = buildJsonObject {
+        put("type", "object")
+        put("properties", buildJsonObject {
+            put("agentId", ToolArgs.prop("Agent profile id, or its unique name."))
+            put("action", ToolArgs.prop("list (default), add, remove, move or clear."))
+            put("ticketId", ToolArgs.prop("Full ticket id, or its 8-char suffix (add, remove, move)."))
+            put("at", ToolArgs.prop("1-based place in the queue (add: default the end; move: required)."))
+            put("verbose", ToolArgs.verboseProp())
+        })
+        put("required", buildJsonArray { add(JsonPrimitive("agentId")) })
+        put("additionalProperties", false)
+    }
+    override val annotations = ToolArgs.annotations(readOnly = false)
+
+    override fun call(call: ToolCall): ToolResult {
+        val args = call.arguments
+        val agent = ToolArgs.string(args, "agentId") ?: return refused("$QUEUE needs an agentId")
+        val action = ToolArgs.string(args, "action") ?: "list"
+        val at = ToolArgs.string(args, "at")?.let { it.toIntOrNull() ?: return refused("$QUEUE: at must be a whole number") }
+        val ticketId = ToolArgs.string(args, "ticketId")?.let { requested ->
+            WireTickets.find(api, call, requested).getOrElse { return refused("$QUEUE refused: ${it.message ?: "no ticket '$requested'"}") }.id
+        }
+        val body = buildJsonObject {
+            put("agentId", agent)
+            put("action", action)
+            ticketId?.let { put("ticketId", it) }
+            at?.let { put("at", it) }
+        }
+        val answer = WireTickets.request(call, AGENT_QUEUE, json.encodeToString(JsonObject.serializer(), body), AGENT_QUEUE)
+            .getOrElse { return refused("$QUEUE refused: ${it.message}") }
+        val state = runCatching { com.superiorsoftllc.infantry.protocol.AgentQueueState.decode(answer.data) }
+            .getOrElse { return refused("$QUEUE: malformed answer from the daemon: ${it.message}") }
+        val label = state.name ?: state.agentId
+        val lines = state.tickets.joinToString("\n") { "#${it.rank} ${WireTickets.shortId(it.ticketId)} ${it.title}" }
+        val head = "queue of $label: ${state.tickets.size} ticket(s)" + (state.message?.let { " ($it)" } ?: "")
+        return ToolResult(if (lines.isEmpty()) head else "$head\n$lines")
+    }
+
+    companion object {
+        const val QUEUE = "infantry_agent_queue"
+        private const val AGENT_QUEUE = "agent_queue"
+    }
+}

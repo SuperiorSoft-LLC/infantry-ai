@@ -114,6 +114,10 @@ data class TicketInfo(
     /** AGENT-TASKS-2: the tip and commits-ahead of a todo ticket's kept work (null = none). */
     val workTip: String? = null,
     val workAhead: Int? = null,
+    /** AGENT-TASKS-3: the agent profile whose queue holds this todo ticket, its name and the 1-based place (null = not queued). */
+    val queuedAgent: String? = null,
+    val queuedAgentName: String? = null,
+    val queueRank: Int? = null,
 )
 
 /** A new ticket. [description] is kept verbatim. [clientKey] makes the create idempotent. */

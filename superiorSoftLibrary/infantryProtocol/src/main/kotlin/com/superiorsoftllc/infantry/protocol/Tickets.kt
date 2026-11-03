@@ -185,6 +185,11 @@ data class Ticket(
     val includeLinkedTasksContext: Boolean? = null,
     val queuedFor: String? = null,
     val queuedAt: Long? = null,
+    /** AGENT-TASKS-3 (additive): the agent profile whose persistent queue holds this todo ticket, and its place (lowest first). */
+    val queuedAgent: String? = null,
+    val queueRank: Int? = null,
+    /** The queue agent's name (display only). */
+    val queuedAgentName: String? = null,
     val sessionId: String? = null,
     /** AGENT-TASKS-2 (additive, derived, never stored): a todo ticket whose recorded branch is ahead of its base. */
     val hasWork: HasWork? = null,
@@ -487,6 +492,26 @@ data class TicketMove(
 data class TicketUnassign(val id: String, val now: Boolean = false, val note: String? = null) {
     companion object {
         fun decode(text: String): TicketUnassign = StrictJson.decode(serializer(), text, "ticket_unassign payload")
+    }
+}
+
+/** `agent_queue` (AGENT-TASKS-3): [agentId] is a profile id or a unique name; [action] is list|add|remove|move|clear; [at] a 1-based place. */
+@Serializable
+data class AgentQueueRequest(val agentId: String, val action: String = "list", val ticketId: String? = null, val at: Int? = null) {
+    companion object {
+        fun decode(text: String): AgentQueueRequest = StrictJson.decode(serializer(), text, "agent_queue payload")
+    }
+}
+
+/** One queued ticket: its full id, title and 1-based place. */
+@Serializable
+data class AgentQueueEntry(val ticketId: String, val title: String, val rank: Int)
+
+/** The answer to `agent_queue`: the agent's queue after the action, head first. */
+@Serializable
+data class AgentQueueState(val agentId: String, val name: String? = null, val tickets: List<AgentQueueEntry> = emptyList(), val message: String? = null) {
+    companion object {
+        fun decode(text: String): AgentQueueState = StrictJson.decode(serializer(), text, "agent_queue answer")
     }
 }
 

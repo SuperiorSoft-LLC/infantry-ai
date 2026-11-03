@@ -447,6 +447,8 @@ data class Envelope(
         const val TICKET_MOVE = "ticket_move"
         /** AGENT-TASKS-2: an in_progress ticket goes back to todo, its work kept; see [TicketUnassign]. */
         const val TICKET_UNASSIGN = "ticket_unassign"
+        /** AGENT-TASKS-3: an agent's persistent ticket queue; see [AgentQueueRequest], answered with an [AgentQueueState]. */
+        const val AGENT_QUEUE = "agent_queue"
         const val TICKET_LINK = "ticket_link"
         const val TICKET_UNLINK = "ticket_unlink"
         const val TICKET_REORDER = "ticket_reorder"

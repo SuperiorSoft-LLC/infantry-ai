@@ -1,0 +1,11 @@
+-- AGENT-TASKS-3 (ticket ace812e8) -- migration v57 -> v58: the persistent per-agent ticket queue (docs/AGENT-TASKS-DESIGN.md 2.4).
+-- queued_agent = the agent profile id whose queue holds this todo ticket; queue_rank = its place there (lowest first). Both
+-- nullable: every existing ticket is in no queue. Distinct from the volatile capacity mark queued_for/queued_at, which boot clears.
+-- The columns are exactly tickets.sq's and archive.sq's.
+--
+-- NEXT MIGRATION: 58.sqm
+
+ALTER TABLE tickets ADD COLUMN queued_agent TEXT;
+ALTER TABLE tickets ADD COLUMN queue_rank INTEGER;
+ALTER TABLE archived_tickets ADD COLUMN queued_agent TEXT;
+ALTER TABLE archived_tickets ADD COLUMN queue_rank INTEGER;

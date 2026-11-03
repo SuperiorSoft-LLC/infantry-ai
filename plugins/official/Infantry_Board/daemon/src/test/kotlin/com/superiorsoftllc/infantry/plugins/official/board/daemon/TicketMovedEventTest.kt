@@ -24,6 +24,12 @@ class TicketMovedEventTest {
         assertEquals("7", o["seq"]!!.jsonPrimitive.content)
     }
 
+    @Test fun doneEventCarriesTheAgentQueueHeadOnlyWhenThereIsOne() {
+        val e = TicketEvent(seq = 8, ticketId = "ticket-abc", kind = TicketEvent.DONE, from = "in_progress", to = "done")
+        assertEquals("ticket-next", Json.parseToJsonElement(TicketMovedEvent.payload(e, "ticket-next")).jsonObject["agentQueueNext"]!!.jsonPrimitive.content)
+        assertFalse(Json.parseToJsonElement(TicketMovedEvent.payload(e)).jsonObject.containsKey("agentQueueNext"))
+    }
+
     @Test fun createdEventHasNoFromAndUpdatesAreNotTransitions() {
         val created = TicketEvent(seq = 1, ticketId = "t", kind = TicketEvent.CREATED, to = "todo")
         assertFalse(Json.parseToJsonElement(TicketMovedEvent.payload(created)).jsonObject.containsKey("from"))

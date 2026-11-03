@@ -141,9 +141,12 @@ fun TicketBoard(
     /** AGENT-TASKS-2: `tickets.agentTasks.handoffNote` and `limits.agentTasks.unassignWaitSeconds`. */
     handoffMode: () -> String = { "auto" },
     unassignWaitSeconds: () -> Long = { 120 },
+    /** AGENT-TASKS-3: `limits.agentTasks.queueMax` and `tickets.agentTasks.closeDoneWorkerWhenQueued`. */
+    queueMax: () -> Long = { 5 },
+    closeDoneWorkerWhenQueued: () -> Boolean = { true },
 ): TicketBoard = TicketBoard(
         host = LocalBoardHost(store, { sessions }, branches, baseRef, projectDirectory, repo, { null }, clock, agents, knowledge, skills, images),
-        clock = clock, idFactory = idFactory, context = context, profilesAvailable = agents != null, roleIds = roleIds, exitBehavior = exitBehavior, autoDoneMinOutputs = autoDoneMinOutputs, weightExecutors = weightExecutors, weightContext = weightContext, laneCap = laneCap, routingRules = routingRules, routingRefused = routingRefused, pacing = pacing, relatedDescription = relatedDescription, handoffMode = handoffMode, unassignWaitSeconds = unassignWaitSeconds,
+        clock = clock, idFactory = idFactory, context = context, profilesAvailable = agents != null, roleIds = roleIds, exitBehavior = exitBehavior, autoDoneMinOutputs = autoDoneMinOutputs, weightExecutors = weightExecutors, weightContext = weightContext, laneCap = laneCap, routingRules = routingRules, routingRefused = routingRefused, pacing = pacing, relatedDescription = relatedDescription, handoffMode = handoffMode, unassignWaitSeconds = unassignWaitSeconds, queueMax = queueMax, closeDoneWorkerWhenQueued = closeDoneWorkerWhenQueued,
         unknownSkills = { ids -> store.transaction { ids.filter { store.skills.get(it) == null } } },
 )
 
