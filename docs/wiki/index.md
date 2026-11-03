@@ -43,6 +43,7 @@ Every page of this wiki is listed here, one line each. The pages are written fro
 ## Project
 
 - [Licensing (draft)](licensing.md): why the core is MPL-2.0 and everything else Apache-2.0.
+- [Compatibility and deprecation policy (draft)](compatibility.md): what backward compatible means, support period, notice.
 - [CONTRIBUTING](https://github.com/SuperiorSoft-LLC/infantry-ai/blob/main/CONTRIBUTING.md): how to contribute.
 - [AGENTS.md](https://github.com/SuperiorSoft-LLC/infantry-ai/blob/main/AGENTS.md): the guide for AI coding agents.
 - [llms.txt](https://github.com/SuperiorSoft-LLC/infantry-ai/blob/main/llms.txt): the same map in the llms.txt format.

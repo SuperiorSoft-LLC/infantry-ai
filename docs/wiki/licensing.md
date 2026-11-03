@@ -106,8 +106,8 @@ surface has a version that the code checks.
 
 Gaps in the promise, stated plainly:
 
-- **No written deprecation policy.** Nothing says how long an old `apiVersion` or API version keeps loading, or how
-  much notice a breaking change gets.
+- **Deprecation policy is a draft.** See [Compatibility and deprecation policy](compatibility.md) for how long an old
+  API version keeps loading and how much notice a breaking change gets.
 - **The UI plugin API is exact-match.** A module with a different `apiVersion` is refused; there is no range today.
 - **Protocol contract text.** The code comments point to `CONTRACT.md`, which is not in the repository paths checked
   for this page; the version number in code is the contract's only recorded form here.
@@ -119,14 +119,15 @@ Gaps in the promise, stated plainly:
 "Infantry AI", the logo and the emblem are trademarks of SuperiorSoft LLC. **They are not under MPL-2.0 or Apache-2.0**,
 and neither license grants any right to them (Apache section 6, MPL section 2.3). The map's outline: factual references
 ("a plugin for Infantry AI") are fine; a modified build, a hosted service or a fork using the name or logo needs
-permission, and forks rename. No written trademark policy exists yet.
+permission, and forks rename. The draft policy is [TRADEMARK.md](../legal/TRADEMARK.md).
 
 ## 6. Contributions need a CLA
 
 The map recommends a **CLA** (Apache-style, with an explicit right to relicense) over a DCO, because a file may later
 move between MPL and Apache (for example when a feature leaves the daemon and becomes a plugin). Without a CLA, an
-outside contributor's file stays under the license it came in with and cannot be moved. Until a CLA exists,
-`CONTRIBUTING.md` refuses outside code.
+outside contributor's file stays under the license it came in with and cannot be moved. The draft text is
+[CLA.md](../legal/CLA.md) (individual and corporate), with a disabled bot config in `.github/cla.json`. Until it is
+official, `CONTRIBUTING.md` refuses outside code.
 
 ## 7. Open items before this takes effect
 
@@ -138,11 +139,11 @@ From the map (sections 5, 6, 7):
    `infantryBoard`; the wording for the desktop installer and Docker image as combined works; the MPL header text;
    `pty4j` (EPL-1.0) against MPL; `jlayer`, ML Kit, JDK and Docker base obligations; the effect of the Apache patent
    clause on a hosted orchestrator.
-3. **CLA text** and a bot to enforce it.
+3. **CLA text** (draft: [CLA.md](../legal/CLA.md)) and a bot to enforce it (config only, not enabled).
 4. **Notices** (DRAFT done in LICENSE-NOTICES-2): `NOTICE`, `THIRD-PARTY-NOTICES.md`, task `./gradlew generateSbom`. Open: jlayer replacement, mp3 provenance. Original list: sqlite-jdbc, slf4j, Noto font, js-joda, zxing, jlayer, ML Kit,
    Compose/Skiko, JDK), generated from an SBOM.
 5. **Replace or document** `jlayer` and the sound file of unknown origin.
-6. **Trademark policy** and a name search/registration.
+6. **Trademark policy** (draft: [TRADEMARK.md](../legal/TRADEMARK.md)) and a name search/registration.
 7. **Site wording** (map 6D): the core is MPL-2.0; the SDKs, official plugins, examples and demo are Apache-2.0;
    features still in the daemon are MPL until they move; the name and logo are trademarks; the hosted service is not
    open source.
