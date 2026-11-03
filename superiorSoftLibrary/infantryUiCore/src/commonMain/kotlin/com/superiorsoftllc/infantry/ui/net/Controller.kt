@@ -29,6 +29,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 import com.superiorsoftllc.infantry.ui.model.isBusy
 import com.superiorsoftllc.infantry.ui.model.SWITCH_WAIT_FOR_TURN
+import com.superiorsoftllc.infantry.ui.model.queueDrainTargets
+import com.superiorsoftllc.infantry.ui.model.queuedTurnText
 import com.superiorsoftllc.infantry.ui.model.queuedFor
 import com.superiorsoftllc.infantry.ui.model.withQueue
 import com.superiorsoftllc.infantry.ui.model.contractAtLeast
@@ -843,6 +845,17 @@ class Controller(
     suspend fun prompt(sessionId: String, text: String): CommandResult {
         if (text.isBlank()) return report(CommandResult.Refused("nothing to send"))
         _state.value.agents[sessionId]?.let { a -> promptBlocker(a)?.let { return report(CommandResult.Refused(it)) } }
+        // QUEUE-STUCK-1: a send while the agent is at rest and messages are still queued delivers the whole queue,
+        // in order, ahead of the new text, as one turn.
+        val held = _state.value.queuedFor(sessionId)
+        if (held.isNotEmpty() && !isSlashCommand(text)) {
+            _state.update { it.withQueue(sessionId, emptyList()) }
+            val all = queuedTurnText(held, text)
+            val r = send(Envelope(Envelope.PROMPT, all, sessionId))
+            if (r is CommandResult.Sent) echo(sessionId, all)
+            else _state.update { it.withQueue(sessionId, held + it.queuedFor(sessionId)) }
+            return report(r)
+        }
         val r = send(Envelope(Envelope.PROMPT, text, sessionId))
         // A leading "/" is a command, never a prompt (CP-4): the daemon answers it with a result or an error, so it is
         // not echoed into the chat as something the user said to the agent.
@@ -934,14 +947,9 @@ class Controller(
     private var queueSends = 0
 
     private suspend fun sendQueuedAtRest(before: AppState, after: AppState) {
-        for (sessionId in after.queued.keys) {
-            val agent = after.agents[sessionId] ?: continue
-            val wasRunning = before.agents[sessionId]?.let { isBusy(it) } ?: false
-            if (!wasRunning || isBusy(agent) || agent.session.state != SessionState.IDLE) continue
-            if (promptBlocker(agent) != null) continue
-            val requestId = if (contractAtLeast(after.connection.contract, RunInFlight.SINCE_MAJOR, RunInFlight.SINCE_MINOR)) {
-                "queue-${++queueSends}"
-            } else null
+        val tracks = contractAtLeast(after.connection.contract, RunInFlight.SINCE_MAJOR, RunInFlight.SINCE_MINOR)
+        for (sessionId in queueDrainTargets(before, after, tracks)) {
+            val requestId = if (tracks) "queue-${++queueSends}" else null
             var head: QueuedPrompt? = null
             _state.update { s ->
                 val items = s.queuedFor(sessionId)
