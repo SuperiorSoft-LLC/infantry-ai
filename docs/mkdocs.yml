@@ -1,0 +1,40 @@
+site_name: Infantry AI
+docs_dir: wiki
+strict: true
+use_directory_urls: false
+theme:
+  name: material
+  features: [navigation.sections, navigation.top, search.suggest, search.highlight, content.code.copy]
+  palette:
+    - scheme: default
+      toggle: {icon: material/weather-night, name: Dark mode}
+    - scheme: slate
+      toggle: {icon: material/weather-sunny, name: Light mode}
+repo_url: ""
+edit_uri: ""
+validation:
+  omitted_files: warn
+  absolute_links: warn
+  unrecognized_links: warn
+markdown_extensions:
+  - admonition
+  - tables
+  - toc: {permalink: true}
+  - pymdownx.details
+  - pymdownx.highlight: {anchor_linenums: true}
+  - pymdownx.inlinehilite
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+nav:
+  - Home: Home.md
+  - Architecture: Architecture.md
+  - Getting started: Plugins.md
+  - Make a plugin: make-a-plugin.md
+  - Plugin API: plugin-api.md
+  - Daemon plugin API: daemon-plugin-api.md
+  - Scripting and hooks: Scripting.md
+  - Harnesses and providers: Harnesses.md
+  - Settings: Settings.md
