@@ -202,6 +202,7 @@ class Controller(
                 answerImageUpload(env)
                 answerPluginSecret(env)
                 answerPluginTool(env)
+                views.onFrame(env)
                 answerSpawnCatalog(env)
                 if (env.type == Envelope.SPOKEN) {
                     runCatching { json.decodeFromString(com.superiorsoftllc.infantry.ui.voice.SpokenNotice.serializer(), env.data) }
@@ -286,6 +287,7 @@ class Controller(
         }
         scope.launch {
             client.opened.collect {
+                views.reopen()
                 // Resync everything the daemon does not replay on its own after (re)connect.
                 client.send(Envelope(Envelope.MAIL_WAITING))
                 // The Role picker / Role detail data and the attention history (contracts 1.12.0, 1.4.0, 1.3.0, 1.9.0).
@@ -785,12 +787,12 @@ class Controller(
      * TICKET-COMMENTS-3: one call of a daemon plugin's tool (`plugin_tool_call`, contract 1.144.0), answered by `plugin_tool_result`
      * matched by request id. Success = the tool's text; failure = its refusal / error text or why nothing was sent.
      */
-    suspend fun pluginTool(name: String, arguments: kotlinx.serialization.json.JsonObject): Result<String> {
+    suspend fun pluginTool(name: String, arguments: kotlinx.serialization.json.JsonObject, origin: kotlinx.serialization.json.JsonObject? = null): Result<String> {
         val requestId = "plugin-tool-${++pluginToolRequests}"
         val answer = CompletableDeferred<Envelope>()
         pendingPluginTools[requestId] = answer
         try {
-            val body = kotlinx.serialization.json.buildJsonObject { put("name", name); put("arguments", arguments) }
+            val body = kotlinx.serialization.json.buildJsonObject { put("name", name); put("arguments", arguments); origin?.let { put("origin", it) } }
             if (!client.send(Envelope("plugin_tool_call", body.toString(), requestId = requestId))) return Result.failure(IllegalStateException("not connected to the daemon"))
             val env = withTimeoutOrNull(PLUGIN_TOOL_TIMEOUT_MS) { answer.await() } ?: return Result.failure(IllegalStateException("the daemon did not answer $name"))
             if (env.type != "plugin_tool_result") return Result.failure(IllegalStateException(env.data.take(300)))
@@ -805,6 +807,9 @@ class Controller(
             pendingPluginTools.remove(requestId)
         }
     }
+
+    /** DV-2: the views service over the `plugin_view*` frames. */
+    val views: ViewsClient = ViewsClient(send = { client.send(it) }, tool = { n, a, o -> pluginTool(n, a, o) })
 
     private var pluginToolRequests = 0
     private val pendingPluginTools = mutableMapOf<String, CompletableDeferred<Envelope>>()
