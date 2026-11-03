@@ -99,4 +99,34 @@ class PluginFoldersTest {
         assertTrue("Acme_Gone" !in modules)
         assertEquals(listOf("GET /health"), PluginFolders.config(root).demoLock.allowRoutes)
     }
+
+    private fun versionPair(installed: String, bundledVersion: String): List<ModuleCandidate> {
+        val bundled = Files.createTempDirectory("bundled-test").toFile()
+        module("official", "Infantry_V", """{"name":"Infantry_V","version":"$installed"}""")
+        File(bundled, "official/Infantry_V").apply { mkdirs() }.resolve("module.json").writeText("""{"name":"Infantry_V","version":"$bundledVersion"}""")
+        return PluginFolders.scan(root, PluginFolders.config(root), bundled)
+    }
+
+    @Test
+    fun `a higher bundled version wins and the installed copy is shadowed`() {
+        val found = versionPair("1.0.0", "1.1.0")
+        assertEquals(2, found.size)
+        assertTrue(found.first { it.refusal != null }.refusal!!.startsWith("shadowed by "))
+        assertTrue(found.first { it.refusal != null }.refusal!!.endsWith(" 1.1.0"))
+        assertEquals("1.1.0", found.first { it.refusal == null }.manifest!!.version)
+    }
+
+    @Test
+    fun `a higher installed version wins`() {
+        val found = versionPair("1.2.0", "1.1.0")
+        assertEquals("1.2.0", found.first { it.refusal == null }.manifest!!.version)
+        assertTrue(found.first { it.refusal != null }.refusal!!.contains("shadowed by"))
+    }
+
+    @Test
+    fun `equal versions prefer the installed copy`() {
+        val found = versionPair("1.1.0", "1.1.0")
+        val winner = found.first { it.refusal == null }
+        assertTrue(winner.dir!!.startsWith(root.absolutePath))
+    }
 }
