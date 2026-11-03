@@ -107,7 +107,8 @@ class DaemonViewsTest {
         assertEquals("box", a["page"]!!.jsonObject["type"]!!.jsonPrimitive.content)
         assertEquals("hi", a["page"]!!.jsonObject["echo"]!!.jsonPrimitive.content)
         assertEquals("hi", a["params"]!!.jsonObject["q"]!!.jsonPrimitive.content)
-        val b = h.open("main")
+        // DV-1b: rev is a counter per (module, view, params), so it grows for the same params.
+        val b = h.open("main", """{"q":"hi"}""")
         assertTrue(b["rev"]!!.jsonPrimitive.content.toLong() > a["rev"]!!.jsonPrimitive.content.toLong(), "rev only grows")
     }
 
