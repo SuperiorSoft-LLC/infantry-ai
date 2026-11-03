@@ -1880,7 +1880,11 @@ class SessionManager(
             }.also {
                 // H2: the default is "none" when no harness is installed; say what to do instead of failing in a launch.
                 if (it.provider is com.superiorsoftllc.infantry.harness.NoHarnessProvider) {
-                    throw IllegalArgumentException(com.superiorsoftllc.infantry.harness.NoHarnessProvider.NOT_INSTALLED)
+                    throw IllegalArgumentException(
+                        com.superiorsoftllc.infantry.harness.NoHarnessProvider.NOT_INSTALLED +
+                            " (checked: the spawn named no provider, the project routing rules and the role/agent default named none, " +
+                            "and the harness registry holds ${harnesses?.harnessIds().orEmpty().ifEmpty { listOf("no harness") }.joinToString()} that can run)",
+                    )
                 }
             }
         return lookup(wanted) ?: throw IllegalArgumentException(

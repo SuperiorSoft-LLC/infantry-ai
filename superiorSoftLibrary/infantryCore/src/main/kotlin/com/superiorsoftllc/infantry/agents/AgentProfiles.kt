@@ -52,6 +52,8 @@ class AgentProfiles(
     /** ROLE-EDIT-1: a role's instructions (its persona) from the live catalog, null/blank = none. Default = no role has any. */
     private val rolePersona: (String) -> String? = { null },
 ) {
+    /** SPAWN-HARNESS-1: the project routing rule (projectId, role) a ticket start would apply; set by the daemon once projects exist. */
+    @Volatile var spawnRoute: ((projectId: String?, role: String?) -> RoleBinding?)? = null
 
     /**
      * TRAITS-T4 (docs/INFANTRY-ROLE-TRAITS.md section 3): the [RoleInstance] a session spawned NOW for [agentId] and/or
@@ -265,9 +267,15 @@ class AgentProfiles(
                 "agent '${profile?.id}' has role '${profile?.role}', not '$spawnRole'"
             }
         }
-        val spawnProvider = options?.provider?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
-        val spawnModel = options?.model?.trim()?.takeIf { it.isNotEmpty() }
-        val (provider, model, effort) = executorFor(profile, spawnProvider, spawnModel, options?.effort, spawnRole)
+        val askedProvider = options?.provider?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
+        val askedModel = options?.model?.trim()?.takeIf { it.isNotEmpty() }
+        // SPAWN-HARNESS-1: a spawn that names no provider or model is routed like a ticket start: the project's routing rules first.
+        val routed = if (askedProvider == null && askedModel == null) {
+            spawnRoute?.invoke(options?.projectId?.trim()?.takeIf { it.isNotEmpty() } ?: profile?.projectId, profile?.role ?: spawnRole)
+        } else null
+        val spawnProvider = askedProvider ?: routed?.provider
+        val spawnModel = askedModel ?: routed?.model
+        val (provider, model, effort) = executorFor(profile, spawnProvider, spawnModel, options?.effort ?: routed?.effort, spawnRole)
         sessions.checkSpawn(provider, model)
         // CP-3: a profile's project is the session's project. A spawn naming ANOTHER project is refused,
         // so an agent never runs (or gets addressed) inside a project it does not belong to.
