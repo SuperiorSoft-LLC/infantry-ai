@@ -4470,7 +4470,7 @@ internal object Cli {
     /** The whole `--help`, grouped under headings (MAIL-FOOTER-1) so related commands sit together. */
     private fun usageText(): String =
         """
-            Infantry AI CLI - control the Infantry AI daemon (`infantry`; `infantry` is an alias)
+            Infantry AI CLI - control the Infantry AI daemon (`infantry`; `agenthq` is a deprecated alias)
 
             Usage: infantry [connection options] <command> [args...]
 
