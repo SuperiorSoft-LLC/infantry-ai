@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // DEMO-MERGE-1: the demo lock module (docs/DEMO-MERGE.md). A demo-only module like Demo_Banner. It is compiled into the web and Android builds only
 // when -Pdemo=true (infantryAppUi:generateModuleList); the desktop and the production builds never see it. No jar, no signing.
 plugins {

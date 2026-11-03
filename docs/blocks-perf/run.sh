@@ -1,4 +1,6 @@
 #!/bin/bash
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) SuperiorSoft LLC
 # usage: run.sh <worktree> <label> ; 1 discarded warm-up run + 5 measured runs, one at a time
 set -e
 WT=$1; L=$2; OUT=C:/Users/antho/perf-98c61dd1/$L

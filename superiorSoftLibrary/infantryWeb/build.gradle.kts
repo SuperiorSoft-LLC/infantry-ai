@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // WEB-1: the Infantry browser client. infantryUiCore rendered as Kotlin/WASM, talking to a real daemon over its WebSocket
 // (or, offline, to a built-in fake daemon). The daemon serves this bundle at http://host:port/.
 // Single-threaded wasm, so no COOP/COEP headers are needed to host it.

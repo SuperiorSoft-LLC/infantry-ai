@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 /*
  * The path data below is copied from the Material icons of the Android Open Source Project
  * (androidx.compose.material:material-icons-core / material-icons-extended 1.7.3).

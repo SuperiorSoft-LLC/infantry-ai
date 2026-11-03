@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // :superiorSoftLibrary:infantryHeadless -- HEADLESS-1, the headless guard. TEST-ONLY, JVM.
 //
 // The owner's requirement (2026-10-20): the Infantry daemon is a server-side app that runs with no UI, so a phone app,

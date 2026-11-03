@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.ui.model
 
 /** PANEL-TOGGLE-1: the window's two side panels, the agent list on the left and the Changes/Review/... panel on the right. */

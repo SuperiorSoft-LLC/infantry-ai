@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // CHAT-FEED-SPLIT-1: official module Infantry_ChatFeed, the chat feed (rows drawn by kind, the pending question, the Activity box), split out of Infantry_Chat.
 // It fills the chat's `chat.feed` slot and registers today's row renderers like any plugin could. One source for every platform (D9):
 //  - desktop: build/libs/Infantry_ChatFeed.jar, loaded at run time from official/Infantry_ChatFeed (signed as Infantry_Chat's is).

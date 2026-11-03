@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.ui.model
 
 import com.superiorsoftllc.infantry.ui.protocol.GitWorktree

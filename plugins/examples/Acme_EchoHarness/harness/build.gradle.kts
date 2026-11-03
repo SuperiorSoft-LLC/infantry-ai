@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // HARNESS-PLUGIN-3 (docs/HARNESS-PLUGINS.md): the reference harness plugin, compiled against the harness API only (compileOnly:
 // the daemon provides it at run time through HarnessApiClassLoader). `:harness-plugin-examples-Acme_EchoHarness:jar`.
 plugins {

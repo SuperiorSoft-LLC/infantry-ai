@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // HARNESS H8b-3: the opencode harness plugin, compiled against the harness API only (compileOnly: the daemon provides it at run time through
 // HarnessApiClassLoader). `:harness-plugin-official-Infantry_OpenCode:jar`.
 plugins {

@@ -1,4 +1,17 @@
-# LICENSE-MAP: proposed directory-by-directory license split (DRAFT for owner sign-off)
+# LICENSE-MAP: directory-by-directory license split (APPLIED as a DRAFT)
+
+> **DRAFT: applied, not official until the public launch.** The owner decided on 2026-11-03 (ticket 67e0d704, LICENSE-APPLY-1;
+> memory `license-infantryplugins-apache`) and will review once everything is live. The rule: **MPL-2.0 is the abstraction layer**
+> (the generic engine everything plugs into): `infantryProtocol`, `infantryCore`, `infantryRunner`, `infantry`, and the reserved
+> empty `plugins/core/`. **Apache-2.0 is everything concrete on top**: `infantryPlugins` (the whole module, `plugin.api` AND
+> `plugin.host`), `infantryBoard`, `infantryDaemonApi`, `infantryHarnessApi`, `infantryUiCore`, `infantryAppUi`, the apps, `samples/`,
+> all of `plugins/`, `docs/`, `docker/`, `scripts/`, `gradle/`, `.github/` and the root build files. Neither license: logo, emblem
+> and name (trademark). **Applied in the repo:** full texts in `LICENSES/`, a `LICENSE` in each MPL module and each Apache top
+> directory, an SPDX header on every `.kt .kts .sh .ps1 .mjs` file (`scripts/license-headers.sh`, rule in
+> `scripts/license-paths.txt`), and `LicenseMapGuardTest`. Where this banner and a table row below disagree, **the banner wins**
+> (rows S1, S3, S13, S15 and the MPL/interim marks are the older proposal). Owner reasons: `infantryPlugins` is one module and the
+> plugin host is what plugin authors build against, so it is Apache whole; the protocol is part of the abstraction layer, so MPL
+> (an Apache SDK may use unmodified MPL files, S13 is accepted); `infantryBoard` is a concrete feature, so Apache and not interim.
 
 Ticket 28145912 (LICENSE-PREP-1), updated by ticket 835d76fe (LICENSE-PREP-2, 2026-11-02) for the module layout after CORE-SPLIT-4b (c682d8a5) and DAEMON-CORE-2 (46483d24). **Docs only.** No LICENSE file, SPDX header or NOTICE is added by this ticket; the root
 `LICENSE` is still the "[PLACEHOLDER] LICENSE NOT YET CHOSEN" text. Nothing below takes effect until the owner signs off the
@@ -43,7 +56,7 @@ core and "stays/plugin-later" feature packages (section 3, S1). Everything else 
 | `superiorSoftLibrary/infantryRunner` | **MPL-2.0** | process runner, PTY, watch shims, tool profiles | leaf: no `project(...)` line; external deps kotlinx-serialization, JNA, pty4j (EPL-1.0, S10) |
 | `superiorSoftLibrary/infantryCore` | **MPL-2.0** | the daemon core extracted by CORE-SPLIT-4b (150 main files: `agents db harness mailbox mvp persistence policy prompts provider session settings stats usage worktree`...) | `build.gradle.kts` 27-32: `api(project(...))` on `infantryPlugins`, `infantryDaemonApi`, `infantryHarnessApi`, `infantryProtocol`, `infantryRunner`, `infantryBoard`. MPL -> Apache SDK edges (allowed); no `:plugins:*`, no `daemon-plugin-*`, no `harness-plugin-*`. No `infantry.plugins.`/`com.acme.` identifier in its sources |
 | `superiorSoftLibrary/infantry` | **MPL-2.0** (the rest of the daemon: 155 main files in `archive backlog cli client daemon epics experiments notify orchestration testrun ticketfiles tokens triggers update`; DaemonMain, plugin host, CLI, HTTP shell) | still holds feature packages (S1) | lines 56-66: `implementation` `infantryPlugins`, `infantryDaemonApi`, `infantryHarnessApi`; `api` `infantryCore`, `infantryBoard`, `infantryProtocol`, `infantryRunner`. Lines 111-115: **test-only** `daemon-plugin-official-Infantry_Roles`, `harness-plugin-official-Infantry_Claude|OpenCode` (not shipped). Line 472 reads `infantryWeb`'s build dir (bundle bytes, no code edge). No `Demo_*`; the only `Infantry_*` text in main sources is strings and comments (`AgentDefCli`, `TicketCommentCli`, `UsageCli` messages, `CoreHarnessContributions` id as data, `DaemonPluginHost.kt:445` id compare) |
-| `superiorSoftLibrary/infantryBoard` | **MPL-2.0 (interim)** | the ticket board (`TicketBoard.kt`, frames, snapshots) split out of `infantry`; the Board plugin's daemon half fronts it. Product feature, so S1 material (S15) | lines 15-16: `api` `infantryDaemonApi`, `infantryProtocol`; nothing else |
+| `superiorSoftLibrary/infantryBoard` | **Apache-2.0** (decided 2026-11-03, not interim) | the ticket board (`TicketBoard.kt`, frames, snapshots) split out of `infantry`; the Board plugin's daemon half fronts it. Product feature, so S1 material (S15) | lines 15-16: `api` `infantryDaemonApi`, `infantryProtocol`; nothing else |
 | `superiorSoftLibrary/infantryHarnessApi` | **Apache-2.0** | the ONE surface a harness plugin compiles against | leaf, header comment forbids any project dependency; no `project(...)` line. Clean |
 | `superiorSoftLibrary/infantry/headless/` | Apache-2.0 | launcher scripts (`infantry`, `.cmd`, `infantry-server.*`); trivial, users edit them | n/a |
 | `superiorSoftLibrary/infantry/preflight/` | Apache-2.0 | branch verification build script | n/a |
@@ -64,8 +77,8 @@ Every Gradle module (from `settings.gradle.kts`) and its proposed license:
 
 | Gradle module(s) | license |
 |---|---|
-| `:superiorSoftLibrary:infantryProtocol`, `:infantryRunner`, `:infantryCore`, `:infantry`, `:infantryBoard` (interim) | MPL-2.0 |
-| `:superiorSoftLibrary:infantryDaemonApi`, `:infantryHarnessApi`, `:infantryPlugins`, `:infantryUiCore`, `:infantryAppUi`, `:infantryUi`, `:infantryWeb`, `:infantryAndroid`, `:infantryHeadless`, `:samples:markdownEnginePlugin` | Apache-2.0 |
+| `:superiorSoftLibrary:infantryProtocol`, `:infantryRunner`, `:infantryCore`, `:infantry` | MPL-2.0 |
+| `:superiorSoftLibrary:infantryDaemonApi`, `:infantryBoard`, `:infantryHarnessApi`, `:infantryPlugins`, `:infantryUiCore`, `:infantryAppUi`, `:infantryUi`, `:infantryWeb`, `:infantryAndroid`, `:infantryHeadless`, `:samples:markdownEnginePlugin` | Apache-2.0 |
 | `:plugins:official:Infantry_*` (27) and `:daemon-plugin-official-*` (Board, Processes, Usage) | Apache-2.0 |
 | `:plugins:community:Acme_*`, `:plugins:demo:Demo_Banner|Demo_Lock`, `:daemon-plugin-demo-Demo_Lock`, `:daemon-plugin-examples-*`, `:harness-plugin-*` | Apache-2.0 |
 | `:plugins:_template`, `:daemon-plugin-_template` | Apache-2.0 |
@@ -77,7 +90,7 @@ Every Gradle module (from `settings.gradle.kts`) and its proposed license:
 |---|---|---|---|
 | S1 | **`infantry` + `infantryCore` + `infantryBoard`**: core and features still mixed | **Partly resolved (LICENSE-PREP-2).** The physical split happened: `infantryCore` (150 files) was extracted from `infantry` (now 155 files) and `infantryBoard` from both, and neither depends on a plugin or demo (evidence in section 2). **Not resolved:** the STAYS / PLUGIN-NOW / PLUGIN-LATER feature packages of `DAEMON-CORE.md` §3 (`backlog`, `epics`, `ticketfiles`, `triggers`, `notify`, `orchestration`, `testrun`, `cli`, `client` in `infantry`; `prompts`, `mvp`, `agents`, `stats` in `infantryCore`; the Board in `infantryBoard`) still sit in MPL modules, so the line is by module, not yet by feature. | Unchanged recommendation: all three modules **MPL-2.0 (interim)**; features relicense to Apache file by file as DAEMON-PLUGINS move them into `daemon/` folders (owner holds copyright; needs CLA, section 6). No per-file headers by package. Public wording: "the daemon is MPL-2.0; features move to Apache-2.0 as they leave core". |
 | S2 | `infantryDaemonApi` | `DAEMON-CORE.md` §4 step 5 says "`infantryCore` + `infantryDaemonApi` MPL-2.0". The ticket decision says SDK/API = Apache. | **Apache-2.0**, and edit that line of DAEMON-CORE.md when the owner signs off (not done here; docs-only scope is this file). Reason: daemon plugin authors compile against it; MPL there would make their jar a combined work reviewed by a lawyer for no benefit. API check: imports only `infantry.plugin.*` (from `infantryPlugins`) and kotlinx-serialization. |
-| S3 | `infantryProtocol` | It is the wire contract; clients (CLI, web, Android, third-party UIs) implement it. It imports `session.SessionState`, `harness.HarnessCommand` which live in the same module and are MPL. | **MPL-2.0 for now** (it is physically core and `CONTRACT.md` is the data contract). Owner option: make the *contract text* (`CONTRACT.md`, DTOs) Apache so third-party clients carry zero copyleft. MPL only triggers on *modified MPL files*, so using the protocol classes unmodified in an Apache client is already permitted; the option is low value. |
+| S3 | `infantryProtocol` (RESOLVED 2026-11-03: MPL-2.0) | It is the wire contract; clients (CLI, web, Android, third-party UIs) implement it. It imports `session.SessionState`, `harness.HarnessCommand` which live in the same module and are MPL. | **MPL-2.0 for now** (it is physically core and `CONTRACT.md` is the data contract). Owner option: make the *contract text* (`CONTRACT.md`, DTOs) Apache so third-party clients carry zero copyleft. MPL only triggers on *modified MPL files*, so using the protocol classes unmodified in an Apache client is already permitted; the option is low value. |
 | S4 | `infantryUiCore` | Apache, but heavy: depends on every official plugin project (compile-in) and bundles `incoming-comms.mp3` (provenance not documented), `jlayer` (LGPL) on JVM. | Apache-2.0. Action: document the mp3's origin or replace it; replace `jlayer` (LGPL-2.1+, dynamic library use, ok but must ship its license and allow relinking; see S10). Also confirm no file here imports `infantry` or `infantryRunner` (guard G3). |
 | S5 | `infantryUi` (desktop app) | Apache module that depends on the MPL `infantry` and embeds it; the packaged installer is a *Larger Work* with both licenses plus all third-party jars. | Apache-2.0 for `infantryUi` sources. The installer must carry both license texts, the MPL "source form is available at <URL>" notice for the MPL files, and THIRD-PARTY-NOTICES. Lawyer to confirm the Larger Work wording. |
 | S6 | `Demo_Lock/daemon` | **Resolved (LICENSE-PREP-2).** Its main compile path is `compileOnly(infantryDaemonApi)` only, the same as `plugins/examples/Acme_PolicyHook`; the whole `:infantry` appears only as `testImplementation` (tests run the lock against the real action catalog) and is never shipped or on the compile path. Verified by compiling the module and running its tests. Nothing is missing from the API. | Keep Apache. No demo-named code in core (identifier scan finds none; `NoDemoInDaemonCoreGuardTest` stays the guard). |
@@ -98,9 +111,9 @@ Added by LICENSE-PREP-2:
 
 | id | item | problem | recommendation |
 |---|---|---|---|
-| S13 | **`infantryDaemonApi` (Apache) depends on `infantryProtocol` (MPL)** | `infantryDaemonApi/build.gradle.kts:17` `api(project(":superiorSoftLibrary:infantryProtocol"))`; `triggers/TriggerPorts.kt:4-5` imports `TriggerEventView`, `TriggerView`. The rule "an Apache SDK imports nothing MPL-only" is broken, and `api` leaks the MPL classes to every daemon plugin's compile classpath. | Cheapest: move the two trigger view DTOs into `infantryDaemonApi` and drop the `api(infantryProtocol)` line. Alternative (S3): declare `infantryProtocol` Apache, nothing moves. Owner picks before license files; own follow-up ticket. Not changed here (the ticket forbids widening the API). |
+| S13 (RESOLVED 2026-11-03: protocol stays MPL, the edge is accepted) | **`infantryDaemonApi` (Apache) depends on `infantryProtocol` (MPL)** | `infantryDaemonApi/build.gradle.kts:17` `api(project(":superiorSoftLibrary:infantryProtocol"))`; `triggers/TriggerPorts.kt:4-5` imports `TriggerEventView`, `TriggerView`. The rule "an Apache SDK imports nothing MPL-only" is broken, and `api` leaks the MPL classes to every daemon plugin's compile classpath. | Cheapest: move the two trigger view DTOs into `infantryDaemonApi` and drop the `api(infantryProtocol)` line. Alternative (S3): declare `infantryProtocol` Apache, nothing moves. Owner picks before license files; own follow-up ticket. Not changed here (the ticket forbids widening the API). |
 | S14 | Duplicate event-stream reader | See 3a. | One copy in an Apache module. |
-| S15 | `infantryBoard` | New module, not in the first map. Product feature in an MPL module. | MPL (interim) together with S1. |
+| S15 (RESOLVED 2026-11-03: Apache) | `infantryBoard` | New module, not in the first map. Product feature in an MPL module. | MPL (interim) together with S1. |
 
 ### 3a. Removing the copied event-stream reader (proposal only, no code moved)
 
@@ -206,7 +219,9 @@ Until the owner approves section 2 in writing: no `LICENSE` change, no per-direc
 NOTICE, no site wording. When approved, the follow-up tickets are: (a) license files + headers by directory, (b) fix
 DAEMON-CORE.md §4 step 5 per S2, (c) notices from an SBOM, (d) guard test (section 8), (e) CLA bot, (f) replace jlayer / mp3.
 
-## 8. Guard test proposal (text only, not implemented)
+## 8. Guard test (implemented as G2 only; G1, G3-G6 remain proposals)
+
+`LicenseMapGuardTest` now exists and enforces G2 using `scripts/license-paths.txt`.
 
 `LicenseMapGuardTest` in `superiorSoftLibrary/infantry/src/test`, in the style of `DaemonCoreGuardTest`:
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.usagemeter
 
 import kotlinx.serialization.builtins.ListSerializer

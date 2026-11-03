@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) SuperiorSoft LLC
 # BUILD-PLUGINS-1 scoped tests (no Gradle): powershell -File scripts/plugin-selection.tests.ps1 ; exit 0 = all pass.
 . "$PSScriptRoot\plugin-selection.ps1"
 $root = Join-Path (Split-Path -Parent $PSScriptRoot) 'plugins'

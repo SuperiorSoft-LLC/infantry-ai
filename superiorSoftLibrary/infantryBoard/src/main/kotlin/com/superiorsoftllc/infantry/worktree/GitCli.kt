@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.worktree
 
 import java.io.File

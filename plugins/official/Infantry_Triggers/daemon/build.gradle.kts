@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // TRIG-2b: Infantry_Triggers daemon half (TriggerStore over the adopted trigger tables). Compiled against the daemon API only; protocol shaded in.
 plugins {
     kotlin("jvm")

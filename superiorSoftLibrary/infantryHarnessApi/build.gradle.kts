@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // :superiorSoftLibrary:infantryHarnessApi -- HARNESS-PLUGIN-3 H3 (docs/HARNESS-PLUGINS.md section 3.1): the ONE surface a harness
 // plugin compiles against: what it implements (HarnessPlugin, Harness, HarnessTranslator) and what it may call (HarnessHost).
 // A LEAF with no project dependency and no library beyond the Kotlin stdlib, so its ABI is only what is written here. A harness

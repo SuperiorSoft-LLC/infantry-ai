@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) SuperiorSoft LLC
 # Smoke test for the headless daemon image + docker/compose.yaml.
 #   container up -> /health -> a ticket started with a fake harness reaches a session -> restart keeps the data.
 # Usage:  docker/smoke.sh [image]        (default: INFANTRY_IMAGE or infantryai/infantry-ai:dev; build it first, see docker/README.md)

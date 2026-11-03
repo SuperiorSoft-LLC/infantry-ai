@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 package com.acme.weather
 
 import androidx.compose.runtime.Composable

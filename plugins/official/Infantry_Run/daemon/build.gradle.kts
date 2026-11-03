@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // CMD-1: Infantry_Run daemon half (saved commands and their runs, over api.runs). Compiled against the daemon API only; protocol shaded in.
 plugins {
     kotlin("jvm")

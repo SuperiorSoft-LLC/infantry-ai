@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // RUNTIME-3 (docs/RUNTIME-PLUGINS-AUDIT.md section 3, step 3): official module Infantry_Cli, the CLI tab, out of the shell
 // build into its own project. One source for every platform (D9):
 //  - desktop: build/libs/Infantry_Cli.jar (this project's jvm jar: its classes, its signed module.json and a ServiceLoader

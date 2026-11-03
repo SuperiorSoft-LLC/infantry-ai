@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 plugins {
     // PRE-LOAD PLUGINS FROM CATALOG
     alias(libs.plugins.androidApplication) apply false

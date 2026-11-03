@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // PACE-TREND-1: official module Infantry_Pace, the pacing trend charts, an OPTIONAL plugin (a sub-plugin of Stats: soft parent). One source for every platform (D9); see Infantry_Usage/build.gradle.kts.
 //  - desktop: build/libs/Infantry_Pace.jar (this project's jvm jar: its classes, its signed module.json and a ServiceLoader
 //    entry for class paths that carry it, i.e. tests), loaded at run time from official/Infantry_Pace. The jar is signed

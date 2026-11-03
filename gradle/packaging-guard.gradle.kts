@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // PACKAGING-GUARD-1: every packaging task (Compose createDistributable/package*Msi|Exe, releaseAssets, Android assemble*/bundle*)
 //  1. prints the git branch and short sha at the start of the build,
 //  2. refuses a dirty working tree or a checkout that is neither feature-agenthq-mvp nor a v* tag

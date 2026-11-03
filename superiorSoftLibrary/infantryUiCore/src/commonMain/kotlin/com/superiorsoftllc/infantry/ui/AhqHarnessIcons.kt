@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 /*
  * The "opencode" brackets and the "terminal" fallback are adapted from the Material icons "Filled.Code" and
  * "Filled.Terminal" of the Android Open Source Project (androidx.compose.material:material-icons-extended 1.7.3).

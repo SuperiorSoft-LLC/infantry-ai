@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // AGENT-REGISTRY-1 (docs/AGENT-REGISTRY.md section 7): the reference agent plugin, an agent with no code orchestration, compiled
 // against the daemon API only (compileOnly: the daemon provides it at run time). `:daemon-plugin-examples-Acme_NewsAgent:jar`.
 plugins {

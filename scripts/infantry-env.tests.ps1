@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) SuperiorSoft LLC
 # Checks the INFANTRY_*/AGENTHQ_* fallback with only the legacy variables set (no packaging). Exit 0 = pass.
 . (Join-Path $PSScriptRoot 'infantry-env.ps1')
 $fail = 0

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.mailbox
 
 /** DP-4c: mailbox-owned recipient aliases, so the mailbox names no board package. */

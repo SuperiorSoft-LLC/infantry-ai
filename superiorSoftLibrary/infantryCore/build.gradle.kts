@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) SuperiorSoft LLC
 // :superiorSoftLibrary:infantryCore -- CORE-SPLIT-4b (docs/DAEMON-CORE.md section 4): the packages that stay in core
 // (session ledger, mailbox routing, policy, settings, db/keystore, harness API + providers, mvp registry, persistence,
 // worktree/projectgit, usage/stats, prompts, agents, executables, daemon.AccessPolicy). Package names are unchanged from

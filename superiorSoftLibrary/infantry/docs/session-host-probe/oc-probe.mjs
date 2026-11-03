@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) SuperiorSoft LLC
 // BUG-M2-11a probe: opencode serve, several turns + an abort on ONE server process, then stdin-close behaviour.
 // usage: OPENCODE_EXE=<path to opencode.exe> node oc-probe.mjs <cwd> <modelID>
 //   OPENCODE_EXE must be the real binary (on Windows the npm `opencode` shim is a .cmd, which spawn cannot run).

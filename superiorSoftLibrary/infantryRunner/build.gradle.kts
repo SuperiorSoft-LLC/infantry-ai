@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) SuperiorSoft LLC
 // :superiorSoftLibrary:infantryRunner -- CORE-SPLIT-2 (docs/DAEMON-CORE.md section 4): the process runner and watch mechanism
 // (package `runner`: ProcessRunner, PtyProcessRunner, WatchShims, ToolProfiles, ...). A LEAF: it depends on no other infantry
 // module and no plugin module (guarded by DaemonCoreGuardTest). Package names are unchanged from when these sources lived in :infantry.

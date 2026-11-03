@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.android
 
 import androidx.test.ext.junit.runners.AndroidJUnit4

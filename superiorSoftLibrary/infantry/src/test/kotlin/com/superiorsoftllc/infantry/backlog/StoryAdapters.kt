@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) SuperiorSoft LLC
 @file:Suppress("PackageDirectoryMismatch")
 
 package com.superiorsoftllc.infantry.stories

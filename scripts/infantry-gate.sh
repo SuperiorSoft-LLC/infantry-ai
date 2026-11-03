@@ -1,4 +1,6 @@
 #!/bin/sh
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) SuperiorSoft LLC
 # Bulk QA gate: runs every test stage (test tasks forced, never cached), one Gradle at a time, in a throwaway worktree.
 # Usage: scripts/infantry-gate.sh [--full] <commit-or-branch>   (see docs/GATE.md)
 #   --full: the promotion run. Nothing from the build cache (--no-build-cache): every module compiles fresh, once.

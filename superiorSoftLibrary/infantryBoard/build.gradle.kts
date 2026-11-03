@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // :superiorSoftLibrary:infantryBoard -- DAEMON-PLUGIN DP-5e (docs/DAEMON-CORE.md): the board's lower-level packages (epics, brief, ledger,
 // context, ticketfiles). Depends on the daemon API and the protocol, NEVER on :infantry (the dependency points one way: infantry -> here;
 // guarded by BoardImportGuardTest). What these packages need of the host comes in through small ports declared here; :infantry adapts them.

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // CONFIG-3 (docs/CONFIG-MANIFEST-DESIGN.md): official module Infantry_Appearance, the theme and blur settings and the pilot of
 // manifest-driven config, built like Infantry_Alerts. One source for every platform (D9):
 //  - desktop: build/libs/Infantry_Appearance.jar (this project's jvm jar: its classes, its signed module.json and a ServiceLoader

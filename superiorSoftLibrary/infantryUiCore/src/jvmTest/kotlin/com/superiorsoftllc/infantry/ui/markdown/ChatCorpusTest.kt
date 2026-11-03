@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.ui.markdown
 
 import com.superiorsoftllc.infantry.ui.checkChatCorpusSample

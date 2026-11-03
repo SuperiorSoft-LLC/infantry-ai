@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.triggers
 
 enum class ScheduleFrequency { EVERY_MINUTES, HOURLY, DAILY, WEEKLY, MONTHLY }

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // S5: packages a plugin module into <Vendor_Module>.ihq (apply with: apply(from = rootProject.file("gradle/ihq.gradle.kts"))).
 // Layout: module.json (its "jar" rewritten to lib/<jar>), lib/<the module's jar>. Run `ihq`; output build/ihq/<name>.ihq.
 // Reads <projectDir>/module.json and the project's `jar` task. Signing is optional and never uses a key from the repo:

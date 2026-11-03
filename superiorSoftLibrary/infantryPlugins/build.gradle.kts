@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // PLUGINS-1: the plugin contract (package plugin.api) and the host's pure loading rules (package plugin.host).
 // No Compose and no app code, so the desktop UI, the web/Android clients and the headless daemon all share it, and the
 // API can carry its own license later. One-way: the app and the modules depend on this; this depends on neither.

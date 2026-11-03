@@ -2,16 +2,16 @@
 
 # Licensing: the foundation and everything on top
 
-> **DRAFT. Not legal advice. Not yet in effect.** No license is applied to this repository today: the root `LICENSE`
-> is still a placeholder and all rights stay with SuperiorSoft LLC. This page explains the split the owner is
-> deciding on. The source of truth is `docs/LICENSE-MAP.md`; where this page and the map differ,
+> **DRAFT: applied, not official until the public launch. Not legal advice.** The split is applied in the repo (license
+> texts in `LICENSES/`, SPDX headers, per-directory `LICENSE` files, `LicenseMapGuardTest`); the owner makes it official
+> at launch. This page explains the split. The source of truth is `docs/LICENSE-MAP.md`; where this page and the map differ,
 > the map wins.
 
 ## The short version
 
 <!-- shared:license_line -->The core (the daemon) is the foundation: it is licensed MPL-2.0 to protect its integrity, so apps and plugins can rely on a stable base that does not break, with backward compatibility as the promise. Everything built on top (the SDKs, the UI core, the apps and every plugin) is free under Apache-2.0: build, fork, sell and extend it without copyleft.<!-- /shared:license_line -->
 
-**The core is the foundation. It is MPL-2.0 to protect its integrity.** Apps and plugins stand on the core, so the
+**The abstraction layer is the foundation. It is MPL-2.0 to protect its integrity.** Apps and plugins stand on the core, so the
 core has to stay a stable base that does not break under them. MPL-2.0 keeps every change to a core file open, so a
 fork of the core cannot quietly break the base everyone depends on, or close it. Backward compatibility is the promise
 the core makes in return (see [The compatibility promise](#the-compatibility-promise-as-implemented-today)).
@@ -52,14 +52,14 @@ From `docs/LICENSE-MAP.md` section 2. "Interim" means the map flags it for the o
 
 | Module / path | License | Why |
 |---|---|---|
-| `superiorSoftLibrary/infantryProtocol` | **MPL-2.0** | The wire contract between daemon and clients. Open question S13: the Apache daemon SDK depends on it, so the owner may prefer Apache for the contract. |
+| `superiorSoftLibrary/infantryProtocol` | **MPL-2.0** | The wire contract between daemon and clients; part of the abstraction layer (S13 resolved: stays MPL, an Apache SDK may use it unmodified). |
 | `superiorSoftLibrary/infantryRunner` | **MPL-2.0** | Process runner, PTY, watch shims. Core. |
 | `superiorSoftLibrary/infantryCore` | **MPL-2.0** | The daemon core (agents, db, harness registry, mailbox, policy, session, settings, worktree...). |
-| `superiorSoftLibrary/infantry` | **MPL-2.0** (interim) | Daemon main, plugin host, CLI, HTTP shell. Still holds some feature packages (map S1) that may move into plugins and then become Apache. |
-| `superiorSoftLibrary/infantryBoard` | **MPL-2.0** (interim) | The ticket board, a product feature fronted by the Board plugin (S15). |
+| `superiorSoftLibrary/infantry` | **MPL-2.0** | Daemon main, plugin host, CLI, HTTP shell. Still holds some feature packages (map S1) that may move into plugins and then become Apache. |
+| `superiorSoftLibrary/infantryBoard` | Apache-2.0 | The ticket board, a concrete feature fronted by the Board plugin; Apache, not interim (S15 resolved). |
 | `superiorSoftLibrary/infantryDaemonApi` | Apache-2.0 | SDK for daemon plugins. Overrides the older "MPL" line in `DAEMON-CORE.md` (S2). |
 | `superiorSoftLibrary/infantryHarnessApi` | Apache-2.0 | SDK for harness plugins. |
-| `superiorSoftLibrary/infantryPlugins` | Apache-2.0 | UI plugin API and host loading rules. |
+| `superiorSoftLibrary/infantryPlugins` | Apache-2.0 | The WHOLE module: plugin API (`plugin.api`) and plugin host (`plugin.host`). Owner: plugin authors build against it, so it is not MPL even though it is the plugin manager. |
 | `superiorSoftLibrary/infantryUiCore`, `infantryAppUi` | Apache-2.0 | UI contract, block model, shell. |
 | `superiorSoftLibrary/infantryUi`, `infantryWeb`, `infantryAndroid`, `infantryHeadless` | Apache-2.0 | The desktop, web and Android apps and the headless test harness. The installer is a combined work with the MPL daemon (S5). |
 | `superiorSoftLibrary/samples/*` | Apache-2.0 | Example plugin. |
@@ -111,8 +111,8 @@ Gaps in the promise, stated plainly:
 - **The UI plugin API is exact-match.** A module with a different `apiVersion` is refused; there is no range today.
 - **Protocol contract text.** The code comments point to `CONTRACT.md`, which is not in the repository paths checked
   for this page; the version number in code is the contract's only recorded form here.
-- **No guard test for the license map yet** (map section 8 proposes `LicenseMapGuardTest`; it is text only). <!-- docs-freshness: ignore -->
-- **Where the protocol belongs** (MPL or Apache) is undecided (S3, S13).
+- **License map guard:** `LicenseMapGuardTest` checks the SPDX header of every source file against `scripts/license-paths.txt`.
+- **Where the protocol belongs** is decided: MPL (S3, S13 resolved 2026-11-03).
 
 ## 5. Trademark: the name and the logo
 
@@ -133,10 +133,9 @@ official, `CONTRIBUTING.md` refuses outside code.
 
 From the map (sections 5, 6, 7):
 
-1. **Owner sign-off** of the module table in section 3 above. Until then no license file, SPDX header, per-directory
-   `LICENSE` or `NOTICE` is added.
-2. **Lawyer review**: the Apache SDK to MPL protocol edge (S13); the interim MPL for `infantry`, `infantryCore`,
-   `infantryBoard`; the wording for the desktop installer and Docker image as combined works; the MPL header text;
+1. **Owner review and making it official** at launch. The files and headers are already applied as a draft; re-run
+   `scripts/license-headers.sh` after any change to `scripts/license-paths.txt`.
+2. **Lawyer review**: the Apache SDK to MPL protocol edge (S13, accepted); the wording for the desktop installer and Docker image as combined works; the MPL header text;
    `pty4j` (EPL-1.0) against MPL; `jlayer`, ML Kit, JDK and Docker base obligations; the effect of the Apache patent
    clause on a hosted orchestrator.
 3. **CLA text** (draft: [CLA.md](../legal/CLA.md)) and a bot to enforce it (config only, not enabled).

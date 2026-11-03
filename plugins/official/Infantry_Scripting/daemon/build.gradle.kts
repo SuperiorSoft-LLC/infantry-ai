@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // SCRIPT-2: Infantry_Scripting, the daemon half that owns the script-engine extension point (compiled against the daemon API only).
 plugins {
     kotlin("jvm")

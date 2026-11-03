@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) SuperiorSoft LLC
 <#
 .SYNOPSIS
   BUILD-LOC-1: packages one git sha into the project's configured build folder, or backs up the owner state.

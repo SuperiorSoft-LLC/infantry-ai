@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) SuperiorSoft LLC
 // :superiorSoftLibrary:infantry -- Infantry daemon + CLI. JVM ONLY.
 //
 // WHY JVM-ONLY AND NOT KMP: this module drives OS subprocesses, and the parked Pty4J path is

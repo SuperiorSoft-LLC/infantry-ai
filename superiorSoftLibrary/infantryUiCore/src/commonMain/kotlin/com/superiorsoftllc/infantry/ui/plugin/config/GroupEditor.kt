@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.ui.plugin.config
 
 import androidx.compose.foundation.layout.Arrangement

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.ui.model
 
 enum class ToastKind { INFO, SUCCESS, WARN, ERROR }

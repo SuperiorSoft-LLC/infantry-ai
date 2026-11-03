@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // Desktop window shell. Shared screens and daemon client live in :infantryUiCore.
 import java.time.Duration
 import java.security.cert.CertificateFactory

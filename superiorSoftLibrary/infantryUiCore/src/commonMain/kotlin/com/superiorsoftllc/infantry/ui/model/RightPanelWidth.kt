@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.ui.model
 
 /** Width rules for the drag-resizable right panel, in dp. Pure so the bounds are testable without Compose. */

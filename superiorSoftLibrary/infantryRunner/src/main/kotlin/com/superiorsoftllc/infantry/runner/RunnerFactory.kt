@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.runner
 
 /** Selects the runner from `INFANTRY_RUNNER` (default `piped`). */

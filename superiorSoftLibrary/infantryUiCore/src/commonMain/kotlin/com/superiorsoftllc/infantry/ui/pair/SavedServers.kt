@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.ui.pair
 
 /** PAIR-1: a server a client keeps. The token is a credential: [toString] never prints it. */

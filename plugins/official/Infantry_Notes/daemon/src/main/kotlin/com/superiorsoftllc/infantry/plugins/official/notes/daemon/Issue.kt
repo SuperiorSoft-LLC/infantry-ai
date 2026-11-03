@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.plugins.official.notes.daemon
 
 /** Who wrote an issue or an event, resolved from the declared session. */

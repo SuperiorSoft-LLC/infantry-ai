@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) SuperiorSoft LLC
 <#
 .SYNOPSIS
   BUILD-SWAP-1: switches <build.root>\current to a finished build without ever leaving current\ half-deleted.

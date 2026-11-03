@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // RUNTIME-22 (F6, docs/RUNTIME-PLUGINS-AUDIT.md): official module Infantry_Chat, the centre column (chat, centre tab strip, New agent dialog), out of the shell
 // build into its own project. One source for every platform (D9):
 //  - desktop: build/libs/Infantry_Chat.jar (this project's jvm jar: its classes, its signed module.json and a ServiceLoader

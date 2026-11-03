@@ -1,4 +1,6 @@
 #!/bin/sh
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) SuperiorSoft LLC
 # Infantry AI daemon entrypoint (DOCKER-2, ticket c00d1d1c).
 #  - Token: with no INFANTRY_TOKEN and no token file yet, ONE token is generated into the state volume
 #    (INFANTRY_TOKEN_FILE, default /data/access-token, mode 600) and used from then on. Only the PATH is printed, never

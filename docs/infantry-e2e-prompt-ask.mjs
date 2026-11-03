@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // PROMPT-4: live check that `opencode serve` under Tool approval `ask` forwards each permission to the prompt card, and
 // that the answer decides the outcome. A THROWAWAY daemon (fresh state dir, its own port, INFANTRY_PORT_STRICT) and a
 // THROWAWAY git repo; refuses 8787 / 8788; never reads or writes ~/.infantry.

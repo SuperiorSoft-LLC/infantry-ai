@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // PLUGIN-ENDPOINTS-2 example community module: a plugin with a backend of its own (plugins/GUIDE.md, "Your own backend in an
 // hour"). Found by settings.gradle.kts scanning plugins/community; builds ONE jar, build/libs/Acme_Echo.jar.
 plugins {

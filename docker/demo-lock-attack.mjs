@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // DEMO-LOCK attacker test (ticket 2f154f5f). Node >= 22 (global WebSocket/fetch); no dependencies.
 //
 //   DEMO_URL=http://127.0.0.1:8813 DEMO_TOKEN_FILE=<file with the OWNER token> node docker/demo-lock-attack.mjs [--scenarios]

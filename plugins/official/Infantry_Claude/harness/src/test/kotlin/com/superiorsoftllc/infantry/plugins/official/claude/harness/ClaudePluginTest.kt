@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.plugins.official.claude.harness
 
 import com.superiorsoftllc.infantry.harness.api.ToolApproval

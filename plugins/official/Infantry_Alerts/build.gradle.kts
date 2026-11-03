@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // RUNTIME-16 (docs/RUNTIME-PLUGINS-AUDIT.md, "AppUi remaining"): official module Infantry_Alerts, the incoming-comms sound and the
 // spoken alerts, out of Infantry_AppUi into its own project. One source for every platform (D9):
 //  - desktop: build/libs/Infantry_Alerts.jar (this project's jvm jar: its classes, its signed module.json and a ServiceLoader

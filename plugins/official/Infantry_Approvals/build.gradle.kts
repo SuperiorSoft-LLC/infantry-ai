@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // RUNTIME-23 (F7) (F6, docs/RUNTIME-PLUGINS-AUDIT.md): official module Infantry_Approvals, the questions pill (F7), out of the shell
 // build into its own project. One source for every platform (D9):
 //  - desktop: build/libs/Infantry_Approvals.jar (this project's jvm jar: its classes, its signed module.json and a ServiceLoader

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.ui.model
 
 /** ASSISTANT-1: width rules for the drag-resizable Assistant popup, in dp. Pure so the bounds are testable without Compose. */

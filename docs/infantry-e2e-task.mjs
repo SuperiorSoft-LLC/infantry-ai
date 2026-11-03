@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // E2E-TASK-1: an agent creates a ticket with the `infantry` CLI, the ticket is assigned a role / harness / model and started
 // the way the UI starts it (`ticket_move` -> in_progress), and we check the spawned session did the work.
 // See docs/infantry-e2e-task.md.

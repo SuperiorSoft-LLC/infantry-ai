@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // BUILD-STAMP-1: the one build string every packaged Infantry build carries, e.g. 1.0.1+20261023.1432.e85b223 (".dirty" appended
 // when the working tree had changes). SemVer: <version>+<UTC yyyyMMdd>.<UTC HHmm>.<short sha>[.dirty].
 //   * version: the `infantryVersion` Gradle property (root gradle.properties, or -PinfantryVersion); never edited per build.
