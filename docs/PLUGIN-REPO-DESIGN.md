@@ -246,17 +246,17 @@ Desktop keeps Compose jars as the "full power" path; a plugin that wants to be e
 
 ## 8. Build tickets (todo, in order)
 
-Each is small, has grep-able acceptance and names its scoped tests; Sonnet for implementation unless stated. Listed in the
-ticket report with their ids.
+Each is small, has grep-able acceptance and names its scoped tests; Sonnet for implementation unless stated. Created in todo
+in this order (ids in brackets).
 
-1. SDK-PUB-1: publish config + BOM + version catalog + `sdk-publish.yml` (dry run only, no publish without the owner).
-2. SDK-SURFACE-1: API dumps and the class-loader/published-surface guard.
-3. PLUGIN-GRADLE-1: `build-logic` Gradle plugin replacing `gradle/ihq.gradle.kts`; `ihq` packs all three halves (G5); `catalogEntry`.
-4. TEMPLATE-REPO-1: `templates/plugin-repo/` building against `build/m2`, with CI and release workflows.
-5. REGISTRY-1a: catalog schema additions (`repo`, `yanked`) + `infantry plugin catalog build`.
-6. REGISTRY-1b: `registry/` scaffold for the `infantry-plugins` repo with validate/publish workflows.
-7. PLUGIN-VERSION-WIN-1: higher version wins between bundled and installed copies.
-8. PLUGIN-MCP-1: DaemonApi plugin-manager read seam + `Infantry_Plugins` daemon tools + owner-ask request.
+1. SDK-PUB-1 (d9704a04): publish config + BOM + version catalog + `sdk-publish.yml` (dry run only, no publish without the owner).
+2. SDK-SURFACE-1 (fe21312a): API dumps and the class-loader/published-surface guard.
+3. PLUGIN-GRADLE-1 (3e3271ef): `build-logic` Gradle plugin replacing `gradle/ihq.gradle.kts`; `ihq` packs all three halves (G5); `catalogEntry`.
+4. TEMPLATE-REPO-1 (8d852bbf): `templates/plugin-repo/` building against `build/m2`, with CI and release workflows.
+5. REGISTRY-1a (955298b5): catalog schema additions (`repo`, `yanked`) + `infantry plugin catalog build`.
+6. REGISTRY-1b (190708ef): `registry/` scaffold for the `infantry-plugins` repo with validate/publish workflows.
+7. PLUGIN-VERSION-WIN-1 (c2ba55f5): higher version wins between bundled and installed copies.
+8. PLUGIN-MCP-1 (07a41012): DaemonApi plugin-manager read seam + `Infantry_Plugins` daemon tools + owner-ask request.
 9. PLUGIN-HOTLOAD-1: load/unload one daemon half without a restart (shared with BOARD-DOWN-2).
-10. PLUGIN-UI-1 (PM-8): desktop Settings > Plugins screen with the consent dialog and the not-sandboxed warning.
-11. DECL-UI-0 (design, Opus): declarative plugin UI for Android/web.
+10. PLUGIN-UI-1 (7988ce17, PM-8): desktop Settings > Plugins screen with the consent dialog and the not-sandboxed warning.
+11. DECL-UI-0 (b4681a4a, design, Opus): declarative plugin UI for Android/web.
