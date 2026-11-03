@@ -17,6 +17,8 @@
   <a href="#support-the-project">Sponsor</a>
 </p>
 
+<p align="center"><img src="docs/img/app-screenshot.png" alt="Infantry AI desktop app: agents, chat and usage" width="900"></p>
+
 ---
 
 ## An AI framework, not just a board
