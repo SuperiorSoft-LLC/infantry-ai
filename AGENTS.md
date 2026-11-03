@@ -128,6 +128,7 @@ All under `superiorSoftLibrary/infantry/src/test/kotlin/com/superiorsoftllc/infa
 | `CoreHasNoScriptingGuardTest.kt` | Core names no script engine or Lua identifier; scripting is a plugin. |
 | `daemon/BuiltinToolsListGuardTest.kt` | Every built-in agent tool left in core is on an explicit list with its reason. |
 | `daemon/HarnessCoreGuardTest.kt` | The core jar carries no concrete harness. |
+| `daemon/SdkSurfaceGuardTest.kt` | The packages the daemon and harness class loaders expose equal the published SDK modules (`infantryDaemonApi`, `infantryPlugins`, `infantryHarnessApi`). |
 | `daemon/BoardImportGuardTest.kt` | Core reaches the board only through the daemon API. |
 | `orchestration/OrchestratorBoundaryGuardTest.kt` | The runner side does not import orchestration. |
 | `policy/NoPresetInCoreGuardTest.kt` | Policy mechanism is core, preset values are a plugin's. |

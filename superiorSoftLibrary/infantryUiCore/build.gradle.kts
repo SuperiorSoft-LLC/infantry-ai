@@ -15,6 +15,9 @@ apply(from = rootProject.file("gradle/sdk-publish.gradle.kts"))
 
 kotlin {
     jvmToolchain(21)
+    // SDK-SURFACE-1: committed ABI dump (api/). Dump only: a record of what external desktop jars may compile against, not enforced.
+    @OptIn(org.jetbrains.kotlin.gradle.dsl.abi.ExperimentalAbiValidation::class)
+    abiValidation { enabled.set(true) }
     jvm()
     // WEB-1: the browser client (infantryWeb) runs this same UI as WebAssembly.
     @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
@@ -156,3 +159,6 @@ tasks.named<Test>("jvmTest") {
         p.projectDir.absolutePath
     })
 }
+
+// SDK-SURFACE-1: the UI core dump is a record only; keep the check out of `check`.
+tasks.matching { it.name == "checkLegacyAbi" }.configureEach { enabled = false }

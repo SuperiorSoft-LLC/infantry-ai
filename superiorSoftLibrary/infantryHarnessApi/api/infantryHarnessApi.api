@@ -1,0 +1,717 @@
+public final class com/superiorsoftllc/infantry/harness/api/ApprovalReply : java/lang/Enum {
+	public static final field ALLOW_ALWAYS Lcom/superiorsoftllc/infantry/harness/api/ApprovalReply;
+	public static final field ALLOW_ONCE Lcom/superiorsoftllc/infantry/harness/api/ApprovalReply;
+	public static final field ALLOW_SESSION Lcom/superiorsoftllc/infantry/harness/api/ApprovalReply;
+	public static final field DENY Lcom/superiorsoftllc/infantry/harness/api/ApprovalReply;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/harness/api/ApprovalReply;
+	public static fun values ()[Lcom/superiorsoftllc/infantry/harness/api/ApprovalReply;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/ConfigParts {
+	public fun <init> ()V
+	public fun <init> (Lcom/superiorsoftllc/infantry/harness/api/HarnessProcess;Ljava/io/File;)V
+	public synthetic fun <init> (Lcom/superiorsoftllc/infantry/harness/api/HarnessProcess;Ljava/io/File;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Lcom/superiorsoftllc/infantry/harness/api/HarnessProcess;
+	public final fun component2 ()Ljava/io/File;
+	public final fun copy (Lcom/superiorsoftllc/infantry/harness/api/HarnessProcess;Ljava/io/File;)Lcom/superiorsoftllc/infantry/harness/api/ConfigParts;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/harness/api/ConfigParts;Lcom/superiorsoftllc/infantry/harness/api/HarnessProcess;Ljava/io/File;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/harness/api/ConfigParts;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getMcp ()Lcom/superiorsoftllc/infantry/harness/api/HarnessProcess;
+	public final fun getWatchPlugin ()Ljava/io/File;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/ContextLimitCapability {
+	public static final field Companion Lcom/superiorsoftllc/infantry/harness/api/ContextLimitCapability$Companion;
+	public fun <init> (Lcom/superiorsoftllc/infantry/harness/api/ContextLimitSupport;Ljava/lang/String;)V
+	public synthetic fun <init> (Lcom/superiorsoftllc/infantry/harness/api/ContextLimitSupport;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Lcom/superiorsoftllc/infantry/harness/api/ContextLimitSupport;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Lcom/superiorsoftllc/infantry/harness/api/ContextLimitSupport;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/harness/api/ContextLimitCapability;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/harness/api/ContextLimitCapability;Lcom/superiorsoftllc/infantry/harness/api/ContextLimitSupport;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/harness/api/ContextLimitCapability;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getHow ()Ljava/lang/String;
+	public final fun getSupport ()Lcom/superiorsoftllc/infantry/harness/api/ContextLimitSupport;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/ContextLimitCapability$Companion {
+	public final fun getUNSUPPORTED ()Lcom/superiorsoftllc/infantry/harness/api/ContextLimitCapability;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/ContextLimitSupport : java/lang/Enum {
+	public static final field BEST_EFFORT Lcom/superiorsoftllc/infantry/harness/api/ContextLimitSupport;
+	public static final field SUPPORTED Lcom/superiorsoftllc/infantry/harness/api/ContextLimitSupport;
+	public static final field UNSUPPORTED Lcom/superiorsoftllc/infantry/harness/api/ContextLimitSupport;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/harness/api/ContextLimitSupport;
+	public static fun values ()[Lcom/superiorsoftllc/infantry/harness/api/ContextLimitSupport;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/EffortCapability {
+	public static final field Companion Lcom/superiorsoftllc/infantry/harness/api/EffortCapability$Companion;
+	public fun <init> (Lcom/superiorsoftllc/infantry/harness/api/EffortSupport;Ljava/lang/String;)V
+	public synthetic fun <init> (Lcom/superiorsoftllc/infantry/harness/api/EffortSupport;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Lcom/superiorsoftllc/infantry/harness/api/EffortSupport;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Lcom/superiorsoftllc/infantry/harness/api/EffortSupport;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/harness/api/EffortCapability;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/harness/api/EffortCapability;Lcom/superiorsoftllc/infantry/harness/api/EffortSupport;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/harness/api/EffortCapability;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getHow ()Ljava/lang/String;
+	public final fun getSupport ()Lcom/superiorsoftllc/infantry/harness/api/EffortSupport;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/EffortCapability$Companion {
+	public final fun getUNSUPPORTED ()Lcom/superiorsoftllc/infantry/harness/api/EffortCapability;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/EffortSupport : java/lang/Enum {
+	public static final field BEST_EFFORT Lcom/superiorsoftllc/infantry/harness/api/EffortSupport;
+	public static final field SUPPORTED Lcom/superiorsoftllc/infantry/harness/api/EffortSupport;
+	public static final field UNSUPPORTED Lcom/superiorsoftllc/infantry/harness/api/EffortSupport;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/harness/api/EffortSupport;
+	public static fun values ()[Lcom/superiorsoftllc/infantry/harness/api/EffortSupport;
+}
+
+public abstract interface class com/superiorsoftllc/infantry/harness/api/Harness {
+	public fun approvalArgs (Lcom/superiorsoftllc/infantry/harness/api/ToolApproval;)Ljava/util/List;
+	public fun commands ()Ljava/util/List;
+	public abstract fun getCapabilities ()Ljava/util/Set;
+	public fun getContextLimit ()Lcom/superiorsoftllc/infantry/harness/api/ContextLimitCapability;
+	public fun getEffort ()Lcom/superiorsoftllc/infantry/harness/api/EffortCapability;
+	public abstract fun getId ()Ljava/lang/String;
+	public fun mcpToolRule (Ljava/lang/String;)Ljava/lang/String;
+	public fun mergeConfig (Ljava/lang/String;Lcom/superiorsoftllc/infantry/harness/api/ConfigParts;)Ljava/lang/String;
+	public fun models ()Ljava/util/List;
+	public abstract fun newTranslator ()Lcom/superiorsoftllc/infantry/harness/api/HarnessTranslator;
+	public abstract fun process (Lcom/superiorsoftllc/infantry/harness/api/HarnessRequest;)Lcom/superiorsoftllc/infantry/harness/api/HarnessProcess;
+	public fun sandbox (Lcom/superiorsoftllc/infantry/harness/api/SandboxRoots;)Lcom/superiorsoftllc/infantry/harness/api/SandboxContribution;
+	public fun session ()Lcom/superiorsoftllc/infantry/harness/api/HarnessSession;
+	public fun stats ()Lcom/superiorsoftllc/infantry/harness/api/HarnessStats;
+	public fun usageSource ()Lcom/superiorsoftllc/infantry/harness/api/HarnessUsageSource;
+	public fun watch (Ljava/util/Map;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/harness/api/WatchContribution;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/Harness$DefaultImpls {
+	public static fun approvalArgs (Lcom/superiorsoftllc/infantry/harness/api/Harness;Lcom/superiorsoftllc/infantry/harness/api/ToolApproval;)Ljava/util/List;
+	public static fun commands (Lcom/superiorsoftllc/infantry/harness/api/Harness;)Ljava/util/List;
+	public static fun getContextLimit (Lcom/superiorsoftllc/infantry/harness/api/Harness;)Lcom/superiorsoftllc/infantry/harness/api/ContextLimitCapability;
+	public static fun getEffort (Lcom/superiorsoftllc/infantry/harness/api/Harness;)Lcom/superiorsoftllc/infantry/harness/api/EffortCapability;
+	public static fun mcpToolRule (Lcom/superiorsoftllc/infantry/harness/api/Harness;Ljava/lang/String;)Ljava/lang/String;
+	public static fun mergeConfig (Lcom/superiorsoftllc/infantry/harness/api/Harness;Ljava/lang/String;Lcom/superiorsoftllc/infantry/harness/api/ConfigParts;)Ljava/lang/String;
+	public static fun models (Lcom/superiorsoftllc/infantry/harness/api/Harness;)Ljava/util/List;
+	public static fun sandbox (Lcom/superiorsoftllc/infantry/harness/api/Harness;Lcom/superiorsoftllc/infantry/harness/api/SandboxRoots;)Lcom/superiorsoftllc/infantry/harness/api/SandboxContribution;
+	public static fun session (Lcom/superiorsoftllc/infantry/harness/api/Harness;)Lcom/superiorsoftllc/infantry/harness/api/HarnessSession;
+	public static fun stats (Lcom/superiorsoftllc/infantry/harness/api/Harness;)Lcom/superiorsoftllc/infantry/harness/api/HarnessStats;
+	public static fun usageSource (Lcom/superiorsoftllc/infantry/harness/api/Harness;)Lcom/superiorsoftllc/infantry/harness/api/HarnessUsageSource;
+	public static fun watch (Lcom/superiorsoftllc/infantry/harness/api/Harness;Ljava/util/Map;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/harness/api/WatchContribution;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/HarnessAnswer {
+	public static final field Companion Lcom/superiorsoftllc/infantry/harness/api/HarnessAnswer$Companion;
+	public fun <init> (Ljava/util/List;Ljava/lang/String;Z)V
+	public final fun component1 ()Ljava/util/List;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Z
+	public final fun copy (Ljava/util/List;Ljava/lang/String;Z)Lcom/superiorsoftllc/infantry/harness/api/HarnessAnswer;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/harness/api/HarnessAnswer;Ljava/util/List;Ljava/lang/String;ZILjava/lang/Object;)Lcom/superiorsoftllc/infantry/harness/api/HarnessAnswer;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAnswered ()Z
+	public final fun getAnswers ()Ljava/util/List;
+	public final fun getOtherText ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/HarnessAnswer$Companion {
+	public final fun getNONE ()Lcom/superiorsoftllc/infantry/harness/api/HarnessAnswer;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/HarnessApiKt {
+	public static final field HARNESS_API_VERSION Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/HarnessCapability : java/lang/Enum {
+	public static final field EFFORT_SELECTION Lcom/superiorsoftllc/infantry/harness/api/HarnessCapability;
+	public static final field MODEL_SELECTION Lcom/superiorsoftllc/infantry/harness/api/HarnessCapability;
+	public static final field REASONING Lcom/superiorsoftllc/infantry/harness/api/HarnessCapability;
+	public static final field SESSION_RESUME Lcom/superiorsoftllc/infantry/harness/api/HarnessCapability;
+	public static final field TOOL_CALLS Lcom/superiorsoftllc/infantry/harness/api/HarnessCapability;
+	public static final field USAGE Lcom/superiorsoftllc/infantry/harness/api/HarnessCapability;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/harness/api/HarnessCapability;
+	public static fun values ()[Lcom/superiorsoftllc/infantry/harness/api/HarnessCapability;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/HarnessCommandAction : java/lang/Enum {
+	public static final field NATIVE Lcom/superiorsoftllc/infantry/harness/api/HarnessCommandAction;
+	public static final field SET_EFFORT Lcom/superiorsoftllc/infantry/harness/api/HarnessCommandAction;
+	public static final field SET_MODEL Lcom/superiorsoftllc/infantry/harness/api/HarnessCommandAction;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/harness/api/HarnessCommandAction;
+	public static fun values ()[Lcom/superiorsoftllc/infantry/harness/api/HarnessCommandAction;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/HarnessCommandSpec {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Lcom/superiorsoftllc/infantry/harness/api/HarnessCommandAction;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Lcom/superiorsoftllc/infantry/harness/api/HarnessCommandAction;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Lcom/superiorsoftllc/infantry/harness/api/HarnessCommandAction;
+	public final fun component4 ()Ljava/lang/String;
+	public final fun component5 ()Ljava/util/List;
+	public final fun component6 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Lcom/superiorsoftllc/infantry/harness/api/HarnessCommandAction;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/harness/api/HarnessCommandSpec;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/harness/api/HarnessCommandSpec;Ljava/lang/String;Ljava/lang/String;Lcom/superiorsoftllc/infantry/harness/api/HarnessCommandAction;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/harness/api/HarnessCommandSpec;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAction ()Lcom/superiorsoftllc/infantry/harness/api/HarnessCommandAction;
+	public final fun getArgument ()Ljava/lang/String;
+	public final fun getDescription ()Ljava/lang/String;
+	public final fun getName ()Ljava/lang/String;
+	public final fun getNative ()Ljava/lang/String;
+	public final fun getValues ()Ljava/util/List;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class com/superiorsoftllc/infantry/harness/api/HarnessEvent {
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/HarnessEvent$Completion : com/superiorsoftllc/infantry/harness/api/HarnessEvent {
+	public fun <init> ()V
+	public fun <init> (Ljava/lang/String;)V
+	public synthetic fun <init> (Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/harness/api/HarnessEvent$Completion;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/harness/api/HarnessEvent$Completion;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/harness/api/HarnessEvent$Completion;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getReason ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/HarnessEvent$Denial : com/superiorsoftllc/infantry/harness/api/HarnessEvent {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/harness/api/HarnessEvent$Denial;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/harness/api/HarnessEvent$Denial;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/harness/api/HarnessEvent$Denial;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getReason ()Ljava/lang/String;
+	public final fun getTool ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/HarnessEvent$Error : com/superiorsoftllc/infantry/harness/api/HarnessEvent {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/harness/api/HarnessEvent$Error;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/harness/api/HarnessEvent$Error;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/harness/api/HarnessEvent$Error;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getMessage ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/HarnessEvent$Reasoning : com/superiorsoftllc/infantry/harness/api/HarnessEvent {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/harness/api/HarnessEvent$Reasoning;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/harness/api/HarnessEvent$Reasoning;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/harness/api/HarnessEvent$Reasoning;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getText ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/HarnessEvent$SessionStarted : com/superiorsoftllc/infantry/harness/api/HarnessEvent {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/harness/api/HarnessEvent$SessionStarted;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/harness/api/HarnessEvent$SessionStarted;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/harness/api/HarnessEvent$SessionStarted;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getSessionId ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/HarnessEvent$TextDelta : com/superiorsoftllc/infantry/harness/api/HarnessEvent {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/harness/api/HarnessEvent$TextDelta;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/harness/api/HarnessEvent$TextDelta;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/harness/api/HarnessEvent$TextDelta;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getText ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/HarnessEvent$ToolCall : com/superiorsoftllc/infantry/harness/api/HarnessEvent {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/harness/api/HarnessEvent$ToolCall;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/harness/api/HarnessEvent$ToolCall;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/harness/api/HarnessEvent$ToolCall;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getArguments ()Ljava/lang/String;
+	public final fun getCallId ()Ljava/lang/String;
+	public final fun getName ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/HarnessEvent$ToolResult : com/superiorsoftllc/infantry/harness/api/HarnessEvent {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Z)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Z
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Z)Lcom/superiorsoftllc/infantry/harness/api/HarnessEvent$ToolResult;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/harness/api/HarnessEvent$ToolResult;Ljava/lang/String;Ljava/lang/String;ZILjava/lang/Object;)Lcom/superiorsoftllc/infantry/harness/api/HarnessEvent$ToolResult;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCallId ()Ljava/lang/String;
+	public final fun getOutput ()Ljava/lang/String;
+	public fun hashCode ()I
+	public final fun isError ()Z
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/HarnessEvent$Usage : com/superiorsoftllc/infantry/harness/api/HarnessEvent {
+	public fun <init> (JJ)V
+	public fun <init> (JJJ)V
+	public fun <init> (JJJJ)V
+	public synthetic fun <init> (JJJJILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()J
+	public final fun component2 ()J
+	public final fun component3 ()J
+	public final fun component4 ()J
+	public final fun copy (JJJJ)Lcom/superiorsoftllc/infantry/harness/api/HarnessEvent$Usage;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/harness/api/HarnessEvent$Usage;JJJJILjava/lang/Object;)Lcom/superiorsoftllc/infantry/harness/api/HarnessEvent$Usage;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCacheReadTokens ()J
+	public final fun getCacheWriteTokens ()J
+	public final fun getInputTokens ()J
+	public final fun getOutputTokens ()J
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class com/superiorsoftllc/infantry/harness/api/HarnessHost {
+	public abstract fun ask (Ljava/lang/String;Lcom/superiorsoftllc/infantry/harness/api/HarnessQuestion;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun getApiVersion ()Ljava/lang/String;
+	public abstract fun getModuleId ()Ljava/lang/String;
+	public abstract fun getStateDir ()Ljava/io/File;
+	public abstract fun log (Ljava/lang/String;)V
+	public abstract fun mcpLaunch (Ljava/util/Map;)Lcom/superiorsoftllc/infantry/harness/api/HarnessProcess;
+	public fun queryDb (Ljava/io/File;Ljava/lang/String;Ljava/util/List;)Ljava/util/List;
+	public static synthetic fun queryDb$default (Lcom/superiorsoftllc/infantry/harness/api/HarnessHost;Ljava/io/File;Ljava/lang/String;Ljava/util/List;ILjava/lang/Object;)Ljava/util/List;
+	public abstract fun resolveCli (Ljava/lang/String;)Ljava/lang/String;
+	public abstract fun setting (Ljava/lang/String;)Ljava/lang/String;
+	public abstract fun start (Lcom/superiorsoftllc/infantry/harness/api/HarnessProcess;Lcom/superiorsoftllc/infantry/harness/api/HarnessProcessListener;)Lcom/superiorsoftllc/infantry/harness/api/HarnessRunningProcess;
+	public abstract fun watchLauncher (Ljava/util/Map;)Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/HarnessHost$DefaultImpls {
+	public static fun queryDb (Lcom/superiorsoftllc/infantry/harness/api/HarnessHost;Ljava/io/File;Ljava/lang/String;Ljava/util/List;)Ljava/util/List;
+	public static synthetic fun queryDb$default (Lcom/superiorsoftllc/infantry/harness/api/HarnessHost;Ljava/io/File;Ljava/lang/String;Ljava/util/List;ILjava/lang/Object;)Ljava/util/List;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/HarnessModels {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;Z)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/util/List;
+	public final fun component4 ()Ljava/lang/String;
+	public final fun component5 ()Z
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;Z)Lcom/superiorsoftllc/infantry/harness/api/HarnessModels;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/harness/api/HarnessModels;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;ZILjava/lang/Object;)Lcom/superiorsoftllc/infantry/harness/api/HarnessModels;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getGroup ()Ljava/lang/String;
+	public final fun getLabel ()Ljava/lang/String;
+	public final fun getModels ()Ljava/util/List;
+	public final fun getNote ()Ljava/lang/String;
+	public final fun getUnavailable ()Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class com/superiorsoftllc/infantry/harness/api/HarnessPlugin {
+	public abstract fun getContractVersion ()Ljava/lang/String;
+	public abstract fun getPluginId ()Ljava/lang/String;
+	public abstract fun register (Lcom/superiorsoftllc/infantry/harness/api/HarnessRegistrar;)V
+	public fun unload ()V
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/HarnessPlugin$DefaultImpls {
+	public static fun unload (Lcom/superiorsoftllc/infantry/harness/api/HarnessPlugin;)V
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/HarnessProcess {
+	public fun <init> (Ljava/util/List;Ljava/io/File;Ljava/util/Map;)V
+	public synthetic fun <init> (Ljava/util/List;Ljava/io/File;Ljava/util/Map;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/util/List;
+	public final fun component2 ()Ljava/io/File;
+	public final fun component3 ()Ljava/util/Map;
+	public final fun copy (Ljava/util/List;Ljava/io/File;Ljava/util/Map;)Lcom/superiorsoftllc/infantry/harness/api/HarnessProcess;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/harness/api/HarnessProcess;Ljava/util/List;Ljava/io/File;Ljava/util/Map;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/harness/api/HarnessProcess;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCommand ()Ljava/util/List;
+	public final fun getEnv ()Ljava/util/Map;
+	public final fun getWorkingDir ()Ljava/io/File;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class com/superiorsoftllc/infantry/harness/api/HarnessProcessListener {
+	public abstract fun onExit (I)V
+	public abstract fun onStderr (Ljava/lang/String;)V
+	public abstract fun onStdout (Ljava/lang/String;)V
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/HarnessQuestion {
+	public fun <init> (Ljava/lang/String;Ljava/util/List;Ljava/lang/String;Ljava/lang/Long;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/util/List;Ljava/lang/String;Ljava/lang/Long;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/util/List;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()Ljava/lang/Long;
+	public final fun copy (Ljava/lang/String;Ljava/util/List;Ljava/lang/String;Ljava/lang/Long;)Lcom/superiorsoftllc/infantry/harness/api/HarnessQuestion;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/harness/api/HarnessQuestion;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;Ljava/lang/Long;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/harness/api/HarnessQuestion;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getOptions ()Ljava/util/List;
+	public final fun getQuestion ()Ljava/lang/String;
+	public final fun getRecommended ()Ljava/lang/String;
+	public final fun getTimeoutMillis ()Ljava/lang/Long;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class com/superiorsoftllc/infantry/harness/api/HarnessRegistrar {
+	public abstract fun getHost ()Lcom/superiorsoftllc/infantry/harness/api/HarnessHost;
+	public abstract fun register (Lcom/superiorsoftllc/infantry/harness/api/Harness;)V
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/HarnessRequest {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lcom/superiorsoftllc/infantry/harness/api/ToolApproval;Ljava/lang/Integer;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lcom/superiorsoftllc/infantry/harness/api/ToolApproval;Ljava/lang/Integer;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()Ljava/lang/String;
+	public final fun component5 ()Ljava/lang/String;
+	public final fun component6 ()Ljava/lang/String;
+	public final fun component7 ()Lcom/superiorsoftllc/infantry/harness/api/ToolApproval;
+	public final fun component8 ()Ljava/lang/Integer;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lcom/superiorsoftllc/infantry/harness/api/ToolApproval;Ljava/lang/Integer;)Lcom/superiorsoftllc/infantry/harness/api/HarnessRequest;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/harness/api/HarnessRequest;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lcom/superiorsoftllc/infantry/harness/api/ToolApproval;Ljava/lang/Integer;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/harness/api/HarnessRequest;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getContextLimit ()Ljava/lang/Integer;
+	public final fun getEffort ()Ljava/lang/String;
+	public final fun getHarnessId ()Ljava/lang/String;
+	public final fun getModel ()Ljava/lang/String;
+	public final fun getProject ()Ljava/lang/String;
+	public final fun getPrompt ()Ljava/lang/String;
+	public final fun getSessionId ()Ljava/lang/String;
+	public final fun getToolApproval ()Lcom/superiorsoftllc/infantry/harness/api/ToolApproval;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class com/superiorsoftllc/infantry/harness/api/HarnessRunningProcess {
+	public abstract fun closeInput ()V
+	public abstract fun isAlive ()Z
+	public abstract fun killTree ()V
+	public abstract fun writeInput (Ljava/lang/String;)V
+}
+
+public abstract interface class com/superiorsoftllc/infantry/harness/api/HarnessSession {
+	public abstract fun connect (Lcom/superiorsoftllc/infantry/harness/api/SessionOutput;)Lcom/superiorsoftllc/infantry/harness/api/SessionConnection;
+	public fun connect (Lcom/superiorsoftllc/infantry/harness/api/SessionOutput;Lcom/superiorsoftllc/infantry/harness/api/HarnessProcess;)Lcom/superiorsoftllc/infantry/harness/api/SessionConnection;
+	public abstract fun fingerprint (Lcom/superiorsoftllc/infantry/harness/api/HarnessRequest;Ljava/util/Map;)Ljava/lang/String;
+	public fun getBootTimeoutMs ()J
+	public abstract fun getLabel ()Ljava/lang/String;
+	public abstract fun launch (Lcom/superiorsoftllc/infantry/harness/api/HarnessRequest;Ljava/util/Map;)Lcom/superiorsoftllc/infantry/harness/api/HarnessProcess;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/HarnessSession$DefaultImpls {
+	public static fun connect (Lcom/superiorsoftllc/infantry/harness/api/HarnessSession;Lcom/superiorsoftllc/infantry/harness/api/SessionOutput;Lcom/superiorsoftllc/infantry/harness/api/HarnessProcess;)Lcom/superiorsoftllc/infantry/harness/api/SessionConnection;
+	public static fun getBootTimeoutMs (Lcom/superiorsoftllc/infantry/harness/api/HarnessSession;)J
+}
+
+public abstract interface class com/superiorsoftllc/infantry/harness/api/HarnessStatEvent {
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/HarnessStatEvent$AssistantAt : com/superiorsoftllc/infantry/harness/api/HarnessStatEvent {
+	public fun <init> (Ljava/lang/Long;)V
+	public final fun component1 ()Ljava/lang/Long;
+	public final fun copy (Ljava/lang/Long;)Lcom/superiorsoftllc/infantry/harness/api/HarnessStatEvent$AssistantAt;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/harness/api/HarnessStatEvent$AssistantAt;Ljava/lang/Long;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/harness/api/HarnessStatEvent$AssistantAt;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAt ()Ljava/lang/Long;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/HarnessStatEvent$Prompt : com/superiorsoftllc/infantry/harness/api/HarnessStatEvent {
+	public static final field INSTANCE Lcom/superiorsoftllc/infantry/harness/api/HarnessStatEvent$Prompt;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/HarnessStatEvent$Request : com/superiorsoftllc/infantry/harness/api/HarnessStatEvent {
+	public fun <init> (Ljava/lang/Long;Ljava/lang/String;JJJJLjava/lang/Double;)V
+	public synthetic fun <init> (Ljava/lang/Long;Ljava/lang/String;JJJJLjava/lang/Double;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/Long;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()J
+	public final fun component4 ()J
+	public final fun component5 ()J
+	public final fun component6 ()J
+	public final fun component7 ()Ljava/lang/Double;
+	public final fun copy (Ljava/lang/Long;Ljava/lang/String;JJJJLjava/lang/Double;)Lcom/superiorsoftllc/infantry/harness/api/HarnessStatEvent$Request;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/harness/api/HarnessStatEvent$Request;Ljava/lang/Long;Ljava/lang/String;JJJJLjava/lang/Double;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/harness/api/HarnessStatEvent$Request;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAt ()Ljava/lang/Long;
+	public final fun getCacheRead ()J
+	public final fun getCacheWrite ()J
+	public final fun getCost ()Ljava/lang/Double;
+	public final fun getInput ()J
+	public final fun getModel ()Ljava/lang/String;
+	public final fun getOutput ()J
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/HarnessStatEvent$Seen : com/superiorsoftllc/infantry/harness/api/HarnessStatEvent {
+	public fun <init> (Ljava/lang/Long;)V
+	public final fun component1 ()Ljava/lang/Long;
+	public final fun copy (Ljava/lang/Long;)Lcom/superiorsoftllc/infantry/harness/api/HarnessStatEvent$Seen;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/harness/api/HarnessStatEvent$Seen;Ljava/lang/Long;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/harness/api/HarnessStatEvent$Seen;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAt ()Ljava/lang/Long;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/HarnessStatEvent$Tool : com/superiorsoftllc/infantry/harness/api/HarnessStatEvent {
+	public fun <init> (Ljava/lang/String;Ljava/lang/Long;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/Long;
+	public final fun copy (Ljava/lang/String;Ljava/lang/Long;)Lcom/superiorsoftllc/infantry/harness/api/HarnessStatEvent$Tool;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/harness/api/HarnessStatEvent$Tool;Ljava/lang/String;Ljava/lang/Long;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/harness/api/HarnessStatEvent$Tool;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAt ()Ljava/lang/Long;
+	public final fun getName ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/HarnessStatEvent$ToolResult : com/superiorsoftllc/infantry/harness/api/HarnessStatEvent {
+	public fun <init> (ILjava/lang/Long;)V
+	public final fun component1 ()I
+	public final fun component2 ()Ljava/lang/Long;
+	public final fun copy (ILjava/lang/Long;)Lcom/superiorsoftllc/infantry/harness/api/HarnessStatEvent$ToolResult;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/harness/api/HarnessStatEvent$ToolResult;ILjava/lang/Long;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/harness/api/HarnessStatEvent$ToolResult;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAt ()Ljava/lang/Long;
+	public final fun getChars ()I
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/HarnessStatEvent$Turn : com/superiorsoftllc/infantry/harness/api/HarnessStatEvent {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/harness/api/HarnessStatEvent$Turn;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/harness/api/HarnessStatEvent$Turn;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/harness/api/HarnessStatEvent$Turn;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getModel ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class com/superiorsoftllc/infantry/harness/api/HarnessStats {
+	public abstract fun read (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/harness/api/HarnessStatsRow;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/HarnessStatsRow {
+	public fun <init> ()V
+	public fun <init> (Ljava/lang/Long;Ljava/lang/Long;Ljava/lang/Integer;Ljava/lang/Integer;Ljava/lang/Integer;Ljava/util/List;Ljava/lang/Long;Ljava/lang/Long;Ljava/lang/Double;Ljava/util/List;)V
+	public synthetic fun <init> (Ljava/lang/Long;Ljava/lang/Long;Ljava/lang/Integer;Ljava/lang/Integer;Ljava/lang/Integer;Ljava/util/List;Ljava/lang/Long;Ljava/lang/Long;Ljava/lang/Double;Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/Long;
+	public final fun component10 ()Ljava/util/List;
+	public final fun component2 ()Ljava/lang/Long;
+	public final fun component3 ()Ljava/lang/Integer;
+	public final fun component4 ()Ljava/lang/Integer;
+	public final fun component5 ()Ljava/lang/Integer;
+	public final fun component6 ()Ljava/util/List;
+	public final fun component7 ()Ljava/lang/Long;
+	public final fun component8 ()Ljava/lang/Long;
+	public final fun component9 ()Ljava/lang/Double;
+	public final fun copy (Ljava/lang/Long;Ljava/lang/Long;Ljava/lang/Integer;Ljava/lang/Integer;Ljava/lang/Integer;Ljava/util/List;Ljava/lang/Long;Ljava/lang/Long;Ljava/lang/Double;Ljava/util/List;)Lcom/superiorsoftllc/infantry/harness/api/HarnessStatsRow;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/harness/api/HarnessStatsRow;Ljava/lang/Long;Ljava/lang/Long;Ljava/lang/Integer;Ljava/lang/Integer;Ljava/lang/Integer;Ljava/util/List;Ljava/lang/Long;Ljava/lang/Long;Ljava/lang/Double;Ljava/util/List;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/harness/api/HarnessStatsRow;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAssistantTurns ()Ljava/lang/Integer;
+	public final fun getBilledTokens ()Ljava/lang/Long;
+	public final fun getCostTotal ()Ljava/lang/Double;
+	public final fun getEndedAt ()Ljava/lang/Long;
+	public final fun getEvents ()Ljava/util/List;
+	public final fun getLastContextTokens ()Ljava/lang/Long;
+	public final fun getModels ()Ljava/util/List;
+	public final fun getStartedAt ()Ljava/lang/Long;
+	public final fun getToolUses ()Ljava/lang/Integer;
+	public final fun getUserPrompts ()Ljava/lang/Integer;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class com/superiorsoftllc/infantry/harness/api/HarnessTranslator {
+	public abstract fun terminal (ILjava/lang/String;)Lcom/superiorsoftllc/infantry/harness/api/HarnessEvent;
+	public abstract fun translate (Ljava/lang/String;)Ljava/util/List;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/HarnessUsageReading {
+	public fun <init> (Ljava/util/List;Ljava/lang/String;)V
+	public synthetic fun <init> (Ljava/util/List;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/util/List;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Ljava/util/List;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/harness/api/HarnessUsageReading;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/harness/api/HarnessUsageReading;Ljava/util/List;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/harness/api/HarnessUsageReading;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getReason ()Ljava/lang/String;
+	public final fun getWindows ()Ljava/util/List;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class com/superiorsoftllc/infantry/harness/api/HarnessUsageSource {
+	public abstract fun read (J)Lcom/superiorsoftllc/infantry/harness/api/HarnessUsageReading;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/HarnessUsageWindow {
+	public fun <init> (Ljava/lang/String;ILjava/lang/Double;Ljava/lang/Long;)V
+	public synthetic fun <init> (Ljava/lang/String;ILjava/lang/Double;Ljava/lang/Long;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()I
+	public final fun component3 ()Ljava/lang/Double;
+	public final fun component4 ()Ljava/lang/Long;
+	public final fun copy (Ljava/lang/String;ILjava/lang/Double;Ljava/lang/Long;)Lcom/superiorsoftllc/infantry/harness/api/HarnessUsageWindow;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/harness/api/HarnessUsageWindow;Ljava/lang/String;ILjava/lang/Double;Ljava/lang/Long;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/harness/api/HarnessUsageWindow;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getLabel ()Ljava/lang/String;
+	public final fun getPercent ()Ljava/lang/Double;
+	public final fun getResetsAt ()Ljava/lang/Long;
+	public final fun getWindowMinutes ()I
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/SandboxContribution {
+	public fun <init> ()V
+	public fun <init> (Ljava/util/List;Ljava/util/List;Ljava/util/Set;)V
+	public synthetic fun <init> (Ljava/util/List;Ljava/util/List;Ljava/util/Set;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/util/List;
+	public final fun component2 ()Ljava/util/List;
+	public final fun component3 ()Ljava/util/Set;
+	public final fun copy (Ljava/util/List;Ljava/util/List;Ljava/util/Set;)Lcom/superiorsoftllc/infantry/harness/api/SandboxContribution;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/harness/api/SandboxContribution;Ljava/util/List;Ljava/util/List;Ljava/util/Set;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/harness/api/SandboxContribution;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getEnvNames ()Ljava/util/Set;
+	public final fun getReadDirs ()Ljava/util/List;
+	public final fun getWriteDirs ()Ljava/util/List;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/SandboxRoots {
+	public fun <init> (Ljava/io/File;Ljava/io/File;)V
+	public final fun component1 ()Ljava/io/File;
+	public final fun component2 ()Ljava/io/File;
+	public final fun copy (Ljava/io/File;Ljava/io/File;)Lcom/superiorsoftllc/infantry/harness/api/SandboxRoots;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/harness/api/SandboxRoots;Ljava/io/File;Ljava/io/File;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/harness/api/SandboxRoots;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDataDir ()Ljava/io/File;
+	public final fun getWorktree ()Ljava/io/File;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class com/superiorsoftllc/infantry/harness/api/SessionConnection {
+	public abstract fun abortTurn ()Z
+	public fun close ()Z
+	public fun onStderr (Ljava/lang/String;)V
+	public abstract fun onStdout (Ljava/lang/String;)V
+	public abstract fun sendTurn (Lcom/superiorsoftllc/infantry/harness/api/HarnessRequest;)V
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/SessionConnection$DefaultImpls {
+	public static fun close (Lcom/superiorsoftllc/infantry/harness/api/SessionConnection;)Z
+	public static fun onStderr (Lcom/superiorsoftllc/infantry/harness/api/SessionConnection;Ljava/lang/String;)V
+}
+
+public abstract interface class com/superiorsoftllc/infantry/harness/api/SessionOutput {
+	public abstract fun closeInput ()V
+	public abstract fun detail (Ljava/lang/String;)V
+	public fun diagnostic (Ljava/lang/String;)V
+	public fun output (Ljava/lang/String;)V
+	public abstract fun providerSession (Ljava/lang/String;)V
+	public fun requestApproval (Ljava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/harness/api/ApprovalReply;
+	public abstract fun turnEnded (Lcom/superiorsoftllc/infantry/harness/api/SessionTurnEnd;Ljava/lang/Integer;Ljava/lang/String;)V
+	public static synthetic fun turnEnded$default (Lcom/superiorsoftllc/infantry/harness/api/SessionOutput;Lcom/superiorsoftllc/infantry/harness/api/SessionTurnEnd;Ljava/lang/Integer;Ljava/lang/String;ILjava/lang/Object;)V
+	public abstract fun write (Ljava/lang/String;)Z
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/SessionOutput$DefaultImpls {
+	public static fun diagnostic (Lcom/superiorsoftllc/infantry/harness/api/SessionOutput;Ljava/lang/String;)V
+	public static fun output (Lcom/superiorsoftllc/infantry/harness/api/SessionOutput;Ljava/lang/String;)V
+	public static fun requestApproval (Lcom/superiorsoftllc/infantry/harness/api/SessionOutput;Ljava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/harness/api/ApprovalReply;
+	public static synthetic fun turnEnded$default (Lcom/superiorsoftllc/infantry/harness/api/SessionOutput;Lcom/superiorsoftllc/infantry/harness/api/SessionTurnEnd;Ljava/lang/Integer;Ljava/lang/String;ILjava/lang/Object;)V
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/SessionTurnEnd : java/lang/Enum {
+	public static final field COMPLETED Lcom/superiorsoftllc/infantry/harness/api/SessionTurnEnd;
+	public static final field FAILED Lcom/superiorsoftllc/infantry/harness/api/SessionTurnEnd;
+	public static final field INTERRUPTED Lcom/superiorsoftllc/infantry/harness/api/SessionTurnEnd;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/harness/api/SessionTurnEnd;
+	public static fun values ()[Lcom/superiorsoftllc/infantry/harness/api/SessionTurnEnd;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/ToolApproval : java/lang/Enum {
+	public static final field ALLOW_ALL Lcom/superiorsoftllc/infantry/harness/api/ToolApproval;
+	public static final field ALLOW_EDITS Lcom/superiorsoftllc/infantry/harness/api/ToolApproval;
+	public static final field ASK Lcom/superiorsoftllc/infantry/harness/api/ToolApproval;
+	public static final field DENY Lcom/superiorsoftllc/infantry/harness/api/ToolApproval;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/harness/api/ToolApproval;
+	public static fun values ()[Lcom/superiorsoftllc/infantry/harness/api/ToolApproval;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/WatchContribution {
+	public fun <init> ()V
+	public fun <init> (Ljava/util/List;Ljava/util/Map;Ljava/util/Map;)V
+	public synthetic fun <init> (Ljava/util/List;Ljava/util/Map;Ljava/util/Map;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/util/List;
+	public final fun component2 ()Ljava/util/Map;
+	public final fun component3 ()Ljava/util/Map;
+	public final fun copy (Ljava/util/List;Ljava/util/Map;Ljava/util/Map;)Lcom/superiorsoftllc/infantry/harness/api/WatchContribution;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/harness/api/WatchContribution;Ljava/util/List;Ljava/util/Map;Ljava/util/Map;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/harness/api/WatchContribution;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getEnv ()Ljava/util/Map;
+	public final fun getExtraArgs ()Ljava/util/List;
+	public final fun getFiles ()Ljava/util/Map;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+

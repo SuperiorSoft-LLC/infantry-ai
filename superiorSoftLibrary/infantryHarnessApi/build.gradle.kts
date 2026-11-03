@@ -14,4 +14,10 @@ apply(from = rootProject.file("gradle/sdk-publish.gradle.kts"))
 
 kotlin {
     jvmToolchain(21)
+    // SDK-SURFACE-1: committed ABI dump (api/). checkLegacyAbi runs in `check`.
+    @OptIn(org.jetbrains.kotlin.gradle.dsl.abi.ExperimentalAbiValidation::class)
+    abiValidation { enabled.set(true) }
 }
+
+// SDK-SURFACE-1: the ABI check gates `check`.
+tasks.named("check") { dependsOn("checkLegacyAbi") }
