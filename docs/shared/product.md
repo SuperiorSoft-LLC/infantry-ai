@@ -6,6 +6,9 @@ pitch: Infantry AI is a command post for coding agents: a ticket board, agents o
 license_line: The core (the daemon) is the foundation: it is licensed MPL-2.0 to protect its integrity, so apps and plugins can rely on a stable base that does not break, with backward compatibility as the promise. Everything built on top (the SDKs, the UI core, the apps and every plugin) is free under Apache-2.0: build, fork, sell and extend it without copyleft.
 license_footer: The core is a community effort; the rest is yours.
 platforms: Windows desktop now. Android app. Headless server (Docker or plain archive). No macOS or Linux desktop app yet.
+status: Beta
+beta_line: Infantry AI is in Beta. It works and we use it every day, but not every part is fully tested yet: you are an early tester. Please report anything that breaks on GitHub.
+issues_url: https://github.com/SuperiorSoft-LLC/infantry-ai/issues
 repo: https://github.com/SuperiorSoft-LLC/infantry-ai
 wiki: https://github.com/SuperiorSoft-LLC/infantry-ai/blob/main/docs/wiki/index.md
 plugins_page: https://github.com/SuperiorSoft-LLC/infantry-ai/blob/main/docs/wiki/make-a-plugin.md
