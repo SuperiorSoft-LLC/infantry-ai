@@ -192,6 +192,8 @@ What is missing, and the shape of each:
 3. **Loading the daemon half without a restart.** Today every change says "takes effect at the next daemon start". A
    `DaemonPluginHost` load-one / unload-one for a module (its own class loader already makes this possible) removes that.
    BOARD-DOWN-2 (6f94b170, backlog: re-enable a failed plugin without a restart) is the same mechanism; build it once.
+   **Built (PLUGIN-HOTLOAD-1):** `DaemonPluginHost.load / unload / reload`, called by the manager; see PLUGIN-MANAGER "Live daemon halves".
+   `load` of a failed plugin takes the failed copy out and starts it afresh, which is the BOARD-DOWN-2 re-enable.
 4. **Staged apply (G7)** for a module whose jars are open: write `_pending.json`, apply at the next start. Needed for update on
    Windows; independent of the rest.
 5. **Remote clients** (web, Android) manage plugins through frames (`plugin_*`, PLUGIN-MANAGER section 4.3), owner-only action

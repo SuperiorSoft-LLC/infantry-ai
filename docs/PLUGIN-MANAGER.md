@@ -362,7 +362,29 @@ Not built (gaps, listed not hacked):
   with the read tools and an `infantry_plugin_request` that calls the ask service. Until then agents use `infantry plugin list|search|show`
   through the CLI and `infantry ask` to request an install.
 * **G7 staged apply.** A loaded module's locked files make update/rollback/remove answer IN_USE (nothing changed); `_pending.json` /
-  `applyPending` is not built. Daemon/harness halves load at start, so every change says "takes effect at the next daemon start".
+  `applyPending` is not built. PLUGIN-HOTLOAD-1: a daemon half is now loaded / unloaded / reloaded live (see "Live daemon halves" below), so
+  only a harness half, or a manager with no running daemon (the CLI), says "takes effect at the next daemon start".
+
+### Live daemon halves (PLUGIN-HOTLOAD-1)
+
+`DaemonPluginHost.load(id)`, `unload(id)` and `reload(id)` (the `PluginHotApply` seam the manager is given) change ONE daemon half while the
+host runs. Install and enable load it; disable and remove unload it; update, rollback and a grant change reload it.
+
+* **Unload** takes the plugin's registrations out first (tools, frames, routes, every hook and gate, event listeners, admissions), so a new
+  request no longer finds it; closes its background work; calls `stop` under `limits.plugins.stopTimeoutMs`; drains its call pool (a call in
+  flight finishes, or is interrupted at that same timeout); then closes its class loader, so the jar can be deleted or moved on Windows. A
+  failure caused by leaving is not a plugin failure: no "FAILED" mail, no strike. Gates are removed on purpose (a failed plugin's gates stay and
+  fail closed; an unloaded one's do not).
+* **Order** for update / rollback / remove: unload, move the files, load. Unload comes first because the open jar blocks the move on Windows;
+  if the move is refused (IN_USE) or the install fails, the old half is loaded again.
+* **Dependents.** A module that depends on the unloaded one leaves with it (reverse load order) and the answer names it. Update / rollback
+  bring those back after the plugin; remove / disable leave them out. `load` of a module whose dependency's daemon half is not loaded is refused.
+* **Concurrency.** Load / unload / reload are serialised by one lock. Readers take none: the registries are concurrent maps and copy-on-write
+  lists, so a swap is one atomic step per registry. A reload has a short gap in which the plugin's tools are absent.
+* **Not live** (reported in the answer's notes): a harness half (start-only); an `orchestratorBinding` offered to the hub (registered once at
+  start, there is no unregister); a plugin's event forwarding when the daemon started with no plugin at all.
+* **MCP.** `tools/list` asks the daemon for its `plugin_tools` frame on every call, so a changed tool set shows on the next list. The server
+  declares `listChanged: false` and sends no `notifications/tools/list_changed`; a client that caches the list sees the change when it asks again.
 * **G5 packaging.** `.ihq` build (`gradle/ihq.gradle.kts`) still packs only the UI jar; a daemon half inside a package works if its
   `daemon.jar` points at `lib/<x>.jar` (the manager and installer accept it), but the build does not produce that yet (PM-3).
 * **Catalog generation, UI screen (PM-8), VoicePluginStore fold-in (PM-9), update-check schedule, attestation.**

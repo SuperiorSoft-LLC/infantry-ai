@@ -42,7 +42,10 @@ import com.superiorsoftllc.infantry.plugin.api.ModulesConfig
 import com.superiorsoftllc.infantry.plugin.api.PolicyPreset
 import com.superiorsoftllc.infantry.plugin.api.Tier
 import com.superiorsoftllc.infantry.plugin.host.ModuleCandidate
+import com.superiorsoftllc.infantry.plugin.host.ModuleState
 import com.superiorsoftllc.infantry.plugin.host.ModuleStatus
+import com.superiorsoftllc.infantry.daemon.plugins.manager.HotOutcome
+import com.superiorsoftllc.infantry.daemon.plugins.manager.PluginHotApply
 import com.superiorsoftllc.infantry.plugin.host.OfficialTrust
 import com.superiorsoftllc.infantry.plugin.host.Resolution
 import com.superiorsoftllc.infantry.plugin.host.SemVer
@@ -76,7 +79,7 @@ class DaemonPluginHost private constructor(
     private val services: DaemonServices,
     private val stateDir: File,
     private val log: (String) -> Unit,
-) : AutoCloseable {
+) : AutoCloseable, PluginHotApply {
 
     /** One loaded daemon half. */
     inner class Loaded(
@@ -86,8 +89,12 @@ class DaemonPluginHost private constructor(
         val setting: ModuleSetting,
         val guard: PluginGuard,
         val loader: URLClassLoader,
+        /** PLUGIN-HOTLOAD-1: the module ids this one depends on (its manifest's `dependencies`), so an unload finds its dependents. */
+        val dependencies: List<String> = emptyList(),
     ) {
         @Volatile var plugin: DaemonPlugin? = null
+        /** PLUGIN-HOTLOAD-1: set when an unload began: a failure from here on is not announced, and its gates no longer apply. */
+        @Volatile var unloading = false
         val community: Boolean get() = tier == Tier.COMMUNITY
         val callTimeoutMs: Long = declared.limits.callTimeoutMs ?: services.limit(LimitRegistry.PLUGIN_CALL_TIMEOUT_MS)
         val toolTimeoutMs: Long = declared.limits.toolTimeoutMs ?: services.limit(LimitRegistry.PLUGIN_TOOL_TIMEOUT_MS)
@@ -117,7 +124,7 @@ class DaemonPluginHost private constructor(
     private val frameHandlers = ConcurrentHashMap<String, FrameEntry>()
     private val routeEntries = ConcurrentHashMap<String, RouteEntry>()
     private val frameGates = CopyOnWriteArrayList<Registered<FrameGateHook>>()
-    private val orchestratorBindings = CopyOnWriteArrayList<Pair<String, com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorBinding>>()
+    private val orchestratorBindings = CopyOnWriteArrayList<Registered<Pair<String, com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorBinding>>>()
     private val approvalRuleHooks = CopyOnWriteArrayList<Registered<com.superiorsoftllc.infantry.daemon.api.ApprovalRulesHook>>()
     private val httpGates = CopyOnWriteArrayList<Registered<HttpGateHook>>()
     private val admissions = CopyOnWriteArrayList<Registered<AdmissionHook>>()
@@ -151,6 +158,7 @@ class DaemonPluginHost private constructor(
     fun frameRefusal(envelope: Envelope, caller: Caller): String? {
         val frame = envelope.toFrame()
         for (g in frameGates) {
+            if (g.owner.unloading) continue // PLUGIN-HOTLOAD-1: a gate being removed on purpose is no failure
             if (g.owner.guard.disabled) {
                 if (caller.owner) continue
                 return failClosed(g.owner, "frame gate")
@@ -165,6 +173,7 @@ class DaemonPluginHost private constructor(
     /** Every HTTP gate; fail closed (except `/health`, which a supervisor must always reach). */
     fun httpRefusal(method: String, path: String, webAsset: Boolean): String? {
         for (g in httpGates) {
+            if (g.owner.unloading) continue
             if (g.owner.guard.disabled) { if (path == "/health") continue; return failClosed(g.owner, "http gate") }
             val r = g.owner.call("httpGate($method $path)") { g.value.refusal(method, path, webAsset) }
             if (r.isFailure) { if (path == "/health") continue; return failClosed(g.owner, "http gate") }
@@ -175,7 +184,7 @@ class DaemonPluginHost private constructor(
 
     /** The guest bearer tokens admitted now (official/core admission hooks only); fail open (none). */
     /** ORCH-1: the orchestrator bindings plugins offered, for the daemon to register on its hub. */
-    fun orchestratorBindings(): List<Pair<String, com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorBinding>> = orchestratorBindings.toList()
+    fun orchestratorBindings(): List<Pair<String, com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorBinding>> = orchestratorBindings.map { it.value }
 
     /** DP-10b: the approval-rule store a plugin offered (the first one), else a port with no rules. Fail open. */
     val approvalRules: com.superiorsoftllc.infantry.daemon.api.ApprovalRulesHook = object : com.superiorsoftllc.infantry.daemon.api.ApprovalRulesHook {
@@ -191,6 +200,7 @@ class DaemonPluginHost private constructor(
 
     fun mailRefusal(from: String, to: String, allowCrossProject: Boolean): String? {
         for (g in mailGates) {
+            if (g.owner.unloading) continue
             if (g.owner.guard.disabled) return failClosed(g.owner, "mail gate")
             val r = g.owner.call("mailGate") { g.value.refusal(from, to, allowCrossProject) }
             if (r.isFailure) return failClosed(g.owner, "mail gate")
@@ -213,6 +223,7 @@ class DaemonPluginHost private constructor(
 
     fun spawnRefusal(role: String?, projectId: String?): String? {
         for (g in spawnGates) {
+            if (g.owner.unloading) continue
             if (g.owner.guard.disabled) return failClosed(g.owner, "spawn gate")
             val r = g.owner.call("spawnGate") { g.value.refusal(role, projectId) }
             if (r.isFailure) return failClosed(g.owner, "spawn gate")
@@ -507,7 +518,148 @@ class DaemonPluginHost private constructor(
             .getOrElse { HttpReply(500, "plugin ${owner.id} failed: ${it.message ?: it::class.simpleName}") }
     }
 
-    override fun close() {
+    // ---- PLUGIN-HOTLOAD-1: load, unload and reload ONE daemon half while the host runs ------------------------------
+
+    /** What a live load reads: the plugins root as it is NOW (re-resolved), its grants file, and the trust that boot used. */
+    class HotSource(val resolution: Resolution, val config: ModulesConfig, val trust: Trust)
+
+    /** Set by the daemon once it is up: re-reads the plugins root and the loading rules, so [load] sees what was just installed. Null = no live load. */
+    @Volatile var hotSource: (() -> HotSource)? = null
+
+    /**
+     * Serialises load / unload / reload (one at a time). Readers never take it: every registry is a concurrent map or a
+     * copy-on-write list, a removal is one atomic step per registry, and a request that already holds an entry runs to its end
+     * through the owner's guard (see [retire]).
+     */
+    private val lifecycle = Any()
+
+    /** True when the daemon half of [module] is in the host (healthy or failed). */
+    fun isLoaded(module: String): Boolean = loaded.any { it.id == module }
+
+    private inline fun withSource(block: (HotSource) -> HotOutcome): HotOutcome {
+        val src = hotSource ?: return HotOutcome(false, "this host cannot load plugins live (no plugin source set)")
+        val fresh = runCatching { src() }.getOrElse { return HotOutcome(false, "could not re-read the plugins root: ${it.message}") }
+        return block(fresh)
+    }
+
+    /** Starts the daemon half of [id], resolving it against the loaded set as boot does. Dependencies must already be loaded. */
+    override fun load(id: String): HotOutcome = withSource { load(id, it) }
+    override fun unload(id: String): HotOutcome = synchronized(lifecycle) { unloadLocked(id) }
+    override fun reload(id: String): HotOutcome = withSource { reload(id, it) }
+
+    fun load(id: String, source: HotSource): HotOutcome = synchronized(lifecycle) { loadLocked(id, source) }
+
+    /** Unload then load of [id], then every module that had to leave with it, in dependency order. */
+    fun reload(id: String, source: HotSource): HotOutcome = synchronized(lifecycle) {
+        val out = unloadLocked(id)
+        val self = loadLocked(id, source)
+        val back = if (self.ok) out.unloaded.filter { it != id }.reversed().map { loadLocked(it, source) } else emptyList()
+        val failed = back.filter { !it.ok }
+        HotOutcome(
+            self.ok && failed.isEmpty(),
+            buildString {
+                append(self.message)
+                val again = back.flatMap { it.loaded }
+                if (again.isNotEmpty()) append("; dependents loaded again: ${again.joinToString()}")
+                failed.forEach { append("; ${it.message}") }
+            },
+            unloaded = out.unloaded, loaded = self.loaded + back.flatMap { it.loaded }, notes = (out.notes + self.notes + back.flatMap { it.notes }).distinct(),
+        )
+    }
+
+    private fun loadLocked(id: String, src: HotSource): HotOutcome {
+        loaded.firstOrNull { it.id == id }?.let { existing ->
+            if (!existing.guard.disabled) return HotOutcome(true, "$id is already loaded")
+            unloadLocked(id) // a failed one: take it out first (frees its class loader), then start it afresh
+        }
+        val s = src.resolution.status(id) ?: return HotOutcome(false, "no module '$id' in the plugins root")
+        if (s.state != ModuleState.LOADED) return HotOutcome(false, "$id does not load: ${s.state.name.lowercase()}${s.reason?.let { " ($it)" }.orEmpty()}")
+        val m = s.manifest ?: return HotOutcome(false, "$id has no readable module.json")
+        val daemon = m.daemon
+        val notes = mutableListOf<String>()
+        if (m.harness != null) notes += "the harness half of $id loads at the next daemon start (harness halves are start-only)"
+        if (daemon?.entry.isNullOrBlank()) return HotOutcome(true, "$id has no daemon half; nothing to load", notes = notes)
+        for (dep in m.dependencies) {
+            val ds = src.resolution.status(dep.id)
+            if (ds?.manifest?.daemon?.entry?.isNotBlank() == true && loaded.none { it.id == dep.id && !it.guard.disabled }) {
+                return HotOutcome(false, "$id depends on ${dep.id}, whose daemon half is not loaded; load ${dep.id} first", notes = notes)
+            }
+        }
+        if (daemon != null && "orchestratorBinding" in daemon.hooks) notes += "an orchestrator binding of $id is offered to the hub at daemon start only"
+        runCatching { load(s, src.config, src.trust) }
+            .onFailure { statuses[id] = "refused: ${it.message}"; log("[plugins] daemon half of $id refused: ${it.message}") }
+        // A start that failed leaves a disabled plugin behind: free its class loader at once (the status keeps the reason).
+        loaded.firstOrNull { it.id == id }?.takeIf { it.guard.disabled }?.let { failed -> retire(failed); loaded.remove(failed) }
+        val status = statuses[id] ?: "refused"
+        return if (status == "loaded") HotOutcome(true, "loaded $id: ${toolsOf(id).size} tool(s)", loaded = listOf(id), notes = notes)
+        else HotOutcome(false, "$id did not load ($status)", notes = notes)
+    }
+
+    private fun unloadLocked(id: String): HotOutcome {
+        val target = loaded.firstOrNull { it.id == id } ?: return HotOutcome(true, "$id has no loaded daemon half")
+        // A dependent cannot run without it: they leave first (reverse load order), and are reported.
+        val gone = mutableSetOf(id)
+        var grew = true
+        while (grew) {
+            grew = false
+            for (p in loaded) if (p.id !in gone && p.dependencies.any { it in gone }) { gone += p.id; grew = true }
+        }
+        val leaving = loaded.reversed().filter { it.id in gone && it !== target } + target
+        val notes = leaving.filter { o -> orchestratorBindings.any { it.owner === o } }.map { "the orchestrator binding of ${it.id} stays on the hub until the next daemon start" }
+        for (p in leaving) {
+            retire(p)
+            loaded.remove(p)
+            statuses.remove(p.id)
+        }
+        val names = leaving.map { it.id }
+        log("[plugins] unloaded daemon half of ${names.joinToString()}")
+        val dependents = names.filter { it != id }
+        return HotOutcome(true, "unloaded $id" + if (dependents.isEmpty()) "" else " (and its dependents ${dependents.joinToString()})", unloaded = names, notes = notes)
+    }
+
+    /**
+     * Takes one plugin out of service: its registrations go first (a new request no longer finds it), then its background work,
+     * then `stop` under the stop timeout, then its guard drains (a call in flight finishes, or is interrupted at the stop
+     * timeout, and a failure caused by leaving is not a plugin failure), then its class loader closes so the jar can be deleted.
+     */
+    private fun retire(p: Loaded) {
+        p.unloading = true
+        dropRegistrations(p)
+        p.closeables.forEach { runCatching { it.close() } }
+        val stopMs = services.limit(LimitRegistry.PLUGIN_STOP_TIMEOUT_MS)
+        if (!p.guard.disabled && p.plugin != null) {
+            p.call("stop", stopMs) { p.plugin?.stop() }.onFailure { log("[plugins] ${p.id}: stop failed while unloading: ${it.message}") }
+        }
+        p.guard.retire(stopMs)
+        runCatching { p.loader.close() }.onFailure { log("[plugins] ${p.id}: could not close its class loader: ${it.message}") }
+    }
+
+    /** EVERYTHING [p] registered, public routes and gates included (a planned unload, unlike a failure, removes its gates). */
+    private fun dropRegistrations(p: Loaded) {
+        toolEntries.values.removeIf { it.owner === p }
+        frameHandlers.values.removeIf { it.owner === p }
+        routeEntries.values.removeIf { it.owner === p }
+        frameGates.removeIf { it.owner === p }
+        approvalRuleHooks.removeIf { it.owner === p }
+        httpGates.removeIf { it.owner === p }
+        admissions.removeIf { it.owner === p }
+        mailGates.removeIf { it.owner === p }
+        incomingMailHooks.removeIf { it.owner === p }
+        spawnGates.removeIf { it.owner === p }
+        connectedHooks.removeIf { it.owner === p }
+        statusHooks.removeIf { it.owner === p }
+        readyHooks.removeIf { it.owner === p }
+        turnHooks.removeIf { it.owner === p }
+        sessionHooks.removeIf { it.owner === p }
+        presetHooks.removeIf { it.owner === p }
+        orchestratorBindings.removeIf { it.owner === p }
+        eventListeners.removeIf { it.first === p }
+        seatClaimants.remove(p)
+    }
+
+    override fun close() = synchronized(lifecycle) { closeAll() }
+
+    private fun closeAll() {
         for (p in loaded.reversed()) {
             p.closeables.forEach { runCatching { it.close() } }
             if (!p.guard.disabled) p.call("stop", services.limit(LimitRegistry.PLUGIN_STOP_TIMEOUT_MS)) { p.plugin?.stop() }
@@ -572,8 +724,8 @@ class DaemonPluginHost private constructor(
         val loader = URLClassLoader("plugin-$id", arrayOf(jar.toURI().toURL()), DaemonApiClassLoader(DaemonPluginHost::class.java.classLoader))
         val cpu = d.limits.cpuMsPerCall ?: maxOf(d.limits.callTimeoutMs ?: services.limit(LimitRegistry.PLUGIN_CALL_TIMEOUT_MS), d.limits.toolTimeoutMs ?: services.limit(LimitRegistry.PLUGIN_TOOL_TIMEOUT_MS))
         lateinit var p: Loaded
-        val guard = PluginGuard(id, loader, cpu, log, hangCeilingMs = services.limit(LimitRegistry.PLUGIN_HANG_CEILING_MS), poolSize = services.limit(LimitRegistry.PLUGIN_POOL_SIZE).toInt(), queueLimit = services.limit(LimitRegistry.PLUGIN_QUEUE_LIMIT).toInt(), timeoutStrikes = services.limit(LimitRegistry.PLUGIN_GUARD_STRIKES).toInt(), cooldownMs = services.limit(LimitRegistry.PLUGIN_GUARD_COOLDOWN_MS), onTripped = { why -> announceTrip(id, why) }, onRecovered = { announceRecovered(id) }, onDisabled = { why -> unregister(p); announceFailure(id, why) })
-        p = Loaded(id, status.tier, d, setting, guard, loader)
+        val guard = PluginGuard(id, loader, cpu, log, hangCeilingMs = services.limit(LimitRegistry.PLUGIN_HANG_CEILING_MS), poolSize = services.limit(LimitRegistry.PLUGIN_POOL_SIZE).toInt(), queueLimit = services.limit(LimitRegistry.PLUGIN_QUEUE_LIMIT).toInt(), timeoutStrikes = services.limit(LimitRegistry.PLUGIN_GUARD_STRIKES).toInt(), cooldownMs = services.limit(LimitRegistry.PLUGIN_GUARD_COOLDOWN_MS), onTripped = { why -> announceTrip(id, why) }, onRecovered = { announceRecovered(id) }, onDisabled = { why -> if (!p.unloading) { unregister(p); announceFailure(id, why) } })
+        p = Loaded(id, status.tier, d, setting, guard, loader, m.dependencies.map { it.id })
         loaded += p
         val api = Api(p)
         val started = p.call("start", services.limit(LimitRegistry.PLUGIN_START_TIMEOUT_MS)) {
@@ -850,7 +1002,7 @@ class DaemonPluginHost private constructor(
             override fun ready(hook: ReadyHook) { declare("ready"); readyHooks += Registered(p, hook) }
             override fun turns(hook: TurnHook) { declare("turns"); turnHooks += Registered(p, hook) }
             override fun sessions(hook: SessionHook) { declare("sessions"); sessionHooks += Registered(p, hook) }
-            override fun orchestratorBinding(providerId: String, binding: com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorBinding) { declare("orchestratorBinding"); orchestratorBindings += providerId to binding }
+            override fun orchestratorBinding(providerId: String, binding: com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorBinding) { declare("orchestratorBinding"); orchestratorBindings += Registered(p, providerId to binding) }
             override fun policyProvider(hook: PresetProviderHook) { declare("policyProvider"); presetHooks += Registered(p, hook) }
         }
 

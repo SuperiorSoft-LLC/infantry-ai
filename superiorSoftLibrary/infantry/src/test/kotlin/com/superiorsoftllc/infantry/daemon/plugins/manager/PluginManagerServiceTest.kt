@@ -349,4 +349,101 @@ class PluginManagerServiceTest {
         File(d, "Wrong.json").writeText("""{"id":"Other"}""")
         assertTrue(CatalogBuilder.build(d, "idx", "community").second.single().contains("file name must equal"))
     }
+
+    // ---- PLUGIN-HOTLOAD-1: the manager applies a change to the running host ---------------------------------------------
+
+    /** A host that only records what it was asked, and what the module's folder held at that moment (the jar is open until unload). */
+    private inner class RecordingHost(private val dependents: List<String> = emptyList()) : PluginHotApply {
+        val calls = mutableListOf<String>()
+        private fun seen(id: String) = File(root, "community/$id/module.json").takeIf { it.isFile }?.readText()?.substringAfter("\"version\":\"")?.substringBefore('"') ?: "-"
+        override fun load(id: String): HotOutcome { calls += "load:$id@${seen(id)}"; return HotOutcome(true, "loaded $id", loaded = listOf(id)) }
+        override fun unload(id: String): HotOutcome { calls += "unload:$id@${seen(id)}"; return HotOutcome(true, "unloaded $id", unloaded = dependents + id) }
+        override fun reload(id: String): HotOutcome { calls += "reload:$id@${seen(id)}"; return HotOutcome(true, "reloaded $id", unloaded = listOf(id), loaded = listOf(id)) }
+    }
+
+    private fun hotManager(host: PluginHotApply?) = PluginManager(root, state, hot = host)
+
+    @Test fun `install loads live and update unloads before the files move, then loads the new version`() {
+        val v1 = pack(version = "1.0.0", extra = daemonBlock); val v2 = pack(version = "1.1.0", extra = daemonBlock)
+        catalog(entry(v1, "Acme_Echo", "1.0.0", listOf("daemon.code", "daemon.tool")))
+        val host = RecordingHost()
+        val m = hotManager(host); source(m)
+        val i = m.install("Acme_Echo", setOf("daemon.code", "daemon.tool"))
+        assertTrue(i.ok, i.message)
+        assertFalse(i.restartNeeded, "a daemon half applied live needs no restart")
+        assertTrue("live" in i.message && "restart" !in i.message.lowercase(), i.message)
+        assertEquals(listOf("load:Acme_Echo@1.0.0"), host.calls)
+
+        host.calls.clear()
+        catalog(entry(v1, "Acme_Echo", "1.0.0", listOf("daemon.code", "daemon.tool")), entry(v2, "Acme_Echo", "1.1.0", listOf("daemon.code", "daemon.tool")))
+        val u = m.update("Acme_Echo")
+        assertTrue(u.ok, u.message)
+        assertFalse(u.restartNeeded)
+        assertEquals(listOf("unload:Acme_Echo@1.0.0", "load:Acme_Echo@1.1.0"), host.calls, "unload sees the old files, load the new ones")
+
+        host.calls.clear()
+        val rb = m.rollback("Acme_Echo")
+        assertTrue(rb.ok && !rb.restartNeeded, rb.message)
+        assertEquals(listOf("unload:Acme_Echo@1.1.0", "load:Acme_Echo@1.0.0"), host.calls)
+    }
+
+    @Test fun `remove unloads first, a dependent that left with it is reported and not started again`() {
+        val f = pack(extra = daemonBlock); catalog(entry(f, "Acme_Echo", "1.0.0", listOf("daemon.code", "daemon.tool")))
+        val host = RecordingHost(dependents = listOf("Acme_Dependent"))
+        val m = hotManager(host); source(m)
+        installOk(m, "Acme_Echo", setOf("daemon.code", "daemon.tool"))
+        host.calls.clear()
+        val r = m.remove("Acme_Echo")
+        assertTrue(r.ok && !r.restartNeeded, r.message)
+        assertEquals(listOf("unload:Acme_Echo@1.0.0"), host.calls, "the jar is still on disk when the unload runs")
+        assertFalse(File(root, "community/Acme_Echo").exists())
+        assertTrue("Acme_Echo" in r.message)
+    }
+
+    @Test fun `an update brings back the dependents that left with the plugin`() {
+        val v1 = pack(version = "1.0.0", extra = daemonBlock); val v2 = pack(version = "1.1.0", extra = daemonBlock)
+        catalog(entry(v1, "Acme_Echo", "1.0.0", listOf("daemon.code", "daemon.tool")))
+        val host = RecordingHost(dependents = listOf("Acme_Late", "Acme_Dependent"))
+        val m = hotManager(host); source(m)
+        installOk(m, "Acme_Echo", setOf("daemon.code", "daemon.tool"))
+        catalog(entry(v1, "Acme_Echo", "1.0.0", listOf("daemon.code", "daemon.tool")), entry(v2, "Acme_Echo", "1.1.0", listOf("daemon.code", "daemon.tool")))
+        host.calls.clear()
+        assertTrue(m.update("Acme_Echo").ok)
+        assertEquals(listOf("unload:Acme_Echo@1.0.0", "load:Acme_Echo@1.1.0", "load:Acme_Dependent@-", "load:Acme_Late@-"), host.calls)
+    }
+
+    @Test fun `disable unloads and enable loads, grants reload`() {
+        val f = pack(extra = daemonBlock); catalog(entry(f, "Acme_Echo", "1.0.0", listOf("daemon.code", "daemon.tool")))
+        val host = RecordingHost()
+        val m = hotManager(host); source(m)
+        installOk(m, "Acme_Echo", setOf("daemon.code", "daemon.tool"))
+        host.calls.clear()
+        val d = m.setEnabled("Acme_Echo", false)
+        assertTrue(d.ok && !d.restartNeeded, d.message)
+        val e = m.setEnabled("Acme_Echo", true)
+        assertTrue(e.ok && !e.restartNeeded, e.message)
+        val g = m.setGrants("Acme_Echo", setOf("daemon.code"))
+        assertTrue(g.ok && !g.restartNeeded, g.message)
+        assertEquals(listOf("unload:Acme_Echo@1.0.0", "load:Acme_Echo@1.0.0", "reload:Acme_Echo@1.0.0"), host.calls)
+    }
+
+    @Test fun `a harness half stays start-only and the answer says so`() {
+        val f = pack(extra = """"daemon":{"entry":"x.D","jar":"lib/Acme_Echo.jar","tools":[{"name":"echo","action":"echo.read"}]},"harness":{"jar":"lib/Acme_Echo.jar","ids":["acme-echo"]}""")
+        catalog(entry(f, "Acme_Echo", "1.0.0", listOf("daemon.code", "daemon.tool", "harness.code")))
+        val host = RecordingHost()
+        val m = hotManager(host); source(m)
+        val r = m.install("Acme_Echo", setOf("daemon.code", "daemon.tool", "harness.code"))
+        assertTrue(r.ok, r.message)
+        assertTrue(r.restartNeeded, "the harness half loads at the next start")
+        assertTrue("harness" in r.message && "start" in r.message, r.message)
+        assertEquals(listOf("load:Acme_Echo@1.0.0"), host.calls, "the daemon half still loads live")
+    }
+
+    @Test fun `with no running daemon a change waits for the next start`() {
+        val f = pack(extra = daemonBlock); catalog(entry(f, "Acme_Echo", "1.0.0", listOf("daemon.code", "daemon.tool")))
+        val m = hotManager(null); source(m)
+        val r = m.install("Acme_Echo", setOf("daemon.code", "daemon.tool"))
+        assertTrue(r.ok && r.restartNeeded, r.message)
+        assertTrue(m.setEnabled("Acme_Echo", false).restartNeeded)
+    }
 }
