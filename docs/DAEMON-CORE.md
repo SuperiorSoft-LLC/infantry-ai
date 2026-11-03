@@ -13,7 +13,7 @@ no product feature. A thing is **plugin** when it is a concrete behaviour built 
 a harness adapter, a policy preset, a demo). A thing that is concrete but cannot leave yet is **stays in core** with the reason
 that holds it, and shrinks with DAEMON-PLUGINS-2.
 
-## 2. The core list (verified against `superiorSoftLibrary/agentHq/src/main`)
+## 2. The core list (verified against `superiorSoftLibrary/infantry/src/main`)
 
 | core item | where | reason |
 |---|---|---|
@@ -21,10 +21,10 @@ that holds it, and shrinks with DAEMON-PLUGINS-2.
 | session lifecycle | `session` (`SessionManager`, `Session`, `SessionStore`, `session/host`) | spawn, resume, restart, kill and the process ledger every harness runs under |
 | harness abstraction | `harness` (`Harness`, `HarnessPlugin`, `HarnessRegistry`, `CliHarness`, `HarnessCommand`) | the interface third parties implement; the adapters under it are not core |
 | mail routing and the mailbox | `mailbox` (`Mailbox`, `MailRouter`, `MailStore`, `Message`), `daemon/MailHttp.kt` | the routing mechanism and durable queue; the monitors in the package are product rules (section 3) |
-| plugin host | `daemon/plugins` (`DaemonPluginHost`, `PluginGuard`, `DaemonApiClassLoader`, `DaemonServices`), `daemon/DaemonPlugins.kt`, `agentHqDaemonApi` | loads, isolates, grants and limits daemon plugins; the module `agentHqDaemonApi` is the plugin-facing API |
+| plugin host | `daemon/plugins` (`DaemonPluginHost`, `PluginGuard`, `DaemonApiClassLoader`, `DaemonServices`), `daemon/DaemonPlugins.kt`, `infantryDaemonApi` | loads, isolates, grants and limits daemon plugins; the module `infantryDaemonApi` is the plugin-facing API |
 | policy mechanism | `policy` (`ActionCatalog`, `PolicyProvider`, `PolicyRuntime`), `daemon/FrameGate.kt`, `daemon/AccessPolicy.kt` | who may do what; presets, seats and gates are data and plugins on top |
 | configuration | `settings` (`SettingsService`, `LimitRegistry`, `ProjectSettings`, `ModelAllowlist`), `daemon/DaemonConfig.kt`, `ConfigManifestHttp.kt`, `NodeConfigHttp.kt` | the unified config and the frames/tools to modify it |
-| storage abstraction | `db` (`AgentHQDatabase`), `keystore` | the one SQLite entry point and the secret store behind plugin secret grants |
+| storage abstraction | `db` (`InfantryDatabase`), `keystore` | the one SQLite entry point and the secret store behind plugin secret grants |
 | watch and run mechanism | `runner` (`ProcessRunner`, `PtyProcessRunner`, `WatchShims`, `WatchLog`, `WatchNotices`, `Sandbox`), `daemon/WatchHooks.kt` | how a command runs and is watched; `ToolProfiles` (gradle, mvn, npm...) are data on the mechanism |
 | daemon bootstrap and transport | `daemon` (`DaemonMain`, `HealthGate`, `StateDirLock`, `RemoteAccess`, `OwnerCredential`, `/ws`, `/mail/*`, `/hooks/*`, `/health`) | starts the above in order and serves the contract |
 
@@ -45,11 +45,11 @@ that is renamed or deleted must leave the table. Lines in PLUGIN_NOW/PLUGIN_LATE
 |---|---|
 | `session` | SessionManager and the process ledger are core; AutoProgress, ToolApprovals, SleepHint, RetrievalClassifier are plugin candidates |
 | `mailbox` | Mailbox/MailRouter/MailStore are core; the Stall/Watchdog/ReportBack/FinishNotice monitors are product rules |
-| `persistence` | AgentHqStore and the records are shared by every feature table; shrinks as features take their own tables |
+| `persistence` | InfantryStore and the records are shared by every feature table; shrinks as features take their own tables |
 | `worktree` | git working copies, runner side, used by SessionManager and the board alike |
 | `projectgit` | git status/diff/commit helpers over worktree, runner side; moves with the Git plugin once DaemonApi has a git surface |
 | `usage`, `usagemeter`, `stats`, `tokens` | limits, metering and the harness-neutral RequestUsage record are fed by every harness stream |
-| `testrun` | background full-suite runner and its ledger behind the `agenthq_tests` tool (FULLSUITE-2); runner side of the staging gate |
+| `testrun` | background full-suite runner and its ledger behind the `infantry_tests` tool (FULLSUITE-2); runner side of the staging gate |
 | `executables` | resolves harness and tool binaries for the runner |
 | `archive` | ArchiveService: archived tickets and sessions, stays in the app shell until the board plugin owns archiving |
 | `update` | self-update of the install; DaemonMain wires it directly |
@@ -60,7 +60,7 @@ that is renamed or deleted must leave the table. Lines in PLUGIN_NOW/PLUGIN_LATE
 **PLUGIN NOW** (mechanism exists, only the move is left): `memory` (a Knowledge
 plugin); `images` (Infantry_Chat).
 DP-10b: `prompts` is reclassified CORE, not PLUGIN NOW: it is the PROMPT-1 tool-approval round-trip (PendingPrompts, PromptTimeouts, SpawnPromptTimeout; used by session, harness, claude, opencode), not the Infantry_Prompts template library. Only its policy data left: the stored "allow always" rules and the `approval_rules` / `approval_rule_delete` frames are Infantry_Approvals' daemon half (table `infantry_approvals_rules` via `api.storage`), reached by core through the `hooks.approvalRules` port (DaemonApi 1.22.0, additive; `ApprovalRulesHook.match` / `remember`). With the plugin absent there are no stored rules: every prompt asks and ALLOW_ALWAYS degrades to ALLOW_SESSION with no error. Rules stored before this change (settings row `toolApproval.rules`) are not migrated.
-DP-7c: `issues` and `decisions` (stores, handlers, frames) moved to plugins/official/Infantry_Notes/daemon; only the wire DTOs stay in core (agentHqProtocol).
+DP-7c: `issues` and `decisions` (stores, handlers, frames) moved to plugins/official/Infantry_Notes/daemon; only the wire DTOs stay in core (infantryProtocol).
 
 DAEMON-PLUGINS-3: `probe` (a one-off provider comparison `main()` and its `probeProvider` Gradle task) was dead and is deleted. `experiments` (the pi tool bridge) cannot move yet, see below.
 
@@ -74,10 +74,10 @@ DAEMON-PLUGINS-3: `probe` (a one-off provider comparison `main()` and its `probe
 | `questions`, `attention` | DONE (ATTN-2b / ATTN-2c): core has neither package. Infantry_Attention's daemon half owns the attention store and the owner questions (store, sweep, `question_*` frames, answer mail, connect replay); core keeps `FoundAttention` (package `daemon`), the consumer lookup of the `Attention` service |
 | `triggers` | DaemonApi has `schedule()` but no spawn-with-binding or ticket-transition events |
 | `commands` | DONE (CMD-1): core has no `commands` package. Infantry_Run's daemon half owns the saved commands (`commands.json`), RunManager and the run frames over `api.runs` (DaemonApi 1.31.0, additive: `Runs.start(RunSpec, RunListener)` returns a `RunHandle` with write/resize/terminate/killTree; the cwd is bound to the project's directory and a `..`, absolute or linked escape is refused before anything starts; official tier or the grant `runs`). The owner-credential gate on the run frames stays in core's FrameGate (same action/kind in the module's `daemon.frames`). With the plugin absent the run frames refuse like any unhandled frame |
-| `experiments` | the pi tool bridge hooks `PiLaunchExtras`, `SessionStatsService` taggers and reads `AgentHqMcp`/`AccessPolicy` internals; needs a harness launch-extras hook and an MCP tool-exposure surface in DaemonApi |
-| `cli`, `client` | the `agenthq` CLI/MCP server and console client are clients of the daemon, not daemon, but import protocol/session/daemon types; they leave with the agentHqCore split (section 4) |
+| `experiments` | the pi tool bridge hooks `PiLaunchExtras`, `SessionStatsService` taggers and reads `InfantryMcp`/`AccessPolicy` internals; needs a harness launch-extras hook and an MCP tool-exposure surface in DaemonApi |
+| `cli`, `client` | the `infantry` CLI/MCP server and console client are clients of the daemon, not daemon, but import protocol/session/daemon types; they leave with the infantryCore split (section 4) |
 
-Measured coupling (imports between top-level packages, `agentHq/src/main`): `daemon` imports 31 packages, `cli` 18, `backlog`
+Measured coupling (imports between top-level packages, `infantry/src/main`): `daemon` imports 31 packages, `cli` 18, `backlog`
 11, `session` 10. `protocol` imports `session` (2) and `harness` (1) and `runner` imports `session` (1): those three
 back-references are what the module split must break first.
 
@@ -86,48 +86,48 @@ back-references are what the module split must break first.
 Done now (additive, no behaviour or wire change, contract version unchanged):
 
 * **package-level split by classification** with `DaemonCoreGuardTest` (section 5);
-* `agentHqDaemonApi` is already its own module and the only thing a daemon plugin compiles against;
-* the plugin-facing API cannot be reached the other way: `agentHq` depends on no `:plugins:*` or `daemon-plugin-*` project
-  (guarded), and its sources name no `agenthq.plugins.*` package.
+* `infantryDaemonApi` is already its own module and the only thing a daemon plugin compiles against;
+* the plugin-facing API cannot be reached the other way: `infantry` depends on no `:plugins:*` or `daemon-plugin-*` project
+  (guarded), and its sources name no `infantry.plugins.*` package.
 
-Not done, with the reason: the **Gradle module split** (`agentHqCore`) is not a mechanical change today. The packages form one
+Not done, with the reason: the **Gradle module split** (`infantryCore`) is not a mechanical change today. The packages form one
 strongly connected graph (`session` <-> `runner` <-> `provider` <-> `harness` <-> `daemon`; `protocol` imports `session` and
 `harness`; `DaemonMain.kt` is 4300 lines naming ~40 packages), so a module cut either fails to compile or needs interfaces
 that are the real work. Exact plan, one ticket per step, each keeps the build green:
 
-1. **CORE-SPLIT-1 (DONE, ticket e7fb5a60)** move `protocol` + `Frame` types out of `session`/`harness` references (3 imports) so `protocol` is a leaf; create module `agentHqProtocol` (contract + wire DTOs). Small.
-2. **CORE-SPLIT-2 (DONE, ticket e7fb5a60)** `runner` becomes a leaf (1 back-import of `session`); module `agentHqRunner`. Small.
-3. **CORE-SPLIT-3** invert the `session`->`provider`->`harness`->`session` cycle: `Harness`/`AgentProvider` interfaces and `SessionEvent` types into `agentHqCore`; `ClaudeCodeProvider`, `OpenCodeProvider`, `harness/claude|pi|descriptor|install` into `agentHqHarnesses`. Medium; depends on DAEMON-PLUGINS-2 registering built-ins via the SPI.
-4. **CORE-SPLIT-4** cut `DaemonMain.kt` into core bootstrap plus `feature wiring` (what DAEMON-PLUGINS-2 moves out); then `agentHqCore` holds `protocol, session, harness (api), mailbox, policy, settings, db, keystore, runner, daemon/plugins` and the dependency rule (core imports no feature module) becomes a Gradle fact instead of a test.
+1. **CORE-SPLIT-1 (DONE, ticket e7fb5a60)** move `protocol` + `Frame` types out of `session`/`harness` references (3 imports) so `protocol` is a leaf; create module `infantryProtocol` (contract + wire DTOs). Small.
+2. **CORE-SPLIT-2 (DONE, ticket e7fb5a60)** `runner` becomes a leaf (1 back-import of `session`); module `infantryRunner`. Small.
+3. **CORE-SPLIT-3** invert the `session`->`provider`->`harness`->`session` cycle: `Harness`/`AgentProvider` interfaces and `SessionEvent` types into `infantryCore`; `ClaudeCodeProvider`, `OpenCodeProvider`, `harness/claude|pi|descriptor|install` into `infantryHarnesses`. Medium; depends on DAEMON-PLUGINS-2 registering built-ins via the SPI.
+4. **CORE-SPLIT-4** cut `DaemonMain.kt` into core bootstrap plus `feature wiring` (what DAEMON-PLUGINS-2 moves out); then `infantryCore` holds `protocol, session, harness (api), mailbox, policy, settings, db, keystore, runner, daemon/plugins` and the dependency rule (core imports no feature module) becomes a Gradle fact instead of a test.
    **CORE-SPLIT-4a1/4a2 status:** feature wiring moved out of `daemon/DaemonMain.kt` into `daemon/wiring/*.kt`: AttentionWiring, CommandsWiring, ImagesWiring, KnowledgeWiring, QuestionsWiring, TriggersWiring (4a1), AgentsWiring (roles registry, agent modules, profiles), PromptsWiring (pending prompts, approval rules), BoardWiring (core ticket services, core-built LocalBoardHost) (4a2). `DaemonMain.kt` is now 4338 lines (was 4417); the rest is bootstrap plus the plugin-host, orchestrator-hub and harness-module construction, still to cut.
-   **CORE-SPLIT-4b status (ticket c682d8a5):** Gradle module `superiorSoftLibrary/agentHqCore` (`:superiorSoftLibrary:agentHqCore`) now holds the packages `session, mailbox, policy, settings, db (+SQLDelight), keystore, mvp, persistence, worktree, projectgit, usage, usagemeter, stats, harness, provider, agents, prompts, executables` plus `daemon.AccessPolicy`/`AgentTier`; package names unchanged. It depends on `agentHqBoard` (which shares the packages `session`, `persistence`, `agents`), the daemon API, protocol, runner, harness API and plugins modules, and on no feature or plugin module. `agentHq` is the app/CLI shell (daemon, cli, orchestration, triggers, update, backlog, ...) and depends on it; `DaemonCoreGuardTest` and `OrchestratorBoundaryGuardTest` scan both source roots. `agentHq` tests reach core `internal` members through a Kotlin friend path (agentHq/build.gradle.kts). NOT done: moving the `daemon.api.board` / OrchestratorLink DTOs from `agentHqDaemonApi` into a separate board API artifact (with typealias re-exports); left for the next ticket.
-5. License split follows: `agentHqCore` + `agentHqDaemonApi` MPL-2.0, features Apache-2.0.
+   **CORE-SPLIT-4b status (ticket c682d8a5):** Gradle module `superiorSoftLibrary/infantryCore` (`:superiorSoftLibrary:infantryCore`) now holds the packages `session, mailbox, policy, settings, db (+SQLDelight), keystore, mvp, persistence, worktree, projectgit, usage, usagemeter, stats, harness, provider, agents, prompts, executables` plus `daemon.AccessPolicy`/`AgentTier`; package names unchanged. It depends on `infantryBoard` (which shares the packages `session`, `persistence`, `agents`), the daemon API, protocol, runner, harness API and plugins modules, and on no feature or plugin module. `infantry` is the app/CLI shell (daemon, cli, orchestration, triggers, update, backlog, ...) and depends on it; `DaemonCoreGuardTest` and `OrchestratorBoundaryGuardTest` scan both source roots. `infantry` tests reach core `internal` members through a Kotlin friend path (infantry/build.gradle.kts). NOT done: moving the `daemon.api.board` / OrchestratorLink DTOs from `infantryDaemonApi` into a separate board API artifact (with typealias re-exports); left for the next ticket.
+5. License split follows: `infantryCore` + `infantryDaemonApi` MPL-2.0, features Apache-2.0.
 
 ### License readiness (CORE-SPLIT-A, ticket e7fb5a60)
 
-Physically core today (own Gradle module, depends on no other agentHq module and no plugin module; `DaemonCoreGuardTest` checks it):
+Physically core today (own Gradle module, depends on no other infantry module and no plugin module; `DaemonCoreGuardTest` checks it):
 
-* `superiorSoftLibrary/agentHqProtocol` (`:superiorSoftLibrary:agentHqProtocol`): package `protocol` (wire contract and DTOs), plus the two
+* `superiorSoftLibrary/infantryProtocol` (`:superiorSoftLibrary:infantryProtocol`): package `protocol` (wire contract and DTOs), plus the two
   wire types it needs, which keep their package names: `session.SessionState`, `session.SleepHint`/`WaitHint`, `session.RunPhaseOverlay` and
   `harness.HarnessCommand` (+ `CommandAction`, `StandardCommands`, `CommandLine(s)`). `protocol` was made a leaf by moving those declarations here instead of
   importing `session`/`harness`; `SpawnOptions.promptTimeoutOverride()` (which named `prompts`) became an extension in `prompts/SpawnPromptTimeout.kt`.
   The leaf's `internal` members became public (tests and the daemon are now in another module).
-* `superiorSoftLibrary/agentHqRunner` (`:superiorSoftLibrary:agentHqRunner`): package `runner` (ProcessRunner, PtyProcessRunner, watch shims,
-  ToolProfiles, ...). Its one back-import of `session.InfantryEnv` was inverted by letting `RunnerFactory` read `INFANTRY_RUNNER`/`AGENTHQ_RUNNER` itself.
-* `superiorSoftLibrary/agentHqBoard` (`:superiorSoftLibrary:agentHqBoard`, DP-5e): packages `epics`, `brief`, `ledger`, `context`, `ticketfiles` (package names unchanged).
-  Depends on `agentHqDaemonApi` and `agentHqProtocol`, never on `agentHq` (`BoardImportGuardTest`); `agentHq` depends on it, still one daemon jar. What the packages
+* `superiorSoftLibrary/infantryRunner` (`:superiorSoftLibrary:infantryRunner`): package `runner` (ProcessRunner, PtyProcessRunner, watch shims,
+  ToolProfiles, ...). Its one back-import of `session.InfantryEnv` was inverted by letting `RunnerFactory` read `INFANTRY_RUNNER`/`INFANTRY_RUNNER` itself.
+* `superiorSoftLibrary/infantryBoard` (`:superiorSoftLibrary:infantryBoard`, DP-5e): packages `epics`, `brief`, `ledger`, `context`, `ticketfiles` (package names unchanged).
+  Depends on `infantryDaemonApi` and `infantryProtocol`, never on `infantry` (`BoardImportGuardTest`); `infantry` depends on it, still one daemon jar. What the packages
   need of the host comes in through ports declared there: `TicketFileRows` (SQL adapter `SqlTicketFileRows` in core), `ProjectDirectory`, `KnowledgeSection`,
   `SkillsSection`, `GitCli`/`GitResult`, `ProjectSettings`, and the EpicHandler `branchName` hook. `SqlEpicPersistence` and the `TicketFiles(db, ...)` factory stay in core.
-  `backlog`, `mvp` and `stories` stay in `agentHq` and depend on it (DP-5h-4: no core main file imports them any more; the board constructors `TicketBoard(store, ...)`/`StoryMigration(...)` live in the test source set).
-* `superiorSoftLibrary/agentHqDaemonApi` and `superiorSoftLibrary/agenthqPlugins` were already separate modules.
+  `backlog`, `mvp` and `stories` stay in `infantry` and depend on it (DP-5h-4: no core main file imports them any more; the board constructors `TicketBoard(store, ...)`/`StoryMigration(...)` live in the test source set).
+* `superiorSoftLibrary/infantryDaemonApi` and `superiorSoftLibrary/infantryPlugins` were already separate modules.
 
-Still inside `superiorSoftLibrary/agentHq` (not yet physical): `session`, `harness` (apart from `HarnessCommand.kt`), `daemon`, `policy`,
+Still inside `superiorSoftLibrary/infantry` (not yet physical): `session`, `harness` (apart from `HarnessCommand.kt`), `daemon`, `policy`,
 `settings`, `db`, `keystore` and every other package, until CORE-SPLIT-3/4. No license file or header has been added; the owner signs off
 this directory list first.
 
 ## 5. Guards (`DaemonCoreGuardTest`, `NoDemoInDaemonCoreGuardTest`)
 
-* (a) no core source names a plugin-owned package (`agenthq.plugins.`, `com.acme.`), and `agentHq/build.gradle.kts` has no
+* (a) no core source names a plugin-owned package (`infantry.plugins.`, `com.acme.`), and `infantry/build.gradle.kts` has no
   `:plugins:`/`daemon-plugin` project dependency;
 * (b) the classification table of section 3 is complete, exclusive, current, every entry has a reason, every plugin-later entry
   names a `blocker:`, and this file names every package; DAEMON-PLUGINS-2 deletes rows as it migrates (the test fails if a
@@ -139,7 +139,7 @@ this directory list first.
 top-level (official/core tier) daemon plugin can add frames, tools, hooks, routes, policy presets, limits and top-level/public
 routes, so a product can ship its own board, policy or demo lock on the stock core (Demo_Lock is the worked example). What it
 cannot do is replace a core component (SessionManager, the mailbox, the store, the harness registry, the transport): they are
-constructed by `DaemonMain`, not resolved through the host. **DAEMON-CORE-2: component bindings** (seam landed): `ComponentBindings` (agentHqCore, `daemon`) reads `core.<component>.provider` (component = sessionManager | mailbox | orchestratorLink | store; default `local`) and resolves a provider offered through `ComponentProviders` (published in the AR-5 service registry). An unknown id makes the daemon refuse to start (`[agentHq] refusing to start: ...`, exit 2), never a silent fallback. Only `local` ships; at default nothing changes. `DaemonMain` verifies the settings at start; each component's construction switches to `resolve(...)` as its alternative provider appears.
+constructed by `DaemonMain`, not resolved through the host. **DAEMON-CORE-2: component bindings** (seam landed): `ComponentBindings` (infantryCore, `daemon`) reads `core.<component>.provider` (component = sessionManager | mailbox | orchestratorLink | store; default `local`) and resolves a provider offered through `ComponentProviders` (published in the AR-5 service registry). An unknown id makes the daemon refuse to start (`[infantry] refusing to start: ...`, exit 2), never a silent fallback. Only `local` ships; at default nothing changes. `DaemonMain` verifies the settings at start; each component's construction switches to `resolve(...)` as its alternative provider appears.
 
 ## 6. Orchestrator vs runner
 
@@ -157,7 +157,7 @@ nothing in this section changes behaviour. Note the name clash: `orchestration/O
 | `harness`, `provider`, `claude`, `opencode`, `executables` | **runner** | `ProcessBuilder`/`ProcessRunner`, binaries, PTY, CLI installs (grep: harness 9 files, runner 7, session 6, provider 4) |
 | `runner` (+ `daemon/WatchHooks`) | **runner** | processes, PTY, sandbox, watch shims |
 | `worktree`, `projectgit` | **runner** | git CLI, branches, worktrees on disk (`GitCli`, `Worktree*`) |
-| `commands`, `images`, `update` | **runner** | cwd-bound commands, uploads under `<project>/.agenthq`, install/updater |
+| `commands`, `images`, `update` | **runner** | cwd-bound commands, uploads under `<project>/.infantry`, install/updater |
 | `keystore` | **runner** (secrets stay local) | OS vault master key (`OsVaults`) |
 | `backlog`, `epics`, `stories`, `mvp`, `pipeline`, `ticketfiles`(rules), `context`, `brief`, `ledger` | **orchestrator** | tickets, status machine, linking, prompts for workers: state and rules; two leaks: `TicketBoard` takes `SessionManager`, `worktree` (7 imports), and ticket rows carry file paths |
 | `orchestration` (pod DAG) | **orchestrator** | pure scheduling over `SessionManager`; its only runner contact is spawn/events |
@@ -193,7 +193,7 @@ delivery with ordering and replay (today in-process callbacks); (6) a binding re
 
 | coupling | size |
 |---|---|
-| **One database**: `AgentHqStore` holds tickets, sessions, attention, settings, usage, roles, pods in one SQLite; `persistence` imports `usage`, `role`, `attention`, `session` | **L**: one store per side, plus migrations |
+| **One database**: `InfantryStore` holds tickets, sessions, attention, settings, usage, roles, pods in one SQLite; `persistence` imports `usage`, `role`, `attention`, `session` | **L**: one store per side, plus migrations |
 | **MailRouter <-> SessionManager**: `MailRouter(manager, mailbox, ...)` lists sessions, resumes, reads `ticketId`/`agentId`; `FinishNoticeMonitor`/`AgentWatchdog` read ticket + session together | **L**: routing vs delivery split; `MailDelivery` is the right edge, the rest of the router is not |
 | **TicketBoard owns worktrees**: `backlog` imports `worktree` (7), `session` (7); `board.cutRepo`, branches | **M**: ticket rows carry `worktreeBranch`/`useWorktree`, upload paths relative to the project dir |
 | **File paths in tickets and prompts**: `Tickets.kt` (worktree fields), `TicketContextComposer`, `ticketfiles` (git diff names) | **M**: paths are runner-local; the orchestrator must treat them as opaque |
@@ -207,7 +207,7 @@ delivery with ordering and replay (today in-process callbacks); (6) a binding re
 
 1. **Interface + local binding (this ticket, done in part).** `OrchestratorLink`, `OrchestratorReply`, `LocalOrchestratorLink`
    in `orchestration/OrchestratorLink.kt`; `mail.reportCheck` goes through it. Next in this step: one operation per seam of
-   6.2, each with a plain data model, then move the interface into `agentHqDaemonApi` and add `orchestrator.provider` (default
+   6.2, each with a plain data model, then move the interface into `infantryDaemonApi` and add `orchestrator.provider` (default
    `local`) resolved at startup. Policy: unchanged; the local binding is the only one.
 2. **Outbound-only connection from a runner to a remote orchestrator.** A binding plugin (`orchestrator.provider = <plugin id>`)
    opens one outbound, authenticated, TLS channel; the runner polls or streams; nothing listens. Operations carry orchestration
@@ -271,10 +271,10 @@ check, `ClientMain` and the CLI, none of them orchestrator traffic), so the tran
 
 ### 6.7 ORCH-1: what shipped, what is left, degrade rules
 
-**Shipped.** `daemon.api.orchestrator.OrchestratorLink` (contract 1.1.0) now lives in `agentHqDaemonApi`, beside `RunnerLink`
+**Shipped.** `daemon.api.orchestrator.OrchestratorLink` (contract 1.1.0) now lives in `infantryDaemonApi`, beside `RunnerLink`
 (orchestrator -> runner: `ticketIdOf`), `LocalOrchestratorLink`, and `OrchestratorHub` (the registry plus the one link callers
 hold). Plugins offer a binding with `api.hooks.orchestratorBinding(id, binding)` (declare `orchestratorBinding` in
-`daemon.hooks`); `AGENTHQ_ORCHESTRATOR_PROVIDER` (default `local`) picks it at startup, after plugins load; an unknown or failing
+`daemon.hooks`); `INFANTRY_ORCHESTRATOR_PROVIDER` (default `local`) picks it at startup, after plugins load; an unknown or failing
 provider keeps the local binding and logs. Operations: `reviewReport` (mail), `ticketOf`, `starterOf` (board/tickets),
 `launchDecision` (policy/usage). Routed in `DaemonMain`: `mail.reportCheck`, `MailRouter.starterOf`, `DoneWorkerReaper.ticketOf`,
 `manager.launchGate`. Local mode calls the same functions with the same arguments.
@@ -293,7 +293,7 @@ nothing of the daemon) and `DaemonCoreGuardTest` (no transport next to the link)
 ticket row, not `TicketRef`), `ticketTransition` event, `sessionEvent` stream, `usageRecord`, `acceptMail`/`deliveryResult` (split
 `MailRouter` routing from `MailDelivery`). (2) Shrink `OrchestratorBoundaryGuardTest.BASELINE` (51 imports in 30 pairs; biggest:
 `cli>memory` 14, `cli>issues` 9, `cli>pipeline` 8, `backlog>session` 7, `backlog>worktree` 7, `orchestration>session` 7). The `cli>*`
-entries are wire DTOs that belong in `agentHqProtocol`. (3) `orchestrator.provider` as a declared setting instead of the env var.
+entries are wire DTOs that belong in `infantryProtocol`. (3) `orchestrator.provider` as a declared setting instead of the env var.
 
 ## 7. Plugin storage (DAEMON-STORAGE-1, DaemonApi 1.15.0)
 
@@ -302,7 +302,7 @@ entries are wire DTOs that belong in `agentHqProtocol`. (3) `orchestrator.provid
 - Members: `migrate(version, sql)` (runs once per module, records the version in the host table `plugin_storage_versions`, all-or-nothing), `query(sql, args)`, `execute(sql, args)`, `transaction { }` (rolls back on exception).
 - Naming: every table / index / view / trigger a statement names (after FROM / INTO / UPDATE / JOIN / TABLE / INDEX / VIEW / TRIGGER, `ON` of CREATE INDEX) must start with the module prefix (module id lowercased, non-alphanumerics as `_`, plus `_`) or be on the adopt list. One statement per call; ATTACH / PRAGMA / VACUUM, schema-qualified names and table functions are refused. String literals and comments are ignored by the check.
 - ADOPT: an OFFICIAL / bundled module may declare `daemon.storage.adopt: [table...]` in module.json, existing core tables it takes over (DP-6 / DP-7 keep their rows, no migration). A community module declaring adopt is refused at load; it gets prefix only and needs the grant `storage`.
-- Implementation: `LocalPluginStorage` over the store's `AgentHQDatabaseHandle` (same driver, lock and write tracking). Values bind as null / Long / Int / Boolean / Double / String / ByteArray; rows come back as column-label maps.
+- Implementation: `LocalPluginStorage` over the store's `InfantryDatabaseHandle` (same driver, lock and write tracking). Values bind as null / Long / Int / Boolean / Double / String / ByteArray; rows come back as column-label maps.
 
 ## 8. Typed service registry (AR-5, DaemonApi 1.16.0)
 
@@ -317,22 +317,22 @@ entries are wire DTOs that belong in `agentHqProtocol`. (3) `orchestrator.provid
 
 No existing getter is changed or deprecated by AR-5 (additive). `tickets`, `epics`, `boardRuntime`, `board` and `hooks.orchestratorBinding` are marked `@Deprecated("use services.find", level = WARNING)` only once a provider for their interface is published through `services.provide` (board plugin: DP-5 follow-ups; orchestration: the OrchestratorBinding provider), and removed or moved with CORE-SPLIT-4b (the `daemon.api.board` types stay in the API jar until then).
 
-**DP-6 (pipeline moved out of core):** the `pipeline` package is gone from `agentHq`. Its wire DTOs (`PipelineConfig/Entry/Check/State/Configure/Show/Record/CheckRequest/Refusal`, package name unchanged) live in `agentHqProtocol`; `PipelineStore` / `PipelineHandler` and the tools `agenthq_pipeline` / `agenthq_pipeline_record` live in `plugins/official/Infantry_Board/daemon` (the tools moved there from Infantry_Git). Storage goes through `api.storage` adopting `pipeline_config`, `pipeline_entries`, `pipeline_checks` (module.json `daemon.storage.adopt`; core's migrations still create them). The four `pipeline_*` frames are declared in `daemon.frames` and registered with `api.frames.handle`; the new `pipeline_state` push goes out through `api.boardRuntime.push`. Plugin absent: `<type> refused: this daemon has no pipeline` (`BoardFrames.noPipeline`). No DaemonApi change.
-**DP-7a (ticket 6df0d6c2):** the knowledge wire DTOs (`memory`: MemoryNote, MemorySave/Get/List/Search/Delete/PurgeRole, MemoryScoped, MemoryIndexEntry, MemorySearchResult, `memoryOccurrences`; `issues`: Issue, IssueEvent and the Issue* payloads, ref/location helpers; `decisions`: Decision, DecisionAdd/List/Get, `parseDecisionRef`) live in `agentHqProtocol` under the same package names (wire unchanged). Stores, handlers, refusals and SQL stay in `agentHq`. `OrchestratorBoundaryGuardTest` no longer counts an import of such a type as a runner<->orchestrator crossing: `cli>memory`, `cli>issues`, `cli>decisions` are 0.
+**DP-6 (pipeline moved out of core):** the `pipeline` package is gone from `infantry`. Its wire DTOs (`PipelineConfig/Entry/Check/State/Configure/Show/Record/CheckRequest/Refusal`, package name unchanged) live in `infantryProtocol`; `PipelineStore` / `PipelineHandler` and the tools `infantry_pipeline` / `infantry_pipeline_record` live in `plugins/official/Infantry_Board/daemon` (the tools moved there from Infantry_Git). Storage goes through `api.storage` adopting `pipeline_config`, `pipeline_entries`, `pipeline_checks` (module.json `daemon.storage.adopt`; core's migrations still create them). The four `pipeline_*` frames are declared in `daemon.frames` and registered with `api.frames.handle`; the new `pipeline_state` push goes out through `api.boardRuntime.push`. Plugin absent: `<type> refused: this daemon has no pipeline` (`BoardFrames.noPipeline`). No DaemonApi change.
+**DP-7a (ticket 6df0d6c2):** the knowledge wire DTOs (`memory`: MemoryNote, MemorySave/Get/List/Search/Delete/PurgeRole, MemoryScoped, MemoryIndexEntry, MemorySearchResult, `memoryOccurrences`; `issues`: Issue, IssueEvent and the Issue* payloads, ref/location helpers; `decisions`: Decision, DecisionAdd/List/Get, `parseDecisionRef`) live in `infantryProtocol` under the same package names (wire unchanged). Stores, handlers, refusals and SQL stay in `infantry`. `OrchestratorBoundaryGuardTest` no longer counts an import of such a type as a runner<->orchestrator crossing: `cli>memory`, `cli>issues`, `cli>decisions` are 0.
 
 **DP-7b (Knowledge read port, DaemonApi 1.17.0, additive):** `daemon.api.knowledge.Knowledge` (read-only: `noteCount`, `digest(project, role, budget)`, `section`, `search`, `roleNotes`) is a service in the AR-5 registry. Core registers `LocalKnowledge` (over MemoryStore/DecisionStore/IssueStore, owner `core`) right after the plugin host is set. `agents/Knowledge.kt`'s `KnowledgeCounter` (first-turn digest, board brief, mail router) is now `ServiceKnowledgeCounter`, which calls `services.find(Knowledge)` on every read; no provider = no counts = the knowledge section is simply omitted (no error). Rendered text unchanged (`renderKnowledge` untouched). `budget` is reserved: the local provider applies the shipped caps.
 
-**DP-7c (issues and decisions moved out of core):** the `issues` and `decisions` packages are gone from `agentHq`. The Infantry_Notes daemon half owns the stores (over `api.storage`, tables adopted via `daemon.storage.adopt`: decisions, issues, issue_events; core migrations still create them) and the nine frames (module.json `daemon.frames`, same types, actions, kinds and refusal texts). DaemonApi 1.18.0 (additive minor) adds `KnowledgeRecords` (`activeDecisions`, `openIssues`) beside `Knowledge`; the plugin provides it and core's `LocalKnowledge` reads it lazily for the digest (memory stays in core until DP-7d). Without the plugin the frames refuse with `<type> refused: this daemon has no decisions|issues` and the digest omits both. No decision/issue MCP tools exist, so none were added.
+**DP-7c (issues and decisions moved out of core):** the `issues` and `decisions` packages are gone from `infantry`. The Infantry_Notes daemon half owns the stores (over `api.storage`, tables adopted via `daemon.storage.adopt`: decisions, issues, issue_events; core migrations still create them) and the nine frames (module.json `daemon.frames`, same types, actions, kinds and refusal texts). DaemonApi 1.18.0 (additive minor) adds `KnowledgeRecords` (`activeDecisions`, `openIssues`) beside `Knowledge`; the plugin provides it and core's `LocalKnowledge` reads it lazily for the digest (memory stays in core until DP-7d). Without the plugin the frames refuse with `<type> refused: this daemon has no decisions|issues` and the digest omits both. No decision/issue MCP tools exist, so none were added.
 
 **DP-7d (step 1, DaemonApi 1.18.0, additive):** `events.onSessionRemoved(listener)` tells a plugin the id of every session that is killed or removed (after core's own `onSessionEnded`; one failing listener never stops the rest; community plugins get no grant gate, it carries ids only). It is what lets the Infantry_Notes daemon half drop session-scoped notes when the memory package moves out of core. The memory package itself (MemoryStore, MemoryHandler, LeadNoteStore, `memory_notes` adoption, role-note mail, deleting `LocalKnowledge`) has NOT moved yet: see the DP-7d report for what is left.
 
 **DP-7e (mail port, DaemonApi 1.19.0, additive):** `api.sessionNotifier` (`daemon.api.sessions.SessionNotifier`): `notifySession(sessionId, subject, body): Boolean` and `notifyRole(projectId, role, subject, body): Int` (count of live sessions mailed). Core implements it (`LocalSessionNotifier`) over the existing mail router, only to sessions that are live; a send that fails is not counted and never throws. The default (`NoSessionNotifier`) delivers nothing. Official / core plugins use it freely; a community module needs the grant `sessions.notify` in its module settings (`GrantedSessionNotifier`; default deny, the call throws `missing grant 'sessions.notify' in modules.json`). Core's ROLE-NOTES-1 announcement now goes through the same class, and the memory package can move into Infantry_Notes without a mail dependency.
 
-**DP-7f (memory moved out of core):** MemoryStore, MemoryHandler, LeadNoteStore and the persistence (now `StorageMemoryPersistence` over `api.storage`; LIKE search with `ESCAPE`) live in the Infantry_Notes daemon plugin; `memory_notes` is in module.json `storage.adopt` (core migrations still create it) and the six `memory_*` frames are declared in `daemon.frames` (same types, actions, kinds and refusal texts). A session's notes are dropped on `events.onSessionRemoved`; a role-note change is mailed through `sessionNotifier.notifyRole`. The plugin provides the whole `Knowledge` port (digest, section, search, roleNotes); core's `LocalKnowledge` and `KnowledgeWiring` are deleted, `roleNotesOf` reads the port, and `KnowledgeLines`/`KnowledgeDigest` moved to `agentHqProtocol` (package `agents`) so the plugin can build the digest lines. Without the plugin the memory frames refuse `<type> refused: this daemon has no memory` and the digest omits notes. The `memory` package in core now holds only the wire DTOs (agentHqProtocol).
+**DP-7f (memory moved out of core):** MemoryStore, MemoryHandler, LeadNoteStore and the persistence (now `StorageMemoryPersistence` over `api.storage`; LIKE search with `ESCAPE`) live in the Infantry_Notes daemon plugin; `memory_notes` is in module.json `storage.adopt` (core migrations still create it) and the six `memory_*` frames are declared in `daemon.frames` (same types, actions, kinds and refusal texts). A session's notes are dropped on `events.onSessionRemoved`; a role-note change is mailed through `sessionNotifier.notifyRole`. The plugin provides the whole `Knowledge` port (digest, section, search, roleNotes); core's `LocalKnowledge` and `KnowledgeWiring` are deleted, `roleNotesOf` reads the port, and `KnowledgeLines`/`KnowledgeDigest` moved to `infantryProtocol` (package `agents`) so the plugin can build the digest lines. Without the plugin the memory frames refuse `<type> refused: this daemon has no memory` and the digest omits notes. The `memory` package in core now holds only the wire DTOs (infantryProtocol).
 
 **USAGE-FIT (DaemonApi 1.20.0, additive):** `Meters.requests(sinceMs)` returns the recorded model requests (`MeterRequest`: ts, session, role, harness, model, input/output/cache tokens; null = not reported) so the Pace daemon can fit tokens per meter point. Read-only; empty when the daemon keeps none.
 
-**DP-10a (chat images moved out of core, DaemonApi 1.21.0, additive):** `api.files(projectId)` returns a `ProjectFiles` rooted at `<project directory>/.agenthq/` (put / get / stat / list / delete / touch / absolutePath). It refuses `..`, empty or `.` segments, absolute paths, drive letters and a symlink that leads out of the root, and an unknown project or one without a directory (IllegalArgumentException). Official tier or a community `files` grant. ImageUploads and ChatImageRetention now live in Infantry_Chat (`image_upload` frame declared in module.json under the same action `images.upload`/write; the wire, the `.agenthq/uploads/<purpose>/<sha>.<ext>` layout and the refusal texts are unchanged); retention runs once at start then every 6h through `api.schedule`. Without the plugin `image_upload` answers `image_upload refused: this daemon stores no uploads`. Ticket image attach (backlog/TicketImages.kt) stays in core and takes its path prefix from `ProjectFiles.UPLOADS_REL`. Settings `images.*` are plugin-readable.
+**DP-10a (chat images moved out of core, DaemonApi 1.21.0, additive):** `api.files(projectId)` returns a `ProjectFiles` rooted at `<project directory>/.infantry/` (put / get / stat / list / delete / touch / absolutePath). It refuses `..`, empty or `.` segments, absolute paths, drive letters and a symlink that leads out of the root, and an unknown project or one without a directory (IllegalArgumentException). Official tier or a community `files` grant. ImageUploads and ChatImageRetention now live in Infantry_Chat (`image_upload` frame declared in module.json under the same action `images.upload`/write; the wire, the `.infantry/uploads/<purpose>/<sha>.<ext>` layout and the refusal texts are unchanged); retention runs once at start then every 6h through `api.schedule`. Without the plugin `image_upload` answers `image_upload refused: this daemon stores no uploads`. Ticket image attach (backlog/TicketImages.kt) stays in core and takes its path prefix from `ProjectFiles.UPLOADS_REL`. Settings `images.*` are plugin-readable.
 
 ### ATTN-1: Attention as a provided service (DaemonApi additive minor)
 `daemon.api.attention.Attention` (`raise(kind, ..., outcome, detail): String?`, `resolve(id)`, `list(project)`), kinds as `AttentionKinds` wire names, published in the AR-5 registry. Core registers `LocalAttention` over `AttentionStore`. Usage's `LaunchGate`, `AgentWatchdog`, `ReportBackMonitor`, `TriggerGuard`/`TriggerService`, `LocalBoardRuntime` and `DaemonMain`'s raise sites call it through `FoundAttention` (registry lookup per call; absent provider = item dropped, logged once). UI frames for attention unchanged.
@@ -353,7 +353,7 @@ No existing getter is changed or deprecated by AR-5 (additive). `tickets`, `epic
 `hooks.incomingMail(IncomingMailHook)` (hook kind `incomingMail`, official/core only) is asked once per accepted mail, after `mail.sent` and BEFORE any wake or injection, with `IncomingMail` (id, from, to, recipientSessionId/Role/projectId when the address resolves, subject, body, threadId). A `MailVerdict(handled = true)` marks the mail READ for the recipient and wakes nobody; `MailVerdict(text = ...)` replaces the delivered text of that one mail; null, a throw, a disabled plugin or a timeout of `limits.plugins.callTimeoutMs` delivers as today (fail open: a mail is never dropped). Infantry_Scripting runs project hooks `on mail.incoming` through it (`ih.handled()`, `ih.deliver_text{text=}`).
 
 ## Script process bridge (SCRIPT-CMD-1)
-The Scripting plugin (not core) registers `agenthq_exec` and `agenthq_exec_status` (plugin tools, no DaemonApi change) so a sandboxed script can run a command line through the daemon and read `{exitCode, durationMs, stdoutTail, stderrTail, timedOut}` in `input.results`; `exec.done` is published on the named-event bus for background runs. Off by default (`scripting.exec.enabled`), with allow-list and role settings. Details and a worked example: `plugins/official/Infantry_Scripting/project-scripts/README.md`.
+The Scripting plugin (not core) registers `infantry_exec` and `infantry_exec_status` (plugin tools, no DaemonApi change) so a sandboxed script can run a command line through the daemon and read `{exitCode, durationMs, stdoutTail, stderrTail, timedOut}` in `input.results`; `exec.done` is published on the named-event bus for background runs. Off by default (`scripting.exec.enabled`), with allow-list and role settings. Details and a worked example: `plugins/official/Infantry_Scripting/project-scripts/README.md`.
 
 **AR-4b-i (DaemonApi 1.32.0, additive):** `daemon.api.roles.Roles` (`all()`, `role(id)`: read-only role catalog, `RoleRecord` gains the TOKEN-1 response fields) is a service in the AR-5 registry. Core registers `LocalRoles` over `RoleService` (owner `core`) right after the plugin host is set. Core reads roles only through `RolesLookup` (`services.find(Roles)` per call): spawn env (TOKEN-1), routing `roleKnown`, `AgentsWiring` (agent registry, profiles), `LocalBoardRuntime.roleIds`. No provider = no roles: sessions spawn with no persona (logged once). Still direct on `role`: the role_* frames, binding/trait handlers (AR-4b-ii moves them with the store).
 

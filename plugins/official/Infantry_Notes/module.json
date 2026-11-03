@@ -6,11 +6,11 @@
   "description": "The project knowledge notes.",
   "tier": "official",
   "sequence": [],
-  "entry": "com.superiorsoftllc.agenthq.plugins.official.notes.NotesPlugin",
+  "entry": "com.superiorsoftllc.infantry.plugins.official.notes.NotesPlugin",
   "jar": "build/libs/Infantry_Notes.jar",
   "buildOrder": 80,
   "daemon": {
-    "entry": "com.superiorsoftllc.agenthq.plugins.official.notes.daemon.NotesDaemonPlugin",
+    "entry": "com.superiorsoftllc.infantry.plugins.official.notes.daemon.NotesDaemonPlugin",
     "jar": "daemon/build/libs/Infantry_Notes-daemon.jar",
     "apiAtLeast": "1.19.0",
     "storage": { "adopt": ["decisions", "issues", "issue_events", "memory_notes"] },

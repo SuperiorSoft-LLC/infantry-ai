@@ -2,7 +2,7 @@
 
 A value can live at four scopes; the most specific one that holds a value wins:
 **session > role (in a project) > project > app > built-in default** (`SettingScope` in
-`superiorSoftLibrary/agentHqCore/src/main/kotlin/com/superiorsoftllc/agenthq/settings/ScopedSettings.kt`). There are
+`superiorSoftLibrary/infantryCore/src/main/kotlin/com/superiorsoftllc/infantry/settings/ScopedSettings.kt`). There are
 two kinds of setting, and they live in different places.
 
 ## A. A plugin setting (the common case)
@@ -50,8 +50,8 @@ scope is refused with the allowed list.
 ### Files to touch
 
 ```
-superiorSoftLibrary/agentHqCore/src/main/kotlin/com/superiorsoftllc/agenthq/settings/SettingsService.kt
-superiorSoftLibrary/agentHqCore/src/main/kotlin/com/superiorsoftllc/agenthq/settings/ScopedSettings.kt
+superiorSoftLibrary/infantryCore/src/main/kotlin/com/superiorsoftllc/infantry/settings/SettingsService.kt
+superiorSoftLibrary/infantryCore/src/main/kotlin/com/superiorsoftllc/infantry/settings/ScopedSettings.kt
 ```
 
 ### Steps (follow `INCLUDE_SKILLS_CONTEXT`, a boolean, through the same two files)
@@ -71,7 +71,7 @@ superiorSoftLibrary/agentHqCore/src/main/kotlin/com/superiorsoftllc/agenthq/sett
 ## Check
 
 ```
-./gradlew :superiorSoftLibrary:agentHq:test --tests "com.superiorsoftllc.agenthq.settings.LimitsGuardTest" --console=plain
+./gradlew :superiorSoftLibrary:infantry:test --tests "com.superiorsoftllc.infantry.settings.LimitsGuardTest" --console=plain
 ```
 
 ## Related

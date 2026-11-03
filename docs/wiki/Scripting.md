@@ -1,7 +1,7 @@
 # Scripting with Lua
 
 Scripts encode your process: what happens when a ticket is done, when mail arrives, when a build ends. They are
-Lua 5.2 (LuaJ 3.0.1), sandboxed, and live in your project's `.agenthq/scripts/` folder. Any agent or role may
+Lua 5.2 (LuaJ 3.0.1), sandboxed, and live in your project's `.infantry/scripts/` folder. Any agent or role may
 author and run them. The engine is a plugin (`Infantry_Lua`) behind the `Infantry_Scripting` plugin, which owns
 hooks, limits and the tools.
 
@@ -36,14 +36,14 @@ with `input.results`. Branch on `input.phase` (or `input.results == nil`). The c
 
 ### Calling tools
 
-Every tool the daemon has is callable: `ih.call("agenthq_ticket_move", {ticket = "t1", status = "done"})`, or
+Every tool the daemon has is callable: `ih.call("infantry_ticket_move", {ticket = "t1", status = "done"})`, or
 `ih.<toolname>{...}`, or by alias. Arguments are always ONE table of named values. Aliases come from the setting
 `scripting.aliases` (short name to tool name; defaults: `move`, `comment`, `message`, `start`, `close_session`,
 `kill`, `prompt`, `ask`, `ticket_get`, `ticket_update`, `ticket_create`, `board`, `emit`) plus built-ins every project
 has: `exec`, `cli`, `exec_status`, `progress`, `chat_note`, `chat_image`, `session_read`, `session_act`,
 `notice_suppress`.
 
-The live list of tools, aliases and engine notes: `agenthq_script_api` (MCP tool; optional `tool` argument for one
+The live list of tools, aliases and engine notes: `infantry_script_api` (MCP tool; optional `tool` argument for one
 tool in full). It is generated from the registry on each call, so it is always current.
 
 ## Saving, running, listing
@@ -52,12 +52,12 @@ MCP tools (preferred) and CLI:
 
 | Tool | CLI |
 |---|---|
-| `agenthq_script_save {name, source}` (parse-checked, runs at once) | `agenthq script save <name> --file <path>` (or `--body -`) |
-| `agenthq_script_list` | `agenthq script list` |
-| `agenthq_script_delete {name}` (refused while a hook uses it) | `agenthq script delete <name>` |
-| `agenthq_script_run {name, args, dryRun}` | (MCP) |
-| `agenthq_script_hook {action: list\|add\|remove, on, script, args, id, to}` | `agenthq script hook list \| add <on> <script> [--payload <json>\|-] \| remove <id>` |
-| `agenthq_script_stats` (turns saved, wakes by reason, latest runs) | (MCP) |
+| `infantry_script_save {name, source}` (parse-checked, runs at once) | `infantry script save <name> --file <path>` (or `--body -`) |
+| `infantry_script_list` | `infantry script list` |
+| `infantry_script_delete {name}` (refused while a hook uses it) | `infantry script delete <name>` |
+| `infantry_script_run {name, args, dryRun}` | (MCP) |
+| `infantry_script_hook {action: list\|add\|remove, on, script, args, id, to}` | `infantry script hook list \| add <on> <script> [--payload <json>\|-] \| remove <id>` |
+| `infantry_script_stats` (turns saved, wakes by reason, latest runs) | (MCP) |
 
 ## Hooks
 
@@ -70,13 +70,13 @@ A hook says "when this happens, run this script with these fixed args". The `on`
 | `exec.done` | a background exec ends | `id`, `exitCode`, `script`, `session`, `timedOut` |
 | `exec.tick` | every `scripting.exec.tickSec` seconds while a background exec runs | `id`, `script`, `session`, `elapsedMs`, `stdoutTail`, `stderrTail`, `bytesSinceLast` |
 | `every <N>s` | a timer; minimum `scripting.hooks.minEverySec` (default 10) | `tick`, `at`, `hookId` |
-| any event name | a named event: `ticket.commented`, `merge.done`, `ticket.*`, or your own via `agenthq_event_emit` | the event's payload |
+| any event name | a named event: `ticket.commented`, `merge.done`, `ticket.*`, or your own via `infantry_event_emit` | the event's payload |
 
 Examples:
 
 ```
-agenthq script hook add "lane enter done" on-ticket-done --payload '{"devBranch":"main"}'
-agenthq script hook add "every 180s" worker-watch --payload '{"exemptRoles":["pm"]}'
+infantry script hook add "lane enter done" on-ticket-done --payload '{"devBranch":"main"}'
+infantry script hook add "every 180s" worker-watch --payload '{"exemptRoles":["pm"]}'
 ```
 
 `to` on `every <N>s` and `exec.tick` names a session the script acts for (its `progress` lands on that card).
@@ -105,13 +105,13 @@ Hooks can trigger events that trigger hooks. Guards (settings): `scripting.hooks
 
 ## exec: running a process
 
-A script is sandboxed and runs nothing itself; it queues `ih.exec{...}` (same as `ih.cli`; MCP tool `agenthq_exec`)
+A script is sandboxed and runs nothing itself; it queues `ih.exec{...}` (same as `ih.cli`; MCP tool `infantry_exec`)
 and the daemon runs the process as the caller. The bridge is **off by default**.
 
 Args: `command` (an argv list, run directly; or one string split on spaces/quotes, no shell), `cwd` (default the
 project root), `env`, `stdin`, `timeoutSec`, `script` (label), `background`. A non-zero exit is a result, not a
 failure. Result in `input.results[i].json`: `{exitCode, durationMs, stdoutTail, stderrTail, timedOut}`.
-`background = true` answers `{id, state = "running"}`; read it with `agenthq_exec_status {id}` or continue from an
+`background = true` answers `{id, state = "running"}`; read it with `infantry_exec_status {id}` or continue from an
 `exec.done` hook.
 
 ```lua
@@ -137,8 +137,8 @@ end
 | `scripting.exec.tailChars` | 8000 | Output tail kept |
 | `scripting.exec.tickSec` | 10 | Seconds between `exec.tick` events |
 
-Enable it narrowly: `agenthq settings set scripting.exec.enabled true` and
-`agenthq settings set scripting.exec.allow git`. Each run is logged once (session, role, script, command, exit code,
+Enable it narrowly: `infantry settings set scripting.exec.enabled true` and
+`infantry settings set scripting.exec.allow git`. Each run is logged once (session, role, script, command, exit code,
 duration).
 
 ## Chat notes
@@ -149,10 +149,10 @@ the agent: use that for real exceptions only. Same project only, rate limited pe
 
 ## Progress
 
-`ih.progress{...}` (`agenthq_progress`) shows a live bar on a session's card. From a hook with `to`, it lands on
+`ih.progress{...}` (`infantry_progress`) shows a live bar on a session's card. From a hook with `to`, it lands on
 that session; otherwise on the caller, or the `sessionId` you name (same project only). Agents use the CLI form:
-`agenthq progress 40 "compiling"`, `progress plan "a" "b"`, `progress step`, `progress done`, `progress fail`.
-`agenthq run --label tests -- <cmd>` runs a command with progress reported on exit.
+`infantry progress 40 "compiling"`, `progress plan "a" "b"`, `progress step`, `progress done`, `progress fail`.
+`infantry run --label tests -- <cmd>` runs a command with progress reported on exit.
 
 ## The session bridge
 
@@ -169,7 +169,7 @@ Scripts can watch and steer sessions with built-in aliases:
 
 Limits per run: `scripting.maxSteps` (5,000,000), `scripting.timeoutMs` (2000), `scripting.maxAllocBytes`
 (64 MiB), `scripting.maxPhases` (3), `scripting.defaultEngine` (`lua`). Hooks and exec: see above. All are daemon
-settings: `agenthq settings get scripting.timeoutMs`, `agenthq settings set <key> <value>`.
+settings: `infantry settings get scripting.timeoutMs`, `infantry settings set <key> <value>`.
 
 ## Worked examples
 
@@ -183,16 +183,16 @@ local ticket = a.ticketId or error("no ticketId")
 local done = a.doneLane or error("needs doneLane")
 if a.to and a.to:lower() == done:lower() then return end
 if input.phase == 1 and a.workerSession then
-  ih.agenthq_session_remove{sessionId = a.workerSession, force = true}
+  ih.infantry_session_remove{sessionId = a.workerSession, force = true}
   ih.again()
 else
-  ih.agenthq_ticket_comment{ticketId = ticket, body = "moved " .. tostring(a.from) .. " -> " .. tostring(a.to)}
+  ih.infantry_ticket_comment{ticketId = ticket, body = "moved " .. tostring(a.from) .. " -> " .. tostring(a.to)}
 end
 ```
 
 ```
-agenthq script hook add "lane enter backlog" lane-park --payload '{"doneLane":"done"}'
-agenthq script hook add "lane exit in_progress" lane-park --payload '{"doneLane":"done"}'
+infantry script hook add "lane enter backlog" lane-park --payload '{"doneLane":"done"}'
+infantry script hook add "lane exit in_progress" lane-park --payload '{"doneLane":"done"}'
 ```
 
 **Run a build in the background and report** (an `exec` with `background = true` plus hooks on `exec.tick` for the
@@ -208,17 +208,17 @@ More shipped scripts: `plugins/official/Infantry_Scripting/project-scripts/` (`o
 - An exec id can reach an `exec.done` hook as a number in older builds; compare as a string before calling
   `exec_status`.
 - The script CLI lives in `ScriptCli.kt`; its usage line is
-  `agenthq script hook list | add <on> <script> [--payload <args json>|-] | remove <id> | save <name> [--file <path> | --body -] | list | delete <name>`.
+  `infantry script hook list | add <on> <script> [--payload <args json>|-] | remove <id> | save <name> [--file <path> | --body -] | list | delete <name>`.
 
 ## Reference: hooks.json, engine limits, adding a language
 
-Added by DOCS-2. Sources: `plugins/official/Infantry_Scripting/daemon/src/main/kotlin/com/superiorsoftllc/agenthq/plugins/official/scripting/daemon/ScriptEngine.kt`,
+Added by DOCS-2. Sources: `plugins/official/Infantry_Scripting/daemon/src/main/kotlin/com/superiorsoftllc/infantry/plugins/official/scripting/daemon/ScriptEngine.kt`,
 `ScriptEngineWire.kt` (same folder), `plugins/official/Infantry_Lua/daemon/.../LuaScriptEngine.kt`,
 `plugins/official/Infantry_Scripting/module.json`.
 
 ### hooks.json
 
-Hooks live in `<project>/.agenthq/scripts/hooks.json`:
+Hooks live in `<project>/.infantry/scripts/hooks.json`:
 
 ```json
 { "version": 1, "hooks": [
@@ -229,7 +229,7 @@ Hooks live in `<project>/.agenthq/scripts/hooks.json`:
 Fields per hook: `id`, `on`, `script`, `args`, `enabled`, `ownerSession`, `ownerRole`, `ownerIsOwner`, `to`.
 `on` forms: `lane enter <lane>` and `lane exit <lane>` (the named event `ticket.moved`), a named event
 (`mail.incoming`, `exec.done`, `exec.tick`, ticket events), a prefix ending in `.*` or `*`, and `every <N>s` (a timer).
-Manage them with `agenthq script hook list | add | remove` (see above) rather than editing the file by hand.
+Manage them with `infantry script hook list | add | remove` (see above) rather than editing the file by hand.
 
 ### Engine limits
 

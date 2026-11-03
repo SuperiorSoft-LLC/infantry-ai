@@ -1,22 +1,22 @@
-package com.superiorsoftllc.agenthq.plugins.official
+package com.superiorsoftllc.infantry.plugins.official
 
-import com.superiorsoftllc.agenthq.plugin.api.ConfigDeclaration
-import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
-import com.superiorsoftllc.agenthq.plugins.official.agents.AgentsSection
-import com.superiorsoftllc.agenthq.plugin.api.PanelDeclaration
-import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
-import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
-import com.superiorsoftllc.agenthq.ui.plugin.PanelProvider
-import com.superiorsoftllc.agenthq.ui.plugin.Panels
-import com.superiorsoftllc.agenthq.ui.plugin.UiPlugin
-import com.superiorsoftllc.agenthq.ui.plugin.UiRegistrar
+import com.superiorsoftllc.infantry.plugin.api.ConfigDeclaration
+import com.superiorsoftllc.infantry.plugin.api.ModuleManifest
+import com.superiorsoftllc.infantry.plugins.official.agents.AgentsSection
+import com.superiorsoftllc.infantry.plugin.api.PanelDeclaration
+import com.superiorsoftllc.infantry.ui.plugin.InfantryModule
+import com.superiorsoftllc.infantry.ui.plugin.ModuleSource
+import com.superiorsoftllc.infantry.ui.plugin.PanelProvider
+import com.superiorsoftllc.infantry.ui.plugin.Panels
+import com.superiorsoftllc.infantry.ui.plugin.UiPlugin
+import com.superiorsoftllc.infantry.ui.plugin.UiRegistrar
 
 /** The left panel's agents section: counters, Board, search, filters, the list (drawn from the window's `ShellContext.agents`). */
 private fun agentsPanel() =
     PanelProvider(id = "infantry.agents", panel = Panels.LEFT, order = Panels.TABS_ORDER, testTag = "left-panel-agents", fill = true) { AgentsSection() }
 
 /** Infantry_Agents as a compiled-in module (web and Android, D9): the manifest mirrors module.json. */
-val InfantryAgents = AgentHqModule(
+val InfantryAgents = InfantryModule(
     ModuleManifest(
         name = "Infantry_Agents", version = "1.0.0", author = "Infantry AI", description = "The left panel's agents list.",
         panels = listOf(PanelDeclaration("infantry.agents", Panels.LEFT)),
@@ -36,5 +36,5 @@ val InfantryAgents = AgentHqModule(
 class AgentsPlugin : UiPlugin, ModuleSource {
     override fun register(registrar: UiRegistrar) = registrar.panel(agentsPanel())
 
-    override fun modules(): List<AgentHqModule> = listOf(InfantryAgents)
+    override fun modules(): List<InfantryModule> = listOf(InfantryAgents)
 }

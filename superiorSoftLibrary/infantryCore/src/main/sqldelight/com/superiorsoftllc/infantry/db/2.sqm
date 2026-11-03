@@ -1,0 +1,35 @@
+-- Phase 4.5 -- migration v2 -> v3: pods, events, and runs.pod_id.
+--
+-- v2 is a story-1 file: the `runs` table only. Story 1's factory never wrote PRAGMA user_version,
+-- so such a file reads user_version = 0 WITH a `runs` table; InfantryDatabaseFactory treats exactly
+-- that combination as v2 and runs this file. Everything it creates must match the .sq files
+-- column for column -- VerifyMigrationTask is disabled repo-wide by design, so
+-- SchemaMigrationTest asserts the equivalence instead (table_info, index_list, foreign_key_list).
+--
+-- NEXT MIGRATION: 3.sqm (v3 -> v4), which makes Schema.version 4.
+
+CREATE TABLE pods (
+    id TEXT NOT NULL PRIMARY KEY,
+    goal TEXT NOT NULL,
+    state TEXT NOT NULL,
+    max_concurrency INTEGER NOT NULL DEFAULT 1 CHECK (max_concurrency >= 1),
+    created_at INTEGER NOT NULL,
+    ended_at INTEGER
+);
+
+-- ADD COLUMN appends, which is why runs.sq declares pod_id LAST. A REFERENCES clause is allowed
+-- here because the column's default is NULL.
+ALTER TABLE runs ADD COLUMN pod_id TEXT REFERENCES pods(id) ON DELETE CASCADE;
+
+CREATE INDEX index_runs_on_pod_id ON runs(pod_id);
+
+CREATE TABLE events (
+    seq INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+    type TEXT NOT NULL CHECK (type IN ('text_delta', 'status', 'error', 'finished')),
+    payload TEXT NOT NULL,
+    vocabulary_version TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+);
+
+CREATE INDEX index_events_on_run_id_seq ON events(run_id, seq);

@@ -1,6 +1,6 @@
 # BLOCKS-LAYOUT: layout is a block type (design only)
 
-Ticket fa41d42d. Read on feature-agenthq-mvp @ 21b5905, plus the BLOCKS-SHELL-3 tip 64de8b1 (a3923bd0, not merged yet).
+Ticket fa41d42d. Read on "feature-agenthq"-mvp @ 21b5905, plus the BLOCKS-SHELL-3 tip 64de8b1 (a3923bd0, not merged yet).
 Inputs: `ui/block/Block.kt`, `ui/AppShell.kt`, `ui/shell/blocks/*`, `App.kt:380-410` and `:898-929` (StatusBar), BLOCKS-1 note
 (f706b748), LAYOUT-1 note (2f71cd83), superPayload `BlockComponent.kt`, `RowBlock`, `ColumnBlock`, `SectionBlock`.
 
@@ -708,7 +708,7 @@ infantry.shell.windowLayer  placeholder   default: group             the dialogs
 ### 6q. As built in SHELL-EMPTY-DROPIN S2 (4c8f56c3): the ShellContext
 
 Gap 2 of the feasibility doc: the open nodes read `App`, `Shell` and `Controller` directly, so a block compiled outside
-core has nothing stable to compile against. `ui.shell.ShellContext` (agenthqUiCore, commonMain) is that surface; the
+core has nothing stable to compile against. `ui.shell.ShellContext` (infantryUiCore, commonMain) is that surface; the
 shell provides it once, through `LocalShellContext`, next to `LocalShell`.
 
 ```
@@ -950,7 +950,7 @@ from the compiled-in modules (`CoreModules.all`). Only Windows has the drop-in (
 **P1 step 2 (44aee6e5), as built.** Decisions taken while building (the owner approved 6s as written; none of these
 changes a line of the ten-line summary):
 
-- **1. Schema, tree, storage, resolver.** The schema types are plugin API in `agenthqPlugins` (`ConfigDeclaration`,
+- **1. Schema, tree, storage, resolver.** The schema types are plugin API in `infantryPlugins` (`ConfigDeclaration`,
   `ConfigFieldDeclaration`, `ConfigFieldTypes`, the wire row `NodeConfigEntry`), shared by the daemon and the window;
   module.json gains `config` (A). `TabFactory.configTree` merges core's `CoreConfig.JSON` (text in commonMain, so web and
   Android read the same file, G) and each loaded module's `config` in load order (B); the hierarchy is the drawn trees'

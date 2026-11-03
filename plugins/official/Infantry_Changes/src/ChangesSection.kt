@@ -1,6 +1,6 @@
-package com.superiorsoftllc.agenthq.plugins.official.changes
+package com.superiorsoftllc.infantry.plugins.official.changes
 
-import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.infantry.ui.*
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -25,14 +25,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.model.ChangesView
-import com.superiorsoftllc.agenthq.ui.model.badge
-import com.superiorsoftllc.agenthq.ui.model.display
-import com.superiorsoftllc.agenthq.ui.model.label
-import com.superiorsoftllc.agenthq.ui.model.splitExtension
-import com.superiorsoftllc.agenthq.ui.model.summary
-import com.superiorsoftllc.agenthq.ui.protocol.ChangeKind
-import com.superiorsoftllc.agenthq.ui.protocol.ChangedFile
+import com.superiorsoftllc.infantry.ui.model.ChangesView
+import com.superiorsoftllc.infantry.ui.model.badge
+import com.superiorsoftllc.infantry.ui.model.display
+import com.superiorsoftllc.infantry.ui.model.label
+import com.superiorsoftllc.infantry.ui.model.splitExtension
+import com.superiorsoftllc.infantry.ui.model.summary
+import com.superiorsoftllc.infantry.ui.protocol.ChangeKind
+import com.superiorsoftllc.infantry.ui.protocol.ChangedFile
 
 /**
  * GIT VIEW: the changed files of one agent's worktree, staged and unstaged apart. Presentation only --

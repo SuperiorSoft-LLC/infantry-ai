@@ -1,13 +1,13 @@
-package com.superiorsoftllc.agenthq.plugins.official.chatfeed
+package com.superiorsoftllc.infantry.plugins.official.chatfeed
 
-import com.superiorsoftllc.agenthq.plugin.api.ImplementationDeclaration
-import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
-import com.superiorsoftllc.agenthq.plugin.api.PanelDeclaration
-import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
-import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
-import com.superiorsoftllc.agenthq.ui.plugin.PanelProvider
-import com.superiorsoftllc.agenthq.ui.plugin.UiPlugin
-import com.superiorsoftllc.agenthq.ui.plugin.UiRegistrar
+import com.superiorsoftllc.infantry.plugin.api.ImplementationDeclaration
+import com.superiorsoftllc.infantry.plugin.api.ModuleManifest
+import com.superiorsoftllc.infantry.plugin.api.PanelDeclaration
+import com.superiorsoftllc.infantry.ui.plugin.InfantryModule
+import com.superiorsoftllc.infantry.ui.plugin.ModuleSource
+import com.superiorsoftllc.infantry.ui.plugin.PanelProvider
+import com.superiorsoftllc.infantry.ui.plugin.UiPlugin
+import com.superiorsoftllc.infantry.ui.plugin.UiRegistrar
 
 /** The slot Infantry_Chat draws its feed in; this module contributes the default section of it. */
 const val FEED_SLOT = "chat.feed"
@@ -18,7 +18,7 @@ const val FEED_SECTION_ID = "infantry.chatfeed"
 private fun feedPanel() = PanelProvider(id = FEED_SECTION_ID, panel = FEED_SLOT, order = 0, testTag = "chat-feed", fill = true) { FeedSection(it) }
 
 /** Infantry_ChatFeed as a compiled-in module (web and Android, D9): the manifest mirrors module.json. */
-val InfantryChatFeed = AgentHqModule(
+val InfantryChatFeed = InfantryModule(
     ModuleManifest(
         name = "Infantry_ChatFeed", version = "1.0.0", author = "Infantry AI",
         description = "The chat feed: the session's messages, thinking, comms cards, finished lines and automation rows, drawn by kind.",
@@ -41,5 +41,5 @@ class ChatFeedPlugin : UiPlugin, ModuleSource {
         for ((kind, renderer) in DefaultFeedRenderers) registrar.implementation(FEED_RENDERERS, kind, renderer)
     }
 
-    override fun modules(): List<AgentHqModule> = listOf(InfantryChatFeed)
+    override fun modules(): List<InfantryModule> = listOf(InfantryChatFeed)
 }

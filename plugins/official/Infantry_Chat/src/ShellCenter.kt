@@ -1,6 +1,6 @@
-package com.superiorsoftllc.agenthq.plugins.official.chat
+package com.superiorsoftllc.infantry.plugins.official.chat
 
-import com.superiorsoftllc.agenthq.ui.shell.blocks.*
+import com.superiorsoftllc.infantry.ui.shell.blocks.*
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -12,36 +12,36 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import com.superiorsoftllc.agenthq.ui.CENTER_PANE_TAG
-import com.superiorsoftllc.agenthq.ui.CENTER_TRANSCRIPT_TAG
-import com.superiorsoftllc.agenthq.plugins.official.chat.CenterTabBar
-import com.superiorsoftllc.agenthq.plugins.official.chat.ChatPanelHost
-import com.superiorsoftllc.agenthq.plugins.official.chat.Composer
-import com.superiorsoftllc.agenthq.plugins.official.chat.Header
-import com.superiorsoftllc.agenthq.plugins.official.chat.NewAgentDialogFrame
-import com.superiorsoftllc.agenthq.plugins.official.chat.NewAgentDraft
-import com.superiorsoftllc.agenthq.plugins.official.chat.NewAgentError
-import com.superiorsoftllc.agenthq.plugins.official.chat.NewAgentExecutorStep
-import com.superiorsoftllc.agenthq.plugins.official.chat.NewAgentRoleStep
-import com.superiorsoftllc.agenthq.plugins.official.chat.NewAgentTaskStep
-import com.superiorsoftllc.agenthq.plugins.official.chat.Notices
-import com.superiorsoftllc.agenthq.plugins.official.chat.SpawnRows
-import com.superiorsoftllc.agenthq.plugins.official.chat.SwitchPicker
-import com.superiorsoftllc.agenthq.plugins.official.chat.Transcript
-import com.superiorsoftllc.agenthq.plugins.official.chat.chatPanelHeader
-import com.superiorsoftllc.agenthq.plugins.official.chat.chatPanelHost
-import com.superiorsoftllc.agenthq.ui.block.layout.Block
-import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
-import com.superiorsoftllc.agenthq.ui.block.layout.Place
-import com.superiorsoftllc.agenthq.ui.block.layout.RenderPlaced
-import com.superiorsoftllc.agenthq.ui.net.CommandResult
-import com.superiorsoftllc.agenthq.ui.block.layout.LocalBlockSize
-import com.superiorsoftllc.agenthq.ui.model.PanelLayout
-import com.superiorsoftllc.agenthq.plugins.official.chat.ChatPanel
-import com.superiorsoftllc.agenthq.ui.shell.ChatContext
-import com.superiorsoftllc.agenthq.ui.shell.ChatPanels
-import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
-import com.superiorsoftllc.agenthq.ui.shell.NoChat
+import com.superiorsoftllc.infantry.ui.CENTER_PANE_TAG
+import com.superiorsoftllc.infantry.ui.CENTER_TRANSCRIPT_TAG
+import com.superiorsoftllc.infantry.plugins.official.chat.CenterTabBar
+import com.superiorsoftllc.infantry.plugins.official.chat.ChatPanelHost
+import com.superiorsoftllc.infantry.plugins.official.chat.Composer
+import com.superiorsoftllc.infantry.plugins.official.chat.Header
+import com.superiorsoftllc.infantry.plugins.official.chat.NewAgentDialogFrame
+import com.superiorsoftllc.infantry.plugins.official.chat.NewAgentDraft
+import com.superiorsoftllc.infantry.plugins.official.chat.NewAgentError
+import com.superiorsoftllc.infantry.plugins.official.chat.NewAgentExecutorStep
+import com.superiorsoftllc.infantry.plugins.official.chat.NewAgentRoleStep
+import com.superiorsoftllc.infantry.plugins.official.chat.NewAgentTaskStep
+import com.superiorsoftllc.infantry.plugins.official.chat.Notices
+import com.superiorsoftllc.infantry.plugins.official.chat.SpawnRows
+import com.superiorsoftllc.infantry.plugins.official.chat.SwitchPicker
+import com.superiorsoftllc.infantry.plugins.official.chat.Transcript
+import com.superiorsoftllc.infantry.plugins.official.chat.chatPanelHeader
+import com.superiorsoftllc.infantry.plugins.official.chat.chatPanelHost
+import com.superiorsoftllc.infantry.ui.block.layout.Block
+import com.superiorsoftllc.infantry.ui.block.layout.BlockScope
+import com.superiorsoftllc.infantry.ui.block.layout.Place
+import com.superiorsoftllc.infantry.ui.block.layout.RenderPlaced
+import com.superiorsoftllc.infantry.ui.net.CommandResult
+import com.superiorsoftllc.infantry.ui.block.layout.LocalBlockSize
+import com.superiorsoftllc.infantry.ui.model.PanelLayout
+import com.superiorsoftllc.infantry.plugins.official.chat.ChatPanel
+import com.superiorsoftllc.infantry.ui.shell.ChatContext
+import com.superiorsoftllc.infantry.ui.shell.ChatPanels
+import com.superiorsoftllc.infantry.ui.shell.LocalShellContext
+import com.superiorsoftllc.infantry.ui.shell.NoChat
 
 private const val CENTER = "infantry.shell.center"
 
@@ -205,7 +205,7 @@ class NewAgentBlock(children: List<Block>, place: Place = Place()) : Block("newA
             if (c.showNewAgent && state.connection.isLive) controller.refreshModelCatalog()
         }
         // DEMO-MERGE-1 / POLICY-1: the New agent modal never opens while the policy turns agents.spawn off
-        if (c.showNewAgent && com.superiorsoftllc.agenthq.ui.shell.rememberGate("agents.spawn", com.superiorsoftllc.agenthq.plugin.api.ActionKind.SPAWN).allowed) {
+        if (c.showNewAgent && com.superiorsoftllc.infantry.ui.shell.rememberGate("agents.spawn", com.superiorsoftllc.infantry.plugin.api.ActionKind.SPAWN).allowed) {
             NewAgentDialogFrame(
                 state,
                 onAdd = { role, picked, task, contextLimit, effort ->

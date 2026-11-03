@@ -1,0 +1,23 @@
+-- Story 9.3 project settings. Values are stored as their JSON text representation.
+CREATE TABLE IF NOT EXISTS settings (
+    key TEXT NOT NULL PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+getSettingByKey:
+SELECT * FROM settings WHERE key = ?;
+
+getAllSettings:
+SELECT * FROM settings ORDER BY key ASC;
+
+-- A setting is written as putSetting THEN updateSetting (SqlInfantryStore.settings.put): insert if new, then overwrite.
+-- P10-K11: these used to be ONE label with no braces, and SQLDelight then generated only the INSERT OR IGNORE, so a key
+-- could be written once and never changed (a second settings_set was silently dropped). A braced group is not used
+-- because SQLDelight wraps it in a transaction of its own, which bypasses the tracked lock attribution
+-- (LockAttributionTest); `ON CONFLICT DO UPDATE` needs the sqlite-3-24 dialect this module does not use.
+putSetting:
+INSERT OR IGNORE INTO settings(key, value, updated_at) VALUES (:key, :value, :updated_at);
+
+updateSetting:
+UPDATE settings SET value = :value, updated_at = :updated_at WHERE key = :key;

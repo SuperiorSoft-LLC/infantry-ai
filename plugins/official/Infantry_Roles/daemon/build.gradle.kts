@@ -1,7 +1,7 @@
 // DAEMON-PLUGINS-1 (docs/DAEMON-PLUGINS.md): Infantry_Roles's daemon half, the MCP tools that used to be built into the CLI.
 // AR-4b-ii-b: it also owns the role catalog (RoleService, bundled roles/, avatars), the role frames and the role binding / trait
 // stores, and provides the DaemonApi roles ports. Compiled against the daemon API only (compileOnly: the daemon provides it at
-// run time); the wire DTOs (agentHqProtocol) are shaded in; module.json's `daemon.jar` names the jar this builds.
+// run time); the wire DTOs (infantryProtocol) are shaded in; module.json's `daemon.jar` names the jar this builds.
 // `:daemon-plugin-official-Infantry_Roles:jar`.
 plugins {
     kotlin("jvm")
@@ -15,21 +15,21 @@ kotlin {
 val shaded by configurations.creating { isTransitive = false }
 
 dependencies {
-    shaded(project(":superiorSoftLibrary:agentHqProtocol"))
-    compileOnly(project(":superiorSoftLibrary:agentHqProtocol"))
-    compileOnly(project(":superiorSoftLibrary:agentHqDaemonApi"))
+    shaded(project(":superiorSoftLibrary:infantryProtocol"))
+    compileOnly(project(":superiorSoftLibrary:infantryProtocol"))
+    compileOnly(project(":superiorSoftLibrary:infantryDaemonApi"))
     compileOnly(libs.kotlinx.serialization.json)
-    testImplementation(project(":superiorSoftLibrary:agentHqDaemonApi"))
-    testImplementation(project(":superiorSoftLibrary:agentHqProtocol"))
+    testImplementation(project(":superiorSoftLibrary:infantryDaemonApi"))
+    testImplementation(project(":superiorSoftLibrary:infantryProtocol"))
     testImplementation(kotlin("test"))
     testImplementation(libs.kotlinx.serialization.json)
 }
 
-// The role catalog dump (formerly :superiorSoftLibrary:agentHq:roleCatalog): the bundled roles and the avatar resolution chain.
+// The role catalog dump (formerly :superiorSoftLibrary:infantry:roleCatalog): the bundled roles and the avatar resolution chain.
 tasks.register<JavaExec>("roleCatalog") {
     group = "application"
     description = "Prints the Infantry AI role catalog and the avatar resolution chain (Phase 10a)."
-    mainClass.set("com.superiorsoftllc.agenthq.plugins.official.roles.daemon.RoleCatalogProbeKt")
+    mainClass.set("com.superiorsoftllc.infantry.plugins.official.roles.daemon.RoleCatalogProbeKt")
     classpath = sourceSets["main"].runtimeClasspath + configurations["compileClasspath"]
     providers.gradleProperty("roles").orNull?.takeIf { it.isNotBlank() }?.let { args(it) }
 }

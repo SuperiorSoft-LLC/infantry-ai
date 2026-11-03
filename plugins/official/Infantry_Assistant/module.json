@@ -6,7 +6,7 @@
   "description": "The global Assistant: a popup docked under the title bar that hosts the shared chat panel.",
   "tier": "official",
   "sequence": [],
-  "entry": "com.superiorsoftllc.agenthq.plugins.official.assistant.AssistantPlugin",
+  "entry": "com.superiorsoftllc.infantry.plugins.official.assistant.AssistantPlugin",
   "jar": "build/libs/Infantry_Assistant.jar",
   "buildOrder": 200,
   "fills": [

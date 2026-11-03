@@ -1,6 +1,6 @@
-package com.superiorsoftllc.agenthq.plugins.official.attention
+package com.superiorsoftllc.infantry.plugins.official.attention
 
-import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.infantry.ui.*
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -20,8 +20,8 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.protocol.OwnerQuestionView
-import com.superiorsoftllc.agenthq.ui.protocol.QuestionAnswerWire
+import com.superiorsoftllc.infantry.ui.protocol.OwnerQuestionView
+import com.superiorsoftllc.infantry.ui.protocol.QuestionAnswerWire
 
 // RUNTIME-13: the question history, out of Infantry_AppUi's QuestionWindow.kt into the official Infantry_Attention jar.
 

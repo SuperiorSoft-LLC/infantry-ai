@@ -1,12 +1,12 @@
 package com.acme.policyhook
 
-import com.superiorsoftllc.agenthq.daemon.api.DaemonApi
-import com.superiorsoftllc.agenthq.daemon.api.DaemonPlugin
-import com.superiorsoftllc.agenthq.daemon.api.DaemonTool
-import com.superiorsoftllc.agenthq.daemon.api.Frame
-import com.superiorsoftllc.agenthq.daemon.api.FrameGateHook
-import com.superiorsoftllc.agenthq.daemon.api.ToolCall
-import com.superiorsoftllc.agenthq.daemon.api.ToolResult
+import com.superiorsoftllc.infantry.daemon.api.DaemonApi
+import com.superiorsoftllc.infantry.daemon.api.DaemonPlugin
+import com.superiorsoftllc.infantry.daemon.api.DaemonTool
+import com.superiorsoftllc.infantry.daemon.api.Frame
+import com.superiorsoftllc.infantry.daemon.api.FrameGateHook
+import com.superiorsoftllc.infantry.daemon.api.ToolCall
+import com.superiorsoftllc.infantry.daemon.api.ToolResult
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.serialization.json.JsonPrimitive

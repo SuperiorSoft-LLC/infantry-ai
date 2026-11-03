@@ -1,18 +1,18 @@
-package com.superiorsoftllc.agenthq.plugins.official.notes
+package com.superiorsoftllc.infantry.plugins.official.notes
 
-import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.infantry.ui.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Modifier
-import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
-import com.superiorsoftllc.agenthq.ui.block.layout.Block
-import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
-import com.superiorsoftllc.agenthq.ui.block.layout.Place
-import com.superiorsoftllc.agenthq.ui.block.layout.RenderPlaced
-import com.superiorsoftllc.agenthq.ui.block.layout.RenderPlain
-import com.superiorsoftllc.agenthq.ui.model.MemoryHitView
-import com.superiorsoftllc.agenthq.ui.model.MemoryNoteView
+import com.superiorsoftllc.infantry.ui.shell.LocalShellContext
+import com.superiorsoftllc.infantry.ui.block.layout.Block
+import com.superiorsoftllc.infantry.ui.block.layout.BlockScope
+import com.superiorsoftllc.infantry.ui.block.layout.Place
+import com.superiorsoftllc.infantry.ui.block.layout.RenderPlaced
+import com.superiorsoftllc.infantry.ui.block.layout.RenderPlain
+import com.superiorsoftllc.infantry.ui.model.MemoryHitView
+import com.superiorsoftllc.infantry.ui.model.MemoryNoteView
 
 private const val NOTES = "infantry.shell.notes"
 private const val MODAL = "$NOTES.modal"

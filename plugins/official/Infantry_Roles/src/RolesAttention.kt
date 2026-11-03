@@ -1,9 +1,9 @@
-package com.superiorsoftllc.agenthq.plugins.official.roles
+package com.superiorsoftllc.infantry.plugins.official.roles
 
-import com.superiorsoftllc.agenthq.ui.shell.gate
-import com.superiorsoftllc.agenthq.ui.*
-import com.superiorsoftllc.agenthq.ui.model.sessionContextLimitChip
-import com.superiorsoftllc.agenthq.ui.model.sessionEffortChip
+import com.superiorsoftllc.infantry.ui.shell.gate
+import com.superiorsoftllc.infantry.ui.*
+import com.superiorsoftllc.infantry.ui.model.sessionContextLimitChip
+import com.superiorsoftllc.infantry.ui.model.sessionEffortChip
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -44,17 +44,17 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.model.AppState
-import com.superiorsoftllc.agenthq.ui.model.ExecutorPickerModel
-import com.superiorsoftllc.agenthq.ui.model.PickedModel
-import com.superiorsoftllc.agenthq.ui.model.RoleIcons
-import com.superiorsoftllc.agenthq.ui.model.stateLabel
-import com.superiorsoftllc.agenthq.ui.model.watchFlagOf
-import com.superiorsoftllc.agenthq.ui.net.CommandResult
-import com.superiorsoftllc.agenthq.ui.protocol.AgentProfile
-import com.superiorsoftllc.agenthq.ui.protocol.Role
-import com.superiorsoftllc.agenthq.ui.protocol.RoleBinding
-import com.superiorsoftllc.agenthq.ui.shell.RolesContext
+import com.superiorsoftllc.infantry.ui.model.AppState
+import com.superiorsoftllc.infantry.ui.model.ExecutorPickerModel
+import com.superiorsoftllc.infantry.ui.model.PickedModel
+import com.superiorsoftllc.infantry.ui.model.RoleIcons
+import com.superiorsoftllc.infantry.ui.model.stateLabel
+import com.superiorsoftllc.infantry.ui.model.watchFlagOf
+import com.superiorsoftllc.infantry.ui.net.CommandResult
+import com.superiorsoftllc.infantry.ui.protocol.AgentProfile
+import com.superiorsoftllc.infantry.ui.protocol.Role
+import com.superiorsoftllc.infantry.ui.protocol.RoleBinding
+import com.superiorsoftllc.infantry.ui.shell.RolesContext
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
 
@@ -283,7 +283,7 @@ private fun ProfileCard(p: AgentProfile, deps: RolesDeps, onSessionStarted: () -
             TextButton(onClick = onEdit, enabled = deps.link.gate("agents.profile.save").enabled, modifier = Modifier.testTag(PROFILE_EDIT_TAG_PREFIX + (p.id ?: p.name))) {
                 Text("Edit", fontSize = 11.sp)
             }
-            TextButton(onClick = { p.id?.let { id -> actionScope.launch { deps.roles.deleteProfile(id) } } }, enabled = deps.link.gate("agents.profile.delete", com.superiorsoftllc.agenthq.plugin.api.ActionKind.DESTRUCTIVE).enabled) {
+            TextButton(onClick = { p.id?.let { id -> actionScope.launch { deps.roles.deleteProfile(id) } } }, enabled = deps.link.gate("agents.profile.delete", com.superiorsoftllc.infantry.plugin.api.ActionKind.DESTRUCTIVE).enabled) {
                 Text("Delete", color = Palette.Danger, fontSize = 11.sp)
             }
         }
@@ -296,7 +296,7 @@ private fun ProfileCard(p: AgentProfile, deps: RolesDeps, onSessionStarted: () -
             Spacer(Modifier.width(6.dp))
             Button(
                 // GATE-PANES-1: a start as this profile spawns a session (`new`, `agents.spawn`), not a profile save.
-                enabled = deps.link.gate("agents.spawn", com.superiorsoftllc.agenthq.plugin.api.ActionKind.SPAWN).enabled && first.isNotBlank() && p.id != null,
+                enabled = deps.link.gate("agents.spawn", com.superiorsoftllc.infantry.plugin.api.ActionKind.SPAWN).enabled && first.isNotBlank() && p.id != null,
                 onClick = {
                     actionScope.launch {
                         if (deps.roles.spawnAs(p.id!!, first.trim()) is CommandResult.Sent) { first = ""; onSessionStarted() }

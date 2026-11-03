@@ -6,21 +6,21 @@
   "description": "The centre column: the agent chat, the centre tab strip and the New agent dialog.",
   "tier": "official",
   "sequence": [],
-  "entry": "com.superiorsoftllc.agenthq.plugins.official.chat.ChatPlugin",
+  "entry": "com.superiorsoftllc.infantry.plugins.official.chat.ChatPlugin",
   "jar": "build/libs/Infantry_Chat.jar",
   "buildOrder": 200,
   "daemon": {
-    "entry": "com.superiorsoftllc.agenthq.plugins.official.chat.daemon.ChatDaemonPlugin",
+    "entry": "com.superiorsoftllc.infantry.plugins.official.chat.daemon.ChatDaemonPlugin",
     "jar": "daemon/build/libs/Infantry_Chat-daemon.jar",
     "apiAtLeast": "1.21.0",
     "frames": [
       { "type": "image_upload", "action": "images.upload", "kind": "write" }
     ],
     "tools": [
-      { "name": "agenthq_inbox", "action": "mail.read", "kind": "read", "description": "List the COMMS mail addressed to you." },
-      { "name": "agenthq_read", "action": "mail.read", "kind": "read", "description": "Read one message in full and mark it read." },
-      { "name": "agenthq_message", "action": "mail.send", "kind": "write", "description": "Send COMMS mail to an agent, a role or a session." },
-      { "name": "agenthq_chat_image", "action": "chat.image", "kind": "write", "description": "Show an image inline in a session's chat (a file inside the project, or an uploaded image id)." }
+      { "name": "infantry_inbox", "action": "mail.read", "kind": "read", "description": "List the COMMS mail addressed to you." },
+      { "name": "infantry_read", "action": "mail.read", "kind": "read", "description": "Read one message in full and mark it read." },
+      { "name": "infantry_message", "action": "mail.send", "kind": "write", "description": "Send COMMS mail to an agent, a role or a session." },
+      { "name": "infantry_chat_image", "action": "chat.image", "kind": "write", "description": "Show an image inline in a session's chat (a file inside the project, or an uploaded image id)." }
     ]
   },
   "slots": ["chat.feed"],

@@ -5,8 +5,8 @@
 //   ... node /tmp/sandbox-check.mjs both <roleA> "<pA>" <roleB> "<pB>"  two turns started at the same moment
 import { readFileSync, mkdirSync } from "node:fs";
 
-const port = process.env.AGENTHQ_PORT || "8787";
-const token = readFileSync(process.env.AGENTHQ_TOKEN_FILE || "/data/access-token", "utf8").trim();
+const port = process.env.INFANTRY_PORT || "8787";
+const token = readFileSync(process.env.INFANTRY_TOKEN_FILE || "/data/access-token", "utf8").trim();
 const model = process.env.CHECK_MODEL || "opencode/deepseek-v4.1-flash-free";
 const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`, { headers: { Authorization: `Bearer ${token}` } });
 const listeners = new Set();

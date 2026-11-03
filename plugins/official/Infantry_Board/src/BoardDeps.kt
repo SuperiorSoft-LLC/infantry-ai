@@ -1,22 +1,22 @@
-package com.superiorsoftllc.agenthq.plugins.official.board
+package com.superiorsoftllc.infantry.plugins.official.board
 
-import com.superiorsoftllc.agenthq.ui.shell.gate
+import com.superiorsoftllc.infantry.ui.shell.gate
 import androidx.compose.runtime.Composable
-import com.superiorsoftllc.agenthq.ui.*
-import com.superiorsoftllc.agenthq.ui.shell.blocks.*
+import com.superiorsoftllc.infantry.ui.*
+import com.superiorsoftllc.infantry.ui.shell.blocks.*
 
-import com.superiorsoftllc.agenthq.ui.model.EpicView
-import com.superiorsoftllc.agenthq.ui.model.ReportFlag
-import com.superiorsoftllc.agenthq.ui.model.AgentView
-import com.superiorsoftllc.agenthq.ui.model.reportFlagOf
-import com.superiorsoftllc.agenthq.ui.protocol.Ticket
-import com.superiorsoftllc.agenthq.ui.shell.ExecutorContext
-import com.superiorsoftllc.agenthq.ui.shell.LayoutContext
-import com.superiorsoftllc.agenthq.ui.shell.LinkContext
-import com.superiorsoftllc.agenthq.ui.shell.RolesContext
-import com.superiorsoftllc.agenthq.ui.shell.SessionContext
-import com.superiorsoftllc.agenthq.ui.shell.ShellContext
-import com.superiorsoftllc.agenthq.ui.shell.TicketsContext
+import com.superiorsoftllc.infantry.ui.model.EpicView
+import com.superiorsoftllc.infantry.ui.model.ReportFlag
+import com.superiorsoftllc.infantry.ui.model.AgentView
+import com.superiorsoftllc.infantry.ui.model.reportFlagOf
+import com.superiorsoftllc.infantry.ui.protocol.Ticket
+import com.superiorsoftllc.infantry.ui.shell.ExecutorContext
+import com.superiorsoftllc.infantry.ui.shell.LayoutContext
+import com.superiorsoftllc.infantry.ui.shell.LinkContext
+import com.superiorsoftllc.infantry.ui.shell.RolesContext
+import com.superiorsoftllc.infantry.ui.shell.SessionContext
+import com.superiorsoftllc.infantry.ui.shell.ShellContext
+import com.superiorsoftllc.infantry.ui.shell.TicketsContext
 
 /**
  * S4d (docs/SHELL-LEAKS.md): what the board reads and sends, all of it [ShellContext] domains, so the board never reads
@@ -37,7 +37,7 @@ class BoardDeps(
     // DEMO-MERGE-1 / POLICY-1: the generic write (an undeclared action); a control with a named action asks [can].
     val canWrite: Boolean @Composable get() = link.canWrite
     /** POLICY-1: the named action [actionId] may be performed now (live, the daemon's policy and any write policy allow it). */
-    @Composable fun can(actionId: String, kind: String = com.superiorsoftllc.agenthq.plugin.api.ActionKind.WRITE): Boolean =
+    @Composable fun can(actionId: String, kind: String = com.superiorsoftllc.infantry.plugin.api.ActionKind.WRITE): Boolean =
         link.gate(actionId, kind).enabled
 
     /** The session [id] runs, if the sidebar knows it. */

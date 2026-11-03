@@ -1,9 +1,9 @@
 package com.acme.hello
 
-import com.superiorsoftllc.agenthq.plugin.api.ConfigClassSlot
-import com.superiorsoftllc.agenthq.plugin.api.ConfigDeclaration
-import com.superiorsoftllc.agenthq.plugin.api.ConfigFieldDeclaration
-import com.superiorsoftllc.agenthq.plugin.api.ConfigFieldTypes
+import com.superiorsoftllc.infantry.plugin.api.ConfigClassSlot
+import com.superiorsoftllc.infantry.plugin.api.ConfigDeclaration
+import com.superiorsoftllc.infantry.plugin.api.ConfigFieldDeclaration
+import com.superiorsoftllc.infantry.plugin.api.ConfigFieldTypes
 import kotlinx.serialization.json.JsonPrimitive
 
 /**

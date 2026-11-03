@@ -8,16 +8,16 @@ kotlin {
     jvmToolchain(21)
 }
 
-// The daemon API stays compileOnly (the host provides it at run time, one copy); only agentHqBoard's own output is bundled.
+// The daemon API stays compileOnly (the host provides it at run time, one copy); only infantryBoard's own output is bundled.
 val shaded by configurations.creating { isTransitive = false }
 
 dependencies {
-    shaded(project(":superiorSoftLibrary:agentHqProtocol"))
-    compileOnly(project(":superiorSoftLibrary:agentHqDaemonApi"))
-    compileOnly(project(":superiorSoftLibrary:agentHqProtocol"))
+    shaded(project(":superiorSoftLibrary:infantryProtocol"))
+    compileOnly(project(":superiorSoftLibrary:infantryDaemonApi"))
+    compileOnly(project(":superiorSoftLibrary:infantryProtocol"))
     compileOnly(libs.kotlinx.serialization.json)
-    testImplementation(project(":superiorSoftLibrary:agentHqProtocol"))
-    testImplementation(project(":superiorSoftLibrary:agentHqDaemonApi"))
+    testImplementation(project(":superiorSoftLibrary:infantryProtocol"))
+    testImplementation(project(":superiorSoftLibrary:infantryDaemonApi"))
     testImplementation(kotlin("test"))
     // DP-6: PipelineStoreTest runs the adopted pipeline tables on a real SQLite file.
     testImplementation(libs.sqlite.jdbc)

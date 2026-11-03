@@ -1,0 +1,9 @@
+Gate result per module:
+
+| Module | Tests | Result |
+|--------|------:|:------:|
+| infantry | 1,204 | pass |
+| infantryUiCore | 880 | pass |
+| infantryUi | 96 | fail |
+
+Only infantryUi needs a look.

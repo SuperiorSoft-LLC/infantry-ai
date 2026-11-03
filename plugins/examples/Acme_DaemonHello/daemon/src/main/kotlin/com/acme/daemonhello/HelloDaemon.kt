@@ -1,12 +1,12 @@
 package com.acme.daemonhello
 
-import com.superiorsoftllc.agenthq.daemon.api.DaemonApi
-import com.superiorsoftllc.agenthq.daemon.api.DaemonPlugin
-import com.superiorsoftllc.agenthq.daemon.api.DaemonTool
-import com.superiorsoftllc.agenthq.daemon.api.HttpReply
-import com.superiorsoftllc.agenthq.daemon.api.ReadyHook
-import com.superiorsoftllc.agenthq.daemon.api.ToolCall
-import com.superiorsoftllc.agenthq.daemon.api.ToolResult
+import com.superiorsoftllc.infantry.daemon.api.DaemonApi
+import com.superiorsoftllc.infantry.daemon.api.DaemonPlugin
+import com.superiorsoftllc.infantry.daemon.api.DaemonTool
+import com.superiorsoftllc.infantry.daemon.api.HttpReply
+import com.superiorsoftllc.infantry.daemon.api.ReadyHook
+import com.superiorsoftllc.infantry.daemon.api.ToolCall
+import com.superiorsoftllc.infantry.daemon.api.ToolResult
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
@@ -16,7 +16,7 @@ import kotlinx.serialization.json.put
 /**
  * DAEMON-PLUGINS-1: the reference daemon plugin. Everything it registers is declared in its module.json `daemon` object:
  *
- * - tool `acme_hello` (action `acme.hello.read`): listed to clients (`plugin_tools`) and agents (`agenthq mcp serve`);
+ * - tool `acme_hello` (action `acme.hello.read`): listed to clients (`plugin_tools`) and agents (`infantry mcp serve`);
  * - route `GET hello`: relative, so it answers at `/plugins/Acme_DaemonHello/hello`, behind the access policy;
  * - hook `ready`: adds the `acmeHello` key to every `ready` frame.
  *

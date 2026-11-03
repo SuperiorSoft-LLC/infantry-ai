@@ -1,6 +1,6 @@
-package com.superiorsoftllc.agenthq.plugins.official.chat
+package com.superiorsoftllc.infantry.plugins.official.chat
 
-import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.infantry.ui.*
 
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -60,13 +60,13 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.foundation.draganddrop.dragAndDropTarget
 import androidx.compose.ui.draganddrop.DragAndDropEvent
 import androidx.compose.ui.draganddrop.DragAndDropTarget
-import com.superiorsoftllc.agenthq.ui.net.ImageUploadOutcome
-import com.superiorsoftllc.agenthq.ui.protocol.ImageUploadWire
-import com.superiorsoftllc.agenthq.ui.pair.applyPairing
-import com.superiorsoftllc.agenthq.ui.shell.LocalPlatformHost
-import com.superiorsoftllc.agenthq.ui.shell.ServerChoice
-import com.superiorsoftllc.agenthq.ui.shell.ServerSwitcher
-import com.superiorsoftllc.agenthq.ui.shell.PickedImage
+import com.superiorsoftllc.infantry.ui.net.ImageUploadOutcome
+import com.superiorsoftllc.infantry.ui.protocol.ImageUploadWire
+import com.superiorsoftllc.infantry.ui.pair.applyPairing
+import com.superiorsoftllc.infantry.ui.shell.LocalPlatformHost
+import com.superiorsoftllc.infantry.ui.shell.ServerChoice
+import com.superiorsoftllc.infantry.ui.shell.ServerSwitcher
+import com.superiorsoftllc.infantry.ui.shell.PickedImage
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -98,10 +98,10 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
-import com.superiorsoftllc.agenthq.ui.model.PickedModel
-import com.superiorsoftllc.agenthq.ui.model.chatRows
-import com.superiorsoftllc.agenthq.ui.model.NoticeKind
-import com.superiorsoftllc.agenthq.ui.model.noticesForSession
+import com.superiorsoftllc.infantry.ui.model.PickedModel
+import com.superiorsoftllc.infantry.ui.model.chatRows
+import com.superiorsoftllc.infantry.ui.model.NoticeKind
+import com.superiorsoftllc.infantry.ui.model.noticesForSession
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
@@ -115,15 +115,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import com.superiorsoftllc.agenthq.ui.model.AgentGroup
-import com.superiorsoftllc.agenthq.ui.model.parseHexColor
-import com.superiorsoftllc.agenthq.ui.model.roleHue
+import com.superiorsoftllc.infantry.ui.model.AgentGroup
+import com.superiorsoftllc.infantry.ui.model.parseHexColor
+import com.superiorsoftllc.infantry.ui.model.roleHue
 import androidx.compose.foundation.horizontalScroll
-import com.superiorsoftllc.agenthq.ui.model.RightPanelWidth
-import com.superiorsoftllc.agenthq.ui.model.SidebarWidth
-import com.superiorsoftllc.agenthq.ui.model.CompactScreen
-import com.superiorsoftllc.agenthq.ui.model.PanelLayout
-import com.superiorsoftllc.agenthq.ui.model.PanelSide
+import com.superiorsoftllc.infantry.ui.model.RightPanelWidth
+import com.superiorsoftllc.infantry.ui.model.SidebarWidth
+import com.superiorsoftllc.infantry.ui.model.CompactScreen
+import com.superiorsoftllc.infantry.ui.model.PanelLayout
+import com.superiorsoftllc.infantry.ui.model.PanelSide
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextDecoration
@@ -131,63 +131,63 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.TextLinkStyles
-import com.superiorsoftllc.agenthq.ui.model.isSafeChatUrl
-import com.superiorsoftllc.agenthq.ui.model.AgentScope
-import com.superiorsoftllc.agenthq.ui.model.SlashSuggestion
-import com.superiorsoftllc.agenthq.ui.model.isSlashCommand
-import com.superiorsoftllc.agenthq.ui.model.moveSlashSelection
-import com.superiorsoftllc.agenthq.ui.model.slashHeader
-import com.superiorsoftllc.agenthq.ui.model.HarnessSwitch
-import com.superiorsoftllc.agenthq.ui.model.switchChipText
-import com.superiorsoftllc.agenthq.ui.model.slashPick
-import com.superiorsoftllc.agenthq.ui.model.slashSubmitOnEnter
-import com.superiorsoftllc.agenthq.ui.model.slashSuggestions
-import com.superiorsoftllc.agenthq.ui.model.slashTyped
-import com.superiorsoftllc.agenthq.ui.model.branchLine
-import com.superiorsoftllc.agenthq.ui.model.changesView
-import com.superiorsoftllc.agenthq.ui.model.ticketBranchFor
-import com.superiorsoftllc.agenthq.ui.model.ticketTagFull
-import com.superiorsoftllc.agenthq.ui.model.ticketTagLabel
-import com.superiorsoftllc.agenthq.ui.model.reportFlagOf
-import com.superiorsoftllc.agenthq.ui.model.watchFlagOf
-import com.superiorsoftllc.agenthq.ui.model.UiFlags
-import com.superiorsoftllc.agenthq.ui.model.ChatBlock
-import com.superiorsoftllc.agenthq.ui.model.ChatItem
-import com.superiorsoftllc.agenthq.ui.model.TimelineItem
-import com.superiorsoftllc.agenthq.ui.model.withContributions
-import com.superiorsoftllc.agenthq.ui.model.wakeReasons
-import com.superiorsoftllc.agenthq.ui.model.ChatSpan
-import com.superiorsoftllc.agenthq.ui.model.ChatStatus
-import com.superiorsoftllc.agenthq.ui.model.OutputLine
-import com.superiorsoftllc.agenthq.ui.model.USER_AVATAR_ID
-import com.superiorsoftllc.agenthq.ui.model.UserPortrait
-import com.superiorsoftllc.agenthq.ui.model.contractAtLeast
-import com.superiorsoftllc.agenthq.ui.model.avatarFor
-import com.superiorsoftllc.agenthq.ui.model.chatItems
-import com.superiorsoftllc.agenthq.ui.model.chatLineBlocks
-import com.superiorsoftllc.agenthq.ui.model.parseChatInline
-import com.superiorsoftllc.agenthq.ui.model.AgentView
-import com.superiorsoftllc.agenthq.ui.model.SessionExecutor
-import com.superiorsoftllc.agenthq.ui.model.COMPACTING_LABEL
-import com.superiorsoftllc.agenthq.ui.model.AppState
-import com.superiorsoftllc.agenthq.ui.model.DiffTarget
-import com.superiorsoftllc.agenthq.ui.model.ConnState
-import com.superiorsoftllc.agenthq.ui.model.LineKind
-import com.superiorsoftllc.agenthq.ui.model.activityTimestamp
-import com.superiorsoftllc.agenthq.ui.model.isBusy
-import com.superiorsoftllc.agenthq.ui.model.QueuedPrompt
-import com.superiorsoftllc.agenthq.ui.model.interruptBlocker
-import com.superiorsoftllc.agenthq.ui.model.queuedFor
-import com.superiorsoftllc.agenthq.ui.model.isRunning
-import com.superiorsoftllc.agenthq.ui.model.needsInput
-import com.superiorsoftllc.agenthq.ui.model.insertIntoPrompt
-import com.superiorsoftllc.agenthq.ui.model.promptBlocker
-import com.superiorsoftllc.agenthq.ui.model.parseNodes
-import com.superiorsoftllc.agenthq.ui.model.stateLabel
-import com.superiorsoftllc.agenthq.ui.model.visibleAgents
-import com.superiorsoftllc.agenthq.ui.net.CommandResult
-import com.superiorsoftllc.agenthq.ui.net.Controller
-import com.superiorsoftllc.agenthq.ui.protocol.SessionState
+import com.superiorsoftllc.infantry.ui.model.isSafeChatUrl
+import com.superiorsoftllc.infantry.ui.model.AgentScope
+import com.superiorsoftllc.infantry.ui.model.SlashSuggestion
+import com.superiorsoftllc.infantry.ui.model.isSlashCommand
+import com.superiorsoftllc.infantry.ui.model.moveSlashSelection
+import com.superiorsoftllc.infantry.ui.model.slashHeader
+import com.superiorsoftllc.infantry.ui.model.HarnessSwitch
+import com.superiorsoftllc.infantry.ui.model.switchChipText
+import com.superiorsoftllc.infantry.ui.model.slashPick
+import com.superiorsoftllc.infantry.ui.model.slashSubmitOnEnter
+import com.superiorsoftllc.infantry.ui.model.slashSuggestions
+import com.superiorsoftllc.infantry.ui.model.slashTyped
+import com.superiorsoftllc.infantry.ui.model.branchLine
+import com.superiorsoftllc.infantry.ui.model.changesView
+import com.superiorsoftllc.infantry.ui.model.ticketBranchFor
+import com.superiorsoftllc.infantry.ui.model.ticketTagFull
+import com.superiorsoftllc.infantry.ui.model.ticketTagLabel
+import com.superiorsoftllc.infantry.ui.model.reportFlagOf
+import com.superiorsoftllc.infantry.ui.model.watchFlagOf
+import com.superiorsoftllc.infantry.ui.model.UiFlags
+import com.superiorsoftllc.infantry.ui.model.ChatBlock
+import com.superiorsoftllc.infantry.ui.model.ChatItem
+import com.superiorsoftllc.infantry.ui.model.TimelineItem
+import com.superiorsoftllc.infantry.ui.model.withContributions
+import com.superiorsoftllc.infantry.ui.model.wakeReasons
+import com.superiorsoftllc.infantry.ui.model.ChatSpan
+import com.superiorsoftllc.infantry.ui.model.ChatStatus
+import com.superiorsoftllc.infantry.ui.model.OutputLine
+import com.superiorsoftllc.infantry.ui.model.USER_AVATAR_ID
+import com.superiorsoftllc.infantry.ui.model.UserPortrait
+import com.superiorsoftllc.infantry.ui.model.contractAtLeast
+import com.superiorsoftllc.infantry.ui.model.avatarFor
+import com.superiorsoftllc.infantry.ui.model.chatItems
+import com.superiorsoftllc.infantry.ui.model.chatLineBlocks
+import com.superiorsoftllc.infantry.ui.model.parseChatInline
+import com.superiorsoftllc.infantry.ui.model.AgentView
+import com.superiorsoftllc.infantry.ui.model.SessionExecutor
+import com.superiorsoftllc.infantry.ui.model.COMPACTING_LABEL
+import com.superiorsoftllc.infantry.ui.model.AppState
+import com.superiorsoftllc.infantry.ui.model.DiffTarget
+import com.superiorsoftllc.infantry.ui.model.ConnState
+import com.superiorsoftllc.infantry.ui.model.LineKind
+import com.superiorsoftllc.infantry.ui.model.activityTimestamp
+import com.superiorsoftllc.infantry.ui.model.isBusy
+import com.superiorsoftllc.infantry.ui.model.QueuedPrompt
+import com.superiorsoftllc.infantry.ui.model.interruptBlocker
+import com.superiorsoftllc.infantry.ui.model.queuedFor
+import com.superiorsoftllc.infantry.ui.model.isRunning
+import com.superiorsoftllc.infantry.ui.model.needsInput
+import com.superiorsoftllc.infantry.ui.model.insertIntoPrompt
+import com.superiorsoftllc.infantry.ui.model.promptBlocker
+import com.superiorsoftllc.infantry.ui.model.parseNodes
+import com.superiorsoftllc.infantry.ui.model.stateLabel
+import com.superiorsoftllc.infantry.ui.model.visibleAgents
+import com.superiorsoftllc.infantry.ui.net.CommandResult
+import com.superiorsoftllc.infantry.ui.net.Controller
+import com.superiorsoftllc.infantry.ui.protocol.SessionState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
@@ -342,7 +342,7 @@ fun noticeColour(kind: NoticeKind): Color = when (kind) {
 @Composable
 fun InterruptButton(agent: AgentView, live: Boolean, controller: Controller) {
     val actionScope = rememberCoroutineScope()
-    val gate = com.superiorsoftllc.agenthq.ui.shell.rememberGate("chat.interrupt")
+    val gate = com.superiorsoftllc.infantry.ui.shell.rememberGate("chat.interrupt")
     val busy = isBusy(agent)
     IconAction(
         AhqIcons.Stop, gate.label(STOP_TURN_LABEL),
@@ -393,15 +393,15 @@ internal fun PromptBox(
     val live = snapshot.connection.isLive
     // DEMO-MERGE-1 / POLICY-1: each write control is a named action gated by the daemon's policy (and any write policy); the
     // generic gate covers what has no action of its own (a slash command typed into the box).
-    val policy = com.superiorsoftllc.agenthq.ui.shell.rememberGate("")
-    val swap = com.superiorsoftllc.agenthq.ui.shell.rememberGate("agents.swap")
-    val spawn = com.superiorsoftllc.agenthq.ui.shell.rememberGate("agents.spawn", com.superiorsoftllc.agenthq.plugin.api.ActionKind.SPAWN)
-    val reap = com.superiorsoftllc.agenthq.ui.shell.rememberGate("host.processes.reap", com.superiorsoftllc.agenthq.plugin.api.ActionKind.DESTRUCTIVE)
-    val remove = com.superiorsoftllc.agenthq.ui.shell.rememberGate("agents.delete")
-    val kill = com.superiorsoftllc.agenthq.ui.shell.rememberGate("agents.kill")
-    val restart = com.superiorsoftllc.agenthq.ui.shell.rememberGate("agents.restart")
+    val policy = com.superiorsoftllc.infantry.ui.shell.rememberGate("")
+    val swap = com.superiorsoftllc.infantry.ui.shell.rememberGate("agents.swap")
+    val spawn = com.superiorsoftllc.infantry.ui.shell.rememberGate("agents.spawn", com.superiorsoftllc.infantry.plugin.api.ActionKind.SPAWN)
+    val reap = com.superiorsoftllc.infantry.ui.shell.rememberGate("host.processes.reap", com.superiorsoftllc.infantry.plugin.api.ActionKind.DESTRUCTIVE)
+    val remove = com.superiorsoftllc.infantry.ui.shell.rememberGate("agents.delete")
+    val kill = com.superiorsoftllc.infantry.ui.shell.rememberGate("agents.kill")
+    val restart = com.superiorsoftllc.infantry.ui.shell.rememberGate("agents.restart")
     // GATE-PANES-1: a message to an existing agent is `chat.prompt`; off, Send is dimmed and says why.
-    val prompt = com.superiorsoftllc.agenthq.ui.shell.rememberGate("chat.prompt")
+    val prompt = com.superiorsoftllc.infantry.ui.shell.rememberGate("chat.prompt")
     val promptLocked = !spawnMode && a != null && !prompt.allowed
     val writeLocked = !policy.allowed
     // COMPOSER-NEWLINE-1: the box keeps its own caret so Shift+Enter can break the line exactly there. A value set
@@ -469,10 +469,10 @@ internal fun PromptBox(
         // PROMPT-2: the open session's prompt card, docked above the input until the daemon resolves it.
         if (!spawnMode && a != null) {
             PromptCard(
-                snapshot.promptsFor(a.id), com.superiorsoftllc.agenthq.ui.model.PromptCards.offersAllowAlways(snapshot.connection.contract),
+                snapshot.promptsFor(a.id), com.superiorsoftllc.infantry.ui.model.PromptCards.offersAllowAlways(snapshot.connection.contract),
                 onAnswer = { r -> actionScope.launch { controller.answerPrompt(r) } },
                 onDismiss = controller::dismissPrompt,
-                enabled = com.superiorsoftllc.agenthq.ui.shell.rememberGate("approvals.answer").allowed,
+                enabled = com.superiorsoftllc.infantry.ui.shell.rememberGate("approvals.answer").allowed,
             )
         }
         QueuedMessages(queue)
@@ -572,7 +572,7 @@ internal fun PromptBox(
                 )
             }
             if (a != null && !spawnMode) {
-                val resume = com.superiorsoftllc.agenthq.ui.shell.rememberGate("chat.resume")
+                val resume = com.superiorsoftllc.infantry.ui.shell.rememberGate("chat.resume")
                 val canResume = live && resume.allowed && resumeEnabled(a.session)
                 IconAction(AhqIcons.PlayArrow, resume.label("Resume"), onClick = {
                     actionScope.launch {
@@ -682,7 +682,7 @@ internal fun SpawnRoleRow(state: AppState, controller: Controller) {
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
             SectionLabel("Role", Palette.Text, Modifier.padding(end = 4.dp), topGap = false)
             Chip("none", if (state.spawnRole == null) Palette.Accent else Palette.Muted, Modifier.clickable { controller.pickSpawnRole(null) })
-            com.superiorsoftllc.agenthq.ui.model.AllowedRoles.filter(state.allowedRoles, state.roles).forEach { r ->
+            com.superiorsoftllc.infantry.ui.model.AllowedRoles.filter(state.allowedRoles, state.roles).forEach { r ->
                 Chip(r.id, if (state.spawnRole == r.id) Palette.Accent else Palette.Muted, Modifier.testTag(SPAWN_ROLE_TAG_PREFIX + r.id).clickable { controller.pickSpawnRole(r.id) })
             }
         }

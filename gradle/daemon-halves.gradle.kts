@@ -8,7 +8,7 @@
 //   ihqVerifyDaemonHalves(modulesRoot: File, label: String, expected: List<String>)
 //       fails the build when a staged module.json declares a daemon half whose jar is not next to it, or when a module in
 //       [expected] (folder names) is not staged at all: a missing half can never ship silently.
-// `verifyDaemonHalvesGuard` (wired into :superiorSoftLibrary:agentHq:check) runs the check on scratch folders.
+// `verifyDaemonHalvesGuard` (wired into :superiorSoftLibrary:infantry:check) runs the check on scratch folders.
 
 /** `daemon.jar` of `<moduleDir>/module.json`; null when the module declares no daemon half. A `daemon` block without a jar fails. */
 fun daemonJar(moduleDir: File): String? {

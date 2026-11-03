@@ -1,6 +1,6 @@
-package com.superiorsoftllc.agenthq.plugins.official.pods
+package com.superiorsoftllc.infantry.plugins.official.pods
 
-import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.infantry.ui.*
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -34,10 +34,10 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.model.AppState
-import com.superiorsoftllc.agenthq.ui.model.parseNodes
-import com.superiorsoftllc.agenthq.ui.shell.PodsContext
-import com.superiorsoftllc.agenthq.ui.shell.gate
+import com.superiorsoftllc.infantry.ui.model.AppState
+import com.superiorsoftllc.infantry.ui.model.parseNodes
+import com.superiorsoftllc.infantry.ui.shell.PodsContext
+import com.superiorsoftllc.infantry.ui.shell.gate
 import kotlinx.coroutines.launch
 
 /** The window's pods ([AppState.pods]) and the submit / load / cancel requests, through [pods] (RUNTIME-12). */
@@ -45,8 +45,8 @@ import kotlinx.coroutines.launch
 internal fun PodsPane(state: AppState, pods: PodsContext) {
     val actionScope = rememberCoroutineScope()
     // GATE-PANES-1: submitting a pod spawns agents, cancelling one stops them; each its own named action.
-    val canSubmit = state.connection.gate("pods.submit", com.superiorsoftllc.agenthq.plugin.api.ActionKind.SPAWN).enabled
-    val canCancel = state.connection.gate("pods.cancel", com.superiorsoftllc.agenthq.plugin.api.ActionKind.DESTRUCTIVE).enabled
+    val canSubmit = state.connection.gate("pods.submit", com.superiorsoftllc.infantry.plugin.api.ActionKind.SPAWN).enabled
+    val canCancel = state.connection.gate("pods.cancel", com.superiorsoftllc.infantry.plugin.api.ActionKind.DESTRUCTIVE).enabled
     var goal by remember { mutableStateOf("") }
     var nodesText by remember { mutableStateOf("") }
     var podId by remember { mutableStateOf("") }

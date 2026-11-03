@@ -10,11 +10,11 @@ kotlin {
 }
 
 dependencies {
-    compileOnly(project(":superiorSoftLibrary:agentHqDaemonApi"))
-    testImplementation(project(":superiorSoftLibrary:agentHqDaemonApi"))
+    compileOnly(project(":superiorSoftLibrary:infantryDaemonApi"))
+    testImplementation(project(":superiorSoftLibrary:infantryDaemonApi"))
     testImplementation(kotlin("test"))
     // The tests run the lock against core's real action catalog and policy runtime (never on the plugin's compile path).
-    testImplementation(project(":superiorSoftLibrary:agentHq"))
+    testImplementation(project(":superiorSoftLibrary:infantry"))
 }
 
 tasks.jar {

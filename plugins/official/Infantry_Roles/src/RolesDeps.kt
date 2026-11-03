@@ -1,21 +1,21 @@
-package com.superiorsoftllc.agenthq.plugins.official.roles
+package com.superiorsoftllc.infantry.plugins.official.roles
 
-import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.infantry.ui.*
 
-import com.superiorsoftllc.agenthq.ui.model.AppState
-import com.superiorsoftllc.agenthq.ui.shell.CoreExecutor
-import com.superiorsoftllc.agenthq.ui.shell.CoreLink
-import com.superiorsoftllc.agenthq.ui.shell.NoNotes
-import com.superiorsoftllc.agenthq.ui.shell.NoRoles
-import com.superiorsoftllc.agenthq.ui.shell.CoreSession
-import com.superiorsoftllc.agenthq.ui.shell.NoTraits
-import com.superiorsoftllc.agenthq.ui.shell.ExecutorContext
-import com.superiorsoftllc.agenthq.ui.shell.LinkContext
-import com.superiorsoftllc.agenthq.ui.shell.NotesContext
-import com.superiorsoftllc.agenthq.ui.shell.RolesContext
-import com.superiorsoftllc.agenthq.ui.shell.SessionContext
-import com.superiorsoftllc.agenthq.ui.shell.ShellContext
-import com.superiorsoftllc.agenthq.ui.shell.TraitsContext
+import com.superiorsoftllc.infantry.ui.model.AppState
+import com.superiorsoftllc.infantry.ui.shell.CoreExecutor
+import com.superiorsoftllc.infantry.ui.shell.CoreLink
+import com.superiorsoftllc.infantry.ui.shell.NoNotes
+import com.superiorsoftllc.infantry.ui.shell.NoRoles
+import com.superiorsoftllc.infantry.ui.shell.CoreSession
+import com.superiorsoftllc.infantry.ui.shell.NoTraits
+import com.superiorsoftllc.infantry.ui.shell.ExecutorContext
+import com.superiorsoftllc.infantry.ui.shell.LinkContext
+import com.superiorsoftllc.infantry.ui.shell.NotesContext
+import com.superiorsoftllc.infantry.ui.shell.RolesContext
+import com.superiorsoftllc.infantry.ui.shell.SessionContext
+import com.superiorsoftllc.infantry.ui.shell.ShellContext
+import com.superiorsoftllc.infantry.ui.shell.TraitsContext
 
 /**
  * S4c (docs/SHELL-LEAKS.md): what the roles window and the Roles pane read and send, all of it [ShellContext] domains,

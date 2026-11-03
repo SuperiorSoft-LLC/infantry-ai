@@ -15,15 +15,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
-import com.superiorsoftllc.agenthq.plugin.api.EndpointAccess
-import com.superiorsoftllc.agenthq.plugin.api.EndpointReply
-import com.superiorsoftllc.agenthq.plugin.api.Services
-import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
-import com.superiorsoftllc.agenthq.ui.plugin.TabProvider
-import com.superiorsoftllc.agenthq.ui.plugin.UiPlugin
-import com.superiorsoftllc.agenthq.ui.plugin.UiRegistrar
-import com.superiorsoftllc.agenthq.ui.plugin.circle
-import com.superiorsoftllc.agenthq.ui.plugin.tabIcon
+import com.superiorsoftllc.infantry.plugin.api.EndpointAccess
+import com.superiorsoftllc.infantry.plugin.api.EndpointReply
+import com.superiorsoftllc.infantry.plugin.api.Services
+import com.superiorsoftllc.infantry.ui.plugin.TabContainers
+import com.superiorsoftllc.infantry.ui.plugin.TabProvider
+import com.superiorsoftllc.infantry.ui.plugin.UiPlugin
+import com.superiorsoftllc.infantry.ui.plugin.UiRegistrar
+import com.superiorsoftllc.infantry.ui.plugin.circle
+import com.superiorsoftllc.infantry.ui.plugin.tabIcon
 import kotlinx.coroutines.launch
 
 /**

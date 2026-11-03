@@ -1,7 +1,7 @@
-package com.superiorsoftllc.agenthq.plugins.official.notes
+package com.superiorsoftllc.infantry.plugins.official.notes
 
-import com.superiorsoftllc.agenthq.ui.*
-import com.superiorsoftllc.agenthq.ui.shell.gate
+import com.superiorsoftllc.infantry.ui.*
+import com.superiorsoftllc.infantry.ui.shell.gate
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,15 +33,15 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.model.AgentView
-import com.superiorsoftllc.agenthq.ui.model.MemoryHitView
-import com.superiorsoftllc.agenthq.ui.model.MemoryNoteView
-import com.superiorsoftllc.agenthq.ui.model.NoteScope
-import com.superiorsoftllc.agenthq.ui.model.ProjectView
-import com.superiorsoftllc.agenthq.ui.net.CommandResult
-import com.superiorsoftllc.agenthq.ui.shell.LinkContext
-import com.superiorsoftllc.agenthq.ui.shell.NotesContext
-import com.superiorsoftllc.agenthq.ui.shell.SessionContext
+import com.superiorsoftllc.infantry.ui.model.AgentView
+import com.superiorsoftllc.infantry.ui.model.MemoryHitView
+import com.superiorsoftllc.infantry.ui.model.MemoryNoteView
+import com.superiorsoftllc.infantry.ui.model.NoteScope
+import com.superiorsoftllc.infantry.ui.model.ProjectView
+import com.superiorsoftllc.infantry.ui.net.CommandResult
+import com.superiorsoftllc.infantry.ui.shell.LinkContext
+import com.superiorsoftllc.infantry.ui.shell.NotesContext
+import com.superiorsoftllc.infantry.ui.shell.SessionContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -93,7 +93,7 @@ internal data class NoteDraft(
 class NotesPaneHost internal constructor(
     val link: LinkContext,
     val session: SessionContext,
-    /** S4b: the notes and their requests (the shell's [com.superiorsoftllc.agenthq.ui.shell.ShellContext.notes]). */
+    /** S4b: the notes and their requests (the shell's [com.superiorsoftllc.infantry.ui.shell.ShellContext.notes]). */
     val context: NotesContext,
     private val scope: CoroutineScope,
     private val queryState: MutableState<String>,
@@ -105,7 +105,7 @@ class NotesPaneHost internal constructor(
 
     /** GATE-PANES-1: save (add / edit) and delete, each its named action: dimmed with the policy's reason while off. */
     val canSave: Boolean @Composable get() = link.gate("memory.save").enabled
-    val canDelete: Boolean @Composable get() = link.gate("memory.delete", com.superiorsoftllc.agenthq.plugin.api.ActionKind.DESTRUCTIVE).enabled
+    val canDelete: Boolean @Composable get() = link.gate("memory.delete", com.superiorsoftllc.infantry.plugin.api.ActionKind.DESTRUCTIVE).enabled
     val active: ProjectView? get() = session.activeProject
     val picked: AgentView? get() = session.selectedAgent
 

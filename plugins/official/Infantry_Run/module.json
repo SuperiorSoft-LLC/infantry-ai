@@ -6,11 +6,11 @@
   "description": "Saved commands and their runs.",
   "tier": "official",
   "sequence": [],
-  "entry": "com.superiorsoftllc.agenthq.plugins.official.run.RunPlugin",
+  "entry": "com.superiorsoftllc.infantry.plugins.official.run.RunPlugin",
   "jar": "build/libs/Infantry_Run.jar",
   "buildOrder": 90,
   "daemon": {
-    "entry": "com.superiorsoftllc.agenthq.plugins.official.run.daemon.RunDaemonPlugin",
+    "entry": "com.superiorsoftllc.infantry.plugins.official.run.daemon.RunDaemonPlugin",
     "jar": "daemon/build/libs/Infantry_Run-daemon.jar",
     "apiAtLeast": "1.31.0",
     "frames": [

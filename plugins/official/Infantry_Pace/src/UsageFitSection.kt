@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.plugins.official.pace
+package com.superiorsoftllc.infantry.plugins.official.pace
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -30,9 +30,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.plugin.api.DaemonAccess
-import com.superiorsoftllc.agenthq.plugin.api.DaemonReply
-import com.superiorsoftllc.agenthq.ui.Palette
+import com.superiorsoftllc.infantry.plugin.api.DaemonAccess
+import com.superiorsoftllc.infantry.plugin.api.DaemonReply
+import com.superiorsoftllc.infantry.ui.Palette
 import kotlinx.coroutines.delay
 
 /*

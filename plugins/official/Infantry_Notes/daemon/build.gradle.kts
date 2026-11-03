@@ -1,5 +1,5 @@
 // DP-7c: Infantry_Notes's daemon half, the decisions and issues logs (stores, frames, Knowledge records).
-// Compiled against the daemon API only (compileOnly: the daemon provides it at run time); the wire DTOs (agentHqProtocol) are shaded in;
+// Compiled against the daemon API only (compileOnly: the daemon provides it at run time); the wire DTOs (infantryProtocol) are shaded in;
 // module.json's `daemon.jar` names the jar this builds. `:daemon-plugin-official-Infantry_Notes:jar`.
 plugins {
     kotlin("jvm")
@@ -13,13 +13,13 @@ kotlin {
 val shaded by configurations.creating { isTransitive = false }
 
 dependencies {
-    shaded(project(":superiorSoftLibrary:agentHqProtocol"))
-    compileOnly(project(":superiorSoftLibrary:agentHqProtocol"))
-    compileOnly(project(":superiorSoftLibrary:agentHqDaemonApi"))
+    shaded(project(":superiorSoftLibrary:infantryProtocol"))
+    compileOnly(project(":superiorSoftLibrary:infantryProtocol"))
+    compileOnly(project(":superiorSoftLibrary:infantryDaemonApi"))
     // DP-7f: LeadNote is @Serializable; the daemon provides the runtime.
     compileOnly(libs.kotlinx.serialization.json)
-    testImplementation(project(":superiorSoftLibrary:agentHqDaemonApi"))
-    testImplementation(project(":superiorSoftLibrary:agentHqProtocol"))
+    testImplementation(project(":superiorSoftLibrary:infantryDaemonApi"))
+    testImplementation(project(":superiorSoftLibrary:infantryProtocol"))
     testImplementation(kotlin("test"))
     // DP-6: PipelineStoreTest runs the adopted pipeline tables on a real SQLite file.
     testImplementation(libs.sqlite.jdbc)

@@ -9,14 +9,14 @@ plugins {
     alias(libs.plugins.androidKotlinMultiplatformLibrary) apply false
 }
 
-// BUILD-STAMP-1: the version+time+sha string every build carries (rootProject.extra["agenthqBuild"]); see the script.
+// BUILD-STAMP-1: the version+time+sha string every build carries (rootProject.extra["infantryBuild"]); see the script.
 apply(from = rootProject.file("gradle/build-stamp.gradle.kts"))
 // PACKAGE-1: what a module's daemon half is, and the check every packaging task runs on it; see the script.
 apply(from = rootProject.file("gradle/daemon-halves.gradle.kts"))
 
 // ---------------------------------------------------------------------------------------------
 // SEC-SECRETS-1 guard. Standalone on purpose (NOT wired into `check`): run it explicitly, e.g. from
-// the AgentHQ gate: `./gradlew verifySecretsNotTracked`. Fails when
+// the Infantry gate: `./gradlew verifySecretsNotTracked`. Fails when
 //   * a git-tracked *.properties file has a secret-looking key with a non-empty value, or a line
 //     carrying keytool store/key passwords, or
 //   * a keystore / cert container (*.jks, *.p12, *.pfx, *.keystore) is tracked in the git index.
@@ -49,7 +49,7 @@ tasks.register("verifySecretsNotTracked") {
 
         // Files whose keys are not credentials (branch-name -> commit-sha registry; branch names such as
         // "sec-secrets-1" would otherwise trip the key regex). Keep this list short and justified.
-        val nonSecretPropertyFiles = setOf("superiorSoftLibrary/agentHq/preflight/expected-bases.properties")
+        val nonSecretPropertyFiles = setOf("superiorSoftLibrary/infantry/preflight/expected-bases.properties")
 
         tracked.filter { privateKeyName.containsMatchIn(it) }
             .forEach { violations += "$it:1 tracked private-key / .env file" }

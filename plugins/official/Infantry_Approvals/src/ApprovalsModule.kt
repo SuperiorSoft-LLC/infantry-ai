@@ -1,18 +1,18 @@
-package com.superiorsoftllc.agenthq.plugins.official.approvals
+package com.superiorsoftllc.infantry.plugins.official.approvals
 
-import com.superiorsoftllc.agenthq.plugin.api.ConfigDeclaration
-import com.superiorsoftllc.agenthq.plugin.api.FillDeclaration
-import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
-import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
-import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
-import com.superiorsoftllc.agenthq.ui.plugin.UiPlugin
-import com.superiorsoftllc.agenthq.ui.plugin.UiRegistrar
-import com.superiorsoftllc.agenthq.plugins.official.approvals.ShellQuestionPill
+import com.superiorsoftllc.infantry.plugin.api.ConfigDeclaration
+import com.superiorsoftllc.infantry.plugin.api.FillDeclaration
+import com.superiorsoftllc.infantry.plugin.api.ModuleManifest
+import com.superiorsoftllc.infantry.ui.plugin.InfantryModule
+import com.superiorsoftllc.infantry.ui.plugin.ModuleSource
+import com.superiorsoftllc.infantry.ui.plugin.UiPlugin
+import com.superiorsoftllc.infantry.ui.plugin.UiRegistrar
+import com.superiorsoftllc.infantry.plugins.official.approvals.ShellQuestionPill
 
 private const val QUESTIONS_FILL_ID = "infantry.shell.questions"
 
 /** Infantry_Approvals as a compiled-in module (web and Android, D9): the manifest mirrors module.json. */
-val InfantryApprovals = AgentHqModule(
+val InfantryApprovals = InfantryModule(
     ModuleManifest(
         name = "Infantry_Approvals", version = "1.0.0", author = "Infantry AI",
         description = "The questions pill: open owner questions the owner cannot see inline, one click from the asking chat.",
@@ -35,5 +35,5 @@ class ApprovalsPlugin : UiPlugin, ModuleSource {
         registrar.fill(QUESTIONS_FILL_ID, ShellQuestionPill)
     }
 
-    override fun modules(): List<AgentHqModule> = listOf(InfantryApprovals)
+    override fun modules(): List<InfantryModule> = listOf(InfantryApprovals)
 }

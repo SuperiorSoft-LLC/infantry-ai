@@ -1,6 +1,6 @@
-package com.superiorsoftllc.agenthq.plugins.official.usage
+package com.superiorsoftllc.infantry.plugins.official.usage
 
-import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.infantry.ui.*
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -26,18 +26,18 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.model.AgentView
+import com.superiorsoftllc.infantry.ui.model.AgentView
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import com.superiorsoftllc.agenthq.ui.model.AppState
-import com.superiorsoftllc.agenthq.ui.model.LimitsView
-import com.superiorsoftllc.agenthq.ui.shell.UsageContext
-import com.superiorsoftllc.agenthq.ui.protocol.LimitWindow
-import com.superiorsoftllc.agenthq.ui.protocol.ProviderLimits
-import com.superiorsoftllc.agenthq.ui.protocol.ProviderState
+import com.superiorsoftllc.infantry.ui.model.AppState
+import com.superiorsoftllc.infantry.ui.model.LimitsView
+import com.superiorsoftllc.infantry.ui.shell.UsageContext
+import com.superiorsoftllc.infantry.ui.protocol.LimitWindow
+import com.superiorsoftllc.infantry.ui.protocol.ProviderLimits
+import com.superiorsoftllc.infantry.ui.protocol.ProviderState
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 import kotlin.time.Clock

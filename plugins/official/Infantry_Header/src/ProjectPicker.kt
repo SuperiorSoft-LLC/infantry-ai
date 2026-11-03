@@ -1,10 +1,10 @@
-package com.superiorsoftllc.agenthq.plugins.official.header
+package com.superiorsoftllc.infantry.plugins.official.header
 
-import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.infantry.ui.*
 
 import androidx.compose.foundation.background
-import com.superiorsoftllc.agenthq.ui.model.ProjectSettingsRegistry
-import com.superiorsoftllc.agenthq.ui.model.ProjectView
+import com.superiorsoftllc.infantry.ui.model.ProjectSettingsRegistry
+import com.superiorsoftllc.infantry.ui.model.ProjectView
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -54,9 +54,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.model.AppState
-import com.superiorsoftllc.agenthq.ui.net.CommandResult
-import com.superiorsoftllc.agenthq.ui.net.Controller
+import com.superiorsoftllc.infantry.ui.model.AppState
+import com.superiorsoftllc.infantry.ui.net.CommandResult
+import com.superiorsoftllc.infantry.ui.net.Controller
 import kotlinx.coroutines.launch
 
 const val PROJECT_PICKER_TAG = "title-bar-project-picker"
@@ -146,7 +146,7 @@ fun ProjectPicker(state: AppState, controller: Controller) {
         }
         Spacer(Modifier.width(6.dp))
         // DEMO-MERGE-1: a project change is a write; both boxes are dimmed and say why while writes are refused.
-        val policy = com.superiorsoftllc.agenthq.ui.shell.rememberGate("projects.save")
+        val policy = com.superiorsoftllc.infantry.ui.shell.rememberGate("projects.save")
         val writeLocked = !policy.allowed
         NewProjectBox(enabled = live && !writeLocked, label = policy.label(NEW_PROJECT_LABEL)) { creating = true }
         Spacer(Modifier.width(6.dp))
@@ -212,7 +212,7 @@ private fun NewProjectDialog(
     var busy by remember { mutableStateOf(false) }
     var directory by remember { mutableStateOf("") }
     val nameFocus = remember { FocusRequester() }
-    val canCreate = live && com.superiorsoftllc.agenthq.ui.shell.rememberGate("projects.save").allowed && name.isNotBlank() && !busy
+    val canCreate = live && com.superiorsoftllc.infantry.ui.shell.rememberGate("projects.save").allowed && name.isNotBlank() && !busy
     fun create() {
         if (!canCreate) return
         busy = true
@@ -273,7 +273,7 @@ private fun ProjectConfigDialog(state: AppState, controller: Controller, project
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     // GATE-PANES-1: every change here (name, directory, lane caps, switches) is `projects.save`, dimmed while it is off.
-    val canWrite = live && com.superiorsoftllc.agenthq.ui.shell.rememberGate("projects.save").allowed
+    val canWrite = live && com.superiorsoftllc.infantry.ui.shell.rememberGate("projects.save").allowed
     val canSave = canWrite && name.isNotBlank() && !busy
     fun save() {
         if (!canSave) return

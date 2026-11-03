@@ -1,19 +1,19 @@
 package com.acme.echoharness
 
-import com.superiorsoftllc.agenthq.harness.api.ContextLimitCapability
-import com.superiorsoftllc.agenthq.harness.api.ContextLimitSupport
-import com.superiorsoftllc.agenthq.harness.api.EffortCapability
-import com.superiorsoftllc.agenthq.harness.api.EffortSupport
-import com.superiorsoftllc.agenthq.harness.api.HARNESS_API_VERSION
-import com.superiorsoftllc.agenthq.harness.api.Harness
-import com.superiorsoftllc.agenthq.harness.api.HarnessCapability
-import com.superiorsoftllc.agenthq.harness.api.HarnessEvent
-import com.superiorsoftllc.agenthq.harness.api.HarnessHost
-import com.superiorsoftllc.agenthq.harness.api.HarnessPlugin
-import com.superiorsoftllc.agenthq.harness.api.HarnessProcess
-import com.superiorsoftllc.agenthq.harness.api.HarnessRegistrar
-import com.superiorsoftllc.agenthq.harness.api.HarnessRequest
-import com.superiorsoftllc.agenthq.harness.api.HarnessTranslator
+import com.superiorsoftllc.infantry.harness.api.ContextLimitCapability
+import com.superiorsoftllc.infantry.harness.api.ContextLimitSupport
+import com.superiorsoftllc.infantry.harness.api.EffortCapability
+import com.superiorsoftllc.infantry.harness.api.EffortSupport
+import com.superiorsoftllc.infantry.harness.api.HARNESS_API_VERSION
+import com.superiorsoftllc.infantry.harness.api.Harness
+import com.superiorsoftllc.infantry.harness.api.HarnessCapability
+import com.superiorsoftllc.infantry.harness.api.HarnessEvent
+import com.superiorsoftllc.infantry.harness.api.HarnessHost
+import com.superiorsoftllc.infantry.harness.api.HarnessPlugin
+import com.superiorsoftllc.infantry.harness.api.HarnessProcess
+import com.superiorsoftllc.infantry.harness.api.HarnessRegistrar
+import com.superiorsoftllc.infantry.harness.api.HarnessRequest
+import com.superiorsoftllc.infantry.harness.api.HarnessTranslator
 import java.io.File
 
 /**

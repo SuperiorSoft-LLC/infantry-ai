@@ -1,6 +1,6 @@
-package com.superiorsoftllc.agenthq.plugins.official.chatfeed
+package com.superiorsoftllc.infantry.plugins.official.chatfeed
 
-import com.superiorsoftllc.agenthq.ui.model.MessageOrigin
+import com.superiorsoftllc.infantry.ui.model.MessageOrigin
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals

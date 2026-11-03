@@ -16,7 +16,7 @@
 - TEST-TODO: plugin missing: remove Infantry_Board-daemon.jar from the plugins dir; daemon starts, every ticket_* frame answers '<type> refused: this daemon has no board', session events queue (SwapFeed.pending grows to its limit, then drops oldest).
 - TEST-TODO: reload mid-worker: start a ticket worker, reload Infantry_Board; worker keeps running in core, the new board re-adopts it (sweepWorkers) and clearQueueMarks runs; the status/exit events of the gap arrive in order.
 - TEST-TODO: startup order: with the plugin installed, the first client frame and the session restore both see a built board (needs DaemonMain to build the plugin host before restore; not done in this ticket).
-- TEST-TODO: the shaded Infantry_Board-daemon.jar contains com/superiorsoftllc/agenthq/backlog/TicketBoard.class and no daemon-api classes.
+- TEST-TODO: the shaded Infantry_Board-daemon.jar contains com/superiorsoftllc/infantry/backlog/TicketBoard.class and no daemon-api classes.
 
 ## DP-5h-3a (ticket-498dfe11): board frame registration on the ports
 - TEST-TODO: a session-originated ticket_move through the board-side `registerBoardFrames` (FrameBinding + SpawnCharge) hits the depth / pod-cap refusal with the same text as the old core TicketStartCharge path; the worker joins the starter's pod and records its spawner.
@@ -39,8 +39,8 @@
 ## DP-5h-3e-c (ticket-33c67672): plugin-present start charge
 - TEST-TODO: PluginBoardStartChargeDaemonTest -- session-originated ticket_move to in_progress through the plugin-built board: podSpawnDepth=0 -> 'spawn refused: depth limit', podSpawnCap=0 -> 'spawn refused: pod cap' (ticket stays todo); defaults -> started and the worker's spawnerSessionId is the starter; beforeStart sees boardPorts.ops() != null and the first ticket_list answers `tickets`.
 ## DP-5f-6 (ticket-8b50393b): TicketBoard tests over the fake host (partial)
-- TEST-TODO: RoutingRulesTest, BacklogLaneTest, TicketPacingGateTest (agentHqBoard, over InMemoryBoardHost) -- start precedence (rule beats role binding, ticket pin beats rule), a rule naming an unknown provider parks the ticket in todo with "rule 'heavy'" in the detail and reports once, per-lane cap and pacing gate refusals. Inputs: weighted tickets with rules/pins/lane caps; expected: same assertions as before the move, started model read from host.starts.
-- TEST-TODO: still in agentHq, not yet moved: RoleBindingSpawnTest, ContextLimitTest, EffortTest, TicketWorkerInvariantTest, TicketSkillAttachmentTest, TicketWeightTest, TicketBoardTest, KnowledgePtrTest; TicketEventLogTest/TicketTypeMigrationTest/LocalBoardServicesTest/StoryMigrationTest not yet rewired to BoardOps.
+- TEST-TODO: RoutingRulesTest, BacklogLaneTest, TicketPacingGateTest (infantryBoard, over InMemoryBoardHost) -- start precedence (rule beats role binding, ticket pin beats rule), a rule naming an unknown provider parks the ticket in todo with "rule 'heavy'" in the detail and reports once, per-lane cap and pacing gate refusals. Inputs: weighted tickets with rules/pins/lane caps; expected: same assertions as before the move, started model read from host.starts.
+- TEST-TODO: still in infantry, not yet moved: RoleBindingSpawnTest, ContextLimitTest, EffortTest, TicketWorkerInvariantTest, TicketSkillAttachmentTest, TicketWeightTest, TicketBoardTest, KnowledgePtrTest; TicketEventLogTest/TicketTypeMigrationTest/LocalBoardServicesTest/StoryMigrationTest not yet rewired to BoardOps.
 
 ## CORE-SPLIT-4a1 (ticket 6dad821a)
 TEST-TODO: daemon wiring builders (`daemon/wiring/*Wiring.kt`) are a pure move of DaemonMain construction. Behaviour: a daemon started as before has the same stores, frames, trigger service (autoStart=false), owner-question sink, attention eventSink, run manager and chat-image retention. Check: start the daemon, save a memory note/decision/issue, fire a trigger, ask an owner question; all behave as before.
@@ -50,23 +50,23 @@ TEST-TODO (CORE-SPLIT-4a2): behaviour: daemon start order unchanged after moving
 ## STACK-NEUTRAL-6 (ticket-89466254)
 TEST-TODO: SettingsService.migrateRepoProfileAdditions - existing install with no stored `gradle` override: stored watch.toolProfiles gains the gradle profile + the two fork templates (resource watch/repo-profile-additions.json), second call returns false; fresh install or existing gradle override: untouched. Expect owner's worker GRADLE_OPTS identical to before.
 
-TEST-TODO (STACK-NEUTRAL-3, ticket cd3d95bc): behaviour: `--reader <name>` resolves from the tool profiles' `progress` list. Class: ProgressCliTest `shipped task reader...`. Inputs: line `> Task :app:compileKotlin` with --reader gradle; unknown reader name. Expected: status "gradle :app:compileKotlin" (only while the job is indeterminate); unknown name = error "--reader expects one of junit, gate, gradle". Also at QA: a custom profile with a `progress` entry in watch.toolProfiles works with `agenthq run --reader`.
+TEST-TODO (STACK-NEUTRAL-3, ticket cd3d95bc): behaviour: `--reader <name>` resolves from the tool profiles' `progress` list. Class: ProgressCliTest `shipped task reader...`. Inputs: line `> Task :app:compileKotlin` with --reader gradle; unknown reader name. Expected: status "gradle :app:compileKotlin" (only while the job is indeterminate); unknown name = error "--reader expects one of junit, gate, gradle". Also at QA: a custom profile with a `progress` entry in watch.toolProfiles works with `infantry run --reader`.
 ## STACK-NEUTRAL-4 (ticket-bfe9e7d0)
 TEST-TODO: WorktreeProvisionHook seam (worktree/WorktreeProvisionHook.kt). Behaviour: WorktreeProvisions runs each hook on worktree creation, joins warnings with "; ", none -> null. Class AndroidSdkProvisionTest: gradle-file repo + no SDK -> same warning; SDK found -> same local.properties; non-matching repo -> no file, no warning. Detect files now come from resources worktree/sdk-provision.json. Not done: DaemonApi hooks.worktreeProvision (plugin registration) left for a follow-up.
 
 TEST-TODO: STACK-NEUTRAL-5 (ticket-18370e32)
 - Start brief watch line: BoardRuntime.watchedPrograms() empty unless limits.watch.enabled=1 and limits.watch.forced=1; then the shimmed programs of the profiles in force. Check on a live project: watch on -> brief names the profile programs; watch off -> no WATCHED line.
-- BG_RUN_LINE no longer carries the Windows wrapper hint: put it in this project's knowledge/role notes (`agenthq memory save`): "On Windows run Gradle as gradlew.bat (./gradlew fails under agenthq bg run)".
+- BG_RUN_LINE no longer carries the Windows wrapper hint: put it in this project's knowledge/role notes (`infantry memory save`): "On Windows run Gradle as gradlew.bat (./gradlew fails under infantry bg run)".
 ## DAEMON-STORAGE-1
 - Plugin storage (PluginStorageTest): prefix refusal (core table, join, comma list, schema-qualified, ATTACH/PRAGMA, two statements), adopt list official-only, `migrate` idempotent + failed migrate rolls back, `transaction` rollback, `storage` grant. Not tested: a real plugin jar calling api.storage through DaemonPluginHost, community adopt refusal at load, concurrent writers.
 
 ## AR-5 (ticket-d742b63c)
 TEST-TODO: typed service registry. Class ServiceRegistryTest (done, unit): provide/find, missing = null, duplicate provider refused, community without `services.provide` refused, unload closes handles, stale handle safe. Not tested: a real plugin jar calling api.services through DaemonPluginHost (QA: a plugin publishes an interface, a second plugin finds it, disable the first, find returns null); community grant path through module settings.
 ## DP-6 (ticket-9d0a581b)
-TEST-TODO: pipeline in Infantry_Board. Done (PipelineStoreTest, real SQLite, 11 tests): store rules, handler answers/refusals/push. Not tested (QA): (1) a real daemon with Infantry_Board loaded answering `pipeline_show`/`pipeline_record` through DaemonPluginHost, author label "role (agent)" from `sessionReads.find`, `pipeline_state` push reaching a second WebSocket client via `boardRuntime.push`; (2) with Infantry_Board absent, `pipeline_show` answers `pipeline_show refused: this daemon has no pipeline`; (3) `agenthq pipeline record` + MCP `agenthq_pipeline_record` end to end; (4) existing McpServeTest has 15 golden-drift failures and BuiltinToolsListGuardTest 2 (`agenthq_read` in McpPluginTools) that predate DP-6.
+TEST-TODO: pipeline in Infantry_Board. Done (PipelineStoreTest, real SQLite, 11 tests): store rules, handler answers/refusals/push. Not tested (QA): (1) a real daemon with Infantry_Board loaded answering `pipeline_show`/`pipeline_record` through DaemonPluginHost, author label "role (agent)" from `sessionReads.find`, `pipeline_state` push reaching a second WebSocket client via `boardRuntime.push`; (2) with Infantry_Board absent, `pipeline_show` answers `pipeline_show refused: this daemon has no pipeline`; (3) `infantry pipeline record` + MCP `infantry_pipeline_record` end to end; (4) existing McpServeTest has 15 golden-drift failures and BuiltinToolsListGuardTest 2 (`infantry_read` in McpPluginTools) that predate DP-6.
 
 ## DP-7a (ticket-6df0d6c2)
-TEST-TODO: knowledge wire DTOs moved to agentHqProtocol (same packages). Covered: OrchestratorBoundaryGuardTest (cli>memory/issues/decisions 0), DaemonCoreGuardTest (protocol leaf holds memory/issues/decisions), existing Memory/Issue/Decision tests. QA: `agenthq memory save/get/list/search`, `agenthq issue open/attempt/fix/list`, `agenthq decision add/list/show` against a running daemon return the same output as before the move.
+TEST-TODO: knowledge wire DTOs moved to infantryProtocol (same packages). Covered: OrchestratorBoundaryGuardTest (cli>memory/issues/decisions 0), DaemonCoreGuardTest (protocol leaf holds memory/issues/decisions), existing Memory/Issue/Decision tests. QA: `infantry memory save/get/list/search`, `infantry issue open/attempt/fix/list`, `infantry decision add/list/show` against a running daemon return the same output as before the move.
 
 ## DP-7b (ticket-1580ce99)
 TEST-TODO: Knowledge port. LocalKnowledgeTest: digest/section/search/noteCount over real stores; ServiceKnowledgeCounter renders identical to renderKnowledge and gives null section with no provider. Not tested (QA): a real daemon first turn after the plugin host unloads/never provides (expect no KNOWLEDGE section, no error); KnowledgeFirstTurnTest known-failing case compared to base.
@@ -79,12 +79,12 @@ TEST-TODO: session-ended hook. MemoryScopeTest.sessionEndedListenersHearAKillAnd
 ## DP-7e (ticket-0839e57f)
 TEST-TODO: mail port. SessionNotifierTest (unit): notifyRole reaches only live sessions of the role in the project, nothing for none, failing send not counted, grant refused for a community module, default port delivers nothing. Not tested (QA): a real community plugin with and without `sessions.notify` in modules.json receiving a real mail in a live daemon; the ROLE-NOTES-1 role-note announcement end to end after the DaemonMain rewire.
 
-- DP-7f: with the real Infantry_Notes plugin loaded in a daemon, run `agenthq memory save/show/index/search/append/edit/delete` (project, role and session scope) end to end; this replaces the deleted core CliMemoryTest, MemoryDaemonTest and MemoryModesWireTest (daemon-socket tests that needed the in-core store). Also check a role note change mails a live session of that role, a removed session's notes vanish, and notes survive a daemon restart.
-- USAGE-FIT (ticket-665db9e0) TEST-TODO: with a real daemon and the usage-meter db holding >= 8 weekly steps, open Stats, expand "Usage fit" (collapsed by default, nothing around it moves) and check headline/confidence/table/3 charts read right in dark and light, and the 5-hour toggle; with < 8 steps expect "not enough data yet". Check a plugin-less Stats pane still draws exactly as before. agentHqUi test sources do not compile on the base (TicketImagesUiTest/StartSessionShotsMain), so InjectorUiTest and a Stats tab-tree render test could not run; no screenshot taken.
+- DP-7f: with the real Infantry_Notes plugin loaded in a daemon, run `infantry memory save/show/index/search/append/edit/delete` (project, role and session scope) end to end; this replaces the deleted core CliMemoryTest, MemoryDaemonTest and MemoryModesWireTest (daemon-socket tests that needed the in-core store). Also check a role note change mails a live session of that role, a removed session's notes vanish, and notes survive a daemon restart.
+- USAGE-FIT (ticket-665db9e0) TEST-TODO: with a real daemon and the usage-meter db holding >= 8 weekly steps, open Stats, expand "Usage fit" (collapsed by default, nothing around it moves) and check headline/confidence/table/3 charts read right in dark and light, and the 5-hour toggle; with < 8 steps expect "not enough data yet". Check a plugin-less Stats pane still draws exactly as before. infantryUi test sources do not compile on the base (TicketImagesUiTest/StartSessionShotsMain), so InjectorUiTest and a Stats tab-tree render test could not run; no screenshot taken.
 
 ## DP-10a (ticket-6aa4b885)
-TEST-TODO: project files + chat images in the plugin. With a real daemon and the Infantry_Chat plugin: (1) attach a PNG in chat and a ticket image; expect files under `<project>/.agenthq/uploads/chat|ticket/<sha>.png`, `uploads/.gitignore` = "*", same answer JSON as before. (2) Remove the plugin: `image_upload` answers "image_upload refused: this daemon stores no uploads". (3) Set `images.chatImageRetentionDays` to 1, backdate a chat upload 2 days, restart: swept at start; ticket upload kept. (4) A community plugin without the `files` grant calling `api.files(...)` is refused "missing grant 'files'". ProjectFilesTest covers scope refusal; ImageUploadsTest the retention clock.
-- TOKEN-9: with the app running a few hours, call agenthq_pace with samples:"true" and confirm rawSamples rows carry raw percent, prev, delta and per-session tokens; check whole-percent steps vs token burn.
+TEST-TODO: project files + chat images in the plugin. With a real daemon and the Infantry_Chat plugin: (1) attach a PNG in chat and a ticket image; expect files under `<project>/.infantry/uploads/chat|ticket/<sha>.png`, `uploads/.gitignore` = "*", same answer JSON as before. (2) Remove the plugin: `image_upload` answers "image_upload refused: this daemon stores no uploads". (3) Set `images.chatImageRetentionDays` to 1, backdate a chat upload 2 days, restart: swept at start; ticket upload kept. (4) A community plugin without the `files` grant calling `api.files(...)` is refused "missing grant 'files'". ProjectFilesTest covers scope refusal; ImageUploadsTest the retention clock.
+- TOKEN-9: with the app running a few hours, call infantry_pace with samples:"true" and confirm rawSamples rows carry raw percent, prev, delta and per-session tokens; check whole-percent steps vs token burn.
 
 ## DP-10b (ticket-1b61bfef)
 TEST-TODO: approval rules in Infantry_Approvals. With a real daemon: (1) answer a Bash approval card "Always allow" in a project; a NEW session of that project calling `git ...` is auto-allowed (one `auto-allowed by rule Bash git` line, no card) and `approval_rules` lists the rule (Settings > Tool approval); delete it and the next call asks again. (2) Disable or remove Infantry_Approvals, restart: every prompt asks, "Always allow" lasts only the session (same tool again in that session has no card, a new session asks), no error. Rules stored before DP-10b (settings row `toolApproval.rules`) are NOT migrated: the owner is asked again once. Classes: ApprovalRulesPortTest (core), ApprovalRulesTest (plugin), DaemonCoreGuardTest.
@@ -94,7 +94,7 @@ TEST-TODO (ATTN-1): AttentionServiceTest: local provider raise/list/resolve keep
 TEST-TODO: `events.broadcast` / `hooks.connected` / `QuestionsOpen` (DaemonPluginHost, DaemonMain). Inputs: an official plugin calls `api.events.broadcast("x","{}")`, registers `hooks.connected { listOf(Frame("x","{}")) }`; a community plugin does the same. Expected: a connected client gets the frame in both cases for official; community throws IllegalStateException (plugin disabled). Stall detector: a session with an open question published via `QuestionsOpen` is not nudged.
 
 ## ATTN-2c (77434467)
-- [ ] ask E2E on a real daemon: `agenthq ask --recommend ...` from a session -> `question` push and `questions` replay on connect reach a client -> `question_answer` mails the pick to the asking session (body carries `(thread question:<id>)`) -> an unanswered question with `--default-after` auto-picks via the 15 s `api.schedule` sweep -> killing the session orphans it. No daemon-level test covers the plugin path (only OwnerQuestionsTest on the service and the store).
+- [ ] ask E2E on a real daemon: `infantry ask --recommend ...` from a session -> `question` push and `questions` replay on connect reach a client -> `question_answer` mails the pick to the asking session (body carries `(thread question:<id>)`) -> an unanswered question with `--default-after` auto-picks via the 15 s `api.schedule` sweep -> killing the session orphans it. No daemon-level test covers the plugin path (only OwnerQuestionsTest on the service and the store).
 - [ ] per-session prompt-timer override no longer feeds the default auto-pick of a question (core state); only global `prompts.timeoutSec` does. Decide if a seam is wanted.
 
 ## TRIG-1
@@ -109,20 +109,20 @@ TEST-TODO: `events.broadcast` / `hooks.connected` / `QuestionsOpen` (DaemonPlugi
 - TEST-TODO (TRIG-2b): run TriggerStoreContractTest (Infantry_Triggers/daemon) at the QA checkpoint; once TRIG-2c switches core over, check triggers survive a daemon restart through the plugin store (create, fire, restart, list, event pruning to 500).
 
 ## MAIL-HOOK-1 (pre-delivery mail hook)
-TEST-TODO: install `on-mail-sent.lua` (plugins/official/Infantry_Scripting/project-scripts) with hook `on="mail.incoming"`, routeRoles ["pm"] and the vc-merged / vc-duplicate / stale-auto-failure / worker-done rules; send a routine VC mail to an idle PM: expect it READ, no PM turn, ticket comment written; send an unmatched mail: PM woken once (no second delivery). Break the script (syntax error): mail still delivered. Check why agenthq_prompt to an idle session waits 30 s (see report).
+TEST-TODO: install `on-mail-sent.lua` (plugins/official/Infantry_Scripting/project-scripts) with hook `on="mail.incoming"`, routeRoles ["pm"] and the vc-merged / vc-duplicate / stale-auto-failure / worker-done rules; send a routine VC mail to an idle PM: expect it READ, no PM turn, ticket comment written; send an unmatched mail: PM woken once (no second delivery). Break the script (syntax error): mail still delivered. Check why infantry_prompt to an idle session waits 30 s (see report).
 
 ## MAIL-HOOK-1b (860c0da2)
-TEST-TODO: on a real daemon (port 8812, temp state dir): session A `agenthq script hook add --on mail.incoming --to <B> --script pong`, A mails B "PING n"; confirm B's reply and no wake. The in-process ping-pong (ScriptHooksTest) fakes the mailbox, not MailRouter. Also confirm a hook disappears from `script hook list` after its session is removed.
+TEST-TODO: on a real daemon (port 8812, temp state dir): session A `infantry script hook add --on mail.incoming --to <B> --script pong`, A mails B "PING n"; confirm B's reply and no wake. The in-process ping-pong (ScriptHooksTest) fakes the mailbox, not MailRouter. Also confirm a hook disappears from `script hook list` after its session is removed.
 
 ## DISCONNECT-1 (0af901f2)
-TEST-TODO: on a TEST daemon only (port 8812, temp AGENTHQ_STATE_DIR; never the owner's 8797/8798/8787), connect a real app/client, then kill only the client's TCP connection (not the daemon): expect "reconnecting..." with a countdown, then back to connected with the same sessions and no second daemon; a relaunch of the app is still refused by the state-dir lock.
-TEST-TODO: with a long-running agenthq_session_remove / agenthq_prompt in flight, send a malformed frame on the same ws: expect an `error` frame for that frame (log "ws frame failed, connection kept") and the ws stays open.
+TEST-TODO: on a TEST daemon only (port 8812, temp INFANTRY_STATE_DIR; never the owner's 8797/8798/8787), connect a real app/client, then kill only the client's TCP connection (not the daemon): expect "reconnecting..." with a countdown, then back to connected with the same sessions and no second daemon; a relaunch of the app is still refused by the state-dir lock.
+TEST-TODO: with a long-running infantry_session_remove / infantry_prompt in flight, send a malformed frame on the same ws: expect an `error` frame for that frame (log "ws frame failed, connection kept") and the ws stays open.
 TEST-TODO: on a test daemon, close a session whose tree holds a `java.exe --add-opens ...` process from the app's own runtime: expect it untouched (TreeKillRule). Not exercised end to end: the owner's original trigger was never reproduced.
 
-TEST-TODO (SCRIPT-VIS-1): in a live daemon with a mail.incoming hook that handles a mail: agenthq_script_stats shows the run (AUTOMATION line, handled) and turnsSaved +1 for the recipient; an ordinary mail shows wakesByReason.mail +1; an owner message shows owner +1. UI (automation line in the session transcript, session panel counts, project summary) is NOT built yet.
+TEST-TODO (SCRIPT-VIS-1): in a live daemon with a mail.incoming hook that handles a mail: infantry_script_stats shows the run (AUTOMATION line, handled) and turnsSaved +1 for the recipient; an ordinary mail shows wakesByReason.mail +1; an owner message shows owner +1. UI (automation line in the session transcript, session panel counts, project summary) is NOT built yet.
 
 ## TEST-TODO: SCRIPT-VIS-1b (e65bfcf2)
-- Live ping-pong on a TEST daemon (own state dir + port, kill by PID): PM <-> VC mail hooks live; send a ping. Expect: both chats show an "AUTOMATION · pong · handled ..." line (gear mark, expandable to actions and ih.log lines), no session woke, `agenthq_script_stats` shows 2 turns saved.
+- Live ping-pong on a TEST daemon (own state dir + port, kill by PID): PM <-> VC mail hooks live; send a ping. Expect: both chats show an "AUTOMATION · pong · handled ..." line (gear mark, expandable to actions and ih.log lines), no session woke, `infantry_script_stats` shows 2 turns saved.
 - While a hook runs, the session list carries `automation {script, hookId, since}`; the session sits under Running with BUSY/IDLE unchanged; it moves back when the run ends.
 - Restart the daemon: the run log (newest `limits.scripting.runLogMax`) is still there and the chat lines come back via `timeline_list`.
 - Disable/uninstall Infantry_Scripting: chat shows no automation lines and works as before.
@@ -138,33 +138,33 @@ TEST-TODO (SCRIPT-VIS-1): in a live daemon with a mail.incoming hook that handle
 ## SCRIPT-CMD-1
 - TEST-TODO: set scripting.exec.enabled=true, run a script with `ih.exec{command={...}}` from a real agent session: exit code and stdoutTail arrive in phase 2; with the setting off the tool refuses and names the setting.
 - TEST-TODO: background=true run + a hook on `exec.done` continues the protocol; the Infantry_Scripting settings page shows the six scripting.exec.* fields.
-- TEST-TODO: the CLI parity command `agenthq exec` was NOT added (see report); call the tool via `agenthq_exec` MCP / `script_run`.
+- TEST-TODO: the CLI parity command `infantry exec` was NOT added (see report); call the tool via `infantry_exec` MCP / `script_run`.
 
 ## SCRIPT-TICK-1
-- TEST-TODO: add a hook `on="every 30s" to=<your session>` for a script that calls `ih.progress{mode="status", label="..."}`: the card of that session shows the label and updates every 30 s; end the session and confirm the hook is gone from `agenthq script hook list`.
+- TEST-TODO: add a hook `on="every 30s" to=<your session>` for a script that calls `ih.progress{mode="status", label="..."}`: the card of that session shows the label and updates every 30 s; end the session and confirm the hook is gone from `infantry script hook list`.
 - TEST-TODO: start `ih.exec{command=..., background=true}`, add an `exec.tick` hook (see docs/SCRIPT-TIMERS.md): the card shows steps parsed from the output and `fail` on a failing line; the hook stops being called after exec.done.
 - TEST-TODO: a deliberately slow tick script (longer than the period): one "skipped (never stacked)" log line, no pile-up. Not run by hand; unit-tested with a nested tick only.
 - TEST-TODO: progress with a `sessionId` of another project is refused (unit-tested; try it from a real second project).
 
 ## SCRIPT-SAVE-1
-- TEST-TODO: from a real worker session run `agenthq script save probe --body -` (pipe `ih.log("hi")`), then `agenthq script list` (shows size, saver, hooks) and `agenthq_script_run name=probe` with no restart; a source with a syntax error must be refused with the Lua parse error and leave no file.
-- TEST-TODO: add a hook on `probe`, then `agenthq script delete probe` must be refused naming the hook; remove the hook and the delete works. Not tried by hand with the real Lua engine over the wire `check` op (unit-tested with a fake engine; Lua check compiled but only built, not exercised).
+- TEST-TODO: from a real worker session run `infantry script save probe --body -` (pipe `ih.log("hi")`), then `infantry script list` (shows size, saver, hooks) and `infantry_script_run name=probe` with no restart; a source with a syntax error must be refused with the Lua parse error and leave no file.
+- TEST-TODO: add a hook on `probe`, then `infantry script delete probe` must be refused naming the hook; remove the hook and the delete works. Not tried by hand with the real Lua engine over the wire `check` op (unit-tested with a fake engine; Lua check compiled but only built, not exercised).
 
 TEST-TODO: HOOK-DEPTH-1 (e5271b5d): a done-hook starts a worker; its finish minutes later must run the done hook (no loop guard refusal); a hook that re-triggers itself within attributionMs is still stopped at maxDepth.
 
 TEST-TODO: ROLE-NOTE-1 (bcdfcce6): set `context.includeFinishInstructions` false for a project, start a ticket worker: its brief has no 'WHEN YOU ARE FINISHED' / 'Report to' line and shows the role notes; default (unset) is unchanged. Role notes appear as name: description only; the worker must `memory show` the body.
 
-TEST-TODO: KILL-TIMEOUT-1 (1e4f25f0): finish a ticket so the done hook runs agenthq_session_remove force=true; it must answer at once (no "kill got no answer in 30000 ms" mail). Not run against a live daemon.
+TEST-TODO: KILL-TIMEOUT-1 (1e4f25f0): finish a ticket so the done hook runs infantry_session_remove force=true; it must answer at once (no "kill got no answer in 30000 ms" mail). Not run against a live daemon.
 
 TEST-TODO: CMD-1 (0f16650d): Run tab on a real daemon: save a command, run it (pty and a piped one), type into the console, resize, stop it (child tree gone), restart the daemon and check commands.json is still read; a restricted policy still refuses interactive runs/run_input. RunsSurfaceTest (LocalRuns): a cwd with `..`, absolute or a link leaving the project is refused before start; stop (killTree) ends a child and its grandchild. Unit-level only; the daemon-level classes CommandSaveDaemonTest / RunStubProviderDaemonTest / PolicySwitchDaemonTest need the built Infantry_Run-daemon jar and were not run by hand.
 
-## AR-4a (ticket c510e4e3): role vocabulary moved to agentHqProtocol
+## AR-4a (ticket c510e4e3): role vocabulary moved to infantryProtocol
 TEST-TODO:
 - Behaviour: `protocol.RoleIds.RETIRED` equals `daemon.api.roles.RetiredRoleIds.MAP`; ids normalise the same. Class: RoleIdsTest. Inputs: "git","bot","architect". Expected: version-control, automation, architect.
 - Behaviour: open-time migration still rewrites retired ids. Class: db.RoleIdMigrationTest. Inputs: rows with role "git". Expected: rewritten once, idempotent.
 - Behaviour: user-portrait setting still refuses a bad image. Class: AvatarUploadsTest / settings. Inputs: non-PNG bytes. Expected: IllegalArgumentException "setting 'user_portrait': ...".
 
-TEST-TODO (AR-4b-i): RolesLookup with no provider: `all()` empty, `role("backend")` null, one stderr line; LocalRoles.record maps Role fields (incl. responseDetail/MaxChars/BodyChars) to RoleRecord. Pre-existing failures seen on this branch, unrelated: AgentRegistryLayerGuardTest (Infantry_Agents SpawnTools board imports), BuiltinToolsListGuardTest (agenthq_read).
+TEST-TODO (AR-4b-i): RolesLookup with no provider: `all()` empty, `role("backend")` null, one stderr line; LocalRoles.record maps Role fields (incl. responseDetail/MaxChars/BodyChars) to RoleRecord. Pre-existing failures seen on this branch, unrelated: AgentRegistryLayerGuardTest (Infantry_Agents SpawnTools board imports), BuiltinToolsListGuardTest (infantry_read).
 
 
 TEST-TODO (AR-3a): FirstTurnProvidersTest: two providers + a throwing one on a ticket-bound first turn -> sections joined in registration order by `---`, throwing/blank skipped, unbound session unchanged.
@@ -172,7 +172,7 @@ TEST-TODO (AR-3a): FirstTurnProvidersTest: two providers + a throwing one on a t
 TEST-TODO (AR-3b): TicketBindingPolicy: twin() same ticket / same agent with a ticket -> refusal text "start refused: session X already runs ticket T ..." (unchanged); ticketless sessions of one agent not restricted; deadlineMs(binding) = ticket deadline, null binding = null (generic deadline); lockHeld false when gate lock throws. Pre-existing/unrelated failure seen: BacklogLaneE2eTest (role:backend "valid role ids:" empty, roles plugin).
 
 ## AR-7 (f794f8de)
-TEST-TODO: Board button comes from Infantry_Board. Class NoBoardSidebarTest (written, not run: agentHqUi test sources do not compile at base, RunConsoleEndToEndTest imports com.superiorsoftllc.agenthq.commands). Input: Sidebar with no left.board contributor. Expected: search shown, no "sidebar-board-button". Also run with Board jar: button first in left.board, click opens board (BoardUiTest, UxPolishLayoutUiTest).
+TEST-TODO: Board button comes from Infantry_Board. Class NoBoardSidebarTest (written, not run: infantryUi test sources do not compile at base, RunConsoleEndToEndTest imports com.superiorsoftllc.infantry.commands). Input: Sidebar with no left.board contributor. Expected: search shown, no "sidebar-board-button". Also run with Board jar: button first in left.board, click opens board (BoardUiTest, UxPolishLayoutUiTest).
 
 ## H5b (HarnessEvent.Denial, API 2.3.0)
 TEST-TODO: HarnessDenialTest - a 2.3 plugin translator emitting Denial("shell") -> Denial.toLine("denier") == EventNormalizer.Line.Denial("denier","shell"); blank tool -> attributed Error; 2.0.0/2.2.0 plugins register on 2.3; a plugin Usage(100,20) via UsageMeter.eventTranslatorFor reaches the meter report (input 100, output 20). Manual: run a real plugin-harness session and confirm a usage row appears.
@@ -187,7 +187,7 @@ TEST-TODO: HarnessStatsSourceTest - a granted+declared stats row (start 1000/end
 TEST-TODO: HarnessWatchContributionTest - a granted+declared watch contribution with launcher "L" gives HarnessRegistry.applyWatch argv `echo --runner L` and env W=L; file hook/a.js is written under plugin-data/<Module>/ and ../../evil.txt is refused; ungranted/undeclared/watch-off (launcher null) -> spec unchanged; throwing watch -> spec unchanged + attributed PluginFailure. Manual: real plugin harness with watch ON, check tool calls go through the watched runner.
 
 ## H5f (Harness.sandbox, API 2.7.0)
-TEST-TODO: HarnessSandboxContributionTest - a granted+declared sandbox contribution with dirs under plugin-data/<Module>/ and the worktree is returned by HarnessRegistry.sandboxFor (canonical paths, env names kept); a dir outside (or ../ escape) refuses the whole contribution; AGENTHQ_* env name refused; ungranted/undeclared -> null; throwing sandbox -> null + attributed PluginFailure. Manual: real plugin harness with a sandbox contribution, check the agent sees only the dirs it asked for.
+TEST-TODO: HarnessSandboxContributionTest - a granted+declared sandbox contribution with dirs under plugin-data/<Module>/ and the worktree is returned by HarnessRegistry.sandboxFor (canonical paths, env names kept); a dir outside (or ../ escape) refuses the whole contribution; INFANTRY_* env name refused; ungranted/undeclared -> null; throwing sandbox -> null + attributed PluginFailure. Manual: real plugin harness with a sandbox contribution, check the agent sees only the dirs it asked for.
 
 ## HARNESS H6a (ticket dfd2a49c): harness API 2.8.0 session + models contributions
 TEST-TODO:
@@ -197,25 +197,25 @@ TEST-TODO:
 ## HARNESS H7a (ticket edf20ad3)
 TEST-TODO: ClaudeFoldParityTest.providerSpecIsTheHarnessSpec / modelsAndDefaultComeFromTheHarness — RunRequest(model, resume) and a ClaudeCatalog — provider.spec/models/defaultModel equal ClaudeHarness.specFor/models/defaultModel (argv, env, MCP file unchanged).
 
-TEST-TODO (H7b-1, b7051b65): HarnessApprovalCommandsRuleTest. A plugin harness returning approvalArgs(ALLOW_ALL)=["--yes"], one NATIVE command and mcpToolRule("agenthq")="mcp__agenthq__*" shows all three on the daemon Harness; a 2.9-style plugin shows none; core ClaudeHarness.approvalArgs(ALLOW_EDITS)=["--permission-mode","acceptEdits"].
+TEST-TODO (H7b-1, b7051b65): HarnessApprovalCommandsRuleTest. A plugin harness returning approvalArgs(ALLOW_ALL)=["--yes"], one NATIVE command and mcpToolRule("infantry")="mcp__infantry__*" shows all three on the daemon Harness; a 2.9-style plugin shows none; core ClaudeHarness.approvalArgs(ALLOW_EDITS)=["--permission-mode","acceptEdits"].
 
 ## HARNESS H8a (ticket 7984dc08)
 TEST-TODO: OpenCodeFoldParityTest.providerSpecIsTheHarnessSpec / modelsDefaultAndAnswersComeFromTheHarness — RunRequest(model, resume) and a model id list — OpenCodeProvider.spec/models/defaultModel/contextLimit/effort/commands equal OpenCodeHarness (argv, env, grouping unchanged). Manual QA: with a real opencode, the model picker and a serve-mode session behave as before.
 
 ## HARNESS H8b-1 (ticket 14c420e2)
-TEST-TODO: HarnessConfigMergeTest.opencodeMergeThroughTheSlotEqualsTheDirectMerge / readOnlyDbQueriesAndRefusesBadInput / hostQueryDbNeedsTheStatsHook — mcp+config via HarnessConfigMerge("opencode"), a sqlite file via ReadOnlyDb and ModuleHarnessHost.queryDb — merge equals AgentHqMcp.mergeOpenCode; INSERT and missing file answer null; no `stats` hook answers null.
+TEST-TODO: HarnessConfigMergeTest.opencodeMergeThroughTheSlotEqualsTheDirectMerge / readOnlyDbQueriesAndRefusesBadInput / hostQueryDbNeedsTheStatsHook — mcp+config via HarnessConfigMerge("opencode"), a sqlite file via ReadOnlyDb and ModuleHarnessHost.queryDb — merge equals InfantryMcp.mergeOpenCode; INSERT and missing file answer null; no `stats` hook answers null.
 
 
 ## HARNESS H9 (ticket 21d8bace)
 TEST-TODO: HarnessCoreGuardTest - add `class X : Harness {}` under core main -> `no core class implements the Harness SPI...` fails; add a `"claude"` literal in a new core file -> `built-in harness id literals...` fails naming it; remove a listed literal -> stale-entry failure.
 
 ## CORE-SPLIT-3 (ticket 88a2fc64)
-TEST-TODO: session imports no provider/claude/opencode/experiments package. Class DaemonCoreGuardTest, `session depends on the harness SPI only...`. Input: sources under agentHq/session. Expected: no line names those packages. Also: AgentProvider/RunRequest/HarnessProvider/NoHarnessProvider now live in agenthq.harness (provider keeps catalog/factory); no behaviour change.
+TEST-TODO: session imports no provider/claude/opencode/experiments package. Class DaemonCoreGuardTest, `session depends on the harness SPI only...`. Input: sources under infantry/session. Expected: no line names those packages. Also: AgentProvider/RunRequest/HarnessProvider/NoHarnessProvider now live in infantry.harness (provider keeps catalog/factory); no behaviour change.
 
 ## CORE-SPLIT-4b (ticket c682d8a5)
-TEST-TODO: behaviour: the desktop app and the installed daemon still start with the core in its own jar. Class/function: installDist + launch the daemon with a fresh state dir. Inputs: default settings. Expected: daemon ready, `agenthq version` answers, SQLDelight migrations create the db (class AgentHQDatabase now generated in :agentHqCore).
-TEST-TODO: behaviour: friend-path test access. Class: agentHq test compile (compileTestKotlin). Inputs: none. Expected: tests that use core `internal` members (ProviderFactory, AgentHQDatabaseFactory) compile.
+TEST-TODO: behaviour: the desktop app and the installed daemon still start with the core in its own jar. Class/function: installDist + launch the daemon with a fresh state dir. Inputs: default settings. Expected: daemon ready, `infantry version` answers, SQLDelight migrations create the db (class InfantryDatabase now generated in :infantryCore).
+TEST-TODO: behaviour: friend-path test access. Class: infantry test compile (compileTestKotlin). Inputs: none. Expected: tests that use core `internal` members (ProviderFactory, InfantryDatabaseFactory) compile.
 
 ## DAEMON-CORE-2 bindings (ticket 46483d24)
 TEST-TODO: behaviour: core components resolve by core.<component>.provider. Class ComponentBindingsTest. Inputs: no setting / swapped fake OrchestratorLink / unknown id on core.mailbox.provider. Expected: local built / fake returned / UnknownComponentProviderException naming the setting.
-TEST-TODO: behaviour: daemon refuses to start on an unknown provider id. Class/function: manual launch with setting core.mailbox.provider=nope. Expected: '[agentHq] refusing to start' line, exit 2.
+TEST-TODO: behaviour: daemon refuses to start on an unknown provider id. Class/function: manual launch with setting core.mailbox.provider=nope. Expected: '[infantry] refusing to start' line, exit 2.

@@ -1,6 +1,6 @@
-package com.superiorsoftllc.agenthq.plugins.official.approvals
+package com.superiorsoftllc.infantry.plugins.official.approvals
 
-import com.superiorsoftllc.agenthq.ui.shell.blocks.*
+import com.superiorsoftllc.infantry.ui.shell.blocks.*
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -9,10 +9,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.launch
-import com.superiorsoftllc.agenthq.plugins.official.approvals.QuestionGoneCard
-import com.superiorsoftllc.agenthq.ui.block.layout.Block
-import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
-import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
+import com.superiorsoftllc.infantry.plugins.official.approvals.QuestionGoneCard
+import com.superiorsoftllc.infantry.ui.block.layout.Block
+import com.superiorsoftllc.infantry.ui.block.layout.BlockScope
+import com.superiorsoftllc.infantry.ui.shell.LocalShellContext
 
 /** ASK-1: questions the owner cannot see inline (another session, or put off with Later): a pill that opens the asker. */
 object ShellQuestionPill : Block("infantry.shell.questions", "infantry.shell.questions") {

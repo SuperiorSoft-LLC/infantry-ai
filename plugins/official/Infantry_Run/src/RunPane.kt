@@ -1,6 +1,6 @@
-package com.superiorsoftllc.agenthq.plugins.official.run
+package com.superiorsoftllc.infantry.plugins.official.run
 
-import com.superiorsoftllc.agenthq.ui.shell.gate
+import com.superiorsoftllc.infantry.ui.shell.gate
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -35,14 +35,14 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.*
-import com.superiorsoftllc.agenthq.ui.model.CommandSpecView
-import com.superiorsoftllc.agenthq.ui.model.RunState
-import com.superiorsoftllc.agenthq.ui.model.RunsState
-import com.superiorsoftllc.agenthq.ui.net.CommandResult
-import com.superiorsoftllc.agenthq.ui.model.runPills
-import com.superiorsoftllc.agenthq.ui.shell.LinkContext
-import com.superiorsoftllc.agenthq.ui.shell.RunContext
+import com.superiorsoftllc.infantry.ui.*
+import com.superiorsoftllc.infantry.ui.model.CommandSpecView
+import com.superiorsoftllc.infantry.ui.model.RunState
+import com.superiorsoftllc.infantry.ui.model.RunsState
+import com.superiorsoftllc.infantry.ui.net.CommandResult
+import com.superiorsoftllc.infantry.ui.model.runPills
+import com.superiorsoftllc.infantry.ui.shell.LinkContext
+import com.superiorsoftllc.infantry.ui.shell.RunContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -131,7 +131,7 @@ internal data class CommandDraft(
  */
 class RunPaneHost internal constructor(
     val link: LinkContext,
-    /** S2: the runs and their requests (the shell's [com.superiorsoftllc.agenthq.ui.shell.ShellContext.run]). */
+    /** S2: the runs and their requests (the shell's [com.superiorsoftllc.infantry.ui.shell.ShellContext.run]). */
     val context: RunContext,
     private val scope: CoroutineScope,
     private val pickedId: MutableState<String?>,
@@ -143,7 +143,7 @@ class RunPaneHost internal constructor(
     val runs: RunsState = context.runs
     val live: Boolean = link.live
     /** POLICY-1: the named action [actionId] may be performed now (live, and the daemon's policy allows it). */
-    @Composable fun can(actionId: String, kind: String = com.superiorsoftllc.agenthq.plugin.api.ActionKind.WRITE): Boolean = link.gate(actionId, kind).enabled
+    @Composable fun can(actionId: String, kind: String = com.superiorsoftllc.infantry.plugin.api.ActionKind.WRITE): Boolean = link.gate(actionId, kind).enabled
     val picked: CommandSpecView? = runs.commands.firstOrNull { it.id == pickedId.value } ?: runs.commands.firstOrNull()
     val current: RunState? = runs.current
     /** The run going now (one at a time), whichever pill is selected. */
@@ -281,8 +281,8 @@ fun RunToolbarSection(run: RunPaneHost, modifier: Modifier = Modifier) {
     val runs = run.runs
     val live = run.live
     // POLICY-1: write controls are named actions gated by the daemon's policy (and any write policy); reads keep live.
-    val canWrite = run.can("runs.start", com.superiorsoftllc.agenthq.plugin.api.ActionKind.SPAWN)
-    val canStop = run.can("runs.stop", com.superiorsoftllc.agenthq.plugin.api.ActionKind.DESTRUCTIVE)
+    val canWrite = run.can("runs.start", com.superiorsoftllc.infantry.plugin.api.ActionKind.SPAWN)
+    val canStop = run.can("runs.stop", com.superiorsoftllc.infantry.plugin.api.ActionKind.DESTRUCTIVE)
     val inFlight = run.inFlight
     val picked = run.picked
     var menuOpen by remember { mutableStateOf(false) }

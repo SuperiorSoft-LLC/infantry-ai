@@ -6,7 +6,7 @@
   "description": "The project's worktrees and their changes.",
   "tier": "official",
   "sequence": [],
-  "entry": "com.superiorsoftllc.agenthq.plugins.official.changes.ChangesPlugin",
+  "entry": "com.superiorsoftllc.infantry.plugins.official.changes.ChangesPlugin",
   "jar": "build/libs/Infantry_Changes.jar",
   "buildOrder": 130,
   "tabs": [

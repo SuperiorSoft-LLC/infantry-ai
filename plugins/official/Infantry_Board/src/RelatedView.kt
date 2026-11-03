@@ -1,6 +1,6 @@
-package com.superiorsoftllc.agenthq.plugins.official.board
+package com.superiorsoftllc.infantry.plugins.official.board
 
-import com.superiorsoftllc.agenthq.ui.protocol.Ticket
+import com.superiorsoftllc.infantry.ui.protocol.Ticket
 
 /** KNOWLEDGE-PTR-2: one line of the stored RELATED (auto) block: why it is related, the ticket, its status and files. */
 data class RelatedItem(val reason: String, val ticketId: String, val title: String, val status: String, val files: String?)

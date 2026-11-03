@@ -39,7 +39,7 @@ A complete, built host and child (`Acme_Notes`, `Acme_NotesExtra`) are printed i
    code cannot reach):
 
 ```kotlin
-import com.superiorsoftllc.agenthq.ui.LocalTabFactory
+import com.superiorsoftllc.infantry.ui.LocalTabFactory
 
 const val NOTES_SLOT = "acme.notes.extra"
 
@@ -72,9 +72,9 @@ LocalTabFactory.current.panels(NOTES_SLOT).forEach { section -> section.content(
 package com.acme.notesextra
 
 import androidx.compose.material3.Text
-import com.superiorsoftllc.agenthq.ui.plugin.PanelProvider
-import com.superiorsoftllc.agenthq.ui.plugin.UiPlugin
-import com.superiorsoftllc.agenthq.ui.plugin.UiRegistrar
+import com.superiorsoftllc.infantry.ui.plugin.PanelProvider
+import com.superiorsoftllc.infantry.ui.plugin.UiPlugin
+import com.superiorsoftllc.infantry.ui.plugin.UiRegistrar
 
 class NotesExtraPlugin : UiPlugin {
     override fun register(registrar: UiRegistrar) {
@@ -93,7 +93,7 @@ class NotesExtraPlugin : UiPlugin {
 ## Check
 
 - `./gradlew :plugins:community:Acme_Notes:jar :plugins:community:Acme_NotesExtra:jar --console=plain` builds both.
-- `PluginTree` (`superiorSoftLibrary/agenthqPlugins/src/commonMain/kotlin/com/superiorsoftllc/agenthq/plugin/host/PluginTree.kt`)
+- `PluginTree` (`superiorSoftLibrary/infantryPlugins/src/commonMain/kotlin/com/superiorsoftllc/infantry/plugin/host/PluginTree.kt`)
   makes a module a child of P when it lists P in `parents` or fills a slot P declares. The Plugins tab shows it under
   the host, and a child shared by two parents cannot be switched off while one of them is enabled.
 - Add a test like the template's: `registerModule` the child, build a `TabFactory`, assert `factory.problems` is empty

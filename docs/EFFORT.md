@@ -19,10 +19,10 @@ validate against it; a harness maps a level to its own flag. Add or reorder leve
 
 | Layer | What was added (all additive) |
 |---|---|
-| Harness API 2.2.0 (`agentHqHarnessApi`) | `Harness.effort: EffortCapability` (default `UNSUPPORTED`), `EffortSupport { SUPPORTED, BEST_EFFORT, UNSUPPORTED }`, `EffortCapability(support, how)`. `HarnessRequest.effort` already existed in 2.0.0. |
+| Harness API 2.2.0 (`infantryHarnessApi`) | `Harness.effort: EffortCapability` (default `UNSUPPORTED`), `EffortSupport { SUPPORTED, BEST_EFFORT, UNSUPPORTED }`, `EffortCapability(support, how)`. `HarnessRequest.effort` already existed in 2.0.0. |
 | Daemon harness contract 1.8.0 | the same on the 1.x `Harness`; default = supported when the harness declares `EFFORT_SELECTION`, else unsupported. `AgentProvider.effort()`. |
 | Wire 1.148.0 | `ticket_save.effort`, `ticket.effort` + `effectiveEffort {value, source, support, how}`, `session.effortSupport`, `providers[].effort` + `effortHow` |
-| Board API 1.4.0 (`agentHqDaemonApi`) | `TicketInfo.effort` / `effectiveEffort*` / `effortSupport`, `TicketDraft` / `TicketPatch.effort`, `SpawnRequest.effort`, `SessionInfo.effort` / `effortSupport`, catalog `effort` / `effortHow` |
+| Board API 1.4.0 (`infantryDaemonApi`) | `TicketInfo.effort` / `effectiveEffort*` / `effortSupport`, `TicketDraft` / `TicketPatch.effort`, `SpawnRequest.effort`, `SessionInfo.effort` / `effortSupport`, catalog `effort` / `effortHow` |
 | DB v56 (`55.sqm`) | `tickets.effort`, `run_usage.effort` (next to `context_limit`) |
 | Registry | `AgentDefinition.effort` (additive, validated against the levels; a profile fills it like `contextLimit`) |
 
@@ -42,12 +42,12 @@ A 2.0 / 2.1 harness plugin keeps working unchanged: it is `unsupported` unless i
 
 ## Where it is set
 
-- **Spawn**: `new` frame `effort` (existing); MCP `agenthq_spawn` `effort` (`low`..`max`, `off`).
+- **Spawn**: `new` frame `effort` (existing); MCP `infantry_spawn` `effort` (`low`..`max`, `off`).
 - **Agent profile / role binding / routing rule**: existing `effort` fields; registry `AgentDefinition.effort`.
-- **Ticket**: `ticket_save.effort`; MCP `agenthq_ticket_create` / `agenthq_ticket_update` `effort`; CLI
-  `agenthq ticket create|update --effort high|off`. `ticket show` prints `EFFORT: high (ticket) / harness: supported`;
-  `agenthq_ticket_get` returns `effort`, `effectiveEffort`, `effectiveEffortSource`, `effortSupport`; `agenthq_list_harnesses`
-  and `agenthq harnesses` show `effort` per harness.
+- **Ticket**: `ticket_save.effort`; MCP `infantry_ticket_create` / `infantry_ticket_update` `effort`; CLI
+  `infantry ticket create|update --effort high|off`. `ticket show` prints `EFFORT: high (ticket) / harness: supported`;
+  `infantry_ticket_get` returns `effort`, `effectiveEffort`, `effectiveEffortSource`, `effortSupport`; `infantry_list_harnesses`
+  and `infantry harnesses` show `effort` per harness.
 - **Effective value and source**: the ticket's own pin, else the matched routing rule (`rule`), the agent profile (`agent`), the
   role binding (`role`), else `default` (no effort). A start passes the resolved level to the worker session.
 
@@ -58,7 +58,7 @@ the stats product can compare turns and tokens by effort (the owner's pi vs clau
 
 ## UI (second slice)
 
-`ui/model/EffortModel.kt` and `ui/EffortViews.kt` (agenthqUiCore) mirror ContextLimitModel / ContextLimitViews: the shared
+`ui/model/EffortModel.kt` and `ui/EffortViews.kt` (infantryUiCore) mirror ContextLimitModel / ContextLimitViews: the shared
 `EffortField` (checkbox = off/harness default, one button per level of `EffortLevels.ALL`, picked one ticked, a per-harness
 support line) in the New agent dialog and ticket create/edit; the `effort high` / `(best effort)` / `(not applied)` chip on
 the session header (`CenterHeader`) and the agent card (`RolesAttention`); and the board card line `effort high (ticket)`.

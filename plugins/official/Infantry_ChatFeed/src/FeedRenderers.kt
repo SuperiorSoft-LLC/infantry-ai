@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.plugins.official.chatfeed
+package com.superiorsoftllc.infantry.plugins.official.chatfeed
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -7,21 +7,21 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import com.superiorsoftllc.agenthq.ui.LocalTabFactory
+import com.superiorsoftllc.infantry.ui.LocalTabFactory
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.Mono
-import com.superiorsoftllc.agenthq.ui.Palette
-import com.superiorsoftllc.agenthq.ui.LocalChatMarkdown
-import com.superiorsoftllc.agenthq.ui.ChatImageLines
-import com.superiorsoftllc.agenthq.ui.model.ChatItem
-import com.superiorsoftllc.agenthq.ui.model.LineKind
-import com.superiorsoftllc.agenthq.ui.model.OutputLine
-import com.superiorsoftllc.agenthq.ui.model.chatLineBlocks
-import com.superiorsoftllc.agenthq.ui.plugin.RowItem
-import com.superiorsoftllc.agenthq.ui.plugin.RowRenderer
-import com.superiorsoftllc.agenthq.ui.plugin.TabFactory
-import com.superiorsoftllc.agenthq.ui.shell.LocalPlatformHost
+import com.superiorsoftllc.infantry.ui.Mono
+import com.superiorsoftllc.infantry.ui.Palette
+import com.superiorsoftllc.infantry.ui.LocalChatMarkdown
+import com.superiorsoftllc.infantry.ui.ChatImageLines
+import com.superiorsoftllc.infantry.ui.model.ChatItem
+import com.superiorsoftllc.infantry.ui.model.LineKind
+import com.superiorsoftllc.infantry.ui.model.OutputLine
+import com.superiorsoftllc.infantry.ui.model.chatLineBlocks
+import com.superiorsoftllc.infantry.ui.plugin.RowItem
+import com.superiorsoftllc.infantry.ui.plugin.RowRenderer
+import com.superiorsoftllc.infantry.ui.plugin.TabFactory
+import com.superiorsoftllc.infantry.ui.shell.LocalPlatformHost
 
 /**
  * KINDS-1: the registry the feed draws its rows from, keyed by kind: `UiRegistrar.implementation(FEED_RENDERERS, kind, RowRenderer)`,

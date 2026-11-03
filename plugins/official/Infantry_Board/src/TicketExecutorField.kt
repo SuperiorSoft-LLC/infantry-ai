@@ -1,7 +1,7 @@
-package com.superiorsoftllc.agenthq.plugins.official.board
+package com.superiorsoftllc.infantry.plugins.official.board
 
-import com.superiorsoftllc.agenthq.ui.*
-import com.superiorsoftllc.agenthq.ui.shell.blocks.*
+import com.superiorsoftllc.infantry.ui.*
+import com.superiorsoftllc.infantry.ui.shell.blocks.*
 
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -22,11 +22,11 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.model.ExecutorPickerModel
-import com.superiorsoftllc.agenthq.ui.model.PickedModel
-import com.superiorsoftllc.agenthq.ui.model.modelForProvider
-import com.superiorsoftllc.agenthq.ui.shell.ExecutorContext
-import com.superiorsoftllc.agenthq.ui.shell.RolesContext
+import com.superiorsoftllc.infantry.ui.model.ExecutorPickerModel
+import com.superiorsoftllc.infantry.ui.model.PickedModel
+import com.superiorsoftllc.infantry.ui.model.modelForProvider
+import com.superiorsoftllc.infantry.ui.shell.ExecutorContext
+import com.superiorsoftllc.infantry.ui.shell.RolesContext
 
 /** TICKET-EXEC-UI: the ticket forms' assignee chips, tagged with their value ("unassigned", `role:<r>`, a profile id). */
 const val TICKET_ASSIGNEE_TAG_PREFIX = "ticket-assignee-"

@@ -1,6 +1,6 @@
-package com.superiorsoftllc.agenthq.plugins.official.pace
+package com.superiorsoftllc.infantry.plugins.official.pace
 
-import com.superiorsoftllc.agenthq.ui.protocol.UsageMeterRow
+import com.superiorsoftllc.infantry.ui.protocol.UsageMeterRow
 import kotlin.time.Clock
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.TimeZone

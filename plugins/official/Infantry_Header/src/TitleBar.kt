@@ -1,9 +1,9 @@
-package com.superiorsoftllc.agenthq.plugins.official.header
+package com.superiorsoftllc.infantry.plugins.official.header
 
-import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.infantry.ui.*
 
 import androidx.compose.foundation.Canvas
-import com.superiorsoftllc.agenthq.ui.model.PanelLayout
+import com.superiorsoftllc.infantry.ui.model.PanelLayout
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.material3.DropdownMenu
@@ -50,14 +50,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
-import com.superiorsoftllc.agenthq.ui.block.layout.LocalBlockSize
+import com.superiorsoftllc.infantry.ui.block.layout.LocalBlockSize
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.model.AgentScope
-import com.superiorsoftllc.agenthq.ui.model.AppState
-import com.superiorsoftllc.agenthq.ui.model.ConnState
-import com.superiorsoftllc.agenthq.ui.model.PanelSide
-import com.superiorsoftllc.agenthq.ui.model.needsInput
-import com.superiorsoftllc.agenthq.ui.model.visibleAgents
+import com.superiorsoftllc.infantry.ui.model.AgentScope
+import com.superiorsoftllc.infantry.ui.model.AppState
+import com.superiorsoftllc.infantry.ui.model.ConnState
+import com.superiorsoftllc.infantry.ui.model.PanelSide
+import com.superiorsoftllc.infantry.ui.model.needsInput
+import com.superiorsoftllc.infantry.ui.model.visibleAgents
 
 /** BUG-M2-15: one top-bar avatar, suffixed with the session id. */
 const val TITLE_BAR_AVATAR_TAG_PREFIX = "title-bar-avatar-"

@@ -8,7 +8,7 @@
   "sequence": [],
   "buildOrder": 220,
   "daemon": {
-    "entry": "com.superiorsoftllc.agenthq.plugins.official.lua.daemon.LuaDaemonPlugin",
+    "entry": "com.superiorsoftllc.infantry.plugins.official.lua.daemon.LuaDaemonPlugin",
     "jar": "daemon/build/libs/Infantry_Lua-daemon.jar",
     "apiAtLeast": "1.25.0"
   }

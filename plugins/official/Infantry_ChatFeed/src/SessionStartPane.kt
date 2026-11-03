@@ -1,6 +1,6 @@
-package com.superiorsoftllc.agenthq.plugins.official.chatfeed
+package com.superiorsoftllc.infantry.plugins.official.chatfeed
 
-import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.infantry.ui.*
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -24,8 +24,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.model.SessionPaneAction
-import com.superiorsoftllc.agenthq.ui.model.StartPlan
+import com.superiorsoftllc.infantry.ui.model.SessionPaneAction
+import com.superiorsoftllc.infantry.ui.model.StartPlan
 
 /** GAP-006b: the empty pane's Start session button (no first turn yet). */
 const val START_SESSION_TAG = "session-start"
@@ -45,9 +45,9 @@ const val START_CANCEL_TAG = "session-start-cancel"
 @Composable
 fun SessionStartPane(action: SessionPaneAction, onApply: (StartPlan) -> Unit, onResume: (String) -> Unit) {
     // GATE-PANES-1: Resume is `chat.resume`; Start runs the session's first prompt (`chat.prompt`) or moves its ticket.
-    val resume = com.superiorsoftllc.agenthq.ui.shell.rememberGate("chat.resume")
-    val start = if ((action as? SessionPaneAction.Start)?.plan?.ticketId != null) com.superiorsoftllc.agenthq.ui.shell.rememberGate("board.ticket.move")
-        else com.superiorsoftllc.agenthq.ui.shell.rememberGate("chat.prompt")
+    val resume = com.superiorsoftllc.infantry.ui.shell.rememberGate("chat.resume")
+    val start = if ((action as? SessionPaneAction.Start)?.plan?.ticketId != null) com.superiorsoftllc.infantry.ui.shell.rememberGate("board.ticket.move")
+        else com.superiorsoftllc.infantry.ui.shell.rememberGate("chat.prompt")
     when (action) {
         is SessionPaneAction.Resume ->
             Button(onClick = { onResume(action.sessionId) }, enabled = resume.allowed, modifier = Modifier.testTag(RESUME_SESSION_TAG)) { Text("Resume") }

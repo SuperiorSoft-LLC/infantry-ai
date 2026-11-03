@@ -1,6 +1,6 @@
-package com.superiorsoftllc.agenthq.plugins.official.approvals
+package com.superiorsoftllc.infantry.plugins.official.approvals
 
-import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.infantry.ui.*
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
@@ -50,9 +50,9 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.model.PromptCards
-import com.superiorsoftllc.agenthq.ui.protocol.OwnerQuestionView
-import com.superiorsoftllc.agenthq.ui.protocol.QuestionAnswerWire
+import com.superiorsoftllc.infantry.ui.model.PromptCards
+import com.superiorsoftllc.infantry.ui.protocol.OwnerQuestionView
+import com.superiorsoftllc.infantry.ui.protocol.QuestionAnswerWire
 
 const val QUESTION_PILL_TAG = "question-pill"
 /** The drawn dismiss cross on the pill: closes the question the pill would open. */

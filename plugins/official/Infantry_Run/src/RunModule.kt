@@ -1,14 +1,14 @@
-package com.superiorsoftllc.agenthq.plugins.official.run
+package com.superiorsoftllc.infantry.plugins.official.run
 
-import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
-import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
-import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
-import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
-import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
-import com.superiorsoftllc.agenthq.ui.plugin.TabProvider
-import com.superiorsoftllc.agenthq.ui.plugin.UiPlugin
-import com.superiorsoftllc.agenthq.ui.plugin.UiRegistrar
-import com.superiorsoftllc.agenthq.ui.plugin.tabIcon
+import com.superiorsoftllc.infantry.plugin.api.ModuleManifest
+import com.superiorsoftllc.infantry.plugin.api.TabDeclaration
+import com.superiorsoftllc.infantry.ui.plugin.InfantryModule
+import com.superiorsoftllc.infantry.ui.plugin.ModuleSource
+import com.superiorsoftllc.infantry.ui.plugin.TabContainers
+import com.superiorsoftllc.infantry.ui.plugin.TabProvider
+import com.superiorsoftllc.infantry.ui.plugin.UiPlugin
+import com.superiorsoftllc.infantry.ui.plugin.UiRegistrar
+import com.superiorsoftllc.infantry.ui.plugin.tabIcon
 
 /** The Run tab's id. */
 const val RUN_TAB_ID = "infantry.run"
@@ -31,7 +31,7 @@ private fun runTab() = TabProvider(
  * Android, D9; the manifest mirrors module.json). It brings its own tab tree, [ShellRun], which the tab draws (RUNTIME-7:
  * no longer registered by Infantry_AppUi).
  */
-val InfantryRun = AgentHqModule(
+val InfantryRun = InfantryModule(
     ModuleManifest(
         name = "Infantry_Run", version = "1.0.0", author = "Infantry AI", description = "Saved commands and their runs.",
         tabs = listOf(TabDeclaration(RUN_TAB_ID, TabContainers.CENTER)),
@@ -51,5 +51,5 @@ class RunPlugin : UiPlugin, ModuleSource {
         registrar.tabTree(RUN_TAB_ID, ShellRun)
     }
 
-    override fun modules(): List<AgentHqModule> = listOf(InfantryRun)
+    override fun modules(): List<InfantryModule> = listOf(InfantryRun)
 }

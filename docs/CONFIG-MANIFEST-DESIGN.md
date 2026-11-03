@@ -17,10 +17,10 @@ built** (P1 step 2, 44aee6e5), and `Infantry_Settings/module.json` already ships
 
 | Piece | Where | State |
 |---|---|---|
-| `ConfigDeclaration(node, group, fields)` + `ConfigFieldDeclaration(key,type,label,default,options,min,max,step,registry,exposed,autoSelectNew)` | `agenthqPlugins/.../plugin/api/NodeConfig.kt` | built |
+| `ConfigDeclaration(node, group, fields)` + `ConfigFieldDeclaration(key,type,label,default,options,min,max,step,registry,exposed,autoSelectNew)` | `infantryPlugins/.../plugin/api/NodeConfig.kt` | built |
 | Field types `text number checkbox select multiSelect implementation` (a module may register more) | `ConfigFieldTypes` | built |
 | One merged tree: core `CoreConfig.JSON` + every module.json `config`, keyed by node id, parent chain from the block tree | `ui/plugin/config/ConfigTree.kt` | built |
-| Overrides in the daemon table `node_config` (`nodeId,key,value,setBy seed|user,updatedAt`); `GET /node-config`, `POST /node-config/seed` (insert missing only), `PUT /node-config` (null value = delete) | `agentHq/daemon/NodeConfigHttp.kt` | built |
+| Overrides in the daemon table `node_config` (`nodeId,key,value,setBy seed|user,updatedAt`); `GET /node-config`, `POST /node-config/seed` (insert missing only), `PUT /node-config` (null value = delete) | `infantry/daemon/NodeConfigHttp.kt` | built |
 | Resolution child -> parent -> root -> declared default; unset is null | `ResolvedConfig` | built |
 | Bean-style read: `ShellContext.config.values(nodeId)` returns typed `ConfigValues` (`string int double boolean strings`), recomposes on change | `ConfigContext` | built |
 | Node editors in a "Plugins" view (`NodeFields.kt`) | `ui/plugin/config/` | built |
@@ -475,16 +475,16 @@ Paths are under `superiorSoftLibrary/`.
 
 | Concern | Exists today | Added |
 |---|---|---|
-| Field/declaration model | `agenthqPlugins/.../plugin/api/NodeConfig.kt` | optional `tab order title applies keywords requires description visibleWhen scope since renamedFrom`; types `radio color list classes` |
-| Merge | `agenthqUiCore/.../ui/plugin/config/ConfigTree.kt`, `CoreConfig.kt` | canonical serialise + hash; `block`/`locked` entries for the trust sections |
-| Compiled manifest in the DB | none | table `config_manifest`, `agentHq/.../daemon/ConfigManifestHttp.kt`, a migration (see `db/SchemaMigrationTest`) |
-| Overrides | `agentHq/.../daemon/NodeConfigHttp.kt`, `NodeConfigState.kt`, table `node_config` | only `setBy:user` rows; seed migration; `@migrated` markers |
+| Field/declaration model | `infantryPlugins/.../plugin/api/NodeConfig.kt` | optional `tab order title applies keywords requires description visibleWhen scope since renamedFrom`; types `radio color list classes` |
+| Merge | `infantryUiCore/.../ui/plugin/config/ConfigTree.kt`, `CoreConfig.kt` | canonical serialise + hash; `block`/`locked` entries for the trust sections |
+| Compiled manifest in the DB | none | table `config_manifest`, `infantry/.../daemon/ConfigManifestHttp.kt`, a migration (see `db/SchemaMigrationTest`) |
+| Overrides | `infantry/.../daemon/NodeConfigHttp.kt`, `NodeConfigState.kt`, table `node_config` | only `setBy:user` rows; seed migration; `@migrated` markers |
 | Resolution | `ResolvedConfig.kt` | default from the snapshot; scopes `device`, `daemon` |
 | Injection | `ConfigContext` / `ShellContext.config.values(nodeId)` | `BlockScope.config()`, `configAs<T>()`, `ConfigValues.color/classes/obj`, `config.watch` |
 | Editors | `ui/plugin/config/NodeFields.kt` | `FieldType` registry, `UiRegistrar.fieldType` (`TabFactory.kt`) |
 | Dialog | `ui/ConfigDialog.kt`, `ConfigTabs.kt` (`ConfigEntry`, `ConfigTab`), `shell/blocks/ShellConfig.kt`, `ShellConfigSettings.kt` | generated from the snapshot; enum becomes fallback, then is deleted |
 | Appearance | `ConfigThemeSection` in `ShellConfigSettings.kt`, `model/ThemeSettings.kt` | `plugins/official/Infantry_Appearance/{module.json,src}` with `ThemeBlock` |
-| Daemon settings | `agentHq/.../settings/SettingsService.kt` | declared-validator fallback; frames (section 6) |
+| Daemon settings | `infantry/.../settings/SettingsService.kt` | declared-validator fallback; frames (section 6) |
 
 ## 11. Owner's picks (2026-10-28) and what is still open
 
@@ -567,7 +567,7 @@ before it). Nothing in CONFIG-3/4 is blocked by it.
 1. Add the slot `infantry.shell.settings` and the optional `replaces` key (fill resolver in `TabFactory`, a `problems` line when the
    named plugin is not loaded).
 2. `Infantry_Settings` fills it with the generated body (CONFIG-5 code moved behind the slot).
-3. Guard test `SettingsSurfaceReplaceableTest` (agentHqUi): (a) with only the default, the surface shows the Appearance tab;
+3. Guard test `SettingsSurfaceReplaceableTest` (infantryUi): (a) with only the default, the surface shows the Appearance tab;
    (b) load a throwaway plugin that fills the slot: its test tag is present, the default's is not, and a write through it is read
    back by `ResolvedConfig` and by the default editor path; (c) remove it: the default is back and the value persists.
    No shell source names `Acme`.
@@ -576,10 +576,10 @@ before it). Nothing in CONFIG-3/4 is blocked by it.
 
 `plugins/official/Infantry_Alerts/{module.json,src/AlertsModule.kt}`, `plugins/community/Acme_Echo/module.json`,
 `plugins/community/Acme_Hello/{module.json,src/.../HelloPlugin.kt}`, `plugins/official/Infantry_{Settings,Stats}/module.json`,
-`agenthqUiCore/.../ui/{ConfigTabs.kt (ConfigEntry/ConfigTab), shell/blocks/ShellConfig.kt, shell/blocks/ShellConfigSettings.kt,
+`infantryUiCore/.../ui/{ConfigTabs.kt (ConfigEntry/ConfigTab), shell/blocks/ShellConfig.kt, shell/blocks/ShellConfigSettings.kt,
 model/PromptTimerSetting.kt, model/ThemeSettings.kt, plugin/TabFactory.kt (UiRegistrar), plugin/config/{ConfigTree,ResolvedConfig,
-CoreConfig}.kt}`, `agenthqPlugins/.../plugin/api/{NodeConfig.kt,ModuleManifest.kt}`, `agentHq/.../settings/SettingsService.kt`
-(`set`), `agentHq/.../daemon/NodeConfigHttp.kt` (signatures), `docs/{BLOCKS-LAYOUT-DESIGN.md (6s),RUNTIME-PLUGINS-AUDIT.md,
+CoreConfig}.kt}`, `infantryPlugins/.../plugin/api/{NodeConfig.kt,ModuleManifest.kt}`, `infantry/.../settings/SettingsService.kt`
+(`set`), `infantry/.../daemon/NodeConfigHttp.kt` (signatures), `docs/{BLOCKS-LAYOUT-DESIGN.md (6s),RUNTIME-PLUGINS-AUDIT.md,
 EMPTY-SHELL-DESIGN.md (headings),PLUGIN-ENDPOINTS-DESIGN.md (D1)}`. Not read in full: `ConfigDialog.kt`, `NodeFields.kt`,
 `NodeConfigState.kt` bodies (signatures only).
 
@@ -589,4 +589,4 @@ PM decision 2026-10-29: the compiled manifest is NOT a new table. It is a reserv
 
 ## CONFIG-8 as built: daemon sections and frames
 
-`daemon.config` is a new optional key of `DaemonCapabilities` (the existing `daemon` object of module.json). `DaemonConfig` (daemon package) compiles it after `DaemonPlugins.resolve`; frames and rules are in `agentHq/CONTRACT.md` (1.142.0). Choices: `rev` is one daemon-wide counter (seeded from the clock, so a restart never reuses one) and any write bumps it, so a stale `expectRev` also rejects a write racing an unrelated key (the dialog refetches); a declared key is a flat settings key (collisions with built-in keys are dropped, so plugin keys should be author-prefixed); reset stores JSON `null`; "unsigned" is the community tier (a signature check on the jar is RUNTIME-2's). The 11-section hand-written daemon UI is not removed: it stays the fallback for a daemon below 1.142.0. Client: `AppState.daemonConfigSchema/daemonConfigValues` hold the frames; merging them into the dialog tree after local modules (`origin: daemon`) is the dialog ticket's.
+`daemon.config` is a new optional key of `DaemonCapabilities` (the existing `daemon` object of module.json). `DaemonConfig` (daemon package) compiles it after `DaemonPlugins.resolve`; frames and rules are in `infantry/CONTRACT.md` (1.142.0). Choices: `rev` is one daemon-wide counter (seeded from the clock, so a restart never reuses one) and any write bumps it, so a stale `expectRev` also rejects a write racing an unrelated key (the dialog refetches); a declared key is a flat settings key (collisions with built-in keys are dropped, so plugin keys should be author-prefixed); reset stores JSON `null`; "unsigned" is the community tier (a signature check on the jar is RUNTIME-2's). The 11-section hand-written daemon UI is not removed: it stays the fallback for a daemon below 1.142.0. Client: `AppState.daemonConfigSchema/daemonConfigValues` hold the frames; merging them into the dialog tree after local modules (`origin: daemon`) is the dialog ticket's.

@@ -8,7 +8,7 @@ Ticket CONFIG-FIELDS-1 (aa17b1d2). Audit + design + gap list. It does NOT replac
 
 | Concern | State | Where |
 |---|---|---|
-| Declaration model | built: `ConfigDeclaration(node, group, fields, tab, order, title, applies, keywords, block, locked, readOnly, platforms)`, `ConfigFieldDeclaration(key, type, label, default, options, optionLabels, min, max, step, registry, exposed, autoSelectNew, description, order, scope, platforms, slots, item)` | `agenthqPlugins/.../plugin/api/NodeConfig.kt` |
+| Declaration model | built: `ConfigDeclaration(node, group, fields, tab, order, title, applies, keywords, block, locked, readOnly, platforms)`, `ConfigFieldDeclaration(key, type, label, default, options, optionLabels, min, max, step, registry, exposed, autoSelectNew, description, order, scope, platforms, slots, item)` | `infantryPlugins/.../plugin/api/NodeConfig.kt` |
 | Field types | built: `text textarea(new) number checkbox/toggle select radio multiSelect color classes list implementation`, plus module-registered types (`fieldTypes` in module.json, `UiRegistrar.fieldType`); an unknown type is kept and shown read-only | `ConfigFieldTypes`, `FieldTypes.kt` |
 | Validation | one rule per type, shared: `ConfigFieldValidator` (daemon + client, throws) and `FieldTypes.validateBuiltIn` (dialog, one-line message). Bad value: refused on write | `NodeConfig.kt`, `FieldTypes.kt` |
 | Settings UI | generated from the compiled manifest: tab/group/order/title/applies/keywords; `block` escape hatch for non-form sections; editors in `NodeFields.kt` (`TextEditor`, `ClassesEditor`, `ListEditor`, options, registered editors) | `ui/plugin/config/` |
@@ -17,7 +17,7 @@ Ticket CONFIG-FIELDS-1 (aa17b1d2). Audit + design + gap list. It does NOT replac
 | Block params | `Render(scope)` gets no params; it calls `scope.config()` (`BlockScope.config()`, Contract.kt:90) -> `ConfigValues { string int double boolean strings classes color overridden }`, recomposes on change. Missing config = `EMPTY` | `ShellContext.kt:919` |
 | Class overrides | built: `classes` field with per-slot token allow-list; `ConfigValues.classes(slot)`; validator refuses tokens outside the list; the block owns token -> Modifier map (no CSS strings from config) | `ConfigClassSlot` |
 | Bean-style binding | built only for `implementation` fields: `registry` + `exposed`, resolved to a registered key (e.g. `tabs.sorter`, `orchestrator.provider`); `ConfigContext.implementation` | `ImplementationFields.kt` |
-| Daemon halves | built (CONFIG-8): `daemon.config` in module.json, `config_schema/values/set/changed` frames, `rev` check, unsigned = read-only (contract 1.142.0) | `DaemonConfig`, `agentHq/CONTRACT.md` |
+| Daemon halves | built (CONFIG-8): `daemon.config` in module.json, `config_schema/values/set/changed` frames, `rev` check, unsigned = read-only (contract 1.142.0) | `DaemonConfig`, `infantry/CONTRACT.md` |
 | Unknown tolerance | `PluginJson` has `ignoreUnknownKeys = true`; unknown field type kept read-only; conflicting node+key: first wins, second is a `problems` line | `ModuleResolver.kt` |
 
 ### Hard-wired in a blank install (no plugins)
@@ -140,17 +140,17 @@ all, never by a compile-time import between plugins. Today this works for tab so
 
 - `textarea` field type (commit 21a6ecac): `ConfigFieldTypes.TEXTAREA`, in `BUILT_IN`, validated as a string by both validators,
   drawn by `TextEditor` as a 3-line multi-line box. Test: `CompiledConfigTest` "textarea is a built-in string type"
-  (`:superiorSoftLibrary:agenthqUiCore:jvmTest --tests *CompiledConfigTest`, passes).
+  (`:superiorSoftLibrary:infantryUiCore:jvmTest --tests *CompiledConfigTest`, passes).
 
 ## Files read
 
 `docs/{CONFIG-MANIFEST-DESIGN,RUNTIME-PLUGINS-AUDIT,SHELL-LEAKS}.md` (sections), `plugins/modules.json`,
-`superiorSoftLibrary/agenthqPlugins/.../plugin/api/NodeConfig.kt`, `agenthqUiCore/.../ui/plugin/config/{FieldTypes,NodeFields,CoreConfig}.kt`,
-`agenthqUiCore/.../ui/shell/ShellContext.kt` (ConfigValues), `.../block/layout/Contract.kt` (grep), `CompiledConfigTest.kt`.
+`superiorSoftLibrary/infantryPlugins/.../plugin/api/NodeConfig.kt`, `infantryUiCore/.../ui/plugin/config/{FieldTypes,NodeFields,CoreConfig}.kt`,
+`infantryUiCore/.../ui/shell/ShellContext.kt` (ConfigValues), `.../block/layout/Contract.kt` (grep), `CompiledConfigTest.kt`.
 
 ## 9. Blank-shell E2E (CONFIG-FIELDS-3, G10)
 
-One command: `gradlew.bat :superiorSoftLibrary:agenthqUiCore:jvmTest --tests "*BlankShellE2ETest"` (use `--no-parallel` and the Metaspace 2g flags).
+One command: `gradlew.bat :superiorSoftLibrary:infantryUiCore:jvmTest --tests "*BlankShellE2ETest"` (use `--no-parallel` and the Metaspace 2g flags).
 It runs the real `DesktopPlugins.load` on a temp state dir with an empty `plugins/` tree and no compiled modules, and asserts:
 (1) no module, every config declaration is core, no plugin card, manifest sources empty; (2) a config-only `plugins/community/Acme_Look/module.json`
 (no entry, no jar, no fills) adds its Appearance card and one manifest source; (3) deleting the dir removes both. It needs no daemon and
@@ -158,8 +158,8 @@ no port (the daemon only stores `/config-manifest`; the UI compiles it), so 8812
 a code-less module with `config` now loads as data-only (`DesktopPlugins.loadJar`); before, it was refused "module.json has no entry class".
 
 Still hard-wired in a blank install (section 1 items): (a) the UI modules of the shipped app still compile in via `CompiledModules`
-(`agenthqUiCore/.../plugin/CompiledModules.kt`; the test passes `compiled = emptyList()`); (b) daemon features live in the daemon jar
-(`agentHq/.../daemon/DaemonPlugins.kt` resolves modules, loads no code); (c) harnesses `claude`/`pi` on the daemon classpath; (d) the
+(`infantryUiCore/.../plugin/CompiledModules.kt`; the test passes `compiled = emptyList()`); (b) daemon features live in the daemon jar
+(`infantry/.../daemon/DaemonPlugins.kt` resolves modules, loads no code); (c) harnesses `claude`/`pi` on the daemon classpath; (d) the
 hand-written fallback `ConfigTab`/`ShellConfigSettings.kt` when no snapshot exists. Not scripted: a real daemon on 8812 and a rendered Settings dialog.
 
 ## 10. Group and list-of-objects fields (CONFIG-FIELDS-4, G3)

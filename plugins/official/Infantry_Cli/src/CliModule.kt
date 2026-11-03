@@ -1,14 +1,14 @@
-package com.superiorsoftllc.agenthq.plugins.official
+package com.superiorsoftllc.infantry.plugins.official
 
-import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
-import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
-import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
-import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
-import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
-import com.superiorsoftllc.agenthq.ui.plugin.TabProvider
-import com.superiorsoftllc.agenthq.ui.plugin.UiPlugin
-import com.superiorsoftllc.agenthq.ui.plugin.UiRegistrar
-import com.superiorsoftllc.agenthq.ui.plugin.tabIcon
+import com.superiorsoftllc.infantry.ui.plugin.ModuleSource
+import com.superiorsoftllc.infantry.plugin.api.ModuleManifest
+import com.superiorsoftllc.infantry.plugin.api.TabDeclaration
+import com.superiorsoftllc.infantry.ui.plugin.InfantryModule
+import com.superiorsoftllc.infantry.ui.plugin.TabContainers
+import com.superiorsoftllc.infantry.ui.plugin.TabProvider
+import com.superiorsoftllc.infantry.ui.plugin.UiPlugin
+import com.superiorsoftllc.infantry.ui.plugin.UiRegistrar
+import com.superiorsoftllc.infantry.ui.plugin.tabIcon
 
 /** The CLI tab: the selected agent's chat transcript, first in the centre strip (Ctrl+1). */
 private fun cliTab() = TabProvider(
@@ -24,7 +24,7 @@ private fun cliTab() = TabProvider(
 ) { it.transcript() }
 
 /** Infantry_Cli as a compiled-in module (web and Android, D9): the manifest mirrors module.json. */
-val InfantryCli = AgentHqModule(
+val InfantryCli = InfantryModule(
     ModuleManifest(
         name = "Infantry_Cli", version = "1.0.0", author = "Infantry AI", description = "The selected agent's chat transcript.",
         tabs = listOf(TabDeclaration("infantry.cli", TabContainers.CENTER)),
@@ -40,5 +40,5 @@ val InfantryCli = AgentHqModule(
 class CliPlugin : UiPlugin, ModuleSource {
     override fun register(registrar: UiRegistrar) = registrar.tab(cliTab())
 
-    override fun modules(): List<AgentHqModule> = listOf(InfantryCli)
+    override fun modules(): List<InfantryModule> = listOf(InfantryCli)
 }

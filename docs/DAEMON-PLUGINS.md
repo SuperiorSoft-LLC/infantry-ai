@@ -12,7 +12,7 @@ PLUGIN-OVERRIDES.md section 8 and GAP-AUDIT.md rows 1, 4, 6, 8, 9 and gaps 5, 6.
 
 A daemon half lives next to the module's UI half, in the same `plugins/<folder>/<Vendor_Module>/` folder, as its own Gradle
 project in `daemon/` (project path `:daemon-plugin-<folder>-<Module>`, so the UI builds that iterate `:plugins:official:*`
-never see it). It compiles against `superiorSoftLibrary/agentHqDaemonApi` only (`compileOnly`) and builds
+never see it). It compiles against `superiorSoftLibrary/infantryDaemonApi` only (`compileOnly`) and builds
 `daemon/build/libs/<Module>-daemon.jar`, which carries a copy of the module's `module.json` (the signed one, as for UI jars).
 
 module.json grows **optional** keys under the existing `daemon` object (NS3/CONFIG-8 already own `needs`, `wants`, `config`);
@@ -28,7 +28,7 @@ older hosts ignore them, a module without them loads no daemon code (default: no
   "hooks":  [ "frameGate", "httpGate", "admission", "mailGate", "ready", "spawnGate", "turns", "sessions", "policyProvider" ],
   "routes": [ "GET /demo/visitor-token" ],           // top-level routes, official/core only; plugin routes go under /plugins/<id>/
   "publicRoutes": [ "GET /demo/visitor-token" ],     // answered without the bearer token (official/core only)
-  "env": [ "AGENTHQ_DEMO_NOTICE" ],                  // env vars the plugin may read through DaemonApi.env
+  "env": [ "INFANTRY_DEMO_NOTICE" ],                  // env vars the plugin may read through DaemonApi.env
   "secrets": [ "acme.apiKey" ],                      // keystore secrets the plugin may read (granted, never pushed)
   "limits": { "callTimeoutMs": 2000, "cpuMsPerCall": 2000, "routeRequestsPerMinute": 600, "memoryMbHint": 64 }
 }
@@ -45,12 +45,12 @@ only a **LOADED** module's daemon half is considered.
 | tier | code loads when | may use |
 |---|---|---|
 | core | always | everything declared |
-| official | the daemon jar passes `OfficialTrust` (signed by the pinned Infantry key, signed module.json equal to the disk one), or `-Dagenthq.plugins.devTrust=true` (dev runs), or it is in the install's **bundled** root (owner question 97479106, recommended answer: the install's own read-only folder is as trusted as `lib/`) | everything declared |
+| official | the daemon jar passes `OfficialTrust` (signed by the pinned Infantry key, signed module.json equal to the disk one), or `-Dinfantry.plugins.devTrust=true` (dev runs), or it is in the install's **bundled** root (owner question 97479106, recommended answer: the install's own read-only folder is as trusted as `lib/`) | everything declared |
 | community | enabled in modules.json **and** granted `daemon.code` in its `allow` list | only what is granted: `daemon.tool`, `daemon.frame`, `daemon.route`, `daemon.hook.<kind>`, `daemon.env:<NAME>`, `daemon.secret:<name>`; never top-level or public routes, never owner-only frames, never the `admission` hook, tool names only with its own vendor prefix (`acme_...`) |
 
 A plugin's code sees only a declared surface: its jar is put on its **own** `URLClassLoader` whose parent
 (`DaemonApiClassLoader`) exposes only `java.*`/`javax.*`, `kotlin.*`, `kotlinx.serialization.*`, the daemon API
-(`com.superiorsoftllc.agenthq.daemon.api.*`) and the plugin SDK data model (`com.superiorsoftllc.agenthq.plugin.api.*`:
+(`com.superiorsoftllc.infantry.daemon.api.*`) and the plugin SDK data model (`com.superiorsoftllc.infantry.plugin.api.*`:
 `PolicyPreset`, `SeatsSpec`, ...). Every other daemon class (`SessionManager`, `AccessPolicy`, the stores) is
 `ClassNotFoundException` to a plugin. Removing the module folder removes the module, its tools, frames, routes and hooks at
 the next start (`GET /plugins` and `plugin_tools` stop listing it).
@@ -72,7 +72,7 @@ sessions exist and before the server binds. What `DaemonApi` gives:
   (relative paths answer under `/plugins/<module id>/<path>`), and the hooks of section 4.
 
 A **tool** is a named callable with a JSON schema (`DaemonTool`: `name`, `description`, `inputSchema`, `annotations`,
-`call(ToolCall) -> ToolResult`). It is listed to clients (`plugin_tools` frame) and to agents (`agenthq mcp serve` appends the
+`call(ToolCall) -> ToolResult`). It is listed to clients (`plugin_tools` frame) and to agents (`infantry mcp serve` appends the
 daemon's plugin tools to `tools/list` and routes an unknown `tools/call` to `plugin_tool_call`), and it has its **own policy
 action id** (declared in module.json, merged into `ActionCatalog`), so POLICY-1 gates it like any frame: a `plugin_tool_call`
 is the action of the tool it names. A tool reaches the daemon through `ToolCall.request(type, data)`: the frame is
@@ -112,23 +112,23 @@ to the runtime's providers, so the switch, pinning and fail-closed rules of docs
 
 ## 6. Built-in tools: audit and migration plan
 
-The daemon's built-in agent tools are the `agenthq_*` MCP tools of `agenthq mcp serve` (`cli/mcp/*`): CLI-side wrappers over
+The daemon's built-in agent tools are the `infantry_*` MCP tools of `infantry mcp serve` (`cli/mcp/*`): CLI-side wrappers over
 daemon frames. The frames are the **abstract daemon data contract** (core); a tool is a concrete composition over it (plugin).
 
 | tool(s) | frames | class | plan |
 |---|---|---|---|
-| `agenthq_ticket_files`, `agenthq_ticket_related_files` | `ticket_files` | concrete | **MIGRATED** (this ticket): `plugins/official/Infantry_Board/daemon` (`board.files.read`), deleted from core |
-| `agenthq_usage` | `usage_get` | concrete | **MIGRATED** (DAEMON-PLUGINS-3): `plugins/official/Infantry_Usage/daemon` (`usage.read`); `UsageReport`/`UsageText` live in agentHqDaemonApi |
-| `agenthq_processes`, `agenthq_processes_reap` | `processes`, `processes_reap` | concrete | **MIGRATED** (DAEMON-PLUGINS-3): `plugins/official/Infantry_Processes/daemon` (`host.processes.read`, `host.processes.reap`); models and `ProcessesText` live in agentHqDaemonApi |
-| `agenthq_role_*` | `role_*` | concrete | Infantry_Roles daemon half (the agent-caller persona/description rule moves with it) |
-| `agenthq_ticket_create/update/get/move/delete/start`, `agenthq_epic_base`, `agenthq_board` | `ticket_*`, `epic_*`, `sessions` | concrete | Infantry_Board daemon half; needs the ProjectScope guard as a shared helper in the API |
-| `agenthq_inbox`, `agenthq_read`, `agenthq_message` | `mail_*` | concrete | Infantry_Chat (or a Mail) daemon half |
-| `agenthq_pipeline`, `agenthq_pipeline_record` | `pipeline_*` | concrete | a Pipeline official plugin |
-| `agenthq_ask` | `question_ask` | concrete | Infantry_Attention daemon half |
-| `agenthq_progress` | `progress` | concrete | stays with the progress bar owner (Infantry_Board) |
-| `agenthq_project_config_get/set` | `project_*` | concrete | Infantry_Settings daemon half |
-| `agenthq_list_harnesses`, `agenthq_harness_status`, `agenthq_harness_install` | `providers`, `harness_install*` | concrete | Infantry_Agents daemon half |
-| `agenthq_list_sessions`, `agenthq_get_session`, `agenthq_pod_state`, `agenthq_spawn`, `agenthq_prompt`, `agenthq_kill`, `agenthq_session_restart`, `agenthq_session_remove` | `sessions`, `replay_request`, `pod_*`, `new`, `prompt`, `kill`, ... | concrete over abstract session primitives | Infantry_Agents daemon half; McpGuardrails (depth/concurrency/kill scope) moves with them |
+| `infantry_ticket_files`, `infantry_ticket_related_files` | `ticket_files` | concrete | **MIGRATED** (this ticket): `plugins/official/Infantry_Board/daemon` (`board.files.read`), deleted from core |
+| `infantry_usage` | `usage_get` | concrete | **MIGRATED** (DAEMON-PLUGINS-3): `plugins/official/Infantry_Usage/daemon` (`usage.read`); `UsageReport`/`UsageText` live in infantryDaemonApi |
+| `infantry_processes`, `infantry_processes_reap` | `processes`, `processes_reap` | concrete | **MIGRATED** (DAEMON-PLUGINS-3): `plugins/official/Infantry_Processes/daemon` (`host.processes.read`, `host.processes.reap`); models and `ProcessesText` live in infantryDaemonApi |
+| `infantry_role_*` | `role_*` | concrete | Infantry_Roles daemon half (the agent-caller persona/description rule moves with it) |
+| `infantry_ticket_create/update/get/move/delete/start`, `infantry_epic_base`, `infantry_board` | `ticket_*`, `epic_*`, `sessions` | concrete | Infantry_Board daemon half; needs the ProjectScope guard as a shared helper in the API |
+| `infantry_inbox`, `infantry_read`, `infantry_message` | `mail_*` | concrete | Infantry_Chat (or a Mail) daemon half |
+| `infantry_pipeline`, `infantry_pipeline_record` | `pipeline_*` | concrete | a Pipeline official plugin |
+| `infantry_ask` | `question_ask` | concrete | Infantry_Attention daemon half |
+| `infantry_progress` | `progress` | concrete | stays with the progress bar owner (Infantry_Board) |
+| `infantry_project_config_get/set` | `project_*` | concrete | Infantry_Settings daemon half |
+| `infantry_list_harnesses`, `infantry_harness_status`, `infantry_harness_install` | `providers`, `harness_install*` | concrete | Infantry_Agents daemon half |
+| `infantry_list_sessions`, `infantry_get_session`, `infantry_pod_state`, `infantry_spawn`, `infantry_prompt`, `infantry_kill`, `infantry_session_restart`, `infantry_session_remove` | `sessions`, `replay_request`, `pod_*`, `new`, `prompt`, `kill`, ... | concrete over abstract session primitives | Infantry_Agents daemon half; McpGuardrails (depth/concurrency/kill scope) moves with them |
 | the frames themselves, `SessionManager`, transport (`/ws`, `/mail/*`, `/hooks/*`, `/health`), `AccessPolicy`, `FrameGate`, `PolicyRuntime`, `ActionCatalog` | - | **abstract core** | stay |
 | triggers (`TriggerService`), harness install (`HarnessInstaller`), watch hooks | - | concrete daemon behaviour, not tools | later DAEMON-PLUGINS tickets: they need `DaemonApi` scheduling and harness surfaces first |
 
@@ -151,12 +151,12 @@ now the daemon half of `plugins/demo/Demo_Lock` (`:daemon-plugin-demo-Demo_Lock`
 | `SessionManager.demoLocked` | the plugin's `spawnGate` hook (core: the generic `SessionManager.spawnGate`) |
 | visitor token (`AccessPolicy.withDemoTokens`, `GET /demo/visitor-token`) | the plugin's `admission` hook (core: generic guest tokens) + its declared public top-level route |
 | `DemoTurnLimit` (per-IP turns) | the plugin's `frameGate` (refusal) + `turns` hook (record) |
-| `readyFields` / `notice` (`AGENTHQ_DEMO_NOTICE`) | the plugin's `ready` hook |
-| `AGENTHQ_DEMO_*` env reads | declared in the plugin's `daemon.env`, read through `api.env` |
+| `readyFields` / `notice` (`INFANTRY_DEMO_NOTICE`) | the plugin's `ready` hook |
+| `INFANTRY_DEMO_*` env reads | declared in the plugin's `daemon.env`, read through `api.env` |
 | RunManager / Keystore "locked" | core: the active preset's generic `restricted` flag, neutral text |
-| `FrameGate.DEMO_LOCK_ALLOWED` (env set, no preset installed) | gone; core's generic rule: a preset with `seats` that no loaded plugin seats is **fail closed** (every frame refused but the switch), and `AGENTHQ_POLICY=<id>` pinned to a missing preset denies everything (POLICY-1) |
+| `FrameGate.DEMO_LOCK_ALLOWED` (env set, no preset installed) | gone; core's generic rule: a preset with `seats` that no loaded plugin seats is **fail closed** (every frame refused but the switch), and `INFANTRY_POLICY=<id>` pinned to a missing preset denies everything (POLICY-1) |
 
-`NoDemoInDaemonCoreGuardTest` fails when daemon core source (`superiorSoftLibrary/agentHq/src/main`) names a demo symbol.
+`NoDemoInDaemonCoreGuardTest` fails when daemon core source (`superiorSoftLibrary/infantry/src/main`) names a demo symbol.
 
 ## 8. How to write your own daemon tool
 
@@ -164,16 +164,16 @@ Copy `plugins/_template` (its `daemon/` folder is the daemon half), rename, and 
 The reference plugin `plugins/examples/Acme_DaemonHello` has one tool, one route and one hook. In short:
 
 1. `module.json`: add `daemon.entry`, `daemon.jar`, and declare your tool (`name`, `action`, `kind`, `description`).
-2. `daemon/build.gradle.kts`: `compileOnly(project(":superiorSoftLibrary:agentHqDaemonApi"))`, jar named `<Module>-daemon.jar`.
+2. `daemon/build.gradle.kts`: `compileOnly(project(":superiorSoftLibrary:infantryDaemonApi"))`, jar named `<Module>-daemon.jar`.
 3. A class implementing `DaemonPlugin` registers a `DaemonTool` in `start(api)`; inside `call`, use `call.request(frame, data)`
    to read through the daemon's frames as the caller.
 4. Drop the folder under the plugins root; a community module also needs `"enabled": true` and `"allow": ["daemon.code",
    "daemon.tool"]` in modules.json (plus `daemon.route` for a relative route, `daemon.hook.<kind>` per hook, `daemon.env:<NAME>`
-   per env var). The tool appears in `agenthq mcp serve`'s `tools/list` and in the `plugin_tools` frame.
+   per env var). The tool appears in `infantry mcp serve`'s `tools/list` and in the `plugin_tools` frame.
 
 `DaemonPluginMechanismTest` runs Acme_DaemonHello from its built jar as a community module: loaded, listed, called, routed,
 its hook run; a throwing hook disables only it; refused without grants; gone when its folder is removed.
-verifyBase: OK. 'feature-agenthq-harness4' (HEAD adc32204) contains expected base 9534c95ecbe516c7af587247400300a067c12cd0.
+verifyBase: OK. '"feature-agenthq"-harness4' (HEAD adc32204) contains expected base 9534c95ecbe516c7af587247400300a067c12cd0.
 
 `plugins/examples/Acme_PolicyHook` is the second reference: a tool that asks the policy for a frame's action and refusal
 (`api.policy.actionOf` / `refusal`) and a `frameGate` hook that counts frames by action kind (`PolicyHookExampleTest` runs
@@ -183,17 +183,17 @@ it from its built jar). Its `module.json` declares the hook; a community module 
 
 * **Installs and the docker image** carry the official daemon halves under `<install>/modules/official/<Module>/`
   (`installDist` / `dockerContext` copy each module.json, `policies/` and built `<Module>-daemon.jar`; the image adds the demo
-  halves). The daemon sets `agenthq.plugins.bundled` to that folder when unset, so they load as **bundled = trusted** (owner
+  halves). The daemon sets `infantry.plugins.bundled` to that folder when unset, so they load as **bundled = trusted** (owner
   answer to question 97479106) without a signature. Without them the ticket-files tools are not listed and a seated preset is
   fail closed: nothing is lost silently.
-* **The bundled root, one place per install layout** (PACKAGE-1; `installModules()` in DaemonMain, `AGENTHQ_BUNDLED_MODULES`
-  or `-Dagenthq.plugins.bundled` win when set):
+* **The bundled root, one place per install layout** (PACKAGE-1; `installModules()` in DaemonMain, `INFANTRY_BUNDLED_MODULES`
+  or `-Dinfantry.plugins.bundled` win when set):
 
   | layout | jars | bundled root | set by |
   |---|---|---|---|
   | `installDist`, headless archive | `<install>/lib/` | `<install>/modules` | the daemon (the `lib/` parent) |
-  | docker image | `/opt/agenthq/lib/` | `/opt/agenthq/modules` | the daemon (the `lib/` parent) |
-  | desktop app image (jpackage: createDistributable, MSI/EXE) | `<app>/app/` | `<app>/app/resources/modules` | the launcher (`-Dagenthq.plugins.bundled=$APPDIR/resources/modules`); the daemon falls back to `<compose.application.resources.dir>/modules` |
+  | docker image | `/opt/infantry/lib/` | `/opt/infantry/modules` | the daemon (the `lib/` parent) |
+  | desktop app image (jpackage: createDistributable, MSI/EXE) | `<app>/app/` | `<app>/app/resources/modules` | the launcher (`-Dinfantry.plugins.bundled=$APPDIR/resources/modules`); the daemon falls back to `<compose.application.resources.dir>/modules` |
 
   The desktop image carries the daemon halves in the same module folder as the UI jar: `stageOfficialModules` copies each
   official module's module.json `daemon.jar` and `policies/` next to its signed UI jar and signs the daemon jar with the same
@@ -202,14 +202,14 @@ it from its built jar). Its `module.json` declares the hook; a community module 
 * **The guard**: what a daemon half is lives in one place, `gradle/daemon-halves.gradle.kts` (a module.json with a `daemon`
   block; its `daemon.jar`). `stageOfficialModules`, `prepareDistributableResources` (what every desktop package task packs),
   `installDist` and `dockerContext` fail the build when a staged module declares a daemon jar that is not there, or a module with
-  a half is not staged; `verifyDaemonHalvesGuard` (in agentHq `check`) tests that check. At run time a declared half whose jar
+  a half is not staged; `verifyDaemonHalvesGuard` (in infantry `check`) tests that check. At run time a declared half whose jar
   is missing is logged at startup and listed in `GET /plugins` as `refused: jar missing: daemon.jar <path> is not in <folder> ...`.
 * **Dev runs** scan the repo's `plugins/` (modules.json folders `core`, `official`, `community`), with `devTrust` for official
   jars. `plugins/demo` is not a modules.json folder, so a dev demo needs the bundled root (or a copy into `official/`).
 * **Gradle projects** are flat, `:daemon-plugin-<folder>-<Module>` (Gradle 9 refuses directory-less parents), plus
-  `:daemon-plugin-_template`; the agentHq test task depends on the jars the daemon tests load.
-* **Behaviour changes** (contract 1.144.0, CONTRACT.md): `AGENTHQ_DEMO_LOCK` alone no longer locks anything; the demo seed
-  pins `AGENTHQ_POLICY=demo`, and a missing preset fails closed (POLICY-1). A preset is `locked` (keystore, RunManager) when
+  `:daemon-plugin-_template`; the infantry test task depends on the jars the daemon tests load.
+* **Behaviour changes** (contract 1.144.0, CONTRACT.md): `INFANTRY_DEMO_LOCK` alone no longer locks anything; the demo seed
+  pins `INFANTRY_POLICY=demo`, and a missing preset fails closed (POLICY-1). A preset is `locked` (keystore, RunManager) when
   it is `restricted` **or** has `seats`. The per-IP turn file is now `<state>/plugin-data/Demo_Lock/demo-turns.tsv` (a one-time
   reset of the counts). A seated preset without a `projectDir` uses the plugin's own state folder.
 * **Gaps**: `memoryMbHint` is not enforced (one JVM); the SDK's `PluginFolders.demoLock()` / the UI's demo-lock module rules

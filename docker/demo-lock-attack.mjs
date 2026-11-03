@@ -14,16 +14,16 @@ import path from 'node:path'
 import url from 'node:url'
 
 const here = path.dirname(url.fileURLToPath(import.meta.url))
-const src = path.join(here, '..', 'superiorSoftLibrary', 'agentHq', 'src', 'main', 'kotlin', 'com', 'superiorsoftllc', 'agenthq')
+const src = path.join(here, '..', 'superiorSoftLibrary', 'infantry', 'src', 'main', 'kotlin', 'com', 'superiorsoftllc', 'infantry')
 const base = (process.env.DEMO_URL || 'http://127.0.0.1:8813').replace(/\/$/, '')
-// DEMO_TOKEN_FILE, not AGENTHQ_TOKEN: an agent shell already carries ITS daemon's token under that name.
+// DEMO_TOKEN_FILE, not INFANTRY_TOKEN: an agent shell already carries ITS daemon's token under that name.
 const token = fs.readFileSync(process.env.DEMO_TOKEN_FILE, 'utf8').trim()
 const scenarios = process.argv.includes('--scenarios')
 
 // ---- frame types from the code -------------------------------------------------------------------------------------
-// CORE-SPLIT-A moved Protocol.kt into its own module (agentHqProtocol).
+// CORE-SPLIT-A moved Protocol.kt into its own module (infantryProtocol).
 const protocolFile = [path.join(src, 'protocol', 'Protocol.kt'),
-  path.join(here, '..', 'superiorSoftLibrary', 'agentHqProtocol', 'src', 'main', 'kotlin', 'com', 'superiorsoftllc', 'agenthq', 'protocol', 'Protocol.kt')]
+  path.join(here, '..', 'superiorSoftLibrary', 'infantryProtocol', 'src', 'main', 'kotlin', 'com', 'superiorsoftllc', 'infantry', 'protocol', 'Protocol.kt')]
   .find(f => fs.existsSync(f))
 const protocol = fs.readFileSync(protocolFile, 'utf8')
 const consts = Object.fromEntries([...protocol.matchAll(/const val ([A-Z0-9_]+) = "([^"]+)"/g)].map(m => [m[1], m[2]]))

@@ -6,7 +6,7 @@
   "description": "Epics and their tickets.",
   "tier": "official",
   "sequence": [],
-  "entry": "com.superiorsoftllc.agenthq.plugins.official.epics.EpicsPlugin",
+  "entry": "com.superiorsoftllc.infantry.plugins.official.epics.EpicsPlugin",
   "jar": "build/libs/Infantry_Epics.jar",
   "buildOrder": 70,
   "tabs": [

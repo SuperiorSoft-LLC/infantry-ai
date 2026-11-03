@@ -9,17 +9,17 @@ kotlin {
     jvmToolchain(21)
 }
 
-// DP-5h-3: the board (agentHqBoard's classes) is SHADED into this jar, no source move: the plugin carries the board it builds.
-// The daemon API stays compileOnly (the host provides it at run time, one copy); only agentHqBoard's own output is bundled.
+// DP-5h-3: the board (infantryBoard's classes) is SHADED into this jar, no source move: the plugin carries the board it builds.
+// The daemon API stays compileOnly (the host provides it at run time, one copy); only infantryBoard's own output is bundled.
 val shaded by configurations.creating { isTransitive = false }
 
 dependencies {
-    shaded(project(":superiorSoftLibrary:agentHqBoard"))
-    shaded(project(":superiorSoftLibrary:agentHqProtocol"))
-    compileOnly(project(":superiorSoftLibrary:agentHqBoard"))
-    compileOnly(project(":superiorSoftLibrary:agentHqDaemonApi"))
-    testImplementation(project(":superiorSoftLibrary:agentHqDaemonApi"))
-    testImplementation(project(":superiorSoftLibrary:agentHqBoard"))
+    shaded(project(":superiorSoftLibrary:infantryBoard"))
+    shaded(project(":superiorSoftLibrary:infantryProtocol"))
+    compileOnly(project(":superiorSoftLibrary:infantryBoard"))
+    compileOnly(project(":superiorSoftLibrary:infantryDaemonApi"))
+    testImplementation(project(":superiorSoftLibrary:infantryDaemonApi"))
+    testImplementation(project(":superiorSoftLibrary:infantryBoard"))
     testImplementation(kotlin("test"))
     // DP-6: PipelineStoreTest runs the adopted pipeline tables on a real SQLite file.
     testImplementation(libs.sqlite.jdbc)

@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.plugins.demo.lock
+package com.superiorsoftllc.infantry.plugins.demo.lock
 
 import kotlin.test.Test
 import kotlin.test.assertEquals

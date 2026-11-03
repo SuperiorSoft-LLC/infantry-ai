@@ -17,7 +17,7 @@ reference plugin with a tool, a route and a hook is [plugins/examples/Acme_Daemo
    plus `daemon.frame`, `daemon.route` (a relative route), `daemon.hook.<kind>`, `daemon.env:<NAME>`, `daemon.secret:<name>` for what you declare. Restart
    the daemon.
 
-The tool then appears in `agenthq mcp serve`'s `tools/list`, in the `plugin_tools` frame, and `GET /plugins` shows the
+The tool then appears in `infantry mcp serve`'s `tools/list`, in the `plugin_tools` frame, and `GET /plugins` shows the
 module's `daemon` status (`loaded`, `refused: <why>` or `failed: <why>`) and its `tools`.
 
 ## The `daemon` keys of module.json

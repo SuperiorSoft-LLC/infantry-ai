@@ -25,7 +25,7 @@
 
 Infantry AI is an AI framework. It is no longer only a project-management app: it is the components to build something else. You can build a completely new application with it, or use the platform itself to build the application you want. The AI is no longer just the builder: the agents are the cells of the body, and they evolve the application into something else. The project-management board is one app built on this framework. See [docs/VISION.md](docs/VISION.md).
 
-Infantry AI (formerly AgentHQ) is a command post for coding agents. You file tickets on a board, give each one a role
+Infantry AI (formerly Infantry) is a command post for coding agents. You file tickets on a board, give each one a role
 (full-stack engineer, QA, PM, ...) and a provider (Claude Code, opencode, pi, or any CLI you describe in a JSON file),
 and Infantry AI starts the agent on its own git branch and worktree, keeps its mail, progress and shared project
 knowledge in one daemon, and lets you watch, steer and merge the work from your desktop or your phone. The daemon runs
@@ -63,7 +63,7 @@ Screenshots still to capture (placeholders for the owner): `question.png` (quest
   branch and worktree so agents never collide. Pending is set by the daemon while a blocking ticket is still open.
 - **Routing by weight**: give a ticket a weight from 1 to 5 and the daemon picks the provider and model mapped to that weight
   (setting `tickets.weightExecutors`), unless the ticket or its role already pins one. Richer routing rules are planned.
-- **Question panel**: an agent that needs a decision asks you (`agenthq ask`) without blocking. You see the question with its
+- **Question panel**: an agent that needs a decision asks you (`infantry ask`) without blocking. You see the question with its
   options and the agent's recommended pick, answer once, and the answer reaches the agent as mail.
 - **Mail, progress and project knowledge**: agents message each other and you, report live progress, and share decisions,
   issues and notes kept in the daemon.
@@ -92,7 +92,7 @@ type, a weight and optionally a provider and model. Starting it cuts its own bra
 there; its report lands as a ticket comment. Pending is set by the daemon while a blocking ticket is open. Order in a
 column is priority.
 
-**Scripts.** Your process lives in Lua scripts in `<project>/.agenthq/scripts/`, not in anyone's memory: what happens
+**Scripts.** Your process lives in Lua scripts in `<project>/.infantry/scripts/`, not in anyone's memory: what happens
 when a ticket is done, when mail arrives, when a build ends. Hooks run a script on a lane change, on incoming mail, on
 a timer or on a named event, and a script can call every tool an agent has. See [Scripting](docs/wiki/Scripting.md).
 
@@ -114,7 +114,7 @@ agent CLI harness, is a plugin with a `module.json`. Write your own in a few min
 - [Licensing](docs/wiki/licensing.md) (draft): core MPL-2.0 vs Apache-2.0 per module, and the compatibility promise
 
 Build and preview the wiki site locally (MkDocs + Material, strict: a broken link fails; nothing is published):
-`agenthq script run wiki --args '{"mode":"serve","port":8899}'` (or `"mode":"build"` to write
+`infantry script run wiki --args '{"mode":"serve","port":8899}'` (or `"mode":"build"` to write
 `C:/Users/antho/agenthq-dist/wiki/<sha8>`). Needs `scripting.exec.enabled` and a venv with `docs/requirements-wiki.txt`
 (pinned) at `agenthq-dist/wiki-venv`; the script installs it. Without the script:
 `python -m mkdocs build --strict -f docs/mkdocs.yml -d <out>`.
@@ -142,7 +142,7 @@ Screenshots the docs link are listed in [docs/img/README.md](docs/img/README.md)
 | **Windows desktop** | The full app: board, agents, mail, knowledge. It runs its own daemon, so it works on its own with no server. | `InfantryAI-<version>.msi` from the [latest Release](../../releases/latest) (or the `-windows.zip` app image). |
 | **Android** | A phone client for a daemon running elsewhere (your PC or a server): watch agents, answer questions, move tickets. | `InfantryAI-<version>.apk` from the [latest Release](../../releases/latest), installed by hand (not on Google Play yet). |
 | **Web** | A browser client (Kotlin/WASM) served by the daemon itself: board, agents, transcripts, messages, ticket starts. File, QR and camera features stay in the desktop and phone apps. | Open `http://<host>:<port>/` on a daemon that has a token. See [Web](#web). |
-| **CLI** (`infantry`, alias `agenthq`) | Every board, ticket, mail and knowledge command, for scripts and for the agents themselves. | Ships inside the desktop app and the server archive. |
+| **CLI** (`infantry`; `agenthq` is a deprecated alias) | Every board, ticket, mail and knowledge command, for scripts and for the agents themselves. | Ships inside the desktop app and the server archive. |
 | **Headless server** | The daemon with no UI, for a home server, a VM or a cloud box. | Docker image (build it yourself for now) or `InfantryAI-server-<version>-<os>-<arch>` archive from the Release. |
 
 macOS and Linux desktop apps are not packaged yet; on those systems use the headless server plus the Android app or the CLI.
@@ -162,8 +162,8 @@ macOS and Linux desktop apps are not packaged yet; on those systems use the head
 5. Create a ticket, give it a role, and press **Start**. The agent works on its own branch in its own worktree; you watch
    its session live and read its report when it is done.
 
-Your data lives in `%LOCALAPPDATA%\SuperiorSoft\AgentHQ`, apart from the program, so upgrades and uninstalls keep it.
-Details: [docs/AGENTHQ-INSTALL.md](docs/AGENTHQ-INSTALL.md).
+Your data lives in `%LOCALAPPDATA%\SuperiorSoft\InfantryAI`, apart from the program, so upgrades and uninstalls keep it.
+Details: [docs/INFANTRY-INSTALL.md](docs/INFANTRY-INSTALL.md).
 
 ### Android (about 5 minutes)
 
@@ -173,7 +173,7 @@ The Android app is a client: it needs a daemon to connect to (your Windows app o
    (allow "install unknown apps" for your browser when Android asks).
 2. Make the daemon reachable from the phone. On your own network or over [Tailscale](https://tailscale.com), run
    `infantry remote on` on the PC and restart the app; it prints the address and a token. See
-   [ANDROID-TAILSCALE.md](superiorSoftLibrary/agentHq/docs/ANDROID-TAILSCALE.md).
+   [ANDROID-TAILSCALE.md](superiorSoftLibrary/infantry/docs/ANDROID-TAILSCALE.md).
 3. On the PC open **Configuration > Pair a device** and scan the QR code with the phone's connect screen (or type the
    `ws://<host>:<port>/ws` address and the token by hand). See [Pairing](#pairing-a-phone-or-another-client-qr).
 
@@ -182,8 +182,8 @@ The Android app is a client: it needs a daemon to connect to (your Windows app o
 The daemon serves a browser client at `http://<host>:<port>/` (the server archive, the Docker image and the desktop app
 ship it). Open that address, enter the daemon's token once (the browser keeps it in its localStorage), and you get the
 board, the agents, their transcripts, messages and ticket starts. The browser only connects to a daemon that has a token
-(`AGENTHQ_TOKEN` / `AGENTHQ_TOKEN_FILE`, or remote access turned on), and only from the same origin. If you reach the
-daemon by a host name it cannot see (a domain, or Docker), list it in `AGENTHQ_WEB_HOSTS` (comma-separated). An offline
+(`INFANTRY_TOKEN` / `INFANTRY_TOKEN_FILE`, or remote access turned on), and only from the same origin. If you reach the
+daemon by a host name it cannot see (a domain, or Docker), list it in `INFANTRY_WEB_HOSTS` (comma-separated). An offline
 demo with fake data is on the token screen.
 
 ### Server (about 5 minutes with Docker)
@@ -204,36 +204,36 @@ well) in front; it must pass WebSocket upgrades.
 
 The image (`infantryai/infantry-ai`) is **not published yet**; build it locally:
 
-    ./gradlew :superiorSoftLibrary:agentHq:dockerContext
-    docker build -t infantryai/infantry-ai:dev superiorSoftLibrary/agentHq/build/docker
+    ./gradlew :superiorSoftLibrary:infantry:dockerContext
+    docker build -t infantryai/infantry-ai:dev superiorSoftLibrary/infantry/build/docker
 
 Run (the token is mandatory, at least 32 characters: the daemon refuses a non-loopback bind without one):
 
-    openssl rand -hex 32 > agenthq_token
-    openssl rand -hex 32 > agenthq_keystore_key
+    openssl rand -hex 32 > infantry_token
+    openssl rand -hex 32 > infantry_keystore_key
     docker run -d --name infantry-ai -p 127.0.0.1:8787:8787 \
-      -e AGENTHQ_TOKEN_FILE=/run/secrets/agenthq_token \
-      -v ./agenthq_token:/run/secrets/agenthq_token:ro \
-      -e AGENTHQ_KEYSTORE_KEY_FILE=/run/secrets/agenthq_keystore_key \
-      -v ./agenthq_keystore_key:/run/secrets/agenthq_keystore_key:ro \
-      -v agenthq-data:/data infantryai/infantry-ai:dev
-    infantry --url ws://127.0.0.1:8787/ws --token-file ./agenthq_token board
+      -e INFANTRY_TOKEN_FILE=/run/secrets/infantry_token \
+      -v ./infantry_token:/run/secrets/infantry_token:ro \
+      -e INFANTRY_KEYSTORE_KEY_FILE=/run/secrets/infantry_keystore_key \
+      -v ./infantry_keystore_key:/run/secrets/infantry_keystore_key:ro \
+      -v infantry-data:/data infantryai/infantry-ai:dev
+    infantry --url ws://127.0.0.1:8787/ws --token-file ./infantry_token board
 
 (Git Bash on Windows rewrites `/run/...` into a Windows path: prefix the `docker run` with `MSYS_NO_PATHCONV=1`.)
 
-- **Volume**: `/data` holds the database, logs and state (`AGENTHQ_STATE_DIR`). Keep the same volume across image upgrades.
-- **Config**: `AGENTHQ_PORT` (default 8787), `AGENTHQ_HOST` (default `0.0.0.0`), `AGENTHQ_TOKEN` or `AGENTHQ_TOKEN_FILE`
-  (e.g. a Docker secret at `/run/secrets/agenthq_token`); other `AGENTHQ_*` variables are read as usual.
+- **Volume**: `/data` holds the database, logs and state (`INFANTRY_STATE_DIR`). Keep the same volume across image upgrades.
+- **Config**: `INFANTRY_PORT` (default 8787), `INFANTRY_HOST` (default `0.0.0.0`), `INFANTRY_TOKEN` or `INFANTRY_TOKEN_FILE`
+  (e.g. a Docker secret at `/run/secrets/infantry_token`); other `INFANTRY_*` variables are read as usual.
 - **Health**: `HEALTHCHECK` polls `GET /health` (the one path open without a token).
 - **Repositories**: starting a ticket cuts a git worktree, so mount a checkout and name its base branch:
-  `-e AGENTHQ_REPO=/work/repo -e AGENTHQ_BASE_BRANCH=main` (see [docker/README.md](docker/README.md)).
+  `-e INFANTRY_REPO=/work/repo -e INFANTRY_BASE_BRANCH=main` (see [docker/README.md](docker/README.md)).
 - **Agent CLIs**: the image ships Node/npm, not the CLIs. Install the ones you use from any client:
   `infantry --url ... --token-file ... harness-install claude` (also `opencode`, `pi`); they land in
   `/data/harness-tools`, so they survive container upgrades, and `harness-status` shows them. Sign-in is per CLI: pass the
   provider's API key (`-e ANTHROPIC_API_KEY=...`) or log in once with `docker exec -it infantry-ai claude` and keep the login with
-  `-v agenthq-home:/home/agenthq`. A CLI you already have can be mounted instead (`-v /path/to/cli:/usr/local/bin/<name>:ro`).
+  `-v infantry-home:/home/infantry`. A CLI you already have can be mounted instead (`-v /path/to/cli:/usr/local/bin/<name>:ro`).
 - **Keystore key**: the daemon seals its secrets in `/data/keystore.json`. A container has no OS keychain, so mount the master
-  key and point `AGENTHQ_KEYSTORE_KEY_FILE` at it (as above; `AGENTHQ_KEYSTORE_KEY` also works). Without it the daemon falls
+  key and point `INFANTRY_KEYSTORE_KEY_FILE` at it (as above; `INFANTRY_KEYSTORE_KEY` also works). Without it the daemon falls
   back to `/data/keystore.key`, which is only as safe as the volume. Keep the key file outside the volume and back it up.
 - The container runs as non-root (uid 10001). Do not bake the token into an image.
 
@@ -244,12 +244,12 @@ The same daemon with its own Java runtime bundled (nothing to install), one per 
 `InfantryAI-server-<version>-macos-aarch64.tar.gz`. Unpack it and start the daemon (`README.txt` inside lists every setting):
 
     # Linux / macOS
-    AGENTHQ_TOKEN_FILE=./agenthq_token AGENTHQ_HOST=0.0.0.0 ./InfantryAI-server-<version>-linux-x64/bin/agenthq-server.sh
+    INFANTRY_TOKEN_FILE=./infantry_token INFANTRY_HOST=0.0.0.0 ./InfantryAI-server-<version>-linux-x64/bin/infantry-server.sh
     # Windows (cmd)
-    set AGENTHQ_TOKEN_FILE=%CD%\agenthq_token& set AGENTHQ_HOST=0.0.0.0& InfantryAI-server-<version>-windows-x64\bin\agenthq-server.bat
+    set INFANTRY_TOKEN_FILE=%CD%\infantry_token& set INFANTRY_HOST=0.0.0.0& InfantryAI-server-<version>-windows-x64\bin\infantry-server.bat
 
-Without `AGENTHQ_HOST` it binds to 127.0.0.1 only. State goes to `~/.agenthq` unless `AGENTHQ_STATE_DIR` says otherwise, so do
-not run it next to an installed desktop app on the same state dir and port. `bin/agenthq` in the archive is the CLI, on the
+Without `INFANTRY_HOST` it binds to 127.0.0.1 only. State goes to `~/.infantry` unless `INFANTRY_STATE_DIR` says otherwise, so do
+not run it next to an installed desktop app on the same state dir and port. `bin/infantry` in the archive is the CLI, on the
 same bundled runtime. Agent CLIs are the machine's own (`infantry harness-install <id>` needs Node 20+).
 
 ## Pairing a phone or another client (QR)
@@ -258,7 +258,7 @@ A client connects to a daemon with two things: its address (`ws://<host>:<port>/
 token. Pairing hands both over in one step:
 
 1. On a client that is already connected (the desktop app), open **Configuration > Pair a device**. It shows a QR code
-   and a copyable link of the form `agenthq://connect?url=...&token=...&name=...`.
+   and a copyable link of the form `infantry://connect?url=...&token=...&name=...`.
 2. On the new client (the Android connect screen), **scan** the code with the camera, or **paste** the link. The desktop
    app can also open a QR image file.
 3. The new client saves the server in its list of saved servers and connects.
@@ -281,17 +281,17 @@ restart the daemon.
 - **Android**: install the newer APK over the old one. Android only accepts it when both are signed with the same key,
   so stay on `InfantryAI-<version>.apk` (release-signed) builds; a `-debug.apk` cannot upgrade a release install.
 
-Details: [docs/RELEASING.md](docs/RELEASING.md) and [UPDATES.md](superiorSoftLibrary/agentHq/docs/UPDATES.md).
+Details: [docs/RELEASING.md](docs/RELEASING.md) and [UPDATES.md](superiorSoftLibrary/infantry/docs/UPDATES.md).
 
 ## FAQ
 
 **Which agents does it run?** Claude Code, opencode and pi out of the box. Any other command-line agent can be added
-with a JSON descriptor; see [QUICKSTART.md](superiorSoftLibrary/agentHq/docs/QUICKSTART.md#4-add-a-harness-with-a-json-descriptor).
+with a JSON descriptor; see [QUICKSTART.md](superiorSoftLibrary/infantry/docs/QUICKSTART.md#4-add-a-harness-with-a-json-descriptor).
 
 **Do I need an account with you?** No. There is no Infantry AI cloud service. You bring your own agent CLIs and their
 logins or API keys; the daemon runs on your hardware.
 
-**Where is my data?** Windows app: `%LOCALAPPDATA%\SuperiorSoft\AgentHQ`. Server: `~/.agenthq` or `AGENTHQ_STATE_DIR`
+**Where is my data?** Windows app: `%LOCALAPPDATA%\SuperiorSoft\InfantryAI`. Server: `~/.infantry` or `INFANTRY_STATE_DIR`
 (`/data` in Docker). Secrets (tokens, keys) are sealed in a keystore there.
 
 **Does it cost anything?** The app is free to download. The agents use your own subscriptions or API keys with their
@@ -300,8 +300,8 @@ providers, billed by those providers.
 **Can several people share one server?** One daemon has one token today; anyone with it has full access. Per-user
 accounts are not built yet.
 
-**Why do some names say AgentHQ?** That was the project's earlier name. Folders, variables (`AGENTHQ_*`, also read as
-`INFANTRY_*`) and the `agenthq` command keep working so nothing breaks on upgrade.
+**Why do some names say Infantry?** That was the project's earlier name. Folders, variables (`INFANTRY_*`, also read as
+`INFANTRY_*`) and the `infantry` command keep working so nothing breaks on upgrade.
 
 **Is it safe to expose to the internet?** Not directly. See the security note under [Headless server](#headless-server).
 
@@ -311,14 +311,14 @@ accounts are not built yet.
 |---|---|
 | SmartScreen blocks the installer | Expected for now: the MSI is not code-signed yet. **More info > Run anyway**. |
 | An agent provider is missing from the picker | The CLI must be installed and on the daemon's PATH (`infantry harness-status`), then restart the app. |
-| A ticket refuses to start: "no directory configured" / "no base branch configured" | Set the project's repository and base branch (Docker: `AGENTHQ_REPO` and `AGENTHQ_BASE_BRANCH`). A ticket also needs a role. |
+| A ticket refuses to start: "no directory configured" / "no base branch configured" | Set the project's repository and base branch (Docker: `INFANTRY_REPO` and `INFANTRY_BASE_BRANCH`). A ticket also needs a role. |
 | Phone says it cannot connect | Same network or Tailscale? Firewall open for the daemon port? Address ends in `/ws`? A 401/403 means a wrong token. |
 | Server refuses to start: "refusing to start" | A non-loopback bind needs a token of at least 32 characters. |
-| "Check for updates" says updates are off | Set `AGENTHQ_UPDATE_REPO=owner/repo` (or `repo=` in `update.properties`). |
-| Anything else | Open **Configuration > Logs > Open logs folder** and attach `agenthq.log` to a [bug report](../../issues/new/choose). Read it first: logs can hold project paths and agent output. |
+| "Check for updates" says updates are off | Set `INFANTRY_UPDATE_REPO=owner/repo` (or `repo=` in `update.properties`). |
+| Anything else | Open **Configuration > Logs > Open logs folder** and attach `infantry.log` to a [bug report](../../issues/new/choose). Read it first: logs can hold project paths and agent output. |
 
-More: [QUICKSTART.md troubleshooting](superiorSoftLibrary/agentHq/docs/QUICKSTART.md#6-troubleshooting) and
-[INSTALL logs](docs/AGENTHQ-INSTALL.md#logs).
+More: [QUICKSTART.md troubleshooting](superiorSoftLibrary/infantry/docs/QUICKSTART.md#6-troubleshooting) and
+[INSTALL logs](docs/INFANTRY-INSTALL.md#logs).
 
 ## Roadmap and known issues
 
@@ -341,7 +341,7 @@ Priorities can change; watch the [Releases](../../releases) page.
 ## Getting help
 
 - **Questions and ideas**: [GitHub Discussions](../../discussions) <!-- OWNER: enable Discussions in the repo settings -->
-- **Bugs**: [open an issue](../../issues/new/choose) with the bug template (version, OS, steps, `agenthq.log`).
+- **Bugs**: [open an issue](../../issues/new/choose) with the bug template (version, OS, steps, `infantry.log`).
 - **Security problems**: do **not** open a public issue; follow [SECURITY.md](SECURITY.md).
 
 ## Contributing
@@ -376,30 +376,30 @@ SDK, UI core, apps, plugins, examples) is free under **Apache-2.0**, split by di
 Requires JDK 21 (Gradle toolchain resolution via foojay) and, for the Android module, an Android SDK. Run only one Gradle
 build at a time.
 
-    ./gradlew :superiorSoftLibrary:agentHq:compileKotlin :superiorSoftLibrary:agentHqUi:compileKotlin
-    ./gradlew :superiorSoftLibrary:agentHq:installDist     # build/install/agenthq/bin/infantry (and agenthq)
-    ./gradlew :superiorSoftLibrary:agentHqUi:packageReleaseMsi   # Windows installer
-    ./gradlew :superiorSoftLibrary:agentHq:headlessDist    # server archive for this OS
+    ./gradlew :superiorSoftLibrary:infantry:compileKotlin :superiorSoftLibrary:infantryUi:compileKotlin
+    ./gradlew :superiorSoftLibrary:infantry:installDist     # build/install/infantry/bin/infantry (and infantry)
+    ./gradlew :superiorSoftLibrary:infantryUi:packageReleaseMsi   # Windows installer
+    ./gradlew :superiorSoftLibrary:infantry:headlessDist    # server archive for this OS
 
 Modules (all under `superiorSoftLibrary/`; the prefix keeps `:superiorSoftLibrary:*` paths stable):
 
-- `agentHq`: daemon + `infantry` CLI (JVM; `agenthq` stays as an alias)
-- `agenthqUiCore`: shared UI core (Compose Multiplatform)
-- `agentHqUi`: desktop UI
-- `agentHqAndroid`: Android shell
-- `agentHqHeadless`: test-only guard that the daemon runs with no UI
+- `infantry`: daemon + `infantry` CLI (JVM; `infantry` stays as an alias)
+- `infantryUiCore`: shared UI core (Compose Multiplatform)
+- `infantryUi`: desktop UI
+- `infantryAndroid`: Android shell
+- `infantryHeadless`: test-only guard that the daemon runs with no UI
 
 Secrets guard: `./gradlew verifySecretsNotTracked` fails if keys, keystores or tokens are tracked. Signing secrets belong in
 `secrets.local.properties` (gitignored) or environment variables. More in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Reference
 
-- Every `AGENTHQ_*` variable is also read as `INFANTRY_*` (`INFANTRY_PORT`, `INFANTRY_TOKEN`, ...). The old `AGENTHQ_*`
-  names keep working; when both are set the `AGENTHQ_*` one wins.
-- [Install and data layout (Windows)](docs/AGENTHQ-INSTALL.md) · [Releasing](docs/RELEASING.md) ·
-  [Owner quickstart (from source)](superiorSoftLibrary/agentHq/docs/QUICKSTART.md) ·
-  [Architecture](superiorSoftLibrary/agentHq/docs/ARCHITECTURE.md) · [MCP tools](superiorSoftLibrary/agentHq/docs/MCP.md) ·
-  [Agent quick reference](superiorSoftLibrary/agentHq/docs/AGENT-QUICKREF.md)
+- Every `INFANTRY_*` variable is also read as `INFANTRY_*` (`INFANTRY_PORT`, `INFANTRY_TOKEN`, ...). The old `INFANTRY_*`
+  names keep working; when both are set the `INFANTRY_*` one wins.
+- [Install and data layout (Windows)](docs/INFANTRY-INSTALL.md) · [Releasing](docs/RELEASING.md) ·
+  [Owner quickstart (from source)](superiorSoftLibrary/infantry/docs/QUICKSTART.md) ·
+  [Architecture](superiorSoftLibrary/infantry/docs/ARCHITECTURE.md) · [MCP tools](superiorSoftLibrary/infantry/docs/MCP.md) ·
+  [Agent quick reference](superiorSoftLibrary/infantry/docs/AGENT-QUICKREF.md)
 
 ---
 

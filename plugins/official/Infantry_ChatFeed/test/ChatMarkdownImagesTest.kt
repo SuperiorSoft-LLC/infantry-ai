@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.plugins.official.chatfeed
+package com.superiorsoftllc.infantry.plugins.official.chatfeed
 import kotlin.test.Test
 import kotlin.test.assertEquals
 

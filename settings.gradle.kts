@@ -1,4 +1,4 @@
-rootProject.name = "AgentHQ"
+rootProject.name = "InfantryAI"
 pluginManagement {
     repositories {
         maven("https://maven.pkg.jetbrains.space/public/p/compose/dev")
@@ -27,15 +27,15 @@ dependencyResolutionManagement {
 
 // The directory prefix is kept from the monorepo so ":superiorSoftLibrary:..." project paths stay valid.
 include(":superiorSoftLibrary")
-include(":superiorSoftLibrary:agentHq")
-// CORE-SPLIT-1/2 (docs/DAEMON-CORE.md): leaf modules carved out of agentHq; package names unchanged.
-include(":superiorSoftLibrary:agentHqProtocol")
-include(":superiorSoftLibrary:agentHqRunner")
-include(":superiorSoftLibrary:agentHqCore")
-// DP-5e: the board's lower-level packages (epics, brief, ledger, context, ticketfiles); depends on the daemon API, never on agentHq.
-include(":superiorSoftLibrary:agentHqBoard")
-include(":superiorSoftLibrary:agenthqUiCore")
-include(":superiorSoftLibrary:agenthqAppUi")
+include(":superiorSoftLibrary:infantry")
+// CORE-SPLIT-1/2 (docs/DAEMON-CORE.md): leaf modules carved out of infantry; package names unchanged.
+include(":superiorSoftLibrary:infantryProtocol")
+include(":superiorSoftLibrary:infantryRunner")
+include(":superiorSoftLibrary:infantryCore")
+// DP-5e: the board's lower-level packages (epics, brief, ledger, context, ticketfiles); depends on the daemon API, never on infantry.
+include(":superiorSoftLibrary:infantryBoard")
+include(":superiorSoftLibrary:infantryUiCore")
+include(":superiorSoftLibrary:infantryAppUi")
 // RUNTIME-3: an official module with sources (plugins/official/<Module>/build.gradle.kts) builds as its own project and
 // jar, found by scanning like community: Infantry_Cli first. Desktop loads the jar at run time; web/Android compile it in.
 file("plugins/official").listFiles { f -> f.isDirectory && !f.name.startsWith("_") && java.io.File(f, "build.gradle.kts").isFile }.orEmpty().sortedBy { it.name }.forEach { dir ->
@@ -43,18 +43,18 @@ file("plugins/official").listFiles { f -> f.isDirectory && !f.name.startsWith("_
     project(":plugins:official:${dir.name}").projectDir = dir
 }
 // OVERRIDE-1: a demo-only module (plugins/demo/<Module>/build.gradle.kts) builds as its own project; the web and Android
-// builds compile it in only with -Pdemo=true (agenthqAppUi:generateModuleList), after the live modules, so it overrides them.
+// builds compile it in only with -Pdemo=true (infantryAppUi:generateModuleList), after the live modules, so it overrides them.
 file("plugins/demo").listFiles { f -> f.isDirectory && !f.name.startsWith("_") && java.io.File(f, "build.gradle.kts").isFile }.orEmpty().sortedBy { it.name }.forEach { dir ->
     include(":plugins:demo:${dir.name}")
     project(":plugins:demo:${dir.name}").projectDir = dir
 }
 // PLUGINS-1: the plugin API and the host's loading rules (no Compose, shared by the UI and the daemon).
-include(":superiorSoftLibrary:agenthqPlugins")
-include(":superiorSoftLibrary:agentHqUi")
-// WEB-1: browser (wasmJs) client over agenthqUiCore; the daemon serves its bundle at /.
-include(":superiorSoftLibrary:agentHqWeb")
-include(":superiorSoftLibrary:agentHqAndroid")
-include(":superiorSoftLibrary:agentHqHeadless")
+include(":superiorSoftLibrary:infantryPlugins")
+include(":superiorSoftLibrary:infantryUi")
+// WEB-1: browser (wasmJs) client over infantryUiCore; the daemon serves its bundle at /.
+include(":superiorSoftLibrary:infantryWeb")
+include(":superiorSoftLibrary:infantryAndroid")
+include(":superiorSoftLibrary:infantryHeadless")
 // MD-PLUGIN-1: the example markdown engine plugin (built to a jar the app loads at runtime).
 include(":superiorSoftLibrary:samples:markdownEnginePlugin")
 
@@ -68,8 +68,8 @@ file("plugins/community").listFiles { f -> f.isDirectory && !f.name.startsWith("
 // loader never sees it: it is outside core/ and community/, and a folder starting with "_" is not a module.
 // DAEMON-PLUGINS-1 (docs/DAEMON-PLUGINS.md): the daemon API every daemon half compiles against, and each module's daemon half
 // (`plugins/<folder>/<Module>/daemon`) as `:daemon-plugin-<folder>-<Module>` (flat: Gradle 9 will not configure directory-less parents), apart from the `:plugins:*` UI projects.
-include(":superiorSoftLibrary:agentHqDaemonApi")
-include(":superiorSoftLibrary:agentHqHarnessApi")
+include(":superiorSoftLibrary:infantryDaemonApi")
+include(":superiorSoftLibrary:infantryHarnessApi")
 listOf("core", "official", "demo", "community", "examples").forEach { folder ->
     file("plugins/$folder").listFiles { f -> f.isDirectory && !f.name.startsWith("_") && java.io.File(f, "daemon/build.gradle.kts").isFile }.orEmpty().sortedBy { it.name }.forEach { dir ->
         include(":daemon-plugin-$folder-${dir.name}")

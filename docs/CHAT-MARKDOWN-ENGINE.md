@@ -1,6 +1,6 @@
 # Chat markdown engine (CHAT-MD-ENGINE)
 
-Assistant replies are formatted through a seam in `agenthqUiCore` (shared by desktop, Android and wasm; no JVM-only types):
+Assistant replies are formatted through a seam in `infantryUiCore` (shared by desktop, Android and wasm; no JVM-only types):
 
 - `ChatMarkdownEngine` (`ui/model/ChatMarkdownEngine.kt`): `parse(text, streaming): List<ChatBlock>` and `supports(feature)`. The chat calls only this. `BuiltInChatMarkdownEngine` (the hand-written parser) is the default.
 - `ChatBlockRenderer` / `ChatBlockRenderers` (`ui/ChatBlockRenderers.kt`): block type -> composable. `DefaultChatBlockRenderer` draws every built-in block.
@@ -14,4 +14,4 @@ Override points:
 
 ## Loadable engine plugins (MD-PLUGIN-1)
 
-A jar in `<stateDir>/markdown-engines/` that declares a `ChatMarkdownEngine` through `META-INF/services` is loaded at start-up (`MarkdownEnginePluginLoader`, jvmMain; desktop only) in its own classloader that sees only the JDK, the Kotlin runtime and `ui.model`. It is registered like any engine and appears in the setting. A plugin engine runs behind `GuardedMarkdownEngine`: an exception, Error (not OutOfMemoryError) or a parse over 250 ms makes that message use the built-in engine, logs once, and disables the engine. Any engine that throws gets the built-in output for that message (`parseChatMarkdownSafely`). The `callout` block is drawn by the host (`CalloutBlockRenderer`). Worked example and README: `superiorSoftLibrary/samples/markdownEnginePlugin`. Parsing regression corpus: `agenthqUiCore/src/commonTest/resources/chat-corpus/`.
+A jar in `<stateDir>/markdown-engines/` that declares a `ChatMarkdownEngine` through `META-INF/services` is loaded at start-up (`MarkdownEnginePluginLoader`, jvmMain; desktop only) in its own classloader that sees only the JDK, the Kotlin runtime and `ui.model`. It is registered like any engine and appears in the setting. A plugin engine runs behind `GuardedMarkdownEngine`: an exception, Error (not OutOfMemoryError) or a parse over 250 ms makes that message use the built-in engine, logs once, and disables the engine. Any engine that throws gets the built-in output for that message (`parseChatMarkdownSafely`). The `callout` block is drawn by the host (`CalloutBlockRenderer`). Worked example and README: `superiorSoftLibrary/samples/markdownEnginePlugin`. Parsing regression corpus: `infantryUiCore/src/commonTest/resources/chat-corpus/`.

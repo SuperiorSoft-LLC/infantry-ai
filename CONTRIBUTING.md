@@ -14,7 +14,7 @@ Everyone who takes part follows the [Code of Conduct](CODE_OF_CONDUCT.md).
 1. Search the [existing issues](../../issues) first; add details to a match instead of opening a duplicate.
 2. Open a new issue with the right template ([choose one](../../issues/new/choose)):
    - **Bug report**: the version (Configuration > About, or `infantry version`), the OS, which client (Windows, Android,
-     server, CLI), the steps, what you expected and what happened. Attach `agenthq.log` (Configuration > Logs > Open logs
+     server, CLI), the steps, what you expected and what happened. Attach `infantry.log` (Configuration > Logs > Open logs
      folder). Read the log first: it can hold project paths, prompts and agent output.
    - **Feature request**: the problem you want solved, not only the solution you have in mind.
 3. **Security problems never go in a public issue**: follow [SECURITY.md](SECURITY.md).
@@ -25,35 +25,35 @@ Everyone who takes part follows the [Code of Conduct](CODE_OF_CONDUCT.md).
 Requirements:
 
 - JDK 21 (the Gradle toolchain resolves it through foojay if you do not have one).
-- An Android SDK, only for the `agentHqAndroid` module.
+- An Android SDK, only for the `infantryAndroid` module.
 - Git, and Node 20+ if you want the app to install agent CLIs for you.
 
 Common tasks, from the repository root:
 
-    ./gradlew :superiorSoftLibrary:agentHq:compileKotlin :superiorSoftLibrary:agentHqUi:compileKotlin
-    ./gradlew :superiorSoftLibrary:agentHq:runDaemon        # daemon on ws://127.0.0.1:8787/ws
-    ./gradlew :superiorSoftLibrary:agentHqUi:runUi          # desktop UI against it
-    ./gradlew :superiorSoftLibrary:agentHqUi:runSmoke       # UI against an in-process stub daemon (no real CLIs)
-    ./gradlew :superiorSoftLibrary:agentHq:installDist      # the infantry / agenthq CLI
+    ./gradlew :superiorSoftLibrary:infantry:compileKotlin :superiorSoftLibrary:infantryUi:compileKotlin
+    ./gradlew :superiorSoftLibrary:infantry:runDaemon        # daemon on ws://127.0.0.1:8787/ws
+    ./gradlew :superiorSoftLibrary:infantryUi:runUi          # desktop UI against it
+    ./gradlew :superiorSoftLibrary:infantryUi:runSmoke       # UI against an in-process stub daemon (no real CLIs)
+    ./gradlew :superiorSoftLibrary:infantry:installDist      # the infantry / infantry CLI
 
 **Run one Gradle build at a time.** The test JVMs are memory hungry; two builds in parallel can exhaust the host's RAM
-and crash. More detail: [QUICKSTART.md](superiorSoftLibrary/agentHq/docs/QUICKSTART.md) (from source) and
-[docs/AGENTHQ-INSTALL.md](docs/AGENTHQ-INSTALL.md) (installer).
+and crash. More detail: [QUICKSTART.md](superiorSoftLibrary/infantry/docs/QUICKSTART.md) (from source) and
+[docs/INFANTRY-INSTALL.md](docs/INFANTRY-INSTALL.md) (installer).
 
 ## Branches
 
-- `feature-agenthq-mvp` is the branch the app is built from.
+- `"feature-agenthq"-mvp` is the branch the app is built from.
 - Work happens on a short-lived branch per change, named after its ticket or issue, e.g. `ticket/<id>-<short-slug>`
   or `fix/<issue-number>-<short-slug>`.
 - Changes are batched into a `staging-agenthq*` branch, the full test gate runs once over the batch
-  ([docs/GATE.md](docs/GATE.md)), and the batch is promoted to `feature-agenthq-mvp` only after it passes.
+  ([docs/GATE.md](docs/GATE.md)), and the batch is promoted to `"feature-agenthq"-mvp` only after it passes.
 - Never force-push a shared branch.
 
 ## Testing
 
 - Add or update tests with every behaviour change; a fix comes with a test that fails without it.
-- Run the tests of the module you touched, for example `./gradlew :superiorSoftLibrary:agentHq:test`.
-- The full gate is `scripts/agenthq-gate.sh <branch-or-sha>` ([docs/GATE.md](docs/GATE.md)). It takes tens of minutes.
+- Run the tests of the module you touched, for example `./gradlew :superiorSoftLibrary:infantry:test`.
+- The full gate is `scripts/infantry-gate.sh <branch-or-sha>` ([docs/GATE.md](docs/GATE.md)). It takes tens of minutes.
 - Tests never bind the real ports 8787 or 8788 (a guard test fails the build); use port 0.
 - Do not edit a test just to make it pass. If a test is wrong, say why in the commit message.
 - Documentation-only changes need no test run.
@@ -70,7 +70,7 @@ and crash. More detail: [QUICKSTART.md](superiorSoftLibrary/agentHq/docs/QUICKST
 
 ## Pull requests
 
-Once outside contributions open: fork, branch from `feature-agenthq-mvp`, keep the PR small and focused, fill in the
+Once outside contributions open: fork, branch from `"feature-agenthq"-mvp`, keep the PR small and focused, fill in the
 pull request template, and link the issue it closes. A maintainer reviews it and merges it through the staging gate.
 
 ## Code style

@@ -12,11 +12,11 @@ There are two routes. Use the first when the CLI prints JSON lines and takes fla
 ### Files to touch
 
 ```
-~/.agenthq/harnesses/mycli.json      (the config dir; AGENTHQ_HOME changes it)
+~/.infantry/harnesses/mycli.json      (the config dir; INFANTRY_HOME changes it)
 ```
 
-Samples that ship: `superiorSoftLibrary/agentHq/docs/harnesses/codex.json` and
-`superiorSoftLibrary/agentHq/docs/harnesses/gemini.json`.
+Samples that ship: `superiorSoftLibrary/infantry/docs/harnesses/codex.json` and
+`superiorSoftLibrary/infantry/docs/harnesses/gemini.json`.
 
 ### Steps
 
@@ -33,7 +33,7 @@ Samples that ship: `superiorSoftLibrary/agentHq/docs/harnesses/codex.json` and
 ## Route 2: a harness plugin (code)
 
 The reference is `plugins/examples/Acme_EchoHarness`, an agent process that prints the prompt back. It compiles
-against `agentHqHarnessApi` only (a leaf with no project dependency).
+against `infantryHarnessApi` only (a leaf with no project dependency).
 
 ### Files to touch
 
@@ -41,21 +41,21 @@ against `agentHqHarnessApi` only (a leaf with no project dependency).
 plugins/community/Acme_MyHarness/module.json
 plugins/community/Acme_MyHarness/harness/build.gradle.kts
 plugins/community/Acme_MyHarness/harness/src/main/kotlin/com/acme/myharness/MyHarnessPlugin.kt
-plugins/community/Acme_MyHarness/harness/src/main/resources/META-INF/services/com.superiorsoftllc.agenthq.harness.api.HarnessPlugin
+plugins/community/Acme_MyHarness/harness/src/main/resources/META-INF/services/com.superiorsoftllc.infantry.harness.api.HarnessPlugin
 plugins/modules.json                 (existing file: enable and grant)
 ```
 
 Their models in the repository: `plugins/examples/Acme_EchoHarness/module.json`,
 `plugins/examples/Acme_EchoHarness/harness/build.gradle.kts`,
 `plugins/examples/Acme_EchoHarness/harness/src/main/kotlin/com/acme/echoharness/EchoHarnessPlugin.kt`, and the services
-file `plugins/examples/Acme_EchoHarness/harness/src/main/resources/META-INF/services/com.superiorsoftllc.agenthq.harness.api.HarnessPlugin`.
+file `plugins/examples/Acme_EchoHarness/harness/src/main/resources/META-INF/services/com.superiorsoftllc.infantry.harness.api.HarnessPlugin`.
 
 ### Steps
 
 1. Copy `plugins/examples/Acme_EchoHarness` to `plugins/community/Acme_MyHarness`. Rename the package. `settings.gradle.kts`
    includes `plugins/<folder>/<Module>/harness` as `:harness-plugin-<folder>-<Module>`.
 2. `module.json`: set `name`, `author`, `license`, and the `harness` object: `jar`, `contract` (must equal
-   `HARNESS_API_VERSION`, in `superiorSoftLibrary/agentHqHarnessApi/src/main/kotlin/com/superiorsoftllc/agenthq/harness/api/HarnessApi.kt`),
+   `HARNESS_API_VERSION`, in `superiorSoftLibrary/infantryHarnessApi/src/main/kotlin/com/superiorsoftllc/infantry/harness/api/HarnessApi.kt`),
    `ids`, `cli`, `settings` (every key the harness reads), `hooks` (optional contributions it uses).
 3. Implement `HarnessPlugin`: `pluginId`, `contractVersion = HARNESS_API_VERSION`, and
    `register(registrar)` calling `registrar.register(MyHarness(registrar.host))`.

@@ -1,16 +1,16 @@
-package com.superiorsoftllc.agenthq.plugins.official.processes
+package com.superiorsoftllc.infantry.plugins.official.processes
 
 import androidx.compose.runtime.Composable
-import com.superiorsoftllc.agenthq.plugin.api.FillDeclaration
-import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
-import com.superiorsoftllc.agenthq.ui.block.layout.Block
-import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
-import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
-import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
-import com.superiorsoftllc.agenthq.ui.plugin.UiPlugin
-import com.superiorsoftllc.agenthq.ui.plugin.UiRegistrar
-import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
-import com.superiorsoftllc.agenthq.ui.shell.blocks.PROCESSES_BADGE_SLOT
+import com.superiorsoftllc.infantry.plugin.api.FillDeclaration
+import com.superiorsoftllc.infantry.plugin.api.ModuleManifest
+import com.superiorsoftllc.infantry.ui.block.layout.Block
+import com.superiorsoftllc.infantry.ui.block.layout.BlockScope
+import com.superiorsoftllc.infantry.ui.plugin.InfantryModule
+import com.superiorsoftllc.infantry.ui.plugin.ModuleSource
+import com.superiorsoftllc.infantry.ui.plugin.UiPlugin
+import com.superiorsoftllc.infantry.ui.plugin.UiRegistrar
+import com.superiorsoftllc.infantry.ui.shell.LocalShellContext
+import com.superiorsoftllc.infantry.ui.shell.blocks.PROCESSES_BADGE_SLOT
 
 /** The status bar's processes-badge slot, which this module fills (`infantry.shell.footer.processesBadge`). */
 const val PROCESSES_FILL_ID = PROCESSES_BADGE_SLOT
@@ -25,7 +25,7 @@ object ProcessesBadgeBlock : Block("processesBadge", PROCESSES_FILL_ID) {
 }
 
 /** RUNTIME-18: Infantry_Processes (official), the status bar's processes badge, compiled in on web and Android (D9). */
-val InfantryProcesses = AgentHqModule(
+val InfantryProcesses = InfantryModule(
     ModuleManifest(
         name = "Infantry_Processes", version = "1.0.0", author = "Infantry AI",
         description = "The status bar's processes badge (free RAM, rogue processes) and its panel.",
@@ -45,5 +45,5 @@ class ProcessesPlugin : UiPlugin, ModuleSource {
         registrar.fill(PROCESSES_FILL_ID, ProcessesBadgeBlock)
     }
 
-    override fun modules(): List<AgentHqModule> = listOf(InfantryProcesses)
+    override fun modules(): List<InfantryModule> = listOf(InfantryProcesses)
 }

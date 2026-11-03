@@ -1,6 +1,6 @@
-package com.superiorsoftllc.agenthq.plugins.official.stats
+package com.superiorsoftllc.infantry.plugins.official.stats
 
-import com.superiorsoftllc.agenthq.ui.protocol.UsageMeterRow
+import com.superiorsoftllc.infantry.ui.protocol.UsageMeterRow
 import kotlin.math.roundToLong
 
 /** USAGE-1: sums of meter rows. Provider-reported usage only. */

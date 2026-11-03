@@ -8,9 +8,9 @@ Owner (2026-10-29): if it is not abstract it goes out; once migrated to a plugin
 |---|---|---|
 | `ConfigEntry`, `ShellConfigSettings` | dead, already gone (no source hit). `NodeConfigEntry` is the live abstract config contract | stays (core config) |
 | 8 SEC-FIX-1 ratchet files (PluginDropIn, ShellDropIn, DesktopDropIn, DesktopPlugins, JvmEndpointAccess, JvmPlatformHost, ConfigDialog, ModulesSection) | abstract mechanism, demo-named | renamed: `demoLock` -> `lockdown`, texts "The lockdown is on". The mechanism (a deployment can lock plugin install and community modules) is generic and stays |
-| `PluginFolders.demoLock()` / `DEMO_LOCK_ENV` | abstract mechanism | `PluginFolders.lockdown()`, env `AGENTHQ_LOCKDOWN`; legacy `AGENTHQ_DEMO_LOCK` still read so a deployed demo keeps working (remove the alias when the Demo_Lock deployment sets the new name) |
+| `PluginFolders.demoLock()` / `DEMO_LOCK_ENV` | abstract mechanism | `PluginFolders.lockdown()`, env `INFANTRY_LOCKDOWN`; legacy `INFANTRY_DEMO_LOCK` still read so a deployed demo keeps working (remove the alias when the Demo_Lock deployment sets the new name) |
 | refusal texts in ModuleResolver / EndpointGate / ServiceRegistry | abstract | say "lockdown" |
-| `FreshShell` excluded `Infantry_Board` / `agenthqAppUi` | concrete plugin id in core | now data: app build passes `-Dagenthq.freshShell.exclude=...`; core names none |
+| `FreshShell` excluded `Infantry_Board` / `infantryAppUi` | concrete plugin id in core | now data: app build passes `-Dinfantry.freshShell.exclude=...`; core names none |
 | `ModulesConfig.demoLock` / `DemoLockConfig` (modules.json key `demoLock`) | abstract allow-list, demo-named, persisted in users' modules.json | **stays for now**: renaming the JSON key breaks existing files. Needs a read-both migration; ticket to file |
 | daemon DemoLock, visitor token, per-IP limit | already migrated by DAEMON-PLUGINS-1 / POLICY-1 (Demo_Lock plugin + `NoDemoInDaemonCoreGuardTest`) | done, not touched here |
 

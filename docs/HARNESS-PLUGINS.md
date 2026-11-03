@@ -22,7 +22,7 @@ But the registry is only half of how a harness runs. There are **two harness lay
 
 | layer | what | harnesses in it | how registered |
 |---|---|---|---|
-| `AgentProvider` (`provider/`) | what `SessionManager` actually drives | `opencode` (the hard-coded DEFAULT), `claude`, `stub` | `ProviderFactory.builders` map, compiled in; `AGENTHQ_PROVIDER` / `AGENTHQ_PROVIDERS` pick |
+| `AgentProvider` (`provider/`) | what `SessionManager` actually drives | `opencode` (the hard-coded DEFAULT), `claude`, `stub` | `ProviderFactory.builders` map, compiled in; `INFANTRY_PROVIDER` / `INFANTRY_PROVIDERS` pick |
 | `HarnessPlugin` -> `HarnessRegistry` (`harness/`) | WIRE-1; a `CliHarness` is adapted to an `AgentProvider` by `HarnessProvider` | `claude` (again), `pi` | `META-INF/services` in the daemon jar (`ServiceLoaderPluginSource`), then JSON descriptors from `<config>/harnesses/` |
 
 So `claude` exists twice (provider wins on the id), `pi` only as a plugin, and **`opencode` is not a plugin at all**.
@@ -34,8 +34,8 @@ plugin, and it stays.
 | harness | code today (lines) | daemon internals it imports | size to decouple |
 |---|---|---|---|
 | **pi** | `harness/pi/*` (881): PiHarnessPlugin, PiCommand, PiStreamTranslator, PiSessionAdapter, PiModelCatalog, PiLaunchExtras, PiTodoExtension | harness API (`CliHarness`, `HarnessPlugin`, `HarnessRequest/Event`, `HarnessTranslator`, `ToolApproval`, `HarnessCapability`); runner (`ProcessSpec`, `ProcessRunner`, `PipedProcessRunner`, `RunningProcess`, `ProcessListener`, a leaf module already); `session.host` (`HarnessSessionAdapter`, `AdapterSink`, `HostedProcess`, `TurnEnd`); `provider.RunRequest`, `provider.HarnessModelCatalog`; `protocol.ProviderModels`; `executables.CliExecutables/CliTools` | **M**. Cleanest one: already a `HarnessPlugin`. Blockers are global mutable seams the daemon sets: `PiLaunchExtras.builtIn` (DaemonMain 1115: todo extension + `WatchHooks.piLaunchArgs`) and `PiLaunchExtras.args` (experiments `PiToolBridgeRegistration`) |
-| **claude** | `harness/claude/*` (338) + `claude/*` ClaudeCommand, ClaudePermissionMode, ClaudeSessionAdapter + `provider/ClaudeCodeProvider` + `providerconfig/ClaudeConfigReader` (1,103 total) | everything pi uses, plus `prompts.PromptAsker/QuestionSpec`, `protocol.PromptOption` (owner questions), `daemon.AgentHqMcp` (MCP config), `daemon.WatchHooks` (watch settings file), `session.InfantryEnv`, `session.agentHqSetting`, `provider.AgentProvider`, `provider.ClaudeCodeProvider` (the plugin wraps the provider) | **L**. Two layers to merge into one plugin; MCP + watch + prompt seams must become host services |
-| **opencode** | `opencode/*` OpenCodeCommand(s), OpenCodePermissions, OpenCodeServeAdapter (28.7K) + `provider/OpenCodeProvider` + `providerconfig/OpenCodeConfigReader` (1,079 total) | runner, `session.host`, `provider.RunRequest`, `harness.ToolApproval/HarnessCommand/CommandAction`, `prompts.Decision`, `daemon.AgentHqMcp` (mergeOpenCode, isOpenCodeAgentHqTool), `daemon.WatchHooks` (openCodePlugin), `protocol.EventNormalizer`, `session.InfantryEnv`, `executables` | **L**. Not a plugin yet; is the daemon's DEFAULT provider; the serve adapter is the largest adapter |
+| **claude** | `harness/claude/*` (338) + `claude/*` ClaudeCommand, ClaudePermissionMode, ClaudeSessionAdapter + `provider/ClaudeCodeProvider` + `providerconfig/ClaudeConfigReader` (1,103 total) | everything pi uses, plus `prompts.PromptAsker/QuestionSpec`, `protocol.PromptOption` (owner questions), `daemon.InfantryMcp` (MCP config), `daemon.WatchHooks` (watch settings file), `session.InfantryEnv`, `session.infantrySetting`, `provider.AgentProvider`, `provider.ClaudeCodeProvider` (the plugin wraps the provider) | **L**. Two layers to merge into one plugin; MCP + watch + prompt seams must become host services |
+| **opencode** | `opencode/*` OpenCodeCommand(s), OpenCodePermissions, OpenCodeServeAdapter (28.7K) + `provider/OpenCodeProvider` + `providerconfig/OpenCodeConfigReader` (1,079 total) | runner, `session.host`, `provider.RunRequest`, `harness.ToolApproval/HarnessCommand/CommandAction`, `prompts.Decision`, `daemon.InfantryMcp` (mergeOpenCode, isOpenCodeInfantryTool), `daemon.WatchHooks` (openCodePlugin), `protocol.EventNormalizer`, `session.InfantryEnv`, `executables` | **L**. Not a plugin yet; is the daemon's DEFAULT provider; the serve adapter is the largest adapter |
 
 ### 1.3 The other direction: daemon code that names a harness (must move into the plugin or become a contribution)
 
@@ -44,10 +44,10 @@ plugin, and it stays.
 | `provider/ProviderFactory.kt` | builders `opencode`, `claude`; `DEFAULT = "opencode"`; aliases `oc`, `cc`, `claude-code` | registry; aliases in module.json |
 | `daemon/DaemonMain.kt` 1110-1123 | pi launch extras (todo + watch), opencode watch plugin file, claude watch settings dir | each plugin's `start(host)` |
 | `daemon/WatchHooks.kt` | `mergeOpenCodePlugin`, `piLaunchArgs`, `harness == "claude"` / `"pi"` branches | per-harness watch contribution (host gives the watched-runner launcher) |
-| `daemon/AgentHqMcp.kt` | `mergeOpenCode`, `isOpenCodeAgentHqTool` | opencode plugin; host gives the MCP launch (`Launch`) |
-| `agentHqRunner/.../Sandbox.kt` | `opencode`/`pi`/`claude` sandbox argv/env branches and data dirs | `CliHarness.sandbox(spec, dirs)` contribution |
-| `agentHqProtocol/.../EventNormalizer.kt` | opencode rejection / tool-end shapes, claude `permission_denials` | each harness's translator emits `HarnessEvent` (denial event) |
-| `agentHqProtocol/.../todo/OpenCodeTodoWrite.kt`, `TodoAdapter.kt` | opencode todo shape | opencode translator |
+| `daemon/InfantryMcp.kt` | `mergeOpenCode`, `isOpenCodeInfantryTool` | opencode plugin; host gives the MCP launch (`Launch`) |
+| `infantryRunner/.../Sandbox.kt` | `opencode`/`pi`/`claude` sandbox argv/env branches and data dirs | `CliHarness.sandbox(spec, dirs)` contribution |
+| `infantryProtocol/.../EventNormalizer.kt` | opencode rejection / tool-end shapes, claude `permission_denials` | each harness's translator emits `HarnessEvent` (denial event) |
+| `infantryProtocol/.../todo/OpenCodeTodoWrite.kt`, `TodoAdapter.kt` | opencode todo shape | opencode translator |
 | `stats/SessionStatsService.kt` | `readOpenCode`, Pi `models-store.json`, `CLAUDE` | `HarnessStats` contribution (stats taggers) |
 | `usage/Limits.kt` | `ClaudeOAuthUsageSource`, `OpenCodeGoUsageSource` | `UsageSource` contribution |
 | `tokens/OpenCodeUsageParser.kt`, `usagemeter/StreamUsage.kt` | opencode usage lines | translator `Usage` event |
@@ -61,17 +61,17 @@ plugin, and it stays.
 
 ## 2. Blank test (scratch, not committed)
 
-Scratch change: emptied `src/main/resources/META-INF/services/com.superiorsoftllc.agenthq.harness.HarnessPlugin` (no
+Scratch change: emptied `src/main/resources/META-INF/services/com.superiorsoftllc.infantry.harness.HarnessPlugin` (no
 claude, no pi plugin) and removed the `opencode` and `claude` builders from `ProviderFactory` (stub kept). `installDist`,
-then the daemon class run from `build/install/agenthq/lib` with every `AGENTHQ_*` unset and `AGENTHQ_STATE_DIR` /
-`AGENTHQ_HOME` = a temp dir, `AGENTHQ_PORT=8812`, set before launch. Reverted afterwards (`git status` clean).
+then the daemon class run from `build/install/infantry/lib` with every `INFANTRY_*` unset and `INFANTRY_STATE_DIR` /
+`INFANTRY_HOME` = a temp dir, `INFANTRY_PORT=8812`, set before launch. Reverted afterwards (`git status` clean).
 
 | # | what | result |
 |---|---|---|
-| B1 | daemon start, default env | **crash at startup**: `NoSuchElementException: Key opencode is missing in the map` at `ProviderFactory.fromFlag` <- `AgentHqDaemon.build` default param (DaemonMain 600). The daemon cannot start with zero harnesses. |
-| B2 | daemon start, `AGENTHQ_PROVIDER=stub` | starts; `/health` ok, `providers:["stub"]`, log `harnesses: <none>`; the 7 official daemon halves load |
+| B1 | daemon start, default env | **crash at startup**: `NoSuchElementException: Key opencode is missing in the map` at `ProviderFactory.fromFlag` <- `InfantryDaemon.build` default param (DaemonMain 600). The daemon cannot start with zero harnesses. |
+| B2 | daemon start, `INFANTRY_PROVIDER=stub` | starts; `/health` ok, `providers:["stub"]`, log `harnesses: <none>`; the 7 official daemon halves load |
 | B3 | state dir after start | an `opencode/` folder is written anyway (DaemonMain 1120 installs the opencode watch plugin unconditionally) |
-| B4 | `agenthq harnesses` | lists only `stub` as default: the test fake is presented as a real harness; no "install one" hint |
+| B4 | `infantry harnesses` | lists only `stub` as default: the test fake is presented as a real harness; no "install one" hint |
 | B5 | `ticket create --weight 3` + role, `ticket start` | refused: `provider 'claude' is not configured on this daemon (configured: stub)` (WeightExecutors routes w1-3 to claude) |
 | B6 | `--weight 5`, `ticket start` | refused: `provider 'pi' is not configured` (RoutingRules `OPUS_PROVIDER = "pi"`) |
 | B7 | `ticket create --provider claude` | refused at save: `provider 'claude' is not configured`. Good shape, wrong words ("not installed" is the truth) |
@@ -90,10 +90,10 @@ Found by reading (not run in the blank build):
 
 ### 3.1 The harness API module (what a harness plugin implements and may call)
 
-New leaf Gradle module **`agentHqHarnessApi`** (beside `agentHqRunner` / `agentHqProtocol`, same pattern as CORE-SPLIT-A).
+New leaf Gradle module **`infantryHarnessApi`** (beside `infantryRunner` / `infantryProtocol`, same pattern as CORE-SPLIT-A).
 It is the ONLY thing a harness jar compiles against, and the only daemon packages its class loader exposes.
 
-Implements (moved from `agentHq/harness` and `session/host`, unchanged signatures):
+Implements (moved from `infantry/harness` and `session/host`, unchanged signatures):
 * `HarnessPlugin` (`pluginId`, `contractVersion`, `register(registrar)`, `unload()`), `HarnessRegistrar`.
 * `Harness` / `CliHarness` (`processSpec`, `newTranslator`, `commands`, `sessionAdapter()`, `conversationCarry`),
   `HarnessRequest`, `HarnessEvent` (+ a `Denial` and `Usage` event so EventNormalizer/usage parsers lose their harness
@@ -103,7 +103,7 @@ Implements (moved from `agentHq/harness` and `session/host`, unchanged signature
 
 May call (`HarnessHost`, handed to `HarnessPlugin.register` through the registrar, never a static):
 * `stateDir` (its own `plugin-data/<Module>/`), `resolveCli(tool)`, `processRunner`, `settings(key)` (declared keys only),
-  `mcpLaunch()` (the agenthq MCP server command for the session), `watch` (the watched-runner launcher, on/off per session),
+  `mcpLaunch()` (the infantry MCP server command for the session), `watch` (the watched-runner launcher, on/off per session),
   `ask(question)` (PromptAsker), `log`.
 * Nothing else: no `SessionManager`, stores, `AccessPolicy` or `DaemonMain`. Class loader: a `HarnessApiClassLoader` like
   `DaemonApiClassLoader`, exposing `java.*`, `kotlin.*`, `kotlinx.coroutines/serialization.*`, `...harness.api.*`,
@@ -113,8 +113,8 @@ Contract version: the existing `HARNESS_CONTRACT_VERSION` exact-match handshake 
 (see 3.7).
 
 **As built in H3 (HARNESS-PLUGIN-3): bridge, not move.** The plan above moves the daemon's harness types into the API
-module. H3 instead adds a NEW, self-contained contract in `agentHqHarnessApi`
-(`com.superiorsoftllc.agenthq.harness.api`). It depends only on the Kotlin stdlib. `HarnessApiImportGuardTest` checks that
+module. H3 instead adds a NEW, self-contained contract in `infantryHarnessApi`
+(`com.superiorsoftllc.infantry.harness.api`). It depends only on the Kotlin stdlib. `HarnessApiImportGuardTest` checks that
 it imports nothing from the daemon. The daemon's 1.x types stay where they are, and the built-in pi/claude/opencode keep the
 1.x path unchanged.
 
@@ -183,9 +183,9 @@ Trust, identical to daemon halves (DAEMON-PLUGINS section 2):
 
 * Daemon **starts**. No default provider is chosen at build time; `ProviderFactory.DEFAULT` goes, the default is the first
   installed harness (or the owner's setting), else **none**.
-* `/health` + `ready` carry `harnesses: []`; `agenthq harnesses` prints "No harness installed. Install one: agenthq harness
+* `/health` + `ready` carry `harnesses: []`; `infantry harnesses` prints "No harness installed. Install one: infantry harness
   install <id>, or drop a harness module into plugins/." The stub is a test provider and is no longer listed unless
-  `AGENTHQ_PROVIDER=stub` is set explicitly.
+  `INFANTRY_PROVIDER=stub` is set explicitly.
 * Spawn / ticket start / ticket save naming an absent id: refused with `harness '<id>' is not installed (installed: ...)`.
   Routing defaults (weights, opus route) that name an absent harness are skipped with that same reason, never a crash.
 * UI: harness/model pickers show an empty state with an Install action (the Agents plugin's install surface).
@@ -199,7 +199,7 @@ root, so a default install behaves exactly as today.
 
 Compatibility: harness ids stay `pi`, `claude`, `opencode` (sessions, roles, tickets, routing rules and stats store ids as
 strings: no data migration). Aliases move to the manifest. A stored id whose plugin is absent resolves to "not installed"
-(the session can still be viewed; resume is refused with the reason). `AGENTHQ_PROVIDER(S)` keep working as a pick among
+(the session can still be viewed; resume is refused with the reason). `INFANTRY_PROVIDER(S)` keep working as a pick among
 installed harnesses.
 
 ### 3.6 Ordered steps
@@ -208,7 +208,7 @@ installed harnesses.
 |---|---|---|
 | **H1** | `JarHarnessPluginSource` (+ `folder(dir)`): jars outside the class path, one loader each, only the jar's own services entries, failures attributed per jar. Test plugin packed at test time. **Done in this ticket, not wired.** | S |
 | H2 | Zero-harness core: drop `ProviderFactory.DEFAULT`, start with none, "not installed" wording, routing defaults skip absent harnesses, stub hidden, no unconditional `opencode/` write, `harnesses` empty state. Fixes B1-B7. | M |
-| H3 | `agentHqHarnessApi` module + `HarnessHost` + `HarnessApiClassLoader`; ~~move the API types~~ a new 2.0.0 contract bridged into the 1.x registry (see 3.1 "As built"). **Done (HARNESS-PLUGIN-3).** | M |
+| H3 | `infantryHarnessApi` module + `HarnessHost` + `HarnessApiClassLoader`; ~~move the API types~~ a new 2.0.0 contract bridged into the 1.x registry (see 3.1 "As built"). **Done (HARNESS-PLUGIN-3).** | M |
 | H4 | module.json `harness` block, ModuleResolver -> `JarHarnessPluginSource`, trust/grants; build registry after module resolution (today `loadHarnesses()` runs at daemon build, before `DaemonPluginHost.load`); example `plugins/examples/Acme_EchoHarness`. **Done (HARNESS-PLUGIN-3)**: `HarnessModules` loads harness modules after module resolution and re-syncs on every re-resolution. Desktop app staging/signing of an official harness half is deferred to H6, the first official harness module. | M |
 | H5 | Contributions replacing core branches: watch, sandbox, stats, usage, denial/usage events, CLI + installer from manifest, UI icon/installable from manifest. Split into **H5a-H5f** (section 3.8); **H5a done (HARNESS-PLUGIN-4)**. | L (split per contribution) |
 | H6 | pi -> `plugins/official/Infantry_Pi` (incl. `PiLaunchExtras`, todo extension, tool-bridge experiment). | M |
@@ -253,7 +253,7 @@ H5b-H5f may ship in one API minor if they land together. The table gives each it
   null and keep the `HarnessPrefix` table, unchanged.
 * **Installer**: `HarnessInstaller(fromModules = HarnessModules::installables)` lists the built-ins first (same order),
   then each LOADED module's `cli.install`. A built-in id wins. The list is re-read on every call, so a module loaded or
-  unloaded since is seen. The package and the pinned version (`AGENTHQ_<ID>_VERSION`, `-` -> `_`) are re-checked before
+  unloaded since is seen. The package and the pinned version (`INFANTRY_<ID>_VERSION`, `-` -> `_`) are re-checked before
   npm runs.
 * **Daemon**: `HarnessHost.resolveCli` resolves through the module's manifest tool, so it finds a CLI the installer put
   in the prefix. Settings > CLI locations lists module tools after the built-ins and descriptors. `GET /plugins` modules
@@ -354,4 +354,4 @@ Additive, so the opencode harness can leave core without the daemon naming it. `
 
 
 ### 3.12 H8b-2 as built (API 2.12.0, ticket c0a61314)
-plugins/official/Infantry_OpenCode (hooks watch, mcp, config, session, models; CLI `opencode`) carries the opencode harness on the API, NOT switched on (the core copy still runs; H8b-3 switches and deletes it). `opencode serve` speaks HTTP + SSE, not stdin/stdout lines, so the API grew additively: `SessionOutput.output(line)` (a record as if the process printed it: raw stream + translator), `SessionOutput.diagnostic`, `SessionOutput.requestApproval(tool, input): ApprovalReply` (blocking, ask mode), `SessionConnection.onStderr`, and `HarnessSession.connect(out, launched)` (the launched process, so a connection can read the per-process password the plugin put in its env). The serve session boots from the `listening on <url>` stdout line; the provider session is created or resumed on the first turn. The plugin re-emits server events as the `opencode run --format json` lines and `OpenCodeTranslator` reads both. Parity with the core copy is pinned by `OpenCodePluginParityTest` (argv, merged config, permission replies, stream lines). Not ported: the sqlite stats read (stays in core until H8b-3) and `AGENTHQ_OPENCODE_MODEL` is read from the process environment.
+plugins/official/Infantry_OpenCode (hooks watch, mcp, config, session, models; CLI `opencode`) carries the opencode harness on the API, NOT switched on (the core copy still runs; H8b-3 switches and deletes it). `opencode serve` speaks HTTP + SSE, not stdin/stdout lines, so the API grew additively: `SessionOutput.output(line)` (a record as if the process printed it: raw stream + translator), `SessionOutput.diagnostic`, `SessionOutput.requestApproval(tool, input): ApprovalReply` (blocking, ask mode), `SessionConnection.onStderr`, and `HarnessSession.connect(out, launched)` (the launched process, so a connection can read the per-process password the plugin put in its env). The serve session boots from the `listening on <url>` stdout line; the provider session is created or resumed on the first turn. The plugin re-emits server events as the `opencode run --format json` lines and `OpenCodeTranslator` reads both. Parity with the core copy is pinned by `OpenCodePluginParityTest` (argv, merged config, permission replies, stream lines). Not ported: the sqlite stats read (stays in core until H8b-3) and `INFANTRY_OPENCODE_MODEL` is read from the process environment.

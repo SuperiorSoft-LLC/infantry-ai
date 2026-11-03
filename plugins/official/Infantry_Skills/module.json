@@ -6,7 +6,7 @@
   "description": "Saved skills to insert into the chat.",
   "tier": "official",
   "sequence": [],
-  "entry": "com.superiorsoftllc.agenthq.plugins.official.skills.SkillsPlugin",
+  "entry": "com.superiorsoftllc.infantry.plugins.official.skills.SkillsPlugin",
   "jar": "build/libs/Infantry_Skills.jar",
   "buildOrder": 180,
   "tabs": [

@@ -19,5 +19,5 @@ wins, and the page says so.
 
 Start with the `README.md` for install and first run.
 
-Commands in these pages were checked against `infantry --help` (`agenthq` is an alias of `infantry`) and the CLI
+Commands in these pages were checked against `infantry --help` (`agenthq` is a deprecated alias of `infantry`) and the CLI
 source. Screenshots are listed in `docs/img/README.md`.

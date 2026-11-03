@@ -1,6 +1,6 @@
-package com.superiorsoftllc.agenthq.plugins.official.review
+package com.superiorsoftllc.infantry.plugins.official.review
 
-import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.infantry.ui.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -20,8 +20,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.model.AppState
-import com.superiorsoftllc.agenthq.ui.shell.ReviewContext
+import com.superiorsoftllc.infantry.ui.model.AppState
+import com.superiorsoftllc.infantry.ui.shell.ReviewContext
 
 /** The nodes converged pods queue for review ([AppState.reviewQueue]); "Open agent" goes through [review] (RUNTIME-11). */
 @Composable

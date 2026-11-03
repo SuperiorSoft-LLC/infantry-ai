@@ -15,13 +15,13 @@ Nothing here decides the owner questions of section 8.
 
 | piece | where | what it does |
 |---|---|---|
-| plugins root | `PluginFolders.root` (agenthqPlugins jvmMain) | `AGENTHQ_PLUGINS_ROOT`, else `-Dagenthq.plugins.root`, else `<state dir>/plugins` |
+| plugins root | `PluginFolders.root` (infantryPlugins jvmMain) | `INFANTRY_PLUGINS_ROOT`, else `-Dinfantry.plugins.root`, else `<state dir>/plugins` |
 | folders + enable list | `<root>/modules.json` (`ModulesConfig`) | `folders` (path + tier, default `core`/`official`/`community`), `modules.<Name>` = `ModuleSetting` (`enabled`, `allow`, `deny`, `allowOverride`, `allowInject`, `endpoints`) |
 | scan | `PluginFolders.scan(root, config, bundled)` | every `<folder>/<Name>/module.json` (not `_*`), then the bundled root's `official/` (a user copy of the same name wins) |
-| bundled root | `PluginFolders.bundledRoot` | `AGENTHQ_BUNDLED_MODULES` / `-Dagenthq.plugins.bundled`; per layout in DAEMON-PLUGINS.md section 9 (installDist, docker, jpackage) |
+| bundled root | `PluginFolders.bundledRoot` | `INFANTRY_BUNDLED_MODULES` / `-Dinfantry.plugins.bundled`; per layout in DAEMON-PLUGINS.md section 9 (installDist, docker, jpackage) |
 | resolver | `ModuleResolver` (commonMain) | enable list, safe mode, dependencies (`DependencyGraph`, `SemVer`), `apiVersion` |
-| UI host | `DesktopPlugins` (agenthqUiCore jvmMain) | loads UI jars at runtime (desktop); wasm/Android compile from a plugin list (D6, D9) |
-| daemon host | `DaemonPluginHost` (agentHq `daemon/plugins`) | daemon halves (`daemon` block), own `URLClassLoader` under `DaemonApiClassLoader`, limits, hooks; **at daemon start only** |
+| UI host | `DesktopPlugins` (infantryUiCore jvmMain) | loads UI jars at runtime (desktop); wasm/Android compile from a plugin list (D6, D9) |
+| daemon host | `DaemonPluginHost` (infantry `daemon/plugins`) | daemon halves (`daemon` block), own `URLClassLoader` under `DaemonApiClassLoader`, limits, hooks; **at daemon start only** |
 | harness host | `HarnessModules` + `JarHarnessPluginSource` | harness halves (`harness` block) under `HarnessApiClassLoader`; at start; registry supports unload/discover per module |
 | what is loaded | `GET /plugins` (DaemonMain) | modules + daemon + harness status (`loaded`, `refused: <reason>`, `failed`) |
 
@@ -30,13 +30,13 @@ Nothing here decides the owner questions of section 8.
 * **Tier comes from the folder** (`Tier`: core / official / community), never from module.json.
 * **core**: compiled in, everything declared.
 * **official**: the jar passes `OfficialTrust` (signed by a pinned key; signed module.json equal to the disk one), **or** it is in the
-  install's bundled root (bundled = trusted, owner answer 97479106), **or** `-Dagenthq.plugins.devTrust=true` (property only, dev runs).
+  install's bundled root (bundled = trusted, owner answer 97479106), **or** `-Dinfantry.plugins.devTrust=true` (property only, dev runs).
   `OfficialTrust.PINNED_FINGERPRINTS` holds a **placeholder** (`REPLACE_WITH_REAL_INFANTRY_SIGNING_CERT_SHA256_FINGERPRINT`): no
   real Infantry key exists, so outside the bundled root and devTrust nothing is official today.
 * **community**: off until `enabled: true`, and only the services granted in `allow` (`daemon.code`, `daemon.tool`, `daemon.hook.<kind>`,
   `daemon.env:<N>`, `daemon.secret:<n>`, `daemon.processes` (never `kill`), `harness.code`, `harness.hook.<kind>`, `harness.setting:<k>`,
   `harness.cli`, plus the UI services) and node grants (`allowOverride`, `allowInject`). Default deny, fail closed.
-* **safe mode** (`AGENTHQ_SAFE_MODE`, `--safe-mode`): no community module loads.
+* **safe mode** (`INFANTRY_SAFE_MODE`, `--safe-mode`): no community module loads.
 
 ### 1.3 Install paths today
 
@@ -44,17 +44,17 @@ Nothing here decides the owner questions of section 8.
 |---|---|---|---|
 | copy a folder into `<root>/<tier>/` | anything | the tier's load rules at next start | no record of where it came from, no version history |
 | `.ihq` drop-in / picker (`DesktopDropIn` over `IhqInstaller`, desktop UI only) | `module.json` + `lib/*.jar` (+ `layout/*.json`, `deps/*.ihq` for compositions) | size/entry limits, safe names, jarsigner signature over the whole zip, one signer, cert currently valid, staged then atomic rename, `inspect` before `install`, re-inspect at commit | see 1.5 |
-| `harness_install` frame / `agenthq harness-install` / `agenthq_harness_install` | the harness's **CLI** (npm etc., from `harness.cli.install`), not the plugin | none on the plugin; it is a tool install | not a plugin install at all; keep it, it is the harness's own setup step |
-| `VoicePluginStore` (agenthqUiCore voice) | voice engines from a bundled catalog | per-asset size + sha256, staged, enabled id file | a second, separate store with its own downloader and enable state |
+| `harness_install` frame / `infantry harness-install` / `infantry_harness_install` | the harness's **CLI** (npm etc., from `harness.cli.install`), not the plugin | none on the plugin; it is a tool install | not a plugin install at all; keep it, it is the harness's own setup step |
+| `VoicePluginStore` (infantryUiCore voice) | voice engines from a bundled catalog | per-asset size + sha256, staged, enabled id file | a second, separate store with its own downloader and enable state |
 | build presets (`plugins/build-presets.json`, BUILD-PLUGINS-1) | which plugins a packaged build carries; class `optional` = may be left out and installed later "through the plugin manager" | build-time only | the manager it points to does not exist yet |
 
 ### 1.4 Update, enable/disable, remove today
 
 * **Update**: none for plugins. `IhqInstaller` refuses a name that exists in any tier folder (`ALREADY_INSTALLED`, "needs an
   upgrade path (none yet)"). A new version = delete the folder and drop again.
-* **App update** (the mechanism to reuse): `update/` in agentHq. `UpdateSource` (`check()`, `download()` -> `VerifiedInstaller`),
+* **App update** (the mechanism to reuse): `update/` in infantry. `UpdateSource` (`check()`, `download()` -> `VerifiedInstaller`),
   `Updater` (GitHub Releases API + `SHA256SUMS`), `LocalDirSource` (a releases folder, offline), `UpdateSources.forConfig`
-  (`AGENTHQ_UPDATE_DIR` wins over `AGENTHQ_UPDATE_REPO`), token only from the environment and only to the configured host,
+  (`INFANTRY_UPDATE_DIR` wins over `INFANTRY_UPDATE_REPO`), token only from the environment and only to the configured host,
   `ReleaseAssets.sha256` / `Updater.parseChecksum`. Headless: `ServerInstall` keeps `<root>/versions/<v>/` + `current`,
   previous version kept for rollback (`infantry rollback`). Desktop: verified MSI handed to Windows.
 * **Enable/disable**: `modules.json` `enabled`; written by Settings (`ModulesFile.write`, `ModulesFile.grant` from the consent
@@ -153,7 +153,7 @@ from a mirror, or from a local folder. It contains no code.
 * Stack names are plain `tags` (`gradle`, `npm`); the manager never interprets them.
 * Optional, later: `attestation` (Sigstore / GitHub build attestation URL). Not checked in v1.
 * The official index is **generated** from the build (BUILD-PLUGINS-1's optional-plugins output writes catalog.json + the
-  `.ihq` assets); a community index is a git repo where a pull request adds an entry and CI runs `agenthq plugin catalog
+  `.ihq` assets); a community index is a git repo where a pull request adds an entry and CI runs `infantry plugin catalog
   validate` (the same validator the manager uses), which recomputes sha256, the grants and the api range from the asset. Repo
   topic search is an unreviewed discovery aid only, its results are `custom`.
 
@@ -210,7 +210,7 @@ data class Consent(val token: String, val granted: Set<String>)
 
 ### 4.2 Grants: one function for every caller
 
-`RequestedGrants.of(manifest): List<GrantAsk>` (agenthqPlugins commonMain, pure): every grant the module would need as
+`RequestedGrants.of(manifest): List<GrantAsk>` (infantryPlugins commonMain, pure): every grant the module would need as
 community tier: its declared services, `daemon.code` + one per declared daemon tool/frame/hook/env/secret/processes, `harness.code`
 + hooks/settings/cli, and the node asks (`fill:`, `override:`, `inject:`, locked nodes marked not grantable). The consent dialog,
 the CLI, the catalog validator and the update diff all use it, so G4 closes in one place. Consent writes `modules.json`
@@ -222,12 +222,12 @@ the CLI, the catalog validator and the update diff all use it, so G4 closes in o
   `plugin_inspect`, `plugin_install`, `plugin_set` (enabled / grants), `plugin_updates`, `plugin_update`, `plugin_rollback`,
   `plugin_remove`, `plugin_status`; each with a `_result`. Actions in `ActionCatalog`: `plugins.read` (read), `plugins.manage`
   (destructive, **owner-only**: install, grants, update, rollback, remove, sources). The demo lock refuses `plugins.manage`.
-* CLI: `agenthq plugin list | search <q> [--tag t] | show <id> | install <id|file.ihq|dir|url> [--version v] [--grant g ...] [--grant-all-requested] |
+* CLI: `infantry plugin list | search <q> [--tag t] | show <id> | install <id|file.ihq|dir|url> [--version v] [--grant g ...] [--grant-all-requested] |
   enable <id> | disable <id> | grants <id> [--grant ...] | updates | update <id|--all> | rollback <id> | remove <id> [--purge] |
   status <id> | sources list|add|remove|refresh | catalog validate <catalog.json> [--assets dir]`. Without `--grant` an install
   prints the requested grants and stops (no interactive prompt).
-* MCP (agents): `agenthq_plugin_list`, `agenthq_plugin_search`, `agenthq_plugin_show`, `agenthq_plugin_status` (read), and
-  `agenthq_plugin_request` which **asks the owner** (an `ask` with the inspection: grants, licence, class) instead of installing.
+* MCP (agents): `infantry_plugin_list`, `infantry_plugin_search`, `infantry_plugin_show`, `infantry_plugin_status` (read), and
+  `infantry_plugin_request` which **asks the owner** (an `ask` with the inspection: grants, licence, class) instead of installing.
   Agents never install or grant (owner decision 8.6 recommends keeping it so).
 * UI (later slice): Settings > Plugins: tabs Installed / Browse / Sources; class badges (official, community, **custom**), bundled
   vs installed, licence, signer, grants with ticks, update badge with "asks for new permissions", rollback, remove. The `.ihq`
@@ -293,14 +293,14 @@ STACK-NEUTRAL-2 has landed: the watch is `plugins/official/Infantry_Processes` (
 
 | # | slice | module(s) | done when | scoped tests |
 |---|---|---|---|---|
-| PM-1 | Model: `PluginClass`, `CatalogEntry`/`Catalog` (schema 1, serializable, validation), api ranges, `RequestedGrants.of` | agenthqPlugins commonMain | pure functions, no IO | `CatalogTest`, `RequestedGrantsTest`, `SemVerTest` |
-| PM-2 | Installer: trusted signer -> **OFFICIAL** (G3); expected sha256 + manifest-equals-entry checks; `_versions`, `installed.json`, `_pending.json` + `applyPending`; update/rollback/remove primitives | agenthqPlugins jvmMain | an update and a rollback swap folders atomically, pending when locked | `IhqInstallerTest`, new `PluginVersionsTest`, `PendingOpsTest` |
-| PM-3 | Package daemon + harness halves in `.ihq` (G5): `ihq.gradle.kts` adds `lib/<Module>-daemon.jar`, `lib/<Module>-harness.jar`, rewrites `daemon.jar`/`harness.jar`; installer allows `policies/*.json` | gradle, agenthqPlugins | an installed Acme `.ihq` with a daemon half loads in the daemon | `IhqInstallerTest`, `DaemonPluginMechanismTest` |
-| PM-4 | Sources and fetch: `sources.json`, dir + url catalog sources, cache, offline; `AssetFetch` extracted from `update/` and used by `Updater`/`LocalDirSource` | agentHq `update/`, new `plugins/manager/` | a dir source works with no network; url source via a local test HTTP server | `CatalogSourcesTest`, `AssetFetchTest`, `UpdaterTest`, `LocalDirSourceTest` |
-| PM-5 | Daemon `PluginManager` service + frames + `plugins.read`/`plugins.manage` actions + CLI `agenthq plugin ...` + `catalog validate` | agentHq daemon, cli, protocol | the de8dd3c2 test list passes | new `PluginManagerServiceTest` (install/enable/disable/update/rollback/remove with a fake catalog + the Acme jar; tampered hash and signature refused; consent required; grant-raising update not auto-applied; incompatible api refused; disabled loads nothing; custom dir offline), `PluginCliTest` |
-| PM-6 | MCP read tools + `agenthq_plugin_request` (owner ask) | agentHq cli/mcp | agents can list and request, never install | `McpPluginManagerToolsTest` |
+| PM-1 | Model: `PluginClass`, `CatalogEntry`/`Catalog` (schema 1, serializable, validation), api ranges, `RequestedGrants.of` | infantryPlugins commonMain | pure functions, no IO | `CatalogTest`, `RequestedGrantsTest`, `SemVerTest` |
+| PM-2 | Installer: trusted signer -> **OFFICIAL** (G3); expected sha256 + manifest-equals-entry checks; `_versions`, `installed.json`, `_pending.json` + `applyPending`; update/rollback/remove primitives | infantryPlugins jvmMain | an update and a rollback swap folders atomically, pending when locked | `IhqInstallerTest`, new `PluginVersionsTest`, `PendingOpsTest` |
+| PM-3 | Package daemon + harness halves in `.ihq` (G5): `ihq.gradle.kts` adds `lib/<Module>-daemon.jar`, `lib/<Module>-harness.jar`, rewrites `daemon.jar`/`harness.jar`; installer allows `policies/*.json` | gradle, infantryPlugins | an installed Acme `.ihq` with a daemon half loads in the daemon | `IhqInstallerTest`, `DaemonPluginMechanismTest` |
+| PM-4 | Sources and fetch: `sources.json`, dir + url catalog sources, cache, offline; `AssetFetch` extracted from `update/` and used by `Updater`/`LocalDirSource` | infantry `update/`, new `plugins/manager/` | a dir source works with no network; url source via a local test HTTP server | `CatalogSourcesTest`, `AssetFetchTest`, `UpdaterTest`, `LocalDirSourceTest` |
+| PM-5 | Daemon `PluginManager` service + frames + `plugins.read`/`plugins.manage` actions + CLI `infantry plugin ...` + `catalog validate` | infantry daemon, cli, protocol | the de8dd3c2 test list passes | new `PluginManagerServiceTest` (install/enable/disable/update/rollback/remove with a fake catalog + the Acme jar; tampered hash and signature refused; consent required; grant-raising update not auto-applied; incompatible api refused; disabled loads nothing; custom dir offline), `PluginCliTest` |
+| PM-6 | MCP read tools + `infantry_plugin_request` (owner ask) | infantry cli/mcp | agents can list and request, never install | `McpPluginManagerToolsTest` |
 | PM-7 | Process watcher as the first optional catalog entry (section 6), generated catalog.json from BUILD-PLUGINS-1's optional output | plugins/official/Infantry_Processes, gradle | fresh optional build: not installed; install via catalog works; community copy cannot reap | `ProcessesCatalogEntryTest` + the Infantry_Processes daemon tests |
-| PM-8 | UI: Settings > Plugins (Installed / Browse / Sources, consent with all grants, update/rollback), `DesktopDropIn` through the manager | agenthqUiCore, Infantry_Settings | consent shows service + daemon + node grants | the Settings plugin UI tests touched, `ConfigDialogOfficialJarsUiTest` |
+| PM-8 | UI: Settings > Plugins (Installed / Browse / Sources, consent with all grants, update/rollback), `DesktopDropIn` through the manager | infantryUiCore, Infantry_Settings | consent shows service + daemon + node grants | the Settings plugin UI tests touched, `ConfigDialogOfficialJarsUiTest` |
 | PM-9 | Later: fold `VoicePluginStore` in (G11); remote client UI halves (G13); attestation check; licence display polish | various | | per slice |
 
 PM-1 and PM-2 have no dependency on each other's code beyond PM-1's types, so PM-2 starts as soon as PM-1 merges (one worker
@@ -329,18 +329,18 @@ at a time, D7). PM-3 can run any time after PM-2. PM-5 needs PM-1, PM-2, PM-4.
 ## 10. Implementation status (PLUGIN-MANAGER-1, ticket de8dd3c2)
 
 Built: the daemon-side manager core and the CLI (slices PM-1, PM-2 core, PM-4 sources, PM-5 minus wire frames). Code:
-`agentHq/.../daemon/plugins/manager/` (`PluginCatalog.kt` = schema-1 model, `RequestedGrants`, ledger; `PluginManager.kt` = sources,
+`infantry/.../daemon/plugins/manager/` (`PluginCatalog.kt` = schema-1 model, `RequestedGrants`, ledger; `PluginManager.kt` = sources,
 refresh/cache, search, inspect, install, enable/disable, grants, checkUpdates/update, rollback, remove, `validate`) and
-`cli/PluginCli.kt` (`agenthq plugin ...`, section 4.3 command set). Supporting edits in `agenthqPlugins`: `IhqInstaller` takes
+`cli/PluginCli.kt` (`infantry plugin ...`, section 4.3 command set). Supporting edits in `infantryPlugins`: `IhqInstaller` takes
 `trustedTier` (the manager passes OFFICIAL: **closes G3** for the manager path; the drop-in keeps CORE until PM-8) and `replace`
 (update); `ModulesFile.update` writes `enabled`/`allow`/`allowOverride`/`allowInject`.
 
 Decisions taken while building (all reversible, none owner-level):
 
-* **No wire frames, no new contract.** `agenthq plugin` works on this host's plugins root directly (like `agenthq remote`), because the
+* **No wire frames, no new contract.** `infantry plugin` works on this host's plugins root directly (like `infantry remote`), because the
   files are local to the daemon and the app. Frames (section 4.3) stay a follow-up for a remote client; `plugins.manage` owner-only is
   therefore "whoever can run the CLI on the host".
-* **`RequestedGrants` lives in the manager package**, not agenthqPlugins commonMain: the UI consent dialog (PM-8) moves it when it needs it.
+* **`RequestedGrants` lives in the manager package**, not infantryPlugins commonMain: the UI consent dialog (PM-8) moves it when it needs it.
 * **Local paths never use the network fetcher.** Only `http(s)` goes through the injectable `Fetcher`; dir/file/`file:` sources work offline.
 * **Unsigned is accepted for community/custom** (the catalog sha256 pin, or the user's own say for custom, is the proof); a broken
   signature is always refused; official needs a trusted-key signature (`NOT_SIGNED_OFFICIAL`). A user-trusted key lives in
@@ -352,11 +352,11 @@ Decisions taken while building (all reversible, none owner-level):
 
 Not built (gaps, listed not hacked):
 
-* **MCP tools.** Five `agenthq_plugin_*` tools were written and **backed out**: `BuiltinToolsListGuardTest` (a ratchet, "the list grew
+* **MCP tools.** Five `infantry_plugin_*` tools were written and **backed out**: `BuiltinToolsListGuardTest` (a ratchet, "the list grew
   past 6") says new MCP tools must be daemon-plugin tools, and a daemon plugin cannot reach the manager (no `DaemonApi` surface for the
   plugins root). Seam needed: a `DaemonApi` plugin-manager read service (list/search/inspect) + an official `Infantry_Plugins` daemon half
-  with the read tools and an `agenthq_plugin_request` that calls the ask service. Until then agents use `agenthq plugin list|search|show`
-  through the CLI and `agenthq ask` to request an install.
+  with the read tools and an `infantry_plugin_request` that calls the ask service. Until then agents use `infantry plugin list|search|show`
+  through the CLI and `infantry ask` to request an install.
 * **G7 staged apply.** A loaded module's locked files make update/rollback/remove answer IN_USE (nothing changed); `_pending.json` /
   `applyPending` is not built. Daemon/harness halves load at start, so every change says "takes effect at the next daemon start".
 * **G5 packaging.** `.ihq` build (`gradle/ihq.gradle.kts`) still packs only the UI jar; a daemon half inside a package works if its
@@ -366,7 +366,7 @@ Not built (gaps, listed not hacked):
 ### The process watcher as the first optional catalog entry (item 4)
 
 STACK-NEUTRAL-2 landed (`plugins/official/Infantry_Processes`, UI badge + daemon half). The entry the generated official index must carry,
-and that `agenthq plugin catalog validate` checks (sha256, size and grants are filled from the built `.ihq`):
+and that `infantry plugin catalog validate` checks (sha256, size and grants are filled from the built `.ihq`):
 
 ```json
 { "id": "Infantry_Processes", "description": "Process watcher: rogue background processes, free RAM, reaping.",

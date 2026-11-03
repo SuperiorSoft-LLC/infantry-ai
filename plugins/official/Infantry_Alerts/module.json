@@ -6,7 +6,7 @@
   "description": "The incoming-comms sound and spoken attention alerts.",
   "tier": "official",
   "sequence": [],
-  "entry": "com.superiorsoftllc.agenthq.plugins.official.alerts.AlertsPlugin",
+  "entry": "com.superiorsoftllc.infantry.plugins.official.alerts.AlertsPlugin",
   "jar": "build/libs/Infantry_Alerts.jar",
   "buildOrder": 200,
   "fills": [

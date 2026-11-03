@@ -1,6 +1,6 @@
-package com.superiorsoftllc.agenthq.plugins.official.chat
+package com.superiorsoftllc.infantry.plugins.official.chat
 
-import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.infantry.ui.*
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
@@ -13,8 +13,8 @@ import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.style.TextDecoration
-import com.superiorsoftllc.agenthq.ui.model.NewAgentField
-import com.superiorsoftllc.agenthq.ui.protocol.Role
+import com.superiorsoftllc.infantry.ui.model.NewAgentField
+import com.superiorsoftllc.infantry.ui.protocol.Role
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -44,11 +44,11 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.model.AllowedRoles
-import com.superiorsoftllc.agenthq.ui.model.AppState
-import com.superiorsoftllc.agenthq.ui.model.ExecutorPickerModel
-import com.superiorsoftllc.agenthq.ui.model.NewAgentModalModel
-import com.superiorsoftllc.agenthq.ui.model.PickedModel
+import com.superiorsoftllc.infantry.ui.model.AllowedRoles
+import com.superiorsoftllc.infantry.ui.model.AppState
+import com.superiorsoftllc.infantry.ui.model.ExecutorPickerModel
+import com.superiorsoftllc.infantry.ui.model.NewAgentModalModel
+import com.superiorsoftllc.infantry.ui.model.PickedModel
 import kotlinx.coroutines.launch
 
 const val NEW_AGENT_DIALOG_TAG = "new-agent-dialog"

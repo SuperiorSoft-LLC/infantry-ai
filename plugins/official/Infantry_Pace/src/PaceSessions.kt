@@ -1,6 +1,6 @@
-package com.superiorsoftllc.agenthq.plugins.official.pace
+package com.superiorsoftllc.infantry.plugins.official.pace
 
-import com.superiorsoftllc.agenthq.ui.protocol.UsageMeterRequest
+import com.superiorsoftllc.infantry.ui.protocol.UsageMeterRequest
 import kotlin.math.roundToInt
 
 /*

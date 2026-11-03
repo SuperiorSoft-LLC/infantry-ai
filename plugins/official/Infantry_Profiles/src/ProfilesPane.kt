@@ -1,7 +1,7 @@
-package com.superiorsoftllc.agenthq.plugins.official.profiles
+package com.superiorsoftllc.infantry.plugins.official.profiles
 
-import com.superiorsoftllc.agenthq.ui.shell.gate
-import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.infantry.ui.shell.gate
+import com.superiorsoftllc.infantry.ui.*
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -33,11 +33,11 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.shell.ExecutorContext
-import com.superiorsoftllc.agenthq.ui.shell.RolesContext
-import com.superiorsoftllc.agenthq.ui.model.AppState
-import com.superiorsoftllc.agenthq.ui.net.CommandResult
-import com.superiorsoftllc.agenthq.ui.protocol.AgentProfile
+import com.superiorsoftllc.infantry.ui.shell.ExecutorContext
+import com.superiorsoftllc.infantry.ui.shell.RolesContext
+import com.superiorsoftllc.infantry.ui.model.AppState
+import com.superiorsoftllc.infantry.ui.net.CommandResult
+import com.superiorsoftllc.infantry.ui.protocol.AgentProfile
 import kotlinx.coroutines.launch
 
 /**
@@ -74,7 +74,7 @@ private fun ProfileRow(p: AgentProfile, state: AppState, roles: RolesContext, ex
     val live = state.connection.isLive
     // POLICY-1: write controls are named actions gated by the daemon's policy (and any write policy); reads keep live.
     val canWrite = state.connection.gate("agents.profile.save").enabled
-    val canDelete = state.connection.gate("agents.profile.delete", com.superiorsoftllc.agenthq.plugin.api.ActionKind.DESTRUCTIVE).enabled
+    val canDelete = state.connection.gate("agents.profile.delete", com.superiorsoftllc.infantry.plugin.api.ActionKind.DESTRUCTIVE).enabled
     val role = state.role(p.role)
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(Palette.Raised).padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -102,7 +102,7 @@ private fun ProfileRow(p: AgentProfile, state: AppState, roles: RolesContext, ex
             Spacer(Modifier.width(6.dp))
             Button(
                 // GATE-PANES-1: a start as this profile spawns a session (`new`, `agents.spawn`), not a profile save.
-                enabled = state.connection.gate("agents.spawn", com.superiorsoftllc.agenthq.plugin.api.ActionKind.SPAWN).enabled && first.isNotBlank() && p.id != null,
+                enabled = state.connection.gate("agents.spawn", com.superiorsoftllc.infantry.plugin.api.ActionKind.SPAWN).enabled && first.isNotBlank() && p.id != null,
                 onClick = { actionScope.launch { if (roles.spawnAs(p.id!!, first.trim()) is CommandResult.Sent) { first = ""; onSessionStarted() } } },
             ) { Text("Start session") }
         }

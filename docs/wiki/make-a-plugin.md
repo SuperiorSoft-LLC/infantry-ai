@@ -37,7 +37,7 @@ name; the daemon jar name in `daemon/build.gradle.kts` (`archiveFileName`). The 
 ## 3. `module.json`, every field
 
 JSON has no comments, so each field is explained here. Unknown keys are ignored. The model is
-`ModuleManifest` in `superiorSoftLibrary/agenthqPlugins/src/commonMain/kotlin/com/superiorsoftllc/agenthq/plugin/api/ModuleManifest.kt`.
+`ModuleManifest` in `superiorSoftLibrary/infantryPlugins/src/commonMain/kotlin/com/superiorsoftllc/infantry/plugin/api/ModuleManifest.kt`.
 
 ### Identity
 
@@ -51,7 +51,7 @@ JSON has no comments, so each field is explained here. Unknown keys are ignored.
 | `description` | `""` | One line. |
 | `tier` | none | Ignored. The folder decides; a mismatch is logged. |
 | `platforms` | all | `["desktop","android","web"]`. A host on another platform skips the module ("not available on this platform"); an unknown value refuses it. |
-| `buildOrder` | none | Used only by the Gradle module-list generator for modules **compiled in** (core and official): it sorts the generated list, then by name. It is not a `ModuleManifest` field; the loader of a community jar ignores it. Source: `superiorSoftLibrary/agenthqAppUi/build.gradle.kts`. |
+| `buildOrder` | none | Used only by the Gradle module-list generator for modules **compiled in** (core and official): it sorts the generated list, then by name. It is not a `ModuleManifest` field; the loader of a community jar ignores it. Source: `superiorSoftLibrary/infantryAppUi/build.gradle.kts`. |
 
 ### Loading and relations
 
@@ -170,7 +170,7 @@ Rules:
 ## 5. The daemon half
 
 Implement `DaemonPlugin`; register tools, routes, frames and hooks in `start`. Give it its own Gradle project at
-`plugins/community/Acme_Notes/daemon/build.gradle.kts` with `compileOnly(project(":superiorSoftLibrary:agentHqDaemonApi"))`.
+`plugins/community/Acme_Notes/daemon/build.gradle.kts` with `compileOnly(project(":superiorSoftLibrary:infantryDaemonApi"))`.
 The root `settings.gradle.kts` includes every `plugins/<folder>/<Module>/daemon` that has a build file as
 `:daemon-plugin-<folder>-<Module>`. Details and limits: [Daemon plugin API](daemon-plugin-api.md).
 
@@ -204,13 +204,13 @@ There are two paths. Your `register` code is the same for both.
    `register`. This is the path for every community plugin.
 2. **Compiled in (web and Android).** Those platforms cannot load a jar at run time. The app UI module generates a
    module list at build time from `plugins/core/*/module.json` and `plugins/official/*/module.json` (the
-   `generateModuleList` task in `superiorSoftLibrary/agenthqAppUi/build.gradle.kts`), sorted by `buildOrder` then
+   `generateModuleList` task in `superiorSoftLibrary/infantryAppUi/build.gradle.kts`), sorted by `buildOrder` then
    name, and compiles it in. On this path an entry class implements `ModuleSource`
-   (`fun modules(): List<AgentHqModule>`) and returns an `AgentHqModule` whose manifest mirrors `module.json`.
+   (`fun modules(): List<InfantryModule>`) and returns an `InfantryModule` whose manifest mirrors `module.json`.
    `Infantry_ChatFeed` serves both paths with one class: `class ChatFeedPlugin : UiPlugin, ModuleSource`
    (`plugins/official/Infantry_ChatFeed/src/ChatFeedPlugin.kt`). A module with no UI part (only `daemon` or
    `harness`) is left out of the generated list. On the JVM the sources are found with `java.util.ServiceLoader`
-   (`META-INF/services/com.superiorsoftllc.agenthq.ui.plugin.ModuleSource`); the web entry calls
+   (`META-INF/services/com.superiorsoftllc.infantry.ui.plugin.ModuleSource`); the web entry calls
    `CompiledModules.install(...)`.
 
 A community plugin loaded from a jar works on the desktop app and the headless daemon only. To appear on web or
@@ -231,7 +231,7 @@ Android a plugin must be an official or core module compiled into the build.
 ## 9. Install, enable, disable
 
 1. Put the folder (with `module.json` and the jars at the paths the file names) into `<plugins root>/community/`. The
-   plugins root is `AGENTHQ_PLUGINS_ROOT`, else `<state dir>/plugins`.
+   plugins root is `INFANTRY_PLUGINS_ROOT`, else `<state dir>/plugins`.
 2. Enable it in Settings > Plugins > Modules, or edit `<plugins root>/modules.json`:
 
 ```json
@@ -256,8 +256,8 @@ core contributions the module may replace; `allowInject` the node ids it may inj
 - **Run it for real.** Start a throw-away instance so you never touch your own data:
 
 ```powershell
-$env:AGENTHQ_STATE_DIR = "$env:TEMP\plugin-test"; $env:AGENTHQ_PORT = "8812"; $env:AGENTHQ_PROVIDER = "stub"
-.\gradlew.bat --no-parallel :superiorSoftLibrary:agentHqUi:runRealDaemon
+$env:INFANTRY_STATE_DIR = "$env:TEMP\plugin-test"; $env:INFANTRY_PORT = "8812"; $env:INFANTRY_PROVIDER = "stub"
+.\gradlew.bat --no-parallel :superiorSoftLibrary:infantryUi:runRealDaemon
 ```
 
 - **Read the status.** Settings > Plugins lists each module and each refusal with a reason. For a daemon half, the
@@ -321,14 +321,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
-import com.superiorsoftllc.agenthq.ui.LocalTabFactory
-import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
-import com.superiorsoftllc.agenthq.ui.plugin.TabContext
-import com.superiorsoftllc.agenthq.ui.plugin.TabProvider
-import com.superiorsoftllc.agenthq.ui.plugin.UiPlugin
-import com.superiorsoftllc.agenthq.ui.plugin.UiRegistrar
-import com.superiorsoftllc.agenthq.ui.plugin.circle
-import com.superiorsoftllc.agenthq.ui.plugin.tabIcon
+import com.superiorsoftllc.infantry.ui.LocalTabFactory
+import com.superiorsoftllc.infantry.ui.plugin.TabContainers
+import com.superiorsoftllc.infantry.ui.plugin.TabContext
+import com.superiorsoftllc.infantry.ui.plugin.TabProvider
+import com.superiorsoftllc.infantry.ui.plugin.UiPlugin
+import com.superiorsoftllc.infantry.ui.plugin.UiRegistrar
+import com.superiorsoftllc.infantry.ui.plugin.circle
+import com.superiorsoftllc.infantry.ui.plugin.tabIcon
 
 const val NOTES_SLOT = "acme.notes.extra"
 
@@ -363,11 +363,11 @@ private fun NotesTab(context: TabContext) {
 ```kotlin
 package com.acme.notes.daemon
 
-import com.superiorsoftllc.agenthq.daemon.api.DaemonApi
-import com.superiorsoftllc.agenthq.daemon.api.DaemonPlugin
-import com.superiorsoftllc.agenthq.daemon.api.DaemonTool
-import com.superiorsoftllc.agenthq.daemon.api.ToolCall
-import com.superiorsoftllc.agenthq.daemon.api.ToolResult
+import com.superiorsoftllc.infantry.daemon.api.DaemonApi
+import com.superiorsoftllc.infantry.daemon.api.DaemonPlugin
+import com.superiorsoftllc.infantry.daemon.api.DaemonTool
+import com.superiorsoftllc.infantry.daemon.api.ToolCall
+import com.superiorsoftllc.infantry.daemon.api.ToolResult
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
@@ -399,7 +399,7 @@ kotlin {
 }
 
 dependencies {
-    compileOnly(project(":superiorSoftLibrary:agentHqDaemonApi"))
+    compileOnly(project(":superiorSoftLibrary:infantryDaemonApi"))
 }
 
 tasks.jar {
@@ -426,12 +426,12 @@ kotlin {
 }
 
 dependencies {
-    compileOnly(project(":superiorSoftLibrary:agenthqUiCore"))
+    compileOnly(project(":superiorSoftLibrary:infantryUiCore"))
     compileOnly(compose.runtime)
     compileOnly(compose.foundation)
     compileOnly(compose.material3)
 
-    testImplementation(project(":superiorSoftLibrary:agenthqUiCore"))
+    testImplementation(project(":superiorSoftLibrary:infantryUiCore"))
     testImplementation(compose.runtime)
     testImplementation(compose.foundation)
     testImplementation(compose.material3)
@@ -475,9 +475,9 @@ apply(from = rootProject.file("gradle/ihq.gradle.kts"))
 package com.acme.notesextra
 
 import androidx.compose.material3.Text
-import com.superiorsoftllc.agenthq.ui.plugin.PanelProvider
-import com.superiorsoftllc.agenthq.ui.plugin.UiPlugin
-import com.superiorsoftllc.agenthq.ui.plugin.UiRegistrar
+import com.superiorsoftllc.infantry.ui.plugin.PanelProvider
+import com.superiorsoftllc.infantry.ui.plugin.UiPlugin
+import com.superiorsoftllc.infantry.ui.plugin.UiRegistrar
 
 class NotesExtraPlugin : UiPlugin {
     override fun register(registrar: UiRegistrar) {
@@ -491,7 +491,7 @@ class NotesExtraPlugin : UiPlugin {
 `Acme_NotesExtra/build.gradle.kts` is the same file as `Acme_Notes/build.gradle.kts`. <!-- docs-freshness: ignore -->
 
 To try it, enable both modules in `modules.json` (`Acme_Notes` with `allow` `["notifications","daemon.code","daemon.tool"]`),
-restart, open the Notes tab, and call `acme_notes_count` from an agent or `agenthq mcp serve`.
+restart, open the Notes tab, and call `acme_notes_count` from an agent or `infantry mcp serve`.
 
 ## Open questions
 

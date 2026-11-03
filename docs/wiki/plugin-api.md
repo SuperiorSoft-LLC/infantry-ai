@@ -8,10 +8,10 @@ Two Gradle modules make up the UI plugin API:
 
 | Module | Source folder | What it holds |
 |---|---|---|
-| `agenthqPlugins` | `superiorSoftLibrary/agenthqPlugins/src/commonMain/kotlin/com/superiorsoftllc/agenthq/plugin/` | Data only, no UI: `plugin.api` (the `module.json` model, services, config declarations) and `plugin.host` (the loader rules). |
-| `agenthqUiCore` | `superiorSoftLibrary/agenthqUiCore/src/commonMain/kotlin/com/superiorsoftllc/agenthq/ui/` | The Compose side: `UiPlugin`, `UiRegistrar`, tab and panel providers, block types, config values. |
+| `infantryPlugins` | `superiorSoftLibrary/infantryPlugins/src/commonMain/kotlin/com/superiorsoftllc/infantry/plugin/` | Data only, no UI: `plugin.api` (the `module.json` model, services, config declarations) and `plugin.host` (the loader rules). |
+| `infantryUiCore` | `superiorSoftLibrary/infantryUiCore/src/commonMain/kotlin/com/superiorsoftllc/infantry/ui/` | The Compose side: `UiPlugin`, `UiRegistrar`, tab and panel providers, block types, config values. |
 
-A plugin jar compiles against `agenthqUiCore` with `compileOnly` and ships only its own classes. The app provides
+A plugin jar compiles against `infantryUiCore` with `compileOnly` and ships only its own classes. The app provides
 the API, Compose and the Kotlin runtime when it loads the jar. The template build file shows this:
 `plugins/_template/build.gradle.kts`.
 
@@ -21,7 +21,7 @@ refusal as one line (Settings > Plugins, and `TabFactory.problems`). Nothing is 
 
 ## 1. Entry point: `UiPlugin` and `UiRegistrar`
 
-Source: `agenthqUiCore/.../ui/plugin/TabFactory.kt`.
+Source: `infantryUiCore/.../ui/plugin/TabFactory.kt`.
 
 ```kotlin
 interface UiPlugin {
@@ -298,7 +298,7 @@ Declare `{ "registry": "chat.feed.renderers", "key": "user" }` in `implementatio
 
 ## 6. Platform services
 
-Source: `agenthqPlugins/.../plugin/api/Services.kt`. Get a service with `registrar.services.get(Services.X)`, or
+Source: `infantryPlugins/.../plugin/api/Services.kt`. Get a service with `registrar.services.get(Services.X)`, or
 `context.services.get(Services.X)` in a tab. It returns null when the module did not declare it, the owner denied
 it, or the platform lacks it. A community module also needs each service under `allow` in `modules.json`.
 
@@ -405,7 +405,7 @@ You rarely use these in a plugin; they explain the status you see in Settings > 
 - `ModuleState` is `LOADED`, `DISABLED`, `LOCKED`, `REFUSED`; `ModuleStatus` carries the state and the reason.
 - `PLUGIN_API_VERSION = 2`. A module whose `apiVersion` differs is refused. `PLUGIN_API_REVISION = 2` is the additive
   revision (1 added the `official` tier, 2 added sub-tabs).
-- `registerModule(manifest, tier, services, plugin): AgentHqModule` runs a plugin's `register` into a module value.
+- `registerModule(manifest, tier, services, plugin): InfantryModule` runs a plugin's `register` into a module value.
   Tests use it (the template's `StarterPluginTest.kt`).
 - `TabFactory(modules)` binds modules, rejects what is not declared and lists problems in `factory.problems`. Tests
   assert `factory.problems == emptyList()`.
@@ -421,5 +421,5 @@ You rarely use these in a plugin; they explain the status you see in Settings > 
   call `ChildSlot` should exist is not stated in the code.
 - `TabContext.routes` and `TabProvider.routes` are documented as "documentation"; nothing in the code checks them.
 - `ModuleManifest.tier` is read but ignored. Some shipped manifests still carry it.
-- `module.json` `buildOrder` is read by the Gradle module-list generator (`superiorSoftLibrary/agenthqAppUi/build.gradle.kts`)
+- `module.json` `buildOrder` is read by the Gradle module-list generator (`superiorSoftLibrary/infantryAppUi/build.gradle.kts`)
   but is not a field of `ModuleManifest`; see [Make a plugin](make-a-plugin.md).

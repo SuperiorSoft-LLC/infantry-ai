@@ -1,6 +1,6 @@
 -- on-ticket-done: the "a ticket reached done" flow as a script (SCRIPT-PROC-1; D21).
--- Hook:  agenthq script hook add "lane enter done" on-ticket-done --payload '{"devBranch":"<dev branch>","vcRole":"<vc role id>","skipMarkers":["[HOLD]","[PARKED]"]}'
--- Install: copy this file to <project>/.agenthq/scripts/on-ticket-done.lua.
+-- Hook:  infantry script hook add "lane enter done" on-ticket-done --payload '{"devBranch":"<dev branch>","vcRole":"<vc role id>","skipMarkers":["[HOLD]","[PARKED]"]}'
+-- Install: copy this file to <project>/.infantry/scripts/on-ticket-done.lua.
 -- Config is hook args (data), never literals here: devBranch, vcRole (both required), skipMarkers (list, optional).
 -- Event payload (enriched by the daemon): ticketId, title, branch, tipSha, workerSession.
 -- Phase 1: message VC, close the worker session, read the todo lane.  Phase 2: start the next ticket.  Phase 3: comment what was done.
@@ -51,7 +51,7 @@ elseif input.phase == 2 then
 else
   local n = #input.results
   local started = result(n)
-  local didStart = started and started.tool == "agenthq_ticket_start"
+  local didStart = started and started.tool == "infantry_ticket_start"
   local parts = {
     "on-ticket-done: asked '" .. a.vcRole .. "' to merge " .. (a.branch or "?") .. " tip " .. (a.tipSha or "?") .. " into " .. a.devBranch ..
       (ok(result(1)) and " (queued)" or " (FAILED)") .. ".",

@@ -7,13 +7,13 @@ Is "same performance after the block splits" true? This puts numbers on it. Meas
 | side | commit | what it is |
 |---|---|---|
 | base | `9b7c2ce5` | first parent of `af67ce03` (the BLOCKS-LAYOUT L1 merge): the last dev commit before the block splits |
-| dev  | `5aa26850` | dev head (feature-agenthq-mvp) when this ran |
+| dev  | `5aa26850` | dev head ("feature-agenthq"-mvp) when this ran |
 
 Both ran on the same machine (AMD Ryzen 7 5700G, Windows, about 9 GB RAM free), one after the other, one Gradle job at a time, `--max-workers=2`.
 
 ## How
 
-- The harness is `docs/blocks-perf/PerfMain.kt.txt`. It is a copy of the TabShotsMain setup: an in-process stub daemon with temp state, the repo's `plugins/` root, a 1400x860 headless `runDesktopComposeUiTest`, and `agenthq.ui.blur=off`. On dev it also uses the fixed 8 GB MemorySource and the pinned shot prefs. Neither exists at base, where `//DEV:` turns those lines off. Base also cannot draw a low-memory row, because its daemon has no memory hook.
+- The harness is `docs/blocks-perf/PerfMain.kt.txt`. It is a copy of the TabShotsMain setup: an in-process stub daemon with temp state, the repo's `plugins/` root, a 1400x860 headless `runDesktopComposeUiTest`, and `infantry.ui.blur=off`. On dev it also uses the fixed 8 GB MemorySource and the pinned shot prefs. Neither exists at base, where `//DEV:` turns those lines off. Base also cannot draw a low-memory row, because its daemon has no memory hook.
 - It ran through `runTabShots`, with `docs/blocks-perf/perf.init.gradle` swapping in the main class. That gives the same classpath, JVM caps (`-Xmx512m`), plugins root and env. The build files were not touched.
 - Each step's time is wall-clock from the action (click / `setContent`) until its target tag appears **and** `waitForIdle()` returns. That covers composition, layout and the frame. Capturing the drawn window to an image afterwards cost about 1.5–2 ms on both sides, so it is not a factor.
 - Each JVM ran: first draw, connect, spawn one stub agent, then 6 passes of chat→Git→chat, board open/close, New agent open/Cancel. Pass 1 is "cold" and passes 2–6 are "warm" (median per JVM). Then Configuration → Agents → Manage roles, once per JVM.

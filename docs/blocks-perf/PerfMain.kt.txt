@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.ui
+package com.superiorsoftllc.infantry.ui
 
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.test.ComposeUiTest
@@ -16,15 +16,15 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.runDesktopComposeUiTest
-import com.superiorsoftllc.agenthq.daemon.AgentHqDaemon
-import com.superiorsoftllc.agenthq.mailbox.JsonMailStore
-import com.superiorsoftllc.agenthq.persistence.SqlAgentHqStore
-import com.superiorsoftllc.agenthq.plugin.host.PluginFolders
-import com.superiorsoftllc.agenthq.provider.StubProvider
-import com.superiorsoftllc.agenthq.runner.StubScript
-import com.superiorsoftllc.agenthq.session.JsonSessionStore
-import com.superiorsoftllc.agenthq.ui.net.Controller
-import com.superiorsoftllc.agenthq.ui.plugin.DesktopPlugins
+import com.superiorsoftllc.infantry.daemon.InfantryDaemon
+import com.superiorsoftllc.infantry.mailbox.JsonMailStore
+import com.superiorsoftllc.infantry.persistence.SqlInfantryStore
+import com.superiorsoftllc.infantry.plugin.host.PluginFolders
+import com.superiorsoftllc.infantry.provider.StubProvider
+import com.superiorsoftllc.infantry.runner.StubScript
+import com.superiorsoftllc.infantry.session.JsonSessionStore
+import com.superiorsoftllc.infantry.ui.net.Controller
+import com.superiorsoftllc.infantry.ui.plugin.DesktopPlugins
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -44,7 +44,7 @@ fun main(args: Array<String>) {
     //DEV: pinShotUiPrefs()
     val outFile = File(args.firstOrNull() ?: "build/perf.txt")
     val warm = System.getProperty("perf.warm")?.toIntOrNull() ?: 5
-    val dir = Files.createTempDirectory("agenthq-perf").toFile()
+    val dir = Files.createTempDirectory("infantry-perf").toFile()
     val root = File(dir, "plugins")
     System.getProperty(PluginFolders.ROOT_PROPERTY)?.let { File(it).copyRecursively(root) }
     val env = mapOf(PluginFolders.ROOT_ENV to root.absolutePath)
@@ -54,12 +54,12 @@ fun main(args: Array<String>) {
     val port = java.net.ServerSocket(0).use { it.localPort }
     val provider = StubProvider(StubScript.default(), delayMs = 0)
     val n = AtomicInteger()
-    val daemon = AgentHqDaemon.build(
+    val daemon = InfantryDaemon.build(
         port = port, host = "127.0.0.1", provider = provider, runner = provider.transport()!!,
         sessionStore = JsonSessionStore(File(dir, "sessions.json")), mailStore = JsonMailStore(File(dir, "mailbox.json")),
-        store = SqlAgentHqStore.open(File(dir, "agenthq.db").absolutePath), mailBaseUrl = "http://127.0.0.1:1", token = null,
+        store = SqlInfantryStore.open(File(dir, "infantry.db").absolutePath), mailBaseUrl = "http://127.0.0.1:1", token = null,
         sessionIds = { "5e55a0%02d-0000-4000-8000-000000000000".format(n.incrementAndGet()) },
-        //DEV: memory = object : com.superiorsoftllc.agenthq.session.MemorySource { override fun freeMb(): Long = 8192; override fun totalMb(): Long = 16384; override fun processes(): List<com.superiorsoftllc.agenthq.session.ProcMem> = emptyList() },
+        //DEV: memory = object : com.superiorsoftllc.infantry.session.MemorySource { override fun freeMb(): Long = 8192; override fun totalMb(): Long = 16384; override fun processes(): List<com.superiorsoftllc.infantry.session.ProcMem> = emptyList() },
     )
     daemon.start()
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)

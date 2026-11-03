@@ -1,7 +1,7 @@
-package com.superiorsoftllc.agenthq.plugins.official.board
+package com.superiorsoftllc.infantry.plugins.official.board
 
-import com.superiorsoftllc.agenthq.ui.*
-import com.superiorsoftllc.agenthq.ui.shell.blocks.*
+import com.superiorsoftllc.infantry.ui.*
+import com.superiorsoftllc.infantry.ui.shell.blocks.*
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -55,8 +55,8 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.unit.round
 import androidx.compose.ui.unit.toSize
 import androidx.compose.ui.zIndex
-import com.superiorsoftllc.agenthq.ui.model.BoardDrop
-import com.superiorsoftllc.agenthq.ui.model.DropPlan
+import com.superiorsoftllc.infantry.ui.model.BoardDrop
+import com.superiorsoftllc.infantry.ui.model.DropPlan
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import androidx.compose.runtime.remember
@@ -77,35 +77,35 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.model.AppState
-import com.superiorsoftllc.agenthq.ui.model.EpicView
-import com.superiorsoftllc.agenthq.ui.protocol.AgentProfile
-import com.superiorsoftllc.agenthq.ui.model.branchLine
-import com.superiorsoftllc.agenthq.ui.model.ReportFlag
-import com.superiorsoftllc.agenthq.ui.model.reportFlagFor
-import com.superiorsoftllc.agenthq.ui.model.WatchFlag
-import com.superiorsoftllc.agenthq.ui.model.TicketPins
-import com.superiorsoftllc.agenthq.ui.model.ContextLimitInput
-import com.superiorsoftllc.agenthq.ui.model.contextLimitLine
-import com.superiorsoftllc.agenthq.ui.model.contextLimitNoteFor
-import com.superiorsoftllc.agenthq.ui.model.effortLine
-import com.superiorsoftllc.agenthq.ui.model.effortNoteFor
-import com.superiorsoftllc.agenthq.ui.model.ticketEffortEdit
-import com.superiorsoftllc.agenthq.ui.model.executorLine
-import com.superiorsoftllc.agenthq.ui.model.formatContextLimit
-import com.superiorsoftllc.agenthq.ui.model.ticketContextLimitEdit
-import com.superiorsoftllc.agenthq.ui.model.ticketPinEdit
-import com.superiorsoftllc.agenthq.ui.model.ticketTypeLabel
+import com.superiorsoftllc.infantry.ui.model.AppState
+import com.superiorsoftllc.infantry.ui.model.EpicView
+import com.superiorsoftllc.infantry.ui.protocol.AgentProfile
+import com.superiorsoftllc.infantry.ui.model.branchLine
+import com.superiorsoftllc.infantry.ui.model.ReportFlag
+import com.superiorsoftllc.infantry.ui.model.reportFlagFor
+import com.superiorsoftllc.infantry.ui.model.WatchFlag
+import com.superiorsoftllc.infantry.ui.model.TicketPins
+import com.superiorsoftllc.infantry.ui.model.ContextLimitInput
+import com.superiorsoftllc.infantry.ui.model.contextLimitLine
+import com.superiorsoftllc.infantry.ui.model.contextLimitNoteFor
+import com.superiorsoftllc.infantry.ui.model.effortLine
+import com.superiorsoftllc.infantry.ui.model.effortNoteFor
+import com.superiorsoftllc.infantry.ui.model.ticketEffortEdit
+import com.superiorsoftllc.infantry.ui.model.executorLine
+import com.superiorsoftllc.infantry.ui.model.formatContextLimit
+import com.superiorsoftllc.infantry.ui.model.ticketContextLimitEdit
+import com.superiorsoftllc.infantry.ui.model.ticketPinEdit
+import com.superiorsoftllc.infantry.ui.model.ticketTypeLabel
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import com.superiorsoftllc.agenthq.ui.net.CommandResult
-import com.superiorsoftllc.agenthq.ui.net.ImageUploadOutcome
-import com.superiorsoftllc.agenthq.ui.shell.LocalPlatformHost
-import com.superiorsoftllc.agenthq.ui.shell.PickedImage
-import com.superiorsoftllc.agenthq.ui.protocol.Ticket
-import com.superiorsoftllc.agenthq.ui.protocol.TicketColumns
+import com.superiorsoftllc.infantry.ui.net.CommandResult
+import com.superiorsoftllc.infantry.ui.net.ImageUploadOutcome
+import com.superiorsoftllc.infantry.ui.shell.LocalPlatformHost
+import com.superiorsoftllc.infantry.ui.shell.PickedImage
+import com.superiorsoftllc.infantry.ui.protocol.Ticket
+import com.superiorsoftllc.infantry.ui.protocol.TicketColumns
 import kotlinx.coroutines.launch
 
 /** M2-1: the role behind a ticket's assignee: a profile's role, or the `role:<role>` lane's role, else none. */
@@ -249,7 +249,7 @@ class BoardPaneHost internal constructor(
 ) {
     val live: Boolean get() = deps.live
     /** POLICY-1: whether the named action [actionId] may be performed now (live, and the daemon's policy allows it). */
-    @Composable fun can(actionId: String, kind: String = com.superiorsoftllc.agenthq.plugin.api.ActionKind.WRITE): Boolean = deps.can(actionId, kind)
+    @Composable fun can(actionId: String, kind: String = com.superiorsoftllc.infantry.plugin.api.ActionKind.WRITE): Boolean = deps.can(actionId, kind)
     val creating: Boolean get() = creatingState.value
     internal val hover: DragHover? get() = hoverState.value
 
@@ -343,7 +343,7 @@ fun BoardFiltersSection(board: BoardPaneHost, modifier: Modifier = Modifier) {
         OutlinedButton(onClick = { showArchive = true }, modifier = Modifier.testTag(ARCHIVE_BUTTON_TAG)) { Text("Archive", fontSize = 12.sp) }
         if (showArchive) BoardArchiveDialog(board.deps) { showArchive = false }
         Spacer(Modifier.width(6.dp))
-        OutlinedButton(onClick = { board.startNext() }, enabled = board.can("board.ticket.start", com.superiorsoftllc.agenthq.plugin.api.ActionKind.SPAWN) && tickets.column(TicketColumns.TODO).isNotEmpty()) {
+        OutlinedButton(onClick = { board.startNext() }, enabled = board.can("board.ticket.start", com.superiorsoftllc.infantry.plugin.api.ActionKind.SPAWN) && tickets.column(TicketColumns.TODO).isNotEmpty()) {
             Text("Start next", fontSize = 12.sp)
         }
         Spacer(Modifier.width(6.dp))
@@ -605,7 +605,7 @@ class BoardCardHost internal constructor(
     val deps: BoardDeps get() = board.deps
     val live: Boolean get() = board.live
     /** POLICY-1: whether the named action [actionId] may be performed on this card now. */
-    @Composable fun can(actionId: String, kind: String = com.superiorsoftllc.agenthq.plugin.api.ActionKind.WRITE): Boolean = board.can(actionId, kind)
+    @Composable fun can(actionId: String, kind: String = com.superiorsoftllc.infantry.plugin.api.ActionKind.WRITE): Boolean = board.can(actionId, kind)
     /** The edit form is open (the summary toggles it). */
     val open: Boolean get() = openState.value
     val dropNote: String? get() = item.dropNote
@@ -686,7 +686,7 @@ fun TicketCardBadgesSection(card: BoardCardHost, modifier: Modifier = Modifier) 
         // KNOWLEDGE-PTR-2: how many tickets this one relates to (relates_to links + series members).
         RelatedView.count(t).takeIf { it > 0 }?.let { Chip("$it related", Palette.Muted, Modifier.testTag("ticket-related-count-${t.id}")) }
         // TICKET-COMMENTS-3: open comments, read once per ticket revision and cached in TicketCommentCounts.
-        val shell = com.superiorsoftllc.agenthq.ui.shell.LocalShellContext.current
+        val shell = com.superiorsoftllc.infantry.ui.shell.LocalShellContext.current
         androidx.compose.runtime.LaunchedEffect(t.id, t.updatedAt) {
             shell?.let { DaemonTicketCommentsApi(it.tickets).meta(t.id) }
         }
@@ -762,7 +762,7 @@ fun TicketCardActionsSection(card: BoardCardHost, modifier: Modifier = Modifier)
     val canMove = card.can("board.ticket.move")
     // Start moves the ticket to In progress (ticket_move); the daemon then starts its agent.
     val canStart = card.can("board.ticket.move")
-    val canDelete = card.can("board.ticket.delete", com.superiorsoftllc.agenthq.plugin.api.ActionKind.DESTRUCTIVE)
+    val canDelete = card.can("board.ticket.delete", com.superiorsoftllc.infantry.plugin.api.ActionKind.DESTRUCTIVE)
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
         when (t.status) {
             // 1.131.0: a backlog card is never started; it is promoted to the sprint first.
@@ -782,7 +782,7 @@ fun TicketCardActionsSection(card: BoardCardHost, modifier: Modifier = Modifier)
         }
         Spacer(Modifier.weight(1f))
         // TICKET-COMMENTS-1: the full-open modal for this ticket (the inline editor stays).
-        val shellBoard = com.superiorsoftllc.agenthq.ui.shell.LocalShellContext.current?.board
+        val shellBoard = com.superiorsoftllc.infantry.ui.shell.LocalShellContext.current?.board
         if (shellBoard != null) TextButton(onClick = { shellBoard.openTicket(t.id) }, modifier = Modifier.testTag(TICKET_OPEN_TAG_PREFIX + t.id)) { Text("Open", fontSize = 11.sp) }
         if (card.open) TextButton(onClick = { card.delete() }, enabled = canDelete) { Text("Delete", color = Palette.Danger, fontSize = 11.sp) }
     }

@@ -25,7 +25,7 @@ body:
         - Android app
         - Headless server (archive)
         - Headless server (Docker)
-        - CLI (infantry / agenthq)
+        - CLI (infantry / infantry)
         - Updater / installer
         - Pairing (QR / link)
     validations:
@@ -70,7 +70,7 @@ body:
     attributes:
       label: Logs
       description: |
-        Attach `agenthq.log` (Configuration > Logs > Open logs folder), plus `agenthq.1.log` if you restarted since.
+        Attach `infantry.log` (Configuration > Logs > Open logs folder), plus `infantry.1.log` if you restarted since.
         Logs can contain project paths, prompts and agent output: read them and remove anything private first.
         Never paste a token, a key or a pairing link.
   - type: checkboxes

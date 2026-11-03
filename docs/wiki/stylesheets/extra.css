@@ -1,4 +1,4 @@
-/* Infantry AI brand: values from agenthqUiCore Theme.kt (DarkTones/LightTones) and ThemeAccent.RED. */
+/* Infantry AI brand: values from infantryUiCore Theme.kt (DarkTones/LightTones) and ThemeAccent.RED. */
 :root > * { --md-text-font: "Inter"; --md-code-font: "JetBrains Mono"; }
 [data-md-color-scheme="slate"] {
   --md-hue: 220;

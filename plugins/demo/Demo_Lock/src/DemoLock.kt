@@ -1,17 +1,17 @@
-package com.superiorsoftllc.agenthq.plugins.demo.lock
+package com.superiorsoftllc.infantry.plugins.demo.lock
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
-import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
-import com.superiorsoftllc.agenthq.plugin.api.ShellOverrideDeclaration
-import com.superiorsoftllc.agenthq.ui.block.layout.BlockOverride
-import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
-import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
-import com.superiorsoftllc.agenthq.ui.plugin.UiPlugin
-import com.superiorsoftllc.agenthq.ui.plugin.UiRegistrar
-import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
+import com.superiorsoftllc.infantry.plugin.api.ModuleManifest
+import com.superiorsoftllc.infantry.plugin.api.ShellOverrideDeclaration
+import com.superiorsoftllc.infantry.ui.block.layout.BlockOverride
+import com.superiorsoftllc.infantry.ui.plugin.InfantryModule
+import com.superiorsoftllc.infantry.ui.plugin.ModuleSource
+import com.superiorsoftllc.infantry.ui.plugin.UiPlugin
+import com.superiorsoftllc.infantry.ui.plugin.UiRegistrar
+import com.superiorsoftllc.infantry.ui.shell.LocalShellContext
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 
@@ -64,7 +64,7 @@ private fun DemoLockProvider(state: DemoLockState, content: @Composable () -> Un
 }
 
 /** DEMO-MERGE-1: a demo-only module; its single override is declared in module.json and here (same name). */
-val DemoLockModule = AgentHqModule(
+val DemoLockModule = InfantryModule(
     ModuleManifest(
         name = "Demo_Lock", version = "1.1.0", author = "Infantry AI",
         description = "Demo build only: the demo notice around the whole app; ships the demo policy preset (policies/demo.json).",
@@ -76,5 +76,5 @@ val DemoLockModule = AgentHqModule(
 class DemoLockPlugin : UiPlugin, ModuleSource {
     override fun register(registrar: UiRegistrar) = registrar.shell("lock", demoLockWrap)
 
-    override fun modules(): List<AgentHqModule> = listOf(DemoLockModule)
+    override fun modules(): List<InfantryModule> = listOf(DemoLockModule)
 }

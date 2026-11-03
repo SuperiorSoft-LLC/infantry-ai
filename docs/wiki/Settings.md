@@ -1,7 +1,7 @@
 # Settings
 
 Settings are durable key/value pairs kept by the daemon. Read and write them in the Settings tab, with the CLI, or
-with the MCP tools `agenthq_settings_get` / `agenthq_settings_set`.
+with the MCP tools `infantry_settings_get` / `infantry_settings_set`.
 
 ```
 infantry settings                                  # every setting, key = value
@@ -61,5 +61,5 @@ The default is the cheapest reasonable value. A costlier value is an opt-in. The
 | `nudges.deferToHooks` | `[]` | Built-in notices a script replaces (for example `notice.ticket_finished`) |
 
 Plugins add their own keys through `config` cards in their `module.json` (see [Plugins](Plugins.md)). The full list
-for your build: `infantry settings`, and the Settings tab (searchable). Environment variables (`AGENTHQ_*`, also read
+for your build: `infantry settings`, and the Settings tab (searchable). Environment variables (`INFANTRY_*`, also read
 as `INFANTRY_*`) set machine-level values such as the port, state dir and token; see the README.

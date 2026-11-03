@@ -10,8 +10,8 @@ kotlin {
 }
 
 dependencies {
-    compileOnly(project(":superiorSoftLibrary:agentHqDaemonApi"))
-    testImplementation(project(":superiorSoftLibrary:agentHqDaemonApi"))
+    compileOnly(project(":superiorSoftLibrary:infantryDaemonApi"))
+    testImplementation(project(":superiorSoftLibrary:infantryDaemonApi"))
     testImplementation(kotlin("test"))
     // ATTN-2b: AttentionStoreTest runs the store on a real SQLite file.
     testImplementation(libs.sqlite.jdbc)

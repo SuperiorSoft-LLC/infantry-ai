@@ -1,0 +1,24 @@
+# Infantry CLI launcher for PowerShell on Windows (BUG-CLI-2).
+# BUG-CLI-3: shipped as infantry.ps1.template; the installed app copies it to infantry.ps1 only where the PowerShell
+# execution policy lets it run (InstalledCli.syncPowerShellLauncher), else PowerShell keeps using infantry.cmd.
+# PowerShell resolves a bare `infantry` to this file ahead of infantry.cmd in the same directory (ExternalScript beats
+# Application; checked on pwsh 7 and Windows PowerShell 5.1). It exists because infantry.cmd passes `%*`, and cmd.exe ends
+# the argument line at the first LF: a multi-line `--desc "a<LF>b"` became "a" and every later argument (`--port N`)
+# was dropped silently. Here the arguments go to java as an array, so each one arrives whole, newlines included.
+# jpackage layout and java order are infantry.cmd's: INFANTRY_JAVA, the bundled runtime's java.exe, JAVA_HOME, PATH.
+$here = $PSScriptRoot
+$app = Join-Path $here '..'
+$java = $null
+if ($env:INFANTRY_JAVA -and (Test-Path -LiteralPath $env:INFANTRY_JAVA -PathType Leaf)) { $java = $env:INFANTRY_JAVA }
+if (-not $java) {
+    $bundled = Join-Path $here '..\..\runtime\bin\java.exe'
+    if (Test-Path -LiteralPath $bundled -PathType Leaf) { $java = $bundled }
+}
+if (-not $java -and $env:JAVA_HOME) {
+    $javaHome = Join-Path $env:JAVA_HOME 'bin\java.exe'
+    if (Test-Path -LiteralPath $javaHome -PathType Leaf) { $java = $javaHome }
+}
+if (-not $java) { $java = 'java' }
+& $java --add-opens=java.base/java.util=ALL-UNNAMED -cp (Join-Path $app '*') com.superiorsoftllc.infantry.cli.CliMainKt @args
+if ($null -eq $LASTEXITCODE) { exit 1 } # java itself could not be started
+exit $LASTEXITCODE

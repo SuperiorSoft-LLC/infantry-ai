@@ -11,10 +11,10 @@ its report and ticket; QA turns those into cases in one batch.
 
 1. **DAEMON-PLUGIN-3 / d59300af (DP-5a, w3)**: settings (WeightExecutors), db (TicketTypeMigration), TicketStartCharge, ledger stop importing board packages.
 2. **DAEMON-PLUGIN-4 / 56e73894 (DP-5b, w4)**: triggers and ticketfiles use `Tickets`/`TicketEvents` (additive API members if needed).
-3. **DAEMON-PLUGIN-5 / 65094bfb (DP-5c, w5)**: `BoardHost` port in agentHqDaemonApi (storage tx, worktree/git, sessions, settings, clock) + `LocalBoardHost`; nothing consumes it yet.
+3. **DAEMON-PLUGIN-5 / 65094bfb (DP-5c, w5)**: `BoardHost` port in infantryDaemonApi (storage tx, worktree/git, sessions, settings, clock) + `LocalBoardHost`; nothing consumes it yet.
 4. **DAEMON-PLUGIN-6 / 6f045cbf (DP-5d, w4)**: DaemonMain board frame switch becomes a registered handler table with a "no board" refusal fallback.
-5. **DAEMON-PLUGIN-7 / 59edf02f (DP-5e, w4)**: new Gradle module `agentHqBoard`; epics, brief, ledger, context, ticketfiles move into it.
-6. **DAEMON-PLUGIN-8 / a1c88bcc (DP-5f, w5)**: backlog (TicketBoard) moves into agentHqBoard, via BoardHost.
+5. **DAEMON-PLUGIN-7 / 59edf02f (DP-5e, w4)**: new Gradle module `infantryBoard`; epics, brief, ledger, context, ticketfiles move into it.
+6. **DAEMON-PLUGIN-8 / a1c88bcc (DP-5f, w5)**: backlog (TicketBoard) moves into infantryBoard, via BoardHost.
 7. **DAEMON-PLUGIN-9 / 62370fc0 (DP-5g, w4)**: board/story handlers and stories move; project/workspace registry stays core (worker confirms).
 8. **DAEMON-PLUGIN-10 / 405bb59e (DP-5h, w5)**: module becomes Infantry_Board's loaded daemon plugin; DaemonMain constructs no board; ratchet list empty.
 
@@ -42,15 +42,15 @@ Gradle, still one jar), 8 flips it to runtime plugin loading. Each of 5-7 is rev
 ## DP-5f-4 prerequisites (written by DP-5f-3d, ticket ce2a5b9b)
 
 `backlog/TicketBoard.kt` no longer imports `session.*`, `orchestration.*` or `daemon.plugins.LocalBoardHost`. The store-backed constructor is the function
-`TicketBoard(store, ...)` plus extension `TicketBoard.localHost` in `backlog/TicketBoardStores.kt`, which STAYS in agentHq (core). Worker-health, state names and
+`TicketBoard(store, ...)` plus extension `TicketBoard.localHost` in `backlog/TicketBoardStores.kt`, which STAYS in infantry (core). Worker-health, state names and
 run outcome moved board-side into `backlog/BoardSessionFacts.kt` (moves with the class). Every import of TicketBoard.kt that is neither API nor board module:
 
 | Import | Reason it stays (what DP-5f-4 does) |
 |---|---|
-| `persistence.AgentHqStore` | only the removed ctor? No: still used by `RowStore`/`TicketBoardStores` types; move RowStore to core or give the board `BoardTables` rows only |
+| `persistence.InfantryStore` | only the removed ctor? No: still used by `RowStore`/`TicketBoardStores` types; move RowStore to core or give the board `BoardTables` rows only |
 | `persistence.TicketRow`, `TicketLinkRow` | the rules are written against these row types; move the two data classes to the board module (pure data) |
 | `daemon.plugins.toRow` / `toStored` | StoredTicket<->TicketRow mappers used by `RowStore`; move with TicketRow into the board module |
-| `protocol.*` (Ticket, TicketStatus, TicketType, TicketStart, TicketMove, TicketSave, TicketLink*, TicketReorder, TicketRun, TicketWeight, Executor*, FinishedPayload, SkillsMode) | wire types from agentHqProtocol; board module needs a dependency on agentHqProtocol (already a leaf) |
+| `protocol.*` (Ticket, TicketStatus, TicketType, TicketStart, TicketMove, TicketSave, TicketLink*, TicketReorder, TicketRun, TicketWeight, Executor*, FinishedPayload, SkillsMode) | wire types from infantryProtocol; board module needs a dependency on infantryProtocol (already a leaf) |
 | `settings.RoutingRules`, `WeightExecutor(s)`, `requireKnownSkills`, `WeightContext` (fq) | pure setting readers; move to the board module or protocol |
 | `usage.GateDecision`? no: `usage.LaunchOrigin`, `usage.PacingVerdict`, `usage.GateDecision` | `PacingVerdict` is the ctor `pacing` hook type (move it to API); LaunchOrigin/GateDecision are only used by the factory side, check after move |
 | `agents.AgentProfiles`, `KnowledgeCounter`, `SkillsSource`, `firstTurn`, `section` | `AgentProfiles` is the `agents` ctor param; port exists (`host.agents`), move the interface types; `firstTurn`/`section` are pure prompt text: move to board module |

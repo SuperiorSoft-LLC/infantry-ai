@@ -1,17 +1,17 @@
-package com.superiorsoftllc.agenthq.plugins.official.review
+package com.superiorsoftllc.infantry.plugins.official.review
 
-import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
-import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
-import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
-import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
-import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
-import com.superiorsoftllc.agenthq.ui.plugin.TabProvider
-import com.superiorsoftllc.agenthq.ui.plugin.UiPlugin
-import com.superiorsoftllc.agenthq.ui.plugin.UiRegistrar
-import com.superiorsoftllc.agenthq.ui.plugin.circle
-import com.superiorsoftllc.agenthq.ui.plugin.tabIcon
-import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
-import com.superiorsoftllc.agenthq.ui.shell.NoReview
+import com.superiorsoftllc.infantry.plugin.api.ModuleManifest
+import com.superiorsoftllc.infantry.plugin.api.TabDeclaration
+import com.superiorsoftllc.infantry.ui.plugin.InfantryModule
+import com.superiorsoftllc.infantry.ui.plugin.ModuleSource
+import com.superiorsoftllc.infantry.ui.plugin.TabContainers
+import com.superiorsoftllc.infantry.ui.plugin.TabProvider
+import com.superiorsoftllc.infantry.ui.plugin.UiPlugin
+import com.superiorsoftllc.infantry.ui.plugin.UiRegistrar
+import com.superiorsoftllc.infantry.ui.plugin.circle
+import com.superiorsoftllc.infantry.ui.plugin.tabIcon
+import com.superiorsoftllc.infantry.ui.shell.LocalShellContext
+import com.superiorsoftllc.infantry.ui.shell.NoReview
 
 /** The Review tab's id. */
 const val REVIEW_TAB_ID = "infantry.review"
@@ -31,7 +31,7 @@ private fun reviewTab() = TabProvider(
 ) { ReviewPane(it.state, LocalShellContext.current?.review ?: NoReview) }
 
 /** PLUGINS-1: Infantry_Review (official since RUNTIME-11), pod nodes waiting for review, compiled in on web and Android (D9). */
-val InfantryReview = AgentHqModule(
+val InfantryReview = InfantryModule(
     ModuleManifest(
         name = "Infantry_Review", version = "1.0.0", author = "Infantry AI", description = "Pod nodes waiting for review.",
         tabs = listOf(TabDeclaration(REVIEW_TAB_ID, TabContainers.RIGHT)),
@@ -49,5 +49,5 @@ class ReviewPlugin : UiPlugin, ModuleSource {
         registrar.tab(reviewTab())
     }
 
-    override fun modules(): List<AgentHqModule> = listOf(InfantryReview)
+    override fun modules(): List<InfantryModule> = listOf(InfantryReview)
 }

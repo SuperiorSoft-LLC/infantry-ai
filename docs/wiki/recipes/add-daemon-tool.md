@@ -1,6 +1,6 @@
 # Recipe: add a daemon tool
 
-Goal: a named tool, with a JSON schema, that agents (through `agenthq mcp serve`) and clients (`plugin_tools`) can
+Goal: a named tool, with a JSON schema, that agents (through `infantry mcp serve`) and clients (`plugin_tools`) can
 call. It runs in the daemon, in your plugin's own class loader, behind the access policy.
 
 The reference is `plugins/examples/Acme_DaemonHello` (a tool, a route and a hook). Its files:
@@ -47,18 +47,18 @@ A daemon-only plugin needs no UI half: there is no root `build.gradle.kts` and n
 
    `action` is what the access policy checks; `kind` is `read`, `write` or `destructive`.
 3. `daemon/build.gradle.kts`: the template's (`plugins/_template/daemon/build.gradle.kts`): `compileOnly` on
-   `:superiorSoftLibrary:agentHqDaemonApi`, and a jar named exactly like `daemon.jar` in `module.json`
+   `:superiorSoftLibrary:infantryDaemonApi`, and a jar named exactly like `daemon.jar` in `module.json`
    (`Acme_Sessions-daemon.jar`), with `module.json` copied in.
 4. The class. It implements `DaemonPlugin`, receives a `DaemonApi` in `start`, and registers a `DaemonTool`:
 
 ```kotlin
 package com.acme.sessions
 
-import com.superiorsoftllc.agenthq.daemon.api.DaemonApi
-import com.superiorsoftllc.agenthq.daemon.api.DaemonPlugin
-import com.superiorsoftllc.agenthq.daemon.api.DaemonTool
-import com.superiorsoftllc.agenthq.daemon.api.ToolCall
-import com.superiorsoftllc.agenthq.daemon.api.ToolResult
+import com.superiorsoftllc.infantry.daemon.api.DaemonApi
+import com.superiorsoftllc.infantry.daemon.api.DaemonPlugin
+import com.superiorsoftllc.infantry.daemon.api.DaemonTool
+import com.superiorsoftllc.infantry.daemon.api.ToolCall
+import com.superiorsoftllc.infantry.daemon.api.ToolResult
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -87,7 +87,7 @@ class SessionsDaemon : DaemonPlugin {
 
    This is the pattern of `HelloDaemon.kt` with the route, hook and arguments removed. What `DaemonApi` offers
    (`tools`, `frames`, `routes`, `hooks`, `events`, `sessions`, `projects`, `config`, `secret`, `schedule`, `stateDir`)
-   is listed in `superiorSoftLibrary/agentHqDaemonApi/src/main/kotlin/com/superiorsoftllc/agenthq/daemon/api/DaemonApi.kt`.
+   is listed in `superiorSoftLibrary/infantryDaemonApi/src/main/kotlin/com/superiorsoftllc/infantry/daemon/api/DaemonApi.kt`.
 5. Grant it in `plugins/modules.json`. A community daemon half needs `daemon.code` and `daemon.tool` in `allow` (see the
    grants table in [Daemon plugin API](../daemon-plugin-api.md), section 8).
 
@@ -97,8 +97,8 @@ class SessionsDaemon : DaemonPlugin {
 ./gradlew :daemon-plugin-community-Acme_Sessions:jar --console=plain
 ```
 
-Restart the daemon. The tool is listed to clients as a plugin tool and to agents by `agenthq mcp serve`
-(`superiorSoftLibrary/agentHq/src/main/kotlin/com/superiorsoftllc/agenthq/cli/mcp/McpPluginTools.kt` exposes plugin
+Restart the daemon. The tool is listed to clients as a plugin tool and to agents by `infantry mcp serve`
+(`superiorSoftLibrary/infantry/src/main/kotlin/com/superiorsoftllc/infantry/cli/mcp/McpPluginTools.kt` exposes plugin
 tools). A tool that throws or times out fails only its own call; repeated timeouts disable the plugin (the guard).
 
 ## Related

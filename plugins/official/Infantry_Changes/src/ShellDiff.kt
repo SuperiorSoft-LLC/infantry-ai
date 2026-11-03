@@ -1,21 +1,21 @@
-package com.superiorsoftllc.agenthq.plugins.official.changes
+package com.superiorsoftllc.infantry.plugins.official.changes
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
-import com.superiorsoftllc.agenthq.plugins.official.changes.DiffModalBody
-import com.superiorsoftllc.agenthq.plugins.official.changes.DiffModalFrame
-import com.superiorsoftllc.agenthq.plugins.official.changes.DiffModalHeader
-import com.superiorsoftllc.agenthq.plugins.official.changes.OpenDiff
-import com.superiorsoftllc.agenthq.ui.block.layout.Block
-import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
-import com.superiorsoftllc.agenthq.ui.block.layout.Place
-import com.superiorsoftllc.agenthq.ui.block.layout.RenderPlaced
-import com.superiorsoftllc.agenthq.ui.block.layout.Size
-import com.superiorsoftllc.agenthq.ui.model.DiffBody
-import com.superiorsoftllc.agenthq.ui.model.diffBody
-import com.superiorsoftllc.agenthq.plugins.official.changes.openDiff
-import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
+import com.superiorsoftllc.infantry.plugins.official.changes.DiffModalBody
+import com.superiorsoftllc.infantry.plugins.official.changes.DiffModalFrame
+import com.superiorsoftllc.infantry.plugins.official.changes.DiffModalHeader
+import com.superiorsoftllc.infantry.plugins.official.changes.OpenDiff
+import com.superiorsoftllc.infantry.ui.block.layout.Block
+import com.superiorsoftllc.infantry.ui.block.layout.BlockScope
+import com.superiorsoftllc.infantry.ui.block.layout.Place
+import com.superiorsoftllc.infantry.ui.block.layout.RenderPlaced
+import com.superiorsoftllc.infantry.ui.block.layout.Size
+import com.superiorsoftllc.infantry.ui.model.DiffBody
+import com.superiorsoftllc.infantry.ui.model.diffBody
+import com.superiorsoftllc.infantry.plugins.official.changes.openDiff
+import com.superiorsoftllc.infantry.ui.shell.LocalShellContext
 
 private const val DIFF = "infantry.shell.diff"
 

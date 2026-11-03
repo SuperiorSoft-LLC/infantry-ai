@@ -1,16 +1,16 @@
-package com.superiorsoftllc.agenthq.plugins.official.triggers
+package com.superiorsoftllc.infantry.plugins.official.triggers
 
-import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
-import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
-import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
-import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
-import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
-import com.superiorsoftllc.agenthq.ui.plugin.TabProvider
-import com.superiorsoftllc.agenthq.ui.plugin.UiPlugin
-import com.superiorsoftllc.agenthq.ui.plugin.UiRegistrar
-import com.superiorsoftllc.agenthq.ui.plugin.tabIcon
-import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
-import com.superiorsoftllc.agenthq.ui.shell.NoTriggers
+import com.superiorsoftllc.infantry.plugin.api.ModuleManifest
+import com.superiorsoftllc.infantry.plugin.api.TabDeclaration
+import com.superiorsoftllc.infantry.ui.plugin.InfantryModule
+import com.superiorsoftllc.infantry.ui.plugin.ModuleSource
+import com.superiorsoftllc.infantry.ui.plugin.TabContainers
+import com.superiorsoftllc.infantry.ui.plugin.TabProvider
+import com.superiorsoftllc.infantry.ui.plugin.UiPlugin
+import com.superiorsoftllc.infantry.ui.plugin.UiRegistrar
+import com.superiorsoftllc.infantry.ui.plugin.tabIcon
+import com.superiorsoftllc.infantry.ui.shell.LocalShellContext
+import com.superiorsoftllc.infantry.ui.shell.NoTriggers
 
 /** The Triggers tab's id. */
 const val TRIGGERS_TAB_ID = "infantry.triggers"
@@ -30,7 +30,7 @@ private fun triggersTab() = TabProvider(
 ) { TriggersPane(it.state, LocalShellContext.current?.triggers ?: NoTriggers) }
 
 /** PLUGINS-1: Infantry_Triggers (official since RUNTIME-13), triggers that start work on an event, compiled in on web and Android (D9). */
-val InfantryTriggers = AgentHqModule(
+val InfantryTriggers = InfantryModule(
     ModuleManifest(
         name = "Infantry_Triggers", version = "1.0.0", author = "Infantry AI", description = "Triggers that start work on an event.",
         tabs = listOf(TabDeclaration(TRIGGERS_TAB_ID, TabContainers.CENTER)),
@@ -48,5 +48,5 @@ class TriggersPlugin : UiPlugin, ModuleSource {
         registrar.tab(triggersTab())
     }
 
-    override fun modules(): List<AgentHqModule> = listOf(InfantryTriggers)
+    override fun modules(): List<InfantryModule> = listOf(InfantryTriggers)
 }

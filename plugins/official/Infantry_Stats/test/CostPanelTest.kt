@@ -1,8 +1,8 @@
-package com.superiorsoftllc.agenthq.plugins.official.stats
+package com.superiorsoftllc.infantry.plugins.official.stats
 
-import com.superiorsoftllc.agenthq.ui.protocol.UsageMeterPrice
-import com.superiorsoftllc.agenthq.ui.protocol.UsageMeterReport
-import com.superiorsoftllc.agenthq.ui.protocol.UsageMeterRequest
+import com.superiorsoftllc.infantry.ui.protocol.UsageMeterPrice
+import com.superiorsoftllc.infantry.ui.protocol.UsageMeterReport
+import com.superiorsoftllc.infantry.ui.protocol.UsageMeterRequest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull

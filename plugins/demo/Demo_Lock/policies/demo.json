@@ -2,7 +2,7 @@
   "id": "demo",
   "label": "Demo",
   "description": "The public demo: two seated agents a visitor can talk to; everything else is read-only.",
-  "selectWhenEnv": "AGENTHQ_DEMO_LOCK",
+  "selectWhenEnv": "INFANTRY_DEMO_LOCK",
   "disable": ["*"],
   "allow": [
     "sessions.read", "sessions.replay", "projects.read", "settings.read", "usage.read", "board.read", "triggers.read",

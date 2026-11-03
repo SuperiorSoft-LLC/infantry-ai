@@ -1,25 +1,25 @@
-package com.superiorsoftllc.agenthq.plugins.official
+package com.superiorsoftllc.infantry.plugins.official
 
-import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
-import com.superiorsoftllc.agenthq.plugin.api.ModuleSetting
-import com.superiorsoftllc.agenthq.plugin.api.ModulesConfig
-import com.superiorsoftllc.agenthq.plugin.api.NodeConfigEntry
-import com.superiorsoftllc.agenthq.plugin.api.PreferenceDeclaration
-import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
-import com.superiorsoftllc.agenthq.plugin.api.Tier
-import com.superiorsoftllc.agenthq.plugin.host.AcceptedPreference
-import com.superiorsoftllc.agenthq.plugin.host.ModuleCandidate
-import com.superiorsoftllc.agenthq.plugin.host.ModuleResolver
-import com.superiorsoftllc.agenthq.plugin.host.ModuleState
-import com.superiorsoftllc.agenthq.plugin.host.OfficialTrust
-import com.superiorsoftllc.agenthq.plugin.host.PluginFolders
-import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
-import com.superiorsoftllc.agenthq.ui.plugin.DesktopPlugins
-import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
-import com.superiorsoftllc.agenthq.ui.plugin.TabFactory
-import com.superiorsoftllc.agenthq.ui.plugin.TabGroups
-import com.superiorsoftllc.agenthq.ui.plugin.TabProvider
-import com.superiorsoftllc.agenthq.ui.plugin.tabIcon
+import com.superiorsoftllc.infantry.plugin.api.ModuleManifest
+import com.superiorsoftllc.infantry.plugin.api.ModuleSetting
+import com.superiorsoftllc.infantry.plugin.api.ModulesConfig
+import com.superiorsoftllc.infantry.plugin.api.NodeConfigEntry
+import com.superiorsoftllc.infantry.plugin.api.PreferenceDeclaration
+import com.superiorsoftllc.infantry.plugin.api.TabDeclaration
+import com.superiorsoftllc.infantry.plugin.api.Tier
+import com.superiorsoftllc.infantry.plugin.host.AcceptedPreference
+import com.superiorsoftllc.infantry.plugin.host.ModuleCandidate
+import com.superiorsoftllc.infantry.plugin.host.ModuleResolver
+import com.superiorsoftllc.infantry.plugin.host.ModuleState
+import com.superiorsoftllc.infantry.plugin.host.OfficialTrust
+import com.superiorsoftllc.infantry.plugin.host.PluginFolders
+import com.superiorsoftllc.infantry.ui.plugin.InfantryModule
+import com.superiorsoftllc.infantry.ui.plugin.DesktopPlugins
+import com.superiorsoftllc.infantry.ui.plugin.TabContainers
+import com.superiorsoftllc.infantry.ui.plugin.TabFactory
+import com.superiorsoftllc.infantry.ui.plugin.TabGroups
+import com.superiorsoftllc.infantry.ui.plugin.TabProvider
+import com.superiorsoftllc.infantry.ui.plugin.tabIcon
 import kotlinx.serialization.json.JsonPrimitive
 import java.io.File
 import java.nio.file.Files
@@ -49,7 +49,7 @@ class SettingsJarLoadTest {
     private val icon = tabIcon("probe", { moveTo(4f, 12f); lineTo(20f, 12f) })
 
     /** A compiled-in setup tab that names Settings its parent, as Infantry_Git and the others do. */
-    private val probe = AgentHqModule(
+    private val probe = InfantryModule(
         ModuleManifest(name = "Infantry_Probe", version = "1.0.0", tabs = listOf(TabDeclaration("infantry.probe", TabContainers.CENTER))),
         listOf(TabProvider(id = "infantry.probe", container = TabContainers.CENTER, order = 50, title = { "Probe" }, icon = icon, testTag = "center-tab-PROBE", parent = SETTINGS_TAB_ID) {}),
     )
@@ -112,8 +112,8 @@ class SettingsJarLoadTest {
         ), ModulesConfig(modules = mapOf("Acme_Settings" to ModuleSetting(enabled = true))))
         assertEquals(listOf(AcceptedPreference("Acme_Settings", SETTINGS_TAB_ID, "acme.settings")), resolved.preferences, resolved.log.joinToString("\n"))
         val replaced = TabFactory(
-            listOf(AgentHqModule(official, InfantrySettings.tabs, tier = Tier.OFFICIAL),
-                AgentHqModule(acme, listOf(TabProvider(id = "acme.settings", container = TabContainers.CENTER, order = 999, title = { "Mine" }, icon = icon, testTag = "acme-settings") {}), tier = Tier.COMMUNITY)),
+            listOf(InfantryModule(official, InfantrySettings.tabs, tier = Tier.OFFICIAL),
+                InfantryModule(acme, listOf(TabProvider(id = "acme.settings", container = TabContainers.CENTER, order = 999, title = { "Mine" }, icon = icon, testTag = "acme-settings") {}), tier = Tier.COMMUNITY)),
             preferences = resolved.preferences,
         )
         assertEquals("Acme_Settings", replaced.find(SETTINGS_TAB_ID)?.module)

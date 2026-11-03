@@ -6,14 +6,14 @@
   "description": "Roles: who does what, and starting a session as one.",
   "tier": "official",
   "sequence": [],
-  "entry": "com.superiorsoftllc.agenthq.plugins.official.roles.RolesPlugin",
+  "entry": "com.superiorsoftllc.infantry.plugins.official.roles.RolesPlugin",
   "jar": "build/libs/Infantry_Roles.jar",
   "buildOrder": 40,
   "daemon": {
-    "entry": "com.superiorsoftllc.agenthq.plugins.official.roles.daemon.RolesDaemonPlugin",
+    "entry": "com.superiorsoftllc.infantry.plugins.official.roles.daemon.RolesDaemonPlugin",
     "jar": "daemon/build/libs/Infantry_Roles-daemon.jar",
     "apiAtLeast": "1.34.0",
-    "env": ["AGENTHQ_ROLES_DIR"],
+    "env": ["INFANTRY_ROLES_DIR"],
     "storage": { "adopt": ["role_bindings", "role_traits"] },
     "frames": [
       { "type": "role_list", "action": "roles.read", "kind": "read" },
@@ -27,14 +27,14 @@
       { "type": "role_traits_set", "action": "roles.save", "kind": "write" }
     ],
     "tools": [
-      { "name": "agenthq_role_list", "action": "roles.read", "kind": "read", "description": "Every role: id, name, description, source." },
-      { "name": "agenthq_role_get", "action": "roles.read", "kind": "read", "description": "One role in full, with its persona." },
-      { "name": "agenthq_role_update", "action": "roles.save", "kind": "write", "description": "Update a role's persona and description." },
-      { "name": "agenthq_role_create", "action": "roles.save", "kind": "write", "description": "Create a role (non-agent caller only)." },
-      { "name": "agenthq_role_delete", "action": "roles.delete", "kind": "destructive", "description": "Delete or reset a role (non-agent caller only)." },
-      { "name": "agenthq_skill_list", "action": "skills.read", "kind": "read", "description": "Skills of one layer (global/project/role)." },
-      { "name": "agenthq_skill_save", "action": "skills.save", "kind": "write", "description": "Create or replace a skill in one layer." },
-      { "name": "agenthq_skill_delete", "action": "skills.delete", "kind": "destructive", "description": "Delete a skill from one layer." }
+      { "name": "infantry_role_list", "action": "roles.read", "kind": "read", "description": "Every role: id, name, description, source." },
+      { "name": "infantry_role_get", "action": "roles.read", "kind": "read", "description": "One role in full, with its persona." },
+      { "name": "infantry_role_update", "action": "roles.save", "kind": "write", "description": "Update a role's persona and description." },
+      { "name": "infantry_role_create", "action": "roles.save", "kind": "write", "description": "Create a role (non-agent caller only)." },
+      { "name": "infantry_role_delete", "action": "roles.delete", "kind": "destructive", "description": "Delete or reset a role (non-agent caller only)." },
+      { "name": "infantry_skill_list", "action": "skills.read", "kind": "read", "description": "Skills of one layer (global/project/role)." },
+      { "name": "infantry_skill_save", "action": "skills.save", "kind": "write", "description": "Create or replace a skill in one layer." },
+      { "name": "infantry_skill_delete", "action": "skills.delete", "kind": "destructive", "description": "Delete a skill from one layer." }
     ]
   },
   "tabs": [

@@ -35,9 +35,9 @@ Legend: Y = seen, - = not checked. "Interaction" = what I clicked.
 Console (web): one 404 (static server only), WebGL warnings, 401/403 on /attention, /update/status, /node-config/seed in the demo (demo has no auth to the daemon: expected noise).
 
 ## Bugs
-1. web\ in the dist is not self-contained: index.html loads agentHqWeb.mjs but the folder holds agentHqWeb.js (static server -> "Infantry AI could not start", 404). The daemon serves it (200).
+1. web\ in the dist is not self-contained: index.html loads infantryWeb.mjs but the folder holds infantryWeb.js (static server -> "Infantry AI could not start", 404). The daemon serves it (200).
 2. Offline demo: Prompts and Skills panes stay on "Loading..." forever.
 3. Settings plugin declares tab infantry.settings (center) but no Settings tab is drawn; only the gear dialog exists. Confirm intended.
 
 ## NOT covered
-Real-daemon web login (needs AGENTHQ_TOKEN, owner.token is refused), question_ask panel, Stats usage meter, Settings Devices/About, Header/Board children with real data, desktop tab-by-tab clicks (desktop shows same tab set, only the first screenshot taken), Processes badge, Approvals pill, Alerts sound, Android.
+Real-daemon web login (needs INFANTRY_TOKEN, owner.token is refused), question_ask panel, Stats usage meter, Settings Devices/About, Header/Board children with real data, desktop tab-by-tab clicks (desktop shows same tab set, only the first screenshot taken), Processes badge, Approvals pill, Alerts sound, Android.

@@ -1,7 +1,7 @@
-package com.superiorsoftllc.agenthq.plugins.official.skills
+package com.superiorsoftllc.infantry.plugins.official.skills
 
-import com.superiorsoftllc.agenthq.ui.shell.gate
-import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.infantry.ui.shell.gate
+import com.superiorsoftllc.infantry.ui.*
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -33,10 +33,10 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.model.filterSkills
-import com.superiorsoftllc.agenthq.ui.net.CommandResult
-import com.superiorsoftllc.agenthq.ui.shell.LinkContext
-import com.superiorsoftllc.agenthq.ui.shell.SkillsContext
+import com.superiorsoftllc.infantry.ui.model.filterSkills
+import com.superiorsoftllc.infantry.ui.net.CommandResult
+import com.superiorsoftllc.infantry.ui.shell.LinkContext
+import com.superiorsoftllc.infantry.ui.shell.SkillsContext
 import kotlinx.coroutines.launch
 
 const val SKILLS_ADD_BUTTON_TAG = "skills-add"
@@ -71,7 +71,7 @@ fun SkillsPane(link: LinkContext, ctx: SkillsContext, onInsert: (String) -> Unit
     val live = link.live
     // POLICY-1: write controls are named actions gated by the daemon's policy (and any write policy); reads keep live.
     val canWrite = link.gate("skills.save").enabled
-    val canDelete = link.gate("skills.delete", com.superiorsoftllc.agenthq.plugin.api.ActionKind.DESTRUCTIVE).enabled
+    val canDelete = link.gate("skills.delete", com.superiorsoftllc.infantry.plugin.api.ActionKind.DESTRUCTIVE).enabled
     var query by remember { mutableStateOf("") }
     var draft by remember { mutableStateOf<SkillDraft?>(null) }
     var localError by remember { mutableStateOf<String?>(null) }

@@ -1,7 +1,7 @@
 # Infantry AI headless daemon: a single-host deployment. Slice 1 of the Docker design (ticket 2a0ac887).
 #
-#   1. Build the image once (see docker/README.md), or set AGENTHQ_IMAGE to a published one.
-#   2. mkdir -p secrets && openssl rand -hex 32 > secrets/agenthq_token && openssl rand -hex 32 > secrets/agenthq_keystore_key
+#   1. Build the image once (see docker/README.md), or set INFANTRY_IMAGE to a published one.
+#   2. mkdir -p secrets && openssl rand -hex 32 > secrets/infantry_token && openssl rand -hex 32 > secrets/infantry_keystore_key
 #      (the files must be readable by uid 10001 inside the container: chmod 644, keep the directory private on the host)
 #   3. cp docker/.env.example docker/.env   (edit), then:  docker compose -f docker/compose.yaml --env-file docker/.env up -d
 #
@@ -10,42 +10,42 @@ name: ${COMPOSE_PROJECT_NAME:-infantry-ai}
 
 services:
   infantry-ai:
-    image: ${AGENTHQ_IMAGE:-infantryai/infantry-ai:dev}
+    image: ${INFANTRY_IMAGE:-infantryai/infantry-ai:dev}
     init: true                      # PID 1 reaps the zombies agent CLIs leave behind
     restart: unless-stopped
     ports:
       # Loopback only by default; put a TLS proxy (the `tls` profile, Tailscale) in front for remote use.
-      - "${AGENTHQ_BIND:-127.0.0.1}:${AGENTHQ_HOST_PORT:-8787}:8787"
+      - "${INFANTRY_BIND:-127.0.0.1}:${INFANTRY_HOST_PORT:-8787}:8787"
     environment:
-      AGENTHQ_TOKEN_FILE: /run/secrets/agenthq_token
-      AGENTHQ_KEYSTORE_KEY_FILE: /run/secrets/agenthq_keystore_key
-      AGENTHQ_REPO: ${AGENTHQ_REPO:-/work/repo}
-      AGENTHQ_BASE_BRANCH: ${AGENTHQ_BASE_BRANCH:-main}
+      INFANTRY_TOKEN_FILE: /run/secrets/infantry_token
+      INFANTRY_KEYSTORE_KEY_FILE: /run/secrets/infantry_keystore_key
+      INFANTRY_REPO: ${INFANTRY_REPO:-/work/repo}
+      INFANTRY_BASE_BRANCH: ${INFANTRY_BASE_BRANCH:-main}
       # Host name(s) the browser uses (comma separated), e.g. agents.example.com. Empty: the daemon's own addresses only.
-      AGENTHQ_WEB_HOSTS: ${AGENTHQ_WEB_HOSTS:-}
+      INFANTRY_WEB_HOSTS: ${INFANTRY_WEB_HOSTS:-}
       # Health watchdog (ticket 55d60a5e): halts the daemon after FAILURES failed /health self-checks in a row so the restart
       # policy restarts it (Docker never restarts an unhealthy container). 0 = off. See docker-compose.yml.
-      AGENTHQ_LIMIT_HEALTH_WATCHDOG_FAILURES: ${AGENTHQ_LIMIT_HEALTH_WATCHDOG_FAILURES:-3}
+      INFANTRY_LIMIT_HEALTH_WATCHDOG_FAILURES: ${INFANTRY_LIMIT_HEALTH_WATCHDOG_FAILURES:-3}
       # Harness credentials: pass through from the host environment / .env, never write them into this file.
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     secrets:
-      - agenthq_token
-      - agenthq_keystore_key
+      - infantry_token
+      - infantry_keystore_key
     volumes:
-      - agenthq-data:/data          # database, remote settings, keystore, harness-tools, memory: survives image upgrades
-      - agenthq-work:/work          # the git repository ticket worktrees are cut from (AGENTHQ_REPO); unpushed branches live here
-      - agenthq-home:/home/agenthq  # CLI logins (`docker compose exec infantry-ai claude`), npm cache
+      - infantry-data:/data          # database, remote settings, keystore, harness-tools, memory: survives image upgrades
+      - infantry-work:/work          # the git repository ticket worktrees are cut from (INFANTRY_REPO); unpushed branches live here
+      - infantry-home:/home/infantry  # CLI logins (`docker compose exec infantry-ai claude`), npm cache
     read_only: true
     tmpfs:
       - /tmp
     cap_drop: [ALL]
     security_opt:
       - no-new-privileges:true
-    mem_limit: ${AGENTHQ_MEM_LIMIT:-2g}
+    mem_limit: ${INFANTRY_MEM_LIMIT:-2g}
     # No docker.sock mount, ever: agents run code in this container, so the container is the sandbox.
 
-  # Optional TLS in front (profile `tls`): docker compose --profile tls up -d. Needs AGENTHQ_DOMAIN pointing at this host,
+  # Optional TLS in front (profile `tls`): docker compose --profile tls up -d. Needs INFANTRY_DOMAIN pointing at this host,
   # ports 80/443 open. Caddy gets and renews the certificate and passes WebSocket upgrades through.
   caddy:
     profiles: [tls]
@@ -57,21 +57,21 @@ services:
       - "443:443"
     environment:
       # Required with --profile tls. Not `:?`: compose interpolates every service, so `:?` broke plain `up` (no tls).
-      AGENTHQ_DOMAIN: ${AGENTHQ_DOMAIN:-}
+      INFANTRY_DOMAIN: ${INFANTRY_DOMAIN:-}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
 
 secrets:
-  agenthq_token:
-    file: ${AGENTHQ_SECRETS_DIR:-./secrets}/agenthq_token
-  agenthq_keystore_key:
-    file: ${AGENTHQ_SECRETS_DIR:-./secrets}/agenthq_keystore_key
+  infantry_token:
+    file: ${INFANTRY_SECRETS_DIR:-./secrets}/infantry_token
+  infantry_keystore_key:
+    file: ${INFANTRY_SECRETS_DIR:-./secrets}/infantry_keystore_key
 
 volumes:
-  agenthq-data:
-  agenthq-work:
-  agenthq-home:
+  infantry-data:
+  infantry-work:
+  infantry-home:
   caddy-data:
   caddy-config:

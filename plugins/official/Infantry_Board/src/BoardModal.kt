@@ -1,7 +1,7 @@
-package com.superiorsoftllc.agenthq.plugins.official.board
+package com.superiorsoftllc.infantry.plugins.official.board
 
-import com.superiorsoftllc.agenthq.ui.*
-import com.superiorsoftllc.agenthq.ui.shell.blocks.*
+import com.superiorsoftllc.infantry.ui.*
+import com.superiorsoftllc.infantry.ui.shell.blocks.*
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -42,8 +42,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.model.ProjectView
-import com.superiorsoftllc.agenthq.ui.protocol.TicketColumns
+import com.superiorsoftllc.infantry.ui.model.ProjectView
+import com.superiorsoftllc.infantry.ui.protocol.TicketColumns
 
 const val BOARD_MODAL_TAG = "board-modal"
 const val BOARD_MODAL_CLOSE_TAG = "board-modal-close"

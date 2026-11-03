@@ -1,7 +1,7 @@
-package com.superiorsoftllc.agenthq.plugins.official.roles
+package com.superiorsoftllc.infantry.plugins.official.roles
 
-import com.superiorsoftllc.agenthq.ui.shell.gate
-import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.infantry.ui.shell.gate
+import com.superiorsoftllc.infantry.ui.*
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -32,12 +32,12 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.model.AppState
-import com.superiorsoftllc.agenthq.ui.model.NoteScope
-import com.superiorsoftllc.agenthq.ui.model.TraitLimits
-import com.superiorsoftllc.agenthq.ui.net.CommandResult
-import com.superiorsoftllc.agenthq.ui.protocol.Role
-import com.superiorsoftllc.agenthq.ui.protocol.RoleBinding
+import com.superiorsoftllc.infantry.ui.model.AppState
+import com.superiorsoftllc.infantry.ui.model.NoteScope
+import com.superiorsoftllc.infantry.ui.model.TraitLimits
+import com.superiorsoftllc.infantry.ui.net.CommandResult
+import com.superiorsoftllc.infantry.ui.protocol.Role
+import com.superiorsoftllc.infantry.ui.protocol.RoleBinding
 import kotlinx.coroutines.launch
 
 const val ROLE_MANAGER_TAG = "role-manager"
@@ -182,7 +182,7 @@ class RoleFormDraft(
     // POLICY-1: write controls are named actions gated by the daemon's policy (and any write policy); reads keep live.
     val canWrite: Boolean @Composable get() = deps.link.gate("roles.save").enabled
     /** GAP-AUDIT-1 (g): deleting a role is its own declared action, not the save's. */
-    val canDelete: Boolean @Composable get() = deps.link.gate("roles.delete", com.superiorsoftllc.agenthq.plugin.api.ActionKind.DESTRUCTIVE).enabled
+    val canDelete: Boolean @Composable get() = deps.link.gate("roles.delete", com.superiorsoftllc.infantry.plugin.api.ActionKind.DESTRUCTIVE).enabled
     val canEdit: Boolean get() = deps.roles.canEdit
 }
 

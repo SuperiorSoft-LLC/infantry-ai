@@ -35,7 +35,7 @@ can. The in-app updater and `infantry update` install it.
 
 ## Scope
 
-In scope: the daemon, the `infantry` / `agenthq` CLI, the Windows and Android apps, the headless server archives and the
+In scope: the daemon, the `infantry` / `infantry` CLI, the Windows and Android apps, the headless server archives and the
 Docker image built from this repository, and the update and pairing mechanisms.
 
 Out of scope:
@@ -50,5 +50,5 @@ Out of scope:
 
 - Keep the daemon on loopback, or behind a TLS reverse proxy or a VPN such as Tailscale. Never expose the raw port.
 - Use a long random token (at least 32 characters) and keep it out of images, repositories and screenshots.
-- A pairing QR code or `agenthq://connect` link contains the token: treat it like a password.
-- In Docker, mount the keystore key from outside the data volume (`AGENTHQ_KEYSTORE_KEY_FILE`) and back it up separately.
+- A pairing QR code or `infantry://connect` link contains the token: treat it like a password.
+- In Docker, mount the keystore key from outside the data volume (`INFANTRY_KEYSTORE_KEY_FILE`) and back it up separately.

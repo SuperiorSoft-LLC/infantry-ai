@@ -1,25 +1,25 @@
-package com.superiorsoftllc.agenthq.plugins.official.appearance
+package com.superiorsoftllc.infantry.plugins.official.appearance
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
-import com.superiorsoftllc.agenthq.plugin.api.ConfigDeclaration
-import com.superiorsoftllc.agenthq.plugin.api.ConfigFieldDeclaration
-import com.superiorsoftllc.agenthq.plugin.api.ConfigFieldTypes
-import com.superiorsoftllc.agenthq.plugin.api.ConfigScopes
-import com.superiorsoftllc.agenthq.plugin.api.FillDeclaration
-import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
-import com.superiorsoftllc.agenthq.ui.LocalModalBlur
-import com.superiorsoftllc.agenthq.ui.Palette
-import com.superiorsoftllc.agenthq.ui.block.layout.Block
-import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
-import com.superiorsoftllc.agenthq.ui.block.layout.config
-import com.superiorsoftllc.agenthq.ui.model.ThemeAccent
-import com.superiorsoftllc.agenthq.ui.model.ThemeSettings
-import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
-import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
-import com.superiorsoftllc.agenthq.ui.plugin.UiPlugin
-import com.superiorsoftllc.agenthq.ui.plugin.UiRegistrar
+import com.superiorsoftllc.infantry.plugin.api.ConfigDeclaration
+import com.superiorsoftllc.infantry.plugin.api.ConfigFieldDeclaration
+import com.superiorsoftllc.infantry.plugin.api.ConfigFieldTypes
+import com.superiorsoftllc.infantry.plugin.api.ConfigScopes
+import com.superiorsoftllc.infantry.plugin.api.FillDeclaration
+import com.superiorsoftllc.infantry.plugin.api.ModuleManifest
+import com.superiorsoftllc.infantry.ui.LocalModalBlur
+import com.superiorsoftllc.infantry.ui.Palette
+import com.superiorsoftllc.infantry.ui.block.layout.Block
+import com.superiorsoftllc.infantry.ui.block.layout.BlockScope
+import com.superiorsoftllc.infantry.ui.block.layout.config
+import com.superiorsoftllc.infantry.ui.model.ThemeAccent
+import com.superiorsoftllc.infantry.ui.model.ThemeSettings
+import com.superiorsoftllc.infantry.ui.plugin.InfantryModule
+import com.superiorsoftllc.infantry.ui.plugin.ModuleSource
+import com.superiorsoftllc.infantry.ui.plugin.UiPlugin
+import com.superiorsoftllc.infantry.ui.plugin.UiRegistrar
 import kotlinx.serialization.json.JsonPrimitive
 
 /** The shell's theme slot, which this module fills; also the node id its config is declared on and injected from. */
@@ -86,7 +86,7 @@ object ThemeBlock : Block(THEME_FILL_ID, THEME_FILL_ID) {
 }
 
 /** CONFIG-3: Infantry_Appearance (official), the theme slot and its settings, compiled in on web and Android (D9). */
-val InfantryAppearance = AgentHqModule(
+val InfantryAppearance = InfantryModule(
     ModuleManifest(
         name = "Infantry_Appearance", version = "1.0.0", author = "Infantry AI",
         description = "Theme and blur: the pilot of manifest-driven settings.",
@@ -107,5 +107,5 @@ class AppearancePlugin : UiPlugin, ModuleSource {
         registrar.fill(THEME_FILL_ID, ThemeBlock)
     }
 
-    override fun modules(): List<AgentHqModule> = listOf(InfantryAppearance)
+    override fun modules(): List<InfantryModule> = listOf(InfantryAppearance)
 }

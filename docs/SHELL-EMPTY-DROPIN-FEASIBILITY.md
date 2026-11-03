@@ -1,6 +1,6 @@
 # SHELL-EMPTY-DROPIN: Windows empty shell + a drop box that loads the whole app UI (feasibility, read-only)
 
-Ticket c6290fde. Base: `feature-agenthq-mvp` @ 25d1980 (L15 step 1). Scope: the **Windows desktop JVM only**. Nothing was
+Ticket c6290fde. Base: `"feature-agenthq"-mvp` @ 25d1980 (L15 step 1). Scope: the **Windows desktop JVM only**. Nothing was
 built or changed; every figure below is from reading the tree (`wc -l`, the BLOCKS-NEXT-SPLITS survey, LICENSE-0).
 
 Vocabulary: *plugin / subplugin* are relative (a parent is a plugin to its children; the app root is the top plugin).
@@ -8,7 +8,7 @@ Vocabulary: *plugin / subplugin* are relative (a parent is a plugin to its child
 
 **Verdict.** Feasible on Windows JVM, and the code already has most of the right shape (folder scan, trust tiers, node
 overrides that keep a node's id and place, a 0 px shot gate that loads modules through the real loader). It is **not** a
-configuration change: today every pane and dialog is compiled into `agenthqUiCore` (about 34,100 lines of commonMain)
+configuration change: today every pane and dialog is compiled into `infantryUiCore` (about 34,100 lines of commonMain)
 and plugin jars compile *against* it. The "empty shell" is real only when the app UI is moved into a separate Gradle
 module that the shell does **not** depend on, so that the shell compiling on its own *is* the leak test. Estimated
 **7 steps (S0-S6), total weight 22** (section 4), with three decisions that are expensive to reverse (section 3d).
@@ -17,7 +17,7 @@ module that the shell does **not** depend on, so that the shell compiling on its
 
 ## 1. The minimal non-removable Windows shell today
 
-### 1a. What `CoreShell.root` draws (`agenthqUiCore/.../ui/shell/blocks/CoreShell.kt`)
+### 1a. What `CoreShell.root` draws (`infantryUiCore/.../ui/shell/blocks/CoreShell.kt`)
 
 ```
 infantry.shell.window            (locked, GroupBlock)
@@ -52,7 +52,7 @@ composable is 186) which owns the window state, the `Controller`, the effects, a
 So the minimal shell is: the skeleton nodes, the five small dialogs, a **cut-down** Settings (the sections where a token is
 typed, an update approved, a plugin enabled or disabled, a secret touched), the drop box (new), the theme/tokens and the
 component primitives (Button, text, fields; they are the API the dropped plugin draws with), the block layout and
-resolver, the plugin host (`DesktopPlugins`, `agenthqPlugins`), and the daemon connection.
+resolver, the plugin host (`DesktopPlugins`, `infantryPlugins`), and the daemon connection.
 
 ### 1c. What must move out of core into the dropped "app UI" plugin
 
@@ -63,11 +63,11 @@ Everything open in 1a, and every pane those nodes call. Approximate sizes (file 
 | Header, left/right panels, center/chat, compact drawer, status bar, 7 overlays, Roles window | `shell/blocks/Shell*.kt` + `StatusBarBlocks.kt` (about 2,000) and the composables they call: chat/transcript, `QuestionWindow.kt` 306, `SwitchAgentPicker`, `ExecutorPicker`, toasts, diff, assistant |
 | Board | `Board.kt` 781 (BoardPane 131, TicketEditForm 123, TicketCard 96) |
 | Roles | `RoleManager.kt` 336 (RoleForm 133) |
-| The 17 core modules' panes (`plugins/core/*` are 17-34-line manifests; the panes are in `agenthqUiCore`) | `RunPane.kt` 559, `ProjectGitPane.kt` 564, `ProjectChangesPanel.kt` 577, `MemoryPane.kt` 280, `SkillsPane.kt` 178, `PromptsPane.kt` 163 + `PromptCard.kt` 176, Epics, Pods, Profiles, Triggers, Stats, Usage, Review, Attention, Agents (`Sidebar`, `AgentRow`) |
+| The 17 core modules' panes (`plugins/core/*` are 17-34-line manifests; the panes are in `infantryUiCore`) | `RunPane.kt` 559, `ProjectGitPane.kt` 564, `ProjectChangesPanel.kt` 577, `MemoryPane.kt` 280, `SkillsPane.kt` 178, `PromptsPane.kt` 163 + `PromptCard.kt` 176, Epics, Pods, Profiles, Triggers, Stats, Usage, Review, Attention, Agents (`Sidebar`, `AgentRow`) |
 | The non-trust half of Settings | most of `ConfigDialog.kt` 1,060 |
 | The `ShellGit` / `ShellRun` tab trees | `ShellGit.kt`, `ShellRun.kt` (they belong with Git/Run) |
 
-Order of magnitude: about **25-28k of the ~34k lines** of `agenthqUiCore` commonMain go to the plugin; the shell keeps
+Order of magnitude: about **25-28k of the ~34k lines** of `infantryUiCore` commonMain go to the plugin; the shell keeps
 roughly 6-9k (layout, resolver, primitives, theme, plugin host, connect/servers/update, trust-Settings, App state). That
 matches LICENSE-0's split (92.3 % "core", of which most UI is core only because nothing has been cut yet).
 
@@ -101,8 +101,8 @@ matches LICENSE-0's split (92.3 % "core", of which most UI is core only because 
 
 ### 2a. How modules load today
 
-- `PluginFolders.root`: `AGENTHQ_PLUGINS_ROOT`, else the `agenthq.plugins.root` property (dev tasks: repo `plugins/`),
-  else `<state dir>/plugins` (installed app: `%USERPROFILE%\.agenthq\plugins`).
+- `PluginFolders.root`: `INFANTRY_PLUGINS_ROOT`, else the `infantry.plugins.root` property (dev tasks: repo `plugins/`),
+  else `<state dir>/plugins` (installed app: `%USERPROFILE%\.infantry\plugins`).
 - `<root>/modules.json` (`ModulesConfig`): the folders to scan with their **tier** (`core`, `community`), the owner's
   per-module `enabled`, `allow`/`deny` services, `allowOverride`, `allowInject`, and `demoLock.allowRoutes`.
 - `PluginFolders.scan`: every subfolder with a `module.json` (`ModuleManifest`: name, version, apiVersion, author,
@@ -112,7 +112,7 @@ matches LICENSE-0's split (92.3 % "core", of which most UI is core only because 
   a `URLClassLoader` whose parent is the app's loader (it must sit inside its folder), its entry class is a `UiPlugin`,
   `registerModule` binds its contributions into a `TabFactory`. Built **once** (`JvmPlatformHost.tabFactory by lazy`).
   Enable/disable from Settings writes `modules.json` and "applies at the next start".
-- A plugin jar holds only its own classes and is `compileOnly` against `agenthqUiCore` + Compose (Acme_Hello's
+- A plugin jar holds only its own classes and is `compileOnly` against `infantryUiCore` + Compose (Acme_Hello's
   `build.gradle.kts`). That is fine for the shell API, and is exactly why moving the app UI out is a module split.
 
 ### 2b. The single droppable file
@@ -158,7 +158,7 @@ start before the loader opens it ("pending-replace" marker); the soft restart mu
 - Community: needs author + license, off until `modules.json` enables it, services by `allow`, may replace a core
   contribution or shell node only if listed in `allowOverride`, inject only per `allowInject`.
 - **Locked nodes** refuse every override and injection, whatever the tier.
-- **Demo lock** (`AGENTHQ_DEMO_LOCK`): no community module loads; `modules.json` is never written; daemon side, no
+- **Demo lock** (`INFANTRY_DEMO_LOCK`): no community module loads; `modules.json` is never written; daemon side, no
   interactive run, no raw shell keystrokes, no secrets, every non-allowlisted frame refused (RunManager, KeystoreHandler,
   1.136.0 FrameGate).
 - `DesktopPlugins` says it plainly: *a trust label, not a sandbox*; a loaded jar has the app's full JVM access.
@@ -206,8 +206,8 @@ mode), not isolation. Out-of-process UI plugins would be isolation, at a cost fa
 | **S1** | Placeholders: the shell's open children become empty blocks with unchanged id and `place`; the current UI re-enters through `shell(replace)` from a **compiled-in** `Infantry_AppUi` core module | 3 | 32 shots + extras 0 px (nothing moved yet, only the wiring) |
 | **S2** | `ShellContext`: the open nodes read state and actions through an interface the shell provides, not `App` internals | 4 | 0 px; a test that a stub `ShellContext` renders the placeholders |
 | **S3** | Split `ConfigDialog`: locked trust kernel in the shell, other sections as `config.<entry>` from `Infantry_AppUi` | 3 | 0 px incl. config shots |
-| **S4** | **The leak test**: move `Infantry_AppUi` and every pane of section 1c into a new Gradle module `agenthqAppUi`; the shell (`agentHqUi` desktop) no longer depends on it. Every compile error in the shell is a leak, fixed by moving the code or widening `ShellContext` | 5 | shell compiles alone; shell with the module on the classpath = 0 px |
-| **S5** | Packaging: `agenthqAppUi` builds `App_UI.ihq` (zip of module.json + jars, jarsigned); the installer unzips atomically into the tier folder; the loader loads it from disk like Acme_Hello | 2 | `DesktopPluginsJarTest`-style test of install + load + refusal of an unsigned file |
+| **S4** | **The leak test**: move `Infantry_AppUi` and every pane of section 1c into a new Gradle module `infantryAppUi`; the shell (`infantryUi` desktop) no longer depends on it. Every compile error in the shell is a leak, fixed by moving the code or widening `ShellContext` | 5 | shell compiles alone; shell with the module on the classpath = 0 px |
+| **S5** | Packaging: `infantryAppUi` builds `App_UI.ihq` (zip of module.json + jars, jarsigned); the installer unzips atomically into the tier folder; the loader loads it from disk like Acme_Hello | 2 | `DesktopPluginsJarTest`-style test of install + load + refusal of an unsigned file |
 | **S6** | Drop box in the empty `center` placeholder + consent dialog + soft restart + safe mode + demo-lock disabled state | 3 | empty-shell shot (new baseline: drop box); then **install `App_UI.ihq` into a temp plugins root and run the 32-shot `diffTabShots` against the current baseline: 0 px** |
 | | **Total** | **22** | |
 

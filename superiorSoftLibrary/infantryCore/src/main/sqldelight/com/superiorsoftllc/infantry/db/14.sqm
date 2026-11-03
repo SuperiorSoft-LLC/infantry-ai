@@ -1,0 +1,21 @@
+-- MVP MEM-2 -- migration v14 -> v15: project-memory notes survive a daemon restart.
+--
+-- 13.sqm added `workspaces` (v13 -> v14); this is the very next step, adding the `memory_notes`
+-- table that com.superiorsoftllc.infantry.memory.SqlMemoryPersistence writes through. A database
+-- written by the previous build reaches v14 WITHOUT this table, so only an explicit migration step
+-- adds it -- see the same reasoning in 7.sqm for `projects`.
+--
+-- NEXT MIGRATION: 15.sqm
+
+CREATE TABLE IF NOT EXISTS memory_notes (
+    id TEXT NOT NULL PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    folder TEXT NOT NULL DEFAULT '',
+    description TEXT NOT NULL DEFAULT '',
+    body TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS index_memory_notes_on_project ON memory_notes(project_id, created_at);

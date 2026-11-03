@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.plugins.official.pace
+package com.superiorsoftllc.infantry.plugins.official.pace
 
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray

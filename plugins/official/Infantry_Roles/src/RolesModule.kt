@@ -1,21 +1,21 @@
-package com.superiorsoftllc.agenthq.plugins.official.roles
+package com.superiorsoftllc.infantry.plugins.official.roles
 
 import androidx.compose.runtime.remember
-import com.superiorsoftllc.agenthq.plugin.api.FillDeclaration
-import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
-import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
-import com.superiorsoftllc.agenthq.ui.ConfigEntry
-import com.superiorsoftllc.agenthq.ui.ConfigRolesSection
-import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
-import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
-import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
-import com.superiorsoftllc.agenthq.ui.plugin.TabProvider
-import com.superiorsoftllc.agenthq.ui.plugin.UiPlugin
-import com.superiorsoftllc.agenthq.ui.plugin.UiRegistrar
-import com.superiorsoftllc.agenthq.ui.plugin.circle
-import com.superiorsoftllc.agenthq.ui.plugin.tabIcon
-import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
-import com.superiorsoftllc.agenthq.ui.shell.blocks.ConfigSectionBlock
+import com.superiorsoftllc.infantry.plugin.api.FillDeclaration
+import com.superiorsoftllc.infantry.plugin.api.ModuleManifest
+import com.superiorsoftllc.infantry.plugin.api.TabDeclaration
+import com.superiorsoftllc.infantry.ui.ConfigEntry
+import com.superiorsoftllc.infantry.ui.ConfigRolesSection
+import com.superiorsoftllc.infantry.ui.plugin.InfantryModule
+import com.superiorsoftllc.infantry.ui.plugin.ModuleSource
+import com.superiorsoftllc.infantry.ui.plugin.TabContainers
+import com.superiorsoftllc.infantry.ui.plugin.TabProvider
+import com.superiorsoftllc.infantry.ui.plugin.UiPlugin
+import com.superiorsoftllc.infantry.ui.plugin.UiRegistrar
+import com.superiorsoftllc.infantry.ui.plugin.circle
+import com.superiorsoftllc.infantry.ui.plugin.tabIcon
+import com.superiorsoftllc.infantry.ui.shell.LocalShellContext
+import com.superiorsoftllc.infantry.ui.shell.blocks.ConfigSectionBlock
 
 /** The Roles tab's id. */
 const val ROLES_TAB_ID = "infantry.roles"
@@ -50,7 +50,7 @@ private fun rolesTab() = TabProvider(
 }
 
 /** PLUGINS-1: Infantry_Roles (official since RUNTIME-14), the Roles tab and the roles window, compiled in on web and Android (D9). */
-val InfantryRoles = AgentHqModule(
+val InfantryRoles = InfantryModule(
     ModuleManifest(
         name = "Infantry_Roles", version = "1.0.0", author = "Infantry AI", description = "Roles: who does what, and starting a session as one.",
         tabs = listOf(TabDeclaration(ROLES_TAB_ID, TabContainers.CENTER)),
@@ -73,5 +73,5 @@ class RolesPlugin : UiPlugin, ModuleSource {
         registrar.fill(ROLES_CONFIG_ID, rolesSection)
     }
 
-    override fun modules(): List<AgentHqModule> = listOf(InfantryRoles)
+    override fun modules(): List<InfantryModule> = listOf(InfantryRoles)
 }

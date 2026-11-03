@@ -6,11 +6,11 @@
   "description": "The project's git state.",
   "tier": "official",
   "sequence": [],
-  "entry": "com.superiorsoftllc.agenthq.plugins.official.git.GitPlugin",
+  "entry": "com.superiorsoftllc.infantry.plugins.official.git.GitPlugin",
   "jar": "build/libs/Infantry_Git.jar",
   "buildOrder": 100,
   "daemon": {
-    "entry": "com.superiorsoftllc.agenthq.plugins.official.git.daemon.GitDaemonPlugin",
+    "entry": "com.superiorsoftllc.infantry.plugins.official.git.daemon.GitDaemonPlugin",
     "jar": "daemon/build/libs/Infantry_Git-daemon.jar",
     "apiAtLeast": "1.1.0",
     "tools": []

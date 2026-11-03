@@ -7,7 +7,7 @@
 //     app-debug.apk -> <sha>/app-debug-1.0.1+20261023.1432.e85b223.apk. BUILD-INFO.txt carries the same string as build=.
 //     `verifyPackagingStamp` (wired into check) runs this stamping on dummy files and checks both.
 // The original output paths stay put: .github/workflows/release.yml (tag build, no override) reads them.
-// Applied from :agentHqUi and :agentHqAndroid (apply(from = rootProject.file("gradle/packaging-guard.gradle.kts"))).
+// Applied from :infantryUi and :infantryAndroid (apply(from = rootProject.file("gradle/packaging-guard.gradle.kts"))).
 
 fun git(vararg args: String): String? = try {
     val p = ProcessBuilder(listOf("git") + args).directory(rootProject.projectDir).redirectErrorStream(true).start()
@@ -17,12 +17,12 @@ fun git(vararg args: String): String? = try {
 
 val releaseBranch = "feature-agenthq-mvp"
 // BUILD-STAMP-1: the task names, version, sha and build string all come from gradle/build-stamp.gradle.kts (root).
-val guardedTask = rootProject.extra["agenthqPackagingTask"] as Regex
+val guardedTask = rootProject.extra["infantryPackagingTask"] as Regex
 fun isGuarded(t: Task) = guardedTask.matches(t.name)
 
-val sha: String = rootProject.extra["agenthqBuildSha"] as String
-val buildVersion: String = rootProject.extra["agenthqBuildVersion"] as String
-val buildStamp: String = rootProject.extra["agenthqBuild"] as String
+val sha: String = rootProject.extra["infantryBuildSha"] as String
+val buildVersion: String = rootProject.extra["infantryBuildVersion"] as String
+val buildStamp: String = rootProject.extra["infantryBuild"] as String
 val branch: String = git("rev-parse", "--abbrev-ref", "HEAD") ?: "unknown"
 val tag: String? = (git("describe", "--exact-match", "--tags", "HEAD")?.takeIf { it.startsWith("v") })
     ?: System.getenv("GITHUB_REF_NAME")?.takeIf { System.getenv("GITHUB_REF_TYPE") == "tag" && it.startsWith("v") }

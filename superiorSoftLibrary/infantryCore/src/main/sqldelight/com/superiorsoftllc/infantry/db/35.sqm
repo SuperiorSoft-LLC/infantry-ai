@@ -1,0 +1,8 @@
+-- P10-K13 -- migration v35 -> v36: the effective skill ids a session was spawned with, frozen on its T4 instance
+-- (docs/INFANTRY-PHASE10-KNOWLEDGE.md K-D11). A JSON array of skill ids in effective order (`[]` = none), computed once
+-- at spawn by SkillAttachment.effective and never updated, like the rest of the row. Existing instances get `[]`: they
+-- were spawned before skills existed. The column is exactly session_instances.sq's.
+--
+-- NEXT MIGRATION: 36.sqm (taken by E1-a: story_migration)
+
+ALTER TABLE session_instances ADD COLUMN skill_ids TEXT NOT NULL DEFAULT '[]';

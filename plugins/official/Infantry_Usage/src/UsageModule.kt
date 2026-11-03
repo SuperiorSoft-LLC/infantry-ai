@@ -1,20 +1,20 @@
-package com.superiorsoftllc.agenthq.plugins.official.usage
+package com.superiorsoftllc.infantry.plugins.official.usage
 
-import com.superiorsoftllc.agenthq.plugin.api.FillDeclaration
-import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
-import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
-import com.superiorsoftllc.agenthq.ui.ConfigEntry
-import com.superiorsoftllc.agenthq.ui.ConfigLimitsSection
-import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
-import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
-import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
-import com.superiorsoftllc.agenthq.ui.plugin.TabProvider
-import com.superiorsoftllc.agenthq.ui.plugin.UiPlugin
-import com.superiorsoftllc.agenthq.ui.plugin.UiRegistrar
-import com.superiorsoftllc.agenthq.ui.plugin.tabIcon
-import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
-import com.superiorsoftllc.agenthq.ui.shell.NoUsage
-import com.superiorsoftllc.agenthq.ui.shell.blocks.ConfigSectionBlock
+import com.superiorsoftllc.infantry.plugin.api.FillDeclaration
+import com.superiorsoftllc.infantry.plugin.api.ModuleManifest
+import com.superiorsoftllc.infantry.plugin.api.TabDeclaration
+import com.superiorsoftllc.infantry.ui.ConfigEntry
+import com.superiorsoftllc.infantry.ui.ConfigLimitsSection
+import com.superiorsoftllc.infantry.ui.plugin.InfantryModule
+import com.superiorsoftllc.infantry.ui.plugin.ModuleSource
+import com.superiorsoftllc.infantry.ui.plugin.TabContainers
+import com.superiorsoftllc.infantry.ui.plugin.TabProvider
+import com.superiorsoftllc.infantry.ui.plugin.UiPlugin
+import com.superiorsoftllc.infantry.ui.plugin.UiRegistrar
+import com.superiorsoftllc.infantry.ui.plugin.tabIcon
+import com.superiorsoftllc.infantry.ui.shell.LocalShellContext
+import com.superiorsoftllc.infantry.ui.shell.NoUsage
+import com.superiorsoftllc.infantry.ui.shell.blocks.ConfigSectionBlock
 
 /** The Usage tab's id. */
 const val USAGE_TAB_ID = "infantry.usage"
@@ -38,7 +38,7 @@ const val LIMITS_CONFIG_ID = "infantry.shell.config.limits"
 private val limitsSection = ConfigSectionBlock(ConfigEntry.LIMITS, "limits") { c, m -> ConfigLimitsSection(c, m) }
 
 /** PLUGINS-1: Infantry_Usage (official since RUNTIME-10), plan usage and limits, as a compiled-in module (web and Android, D9). */
-val InfantryUsage = AgentHqModule(
+val InfantryUsage = InfantryModule(
     ModuleManifest(
         name = "Infantry_Usage", version = "1.0.0", author = "Infantry AI", description = "Plan usage and limits.",
         tabs = listOf(TabDeclaration(USAGE_TAB_ID, TabContainers.RIGHT)),
@@ -59,5 +59,5 @@ class UsagePlugin : UiPlugin, ModuleSource {
         registrar.fill(LIMITS_CONFIG_ID, limitsSection)
     }
 
-    override fun modules(): List<AgentHqModule> = listOf(InfantryUsage)
+    override fun modules(): List<InfantryModule> = listOf(InfantryUsage)
 }

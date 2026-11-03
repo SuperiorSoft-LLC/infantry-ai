@@ -1,16 +1,16 @@
 # BLOCKS-NEXT-SPLITS: what is left to split (survey, read-only)
 
-Base: dev 5958392. Scope: `agentHqUi`, `agenthqUiCore` (commonMain + androidMain) and `plugins/core/*`. Method: an awk brace-depth
+Base: dev 5958392. Scope: `infantryUi`, `infantryUiCore` (commonMain + androidMain) and `plugins/core/*`. Method: an awk brace-depth
 counter over every `@Composable fun` in the 256 non-test `.kt` files (first line of the function to its closing brace,
 comments and blank lines included). Test code and build output are excluded. Nothing was built.
 
-Result: **no composable in `agentHqUi` or `plugins/core/*` reaches 80 lines** (`UpdatePrompt` is 69; the plugin files are
-17-34 lines of manifest and call a pane that lives in `agenthqUiCore`). All 23 composables of 82+ lines are in `agenthqUiCore`.
+Result: **no composable in `infantryUi` or `plugins/core/*` reaches 80 lines** (`UpdatePrompt` is 69; the plugin files are
+17-34 lines of manifest and call a pane that lives in `infantryUiCore`). All 23 composables of 82+ lines are in `infantryUiCore`.
 
 ## 1. Every @Composable of about 80 lines or more
 
 Node status: "leaf" = a node whose insides are one composable; "none" = not reachable by node id. Locked = in `CoreShell.locked`.
-Files are under `agenthqUiCore/src/commonMain/kotlin/com/superiorsoftllc/agenthq/ui/`.
+Files are under `infantryUiCore/src/commonMain/kotlin/com/superiorsoftllc/infantry/ui/`.
 
 | Lines | Function (file:line) | Node status | Natural children |
 |---|---|---|---|

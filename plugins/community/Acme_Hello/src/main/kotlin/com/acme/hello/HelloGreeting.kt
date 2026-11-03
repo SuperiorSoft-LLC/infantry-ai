@@ -12,7 +12,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.padding
-import com.superiorsoftllc.agenthq.ui.plugin.TabContext
+import com.superiorsoftllc.infantry.ui.plugin.TabContext
 
 const val GREETING_TEXT_TAG = "acme-hello-greeting-text"
 

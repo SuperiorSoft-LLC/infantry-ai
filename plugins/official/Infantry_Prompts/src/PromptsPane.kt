@@ -1,7 +1,7 @@
-package com.superiorsoftllc.agenthq.plugins.official.prompts
+package com.superiorsoftllc.infantry.plugins.official.prompts
 
-import com.superiorsoftllc.agenthq.ui.shell.gate
-import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.infantry.ui.shell.gate
+import com.superiorsoftllc.infantry.ui.*
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -33,10 +33,10 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.model.filterPrompts
-import com.superiorsoftllc.agenthq.ui.net.CommandResult
-import com.superiorsoftllc.agenthq.ui.shell.LinkContext
-import com.superiorsoftllc.agenthq.ui.shell.PromptsContext
+import com.superiorsoftllc.infantry.ui.model.filterPrompts
+import com.superiorsoftllc.infantry.ui.net.CommandResult
+import com.superiorsoftllc.infantry.ui.shell.LinkContext
+import com.superiorsoftllc.infantry.ui.shell.PromptsContext
 import kotlinx.coroutines.launch
 
 const val PROMPTS_ADD_BUTTON_TAG = "prompts-add"
@@ -63,7 +63,7 @@ fun PromptsPane(link: LinkContext, ctx: PromptsContext, onInsert: (String) -> Un
     val live = link.live
     // POLICY-1: write controls are named actions gated by the daemon's policy (and any write policy); reads keep live.
     val canWrite = link.gate("prompts.save").enabled
-    val canDelete = link.gate("prompts.delete", com.superiorsoftllc.agenthq.plugin.api.ActionKind.DESTRUCTIVE).enabled
+    val canDelete = link.gate("prompts.delete", com.superiorsoftllc.infantry.plugin.api.ActionKind.DESTRUCTIVE).enabled
     var query by remember { mutableStateOf("") }
     var draft by remember { mutableStateOf<PromptDraft?>(null) }
     var localError by remember { mutableStateOf<String?>(null) }

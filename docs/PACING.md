@@ -6,8 +6,8 @@ PACE-TREND-1 (ticket-537050e7). Answers one question for every harness: **am I s
 
 | Piece | Where | What it does |
 |---|---|---|
-| `api.meters` (DaemonApi 1.10.0) | `agentHqDaemonApi/.../usage/MetersApi.kt`, `agentHq/.../usage/PacingMeters.kt` | Read-only host service: the CURRENT reading of every provider window (percent, reset time, pace delta, projected landing). Community plugins need the grant `usage.read`. |
-| Infantry_Pace daemon half | `plugins/official/Infantry_Pace/daemon` | Samples `api.meters` every minute, keeps history, computes momentum and forecast, answers `pace_get`, tool `agenthq_pace`, CLI `agenthq usage history`. |
+| `api.meters` (DaemonApi 1.10.0) | `infantryDaemonApi/.../usage/MetersApi.kt`, `infantry/.../usage/PacingMeters.kt` | Read-only host service: the CURRENT reading of every provider window (percent, reset time, pace delta, projected landing). Community plugins need the grant `usage.read`. |
+| Infantry_Pace daemon half | `plugins/official/Infantry_Pace/daemon` | Samples `api.meters` every minute, keeps history, computes momentum and forecast, answers `pace_get`, tool `infantry_pace`, CLI `infantry usage history`. |
 | Infantry_Pace UI half | `plugins/official/Infantry_Pace/src` | The **Pace** tab: one card per provider window. |
 
 Optional plugin (class `optional` in `plugins/build-presets.json`, like Stats). Disabled or removed: nothing is recorded, core is unchanged, the tab is gone.
@@ -16,7 +16,7 @@ Optional plugin (class `optional` in `plugins/build-presets.json`, like Stats). 
 
 The plugin depends on the **source of the data** (the provider meters, through the host's `api.meters`), **not on Stats**. It records its own history from that source, so it works with Stats absent or present and has no `requires: Stats` and no new manifest field.
 
-What Stats stores today: `Infantry_Stats` shows the selected session's statistics and the daemon's token meter (`usage_meter`: tokens and cost by day, from `run_usage`). It keeps **no history of the plan meter percent** (the `agenthq_usage` reading is current only), and it has no contribution point other plugins can add a panel to. Choice: the simplest path that works in both cases is **its own tab**, so nothing in Stats changed. Reusing Stats' data where it exists: the tab already reads the same `usage_meter` report Stats asks for (one request, no polling of its own) for the token totals below. If Stats later grows a contribution point, the cards can move onto the Stats screen without touching the recorder.
+What Stats stores today: `Infantry_Stats` shows the selected session's statistics and the daemon's token meter (`usage_meter`: tokens and cost by day, from `run_usage`). It keeps **no history of the plan meter percent** (the `infantry_usage` reading is current only), and it has no contribution point other plugins can add a panel to. Choice: the simplest path that works in both cases is **its own tab**, so nothing in Stats changed. Reusing Stats' data where it exists: the tab already reads the same `usage_meter` report Stats asks for (one request, no polling of its own) for the token totals below. If Stats later grows a contribution point, the cards can move onto the Stats screen without touching the recorder.
 
 Upload / download: the history is one file in the plugin's own folder, `<state dir>/plugin-data/Infantry_Pace/samples.jsonl`. Whatever export or sync already carries plugin data folders carries it. **No such path exists today** that I found, and no sync system was built here: the history stays on the daemon host.
 
@@ -26,7 +26,7 @@ Every minute the recorder reads `api.meters`. Each readable window becomes one s
 
 Retention: `pace.retentionDays` (default 60, `0` = keep all), pruned at startup and hourly. History round-trips through restarts (one JSON line per sample; a torn line is skipped).
 
-Read it: `agenthq usage history [claude] ["5h limit"] [24h]`, MCP tool `agenthq_pace`, or the `pace_get` frame the tab uses.
+Read it: `infantry usage history [claude] ["5h limit"] [24h]`, MCP tool `infantry_pace`, or the `pace_get` frame the tab uses.
 
 ## The numbers, in plain words
 
@@ -87,7 +87,7 @@ One card per provider window, any provider, no per-provider code (a new harness 
 
 ## Tests
 
-`plugins/official/Infantry_Pace/daemon/src/test/.../PaceTest.kt` (recording, dedupe, retention, round trip, reset splitting, momentum and forecast with fixed series incl. the worked example, insufficient data, report for any provider), `plugins/official/Infantry_Pace/test/PaceChartModelTest.kt` and `PaceContrastTest.kt` (series, empty state, scales, clipping, token totals, tab states, contrast in both themes), `agentHqUi/.../PaceCardUiTest.kt` (the real card, tooltip, clip warning, screenshots in both themes), `agentHq/.../GrantedMetersTest.kt` (`api.meters`, the community grant denial).
+`plugins/official/Infantry_Pace/daemon/src/test/.../PaceTest.kt` (recording, dedupe, retention, round trip, reset splitting, momentum and forecast with fixed series incl. the worked example, insufficient data, report for any provider), `plugins/official/Infantry_Pace/test/PaceChartModelTest.kt` and `PaceContrastTest.kt` (series, empty state, scales, clipping, token totals, tab states, contrast in both themes), `infantryUi/.../PaceCardUiTest.kt` (the real card, tooltip, clip warning, screenshots in both themes), `infantry/.../GrantedMetersTest.kt` (`api.meters`, the community grant denial).
 
 ## Per-session spend (PACE-TREND-2, ticket-39883b1c)
 

@@ -2,7 +2,7 @@
 
 **Revision 5** (RUNTIME-26 / F10, 2026-10-28). Rev 4: ticket d78395b1. Revisions 1-3: ticket 73b920ff (rev 3 = c6f23fa5).
 Revs 1-4 were design only; rev 5 records what the RUNTIME-6..26 extraction built (see "Rev 5: the extraction is done").
-Base: `feature-agenthq-mvp` @ 758149a5, after 4dc8b33f.
+Base: `"feature-agenthq"-mvp` @ 758149a5, after 4dc8b33f.
 
 **Decisions applied in rev 4:**
 - **D3** (owner, 2026-10-28): "official" = plugins made by the app's own developer/company. They are NOT required and
@@ -31,7 +31,7 @@ plugins = programs), **D8** (the empty shell is a drop-in box; dropping the ORCH
   `apiVersion` bump. The one [C] item (breaking) was this ticket.
 - **`plugins/core` is empty** (a README only). `Infantry_AppUi` and `App_UI.ihq` are retired (`appUiIhq` and the
   `-PtabShotsExtra=dropin` acceptance are gone). The panel frames (left, right, compact drawer) and the open settings
-  group (`ShellConfigSettings`) moved into agenthqUiCore as the shell's own nodes: still replaceable by id
+  group (`ShellConfigSettings`) moved into infantryUiCore as the shell's own nodes: still replaceable by id
   (`asPlaceholder()`), no longer slots. `CoreShell.slots` lists only what a plugin fills.
 - **`coreShell`/`appShell` are deleted** (0 uses). `ModuleTier`/`LocalCoreTier` stay as the tier plumbing (no reader).
 - **`apiVersion` 2.** `PLUGIN_API_VERSION = 2`; the resolver matches it exactly, so every module.json (official,
@@ -101,12 +101,12 @@ program loaded through the module system.
 
 **Yes, today.** `CompiledModules.all` is empty when no `ModuleSource` is on the classpath. `CoreShell.slots` then draw
 nothing, the centre slot draws the drop box, and Configuration (the trust kernel) opens. Proof already in the repo:
-- `agentHqUi/.../DropInUiTest` "the empty shell draws the drop box, the app UI does not"
-- baselines `agentHqUi/tab-shots-baseline/empty-shell/shell-empty-1400.png` and `shell-empty-config-1400.png`
-- `:agentHqUi:runShell` (NS4) and "Try in a fresh shell" (NS10)
+- `infantryUi/.../DropInUiTest` "the empty shell draws the drop box, the app UI does not"
+- baselines `infantryUi/tab-shots-baseline/empty-shell/shell-empty-1400.png` and `shell-empty-config-1400.png`
+- `:infantryUi:runShell` (NS4) and "Try in a fresh shell" (NS10)
 
 I did not re-run them: none is a one-command check without a full Compose build. The command is
-`gradlew.bat :superiorSoftLibrary:agentHqUi:test --tests "*DropInUiTest*"`.
+`gradlew.bat :superiorSoftLibrary:infantryUi:test --tests "*DropInUiTest*"`.
 
 **The empty state is a contract:** a window with the drop box in `infantry.shell.center`, the Configuration button
 (top right), connect/servers when no daemon answers, and (NS4 2b) a daemon status line. The `shell-empty` shots define
@@ -116,14 +116,14 @@ it.
 
 | Shell piece | D4 part | Where |
 |---|---|---|
-| Frame: `CoreShell` skeleton, locked nodes, 15 empty slots, window layer, window title-bar frame | shell | agenthqUiCore `ui/shell/blocks` |
-| Loader: `DesktopPlugins`, `PluginFolders`, `ModuleResolver`, `DependencyGraph`, `PluginClassLoader`, `IhqInstaller`, drop box, consent, soft restart, safe mode | orchestration | agenthqUiCore `ui/plugin`, agenthqPlugins `plugin/host` |
-| Trust: `Tier`, `ServiceRegistry`, `RouteGate`, signer pinning, demo lock | orchestration | agenthqPlugins |
-| Platform services: events, storage, settings, notifications (toast host), daemon | orchestration | agenthqPlugins, agenthqUiCore |
-| Daemon link: `Controller`, `DaemonLink`, `WireProtocol`, `Model`/`AppState`; connect, servers, switchError, serverUpdate, connection items of the status bar | orchestration | agenthqUiCore `ui/net`, `ui/protocol`, `ui/model` |
-| Configuration: Plugins/Modules, Secrets, Pair, Updates, About, Logs, and the host for each module's `config.<entry>` | configuration | agenthqUiCore `ConfigDialog` |
-| Theme, kit widgets, icons, markdown engine, layout engine, `ShellContext` | shell (the platform API) | agenthqUiCore `ui/` root, `ui/block`, `ui/shell` |
-| Bundled daemon (in-process in the installed app; a thin flavour without it is NS-L1) | orchestration host | `:agentHq` |
+| Frame: `CoreShell` skeleton, locked nodes, 15 empty slots, window layer, window title-bar frame | shell | infantryUiCore `ui/shell/blocks` |
+| Loader: `DesktopPlugins`, `PluginFolders`, `ModuleResolver`, `DependencyGraph`, `PluginClassLoader`, `IhqInstaller`, drop box, consent, soft restart, safe mode | orchestration | infantryUiCore `ui/plugin`, infantryPlugins `plugin/host` |
+| Trust: `Tier`, `ServiceRegistry`, `RouteGate`, signer pinning, demo lock | orchestration | infantryPlugins |
+| Platform services: events, storage, settings, notifications (toast host), daemon | orchestration | infantryPlugins, infantryUiCore |
+| Daemon link: `Controller`, `DaemonLink`, `WireProtocol`, `Model`/`AppState`; connect, servers, switchError, serverUpdate, connection items of the status bar | orchestration | infantryUiCore `ui/net`, `ui/protocol`, `ui/model` |
+| Configuration: Plugins/Modules, Secrets, Pair, Updates, About, Logs, and the host for each module's `config.<entry>` | configuration | infantryUiCore `ConfigDialog` |
+| Theme, kit widgets, icons, markdown engine, layout engine, `ShellContext` | shell (the platform API) | infantryUiCore `ui/` root, `ui/block`, `ui/shell` |
+| Bundled daemon (in-process in the installed app; a thin flavour without it is NS-L1) | orchestration host | `:infantry` |
 
 **Not shell but still in it (moves out, E4):** `EpicsPane`, `PromptsPane`, `SkillsPane`, `StatsPane`, `UsagePane`
 (1,211 lines) and `UsagePacingSection`. `ProjectPicker` (442) moves to Agents; the non-frame part of `TitleBar` (466)
@@ -191,9 +191,9 @@ makes a module required (D3).
 
 | Tier | Repo (source) | Install (bundled, written by the MSI) | User root (drop box / manual) |
 |---|---|---|---|
-| core: orchestration pieces packaged as modules; today also the 19 program modules not yet moved (the ratchet's debt) | `plugins/core/<Name>` | `<install>\app\resources\modules\core\<Name>\` | `%USERPROFILE%\.agenthq\plugins\core\<Name>\` |
-| official: programs made by Infantry (D3), ship enabled, removable | `plugins/official/<Name>` | `<install>\app\resources\modules\official\<Name>\` | `%USERPROFILE%\.agenthq\plugins\official\<Name>\` |
-| community: programs made by anyone else | `plugins/community/<Name>` | (none: the MSI never ships community) | `%USERPROFILE%\.agenthq\plugins\community\<Name>\` |
+| core: orchestration pieces packaged as modules; today also the 19 program modules not yet moved (the ratchet's debt) | `plugins/core/<Name>` | `<install>\app\resources\modules\core\<Name>\` | `%USERPROFILE%\.infantry\plugins\core\<Name>\` |
+| official: programs made by Infantry (D3), ship enabled, removable | `plugins/official/<Name>` | `<install>\app\resources\modules\official\<Name>\` | `%USERPROFILE%\.infantry\plugins\official\<Name>\` |
+| community: programs made by anyone else | `plugins/community/<Name>` | (none: the MSI never ships community) | `%USERPROFILE%\.infantry\plugins\community\<Name>\` |
 
 - Each module folder holds `module.json` and `lib/<Name>.jar`. The jar is jarsigned, and the `module.json` that counts
   is the copy inside the signature.
@@ -217,7 +217,7 @@ and Settings > Modules shows the reason.
 1. **Folder:** the module sits in T's folder, in the bundled root or the user root.
 2. **Signature:** every jar entry and `module.json` verify against a key trusted for T. The check is
    `JarFile(verify=true)`, as `IhqInstaller` does today. Trusted keys per tier:
-   - **core:** the Infantry key, pinned in the shell binary (agenthqPlugins). Nothing else: core is the OS.
+   - **core:** the Infantry key, pinned in the shell binary (infantryPlugins). Nothing else: core is the OS.
    - **official:** the Infantry key (D3: official = made by the app's own developer).
    - **community:** any signer, or unsigned when `allowUnsigned` is set. A key the owner adds to `trusted-keys/` makes
      its modules community-signed-and-trusted (installs without the unsigned warning); it never lifts them to official
@@ -232,7 +232,7 @@ and Settings > Modules shows the reason.
 A hash is used only as a **cache key**: (path, size, mtime, SHA-256) → "verified for tier T", so the loader can skip
 re-verification at start. A miss or a mismatch only means "verify again". A cache entry never grants anything.
 
-Dev runs from the repo root skip step 2 with `agenthq.plugins.devTrust=true`. The packaged launcher never sets it, and
+Dev runs from the repo root skip step 2 with `infantry.plugins.devTrust=true`. The packaged launcher never sets it, and
 a test checks that.
 
 **Code change this implies:** `Tier` gains `OFFICIAL`. Today several checks are written as `tier != COMMUNITY` (the
@@ -384,7 +384,7 @@ folder. `DesktopPlugins.bundles()` already loads a folder whose entry is a `Modu
 - the signature and signed-tier check;
 - the filtered loader for official (3c).
 
-The desktop app drops `runtimeOnly(agenthqAppUi)` and `isShellJar`. `runShell` becomes "the app with an empty modules
+The desktop app drops `runtimeOnly(infantryAppUi)` and `isShellJar`. `runShell` becomes "the app with an empty modules
 folder".
 
 **Web (wasm) and Android** cannot load code at run time, so the set is composed at build time from the same data.
@@ -396,7 +396,7 @@ folder".
   - filters by `product.json`;
   - orders the modules as `ModuleResolver` would (Kahn over `dependencies` + `sequence`, ties by name);
   - writes `object CoreModules { val all; val factory }` with today's name and API, so the ~20 UI tests and
-    agentHqWeb `Main.kt` do not change;
+    infantryWeb `Main.kt` do not change;
   - adds a `project(...)` dependency for each chosen module.
 - The Android srcDir workaround from 4dc8b33f goes away, because nothing is excluded any more.
 - What Android can do dynamically later:
@@ -439,21 +439,21 @@ Library, Pods, Triggers and Review contexts), counted by the ratchet (3g).
   (0fc727a6, backlog) proposes MPL 2.0. `THIRD-PARTY-NOTICES.md` lists JediTerm (Apache 2.0, chosen from its LGPL/Apache
   dual license), pty4j (EPL 1.0, with winpty and ConPTY under MIT) and JNA (Apache 2.0, chosen from its LGPL/Apache dual
   license). No source file carries an SPDX header yet.
-- **Shell files (= core, D4):** `superiorSoftLibrary/agenthqUiCore`, `superiorSoftLibrary/agenthqPlugins`,
-  `superiorSoftLibrary/agentHqUi` (desktop entry and packaging), `agentHqWeb`, `agentHqAndroid` (entries),
-  `superiorSoftLibrary/agentHq` (the daemon).
+- **Shell files (= core, D4):** `superiorSoftLibrary/infantryUiCore`, `superiorSoftLibrary/infantryPlugins`,
+  `superiorSoftLibrary/infantryUi` (desktop entry and packaging), `infantryWeb`, `infantryAndroid` (entries),
+  `superiorSoftLibrary/infantry` (the daemon).
 - **Module files (programs):** every folder `plugins/core/*` (today), `plugins/official/*` (planned) and
   `plugins/community/*`, each with its own `module.json`. Today all official module code is in `plugins/core/*`,
-  except 1,211 lines of module panes still in agenthqUiCore (section 1).
+  except 1,211 lines of module panes still in infantryUiCore (section 1).
 - **Per-module license field:** `module.json` has `license` and `author`. A community module must state both (the
   resolver refuses it otherwise). Core modules do not fill it today.
 - **What a module links against** (the interfaces):
-  - (1) the `module.json` schema (`ModuleManifest`, agenthqPlugins `plugin.api`);
-  - (2) the Kotlin types in the packages listed in section 6 (`UiPlugin`, `ModuleSource`, `AgentHqModule`,
+  - (1) the `module.json` schema (`ModuleManifest`, infantryPlugins `plugin.api`);
+  - (2) the Kotlin types in the packages listed in section 6 (`UiPlugin`, `ModuleSource`, `InfantryModule`,
     `TabProvider`, `TabContext`, `UiRegistrar`, `Block`, `AppState` and the wire types);
   - (3) after E5, `ShellContext` and the kit.
 
-  Modules compile `compileOnly` against `agenthqUiCore` and Compose (see `plugins/community/Acme_Hello/build.gradle.kts`).
+  Modules compile `compileOnly` against `infantryUiCore` and Compose (see `plugins/community/Acme_Hello/build.gradle.kts`).
   Their jar holds only their own classes.
 - **How a module runs with the shell:**
   - desktop: in the same JVM process, loaded by its own `URLClassLoader` whose parent is the app's loader (dynamic
@@ -473,10 +473,10 @@ Library, Pods, Triggers and Review contexts), counted by the ratchet (3g).
 |---|---|---|---|
 | **E1+E2 (first slice)** | **Infantry_Cli as a real signed OFFICIAL jar.** First commit: `generateModuleList` + one `ModuleSource` per module + `plugins/official` folder support in the scanner (the list stays complete, so 0 px). Then Cli becomes its own project in `plugins/official`. The product build stages `modules/official/Infantry_Cli`. `PluginFolders` gets the bundled root + signed-tier check + `devTrust`; official loads through the filtered loader. Measure plugin load and first frame (BLOCKS-PERF harness); budget <= 500 ms. | 3 | 0 px; tests: unsigned jar in `official\` refused, official-signed jar in `core\` refused, Cli removed → `homeTab` fallback, no exception |
 | E3 | `Tier.OFFICIAL` + the fixed three folders (3a/3b) + the per-tier rules (3c, slots as open hosts) + the id guard test (3e) + the ratchet test (3g) + Settings > Modules shows tier, signer and source. Agents moves to official. | 3 | 0 px; the all-minus-X removal test; tests: old modules.json without `official` still loads official, safe mode skips official, official has no `coreController` |
-| E4 | Move the 1,211 lines of Epics/Prompts/Skills/Stats/Usage panes + `UsagePacingSection` out of agenthqUiCore into their modules (still in plugins/core: they use ctl) | 3 | 0 px incl. `config` shots |
+| E4 | Move the 1,211 lines of Epics/Prompts/Skills/Stats/Usage panes + `UsagePacingSection` out of infantryUiCore into their modules (still in plugins/core: they use ctl) | 3 | 0 px incl. `config` shots |
 | E5 | Publish `ui.shell.api` + `ui.kit` to the filtered loader (official and community alike) | 3 | unit tests; a community test module compiles and runs against them |
 | E6 | Cut the 9 edges (section 6); Git, Run, Notes, Changes, Board → official jars (no ctl). **After ef796432.** | 4 | 0 px incl. `board`, `registry`; removal test for each; ratchet count 1 down by 5 |
-| E7 | **Split AppUi** (section 2): toast, connection items and the config host into the shell; Chat, Approvals, Header, Assistant, Sound+Voice as modules (in plugins/core until their ctl uses reach 0); overlay/diff/roles parts into their owners. agenthqAppUi dissolves. `App_UI.ihq` becomes an NS3 composition with `deps/*.ihq`. | 4 | 32/32 + dropin + empty at 0 px |
+| E7 | **Split AppUi** (section 2): toast, connection items and the config host into the shell; Chat, Approvals, Header, Assistant, Sound+Voice as modules (in plugins/core until their ctl uses reach 0); overlay/diff/roles parts into their owners. infantryAppUi dissolves. `App_UI.ihq` becomes an NS3 composition with `deps/*.ihq`. | 4 | 32/32 + dropin + empty at 0 px |
 | E8… | `coreController` → ShellContext domains, one module per ticket (Roles, Attention, Profiles, Epics, …, Chat, Approvals). When a module reaches 0 uses it moves to `plugins/official`. When the ratchet reads 0/0, delete `coreController`/`coreShell`. | 2-3 each | 0 px each; ratchet down each time |
 
 **Recommended first slice: E1+E2 with Infantry_Cli.**

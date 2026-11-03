@@ -1,10 +1,10 @@
 // QA 98c61dd1: point runTabShots at PerfMain (same classpath, jvm caps, plugins root, env) without touching build files.
 allprojects {
-    if (path == ':superiorSoftLibrary:agentHqUi') {
+    if (path == ':superiorSoftLibrary:infantryUi') {
         afterEvaluate {
             tasks.named('runTabShots') {
-                mainClass.set('com.superiorsoftllc.agenthq.ui.PerfMainKt')
-                systemProperty('agenthq.ui.blur', 'off')
+                mainClass.set('com.superiorsoftllc.infantry.ui.PerfMainKt')
+                systemProperty('infantry.ui.blur', 'off')
                 args = [System.getProperty('perf.out', 'build/perf.txt')]
             }
         }

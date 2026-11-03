@@ -6,7 +6,7 @@
   "description": "Saved agent profiles.",
   "tier": "official",
   "sequence": [],
-  "entry": "com.superiorsoftllc.agenthq.plugins.official.profiles.ProfilesPlugin",
+  "entry": "com.superiorsoftllc.infantry.plugins.official.profiles.ProfilesPlugin",
   "jar": "build/libs/Infantry_Profiles.jar",
   "buildOrder": 50,
   "tabs": [

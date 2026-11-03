@@ -1,6 +1,6 @@
-package com.superiorsoftllc.agenthq.plugins.official.stats
+package com.superiorsoftllc.infantry.plugins.official.stats
 
-import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.infantry.ui.*
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -44,16 +44,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.model.AppState
-import com.superiorsoftllc.agenthq.ui.model.ChartKind
-import com.superiorsoftllc.agenthq.ui.model.ChartScale
-import com.superiorsoftllc.agenthq.ui.model.ChartScaleSetting
-import com.superiorsoftllc.agenthq.ui.model.ChartScales
-import com.superiorsoftllc.agenthq.ui.model.StatsView
-import com.superiorsoftllc.agenthq.ui.model.contractAtLeast
-import com.superiorsoftllc.agenthq.ui.shell.UsageContext
-import com.superiorsoftllc.agenthq.ui.protocol.SessionStats
-import com.superiorsoftllc.agenthq.ui.protocol.StatsPoint
+import com.superiorsoftllc.infantry.ui.model.AppState
+import com.superiorsoftllc.infantry.ui.model.ChartKind
+import com.superiorsoftllc.infantry.ui.model.ChartScale
+import com.superiorsoftllc.infantry.ui.model.ChartScaleSetting
+import com.superiorsoftllc.infantry.ui.model.ChartScales
+import com.superiorsoftllc.infantry.ui.model.StatsView
+import com.superiorsoftllc.infantry.ui.model.contractAtLeast
+import com.superiorsoftllc.infantry.ui.shell.UsageContext
+import com.superiorsoftllc.infantry.ui.protocol.SessionStats
+import com.superiorsoftllc.infantry.ui.protocol.StatsPoint
 import kotlinx.coroutines.delay
 
 const val STATS_PANE_TAG = "stats-pane"
@@ -103,7 +103,7 @@ fun StatsPane(state: AppState, controller: UsageContext) {
                 val stats = state.sessionStats[agent.id]
                 if (stats == null) Empty("Reading this session's record...")
                 else {
-                    val host = com.superiorsoftllc.agenthq.ui.shell.LocalPlatformHost.current
+                    val host = com.superiorsoftllc.infantry.ui.shell.LocalPlatformHost.current
                     val scales = remember(host) { ChartScales(host::uiPref, host::saveUiPref) }
                     StatsBody(stats, scales)
                 }

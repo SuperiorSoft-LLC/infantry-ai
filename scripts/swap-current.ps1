@@ -13,7 +13,7 @@
        (current.partial, current.broken, copy-*) ONLY after that verification.
   Exit codes: 0 switched and verified (or already current), 2 refused/failed (message says what), 3 blocked by a running process
   (READY-TO-SWITCH.txt written in the build root). Never prints "ok" after an error.
-  The build root comes from -BuildRoot, env AGENTHQ_BUILD_ROOT, or the daemon project config (build.root). No kill, no app launch.
+  The build root comes from -BuildRoot, env INFANTRY_BUILD_ROOT, or the daemon project config (build.root). No kill, no app launch.
 
 .EXAMPLE
   powershell -File scripts/swap-current.ps1 -WhatIf          # show the plan, change nothing
@@ -23,8 +23,8 @@
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
   [string]$Sha,
-  [string]$BuildRoot = $env:AGENTHQ_BUILD_ROOT,
-  [string]$ProjectId = $env:AGENTHQ_PROJECT_ID
+  [string]$BuildRoot = $env:INFANTRY_BUILD_ROOT,
+  [string]$ProjectId = $env:INFANTRY_PROJECT_ID
 )
 
 function Fail([string]$Message, [int]$Code = 2) {
@@ -33,14 +33,14 @@ function Fail([string]$Message, [int]$Code = 2) {
 }
 
 if (-not $BuildRoot) {
-  $cli = if ($env:AGENTHQ_CLI) { $env:AGENTHQ_CLI } else { (Get-Command agenthq -ErrorAction SilentlyContinue).Source }
+  $cli = if ($env:INFANTRY_CLI) { $env:INFANTRY_CLI } else { (Get-Command infantry -ErrorAction SilentlyContinue).Source }
   if ($cli -and $ProjectId) {
     foreach ($line in (& $cli project config get $ProjectId 2>$null)) {
       if ($line -match '^\s*build\.root\s*[:=]\s*(.+?)\s*$') { $BuildRoot = $Matches[1]; break }
     }
   }
 }
-if (-not $BuildRoot) { Fail "build.root is not set (-BuildRoot, env AGENTHQ_BUILD_ROOT or project data build.root). Nothing was touched." }
+if (-not $BuildRoot) { Fail "build.root is not set (-BuildRoot, env INFANTRY_BUILD_ROOT or project data build.root). Nothing was touched." }
 if (-not [IO.Path]::IsPathRooted($BuildRoot)) { Fail "build root must be an absolute path (got '$BuildRoot')" }
 $root = [IO.Path]::GetFullPath($BuildRoot).TrimEnd('\')
 $buildsDir = Join-Path $root 'builds'

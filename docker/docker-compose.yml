@@ -9,50 +9,50 @@ name: ${COMPOSE_PROJECT_NAME:-infantry-demo}
 
 services:
   infantry-ai:
-    image: ${AGENTHQ_IMAGE:-infantryai/infantry-ai:dev}
+    image: ${INFANTRY_IMAGE:-infantryai/infantry-ai:dev}
     init: true                      # PID 1 reaps the zombies agent CLIs leave behind
     restart: unless-stopped
     ports:
-      # Loopback by default. On the droplet set AGENTHQ_BIND=0.0.0.0 (firewall: this port only) or keep loopback and use
-      # Tailscale / an SSH tunnel. AGENTHQ_HOST_PORT is the port on the host; the container always listens on 8787.
-      - "${AGENTHQ_BIND:-127.0.0.1}:${AGENTHQ_HOST_PORT:-8787}:8787"
+      # Loopback by default. On the droplet set INFANTRY_BIND=0.0.0.0 (firewall: this port only) or keep loopback and use
+      # Tailscale / an SSH tunnel. INFANTRY_HOST_PORT is the port on the host; the container always listens on 8787.
+      - "${INFANTRY_BIND:-127.0.0.1}:${INFANTRY_HOST_PORT:-8787}:8787"
     environment:
       # Heap: 512 MB is enough for the daemon (idle ~140 MB RSS); the CLIs it spawns are separate processes.
       JAVA_OPTS: ${JAVA_OPTS:--Xms32m -Xmx512m}
       # Token: generated into the state volume on first start (/data/access-token, mode 600). To choose your own, write it
-      # to that file before the first start. AGENTHQ_TOKEN_AUTO=false = refuse to start without one.
-      AGENTHQ_TOKEN_AUTO: ${AGENTHQ_TOKEN_AUTO:-true}
+      # to that file before the first start. INFANTRY_TOKEN_AUTO=false = refuse to start without one.
+      INFANTRY_TOKEN_AUTO: ${INFANTRY_TOKEN_AUTO:-true}
       # Same as the proven headless launch: each project runs in its own directory; sessions get this daemon's URL only.
-      AGENTHQ_PROJECT_DIRS: ${AGENTHQ_PROJECT_DIRS:-true}
-      AGENTHQ_OWN_URL_ONLY: ${AGENTHQ_OWN_URL_ONLY:-true}
+      INFANTRY_PROJECT_DIRS: ${INFANTRY_PROJECT_DIRS:-true}
+      INFANTRY_OWN_URL_ONLY: ${INFANTRY_OWN_URL_ONLY:-true}
       # Host name(s)/IP the browser uses (comma separated), e.g. 203.0.113.7 or demo.example.com. Inside a container the
       # daemon cannot see the droplet's public address, so the browser UI refuses other hosts until this is set.
-      AGENTHQ_WEB_HOSTS: ${AGENTHQ_WEB_HOSTS:-}
-      # --- Limits (settings/LimitRegistry.kt; env AGENTHQ_LIMIT_<KEY>, also changeable live in Settings > Limits) ---
+      INFANTRY_WEB_HOSTS: ${INFANTRY_WEB_HOSTS:-}
+      # --- Limits (settings/LimitRegistry.kt; env INFANTRY_LIMIT_<KEY>, also changeable live in Settings > Limits) ---
       # How deep spawns may nest (1 = a session may spawn, its spawns may not).
-      AGENTHQ_LIMIT_CONCURRENCY_MAX_DEPTH: ${AGENTHQ_LIMIT_CONCURRENCY_MAX_DEPTH:-1}
+      INFANTRY_LIMIT_CONCURRENCY_MAX_DEPTH: ${INFANTRY_LIMIT_CONCURRENCY_MAX_DEPTH:-1}
       # Agents of one role at once in a project (when the project sets no lane cap).
-      AGENTHQ_LIMIT_CONCURRENCY_LANE_DEFAULT: ${AGENTHQ_LIMIT_CONCURRENCY_LANE_DEFAULT:-1}
+      INFANTRY_LIMIT_CONCURRENCY_LANE_DEFAULT: ${INFANTRY_LIMIT_CONCURRENCY_LANE_DEFAULT:-1}
       # Gradle workers / test forks a worker session's build may use (a 1-vCPU droplet: 1).
-      AGENTHQ_LIMIT_BUILD_MAX_WORKERS: ${AGENTHQ_LIMIT_BUILD_MAX_WORKERS:-1}
-      AGENTHQ_LIMIT_BUILD_MAX_PARALLEL_FORKS: ${AGENTHQ_LIMIT_BUILD_MAX_PARALLEL_FORKS:-1}
+      INFANTRY_LIMIT_BUILD_MAX_WORKERS: ${INFANTRY_LIMIT_BUILD_MAX_WORKERS:-1}
+      INFANTRY_LIMIT_BUILD_MAX_PARALLEL_FORKS: ${INFANTRY_LIMIT_BUILD_MAX_PARALLEL_FORKS:-1}
       # Watchdog: unattended ticket worker / other run deadlines, stall and silence (minutes; 0 = off).
-      AGENTHQ_LIMIT_WATCHDOG_TICKET_DEADLINE_MINUTES: ${AGENTHQ_LIMIT_WATCHDOG_TICKET_DEADLINE_MINUTES:-60}
-      AGENTHQ_LIMIT_WATCHDOG_DEADLINE_MINUTES: ${AGENTHQ_LIMIT_WATCHDOG_DEADLINE_MINUTES:-30}
-      AGENTHQ_LIMIT_WATCHDOG_STALL_MINUTES: ${AGENTHQ_LIMIT_WATCHDOG_STALL_MINUTES:-15}
+      INFANTRY_LIMIT_WATCHDOG_TICKET_DEADLINE_MINUTES: ${INFANTRY_LIMIT_WATCHDOG_TICKET_DEADLINE_MINUTES:-60}
+      INFANTRY_LIMIT_WATCHDOG_DEADLINE_MINUTES: ${INFANTRY_LIMIT_WATCHDOG_DEADLINE_MINUTES:-30}
+      INFANTRY_LIMIT_WATCHDOG_STALL_MINUTES: ${INFANTRY_LIMIT_WATCHDOG_STALL_MINUTES:-15}
       # Health watchdog (ticket 55d60a5e): Docker never restarts an UNHEALTHY container, only one that exits. The daemon
       # asks its own /health every INTERVAL seconds (each check waits TIMEOUT s) and halts after FAILURES failed checks in
       # a row, so `restart: unless-stopped` restarts it. /health answers 503 database=stuck when the database does not
       # answer within DB_TIMEOUT seconds. FAILURES=0 = watchdog off. Read at start-up.
-      AGENTHQ_LIMIT_HEALTH_WATCHDOG_FAILURES: ${AGENTHQ_LIMIT_HEALTH_WATCHDOG_FAILURES:-3}
-      AGENTHQ_LIMIT_HEALTH_WATCHDOG_INTERVAL_SECONDS: ${AGENTHQ_LIMIT_HEALTH_WATCHDOG_INTERVAL_SECONDS:-10}
-      AGENTHQ_LIMIT_HEALTH_WATCHDOG_TIMEOUT_SECONDS: ${AGENTHQ_LIMIT_HEALTH_WATCHDOG_TIMEOUT_SECONDS:-5}
-      AGENTHQ_LIMIT_HEALTH_DB_TIMEOUT_SECONDS: ${AGENTHQ_LIMIT_HEALTH_DB_TIMEOUT_SECONDS:-3}
+      INFANTRY_LIMIT_HEALTH_WATCHDOG_FAILURES: ${INFANTRY_LIMIT_HEALTH_WATCHDOG_FAILURES:-3}
+      INFANTRY_LIMIT_HEALTH_WATCHDOG_INTERVAL_SECONDS: ${INFANTRY_LIMIT_HEALTH_WATCHDOG_INTERVAL_SECONDS:-10}
+      INFANTRY_LIMIT_HEALTH_WATCHDOG_TIMEOUT_SECONDS: ${INFANTRY_LIMIT_HEALTH_WATCHDOG_TIMEOUT_SECONDS:-5}
+      INFANTRY_LIMIT_HEALTH_DB_TIMEOUT_SECONDS: ${INFANTRY_LIMIT_HEALTH_DB_TIMEOUT_SECONDS:-3}
       # Sandbox (SANDBOX-1, runner/Sandbox.kt): 1 = every agent CLI runs confined (Landlock: writes only in its working dir
       # + the allowed dirs, CLI config read-only, /data unreachable; shell/web tools off; scoped token). 0 = off.
-      AGENTHQ_LIMIT_SANDBOX_MODE: ${AGENTHQ_LIMIT_SANDBOX_MODE:-1}
+      INFANTRY_LIMIT_SANDBOX_MODE: ${INFANTRY_LIMIT_SANDBOX_MODE:-1}
       # Extra writable dirs besides each session's working dir (comma separated absolute paths). Empty = none.
-      AGENTHQ_LIMIT_SANDBOX_ALLOWED_DIRS: ${AGENTHQ_LIMIT_SANDBOX_ALLOWED_DIRS:-}
+      INFANTRY_LIMIT_SANDBOX_ALLOWED_DIRS: ${INFANTRY_LIMIT_SANDBOX_ALLOWED_DIRS:-}
       # Harness credentials: pass through from the host environment / .env, never write them into this file.
       OPENCODE_API_KEY: ${OPENCODE_API_KEY:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
@@ -61,14 +61,14 @@ services:
     volumes:
       - infantry-data:/data         # database, token, settings, keystore, harness-tools, memory: survives image upgrades
       - infantry-work:/work         # project directories and their git worktrees
-      - infantry-home:/home/agenthq # CLI logins and config (~/.config/opencode, ~/.pi, ~/.claude), npm cache
+      - infantry-home:/home/infantry # CLI logins and config (~/.config/opencode, ~/.pi, ~/.claude), npm cache
     tmpfs:
       - /tmp
     cap_drop: [ALL]
     security_opt:
       - no-new-privileges:true
     # Whole container (daemon + every CLI it runs). 2 GB droplet: leave ~400 MB for the OS and Docker.
-    mem_limit: ${AGENTHQ_MEM_LIMIT:-1600m}
+    mem_limit: ${INFANTRY_MEM_LIMIT:-1600m}
     # No docker.sock mount, ever: agents run code in this container, so the container is the sandbox.
 
 volumes:
