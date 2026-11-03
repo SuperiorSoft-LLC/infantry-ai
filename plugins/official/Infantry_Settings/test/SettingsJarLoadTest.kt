@@ -100,7 +100,8 @@ class SettingsJarLoadTest {
             assertTrue(f.tabs(TabContainers.CENTER).none { t -> t.id == SETTINGS_TAB_ID })
             f.config.replace(listOf(NodeConfigEntry(SETTINGS_TAB_ID, TabGroups.GROUPED, JsonPrimitive(true))))
             assertEquals(listOf(SETTINGS_TAB_ID), f.tabs(TabContainers.CENTER).map { t -> t.id })
-            assertEquals(listOf("infantry.probe"), f.children(SETTINGS_TAB_ID).map { t -> t.id })
+            // PLUGIN-UI-1: the desktop jar also registers its own Plugins sub-tab (web and Android never do).
+            assertEquals(setOf("infantry.probe", PLUGINS_TAB_ID), f.children(SETTINGS_TAB_ID).map { t -> t.id }.toSet())
         }
         println("[RUNTIME-5] Infantry_Settings load (signature check + class load + register): $ms ms (budget 500 ms)")
 

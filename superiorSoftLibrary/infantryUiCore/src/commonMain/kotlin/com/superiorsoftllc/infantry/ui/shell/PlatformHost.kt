@@ -63,6 +63,9 @@ interface PlatformHost {
     /** S6: installing a plugin by dropping a .ihq on the empty shell; null where modules cannot be loaded at run time (web, Android). */
     val dropIn: PluginDropIn? get() = null
 
+    /** PLUGIN-UI-1: the plugin manager of this host's plugins root, for Settings > Plugins; null where jars cannot be loaded (web, Android) or no manager is wired. */
+    val pluginManager: com.superiorsoftllc.infantry.plugin.api.PluginManagerPort? get() = null
+
     /** VOICE-1: whether the app window has focus right now; true when the host cannot tell. */
     fun windowFocused(): Boolean = true
 

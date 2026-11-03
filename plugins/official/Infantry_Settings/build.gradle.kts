@@ -31,6 +31,7 @@ kotlin {
             api(project(":superiorSoftLibrary:infantryUiCore"))
             implementation(compose.runtime)
             implementation(compose.foundation)
+            implementation(compose.material3)
         }
         // The ServiceLoader entry is JVM only: on Android the generated module list already names SettingsPlugin.
         jvmMain { resources.srcDir("jvmResources") }

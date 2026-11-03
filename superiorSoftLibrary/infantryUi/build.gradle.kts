@@ -40,7 +40,7 @@ dependencies {
     // EXAMPLE-1: the example community module, so AcmeHelloGreetingUiTest registers it from its module.json (no ServiceLoader entry).
     testImplementation(project(":plugins:community:Acme_Hello"))
     // RUNTIME-5: and Infantry_Settings, the Settings host tab (the tab shots open it).
-    testRuntimeOnly(project(":plugins:official:Infantry_Settings"))
+    testImplementation(project(":plugins:official:Infantry_Settings")) // PLUGIN-UI-1: PluginsScreen is driven directly
     // RUNTIME-6: and Infantry_Git, the Git tab and its tree (the Git pane tests draw it).
     testImplementation(project(":plugins:official:Infantry_Git"))
     // RUNTIME-7: and Infantry_Run, the Run tab and its tree (the Run pane tests draw it).

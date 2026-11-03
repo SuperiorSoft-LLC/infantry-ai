@@ -2,6 +2,7 @@
 // Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.plugins.official
 
+import com.superiorsoftllc.infantry.ui.shell.LocalPlatformHost
 import com.superiorsoftllc.infantry.ui.plugin.ModuleSource
 import androidx.compose.runtime.Composable
 import com.superiorsoftllc.infantry.plugin.api.ConfigDeclaration
@@ -42,6 +43,17 @@ private fun settingsTab() = TabProvider(
     testTag = "center-tab-SETTINGS",
 ) { SettingsTab(it) }
 
+/** PLUGIN-UI-1: Settings > Plugins, a sub-tab of Settings; it draws nothing when the host has no plugin manager. */
+private fun pluginsTab() = TabProvider(
+    id = PLUGINS_TAB_ID, container = TabContainers.CENTER, order = 90,
+    title = { "Plugins" },
+    icon = tabIcon("plugins", { moveTo(5f, 5f); lineTo(19f, 5f); lineTo(19f, 19f); lineTo(5f, 19f); close() }),
+    testTag = "center-tab-PLUGINS", parent = SETTINGS_TAB_ID,
+) {
+    val port = LocalPlatformHost.current.pluginManager
+    if (port != null) PluginsScreen(port)
+}
+
 /**
  * SETTINGS-TAB-1: Infantry_Settings (official since RUNTIME-5) as a compiled-in module (web and Android, D9; the manifest
  * mirrors module.json). A host tab: the tabs that name it their parent (Profiles, Triggers,
@@ -75,7 +87,11 @@ private fun SettingsTab(context: TabContext) = context.SubTabs(SETTINGS_TAB_ID)
  *  - Web and Android compile it in from the generated module list, which takes it as a [ModuleSource].
  */
 class SettingsPlugin : UiPlugin, ModuleSource {
-    override fun register(registrar: UiRegistrar) = registrar.tab(settingsTab())
+    // The Plugins screen is desktop only: the loader takes this UiPlugin; web and Android compile in `modules()`, which has no such tab.
+    override fun register(registrar: UiRegistrar) {
+        registrar.tab(settingsTab())
+        registrar.tab(pluginsTab())
+    }
 
     override fun modules(): List<InfantryModule> = listOf(InfantrySettings)
 }
