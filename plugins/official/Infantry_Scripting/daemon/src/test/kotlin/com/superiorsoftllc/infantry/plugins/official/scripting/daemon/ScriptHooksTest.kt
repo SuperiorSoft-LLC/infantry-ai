@@ -246,8 +246,8 @@ class ScriptHooksTest {
         val (tool, _, who) = tools.named("t_move").single()
         assertEquals("t_move", tool)
         assertEquals("script:on-done", who.label)
-        assertEquals("pm-1", who.sessionId)
-        assertEquals("pm", who.role)
+        // HOOK-OWNER-1: a lane hook runs as the project (no session, depth 0), not as whoever edited it.
+        assertNull(who.sessionId); assertNull(who.role); assertTrue(who.caller.owner)
         assertTrue(tools.named("infantry_ticket_comment").isEmpty(), "a clean run reports nothing")
     }
 
@@ -547,5 +547,16 @@ class ScriptHooksTest {
     @Test fun `SCRIPT-VIS-1c a throwing mark callback never fails the hook`() {
         putHooks(mailHook)
         assertTrue(build(FakeEngine { listOf(QueuedAction("handled", emptyMap())) }, automation = { _, _ -> error("display only") }).incoming(mail())!!.handled)
+    }
+
+    @Test fun `HOOK-OWNER-1 a project hook runs as the project whoever edited it, a mail hook keeps its session`() {
+        val h = build(FakeEngine { emptyList() })
+        // a depth-1 worker re-added a timer/lane hook; its session is dead too: the run identity is still the project (depth 0)
+        for (edited in listOf(Hook("t", HookOn.Lane("done"), "s", ownerSession = "worker-1", ownerRole = "backend"), Hook("e", HookOn.Lane("done"), "s", ownerSession = "gone", ownerRole = "backend"))) {
+            val inv = h.invokerOf("p1", edited)
+            assertTrue(inv.caller.owner); assertNull(inv.sessionId); assertNull(inv.caller.activeSession); assertNull(inv.role)
+        }
+        val mail = h.invokerOf("p1", Hook("m", HookOn.Lane("done"), "s", ownerSession = "pm-1", ownerRole = "pm", to = "pm-1"))
+        assertEquals("pm-1", mail.sessionId); assertEquals("pm-1", mail.caller.activeSession); assertEquals("pm", mail.role)
     }
 }
