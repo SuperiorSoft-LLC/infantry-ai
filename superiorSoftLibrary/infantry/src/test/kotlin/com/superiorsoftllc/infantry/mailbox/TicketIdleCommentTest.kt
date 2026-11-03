@@ -28,6 +28,7 @@ class TicketIdleCommentTest {
             commitOf = { null }, clock = { now },
             reports = { port }, idleComment = { enabled },
             gitState = { _, _ -> FinishNoticeMonitor.GitState("abcd1234", 2, true) },
+            boardWork = { it() },
         )
         fun exit(code: Int) = monitor.onSessionEvent(SessionEvent.Exit(sessionId, code))
         fun say(line: String) = monitor.onSessionEvent(SessionEvent.Stdout(sessionId, line))
