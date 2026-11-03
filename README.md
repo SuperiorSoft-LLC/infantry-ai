@@ -102,6 +102,12 @@ agent CLI harness, is a plugin with a `module.json`. Write your own in a few min
 - [Harnesses and providers](docs/wiki/Harnesses.md): the harness API, adding a harness or a provider
 - [Settings](docs/wiki/Settings.md): scopes and the cost-saving defaults
 
+Build and preview the wiki site locally (MkDocs + Material, strict: a broken link fails; nothing is published):
+`agenthq script run wiki --args '{"mode":"serve","port":8899}'` (or `"mode":"build"` to write
+`C:/Users/antho/agenthq-dist/wiki/<sha8>`). Needs `scripting.exec.enabled` and a venv with `docs/requirements-wiki.txt`
+(pinned) at `agenthq-dist/wiki-venv`; the script installs it. Without the script:
+`python -m mkdocs build --strict -f docs/mkdocs.yml -d <out>`.
+
 Screenshots the docs link are listed in [docs/img/README.md](docs/img/README.md).
 
 ## Contents
