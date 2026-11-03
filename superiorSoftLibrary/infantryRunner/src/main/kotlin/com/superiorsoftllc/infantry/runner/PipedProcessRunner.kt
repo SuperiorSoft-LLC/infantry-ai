@@ -19,7 +19,7 @@ class PipedProcessRunner : ProcessRunner {
     override fun start(spec: ProcessSpec, listener: ProcessListener): RunningProcess {
         // Ticket 66153313: a worker session's spec names its build priority; the whole tree below it inherits it.
         val priority = ProcessPriority.requested(spec)
-        val builder = ProcessBuilder(ProcessPriority.wrap(spec.command, priority))
+        val builder = ProcessBuilder(escapeForWindows(ProcessPriority.wrap(spec.command, priority)))
         spec.workingDir?.let { builder.directory(it) }
         builder.environment().putAll(spec.env)
         builder.redirectErrorStream(false)
@@ -33,6 +33,19 @@ class PipedProcessRunner : ProcessRunner {
 
         return PipedRunningProcess(process, stdoutDrain, stderrDrain, listener)
     }
+
+    /**
+     * The JVM joins a Windows argv naively: an embedded `"` is not escaped and a trailing backslash is not doubled.
+     * An argument that needs it (after the executable) is quoted here under the CommandLineToArgvW rules; the JVM
+     * leaves an argument that already starts and ends with a quote as it is.
+     */
+    internal fun escapeForWindows(argv: List<String>, windows: Boolean = WINDOWS_HOST): List<String> =
+        if (!windows) argv
+        else argv.mapIndexed { i, a ->
+            if (i == 0 || (a.isNotEmpty() && a.none { it == ' ' || it == '\t' || it == '"' })) a else windowsCommandLine(listOf(a))
+        }
+
+    private val WINDOWS_HOST = System.getProperty("os.name").orEmpty().lowercase().contains("win")
 
     private fun drain(reader: BufferedReader, sink: (String) -> Unit, name: String): Thread =
         Thread({
