@@ -20,6 +20,7 @@ kotlin {
 
 dependencies {
     implementation(project(":superiorSoftLibrary:agenthqUiCore"))
+    implementation("net.java.dev.jna:jna-platform:5.18.1") // UI-ROUND-1: DWM corner preference
     // S4 (drop-in path): the app UI is a plugin of this shell: on the run-time classpath only, found through
     // ServiceLoader, never compiled against (a compile error here is a leak; see docs/SHELL-LEAKS.md). The tests
     // compile against it: they drive the app UI's panes.
