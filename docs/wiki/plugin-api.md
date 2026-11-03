@@ -1,3 +1,5 @@
+[← Wiki index](index.md)
+
 # UI plugin API
 
 This page lists every type and function a UI plugin uses. It is written for a developer who has never seen the code.

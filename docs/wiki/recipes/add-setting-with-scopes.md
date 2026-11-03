@@ -1,3 +1,5 @@
+[← Wiki index](../index.md)
+
 # Recipe: add a setting with scopes
 
 A value can live at four scopes; the most specific one that holds a value wins:

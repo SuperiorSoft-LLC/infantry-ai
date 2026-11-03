@@ -1,3 +1,5 @@
+[← Wiki index](index.md)
+
 # Scripting with Lua
 
 Scripts encode your process: what happens when a ticket is done, when mail arrives, when a build ends. They are

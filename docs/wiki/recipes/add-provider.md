@@ -1,3 +1,5 @@
+[← Wiki index](../index.md)
+
 # Recipe: add a provider (a model group)
 
 A provider is a group of models in a harness's picker. It is data on a harness; there is no separate provider

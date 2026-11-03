@@ -1,3 +1,5 @@
+[← Wiki index](index.md)
+
 # Infantry AI wiki
 
 <!-- shared:pitch -->Infantry AI is a command post for coding agents: a ticket board, agents on their own git branches, mail, shared project knowledge, Lua scripts that automate your process, and plugins that build the app itself.<!-- /shared:pitch -->

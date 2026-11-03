@@ -1,3 +1,5 @@
+[← Wiki index](index.md)
+
 # Settings
 
 Settings are durable key/value pairs kept by the daemon. Read and write them in the Settings tab, with the CLI, or

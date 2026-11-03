@@ -1,3 +1,5 @@
+[← Wiki index](../index.md)
+
 # Recipes: how to add X
 
 Short, complete recipes. Each one starts from code that is in the repository and builds, names the exact files to

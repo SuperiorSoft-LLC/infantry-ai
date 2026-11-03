@@ -103,7 +103,7 @@ agent CLI harness, is a plugin with a `module.json`. Write your own in a few min
 
 ## Documentation
 
-- [Wiki home](docs/wiki/Home.md)
+- [Wiki index](docs/wiki/index.md)
 - [Plugins](docs/wiki/Plugins.md): `module.json`, UI and daemon halves, config, building, installing, signing, a hello plugin
 - [Make a plugin](docs/wiki/make-a-plugin.md): from the template to a built UI + daemon plugin, every `module.json` field
 - [UI plugin API](docs/wiki/plugin-api.md) and [daemon plugin API](docs/wiki/daemon-plugin-api.md): the full references

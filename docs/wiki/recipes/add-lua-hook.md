@@ -1,3 +1,5 @@
+[← Wiki index](../index.md)
+
 # Recipe: add a Lua hook
 
 Goal: when a ticket enters a lane, a script runs and does something with the tools an agent has (here: comment on

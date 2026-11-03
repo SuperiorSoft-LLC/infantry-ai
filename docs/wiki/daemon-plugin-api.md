@@ -1,3 +1,5 @@
+[← Wiki index](index.md)
+
 # Daemon plugin API
 
 A daemon plugin is the part of a module that runs inside the Infantry AI daemon. It adds tools (for the CLI and for

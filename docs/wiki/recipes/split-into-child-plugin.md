@@ -1,3 +1,5 @@
+[← Wiki index](../index.md)
+
 # Recipe: split a section of a plugin into a child plugin through a slot
 
 Goal: a section that lives inside a host plugin's tab moves into its own plugin. The host keeps an empty named

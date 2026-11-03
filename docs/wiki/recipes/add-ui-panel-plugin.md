@@ -1,3 +1,5 @@
+[← Wiki index](../index.md)
+
 # Recipe: add a UI panel plugin
 
 Goal: a new tab in the center area and a section in the left panel, from a plugin that is not part of the core.
