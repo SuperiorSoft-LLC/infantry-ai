@@ -12,6 +12,27 @@
   "panels": [
     { "id": "infantry.chatfeed", "panel": "chat.feed" }
   ],
+  "config": [
+    {
+      "node": "infantry.chatfeed",
+      "tab": "Chat",
+      "group": "Activity box",
+      "order": 10,
+      "title": "Activity box",
+      "applies": "Applies to: the chat view's tool activity box.",
+      "keywords": ["activity", "tools", "collapse"],
+      "fields": [
+        {
+          "key": "activityBox.autoOpenWhileRunning",
+          "type": "checkbox",
+          "label": "Open the activity box while an agent is running",
+          "default": false,
+          "order": 1,
+          "scope": "device"
+        }
+      ]
+    }
+  ],
   "implementations": [
     { "registry": "chat.feed.renderers", "key": "user" },
     { "registry": "chat.feed.renderers", "key": "text" },

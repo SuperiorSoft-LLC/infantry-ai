@@ -16,16 +16,42 @@ import com.superiorsoftllc.infantry.ui.model.AgentActivity
 import com.superiorsoftllc.infantry.ui.model.AgentView
 import com.superiorsoftllc.infantry.ui.protocol.SessionRecord
 import com.superiorsoftllc.infantry.ui.protocol.SessionState
+import androidx.compose.runtime.CompositionLocalProvider
+import com.superiorsoftllc.infantry.ui.shell.ConfigContext
+import com.superiorsoftllc.infantry.ui.shell.ConfigValues
+import com.superiorsoftllc.infantry.ui.shell.EmptyConfig
+import com.superiorsoftllc.infantry.ui.shell.LocalShellContext
+import com.superiorsoftllc.infantry.ui.shell.ShellContext
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 
 /**
  * UI-ACT-2: the chat pane shows a collapsible Activity box above the chat input, reading the session's
- * [AgentView.activityLog] (UI-ACT-1), newest first. It starts expanded while the session runs and
- * collapsed once it is idle.
+ * [AgentView.activityLog] (UI-ACT-1), newest first.
+ *
+ * ACTIVITY-BOX-1: the box now starts COLLAPSED, running or idle (the owner found it popping open annoying), so the
+ * tests that read entries open it with a header click first. The setting `activityBox.autoOpenWhileRunning` brings
+ * back the old open-while-running behaviour; a header click is remembered across sessions and turns.
  */
 @OptIn(ExperimentalTestApi::class)
 class ActivityBoxUiTest {
     private val t0 = 3_723_000L
+
+    @BeforeTest
+    fun fresh() = resetActivityBoxChoice()
+
+    /** A shell context whose only live part is the config (`activityBox.autoOpenWhileRunning`); the box reads nothing else. */
+    private fun shellWith(autoOpen: Boolean): ShellContext {
+        val values = object : ConfigValues by EmptyConfig {
+            override fun boolean(key: String): Boolean? = if (key == "activityBox.autoOpenWhileRunning") autoOpen else null
+        }
+        val cfg = object : ConfigContext by EmptyConfig {
+            override fun values(nodeId: String): ConfigValues = values
+        }
+        return java.lang.reflect.Proxy.newProxyInstance(javaClass.classLoader, arrayOf(ShellContext::class.java)) { _, m, _ ->
+            if (m.name == "getConfig") cfg else null
+        } as ShellContext
+    }
 
     private fun activity(tool: String, detail: String, at: Long) = AgentActivity(tool, detail, at)
 
@@ -46,7 +72,8 @@ class ActivityBoxUiTest {
             mainClock.advanceTimeByFrame()
 
             onNodeWithTag(ACTIVITY_BOX_TAG).assertExists()
-            onNodeWithText("Activity (3)").assertExists()
+            onNodeWithText("Activity (3)").performClick()
+            mainClock.advanceTimeByFrame()
             onNodeWithText("bash: gradle test").assertExists()
             onNodeWithText("grep: TicketBoard").assertExists()
             onNodeWithText("read: Model.kt").assertExists()
@@ -70,6 +97,9 @@ class ActivityBoxUiTest {
             setContent { AgentChat(a, nowProvider = { t0 }) }
             mainClock.advanceTimeByFrame()
 
+            onNodeWithText("read: Model.kt").assertDoesNotExist()
+            onNodeWithText("Activity (2)").performClick()
+            mainClock.advanceTimeByFrame()
             onNodeWithText("read: Model.kt").assertExists()
             onNodeWithText("Activity (2)").performClick()
             mainClock.advanceTimeByFrame()
@@ -112,14 +142,46 @@ class ActivityBoxUiTest {
             setContent { AgentChat(current.value, nowProvider = { t0 }) }
             mainClock.advanceTimeByFrame()
 
-            onNodeWithText("Activity (2)").assertExists()
+            onNodeWithText("Activity (2)").performClick()
+            mainClock.advanceTimeByFrame()
             onNodeWithText("read: Model.kt").assertExists()
 
             current.value = b
             mainClock.advanceTimeByFrame()
 
+            // The open choice is remembered across the session switch.
             onNodeWithText("Activity (1)").assertExists()
             onNodeWithText("grep: TicketBoard").assertExists()
+            onNodeWithText("read: Model.kt").assertDoesNotExist()
+        }
+    }
+
+    @Test
+    fun aRunningSessionStaysCollapsedByDefault() {
+        val a = agent("d", SessionState.BUSY, listOf(activity("read", "Model.kt", t0)))
+        runDesktopComposeUiTest(900, 600) {
+            mainClock.autoAdvance = false
+            setContent { AgentChat(a, nowProvider = { t0 }) }
+            mainClock.advanceTimeByFrame()
+            onNodeWithText("Activity (1)").assertExists()
+            onNodeWithText("read: Model.kt").assertDoesNotExist()
+        }
+    }
+
+    @Test
+    fun theAutoOpenSettingOpensTheBoxWhileRunningButNotWhenIdle() {
+        val busy = agent("e", SessionState.BUSY, listOf(activity("read", "Model.kt", t0)))
+        val idle = agent("f", SessionState.IDLE, listOf(activity("read", "Model.kt", t0)))
+        val current = mutableStateOf(busy)
+        runDesktopComposeUiTest(900, 600) {
+            mainClock.autoAdvance = false
+            setContent {
+                CompositionLocalProvider(LocalShellContext provides shellWith(true)) { AgentChat(current.value, nowProvider = { t0 }) }
+            }
+            mainClock.advanceTimeByFrame()
+            onNodeWithText("read: Model.kt").assertExists()
+            current.value = idle
+            mainClock.advanceTimeByFrame()
             onNodeWithText("read: Model.kt").assertDoesNotExist()
         }
     }
