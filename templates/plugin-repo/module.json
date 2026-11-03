@@ -1,0 +1,24 @@
+{
+  "name": "Example_Starter",
+  "version": "1.0.0",
+  "apiVersion": 2,
+  "author": "Your name or company",
+  "license": "NOASSERTION",
+  "description": "Starter plugin: one tab and one read tool. Rename it and make it yours.",
+  "dependencies": [],
+  "sequence": [],
+  "entry": "com.example.starter.StarterPlugin",
+  "jar": "build/libs/Example_Starter.jar",
+  "services": [],
+  "routes": [],
+  "events": [],
+  "tabs": [{ "id": "example.starter", "container": "center" }],
+  "panels": [],
+  "interceptors": [],
+  "daemon": {
+    "entry": "com.example.starter.daemon.StarterDaemon",
+    "jar": "daemon/build/libs/Example_Starter-daemon.jar",
+    "apiAtLeast": "1.0.0",
+    "tools": [{ "name": "example_sessions", "action": "example.starter.read", "kind": "read", "description": "How many sessions the daemon runs." }]
+  }
+}
