@@ -55,7 +55,7 @@ class BuiltinToolsListGuardTest {
                 "infantry_spawn", "infantry_prompt", "infantry_kill", "infantry_session_restart", "infantry_session_remove"),
             "Infantry_Settings" to listOf("infantry_project_config_get", "infantry_project_config_set", "infantry_settings_get", "infantry_settings_set"),
             // RUNTIME-LOAD-8: the COMMS mail tools and the project pipeline tools.
-            "Infantry_Chat" to listOf("infantry_inbox", "infantry_read", "infantry_message"),
+            "Infantry_Chat" to listOf("infantry_inbox", "infantry_read", "infantry_message", "infantry_projects"),
             // BOARD-API-2: the ticket read tools (the files pair moved earlier, with TICKET-FILES).
             // RUNTIME-LOAD-4 (F5): the board's write tools.
             "Infantry_Board" to listOf("infantry_ticket_get", "infantry_ticket_files", "infantry_ticket_related_files", "infantry_epic_base", "infantry_ticket_move", "infantry_ticket_delete",

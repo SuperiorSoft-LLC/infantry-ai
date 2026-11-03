@@ -85,12 +85,12 @@ class CoreDaemonServices(
     override fun secret(name: String): String? = keystore.get(name)
 
     override val projects: Projects = object : Projects {
-        override fun list(): List<ProjectInfo> = projectStore.list().map { ProjectInfo(it.id, it.name, it.directory) }
+        override fun list(): List<ProjectInfo> = projectStore.list().map { ProjectInfo(it.id, it.name, it.directory, it.data["project.description"].orEmpty()) }
         override fun create(name: String, goal: String, directory: String): ProjectInfo {
             java.io.File(directory).mkdirs()
             val p = projectStore.list().firstOrNull { it.directory == directory }
                 ?: projectStore.save(ProjectSave(name = name, goal = goal, directory = directory))
-            return ProjectInfo(p.id, p.name, p.directory)
+            return ProjectInfo(p.id, p.name, p.directory, p.data["project.description"].orEmpty())
         }
     }
 

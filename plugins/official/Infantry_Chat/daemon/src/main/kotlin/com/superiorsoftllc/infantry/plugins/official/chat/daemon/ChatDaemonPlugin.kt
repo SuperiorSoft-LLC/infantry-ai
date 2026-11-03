@@ -32,6 +32,7 @@ class ChatDaemonPlugin : DaemonPlugin {
         api.tools.register(MailTools.InboxTool)
         api.tools.register(MailTools.ReadTool)
         api.tools.register(MailTools.MessageTool)
+        api.tools.register(MailTools.ProjectsTool(api))
         ImageFrames.install(api)
         api.tools.register(ChatImageTool(
             { api.sessions.get(it)?.projectId }, { id -> api.projects.list().firstOrNull { it.id == id }?.directory }, api::files,
@@ -85,6 +86,7 @@ object MailTools {
     const val INBOX = "infantry_inbox"
     const val READ = "infantry_read"
     const val MESSAGE = "infantry_message"
+    const val PROJECTS = "infantry_projects"
 
     private const val HUMAN = "user"
     private const val PREVIEW_CHARS = 120
@@ -243,13 +245,47 @@ object MailTools {
         }
     }
 
+    /** XPROJ-1: the project directory, read only and on demand; nothing of it is ever put in a session's start brief. */
+    class ProjectsTool(private val api: com.superiorsoftllc.infantry.daemon.api.DaemonApi) : DaemonTool {
+        override val name = PROJECTS
+        override val description =
+            "Look up Infantry AI projects: id, name, one-line description and the roles with a live session. Pass query to find one by " +
+                "name or id. Mail another project's role with $MESSAGE to=\"role@<id or name>\" and allowCrossProject=true."
+        override val inputSchema = buildJsonObject {
+            put("type", "object")
+            put("properties", buildJsonObject { put("query", prop("string", "Only projects whose name, id or description contains this (case-insensitive).")) })
+            put("additionalProperties", false)
+        }
+        override val annotations = buildJsonObject { put("readOnlyHint", true) }
+
+        override fun call(call: ToolCall): ToolResult = guarded(PROJECTS) {
+            val query = call.arguments.string("query")?.lowercase()
+            val sessions = api.sessions.list()
+            val rows = api.projects.list()
+                .filter { query == null || query in it.name.lowercase() || query in it.id.lowercase() || query in it.description.lowercase() }
+                .map { p ->
+                    val roles = sessions.filter { it.projectId == p.id && it.role != null && !it.neverRun && it.state !in setOf("FAILED", "ORPHANED") }
+                        .mapNotNull { it.role }.distinct().sorted()
+                    buildJsonObject {
+                        put("id", p.id); put("name", p.name); put("description", p.description)
+                        put("liveRoles", buildJsonArray { roles.forEach { add(JsonPrimitive(it)) } })
+                    }
+                }
+            ok(buildJsonObject {
+                put("count", rows.size)
+                put("projects", buildJsonArray { rows.forEach { add(it) } })
+                put("hint", "mail a role there: $MESSAGE to=\"role@<id or name>\" allowCrossProject=true")
+            })
+        }
+    }
+
     object MessageTool : DaemonTool {
         override val name = MESSAGE
-        override val description = "Send Infantry AI COMMS mail to an agent id, a role (of the sender's project) or a session id."
+        override val description = "Send Infantry AI COMMS mail to an agent id, a role (of the sender's project), a session id, or `role@project` (project id or name) for another project's role; that needs allowCrossProject. Find projects with $PROJECTS."
         override val inputSchema = buildJsonObject {
             put("type", "object")
             put("properties", buildJsonObject {
-                put("to", prop("string", "Recipient: agent id, role, or session id."))
+                put("to", prop("string", "Recipient: agent id, role, session id, or role@<project id or name> (cross-project, with allowCrossProject)."))
                 put("body", prop("string", "The message."))
                 put("subject", prop("string", "Optional subject."))
                 put("replyTo", prop("string", "Optional message id this answers."))

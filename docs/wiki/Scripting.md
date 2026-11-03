@@ -97,6 +97,16 @@ ih.message{to = input.args.from, subject = "PONG", body = "PONG " .. nonce}
 ih.handled()
 ```
 
+### Cross-project mail
+
+An agent finds another project on demand, never from its start brief: the MCP tool `infantry_projects` (CLI `infantry project find [query]`) lists each project's id, name, one-line description and the roles with a live session. The description is project data: `infantry project config set <projectId> project.description "..."`. Then `infantry_message to: "pm@<project id or name>"` with `allowCrossProject: true` reaches that project's session for the role; it is refused without the flag, and errors clearly for an unknown or ambiguous project, a role with no live session, or several agents of the role.
+
+Mail from a session of another project reaches the recipient project's `mail.incoming` hook with two extra args, `fromProjectId` and `fromProjectName` (absent for same-project mail), so each project screens cross-project mail with its own rules:
+
+```lua
+if input.args.fromProjectId then ih.deliver_text{text = "[from " .. input.args.fromProjectName .. "] " .. input.args.body} end
+```
+
 ### Loop guards
 
 Hooks can trigger events that trigger hooks. Guards (settings): `scripting.hooks.maxDepth` (3),

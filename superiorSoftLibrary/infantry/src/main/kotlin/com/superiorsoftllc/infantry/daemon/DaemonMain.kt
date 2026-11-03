@@ -1156,6 +1156,7 @@ class InfantryDaemon(
                 contextCap = { role, sid -> settings.contextCap(role, sid) },
                 contextTokens = { r -> sessionStats.read(r.id, r.provider, r.providerSessionId, r.state.name.lowercase()).lastContextTokens },
                 knowledge = knowledge, skills = skillsSource, starterOf = { sid -> orchestratorLink.starterOf(sid).valueOr(null) },
+                projectRefs = { projectStore.list().map { MailRouter.ProjectRef(it.id, it.name) } },
             )
             // Story 9.5: triggers -- stored, coalesced, tripped on any non-success, their starts unattended.
             // TRIGGER-NUDGE (contract 1.105.0): a `prompt` action is mail to the target in the trigger's project.
@@ -1652,7 +1653,7 @@ class InfantryDaemon(
             manager.wakeSink = { id, reason, ref -> eventPublisher.woken(id, reason, ref, manager.get(id)?.projectId) }
             mail.onIncoming = { i ->
                 val m = i.message
-                plugins.incomingMail(com.superiorsoftllc.infantry.daemon.api.IncomingMail(m.id, m.from, m.to, i.recipientSessionId, i.recipientRole, m.subject, m.body, m.threadId, i.projectId))
+                plugins.incomingMail(com.superiorsoftllc.infantry.daemon.api.IncomingMail(m.id, m.from, m.to, i.recipientSessionId, i.recipientRole, m.subject, m.body, m.threadId, i.projectId, i.fromProjectId, i.fromProjectName))
                     ?.let { v -> MailRouter.MailVerdictInfo(v.handled, v.text) }
             }
             manager.addSessionEndedListener(eventPublisher::sessionEnded)
