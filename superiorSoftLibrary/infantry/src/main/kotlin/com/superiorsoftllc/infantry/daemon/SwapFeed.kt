@@ -6,9 +6,17 @@ package com.superiorsoftllc.infantry.daemon
  * arrive then are QUEUED in arrival order, and [attach] hands them to the new target before it receives anything live, so a
  * swap loses none. [detach] returns to queueing. The queue is bounded: past [limit] the OLDEST are dropped (counted in
  * [dropped]) so a plugin that never comes back cannot grow the daemon's memory.
+ *
+ * DEADLOCK-1 (ticket f3389c81): the target is NEVER called with [lock] held. The target (the board) takes its own lock, and a
+ * board hand-out emits session events while holding the board lock; delivering under [lock] made the two locks a cycle
+ * (an event thread held [lock] and waited for the board, the hand-out held the board and waited for [lock]). [lock] guards
+ * only the queue and the target reference. Events emitted while an [attach] drains are queued behind the drain, so queued
+ * events still reach the new target before live ones; one thread's events keep their order.
  */
 class SwapFeed<E : Any>(private val limit: Int = 10_000) {
     private val lock = Any()
+    /** Serialises [attach] calls only; [emit] never takes it, so it cannot join a cycle with the target's lock. */
+    private val attachLock = Any()
     private val queue = ArrayDeque<E>()
     private var target: ((E) -> Unit)? = null
 
@@ -20,24 +28,31 @@ class SwapFeed<E : Any>(private val limit: Int = 10_000) {
     /** Queued events not yet delivered. */
     val pending: Int get() = synchronized(lock) { queue.size }
 
-    /** The core side: deliver to the attached target now, else queue. Delivery order is arrival order. */
+    /** The core side: deliver to the attached target now (outside the lock), else queue. */
     fun emit(event: E) {
-        synchronized(lock) {
+        val t = synchronized(lock) {
             val t = target
             if (t == null) {
                 if (queue.size >= limit) { queue.removeFirst(); dropped++ }
                 queue.addLast(event)
                 return
             }
-            t(event)
+            t
         }
+        t(event)
     }
 
     /** Attach a target: it first receives every queued event in order, then live ones. A throwing target skips that event. */
     fun attach(newTarget: (E) -> Unit) {
-        synchronized(lock) {
-            while (queue.isNotEmpty()) runCatching { newTarget(queue.removeFirst()) }
-            target = newTarget
+        synchronized(attachLock) {
+            while (true) {
+                val next = synchronized(lock) {
+                    val e = queue.removeFirstOrNull()
+                    if (e == null) target = newTarget
+                    e
+                } ?: return
+                runCatching { newTarget(next) }
+            }
         }
     }
 

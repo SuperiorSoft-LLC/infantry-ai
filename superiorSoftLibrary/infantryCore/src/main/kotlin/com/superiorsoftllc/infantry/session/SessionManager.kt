@@ -282,6 +282,43 @@ class SessionManager(
     @Volatile
     var eventSink: ((SessionEvent) -> Unit)? = null
 
+    /**
+     * DEADLOCK-1 (ticket f3389c81): events raised while this thread holds the manager lock, delivered in order once the
+     * outermost [locked] section releases it. The sink runs every listener (plugins included); a listener that takes
+     * another lock (the board's) while this one is held closes a cycle with any caller that holds that lock and asks
+     * this manager for something (`TicketBoard.move -> handOut -> startNew`).
+     */
+    private val pendingEvents = ThreadLocal.withInitial { ArrayDeque<SessionEvent>() }
+
+    /** Hand [event] to [eventSink]: at once when the lock is free, else after the outermost [locked] section ends. */
+    private fun emit(event: SessionEvent) {
+        if (Thread.holdsLock(this)) { pendingEvents.get().addLast(event); return }
+        flushEvents()
+        eventSink?.invoke(event)
+    }
+
+    /** Deliver the events this thread queued under the lock. Called only with the lock released. */
+    private fun flushEvents() {
+        val queue = pendingEvents.get()
+        while (true) {
+            val next = queue.removeFirstOrNull() ?: return
+            runCatching { eventSink?.invoke(next) }
+                .onFailure { System.err.println("[infantry] session event listener failed: ${it.message}") }
+        }
+    }
+
+    /**
+     * The manager's one lock (it replaces `@Synchronized`, reentrant like it). Events raised inside are sent after the
+     * outermost section releases the lock, also when the section returns early or throws.
+     */
+    private inline fun <T> locked(block: () -> T): T {
+        try {
+            return synchronized(this) { block() }
+        } finally {
+            if (!Thread.holdsLock(this)) flushEvents()
+        }
+    }
+
     @Volatile
     var watchdogSink: ((SessionRecord, WatchdogExpiry) -> Unit)? = null
 
@@ -362,14 +399,13 @@ class SessionManager(
      * in `sessions.json`). It is frozen NOW, once, so its first turn still carries a persona and every later read sees
      * that same row.
      */
-    @Synchronized
-    fun instance(sessionId: String): RoleInstance? {
+    fun instance(sessionId: String): RoleInstance? { return locked {
         instances.get(sessionId)?.let { return it }
         val session = sessions[sessionId] ?: return null
         val legacy = resolveInstance(session.agentId, session.role) ?: return null
         instances.insert(sessionId, withSkills(legacy.copy(agentId = session.agentId, role = session.role), bindingOf(session)), clock())
         return instances.get(sessionId)
-    }
+    } }
 
     /**
      * Writes the spawn's instance once; an anonymous spawn (no agent, no role) writes nothing, so it has no skills either
@@ -508,7 +544,7 @@ class SessionManager(
             bindingPolicy.progressCount(r)?.let { AutoProgress.commits[r.id] = it }
             val seen = r.id to (SessionActivityLog.overlay(r).progress?.stale to AutoProgress.commits[r.id])
             val before = autoSeen.put(seen.first, seen.second)
-            if (before != null && before != seen.second) eventSink?.invoke(SessionEvent.Status(r))
+            if (before != null && before != seen.second) emit(SessionEvent.Status(r))
         }
     }
 
@@ -684,8 +720,7 @@ class SessionManager(
      * A session already at rest ([SessionState.IDLE], or any terminal state from before) is left
      * exactly as it was.
      */
-    @Synchronized
-    fun loadAndReconcile(): ReconcileReport {
+    fun loadAndReconcile(): ReconcileReport { return locked {
         var exited = 0
         var orphaned = 0
         var unchanged = 0
@@ -746,7 +781,7 @@ class SessionManager(
         }
         if (loaded.isNotEmpty()) writeAll()
         return ReconcileReport(exited, orphaned, unchanged, reapedCount)
-    }
+    } }
 
     /**
      * BUG-M2-11f: tree-kill [kept] only when it is provably the process this daemon's predecessor kept: the pid is alive
@@ -766,7 +801,7 @@ class SessionManager(
             .onFailure { System.err.println("[infantry] reaping ${kept.label} pid ${kept.pid} failed: ${it.message}") }
         val line = "reaped stale ${kept.label} process pid ${kept.pid}"
         println("[infantry] $line (session $sessionId)")
-        eventSink?.invoke(SessionEvent.Activity(sessionId, kept.label, line))
+        emit(SessionEvent.Activity(sessionId, kept.label, line))
         return true
     }
 
@@ -806,7 +841,6 @@ class SessionManager(
      * from. They are recorded as given; resolving a profile is the caller's job
      * ([com.superiorsoftllc.infantry.agents.AgentProfiles.resolveSpawn]).
      */
-    @Synchronized
     fun startNew(
         prompt: String,
         workingDir: File? = null,
@@ -846,7 +880,7 @@ class SessionManager(
         global: Boolean = false,
         /** CONTEXT-LIMIT-1: the session's context limit in tokens ([ContextLimits]); null = the harness's own window. */
         contextLimit: Int? = null,
-    ): SessionRecord {
+    ): SessionRecord { return locked {
         // DAEMON-PLUGINS-1: a plugin's spawn gate binds every path (frame, mail, trigger, ticket) that creates a session.
         val binding = bindingPolicy.bindingFor(ticketId)
         spawnGate(role, projectId, binding)?.let { throw IllegalArgumentException(it) }
@@ -908,7 +942,7 @@ class SessionManager(
                 freezeInstance(id, now, agentId, role, instance, binding)
                 sessions[id] = failed
                 persist(id, force = true)
-                eventSink?.invoke(SessionEvent.Status(failed))
+                emit(SessionEvent.Status(failed))
                 return failed
             }
             worktree = provisioned.getOrNull()
@@ -947,10 +981,10 @@ class SessionManager(
         // TRAITS-T6: an unattended clone of a role with a `report` trait owes a REPORT BACK from spawn (`pending`).
         ReportBack.initial(instances.get(record.id), unattended)?.let { sessions[record.id] = record.copy(report = it) }
         persist(record.id, force = true)
-        eventSink?.invoke(SessionEvent.Status(record))
+        emit(SessionEvent.Status(record))
         if (prompt.isNotBlank()) startRun(record.id, prompt)
         return sessions.getValue(record.id)
-    }
+    } }
 
     /**
      * Resume a finished or dead session and run [prompt] as its next turn. This does not spawn
@@ -968,11 +1002,10 @@ class SessionManager(
      * resume is refused here: the provider session id belongs to that CLI, and handing it to another
      * one could only fail, later and less clearly.
      */
-    @Synchronized
-    fun resume(sessionId: String, prompt: String, origin: MessageOrigin = MessageOrigin.Owner, wakeReason: String? = null, wakeRef: String? = null): SessionRecord {
+    fun resume(sessionId: String, prompt: String, origin: MessageOrigin = MessageOrigin.Owner, wakeReason: String? = null, wakeRef: String? = null): SessionRecord { return locked {
         if (sessionId in held) throw RunInFlightException(sessionId, "session $sessionId is switching harness; send again once it has switched")
         return resumeHeld(sessionId, prompt, origin, wakeReason, wakeRef)
-    }
+    } }
 
     /**
      * SCRIPT-VIS-1: told every time a prompt wakes a session: (session id, reason, ref). Reason is the caller's [resume] `wakeReason`
@@ -982,8 +1015,7 @@ class SessionManager(
     var wakeSink: ((sessionId: String, reason: String, ref: String?) -> Unit)? = null
 
     /** TICKET-HANDOVER: [resume] for the switch that holds [sessionId] (the only caller allowed past the hold). */
-    @Synchronized
-    fun resumeHeld(sessionId: String, prompt: String, origin: MessageOrigin = MessageOrigin.Owner, wakeReason: String? = null, wakeRef: String? = null): SessionRecord {
+    fun resumeHeld(sessionId: String, prompt: String, origin: MessageOrigin = MessageOrigin.Owner, wakeReason: String? = null, wakeRef: String? = null): SessionRecord { return locked {
         val session = sessions[sessionId] ?: error("unknown session $sessionId")
         if (runs.containsKey(sessionId)) throw RunInFlightException(sessionId, "session $sessionId already has a run in flight")
         busyTwin(sessionId, session.agentId, bindingOf(session))?.let {
@@ -1019,14 +1051,14 @@ class SessionManager(
         )
         sessions[sessionId] = revived
         persist(sessionId, force = true)
-        eventSink?.invoke(SessionEvent.Status(revived))
+        emit(SessionEvent.Status(revived))
         if (delivered.isNotBlank()) {
             startRun(sessionId, delivered, resuming = !firstTurn, origin = origin)
             val reason = wakeReason ?: when (origin) { is MessageOrigin.Owner -> "owner"; is MessageOrigin.Agent -> "agent"; else -> "external" }
             runCatching { wakeSink?.invoke(sessionId, reason, wakeRef) }
         }
         return sessions.getValue(sessionId)
-    }
+    } }
 
     /**
      * AR-3a: the first-turn context providers, in registration order. A layer above the core registers one (the board adds the
@@ -1059,38 +1091,35 @@ class SessionManager(
      * CLI answers whether it exists). A run already in flight is untouched. Throws [IllegalArgumentException] naming
      * the problem, changing nothing.
      */
-    @Synchronized
-    fun setModel(sessionId: String, model: String): SessionRecord {
+    fun setModel(sessionId: String, model: String): SessionRecord { return locked {
         val wanted = spawnModel(model) ?: throw IllegalArgumentException("a model name is required")
         requireAllowedModel(wanted, null)
         return changeSetting(sessionId) { it.copy(model = wanted) }
-    }
+    } }
 
     /**
      * CP-4 slice d, `/effort`: the session's NEXT run carries [effort]. Whether the level is one the harness has is
      * the caller's check (the catalog's values); this only refuses what could not be one CLI argument.
      */
-    @Synchronized
-    fun setEffort(sessionId: String, effort: String): SessionRecord {
+    fun setEffort(sessionId: String, effort: String): SessionRecord { return locked {
         val wanted = effort.trim()
         require(wanted.isNotEmpty() && modelProblem(wanted) == null) { "effort '${wanted.take(40)}' is not a usable level" }
         return changeSetting(sessionId) { it.copy(effort = wanted, effortSupport = resolveProvider(it.provider).provider.effort().support.wire) }
-    }
+    } }
 
     /**
      * Role-first S3 (`agent_swap`, outcome `kept`): the session's NEXT run names [model] and [effort] (null = the
      * harness default), through the same internal path `/model` and `/effort` take. A run in flight is untouched: it
      * finishes on the executor it started with. Throws [IllegalArgumentException], changing nothing.
      */
-    @Synchronized
-    fun retarget(sessionId: String, model: String?, effort: String?): SessionRecord {
+    fun retarget(sessionId: String, model: String?, effort: String?): SessionRecord { return locked {
         val wantedModel = spawnModel(model)
         requireAllowedModel(wantedModel, null)
         val wantedEffort = effort?.trim()?.takeIf { it.isNotEmpty() }?.also {
             require(modelProblem(it) == null) { "effort '${it.take(40)}' is not a usable level" }
         }
         return changeSetting(sessionId) { it.copy(model = wantedModel, effort = wantedEffort, effortSupport = wantedEffort?.let { _ -> resolveProvider(it.provider).provider.effort().support.wire }) }
-    }
+    } }
 
     /**
      * TICKET-HANDOVER: the checks [reharness] makes on its target ([providerId], [model], [effort]), with nothing written,
@@ -1114,8 +1143,7 @@ class SessionManager(
      * model / effort change ([retarget]). Refused while a turn is in flight. Throws [IllegalArgumentException],
      * changing nothing.
      */
-    @Synchronized
-    fun reharness(sessionId: String, providerId: String, model: String?, effort: String?, carry: Boolean = true): SessionRecord {
+    fun reharness(sessionId: String, providerId: String, model: String?, effort: String?, carry: Boolean = true): SessionRecord { return locked {
         val session = sessions[sessionId] ?: throw IllegalArgumentException("unknown session '$sessionId'")
         require(!runs.containsKey(sessionId) && !session.live) { "a reply is still running; wait for it to finish or stop it, then switch" }
         val target = resolveProvider(providerId).provider.id
@@ -1140,7 +1168,7 @@ class SessionManager(
                 isProcessAlive = false, lastHeartbeat = clock(),
             )
         }
-    }
+    } }
 
     /**
      * SWAP-AGENT-1 (`session_swap` with a role): [sessionId] now runs as [role] (null = no role), in place. Its frozen
@@ -1150,8 +1178,7 @@ class SessionManager(
      * held under the old persona. The same role is a no-op. Refused while a turn is in flight. Whether [role] exists is
      * the caller's check. Throws [IllegalArgumentException], changing nothing.
      */
-    @Synchronized
-    fun rerole(sessionId: String, role: String?): SessionRecord {
+    fun rerole(sessionId: String, role: String?): SessionRecord { return locked {
         val session = sessions[sessionId] ?: throw IllegalArgumentException("unknown session '$sessionId'")
         require(!runs.containsKey(sessionId) && !session.live) { "a reply is still running; wait for it to finish or stop it, then switch" }
         val wanted = role?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
@@ -1169,7 +1196,7 @@ class SessionManager(
                 isProcessAlive = false, lastHeartbeat = clock(),
             )
         }
-    }
+    } }
 
     /**
      * ROLE-NOTES-1 (`session_restart`): reboot [sessionId] in place. Same id, role, provider, model, effort, project and
@@ -1179,8 +1206,7 @@ class SessionManager(
      * unless [force], which stops it first. Session notes are kept (this is no kill). Throws [IllegalArgumentException],
      * changing nothing.
      */
-    @Synchronized
-    fun restart(sessionId: String, force: Boolean = false): SessionRecord {
+    fun restart(sessionId: String, force: Boolean = false): SessionRecord { return locked {
         val session = sessions[sessionId] ?: throw IllegalArgumentException("unknown session '$sessionId'")
         val busy = runs.containsKey(sessionId) || session.live
         require(!busy || force) {
@@ -1200,7 +1226,7 @@ class SessionManager(
                 isProcessAlive = false, lastHeartbeat = clock(),
             )
         }
-    }
+    } }
 
     /**
      * TRAITS-T6: record [report] as [sessionId]'s REPORT BACK state, persisted and pushed like any other record change.
@@ -1209,12 +1235,11 @@ class SessionManager(
     fun setReport(sessionId: String, report: SessionReport): SessionRecord = changeSetting(sessionId) { it.copy(report = report) }
 
     /** PIPELINE-WATCHDOG: store the derived [AgentWatch]; an unchanged value writes and pushes nothing. */
-    @Synchronized
-    fun setWatch(sessionId: String, watch: AgentWatch?) {
+    fun setWatch(sessionId: String, watch: AgentWatch?) { locked {
         val current = sessions[sessionId] ?: return
         if (current.watch == watch) return
         changeSetting(sessionId) { it.copy(watch = watch) }
-    }
+    } }
 
     /**
      * BUG-M2-15b (contract 1.61.0, `session_project`): bind an UNBOUND session (one recorded before spawns carried a
@@ -1222,15 +1247,14 @@ class SessionManager(
      * has is a no-op answer; moving a session that is bound to ANOTHER project is refused, since mail routing and the
      * access policy were set up for that one. Throws [IllegalArgumentException], changing nothing.
      */
-    @Synchronized
-    fun setProject(sessionId: String, projectId: String): SessionRecord {
+    fun setProject(sessionId: String, projectId: String): SessionRecord { return locked {
         val wanted = projectId.trim()
         require(wanted.isNotEmpty()) { "a project id is required" }
         val session = sessions[sessionId] ?: throw IllegalArgumentException("unknown session '$sessionId'")
         val current = session.projectId?.takeIf { it.isNotBlank() }
         require(current == null || current == wanted) { "session '$sessionId' is already bound to project '$current'" }
         return changeSetting(sessionId) { it.copy(projectId = wanted) }
-    }
+    } }
 
     /** Contract 1.114.0: record which session spawned [sessionId]; a no-op for a blank or unknown id. */
     fun setSpawner(sessionId: String, spawnerId: String?) {
@@ -1245,7 +1269,7 @@ class SessionManager(
         val next = transform(session)
         sessions[sessionId] = next
         persist(sessionId, force = true)
-        eventSink?.invoke(SessionEvent.Status(next))
+        emit(SessionEvent.Status(next))
         return next
     }
 
@@ -1257,7 +1281,7 @@ class SessionManager(
         // Contract 1.11.0: the turn is accepted, so it goes on the session's stream NOW -- before the
         // provider is resolved or spawned -- and therefore ahead of anything this run prints. A run that
         // then fails to start still shows what was asked, followed by why it never ran.
-        eventSink?.invoke(SessionEvent.Turn(sessionId, prompt, origin))
+        emit(SessionEvent.Turn(sessionId, prompt, origin))
         // The session's OWN provider and transport (contract 1.3.0). startNew and resume have already
         // refused an unconfigured provider; this guard only keeps a run from ever reaching another CLI.
         val target = lookup(session.provider) ?: run {
@@ -1320,7 +1344,7 @@ class SessionManager(
             it.copy(state = SessionState.BUSY, childPid = null, runCount = it.runCount + 1, lastHeartbeat = clock(), isProcessAlive = true, backgroundWork = null, killedBy = null, killReason = null)
         }
         // BUG-M2-11b-1: the host owns the process and the ONE chat line per launch; the per-turn plumbing is Activity.
-        bootDetails.forEach { eventSink?.invoke(SessionEvent.Activity(sessionId, provider.id, it)) }
+        bootDetails.forEach { emit(SessionEvent.Activity(sessionId, provider.id, it)) }
         host.runTurn(sessionId, provider, request, runEnv)
     }
 
@@ -1402,8 +1426,7 @@ class SessionManager(
      * session from [SessionState.STARTING] to [SessionState.BUSY]. A provider session id observed on
      * the line is force-persisted (via [update]) so it survives a crash mid-run.
      */
-    @Synchronized
-    private fun heartbeat(sessionId: String, providerSessionId: String?) {
+    private fun heartbeat(sessionId: String, providerSessionId: String?) { locked {
         update(sessionId) { current ->
             current.copy(
                 lastHeartbeat = clock(),
@@ -1412,14 +1435,13 @@ class SessionManager(
                 isProcessAlive = true,
             )
         }
-    }
+    } }
 
     /**
      * BUG-M2-11b-1: a hosted turn ended ([HostEvents.turnEnded]). A turn that never got a child (its spec or its spawn
      * failed) fails the session with the reason and no `finished`, as before the host.
      */
-    @Synchronized
-    private fun finishHosted(sessionId: String, end: TurnEnd, exitCode: Int?, processExited: Boolean, reason: String?) {
+    private fun finishHosted(sessionId: String, end: TurnEnd, exitCode: Int?, processExited: Boolean, reason: String?) { locked {
         val run = runs[sessionId] ?: return
         if (!runs.remove(sessionId, run)) return
         // 1.117.0: a turn that ended with no progress report in it drops the old report, unless a registered
@@ -1434,7 +1456,7 @@ class SessionManager(
             exitCode == null && end == TurnEnd.FAILED -> failRun(sessionId, IllegalStateException(reason ?: "the turn failed"))
             else -> settle(sessionId, run, exitCode ?: if (end == TurnEnd.COMPLETED) 0 else 1, processExited)
         }
-    }
+    } }
 
     private fun settle(sessionId: String, run: ActiveRun, exitCode: Int?, processExited: Boolean) {
         if (run.interruptRequested.get()) {
@@ -1477,7 +1499,7 @@ class SessionManager(
                 isProcessAlive = false,
             )
         }
-        eventSink?.invoke(SessionEvent.Exit(sessionId, exitCode, outcome, processExited = processExited))
+        emit(SessionEvent.Exit(sessionId, exitCode, outcome, processExited = processExited))
         if (state == SessionState.FAILED) closed(sessionId, "turn failed", resumable = true)
     }
 
@@ -1512,8 +1534,7 @@ class SessionManager(
      * outcome (FINISHED would read as FAILED with no exit code), so the transcript gets a visible line
      * and the IDLE status is the at-rest signal.
      */
-    @Synchronized
-    private fun settleInterrupted(sessionId: String, exitCode: Int?) {
+    private fun settleInterrupted(sessionId: String, exitCode: Int?) { locked {
         bootLine(sessionId, "turn interrupted by the owner; the session is at rest and keeps its conversation")
         update(sessionId) {
             it.copy(
@@ -1525,11 +1546,11 @@ class SessionManager(
                 isProcessAlive = false,
             )
         }
-    }
+    } }
 
     /** UI-BOOT-1: an additive STDERR line (no new frame type) explaining what the daemon is doing. */
     private fun bootLine(sessionId: String, text: String) {
-        eventSink?.invoke(SessionEvent.Stderr(sessionId, "[infantry] $text"))
+        emit(SessionEvent.Stderr(sessionId, "[infantry] $text"))
     }
 
     private fun failRun(sessionId: String, e: Exception) {
@@ -1669,8 +1690,7 @@ class SessionManager(
      * Deliberately out of scope, left to their own dedicated commands: the git worktree on disk
      * (`worktree_remove`) and the provider CLI's own conversation store (the CLI's data, not ours).
      */
-    @Synchronized
-    fun delete(sessionId: String) {
+    fun delete(sessionId: String) { locked {
         val existing = sessions[sessionId] ?: throw IllegalArgumentException("unknown session '$sessionId'")
         // BASICS-KILL-1: a record that claims a run but has none in this daemon and no live process is stale: ended here.
         if (existing.live && isStaleLive(sessionId, existing)) {
@@ -1688,7 +1708,7 @@ class SessionManager(
         endedNotice(sessionId)
         closed(sessionId, "session removed", closing)
         writeAll()
-    }
+    } }
 
     /**
      * BASICS-KILL-1: [record] reads live (STARTING / BUSY / WAITING_INPUT, or a pid marked alive) while this daemon has
@@ -1702,12 +1722,11 @@ class SessionManager(
     fun busyTwin(exceptId: String?, agentId: String?, binding: SessionBinding?): SessionRecord? =
         bindingPolicy.twin(exceptId, agentId, binding, sessions.values)
 
-    @Synchronized
     private fun markKilled(
         sessionId: String,
         outcome: KillOutcome,
         expectedRun: ActiveRun? = null,
-    ): SessionRecord? {
+    ): SessionRecord? { return locked {
         if (expectedRun != null) {
             // finish() and kill() may race after the process stops. Only the winner that removes this
             // exact ActiveRun owns the terminal update and Exit event.
@@ -1725,9 +1744,9 @@ class SessionManager(
                 isProcessAlive = false,
             )
         }
-        if (killed != null) eventSink?.invoke(SessionEvent.Exit(sessionId, code = null, killOutcome = outcome))
+        if (killed != null) emit(SessionEvent.Exit(sessionId, code = null, killOutcome = outcome))
         return killed
-    }
+    } }
 
     // --- shutdown -------------------------------------------------------------------------------
 
@@ -1753,19 +1772,19 @@ class SessionManager(
             val provider = sessions[sessionId]?.let { lookup(it.provider)?.provider }
             heartbeat(sessionId, provider?.sessionIdFromLine(line))
             if (sessionId !in interruptedTurns) conversation.output(sessionId, line)
-            eventSink?.invoke(SessionEvent.Stdout(sessionId, line, afterInterrupt = sessionId in interruptedTurns))
+            emit(SessionEvent.Stdout(sessionId, line, afterInterrupt = sessionId in interruptedTurns))
         }
 
         override fun stderr(sessionId: String, line: String) {
             heartbeat(sessionId, null)
-            eventSink?.invoke(SessionEvent.Stderr(sessionId, line))
+            emit(SessionEvent.Stderr(sessionId, line))
         }
 
         override fun bootLine(sessionId: String, text: String) = this@SessionManager.bootLine(sessionId, text)
 
         override fun activity(sessionId: String, detail: String) {
             val tool = sessions[sessionId]?.provider ?: return
-            eventSink?.invoke(SessionEvent.Activity(sessionId, tool, detail))
+            emit(SessionEvent.Activity(sessionId, tool, detail))
         }
 
         override fun providerSession(sessionId: String, id: String) = heartbeat(sessionId, id)
@@ -1779,7 +1798,7 @@ class SessionManager(
             finishHosted(sessionId, end, exitCode, processExited, reason)
 
         override fun processExited(sessionId: String, exitCode: Int) {
-            eventSink?.invoke(SessionEvent.ProcessExit(sessionId, exitCode))
+            emit(SessionEvent.ProcessExit(sessionId, exitCode))
         }
 
         override fun keptProcess(sessionId: String, kept: KeptProcess) {
@@ -1884,8 +1903,7 @@ class SessionManager(
      * are throttled on disk. The write happens AFTER the map assignment so the snapshot includes
      * [next].
      */
-    @Synchronized
-    private fun update(sessionId: String, transform: (SessionRecord) -> SessionRecord): SessionRecord? {
+    private fun update(sessionId: String, transform: (SessionRecord) -> SessionRecord): SessionRecord? { return locked {
         val current = sessions[sessionId] ?: return null
         // 1.117.0: a session that ended (killed, orphaned) has no job left to measure.
         val next = transform(current).let {
@@ -1917,9 +1935,9 @@ class SessionManager(
         // id it carries (what resume and the interrupt snapshot need) must still reach clients as its own status.
         val backgroundChanged = next.backgroundWork != current.backgroundWork || next.bgJobs.map { it.id } != current.bgJobs.map { it.id }
         val progressChanged = next.progress != current.progress
-        if (stateChanged || identityChanged || backgroundChanged || progressChanged) eventSink?.invoke(SessionEvent.Status(next))
+        if (stateChanged || identityChanged || backgroundChanged || progressChanged) emit(SessionEvent.Status(next))
         return next
-    }
+    } }
 
     private fun persist(sessionId: String, force: Boolean) {
         val now = clock()

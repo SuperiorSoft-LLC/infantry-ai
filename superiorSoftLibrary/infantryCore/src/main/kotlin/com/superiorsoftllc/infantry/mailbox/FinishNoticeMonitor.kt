@@ -50,6 +50,12 @@ class FinishNoticeMonitor(
     private val gitState: (File?, String?) -> GitState? = { d, b -> d?.let { gitStateOf(it, b) } },
     /** NUDGE-SCRIPT-1: emits each built-in notice as a named event; deferred ones are left to script hooks. */
     private val gate: NudgeGate = NudgeGate.NONE,
+    /**
+     * DEADLOCK-1 (ticket f3389c81): where the board work of a turn end (the idle comment) runs. Null = this monitor's own
+     * thread, so a board that is busy (or locked by a hand-out waiting on the session manager) never stalls the thread that
+     * ended the turn. Tests pass `{ it() }` to run it inline.
+     */
+    private val boardWork: ((() -> Unit) -> Unit)? = null,
 ) {
     /** Tip (8 chars), commits since the start ref (null = unknown) and whether the worktree has uncommitted changes. */
     data class GitState(val tip: String, val newCommits: Int?, val dirty: Boolean)
@@ -80,6 +86,13 @@ class FinishNoticeMonitor(
     }
 
     fun close() { executor.shutdownNow() }
+
+    /** Run [work] where [boardWork] says; a closed monitor drops it (the daemon is shutting down). */
+    private fun onBoardThread(work: () -> Unit) {
+        val runner = boardWork
+        if (runner != null) { runner(work); return }
+        try { executor.execute(work) } catch (_: java.util.concurrent.RejectedExecutionException) { }
+    }
 
     fun onSessionEvent(event: SessionEvent) {
         when (event) {
@@ -120,8 +133,10 @@ class FinishNoticeMonitor(
         if (!failed && !done) {
             // A clean end of turn with the ticket open: the worker is waiting, not failing. Same period while no mail moved.
             val now = clock()
-            runCatching { idleComment(session, ticket, starter) }
-                .onFailure { System.err.println("[infantry] idle comment failed for ${session.id}: ${it.message}") }
+            onBoardThread {
+                runCatching { idleComment(session, ticket, starter) }
+                    .onFailure { System.err.println("[infantry] idle comment failed for ${session.id}: ${it.message}") }
+            }
             idle.compute(session.id) { _, p -> if (p != null && lastMailAt(session) < p.since) p else IdlePeriod(now) }
             return
         }
