@@ -468,6 +468,9 @@ data class TicketLink(val type: String, val ticketId: String)
 
 /** A backlog ticket as the board needs it (the daemon sends more; unknown keys are ignored). */
 @Serializable
+data class TicketHasWork(val branch: String = "", val tip: String, val ahead: Int)
+
+@Serializable
 data class Ticket(
     val id: String,
     val title: String,
@@ -488,6 +491,12 @@ data class Ticket(
     val provider: String? = null,
     val model: String? = null,
     val queuedFor: String? = null,
+    /** AGENT-TASKS-6: the agent profile whose persistent queue holds this todo ticket, its name and place; null = not queued. */
+    val queuedAgent: String? = null,
+    val queuedAgentName: String? = null,
+    val queueRank: Int? = null,
+    /** AGENT-TASKS-6: a todo ticket whose branch is ahead of its base (tip sha, commits ahead); null = no kept work. */
+    val hasWork: TicketHasWork? = null,
     val sessionId: String? = null,
     val effectiveExecutor: EffectiveExecutor? = null,
     val lastRun: TicketRun? = null,
