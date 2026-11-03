@@ -157,6 +157,7 @@ data class Envelope(
         val CORRELATED_REQUESTS: Set<String> = setOf(
             TICKET_SAVE, TICKET_GET, TICKET_LIST, TICKET_MOVE, TICKET_LINK,
             TICKET_UNLINK, TICKET_REORDER, TICKET_DELETE, TICKET_START_NEXT, TICKET_UNASSIGN,
+            TICKET_ASSIGN, AGENT_SWITCH,
         )
 
         const val READY = "ready"
@@ -449,6 +450,10 @@ data class Envelope(
         const val TICKET_UNASSIGN = "ticket_unassign"
         /** AGENT-TASKS-3: an agent's persistent ticket queue; see [AgentQueueRequest], answered with an [AgentQueueState]. */
         const val AGENT_QUEUE = "agent_queue"
+        /** AGENT-TASKS-4: assign a todo ticket to an existing agent; see [TicketAssign], answered with a ticket. */
+        const val TICKET_ASSIGN = "ticket_assign"
+        /** AGENT-TASKS-4: switch an agent from its ticket to another; see [AgentSwitch], answered with the new ticket. */
+        const val AGENT_SWITCH = "agent_switch"
         const val TICKET_LINK = "ticket_link"
         const val TICKET_UNLINK = "ticket_unlink"
         const val TICKET_REORDER = "ticket_reorder"

@@ -206,6 +206,104 @@ class TicketUnassignTool(private val api: DaemonApi) : DaemonTool {
     }
 }
 
+/** AGENT-TASKS-4: `infantry_ticket_assign`, give a todo ticket to an existing agent (start now, or queue). Over `ticket_assign`. */
+class TicketAssignTool(private val api: DaemonApi) : DaemonTool {
+    override val name = ASSIGN
+    override val description =
+        "Assign a todo ticket to an EXISTING agent (profile id or unique name). Default starts it on that agent: no session -> a new " +
+            "worker on the ticket's own branch; an idle session on no in-progress ticket is ended and the ticket starts on its exit " +
+            "(the answer says the start is deferred). An agent on another in-progress ticket is refused (use infantry_agent_switch or " +
+            "queue). queue=true adds it to the agent's queue at `at` instead. Same as `infantry ticket assign <id> <agent> [--queue] [--at n]`."
+    override val inputSchema = buildJsonObject {
+        put("type", "object")
+        put("properties", buildJsonObject {
+            put("ticketId", ToolArgs.prop("Full ticket id, or its 8-char suffix."))
+            put("agentId", ToolArgs.prop("Agent profile id, or its unique name."))
+            put("queue", ToolArgs.boolProp("Add to the agent's queue instead of starting."))
+            put("at", ToolArgs.prop("1-based place in the queue (with queue)."))
+            put("verbose", ToolArgs.verboseProp())
+        })
+        put("required", buildJsonArray { add(JsonPrimitive("ticketId")); add(JsonPrimitive("agentId")) })
+        put("additionalProperties", false)
+    }
+    override val annotations = ToolArgs.annotations(readOnly = false)
+
+    override fun call(call: ToolCall): ToolResult {
+        val args = call.arguments
+        val requested = ToolArgs.string(args, "ticketId") ?: return refused("$ASSIGN needs a ticketId")
+        val agent = ToolArgs.string(args, "agentId") ?: return refused("$ASSIGN needs an agentId")
+        val at = ToolArgs.string(args, "at")?.let { it.toIntOrNull() ?: return refused("$ASSIGN: at must be a whole number") }
+        val ticket = WireTickets.find(api, call, requested).getOrElse { return refused("$ASSIGN refused: ${it.message ?: "no ticket '$requested'"}") }
+        val body = buildJsonObject {
+            put("id", ticket.id)
+            put("agentId", agent)
+            if (ToolArgs.flag(args, "queue")) put("queue", true)
+            at?.let { put("at", it) }
+        }
+        val answer = WireTickets.request(call, TICKET_ASSIGN, json.encodeToString(JsonObject.serializer(), body), TICKET, sessionId = call.clientSessionId)
+            .getOrElse { return refused("$ASSIGN refused: ${it.message}") }
+        return ticketReply(ASSIGN, answer.data, "Assigned", args)
+    }
+
+    companion object {
+        const val ASSIGN = "infantry_ticket_assign"
+        private const val TICKET_ASSIGN = "ticket_assign"
+        private const val TICKET = "ticket"
+    }
+}
+
+/** AGENT-TASKS-4: `infantry_agent_switch`, an agent leaves its in-progress ticket for another. Over `agent_switch`. */
+class AgentSwitchTool(private val api: DaemonApi) : DaemonTool {
+    override val name = SWITCH
+    override val description =
+        "Switch an agent from its in-progress ticket A to ticket B: A goes back to todo (top) with a handoff and its branch kept, B " +
+            "heads the agent's queue, the worker ends like unassign (now = at once) and B starts for the same agent on exit (deferred: " +
+            "the worker ends after its turn). With no current ticket it is an assign. Same as `infantry agent switch <agent> <ticketId> [--now]`."
+    override val inputSchema = buildJsonObject {
+        put("type", "object")
+        put("properties", buildJsonObject {
+            put("agentId", ToolArgs.prop("Agent profile id, or its unique name."))
+            put("ticketId", ToolArgs.prop("The ticket to switch to: full id, or its 8-char suffix."))
+            put("now", ToolArgs.boolProp("End the worker at once instead of after its current turn."))
+            put("verbose", ToolArgs.verboseProp())
+        })
+        put("required", buildJsonArray { add(JsonPrimitive("agentId")); add(JsonPrimitive("ticketId")) })
+        put("additionalProperties", false)
+    }
+    override val annotations = ToolArgs.annotations(readOnly = false)
+
+    override fun call(call: ToolCall): ToolResult {
+        val args = call.arguments
+        val agent = ToolArgs.string(args, "agentId") ?: return refused("$SWITCH needs an agentId")
+        val requested = ToolArgs.string(args, "ticketId") ?: return refused("$SWITCH needs a ticketId")
+        val ticket = WireTickets.find(api, call, requested).getOrElse { return refused("$SWITCH refused: ${it.message ?: "no ticket '$requested'"}") }
+        val body = buildJsonObject {
+            put("agentId", agent)
+            put("ticketId", ticket.id)
+            if (ToolArgs.flag(args, "now")) put("now", true)
+        }
+        val answer = WireTickets.request(call, AGENT_SWITCH, json.encodeToString(JsonObject.serializer(), body), TICKET, sessionId = call.clientSessionId)
+            .getOrElse { return refused("$SWITCH refused: ${it.message}") }
+        return ticketReply(SWITCH, answer.data, "Switched to", args)
+    }
+
+    companion object {
+        const val SWITCH = "infantry_agent_switch"
+        private const val AGENT_SWITCH = "agent_switch"
+        private const val TICKET = "ticket"
+    }
+}
+
+/** The shared reply of assign and switch: one line, with the deferred-start note; the full ticket with verbose. */
+private fun ticketReply(tool: String, data: String, verb: String, args: JsonObject): ToolResult {
+    val moved = runCatching { WireTickets.ticket(data) }.getOrElse { return refused("$tool: malformed ticket answer from the daemon: ${it.message}") }
+    val start = runCatching { json.parseToJsonElement(data) as JsonObject }.getOrNull()?.get("start") as? JsonObject
+    val note = if ((start?.get("reason") as? JsonPrimitive)?.content == "deferred") (start["detail"] as? JsonPrimitive)?.content?.let { " ($it)" } ?: "" else ""
+    val line = "$verb ${WireTickets.shortId(moved.id)} -> ${moved.status}$note"
+    if (!ToolArgs.flag(args, "verbose")) return ToolResult("ok ${WireTickets.shortId(moved.id)} ${moved.status}$note")
+    return ToolResult(json.encodeToString(JsonObject.serializer(), JsonObject(TicketGetTool.answer(moved, true) + buildJsonObject { put("message", line) })))
+}
+
 /**
  * AGENT-TASKS-3: `infantry_agent_queue`, one agent's persistent ticket queue (list, add, remove, move, clear). Over the `agent_queue`
  * frame. The queue never starts anything itself: the agent's worker ending does.

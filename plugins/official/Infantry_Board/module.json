@@ -24,6 +24,8 @@
       { "name": "infantry_ticket_move", "action": "board.ticket.move", "kind": "write", "description": "Move or reorder ONE ticket." },
       { "name": "infantry_agent_queue", "action": "board.ticket.move", "kind": "write", "description": "List or change ONE agent's persistent ticket queue (add, remove, move, clear)." },
       { "name": "infantry_ticket_unassign", "action": "board.ticket.move", "kind": "write", "description": "Take ONE in_progress ticket back to todo, its work kept, with a handoff note." },
+      { "name": "infantry_ticket_assign", "action": "board.ticket.move", "kind": "write", "description": "Assign a todo ticket to an existing agent (start now, or queue)." },
+      { "name": "infantry_agent_switch", "action": "board.ticket.move", "kind": "write", "description": "Switch an agent from its in-progress ticket to another ticket." },
       { "name": "infantry_ticket_delete", "action": "board.ticket.delete", "kind": "destructive", "description": "Delete ONE ticket." },
       { "name": "infantry_ticket_create", "action": "board.ticket.save", "kind": "write", "description": "Create a ticket (images from the caller's own files)." },
       { "name": "infantry_ticket_update", "action": "board.ticket.save", "kind": "write", "description": "Edit ONE ticket (images from the caller's own files)." },

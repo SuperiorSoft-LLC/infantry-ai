@@ -503,6 +503,22 @@ data class AgentQueueRequest(val agentId: String, val action: String = "list", v
     }
 }
 
+/** `ticket_assign` (AGENT-TASKS-4): [agentId] is a profile id or unique name; [queue] adds to the agent's queue (at [at]) instead of starting. */
+@Serializable
+data class TicketAssign(val id: String, val agentId: String, val queue: Boolean = false, val at: Int? = null) {
+    companion object {
+        fun decode(text: String): TicketAssign = StrictJson.decode(serializer(), text, "ticket_assign payload")
+    }
+}
+
+/** `agent_switch` (AGENT-TASKS-4): [agentId] leaves its in-progress ticket (handoff, todo) for [ticketId]; [now] ends the worker at once. */
+@Serializable
+data class AgentSwitch(val agentId: String, val ticketId: String, val now: Boolean = false) {
+    companion object {
+        fun decode(text: String): AgentSwitch = StrictJson.decode(serializer(), text, "agent_switch payload")
+    }
+}
+
 /** One queued ticket: its full id, title and 1-based place. */
 @Serializable
 data class AgentQueueEntry(val ticketId: String, val title: String, val rank: Int)

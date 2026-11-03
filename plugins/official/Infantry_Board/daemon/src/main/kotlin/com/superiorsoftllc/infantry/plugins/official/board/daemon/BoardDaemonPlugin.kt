@@ -70,6 +70,8 @@ class BoardDaemonPlugin : DaemonPlugin {
         api.tools.register(TicketMoveTool(api))
         api.tools.register(TicketUnassignTool(api))
         api.tools.register(AgentQueueTool(api))
+        api.tools.register(TicketAssignTool(api))
+        api.tools.register(AgentSwitchTool(api))
         api.tools.register(TicketDeleteTool(api))
         api.tools.register(TicketCreateTool(api, comments))
         api.tools.register(TicketUpdateTool(api, comments))
