@@ -14,6 +14,11 @@
 # Outside Infantry AI all of this is inert: the markers are plain lines and `infantry progress` does nothing.
 
 set -u
+# RENAME-2 legacy fallback: an AGENTHQ_<X> variable stands in when INFANTRY_<X> is unset.
+for _v in $(env | sed -n "s/^AGENTHQ_\([A-Za-z0-9_]*\)=.*/\1/p"); do
+  eval "[ -n "\${INFANTRY_$_v:-}" ] || export INFANTRY_$_v="\$AGENTHQ_$_v""
+done
+unset _v
 FULL=""
 if [ "${1:-}" = "--full" ]; then FULL=1; shift; fi
 REF="${1:-}"

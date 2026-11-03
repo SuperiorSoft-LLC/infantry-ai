@@ -5,6 +5,11 @@
 #    the token. INFANTRY_TOKEN_AUTO=false turns generation off: the daemon then refuses to start without a token.
 #  - JVM options come from JAVA_OPTS (default -Xms32m -Xmx512m): the heap is a setting, not baked in.
 set -eu
+# RENAME-2 legacy fallback: an AGENTHQ_<X> variable stands in when INFANTRY_<X> is unset.
+for _v in $(env | sed -n "s/^AGENTHQ_\([A-Za-z0-9_]*\)=.*/\1/p"); do
+  eval "[ -n "\${INFANTRY_$_v:-}" ] || export INFANTRY_$_v="\$AGENTHQ_$_v""
+done
+unset _v
 
 STATE="${INFANTRY_STATE_DIR:-/data}"
 mkdir -p "$STATE"

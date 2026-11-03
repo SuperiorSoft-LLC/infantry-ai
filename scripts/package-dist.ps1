@@ -45,11 +45,13 @@ param(
   [string[]]$Exclude,       # BUILD-PLUGINS-1: leave these optional plugins out (core/official are refused)
   [string]$Preset,          # BUILD-PLUGINS-1: a named preset from plugins/build-presets.json (full, no-optional, core-only)
   [string]$ReleaseBranch = '"feature-agenthq"-mvp',
-  [string]$ProjectId = $env:INFANTRY_PROJECT_ID
+  [string]$ProjectId
 )
 
 $repo = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'plugin-selection.ps1')
+. (Join-Path $PSScriptRoot 'infantry-env.ps1')
+if (-not $ProjectId) { $ProjectId = Get-InfantryEnv 'PROJECT_ID' }
 
 $script:Step = 'start'
 $script:BuildOk = $false
@@ -62,9 +64,9 @@ function Fail([string]$Message) {
 # Reads a project-data setting: env override first, then the daemon's project config. Null when unset.
 function Get-ProjectSetting([string]$Key) {
   $envName = 'INFANTRY_' + ($Key -replace '\.', '_').ToUpper()
-  $fromEnv = [Environment]::GetEnvironmentVariable($envName)
+  $fromEnv = Get-InfantryEnv ($envName -replace "^INFANTRY_","")
   if ($fromEnv) { return [pscustomobject]@{ Value = $fromEnv; From = "env $envName" } }
-  $cli = if ($env:INFANTRY_CLI) { $env:INFANTRY_CLI } else { (Get-Command infantry -ErrorAction SilentlyContinue).Source }
+  $cli = Get-InfantryCli
   if ($cli -and $ProjectId) {
     $lines = & $cli project config get $ProjectId 2>$null
     foreach ($line in $lines) {
@@ -112,7 +114,7 @@ function Get-Count([string]$Dir) {
 
 if ($BackupState) {
   $backup = Get-BackupRoot
-  if (-not $StateDir) { $StateDir = $env:INFANTRY_STATE_DIR }
+  if (-not $StateDir) { $StateDir = Get-InfantryEnv 'STATE_DIR' }
   if (-not $StateDir) { Fail "no state dir given (-StateDir or env INFANTRY_STATE_DIR). Nothing was written." }
   if (-not (Test-Path -LiteralPath $StateDir -PathType Container)) { Fail "state dir '$StateDir' does not exist" }
   $src = [IO.Path]::GetFullPath($StateDir).TrimEnd('\')
