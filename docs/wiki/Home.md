@@ -7,6 +7,9 @@ These pages are written from the code on the dev head. Where an older document d
 wins, and the page says so.
 
 - [Plugins](Plugins.md): `module.json`, the UI and daemon halves, block types, panels and slots, config fields, building, installing, signing, and a hello plugin step by step.
+- [Make a plugin](make-a-plugin.md): step by step from the template to a built UI + daemon example, every `module.json` field, slots and child plugins.
+- [UI plugin API](plugin-api.md): every public type and function of the UI plugin API, with examples.
+- [Daemon plugin API](daemon-plugin-api.md): tools, routes, hooks, events, services, storage, lifecycle, the guard.
 - [Scripting](Scripting.md): the Lua API, hooks, `ih.again` phases, the process bridge (`exec`), chat notes, progress, the session bridge, settings.
 - [Harnesses and providers](Harnesses.md): the harness API, its contributions, how the three built-in harnesses use it, adding a harness and a provider.
 - [Settings](Settings.md): scopes (app, project, role, session), cost-saving defaults and what each opt-in costs.
