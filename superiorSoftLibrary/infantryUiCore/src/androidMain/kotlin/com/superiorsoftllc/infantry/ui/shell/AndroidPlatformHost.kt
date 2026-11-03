@@ -23,7 +23,14 @@ class AndroidPlatformHost(
     override val soundPlayer: com.superiorsoftllc.infantry.ui.sound.SoundPlayer? = null,
     override val customSoundStore: com.superiorsoftllc.infantry.ui.sound.CustomSoundStore? = null,
     private val soundPicker: ((onPicked: (PickedImage?) -> Unit) -> Unit)? = null,
+    /** ANDROID-ATTACH-1: the system picker (imagesOnly, maxBytes, callback), wired to the Activity result registry. */
+    private val attachPicker: ((imagesOnly: Boolean, maxBytes: Long, onPicked: (PickedImage?) -> Unit) -> Unit)? = null,
 ) : PlatformHost {
+    override val canPickAttachment: Boolean get() = attachPicker != null
+    override fun pickAttachment(title: String, imagesOnly: Boolean, maxBytes: Long, onPicked: (PickedImage?) -> Unit) {
+        attachPicker?.invoke(imagesOnly, maxBytes, onPicked) ?: onPicked(null)
+    }
+
     override val canPickSound: Boolean get() = soundPicker != null
     override fun pickSound(onPicked: (PickedImage?) -> Unit) { soundPicker?.invoke(onPicked) ?: onPicked(null) }
 

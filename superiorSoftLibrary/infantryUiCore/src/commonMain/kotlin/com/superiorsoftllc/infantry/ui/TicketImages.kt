@@ -50,6 +50,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.superiorsoftllc.infantry.ui.shell.LocalPlatformHost
+import com.superiorsoftllc.infantry.ui.protocol.ImageUploadWire
 import com.superiorsoftllc.infantry.ui.shell.PickedImage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -185,14 +186,11 @@ fun TicketImagesSection(
             if (busy) Text("Uploading…", color = Palette.Muted, fontSize = 10.sp)
             IconAction(
                 AhqIcons.AttachFile, "Attach an image",
-                enabled = enabled && !busy && host.canPickFiles,
+                enabled = enabled && !busy && host.canPickAttachment,
                 style = IconActionStyle.TEXT,
                 modifier = Modifier.testTag(TICKET_IMAGE_ATTACH_TAG),
                 onClick = {
-                    host.pickFile("Attach an image")?.let { path ->
-                        val name = path.substringAfterLast('/').substringAfterLast('\\')
-                        host.readBytes(path)?.let { bytes -> onAttach(listOf(PickedImage(name, PickedImage.mimeOf(name), bytes))) }
-                    }
+                    host.pickAttachment("Attach an image", true, ImageUploadWire.MAX_BYTES.toLong()) { p -> if (p != null) onAttach(listOf(p)) }
                 },
             )
             IconAction(

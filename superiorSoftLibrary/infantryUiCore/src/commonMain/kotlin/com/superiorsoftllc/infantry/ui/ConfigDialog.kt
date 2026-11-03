@@ -1320,15 +1320,17 @@ private fun UserPortraitSection(portrait: String?, onSave: (ByteArray?) -> Unit)
             androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(
                     onClick = {
-                        val path = host.pickFile("Choose your portrait") ?: return@OutlinedButton
-                        val size = host.fileSize(path)
-                        val bytes = if (size != null && size > UserPortrait.MAX_PICK_BYTES) null else host.readBytes(path)
-                        val refusal = UserPortrait.refusal(bytes, size ?: bytes?.size?.toLong() ?: 0)
-                        val png = if (refusal == null) host.portraitPng(bytes!!, UserPortrait.SIDE) else null
-                        error = refusal ?: if (png == null) "That image could not be read." else null
-                        if (png != null) onSave(png)
+                        host.pickAttachment("Choose your portrait", true, UserPortrait.MAX_PICK_BYTES) { picked ->
+                            if (picked != null) {
+                                val bytes = picked.bytes.takeIf { it.isNotEmpty() }
+                                val refusal = UserPortrait.refusal(bytes, picked.size)
+                                val png = if (refusal == null) host.portraitPng(bytes!!, UserPortrait.SIDE) else null
+                                error = refusal ?: if (png == null) "That image could not be read." else null
+                                if (png != null) onSave(png)
+                            }
+                        }
                     },
-                    enabled = host.canPickFiles,
+                    enabled = host.canPickAttachment,
                     modifier = Modifier.testTag(PORTRAIT_CHANGE_TAG),
                 ) { Text("Change portrait") }
                 TextButton(

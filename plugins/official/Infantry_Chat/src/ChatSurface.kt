@@ -418,12 +418,9 @@ internal fun PromptBox(
         }
     }
     val pick = {
-        if (live && host.canPickFiles) host.pickFile(ATTACH_FILE_LABEL)?.let { path ->
-            val name = path.substringAfterLast('/').substringAfterLast('\\')
-            // An oversize file is refused by its size, never read into memory.
-            val size = host.fileSize(path)
-            val bytes = if (size != null && size > CHAT_FILE_MAX_BYTES) ByteArray(0) else host.readBytes(path)
-            if (bytes != null) insertPicked(listOf(PickedImage(name, PickedImage.mimeOf(name), bytes, size ?: bytes.size.toLong())))
+        // ANDROID-ATTACH-1: content, not a path; the answer may arrive later (Android's system picker).
+        if (live && host.canPickAttachment) host.pickAttachment(ATTACH_FILE_LABEL, false, CHAT_FILE_MAX_BYTES.toLong()) { p ->
+            if (p != null) insertPicked(listOf(p))
         }
     }
     // IMG-2: a file dropped anywhere on the composer is attached like a picked one (ATTACH-INLINE-1: any type).
@@ -488,7 +485,7 @@ internal fun PromptBox(
             trailingIcon = {
                 IconAction(
                     AhqIcons.AttachFile, ATTACH_FILE_LABEL, onClick = pick, shortcut = ATTACH_FILE_SHORTCUT,
-                    enabled = live && host.canPickFiles, style = IconActionStyle.TEXT,
+                    enabled = live && host.canPickAttachment, style = IconActionStyle.TEXT,
                     modifier = Modifier.testTag(CHAT_IMAGE_ATTACH_TAG),
                 )
             },
