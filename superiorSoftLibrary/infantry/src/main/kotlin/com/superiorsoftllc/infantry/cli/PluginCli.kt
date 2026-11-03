@@ -3,6 +3,7 @@
 package com.superiorsoftllc.infantry.cli
 
 import com.superiorsoftllc.infantry.daemon.plugins.manager.Catalog
+import com.superiorsoftllc.infantry.daemon.plugins.manager.CatalogBuilder
 import com.superiorsoftllc.infantry.daemon.plugins.manager.CatalogSource
 import com.superiorsoftllc.infantry.daemon.plugins.manager.Inspection
 import com.superiorsoftllc.infantry.daemon.plugins.manager.ManagerJson
@@ -30,6 +31,8 @@ internal object PluginCli {
   rollback <id> | remove <id> [--purge] | status <id>
   sources list | add <id> (--url U | --dir D) [--class official|community|custom] | remove <id> | refresh [id]
   catalog validate <catalog.json> [--assets dir]
+  catalog build <dir> --id <catalogId> --class <official|community> [--out catalog.json] [--assets dir]
+                                one catalog from <dir>/<id>.json entry files (file name = id, ids unique), then validated
 <ref> = [source:]id[@version] from a catalog, a .ihq file, a plugin folder, or a URL (the last three are CUSTOM plugins)."""
 
     fun run(args: List<String>, out: Appendable, err: Appendable, getenv: (String) -> String?): Int {
@@ -49,6 +52,8 @@ internal object PluginCli {
         var cls: String? = null
         var url: String? = null
         var dir: String? = null
+        var id: String? = null
+        var outFile: String? = null
         val tags = mutableSetOf<String>()
         val rest = mutableListOf<String>()
         var i = 0
@@ -65,6 +70,8 @@ internal object PluginCli {
                 "--assets" -> assets = value(a) ?: return 2
                 "--class" -> cls = value(a) ?: return 2
                 "--url" -> url = value(a) ?: return 2
+                "--id" -> id = value(a) ?: return 2
+                "--out" -> outFile = value(a) ?: return 2
                 "--dir" -> dir = value(a) ?: return 2
                 "--tag" -> tags += value(a) ?: return 2
                 else -> rest += a
@@ -90,7 +97,7 @@ internal object PluginCli {
             "list" -> {
                 val rows = m.list()
                 if (rows.isEmpty()) out.appendLine("no plugins")
-                rows.forEach { out.appendLine("${it.id}  ${it.version}  ${it.cls.label}${if (it.bundled) "/bundled" else ""}  ${it.tier.name.lowercase()}  ${if (it.enabled) "enabled" else "disabled"}  ${it.source ?: "unlisted"}") }
+                rows.forEach { out.appendLine("${it.id}  ${it.version}  ${it.cls.label}${if (it.bundled) "/bundled" else ""}  ${it.tier.name.lowercase()}  ${if (it.enabled) "enabled" else "disabled"}  ${it.source ?: "unlisted"}${it.yanked?.let { y -> "  yanked: $y" } ?: ""}") }
                 return 0
             }
             "search" -> {
@@ -139,6 +146,7 @@ internal object PluginCli {
                 val row = m.status(arg ?: return usage("status needs a plugin id")) ?: return show(ManagerResult.refused("NOT_INSTALLED", "$arg is not installed"))
                 out.appendLine("${row.id} ${row.version}: ${row.cls.label}${if (row.bundled) " (bundled)" else ""}, ${row.tier.name.lowercase()} tier, ${if (row.enabled) "enabled" else "disabled"}")
                 out.appendLine("source: ${row.source ?: "unlisted"}  licence: ${row.license ?: "not stated"}")
+                row.yanked?.let { out.appendLine("yanked: $it") }
                 out.appendLine("asks for: ${row.requested.joinToString().ifEmpty { "nothing" }}")
                 out.appendLine("granted: ${row.granted.joinToString().ifEmpty { "nothing" }}")
                 out.appendLine("kept for rollback: ${row.history.joinToString().ifEmpty { "none" }}")
@@ -156,7 +164,21 @@ internal object PluginCli {
                 else -> return usage("unknown sources command '$arg'")
             }
             "catalog" -> {
-                if (arg != "validate") return usage("catalog needs: validate <catalog.json>")
+                if (arg == "build") {
+                    val src = File(rest.getOrNull(2) ?: return usage("catalog build needs a folder"))
+                    val catId = id ?: return usage("catalog build needs --id")
+                    val c = cls ?: return usage("catalog build needs --class official|community")
+                    if (c != "official" && c != "community") return usage("--class must be official or community")
+                    val (built, bad) = CatalogBuilder.build(src, catId, c)
+                    if (built == null) { bad.forEach { err.appendLine("problem: $it") }; return 1 }
+                    val target = File(outFile ?: "catalog.json").absoluteFile
+                    val problems = m.validate(built, assets?.let(::File) ?: target.parentFile)
+                    if (problems.isNotEmpty()) { problems.forEach { err.appendLine("problem: $it") }; return 1 }
+                    target.writeText(ManagerJson.encodeToString(Catalog.serializer(), built))
+                    out.appendLine("catalog written: ${target.path} (${built.plugins.size} plugin(s))")
+                    return 0
+                }
+                if (arg != "validate") return usage("catalog needs: validate <catalog.json> | build <dir>")
                 val f = File(rest.getOrNull(2) ?: return usage("catalog validate needs a file"))
                 val catalog = runCatching { ManagerJson.decodeFromString(Catalog.serializer(), f.readText()) }.getOrElse { err.appendLine("error: ${f.path} is not a catalog: ${it.message?.lineSequence()?.first()}"); return 1 }
                 val problems = m.validate(catalog, assets?.let(::File) ?: f.absoluteFile.parentFile)

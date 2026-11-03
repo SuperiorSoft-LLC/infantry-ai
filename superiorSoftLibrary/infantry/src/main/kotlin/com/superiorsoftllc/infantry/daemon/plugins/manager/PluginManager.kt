@@ -73,6 +73,8 @@ data class PluginRow(
     val requested: List<String>,
     val granted: List<String>,
     val history: List<String>,
+    /** REGISTRY-1a: the catalog's reason when the installed version is yanked there; null otherwise. */
+    val yanked: String? = null,
 )
 
 data class CatalogHit(val source: String, val cls: PluginClass, val entry: CatalogEntry, val latest: CatalogVersion?)
@@ -236,7 +238,7 @@ class PluginManager(
         }
     }
 
-    private fun compatible(e: CatalogEntry): List<CatalogVersion> = e.versions.filter { semver(it.version) != null && apiProblem(it.api) == null }
+    private fun compatible(e: CatalogEntry): List<CatalogVersion> = e.versions.filter { semver(it.version) != null && !it.yanked && apiProblem(it.api) == null }
 
     private fun semver(v: String) = SemVer.parseOrNull(v)
 
@@ -267,6 +269,7 @@ class PluginManager(
     fun list(): List<PluginRow> {
         val cfg = config()
         val led = ledger().installed
+        val cat = runCatching { loaded() }.getOrDefault(emptyList()).flatMap { it.catalog.plugins }
         return PluginFolders.scan(root, cfg, bundledRoot).mapNotNull { c ->
             val m = c.manifest ?: return@mapNotNull null
             val bundled = bundledRoot != null && c.dir != null && File(c.dir!!).canonicalPath.startsWith(bundledRoot.canonicalPath + File.separator)
@@ -278,6 +281,8 @@ class PluginManager(
                 c.tier, bundled,
                 setting?.enabled ?: (c.tier != Tier.COMMUNITY),
                 row?.source ?: if (bundled) "bundled" else null, m.license, RequestedGrants.of(m), row?.granted.orEmpty(), row?.history.orEmpty(),
+                yanked = cat.filter { it.id == c.folderName }.flatMap { it.versions }.firstOrNull { it.version == m.version && it.yanked }
+                    ?.let { it.yankedReason ?: "no reason given" },
             )
         }.sortedBy { it.id }
     }

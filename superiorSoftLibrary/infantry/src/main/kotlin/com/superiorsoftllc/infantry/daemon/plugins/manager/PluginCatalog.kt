@@ -38,6 +38,9 @@ data class CatalogVersion(
     val signer: String? = null,
     val published: String? = null,
     val notes: String? = null,
+    /** REGISTRY-1a: a yanked version is never chosen by install (without an explicit version) or by update; installed copies show the reason. */
+    val yanked: Boolean = false,
+    val yankedReason: String? = null,
 )
 
 @Serializable
@@ -51,6 +54,8 @@ data class CatalogEntry(
     val license: String? = null,
     val homepage: String? = null,
     val versions: List<CatalogVersion> = emptyList(),
+    /** REGISTRY-1a: the plugin's source repository (url); informational. */
+    val repo: String? = null,
 )
 
 /** `catalog.json`, schema 1: static data, no code. */
@@ -138,4 +143,25 @@ object RequestedGrants {
         granted.filter { it.startsWith(OVERRIDE) }.map { it.removePrefix(OVERRIDE) }.sorted(),
         granted.filter { it.startsWith(INJECT) }.map { it.removePrefix(INJECT) }.sorted(),
     )
+}
+
+/** REGISTRY-1a (docs/PLUGIN-REPO-DESIGN.md 3.1): builds one schema-1 [Catalog] from a folder of per-plugin entry files. */
+object CatalogBuilder {
+    /** Reads every json file of [dir] as a [CatalogEntry]; returns the catalog, or the problems found (name != id, duplicate id, unreadable). */
+    fun build(dir: java.io.File, id: String, cls: String, now: java.time.Instant = java.time.Instant.now()): Pair<Catalog?, List<String>> {
+        val problems = mutableListOf<String>()
+        val entries = mutableListOf<CatalogEntry>()
+        val files = dir.listFiles { f -> f.isFile && f.name.endsWith(".json") }?.sortedBy { it.name }
+        if (files == null) return null to listOf("${dir.path} is not a folder")
+        for (f in files) {
+            val e = runCatching { ManagerJson.decodeFromString(CatalogEntry.serializer(), f.readText()) }
+                .getOrElse { problems += "${f.name}: not a catalog entry: ${it.message?.lineSequence()?.first()}"; continue }
+            if (f.nameWithoutExtension != e.id) { problems += "${f.name}: file name must equal the entry id '${e.id}'"; continue }
+            entries += e
+        }
+        entries.groupBy { it.id }.filter { it.value.size > 1 }.keys.forEach { problems += "$it: id is not unique" }
+        if (problems.isNotEmpty()) return null to problems
+        val generated = java.time.format.DateTimeFormatter.ISO_INSTANT.format(now.truncatedTo(java.time.temporal.ChronoUnit.SECONDS))
+        return Catalog(1, id, cls, generated, entries.sortedBy { it.id }) to emptyList()
+    }
 }
