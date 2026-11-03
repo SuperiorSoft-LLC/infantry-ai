@@ -275,7 +275,9 @@ fun AgentChat(agent: AgentView, nowProvider: () -> Long = { Clock.System.now().t
     val name = agent.session.worktreeBranch ?: agent.id.take(8)
     val agentSide = agentSideOf(LocalTabFactory.current)
     Column(Modifier.fillMaxSize()) {
-        SelectionContainer(Modifier.weight(1f)) {
+        // CHAT-COMPACT-1: the Activity chip floats over the transcript's bottom edge: it takes no row of its own.
+        Box(Modifier.weight(1f)) {
+        SelectionContainer(Modifier.fillMaxSize()) {
             LazyColumn(Modifier.fillMaxSize().padding(horizontal = 14.dp), state = list, contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 10.dp)) {
                 items(rows.size) { i ->
                     // M2-2: the agent's portrait opens each run of agent-side lines, like a chat. KINDS-1: the row is drawn by the renderer of its kind.
@@ -287,8 +289,9 @@ fun AgentChat(agent: AgentView, nowProvider: () -> Long = { Clock.System.now().t
                 }
             }
         }
+        Box(Modifier.align(Alignment.BottomEnd)) { ActivityBox(agent) }
+        }
         questionSlot()
-        ActivityBox(agent)
     }
 }
 
@@ -313,24 +316,30 @@ fun ActivityBox(agent: AgentView) {
     // auto-open while the session runs.
     val autoOpen = LocalShellContext.current?.config?.values("infantry.chatfeed")?.boolean(ACTIVITY_AUTO_OPEN_KEY) ?: false
     val expanded = activityBoxChoice ?: (autoOpen && isRunning(agent.session.state))
-    Column(Modifier.fillMaxWidth().background(Palette.Panel).testTag(ACTIVITY_BOX_TAG)) {
+    Column(Modifier.testTag(ACTIVITY_BOX_TAG), horizontalAlignment = Alignment.End) {
+        if (expanded) Box(Modifier.padding(horizontal = 8.dp)) { ActivityLines(entries) }
         Text(
             "Activity (${entries.size})",
             color = Palette.Muted,
             fontFamily = Mono,
             fontSize = 11.sp,
             fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.fillMaxWidth().clickable { activityBoxChoice = !expanded }.padding(horizontal = 14.dp, vertical = 6.dp),
+            modifier = Modifier.padding(8.dp).background(Palette.Panel, androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+                .clickable { activityBoxChoice = !expanded }.padding(horizontal = 10.dp, vertical = 4.dp),
         )
-        if (expanded) {
-            // Newest first, capped at ~160dp, scrollable, monospace.
-            Column(Modifier.fillMaxWidth().heightIn(max = 160.dp).verticalScroll(rememberScrollState())) {
-                entries.asReversed().forEach { e ->
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 1.dp)) {
-                        Text(activityTimestamp(e.at), color = Palette.Muted, fontFamily = Mono, fontSize = 11.sp)
-                        Spacer(Modifier.width(8.dp))
-                        Text(e.label, color = Palette.Text, fontFamily = Mono, fontSize = 11.sp, modifier = Modifier.testTag(ACTIVITY_LINE_TAG))
-                    }
+    }
+}
+
+/** The activity lines, newest first, capped at ~160dp, scrollable, monospace, on an opaque panel over the transcript. */
+@Composable
+private fun ActivityLines(entries: List<com.superiorsoftllc.infantry.ui.model.AgentActivity>) {
+    run {
+        Column(Modifier.fillMaxWidth().background(Palette.Panel).heightIn(max = 160.dp).verticalScroll(rememberScrollState())) {
+            entries.asReversed().forEach { e ->
+                Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 1.dp)) {
+                    Text(activityTimestamp(e.at), color = Palette.Muted, fontFamily = Mono, fontSize = 11.sp)
+                    Spacer(Modifier.width(8.dp))
+                    Text(e.label, color = Palette.Text, fontFamily = Mono, fontSize = 11.sp, modifier = Modifier.testTag(ACTIVITY_LINE_TAG))
                 }
             }
         }

@@ -425,3 +425,11 @@ You rarely use these in a plugin; they explain the status you see in Settings > 
 - `ModuleManifest.tier` is read but ignored. Some shipped manifests still carry it.
 - `module.json` `buildOrder` is read by the Gradle module-list generator (`superiorSoftLibrary/infantryAppUi/build.gradle.kts`)
   but is not a field of `ModuleManifest`; see [Make a plugin](make-a-plugin.md).
+
+### The chat composer slot (CHAT-COMPACT-1)
+
+The chat composer under the conversation is **one row** with a fixed footprint: input, the plugin `extras` slot, Send and
+the action buttons (on a phone width the less-used ones sit in a "More actions" menu). The Activity header is a chip over
+the transcript's bottom edge; the queue is one line. `PromptBox` (in `Infantry_Chat`) takes an `extras` parameter that
+draws inline in that row: add a chip, an icon button or a menu item there. A plugin must not stack a new full-width row
+under the chat; the height tests in `CompactComposerUiTest` fail when the default composer grows past one row.

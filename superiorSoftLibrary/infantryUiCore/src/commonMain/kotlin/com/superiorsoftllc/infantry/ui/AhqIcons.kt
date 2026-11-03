@@ -49,6 +49,30 @@ object AhqIcons {
         }
     }
 
+    /** Material "Filled.MoreVert" (CHAT-COMPACT-1: the composer's overflow menu). */
+    val MoreVert: ImageVector by lazy {
+        icon("MoreVert", autoMirror = false) {
+            moveTo(12.0f, 8.0f)
+            curveToRelative(1.1f, 0.0f, 2.0f, -0.9f, 2.0f, -2.0f)
+            reflectiveCurveToRelative(-0.9f, -2.0f, -2.0f, -2.0f)
+            reflectiveCurveToRelative(-2.0f, 0.9f, -2.0f, 2.0f)
+            reflectiveCurveToRelative(0.9f, 2.0f, 2.0f, 2.0f)
+            close()
+            moveTo(12.0f, 10.0f)
+            curveToRelative(-1.1f, 0.0f, -2.0f, 0.9f, -2.0f, 2.0f)
+            reflectiveCurveToRelative(0.9f, 2.0f, 2.0f, 2.0f)
+            reflectiveCurveToRelative(2.0f, -0.9f, 2.0f, -2.0f)
+            reflectiveCurveToRelative(-0.9f, -2.0f, -2.0f, -2.0f)
+            close()
+            moveTo(12.0f, 16.0f)
+            curveToRelative(-1.1f, 0.0f, -2.0f, 0.9f, -2.0f, 2.0f)
+            reflectiveCurveToRelative(0.9f, 2.0f, 2.0f, 2.0f)
+            reflectiveCurveToRelative(2.0f, -0.9f, 2.0f, -2.0f)
+            reflectiveCurveToRelative(-0.9f, -2.0f, -2.0f, -2.0f)
+            close()
+        }
+    }
+
     /** Material "Filled.PersonAdd". */
     val PersonAdd: ImageVector by lazy {
         icon("PersonAdd", autoMirror = false) {
