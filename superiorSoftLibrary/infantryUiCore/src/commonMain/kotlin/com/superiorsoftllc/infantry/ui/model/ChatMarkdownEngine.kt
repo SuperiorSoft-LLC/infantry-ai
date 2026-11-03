@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.ui.model
 
 /** What a [ChatMarkdownEngine] can produce; the UI may use it to hide controls or choose fallbacks. */

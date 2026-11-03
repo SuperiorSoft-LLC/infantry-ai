@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // DAEMON-PLUGINS-1 (docs/DAEMON-PLUGINS.md): Infantry_Roles's daemon half, the MCP tools that used to be built into the CLI.
 // AR-4b-ii-b: it also owns the role catalog (RoleService, bundled roles/, avatars), the role frames and the role binding / trait
 // stores, and provides the DaemonApi roles ports. Compiled against the daemon API only (compileOnly: the daemon provides it at

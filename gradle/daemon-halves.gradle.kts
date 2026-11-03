@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // PACKAGE-1 (docs/DAEMON-PLUGINS.md section 9): the one place that knows what a module's daemon half (and, HARNESS-PLUGIN-3, its
 // harness half: module.json `harness.jar`, built by `:harness-plugin-<folder>-<Module>:jar`) is, for every packaging
 // path (desktop stageOfficialModules / prepareDistributableResources, installDist, dockerContext, headlessDist via installDist).

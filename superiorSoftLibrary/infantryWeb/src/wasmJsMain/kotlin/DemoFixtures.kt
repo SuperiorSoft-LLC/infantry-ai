@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 import com.superiorsoftllc.infantry.ui.protocol.Envelope
 
 /** Hand-written, secret-free fixtures in the JSON shapes the real daemon sends. */

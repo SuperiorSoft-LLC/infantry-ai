@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.ui.model
 
 /** Per-device: where the agent's reasoning text is shown. Display only; the text is the harness's own output. */

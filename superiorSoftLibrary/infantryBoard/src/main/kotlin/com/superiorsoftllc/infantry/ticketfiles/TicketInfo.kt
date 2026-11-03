@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.ticketfiles
 
 /** The ticket data the file index and the related-work resolver read; the board family adapts its rows to it. */

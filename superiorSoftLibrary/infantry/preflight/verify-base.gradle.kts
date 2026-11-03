@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // BUILD-VB-1: the base-commit preflight lives in its own script plugin so VerifyBaseTaskTest can apply
 // this exact file to a throwaway Gradle build (TestKit) instead of testing a copy of it.
 import java.util.Properties

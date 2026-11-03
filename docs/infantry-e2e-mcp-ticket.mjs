@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // MCP-1: live check that a Claude session the daemon spawns has Infantry's own MCP server (`infantry mcp serve`) and can
 // create a ticket through the `mcp__infantry__infantry_ticket_create` tool in Tool approval DENY -- not through the shell --
 // with a multi-line description and role / provider / model pins, stored exactly.

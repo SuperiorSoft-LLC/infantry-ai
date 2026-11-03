@@ -2,8 +2,11 @@
 
 Thank you for wanting to help. Please read this page before you open an issue or a pull request.
 
-> **Code contributions from outside SuperiorSoft LLC are on hold.** The project has no license yet (see
-> [LICENSE](LICENSE)), so we cannot accept outside code: without a license there is no clear grant for your changes.
+> **Code contributions from outside SuperiorSoft LLC are on hold.** The license split is applied but still a
+> DRAFT (see [LICENSE](LICENSE) and the per-directory map in [docs/LICENSE-MAP.md](docs/LICENSE-MAP.md): MPL-2.0 for the
+> abstraction layer, Apache-2.0 for everything concrete). Until the CLA ([docs/legal/CLA.md](docs/legal/CLA.md)) is official
+> we cannot accept outside code: there is no clear grant to relicense your changes. Every source file carries an SPDX header
+> that `LicenseMapGuardTest` checks; `scripts/license-headers.sh` adds it.
 > Bug reports, feature requests and documentation feedback are welcome now. This section will change once a license
 > (and, if needed, a contributor agreement) is published.
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // SCRIPT-2: the LuaJ script engine, an engine plugin of Infantry_Scripting (shades its contract classes and luaj-jse).
 plugins {
     kotlin("jvm")

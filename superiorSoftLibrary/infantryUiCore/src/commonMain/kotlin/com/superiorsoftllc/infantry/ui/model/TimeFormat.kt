@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.ui.model
 
 /** The one place a clock time is formatted for display: 12-hour with AM/PM, e.g. `2:59 PM`. */

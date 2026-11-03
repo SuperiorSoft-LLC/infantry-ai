@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // S4 (drop-in path, docs/SHELL-EMPTY-DROPIN-FEASIBILITY.md section 4): the app UI, out of the shell. It holds the core
 // modules (plugins/core, one folder per module; RUNTIME-26: none left, Infantry_AppUi and App_UI.ihq are retired) and the generated
 // module list web and Android compile in, and depends on

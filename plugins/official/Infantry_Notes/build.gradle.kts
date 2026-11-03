@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // RUNTIME-8 (docs/RUNTIME-PLUGINS-AUDIT.md section 3, step 8): official module Infantry_Notes, the Notes tab (its tab tree ShellNotes), out of the shell
 // build into its own project. One source for every platform (D9):
 //  - desktop: build/libs/Infantry_Notes.jar (this project's jvm jar: its classes, its signed module.json and a ServiceLoader

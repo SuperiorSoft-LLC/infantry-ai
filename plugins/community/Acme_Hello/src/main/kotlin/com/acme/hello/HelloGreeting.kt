@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 package com.acme.hello
 
 import androidx.compose.material3.LocalContentColor

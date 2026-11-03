@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // RUNTIME-11 (docs/RUNTIME-PLUGINS-AUDIT.md section 3, step 13): official module Infantry_Review, the Review tab, out of the shell
 // build into its own project. One source for every platform (D9):
 //  - desktop: build/libs/Infantry_Review.jar (this project's jvm jar: its classes, its signed module.json and a ServiceLoader

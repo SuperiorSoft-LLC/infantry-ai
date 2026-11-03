@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.harness.claude
 
 import com.superiorsoftllc.infantry.harness.HarnessEvent

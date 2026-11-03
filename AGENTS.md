@@ -33,21 +33,21 @@ Gradle project paths keep the monorepo prefix `:superiorSoftLibrary:`. "Core" me
 
 | Module (folder under `superiorSoftLibrary/`) | What it is | Core? |
 |---|---|---|
-| `infantry` | Daemon, CLI and MCP server (`DaemonMain.kt`, `CliMain.kt`, `cli/mcp/McpServer.kt`). JVM only. The shell the leaf modules plug into. | core |
-| `infantryProtocol` | The wire contract: `Envelope` and the DTOs. A leaf. | core |
-| `infantryRunner` | The process runner and watch mechanism. A leaf. | core |
-| `infantryCore` | Packages that stay in core: sessions, mailbox, policy, settings, db, harness registry, providers, worktrees, usage. | core |
-| `infantryDaemonApi` | The ONE surface a daemon plugin compiles against (`DaemonApi`, `DaemonPlugin`, `DaemonTool`). | core (SDK) |
-| `infantryHarnessApi` | The ONE surface a harness plugin compiles against (`HarnessPlugin`, `Harness`, `HarnessHost`). A leaf. | core (SDK) |
-| `infantryBoard` | The board's lower-level packages (epics, brief, ledger, context, ticketfiles). Depends on the daemon API, never on `infantry`. | board support, not a generic mechanism |
-| `infantryPlugins` | The UI plugin contract (`plugin.api`: `ModuleManifest`, config types) and the host's loading rules (`plugin.host`: `PluginTree`). No Compose. | core (SDK) |
-| `infantryUiCore` | The shared client: Compose UI shell, `Controller`, `DaemonClient`, `UiPlugin`, `UiRegistrar`. Kotlin Multiplatform (JVM, Android, wasm). | core (client) |
-| `infantryAppUi` | The app UI outside the shell; holds the generated module list web and Android compile in. | client |
-| `infantryUi` | The desktop window (Compose Desktop). | client |
-| `infantryWeb` | The browser client (Kotlin/wasm); the daemon serves its bundle at `/`. | client |
-| `infantryAndroid` | A thin Android application shell around `infantryUiCore`. No sources of its own. | client |
-| `infantryHeadless` | Test-only: proves the daemon runs with no UI. | test |
-| `samples/markdownEnginePlugin` | An example markdown engine plugin built to a jar. | sample |
+| `infantry` | Daemon, CLI and MCP server (`DaemonMain.kt`, `CliMain.kt`, `cli/mcp/McpServer.kt`). JVM only. The shell the leaf modules plug into. | core (MPL-2.0) |
+| `infantryProtocol` | The wire contract: `Envelope` and the DTOs. A leaf. | core (MPL-2.0) |
+| `infantryRunner` | The process runner and watch mechanism. A leaf. | core (MPL-2.0) |
+| `infantryCore` | Packages that stay in core: sessions, mailbox, policy, settings, db, harness registry, providers, worktrees, usage. | core (MPL-2.0) |
+| `infantryDaemonApi` | The ONE surface a daemon plugin compiles against (`DaemonApi`, `DaemonPlugin`, `DaemonTool`). | platform SDK (Apache-2.0) |
+| `infantryHarnessApi` | The ONE surface a harness plugin compiles against (`HarnessPlugin`, `Harness`, `HarnessHost`). A leaf. | platform SDK (Apache-2.0) |
+| `infantryBoard` | The board's lower-level packages (epics, brief, ledger, context, ticketfiles). Depends on the daemon API, never on `infantry`. | platform SDK (Apache-2.0) |
+| `infantryPlugins` | The UI plugin contract (`plugin.api`: `ModuleManifest`, config types) and the host's loading rules (`plugin.host`: `PluginTree`). No Compose. | platform SDK (Apache-2.0) |
+| `infantryUiCore` | The shared client: Compose UI shell, `Controller`, `DaemonClient`, `UiPlugin`, `UiRegistrar`. Kotlin Multiplatform (JVM, Android, wasm). | platform client (Apache-2.0) |
+| `infantryAppUi` | The app UI outside the shell; holds the generated module list web and Android compile in. | app (Apache-2.0) |
+| `infantryUi` | The desktop window (Compose Desktop). | app (Apache-2.0) |
+| `infantryWeb` | The browser client (Kotlin/wasm); the daemon serves its bundle at `/`. | app (Apache-2.0) |
+| `infantryAndroid` | A thin Android application shell around `infantryUiCore`. No sources of its own. | app (Apache-2.0) |
+| `infantryHeadless` | Test-only: proves the daemon runs with no UI. | test (Apache-2.0) |
+| `samples/markdownEnginePlugin` | An example markdown engine plugin built to a jar. | sample (Apache-2.0) |
 
 Plugins live outside that folder, in `plugins/` (see [plugins/README.md](plugins/README.md)):
 

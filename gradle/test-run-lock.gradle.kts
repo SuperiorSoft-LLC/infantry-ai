@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // GATE-LOCK-1: one test run per build dir. Two Gradle builds running this project's Test tasks in the same build dir
 // make the second one wipe build/test-results/<task>/binary under the first, which then fails with
 // java.nio.file.NoSuchFileException: ...\in-progress-results-generic*.bin (ticket e7b6b957).

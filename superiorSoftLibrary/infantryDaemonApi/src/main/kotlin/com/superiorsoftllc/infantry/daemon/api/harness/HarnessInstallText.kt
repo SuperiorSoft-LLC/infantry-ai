@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.daemon.api.harness
 
 /** RUNTIME-LOAD-1: the printed tables of `harness-status` / `harness-install`, shared by the CLI and the Infantry_Agents tools. */

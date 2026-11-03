@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.persistence
 
 import com.superiorsoftllc.infantry.daemon.api.board.StoredLink

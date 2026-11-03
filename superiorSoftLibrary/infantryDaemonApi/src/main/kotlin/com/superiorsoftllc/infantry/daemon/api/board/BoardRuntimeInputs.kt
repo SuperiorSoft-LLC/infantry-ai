@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.daemon.api.board
 
 /** DP-5h-3a2 (DaemonApi 1.13.0, additive): KNOWLEDGE-PTR-1 (C): a ticket as a save or link is about to store it, with the board rows and links. */

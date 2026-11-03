@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // Shared Infantry client: Compose UI, protocol-facing model, controller and WebSocket client.
 // The JVM daemon is intentionally not a dependency; the client wire DTOs live in commonMain.
 plugins {

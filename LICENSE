@@ -1,9 +1,20 @@
-[PLACEHOLDER] LICENSE NOT YET CHOSEN
+DRAFT: applied, not official until the public launch. Not legal advice.
 
-Copyright (c) SuperiorSoft LLC. All rights reserved.
+Infantry AI is licensed per directory. Copyright (c) SuperiorSoft LLC.
 
-The owner has not chosen a license for Infantry AI yet. Until a license replaces this file, no permission
-is granted to copy, modify, distribute or sublicense this software or any part of it. Viewing the source on
-GitHub is permitted under GitHub's Terms of Service only.
+MPL-2.0 (the abstraction layer, the generic engine everything plugs into):
+  superiorSoftLibrary/infantryProtocol, infantryCore, infantryRunner, infantry
+  and the reserved, empty plugins/core/.
+Apache-2.0 (everything concrete on top): every other directory, including the whole plugin
+  API and plugin host (infantryPlugins), infantryBoard, the daemon and harness SDKs, the UI
+  core, the apps, samples/, plugins/, docs/, docker/, scripts/, gradle/, .github/ and the
+  root build files.
+Neither license: the name "Infantry AI", the logo and the emblem (assets/branding and the copies
+  in the app resources). They are trademarks of SuperiorSoft LLC; see docs/legal/TRADEMARK.md.
 
-Outside code contributions are not accepted until a license is published here.
+Each file names its license in an SPDX-License-Identifier header. Each MPL module and each Apache
+top directory has its own LICENSE file; the full texts are in LICENSES/MPL-2.0.txt and
+LICENSES/Apache-2.0.txt. The authoritative map is docs/LICENSE-MAP.md (explained in
+docs/wiki/licensing.md). Third-party components keep their own licenses: see THIRD-PARTY-NOTICES.md.
+
+Outside code contributions are not accepted until the CLA is official (see CONTRIBUTING.md).

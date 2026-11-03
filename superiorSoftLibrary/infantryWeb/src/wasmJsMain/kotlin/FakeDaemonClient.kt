@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 import com.superiorsoftllc.infantry.ui.model.ConnState
 import com.superiorsoftllc.infantry.ui.model.ConnectionInfo
 import com.superiorsoftllc.infantry.ui.net.DaemonClient

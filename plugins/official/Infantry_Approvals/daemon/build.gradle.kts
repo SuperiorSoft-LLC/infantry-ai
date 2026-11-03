@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // into the CLI. Compiled against the daemon API only (compileOnly: the daemon provides it at run time); module.json's
 // `daemon.jar` names the jar this builds. `:daemon-plugin-official-Infantry_Approvals:jar`.
 plugins {

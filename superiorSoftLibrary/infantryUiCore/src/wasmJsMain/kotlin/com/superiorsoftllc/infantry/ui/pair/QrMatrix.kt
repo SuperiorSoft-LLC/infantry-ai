@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.ui.pair
 
 /** WEB-1: ZXing is JVM only, so the browser shows no pairing QR (pairing is a desktop/phone feature): an empty matrix. */

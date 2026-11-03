@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // RUNTIME-13 (docs/RUNTIME-PLUGINS-AUDIT.md, audit ticket 18): official module Infantry_Triggers, the Triggers tab, out of the shell
 // build into its own project. One source for every platform (D9):
 //  - desktop: build/libs/Infantry_Triggers.jar (this project's jvm jar: its classes, its signed module.json and a ServiceLoader

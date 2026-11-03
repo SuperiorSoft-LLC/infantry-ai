@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // DAEMON-PLUGINS-1 (docs/DAEMON-PLUGINS.md): the reference daemon plugin, one tool, one route and one hook, compiled against
 // the daemon API only (compileOnly: the daemon provides it at run time). `:daemon-plugin-examples-Acme_DaemonHello:jar`.
 plugins {

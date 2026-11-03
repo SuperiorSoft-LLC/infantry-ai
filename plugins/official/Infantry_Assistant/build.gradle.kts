@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // RUNTIME-24 (F8) (F6, docs/RUNTIME-PLUGINS-AUDIT.md): official module Infantry_Assistant, the Assistant popup (F8), out of the shell
 // build into its own project. One source for every platform (D9):
 //  - desktop: build/libs/Infantry_Assistant.jar (this project's jvm jar: its classes, its signed module.json and a ServiceLoader

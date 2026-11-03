@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // MOBILE-ANDROID-1: thin Android application shell around infantryUiCore's InfantryActivity.
 // No Kotlin sources here: the activity, host and UI all live in infantryUiCore (androidMain + commonMain).
 import java.util.Properties

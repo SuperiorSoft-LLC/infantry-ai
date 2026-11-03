@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) SuperiorSoft LLC
 // BUG-M2-11a harness probe: does a CLI keep ONE process across several turns written to an open stdin?
 // usage: node stdio-probe.mjs <config.json>
 // config: { name, argv: [exe, ...args], cwd, env?, rawOut?, bootIf?, exitTimeoutMs?, closeStdinAtEnd?,

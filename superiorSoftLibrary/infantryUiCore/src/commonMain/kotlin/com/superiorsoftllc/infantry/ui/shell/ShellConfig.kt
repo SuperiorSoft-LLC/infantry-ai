@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.ui.shell
 
 /** The connection the shell opens on launch. The user can still change it in the connection dialog. */

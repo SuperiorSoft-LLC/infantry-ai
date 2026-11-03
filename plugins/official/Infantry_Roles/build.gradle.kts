@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // RUNTIME-14 (docs/RUNTIME-PLUGINS-AUDIT.md, audit ticket 20): official module Infantry_Roles, the Roles tab and the roles window, out of the shell
 // build into its own project. One source for every platform (D9):
 //  - desktop: build/libs/Infantry_Roles.jar (this project's jvm jar: its classes, its signed module.json and a ServiceLoader

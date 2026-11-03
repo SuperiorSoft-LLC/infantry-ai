@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // OVERRIDE-1 (docs/PLUGIN-OVERRIDES.md section 6): a demo-only module. It is compiled into the web and Android builds only
 // when -Pdemo=true (infantryAppUi:generateModuleList); the desktop and the production builds never see it. No jar, no signing.
 plugins {

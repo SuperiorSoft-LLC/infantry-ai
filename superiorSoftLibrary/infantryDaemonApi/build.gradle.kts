@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // :superiorSoftLibrary:infantryDaemonApi -- DAEMON-PLUGINS-1 (docs/DAEMON-PLUGINS.md): the ONE surface a daemon plugin compiles
 // against. JVM only, small and versioned (DaemonApi.VERSION). A plugin's daemon half depends on it `compileOnly`; the daemon
 // provides it at run time through the plugin's parent class loader, which exposes nothing else of the daemon.

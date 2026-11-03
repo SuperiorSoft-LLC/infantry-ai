@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) SuperiorSoft LLC
 # Env lookup with the RENAME-2 legacy fallback: INFANTRY_<suffix> first, else AGENTHQ_<suffix>. Dot-source it.
 function Get-InfantryEnv([string]$Suffix) {
   foreach ($prefix in 'INFANTRY_', 'AGENTHQ_') {

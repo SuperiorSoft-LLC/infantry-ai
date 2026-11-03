@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.ui.model
 
 /** M2-9: width rules for the drag-resizable LEFT sidebar, in dp. Not persisted (owner's call). */

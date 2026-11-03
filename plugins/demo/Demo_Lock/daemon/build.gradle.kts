@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // DAEMON-PLUGINS-1 (docs/DAEMON-PLUGINS.md): Demo_Lock's daemon half, the seated lockdown a preset's `seats` declare (the
 // visitor token, the per-IP turn limit, the seeded sessions and their warm-up, the demo's refusals). Core holds none of it.
 // Compiled against the daemon API only (compileOnly: the daemon provides it at run time). `:daemon-plugin-demo-Demo_Lock:jar`.

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // PLUGINS-1 example community module. Found by settings.gradle.kts scanning plugins/community; nothing outside this
 // folder names it. Builds ONE jar (build/libs/Acme_Hello.jar, as module.json says) holding only this module's
 // classes: the app provides the plugin API, Compose and the Kotlin runtime at load time.

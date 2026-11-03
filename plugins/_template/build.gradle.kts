@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // PLUGINS-2 starter template. Copied to plugins/community/<Vendor_Module>/, settings.gradle.kts finds it by scanning
 // and builds ONE jar named after module.json's "name" (build/libs/<Vendor_Module>.jar). The jar holds only this
 // module's classes: the app provides the plugin API, Compose and the Kotlin runtime when it loads the jar.

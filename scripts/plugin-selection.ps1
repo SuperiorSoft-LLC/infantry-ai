@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) SuperiorSoft LLC
 # BUILD-PLUGINS-1: plugin selection for the packaging script. Pure functions (dot-sourced by package-dist.ps1 and by
 # plugin-selection.tests.ps1); ids, classes and presets are DATA from plugins/build-presets.json.
 

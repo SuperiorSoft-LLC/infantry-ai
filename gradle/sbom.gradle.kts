@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // LICENSE-NOTICES-2: SBOM of the shipped artifacts. DRAFT until the public launch.
 // Run: ./gradlew generateSbom --console=plain   -> build/sbom/<artifact>.cdx.json (CycloneDX 1.5 JSON, components only)
 // Each artifact's runtime classpath is resolved inside its own project and every external module is listed.

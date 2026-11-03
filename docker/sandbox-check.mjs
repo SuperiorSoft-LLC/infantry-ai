@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // Sandbox check (SANDBOX-1, ticket d4c1dbd9; copy it in first: docker compose -f docker/docker-compose.yml cp docker/sandbox-check.mjs infantry-ai:/tmp/): drive agents inside the running container with the OWNER token, to prove what
 // a sandboxed agent can and cannot do. Node only, no deps. Run inside the container:
 //   docker compose -f docker/docker-compose.yml exec infantry-ai node /tmp/sandbox-check.mjs setup

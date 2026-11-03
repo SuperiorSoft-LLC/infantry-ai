@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // DP-7c: Infantry_Notes's daemon half, the decisions and issues logs (stores, frames, Knowledge records).
 // Compiled against the daemon API only (compileOnly: the daemon provides it at run time); the wire DTOs (infantryProtocol) are shaded in;
 // module.json's `daemon.jar` names the jar this builds. `:daemon-plugin-official-Infantry_Notes:jar`.

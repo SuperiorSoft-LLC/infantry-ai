@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.persistence
 
 /** DP-5f-4a: the stored ticket / link row types (moved from core Records.kt, package unchanged). */

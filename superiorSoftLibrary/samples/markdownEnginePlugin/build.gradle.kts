@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // MD-PLUGIN-1: the example markdown engine plugin. A plain Kotlin/JVM module that is NOT part of the app: it is built
 // to ONE jar the app loads from <state dir>/markdown-engines/. Copy this module to write your own engine (README.md).
 plugins {

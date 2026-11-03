@@ -1,4 +1,6 @@
 #!/bin/sh
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) SuperiorSoft LLC
 # Infantry AI headless daemon (no UI). Java: the bundled runtime/ first, then JAVA_HOME, then `java` on PATH (21+).
 # Configure with INFANTRY_* environment variables (README.txt next to bin/); extra JVM flags go in INFANTRY_JAVA_OPTS.
 APP_HOME=$(cd "$(dirname "$0")/.." && pwd -P) || exit 1

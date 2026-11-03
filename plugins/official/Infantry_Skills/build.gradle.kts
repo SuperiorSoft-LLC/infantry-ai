@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // RUNTIME-9 (docs/RUNTIME-PLUGINS-AUDIT.md section 3, step 9): official module Infantry_Skills, the right-hand Skills tab, out of the shell
 // build into its own project. One source for every platform (D9):
 //  - desktop: build/libs/Infantry_Skills.jar (this project's jvm jar: its classes, its signed module.json and a ServiceLoader

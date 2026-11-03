@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // RUNTIME-20 (docs/RUNTIME-PLUGINS-AUDIT.md, "AppUi remaining" F4): official module Infantry_Header, the window's title bar and
 // project picker, out of Infantry_AppUi and infantryUiCore into its own project. One source for every platform (D9):
 //  - desktop: build/libs/Infantry_Header.jar (this project's jvm jar: its classes, its signed module.json and a ServiceLoader

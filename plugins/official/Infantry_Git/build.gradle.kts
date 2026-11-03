@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // RUNTIME-6 (docs/RUNTIME-PLUGINS-AUDIT.md section 3, step 7): official module Infantry_Git, the Git tab (its tab tree ShellGit), out of the shell
 // build into its own project. One source for every platform (D9):
 //  - desktop: build/libs/Infantry_Git.jar (this project's jvm jar: its classes, its signed module.json and a ServiceLoader
