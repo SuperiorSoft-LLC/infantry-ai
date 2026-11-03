@@ -53,6 +53,7 @@ fun ApplicationScope.AgentHqWindow(onCloseRequest: () -> Unit, content: @Composa
     Window(onCloseRequest = onCloseRequest, icon = icon, state = state, title = ShellApp.current?.manifest?.windowTitle ?: "Infantry AI", undecorated = true, resizable = true) {
         val frame = window
         LaunchedEffect(frame) { frame.minimumSize = MIN_SIZE }
+        LaunchedEffect(frame, state.placement) { WindowCorners.apply(frame, round = state.placement == WindowPlacement.Floating) }
         // INSTALL-REFOCUS-1: what a refused second launch's activation brings forward (only the installed app routes it).
         DisposableEffect(frame) {
             WindowActivation.register { WindowActivation.bringToFront(frame) { state.isMinimized = false } }
