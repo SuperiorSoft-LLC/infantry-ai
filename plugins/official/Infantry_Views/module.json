@@ -29,6 +29,13 @@
       { "key": "value", "type": "text", "label": "Value" },
       { "key": "tone", "type": "select", "label": "Tone", "default": "default", "options": ["default", "muted", "good", "warn", "bad"] },
       { "key": "hint", "type": "text", "label": "Hint" } ] },
+    { "type": "ui.list", "title": "List", "fields": [ { "key": "empty", "type": "text", "label": "Empty text" } ] },
+    { "type": "ui.table", "title": "Table", "fields": [ { "key": "empty", "type": "text", "label": "Empty text" } ] },
+    { "type": "ui.button", "title": "Button", "fields": [
+      { "key": "label", "type": "text", "label": "Label" },
+      { "key": "style", "type": "select", "label": "Style", "default": "secondary", "options": ["primary", "secondary", "danger"] },
+      { "key": "confirm", "type": "text", "label": "Confirm text" },
+      { "key": "enabled", "type": "checkbox", "label": "Enabled", "default": true } ] },
     { "type": "ui.unknown", "title": "Unknown widget", "fields": [ { "key": "text", "type": "text", "label": "Text" } ] }
   ]
 }
