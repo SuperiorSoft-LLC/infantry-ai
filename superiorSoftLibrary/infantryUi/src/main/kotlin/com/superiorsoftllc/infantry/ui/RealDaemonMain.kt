@@ -221,7 +221,7 @@ internal class PinnedDaemonHost(
     local: LocalServer? = null,
     private val activeFile: ActiveServerFile? = null,
     /** VOICE-PLUGIN-1: where voice plugins are installed (`<stateDir>/plugins`); null = OS voice only, no Plugins section (tests). */
-    pluginsDir: File? = null,
+    private val pluginsDir: File? = null,
 ) : PlatformHost by base {
     private val pluginStore = pluginsDir?.let { com.superiorsoftllc.infantry.ui.voice.plugin.VoicePluginStore(it) }
 
@@ -232,6 +232,22 @@ internal class PinnedDaemonHost(
         base.speaker?.let { os -> pluginStore?.let { com.superiorsoftllc.infantry.ui.voice.plugin.PluginSpeaker(it, os) } ?: os }
 
     override val localServer: LocalServer? = local
+
+    /**
+     * PLUGIN-UI-1: Settings > Plugins drives this machine's plugin manager (same plugins root and bundled root as the daemon and
+     * the CLI). Only while the window shows this machine's own daemon: a remote server's plugins are not managed from here.
+     */
+    override val pluginManager: com.superiorsoftllc.infantry.plugin.api.PluginManagerPort? by lazy {
+        if (remote != null || pluginsDir == null) null else runCatching {
+            val dir = stateDir()
+            com.superiorsoftllc.infantry.daemon.plugins.manager.PluginManagerPortAdapter(
+                com.superiorsoftllc.infantry.daemon.plugins.manager.PluginManager(
+                    com.superiorsoftllc.infantry.plugin.host.PluginFolders.root(dir, { System.getenv(it) }), dir,
+                    com.superiorsoftllc.infantry.plugin.host.PluginFolders.bundledRoot({ System.getenv(it) }),
+                ),
+            )
+        }.getOrNull()
+    }
 
     override fun activeServer(): String? = remote?.url
 

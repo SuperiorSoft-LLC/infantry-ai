@@ -97,6 +97,8 @@ data class PluginRow(
     val history: List<String>,
     /** REGISTRY-1a: the catalog's reason when the installed version is yanked there; null otherwise. */
     val yanked: String? = null,
+    /** PLUGIN-UI-1: who signed the installed copy (the ledger's); null = unsigned or bundled. */
+    val signer: String? = null,
 )
 
 data class CatalogHit(val source: String, val cls: PluginClass, val entry: CatalogEntry, val latest: CatalogVersion?)
@@ -310,6 +312,7 @@ class PluginManager(
                 row?.source ?: if (bundled) "bundled" else null, m.license, RequestedGrants.of(m), row?.granted.orEmpty(), row?.history.orEmpty(),
                 yanked = cat.filter { it.id == c.folderName }.flatMap { it.versions }.firstOrNull { it.version == m.version && it.yanked }
                     ?.let { it.yankedReason ?: "no reason given" },
+                signer = row?.signer,
             )
         }.sortedBy { it.id }
     }

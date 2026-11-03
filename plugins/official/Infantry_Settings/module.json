@@ -24,6 +24,10 @@
     {
       "id": "infantry.settings",
       "container": "center"
+    },
+    {
+      "id": "infantry.settings.plugins",
+      "container": "center"
     }
   ],
   "config": [
