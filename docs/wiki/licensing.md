@@ -139,7 +139,7 @@ From the map (sections 5, 6, 7):
    `pty4j` (EPL-1.0) against MPL; `jlayer`, ML Kit, JDK and Docker base obligations; the effect of the Apache patent
    clause on a hosted orchestrator.
 3. **CLA text** and a bot to enforce it.
-4. **Notices**: extend `THIRD-PARTY-NOTICES.md` (sqlite-jdbc, slf4j, Noto font, js-joda, zxing, jlayer, ML Kit,
+4. **Notices** (DRAFT done in LICENSE-NOTICES-2): `NOTICE`, `THIRD-PARTY-NOTICES.md`, task `./gradlew generateSbom`. Open: jlayer replacement, mp3 provenance. Original list: sqlite-jdbc, slf4j, Noto font, js-joda, zxing, jlayer, ML Kit,
    Compose/Skiko, JDK), generated from an SBOM.
 5. **Replace or document** `jlayer` and the sound file of unknown origin.
 6. **Trademark policy** and a name search/registration.
