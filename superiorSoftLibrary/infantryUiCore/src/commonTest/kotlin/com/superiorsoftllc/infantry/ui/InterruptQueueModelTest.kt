@@ -7,6 +7,7 @@ import com.superiorsoftllc.infantry.ui.model.QueueSend
 import com.superiorsoftllc.infantry.ui.model.QueuedPrompt
 import com.superiorsoftllc.infantry.ui.model.TranscriptEntry
 import com.superiorsoftllc.infantry.ui.model.interruptBlocker
+import com.superiorsoftllc.infantry.ui.model.queueDrainTargets
 import com.superiorsoftllc.infantry.ui.model.reduce
 import com.superiorsoftllc.infantry.ui.model.queuedFor
 import com.superiorsoftllc.infantry.ui.model.withQueue
@@ -79,5 +80,29 @@ class InterruptQueueModelTest {
         assertTrue(after.queueSending.isEmpty())
         val other = reduce(sending(), Envelope(Envelope.TURN, "mail for you", "a", sequence = 2), 10)
         assertEquals(setOf("queue-1"), other.queueSending.keys, "another turn (mail) does not settle it")
+    }
+}
+
+/** QUEUE-STUCK-1: the queue drains whenever its agent is at rest, even when the busy-to-idle edge was never observed. */
+class QueueStuckModelTest {
+    private fun agent(state: SessionState, turn: Boolean = false) = AgentView(
+        session = SessionRecord("a", "stub", "/w", spawnedAt = 1, lastHeartbeat = 1, state = state, providerSessionId = "p", turnActive = turn),
+        entries = emptyList(),
+    )
+    private fun st(a: AgentView) = AppState(agents = mapOf("a" to a)).withQueue("a", listOf(QueuedPrompt("held", 1)))
+
+    @Test fun `an idle agent with a queue is drained on a frame that is not the turn-end edge`() {
+        val idle = st(agent(SessionState.IDLE))
+        assertEquals(listOf("a"), queueDrainTargets(idle, idle, tracksSends = true))
+    }
+
+    @Test fun `a send in flight holds the next queued message back`() {
+        val s = st(agent(SessionState.IDLE)).copy(queueSending = mapOf("queue-1" to QueueSend("a", QueuedPrompt("x", 1))))
+        assertEquals(emptyList(), queueDrainTargets(s, s, tracksSends = true))
+    }
+
+    @Test fun `a busy agent is not drained`() {
+        val s = st(agent(SessionState.BUSY, turn = true))
+        assertEquals(emptyList(), queueDrainTargets(s, s, tracksSends = true))
     }
 }

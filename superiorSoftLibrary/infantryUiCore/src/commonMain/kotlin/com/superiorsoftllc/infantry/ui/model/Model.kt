@@ -1169,6 +1169,20 @@ fun promptBlocker(agent: AgentView): String? {
     }
 }
 
+/**
+ * QUEUE-STUCK-1: which queued agents to send their next queued message now. An agent at rest with a non-empty queue is
+ * drained on ANY frame, not only on the busy-to-idle edge: a turn started by mail or automation can end between two
+ * frames we saw, and the edge is then never observed. With request ids ([tracksSends]) a send in flight for the agent
+ * ([AppState.queueSending]) holds the next one back; an older daemon has no such handle, so it keeps the edge rule.
+ */
+fun queueDrainTargets(before: AppState, after: AppState, tracksSends: Boolean): List<String> =
+    after.queued.keys.filter { sessionId ->
+        val agent = after.agents[sessionId] ?: return@filter false
+        if (isBusy(agent) || agent.session.state != SessionState.IDLE || promptBlocker(agent) != null) return@filter false
+        if (tracksSends) after.queueSending.values.none { it.sessionId == sessionId }
+        else before.agents[sessionId]?.let { isBusy(it) } ?: false
+    }
+
 /** A message held while its agent is busy: the text as the human typed it, and when it was queued. */
 data class QueuedPrompt(val text: String, val at: Long)
 
