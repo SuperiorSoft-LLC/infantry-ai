@@ -3,7 +3,7 @@
 <h1 align="center">Infantry AI</h1>
 
 <p align="center">
-  <b>Run a whole team of coding agents from one ticket board.</b><br>
+  <b><!-- shared:tagline -->Run a whole team of coding agents from one ticket board.<!-- /shared:tagline --></b><br>
   Windows · Android · Headless server (Docker or plain archive)
 </p>
 
@@ -33,10 +33,7 @@ and Infantry AI starts the agent on its own git branch and worktree, keeps its m
 knowledge in one daemon, and lets you watch, steer and merge the work from your desktop or your phone. The daemon runs
 on your machine or on your own server: your code, keys and agent output never pass through a third-party service.
 
-**Foundation and free, on purpose.** The core (the daemon) is the foundation: it is licensed MPL-2.0 to protect its
-integrity, so apps and plugins can rely on a stable base that does not break, with backward compatibility as the promise.
-Everything built on top (the SDKs, the UI core, the apps and every plugin) is free under Apache-2.0: build, fork, sell and
-extend it without copyleft. See [Licensing](docs/wiki/licensing.md) (draft, not yet in effect).
+**Foundation and free, on purpose.** <!-- shared:license_line -->The core (the daemon) is the foundation: it is licensed MPL-2.0 to protect its integrity, so apps and plugins can rely on a stable base that does not break, with backward compatibility as the promise. Everything built on top (the SDKs, the UI core, the apps and every plugin) is free under Apache-2.0: build, fork, sell and extend it without copyleft.<!-- /shared:license_line --> See [Licensing](docs/wiki/licensing.md) (draft, not yet in effect).
 
 > **Status: early preview.** The app is used daily by its own team, but it is not 1.0. Read
 > [Roadmap and known issues](#roadmap-and-known-issues) before you rely on it.
