@@ -310,7 +310,7 @@ class ScriptHooks(
                 ?: return fail(project, hook, ticketId, "no script '${hook.script}' in .infantry/scripts/")
             val engine = engines.byExtension(script.extension) ?: return fail(project, hook, ticketId, "no engine loaded for .${script.extension}")
             val invoker = invokerOf(project, hook)
-            val who = ScriptCaller(hook.ownerSession.orEmpty(), hook.ownerRole.orEmpty())
+            val who = if (hook.to == null) ScriptCaller("", "") else ScriptCaller(hook.ownerSession.orEmpty(), hook.ownerRole.orEmpty())
             markedSession = (args["workerSession"] ?: args["sessionId"]) as? String
             markedSession?.let { mark(it, hook) }
             hookTo = hook.to?.takeIf { it != markedSession }?.also { mark(it, hook) }
@@ -369,9 +369,15 @@ class ScriptHooks(
         if (r == null || r.isError) log("hook ${hook.id} ($project): report could not be delivered: ${r?.text?.take(200)}")
     }
 
-    /** The identity a hook run has: its owner's session and role (SCRIPT-4: carried, never tested). Added by the owner: the owner. */
-    private fun invokerOf(project: String, hook: Hook): ToolInvoker =
-        ToolInvoker(if (hook.ownerIsOwner || hook.ownerSession == null) Caller(owner = true) else Caller(owner = false, agent = true, activeSession = hook.ownerSession),
+    /**
+     * The identity a hook run has. HOOK-OWNER-1: a project hook (timer, lane, event) belongs to the project and runs as the
+     * project's automation identity (owner permissions, no session, depth 0); [Hook.ownerSession] is only the audit record of who
+     * last edited it and never decides the run identity, so a worker's edit (or its session ending) changes nothing.
+     * A mail hook (`to` set) is bound to its session and keeps that session's identity.
+     */
+    internal fun invokerOf(project: String, hook: Hook): ToolInvoker =
+        if (hook.to == null) ToolInvoker(Caller(owner = true), null, null, project, "script:${hook.script}")
+        else ToolInvoker(if (hook.ownerIsOwner || hook.ownerSession == null) Caller(owner = true) else Caller(owner = false, agent = true, activeSession = hook.ownerSession),
             hook.ownerSession, hook.ownerRole, project, "script:${hook.script}")
 
     private fun readTicket(ticketId: String): JsonObject? {

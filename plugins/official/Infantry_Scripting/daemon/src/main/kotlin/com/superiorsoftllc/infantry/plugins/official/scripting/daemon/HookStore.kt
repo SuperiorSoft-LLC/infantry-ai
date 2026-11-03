@@ -61,7 +61,7 @@ data class Hook(
     val script: String,
     val args: JsonObject = JsonObject(emptyMap()),
     val enabled: Boolean = true,
-    /** Who added it (data, never a role test): the session and role whose identity the run uses, and whether the owner added it. */
+    /** HOOK-OWNER-1: who last edited it (audit only, never a role test). A mail hook (`to` set) runs as this session; every other hook runs as the project. */
     val ownerSession: String? = null,
     val ownerRole: String? = null,
     val ownerIsOwner: Boolean = false,
@@ -78,7 +78,7 @@ data class Hook(
         to?.let { put("to", it) }
     }
 
-    fun line(): String = "$id  on $on${to?.let { " to $it" } ?: ""} -> $script${ownerSession?.let { " (added by $it${ownerRole?.let { r -> "/$r" } ?: ""})" } ?: ""}${if (args.isEmpty()) "" else " $args"}${if (enabled) "" else "  [disabled]"}"
+    fun line(): String = "$id  on $on${to?.let { " to $it" } ?: ""} -> $script${ownerSession?.let { " (edited by $it${ownerRole?.let { r -> "/$r" } ?: ""})" } ?: ""}${if (args.isEmpty()) "" else " $args"}${if (enabled) "" else "  [disabled]"}"
 }
 
 /**
