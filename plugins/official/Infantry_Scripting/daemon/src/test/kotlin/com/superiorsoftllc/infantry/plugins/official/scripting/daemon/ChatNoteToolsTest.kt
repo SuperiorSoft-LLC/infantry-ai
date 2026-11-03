@@ -38,6 +38,15 @@ class ChatNoteToolsTest {
         assertTrue(tools.handle(call("""{"text":"x","level":"loud"}""")).isError)
     }
 
+    @Test fun `wake on a busy session succeeds, other wake failures and unknown sessions still fail`() {
+        val busy = ChatNoteTools({ "p1" }, { pushed += it }, { stored += it }, { _, _ -> throw IllegalStateException("session s1 already has a run in flight") })
+        val r = busy.handle(call("""{"text":"x","wake":true}"""))
+        assertTrue(!r.isError, r.text); assertTrue(r.text.contains("busy"), r.text); assertEquals(1, stored.size)
+        val broken = ChatNoteTools({ "p1" }, { pushed += it }, { stored += it }, { _, _ -> throw IllegalStateException("boom") })
+        assertTrue(broken.handle(call("""{"text":"x","wake":true}""")).isError)
+        assertTrue(tools.handle(call("""{"text":"x","sessionId":"zzz","wake":true}""")).isError)
+    }
+
     @Test fun `rate limit`() {
         repeat(3) { tools.handle(call("""{"text":"x"}""")) }
         assertTrue(tools.handle(call("""{"text":"x"}""")).isError)
