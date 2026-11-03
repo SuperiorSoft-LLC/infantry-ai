@@ -61,8 +61,13 @@ fun TicketCommentsPanel(ticketId: String, api: TicketCommentsApi, modifier: Modi
         when {
             list == null -> Text("Loading comments…", color = Palette.Muted, fontSize = 11.sp)
             list.isEmpty() -> Text("No comments yet.", color = Palette.Muted, fontSize = 11.sp)
-            else -> list.forEach { c ->
-                CommentRow(c, onResolve = { scope.launch { api.resolve(c.id).onFailure { error = "Resolve: ${it.message}" }; reload() } })
+            else -> {
+                // AGENT-TASKS-6: the latest handoff is its own block above the thread; any other kind (known or not) is a note row.
+                val handoff = list.lastOrNull { it.kind == "handoff" }
+                handoff?.let { HandoffBlock(it) }
+                list.filter { it !== handoff }.forEach { c ->
+                    CommentRow(c, onResolve = { scope.launch { api.resolve(c.id).onFailure { error = "Resolve: ${it.message}" }; reload() } })
+                }
             }
         }
         Composer(onSend = { body, resolved ->
@@ -71,6 +76,18 @@ fun TicketCommentsPanel(ticketId: String, api: TicketCommentsApi, modifier: Modi
                 reload()
             }
         })
+    }
+}
+
+const val HANDOFF_TAG = "ticket-handoff"
+
+/** AGENT-TASKS-6: the latest handoff note (what the last worker left for the next one). */
+@Composable
+private fun HandoffBlock(c: TicketComment) {
+    Column(Modifier.fillMaxWidth().background(Palette.Panel, RoundedCornerShape(6.dp)).padding(8.dp).testTag(HANDOFF_TAG), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("Handoff", color = Palette.Accent, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+        Text(c.time, color = Palette.Muted, fontSize = 10.sp)
+        parseChatMarkdownSafely(BuiltInChatMarkdownEngine, c.body).forEach { DefaultChatBlockRenderer.Render(it) }
     }
 }
 

@@ -684,6 +684,7 @@ fun TicketCardBadgesSection(card: BoardCardHost, modifier: Modifier = Modifier) 
         }
         if (t.wontFix) Chip("won't fix", Palette.Danger)
         if (t.queuedFor != null) Chip("queued", Palette.Accent)
+        AgentTaskBadges(t)
         ReportFlagChip(deps.reportFlag(t), Modifier.testTag("ticket-report-${t.id}"))
         // KNOWLEDGE-PTR-2: how many tickets this one relates to (relates_to links + series members).
         RelatedView.count(t).takeIf { it > 0 }?.let { Chip("$it related", Palette.Muted, Modifier.testTag("ticket-related-count-${t.id}")) }
@@ -783,6 +784,7 @@ fun TicketCardActionsSection(card: BoardCardHost, modifier: Modifier = Modifier)
             TextButton(onClick = { card.openAgent(sid) }) { Text("Agent", fontSize = 11.sp) }
         }
         Spacer(Modifier.weight(1f))
+        AgentTaskMenu(card)
         // TICKET-COMMENTS-1: the full-open modal for this ticket (the inline editor stays).
         val shellBoard = com.superiorsoftllc.infantry.ui.shell.LocalShellContext.current?.board
         if (shellBoard != null) TextButton(onClick = { shellBoard.openTicket(t.id) }, modifier = Modifier.testTag(TICKET_OPEN_TAG_PREFIX + t.id)) { Text("Open", fontSize = 11.sp) }
