@@ -488,7 +488,7 @@ class NotesExtraPlugin : UiPlugin {
 }
 ```
 
-`Acme_NotesExtra/build.gradle.kts` is the same file as `Acme_Notes/build.gradle.kts`.
+`Acme_NotesExtra/build.gradle.kts` is the same file as `Acme_Notes/build.gradle.kts`. <!-- docs-freshness: ignore -->
 
 To try it, enable both modules in `modules.json` (`Acme_Notes` with `allow` `["notifications","daemon.code","daemon.tool"]`),
 restart, open the Notes tab, and call `acme_notes_count` from an agent or `agenthq mcp serve`.

@@ -107,7 +107,7 @@ Gaps in the promise, stated plainly:
 - **The UI plugin API is exact-match.** A module with a different `apiVersion` is refused; there is no range today.
 - **Protocol contract text.** The code comments point to `CONTRACT.md`, which is not in the repository paths checked
   for this page; the version number in code is the contract's only recorded form here.
-- **No guard test for the license map yet** (map section 8 proposes `LicenseMapGuardTest`; it is text only).
+- **No guard test for the license map yet** (map section 8 proposes `LicenseMapGuardTest`; it is text only). <!-- docs-freshness: ignore -->
 - **Where the protocol belongs** (MPL or Apache) is undecided (S3, S13).
 
 ## 5. Trademark: the name and the logo

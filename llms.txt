@@ -1,0 +1,36 @@
+# Infantry AI
+
+> Infantry AI is a command post for coding agents: a daemon with a ticket board, agents on their own git branches, mail, shared project knowledge, Lua scripts and hooks, plus desktop, web, Android and CLI clients. The core is small and generic; every feature is a plugin (a module with a `module.json`). Core is MPL-2.0, everything else Apache-2.0.
+
+Read AGENTS.md first. Facts in these docs come from the code; where an older design record disagrees, the code wins.
+
+## Start here
+
+- [AGENTS.md](AGENTS.md): the guide for AI coding agents: rules, repo layout, build and test commands, where each change goes.
+- [Architecture](docs/wiki/Architecture.md): the three layers, the daemon, the protocol, the request flow from a click to the daemon and back, slots and child plugins, scripting.
+- [Recipes](docs/wiki/recipes/README.md): worked "how to add X" guides with the exact files to touch.
+
+## Build plugins
+
+- [Make a plugin](docs/wiki/make-a-plugin.md): from the template to a built UI + daemon example; every `module.json` field.
+- [Plugins](docs/wiki/Plugins.md): module tiers, panels and slots, config, building, installing, signing.
+- [UI plugin API](docs/wiki/plugin-api.md): every public type of the UI plugin API.
+- [Daemon plugin API](docs/wiki/daemon-plugin-api.md): tools, routes, hooks, events, services, storage, the guard.
+- [Harnesses and providers](docs/wiki/Harnesses.md): adding an agent CLI and a model group.
+
+## Automate and configure
+
+- [Scripting](docs/wiki/Scripting.md): the Lua API, hooks, the process bridge, settings that govern scripts.
+- [Settings](docs/wiki/Settings.md): scopes (app, project, role, session) and cost-saving defaults.
+
+## Project
+
+- [README](README.md): install and first run.
+- [CONTRIBUTING](CONTRIBUTING.md): building, branches, testing.
+- [Licensing](docs/wiki/licensing.md): what is MPL-2.0 and what is Apache-2.0, per module.
+
+## Optional
+
+- [DAEMON-CORE](docs/DAEMON-CORE.md): the design record of the daemon core split (dated).
+- [AGENT-QUICKREF](superiorSoftLibrary/agentHq/docs/AGENT-QUICKREF.md): the CLI for agents.
+- [MCP](superiorSoftLibrary/agentHq/docs/MCP.md): the MCP server and its tools.
