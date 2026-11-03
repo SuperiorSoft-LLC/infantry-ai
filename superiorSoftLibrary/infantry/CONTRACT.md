@@ -847,7 +847,7 @@ The honesty rule of `project_git` holds: `available = false` with a `reason` is 
   changesTruncated, commits[], commitsTruncated}`. `path` must be one of the `GitWorktree.path`s the project's
   repository lists, or the frame is refused: `error` `project_git_worktree_status refused: not a worktree of this
   project's repository: '<path>'`. `base` is resolved as the 1.65.0 default base (the branch's recorded base, then
-  `"feature-agenthq"-mvp`, origin/HEAD, `init.defaultBranch`, `main`, `master`, never the branch itself); `ahead` /
+  `feature-agenthq-mvp`, origin/HEAD, `init.defaultBranch`, `main`, `master`, never the branch itself); `ahead` /
   `behind` count `base...HEAD` and are null with a `baseReason` when there is no base (detached HEAD, no commit, no
   base branch). `uncommitted` counts distinct paths with staged, unstaged or untracked changes, measured before the
   `changes` cap. `commits` are HEAD's newest `historyLimit` (1..200) commits, the same `GitCommit` as
@@ -1144,7 +1144,7 @@ ADDITIVE; a 1.62.0 client keeps working (empty data and a bare project id answer
 ADDITIVE; a 1.64.0 client keeps working (it never sends the new frames, and unknown keys are ignored). The daemon's `ready` frame now reports `contract=1.65.0` (it was `1.64.0`). No schema change.
 - **`project_git_branches`** (data = `{projectId}`) → **`project_git_branch_list`**: `{projectId, available, reason, current?, branches[{name, head, upstream?, isWorktree, worktreePath?}], truncated}`. Local branches only (`refs/heads/`), capped at 300 (`truncated`). `current` is the branch checked out in the project's directory, null on a detached HEAD. `isWorktree`/`worktreePath` say which branches a git worktree has checked out.
 - **`project_git_branch_changes`** (data = `{projectId, branch, base?}`) → **`project_git_branch_diffstat`**: `{projectId, branch, base, mergeBase, available, reason, changes[{path, status, fromPath?, added, removed, binary}], truncated}`. The diff is `mergeBase..branch` (rename detection on), where `mergeBase` is `git merge-base <base> <branch>`: what the BRANCH changed since it forked, never the working tree, and never what the base did after the fork. `status` uses the `ChangeKind` names (`ADDED`, `MODIFIED`, `DELETED`, `RENAMED`); `fromPath` is set on a rename. `added`/`removed` are line counts, `0` with `binary = true` for a binary file. Capped at 500 (`truncated`).
-  - `base` is a local branch name or a full 40-hex commit id. When absent the daemon picks, in order: the branch's RECORDED base (its `<branch>=<sha>` line in `superiorSoftLibrary/infantry/preflight/expected-bases.properties`, as committed on the branch, else as on disk in the repository), then `"feature-agenthq"-mvp`, then the repository's default branch (`origin/HEAD`, `init.defaultBranch`, `main`, `master`); never the branch itself. The answer's `base` names what was used.
+  - `base` is a local branch name or a full 40-hex commit id. When absent the daemon picks, in order: the branch's RECORDED base (its `<branch>=<sha>` line in `superiorSoftLibrary/infantry/preflight/expected-bases.properties`, as committed on the branch, else as on disk in the repository), then `feature-agenthq-mvp`, then the repository's default branch (`origin/HEAD`, `init.defaultBranch`, `main`, `master`); never the branch itself. The answer's `base` names what was used.
 - **`project_git_branch_diff`** (data = `{projectId, branch, base?, path}`) → **`project_git_patch`**, the 1.36.0 shape plus **`branch`** (the branch this patch belongs to; `null` on a working-tree `project_git_diff` answer). `staged` is always false. Same `binary` and 256 000-character `truncated` rules.
 - **Honesty rule, as in 1.35.0:** `available = false` with a `reason` is UNKNOWN and must never be rendered as clean: no directory, not a repository, no base could be resolved, or the branch and base share no history (no merge-base). `available = true` with an empty list is a branch that changed nothing.
 - **Refusals** are `error` frames `<frame> refused: <why>`, nothing run: an unknown project; a `path` that is blank, absolute, has a `..` segment or a control character; a `branch` (or a non-sha `base`) that is blank, starts with `-` or `/` or `refs/`, contains `..`, `@{`, a backslash or a control character, or is not an existing local branch (checked with `git check-ref-format refs/heads/<name>` and a lookup). A name reaches git only as `refs/heads/<name>`; every later command gets the resolved commit ids.
@@ -2597,7 +2597,7 @@ MVP Sprint-Zero I0 integrated the project and story slices. These additive frame
 `projectId` fields are part of the published 1.8.0 contract; the client may use them against a 1.8.0
 daemon. Existing frame names and meanings are unchanged.
 
-**Project** (implemented by slice A, branch `"feature-agenthq"-mvp-scope`):
+**Project** (implemented by slice A, branch `feature-agenthq-mvp-scope`):
 
 | Type | Shape |
 |---|---|
@@ -2610,7 +2610,7 @@ daemon. Existing frame names and meanings are unchanged.
 Frames (1.8.0): `project_save` and `project_get` are answered with `project`; `project_list` (empty
 data) with `projects`. Refusals follow the standing convention (`<frame> refused: <reason>`).
 
-**Story board** (implemented by slice B, branch `"feature-agenthq"-mvp-board`):
+**Story board** (implemented by slice B, branch `feature-agenthq-mvp-board`):
 
 | Type | Shape |
 |---|---|

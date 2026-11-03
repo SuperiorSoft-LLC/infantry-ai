@@ -1,6 +1,6 @@
 # QA log
 
-## LAUNCH-QA-2 (2026-10-30), dev tip d75b4f06 ("feature-agenthq"-mvp already merged; no code changed)
+## LAUNCH-QA-2 (2026-10-30), dev tip d75b4f06 (feature-agenthq-mvp already merged; no code changed)
 
 Gradle flags: `--no-parallel`, `-Xmx3g/-XX:MaxMetaspaceSize=2g` (Gradle + Kotlin daemon), foreground, no tail masking.
 

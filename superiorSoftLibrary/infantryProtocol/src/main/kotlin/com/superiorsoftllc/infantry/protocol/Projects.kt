@@ -5,7 +5,7 @@ import kotlinx.serialization.Serializable
 /*
  * MVP Sprint-Zero (slice 0 freeze): the PROJECT wire types.
  *
- * IMPLEMENTED BY: MVP slice A (branch `"feature-agenthq"-mvp-scope`, worktree ticket f96655b0).
+ * IMPLEMENTED BY: MVP slice A (branch `feature-agenthq-mvp-scope`, worktree ticket f96655b0).
  * This file is the frozen SEAM only: it names the types and carries NO behaviour -- no store,
  * no daemon dispatch, no validation. Slice A builds that half behind these names; slice B builds
  * its half without talking to A. Neither may rename or reshape a type here: the RED tests of

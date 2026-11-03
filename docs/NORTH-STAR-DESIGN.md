@@ -1,6 +1,6 @@
 # NORTH STAR: the shell is a replicable canvas; a section exports as a plugin and drops into a fresh shell
 
-Ticket b9644864. This is a design note only: no code, no Gradle, no tests. Base: `"feature-agenthq"-mvp` @ a6660b31.
+Ticket b9644864. This is a design note only: no code, no Gradle, no tests. Base: `feature-agenthq-mvp` @ a6660b31.
 It builds on:
 - docs/BLOCKS-LAYOUT-DESIGN.md: 6p-6r (placeholders, `ShellContext`, the trust kernel), 6t (PAGE BUILDER: types,
   instances, the export format, `fills[].layout`).

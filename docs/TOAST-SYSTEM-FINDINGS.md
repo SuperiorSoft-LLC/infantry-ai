@@ -1,6 +1,6 @@
 # Toast system vs. the owner design (read-only verification, 2026-10-27)
 
-Base: "feature-agenthq"-mvp @ 9efb09a. Paths are under superiorSoftLibrary/infantryUiCore/src/commonMain/kotlin/com/superiorsoftllc/infantry/ui/.
+Base: feature-agenthq-mvp @ 9efb09a. Paths are under superiorSoftLibrary/infantryUiCore/src/commonMain/kotlin/com/superiorsoftllc/infantry/ui/.
 
 ## 1. Where it lives
 - `ToastHost.kt:69` `fun ToastHost(state: AppState, onOpen, modifier, reducedMotion)`: a concrete top-level composable. Card is `private fun Toast` (`ToastHost.kt:89`).

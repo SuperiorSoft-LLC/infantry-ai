@@ -1,7 +1,7 @@
 # RUNTIME-PLUGINS AUDIT: what loads at compile time today vs at runtime (goal D5)
 
 Ticket be38a342. This is a read-only audit. No code was changed, nothing was built, and no test was run.
-Base: `"feature-agenthq"-mvp` @ 0b145701.
+Base: `feature-agenthq-mvp` @ 0b145701.
 
 Goal (D5, owner 2026-10-28): every plugin loads at RUNTIME, and only core is compiled in. Core (D4) = the shell, the
 configuration and the plugin orchestration. Everything else is an official plugin that can be removed (D3).

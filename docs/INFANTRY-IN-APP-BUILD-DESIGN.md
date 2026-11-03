@@ -9,7 +9,7 @@ to the UI, stop it.
 
 ## 0. Base to build on
 
-- The integration branch is **`"feature-agenthq"-mvp`**, contract **1.32.1** (`EventVocabulary.VERSION`).
+- The integration branch is **`feature-agenthq-mvp`**, contract **1.32.1** (`EventVocabulary.VERSION`).
   `INTERRUPT` (1.32.1) exists there. It does not exist on `ahq-main`, which is still at 1.7.0.
   Every frame named below is designed as an additive minor bump on **1.32.1**, so the next version
   is **1.33.0**. Build the code on a branch cut from mvp, not from the checkout this note was

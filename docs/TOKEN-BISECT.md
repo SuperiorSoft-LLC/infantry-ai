@@ -56,7 +56,7 @@ TEST-TODO: with no ticket running and no mail, let a 30-min prompt trigger fire;
 
 ## PER-COMMIT (TOKEN-13, 2026-10-31)
 
-Method (static, deterministic, no model calls, no Gradle, no app launch): for each of the 49 first-parent merges on "feature-agenthq"-mvp from 2026-10-30 12:00 (54070dd3 .. 8cabc40b) read the tree with `git show <c>:<path>` and measured (script in /tmp, not committed):
+Method (static, deterministic, no model calls, no Gradle, no app launch): for each of the 49 first-parent merges on feature-agenthq-mvp from 2026-10-30 12:00 (54070dd3 .. 8cabc40b) read the tree with `git show <c>:<path>` and measured (script in /tmp, not committed):
 - **tools**: `infantry_*` tools declared in `plugins/official/*/module.json` (core `McpWatchTools` is the rest).
 - **schema chars**: characters of the string literals on name/description/schema lines (`description`, `type`, `enum`, `putJsonObject`, tool names) in tool-defining Kotlin (`plugins/official/*/daemon/**`, `cli/mcp`). A proxy for the text the model receives each turn; it is not the serialised `tools/list`.
 - **brief chars**: NOT measured per commit (rendering needs the runtime knowledge store and a fake ticket, i.e. Gradle test per commit). Proxy: size of `TicketBoard.brief()` = 586 chars at every commit (constant); `TicketBoard.kt` grew 107.4k -> 112.5k chars (brief inputs such as KNOWLEDGE-PTR-2 related tickets).

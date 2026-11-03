@@ -1,6 +1,6 @@
 # DEMO-QA-1: rebuild and retest of the public demo (2026-10-30)
 
-Tip tested: `1e1cb0a5` ("feature-agenthq"-mvp, after CORE-SPLIT-A, DAEMON-PLUGINS-3, ORCH-1, STALL-5, CLI-ENV-1, CONFIG-FIELDS-1..4).
+Tip tested: `1e1cb0a5` (feature-agenthq-mvp, after CORE-SPLIT-A, DAEMON-PLUGINS-3, ORCH-1, STALL-5, CLI-ENV-1, CONFIG-FIELDS-1..4).
 Docker was not used (Windows host, Linux image needs the engine and a 20 min image build); the local equivalent below runs
 the exact `dockerContext` output, which is what the Dockerfile copies into the image.
 

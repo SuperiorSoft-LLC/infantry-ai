@@ -42,11 +42,11 @@ and crash. More detail: [QUICKSTART.md](superiorSoftLibrary/infantry/docs/QUICKS
 
 ## Branches
 
-- `"feature-agenthq"-mvp` is the branch the app is built from.
+- `feature-agenthq-mvp` is the branch the app is built from.
 - Work happens on a short-lived branch per change, named after its ticket or issue, e.g. `ticket/<id>-<short-slug>`
   or `fix/<issue-number>-<short-slug>`.
 - Changes are batched into a `staging-agenthq*` branch, the full test gate runs once over the batch
-  ([docs/GATE.md](docs/GATE.md)), and the batch is promoted to `"feature-agenthq"-mvp` only after it passes.
+  ([docs/GATE.md](docs/GATE.md)), and the batch is promoted to `feature-agenthq-mvp` only after it passes.
 - Never force-push a shared branch.
 
 ## Testing
@@ -70,7 +70,7 @@ and crash. More detail: [QUICKSTART.md](superiorSoftLibrary/infantry/docs/QUICKS
 
 ## Pull requests
 
-Once outside contributions open: fork, branch from `"feature-agenthq"-mvp`, keep the PR small and focused, fill in the
+Once outside contributions open: fork, branch from `feature-agenthq-mvp`, keep the PR small and focused, fill in the
 pull request template, and link the issue it closes. A maintainer reviews it and merges it through the staging gate.
 
 ## Code style

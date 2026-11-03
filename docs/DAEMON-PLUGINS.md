@@ -173,7 +173,7 @@ The reference plugin `plugins/examples/Acme_DaemonHello` has one tool, one route
 
 `DaemonPluginMechanismTest` runs Acme_DaemonHello from its built jar as a community module: loaded, listed, called, routed,
 its hook run; a throwing hook disables only it; refused without grants; gone when its folder is removed.
-verifyBase: OK. '"feature-agenthq"-harness4' (HEAD adc32204) contains expected base 9534c95ecbe516c7af587247400300a067c12cd0.
+verifyBase: OK. 'feature-agenthq-harness4' (HEAD adc32204) contains expected base 9534c95ecbe516c7af587247400300a067c12cd0.
 
 `plugins/examples/Acme_PolicyHook` is the second reference: a tool that asks the policy for a frame's action and refusal
 (`api.policy.actionOf` / `refusal`) and a `frameGate` hook that counts frames by action kind (`PolicyHookExampleTest` runs

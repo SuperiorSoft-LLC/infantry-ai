@@ -89,7 +89,7 @@ The deployed demo = the wasm bundle built with `-Pdemo=true` served by a daemon 
 
 ## Phase 5: retiring the demo-build branch (WRITTEN DOWN, NOT RUN)
 
-Run only after DEMO-MERGE-1 is merged into dev ("feature-agenthq"-mvp) and the deployed demo is rebuilt from dev
+Run only after DEMO-MERGE-1 is merged into dev (feature-agenthq-mvp) and the deployed demo is rebuilt from dev
 (`-Pdemo=true` wasm + `INFANTRY_DEMO_LOCK=1` daemon) and checked. From the main checkout (`C:\Users\antho\agenthq-standalone`),
 PowerShell. Each step is reversible until the last `git branch -D`; the tag keeps demo-build's tip reachable anyway.
 
@@ -131,7 +131,7 @@ git worktree prune
 
 NOT covered, decide first (commits in neither demo-build nor dev on 2026-10-29): the `.worktrees/demo-loader` worktree (detached 874f3c6e), `parked/d4c1dbd9-demo-extras` (2),
 `ticket/2e6b444e-design-offline-demo-canned-data-web-demo` (1), `ticket/b4202754-fix-web-demo-missing-icon-glyphs-tofu-bo` (2),
-`ticket/d5eb35a0-fix-web-demo-remaining-tofu-glyphs-mobil` (1). Check with `git log --oneline "feature-agenthq"-mvp..<branch>`.
+`ticket/d5eb35a0-fix-web-demo-remaining-tofu-glyphs-mobil` (1). Check with `git log --oneline feature-agenthq-mvp..<branch>`.
 
 ## Phase 4: verification (run 2026-10-29 on d94f899b, exact commands)
 

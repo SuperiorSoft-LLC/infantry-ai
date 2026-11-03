@@ -8,7 +8,7 @@
   (INFANTRY_BUILD_ROOT, INFANTRY_BUILD_BACKUPROOT). A missing setting STOPS the script (exit 2) and writes nothing.
 
   Build mode (-Sha):
-    1. resolves the sha and requires it to be on the release branch ("feature-agenthq"-mvp),
+    1. resolves the sha and requires it to be on the release branch (feature-agenthq-mvp),
     2. builds it in a clean detached worktree under %TEMP% (createDistributable, --no-parallel, Xmx3g / Metaspace 2g),
        signed with -Keystore/-KeyAlias (IHQ_STOREPASS in env), else devSign (says so in the output and manifest),
     3. copies the app image to <build.root>\builds\<sha>\, writes BUILD-INFO.txt + MANIFEST.txt there,
@@ -44,7 +44,7 @@ param(
   [string[]]$Include,       # BUILD-PLUGINS-1: keep only these optional plugins (the other optional ones are left out)
   [string[]]$Exclude,       # BUILD-PLUGINS-1: leave these optional plugins out (core/official are refused)
   [string]$Preset,          # BUILD-PLUGINS-1: a named preset from plugins/build-presets.json (full, no-optional, core-only)
-  [string]$ReleaseBranch = '"feature-agenthq"-mvp',
+  [string]$ReleaseBranch = 'feature-agenthq-mvp',
   [string]$ProjectId
 )
 

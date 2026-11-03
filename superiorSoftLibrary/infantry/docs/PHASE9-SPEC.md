@@ -78,7 +78,7 @@ and nothing else) · `done`. An `in_review` column with a reviewer gate is defer
   does. `child_of` is structure, not ordering, and never holds a ticket. Deleting a ticket removes its
   links and re-evaluates its dependents.
 - **Why the daemon owns it.** State is what the daemon decides, never what a participant asserts. That is the session rule, `CONTRACT.md:440-442`. The UI's `reduce` is a
-  pure renderer (`infantryUi/.../ui/model/Model.kt`, branch `"feature-agenthq"-phase8`). A client that
+  pure renderer (`infantryUi/.../ui/model/Model.kt`, branch `feature-agenthq-phase8`). A client that
   bypasses the UI still meets the rule. The precedent is the pod DAG, whose `dependsOn` the
   orchestrator enforces (`Orchestrator.kt:327, 470`). The two differ on purpose: a failed upstream
   SKIPS a pod node (terminal), while an open prerequisite HOLDS a ticket (it waits as long as it
@@ -609,7 +609,7 @@ has no phase8 or phase9 line today.
 6. **There are two derivations of a run's outcome:** `DaemonMain.finishedEnvelope` (exit code + kill,
    `DaemonMain.kt:413`) and `RunOutcomes.of` (session state + kill, `RunOutcomes.kt:15`). This spec
    uses `RunOutcomes.of` (§2.6).
-7. **Phase 8 is not on `ahq-main`.** `eab9e56` (branch `"feature-agenthq"-phase8`) is not an ancestor of
+7. **Phase 8 is not on `ahq-main`.** `eab9e56` (branch `feature-agenthq-phase8`) is not an ancestor of
    `ahq-main`: `git merge-base --is-ancestor` reports it is not merged. Phase 9 nevertheless counts as
    unblocked because Phase 8 is "done". The UI stories need that merge first.
 8. **Headroom routing cannot be built as ticket `ae1cd5f1` asks.** It wants work routed "to whichever

@@ -7,7 +7,7 @@ Is "same performance after the block splits" true? This puts numbers on it. Meas
 | side | commit | what it is |
 |---|---|---|
 | base | `9b7c2ce5` | first parent of `af67ce03` (the BLOCKS-LAYOUT L1 merge): the last dev commit before the block splits |
-| dev  | `5aa26850` | dev head ("feature-agenthq"-mvp) when this ran |
+| dev  | `5aa26850` | dev head (feature-agenthq-mvp) when this ran |
 
 Both ran on the same machine (AMD Ryzen 7 5700G, Windows, about 9 GB RAM free), one after the other, one Gradle job at a time, `--max-workers=2`.
 

@@ -546,10 +546,10 @@ data class Envelope(
 
         // MVP Sprint-Zero (slice 0 freeze). FROZEN NAMES, NO DAEMON BEHAVIOUR YET: the daemon answers
         // these with `error` until the implementing slices land. Project -- slice A
-        // (branch "feature-agenthq"-mvp-scope): `project_save` / `project_get` / `project_list` are
+        // (branch feature-agenthq-mvp-scope): `project_save` / `project_get` / `project_list` are
         // answered by `project` / `projects`. The ordered join was, at the time, maintained by I0 on
         // `Project.storyIds`, not by slice A (RETIRED, contract 1.29.0: it now lives on
-        // `Epic.storyIds` instead). Story board -- slice B (branch "feature-agenthq"-mvp-board):
+        // `Epic.storyIds` instead). Story board -- slice B (branch feature-agenthq-mvp-board):
         // `story_save` / `story_get` / `story_move` by `story`, `story_list` by `stories`.
         const val PROJECT_SAVE = "project_save"
         const val PROJECT_GET = "project_get"

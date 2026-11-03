@@ -22,7 +22,7 @@ import kotlin.test.assertTrue
  * SLICE 0 of ticket b2fbb94d froze the seam: the `Project` / `ProjectSave` types, the
  * `project_save` / `project_get` / `project_list` frames, the `project` / `projects` answers and
  * the `Ticket.projectId` key. This test suite is what the implementing slice (branch
- * `"feature-agenthq"-mvp-scope`) must turn GREEN. Every test here touches ONLY the project half of
+ * `feature-agenthq-mvp-scope`) must turn GREEN. Every test here touches ONLY the project half of
  * the MVP: none of them needs a story, so it can be built without the slice-B board existing.
  *
  * Each test drives the REAL daemon over a REAL WebSocket, the way `TicketDaemonTest` does: nothing
