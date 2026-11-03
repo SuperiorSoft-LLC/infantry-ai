@@ -20,6 +20,7 @@
       { "name": "infantry_inbox", "action": "mail.read", "kind": "read", "description": "List the COMMS mail addressed to you." },
       { "name": "infantry_read", "action": "mail.read", "kind": "read", "description": "Read one message in full and mark it read." },
       { "name": "infantry_message", "action": "mail.send", "kind": "write", "description": "Send COMMS mail to an agent, a role or a session." },
+      { "name": "infantry_projects", "action": "mail.read", "kind": "read", "description": "Look up projects (id, name, description, live roles) to mail another project's role." },
       { "name": "infantry_chat_image", "action": "chat.image", "kind": "write", "description": "Show an image inline in a session's chat (a file inside the project, or an uploaded image id)." }
     ]
   },

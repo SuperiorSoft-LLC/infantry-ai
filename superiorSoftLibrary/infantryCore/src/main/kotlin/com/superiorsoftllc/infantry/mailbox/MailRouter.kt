@@ -102,7 +102,12 @@ class MailRouter(
     private val contextCap: (role: String, sessionId: String) -> Long = { _, _ -> 0L },
     /** USAGE-OUT-2: the session's last request context size (tokens), or null when unknown. */
     private val contextTokens: (SessionRecord) -> Long? = { null },
+    /** XPROJ-1: the projects (id, name) a `role@project` address and the sender-project origin field resolve against. */
+    private val projectRefs: () -> List<ProjectRef> = { emptyList() },
 ) : MailDelivery {
+
+    /** XPROJ-1: a project as mail addressing sees it. */
+    data class ProjectRef(val id: String, val name: String)
 
     private val debounceTimer by lazy {
         java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "mail-wake-debounce").apply { isDaemon = true } }
@@ -185,7 +190,11 @@ class MailRouter(
     @Volatile var onIncoming: ((IncomingMailInfo) -> MailVerdictInfo?)? = null
 
     /** What [onIncoming] sees: the stored [message] and the live session it resolves to (null when it does not resolve). */
-    data class IncomingMailInfo(val message: Message, val recipientSessionId: String?, val recipientRole: String?, val projectId: String? = null)
+    data class IncomingMailInfo(
+        val message: Message, val recipientSessionId: String?, val recipientRole: String?, val projectId: String? = null,
+        /** XPROJ-1: the sender's project when it differs from the recipient's (cross-project mail); null otherwise. */
+        val fromProjectId: String? = null, val fromProjectName: String? = null,
+    )
 
     /** [handled]: read, nobody woken. [text]: replaces the delivered text of this mail. */
     data class MailVerdictInfo(val handled: Boolean, val text: String? = null)
@@ -197,11 +206,19 @@ class MailRouter(
         val hook = onIncoming ?: return null
         return runCatching {
             val resolved = (resolveRecipient(message.to, message.from, message.id in crossAllowed) as? RecipientResolution.Resolved)?.let { manager.get(it.sessionId) }
-            hook(IncomingMailInfo(message, resolved?.id, resolved?.role, resolved?.projectId))
+            val senderProject = manager.get(message.from)?.projectId?.takeIf { it.isNotBlank() }
+            val foreign = senderProject != null && resolved?.projectId != senderProject
+            val fromName = if (foreign) projectRefs().firstOrNull { it.id == senderProject }?.name else null
+            hook(IncomingMailInfo(message, resolved?.id, resolved?.role, resolved?.projectId, if (foreign) senderProject else null, fromName))
         }.getOrNull()
     }
 
-    fun send(request: MailSendRequest): MailResult {
+    fun send(original: MailSendRequest): MailResult {
+        val request = when (val a = addressByRoleAndProject(original)) {
+            is RoleAt.Refused -> return MailResult.Refused(a.reason)
+            is RoleAt.Resolved -> original.copy(to = a.sessionId)
+            RoleAt.NotRoleAt -> original
+        }
         if (request.to == MailAddresses.STARTER) reportCheck?.invoke(request.from, request.body)?.let { return MailResult.Refused(it) }
         crossProjectRefusal(request)?.let { return MailResult.Refused(it) }
         val result = mailbox.send(addressStarter(request))
@@ -242,6 +259,43 @@ class MailRouter(
      * between send and delivery of a still-queued override message makes it UNDELIVERABLE (visible, resend it).
      */
     private val crossAllowed = ConcurrentHashMap.newKeySet<String>()
+
+    private sealed interface RoleAt {
+        data object NotRoleAt : RoleAt
+        data class Resolved(val sessionId: String) : RoleAt
+        data class Refused(val reason: String) : RoleAt
+    }
+
+    /**
+     * XPROJ-1: `role@project` (project = id or exact, case-insensitive name) names the role's session in that project, so no session id is
+     * needed. A target in another project than the sender's still needs `allowCrossProject`. A clear refusal when the project is unknown or
+     * ambiguous, or when the role has no live session there or several agents. An address that is itself a session or agent id is left alone.
+     */
+    private fun addressByRoleAndProject(request: MailSendRequest): RoleAt {
+        val at = request.to.indexOf('@')
+        if (at <= 0 || at == request.to.length - 1 || manager.get(request.to) != null || agentProfiles.get(request.to) != null) return RoleAt.NotRoleAt
+        val role = request.to.substring(0, at).trim()
+        val key = request.to.substring(at + 1).trim()
+        val refs = projectRefs()
+        val byId = refs.filter { it.id == key }
+        val matches = byId.ifEmpty { refs.filter { it.name.equals(key, ignoreCase = true) } }
+        if (matches.isEmpty()) return RoleAt.Refused("no project '$key' (look one up with infantry_projects)")
+        if (matches.size > 1) return RoleAt.Refused("project name '$key' is ambiguous: ${matches.joinToString(", ") { it.id }}; use the project id")
+        val project = matches.single()
+        val senderProject = manager.get(request.from)?.projectId?.takeIf { it.isNotBlank() }
+        if (!request.allowCrossProject && senderProject != null && senderProject != project.id) {
+            return RoleAt.Refused("cross-project mail refused: '${request.to}' is in project ${project.id} (${project.name}) but sender '${request.from}' is in project $senderProject; pass allowCrossProject (--cross-project) to send anyway")
+        }
+        val agents = manager.list()
+            .filter { it.projectId == project.id && it.role == role && it.isInSession() }
+            .groupBy { it.agentId ?: it.id }
+            .map { (_, sessions) -> sessions.sortedByDescending { it.spawnedAt }.let { s -> s.firstOrNull { it.live } ?: s.first() } }
+        return when {
+            agents.isEmpty() -> RoleAt.Refused("no live $role session in project ${project.id} (${project.name})")
+            agents.size > 1 -> RoleAt.Refused("multiple $role agents in project ${project.id} (${project.name}): ${agents.joinToString(", ") { it.agentId ?: it.id }}; address one by session id")
+            else -> RoleAt.Resolved(agents.single().id)
+        }
+    }
 
     /**
      * Send-time cross-project guard: a SESSION sender addressing a session or agent id of another project is refused

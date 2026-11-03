@@ -175,7 +175,8 @@ data class Caller(
 
 // ---- data contract ------------------------------------------------------------------------------------------------
 
-data class ProjectInfo(val id: String, val name: String, val directory: String?)
+/** [description] (additive, XPROJ-1): the project's one-line description, its data key `project.description` ("" = none). */
+data class ProjectInfo(val id: String, val name: String, val directory: String?, val description: String = "")
 
 interface Projects {
     fun list(): List<ProjectInfo>
@@ -456,6 +457,8 @@ fun interface MailGateHook {
 data class IncomingMail(
     val id: String, val from: String, val to: String, val recipientSessionId: String?, val recipientRole: String?,
     val subject: String, val body: String, val threadId: String?, val projectId: String? = null,
+    /** XPROJ-1 (additive): the sender's project (id, name) when the sender is a session of ANOTHER project than the recipient's; null otherwise. */
+    val fromProjectId: String? = null, val fromProjectName: String? = null,
 )
 
 /** 1.30.0: what a hook decided for one mail. [handled] = marked read for the recipient, nobody woken. [text] (if not handled) replaces the delivered text for that mail. */

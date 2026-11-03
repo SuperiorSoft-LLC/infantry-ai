@@ -97,6 +97,7 @@ class ScriptHooks(
             put("id", mail.id); put("from", mail.from); put("to", mail.to); put("subject", mail.subject); put("body", mail.body)
             mail.recipientSessionId?.let { put("sessionId", it) }; mail.recipientRole?.let { put("role", it) }
             mail.threadId?.let { put("threadId", it) }; mail.projectId?.let { put("projectId", it) }
+            mail.fromProjectId?.let { put("fromProjectId", it) }; mail.fromProjectName?.let { put("fromProjectName", it) }
         }
         val e = NamedEvent(INCOMING_EVENT, payload.toString(), "daemon", "mail-incoming:${mail.id}")
         for (p in projects().filter { mail.projectId == null || it == mail.projectId }) {

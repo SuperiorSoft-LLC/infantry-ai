@@ -1783,6 +1783,7 @@ internal object Cli {
      */
     private fun project(stream: FrameStream, parsed: ParsedArgs, out: Appendable, err: Appendable): Int = runBlocking {
         checkContract(stream, err)
+        if (parsed.args[0] == "find") return@runBlocking projectFind(stream, parsed.args.drop(1).joinToString(" ").trim().lowercase(), out, err)
         if (parsed.args[0] == "config") return@runBlocking projectConfig(stream, parsed.args, out, err)
         if (parsed.args[0] == "routing") return@runBlocking projectRouting(stream, parsed.args[1].trim(), parsed.file, parsed.clear, out, err)
         val projectId = parsed.args[1].trim()
@@ -1923,6 +1924,22 @@ internal object Cli {
     }
 
     /** `project rename <id> <name>`: an edit `project_save` carrying only the id and the new name; the id never changes. */
+    /** XPROJ-1: `project find [query]` lists the projects (id, name, description) whose name, id or description contains the query. Read only. */
+    private suspend fun projectFind(stream: FrameStream, query: String, out: Appendable, err: Appendable): Int {
+        val answer = stream.request(Envelope(Envelope.PROJECT_LIST, ""), Envelope.PROJECTS, "project_list", idempotent = true)
+        val projects = try {
+            json.decodeFromString(kotlinx.serialization.builtins.ListSerializer(Project.serializer()), answer.data)
+        } catch (e: Exception) {
+            err.appendLine("error: malformed projects answer from the daemon: ${e.message}")
+            return 1
+        }
+        val shown = projects.filter { p -> query.isEmpty() || listOf(p.name, p.id, p.data["project.description"].orEmpty()).any { query in it.lowercase() } }
+        if (shown.isEmpty()) out.appendLine("no project matches '$query'")
+        for (p in shown) out.appendLine("${p.id} | ${p.name} | ${p.data["project.description"].orEmpty()}")
+        if (shown.isNotEmpty()) out.appendLine("mail a role there: infantry send <role>@<project id or name> \"text\" --cross-project")
+        return 0
+    }
+
     private suspend fun projectRename(stream: FrameStream, projectId: String, name: String, out: Appendable, err: Appendable): Int {
         val payload = json.encodeToString(
             com.superiorsoftllc.infantry.protocol.ProjectSave.serializer(),
@@ -5526,8 +5543,9 @@ internal object Cli {
     /** BASE-1a: the usage error for a `project` invocation, or null when it is valid. */
     private fun projectUsageError(parsed: ParsedArgs): String? {
         val args = parsed.args
-        val usage = "infantry project base <projectId> [<branch>|--clear] | branches <projectId> | rename <projectId> \"<name>\" | config get <projectId> | config set <projectId> <role> <n> | config set <projectId> $AUTO_REMOVE_SETTING on|off | config set <projectId> <dotted.key> <value> | config unset <projectId> <dotted.key> | routing <projectId> [--file <rules.json>|--clear]"
+        val usage = "infantry project find [<query>] | base <projectId> [<branch>|--clear] | branches <projectId> | rename <projectId> \"<name>\" | config get <projectId> | config set <projectId> <role> <n> | config set <projectId> $AUTO_REMOVE_SETTING on|off | config set <projectId> <dotted.key> <value> | config unset <projectId> <dotted.key> | routing <projectId> [--file <rules.json>|--clear]"
         return when {
+            args.firstOrNull() == "find" -> null
             args.firstOrNull() == "config" -> when {
                 args.getOrNull(1) == "get" && args.size == 3 && args[2].isNotBlank() -> null
                 args.getOrNull(1) == "set" && args.size == 5 && args[2].isNotBlank() && args[3].trim() == AUTO_REMOVE_SETTING ->
