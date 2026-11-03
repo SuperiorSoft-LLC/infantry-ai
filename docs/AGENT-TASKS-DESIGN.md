@@ -246,19 +246,19 @@ turns, ~150-250K). For a normal ticket it costs about 50-60% more. So the **defa
 
 ## 9. Build tickets (implementation order)
 
-Created in todo, Sonnet, each small with its own acceptance and scoped tests. Ids are in the AGENT-TASKS-1 report.
+Created in todo, Sonnet, each small with its own acceptance and scoped tests. Ids below.
 
-1. **AGENT-TASKS-2 (backend, weight 4)**: board `unassign` + `hasWork` view + `handoff` comment kind (`auto` note) +
+1. **AGENT-TASKS-2 55d9515d (backend, weight 4)**: board `unassign` + `hasWork` view + `handoff` comment kind (`auto` note) +
    `BoardGit.ahead` / `BoardSessions.lastAssistantText` ports + MCP tool + CLI.
-2. **AGENT-TASKS-3 (backend, weight 4)**: persistent agent queue (`queuedAgent`, `queueRank`, migration), drain order in
+2. **AGENT-TASKS-3 ace812e8 (backend, weight 4)**: persistent agent queue (`queuedAgent`, `queueRank`, migration), drain order in
    `drainProfileLane`, skip in `startNext*`, board-line marker, `agentQueueNext` in the done payload,
    `closeDoneWorkerWhenQueued`, `infantry_agent_queue` tool + CLI.
-3. **AGENT-TASKS-4 (backend, weight 4)**: `assign` (start / queue) and `switch` on top of 2 and 3, tools + CLI.
-4. **AGENT-TASKS-5 (backend, weight 2)**: hook updates: `on-ticket-done` honours `agentQueueNext`; `[Q:` skip markers in
+3. **AGENT-TASKS-4 f5ff8206 (backend, weight 4)**: `assign` (start / queue) and `switch` on top of 2 and 3, tools + CLI.
+4. **AGENT-TASKS-5 748eccd4 (backend, weight 2)**: hook updates: `on-ticket-done` honours `agentQueueNext`; `[Q:` skip markers in
    the official samples and in this project's hook args; a Lua smoke script that unassigns, queues and switches.
-5. **AGENT-TASKS-6 (frontend, weight 3)**: board UI: Unassign, Switch to…, Assign to…, has-work badge, queued badge,
+5. **AGENT-TASKS-6 5f3069b0 (frontend, weight 3)**: board UI: Unassign, Switch to…, Assign to…, has-work badge, queued badge,
    handoff in the detail view.
-6. **AGENT-TASKS-7 (frontend, weight 4)**: Agents card: current ticket, queue list (reorder, remove), drop a ticket on the
+6. **AGENT-TASKS-7 4504ed7c (frontend, weight 4)**: Agents card: current ticket, queue list (reorder, remove), drop a ticket on the
    card to assign; the generic drag/drop seam in `infantryUiCore` if one is missing.
-7. Backlog, **AGENT-TASKS-8 (backend, weight 5)**: `contextMode = continue` with a harness capability
+7. Backlog, **AGENT-TASKS-8 b6bd616d (backend, weight 5)**: `contextMode = continue` with a harness capability
    `resumeInOtherDirectory`; opt-in, costlier (section 7).
