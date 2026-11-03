@@ -109,6 +109,18 @@ class DocsFreshnessGuardTest {
         assertTrue(problems.isEmpty(), "docs name things that are not in the repository (${problems.size}):\n" + problems.joinToString("\n"))
     }
 
+    /** WIKI-INDEX-1: every page under docs/wiki is linked from docs/wiki/index.md, so a new page needs an index entry. */
+    @Test
+    fun everyWikiPageIsLinkedFromTheIndex() {
+        val wiki = File(root, "docs/wiki")
+        val index = File(wiki, "index.md")
+        assertTrue(index.isFile, "docs/wiki/index.md is missing")
+        val linked = linkTargets(index.readText()).map { it.substringBefore('#') }.toSet()
+        val missing = wiki.walkTopDown().filter { it.isFile && it.extension == "md" && it != index }
+            .map { it.relativeTo(wiki).path.replace('\\', '/') }.filter { it !in linked }.toList()
+        assertTrue(missing.isEmpty(), "docs/wiki/index.md does not link: $missing")
+    }
+
     @Test
     fun `the docs this guard reads are present`() {
         assertTrue(File(root, "AGENTS.md").isFile, "AGENTS.md is missing")

@@ -1,3 +1,5 @@
+[← Wiki index](index.md)
+
 # Licensing: the foundation and everything on top
 
 > **DRAFT. Not legal advice. Not yet in effect.** No license is applied to this repository today: the root `LICENSE`

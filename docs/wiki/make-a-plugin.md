@@ -1,3 +1,5 @@
+[← Wiki index](index.md)
+
 # Make a plugin
 
 This page takes you from an empty folder to a working plugin with a UI half and a daemon half, then shows a child

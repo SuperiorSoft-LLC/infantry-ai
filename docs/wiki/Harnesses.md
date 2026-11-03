@@ -1,3 +1,5 @@
+[← Wiki index](index.md)
+
 # Harnesses and providers
 
 A **harness** is the adapter between Infantry AI and one agent CLI (Claude Code, pi, opencode, or your own). Its id

@@ -1,3 +1,5 @@
+[← Wiki index](index.md)
+
 # Plugins
 
 Infantry AI works like a small operating system: the app is the OS, plugins are the programs. Every tab, panel

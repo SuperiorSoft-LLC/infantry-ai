@@ -1,3 +1,5 @@
+[← Wiki index](index.md)
+
 # Architecture
 
 This page maps the system from the code. Each box names the source file that implements it. For rules and the build,

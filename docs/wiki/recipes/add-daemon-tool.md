@@ -1,3 +1,5 @@
+[← Wiki index](../index.md)
+
 # Recipe: add a daemon tool
 
 Goal: a named tool, with a JSON schema, that agents (through `infantry mcp serve`) and clients (`plugin_tools`) can

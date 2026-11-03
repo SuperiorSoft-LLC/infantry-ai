@@ -1,3 +1,5 @@
+[← Wiki index](../index.md)
+
 # Recipe: add a CLI harness
 
 Goal: Infantry AI can run another agent CLI. A **harness** turns "run this prompt in this session" into the argv and
