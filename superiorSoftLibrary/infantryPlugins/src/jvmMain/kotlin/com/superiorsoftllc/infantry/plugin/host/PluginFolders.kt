@@ -86,14 +86,31 @@ object PluginFolders {
             .let { if (OFFICIAL_FOLDER in it) it else it + OFFICIAL_FOLDER }
 
     /**
-     * RUNTIME-2: every module of the user [root] and, after them, of the bundled root's `official/` folder. A bundled module
-     * whose name the user root already holds is left out (the user copy is the one that loads; it passes the same checks).
+     * RUNTIME-2: every module of the user [root] and, after them, of the bundled root's `official/` folder.
+     * PLUGIN-VERSION-WIN-1: when both hold the same name the higher [SemVer] version loads; equal versions prefer the user
+     * copy; an unparseable version counts as the lowest (and the status says so). The loser stays in the list with a
+     * `refusal` "shadowed by <winner path> <version>", the channel `GET /plugins` and the plugin list already show.
      */
     fun scan(root: File, config: ModulesConfig, bundled: File?): List<ModuleCandidate> {
-        val user = scan(root, config)
+        val user = scan(root, config).toMutableList()
         if (bundled == null || bundled.canonicalFile == root.canonicalFile) return user
-        val names = user.map { it.manifest?.name ?: it.folderName }.toSet()
-        return user + scanFolders(bundled, listOf(OFFICIAL_FOLDER)).filter { (it.manifest?.name ?: it.folderName) !in names }
+        fun key(c: ModuleCandidate) = c.manifest?.name ?: c.folderName
+        fun ver(c: ModuleCandidate) = c.manifest?.version?.let(SemVer::parseOrNull)
+        fun note(c: ModuleCandidate) = c.manifest?.version?.let { v -> if (SemVer.parseOrNull(v) == null) " (version '$v' is not valid, counted as lowest)" else "" } ?: ""
+        fun shadowed(loser: ModuleCandidate, winner: ModuleCandidate) =
+            loser.copy(refusal = "shadowed by ${winner.dir} ${winner.manifest?.version ?: "?"}" + note(loser) + note(winner))
+        val out = mutableListOf<ModuleCandidate>()
+        val extra = mutableListOf<ModuleCandidate>()
+        for (b in scanFolders(bundled, listOf(OFFICIAL_FOLDER))) {
+            val i = user.indexOfFirst { key(it) == key(b) && it.refusal == null }
+            if (i < 0) { extra += b; continue }
+            val u = user[i]
+            val uv = ver(u); val bv = ver(b)
+            val bundledWins = bv != null && (uv == null || bv > uv)
+            if (bundledWins) { user[i] = shadowed(u, b); extra += b } else extra += shadowed(b, u)
+        }
+        out += user; out += extra
+        return out
     }
 
     private val OFFICIAL_FOLDER = PluginFolder("official", Tier.OFFICIAL)

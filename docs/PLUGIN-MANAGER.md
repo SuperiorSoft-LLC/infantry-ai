@@ -17,7 +17,7 @@ Nothing here decides the owner questions of section 8.
 |---|---|---|
 | plugins root | `PluginFolders.root` (infantryPlugins jvmMain) | `INFANTRY_PLUGINS_ROOT`, else `-Dinfantry.plugins.root`, else `<state dir>/plugins` |
 | folders + enable list | `<root>/modules.json` (`ModulesConfig`) | `folders` (path + tier, default `core`/`official`/`community`), `modules.<Name>` = `ModuleSetting` (`enabled`, `allow`, `deny`, `allowOverride`, `allowInject`, `endpoints`) |
-| scan | `PluginFolders.scan(root, config, bundled)` | every `<folder>/<Name>/module.json` (not `_*`), then the bundled root's `official/` (a user copy of the same name wins) |
+| scan | `PluginFolders.scan(root, config, bundled)` | every `<folder>/<Name>/module.json` (not `_*`), then the bundled root's `official/` (same name in both: the higher `SemVer` version wins, equal prefers the installed copy, an unparseable version counts lowest; the loser is reported as `shadowed by <winner path> <version>`) |
 | bundled root | `PluginFolders.bundledRoot` | `INFANTRY_BUNDLED_MODULES` / `-Dinfantry.plugins.bundled`; per layout in DAEMON-PLUGINS.md section 9 (installDist, docker, jpackage) |
 | resolver | `ModuleResolver` (commonMain) | enable list, safe mode, dependencies (`DependencyGraph`, `SemVer`), `apiVersion` |
 | UI host | `DesktopPlugins` (infantryUiCore jvmMain) | loads UI jars at runtime (desktop); wasm/Android compile from a plugin list (D6, D9) |
