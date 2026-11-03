@@ -13,6 +13,6 @@ Max 8. Most match files already named in docs/img/README.md.
 
 Before capture: use a demo project; no personal paths, emails, tokens or real customer names.
 
-Done: **main app shot** (agents, chat, usage; real build 52828423, cropped with rounded transparent corners): `docs/img/app-screenshot.png` (README) and `site/assets/app-screenshot.webp` (home page, first tab).
+Done: **main app shot** (agents, chat, usage; real build 52828423, cropped with rounded transparent corners): `docs/img/app-screenshot.png` (README) and assets/app-screenshot.webp in the website repo infantry-site (home page, first tab).
 
-Done: **board shot** (Board overlay, real build 52828423, cropped with rounded transparent corners): `docs/img/board-screenshot.png` and `site/assets/board-screenshot.webp` (home page, Board tab).
+Done: **board shot** (Board overlay, real build 52828423, cropped with rounded transparent corners): `docs/img/board-screenshot.png` and assets/board-screenshot.webp in the website repo infantry-site (home page, Board tab).
