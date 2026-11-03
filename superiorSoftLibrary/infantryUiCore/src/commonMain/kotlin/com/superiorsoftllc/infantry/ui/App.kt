@@ -339,6 +339,7 @@ fun App(
     LaunchedEffect(url, token) { DaemonLink.window.connect(url, token) }
     // PLUGIN-ENDPOINTS-2: a module's endpoint credential comes over this window's (owner) connection, never to the plugin.
     LaunchedEffect(controller) { DaemonLink.window.pluginSecret = controller::pluginSecret }
+    LaunchedEffect(controller) { DaemonLink.window.views = controller.views }
     // P1 step 2 (6s B): once the link is live, the merged config tree seeds the daemon's node_config and the window takes its copy.
     val linkLive = state.connection.isLive
     tabs.config.daemonRowsClosed = state.connection.policy.restricted
