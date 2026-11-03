@@ -23,9 +23,13 @@
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
   [string]$Sha,
-  [string]$BuildRoot = $env:INFANTRY_BUILD_ROOT,
-  [string]$ProjectId = $env:INFANTRY_PROJECT_ID
+  [string]$BuildRoot,
+  [string]$ProjectId
 )
+
+. (Join-Path $PSScriptRoot 'infantry-env.ps1')
+if (-not $BuildRoot) { $BuildRoot = Get-InfantryEnv 'BUILD_ROOT' }
+if (-not $ProjectId) { $ProjectId = Get-InfantryEnv 'PROJECT_ID' }
 
 function Fail([string]$Message, [int]$Code = 2) {
   [Console]::Error.WriteLine("SWAP-CURRENT failed: $Message")
@@ -33,7 +37,7 @@ function Fail([string]$Message, [int]$Code = 2) {
 }
 
 if (-not $BuildRoot) {
-  $cli = if ($env:INFANTRY_CLI) { $env:INFANTRY_CLI } else { (Get-Command infantry -ErrorAction SilentlyContinue).Source }
+  $cli = Get-InfantryCli
   if ($cli -and $ProjectId) {
     foreach ($line in (& $cli project config get $ProjectId 2>$null)) {
       if ($line -match '^\s*build\.root\s*[:=]\s*(.+?)\s*$') { $BuildRoot = $Matches[1]; break }
