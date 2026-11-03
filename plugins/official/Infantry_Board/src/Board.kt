@@ -45,6 +45,8 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import com.superiorsoftllc.infantry.ui.DragPayload
+import com.superiorsoftllc.infantry.ui.DragSeam
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -452,8 +454,7 @@ fun BoardColumnsSection(board: BoardPaneHost, modifier: Modifier = Modifier, car
                         val handle = @Composable {
                             DragHandle(t, canMove, drag, cardMoves(t, index, columnOf, board::drop)) {
                                 val plan = drag.hover(columnOf)?.plan ?: DropPlan.Stay(t.id)
-                                drag.end()
-                                board.drop(t, plan)
+                                if (!drag.end()) board.drop(t, plan)
                             }
                         }
                         val look = Modifier
@@ -481,7 +482,10 @@ fun BoardColumnsSection(board: BoardPaneHost, modifier: Modifier = Modifier, car
 internal class BoardDrag {
     var ticket by mutableStateOf<Ticket?>(null)
         private set
-    var pointer by mutableStateOf(Offset.Zero)
+    private var pointerState by mutableStateOf(Offset.Zero)
+    var pointer: Offset
+        get() = pointerState
+        set(v) { pointerState = v; if (ticket != null) DragSeam.move(v) }
     /** The pointer's offset from the card's top-left when the drag began, so the ghost keeps the grab point. */
     var grab = Offset.Zero
         private set
@@ -490,11 +494,14 @@ internal class BoardDrag {
 
     fun begin(t: Ticket, at: Offset) {
         grab = at - (cards[t.id]?.topLeft ?: at)
-        pointer = at
+        pointerState = at
         ticket = t
+        // AGENT-TASKS-7: a todo ticket is also offered to any plugin's drop target (an agent card) as kind "ticket".
+        if (t.status == TicketColumns.TODO) DragSeam.begin(DragPayload("ticket", t.id, t.title), at)
     }
 
-    fun end() { ticket = null }
+    /** Ends the drag; true when another plugin's drop target took the card (the board then applies no drop of its own). */
+    fun end(): Boolean { val had = ticket != null; ticket = null; return had && DragSeam.end() }
 
     /** The column under the pointer, the slot in it and what a drop there means; null = not over a column. */
     fun hover(columnOf: (String) -> List<Ticket>): DragHover? {
@@ -564,7 +571,7 @@ private fun DragHandle(t: Ticket, enabled: Boolean, drag: BoardDrag, actions: Li
                         place[0]?.takeIf { it.isAttached }?.let { drag.pointer = it.localToRoot(change.position) }
                     },
                     onDragEnd = { dropped() },
-                    onDragCancel = { drag.end() },
+                    onDragCancel = { drag.end(); DragSeam.cancel() },
                 )
             },
         contentAlignment = Alignment.Center,

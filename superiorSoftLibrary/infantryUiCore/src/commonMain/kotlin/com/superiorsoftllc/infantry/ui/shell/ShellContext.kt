@@ -229,6 +229,12 @@ interface AgentsContext {
     fun newAgent()
     suspend fun remove(id: String)
     suspend fun assign(id: String, projectId: String)
+    /** AGENT-TASKS-7: hand ticket [ticketId] to agent profile [agentId] (start if free, else queue). */
+    suspend fun assignTicket(ticketId: String, agentId: String) {}
+    /** AGENT-TASKS-7: opens ticket [ticketId]'s detail (the board's modal), where one is loaded. */
+    fun openTicket(ticketId: String) {}
+    /** AGENT-TASKS-7: an `agent_queue` action on [agentId]: list, remove, move. */
+    suspend fun agentQueue(agentId: String, action: String, ticketId: String? = null, at: Int? = null) {}
     /** Dismisses the daemon's newest project / workspace refusal. */
     fun dismissProjectRefusal()
     /** Opens the board; null when no module fills the board overlay (no Board button then). */

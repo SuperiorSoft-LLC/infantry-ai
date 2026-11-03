@@ -1324,6 +1324,22 @@ class Controller(
         return report(send(Envelope(Envelope.TICKET_MOVE, body.toString())))
     }
 
+    /** AGENT-TASKS-7: hand todo ticket [id] to agent [agentId]: the daemon starts it if the agent is free, else queues it; its answer shows as a notice. */
+    suspend fun assignTicket(id: String, agentId: String): CommandResult {
+        val body = buildJsonObject { put("id", id); put("agentId", agentId) }
+        return report(send(Envelope(Envelope.TICKET_ASSIGN, body.toString())))
+    }
+
+    /** AGENT-TASKS-7: an `agent_queue` action (list, remove, move, clear) on [agentId]; the answer updates [AppState.agentQueues]. */
+    suspend fun agentQueue(agentId: String, action: String = "list", ticketId: String? = null, at: Int? = null): CommandResult {
+        val body = buildJsonObject {
+            put("agentId", agentId); put("action", action)
+            if (ticketId != null) put("ticketId", ticketId)
+            if (at != null) put("at", at)
+        }
+        return report(send(Envelope(Envelope.AGENT_QUEUE, body.toString())))
+    }
+
     /** Reorder inside the ticket's own column (no status): [position] 0 is the top. Ticket order is priority. */
     suspend fun reorderTicket(id: String, position: Int): CommandResult {
         val body = buildJsonObject {
