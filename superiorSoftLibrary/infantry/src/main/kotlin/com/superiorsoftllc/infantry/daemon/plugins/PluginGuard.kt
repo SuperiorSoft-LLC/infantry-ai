@@ -72,6 +72,7 @@ class PluginGuard(
      */
     suspend fun <T> callSuspending(what: String, timeoutMs: Long, block: () -> T): Result<T> {
         disabledReason?.let { return Result.failure(IllegalStateException("plugin $moduleId is disabled: $it")) }
+        if (retired) return Result.failure(IllegalStateException("plugin $moduleId is unloaded; $what refused"))
         var probe = false
         if (tripped) {
             val leftMs = (openUntilNs - System.nanoTime()) / 1_000_000
@@ -177,9 +178,28 @@ class PluginGuard(
         runCatching { onRecovered() }
     }
 
+    /** PLUGIN-HOTLOAD-1: true once [retire] ran: the plugin was unloaded on purpose, so nothing it does afterwards is a failure. */
+    @Volatile var retired = false
+        private set
+
+    /**
+     * PLUGIN-HOTLOAD-1: ends this guard for a planned unload. New calls are refused at once; calls already running get up to
+     * [drainMs] to finish, then are interrupted. A call that fails because of this (an interrupt, a closed class loader) does NOT
+     * disable the plugin or announce a failure: the plugin is leaving anyway.
+     */
+    fun retire(drainMs: Long) {
+        retired = true
+        pool.shutdown()
+        val drained = try { pool.awaitTermination(drainMs.coerceAtLeast(0), TimeUnit.MILLISECONDS) } catch (e: InterruptedException) { Thread.currentThread().interrupt(); false }
+        if (!drained) {
+            log("[plugins] daemon plugin $moduleId: a call was still running ${drainMs} ms after unload began; interrupting it")
+            pool.shutdownNow()
+        }
+    }
+
     @Synchronized
     fun disable(reason: String) {
-        if (disabledReason != null) return
+        if (disabledReason != null || retired) return
         disabledReason = reason
         log("[plugins] daemon plugin $moduleId DISABLED: $reason")
         runCatching { onDisabled(reason) }

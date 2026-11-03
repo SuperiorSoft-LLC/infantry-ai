@@ -32,7 +32,7 @@ data class ManagerResult(
     val ok: Boolean,
     val message: String,
     val code: String? = null,
-    /** Daemon and harness halves load at daemon start: a change to one takes effect at the next start. */
+    /** True when a change waits for the next daemon start: a harness half (start-only), or no running daemon to apply it to. A daemon half applied live does not set it. */
     val restartNeeded: Boolean = false,
     val requested: List<String> = emptyList(),
 ) {
@@ -40,6 +40,28 @@ data class ManagerResult(
         fun done(message: String, restartNeeded: Boolean = false) = ManagerResult(true, message, restartNeeded = restartNeeded)
         fun refused(code: String, message: String, requested: List<String> = emptyList()) = ManagerResult(false, message, code, requested = requested)
     }
+}
+
+/**
+ * PLUGIN-HOTLOAD-1: what a live load / unload / reload of one daemon half did. [unloaded] is every module taken out (dependents
+ * first, the asked one last); [loaded] every module brought back. [notes] are parts that cannot change live.
+ */
+data class HotOutcome(
+    val ok: Boolean,
+    val message: String,
+    val unloaded: List<String> = emptyList(),
+    val loaded: List<String> = emptyList(),
+    val notes: List<String> = emptyList(),
+)
+
+/** PLUGIN-HOTLOAD-1: the running daemon's plugin host, as the manager sees it (null in the CLI, which has no daemon: a change then waits for the next start). */
+interface PluginHotApply {
+    /** Starts the daemon half of [id] from the plugins root as it is now. */
+    fun load(id: String): HotOutcome
+    /** Stops [id] and every loaded module that depends on it, drops their registrations and closes their class loaders. */
+    fun unload(id: String): HotOutcome
+    /** [unload] then [load] of [id], then its dependents again. */
+    fun reload(id: String): HotOutcome
 }
 
 /** What `inspect` found; nothing is installed. [token] binds a consent to these exact bytes and grants. */
@@ -130,8 +152,11 @@ object DefaultFetcher : Fetcher {
  * the hosts. It adds catalogs and sources (data), the class label, hash pins, grant consent, and update/rollback/remove with a
  * version store. Default deny and fail closed: anything that does not check out is a refusal and nothing is changed.
  *
- * Daemon and harness halves load at daemon start, so a change is [ManagerResult.restartNeeded]; a module whose files are
- * locked (Windows keeps a loaded jar open) is refused as IN_USE. The staged apply at next start is still a gap (G7).
+ * PLUGIN-HOTLOAD-1: with a running daemon ([hot]) a change to a daemon half is applied live (install/enable load it,
+ * disable/remove unload it, update/rollback/grant changes reload it), and the answer says so instead of "restart needed". A
+ * harness half stays start-only ([ManagerResult.restartNeeded]); with no daemon ([hot] null, the CLI) every change waits for the
+ * next start. The running half is unloaded BEFORE its files move (Windows keeps a loaded jar open), so a module whose files are
+ * still locked is refused as IN_USE and put back. The staged apply at next start is still a gap (G7).
  */
 class PluginManager(
     private val root: File,
@@ -141,6 +166,8 @@ class PluginManager(
     private val hostPluginApi: Int = PLUGIN_API_VERSION,
     private val hostDaemonApi: String = DaemonApi.VERSION,
     private val keepVersions: Int = 2,
+    /** PLUGIN-HOTLOAD-1: the running daemon's plugin host; null = no daemon to apply a change to (the CLI). */
+    private val hot: PluginHotApply? = null,
 ) {
     private val catalogCache get() = File(stateDir, "plugin-catalogs")
     private val downloads get() = File(stateDir, "plugin-downloads")
@@ -291,12 +318,11 @@ class PluginManager(
 
     fun setEnabled(id: String, enabled: Boolean): ManagerResult {
         val row = status(id) ?: return ManagerResult.refused("NOT_INSTALLED", "$id is not installed")
+        val harness = hasHarness(id)
         ModulesFile.update(root, id, enabled = enabled)
         val missing = if (enabled && row.tier == Tier.COMMUNITY) row.requested - row.granted.toSet() else emptyList()
-        return ManagerResult.done(
-            "$id ${if (enabled) "enabled" else "disabled"}" + if (missing.isNotEmpty()) " (not granted: ${missing.joinToString()}; those parts will not load)" else "",
-            restartNeeded = true,
-        )
+        val outs = hot?.let { listOf(if (enabled) it.load(id) else it.unload(id)) }.orEmpty()
+        return live("$id ${if (enabled) "enabled" else "disabled"}" + if (missing.isNotEmpty()) " (not granted: ${missing.joinToString()}; those parts will not load)" else "", harness, outs)
     }
 
     fun setGrants(id: String, granted: Set<String>): ManagerResult {
@@ -307,12 +333,39 @@ class PluginManager(
         writeGrants(id, granted)
         val l = ledger()
         l.installed[id]?.let { saveLedger(Ledger(l.installed + (id to it.copy(granted = granted.sorted())))) }
-        return ManagerResult.done("$id: granted ${granted.size} of ${requested.size} requested (${tier.name.lowercase()} tier)", restartNeeded = true)
+        // A grant changes what the daemon half may do: it starts again under the new grants (when it is enabled).
+        val outs = hot?.let { h -> if (status(id)?.enabled == true) listOf(h.reload(id)) else emptyList() }.orEmpty()
+        return live("$id: granted ${granted.size} of ${requested.size} requested (${tier.name.lowercase()} tier)", m.harness != null, outs)
     }
 
     private fun writeGrants(id: String, granted: Collection<String>) {
         val (allow, over, inj) = RequestedGrants.split(granted)
         ModulesFile.update(root, id, allow = allow, allowOverride = over, allowInject = inj)
+    }
+
+    // ---------------------------------------------------------------- live apply (PLUGIN-HOTLOAD-1)
+
+    /** True when [id] ships a harness half; those load at daemon start only. */
+    private fun hasHarness(id: String): Boolean =
+        PluginFolders.scan(root, config(), bundledRoot).firstOrNull { it.folderName == id }?.manifest?.harness != null
+
+    private fun hasHarness(insp: Inspection): Boolean = readManifest(insp.file)?.harness != null
+
+    /** The module ids that left with [out] besides [id], in the order to bring them back (dependencies first). */
+    private fun dependentsOf(id: String, out: HotOutcome): List<String> = out.unloaded.filter { it != id }.reversed()
+
+    /** After files changed under an unloaded [id]: starts it again, then every dependent that left with it. */
+    private fun reloadAfter(h: PluginHotApply, id: String, out: HotOutcome): List<HotOutcome> {
+        val self = h.load(id)
+        return listOf(self) + if (self.ok) dependentsOf(id, out).map { h.load(it) } else emptyList()
+    }
+
+    /** Folds the outcomes of a live apply into the answer; [harness] = the module also has a start-only harness half. */
+    private fun live(base: String, harness: Boolean, outs: List<HotOutcome>): ManagerResult {
+        if (hot == null) return ManagerResult.done(base, restartNeeded = true) // no daemon to apply it to: the CLI says it waits for the next start
+        val parts = outs.filter { !it.ok || it.loaded.isNotEmpty() || it.unloaded.isNotEmpty() }.map { it.message } +
+            outs.flatMap { it.notes }.distinct() + if (harness) listOf("its harness half loads at the next daemon start (harness halves are start-only)") else emptyList()
+        return ManagerResult.done(base + if (parts.isEmpty()) "" else "; live: " + parts.joinToString("; "), restartNeeded = harness)
     }
 
     // ---------------------------------------------------------------- inspect
@@ -449,7 +502,8 @@ class PluginManager(
                     val l = ledger()
                     val row = LedgerRow(r.version, insp.cls.label, r.tier.name.lowercase(), insp.source, insp.sha256, insp.signer, granted.sorted(), emptyList(), insp.license)
                     saveLedger(Ledger(l.installed + (r.name to row)))
-                    ManagerResult.done("${r.name} ${r.version} installed as ${insp.cls.label} (${r.tier.name.lowercase()} tier), ${if (enable) "enabled" else "disabled"}", restartNeeded = true)
+                    val outs = hot?.takeIf { enable }?.let { listOf(it.load(r.name)) }.orEmpty()
+                    live("${r.name} ${r.version} installed as ${insp.cls.label} (${r.tier.name.lowercase()} tier), ${if (enable) "enabled" else "disabled"}", hasHarness(r.name), outs)
                 }
                 else -> ManagerResult.refused("IO", "unexpected installer answer")
             }
@@ -501,11 +555,15 @@ class PluginManager(
             }
             (consent.orEmpty() - insp.grants.toSet()).firstOrNull()?.let { return ManagerResult.refused("UNKNOWN_GRANT", "the plugin does not ask for '$it'", insp.grants) }
             val keep = File(versionsDir, "$id/$cur")
-            swapOut(dir, keep)?.let { return it }
+            val harness = hasHarness(id) || hasHarness(insp)
+            // The running half goes first: its class loader holds the jar open, and a held jar cannot be moved on Windows.
+            val unloaded = hot?.unload(id)
+            swapOut(dir, keep)?.let { refused -> unloaded?.let { reloadAfter(hot!!, id, it) }; return refused }
             val settings = InstallSettings.load(root).copy(allowUnsigned = insp.cls != PluginClass.OFFICIAL)
             val r = IhqInstaller.install(insp.file, root, config(), settings, trustedTier = Tier.OFFICIAL, replace = true)
             if (r !is IhqResult.Installed) {
                 runCatching { File(dir.path).deleteRecursively(); Files.move(keep.toPath(), dir.toPath()) }
+                unloaded?.let { reloadAfter(hot!!, id, it) } // the old version runs again
                 val refusal = r as? IhqResult.Refused
                 return ManagerResult.refused(refusal?.reason?.name ?: "IO", refusal?.message ?: "install failed; the old version was restored")
             }
@@ -514,7 +572,8 @@ class PluginManager(
             val history = pruneHistory(id, (row?.history.orEmpty() + cur.toString()).distinct())
             val updated = LedgerRow(r.version, row?.cls ?: insp.cls.label, r.tier.name.lowercase(), if (ref != null) insp.source else row!!.source, insp.sha256, insp.signer, granted.sorted(), history, insp.license)
             saveLedger(Ledger(ledger().installed + (id to updated)))
-            return ManagerResult.done("$id updated $cur -> ${r.version}; $cur kept for rollback", restartNeeded = true)
+            val outs = unloaded?.let { listOf(it) + reloadAfter(hot!!, id, it) }.orEmpty()
+            return live("$id updated $cur -> ${r.version}; $cur kept for rollback", harness, outs)
         } finally {
             insp.file.delete()
         }
@@ -528,11 +587,14 @@ class PluginManager(
             ?: return ManagerResult.refused("NO_ROLLBACK", "$id has no previous version kept")
         val cur = readManifest(dir)?.version ?: row.version
         val keepCur = File(versionsDir, "$id/$cur")
-        swapOut(dir, keepCur)?.let { return it }
+        val harness = hasHarness(id)
+        val unloaded = hot?.unload(id)
+        swapOut(dir, keepCur)?.let { refused -> unloaded?.let { reloadAfter(hot!!, id, it) }; return refused }
         try {
             Files.move(File(versionsDir, "$id/$prev").toPath(), dir.toPath(), StandardCopyOption.ATOMIC_MOVE)
         } catch (e: IOException) {
             runCatching { dir.deleteRecursively(); Files.move(keepCur.toPath(), dir.toPath()) }
+            unloaded?.let { reloadAfter(hot!!, id, it) }
             return ManagerResult.refused("IN_USE", "could not restore $prev: ${e.message}")
         }
         val requested = readManifest(dir)?.let { RequestedGrants.of(it) }.orEmpty().toSet()
@@ -540,7 +602,8 @@ class PluginManager(
         val granted = row.granted.filter { it in requested }
         if (tier == Tier.COMMUNITY) writeGrants(id, granted)
         saveLedger(Ledger(ledger().installed + (id to row.copy(version = prev, granted = granted, history = (row.history - prev + cur).distinct()))))
-        return ManagerResult.done("$id rolled back $cur -> $prev", restartNeeded = true)
+        val outs = unloaded?.let { listOf(it) + reloadAfter(hot!!, id, it) }.orEmpty()
+        return live("$id rolled back $cur -> $prev", harness || hasHarness(id), outs)
     }
 
     /** Removes an installed plugin (its files go to the version store unless [purge]); bundled plugins are only disabled. */
@@ -548,15 +611,18 @@ class PluginManager(
         val (dir, _) = userFolder(id) ?: return if (status(id)?.bundled == true) ManagerResult.refused("BUNDLED", "$id is bundled with the app; disable it instead")
         else ManagerResult.refused("NOT_INSTALLED", "$id is not installed")
         val ver = readManifest(dir)?.version ?: "unknown"
+        val harness = hasHarness(id)
+        // Unload first (it closes the class loader, so the jar can be moved or deleted); a dependent leaves with it, and is reported.
+        val unloaded = hot?.unload(id)
         if (purge) {
-            if (!dir.deleteRecursively()) return ManagerResult.refused("IN_USE", "could not delete ${dir.path} (a file in it is in use)")
+            if (!dir.deleteRecursively()) { unloaded?.let { reloadAfter(hot!!, id, it) }; return ManagerResult.refused("IN_USE", "could not delete ${dir.path} (a file in it is in use)") }
             File(versionsDir, id).deleteRecursively()
             File(stateDir, "plugin-data/$id").deleteRecursively()
-        } else swapOut(dir, File(versionsDir, "$id/$ver"))?.let { return it }
+        } else swapOut(dir, File(versionsDir, "$id/$ver"))?.let { refused -> unloaded?.let { reloadAfter(hot!!, id, it) }; return refused }
         ModulesFile.forget(root, id)
         val l = ledger()
         if (id in l.installed) saveLedger(Ledger(l.installed - id))
-        return ManagerResult.done("$id removed" + if (purge) " (and its data)" else "", restartNeeded = true)
+        return live("$id removed" + if (purge) " (and its data)" else "", harness, listOfNotNull(unloaded))
     }
 
     private fun swapOut(dir: File, keep: File): ManagerResult? {

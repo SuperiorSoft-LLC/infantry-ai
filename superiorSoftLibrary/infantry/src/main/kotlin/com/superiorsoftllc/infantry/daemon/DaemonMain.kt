@@ -1480,18 +1480,19 @@ class InfantryDaemon(
             fun harnessModulesConfig() = com.superiorsoftllc.infantry.plugin.host.PluginFolders.config(harnessModulesRoot.get()!!)
             // POLICY-1: resolved under the ACTIVE preset's restriction, and again on every switch (GET /plugins reads the latest).
             val firstResolution = java.util.concurrent.atomic.AtomicReference<com.superiorsoftllc.infantry.plugin.host.Resolution?>(null)
-            fun resolvePlugins() = DaemonPlugins.resolve(
-                stateDir(),
-                env = { name -> if (pluginsRoot != null && name == com.superiorsoftllc.infantry.plugin.host.PluginFolders.ROOT_ENV) pluginsRoot.absolutePath else if (pluginsRoot != null && name == com.superiorsoftllc.infantry.plugin.host.PluginFolders.BUNDLED_ENV) null else System.getenv(name) },
-                property = { name -> if (pluginsRoot != null && name == com.superiorsoftllc.infantry.plugin.host.PluginFolders.BUNDLED_PROPERTY) null else System.getProperty(name) },
-                locked = locked(),
-                onResolved = { r ->
+            // PLUGIN-HOTLOAD-1: [onResolved] defaults to the daemon's usual side effects; a live load passes its own (no re-sync).
+            fun resolvePlugins(onResolved: (com.superiorsoftllc.infantry.plugin.host.Resolution) -> Unit = { r ->
                     firstResolution.compareAndSet(null, r); daemonConfig.load(r).forEach { line -> System.err.println(line) }
                     // HARNESS-PLUGIN-3 H4: a re-resolution (a policy switch) loads / unloads harness modules to match.
                     harnessModulesRef.get()?.let { hm -> runCatching { hm.sync(r, harnessModulesConfig()) }.onFailure { System.err.println("[harness] module sync failed: ${it.message}") } }
                     // AGENT-REGISTRY-1: the same for modules' `agents` blocks (the first resolution is synced below, once the root is known).
                     harnessModulesRoot.get()?.let { runCatching { agentModules.sync(r, harnessModulesConfig()) }.onFailure { System.err.println("[agents] module sync failed: ${it.message}") } }
-                },
+                }) = DaemonPlugins.resolve(
+                stateDir(),
+                env = { name -> if (pluginsRoot != null && name == com.superiorsoftllc.infantry.plugin.host.PluginFolders.ROOT_ENV) pluginsRoot.absolutePath else if (pluginsRoot != null && name == com.superiorsoftllc.infantry.plugin.host.PluginFolders.BUNDLED_ENV) null else System.getenv(name) },
+                property = { name -> if (pluginsRoot != null && name == com.superiorsoftllc.infantry.plugin.host.PluginFolders.BUNDLED_PROPERTY) null else System.getProperty(name) },
+                locked = locked(),
+                onResolved = onResolved,
             )
             val pluginsNow = java.util.concurrent.atomic.AtomicReference(resolvePlugins())
             // DAEMON-PLUGINS-1 (docs/DAEMON-PLUGINS.md): the daemon half of every module the rules let through, loaded ONCE,
@@ -1536,6 +1537,12 @@ class InfantryDaemon(
                             com.superiorsoftllc.infantry.daemon.plugins.manager.PluginManager(
                                 com.superiorsoftllc.infantry.plugin.host.PluginFolders.root(stateDir(), { System.getenv(it) }),
                                 stateDir(), com.superiorsoftllc.infantry.plugin.host.PluginFolders.bundledRoot({ System.getenv(it) }),
+                                // PLUGIN-HOTLOAD-1: an install / enable / update / remove reaches the running host (no daemon restart).
+                                hot = object : com.superiorsoftllc.infantry.daemon.plugins.manager.PluginHotApply {
+                                    override fun load(id: String) = pluginHost.get().load(id)
+                                    override fun unload(id: String) = pluginHost.get().unload(id)
+                                    override fun reload(id: String) = pluginHost.get().reload(id)
+                                },
                             ),
                             asks = { pluginHost.get().serviceRegistry.find(com.superiorsoftllc.infantry.daemon.api.attention.OwnerAsks::class) },
                             log = { System.err.println("[infantry] $it") },
@@ -1645,6 +1652,15 @@ class InfantryDaemon(
                     stateDir(),
                 )
                 pluginHost.set(host)
+                // PLUGIN-HOTLOAD-1: what a live load reads: the plugins root as it is now, its grants, and the boot trust. No side effects (no config or harness re-sync).
+                host.hotSource = {
+                    var fresh: com.superiorsoftllc.infantry.plugin.host.Resolution? = null
+                    resolvePlugins { fresh = it }
+                    com.superiorsoftllc.infantry.daemon.plugins.DaemonPluginHost.HotSource(
+                        fresh ?: error("the plugins root could not be resolved"),
+                        com.superiorsoftllc.infantry.plugin.host.PluginFolders.config(root), trustNow,
+                    )
+                }
                 // SCRIPT-HOOK-3: a script's tool calls reach the core frames through the daemon's own /ws (see LoopbackFrames).
                 // AR-4b-ii-b: the Infantry_Roles plugin provides Roles / RoleBindings / RoleTraitLists; core keeps the environment port.
                 host.serviceRegistry.provide("core", com.superiorsoftllc.infantry.daemon.api.roles.RoleEnvironment::class, RolePorts.environment(store, manager, harnesses))
