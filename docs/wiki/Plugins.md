@@ -197,4 +197,4 @@ and `docs/AGENTHQ-INSTALL.md` (section "Official modules and the signing key").
 Deeper guides in the repo: `plugins/GUIDE.md`, `plugins/README.md`, `plugins/_template/README.md`,
 `docs/PLUGIN-HELLO.md`, `docs/PLUGIN-ENDPOINTS-DESIGN.md`.
 
-![hello plugin](../img/hello-plugin.png)
+Screenshot: `docs/img/hello-plugin.png` in the repo.

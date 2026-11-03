@@ -14,7 +14,7 @@ wins, and the page says so.
 - [Harnesses and providers](Harnesses.md): the harness API, its contributions, how the three built-in harnesses use it, adding a harness and a provider.
 - [Settings](Settings.md): scopes (app, project, role, session), cost-saving defaults and what each opt-in costs.
 
-Start with the [README](../../README.md) for install and first run.
+Start with the `README.md` for install and first run.
 
 Commands in these pages were checked against `infantry --help` (`agenthq` is an alias of `infantry`) and the CLI
-source. Screenshots are listed in [docs/img/README.md](../img/README.md).
+source. Screenshots are listed in `docs/img/README.md`.
