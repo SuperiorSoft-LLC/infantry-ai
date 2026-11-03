@@ -4,6 +4,9 @@
 
 <!-- shared:pitch -->Infantry AI is a command post for coding agents: a ticket board, agents on their own git branches, mail, shared project knowledge, Lua scripts that automate your process, and plugins that build the app itself.<!-- /shared:pitch -->
 
+> **Beta.** <!-- shared:beta_line -->Infantry AI is in Beta. It works and we use it every day, but not every part is fully tested yet: you are an early tester. Please report anything that breaks on GitHub.<!-- /shared:beta_line -->  
+> [Report a problem](https://github.com/SuperiorSoft-LLC/infantry-ai/issues)
+
 These pages are written from the code on the dev head. Where an older document disagrees with the code, the code
 wins, and the page says so.
 
@@ -29,3 +32,11 @@ source. Screenshots are listed in `docs/img/README.md`.
 
 - [Sponsor on GitHub](https://github.com/sponsors/SPONSORS_ACCOUNT) (monthly)
 - [Donate once](https://buy.stripe.com/STRIPE_PAYMENT_LINK) (you choose the amount)
+
+## Reporting a problem
+
+Infantry AI is a Beta, so your reports matter. Open an issue at <https://github.com/SuperiorSoft-LLC/infantry-ai/issues> and include:
+
+- the build number (shown in the app footer, and under Configuration > About);
+- the steps that led to the problem, and what you expected instead;
+- the logs from the daemon's log folder (state directory) if the problem involves an agent or the daemon.
