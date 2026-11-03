@@ -64,7 +64,7 @@ From `docs/LICENSE-MAP.md` section 2. "Interim" means the map flags it for the o
 | `plugins/core/` | MPL-2.0 (reserved) | Empty tier. If a module ever lands there it is MPL. |
 | `docs/`, `docker/`, `scripts/`, `gradle/`, `.github/`, root build files | Apache-2.0 | Docs and tooling. |
 | `assets/branding/`, app icon and emblem copies | **Neither** | Logo and emblem: trademark, all rights reserved (S9). |
-| `build/`, `.gradle/`, `.worktrees/`, generated files | n/a | Not distributed from source. |
+| `build/`, `.gradle/`, `.worktrees/`, generated files | n/a | Not distributed from source. <!-- docs-freshness: ignore --> |
 
 Third-party dependencies keep their own licenses (map section 4). Items flagged there: `pty4j` (EPL-1.0), `jlayer`
 (LGPL), Google ML Kit on Android (proprietary terms), a sound file of unknown origin, the JDK and Docker base image

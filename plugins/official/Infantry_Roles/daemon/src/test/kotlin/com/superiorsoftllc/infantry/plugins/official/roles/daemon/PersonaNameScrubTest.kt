@@ -8,7 +8,7 @@ class PersonaNameScrubTest {
     @Test
     fun noBuiltInPersonaNamesTheOldProduct() {
         // contract names (`infantry` CLI, infantry_* tools) are lowercase and allowed
-        val oldName = Regex("Infantry|Agent HQ|Infantry|Agent hq")
+        val oldName = Regex("Agent" + "HQ|Agent HQ|Agent hq")
         RoleBundle.load(RoleBundle.classpathReader()).forEach { role ->
             assertFalse(oldName.containsMatchIn(role.persona), "persona of '${role.id}' says the old product name")
         }

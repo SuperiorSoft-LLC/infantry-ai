@@ -132,7 +132,7 @@ class InstallProfileTest {
     @Test fun macOsUsesApplicationSupport() {
         val home = File("/Users/someone").path
         assertEquals(
-            File(home, "Library/Application Support/Infantry").absoluteFile,
+            File(home, "Library/Application Support/InfantryAI").absoluteFile,
             InstallProfile.stateDir({ null }, home, os = "Mac OS X"),
         )
     }

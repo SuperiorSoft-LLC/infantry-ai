@@ -12,7 +12,7 @@ import kotlin.test.assertTrue
  * lines and stream events are the ones the retired core copy produced (ClaudePluginParityTest proved them equal in H7b-2).
  */
 class ClaudePluginTest {
-    private val infantryRules = "Bash(infantry:*),PowerShell(infantry:*),mcp__infantry__*"
+    private val infantryRules = "Bash(infantry:*),PowerShell(infantry:*),Bash(agenthq:*),PowerShell(agenthq:*),mcp__infantry__*"
 
     @Test fun `one-shot argv with every option, in the golden order`() {
         val argv = ClaudeCommand.command(

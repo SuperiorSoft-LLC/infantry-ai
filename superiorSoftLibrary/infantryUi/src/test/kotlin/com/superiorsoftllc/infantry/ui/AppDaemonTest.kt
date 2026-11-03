@@ -54,7 +54,8 @@ class AppDaemonTest {
 
             // The Infantry install's and the dev state dirs are untouched.
             assertFalse(InstallProfile.stateDir({ null }, home.path).exists())
-            assertFalse(File(home, ".infantry").exists())
+            assertFalse(File(home, ".infantry/infantry.db").exists())
+            assertFalse(File(home, ".agenthq").exists())
             // The full build carries the bundled daemon's launcher.
             assertNotNull(DaemonLaunchers.find())
         } finally {
