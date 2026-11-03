@@ -10,6 +10,7 @@ import com.superiorsoftllc.infantry.ui.model.interruptBlocker
 import com.superiorsoftllc.infantry.ui.model.queueDrainTargets
 import com.superiorsoftllc.infantry.ui.model.queuedTurnText
 import com.superiorsoftllc.infantry.ui.model.reduce
+import com.superiorsoftllc.infantry.ui.model.settleQueueSends
 import com.superiorsoftllc.infantry.ui.model.queuedFor
 import com.superiorsoftllc.infantry.ui.model.withQueue
 import com.superiorsoftllc.infantry.ui.protocol.Envelope
@@ -156,5 +157,38 @@ class QueueDeliveredMidTurnTest {
 
     @Test fun `an unrelated turn leaves the queue alone`() {
         assertEquals(2, reduce(busy(), Envelope(Envelope.TURN, "mail for you", "a", sequence = 5), 10).queuedFor("a").size)
+    }
+}
+
+/** QUEUE-STUCK-3: a stale send entry must never block the queue after an interrupt. */
+class QueueStuckAfterInterruptTest {
+    private fun ag(state: SessionState) = AgentView(
+        session = SessionRecord("a", "stub", "/w", spawnedAt = 1, lastHeartbeat = 1, state = state, providerSessionId = "p", turnActive = state == SessionState.BUSY),
+        entries = emptyList(),
+    )
+    private fun st(state: SessionState) = AppState(agents = mapOf("a" to ag(state)))
+        .withQueue("a", listOf(QueuedPrompt("next", 2)))
+        .copy(queueSending = mapOf("queue-1" to QueueSend("a", QueuedPrompt("earlier", 1))))
+
+    @Test fun `a stale send entry is settled when the turn ends, so the queue drains after an interrupt`() {
+        val busy = st(SessionState.BUSY)
+        val idle = settleQueueSends(busy, st(SessionState.IDLE))
+        assertTrue(idle.queueSending.isEmpty())
+        assertEquals(listOf("a"), queueDrainTargets(busy, idle, tracksSends = true))
+    }
+
+    @Test fun `without the settle the stale entry blocks the queue`() {
+        val idle = st(SessionState.IDLE)
+        assertEquals(emptyList(), queueDrainTargets(idle, idle, tracksSends = true))
+    }
+
+    @Test fun `an interrupt turn carrying the sent text also ends its wait`() {
+        val after = reduce(st(SessionState.BUSY), Envelope(Envelope.TURN, "[Request interrupted by user]\n\nearlier", "a", sequence = 5), 10)
+        assertTrue(after.queueSending.isEmpty())
+    }
+
+    @Test fun `a send still in flight on an idle agent is kept`() {
+        val idle = st(SessionState.IDLE)
+        assertEquals(1, settleQueueSends(idle, idle).queueSending.size)
     }
 }

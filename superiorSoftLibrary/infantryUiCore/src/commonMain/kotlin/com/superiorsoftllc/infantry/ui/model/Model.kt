@@ -1349,7 +1349,7 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
 
     Envelope.TURN -> s.stream(env) { a, _ -> a.withEntry(TranscriptEntry(env.sequence, LineKind.USER, env.data, now, origin = env.origin ?: LegacyOriginAdapter.originOf(env.data))) }
         // A queued message on the stream was taken: its wait for a refusal is over.
-        .let { t -> t.copy(queueSending = t.queueSending.filterValues { it.sessionId != env.sessionId || it.prompt.text != env.data }) }
+        .let { t -> t.copy(queueSending = t.queueSending.filterValues { it.sessionId != env.sessionId || !turnCarries(env.data, it.prompt.text) }) }
         // QUEUE-STUCK-2: a turn the agent took by ANY path (an interrupt, an injected input, another window) delivers the
         // queued messages whose text it carries: they leave the queue now, so the at-rest drain never sends them twice.
         .let { t -> env.sessionId?.let { id -> t.withQueue(id, queueAfterTurn(t.queuedFor(id), env.data)) } ?: t }
@@ -2289,6 +2289,22 @@ fun queuedTurnText(held: List<QueuedPrompt>, text: String): String = (held.map {
  * QUEUE-STUCK-2: the queue left after the agent took a turn reading [turn]. A queued message is delivered when the turn
  * is its text, or a "\n\n"-joined turn (see [queuedTurnText]) or an interrupt that carries it as one of its parts.
  */
+fun turnCarries(turn: String, text: String): Boolean = text.trim() in turn.trim().split("\n\n").map { it.trim() }
+
+/**
+ * QUEUE-STUCK-3: a send in flight ([AppState.queueSending]) can never outlive the turn it started. When an agent goes
+ * from a run in flight to rest, its pending entries are dropped: otherwise an echo that did not match (an interrupt
+ * marker, an origin wrapper) leaves one behind and [queueDrainTargets] holds that agent's queue back forever.
+ */
+fun settleQueueSends(before: AppState, after: AppState): AppState {
+    if (after.queueSending.isEmpty()) return after
+    val ended = after.queueSending.values.map { it.sessionId }.toSet().filter { id ->
+        val b = before.agents[id]; val a = after.agents[id]
+        b != null && isBusy(b) && (a == null || !isBusy(a))
+    }
+    return if (ended.isEmpty()) after else after.copy(queueSending = after.queueSending.filterValues { it.sessionId !in ended })
+}
+
 fun queueAfterTurn(held: List<QueuedPrompt>, turn: String): List<QueuedPrompt> {
     if (held.isEmpty()) return held
     val parts = turn.trim().split("\n\n").map { it.trim() }

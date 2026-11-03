@@ -30,6 +30,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import com.superiorsoftllc.infantry.ui.model.isBusy
 import com.superiorsoftllc.infantry.ui.model.SWITCH_WAIT_FOR_TURN
 import com.superiorsoftllc.infantry.ui.model.queueDrainTargets
+import com.superiorsoftllc.infantry.ui.model.settleQueueSends
 import com.superiorsoftllc.infantry.ui.model.queuedTurnText
 import com.superiorsoftllc.infantry.ui.model.queuedFor
 import com.superiorsoftllc.infantry.ui.model.withQueue
@@ -194,6 +195,7 @@ class Controller(
             client.frames.collect { env ->
                 val before = _state.value
                 _state.update { reduce(it, env, Clock.System.now().toEpochMilliseconds()) }
+                _state.update { settleQueueSends(before, it) }
                 sendQueuedAtRest(before, _state.value)
                 answerImageUpload(env)
                 answerPluginSecret(env)
