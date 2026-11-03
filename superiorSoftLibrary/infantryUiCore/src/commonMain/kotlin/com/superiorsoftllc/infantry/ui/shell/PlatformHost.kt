@@ -70,6 +70,23 @@ interface PlatformHost {
     /** CLIPATH-1: let the user choose a file, titled [title]; its absolute path, or null when cancelled / unsupported. */
     fun pickFile(title: String): String? = null
 
+    /** ANDROID-ATTACH-1: whether [pickAttachment] can ask for a file here (desktop dialog, Android system picker). */
+    val canPickAttachment: Boolean get() = canPickFiles
+
+    /**
+     * ANDROID-ATTACH-1: asks for a file and hands its CONTENT (not a path: a phone path means nothing to the daemon) to
+     * [onPicked]; null = cancelled or unreadable. [imagesOnly] narrows the chooser to pictures. A file over [maxBytes]
+     * comes back with empty bytes and its real size, so the caller refuses it unread. May answer later (Android).
+     */
+    fun pickAttachment(title: String, imagesOnly: Boolean, maxBytes: Long, onPicked: (PickedImage?) -> Unit) {
+        val path = pickFile(title)
+        if (path == null) { onPicked(null); return }
+        val name = path.replace('\\', '/').substringAfterLast('/')
+        val size = fileSize(path)
+        val bytes = if (size != null && size > maxBytes) ByteArray(0) else readBytes(path)
+        onPicked(bytes?.let { PickedImage(name, PickedImage.mimeOf(name), it, size ?: it.size.toLong()) })
+    }
+
     /** PKG-3: the folder this app writes its log files to (the installed desktop app), or null when it writes none. */
     val logsDir: String? get() = null
 

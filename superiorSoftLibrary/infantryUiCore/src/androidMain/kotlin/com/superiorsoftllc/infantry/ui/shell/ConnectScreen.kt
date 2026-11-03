@@ -194,7 +194,14 @@ fun AndroidConnectGate(
                         }.getOrNull()
                     })
                 }
-                val host = remember(g) { AndroidPlatformHost(g.settings, soundPlayer = soundPlayer, customSoundStore = soundStore, soundPicker = { cb -> soundCallback = cb; soundLauncher.launch(arrayOf("audio/*")) }, onChangeConnection = { gate = Gate.Form() }, speaker = speaker, savedServers = ConnectionSavedServers(store), uiPrefs = PrefsKeyValueStore(context.getSharedPreferences("infantry_ui", android.content.Context.MODE_PRIVATE)), appBuild = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull()) }
+                // ANDROID-ATTACH-1: OpenDocument needs no storage permission; bytes are read through the ContentResolver.
+                var attachCallback by remember { androidx.compose.runtime.mutableStateOf<((PickedImage?) -> Unit)?>(null) }
+                var attachMax by remember { androidx.compose.runtime.mutableStateOf(0L) }
+                val attachLauncher = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
+                    val cb = attachCallback; attachCallback = null
+                    cb?.invoke(uri?.let { u -> runCatching { readPickedAttachment(context, u, attachMax) }.getOrNull() })
+                }
+                val host = remember(g) { AndroidPlatformHost(g.settings, attachPicker = { images, max, cb -> attachCallback = cb; attachMax = max; attachLauncher.launch(if (images) arrayOf("image/*") else arrayOf("*/*")) }, soundPlayer = soundPlayer, customSoundStore = soundStore, soundPicker = { cb -> soundCallback = cb; soundLauncher.launch(arrayOf("audio/*")) }, onChangeConnection = { gate = Gate.Form() }, speaker = speaker, savedServers = ConnectionSavedServers(store), uiPrefs = PrefsKeyValueStore(context.getSharedPreferences("infantry_ui", android.content.Context.MODE_PRIVATE)), appBuild = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull()) }
                 InfantryShell(host)
             }
         }
@@ -310,4 +317,22 @@ private fun PairingControls(onLink: (PairingLink) -> Unit) {
             CameraQrScanner(onCode = { scanning = false; accept(it) }, onClose = { scanning = false })
         }
     }
+}
+
+/** ANDROID-ATTACH-1: the picked document's name, mime type and bytes; over [maxBytes] it keeps its size and drops the bytes. */
+internal fun readPickedAttachment(context: android.content.Context, uri: android.net.Uri, maxBytes: Long): PickedImage? {
+    val resolver = context.contentResolver
+    var name: String? = null
+    var size = -1L
+    resolver.query(uri, null, null, null, null)?.use { c ->
+        if (c.moveToFirst()) {
+            c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME).takeIf { it >= 0 }?.let { name = c.getString(it) }
+            c.getColumnIndex(android.provider.OpenableColumns.SIZE).takeIf { it >= 0 && !c.isNull(it) }?.let { size = c.getLong(it) }
+        }
+    }
+    val fileName = name ?: uri.lastPathSegment?.substringAfterLast('/')?.substringAfterLast(':') ?: "attachment"
+    val mime = resolver.getType(uri)?.takeIf { it.isNotBlank() } ?: PickedImage.mimeOf(fileName)
+    if (size > maxBytes) return PickedImage(fileName, mime, ByteArray(0), size)
+    val bytes = resolver.openInputStream(uri)?.use { it.readNBytes(maxBytes.toInt() + 1) } ?: return null
+    return if (bytes.size > maxBytes) PickedImage(fileName, mime, ByteArray(0), bytes.size.toLong()) else PickedImage(fileName, mime, bytes)
 }
