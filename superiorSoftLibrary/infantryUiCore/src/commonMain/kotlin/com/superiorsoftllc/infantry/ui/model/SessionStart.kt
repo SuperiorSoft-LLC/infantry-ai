@@ -56,3 +56,10 @@ fun sessionPaneAction(session: SessionRecord, tickets: List<Ticket>): SessionPan
 
 /** The first turn a Start of a plain (non-ticket) session sends when the owner typed nothing. */
 const val START_DEFAULT_PROMPT = "Start."
+
+/**
+ * END-SESSION-1: an ended session (End session, exit, failure) that can be resumed shows the Resume splash at once,
+ * even while its transcript is on screen; it is not a live chat any more.
+ */
+fun showsResumeSplash(session: SessionRecord, action: SessionPaneAction?): Boolean =
+    action is SessionPaneAction.Resume && session.state in setOf(SessionState.EXITED, SessionState.FAILED, SessionState.ORPHANED)
