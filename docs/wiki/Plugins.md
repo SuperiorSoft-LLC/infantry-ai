@@ -78,7 +78,7 @@ From `Infantry_Board`:
   "jar": "daemon/build/libs/Infantry_Board-daemon.jar",
   "apiAtLeast": "1.24.0",
   "tools": [
-    { "name": "agenthq_ticket_get", "action": "board.read", "kind": "read", "description": "Read ONE ticket back." }
+    { "name": "infantry_ticket_get", "action": "board.read", "kind": "read", "description": "Read ONE ticket back." }
   ],
   "frames": [ { "type": "ticket_list", "action": "board.read", "kind": "read" } ]
 }
@@ -140,7 +140,7 @@ in `<module>/native/<os>-<arch>/` and load with `System.loadLibrary`.
 ## Installing
 
 1. Put the folder (with `module.json` and the jar) into `<plugins root>/community/`. The plugins root is
-   `AGENTHQ_PLUGINS_ROOT`, else `<state dir>/plugins`.
+   `INFANTRY_PLUGINS_ROOT`, else `<state dir>/plugins`.
 2. Enable it: Settings > Plugins > Modules > Enable, or edit `plugins/modules.json`:
 
 ```json
@@ -157,8 +157,8 @@ in `<module>/native/<os>-<arch>/` and load with `System.loadLibrary`.
 Official plugins are signed jars; the loader accepts them only when the signer matches a pinned Infantry key and
 the signed `module.json` equals the one on disk. Packages for installing (`.ihq`) are checked the same way.
 A community plugin needs no signature. Status today: the pinned key is a placeholder in the source until the real
-signing certificate is set, and dev builds run with `-Dagenthq.plugins.devTrust=true`. See `docs/PLUGIN-MANAGER.md`
-and `docs/AGENTHQ-INSTALL.md` (section "Official modules and the signing key").
+signing certificate is set, and dev builds run with `-Dinfantry.plugins.devTrust=true`. See `docs/PLUGIN-MANAGER.md`
+and `docs/INFANTRY-INSTALL.md` (section "Official modules and the signing key").
 
 ## Hello plugin, step by step
 
@@ -190,8 +190,8 @@ and `docs/AGENTHQ-INSTALL.md` (section "Official modules and the signing key").
    greeting. The block updates live.
 6. **Run it from source** (Windows):
    ```powershell
-   $env:AGENTHQ_STATE_DIR = "$env:TEMP\hello-state"; $env:AGENTHQ_PORT = "8812"; $env:AGENTHQ_PROVIDER = "stub"
-   .\gradlew.bat --no-parallel :superiorSoftLibrary:agentHqUi:runRealDaemon
+   $env:INFANTRY_STATE_DIR = "$env:TEMP\hello-state"; $env:INFANTRY_PORT = "8812"; $env:INFANTRY_PROVIDER = "stub"
+   .\gradlew.bat --no-parallel :superiorSoftLibrary:infantryUi:runRealDaemon
    ```
 
 Deeper guides in the repo: `plugins/GUIDE.md`, `plugins/README.md`, `plugins/_template/README.md`,

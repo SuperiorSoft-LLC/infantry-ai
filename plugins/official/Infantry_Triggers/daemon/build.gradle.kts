@@ -11,14 +11,14 @@ kotlin {
 val shaded by configurations.creating { isTransitive = false }
 
 dependencies {
-    shaded(project(":superiorSoftLibrary:agentHqProtocol"))
-    compileOnly(project(":superiorSoftLibrary:agentHqProtocol"))
-    compileOnly(project(":superiorSoftLibrary:agentHqDaemonApi"))
-    testImplementation(project(":superiorSoftLibrary:agentHqDaemonApi"))
-    testImplementation(project(":superiorSoftLibrary:agentHqProtocol"))
+    shaded(project(":superiorSoftLibrary:infantryProtocol"))
+    compileOnly(project(":superiorSoftLibrary:infantryProtocol"))
+    compileOnly(project(":superiorSoftLibrary:infantryDaemonApi"))
+    testImplementation(project(":superiorSoftLibrary:infantryDaemonApi"))
+    testImplementation(project(":superiorSoftLibrary:infantryProtocol"))
     testImplementation(kotlin("test"))
-    // TRIG-2b: the contract test runs core TriggerRepository (agentHq) and the plugin store on real SQLite files.
-    testImplementation(project(":superiorSoftLibrary:agentHq"))
+    // TRIG-2b: the contract test runs core TriggerRepository (infantry) and the plugin store on real SQLite files.
+    testImplementation(project(":superiorSoftLibrary:infantry"))
     testImplementation(libs.sqlite.jdbc)
 }
 

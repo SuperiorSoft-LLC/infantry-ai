@@ -9,7 +9,7 @@ kotlin {
 }
 
 dependencies {
-    compileOnly(project(":superiorSoftLibrary:agentHqHarnessApi"))
+    compileOnly(project(":superiorSoftLibrary:infantryHarnessApi"))
 }
 
 tasks.jar {

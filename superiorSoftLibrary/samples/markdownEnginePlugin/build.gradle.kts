@@ -11,7 +11,7 @@ kotlin {
 dependencies {
     // The engine interface and ChatBlock only. The host provides them (and the Kotlin runtime) at load time, so the
     // jar must NOT bundle them.
-    compileOnly(project(":superiorSoftLibrary:agenthqUiCore"))
+    compileOnly(project(":superiorSoftLibrary:infantryUiCore"))
 }
 
 // ./gradlew :superiorSoftLibrary:samples:markdownEnginePlugin:pluginJar  ->  build/libs/markdown-engine-example.jar

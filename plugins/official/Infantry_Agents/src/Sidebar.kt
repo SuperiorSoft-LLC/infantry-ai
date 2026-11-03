@@ -1,9 +1,9 @@
-package com.superiorsoftllc.agenthq.plugins.official.agents
+package com.superiorsoftllc.infantry.plugins.official.agents
 
-import com.superiorsoftllc.agenthq.ui.shell.gate
-import com.superiorsoftllc.agenthq.ui.*
-import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
-import com.superiorsoftllc.agenthq.ui.shell.NoAgents
+import com.superiorsoftllc.infantry.ui.shell.gate
+import com.superiorsoftllc.infantry.ui.*
+import com.superiorsoftllc.infantry.ui.shell.LocalShellContext
+import com.superiorsoftllc.infantry.ui.shell.NoAgents
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.background
@@ -35,10 +35,10 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import com.superiorsoftllc.agenthq.ui.ActiveBorder
-import com.superiorsoftllc.agenthq.ui.ActiveBorderStyle
-import com.superiorsoftllc.agenthq.ui.activeBorder
-import com.superiorsoftllc.agenthq.ui.activeBorderStyle
+import com.superiorsoftllc.infantry.ui.ActiveBorder
+import com.superiorsoftllc.infantry.ui.ActiveBorderStyle
+import com.superiorsoftllc.infantry.ui.activeBorder
+import com.superiorsoftllc.infantry.ui.activeBorderStyle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -64,17 +64,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.style.TextOverflow
-import com.superiorsoftllc.agenthq.ui.model.AgentGroup
-import com.superiorsoftllc.agenthq.ui.model.parseHexColor
-import com.superiorsoftllc.agenthq.ui.model.roleHue
-import com.superiorsoftllc.agenthq.ui.model.reportFlagOf
-import com.superiorsoftllc.agenthq.ui.model.watchFlagOf
-import com.superiorsoftllc.agenthq.ui.model.wakeLine
-import com.superiorsoftllc.agenthq.ui.model.AgentView
-import com.superiorsoftllc.agenthq.ui.model.AppState
-import com.superiorsoftllc.agenthq.ui.model.needsInput
-import com.superiorsoftllc.agenthq.ui.plugin.PanelSlot
-import com.superiorsoftllc.agenthq.ui.plugin.Panels
+import com.superiorsoftllc.infantry.ui.model.AgentGroup
+import com.superiorsoftllc.infantry.ui.model.parseHexColor
+import com.superiorsoftllc.infantry.ui.model.roleHue
+import com.superiorsoftllc.infantry.ui.model.reportFlagOf
+import com.superiorsoftllc.infantry.ui.model.watchFlagOf
+import com.superiorsoftllc.infantry.ui.model.wakeLine
+import com.superiorsoftllc.infantry.ui.model.AgentView
+import com.superiorsoftllc.infantry.ui.model.AppState
+import com.superiorsoftllc.infantry.ui.model.needsInput
+import com.superiorsoftllc.infantry.ui.plugin.PanelSlot
+import com.superiorsoftllc.infantry.ui.plugin.Panels
 import kotlin.time.Clock
 
 // S4c: the left panel's agent list and the centre's tab strip, split out of core App.kt (docs/SHELL-LEAKS.md).
@@ -163,7 +163,7 @@ fun Sidebar(
                     if (state.agents.isEmpty()) "No agents yet." else "No agent matches the filter.",
                     color = Palette.Muted, fontSize = 12.sp,
                 )
-                if (state.agents.isEmpty() && state.connection.gate("agents.spawn", com.superiorsoftllc.agenthq.plugin.api.ActionKind.SPAWN).enabled) {
+                if (state.agents.isEmpty() && state.connection.gate("agents.spawn", com.superiorsoftllc.infantry.plugin.api.ActionKind.SPAWN).enabled) {
                     TextButton(onClick = onNew) { Text("Spawn one (Ctrl+N)") }
                 }
             }
@@ -172,7 +172,7 @@ fun Sidebar(
         HorizontalDivider(color = Palette.Border)
         // UX-ICON-1: the same New agent icon as the composer, with its label (the sidebar has the room).
         // DEMO-MERGE-1: dimmed, with the reason as its tooltip, while the write policy refuses writes.
-        val policy = state.connection.gate("agents.spawn", com.superiorsoftllc.agenthq.plugin.api.ActionKind.SPAWN)
+        val policy = state.connection.gate("agents.spawn", com.superiorsoftllc.infantry.plugin.api.ActionKind.SPAWN)
         val writeLocked = !policy.allowed
         IconAction(
             AhqIcons.PersonAdd, policy.label(NEW_AGENT_LABEL), onNew, Modifier.fillMaxWidth().testTag(SIDEBAR_NEW_AGENT_TAG),
@@ -412,7 +412,7 @@ private fun AgentRowMenu(a: AgentView, state: AppState, revealed: Boolean, onOpe
             }
             HorizontalDivider(color = Palette.Border)
             // DEMO-MERGE-1: the delete is a write; Remove is dimmed and says why while writes are refused.
-            val policy = state.connection.gate("agents.delete", com.superiorsoftllc.agenthq.plugin.api.ActionKind.DESTRUCTIVE)
+            val policy = state.connection.gate("agents.delete", com.superiorsoftllc.infantry.plugin.api.ActionKind.DESTRUCTIVE)
             val writeLocked = !policy.allowed
             WritePolicyTooltip { m ->
                 DropdownMenuItem(

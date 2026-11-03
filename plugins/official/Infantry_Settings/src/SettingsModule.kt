@@ -1,21 +1,21 @@
-package com.superiorsoftllc.agenthq.plugins.official
+package com.superiorsoftllc.infantry.plugins.official
 
-import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
+import com.superiorsoftllc.infantry.ui.plugin.ModuleSource
 import androidx.compose.runtime.Composable
-import com.superiorsoftllc.agenthq.plugin.api.ConfigDeclaration
-import com.superiorsoftllc.agenthq.plugin.api.ConfigFieldDeclaration
-import com.superiorsoftllc.agenthq.plugin.api.ConfigFieldTypes
-import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
-import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
-import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
-import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
-import com.superiorsoftllc.agenthq.ui.plugin.TabContext
-import com.superiorsoftllc.agenthq.ui.plugin.TabGroups
-import com.superiorsoftllc.agenthq.ui.plugin.TabProvider
-import com.superiorsoftllc.agenthq.ui.plugin.UiPlugin
-import com.superiorsoftllc.agenthq.ui.plugin.UiRegistrar
-import com.superiorsoftllc.agenthq.ui.plugin.circle
-import com.superiorsoftllc.agenthq.ui.plugin.tabIcon
+import com.superiorsoftllc.infantry.plugin.api.ConfigDeclaration
+import com.superiorsoftllc.infantry.plugin.api.ConfigFieldDeclaration
+import com.superiorsoftllc.infantry.plugin.api.ConfigFieldTypes
+import com.superiorsoftllc.infantry.plugin.api.ModuleManifest
+import com.superiorsoftllc.infantry.plugin.api.TabDeclaration
+import com.superiorsoftllc.infantry.ui.plugin.InfantryModule
+import com.superiorsoftllc.infantry.ui.plugin.TabContainers
+import com.superiorsoftllc.infantry.ui.plugin.TabContext
+import com.superiorsoftllc.infantry.ui.plugin.TabGroups
+import com.superiorsoftllc.infantry.ui.plugin.TabProvider
+import com.superiorsoftllc.infantry.ui.plugin.UiPlugin
+import com.superiorsoftllc.infantry.ui.plugin.UiRegistrar
+import com.superiorsoftllc.infantry.ui.plugin.circle
+import com.superiorsoftllc.infantry.ui.plugin.tabIcon
 
 /** SETTINGS-TAB-1: the Settings host tab's id; a tab joins it by naming it [TabProvider.parent]. */
 const val SETTINGS_TAB_ID = "infantry.settings"
@@ -46,7 +46,7 @@ private fun settingsTab() = TabProvider(
  * Notes, Run, Git) draw as its sub-tabs while its `children.grouped` switch is on, and stay in the centre strip (with
  * this tab hidden) while it is off, so the owner can compare the two layouts.
  */
-val InfantrySettings = AgentHqModule(
+val InfantrySettings = InfantryModule(
     ModuleManifest(
         name = "Infantry_Settings", version = "1.0.0", author = "Infantry AI",
         description = "The Settings tab: groups the setup tabs (Profiles, Triggers, Notes, Run, Git) under one.",
@@ -75,5 +75,5 @@ private fun SettingsTab(context: TabContext) = context.SubTabs(SETTINGS_TAB_ID)
 class SettingsPlugin : UiPlugin, ModuleSource {
     override fun register(registrar: UiRegistrar) = registrar.tab(settingsTab())
 
-    override fun modules(): List<AgentHqModule> = listOf(InfantrySettings)
+    override fun modules(): List<InfantryModule> = listOf(InfantrySettings)
 }

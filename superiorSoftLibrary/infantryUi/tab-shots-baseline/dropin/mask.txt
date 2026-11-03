@@ -1,0 +1,80 @@
+# Regions diffTabShots does not compare: only what is legitimately dynamic (a clock, a live reading).
+# One region per line: <shot name or *> <x> <y> <width> <height>, in pixels of the 1400x860 shot.
+# Keep each region as small as the dynamic text; a wider mask hides real UI changes.
+
+# Status bar after "contract x.y.z": "last frame Ns ago" and the host's live "RAM x GB free". Their width moves the
+# rest of the bar's text, so the whole remainder of the bar is masked.
+* 190 838 1210 22
+# Status bar: the version digits of "contract x.y.z", so a contract bump does not fail every shot.
+* 140 838 50 22
+# Agent row: the session's age ("now", "6s", "1m").
+* 200 246 50 20
+# Usage: "updated Ns ago" over the plan limits.
+right-tab-USAGE 1240 92 92 18
+# Chat: each message's time of day.
+center-tab-OUTPUT 965 164 92 16
+center-tab-OUTPUT 965 278 92 16
+
+# LAYOUT-1 P0 chrome shots (window chrome, compact widths): each chat message's time of day.
+chrome-desktop-1400 965 164 92 16
+chrome-desktop-1400 965 278 92 16
+chrome-compact-800 710 164 80 16
+chrome-compact-800 710 278 80 16
+chrome-compact-800-overflow 710 164 80 16
+chrome-compact-800-overflow 710 278 80 16
+chrome-compact-360 270 198 80 16
+chrome-compact-360 270 328 80 16
+chrome-compact-360-overflow 270 198 80 16
+chrome-compact-360-overflow 270 328 80 16
+
+# The stub daemon runs on a free ephemeral port per render (concurrent renders must not share one), so the port digits in
+# the header's connection text "ws://127.0.0.1:<port>/ws" and in the overflow menu's server row are dynamic.
+* 1176 10 224 18
+chrome-compact-800-overflow 514 110 130 16
+chrome-compact-360-overflow 40 110 130 16
+
+# BLOCKS-LAYOUT L11 opt-in shots (-PtabShotsExtra=newAgent): the chat messages' time of day behind the New agent dialog.
+newAgent-open 965 164 92 16
+newAgent-open 965 278 92 16
+newAgent-role 965 164 92 16
+newAgent-role 965 278 92 16
+
+# TOAST-1 opt-in shot (-PtabShotsExtra=toast): the chat messages' time of day beside the toast.
+toast-visible 965 164 92 16
+toast-visible 965 278 92 16
+
+# S0 opt-in shots (-PtabShotsExtra=config,changes,compact): the chat messages' time of day behind the dialogs and panels.
+changes-no-directory 965 164 92 16
+changes-no-directory 965 278 92 16
+changes-not-a-repository 965 164 92 16
+changes-not-a-repository 965 278 92 16
+changes-working-tree 965 164 92 16
+changes-working-tree 965 278 92 16
+changes-history 965 164 92 16
+changes-history 965 278 92 16
+compact-800-newAgent 710 164 80 16
+compact-800-newAgent 710 278 80 16
+# Configuration > Devices: the host's own addresses and the ephemeral port (address pills and the "ws://..." line).
+config-devices 246 356 700 42
+config-devices 262 436 300 20
+# L18 opt-in shots (-PtabShotsExtra=changespane): the chat messages' time of day.
+changespane-top 965 164 92 16
+changespane-top 965 278 92 16
+changespane-worktrees 965 164 92 16
+changespane-worktrees 965 278 92 16
+changespane-branches 965 164 92 16
+changespane-branches 965 278 92 16
+changespane-branch 965 164 92 16
+changespane-branch 965 278 92 16
+changespane-history 965 164 92 16
+changespane-history 965 278 92 16
+changespane-not-git 965 164 92 16
+changespane-not-git 965 278 92 16
+
+# S6 drop-in acceptance only (-PtabShotsMask=superiorSoftLibrary/infantryUi/tab-shots-baseline/dropin/mask.txt): Acme_Hello's
+# "Tabs opened since start: N" counts every tab opened since IT started, and the soft-restarted window opened two
+# (CLI, Changes) before the 32 shots, so N is 2 higher than in the default run. Only those digits are masked.
+acme-hello-route-declared 545 231 22 14
+acme-hello-route-refused 545 231 22 14
+center-tab-ACME_HELLO 545 231 22 14
+right-tab-ACME_HELLO 1246 174 14 14

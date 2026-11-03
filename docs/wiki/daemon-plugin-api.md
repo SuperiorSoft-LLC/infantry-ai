@@ -4,11 +4,11 @@ A daemon plugin is the part of a module that runs inside the Infantry AI daemon.
 agents over MCP), HTTP routes, client frames, hooks, scheduled jobs, settings and its own database tables. It is
 optional. Most modules have only a UI half.
 
-Source of the API: `superiorSoftLibrary/agentHqDaemonApi/src/main/kotlin/com/superiorsoftllc/agenthq/daemon/api/`
-(`DaemonApi.kt` holds the core; the sub-packages hold the larger services). Host side: `superiorSoftLibrary/agentHq/src/main/kotlin/com/superiorsoftllc/agenthq/daemon/plugins/`
+Source of the API: `superiorSoftLibrary/infantryDaemonApi/src/main/kotlin/com/superiorsoftllc/infantry/daemon/api/`
+(`DaemonApi.kt` holds the core; the sub-packages hold the larger services). Host side: `superiorSoftLibrary/infantry/src/main/kotlin/com/superiorsoftllc/infantry/daemon/plugins/`
 (`DaemonPluginHost.kt`, `PluginGuard.kt`). The version is `DaemonApi.VERSION`, currently **1.35.0**.
 
-A daemon half compiles against the module `:superiorSoftLibrary:agentHqDaemonApi` with `compileOnly`. The daemon
+A daemon half compiles against the module `:superiorSoftLibrary:infantryDaemonApi` with `compileOnly`. The daemon
 loads the jar in its own class loader, which hides every daemon class except the API.
 
 Tutorial: [Make a plugin](make-a-plugin.md). UI half: [UI plugin API](plugin-api.md).
@@ -71,7 +71,7 @@ the source comment names a grant, a community module needs it in `modules.json` 
 | `sessionNotifier` | `api.sessions` | notify one session or every live session of a role; grant `sessions.notify` |
 | `processes`, `launchEnv` | `api.processes` | OS process table, checked kill, environment for session launches; grant `daemon.processes` (never `kill`) |
 | `meters` | `api.usage` | plan meters, read-only; grant `usage.read` |
-| `files(projectId)` | `api.files` | the project's `.agenthq/` folder; official, or grant `files` |
+| `files(projectId)` | `api.files` | the project's `.infantry/` folder; official, or grant `files` |
 | `runs` | `api.runs` | run a process in a working root; grant `runs` |
 | `triggerHost` | `api.triggers` | trigger store and run events |
 
@@ -98,7 +98,7 @@ data class ToolResult(val text: String, val isError: Boolean = false)
   `{ "name": "acme_hello", "action": "acme.hello.read", "kind": "read", "description": "..." }`.
 - `kind` is `read`, `write`, `destructive` or `spawn`. A policy preset can refuse an `action`; a refused call never
   reaches `call`.
-- A core or official tool may use the `agenthq_` prefix. A community tool name must start with its own vendor prefix
+- A core or official tool may use the `infantry_` prefix. A community tool name must start with its own vendor prefix
   (`acme_...`).
 - `ToolCall.caller` says who called: `owner`, `agent`, `remoteAddress`. `clientSessionId` and `clientRole` are the
   MCP process's own claims: use them only to narrow what a call does, never to widen it.
@@ -245,7 +245,7 @@ loads its UI half only and shows "community daemon code needs the 'daemon.code' 
 
 Each plugin gets its own bounded thread pool and a circuit breaker (`PluginGuard.kt`). The daemon keeps running
 whatever the plugin does. The limits are daemon settings (`limits.plugins.*` and `limits.plugin.guard.*`, defined in
-`superiorSoftLibrary/agentHqCore/src/main/kotlin/com/superiorsoftllc/agenthq/settings/LimitRegistry.kt`). A module's
+`superiorSoftLibrary/infantryCore/src/main/kotlin/com/superiorsoftllc/infantry/settings/LimitRegistry.kt`). A module's
 `daemon.limits` can override `callTimeoutMs`, `toolTimeoutMs`, `cpuMsPerCall`, `routeRequestsPerMinute`;
 `memoryMbHint` is reported, not enforced.
 

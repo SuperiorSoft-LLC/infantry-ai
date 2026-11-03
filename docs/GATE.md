@@ -1,22 +1,22 @@
-# The bulk gate: `scripts/agenthq-gate.sh`
+# The bulk gate: `scripts/infantry-gate.sh`
 
 One script runs the whole QA gate against a commit or branch. QA and the PM run the same thing.
 
 ```sh
-scripts/agenthq-gate.sh staging-agenthq          # batch gate: tests forced, compilation may come from the build cache
-scripts/agenthq-gate.sh --full staging-agenthq   # promotion gate (staging -> feature): nothing from the build cache
+scripts/infantry-gate.sh staging-agenthq          # batch gate: tests forced, compilation may come from the build cache
+scripts/infantry-gate.sh --full staging-agenthq   # promotion gate (staging -> feature): nothing from the build cache
 ```
 
-Run it from Git Bash inside any AgentHQ checkout. Long run (tens of minutes): start it as
-`agenthq bg run --name gate -- sh scripts/agenthq-gate.sh <ref>` so the session shows Running.
+Run it from Git Bash inside any Infantry checkout. Long run (tens of minutes): start it as
+`infantry bg run --name gate -- sh scripts/infantry-gate.sh <ref>` so the session shows Running.
 
 ## What it does
 
-1. Takes a machine-wide lock (`$TEMP/agenthq-gate.lock`). A second run is refused with exit 3 and a message naming the holder's PID. A lock whose PID is dead is removed automatically. The lock dir also holds `owner.txt` (`ticket=<id> session=<id> pid=<n>`): when that session closes (or is seen ended later), the daemon releases the lock if its holder is gone (never a lock owner.txt does not name for it).
+1. Takes a machine-wide lock (`$TEMP/infantry-gate.lock`). A second run is refused with exit 3 and a message naming the holder's PID. A lock whose PID is dead is removed automatically. The lock dir also holds `owner.txt` (`ticket=<id> session=<id> pid=<n>`): when that session closes (or is seen ended later), the daemon releases the lock if its holder is gone (never a lock owner.txt does not name for it).
 2. Aborts (exit 4) if `$TEMP` has less than 5 GB free (`GATE_MIN_FREE_GB` to change). The floor is rechecked before every stage.
 3. Creates a detached temp worktree of `<ref>` under `$TEMP`, so the gate never touches your checkout or its build dirs.
 4. Runs four stages one at a time, each `<task> --rerun --no-daemon`:
-   `agentHq:test`, `agenthqUiCore:jvmTest`, `agentHqUi:test`, `agentHqUi:ownerSmoke`.
+   `infantry:test`, `infantryUiCore:jvmTest`, `infantryUi:test`, `infantryUi:ownerSmoke`.
    `--rerun` forces the named test task to execute (never up-to-date, never from the build cache), so every test
    really runs. Compile tasks are NOT forced: they come from the build cache or are up-to-date, so the modules are
    compiled once per gate, not once per stage. (Before TEST-SPEED-2 each stage used `--rerun-tasks`, which
@@ -24,21 +24,21 @@ Run it from Git Bash inside any AgentHQ checkout. Long run (tens of minutes): st
    `--full` (use it for the promotion run, staging -> feature) adds `--no-build-cache` to every stage: nothing is
    taken from the cache, so every module compiles fresh in the new worktree, once (later stages see it up-to-date).
    The verdict line then says `(full)`.
-   Test tasks run several forks in parallel (`maxParallelForks`; `-Pagenthq.testForks=N`, `-Pagenthq.uiTestForks=N`).
-   The gate always runs the full `test` tasks. For a quick inner loop, `agentHq` and `agentHqUi` also have
+   Test tasks run several forks in parallel (`maxParallelForks`; `-Pinfantry.testForks=N`, `-Pinfantry.uiTestForks=N`).
+   The gate always runs the full `test` tasks. For a quick inner loop, `infantry` and `infantryUi` also have
    `testFast` and `testSlow` (TEST-SPEED-3): two tiers split by class name (`slowTestPatterns` /
    `slowUiTestPatterns` in each build file). Each class is in exactly one tier, so `testFast` + `testSlow` = `test`.
 5. Removes the worktree and the lock on exit (also on Ctrl-C). `GATE_KEEP=1` keeps the worktree for inspection.
 
-Logs are in `$TEMP/agenthq-gate-<sha8>-<pid>/`: `status.log` (one line per stage) and `<stage>.log` (full Gradle output).
+Logs are in `$TEMP/infantry-gate-<sha8>-<pid>/`: `status.log` (one line per stage) and `<stage>.log` (full Gradle output).
 
 ## Reading the result
 
 The last line is the verdict, for example:
 
 ```
-GATE PASS <sha> agentHq=ok(812 tests,0 fail,0 err) uiCore=ok(...) agentHqUi=ok(...) ownerSmoke=ok(...) logs=...
-GATE FAIL <sha> ... agentHqUi=FAIL(300 tests,2 fail,0 err) failing: [agentHqUi: pkg.Class.testName,...] logs=...
+GATE PASS <sha> infantry=ok(812 tests,0 fail,0 err) uiCore=ok(...) infantryUi=ok(...) ownerSmoke=ok(...) logs=...
+GATE FAIL <sha> ... infantryUi=FAIL(300 tests,2 fail,0 err) failing: [infantryUi: pkg.Class.testName,...] logs=...
 ```
 
 Exit code is 0 only on PASS. A stage with zero tests counts as FAIL. Two stage verdicts are not test failures:
@@ -56,9 +56,9 @@ Exit code is 0 only on PASS. A stage with zero tests counts as FAIL. Two stage v
 
 ## Running a test suite safely outside the gate
 
-- Take `$TEMP/agenthq-gate.lock` first (the same `mkdir` lock the gate uses, PID in `pid`), check free RAM > 4 GB,
+- Take `$TEMP/infantry-gate.lock` first (the same `mkdir` lock the gate uses, PID in `pid`), check free RAM > 4 GB,
   and release the lock when done.
-- One test run per build dir. `:agentHq` and `:agentHqUi` hold an exclusive file lock on `build/test-run.lock` for
+- One test run per build dir. `:infantry` and `:infantryUi` hold an exclusive file lock on `build/test-run.lock` for
   the whole build whenever a test task is in the graph (`gradle/test-run-lock.gradle.kts`). A second build in the
   same dir fails at once with `TEST RUN REFUSED: another Gradle build is running ... tests in <dir> (pid N, since T)`.
   Without it, the second run wipes `build/test-results/test/binary` under the first, which then fails with
@@ -69,7 +69,7 @@ Exit code is 0 only on PASS. A stage with zero tests counts as FAIL. Two stage v
 ## CPU priority and worker cap (ticket 66153313)
 
 Every Gradle stage runs under `nice` (below normal; `idle` = 19) with `--max-workers`. Inside an Infantry AI worker session the
-daemon has already lowered the whole session tree (Windows Job object / POSIX nice) and exported `AGENTHQ_BUILD_PRIORITY`,
-`AGENTHQ_BUILD_MAX_WORKERS` and a capped `GRADLE_OPTS` from the settings `limits.build.priority` / `limits.build.maxWorkers` /
-`limits.build.maxParallelForks`; the script follows them (`AGENTHQ_BUILD_PRIORITY=normal` turns its `nice` off, no
-`AGENTHQ_BUILD_MAX_WORKERS` = unlimited). Run outside a session, it defaults to below normal and logical cores - 2 workers.
+daemon has already lowered the whole session tree (Windows Job object / POSIX nice) and exported `INFANTRY_BUILD_PRIORITY`,
+`INFANTRY_BUILD_MAX_WORKERS` and a capped `GRADLE_OPTS` from the settings `limits.build.priority` / `limits.build.maxWorkers` /
+`limits.build.maxParallelForks`; the script follows them (`INFANTRY_BUILD_PRIORITY=normal` turns its `nice` off, no
+`INFANTRY_BUILD_MAX_WORKERS` = unlimited). Run outside a session, it defaults to below normal and logical cores - 2 workers.

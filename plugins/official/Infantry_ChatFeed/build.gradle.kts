@@ -1,7 +1,7 @@
 // CHAT-FEED-SPLIT-1: official module Infantry_ChatFeed, the chat feed (rows drawn by kind, the pending question, the Activity box), split out of Infantry_Chat.
 // It fills the chat's `chat.feed` slot and registers today's row renderers like any plugin could. One source for every platform (D9):
 //  - desktop: build/libs/Infantry_ChatFeed.jar, loaded at run time from official/Infantry_ChatFeed (signed as Infantry_Chat's is).
-//  - web and Android: compiled in by :agenthqAppUi from the generated module list.
+//  - web and Android: compiled in by :infantryAppUi from the generated module list.
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidKotlinMultiplatformLibrary)
@@ -15,7 +15,7 @@ kotlin {
     @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
     wasmJs { browser() }
     androidLibrary {
-        namespace = "com.superiorsoftllc.agenthq.plugins.chatfeed"
+        namespace = "com.superiorsoftllc.infantry.plugins.chatfeed"
         compileSdk = 36
         minSdk = 24
     }
@@ -23,7 +23,7 @@ kotlin {
     sourceSets {
         commonMain { kotlin.srcDir("src") }
         commonMain.dependencies {
-            api(project(":superiorSoftLibrary:agenthqUiCore"))
+            api(project(":superiorSoftLibrary:infantryUiCore"))
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(compose.material3)

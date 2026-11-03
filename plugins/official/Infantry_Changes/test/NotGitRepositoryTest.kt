@@ -1,12 +1,12 @@
-package com.superiorsoftllc.agenthq.plugins.official.changes
+package com.superiorsoftllc.infantry.plugins.official.changes
 
-import com.superiorsoftllc.agenthq.ui.protocol.ProjectGitWorktreeList
+import com.superiorsoftllc.infantry.ui.protocol.ProjectGitWorktreeList
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** S4b: moved from :agenthqUiCore's NoStuckThinkingAndNotGitTest with [isNotGitRepository] (Infantry_Changes). */
+/** S4b: moved from :infantryUiCore's NoStuckThinkingAndNotGitTest with [isNotGitRepository] (Infantry_Changes). */
 class NotGitRepositoryTest {
     @Test fun notAGitRepositoryIsRecognised() {
         val l = ProjectGitWorktreeList("p", available = false, reason = "the project directory is not a git repository: x")

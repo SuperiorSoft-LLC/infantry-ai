@@ -1,23 +1,23 @@
-package com.superiorsoftllc.agenthq.plugins.official.alerts
+package com.superiorsoftllc.infantry.plugins.official.alerts
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import com.superiorsoftllc.agenthq.plugin.api.FillDeclaration
-import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
-import com.superiorsoftllc.agenthq.ui.ConfigEntry
-import com.superiorsoftllc.agenthq.ui.ConfigIncomingSoundSection
-import com.superiorsoftllc.agenthq.ui.ConfigVoiceSection
-import com.superiorsoftllc.agenthq.ui.block.layout.Block
-import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
-import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
-import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
-import com.superiorsoftllc.agenthq.ui.plugin.UiPlugin
-import com.superiorsoftllc.agenthq.ui.plugin.UiRegistrar
-import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
-import com.superiorsoftllc.agenthq.ui.shell.blocks.ConfigSectionBlock
-import com.superiorsoftllc.agenthq.ui.sound.IncomingCommsSoundEffect
-import com.superiorsoftllc.agenthq.ui.voice.VoiceAlerts
+import com.superiorsoftllc.infantry.plugin.api.FillDeclaration
+import com.superiorsoftllc.infantry.plugin.api.ModuleManifest
+import com.superiorsoftllc.infantry.ui.ConfigEntry
+import com.superiorsoftllc.infantry.ui.ConfigIncomingSoundSection
+import com.superiorsoftllc.infantry.ui.ConfigVoiceSection
+import com.superiorsoftllc.infantry.ui.block.layout.Block
+import com.superiorsoftllc.infantry.ui.block.layout.BlockScope
+import com.superiorsoftllc.infantry.ui.plugin.InfantryModule
+import com.superiorsoftllc.infantry.ui.plugin.ModuleSource
+import com.superiorsoftllc.infantry.ui.plugin.UiPlugin
+import com.superiorsoftllc.infantry.ui.plugin.UiRegistrar
+import com.superiorsoftllc.infantry.ui.shell.LocalShellContext
+import com.superiorsoftllc.infantry.ui.shell.blocks.ConfigSectionBlock
+import com.superiorsoftllc.infantry.ui.sound.IncomingCommsSoundEffect
+import com.superiorsoftllc.infantry.ui.voice.VoiceAlerts
 
 /** The shell's incoming-comms sound slot, which this module fills. */
 const val SOUND_FILL_ID = "infantry.shell.sound"
@@ -52,7 +52,7 @@ object AlertsVoice : Block(VOICE_FILL_ID, VOICE_FILL_ID) {
 }
 
 /** RUNTIME-16: Infantry_Alerts (official), the sound and voice slots, compiled in on web and Android (D9). */
-val InfantryAlerts = AgentHqModule(
+val InfantryAlerts = InfantryModule(
     ModuleManifest(
         name = "Infantry_Alerts", version = "1.0.0", author = "Infantry AI",
         description = "The incoming-comms sound and spoken attention alerts.",
@@ -81,5 +81,5 @@ class AlertsPlugin : UiPlugin, ModuleSource {
         registrar.fill(INCOMING_SOUND_CONFIG_ID, incomingSoundSection)
     }
 
-    override fun modules(): List<AgentHqModule> = listOf(InfantryAlerts)
+    override fun modules(): List<InfantryModule> = listOf(InfantryAlerts)
 }

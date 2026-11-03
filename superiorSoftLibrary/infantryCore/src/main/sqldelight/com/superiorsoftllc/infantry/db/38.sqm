@@ -1,0 +1,7 @@
+-- BASE-1a -- migration v38 -> v39: a project records the branch its ticket starts cut from.
+-- NOT NULL DEFAULT '' so every existing project reads back as "no base branch set" (starts keep cutting from
+-- INFANTRY_BASE_BRANCH, else HEAD), never NULL. The column is exactly projects.sq's.
+--
+-- NEXT MIGRATION: 39.sqm
+
+ALTER TABLE projects ADD COLUMN base_branch TEXT NOT NULL DEFAULT '';

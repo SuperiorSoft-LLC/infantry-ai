@@ -1,7 +1,7 @@
 # TOKEN-10: what added ~0.6%/h burn (study, 2026-10-31)
 
 Method: diffs of `git log --no-merges --since "2026-10-30 18:00"` (41 commits) read for idle burn, per-turn tokens, per-start cost.
-NOT measured: per-role tokens/turns/cache-reads 12-18h vs 18h-now. The CLI (`agenthq usage`) only gives plan meters (claude week 23%, +2.3 vs pace, session 29%); no per-role/hour split is exposed, and the DB was not opened (read-only, no app launch). Verdicts below are from code, not stats.
+NOT measured: per-role tokens/turns/cache-reads 12-18h vs 18h-now. The CLI (`infantry usage`) only gives plan meters (claude week 23%, +2.3 vs pace, session 29%); no per-role/hour split is exposed, and the DB was not opened (read-only, no app launch). Verdicts below are from code, not stats.
 
 | Change | Verdict | Evidence |
 |---|---|---|
@@ -9,7 +9,7 @@ NOT measured: per-role tokens/turns/cache-reads 12-18h vs 18h-now. The CLI (`age
 | EFFORT-1 (18f20b2e, 24bfaa1c) | cannot by itself | Default is "off" = no `--effort` flag (`ClaudeCommand.kt:179` adds it only when set). PM/VC raise only if their role binding sets effort. |
 | RUNTIME-LOAD-5/6/7, AGENT-REGISTRY-1, RUNTIME-LOAD-8 | cannot | Move code between modules; no loop, prompt or nudge added. |
 | STALL-6 (ec04b8b9) | cannot | Notice text/ack handling for bg jobs; one per kind, fewer repeats. |
-| TRIGGER-FOOTER-1 (61f18d0d) | minor | +~600 chars on every trigger/system mail (PM woken every 30 min => ~150 tokens x 48/day) and tells the session to run `agenthq read <id>` (one extra tool call per wake). Small but constant for the PM. |
+| TRIGGER-FOOTER-1 (61f18d0d) | minor | +~600 chars on every trigger/system mail (PM woken every 30 min => ~150 tokens x 48/day) and tells the session to run `infantry read <id>` (one extra tool call per wake). Small but constant for the PM. |
 | KNOWLEDGE-PTR-1/2 | per start only | Related-files list in the start brief; one-time per ticket, offset by TOKEN-5 trim. |
 | TOKEN-1/5/6 | reduce | slimmer responses and digest. |
 | TOKEN-4 | cannot | stats split only. |
@@ -29,7 +29,7 @@ Read-only, from code. NOT measured: per-turn gaps of pm/version-control (no CLI 
 
 | Timer | Interval | Does with NO ticket running | Model cost? | Evidence |
 |---|---|---|---|---|
-| **Trigger pump + `prompt` triggers (trg-3ecbb271, 30 min)** | pump 1 s; trigger fires every 30 min | delivers the prompt as MAIL to the PM; wakes an idle PM = a full turn (+ footer, + `agenthq read` call) | **YES, ~48 turns/day** | TriggerService.kt:68,117, TriggerNudge/PromptDelivery :21-32 |
+| **Trigger pump + `prompt` triggers (trg-3ecbb271, 30 min)** | pump 1 s; trigger fires every 30 min | delivers the prompt as MAIL to the PM; wakes an idle PM = a full turn (+ footer, + `infantry read` call) | **YES, ~48 turns/day** | TriggerService.kt:68,117, TriggerNudge/PromptDelivery :21-32 |
 | FinishNoticeMonitor idle sweep | 1 min sweep; note after 60 min at rest (`idleNoticeMinutes`) | one `[AUTOMATIC]` mail to the starter per idle period | yes, once per period, only if a worker rests with ticket open | FinishNoticeMonitor.kt:59-63, LimitRegistry.kt IDLE_NOTICE_MINUTES=60 |
 | StallDetector | 30 s tick; stall 5 min, foreground 10 min | nudge mail to a worker + a line to the starter, once per stretch | yes, only for In Progress tickets | StallDetector.kt:54, :8-20 |
 | AgentWatchdog | pollMs 30 s; nudge ladder, then ONE batched mail to PM | nudges, then wakes PM | yes, only with unanswered mail | AgentWatch.kt:52, AgentWatchdog.kt:58,88-100 |
@@ -56,8 +56,8 @@ TEST-TODO: with no ticket running and no mail, let a 30-min prompt trigger fire;
 
 ## PER-COMMIT (TOKEN-13, 2026-10-31)
 
-Method (static, deterministic, no model calls, no Gradle, no app launch): for each of the 49 first-parent merges on feature-agenthq-mvp from 2026-10-30 12:00 (54070dd3 .. 8cabc40b) read the tree with `git show <c>:<path>` and measured (script in /tmp, not committed):
-- **tools**: `agenthq_*` tools declared in `plugins/official/*/module.json` (core `McpWatchTools` is the rest).
+Method (static, deterministic, no model calls, no Gradle, no app launch): for each of the 49 first-parent merges on "feature-agenthq"-mvp from 2026-10-30 12:00 (54070dd3 .. 8cabc40b) read the tree with `git show <c>:<path>` and measured (script in /tmp, not committed):
+- **tools**: `infantry_*` tools declared in `plugins/official/*/module.json` (core `McpWatchTools` is the rest).
 - **schema chars**: characters of the string literals on name/description/schema lines (`description`, `type`, `enum`, `putJsonObject`, tool names) in tool-defining Kotlin (`plugins/official/*/daemon/**`, `cli/mcp`). A proxy for the text the model receives each turn; it is not the serialised `tools/list`.
 - **brief chars**: NOT measured per commit (rendering needs the runtime knowledge store and a fake ticket, i.e. Gradle test per commit). Proxy: size of `TicketBoard.brief()` = 586 chars at every commit (constant); `TicketBoard.kt` grew 107.4k -> 112.5k chars (brief inputs such as KNOWLEDGE-PTR-2 related tickets).
 - **response chars**: NOT measured (needs a running board). Read from diffs instead: TOKEN-1 (91413e24) cut them (board compact: done 5, backlog/todo 10 lines; session tail 50 -> 5 lines, line cap 300).
@@ -78,7 +78,7 @@ Method (static, deterministic, no model calls, no Gradle, no app launch): for ea
 All other merges: unchanged in every column.
 
 ### Result
-- **Largest jump: b55952c3 (TOKEN-1), schema +1095 chars (+14%, ~270 tokens per turn, prompt-cached).** The diff lines: `putJsonObject("columns")`, `putJsonObject("limit")` (board) and `put("description", "At most this many sessions ...")` (list_sessions), plus longer `agenthq_board` description. It buys smaller responses, so the net is expected to be a saving; it is the only tool-surface growth in the window.
+- **Largest jump: b55952c3 (TOKEN-1), schema +1095 chars (+14%, ~270 tokens per turn, prompt-cached).** The diff lines: `putJsonObject("columns")`, `putJsonObject("limit")` (board) and `put("description", "At most this many sessions ...")` (list_sessions), plus longer `infantry_board` description. It buys smaller responses, so the net is expected to be a saving; it is the only tool-surface growth in the window.
 - Tool count 23 -> 43 in module.json is migration, not growth: the same tools used to be declared in core Kotlin.
 - Nothing in the static surface explains a +0.6%/h burn (270 cached tokens per turn is negligible beside a 50k+ context).
 - No first-turn brief or system-prompt jump visible in code (brief function constant). Not proven: brief CONTENT (knowledge digest, related files, role persona) is data-dependent and was not rendered.

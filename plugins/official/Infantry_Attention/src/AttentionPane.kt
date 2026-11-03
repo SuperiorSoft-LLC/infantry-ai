@@ -1,6 +1,6 @@
-package com.superiorsoftllc.agenthq.plugins.official.attention
+package com.superiorsoftllc.infantry.plugins.official.attention
 
-import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.infantry.ui.*
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -30,10 +30,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.model.AppState
-import com.superiorsoftllc.agenthq.ui.model.watchFlagOf
-import com.superiorsoftllc.agenthq.ui.shell.AttentionContext
-import com.superiorsoftllc.agenthq.ui.shell.gate
+import com.superiorsoftllc.infantry.ui.model.AppState
+import com.superiorsoftllc.infantry.ui.model.watchFlagOf
+import com.superiorsoftllc.infantry.ui.shell.AttentionContext
+import com.superiorsoftllc.infantry.ui.shell.gate
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
 

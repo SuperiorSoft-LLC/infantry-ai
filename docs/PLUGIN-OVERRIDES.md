@@ -83,12 +83,12 @@ returns (when the module set changes; no other plugin restarts). Tested: `removi
 ## 6. Demo wasm / Android versus production
 
 - `plugins/demo/<Demo_X>/` are ordinary modules (own `build.gradle.kts`, `module.json`, a `ModuleSource` entry).
-- `generateModuleList` (agenthqAppUi) lists them in the compiled-in module list **only with `-Pdemo=true`**, after the live modules, so
+- `generateModuleList` (infantryAppUi) lists them in the compiled-in module list **only with `-Pdemo=true`**, after the live modules, so
   on equal priority a demo override wins ("demo over live", D16), and their config goes into `GeneratedConfig` the same way.
   Desktop never lists them. Production wasm/Android (no flag) are byte-for-byte the live set.
 - The compile-time path has no loader, so `TabFactory(modules)` reads `shell[]` off the manifests and applies the same trust rule.
 - Concrete demo override: `plugins/demo/Demo_Banner` puts a strip ("DEMO BUILD - sample data") before `infantry.shell.frame/infantry.shell.body`.
-- Build the demo: `gradlew -Pdemo=true :superiorSoftLibrary:agentHqWeb:<your wasm bundle task>`; without `-Pdemo` the banner is absent.
+- Build the demo: `gradlew -Pdemo=true :superiorSoftLibrary:infantryWeb:<your wasm bundle task>`; without `-Pdemo` the banner is absent.
 
 
 ### 6a. Turning features off: policy presets, not overrides (POLICY-1)
@@ -96,8 +96,8 @@ returns (when the module set changes; no other plugin restarts). Tested: `removi
 An override changes how a node is drawn. To turn features **off** (a demo, a guest or read-only deployment) do not override
 the panes: declare named `actions` in module.json and ship a policy preset as data (docs/POLICY.md). The daemon enforces
 the preset and sends it to every client; core's gate (`Gated`, `ActionButton`, `canWrite`) dims what it turns off, in
-every build, and one setting (Configuration > General > Policy, `AGENTHQ_POLICY`, or a preset's `selectWhenEnv`, e.g.
-`AGENTHQ_DEMO_LOCK=1`) switches it. `plugins/demo/Demo_Lock` is the worked example: its `policies/demo.json` holds every
+every build, and one setting (Configuration > General > Policy, `INFANTRY_POLICY`, or a preset's `selectWhenEnv`, e.g.
+`INFANTRY_DEMO_LOCK=1`) switches it. `plugins/demo/Demo_Lock` is the worked example: its `policies/demo.json` holds every
 demo value, and its override keeps only the notice for `Demo_Banner`.
 
 ## 7. Settings

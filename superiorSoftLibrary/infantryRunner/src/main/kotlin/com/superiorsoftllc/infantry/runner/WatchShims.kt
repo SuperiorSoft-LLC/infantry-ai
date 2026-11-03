@@ -1,0 +1,98 @@
+package com.superiorsoftllc.infantry.runner
+
+import java.io.File
+
+/**
+ * STALL-1 (ticket 802c64d5) item 2, the FORCED-BY-DEFAULT runner: a shim directory the daemon puts FIRST on every worker
+ * session's PATH. A bare `gradle`, `mvn`, `npm`, `yarn` or `pnpm` the worker (or its harness's shell, foreground or
+ * background) runs therefore goes through `infantry bg run --attached --shim <name> -- <name> ...`: the watched runner
+ * (START line, `still running` every minute, END sentinel with exit code and byte count, log under the bg log dir,
+ * registered so the daemon tells the session when it ends while the session is at rest). The worker chooses nothing.
+ *
+ * What a PATH shim cannot catch, and so is NOT forced (docs/STALL.md): a program named by a path (`./gradlew`,
+ * `gradlew.bat` from the cwd, which cmd.exe and the shells resolve before PATH), and any program not in [PROGRAMS].
+ * Those are covered by the daemon's process-tree watch (layer 5) and the stall detector instead, without an exit code.
+ *
+ * A nested call (npm running npm) and a session with the watch off (`limits.watch.forced` = 0, env `INFANTRY_WATCH=off`)
+ * run the real program directly: the CLI checks `INFANTRY_WATCHED` / `INFANTRY_WATCH` before it wraps anything.
+ */
+object WatchShims {
+    /** STALL-3: the tool profiles' shim list ([ToolProfiles]); no tool is named here. */
+    val PROGRAMS: List<String> get() = ToolProfiles.shimPrograms()
+
+    private const val MARKER = "Infantry AI STALL-1 watch shim"
+
+    /**
+     * Writes the shims into [dir] (a `.cmd` and an extensionless `sh` script per program on Windows, where Git Bash runs
+     * the latter; the `sh` script alone elsewhere). [launcher] is the argv that starts the `infantry` CLI. Returns [dir].
+     */
+    fun install(dir: File, launcher: List<String>, windows: Boolean = isWindows()): File {
+        dir.mkdirs()
+        val programs = PROGRAMS
+        // A tool dropped from the profiles loses its shim (only files this code wrote carry the marker).
+        dir.listFiles()?.filter { it.isFile && it.name.substringBefore('.') !in programs }
+            ?.filter { f -> runCatching { f.readText().contains(MARKER) }.getOrDefault(false) }?.forEach { it.delete() }
+        for (p in programs) {
+            val args = listOf("bg", "run", "--attached", "--shim", p, "--", p)
+            val sh = File(dir, p)
+            sh.writeText(
+                "#!/bin/sh\n# Infantry AI STALL-1 watch shim (generated; the daemon rewrites it at start)\n" +
+                    "exec " + (launcher + args).joinToString(" ") { shQuote(toShPath(it, windows)) } + " \"\$@\"\n",
+            )
+            sh.setExecutable(true)
+            if (windows) {
+                val first = launcher.first()
+                val call = if (first.endsWith(".cmd", true) || first.endsWith(".bat", true)) "call " else ""
+                File(dir, "$p.cmd").writeText(
+                    "@echo off\r\nrem Infantry AI STALL-1 watch shim (generated; the daemon rewrites it at start)\r\n" +
+                        call + (launcher + args).joinToString(" ") { cmdQuote(it) } + " %*\r\n" +
+                        "exit /b %ERRORLEVEL%\r\n",
+                )
+            }
+        }
+        return dir
+    }
+
+    /** The CLI launcher argv: the installed `infantry` script in [binDir] when there is one, else this JVM + its classpath. */
+    fun launcher(binDir: File?, windows: Boolean = isWindows()): List<String> {
+        val script = binDir?.let { d ->
+            (if (windows) listOf("infantry.cmd", "infantry.bat") else listOf("infantry")).map { File(d, it) }.firstOrNull { it.isFile }
+        }
+        if (script != null) return listOf(script.absolutePath)
+        val java = ProcessHandle.current().info().command().orElse("java")
+        return listOf(java, "-cp", System.getProperty("java.class.path"), "com.superiorsoftllc.infantry.cli.CliMainKt")
+    }
+
+    /**
+     * The session env: [dir] first on PATH (before [inheritedPath], the PATH the session would get otherwise) and the
+     * shim dir named, or, with [forced] false, `INFANTRY_WATCH=off` and PATH untouched.
+     */
+    fun sessionEnv(
+        dir: File?,
+        inheritedPath: String?,
+        forced: Boolean,
+        treeWaitMinutes: Long? = null,
+        profiles: List<ToolProfile>? = null,
+    ): Map<String, String> {
+        // STALL-2: the runner's tree-wait cap (`limits.watch.treeWaitMinutes`) reaches every run a session starts.
+        // STALL-3: and the tool profiles in force, so the runner a worker starts reads the daemon's list.
+        val tree = treeWaitMinutes?.let { mapOf("INFANTRY_WATCH_TREE_WAIT_SECONDS" to (it * 60).toString()) }.orEmpty() +
+            profiles?.let { mapOf(ToolProfiles.ENV to ToolProfiles.encode(it)) }.orEmpty()
+        if (!forced || dir == null) return mapOf("INFANTRY_WATCH" to "off") + tree
+        val path = dir.absolutePath + (inheritedPath?.takeIf { it.isNotBlank() }?.let { File.pathSeparator + it } ?: "")
+        return mapOf("PATH" to path, "INFANTRY_SHIM_DIR" to dir.absolutePath, "INFANTRY_WATCH" to "on") + tree
+    }
+
+    private fun isWindows() = System.getProperty("os.name").lowercase().contains("win")
+
+    private fun cmdQuote(s: String) = if (s.isNotEmpty() && s.none { it == ' ' || it == '&' || it == '(' || it == ')' || it == ';' }) s else "\"$s\""
+
+    private fun shQuote(s: String) = "'" + s.replace("'", "'\\''") + "'"
+
+    /** `C:\x\y` -> `/c/x/y` for Git Bash; other strings unchanged. */
+    private fun toShPath(s: String, windows: Boolean): String {
+        if (!windows || s.length < 3 || s[1] != ':' || (s[2] != '\\' && s[2] != '/')) return s
+        if (s.contains(';')) return s // a classpath: the JVM reads it, not the shell
+        return "/" + s[0].lowercaseChar() + s.substring(2).replace('\\', '/')
+    }
+}

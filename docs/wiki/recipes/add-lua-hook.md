@@ -4,16 +4,16 @@ Goal: when a ticket enters a lane, a script runs and does something with the too
 the ticket). No Kotlin and no rebuild: a script and a hook are data in the daemon and the project.
 
 Scripting is a plugin, not core: `plugins/official/Infantry_Scripting` owns the hook dispatcher
-(`plugins/official/Infantry_Scripting/daemon/src/main/kotlin/com/superiorsoftllc/agenthq/plugins/official/scripting/daemon/ScriptHooks.kt`)
+(`plugins/official/Infantry_Scripting/daemon/src/main/kotlin/com/superiorsoftllc/infantry/plugins/official/scripting/daemon/ScriptHooks.kt`)
 and `plugins/official/Infantry_Lua` provides the language
-(`plugins/official/Infantry_Lua/daemon/src/main/kotlin/com/superiorsoftllc/agenthq/plugins/official/lua/daemon/LuaScriptEngine.kt`).
+(`plugins/official/Infantry_Lua/daemon/src/main/kotlin/com/superiorsoftllc/infantry/plugins/official/lua/daemon/LuaScriptEngine.kt`).
 The full API is in [Scripting](../Scripting.md).
 
 ## Files to touch
 
 ```
 my-scripts/on-ticket-done.lua                      the script (any folder; you save it into the daemon)
-<project>/.agenthq/scripts/hooks.json               written for you by "script hook add"
+<project>/.infantry/scripts/hooks.json               written for you by "script hook add"
 ```
 
 You do not edit repository code. The hook store (`HookStore.kt`, same folder as `ScriptHooks.kt`) owns `hooks.json`.
@@ -40,20 +40,20 @@ end
 2. Save it (parse-checked, runs at once):
 
 ```
-agenthq script save on-ticket-done --file my-scripts/on-ticket-done.lua
+infantry script save on-ticket-done --file my-scripts/on-ticket-done.lua
 ```
 
 3. Attach it to an event:
 
 ```
-agenthq script hook add "lane enter done" on-ticket-done
-agenthq script hook list
+infantry script hook add "lane enter done" on-ticket-done
+infantry script hook list
 ```
 
    `on` forms: `lane enter <lane>`, `lane exit <lane>`, a named event (`mail.incoming`, `exec.done`, `exec.tick`,
-   `ticket.*`, or your own sent with `agenthq_event_emit`), and `every <N>s`. Fixed args go in with
-   `--payload '{"key":"value"}'`. Remove a hook with `agenthq script hook remove <id>`.
-4. Test without a ticket: run the script with `dryRun` through the MCP tool `agenthq_script_run`
+   `ticket.*`, or your own sent with `infantry_event_emit`), and `every <N>s`. Fixed args go in with
+   `--payload '{"key":"value"}'`. Remove a hook with `infantry script hook remove <id>`.
+4. Test without a ticket: run the script with `dryRun` through the MCP tool `infantry_script_run`
    (`{name, args, dryRun}`), or move a scratch ticket into the lane.
 
 ## Notes
@@ -66,5 +66,5 @@ agenthq script hook list
 
 ## Check
 
-`agenthq script list` shows the script, `agenthq script hook list` shows the hook, and `agenthq_script_stats` (MCP)
-shows the latest runs. The engine's own tests: `plugins/official/Infantry_Scripting/daemon/src/test/kotlin/com/superiorsoftllc/agenthq/plugins/official/scripting/daemon/ScriptHooksTest.kt`.
+`infantry script list` shows the script, `infantry script hook list` shows the hook, and `infantry_script_stats` (MCP)
+shows the latest runs. The engine's own tests: `plugins/official/Infantry_Scripting/daemon/src/test/kotlin/com/superiorsoftllc/infantry/plugins/official/scripting/daemon/ScriptHooksTest.kt`.

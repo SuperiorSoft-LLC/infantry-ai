@@ -3,8 +3,8 @@
 //  - desktop: build/libs/Infantry_Git.jar (this project's jvm jar: its classes, its signed module.json and a ServiceLoader
 //    entry for class paths that carry it, i.e. tests), loaded at run time from official/Infantry_Git. The jar is signed
 //    when -Pihq.keystore / -Pihq.alias are given (password in env IHQ_STOREPASS), as for a .ihq; OfficialTrust then checks
-//    it against the certificates in trusted-keys. Dev runs from the repo pass -Dagenthq.plugins.devTrust=true instead.
-//  - web and Android: compiled in by :agenthqAppUi from the generated module list (wasmJsMain / androidMain only).
+//    it against the certificates in trusted-keys. Dev runs from the repo pass -Dinfantry.plugins.devTrust=true instead.
+//  - web and Android: compiled in by :infantryAppUi from the generated module list (wasmJsMain / androidMain only).
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidKotlinMultiplatformLibrary)
@@ -18,7 +18,7 @@ kotlin {
     @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
     wasmJs { browser() }
     androidLibrary {
-        namespace = "com.superiorsoftllc.agenthq.plugins.git"
+        namespace = "com.superiorsoftllc.infantry.plugins.git"
         compileSdk = 36
         minSdk = 24
     }
@@ -26,7 +26,7 @@ kotlin {
     sourceSets {
         commonMain { kotlin.srcDir("src") }
         commonMain.dependencies {
-            api(project(":superiorSoftLibrary:agenthqUiCore"))
+            api(project(":superiorSoftLibrary:infantryUiCore"))
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(compose.material3)

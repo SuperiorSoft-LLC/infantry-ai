@@ -1,6 +1,6 @@
-package com.superiorsoftllc.agenthq.plugins.official.git
+package com.superiorsoftllc.infantry.plugins.official.git
 
-import com.superiorsoftllc.agenthq.ui.shell.gate
+import com.superiorsoftllc.infantry.ui.shell.gate
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -34,34 +34,34 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.*
-import com.superiorsoftllc.agenthq.ui.model.BASE_BRANCH_DEFAULT_LABEL
-import com.superiorsoftllc.agenthq.ui.model.Notice
-import com.superiorsoftllc.agenthq.ui.model.baseBranchChoices
-import com.superiorsoftllc.agenthq.ui.model.isCurrentBase
-import com.superiorsoftllc.agenthq.ui.model.ChangesView
-import com.superiorsoftllc.agenthq.ui.model.HistoryView
-import com.superiorsoftllc.agenthq.ui.model.PatchView
-import com.superiorsoftllc.agenthq.ui.model.ProjectView
-import com.superiorsoftllc.agenthq.ui.model.badge
-import com.superiorsoftllc.agenthq.ui.model.display
-import com.superiorsoftllc.agenthq.ui.model.headline
-import com.superiorsoftllc.agenthq.ui.model.label
-import com.superiorsoftllc.agenthq.ui.model.projectChangesView
-import com.superiorsoftllc.agenthq.ui.model.projectHistoryView
-import com.superiorsoftllc.agenthq.ui.model.projectPatchView
-import com.superiorsoftllc.agenthq.ui.model.summary
-import com.superiorsoftllc.agenthq.ui.model.whenText
-import com.superiorsoftllc.agenthq.ui.net.CommandResult
-import com.superiorsoftllc.agenthq.ui.net.PROJECT_BASE_UNSUPPORTED
-import com.superiorsoftllc.agenthq.ui.net.PROJECT_GIT_BRANCHES_UNSUPPORTED
-import com.superiorsoftllc.agenthq.ui.net.PROJECT_GIT_CHECKOUT_UNSUPPORTED
-import com.superiorsoftllc.agenthq.ui.net.PROJECT_GIT_UNSUPPORTED
-import com.superiorsoftllc.agenthq.ui.protocol.ChangeKind
-import com.superiorsoftllc.agenthq.ui.protocol.ChangedFile
-import com.superiorsoftllc.agenthq.ui.shell.GitContext
-import com.superiorsoftllc.agenthq.ui.shell.LinkContext
-import com.superiorsoftllc.agenthq.ui.shell.SessionContext
+import com.superiorsoftllc.infantry.ui.*
+import com.superiorsoftllc.infantry.ui.model.BASE_BRANCH_DEFAULT_LABEL
+import com.superiorsoftllc.infantry.ui.model.Notice
+import com.superiorsoftllc.infantry.ui.model.baseBranchChoices
+import com.superiorsoftllc.infantry.ui.model.isCurrentBase
+import com.superiorsoftllc.infantry.ui.model.ChangesView
+import com.superiorsoftllc.infantry.ui.model.HistoryView
+import com.superiorsoftllc.infantry.ui.model.PatchView
+import com.superiorsoftllc.infantry.ui.model.ProjectView
+import com.superiorsoftllc.infantry.ui.model.badge
+import com.superiorsoftllc.infantry.ui.model.display
+import com.superiorsoftllc.infantry.ui.model.headline
+import com.superiorsoftllc.infantry.ui.model.label
+import com.superiorsoftllc.infantry.ui.model.projectChangesView
+import com.superiorsoftllc.infantry.ui.model.projectHistoryView
+import com.superiorsoftllc.infantry.ui.model.projectPatchView
+import com.superiorsoftllc.infantry.ui.model.summary
+import com.superiorsoftllc.infantry.ui.model.whenText
+import com.superiorsoftllc.infantry.ui.net.CommandResult
+import com.superiorsoftllc.infantry.ui.net.PROJECT_BASE_UNSUPPORTED
+import com.superiorsoftllc.infantry.ui.net.PROJECT_GIT_BRANCHES_UNSUPPORTED
+import com.superiorsoftllc.infantry.ui.net.PROJECT_GIT_CHECKOUT_UNSUPPORTED
+import com.superiorsoftllc.infantry.ui.net.PROJECT_GIT_UNSUPPORTED
+import com.superiorsoftllc.infantry.ui.protocol.ChangeKind
+import com.superiorsoftllc.infantry.ui.protocol.ChangedFile
+import com.superiorsoftllc.infantry.ui.shell.GitContext
+import com.superiorsoftllc.infantry.ui.shell.LinkContext
+import com.superiorsoftllc.infantry.ui.shell.SessionContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -81,7 +81,7 @@ import kotlinx.coroutines.launch
 class GitPaneHost(
     val link: LinkContext,
     val session: SessionContext,
-    /** S2: the project's git and its requests (the shell's [com.superiorsoftllc.agenthq.ui.shell.ShellContext.git]). */
+    /** S2: the project's git and its requests (the shell's [com.superiorsoftllc.infantry.ui.shell.ShellContext.git]). */
     val context: GitContext,
     val project: ProjectView,
     val live: Boolean,

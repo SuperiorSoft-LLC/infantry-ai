@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.plugins.official.processes
+package com.superiorsoftllc.infantry.plugins.official.processes
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -26,16 +26,16 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.AhqAlertDialog
-import com.superiorsoftllc.agenthq.ui.Button
-import com.superiorsoftllc.agenthq.ui.Palette
-import com.superiorsoftllc.agenthq.ui.Switch
-import com.superiorsoftllc.agenthq.ui.TextButton
-import com.superiorsoftllc.agenthq.ui.clickable
-import com.superiorsoftllc.agenthq.ui.model.ProcessWatchView
-import com.superiorsoftllc.agenthq.ui.protocol.TrackedProcess
-import com.superiorsoftllc.agenthq.ui.shell.LinkContext
-import com.superiorsoftllc.agenthq.ui.shell.ProcessesContext
+import com.superiorsoftllc.infantry.ui.AhqAlertDialog
+import com.superiorsoftllc.infantry.ui.Button
+import com.superiorsoftllc.infantry.ui.Palette
+import com.superiorsoftllc.infantry.ui.Switch
+import com.superiorsoftllc.infantry.ui.TextButton
+import com.superiorsoftllc.infantry.ui.clickable
+import com.superiorsoftllc.infantry.ui.model.ProcessWatchView
+import com.superiorsoftllc.infantry.ui.protocol.TrackedProcess
+import com.superiorsoftllc.infantry.ui.shell.LinkContext
+import com.superiorsoftllc.infantry.ui.shell.ProcessesContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
@@ -88,9 +88,9 @@ fun ProcessesDialog(processes: ProcessesContext, onDismiss: () -> Unit) {
     val report = processes.report
     val now = Clock.System.now().toEpochMilliseconds()
     // POLICY-1: reaping is the destructive `host.processes.reap` action; a read-only policy still lists.
-    val reap = com.superiorsoftllc.agenthq.ui.shell.rememberGate("host.processes.reap", com.superiorsoftllc.agenthq.plugin.api.ActionKind.DESTRUCTIVE)
+    val reap = com.superiorsoftllc.infantry.ui.shell.rememberGate("host.processes.reap", com.superiorsoftllc.infantry.plugin.api.ActionKind.DESTRUCTIVE)
     // GATE-PANES-1: the auto-reap switch is a setting (`settings_set`, `settings.save`).
-    val autoReap = com.superiorsoftllc.agenthq.ui.shell.rememberGate("settings.save")
+    val autoReap = com.superiorsoftllc.infantry.ui.shell.rememberGate("settings.save")
     AhqAlertDialog(
         onDismissRequest = onDismiss,
         modifier = Modifier.testTag(PROCESSES_PANEL_TAG),

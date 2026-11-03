@@ -9,17 +9,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
-import com.superiorsoftllc.agenthq.plugin.api.Services
-import com.superiorsoftllc.agenthq.ui.plugin.PanelProvider
-import com.superiorsoftllc.agenthq.ui.plugin.Panels
-import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
-import com.superiorsoftllc.agenthq.ui.plugin.TabContext
-import com.superiorsoftllc.agenthq.ui.plugin.TabInterceptor
-import com.superiorsoftllc.agenthq.ui.plugin.TabProvider
-import com.superiorsoftllc.agenthq.ui.plugin.UiPlugin
-import com.superiorsoftllc.agenthq.ui.plugin.UiRegistrar
-import com.superiorsoftllc.agenthq.ui.plugin.circle
-import com.superiorsoftllc.agenthq.ui.plugin.tabIcon
+import com.superiorsoftllc.infantry.plugin.api.Services
+import com.superiorsoftllc.infantry.ui.plugin.PanelProvider
+import com.superiorsoftllc.infantry.ui.plugin.Panels
+import com.superiorsoftllc.infantry.ui.plugin.TabContainers
+import com.superiorsoftllc.infantry.ui.plugin.TabContext
+import com.superiorsoftllc.infantry.ui.plugin.TabInterceptor
+import com.superiorsoftllc.infantry.ui.plugin.TabProvider
+import com.superiorsoftllc.infantry.ui.plugin.UiPlugin
+import com.superiorsoftllc.infantry.ui.plugin.UiRegistrar
+import com.superiorsoftllc.infantry.ui.plugin.circle
+import com.superiorsoftllc.infantry.ui.plugin.tabIcon
 
 /**
  * The starter module. Everything registered here is declared in module.json under the same id or name; the app

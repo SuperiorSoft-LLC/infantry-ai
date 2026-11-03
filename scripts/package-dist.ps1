@@ -4,11 +4,11 @@
 
 .DESCRIPTION
   No owner path is written here. Locations come from project data (build.root, build.backupRoot), read through the
-  daemon (`agenthq project config get <projectId>`, a line `build.root = <path>`), or from an env override
-  (AGENTHQ_BUILD_ROOT, AGENTHQ_BUILD_BACKUPROOT). A missing setting STOPS the script (exit 2) and writes nothing.
+  daemon (`infantry project config get <projectId>`, a line `build.root = <path>`), or from an env override
+  (INFANTRY_BUILD_ROOT, INFANTRY_BUILD_BACKUPROOT). A missing setting STOPS the script (exit 2) and writes nothing.
 
   Build mode (-Sha):
-    1. resolves the sha and requires it to be on the release branch (feature-agenthq-mvp),
+    1. resolves the sha and requires it to be on the release branch ("feature-agenthq"-mvp),
     2. builds it in a clean detached worktree under %TEMP% (createDistributable, --no-parallel, Xmx3g / Metaspace 2g),
        signed with -Keystore/-KeyAlias (IHQ_STOREPASS in env), else devSign (says so in the output and manifest),
     3. copies the app image to <build.root>\builds\<sha>\, writes BUILD-INFO.txt + MANIFEST.txt there,
@@ -21,8 +21,8 @@
     catalog.json (id, version, class, jar, sha256, grants) for the plugin manager's local-directory catalog.
     No tests are run. The worktree is removed afterwards.
 
-  Backup mode (-BackupState): read-only copy of the owner state dir (-StateDir or AGENTHQ_STATE_DIR) into
-  <build.backupRoot>\agenthq-state-backup\<stamp>\. The source is only read.
+  Backup mode (-BackupState): read-only copy of the owner state dir (-StateDir or INFANTRY_STATE_DIR) into
+  <build.backupRoot>\infantry-state-backup\<stamp>\. The source is only read.
 
 .EXAMPLE
   powershell -File scripts/package-dist.ps1 -Sha <sha> -DryRun        # print resolved paths, build nothing
@@ -44,8 +44,8 @@ param(
   [string[]]$Include,       # BUILD-PLUGINS-1: keep only these optional plugins (the other optional ones are left out)
   [string[]]$Exclude,       # BUILD-PLUGINS-1: leave these optional plugins out (core/official are refused)
   [string]$Preset,          # BUILD-PLUGINS-1: a named preset from plugins/build-presets.json (full, no-optional, core-only)
-  [string]$ReleaseBranch = 'feature-agenthq-mvp',
-  [string]$ProjectId = $env:AGENTHQ_PROJECT_ID
+  [string]$ReleaseBranch = '"feature-agenthq"-mvp',
+  [string]$ProjectId = $env:INFANTRY_PROJECT_ID
 )
 
 $repo = Split-Path -Parent $PSScriptRoot
@@ -61,10 +61,10 @@ function Fail([string]$Message) {
 
 # Reads a project-data setting: env override first, then the daemon's project config. Null when unset.
 function Get-ProjectSetting([string]$Key) {
-  $envName = 'AGENTHQ_' + ($Key -replace '\.', '_').ToUpper()
+  $envName = 'INFANTRY_' + ($Key -replace '\.', '_').ToUpper()
   $fromEnv = [Environment]::GetEnvironmentVariable($envName)
   if ($fromEnv) { return [pscustomobject]@{ Value = $fromEnv; From = "env $envName" } }
-  $cli = if ($env:AGENTHQ_CLI) { $env:AGENTHQ_CLI } else { (Get-Command agenthq -ErrorAction SilentlyContinue).Source }
+  $cli = if ($env:INFANTRY_CLI) { $env:INFANTRY_CLI } else { (Get-Command infantry -ErrorAction SilentlyContinue).Source }
   if ($cli -and $ProjectId) {
     $lines = & $cli project config get $ProjectId 2>$null
     foreach ($line in $lines) {
@@ -79,7 +79,7 @@ function Get-ProjectSetting([string]$Key) {
 function Get-BuildRoot {
   $setting = Get-ProjectSetting 'build.root'
   if (-not $setting.Value) {
-    Fail ("build.root is not set. Nothing was written. Set project data build.root (or env AGENTHQ_BUILD_ROOT) " +
+    Fail ("build.root is not set. Nothing was written. Set project data build.root (or env INFANTRY_BUILD_ROOT) " +
           "to an absolute folder, then run again.")
   }
   if (-not [IO.Path]::IsPathRooted($setting.Value)) { Fail "build.root must be an absolute path (got '$($setting.Value)')" }
@@ -92,7 +92,7 @@ function Get-BackupRoot {
   $setting = Get-ProjectSetting 'build.backupRoot'
   if (-not $setting.Value) {
     Fail ("build.backupRoot is not set. Nothing was written. Set project data build.backupRoot " +
-          "(or env AGENTHQ_BUILD_BACKUPROOT) to an absolute folder, then run again.")
+          "(or env INFANTRY_BUILD_BACKUPROOT) to an absolute folder, then run again.")
   }
   if (-not [IO.Path]::IsPathRooted($setting.Value)) { Fail "build.backupRoot must be an absolute path" }
   return [pscustomobject]@{ Path = [IO.Path]::GetFullPath($setting.Value).TrimEnd('\'); From = $setting.From }
@@ -112,12 +112,12 @@ function Get-Count([string]$Dir) {
 
 if ($BackupState) {
   $backup = Get-BackupRoot
-  if (-not $StateDir) { $StateDir = $env:AGENTHQ_STATE_DIR }
-  if (-not $StateDir) { Fail "no state dir given (-StateDir or env AGENTHQ_STATE_DIR). Nothing was written." }
+  if (-not $StateDir) { $StateDir = $env:INFANTRY_STATE_DIR }
+  if (-not $StateDir) { Fail "no state dir given (-StateDir or env INFANTRY_STATE_DIR). Nothing was written." }
   if (-not (Test-Path -LiteralPath $StateDir -PathType Container)) { Fail "state dir '$StateDir' does not exist" }
   $src = [IO.Path]::GetFullPath($StateDir).TrimEnd('\')
   $stamp = (Get-Date).ToString('yyyyMMdd-HHmmss')
-  $dst = Join-Path $backup.Path "agenthq-state-backup\$stamp"
+  $dst = Join-Path $backup.Path "infantry-state-backup\$stamp"
   if ($dst.StartsWith($src, [StringComparison]::OrdinalIgnoreCase)) { Fail "backup destination is inside the state dir" }
   if ($DryRun) {
     Write-Output "DRY-RUN backup: source=$src (read only) destination=$dst (from $($backup.From)). Nothing copied."
@@ -162,7 +162,7 @@ if ($Keystore) {
   $signing = 'devSign'
   $signArgs = @('-Pihq.devSign=true')
 }
-$gradleArgs = @(':superiorSoftLibrary:agentHqUi:createDistributable', '--no-parallel', '--no-daemon',
+$gradleArgs = @(':superiorSoftLibrary:infantryUi:createDistributable', '--no-parallel', '--no-daemon',
   '-Dorg.gradle.jvmargs=-XX:MaxMetaspaceSize=2g -Xmx3g',  # quoted per argument when run (Invoke-Gradle)
   # the worktree is detached, so the packaging guard sees HEAD; the sha was checked to be on $ReleaseBranch above
   '-PallowAnyBranch=true') + $signArgs
@@ -202,7 +202,7 @@ Write-Output "PACKAGE-DIST step 3/7: gradle"
   if ($gradleExit -ne 0) { Fail "gradle createDistributable failed (exit $gradleExit). Nothing was copied." }
 
   $script:Step = 'locate app image'
-  $imageRoot = Join-Path $tmp 'superiorSoftLibrary\agentHqUi\build\compose\binaries\main\app'
+  $imageRoot = Join-Path $tmp 'superiorSoftLibrary\infantryUi\build\compose\binaries\main\app'
   $image = Get-ChildItem -LiteralPath $imageRoot -Directory -ErrorAction SilentlyContinue | Select-Object -First 1
   if (-not $image) { Fail "no app image under $imageRoot" }
   $srcExe = Get-ChildItem -LiteralPath $image.FullName -Filter '*.exe' -File | Select-Object -First 1
@@ -254,7 +254,7 @@ Write-Output "PACKAGE-DIST step 3/7: gradle"
   $optionalDest = Join-Path $buildsDir "$folderName.optional-plugins"
   if (Test-Path -LiteralPath $optionalDest) { Remove-Item -LiteralPath $optionalDest -Recurse -Force }
   if ($selection.Excluded.Count -gt 0) {
-    $optionalSrc = Join-Path $tmp 'superiorSoftLibrary\agentHqUi\build\official-modules\optional-plugins'
+    $optionalSrc = Join-Path $tmp 'superiorSoftLibrary\infantryUi\build\official-modules\optional-plugins'
     if (-not (Test-Path -LiteralPath $optionalSrc)) { Fail "no optional-plugins output at $optionalSrc" }
     Invoke-Robocopy (Join-Path $optionalSrc 'official') $optionalDest
     $catalog = New-OptionalCatalog $optionalDest $inventory

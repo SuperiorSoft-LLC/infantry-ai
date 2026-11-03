@@ -92,7 +92,7 @@ them, so a module's tab is never hidden.
 The build finds any `plugins/community/*/build.gradle.kts` by itself. The jar holds only your classes, because the
 app provides the plugin API, Compose and Kotlin. To install on another machine, copy the folder (with
 `module.json` and `build/libs/Acme_Notes.jar`) into `<plugins root>/community/`. The plugins root is
-`AGENTHQ_PLUGINS_ROOT`, else `<state dir>/plugins`.
+`INFANTRY_PLUGINS_ROOT`, else `<state dir>/plugins`.
 
 ## 5. Enable it (1 min)
 
@@ -130,7 +130,7 @@ The working example is `community/Acme_Echo` with its 30-line backend `examples/
    }
    ```
    The path must sit inside the `url` pattern (no `..`, `//` or `\`). The host removes `Authorization`, `Cookie`,
-   `Host`, `Proxy-*` and `X-AgentHQ-*` from your headers. Replies are cut at 4 MiB.
+   `Host`, `Proxy-*` and `X-Infantry-*` from your headers. Replies are cut at 4 MiB.
 4. **Store the key** (if `auth` is not `none`): in the Secrets section of Configuration create the secret `plugin.<your module, lowercase>`
    (for the example `plugin.acme_echo`) with the field your `auth` names (`apiKey`, value `dev-key`). Never put keys
    in module.json, code, storage or settings. The desktop app reads the field over its owner connection
@@ -184,16 +184,16 @@ community module works on the desktop app and the headless daemon (`GET /plugins
 
 ## The demo lock
 
-With `AGENTHQ_DEMO_LOCK` set, no community module loads, Settings cannot change modules.json, and the `daemon`
+With `INFANTRY_DEMO_LOCK` set, no community module loads, Settings cannot change modules.json, and the `daemon`
 service of a core module is further limited to `demoLock.allowRoutes` in `modules.json`, and its `endpoints` service to
 `demoLock.allowEndpoints`. Core tabs work as usual.
 
 ## Proving the existing UI did not change
 
 A module or seam that must leave the rest of the window as it was proves it with
-`./gradlew :superiorSoftLibrary:agentHqUi:diffTabShots`: every tab is rendered and compared pixel by pixel with the
+`./gradlew :superiorSoftLibrary:infantryUi:diffTabShots`: every tab is rendered and compared pixel by pixel with the
 committed baseline, and the task fails on any difference. See "Proving pixel-identical" in
-`superiorSoftLibrary/agentHqUi/README.md`.
+`superiorSoftLibrary/infantryUi/README.md`.
 
 ## Wrapping an existing section in a slot (child plugins)
 

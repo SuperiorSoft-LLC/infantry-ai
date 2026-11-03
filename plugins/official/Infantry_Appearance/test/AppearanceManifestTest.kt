@@ -1,6 +1,6 @@
-package com.superiorsoftllc.agenthq.plugins.official.appearance
+package com.superiorsoftllc.infantry.plugins.official.appearance
 
-import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
+import com.superiorsoftllc.infantry.plugin.api.ModuleManifest
 import kotlinx.serialization.json.Json
 import java.io.File
 import kotlin.test.Test

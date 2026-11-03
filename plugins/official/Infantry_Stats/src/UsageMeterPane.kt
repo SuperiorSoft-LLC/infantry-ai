@@ -1,7 +1,7 @@
-package com.superiorsoftllc.agenthq.plugins.official.stats
+package com.superiorsoftllc.infantry.plugins.official.stats
 
 import androidx.compose.foundation.background
-import com.superiorsoftllc.agenthq.ui.clickable
+import com.superiorsoftllc.infantry.ui.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,14 +36,14 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.NumericText
-import com.superiorsoftllc.agenthq.ui.Palette
-import com.superiorsoftllc.agenthq.ui.SegmentedControl
-import com.superiorsoftllc.agenthq.ui.StatChip
-import com.superiorsoftllc.agenthq.ui.model.AppState
-import com.superiorsoftllc.agenthq.ui.model.contractAtLeast
-import com.superiorsoftllc.agenthq.ui.protocol.UsageMeterReport
-import com.superiorsoftllc.agenthq.ui.shell.UsageMeterContext
+import com.superiorsoftllc.infantry.ui.NumericText
+import com.superiorsoftllc.infantry.ui.Palette
+import com.superiorsoftllc.infantry.ui.SegmentedControl
+import com.superiorsoftllc.infantry.ui.StatChip
+import com.superiorsoftllc.infantry.ui.model.AppState
+import com.superiorsoftllc.infantry.ui.model.contractAtLeast
+import com.superiorsoftllc.infantry.ui.protocol.UsageMeterReport
+import com.superiorsoftllc.infantry.ui.shell.UsageMeterContext
 
 const val USAGE_METER_TAG = "stats-usage-meter"
 

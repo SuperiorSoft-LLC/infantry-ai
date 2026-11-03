@@ -5,7 +5,7 @@
 // build/test-run.lock before any task runs and keeps it until the build ends (the lock dies with the JVM, so a killed
 // build never leaves a stale lock). A second build in the same dir is refused at once with the holder's pid.
 // One lock per build dir: parallel test forks inside one build share it.
-// Applied from :agentHq and :agentHqUi (apply(from = rootProject.file("gradle/test-run-lock.gradle.kts"))).
+// Applied from :infantry and :infantryUi (apply(from = rootProject.file("gradle/test-run-lock.gradle.kts"))).
 
 import java.lang.management.ManagementFactory
 import java.nio.channels.FileChannel
@@ -33,7 +33,7 @@ abstract class TestRunLock : BuildService<TestRunLock.Params>, AutoCloseable {
             throw GradleException(
                 "TEST RUN REFUSED: another Gradle build is running $projectPath tests in $dir ($holder). " +
                     "One test run per build dir: wait for it to finish, or run the suite in its own worktree " +
-                    "(scripts/agenthq-gate.sh does). See docs/GATE.md."
+                    "(scripts/infantry-gate.sh does). See docs/GATE.md."
             )
         }
         channel = ch; lock = l

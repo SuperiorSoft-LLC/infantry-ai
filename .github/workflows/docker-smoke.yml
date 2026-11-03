@@ -22,12 +22,12 @@ jobs:
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v4
       - name: Build the Docker context
-        run: ./gradlew --no-daemon :superiorSoftLibrary:agentHq:dockerContext
+        run: ./gradlew --no-daemon :superiorSoftLibrary:infantry:dockerContext
       - name: Build the image
-        run: docker build -t infantryai/infantry-ai:dev superiorSoftLibrary/agentHq/build/docker
+        run: docker build -t infantryai/infantry-ai:dev superiorSoftLibrary/infantry/build/docker
       - name: Validate compose.yaml
         run: |
-          mkdir -p /tmp/s && echo x > /tmp/s/agenthq_token && echo x > /tmp/s/agenthq_keystore_key
-          AGENTHQ_SECRETS_DIR=/tmp/s docker compose -f docker/compose.yaml config -q
+          mkdir -p /tmp/s && echo x > /tmp/s/infantry_token && echo x > /tmp/s/infantry_keystore_key
+          INFANTRY_SECRETS_DIR=/tmp/s docker compose -f docker/compose.yaml config -q
       - name: Smoke test
         run: docker/smoke.sh infantryai/infantry-ai:dev

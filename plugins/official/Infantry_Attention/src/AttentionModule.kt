@@ -1,21 +1,21 @@
-package com.superiorsoftllc.agenthq.plugins.official.attention
+package com.superiorsoftllc.infantry.plugins.official.attention
 
-import com.superiorsoftllc.agenthq.plugin.api.FillDeclaration
-import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
-import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
-import com.superiorsoftllc.agenthq.ui.ATTENTION_TAB_ID
-import com.superiorsoftllc.agenthq.ui.ConfigEntry
-import com.superiorsoftllc.agenthq.ui.ConfigQuestionsSection
-import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
-import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
-import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
-import com.superiorsoftllc.agenthq.ui.plugin.TabProvider
-import com.superiorsoftllc.agenthq.ui.plugin.UiPlugin
-import com.superiorsoftllc.agenthq.ui.plugin.UiRegistrar
-import com.superiorsoftllc.agenthq.ui.plugin.tabIcon
-import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
-import com.superiorsoftllc.agenthq.ui.shell.NoAttention
-import com.superiorsoftllc.agenthq.ui.shell.blocks.ConfigSectionBlock
+import com.superiorsoftllc.infantry.plugin.api.FillDeclaration
+import com.superiorsoftllc.infantry.plugin.api.ModuleManifest
+import com.superiorsoftllc.infantry.plugin.api.TabDeclaration
+import com.superiorsoftllc.infantry.ui.ATTENTION_TAB_ID
+import com.superiorsoftllc.infantry.ui.ConfigEntry
+import com.superiorsoftllc.infantry.ui.ConfigQuestionsSection
+import com.superiorsoftllc.infantry.ui.plugin.InfantryModule
+import com.superiorsoftllc.infantry.ui.plugin.ModuleSource
+import com.superiorsoftllc.infantry.ui.plugin.TabContainers
+import com.superiorsoftllc.infantry.ui.plugin.TabProvider
+import com.superiorsoftllc.infantry.ui.plugin.UiPlugin
+import com.superiorsoftllc.infantry.ui.plugin.UiRegistrar
+import com.superiorsoftllc.infantry.ui.plugin.tabIcon
+import com.superiorsoftllc.infantry.ui.shell.LocalShellContext
+import com.superiorsoftllc.infantry.ui.shell.NoAttention
+import com.superiorsoftllc.infantry.ui.shell.blocks.ConfigSectionBlock
 
 /** RUNTIME-19: the Questions section of the Configuration dialog, which this module fills (`infantry.shell.config.questions`). */
 const val QUESTIONS_CONFIG_ID = "infantry.shell.config.questions"
@@ -37,7 +37,7 @@ private fun attentionTab() = TabProvider(
 ) { AttentionPane(it.state, LocalShellContext.current?.attention ?: NoAttention, it.showChat) }
 
 /** PLUGINS-1: Infantry_Attention (official since RUNTIME-13), what needs the owner, compiled in on web and Android (D9). */
-val InfantryAttention = AgentHqModule(
+val InfantryAttention = InfantryModule(
     ModuleManifest(
         name = "Infantry_Attention", version = "1.0.0", author = "Infantry AI", description = "What needs the owner.",
         tabs = listOf(TabDeclaration(ATTENTION_TAB_ID, TabContainers.RIGHT)),
@@ -58,5 +58,5 @@ class AttentionPlugin : UiPlugin, ModuleSource {
         registrar.fill(QUESTIONS_CONFIG_ID, questionsSection)
     }
 
-    override fun modules(): List<AgentHqModule> = listOf(InfantryAttention)
+    override fun modules(): List<InfantryModule> = listOf(InfantryAttention)
 }

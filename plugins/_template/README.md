@@ -30,7 +30,7 @@ JSON has no comments, so the fields are explained here. Unknown keys are ignored
 | `tier` | no | Ignored. The folder decides the tier (`core/` or `community/`), and a claimed tier is only logged. |
 | `dependencies` | no | `[{ "id": "Vendor_Module", "version": ">=1.2 <2" }]`. These are the modules this one cannot run without. Each must be installed, enabled and inside its range, or the module is refused. They also load first. `version` defaults to `*` (any version). |
 | `sequence` | no | `["Vendor_Module"]`. This only sets load order: if a named module loads, it loads first. A name that is absent or off is ignored. |
-| `entry` | community: yes | The class implementing `com.superiorsoftllc.agenthq.ui.plugin.UiPlugin`, with a no-argument constructor. |
+| `entry` | community: yes | The class implementing `com.superiorsoftllc.infantry.ui.plugin.UiPlugin`, with a no-argument constructor. |
 | `jar` | community: yes | The path of the built jar, relative to the module folder. It must stay inside the folder. |
 | `services` | no | The platform services the module uses: `notifications`, `storage`, `settings`, `events`, `daemon`. A service that is not listed here is `null` at run time. A community module also needs each one under `allow` in modules.json. |
 | `routes` | no | The daemon routes the `daemon` service may call, as `METHOD /path` (for example `GET /health`). Any other route is refused. |

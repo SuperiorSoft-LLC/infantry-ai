@@ -8,7 +8,7 @@ import sqlite3
 import sys
 import time
 
-STATE = os.path.join(os.environ["LOCALAPPDATA"], "SuperiorSoft", "AgentHQ")
+STATE = os.path.join(os.environ["LOCALAPPDATA"], "SuperiorSoft", "Infantry")
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCRATCH = os.path.join(HERE, "copy")
 OUT = os.path.join(HERE, "poll.jsonl")
@@ -92,7 +92,7 @@ def poll_once(st, now_ms):
     except (sqlite3.Error, OSError) as e:
         rec["meter_error"] = repr(e)
     try:
-        a = ro(copy_db("agenthq.db"))
+        a = ro(copy_db("infantry.db"))
         started = a.execute(
             "select ticket_id, session_id, started_at from ticket_runs where started_at > ?", (st["ts"],)).fetchall()
         ended = a.execute(
@@ -108,7 +108,7 @@ def poll_once(st, now_ms):
         if changes:
             st["seq"] = max(c[0] for c in changes)
     except (sqlite3.Error, OSError) as e:
-        rec["agenthq_error"] = repr(e)
+        rec["infantry_error"] = repr(e)
     st["ts"] = now_ms
     append(rec)
 
@@ -125,7 +125,7 @@ def main():
     except (sqlite3.Error, OSError) as e:
         append({"at": utc_now(), "baseline_error": repr(e)})
     try:
-        a = ro(copy_db("agenthq.db"))
+        a = ro(copy_db("infantry.db"))
         st["seq"] = a.execute("select coalesce(max(seq),0) from ticket_events").fetchone()[0]
         a.close()
     except (sqlite3.Error, OSError) as e:

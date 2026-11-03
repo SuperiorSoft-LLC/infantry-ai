@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.plugins.official.assistant
+package com.superiorsoftllc.infantry.plugins.official.assistant
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
@@ -8,19 +8,19 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.superiorsoftllc.agenthq.plugins.official.assistant.AssistantPopupChat
-import com.superiorsoftllc.agenthq.plugins.official.assistant.AssistantPopupFrame
-import com.superiorsoftllc.agenthq.plugins.official.assistant.AssistantPopupHeader
-import com.superiorsoftllc.agenthq.plugins.official.assistant.AssistantPopupResize
-import com.superiorsoftllc.agenthq.ui.TITLE_BAR_HEIGHT
-import com.superiorsoftllc.agenthq.ui.shell.AssistantContext
-import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
-import com.superiorsoftllc.agenthq.ui.shell.NoAssistant
-import com.superiorsoftllc.agenthq.ui.block.layout.Block
-import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
-import com.superiorsoftllc.agenthq.ui.block.layout.Place
-import com.superiorsoftllc.agenthq.ui.block.layout.RenderPlaced
-import com.superiorsoftllc.agenthq.ui.block.layout.Size
+import com.superiorsoftllc.infantry.plugins.official.assistant.AssistantPopupChat
+import com.superiorsoftllc.infantry.plugins.official.assistant.AssistantPopupFrame
+import com.superiorsoftllc.infantry.plugins.official.assistant.AssistantPopupHeader
+import com.superiorsoftllc.infantry.plugins.official.assistant.AssistantPopupResize
+import com.superiorsoftllc.infantry.ui.TITLE_BAR_HEIGHT
+import com.superiorsoftllc.infantry.ui.shell.AssistantContext
+import com.superiorsoftllc.infantry.ui.shell.LocalShellContext
+import com.superiorsoftllc.infantry.ui.shell.NoAssistant
+import com.superiorsoftllc.infantry.ui.block.layout.Block
+import com.superiorsoftllc.infantry.ui.block.layout.BlockScope
+import com.superiorsoftllc.infantry.ui.block.layout.Place
+import com.superiorsoftllc.infantry.ui.block.layout.RenderPlaced
+import com.superiorsoftllc.infantry.ui.block.layout.Size
 
 /** The window's Assistant domain; [NoAssistant] (closed, nothing drawn) where the shell has no window. */
 private val assistantCtx: AssistantContext @Composable get() = LocalShellContext.current?.assistant ?: NoAssistant

@@ -1,7 +1,7 @@
-package com.superiorsoftllc.agenthq.plugins.official.pace
+package com.superiorsoftllc.infantry.plugins.official.pace
 
-import com.superiorsoftllc.agenthq.ui.Palette
-import com.superiorsoftllc.agenthq.plugins.official.pace.ThemeContrastAssert.Token
+import com.superiorsoftllc.infantry.ui.Palette
+import com.superiorsoftllc.infantry.plugins.official.pace.ThemeContrastAssert.Token
 import kotlin.test.Test
 
 /**

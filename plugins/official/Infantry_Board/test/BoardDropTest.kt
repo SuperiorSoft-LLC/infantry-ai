@@ -1,19 +1,19 @@
-package com.superiorsoftllc.agenthq.plugins.official.board
+package com.superiorsoftllc.infantry.plugins.official.board
 
-import com.superiorsoftllc.agenthq.ui.*
-import com.superiorsoftllc.agenthq.ui.shell.blocks.*
+import com.superiorsoftllc.infantry.ui.*
+import com.superiorsoftllc.infantry.ui.shell.blocks.*
 
-import com.superiorsoftllc.agenthq.ui.model.AppState
-import com.superiorsoftllc.agenthq.ui.model.BoardDrop
-import com.superiorsoftllc.agenthq.ui.model.DropPlan
-import com.superiorsoftllc.agenthq.ui.net.Controller
-import com.superiorsoftllc.agenthq.ui.net.DaemonClient
-import com.superiorsoftllc.agenthq.ui.protocol.Envelope
-import com.superiorsoftllc.agenthq.ui.protocol.Project
-import com.superiorsoftllc.agenthq.ui.protocol.Ticket
-import com.superiorsoftllc.agenthq.ui.protocol.TicketColumns
-import com.superiorsoftllc.agenthq.ui.protocol.TicketStart
-import com.superiorsoftllc.agenthq.ui.shell.CoreTickets
+import com.superiorsoftllc.infantry.ui.model.AppState
+import com.superiorsoftllc.infantry.ui.model.BoardDrop
+import com.superiorsoftllc.infantry.ui.model.DropPlan
+import com.superiorsoftllc.infantry.ui.net.Controller
+import com.superiorsoftllc.infantry.ui.net.DaemonClient
+import com.superiorsoftllc.infantry.ui.protocol.Envelope
+import com.superiorsoftllc.infantry.ui.protocol.Project
+import com.superiorsoftllc.infantry.ui.protocol.Ticket
+import com.superiorsoftllc.infantry.ui.protocol.TicketColumns
+import com.superiorsoftllc.infantry.ui.protocol.TicketStart
+import com.superiorsoftllc.infantry.ui.shell.CoreTickets
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -199,7 +199,7 @@ class BoardDropTest {
     }
 
     @Test fun `a start refused for want of a role is told apart from every other refusal`() {
-        val noRole = BoardDrop.startNote(TicketStart(false, "start_refused", "ticket has no role; set one with `agenthq ticket update <id> --role <role id>`"))
+        val noRole = BoardDrop.startNote(TicketStart(false, "start_refused", "ticket has no role; set one with `infantry ticket update <id> --role <role id>`"))
         assertTrue(BoardDrop.isNoRoleNote(noRole))
         assertFalse(BoardDrop.isNoRoleNote(BoardDrop.startNote(TicketStart(false, "held", "ticket-x"))))
         assertFalse(BoardDrop.isNoRoleNote(BoardDrop.startNote(TicketStart(false, "queued", "role:qa"))))

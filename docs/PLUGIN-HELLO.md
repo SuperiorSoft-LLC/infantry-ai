@@ -71,13 +71,13 @@ Web and Android compile config in (D9). `AcmeHelloConfig.DECLARATIONS` is module
 ## Run it
 
 ```powershell
-$env:AGENTHQ_STATE_DIR = "$env:TEMP\hello-state"; $env:AGENTHQ_PORT = "8812"; $env:AGENTHQ_PROVIDER = "stub"
-.\gradlew.bat --no-parallel :superiorSoftLibrary:agentHqUi:runRealDaemon
+$env:INFANTRY_STATE_DIR = "$env:TEMP\hello-state"; $env:INFANTRY_PORT = "8812"; $env:INFANTRY_PROVIDER = "stub"
+.\gradlew.bat --no-parallel :superiorSoftLibrary:infantryUi:runRealDaemon
 ```
 
 `runRealDaemon` builds the community jars and loads them from the repo's `plugins/` folder (devTrust). It starts its
 own daemon on the given state dir and port.
 
 Tests: `:plugins:community:Acme_Hello:test` (the guard, the slot binding and the text rules) and
-`:superiorSoftLibrary:agentHqUi:test --tests "*AcmeHelloGreetingUiTest"` (real window: the card switches World to
+`:superiorSoftLibrary:infantryUi:test --tests "*AcmeHelloGreetingUiTest"` (real window: the card switches World to
 Nation, Shout, classes).

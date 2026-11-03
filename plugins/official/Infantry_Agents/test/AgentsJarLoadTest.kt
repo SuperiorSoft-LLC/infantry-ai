@@ -1,11 +1,11 @@
-package com.superiorsoftllc.agenthq.plugins.official
+package com.superiorsoftllc.infantry.plugins.official
 
-import com.superiorsoftllc.agenthq.plugin.api.Tier
-import com.superiorsoftllc.agenthq.plugin.host.ModuleState
-import com.superiorsoftllc.agenthq.plugin.host.OfficialTrust
-import com.superiorsoftllc.agenthq.plugin.host.PluginFolders
-import com.superiorsoftllc.agenthq.ui.plugin.DesktopPlugins
-import com.superiorsoftllc.agenthq.ui.plugin.Panels
+import com.superiorsoftllc.infantry.plugin.api.Tier
+import com.superiorsoftllc.infantry.plugin.host.ModuleState
+import com.superiorsoftllc.infantry.plugin.host.OfficialTrust
+import com.superiorsoftllc.infantry.plugin.host.PluginFolders
+import com.superiorsoftllc.infantry.ui.plugin.DesktopPlugins
+import com.superiorsoftllc.infantry.ui.plugin.Panels
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.AfterTest

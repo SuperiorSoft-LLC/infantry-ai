@@ -1,30 +1,30 @@
-package com.superiorsoftllc.agenthq.plugins.official.header
+package com.superiorsoftllc.infantry.plugins.official.header
 
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import com.superiorsoftllc.agenthq.ui.ATTENTION_TAB_ID
-import com.superiorsoftllc.agenthq.ui.AssistantEntry
-import com.superiorsoftllc.agenthq.ui.ServerSwitcherChip
-import com.superiorsoftllc.agenthq.ui.shell.HeaderContext
-import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
-import com.superiorsoftllc.agenthq.ui.shell.NoHeader
-import com.superiorsoftllc.agenthq.ui.LocalWindowChrome
-import com.superiorsoftllc.agenthq.plugin.api.FillDeclaration
-import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
-import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
-import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
-import com.superiorsoftllc.agenthq.ui.plugin.UiPlugin
-import com.superiorsoftllc.agenthq.ui.plugin.UiRegistrar
-import com.superiorsoftllc.agenthq.ui.block.layout.Block
-import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
-import com.superiorsoftllc.agenthq.ui.block.layout.Place
-import com.superiorsoftllc.agenthq.ui.block.layout.RenderPlaced
-import com.superiorsoftllc.agenthq.ui.block.layout.Show
-import com.superiorsoftllc.agenthq.ui.model.PanelSide
-import com.superiorsoftllc.agenthq.ui.model.needsInput
+import com.superiorsoftllc.infantry.ui.ATTENTION_TAB_ID
+import com.superiorsoftllc.infantry.ui.AssistantEntry
+import com.superiorsoftllc.infantry.ui.ServerSwitcherChip
+import com.superiorsoftllc.infantry.ui.shell.HeaderContext
+import com.superiorsoftllc.infantry.ui.shell.LocalShellContext
+import com.superiorsoftllc.infantry.ui.shell.NoHeader
+import com.superiorsoftllc.infantry.ui.LocalWindowChrome
+import com.superiorsoftllc.infantry.plugin.api.FillDeclaration
+import com.superiorsoftllc.infantry.plugin.api.ModuleManifest
+import com.superiorsoftllc.infantry.ui.plugin.InfantryModule
+import com.superiorsoftllc.infantry.ui.plugin.ModuleSource
+import com.superiorsoftllc.infantry.ui.plugin.UiPlugin
+import com.superiorsoftllc.infantry.ui.plugin.UiRegistrar
+import com.superiorsoftllc.infantry.ui.block.layout.Block
+import com.superiorsoftllc.infantry.ui.block.layout.BlockScope
+import com.superiorsoftllc.infantry.ui.block.layout.Place
+import com.superiorsoftllc.infantry.ui.block.layout.RenderPlaced
+import com.superiorsoftllc.infantry.ui.block.layout.Show
+import com.superiorsoftllc.infantry.ui.model.PanelSide
+import com.superiorsoftllc.infantry.ui.model.needsInput
 
 /**
  * BLOCKS-LAYOUT L6 (docs/BLOCKS-LAYOUT-DESIGN.md section 8): the window's title bar as a `titleBar` layout block. Its
@@ -216,7 +216,7 @@ object HeaderAttention : Block("attentionChip", "$HEADER.attention") {
 val ShellHeader = TitleBarBlock(HEADER, listOf(HeaderLead, HeaderAttention, HeaderToggleRight, HeaderServer, HeaderConnection, HeaderWindowControls))
 
 /** RUNTIME-20: Infantry_Header (official), the window's title bar, compiled in on web and Android (D9). */
-val InfantryHeader = AgentHqModule(
+val InfantryHeader = InfantryModule(
     ModuleManifest(
         name = "Infantry_Header", version = "1.0.0", author = "Infantry AI",
         description = "The window's title bar: logo, project picker, agent strip, attention and connection chips, window controls.",
@@ -236,5 +236,5 @@ class HeaderPlugin : UiPlugin, ModuleSource {
         registrar.fill(HEADER_FILL_ID, ShellHeader)
     }
 
-    override fun modules(): List<AgentHqModule> = listOf(InfantryHeader)
+    override fun modules(): List<InfantryModule> = listOf(InfantryHeader)
 }

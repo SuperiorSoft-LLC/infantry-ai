@@ -12,14 +12,14 @@ kotlin {
 }
 
 dependencies {
-    compileOnly(project(":superiorSoftLibrary:agenthqUiCore"))
+    compileOnly(project(":superiorSoftLibrary:infantryUiCore"))
     compileOnly(compose.runtime)
     compileOnly(compose.foundation)
     compileOnly(compose.material3)
     compileOnly(libs.kotlinx.coroutines.core)
 
     // EXAMPLE-1: the guard that module.json's config equals AcmeHelloConfig (and that the factory binds the block).
-    testImplementation(project(":superiorSoftLibrary:agenthqUiCore"))
+    testImplementation(project(":superiorSoftLibrary:infantryUiCore"))
     testImplementation(compose.runtime)
     testImplementation(compose.foundation)
     testImplementation(compose.material3)

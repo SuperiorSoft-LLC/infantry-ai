@@ -32,5 +32,5 @@ Read AGENTS.md first. Facts in these docs come from the code; where an older des
 ## Optional
 
 - [DAEMON-CORE](docs/DAEMON-CORE.md): the design record of the daemon core split (dated).
-- [AGENT-QUICKREF](superiorSoftLibrary/agentHq/docs/AGENT-QUICKREF.md): the CLI for agents.
-- [MCP](superiorSoftLibrary/agentHq/docs/MCP.md): the MCP server and its tools.
+- [AGENT-QUICKREF](superiorSoftLibrary/infantry/docs/AGENT-QUICKREF.md): the CLI for agents.
+- [MCP](superiorSoftLibrary/infantry/docs/MCP.md): the MCP server and its tools.

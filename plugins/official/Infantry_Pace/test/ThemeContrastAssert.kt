@@ -1,9 +1,9 @@
-package com.superiorsoftllc.agenthq.plugins.official.pace
+package com.superiorsoftllc.infantry.plugins.official.pace
 
 import androidx.compose.ui.graphics.Color
-import com.superiorsoftllc.agenthq.ui.Contrast
-import com.superiorsoftllc.agenthq.ui.Palette
-import com.superiorsoftllc.agenthq.ui.model.ThemeSettings
+import com.superiorsoftllc.infantry.ui.Contrast
+import com.superiorsoftllc.infantry.ui.Palette
+import com.superiorsoftllc.infantry.ui.model.ThemeSettings
 import kotlin.test.fail
 
 /**

@@ -1,17 +1,17 @@
-package com.superiorsoftllc.agenthq.plugins.official.chat
+package com.superiorsoftllc.infantry.plugins.official.chat
 
-import com.superiorsoftllc.agenthq.plugin.api.ConfigDeclaration
-import com.superiorsoftllc.agenthq.plugin.api.FillDeclaration
-import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
-import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
-import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
-import com.superiorsoftllc.agenthq.ui.plugin.UiPlugin
-import com.superiorsoftllc.agenthq.ui.plugin.UiRegistrar
-import com.superiorsoftllc.agenthq.plugins.official.chat.CHAT_FILL_ID
-import com.superiorsoftllc.agenthq.plugins.official.chat.ShellCenter
+import com.superiorsoftllc.infantry.plugin.api.ConfigDeclaration
+import com.superiorsoftllc.infantry.plugin.api.FillDeclaration
+import com.superiorsoftllc.infantry.plugin.api.ModuleManifest
+import com.superiorsoftllc.infantry.ui.plugin.InfantryModule
+import com.superiorsoftllc.infantry.ui.plugin.ModuleSource
+import com.superiorsoftllc.infantry.ui.plugin.UiPlugin
+import com.superiorsoftllc.infantry.ui.plugin.UiRegistrar
+import com.superiorsoftllc.infantry.plugins.official.chat.CHAT_FILL_ID
+import com.superiorsoftllc.infantry.plugins.official.chat.ShellCenter
 
 /** Infantry_Chat as a compiled-in module (web and Android, D9): the manifest mirrors module.json. */
-val InfantryChat = AgentHqModule(
+val InfantryChat = InfantryModule(
     ModuleManifest(
         name = "Infantry_Chat", version = "1.0.0", author = "Infantry AI",
         description = "The centre column: the agent chat, the centre tab strip and the New agent dialog.",
@@ -35,5 +35,5 @@ class ChatPlugin : UiPlugin, ModuleSource {
         registrar.fill(CHAT_FILL_ID, ShellCenter)
     }
 
-    override fun modules(): List<AgentHqModule> = listOf(InfantryChat)
+    override fun modules(): List<InfantryModule> = listOf(InfantryChat)
 }

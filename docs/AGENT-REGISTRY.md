@@ -25,7 +25,7 @@ Dependency direction: 3 -> 2 -> 1, and agents -> harnesses.
 
 ## 1. The audit: where the coupling is today
 
-`K` = `superiorSoftLibrary/agentHq/src/main/kotlin/com/superiorsoftllc/agenthq`. In the "Now" column, *core* means the piece
+`K` = `superiorSoftLibrary/infantry/src/main/kotlin/com/superiorsoftllc/infantry`. In the "Now" column, *core* means the piece
 sits in the daemon jar today.
 
 ### 1.1 Coupling table
@@ -33,23 +33,23 @@ sits in the daemon jar today.
 | # | Piece (file) | Now | Target | Coupling found | Proposed cut |
 |---|---|---|---|---|---|
 | 1 | Plugin loader, guard, trust, `DaemonPluginHost`, `PluginGuard`, `DaemonApiClassLoader` | core | **1A** | none | stays |
-| 2 | `DaemonApi` (`agentHqDaemonApi/DaemonApi.kt`) | core | **1A** | **names board**: `tickets`, `epics`, `board`, `events.onTicket`, `hooks.orchestratorBinding` are on the core API | Move them behind an optional service lookup (`api.service(Board::class)`) that the orchestration plugin provides. Additive first, then deprecate. Follow-up AR-5 |
+| 2 | `DaemonApi` (`infantryDaemonApi/DaemonApi.kt`) | core | **1A** | **names board**: `tickets`, `epics`, `board`, `events.onTicket`, `hooks.orchestratorBinding` are on the core API | Move them behind an optional service lookup (`api.service(Board::class)`) that the orchestration plugin provides. Additive first, then deprecate. Follow-up AR-5 |
 | 3 | `daemon.api.board.*`, `daemon.api.orchestrator.*` | core API | **3A** | it is the orchestration contract, but it is shipped inside the core API jar | Becomes the orchestration plugin's published API (a plugin abstract). AR-5 |
 | 4 | Harness API + `HarnessRegistry`, `HarnessModules` | core | **1A** | none | stays |
 | 5 | claude / opencode / pi harnesses | core | **2S** | none toward orchestration | already pluggable (HARNESS-PLUGIN); move out later |
 | 6 | **Agent registry** (`K/agents/registry/AgentRegistry.kt`, `daemon.api.agents`, module.json `agents`) | new | **1A** | none (guard test) | **this ticket** |
 | 7 | Config manifest (`DaemonConfig`, CONFIG-8) | core | **1A** | none | stays |
 | 8 | Session runtime: `SessionManager`, `Session`, `SessionStore` | core | **1A** for the session mechanism | **heavy**, see 1.2: worktree fields on `SessionRecord`; `ticketId`; `WorktreeProvisioner` param; `briefFor`; ticket deadline; `busyTwin` (one ticket per agent); `gateLock` keyed by ticket; `skillsFor(agentId, ticketId)`; PROGRESS-ALL commit counts | Session = an agent instance in a chat. Work binding (worktree, branch, ticket, brief, deadline, twin rule) becomes a **session-binding capability** the orchestration plugin attaches. AR-3 |
-| 9 | `SessionRecord` wire shape, UI mirror (`agenthqUiCore/.../WireProtocol.kt:1060`: `worktreePath/Branch`, `repoRoot`, `worktreeBaseRef`, `ticketId`, `unattended`) | core protocol | **1A** shape + **3S** fields | ticket and worktree fields on every session | Keep them on the wire (additive rule). Re-home them as a `binding` sub-object owned by orchestration. AR-3 |
-| 10 | `SpawnOptions` (`agentHqProtocol/Spawn.kt`) | core | **1A** | none (no ticket or worktree fields) | stays |
+| 9 | `SessionRecord` wire shape, UI mirror (`infantryUiCore/.../WireProtocol.kt:1060`: `worktreePath/Branch`, `repoRoot`, `worktreeBaseRef`, `ticketId`, `unattended`) | core protocol | **1A** shape + **3S** fields | ticket and worktree fields on every session | Keep them on the wire (additive rule). Re-home them as a `binding` sub-object owned by orchestration. AR-3 |
+| 10 | `SpawnOptions` (`infantryProtocol/Spawn.kt`) | core | **1A** | none (no ticket or worktree fields) | stays |
 | 11 | Roles: `RoleCatalog`, `RoleBundle`, `RoleService`, `CustomRoles`, `RoleIds` | core | **2A** (roles are a persona source agents may reference) | `RoleIdMigration.kt:28-42` runs SQL on the `tickets` table | Roles move to Infantry_Roles' daemon half. The ticket SQL moves with the board's own migration. AR-4 |
-| 12 | Bundled role personas (`resources/roles/*.md`) | core resources | **3S** | 8 personas tell the agent to call `agenthq_ticket_related_files`; pm/architect personas say how to write tickets; version-control persona mentions branches | They are orchestration's agents: move them into the orchestration plugin's `agents` block (persona files beside it). AR-2 |
+| 12 | Bundled role personas (`resources/roles/*.md`) | core resources | **3S** | 8 personas tell the agent to call `infantry_ticket_related_files`; pm/architect personas say how to write tickets; version-control persona mentions branches | They are orchestration's agents: move them into the orchestration plugin's `agents` block (persona files beside it). AR-2 |
 | 13 | `RoleIds.CANONICAL` (16 ids) | core | **3S** (the orchestration crew) | a list of orchestration jobs, kept in core code | It becomes data once 12 moves. Core keeps only `PATTERN`. AR-2 |
 | 14 | Agent profiles (`K/agents/AgentProfiles.kt`) | core | **2A** (named agent instances: provider/model/persona/traits) | none in code; the `role:<id>` form exists for tickets (comment :325) | Becomes a registry override layer ("my architect on opus"). Undecided owner item: Agent Profile may be deprecated (note `profile-undecided-may-deprecate`) |
 | 15 | Knowledge, SharedKnowledge, skills, traits (`K/agents/*`) | core | **2A** | comments only | stays plugin-abstract (first-turn context providers) |
 | 16 | First-turn composer (persona + identity + notes + brief) | core | **1A** pipeline + **2S/3S** providers | the ticket brief is spliced in by `SessionManager.withBrief` | Make it a list of first-turn context providers. The brief is orchestration's provider. AR-3 |
 | 17 | Daemon-communication: MCP server (`K/cli/mcp`), CLI (`K/cli`) | core | **2S** (the plugin that talks to the daemon) | `McpTools` serves `board`; `McpTicketTools` serves `ticket_start`; `McpPipelineTools` serves `pipeline`/`pipeline_record`. They are next to the session and mail tools | Split it. Session, mail, agent and watch tools go to the daemon-communication plugin (2S). The ticket, board and pipeline tools go to orchestration (3S). The list is `BuiltinToolsListGuardTest`'s ratchet. AR-6 |
-| 18 | Infantry_Agents daemon half (harness_status/install, list_harnesses, progress, **agent_list/get/enable/disable**) | official | **2S** | the `agenthq_list_harnesses` description tells agents to use `agenthq_ticket_create/start` | wording only. Move that sentence into the orchestration persona text. AR-6 |
+| 18 | Infantry_Agents daemon half (harness_status/install, list_harnesses, progress, **agent_list/get/enable/disable**) | official | **2S** | the `infantry_list_harnesses` description tells agents to use `infantry_ticket_create/start` | wording only. Move that sentence into the orchestration persona text. AR-6 |
 | 19 | Infantry_Agents UI (`Sidebar.kt:127-141`, `SidebarBoardButton.kt:23`, `TicketTag`) | official | **2S** | a Board button and ticket tags in the agents panel | Orchestration **injects** them into the panel (BLOCKS-INJECTORS). AR-7 |
 | 20 | Infantry_Roles daemon half (role tools) | official | **2S** | none | stays |
 | 21 | Infantry_Roles UI (`RolesAttention.kt:186` shows `worktreeBranch`) | official | **2S** | reads an orchestration field | read it through the binding sub-object once AR-3 lands, or have orchestration inject it. AR-7 |
@@ -77,7 +77,7 @@ All in `K/session/`.
 **`SessionManager.kt`**
 
 - `:77` `WorktreeProvisioner`.
-- `:107`, `:1338-1363`, `:1954` ticket deadline (`AGENTHQ_TICKET_DEADLINE_MIN`).
+- `:107`, `:1338-1363`, `:1954` ticket deadline (`INFANTRY_TICKET_DEADLINE_MIN`).
 - `:110`, `:1317`, `:1353` `gateLock.liveFor(id, ticketId)`.
 - `:306`, `:322` `launchGate(..., ticketId)`.
 - `:347`, `:379-390` `skillsFor(agentId, ticketId)`.
@@ -89,7 +89,7 @@ All in `K/session/`.
 - `:1105` `carry`.
 - `:1134`, `:1167` re-resolve by ticket.
 
-**Not coupled.** `InfantryEnv.kt` (sessions get only `AGENTHQ_SESSION_ID`/`ROLE`/`AGENT_ID`) and `RoleInstance.kt`.
+**Not coupled.** `InfantryEnv.kt` (sessions get only `INFANTRY_SESSION_ID`/`ROLE`/`AGENT_ID`) and `RoleInstance.kt`.
 
 ### 1.3 The layer line, as input for LICENSE-MAP
 
@@ -127,7 +127,7 @@ The owner settled O3: the registry is core abstract (1A), as built.
 
 ### 3.1 The contract (abstract, 1A)
 
-`plugin.api.AgentDefinition` (`agenthqPlugins` commonMain, so desktop, wasm and Android share it):
+`plugin.api.AgentDefinition` (`infantryPlugins` commonMain, so desktop, wasm and Android share it):
 
 | Field | Meaning |
 |---|---|
@@ -195,10 +195,10 @@ role-agents.
 
 | Tool (Infantry_Agents, 2S) | Action | Rule |
 |---|---|---|
-| `agenthq_agent_list`, `agenthq_agent_get` | `agents.registry.read` | everyone |
-| `agenthq_agent_enable`, `agenthq_agent_disable` | `agents.registry.write` | refused for an agent caller (same rule as role create/delete) |
+| `infantry_agent_list`, `infantry_agent_get` | `agents.registry.read` | everyone |
+| `infantry_agent_enable`, `infantry_agent_disable` | `agents.registry.write` | refused for an agent caller (same rule as role create/delete) |
 
-CLI: `agenthq agent-def list | show <id> | enable <id> | disable <id>`. It makes one `plugin_tool_call` per command, so there is
+CLI: `infantry agent-def list | show <id> | enable <id> | disable <id>`. It makes one `plugin_tool_call` per command, so there is
 one gate and one answer. `agents` stays the live-sessions command.
 
 ### 3.5 A session is an instance of an agent
@@ -258,7 +258,7 @@ module.json `agents` block lists them (`role` references or persona files) and c
 | AR-3 | Session binding capability: worktree, ticket, brief, deadline, twin rule and gate lock out of `SessionManager` into an orchestration-provided binding. First-turn context providers | 1A + 3S |
 | AR-4 | Roles' daemon code into Infantry_Roles. `RoleIdMigration`'s ticket SQL to the board | 2A |
 | AR-5 | `DaemonApi.tickets/epics/board/onTicket/orchestratorBinding` behind an optional service lookup provided by orchestration | 1A/3A |
-| AR-6 | Split the MCP/CLI tools: communication plugin (2S) vs orchestration (3S). Move the ticket wording out of `agenthq_list_harnesses` | 2S/3S |
+| AR-6 | Split the MCP/CLI tools: communication plugin (2S) vs orchestration (3S). Move the ticket wording out of `infantry_list_harnesses` | 2S/3S |
 | AR-7 | Agents/Roles UI: Board button, ticket tags and branch label injected by orchestration | 2S/3S |
 | AR-8 | Enforce `AgentDefinition.tools` (per-session MCP allow-list) | 1A |
 

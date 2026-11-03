@@ -1,9 +1,9 @@
-package com.superiorsoftllc.agenthq.plugins.official.triggers
+package com.superiorsoftllc.infantry.plugins.official.triggers
 
-import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.infantry.ui.*
 
-import com.superiorsoftllc.agenthq.ui.protocol.TriggerAction
-import com.superiorsoftllc.agenthq.ui.protocol.TriggerView
+import com.superiorsoftllc.infantry.ui.protocol.TriggerAction
+import com.superiorsoftllc.infantry.ui.protocol.TriggerView
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive

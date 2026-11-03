@@ -1,6 +1,6 @@
-package com.superiorsoftllc.agenthq.plugins.official.chatfeed
+package com.superiorsoftllc.infantry.plugins.official.chatfeed
 
-import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.infantry.ui.*
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
@@ -50,9 +50,9 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.model.PromptCards
-import com.superiorsoftllc.agenthq.ui.protocol.OwnerQuestionView
-import com.superiorsoftllc.agenthq.ui.protocol.QuestionAnswerWire
+import com.superiorsoftllc.infantry.ui.model.PromptCards
+import com.superiorsoftllc.infantry.ui.protocol.OwnerQuestionView
+import com.superiorsoftllc.infantry.ui.protocol.QuestionAnswerWire
 
 // RUNTIME-22: the inline question panel of the chat transcript (moved from QuestionWindow.kt; the pill and gone card stay with the shell).
 const val QUESTION_WINDOW_TAG = "question-window"

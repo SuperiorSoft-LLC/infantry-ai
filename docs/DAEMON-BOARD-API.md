@@ -4,7 +4,7 @@ Status: **design; DP-4a built (BOARD-API-1, ticket 089a22a9, section 7), DP-4b/4
 migration is built after launch. This note is what DP-4.. start from. It does not change behaviour or the wire contract.
 
 Why the board family is not a simple move (DAEMON-PLUGINS-2 finding, confirmed here): a plugin compiles against
-`agentHqDaemonApi` only, and `DaemonApi` today offers `projects`, `sessions`, `policy`, `events`, `tools`, `frames`, `routes`, `hooks`.
+`infantryDaemonApi` only, and `DaemonApi` today offers `projects`, `sessions`, `policy`, `events`, `tools`, `frames`, `routes`, `hooks`.
 It has no ticket, epic or board operation, so a board plugin could not reach its own data; and core reaches the board directly.
 
 ## 1. What is board family, and how big
@@ -20,7 +20,7 @@ It has no ticket, epic or board operation, so a board plugin could not reach its
 | `brief` | 197 | lead-to-worker brief |
 | `ledger` | 82 | asked/done ledger of the board's workers |
 
-About 5200 lines plus the `tickets` table family in `persistence/AgentHqStore`.
+About 5200 lines plus the `tickets` table family in `persistence/InfantryStore`.
 
 ## 2. Every direct coupling to the board (core -> board), with a rough size
 
@@ -33,7 +33,7 @@ References by type name (`grep TicketBoard`, `import ...backlog|epics|stories|mv
 | `ticketfiles/LiveRelatedWork` (4 imports), `ticketfiles/TicketFiles` | read ticket rows to rank related work | **S** (move with it) |
 | `triggers/TriggerService` (2), `TriggerNudges` (1) | read tickets / transitions to fire triggers | **M**: needs the ticket events (section 4) |
 | `mailbox/MailRouter` (1) | `TicketContextComposer.STARTER`, the `starter` addressee constant, plus `starterOf`/`reportCheck` seams | **S**: move the constant to core (`mailbox`), keep the seams (section 5) |
-| `settings/SettingsService` (1), `projectgit/ProjectGitHandler` (1), `images/ImageUploads` (1), `daemon/plugins/CoreDaemonServices` (1), `db/AgentHQDatabase` (1), `ledger/*` (2) | reads of ticket rows, project dirs, ticket ids | **S** each |
+| `settings/SettingsService` (1), `projectgit/ProjectGitHandler` (1), `images/ImageUploads` (1), `daemon/plugins/CoreDaemonServices` (1), `db/InfantryDatabase` (1), `ledger/*` (2) | reads of ticket rows, project dirs, ticket ids | **S** each |
 | `cli/TicketStarter`, `cli/CliMain` ticket commands, `cli/mcp/McpTicketTools`, `McpWriteTools`, `McpProgressTools` | clients: they speak frames, not `TicketBoard` | **none** (frames stay) |
 | `session/SessionManager`, `session/TicketWorkerHealth`, `mailbox/*` | **no `TicketBoard` import.** They reach the board through function-valued seams wired in `DaemonMain`: `manager.launchGate`, `manager.skillsFor`, `bindSessionOnSpawn`, `Orchestrator.sessionStartedSink`, `mail.reportCheck` (already via `OrchestratorLink`), `starterOf = board::starterOf`, `board.transitionSink`, `ticketOf` (x2), `manager.ticketBrief` | **M**: a handful of lambdas to turn into interface calls |
 
@@ -44,7 +44,7 @@ board lambdas. The real blockers are `DaemonMain` (frames + wiring) and the miss
 
 One new section of `DaemonApi`, read and write, versioned with `DaemonApi.VERSION` (minor bump when added). Plain data in/out
 (no `TicketRow`, `SessionRecord` or other daemon class crosses): `TicketInfo`, `TicketDraft`, `TicketPatch`, `EpicInfo`,
-`BoardColumn`, `TicketEvent` live in `agentHqDaemonApi` as serializable data classes.
+`BoardColumn`, `TicketEvent` live in `infantryDaemonApi` as serializable data classes.
 
 ```
 interface Tickets {
@@ -89,7 +89,7 @@ interface Board { fun columns(projectId: String): List<BoardColumn>; fun brief(t
 
 ## 4. Taking the board out of core's hands: interface, not import
 
-Core defines the interface in `agentHqDaemonApi` and owns the *local binding*; the board plugin supplies the implementation
+Core defines the interface in `infantryDaemonApi` and owns the *local binding*; the board plugin supplies the implementation
 after the move. Core code stops naming `TicketBoard`:
 
 1. **Seams become one interface.** Core already has one place for this: `OrchestratorLink` (`orchestration/OrchestratorLink.kt`,
@@ -104,21 +104,21 @@ after the move. Core code stops naming `TicketBoard`:
 4. **`DaemonMain`.** Its board frame switch is data: a table `frame type -> handler` registered by whoever owns the frame.
    The board plugin registers its ~40 frames; core keeps a fallback that answers "this daemon has no board" so a client talking
    to a daemon without the plugin gets a refusal, not a hang.
-5. **Persistence.** `tickets` tables stay in `AgentHqStore` at first (the plugin gets the data through `Tickets`, never SQL);
+5. **Persistence.** `tickets` tables stay in `InfantryStore` at first (the plugin gets the data through `Tickets`, never SQL);
    a later step gives the plugin its own table family through `DaemonApi.storage` (not designed here).
 
 ## 5. Step plan (all after launch; each step keeps the build green and the wire unchanged)
 
 | step | work | size |
 |---|---|---|
-| **DP-4a** (DONE, section 7) | Add `Tickets`/`Epics`/`Board` interfaces + data classes to `agentHqDaemonApi`; `CoreDaemonServices` implements them over `TicketBoard`/`EpicStore` (local binding). Move `ProjectScope` into the host (applies to every `Tickets` call). Golden tests per operation. | M |
+| **DP-4a** (DONE, section 7) | Add `Tickets`/`Epics`/`Board` interfaces + data classes to `infantryDaemonApi`; `CoreDaemonServices` implements them over `TicketBoard`/`EpicStore` (local binding). Move `ProjectScope` into the host (applies to every `Tickets` call). Golden tests per operation. | M |
 | **DP-4b** (DONE, section 8) | `TicketBoard` events: replace `transitionSink` with typed ticket events on `api.events`; `triggers`, `DoneWorkerReaper`, ticket-files recorder subscribe through the API. | M |
 | **DP-4c** | Route the `SessionManager`/mailbox seams (section 4.1) through `OrchestratorLink`; move `STARTER` into `mailbox`; core no longer imports `backlog`/`context` outside `DaemonMain`. Guard: only `DaemonMain` and the board packages name them. | M |
 | **DP-5** | Move `backlog`, `epics`, `stories`, `mvp`, `context`, `brief`, `ledger`, `ticketfiles` into `plugins/official/Infantry_Board/daemon` against the API only; frames registered by the plugin; `DaemonMain` loses its board switch. Parity: every existing board/ticket/story/epic daemon test passes unchanged against the plugin. | L (multi-day) |
-| **DP-6 (DONE)** | Pipeline plugin (`pipeline`, `agenthq_pipeline*` tools): needs only `Tickets` + `Sessions`; small once DP-4a lands. | S |
+| **DP-6 (DONE)** | Pipeline plugin (`pipeline`, `infantry_pipeline*` tools): needs only `Tickets` + `Sessions`; small once DP-4a lands. | S |
 | **DP-7** | Knowledge plugin: `issues`, `decisions`, `memory` (+ their CLI/MCP surface) behind a `Knowledge` section of the API (notes, decisions, issues CRUD, search); own tables. | M |
-| **DP-10** | `prompts` (Infantry_Prompts) and `images` (Infantry_Chat) halves; `images` also needs a storage/upload surface scoped to `<project>/.agenthq`. | S-M each |
-| **DP-11** | Agents tool family (`agenthq_spawn`, `list_sessions`, `prompt`, `kill`, `restart`...): needs `McpGuardrails` in the API (spawn/depth/concurrency/kill-scope checks a plugin calls and cannot reimplement) and `Sessions` extended with the spawn binding. Not done in DP-9 (see below). | M |
+| **DP-10** | `prompts` (Infantry_Prompts) and `images` (Infantry_Chat) halves; `images` also needs a storage/upload surface scoped to `<project>/.infantry`. | S-M each |
+| **DP-11** | Agents tool family (`infantry_spawn`, `list_sessions`, `prompt`, `kill`, `restart`...): needs `McpGuardrails` in the API (spawn/depth/concurrency/kill-scope checks a plugin calls and cannot reimplement) and `Sessions` extended with the spawn binding. Not done in DP-9 (see below). | M |
 
 Order matters: DP-4a first (nothing moves yet, only an interface and its local binding), then 4b/4c, then the move (DP-5).
 After DP-5 the licensing line is clean: core imports no board package, and `Infantry_Board`'s daemon half is Apache-2.0 under `plugins/official`.
@@ -134,7 +134,7 @@ host applying them to every plugin tool call, not a helper a plugin may skip. Th
 ## 7. DP-4a built (BOARD-API-1, ticket 089a22a9): what is there and where it differs from section 3
 
 Built: `Tickets` / `Epics` / `Board` + plain `@Serializable` data (`TicketInfo`, `TicketDraft`, `TicketPatch`, `TicketQuery`, `Page`,
-`StartResult`, `TicketBinding`, `BoardColumn`, `EpicInfo`) in `agentHqDaemonApi/.../api/board/BoardApi.kt` (`BOARD_API_VERSION` 1.0.0,
+`StartResult`, `TicketBinding`, `BoardColumn`, `EpicInfo`) in `infantryDaemonApi/.../api/board/BoardApi.kt` (`BOARD_API_VERSION` 1.0.0,
 `DaemonApi.VERSION` 1.1.0 -> 1.2.0, members default to `NoBoard` = `Unavailable`); the local binding `LocalBoardServices` (over
 `TicketBoard`/`EpicStore`, wired into `CoreDaemonServices` by `DaemonMain`); the grant wrapper `GrantedBoard` (in `DaemonPluginHost.Api`).
 Tests: `LocalBoardServicesTest` (golden per operation, scope, policy, Unavailable through an `OrchestratorLink` fake, grants, get parity),
@@ -163,7 +163,7 @@ Tests: `LocalBoardServicesTest` (golden per operation, scope, policy, Unavailabl
 
 `TicketBoard.transitionSink` is gone. A commit writes one `ticket_events` row per change INSIDE its own transaction (`TicketEventLog.record`,
 migration 52), and delivers after the commit under the board monitor, as the sink did. `TicketEvents.subscribe(consumer, listener)` (in
-`agentHqDaemonApi`, `BOARD_API_VERSION` 1.1.0, `DaemonApi.VERSION` 1.3.0, plugin side `api.events.onTicket(consumer, listener)`) is the one
+`infantryDaemonApi`, `BOARD_API_VERSION` 1.1.0, `DaemonApi.VERSION` 1.3.0, plugin side `api.events.onTicket(consumer, listener)`) is the one
 way in: the three core consumers (`core.triggers`, `core.done-worker-reaper`, `core.ticket-files`) subscribe exactly as a plugin does.
 
 * **Events:** `TicketEvent(seq, ticketId, kind, from, to, at)`, kinds `created`, `moved`, `started` (into in_progress), `done` (into done),
@@ -183,7 +183,7 @@ way in: the three core consumers (`core.triggers`, `core.done-worker-reaper`, `c
 `TicketInfo` gains `contextLimit` (the ticket's limit in tokens, null = none), `effectiveContextLimit`,
 `effectiveContextLimitSource` (`ticket` / `default`) and `contextLimitSupport` (`supported` / `best_effort` / `unsupported`
 for the ticket's effective harness), all defaulted, so a plugin built on 1.1.0 is unaffected. Infantry_Board's
-`agenthq_ticket_get` renders them byte for byte as core's summary does (`LocalBoardServicesTest`). See docs/CONTEXT-LIMIT.md.
+`infantry_ticket_get` renders them byte for byte as core's summary does (`LocalBoardServicesTest`). See docs/CONTEXT-LIMIT.md.
 
 ## EFFORT-1: `BOARD_API_VERSION` 1.4.0 (additive)
 
@@ -195,7 +195,7 @@ for the ticket's effective harness), all defaulted, so a plugin built on 1.1.0 i
 
 The pure shared rules `TicketRefs`, `TicketPlacement`, `TicketImages`, `ContextLimits`; `TicketDraft` / `TicketPatch.contextLimit`;
 `Tickets.mayFile(projectId, by)` (the scope's bare sentence, asked before a tool writes anything for a project). Infantry_Board's
-daemon half now serves `agenthq_ticket_create/update/move/delete` and `agenthq_epic_base`. See RUNTIME-LOAD.md section 10.
+daemon half now serves `infantry_ticket_create/update/move/delete` and `infantry_epic_base`. See RUNTIME-LOAD.md section 10.
 
 ## 9. DP-5c built (ticket 65094bfb): `BoardHost`, what the board plugin asks of the host (`BOARD_API_VERSION` 1.6.0, additive)
 
@@ -210,7 +210,7 @@ receives from `DaemonPlugin`, and a test fakes one member by overriding it. A tr
 
 | core class | what TicketBoard & co. call | port member |
 |---|---|---|
-| `AgentHqStore` | `transaction`, `writeTransaction` | `BoardStorage.transaction/writeTransaction { BoardTables }` |
+| `InfantryStore` | `transaction`, `writeTransaction` | `BoardStorage.transaction/writeTransaction { BoardTables }` |
 | `TicketRepository`/`TicketRow`/`TicketLinkRow` | create/update/get/all/delete/link/unlink/links | `TicketTable` over `StoredTicket`/`StoredLink` |
 | `TicketRunRepository`/`TicketRunRow` | insert/finish/byTicket | `TicketRunTable` over `StoredRun` |
 | `TicketEventLog` | `record(before, after, changed, deleted)` in the commit; `deliver()` after | `TicketEventAppender.record/deliver` |
@@ -241,7 +241,7 @@ move with the board. `WeightExecutors`, `RoutingRules`, `PacingVerdict` come fro
 | `KnowledgeCounter`, `SkillsSource` | `knowledge.section(projectId, role)`, `skills.section(instance)` | `BoardHost.context: BoardContextSources` (`knowledgeSection`, `skillsSection(skillIds, include)`) |
 | `TicketImages` (daemon class) | `normalize`, `absolute`, `release` | `BoardHost.images: BoardImages` (paths as strings, `release` over `StoredTicket`) |
 
-Still not in the port: `AgentProfiles.instanceFor` / `RoleInstance` / `withSkills` (the host resolves the instance inside `BoardSessions.start`, as section 9 noted) and the DP-5f-1 pure classes (already in `agentHqBoard`).
+Still not in the port: `AgentProfiles.instanceFor` / `RoleInstance` / `withSkills` (the host resolves the instance inside `BoardSessions.start`, as section 9 noted) and the DP-5f-1 pure classes (already in `infantryBoard`).
 `LocalBoardHost.publish(SessionEvent)` is the fan-in: the daemon's one event sink calls it (not wired yet, DP-5 does it); listeners run in arrival order, a throw in one is swallowed.
 
 TEST-TODO (DP-5f-2): (1) event delivery order: publish Status, Exit, Status for one session; one listener sees them in that order, two listeners each see all three in that order. (2) subscription lifecycle: after `close()` a listener gets nothing, `close()` twice is safe, a listener subscribing inside a callback does not break the delivery in flight, a throwing listener does not stop the next one. (3) Exit carries the `SessionView` as it stood on arrival even after the session record is deleted. (4) `executorFor` on `LocalBoardHost.agents` equals `AgentProfiles.executorFor` for the same inputs (role binding and pins).
@@ -289,9 +289,9 @@ extension `TicketBoard.localHost`.
 - Project and workspace frames are core's: `BoardFrames.CORE_PROJECT_TYPES`, registered by `registerCoreProjectFrames` whether or not a board is wired; no longer in `BoardFrames.TYPES`. Board frames need no project facts beyond `api.projects`, so no extra read port was added. Behaviour change: a no-board daemon now answers project / workspace frames instead of the no-board refusal.
 
 ## 16. DP-5h-3a (DaemonApi 1.12.0, additive): the board runtime port
-- `api.boardRuntime` (`BoardRuntime`, default `NoBoardRuntime`): everything the board plugin needs to build its own `TicketBoard` with no core class. Only DaemonApi types cross it (plugin jars shade their own agentHqBoard, so class identity forbids sharing board types): `host: BoardHost` (the same port core's `LocalBoardHost` implements over store / branches / SessionManager), `setting(key)`, `limit(key)`, `laneCap(project, role)`, `routingRules(project)` (JSON text), `roleIds()`, `pacing(provider, model)` (`BoardPacing(over, warning)`), `routingRefused(...)`, `push(frames)`.
+- `api.boardRuntime` (`BoardRuntime`, default `NoBoardRuntime`): everything the board plugin needs to build its own `TicketBoard` with no core class. Only DaemonApi types cross it (plugin jars shade their own infantryBoard, so class identity forbids sharing board types): `host: BoardHost` (the same port core's `LocalBoardHost` implements over store / branches / SessionManager), `setting(key)`, `limit(key)`, `laneCap(project, role)`, `routingRules(project)` (JSON text), `roleIds()`, `pacing(provider, model)` (`BoardPacing(over, warning)`), `routingRefused(...)`, `push(frames)`.
 - `coreBuiltBoard`: true while core still builds the board through `BoardWiring` (DP-5h-3b flips it). The plugin then registers tools only; otherwise `BoardDaemonPlugin` calls `BoardFromRuntime.build(runtime)` and `registerBoardFrames(api.frames.table, board, api.spawns.charge, ...)`.
-- `registerBoardFrames` (agentHqBoard) now takes `FrameBinding` + `SpawnCharge` (`BoardStartCharge`); core keeps a thin `GuardSpawnCharge` adapter. Epic / story frames take nullable handlers: they stay core-side until DP-5h-3b (epic store, story migration table, TicketContext sources: settings, knowledge, skills, role notes, related work).
+- `registerBoardFrames` (infantryBoard) now takes `FrameBinding` + `SpawnCharge` (`BoardStartCharge`); core keeps a thin `GuardSpawnCharge` adapter. Epic / story frames take nullable handlers: they stay core-side until DP-5h-3b (epic store, story migration table, TicketContext sources: settings, knowledge, skills, role notes, related work).
 
 ## 17. DP-5h-3a2 (DaemonApi 1.13.0, additive): story, epic and tuning inputs on the one BoardRuntime
 Adds to the section-16 `BoardRuntime` (no second runtime): `ticketEvents` (typed ticket-event subscription, default `NoTicketEvents`), `stories: BoardStoryInputs` (old story id -> ticket id, epic-changed push), `epics: BoardEpicInputs` (epics as `Epic` JSON, project check, `epic_base` check, branch-name normaliser), `relatedDescription(BoardRelatedDraft)` (the RELATED block) and `unknownSkills(ids)`. `BoardFromRuntime.build` maps the last two into the board; `BoardDaemonPlugin` builds `StoryHandler` / `BoardHandler` / `EpicHandler` from the inputs (`BoardBuild.handlers`) and passes them to `registerBoardFrames`. `LocalBoardRuntime` and `DaemonMain` supply them from core.
@@ -304,7 +304,7 @@ facts (`BoardCoreTicket`), session ids and titles, the first-turn brief, the cut
 epic broadcast), lane-cap change, queue-mark clear, the worker sweep, ticket get / move as wire JSON, and the shutdown steps. The plugin owns the ONLY
 `EpicStore`; core reads epics through this access.
 
-Slice 2a/2b/3 (the flip, `coreBuiltBoard=false` in `DaemonMain`): `BoardCoreAccess.invoke(op, json)` carries ticket and epic ops as wire JSON (list, get, save, move, delete, link, unlink, reorder, startNext, startPrompt, epicGet, epicList, epicSave, epicSetBase); core's `BoardOps` is `CoreBoardOps` (over a local board) or `PluginBoardOps` (over `invoke`). `BoardStoryInputs` gains `migrationFile` / `recordMapping`. `BoardRuntime` gains defaulted first-turn inputs (`includeLinkedTasksContext`, `includeSkillsContext`, `skillIds`, `roleNotes`, `relatedBlock`) which `BoardFromRuntime.contextOf` composes into the plugin's `TicketContext`, and the test-only `fixedFirstTurn()` that replaces the composed context in daemon tests. The board plugin shades `agentHqProtocol` as well as `agentHqBoard`. The plugin declares its frames in `module.json` `daemon.frames` (`{type, action, kind}`); the host accepts an OFFICIAL plugin declaring a core frame type only under the same action and kind as core's `ActionCatalog` (community plugins still may not).
+Slice 2a/2b/3 (the flip, `coreBuiltBoard=false` in `DaemonMain`): `BoardCoreAccess.invoke(op, json)` carries ticket and epic ops as wire JSON (list, get, save, move, delete, link, unlink, reorder, startNext, startPrompt, epicGet, epicList, epicSave, epicSetBase); core's `BoardOps` is `CoreBoardOps` (over a local board) or `PluginBoardOps` (over `invoke`). `BoardStoryInputs` gains `migrationFile` / `recordMapping`. `BoardRuntime` gains defaulted first-turn inputs (`includeLinkedTasksContext`, `includeSkillsContext`, `skillIds`, `roleNotes`, `relatedBlock`) which `BoardFromRuntime.contextOf` composes into the plugin's `TicketContext`, and the test-only `fixedFirstTurn()` that replaces the composed context in daemon tests. The board plugin shades `infantryProtocol` as well as `infantryBoard`. The plugin declares its frames in `module.json` `daemon.frames` (`{type, action, kind}`); the host accepts an OFFICIAL plugin declaring a core frame type only under the same action and kind as core's `ActionCatalog` (community plugins still may not).
 
 ## 21. DP-5h-4: core board construction deleted
 `BoardWiring` is gone. `DaemonMain` builds no `TicketBoard`, and `coreBuiltBoard` is passed `false`: the Infantry_Board plugin builds the board and hands core a `BoardCoreAccess`, which core wraps as `PluginBoardPorts` (`BoardPortRef` answers "no board" while none is attached). Core keeps the typed ticket-event log, the `LocalBoardHost`, the ticket files and the three core event consumers. `LocalBoardServices` takes only `BoardOps` (`PluginBoardOps`); `BoardOps.startPrompt` returns the API's `PromptStart`. `CoreBoardOps`, the in-process `LocalBoardServices(board, epicStore, ...)` factory, `TicketBoard(store, ...)` (`TicketBoardStores.kt`) and `StoryAdapters.kt` moved to the test source set. `DaemonMain`'s test hook is now `fixedFirstTurn` (no board type). `BoardImportGuardTest.remaining` is empty and stays so. A daemon with the plugin absent refuses the board frames with the no-board text (`NoBoardDaemonTest`).

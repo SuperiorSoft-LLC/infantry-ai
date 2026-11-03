@@ -1,6 +1,6 @@
-package com.superiorsoftllc.agenthq.plugins.official.triggers
+package com.superiorsoftllc.infantry.plugins.official.triggers
 
-import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.infantry.ui.*
 
 import kotlin.test.Test
 import kotlin.test.assertEquals

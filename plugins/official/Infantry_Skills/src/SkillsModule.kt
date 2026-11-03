@@ -1,15 +1,15 @@
-package com.superiorsoftllc.agenthq.plugins.official.skills
+package com.superiorsoftllc.infantry.plugins.official.skills
 
-import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
-import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
-import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
-import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
-import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
-import com.superiorsoftllc.agenthq.ui.plugin.TabProvider
-import com.superiorsoftllc.agenthq.ui.plugin.UiPlugin
-import com.superiorsoftllc.agenthq.ui.plugin.UiRegistrar
-import com.superiorsoftllc.agenthq.ui.plugin.tabIcon
-import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
+import com.superiorsoftllc.infantry.plugin.api.ModuleManifest
+import com.superiorsoftllc.infantry.plugin.api.TabDeclaration
+import com.superiorsoftllc.infantry.ui.plugin.InfantryModule
+import com.superiorsoftllc.infantry.ui.plugin.ModuleSource
+import com.superiorsoftllc.infantry.ui.plugin.TabContainers
+import com.superiorsoftllc.infantry.ui.plugin.TabProvider
+import com.superiorsoftllc.infantry.ui.plugin.UiPlugin
+import com.superiorsoftllc.infantry.ui.plugin.UiRegistrar
+import com.superiorsoftllc.infantry.ui.plugin.tabIcon
+import com.superiorsoftllc.infantry.ui.shell.LocalShellContext
 
 /** The Skills tab's id. */
 const val SKILLS_TAB_ID = "infantry.skills"
@@ -29,7 +29,7 @@ private fun skillsTab() = TabProvider(
 }
 
 /** PLUGINS-1: Infantry_Skills (official since RUNTIME-9), as a compiled-in module (web and Android, D9; the manifest mirrors module.json). */
-val InfantrySkills = AgentHqModule(
+val InfantrySkills = InfantryModule(
     ModuleManifest(
         name = "Infantry_Skills", version = "1.0.0", author = "Infantry AI", description = "Saved skills to insert into the chat.",
         tabs = listOf(TabDeclaration(SKILLS_TAB_ID, TabContainers.RIGHT)),
@@ -47,5 +47,5 @@ class SkillsPlugin : UiPlugin, ModuleSource {
         registrar.tab(skillsTab())
     }
 
-    override fun modules(): List<AgentHqModule> = listOf(InfantrySkills)
+    override fun modules(): List<InfantryModule> = listOf(InfantrySkills)
 }

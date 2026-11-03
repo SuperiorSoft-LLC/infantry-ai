@@ -6,11 +6,11 @@
   "description": "The questions pill: open owner questions the owner cannot see inline, one click from the asking chat.",
   "tier": "official",
   "sequence": [],
-  "entry": "com.superiorsoftllc.agenthq.plugins.official.approvals.ApprovalsPlugin",
+  "entry": "com.superiorsoftllc.infantry.plugins.official.approvals.ApprovalsPlugin",
   "jar": "build/libs/Infantry_Approvals.jar",
   "buildOrder": 200,
   "daemon": {
-    "entry": "com.superiorsoftllc.agenthq.plugins.official.approvals.daemon.ApprovalsDaemonPlugin",
+    "entry": "com.superiorsoftllc.infantry.plugins.official.approvals.daemon.ApprovalsDaemonPlugin",
     "jar": "daemon/build/libs/Infantry_Approvals-daemon.jar",
     "apiAtLeast": "1.22.0",
     "hooks": ["approvalRules"],

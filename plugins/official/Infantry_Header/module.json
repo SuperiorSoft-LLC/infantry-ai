@@ -6,7 +6,7 @@
   "description": "The window's title bar: logo, project picker, agent strip, attention and connection chips, window controls.",
   "tier": "official",
   "sequence": [],
-  "entry": "com.superiorsoftllc.agenthq.plugins.official.header.HeaderPlugin",
+  "entry": "com.superiorsoftllc.infantry.plugins.official.header.HeaderPlugin",
   "jar": "build/libs/Infantry_Header.jar",
   "buildOrder": 200,
   "fills": [

@@ -1,0 +1,17 @@
+-- TRAITS-T1 -- migration v26 -> v27: the trait library (docs/INFANTRY-ROLE-TRAITS.md section 2, D1).
+--
+-- A trait is a small versioned rule: `id` is a slug chosen by the author (RoleIds.PATTERN), `version` starts at 1 and
+-- moves +1 only when name, body or check changes (TraitStore owns that rule, and every limit). `check_spec` is the
+-- optional structured check as JSON (v1: kind "report" only); NULL = no check. `check` is an SQL keyword, hence the name.
+--
+-- NEXT MIGRATION: 28.sqm (27.sqm = role_traits, TRAITS-T2)
+
+CREATE TABLE IF NOT EXISTS traits (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    version INTEGER NOT NULL CHECK (version >= 1),
+    body TEXT NOT NULL,
+    check_spec TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);

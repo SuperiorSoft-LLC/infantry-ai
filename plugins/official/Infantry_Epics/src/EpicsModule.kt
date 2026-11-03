@@ -1,16 +1,16 @@
-package com.superiorsoftllc.agenthq.plugins.official.epics
+package com.superiorsoftllc.infantry.plugins.official.epics
 
-import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
-import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
-import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
-import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
-import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
-import com.superiorsoftllc.agenthq.ui.plugin.TabProvider
-import com.superiorsoftllc.agenthq.ui.plugin.UiPlugin
-import com.superiorsoftllc.agenthq.ui.plugin.UiRegistrar
-import com.superiorsoftllc.agenthq.ui.plugin.tabIcon
-import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
-import com.superiorsoftllc.agenthq.ui.shell.NoEpics
+import com.superiorsoftllc.infantry.plugin.api.ModuleManifest
+import com.superiorsoftllc.infantry.plugin.api.TabDeclaration
+import com.superiorsoftllc.infantry.ui.plugin.InfantryModule
+import com.superiorsoftllc.infantry.ui.plugin.ModuleSource
+import com.superiorsoftllc.infantry.ui.plugin.TabContainers
+import com.superiorsoftllc.infantry.ui.plugin.TabProvider
+import com.superiorsoftllc.infantry.ui.plugin.UiPlugin
+import com.superiorsoftllc.infantry.ui.plugin.UiRegistrar
+import com.superiorsoftllc.infantry.ui.plugin.tabIcon
+import com.superiorsoftllc.infantry.ui.shell.LocalShellContext
+import com.superiorsoftllc.infantry.ui.shell.NoEpics
 
 /** The Epics tab's id. */
 const val EPICS_TAB_ID = "infantry.epics"
@@ -30,7 +30,7 @@ private fun epicsTab() = TabProvider(
 ) { EpicsPane(it.state, LocalShellContext.current?.epics ?: NoEpics) }
 
 /** PLUGINS-1: Infantry_Epics (official since RUNTIME-11), epics and their tickets, compiled in on web and Android (D9). */
-val InfantryEpics = AgentHqModule(
+val InfantryEpics = InfantryModule(
     ModuleManifest(
         name = "Infantry_Epics", version = "1.0.0", author = "Infantry AI", description = "Epics and their tickets.",
         tabs = listOf(TabDeclaration(EPICS_TAB_ID, TabContainers.CENTER)),
@@ -48,5 +48,5 @@ class EpicsPlugin : UiPlugin, ModuleSource {
         registrar.tab(epicsTab())
     }
 
-    override fun modules(): List<AgentHqModule> = listOf(InfantryEpics)
+    override fun modules(): List<InfantryModule> = listOf(InfantryEpics)
 }

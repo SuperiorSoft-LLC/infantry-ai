@@ -1,16 +1,16 @@
-package com.superiorsoftllc.agenthq.plugins.official.pods
+package com.superiorsoftllc.infantry.plugins.official.pods
 
-import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
-import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
-import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
-import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
-import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
-import com.superiorsoftllc.agenthq.ui.plugin.TabProvider
-import com.superiorsoftllc.agenthq.ui.plugin.UiPlugin
-import com.superiorsoftllc.agenthq.ui.plugin.UiRegistrar
-import com.superiorsoftllc.agenthq.ui.plugin.tabIcon
-import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
-import com.superiorsoftllc.agenthq.ui.shell.NoPods
+import com.superiorsoftllc.infantry.plugin.api.ModuleManifest
+import com.superiorsoftllc.infantry.plugin.api.TabDeclaration
+import com.superiorsoftllc.infantry.ui.plugin.InfantryModule
+import com.superiorsoftllc.infantry.ui.plugin.ModuleSource
+import com.superiorsoftllc.infantry.ui.plugin.TabContainers
+import com.superiorsoftllc.infantry.ui.plugin.TabProvider
+import com.superiorsoftllc.infantry.ui.plugin.UiPlugin
+import com.superiorsoftllc.infantry.ui.plugin.UiRegistrar
+import com.superiorsoftllc.infantry.ui.plugin.tabIcon
+import com.superiorsoftllc.infantry.ui.shell.LocalShellContext
+import com.superiorsoftllc.infantry.ui.shell.NoPods
 
 /** The Pods tab's id. */
 const val PODS_TAB_ID = "infantry.pods"
@@ -31,7 +31,7 @@ private fun podsTab() = TabProvider(
 ) { PodsPane(it.state, LocalShellContext.current?.pods ?: NoPods) }
 
 /** PLUGINS-1: Infantry_Pods (official since RUNTIME-12), submit a goal and watch its nodes, compiled in on web and Android (D9). */
-val InfantryPods = AgentHqModule(
+val InfantryPods = InfantryModule(
     ModuleManifest(
         name = "Infantry_Pods", version = "1.0.0", author = "Infantry AI", description = "Pods: submit a goal, watch its nodes.",
         tabs = listOf(TabDeclaration(PODS_TAB_ID, TabContainers.CENTER)),
@@ -49,5 +49,5 @@ class PodsPlugin : UiPlugin, ModuleSource {
         registrar.tab(podsTab())
     }
 
-    override fun modules(): List<AgentHqModule> = listOf(InfantryPods)
+    override fun modules(): List<InfantryModule> = listOf(InfantryPods)
 }

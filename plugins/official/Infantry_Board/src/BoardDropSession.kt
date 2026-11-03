@@ -1,24 +1,24 @@
-package com.superiorsoftllc.agenthq.plugins.official.board
+package com.superiorsoftllc.infantry.plugins.official.board
 
-import com.superiorsoftllc.agenthq.ui.*
-import com.superiorsoftllc.agenthq.ui.shell.blocks.*
+import com.superiorsoftllc.infantry.ui.*
+import com.superiorsoftllc.infantry.ui.shell.blocks.*
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import com.superiorsoftllc.agenthq.ui.model.BoardDrop
-import com.superiorsoftllc.agenthq.ui.model.DropPlan
-import com.superiorsoftllc.agenthq.ui.model.TicketReorder
-import com.superiorsoftllc.agenthq.ui.net.CommandResult
-import com.superiorsoftllc.agenthq.ui.protocol.Ticket
-import com.superiorsoftllc.agenthq.ui.protocol.TicketColumns
-import com.superiorsoftllc.agenthq.ui.shell.TicketsContext
+import com.superiorsoftllc.infantry.ui.model.BoardDrop
+import com.superiorsoftllc.infantry.ui.model.DropPlan
+import com.superiorsoftllc.infantry.ui.model.TicketReorder
+import com.superiorsoftllc.infantry.ui.net.CommandResult
+import com.superiorsoftllc.infantry.ui.protocol.Ticket
+import com.superiorsoftllc.infantry.ui.protocol.TicketColumns
+import com.superiorsoftllc.infantry.ui.shell.TicketsContext
 
 /** The three requests a drop can make; each answers null once sent, else why it could not be. */
 internal interface TicketMoves {
     suspend fun reorder(id: String, position: Int): String?
     suspend fun move(id: String, status: String, position: Int): String?
-    /** The Start action: `ticket_move` to `in_progress`, the same daemon path as `agenthq ticket start`. */
+    /** The Start action: `ticket_move` to `in_progress`, the same daemon path as `infantry ticket start`. */
     suspend fun start(id: String): String?
 }
 

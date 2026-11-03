@@ -1,6 +1,6 @@
 # USAGE-INVESTIGATION (ticket 244fd210): what drives the Claude weekly meter
 
-Read-only. Data: copies of the live `usage-meter.db` and `agenthq.db` (state dir `%LOCALAPPDATA%\SuperiorSoft\AgentHQ`) and `plugin-data/Infantry_Pace/samples.jsonl`, taken 2026-10-31 ~15:40 UTC. The live meter holds 7311 requests (2026-10-30 00:12 to 2026-10-31 15:36 UTC), not 600; 600 is only the report's query limit. Nothing was changed.
+Read-only. Data: copies of the live `usage-meter.db` and `infantry.db` (state dir `%LOCALAPPDATA%\SuperiorSoft\InfantryAI`) and `plugin-data/Infantry_Pace/samples.jsonl`, taken 2026-10-31 ~15:40 UTC. The live meter holds 7311 requests (2026-10-30 00:12 to 2026-10-31 15:36 UTC), not 600; 600 is only the report's query limit. Nothing was changed.
 
 ## Totals (all harnesses, 7311 requests)
 input 587,072 / output 266,708 / cache-read 895,519,842 / cache-write 18,810,735.
@@ -71,7 +71,7 @@ Each step is a steady 300 to 460 requests, 0.7 to 1.2M cache-write and 28 to 43M
 Caveat: the meter percent weights opus, sonnet and haiku and cache read/write in a way not exposed here, and `cost` is empty in meter_request, so tokens per 1% cannot be converted to a plan formula.
 
 ## Effort and settings
-- Stored settings (agenthq.db `settings`): only `toolApproval.mode=allowAll`, `usage.overrides={"claude":{"workers":5,...}}`, `limits.watch.enabled=1`. No `tickets.weightExecutors` and no weight-context/effort value is stored, so the code defaults apply (`WeightExecutors.DEFAULT`, `WeightContext.DEFAULT`; resolution order in CliMain: ticket pin > profile/role binding > weightExecutors > default). I did not read the default values' contents.
+- Stored settings (infantry.db `settings`): only `toolApproval.mode=allowAll`, `usage.overrides={"claude":{"workers":5,...}}`, `limits.watch.enabled=1`. No `tickets.weightExecutors` and no weight-context/effort value is stored, so the code defaults apply (`WeightExecutors.DEFAULT`, `WeightContext.DEFAULT`; resolution order in CliMain: ticket pin > profile/role binding > weightExecutors > default). I did not read the default values' contents.
 - Tickets: 792 rows, `effort` is empty on all 792 (no ticket pins an effort). Models pinned: sonnet-5-5 162, opus-5-5 105, haiku-5-5 75 (claude); pi: opus-5-5 97, sonnet-5-5 43, haiku 2, opus-5 1; plus alias pins opus 27, haiku 6. Weights: 1:46, 2:128, 3:158, 4:88, 5:42, none 330. There is no `effectiveEffort` column in the DB; I did not find where it is computed at runtime.
 - Spawn command line (ClaudeCommand.kt:174-188): `claude -p --input-format stream-json --output-format stream-json --verbose --thinking adaptive --thinking-display summarized [--model <m>] [--effort <level> only if set] [--permission-mode <m>] --allowedTools ... [--permission-prompt-tool ...] [--settings <watch hook>] [--mcp-config ...] [--resume <id>]`. Env: `ClaudeContextLimit.env(contextLimit)` only (null = the CLI's own window). `--effort` is not passed unless set, so workers run at the CLI default effort. `--thinking adaptive` is always passed.
 - CLI: `claude --version` 2.1.316; `claude --help` lists `--effort <level> (low, medium, high, xhigh, max)` and `--autocompact <auto|tokens>` (100k to 1M) but does not state the default effort for Sonnet 5.5 or Haiku. Not found; I did not run a model call to probe it (that would spend plan).

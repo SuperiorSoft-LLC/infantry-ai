@@ -22,7 +22,7 @@ plugins/official/Infantry_Triggers/module.json
 plugins/official/Infantry_Git/module.json
 
 ## Questions that do not block the agent
-An agent asks with options and a recommendation; the answer returns as mail (`agenthq ask`).
+An agent asks with options and a recommendation; the answer returns as mail (`infantry ask`).
 README.md
 
 ## Mail, live progress, shared project knowledge
@@ -36,7 +36,7 @@ plugins/official/Infantry_Board/module.json
 plugins/examples/Acme_DaemonHello
 
 ## Lua scripting and hooks
-Sandboxed Lua 5.2 (LuaJ) scripts in `.agenthq/scripts/`. Hooks run a script on lane enter/exit, incoming mail, a timer (`every <N>s`) or a named event. Scripts queue calls to any daemon tool, with multi-phase re-runs (`ih.again`). Any role may write scripts. The engine is itself a plugin behind an open extension point.
+Sandboxed Lua 5.2 (LuaJ) scripts in `.infantry/scripts/`. Hooks run a script on lane enter/exit, incoming mail, a timer (`every <N>s`) or a named event. Scripts queue calls to any daemon tool, with multi-phase re-runs (`ih.again`). Any role may write scripts. The engine is itself a plugin behind an open extension point.
 plugins/official/Infantry_Scripting/module.json
 plugins/official/Infantry_Lua/module.json
 docs/wiki/Scripting.md
@@ -48,7 +48,7 @@ plugins/official/Infantry_Usage/module.json
 plugins/official/Infantry_Stats/module.json
 
 ## Clients and CLI
-Windows desktop app (runs its own daemon), Android client, browser client served by the daemon, a CLI (`infantry`, alias `agenthq`), and a headless server (archive or Docker image you build yourself).
+Windows desktop app (runs its own daemon), Android client, browser client served by the daemon, a CLI (`infantry`; `agenthq` is a deprecated alias), and a headless server (archive or Docker image you build yourself).
 README.md (section "The clients")
 
 ## Local-first

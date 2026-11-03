@@ -6,7 +6,7 @@
   "description": "The selected agent's chat transcript.",
   "tier": "official",
   "sequence": [],
-  "entry": "com.superiorsoftllc.agenthq.plugins.official.CliPlugin",
+  "entry": "com.superiorsoftllc.infantry.plugins.official.CliPlugin",
   "jar": "build/libs/Infantry_Cli.jar",
   "buildOrder": 20,
   "tabs": [

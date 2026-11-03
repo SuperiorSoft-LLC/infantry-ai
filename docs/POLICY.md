@@ -7,7 +7,7 @@ Layering rule (owner): the mechanism is core and SDK; the values are a plugin.
 
 | piece | where | what |
 |---|---|---|
-| action / preset / matcher model | SDK `agenthqPlugins` `plugin/api/ActionPolicy.kt` | `ActionKind`, `ActionDeclaration` (module.json `actions`), `PolicyPreset` (a preset file), `PolicyWire` (what a client is sent), `ActionPolicyMatcher` (the ONE matcher both sides run) |
+| action / preset / matcher model | SDK `infantryPlugins` `plugin/api/ActionPolicy.kt` | `ActionKind`, `ActionDeclaration` (module.json `actions`), `PolicyPreset` (a preset file), `PolicyWire` (what a client is sent), `ActionPolicyMatcher` (the ONE matcher both sides run) |
 | frame -> action catalog | daemon core `policy/ActionCatalog.kt` | every client frame the daemon dispatches -> one action id + kind (+ scope) |
 | presets + the switch | daemon core `policy/PolicyRuntime.kt`, `policy/PolicyProvider.kt` | load presets by id from data, resolve `extends`, pick one by ONE setting, enforce, broadcast |
 | UI gate | UI core `shell/ActionGate.kt` | `rememberGate(id)`, `Gated(id) { gate -> }`, `ActionButton(id, ...)`, `LinkContext.canWrite` (generic write) |
@@ -77,17 +77,17 @@ A preset is a JSON file (`PolicyPreset`):
   are empty.
 * Presets come from **providers** (`PolicyProvider`, a one-method interface, so DAEMON-PLUGINS-1 can register more):
   built-in `production` (empty) and `DirectoryPolicyProvider`, which reads `*.json` from
-  `AGENTHQ_POLICY_DIRS` (path list), and every `<plugins root>/<folder>/<Module>/policies/` (the dev run's plugins root is the
+  `INFANTRY_POLICY_DIRS` (path list), and every `<plugins root>/<folder>/<Module>/policies/` (the dev run's plugins root is the
   repo's `plugins/`, so `plugins/demo/Demo_Lock/policies/demo.json` is found). The docker image copies the demo plugin's
-  `policies/` to `/opt/agenthq/policies` and sets `AGENTHQ_POLICY_DIRS`.
+  `policies/` to `/opt/infantry/policies` and sets `INFANTRY_POLICY_DIRS`.
 
 ### The ONE switch
 
 Selection, first that applies:
 
-1. `AGENTHQ_POLICY=<preset id>` (env; **pinned**: the Settings selector is read-only, no token can change it).
-2. Any preset whose `selectWhenEnv` env var is truthy (pinned). The demo preset says `"selectWhenEnv": "AGENTHQ_DEMO_LOCK"`,
-   so **`AGENTHQ_DEMO_LOCK=1` is shorthand for selecting the `demo` preset**, exactly as before.
+1. `INFANTRY_POLICY=<preset id>` (env; **pinned**: the Settings selector is read-only, no token can change it).
+2. Any preset whose `selectWhenEnv` env var is truthy (pinned). The demo preset says `"selectWhenEnv": "INFANTRY_DEMO_LOCK"`,
+   so **`INFANTRY_DEMO_LOCK=1` is shorthand for selecting the `demo` preset**, exactly as before.
 3. The stored setting `<state dir>/policy.preset` (one line: the preset id), written by the owner from
    **Configuration > General > Policy** (the `policy_set` frame, owner credential only, refused while pinned).
 4. Otherwise `production` (nothing disabled, nothing added to `ready`).
@@ -99,7 +99,7 @@ refusals, the daemon's plugin resolution (`GET /plugins`), the public visitor to
 still validated then (a bad one stops the daemon starting); one that becomes active on a switch and breaks the token rules
 is logged and not admitted.
 
-A pinned id that no provider has resolves to **deny-everything** (fail closed); `AGENTHQ_DEMO_LOCK=1` without the demo preset
+A pinned id that no provider has resolves to **deny-everything** (fail closed); `INFANTRY_DEMO_LOCK=1` without the demo preset
 installed also keeps SEC-FIX-1's `FrameGate` read-only list.
 
 Wire: after `ready` (and to every client on each change) the daemon sends a `policy` frame, JSON `PolicyWire`: the active
@@ -129,7 +129,7 @@ when a write frame is in neither the catalog nor `FrameGate.OWNER_ONLY`.
 * The demo preset `plugins/demo/Demo_Lock/policies/demo.json` holds every demo value: the allowed actions (the former
   `DemoLock.READ_FRAMES` / `PROJECT_READ_FRAMES` as action ids), the reason "Disabled in the demo", the refusal text
   (`demo: '{frame}' is disabled in this demo`, so `docker/demo-lock-attack.mjs` reads the same), the seats, project dir/name,
-  turn limit, notice, `ready` `demo=lock`, `restricted`, `notices: [demo_limit]`. The `AGENTHQ_DEMO_*` env vars still override
+  turn limit, notice, `ready` `demo=lock`, `restricted`, `notices: [demo_limit]`. The `INFANTRY_DEMO_*` env vars still override
   the preset's seat values (deployment API, docs/docker-deploy.md).
 * `DemoLock` (daemon core) keeps the seated mechanism and no demo value; it is built from the active preset's `seats`.
 * The UI's demo dimming is core's gate following the daemon's policy, in every build. `plugins/demo/Demo_Lock` no longer
@@ -139,17 +139,17 @@ when a write frame is in neither the catalog nor `FrameGate.OWNER_ONLY`.
 
 ## 5. One-switch proof
 
-`PolicyOneSwitchRealDaemonUiTest` (agentHqUi): real in-process daemon (temp state dir, port 0, owner token), the real App over
+`PolicyOneSwitchRealDaemonUiTest` (infantryUi): real in-process daemon (temp state dir, port 0, owner token), the real App over
 the real WebSocket, plugins root = a temp copy of the demo preset. Boots `production`: New agent is enabled and a
 `ticket_save` is answered. Flips ONLY the setting to `demo` from the Settings Policy card (owner; the choice is stored in
 `<state dir>/policy.preset`): the same control dims, the generic write is refused, `ready` gains `access=restricted`, and the
 daemon refuses `ticket_save` / `kill` with the preset's refusal text. Flips back to `production`: the file is removed, the
 control is enabled and a ticket is saved again. No rebuild, no plugin edited, no env var.
 
-Run: `gradlew.bat --no-parallel :superiorSoftLibrary:agentHqUi:test --tests "*PolicyOneSwitchRealDaemonUiTest"`.
+Run: `gradlew.bat --no-parallel :superiorSoftLibrary:infantryUi:test --tests "*PolicyOneSwitchRealDaemonUiTest"`.
 
-Tests never read the owner's state dir: `TestStateIsolationTest` (agentHq and agentHqUi) fails when a test JVM's `stateDir()`,
-which `AgentHqDaemon.build`'s owner-token / policy defaults read, is not the build's throwaway one. `DaemonFixture` and
+Tests never read the owner's state dir: `TestStateIsolationTest` (infantry and infantryUi) fails when a test JVM's `stateDir()`,
+which `InfantryDaemon.build`'s owner-token / policy defaults read, is not the build's throwaway one. `DaemonFixture` and
 `ConfigDaemonScopeRealDaemonUiTest` pass their own temp owner token and policies explicitly.
 
 ## 6. Settings and plugins

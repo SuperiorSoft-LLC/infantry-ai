@@ -1,14 +1,14 @@
-package com.superiorsoftllc.agenthq.plugins.official.notes
+package com.superiorsoftllc.infantry.plugins.official.notes
 
-import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
-import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
-import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
-import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
-import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
-import com.superiorsoftllc.agenthq.ui.plugin.TabProvider
-import com.superiorsoftllc.agenthq.ui.plugin.UiPlugin
-import com.superiorsoftllc.agenthq.ui.plugin.UiRegistrar
-import com.superiorsoftllc.agenthq.ui.plugin.tabIcon
+import com.superiorsoftllc.infantry.plugin.api.ModuleManifest
+import com.superiorsoftllc.infantry.plugin.api.TabDeclaration
+import com.superiorsoftllc.infantry.ui.plugin.InfantryModule
+import com.superiorsoftllc.infantry.ui.plugin.ModuleSource
+import com.superiorsoftllc.infantry.ui.plugin.TabContainers
+import com.superiorsoftllc.infantry.ui.plugin.TabProvider
+import com.superiorsoftllc.infantry.ui.plugin.UiPlugin
+import com.superiorsoftllc.infantry.ui.plugin.UiRegistrar
+import com.superiorsoftllc.infantry.ui.plugin.tabIcon
 
 /** The Notes tab's id. */
 const val NOTES_TAB_ID = "infantry.notes"
@@ -34,7 +34,7 @@ private fun notesTab() = TabProvider(
  * Android, D9; the manifest mirrors module.json). It brings its own tab tree, [ShellNotes], which the tab draws (RUNTIME-8:
  * no longer registered by Infantry_AppUi).
  */
-val InfantryNotes = AgentHqModule(
+val InfantryNotes = InfantryModule(
     ModuleManifest(
         name = "Infantry_Notes", version = "1.0.0", author = "Infantry AI", description = "The project knowledge notes.",
         tabs = listOf(TabDeclaration(NOTES_TAB_ID, TabContainers.CENTER)),
@@ -54,5 +54,5 @@ class NotesPlugin : UiPlugin, ModuleSource {
         registrar.tabTree(NOTES_TAB_ID, ShellNotes)
     }
 
-    override fun modules(): List<AgentHqModule> = listOf(InfantryNotes)
+    override fun modules(): List<InfantryModule> = listOf(InfantryNotes)
 }

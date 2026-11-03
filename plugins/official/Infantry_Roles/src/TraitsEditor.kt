@@ -1,7 +1,7 @@
-package com.superiorsoftllc.agenthq.plugins.official.roles
+package com.superiorsoftllc.infantry.plugins.official.roles
 
-import com.superiorsoftllc.agenthq.ui.shell.gate
-import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.infantry.ui.shell.gate
+import com.superiorsoftllc.infantry.ui.*
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -23,12 +23,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.model.TraitDraft
-import com.superiorsoftllc.agenthq.ui.model.bindTrait
-import com.superiorsoftllc.agenthq.ui.model.moveTrait
-import com.superiorsoftllc.agenthq.ui.model.unbindTrait
-import com.superiorsoftllc.agenthq.ui.shell.TraitsContext
-import com.superiorsoftllc.agenthq.ui.protocol.Role
+import com.superiorsoftllc.infantry.ui.model.TraitDraft
+import com.superiorsoftllc.infantry.ui.model.bindTrait
+import com.superiorsoftllc.infantry.ui.model.moveTrait
+import com.superiorsoftllc.infantry.ui.model.unbindTrait
+import com.superiorsoftllc.infantry.ui.shell.TraitsContext
+import com.superiorsoftllc.infantry.ui.protocol.Role
 import kotlinx.coroutines.launch
 
 const val ROLE_TRAIT_TAG_PREFIX = "role-trait:"

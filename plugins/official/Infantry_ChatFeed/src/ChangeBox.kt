@@ -1,6 +1,6 @@
-package com.superiorsoftllc.agenthq.plugins.official.chatfeed
+package com.superiorsoftllc.infantry.plugins.official.chatfeed
 
-import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.infantry.ui.*
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -38,12 +38,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.model.ChangeBox
-import com.superiorsoftllc.agenthq.ui.model.ChangeBoxView
-import com.superiorsoftllc.agenthq.ui.model.ChangeKind
-import com.superiorsoftllc.agenthq.ui.model.changeBoxView
-import com.superiorsoftllc.agenthq.ui.model.fileWriteOf
-import com.superiorsoftllc.agenthq.ui.protocol.FileWrite
+import com.superiorsoftllc.infantry.ui.model.ChangeBox
+import com.superiorsoftllc.infantry.ui.model.ChangeBoxView
+import com.superiorsoftllc.infantry.ui.model.ChangeKind
+import com.superiorsoftllc.infantry.ui.model.changeBoxView
+import com.superiorsoftllc.infantry.ui.model.fileWriteOf
+import com.superiorsoftllc.infantry.ui.protocol.FileWrite
 
 const val CHANGE_BOX_TAG = "change-box"
 const val CHANGE_BOX_COUNTS_TAG = "change-box-counts"
@@ -52,7 +52,7 @@ const val CHANGE_BOX_VIEW_ALL_TAG = "change-box-view-all"
 const val CHANGE_BOX_COLLAPSE_TAG = "change-box-collapse"
 const val CHANGE_BOX_FADE_TAG = "change-box-fade"
 
-/** A [LineKind.WRITE][com.superiorsoftllc.agenthq.ui.model.LineKind.WRITE] transcript line's text, drawn as a [ChangeBox]. */
+/** A [LineKind.WRITE][com.superiorsoftllc.infantry.ui.model.LineKind.WRITE] transcript line's text, drawn as a [ChangeBox]. */
 @Composable
 fun ChangeBoxLine(text: String) {
     val write = remember(text) { fileWriteOf(text) }

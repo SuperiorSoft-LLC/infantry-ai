@@ -53,7 +53,7 @@ The restart baseline left 18:33:21 to 18:40:42 out of poll2.jsonl. The meter tab
 
 - The first run ran 31 minutes, not 4 hours. The poller stopped writing, was relaunched detached as PID 40508, and was stopped after about 2.5 more hours of combined runtime.
 - The background-job wrapper was killed at its 30-minute limit (task bql5613pl) and restarted under instruction.
-- `agenthq bg run --notify` is rejected by CLI 1.127 (daemon 1.148).
+- `infantry bg run --notify` is rejected by CLI 1.127 (daemon 1.148).
 - Output tokens are NULL in the meter table.
 - The pace timestamp is the meter's own clock, not the poller's.
 

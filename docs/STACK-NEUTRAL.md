@@ -35,8 +35,8 @@ Classes: **M** = generic mechanism (stays in core), **K** = stack knowledge (dat
 | session/ProcessWatch.kt:266 reason text | "orphan Gradle/Kotlin daemon" | K | generic text + profile name: "orphan build daemon (gradle)" | DONE |
 | session/ProcessLedger.kt:187 `HEAVY_CMD` | java, node, gradle, kotlin, npx, playwright, modelcontextprotocol command lines are adoptable | K | profiles `heavyCommands` (gradle, kotlin, runtimes, mcp) | DONE |
 | session/ProcessLedger.kt `MCP_CMD`, `OPENCODE_SERVE` | harness helper processes (MCP servers, opencode serve) | harness knowledge, not stack | stays (harness plugins later) | kept |
-| agentHqRunner/BuildPriority.kt:57-79 `sessionEnv` | GRADLE_OPTS with `org.gradle.workers.max`, Kotlin in-process strategy, `org.gradle.project.agenthq.*Forks` | K | gradle profile `env` templates (`${maxWorkers}`, `${maxParallelForks}`) | DONE |
-| agentHqRunner/BuildPriority.kt:82 `FORK_PROPERTIES` | this repo's own test-fork property names | project data | moved (STACK-NEUTRAL-6): resource watch/repo-profile-additions.json, migrated once into the install's `watch.toolProfiles` | F1 |
+| infantryRunner/BuildPriority.kt:57-79 `sessionEnv` | GRADLE_OPTS with `org.gradle.workers.max`, Kotlin in-process strategy, `org.gradle.project.infantry.*Forks` | K | gradle profile `env` templates (`${maxWorkers}`, `${maxParallelForks}`) | DONE |
+| infantryRunner/BuildPriority.kt:82 `FORK_PROPERTIES` | this repo's own test-fork property names | project data | moved (STACK-NEUTRAL-6): resource watch/repo-profile-additions.json, migrated once into the install's `watch.toolProfiles` | F1 |
 | daemon/DaemonMain.kt:847 | daemon's GRADLE_OPTS inherited | K | any template variable is appended to the daemon's own value (`inherit`) | DONE |
 | settings/LimitRegistry.kt:82, 258 descriptions | "Gradle workers", "gradle/mvn/npm/yarn/pnpm" | K | generic wording; keys `limits.build.maxWorkers` / `maxParallelForks` were already stack-neutral (no alias needed) | DONE |
 | daemon/WatchHooks.kt, runner/WatchRewrite.kt, runner/WatchShims.kt | which programs are long / shimmed | K | already profiles (STALL-3) | was done |
@@ -50,11 +50,11 @@ Classes: **M** = generic mechanism (stays in core), **K** = stack knowledge (dat
 | daemon/WebBundle.kt:106 | dev hint naming Infantry AI's own web build | this repo's build | allowed (guard allowlist) | - |
 | cli/BgCli.kt:177, cli/ProgressCli.kt:113, cli/CliMain.kt:4377 | help examples `gradlew test`, "Gradle/Kotlin daemons" | K | neutral wording | DONE |
 | plugins/official/Infantry_Processes daemon tool description | "Gradle/Kotlin daemons" | K (wire text) | left: the MCP tool description is asserted on the wire (McpServeTest); change with F5 | F5 |
-| scripts/agenthq-gate.sh | the gate script | this repo's build | allowed | - |
+| scripts/infantry-gate.sh | the gate script | this repo's build | allowed | - |
 
 ## 2. The tool-profile model (one model, `watch/tool-profiles.json`)
 
-Extends STALL-3's `ToolProfile` (agentHqRunner `ToolProfiles.kt`); every new field is optional, so an old override still
+Extends STALL-3's `ToolProfile` (infantryRunner `ToolProfiles.kt`); every new field is optional, so an old override still
 parses. Merge order is unchanged: bundled defaults, then the `watch.toolProfiles` setting (and later plugins/project
 data) by `name` (replace, `disabled: true` drops, a new name appends).
 
@@ -79,15 +79,15 @@ spared, never named; no stack env is set.
 
 ## 3. Seam and opt-in
 
-* **Switch** `limits.watch.enabled` (0/1, a LimitDef, so it shows in Settings and takes `AGENTHQ_LIMIT_WATCH_ENABLED`).
+* **Switch** `limits.watch.enabled` (0/1, a LimitDef, so it shows in Settings and takes `INFANTRY_LIMIT_WATCH_ENABLED`).
   Read live at every entry point: `ProcessWatch.tick/report/reap/reapRogue/reapSession/reapEnded` and the per-launch
-  `buildEnv` (build limits env, PATH shims, `AGENTHQ_WATCH` that turns the harness hooks on). Off = nothing recorded,
+  `buildEnv` (build limits env, PATH shims, `INFANTRY_WATCH` that turns the harness hooks on). Off = nothing recorded,
   nothing killed, no pressure / CPU alert, `report` answers free RAM only, a reap is refused with the reason, a session
-  gets no build env and `AGENTHQ_WATCH=off`. `bg run` still runs and mails its plain exit code and tail.
+  gets no build env and `INFANTRY_WATCH=off`. `bg run` still runs and mails its plain exit code and tail.
 * **Migration** (`SettingsService.migrateWatchEnabled`, at daemon start): while the key is unset and no env names it, an
   install with stored sessions or a process ledger file is set to **1** (the owner's install keeps today's behaviour);
   a fresh one to **0**. Stored, so it runs once; logged as `limits.watch.enabled set to ...`.
-  To turn it on later: Settings > `limits.watch.enabled` = 1 (the `settings_set` frame), or env `AGENTHQ_LIMIT_WATCH_ENABLED=1`
+  To turn it on later: Settings > `limits.watch.enabled` = 1 (the `settings_set` frame), or env `INFANTRY_LIMIT_WATCH_ENABLED=1`
   while the key is unset.
 * **Core keeps** the mechanisms: ledger (pid + start instant), close-time cleanup rules, gate-lock release, CPU meter,
   priority lowering, the runner, bg job registry and exit notices. **Profiles carry** every stack name.
@@ -105,7 +105,7 @@ spared, never named; no stack env is set.
 
 ## 4. Follow-ups (filed as tickets)
 
-* F1: move `agenthq.testForks` / `agenthq.uiTestForks` out of the bundled gradle profile into this project's data.
+* F1: move `infantry.testForks` / `infantry.uiTestForks` out of the bundled gradle profile into this project's data.
 * F2: progress readers as data (`--reader <name>` from profile `progress` rules); drop the code `gradle` reader.
 * F3: start brief and KNOWLEDGE.md watch text from role/project data, shown only with the switch on, tool list from profiles.
 * F4: AndroidSdkProvision as a worktree-provision hook of a profile/plugin.
@@ -131,4 +131,4 @@ publishPressure; raiseAlert), `api.launchEnv.contribute(name){LaunchInfo->Map}` 
 `api.settings.limit/stored` (limits.*, watch.*, processes.* only). Community: grant `daemon.processes`, never `kill`.
 Moved to `Infantry_Processes/daemon`: ProcessWatch, ProcessLedger, CpuMeter/CpuSustain, ProcessFrames, build-limits env + shims env
 (`WatchLaunchEnv`). Core keeps `session/ProcessHost.kt` (LocalProcesses, LaunchEnvHost, OS sources, guard). Plugin absent/disabled = no watch,
-`AGENTHQ_WATCH=off`. The `limits.watch.enabled` switch still gates the plugin's behaviour.
+`INFANTRY_WATCH=off`. The `limits.watch.enabled` switch still gates the plugin's behaviour.

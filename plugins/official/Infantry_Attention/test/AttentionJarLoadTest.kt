@@ -1,12 +1,12 @@
-package com.superiorsoftllc.agenthq.plugins.official.attention
+package com.superiorsoftllc.infantry.plugins.official.attention
 
-import com.superiorsoftllc.agenthq.plugin.api.Tier
-import com.superiorsoftllc.agenthq.plugin.host.ModuleState
-import com.superiorsoftllc.agenthq.plugin.host.OfficialTrust
-import com.superiorsoftllc.agenthq.plugin.host.PluginFolders
-import com.superiorsoftllc.agenthq.ui.plugin.DesktopPlugins
-import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
-import com.superiorsoftllc.agenthq.ui.ATTENTION_TAB_ID
+import com.superiorsoftllc.infantry.plugin.api.Tier
+import com.superiorsoftllc.infantry.plugin.host.ModuleState
+import com.superiorsoftllc.infantry.plugin.host.OfficialTrust
+import com.superiorsoftllc.infantry.plugin.host.PluginFolders
+import com.superiorsoftllc.infantry.ui.plugin.DesktopPlugins
+import com.superiorsoftllc.infantry.ui.plugin.TabContainers
+import com.superiorsoftllc.infantry.ui.ATTENTION_TAB_ID
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.AfterTest

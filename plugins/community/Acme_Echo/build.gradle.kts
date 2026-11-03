@@ -11,7 +11,7 @@ kotlin {
 }
 
 dependencies {
-    compileOnly(project(":superiorSoftLibrary:agenthqUiCore"))
+    compileOnly(project(":superiorSoftLibrary:infantryUiCore"))
     compileOnly(compose.runtime)
     compileOnly(compose.foundation)
     compileOnly(compose.material3)

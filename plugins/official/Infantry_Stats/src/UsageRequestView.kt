@@ -1,9 +1,9 @@
-package com.superiorsoftllc.agenthq.plugins.official.stats
+package com.superiorsoftllc.infantry.plugins.official.stats
 
-import com.superiorsoftllc.agenthq.ui.protocol.UsageMeterPrice
-import com.superiorsoftllc.agenthq.ui.protocol.UsageMeterReport
-import com.superiorsoftllc.agenthq.ui.protocol.UsageMeterRequest
-import com.superiorsoftllc.agenthq.ui.protocol.UsageMeterRow
+import com.superiorsoftllc.infantry.ui.protocol.UsageMeterPrice
+import com.superiorsoftllc.infantry.ui.protocol.UsageMeterReport
+import com.superiorsoftllc.infantry.ui.protocol.UsageMeterRequest
+import com.superiorsoftllc.infantry.ui.protocol.UsageMeterRow
 import kotlin.math.roundToLong
 
 /** STATS-ACC-1: a harness-by-harness line of the pi-vs-claude comparison. Null = n/a (not reported / nothing recorded). */

@@ -1,0 +1,9 @@
+-- BUG-MAIL-2 -- migration v37 -> v38: the session that started a ticket.
+-- A ticket started from an agent's session (`infantry ticket move <id> in_progress` run inside it) records that
+-- session here, so the worker can report back to it even when it sits in another project (`infantry send starter`).
+-- NULL = started from the UI or with no session; existing tickets get NULL, so nothing they do changes.
+-- The column is exactly tickets.sq's.
+--
+-- NEXT MIGRATION: 38.sqm (BASE-1a)
+
+ALTER TABLE tickets ADD COLUMN started_by TEXT;

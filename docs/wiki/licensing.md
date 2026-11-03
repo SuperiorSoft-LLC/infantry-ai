@@ -48,23 +48,23 @@ From `docs/LICENSE-MAP.md` section 2. "Interim" means the map flags it for the o
 
 | Module / path | License | Why |
 |---|---|---|
-| `superiorSoftLibrary/agentHqProtocol` | **MPL-2.0** | The wire contract between daemon and clients. Open question S13: the Apache daemon SDK depends on it, so the owner may prefer Apache for the contract. |
-| `superiorSoftLibrary/agentHqRunner` | **MPL-2.0** | Process runner, PTY, watch shims. Core. |
-| `superiorSoftLibrary/agentHqCore` | **MPL-2.0** | The daemon core (agents, db, harness registry, mailbox, policy, session, settings, worktree...). |
-| `superiorSoftLibrary/agentHq` | **MPL-2.0** (interim) | Daemon main, plugin host, CLI, HTTP shell. Still holds some feature packages (map S1) that may move into plugins and then become Apache. |
-| `superiorSoftLibrary/agentHqBoard` | **MPL-2.0** (interim) | The ticket board, a product feature fronted by the Board plugin (S15). |
-| `superiorSoftLibrary/agentHqDaemonApi` | Apache-2.0 | SDK for daemon plugins. Overrides the older "MPL" line in `DAEMON-CORE.md` (S2). |
-| `superiorSoftLibrary/agentHqHarnessApi` | Apache-2.0 | SDK for harness plugins. |
-| `superiorSoftLibrary/agenthqPlugins` | Apache-2.0 | UI plugin API and host loading rules. |
-| `superiorSoftLibrary/agenthqUiCore`, `agenthqAppUi` | Apache-2.0 | UI contract, block model, shell. |
-| `superiorSoftLibrary/agentHqUi`, `agentHqWeb`, `agentHqAndroid`, `agentHqHeadless` | Apache-2.0 | The desktop, web and Android apps and the headless test harness. The installer is a combined work with the MPL daemon (S5). |
+| `superiorSoftLibrary/infantryProtocol` | **MPL-2.0** | The wire contract between daemon and clients. Open question S13: the Apache daemon SDK depends on it, so the owner may prefer Apache for the contract. |
+| `superiorSoftLibrary/infantryRunner` | **MPL-2.0** | Process runner, PTY, watch shims. Core. |
+| `superiorSoftLibrary/infantryCore` | **MPL-2.0** | The daemon core (agents, db, harness registry, mailbox, policy, session, settings, worktree...). |
+| `superiorSoftLibrary/infantry` | **MPL-2.0** (interim) | Daemon main, plugin host, CLI, HTTP shell. Still holds some feature packages (map S1) that may move into plugins and then become Apache. |
+| `superiorSoftLibrary/infantryBoard` | **MPL-2.0** (interim) | The ticket board, a product feature fronted by the Board plugin (S15). |
+| `superiorSoftLibrary/infantryDaemonApi` | Apache-2.0 | SDK for daemon plugins. Overrides the older "MPL" line in `DAEMON-CORE.md` (S2). |
+| `superiorSoftLibrary/infantryHarnessApi` | Apache-2.0 | SDK for harness plugins. |
+| `superiorSoftLibrary/infantryPlugins` | Apache-2.0 | UI plugin API and host loading rules. |
+| `superiorSoftLibrary/infantryUiCore`, `infantryAppUi` | Apache-2.0 | UI contract, block model, shell. |
+| `superiorSoftLibrary/infantryUi`, `infantryWeb`, `infantryAndroid`, `infantryHeadless` | Apache-2.0 | The desktop, web and Android apps and the headless test harness. The installer is a combined work with the MPL daemon (S5). |
 | `superiorSoftLibrary/samples/*` | Apache-2.0 | Example plugin. |
 | `plugins/official/` | Apache-2.0 | Official plugins: removable and replaceable, so a third party can fork or replace any of them. |
 | `plugins/community/`, `plugins/examples/`, `plugins/demo/`, `plugins/_template/` | Apache-2.0 | Our samples and demo. Other people's modules in `community/` keep their own license. |
 | `plugins/core/` | MPL-2.0 (reserved) | Empty tier. If a module ever lands there it is MPL. |
 | `docs/`, `docker/`, `scripts/`, `gradle/`, `.github/`, root build files | Apache-2.0 | Docs and tooling. |
 | `assets/branding/`, app icon and emblem copies | **Neither** | Logo and emblem: trademark, all rights reserved (S9). |
-| `build/`, `.gradle/`, `.worktrees/`, generated files | n/a | Not distributed from source. |
+| `build/`, `.gradle/`, `.worktrees/`, generated files | n/a | Not distributed from source. <!-- docs-freshness: ignore --> |
 
 Third-party dependencies keep their own licenses (map section 4). Items flagged there: `pty4j` (EPL-1.0), `jlayer`
 (LGPL), Google ML Kit on Android (proprietary terms), a sound file of unknown origin, the JDK and Docker base image
@@ -72,14 +72,14 @@ in packaged artifacts.
 
 ## 4. What a plugin author needs to know
 
-- **Compile against the SDK, stay out of MPL.** UI plugins use `agenthqPlugins` / `agenthqUiCore`; daemon plugins use
-  `agentHqDaemonApi`; harness plugins use `agentHqHarnessApi`. All three are Apache-2.0. Your plugin is not a
+- **Compile against the SDK, stay out of MPL.** UI plugins use `infantryPlugins` / `infantryUiCore`; daemon plugins use
+  `infantryDaemonApi`; harness plugins use `infantryHarnessApi`. All three are Apache-2.0. Your plugin is not a
   derivative of MPL code.
 - **A daemon plugin never sees core classes.** Its class loader hides every daemon class and exposes only the declared
-  `DaemonApi` surface (`superiorSoftLibrary/agentHqDaemonApi/.../DaemonApi.kt`).
+  `DaemonApi` surface (`superiorSoftLibrary/infantryDaemonApi/.../DaemonApi.kt`).
 - **License your plugin as you like.** The templates and examples (`plugins/_template`, `plugins/examples`) are
   Apache-2.0 so you can copy them without friction.
-- **One caveat today (S13).** `agentHqDaemonApi` has an `api(...)` dependency on the MPL `agentHqProtocol`
+- **One caveat today (S13).** `infantryDaemonApi` has an `api(...)` dependency on the MPL `infantryProtocol`
   (two trigger view types). It puts MPL classes on a daemon plugin's compile classpath. Whether that matters is on the
   lawyer list; the map proposes moving those two types or relicensing the protocol.
 - **"Official" is a trust mark.** A module is official only if it is signed with the Infantry key. The name and the
@@ -92,11 +92,11 @@ surface has a version that the code checks.
 
 | Surface | Mechanism | Where |
 |---|---|---|
-| UI plugin API | `module.json` `apiVersion` (an integer, currently `2`). `PLUGIN_API_VERSION` is the host's; a module with a different `apiVersion` is refused with "needs plugin API N, this build has M". Additive changes go under `PLUGIN_API_REVISION` and do not break older modules. | `superiorSoftLibrary/agenthqPlugins/src/commonMain/kotlin/com/superiorsoftllc/agenthq/plugin/api/ModuleManifest.kt`, `.../plugin/host/ModuleResolver.kt` |
-| Daemon plugin API | `DaemonApi.VERSION` (semver, currently `1.35.0`), with the board contract `BOARD_API_VERSION` (`1.12.0`) inside it. A module declaring `daemon.apiAtLeast` newer than the daemon is refused ("needs daemon API X, this daemon has Y"). Adding a field with a default is a minor bump. | `superiorSoftLibrary/agentHqDaemonApi/.../DaemonApi.kt`, `.../api/board/BoardApi.kt`; check in `superiorSoftLibrary/agentHq/.../daemon/plugins/DaemonPluginHost.kt` |
-| Harness API | `HARNESS_API_VERSION` (semver, currently `2.12.0`). A harness plugin states the version it was built against (`contractVersion`, no default on purpose) and the registry checks it. | `superiorSoftLibrary/agentHqHarnessApi/.../harness/api/HarnessApi.kt`; check in `superiorSoftLibrary/agentHqCore/.../harness/HarnessRegistry.kt` |
-| Wire protocol | `EventVocabulary.VERSION` (semver, currently `1.149.0`). Additive frames and fields get a minor bump, breaking changes a major bump. Payloads decode with `ignoreUnknownKeys`, so an older client ignores fields it does not know. | `superiorSoftLibrary/agentHqProtocol/.../protocol/EventVocabulary.kt` |
-| Core stays generic | Guard tests fail the build when feature code leaks into core. `DaemonCoreGuardTest` (core names no plugin package and depends on no plugin module), `HarnessCoreGuardTest` (core carries no concrete harness), `NoDemoInDaemonCoreGuardTest` (no demo code in core), `CoreHasNoScriptingGuardTest` (no Lua engine in core), `BuiltinToolsListGuardTest` (a new built-in tool in core fails until it is a plugin), `HarnessApiImportGuardTest`, `BoardApiImportGuardTest`, `BoardImportGuardTest`, `OrchestratorBoundaryGuardTest`, `NoPresetInCoreGuardTest`, `StackNeutralGuardTest`. | `superiorSoftLibrary/agentHq/src/test/kotlin/com/superiorsoftllc/agenthq/` (the `daemon/`, `harness/`, `orchestration/`, `policy/`, `runner/` folders and `CoreHasNoScriptingGuardTest.kt`) |
+| UI plugin API | `module.json` `apiVersion` (an integer, currently `2`). `PLUGIN_API_VERSION` is the host's; a module with a different `apiVersion` is refused with "needs plugin API N, this build has M". Additive changes go under `PLUGIN_API_REVISION` and do not break older modules. | `superiorSoftLibrary/infantryPlugins/src/commonMain/kotlin/com/superiorsoftllc/infantry/plugin/api/ModuleManifest.kt`, `.../plugin/host/ModuleResolver.kt` |
+| Daemon plugin API | `DaemonApi.VERSION` (semver, currently `1.35.0`), with the board contract `BOARD_API_VERSION` (`1.12.0`) inside it. A module declaring `daemon.apiAtLeast` newer than the daemon is refused ("needs daemon API X, this daemon has Y"). Adding a field with a default is a minor bump. | `superiorSoftLibrary/infantryDaemonApi/.../DaemonApi.kt`, `.../api/board/BoardApi.kt`; check in `superiorSoftLibrary/infantry/.../daemon/plugins/DaemonPluginHost.kt` |
+| Harness API | `HARNESS_API_VERSION` (semver, currently `2.12.0`). A harness plugin states the version it was built against (`contractVersion`, no default on purpose) and the registry checks it. | `superiorSoftLibrary/infantryHarnessApi/.../harness/api/HarnessApi.kt`; check in `superiorSoftLibrary/infantryCore/.../harness/HarnessRegistry.kt` |
+| Wire protocol | `EventVocabulary.VERSION` (semver, currently `1.149.0`). Additive frames and fields get a minor bump, breaking changes a major bump. Payloads decode with `ignoreUnknownKeys`, so an older client ignores fields it does not know. | `superiorSoftLibrary/infantryProtocol/.../protocol/EventVocabulary.kt` |
+| Core stays generic | Guard tests fail the build when feature code leaks into core. `DaemonCoreGuardTest` (core names no plugin package and depends on no plugin module), `HarnessCoreGuardTest` (core carries no concrete harness), `NoDemoInDaemonCoreGuardTest` (no demo code in core), `CoreHasNoScriptingGuardTest` (no Lua engine in core), `BuiltinToolsListGuardTest` (a new built-in tool in core fails until it is a plugin), `HarnessApiImportGuardTest`, `BoardApiImportGuardTest`, `BoardImportGuardTest`, `OrchestratorBoundaryGuardTest`, `NoPresetInCoreGuardTest`, `StackNeutralGuardTest`. | `superiorSoftLibrary/infantry/src/test/kotlin/com/superiorsoftllc/infantry/` (the `daemon/`, `harness/`, `orchestration/`, `policy/`, `runner/` folders and `CoreHasNoScriptingGuardTest.kt`) |
 
 ## Open questions
 
@@ -130,8 +130,8 @@ From the map (sections 5, 6, 7):
 
 1. **Owner sign-off** of the module table in section 3 above. Until then no license file, SPDX header, per-directory
    `LICENSE` or `NOTICE` is added.
-2. **Lawyer review**: the Apache SDK to MPL protocol edge (S13); the interim MPL for `agentHq`, `agentHqCore`,
-   `agentHqBoard`; the wording for the desktop installer and Docker image as combined works; the MPL header text;
+2. **Lawyer review**: the Apache SDK to MPL protocol edge (S13); the interim MPL for `infantry`, `infantryCore`,
+   `infantryBoard`; the wording for the desktop installer and Docker image as combined works; the MPL header text;
    `pty4j` (EPL-1.0) against MPL; `jlayer`, ML Kit, JDK and Docker base obligations; the effect of the Apache patent
    clause on a hosted orchestrator.
 3. **CLA text** and a bot to enforce it.

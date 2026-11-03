@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.plugins.official.pace
+package com.superiorsoftllc.infantry.plugins.official.pace
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,27 +19,27 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.plugin.api.DaemonAccess
-import com.superiorsoftllc.agenthq.plugin.api.InjectDeclaration
-import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
-import com.superiorsoftllc.agenthq.plugin.api.Services
-import com.superiorsoftllc.agenthq.ui.block.layout.BlockInjection
-import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
-import com.superiorsoftllc.agenthq.ui.Palette
-import com.superiorsoftllc.agenthq.ui.model.AppState
-import com.superiorsoftllc.agenthq.ui.net.CommandResult
-import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
-import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
-import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
-import com.superiorsoftllc.agenthq.ui.plugin.TabProvider
-import com.superiorsoftllc.agenthq.ui.plugin.UiPlugin
-import com.superiorsoftllc.agenthq.ui.plugin.UiRegistrar
-import com.superiorsoftllc.agenthq.ui.plugin.tabIcon
-import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
-import com.superiorsoftllc.agenthq.ui.shell.NoPace
-import com.superiorsoftllc.agenthq.ui.shell.NoUsageMeter
-import com.superiorsoftllc.agenthq.ui.shell.PaceContext
-import com.superiorsoftllc.agenthq.ui.shell.UsageMeterContext
+import com.superiorsoftllc.infantry.plugin.api.DaemonAccess
+import com.superiorsoftllc.infantry.plugin.api.InjectDeclaration
+import com.superiorsoftllc.infantry.plugin.api.ModuleManifest
+import com.superiorsoftllc.infantry.plugin.api.Services
+import com.superiorsoftllc.infantry.ui.block.layout.BlockInjection
+import com.superiorsoftllc.infantry.plugin.api.TabDeclaration
+import com.superiorsoftllc.infantry.ui.Palette
+import com.superiorsoftllc.infantry.ui.model.AppState
+import com.superiorsoftllc.infantry.ui.net.CommandResult
+import com.superiorsoftllc.infantry.ui.plugin.InfantryModule
+import com.superiorsoftllc.infantry.ui.plugin.ModuleSource
+import com.superiorsoftllc.infantry.ui.plugin.TabContainers
+import com.superiorsoftllc.infantry.ui.plugin.TabProvider
+import com.superiorsoftllc.infantry.ui.plugin.UiPlugin
+import com.superiorsoftllc.infantry.ui.plugin.UiRegistrar
+import com.superiorsoftllc.infantry.ui.plugin.tabIcon
+import com.superiorsoftllc.infantry.ui.shell.LocalShellContext
+import com.superiorsoftllc.infantry.ui.shell.NoPace
+import com.superiorsoftllc.infantry.ui.shell.NoUsageMeter
+import com.superiorsoftllc.infantry.ui.shell.PaceContext
+import com.superiorsoftllc.infantry.ui.shell.UsageMeterContext
 import kotlinx.coroutines.delay
 
 /** The Pace tab's id. */
@@ -71,7 +71,7 @@ private fun paceTab() = TabProvider(
 }
 
 /** Infantry_Pace (official, optional), compiled in on web and Android (D9). */
-val InfantryPace = AgentHqModule(
+val InfantryPace = InfantryModule(
     ModuleManifest(
         name = "Infantry_Pace", version = "1.0.0", author = "Infantry AI",
         description = "Pacing trend charts for every harness.",
@@ -90,7 +90,7 @@ class PacePlugin : UiPlugin, ModuleSource {
         registrar.inject("usagefit", usageFitInjection { daemon })
     }
 
-    override fun modules(): List<AgentHqModule> = listOf(InfantryPace)
+    override fun modules(): List<InfantryModule> = listOf(InfantryPace)
 }
 
 /** What the tab shows, in order: not connected, waiting, no answer, refused, nothing recorded yet, the cards. One owner of the decision, so the test can assert it. */

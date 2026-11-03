@@ -1,6 +1,6 @@
-package com.superiorsoftllc.agenthq.plugins.official.chatfeed
+package com.superiorsoftllc.infantry.plugins.official.chatfeed
 
-import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.infantry.ui.*
 
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
@@ -10,7 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.model.MessageOrigin
+import com.superiorsoftllc.infantry.ui.model.MessageOrigin
 
 /** Test tag on the sender label above a turn that did not come from the owner. */
 const val ORIGIN_LABEL_TAG = "origin-label"

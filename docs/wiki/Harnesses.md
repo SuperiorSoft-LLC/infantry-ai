@@ -3,7 +3,7 @@
 A **harness** is the adapter between Infantry AI and one agent CLI (Claude Code, pi, opencode, or your own). Its id
 is the **provider** you pin on a ticket or role (`claude`, `pi`, `opencode`). Inside a harness, the model catalog
 groups models by their **upstream provider** (for example pi lists `anthropic/claude-sonnet-5-5`). List both with
-`infantry harnesses` or the MCP tool `agenthq_list_harnesses`.
+`infantry harnesses` or the MCP tool `infantry_list_harnesses`.
 
 There are two ways to add one:
 
@@ -13,8 +13,8 @@ There are two ways to add one:
 
 ## 1. JSON descriptor (no code)
 
-Drop a file into `<config dir>/harnesses/` (default `~/.agenthq/harnesses/`; set by `AGENTHQ_HOME`). Samples ship in
-`superiorSoftLibrary/agentHq/docs/harnesses/` (`codex.json`, `gemini.json`).
+Drop a file into `<config dir>/harnesses/` (default `~/.infantry/harnesses/`; set by `INFANTRY_HOME`). Samples ship in
+`superiorSoftLibrary/infantry/docs/harnesses/` (`codex.json`, `gemini.json`).
 
 ```json
 {
@@ -42,12 +42,12 @@ Drop a file into `<config dir>/harnesses/` (default `~/.agenthq/harnesses/`; set
   the owner's approval choice reaches the CLI.
 
 Quick test: `"command": "cmd", "args": ["/c", "echo", "{prompt}"]` on Windows. See
-`superiorSoftLibrary/agentHq/docs/QUICKSTART.md` section 4.
+`superiorSoftLibrary/infantry/docs/QUICKSTART.md` section 4.
 
 ## 2. The harness API (plugin)
 
-The only thing a harness jar compiles against is the module `agentHqHarnessApi`
-(`com.superiorsoftllc.agenthq.harness.api`). It depends on the Kotlin stdlib only. The version is semver;
+The only thing a harness jar compiles against is the module `infantryHarnessApi`
+(`com.superiorsoftllc.infantry.harness.api`). It depends on the Kotlin stdlib only. The version is semver;
 `HARNESS_API_VERSION` in the source is **2.12.0** (older docs stop at 2.11). A plugin states the version it was built
 against in `contractVersion`; the daemon refuses a different major or a newer minor. Minor bumps only add members
 with defaults, so an old plugin keeps working.
@@ -55,7 +55,7 @@ with defaults, so an old plugin keeps working.
 Core types:
 
 - `HarnessPlugin` (`pluginId`, `contractVersion`, `register(registrar)`, `unload()`), registered through a
-  `META-INF/services/com.superiorsoftllc.agenthq.harness.api.HarnessPlugin` file.
+  `META-INF/services/com.superiorsoftllc.infantry.harness.api.HarnessPlugin` file.
 - `Harness`: `id`, `capabilities`, `process(request): HarnessProcess` (argv, env, working dir; the daemon launches,
   sandboxes, gates and kills it), `newTranslator()` (a `HarnessTranslator`: `translate(line)` to `HarnessEvent`s,
   `terminal(exitCode, stderrTail)`).
@@ -126,7 +126,7 @@ The smallest real example is `plugins/examples/Acme_EchoHarness` (an agent proce
    `host.setting("my.key")`, resolve the CLI with `host.resolveCli("my-cli")`.
 4. Implement a `HarnessTranslator` that turns each output line into `HarnessEvent`s (`SessionStarted`, `TextDelta`,
    tool and usage events, and `terminal` for the exit). Start from the echo translator.
-5. Add `META-INF/services/com.superiorsoftllc.agenthq.harness.api.HarnessPlugin` naming your class.
+5. Add `META-INF/services/com.superiorsoftllc.infantry.harness.api.HarnessPlugin` naming your class.
 6. Add optional contributions only as you need them (approvals first, so the owner's tool approval reaches the CLI;
    then models, then a persistent session). Add each used one to `harness.hooks`.
 7. Build the harness jar, install the folder under the plugins root `community/`, grant it in `modules.json`, restart.
@@ -148,7 +148,7 @@ harness does not list is refused).
 
 ## Reference: HarnessHost, translator, a worked example
 
-Added by DOCS-2. Sources: `superiorSoftLibrary/agentHqHarnessApi/src/main/kotlin/com/superiorsoftllc/agenthq/harness/api/HarnessApi.kt`
+Added by DOCS-2. Sources: `superiorSoftLibrary/infantryHarnessApi/src/main/kotlin/com/superiorsoftllc/infantry/harness/api/HarnessApi.kt`
 and `HarnessHost.kt`, `plugins/examples/Acme_EchoHarness/`.
 
 ### HarnessHost (what a plugin can ask the daemon)
@@ -161,7 +161,7 @@ and `HarnessHost.kt`, `plugins/examples/Acme_EchoHarness/`.
 | `setting(key)` | A value of a setting you declared in `harness.settings`; null when unset or undeclared. |
 | `resolveCli(tool)` | Where your declared CLI (`harness.cli.id`) is installed; null if not. |
 | `start(process, listener)` | Start a helper process (model listing, version probe). Not for the agent run. Throws `SecurityException` when not declared or granted. |
-| `mcpLaunch(sessionEnv)` | The command that starts the agenthq MCP server for a session; null when not granted. |
+| `mcpLaunch(sessionEnv)` | The command that starts the infantry MCP server for a session; null when not granted. |
 | `watchLauncher(sessionEnv)` | The watched-runner launcher, when watch is on; else null. |
 | `queryDb(file, sql, params)` | Read-only sqlite query (2.11.0, grant `harness.hook.stats`); null when not granted or it fails. |
 | `ask(sessionId, question)` | Suspends until the owner answers, it times out, or the session ends. |

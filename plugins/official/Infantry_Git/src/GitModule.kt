@@ -1,15 +1,15 @@
-package com.superiorsoftllc.agenthq.plugins.official.git
+package com.superiorsoftllc.infantry.plugins.official.git
 
-import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
-import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
-import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
-import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
-import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
-import com.superiorsoftllc.agenthq.ui.plugin.TabProvider
-import com.superiorsoftllc.agenthq.ui.plugin.UiPlugin
-import com.superiorsoftllc.agenthq.ui.plugin.UiRegistrar
-import com.superiorsoftllc.agenthq.ui.plugin.circle
-import com.superiorsoftllc.agenthq.ui.plugin.tabIcon
+import com.superiorsoftllc.infantry.plugin.api.ModuleManifest
+import com.superiorsoftllc.infantry.plugin.api.TabDeclaration
+import com.superiorsoftllc.infantry.ui.plugin.InfantryModule
+import com.superiorsoftllc.infantry.ui.plugin.ModuleSource
+import com.superiorsoftllc.infantry.ui.plugin.TabContainers
+import com.superiorsoftllc.infantry.ui.plugin.TabProvider
+import com.superiorsoftllc.infantry.ui.plugin.UiPlugin
+import com.superiorsoftllc.infantry.ui.plugin.UiRegistrar
+import com.superiorsoftllc.infantry.ui.plugin.circle
+import com.superiorsoftllc.infantry.ui.plugin.tabIcon
 
 /** The Git tab's id. */
 const val GIT_TAB_ID = "infantry.git"
@@ -36,7 +36,7 @@ private fun gitTab() = TabProvider(
  * D9; the manifest mirrors module.json). It brings its own tab tree, [ShellGit], which the tab draws (RUNTIME-6: no
  * longer registered by Infantry_AppUi).
  */
-val InfantryGit = AgentHqModule(
+val InfantryGit = InfantryModule(
     ModuleManifest(
         name = "Infantry_Git", version = "1.0.0", author = "Infantry AI", description = "The project's git state.",
         tabs = listOf(TabDeclaration(GIT_TAB_ID, TabContainers.CENTER)),
@@ -56,5 +56,5 @@ class GitPlugin : UiPlugin, ModuleSource {
         registrar.tabTree(GIT_TAB_ID, ShellGit)
     }
 
-    override fun modules(): List<AgentHqModule> = listOf(InfantryGit)
+    override fun modules(): List<InfantryModule> = listOf(InfantryGit)
 }

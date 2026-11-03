@@ -1,13 +1,13 @@
-package com.superiorsoftllc.agenthq.plugins.official.triggers
+package com.superiorsoftllc.infantry.plugins.official.triggers
 
-import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.infantry.ui.*
 
-import com.superiorsoftllc.agenthq.ui.model.AppState
-import com.superiorsoftllc.agenthq.ui.protocol.Role
+import com.superiorsoftllc.infantry.ui.model.AppState
+import com.superiorsoftllc.infantry.ui.protocol.Role
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-/** S4: moved from :agenthqUiCore's BoardTriggersModelTest with [triggerLanes] (Infantry_Triggers). */
+/** S4: moved from :infantryUiCore's BoardTriggersModelTest with [triggerLanes] (Infantry_Triggers). */
 class TriggerLanesTest {
     @Test fun `the trigger target lanes include the built-in roles even with no profiles, without duplicates`() {
         assertEquals(listOf("role:pm", "role:qa", "role:version-control", "role:assistant"), triggerLanes(AppState()))

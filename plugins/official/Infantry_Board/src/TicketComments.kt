@@ -1,7 +1,7 @@
-package com.superiorsoftllc.agenthq.plugins.official.board
+package com.superiorsoftllc.infantry.plugins.official.board
 
 import androidx.compose.runtime.mutableStateMapOf
-import com.superiorsoftllc.agenthq.ui.shell.TicketsContext
+import com.superiorsoftllc.infantry.ui.shell.TicketsContext
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -14,12 +14,12 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.Json
 
-/** TICKET-COMMENTS-3: one comment as the daemon's `agenthq_ticket_comments` line carries it. */
+/** TICKET-COMMENTS-3: one comment as the daemon's `infantry_ticket_comments` line carries it. */
 data class TicketComment(val id: String, val kind: String, val state: String, val author: String, val time: String, val body: String) {
     val open: Boolean get() = state == "open"
 }
 
-/** A ticket's creator, notify list and open comment count (the daemon's `agenthq_ticket_get`). */
+/** A ticket's creator, notify list and open comment count (the daemon's `infantry_ticket_get`). */
 data class TicketCommentMeta(val createdBy: String?, val notify: List<String>, val open: Int)
 
 /** An agent the notify picker offers. */
@@ -45,9 +45,9 @@ object TicketCommentCounts {
 class DaemonTicketCommentsApi(private val tickets: TicketsContext) : TicketCommentsApi {
     private suspend fun call(tool: String, args: JsonObject): Result<String> = tickets.pluginTool(tool, args)
 
-    override suspend fun comments(ticketId: String) = call("agenthq_ticket_comments", buildJsonObject { put("ticketId", ticketId); put("which", "all") }).map(::parseComments)
+    override suspend fun comments(ticketId: String) = call("infantry_ticket_comments", buildJsonObject { put("ticketId", ticketId); put("which", "all") }).map(::parseComments)
 
-    override suspend fun meta(ticketId: String) = call("agenthq_ticket_get", buildJsonObject { put("ticketId", ticketId) }).mapCatching { text ->
+    override suspend fun meta(ticketId: String) = call("infantry_ticket_get", buildJsonObject { put("ticketId", ticketId) }).mapCatching { text ->
         val o = Json.parseToJsonElement(text).jsonObject
         TicketCommentMeta(
             o["createdBy"]?.jsonPrimitive?.contentOrNull,
@@ -57,14 +57,14 @@ class DaemonTicketCommentsApi(private val tickets: TicketsContext) : TicketComme
     }
 
     override suspend fun add(ticketId: String, body: String, resolved: Boolean) =
-        call("agenthq_ticket_comment", buildJsonObject { put("ticketId", ticketId); put("body", body); put("state", if (resolved) "resolved" else "open") }).map { }
+        call("infantry_ticket_comment", buildJsonObject { put("ticketId", ticketId); put("body", body); put("state", if (resolved) "resolved" else "open") }).map { }
 
-    override suspend fun resolve(commentId: String) = call("agenthq_ticket_comment", buildJsonObject { put("commentId", commentId) }).map { }
+    override suspend fun resolve(commentId: String) = call("infantry_ticket_comment", buildJsonObject { put("commentId", commentId) }).map { }
 
-    override suspend fun notifyCandidates() = call("agenthq_agent_list", buildJsonObject { }).map(::parseAgents)
+    override suspend fun notifyCandidates() = call("infantry_agent_list", buildJsonObject { }).map(::parseAgents)
 
     override suspend fun saveNotify(ticketId: String, agentIds: List<String>) =
-        call("agenthq_ticket_update", buildJsonObject { put("ticketId", ticketId); put("notify", JsonArray(agentIds.map { JsonPrimitive(it) })) }).map { }
+        call("infantry_ticket_update", buildJsonObject { put("ticketId", ticketId); put("notify", JsonArray(agentIds.map { JsonPrimitive(it) })) }).map { }
 
     companion object {
         private val line = Regex("""^(\S+) (\w+)/(\w+) by (.+?) (\d{4}-\d\d-\d\dT\S+): (.*)$""")

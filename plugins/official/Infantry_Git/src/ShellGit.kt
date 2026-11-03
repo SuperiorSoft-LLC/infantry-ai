@@ -1,14 +1,14 @@
-package com.superiorsoftllc.agenthq.plugins.official.git
+package com.superiorsoftllc.infantry.plugins.official.git
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Modifier
-import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
-import com.superiorsoftllc.agenthq.ui.block.layout.Block
-import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
-import com.superiorsoftllc.agenthq.ui.block.layout.Place
-import com.superiorsoftllc.agenthq.ui.block.layout.RenderPlaced
+import com.superiorsoftllc.infantry.ui.shell.LocalShellContext
+import com.superiorsoftllc.infantry.ui.block.layout.Block
+import com.superiorsoftllc.infantry.ui.block.layout.BlockScope
+import com.superiorsoftllc.infantry.ui.block.layout.Place
+import com.superiorsoftllc.infantry.ui.block.layout.RenderPlaced
 
 private const val GIT = "infantry.shell.git"
 

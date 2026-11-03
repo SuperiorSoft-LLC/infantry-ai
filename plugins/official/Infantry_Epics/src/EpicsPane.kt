@@ -1,7 +1,7 @@
-package com.superiorsoftllc.agenthq.plugins.official.epics
+package com.superiorsoftllc.infantry.plugins.official.epics
 
-import com.superiorsoftllc.agenthq.ui.shell.gate
-import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.infantry.ui.shell.gate
+import com.superiorsoftllc.infantry.ui.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,13 +31,13 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.model.AppState
-import com.superiorsoftllc.agenthq.ui.model.EpicView
-import com.superiorsoftllc.agenthq.ui.model.epicTicketColumns
-import com.superiorsoftllc.agenthq.ui.net.CommandResult
-import com.superiorsoftllc.agenthq.ui.protocol.Ticket
-import com.superiorsoftllc.agenthq.ui.protocol.TicketColumns
-import com.superiorsoftllc.agenthq.ui.shell.EpicsContext
+import com.superiorsoftllc.infantry.ui.model.AppState
+import com.superiorsoftllc.infantry.ui.model.EpicView
+import com.superiorsoftllc.infantry.ui.model.epicTicketColumns
+import com.superiorsoftllc.infantry.ui.net.CommandResult
+import com.superiorsoftllc.infantry.ui.protocol.Ticket
+import com.superiorsoftllc.infantry.ui.protocol.TicketColumns
+import com.superiorsoftllc.infantry.ui.shell.EpicsContext
 import kotlinx.coroutines.launch
 
 /** Column headers, keyed by [TicketColumns]. */

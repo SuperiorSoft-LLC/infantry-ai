@@ -1,9 +1,9 @@
 # Build speed (BUILD-SPEED-1)
 
-Measurement only. No build file was changed. Build target: `:superiorSoftLibrary:agentHqUi:createDistributable`.
+Measurement only. No build file was changed. Build target: `:superiorSoftLibrary:infantryUi:createDistributable`.
 Source: detached worktree at `a8ce8a21` (dev tip at measurement time), `-Pihq.devSign=true`, `-PallowAnyBranch=true`
-(the packaging guard refuses a detached HEAD that is not `feature-agenthq-mvp` or a `v*` tag; the sha is on
-`feature-agenthq-mvp`). Host: 16 logical cores, 32 GB RAM, about 8.9 GB free at start (see the RAM note below).
+(the packaging guard refuses a detached HEAD that is not `"feature-agenthq"-mvp` or a `v*` tag; the sha is on
+`"feature-agenthq"-mvp`). Host: 16 logical cores, 32 GB RAM, about 8.9 GB free at start (see the RAM note below).
 
 ## Results
 
@@ -22,9 +22,9 @@ local cache, and no daemon reuse (`--no-daemon`, as the packaging script uses).
 ### Where the time goes (cold run 1)
 
 - Gradle configuration of all projects: about 8 s. Startup and settings about 5 s.
-- `agentHqWeb` (wasm web module, a dependency of the desktop dist, see below): `compileKotlinWasmJs` about 35 s
+- `infantryWeb` (wasm web module, a dependency of the desktop dist, see below): `compileKotlinWasmJs` about 35 s
   (profile figure), `assembleWeb` itself about 0.3 s when its input is already compiled.
-- The longest single tasks in the profile are Kotlin compiles of plugins and of the UI: `agentHqUi:compileKotlin`
+- The longest single tasks in the profile are Kotlin compiles of plugins and of the UI: `infantryUi:compileKotlin`
   about 57 s; the plugin `compileKotlinJvm` and `compileKotlinWasmJs` tasks each about 45-56 s.
 
 Caveat: the profile's per-task durations overlap and do not add up. Their sum is about 3,115 s against a 629 s wall
@@ -39,8 +39,8 @@ not a cacheable task. Those are the floor of a warm build (about 5 min here).
 
 ## The wasm web module is part of the desktop dist
 
-`superiorSoftLibrary/agentHqUi/build.gradle.kts` (WEB-1, around lines 470-474) makes `prepareAppResources` depend on
-`:superiorSoftLibrary:agentHqWeb:assembleWeb` and copies its output into the app's `web/` resource folder. The installed
+`superiorSoftLibrary/infantryUi/build.gradle.kts` (WEB-1, around lines 470-474) makes `prepareAppResources` depend on
+`:superiorSoftLibrary:infantryWeb:assembleWeb` and copies its output into the app's `web/` resource folder. The installed
 app's in-process daemon serves that browser client at `/`. So the desktop dist needs the wasm module.
 
 **Skipping wasm for the desktop dist is not a safe speed-up.** It would drop the browser client. It has not been
@@ -64,11 +64,11 @@ proven either way: the app image was not run without it (not done here, out of s
 # cold: fresh detached worktree at the sha, no build cache
 git worktree add --detach $env:TEMP\ihq-speed-cold <sha>
 Set-Location $env:TEMP\ihq-speed-cold
-.\gradlew.bat ':superiorSoftLibrary:agentHqUi:createDistributable' '--no-parallel' '--no-daemon' '--no-build-cache' '--profile' '--console=plain' '-Pihq.devSign=true' '-PallowAnyBranch=true' '-Dorg.gradle.jvmargs=-XX:MaxMetaspaceSize=2g -Xmx3g'
+.\gradlew.bat ':superiorSoftLibrary:infantryUi:createDistributable' '--no-parallel' '--no-daemon' '--no-build-cache' '--profile' '--console=plain' '-Pihq.devSign=true' '-PallowAnyBranch=true' '-Dorg.gradle.jvmargs=-XX:MaxMetaspaceSize=2g -Xmx3g'
 # warm: a second fresh worktree with the build cache on (the cache from the first run is reused)
 git worktree add --detach $env:TEMP\ihq-speed-warm <sha>
 Set-Location $env:TEMP\ihq-speed-warm
-.\gradlew.bat ':superiorSoftLibrary:agentHqUi:createDistributable' '--no-parallel' '--no-daemon' '--build-cache' '--profile' '--console=plain' '-Pihq.devSign=true' '-PallowAnyBranch=true' '-Dorg.gradle.jvmargs=-XX:MaxMetaspaceSize=2g -Xmx3g'
+.\gradlew.bat ':superiorSoftLibrary:infantryUi:createDistributable' '--no-parallel' '--no-daemon' '--build-cache' '--profile' '--console=plain' '-Pihq.devSign=true' '-PallowAnyBranch=true' '-Dorg.gradle.jvmargs=-XX:MaxMetaspaceSize=2g -Xmx3g'
 # profile report: build/reports/profile/profile-*.html in the worktree
 ```
 

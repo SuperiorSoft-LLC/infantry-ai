@@ -6,7 +6,7 @@
   "description": "Pod nodes waiting for review.",
   "tier": "official",
   "sequence": [],
-  "entry": "com.superiorsoftllc.agenthq.plugins.official.review.ReviewPlugin",
+  "entry": "com.superiorsoftllc.infantry.plugins.official.review.ReviewPlugin",
   "jar": "build/libs/Infantry_Review.jar",
   "buildOrder": 140,
   "tabs": [

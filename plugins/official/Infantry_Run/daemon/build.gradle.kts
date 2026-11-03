@@ -11,12 +11,12 @@ kotlin {
 val shaded by configurations.creating { isTransitive = false }
 
 dependencies {
-    shaded(project(":superiorSoftLibrary:agentHqProtocol"))
-    compileOnly(project(":superiorSoftLibrary:agentHqProtocol"))
-    compileOnly(project(":superiorSoftLibrary:agentHqDaemonApi"))
-    testImplementation(project(":superiorSoftLibrary:agentHqDaemonApi"))
-    testImplementation(project(":superiorSoftLibrary:agentHqProtocol"))
-    testImplementation(project(":superiorSoftLibrary:agentHqRunner"))
+    shaded(project(":superiorSoftLibrary:infantryProtocol"))
+    compileOnly(project(":superiorSoftLibrary:infantryProtocol"))
+    compileOnly(project(":superiorSoftLibrary:infantryDaemonApi"))
+    testImplementation(project(":superiorSoftLibrary:infantryDaemonApi"))
+    testImplementation(project(":superiorSoftLibrary:infantryProtocol"))
+    testImplementation(project(":superiorSoftLibrary:infantryRunner"))
     testImplementation(kotlin("test"))
 }
 

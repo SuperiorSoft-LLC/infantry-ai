@@ -1,10 +1,10 @@
 # NORTH STAR: the shell is a replicable canvas; a section exports as a plugin and drops into a fresh shell
 
-Ticket b9644864. This is a design note only: no code, no Gradle, no tests. Base: `feature-agenthq-mvp` @ a6660b31.
+Ticket b9644864. This is a design note only: no code, no Gradle, no tests. Base: `"feature-agenthq"-mvp` @ a6660b31.
 It builds on:
 - docs/BLOCKS-LAYOUT-DESIGN.md: 6p-6r (placeholders, `ShellContext`, the trust kernel), 6t (PAGE BUILDER: types,
   instances, the export format, `fills[].layout`).
-- docs/SHELL-EMPTY-DROPIN-FEASIBILITY.md and S4/S4d/S6/S7 as built: agenthqAppUi split out, empty slots, the drop box,
+- docs/SHELL-EMPTY-DROPIN-FEASIBILITY.md and S4/S4d/S6/S7 as built: infantryAppUi split out, empty slots, the drop box,
   consent, soft restart, safe mode, the signed 18-module App_UI.ihq.
 - docs/IHQ-PACKAGE.md (S5).
 - docs/PLUGIN-ENDPOINTS-DESIGN.md (D1-D5, as built in a073edfa and 779d5845).
@@ -39,7 +39,7 @@ Related open tickets:
 | Piece | State |
 |---|---|
 | Empty slots | Exists. `CoreShell.slots`: header, left, center, right, drawer, footer, assistant, toast, board, diff, sound, voice, questions, config.settings, roles. `UiRegistrar.fill(node, block)`; `Infantry_AppUi`'s module.json `fills` lists all of them. |
-| Shell without the app UI | Exists. agentHqUi has agenthqAppUi `runtimeOnly`. The `-PtabShotsExtra=dropin` acceptance runs the shell with agenthqAppUi filtered off the classpath, installs App_UI.ihq through the drop box and matches 32/32 at 0 px. |
+| Shell without the app UI | Exists. infantryUi has infantryAppUi `runtimeOnly`. The `-PtabShotsExtra=dropin` acceptance runs the shell with infantryAppUi filtered off the classpath, installs App_UI.ihq through the drop box and matches 32/32 at 0 px. |
 | Drop box, consent, soft restart, safe mode, unload | Exists (S6, S7). |
 | `.ihq` | Exists. A signed zip of `module.json` + `lib/*.jar`; a bundle carries many modules (S7). Tier comes from a pinned signer; there is no upgrade path. |
 | `ShellContext` | Exists. link, session, git, run, board, roles, toast, config, layout, notes, changes, executor, traits, tickets, window, questions. It is the only state a block may read; additions only. |
@@ -49,10 +49,10 @@ Related open tickets:
 | Shell-only *package* | Missing. A shot task proves it; no launcher or MSI exists. |
 | Daemon | Bundled **in-process** in the installed app (`AppMain` -> `runRealDaemonUi`, state dir and port pinned by `InstallProfile`, `StateDirLock`). Dev connects to 8787. |
 | Tokens | Two: the **access token** (every agent and every paired device has it; it reaches the whole non-owner API) and the **owner token** (`owner.token`, needed for `FrameGate.OWNER_ONLY`). There is no scoped token. |
-| Pairing | `agenthq://connect?url&token&name` as a QR or link. It carries the **access token**, so it is too broad for an app (section 4). |
+| Pairing | `infantry://connect?url&token&name` as a QR or link. It carries the **access token**, so it is too broad for an app (section 4). |
 
-The image measured on disk: `agentHqUi/build/compose/binaries/main/app` = **234 MB** (jlink `includeAllModules` JDK +
-Compose/Skiko + daemon 4.9 MB + agenthqUiCore 3.6 MB). Every other size in this note is an estimate and is labelled as one.
+The image measured on disk: `infantryUi/build/compose/binaries/main/app` = **234 MB** (jlink `includeAllModules` JDK +
+Compose/Skiko + daemon 4.9 MB + infantryUiCore 3.6 MB). Every other size in this note is an estimate and is labelled as one.
 
 ---
 
@@ -117,17 +117,17 @@ capabilities.** S4d already holds the board to the first of these.
 
 ### 2a. What changes in the build
 
-- New tasks in agentHqUi (not a new Gradle module, to avoid copying 36 KB of packaging script):
+- New tasks in infantryUi (not a new Gradle module, to avoid copying 36 KB of packaging script):
   - `runShell`: a `JavaExec` with the classpath filtered exactly as the dropin shot task does today
-    (`!"agenthqAppUi" in path`).
+    (`!"infantryAppUi" in path`).
   - `createShellDistributable` / `packageShellMsi`: a second Compose `nativeDistributions` flavour. Its
     `packageName`, `upgradeUuid` and icon come from the app manifest (2c), so a shell-built app never upgrades over
     Infantry AI. Compose Desktop allows one `application {}` per project, so the second flavour is a copy step plus
     `jpackage` over the shell runtime image, the way PKG-4 already post-processes jlink output.
 - The launcher gets `--app <appDir>`. It reads `<appDir>/app.json` (2c) and uses `<appDir>/plugins` as the plugins root,
-  through the existing `AGENTHQ_PLUGINS_ROOT` mechanism. The state dir is `%USERPROFILE%\.infantry\apps\<appId>\`, never the
+  through the existing `INFANTRY_PLUGINS_ROOT` mechanism. The state dir is `%USERPROFILE%\.infantry\apps\<appId>\`, never the
   Infantry install's.
-- The daemon stays **in** the shell-only build: `:agentHq` stays a dependency, because connect-or-bundle needs a bundled
+- The daemon stays **in** the shell-only build: `:infantry` stays a dependency, because connect-or-bundle needs a bundled
   daemon. A **thin** flavour (no daemon jar, no SQLite native, a trimmed jlink module list) is a later ticket (NS-L1). The
   daemon boot moves behind a `DaemonLauncher` found through ServiceLoader, so its absence is a classpath fact and not an
   `if`.
@@ -170,20 +170,20 @@ Every other slot is empty and draws nothing.
 
 | What | Size | Source |
 |---|---|---|
-| Full app image `agentHqUi/build/compose/binaries/main/app/AgentHQ` | **234 MB** | `du`, build of 2026-10-23 |
+| Full app image `infantryUi/build/compose/binaries/main/app/Infantry` | **234 MB** | `du`, build of 2026-10-23 |
 | of which the jlink runtime (`runtime/`, `includeAllModules`) | **155 MB** | `du` |
-| of which the jars (`app/`, Compose + Skiko + ktor + SQLite + ours) | **79 MB** | `du`; ours: agentHq 4.9 MB, agenthqUiCore 3.7 MB, agentHqUi 0.1 MB |
-| Installer `main-release/exe/AgentHQ-1.0.1.exe` (compressed) | **118 MB** (123,331,072 B) | `stat` |
+| of which the jars (`app/`, Compose + Skiko + ktor + SQLite + ours) | **79 MB** | `du`; ours: infantry 4.9 MB, infantryUiCore 3.7 MB, infantryUi 0.1 MB |
+| Installer `main-release/exe/Infantry-1.0.1.exe` (compressed) | **118 MB** (123,331,072 B) | `stat` |
 
 - The shell-only image is that image minus the app UI and board jars (`isShellJar`), so **~230 MB**: the estimate
   holds. The runtime is two thirds of it; the thin flavour (trimmed jlink) is where the size can drop.
-- The 10-23 image predates the NS2 module split, so it has no separate agenthqAppUi/Infantry_Board jar to subtract.
-  An exact shell number needs `gradlew :superiorSoftLibrary:agentHqUi:packageShellMsi` (or `createRuntimeImage` +
+- The 10-23 image predates the NS2 module split, so it has no separate infantryAppUi/Infantry_Board jar to subtract.
+  An exact shell number needs `gradlew :superiorSoftLibrary:infantryUi:packageShellMsi` (or `createRuntimeImage` +
   `shellJars`, then `du build/shell/input` + the runtime).
 - The exported `Board.ihq` itself is small (layout JSON + the nested Infantry_Board package), not part of the image.
 - **Start-up: not measured yet.** It needs a timed window launch, which this ticket did not run (no waits). To measure:
   Registered > `infantry.shell.board.pane` > **Try in a fresh shell**, and time from the click to the drop box; the
-  child's log is `<stateDir>/fresh-shells/<appId>/shell.log` and its `[agentHq-app] ... daemon=` line marks the daemon
+  child's log is `<stateDir>/fresh-shells/<appId>/shell.log` and its `[infantry-app] ... daemon=` line marks the daemon
   choice. Record it here when the owner runs it.
 - Each running exported app is its own JVM. With the PERF-2 heap caps, expect a few hundred MB RSS per app, plus a second
   daemon when bundled. That matters on this host (knowledge note `host-ram-exhaustion-jvm-crashes`).
@@ -221,7 +221,7 @@ Instance config to declare now (6s A): `board.pane.columns` (multiSelect of stat
 
 The board's code moves from the 18-module bundle into its own module **`Infantry_Board`** (plugins/core/Infantry_Board,
 its own Gradle project and jar, `fills` none, `blockTypes` the 14 above).
-- agenthqAppUi depends on it and still draws the board overlay from those types, so the main app is pixel-identical:
+- infantryAppUi depends on it and still draws the board overlay from those types, so the main app is pixel-identical:
   the board shots (`-PtabShotsExtra=board`, 4 shots) stay at 0 px.
 - `appUiIhq` keeps bundling it for the main app.
 - A new `boardIhq` task publishes it alone as `Infantry_Board.ihq`, signed with the same key, so it is core tier.
@@ -303,9 +303,9 @@ account. Reading it would hand the owner credential to a process running communi
      epics; optional: start tickets. Project: [pick]". Approve / Deny. On approve, the app's pending connection receives
      the token once.
   2. *QR / one-time code*: in Configuration > Devices (locked, `pair`), the owner creates "Pair an app" with a capability
-     preset and project. This gives `agenthq://grant?url=…&code=<one-time, 10 min, single use>`. The app (or a phone
+     preset and project. This gives `infantry://grant?url=…&code=<one-time, 10 min, single use>`. The app (or a phone
      running a shell) scans or pastes it and redeems the code for the token. **The token is never in the QR.**
-     Today's `agenthq://connect` with the access token stays for the owner's own devices only.
+     Today's `infantry://connect` with the access token stays for the owner's own devices only.
 - **Enforcement is daemon-side**: `FrameGate` gains a per-capability frame allowlist (the `DEMO_LOCK_ALLOWED` machinery,
   generalised). It is **default-deny**: a frame or event type not classified under any capability is refused to a grant
   connection. **Outgoing events are filtered too**: a grant connection receives only events of its capabilities and
@@ -340,7 +340,7 @@ a full weekend for the pipeline. NS1-NS3 are serial; NS4/NS5 can run alongside N
 | # | Ticket | W | Depends | Done when |
 |---|---|---|---|---|
 | NS1 | **PB1 type registry** (6t.6): `UiRegistrar.blockType`, module.json `blockTypes` (type, title, fields, takesChildren, needs, parents, max, template), layout primitives as core types, Registered lists types. **Supersedes or absorbs 7a062c28** (BLOCKS-1 P1). Close that ticket in favour of this one. | 3 | - | unit tests; 32/32 0 px |
-| NS2 | **Board as types + `Infantry_Board` module split** (3a, 3b): 14 types with render tests, two instance fields, its own Gradle project/jar, `boardIhq` task; agenthqAppUi draws the overlay from the types | 4 | NS1 | board shots 4/4 + 32/32 at 0 px; `Infantry_Board.ihq` builds signed |
+| NS2 | **Board as types + `Infantry_Board` module split** (3a, 3b): 14 types with render tests, two instance fields, its own Gradle project/jar, `boardIhq` task; infantryAppUi draws the overlay from the types | 4 | NS1 | board shots 4/4 + 32/32 at 0 px; `Infantry_Board.ihq` builds signed |
 | NS3 | **Export + `fills[].layout`** (PB6, 1b-1c): `LayoutExport` (pure: subtree -> page JSON + refusal list), template children, `IhqInstaller` accepts `layout/*.json` + one level of `deps/*.ihq`, `fills[].layout` instantiates through the registry, the export key, "Export section…" in Registered | 4 | NS2 | unit tests for export, refusal and install; round-trip test: export board -> install in temp root -> resolved tree equal |
 | NS4 | **Shell-only target**: `runShell` and the shell distributable/MSI flavour, `--app <dir>`, `app.json` (2c), per-app plugins root; empty-shell daemon status line | 3 | - | `runShell` shows the drop box; a packaging config test (no jpackage run in tests) |
 | NS5 | **Per-app isolation of the bundled daemon**: state dir `~/.infantry/apps/<appId>`, loopback ephemeral port, `StateDirLock` per app, `seedProject`, `DaemonLauncher` behind ServiceLoader | 2 | NS4 | test: two app ids start two daemons with separate state dirs; the Infantry install untouched |
@@ -352,7 +352,7 @@ a full weekend for the pipeline. NS1-NS3 are serial; NS4/NS5 can run alongside N
 | # | Ticket | W | Depends |
 |---|---|---|---|
 | NS7 | **Scoped app grants, daemon**: grant table + migration, capability map + default-deny guard test, FrameGate per-capability gate **including outgoing event filtering**, project scoping, revoke closes connections, contract bump; eb5a962f becomes a preset | 5 | - |
-| NS8 | **Attach flow, UI**: `grant_request` + locked `infantry.shell.grant` approval dialog on owner clients; "Pair an app" one-time code QR (`agenthq://grant`); grants list + Revoke in Devices | 3 | NS7 |
+| NS8 | **Attach flow, UI**: `grant_request` + locked `infantry.shell.grant` approval dialog on owner clients; "Pair an app" one-time code QR (`infantry://grant`); grants list + Revoke in Devices | 3 | NS7 |
 | NS6b | DaemonChoice connect path: stored grant per URL in keystore, the switchError "use own data" choice | 2 | NS7, NS8 |
 | NS9 | **Capability-aware blocks**: module.json `daemon.needs/wants/minContract`, `LinkContext.can(...)`, consent lists them, board hides Start/Agent without `tickets.start`/`agents.read` | 2 | NS7 |
 
@@ -408,7 +408,7 @@ Taken (no owner wait):
 - connect-or-bundle, with no silent fallback and no auto-attach to the Infantry daemon.
 - Attaching uses scoped grants only. QR carries a one-time code, never a token.
 - The visitor tier (eb5a962f) is a grant preset.
-- The shell-only build is a flavour of agentHqUi with the daemon kept in; the thin flavour comes later.
+- The shell-only build is a flavour of infantryUi with the daemon kept in; the thin flavour comes later.
 - The hub (d) is later.
 
 **Expensive to reverse:**

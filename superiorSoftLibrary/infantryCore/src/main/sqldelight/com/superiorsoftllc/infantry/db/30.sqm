@@ -1,0 +1,33 @@
+-- TRAITS-T6 -- migration v30 -> v31: attention kind `unreported` (docs/INFANTRY-ROLE-TRAITS.md section 5, D10).
+-- `attention.kind` is limited by a CHECK (9.sqm) and SQLite cannot alter a CHECK, so the table is REBUILT: a new table
+-- with the extended list, every existing row copied verbatim, the old table dropped, the new one renamed, and the index
+-- (dropped with the old table) re-created. Column order and the index are exactly attention.sq's, so a fresh file and a
+-- migrated one stay identical (SchemaMigrationTest).
+--
+-- NEXT MIGRATION: 31.sqm (taken by P10-K4: the decisions log)
+
+CREATE TABLE attention_new (
+    id TEXT NOT NULL PRIMARY KEY,
+    created_at INTEGER NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN (
+        'trigger_tripped', 'deadline', 'stalled', 'ceiling', 'launch_blocked',
+        'prerequisite_declined', 'queue_cleared', 'unreported'
+    )),
+    trigger_id TEXT,
+    ticket_id TEXT,
+    pod_id TEXT,
+    session_id TEXT,
+    outcome TEXT NOT NULL,
+    detail TEXT NOT NULL,
+    acked_at INTEGER
+);
+
+INSERT INTO attention_new(id, created_at, kind, trigger_id, ticket_id, pod_id, session_id, outcome, detail, acked_at)
+SELECT id, created_at, kind, trigger_id, ticket_id, pod_id, session_id, outcome, detail, acked_at FROM attention;
+
+DROP TABLE attention;
+
+ALTER TABLE attention_new RENAME TO attention;
+
+CREATE INDEX IF NOT EXISTS index_attention_on_acknowledged_created_at
+    ON attention(acked_at, created_at, id);

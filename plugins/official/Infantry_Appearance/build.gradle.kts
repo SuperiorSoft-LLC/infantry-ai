@@ -2,7 +2,7 @@
 // manifest-driven config, built like Infantry_Alerts. One source for every platform (D9):
 //  - desktop: build/libs/Infantry_Appearance.jar (this project's jvm jar: its classes, its signed module.json and a ServiceLoader
 //    entry for class paths that carry it, i.e. tests), loaded at run time from official/Infantry_Appearance. Signed as the others.
-//  - web and Android: compiled in by :agenthqAppUi from the generated module list (wasmJsMain / androidMain only).
+//  - web and Android: compiled in by :infantryAppUi from the generated module list (wasmJsMain / androidMain only).
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidKotlinMultiplatformLibrary)
@@ -16,7 +16,7 @@ kotlin {
     @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
     wasmJs { browser() }
     androidLibrary {
-        namespace = "com.superiorsoftllc.agenthq.plugins.appearance"
+        namespace = "com.superiorsoftllc.infantry.plugins.appearance"
         compileSdk = 36
         minSdk = 24
     }
@@ -24,7 +24,7 @@ kotlin {
     sourceSets {
         commonMain { kotlin.srcDir("src") }
         commonMain.dependencies {
-            api(project(":superiorSoftLibrary:agenthqUiCore"))
+            api(project(":superiorSoftLibrary:infantryUiCore"))
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(compose.material3)

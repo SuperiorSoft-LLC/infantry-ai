@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.plugins.official.board
+package com.superiorsoftllc.infantry.plugins.official.board
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -10,7 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.infantry.ui.*
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
@@ -21,10 +21,10 @@ const val ARCHIVE_BUTTON_TAG = "board-archive-button"
 const val ARCHIVE_SEARCH_TAG = "board-archive-search"
 const val ARCHIVE_RESTORE_TAG_PREFIX = "board-archive-restore-"
 
-/** ARCHIVE-1: one archived ticket as the daemon's `agenthq_archive` line carries it: `<id> [<status>] <title>`. */
+/** ARCHIVE-1: one archived ticket as the daemon's `infantry_archive` line carries it: `<id> [<status>] <title>`. */
 data class ArchivedTicketLine(val id: String, val status: String, val title: String)
 
-/** Parses the lines of an `agenthq_archive` list / search answer (the first "N archived" summary line is skipped). */
+/** Parses the lines of an `infantry_archive` list / search answer (the first "N archived" summary line is skipped). */
 fun parseArchiveLines(text: String): List<ArchivedTicketLine> = text.lineSequence().mapNotNull { line ->
     val m = Regex("""^(ticket-[0-9a-f]+) \[([^\]]*)] (.*)$""").find(line.trim()) ?: return@mapNotNull null
     ArchivedTicketLine(m.groupValues[1], m.groupValues[2], m.groupValues[3])
@@ -51,7 +51,7 @@ fun BoardArchiveDialog(deps: BoardDeps, onClose: () -> Unit) {
             project?.let { put("projectId", it) }
             put("limit", 200)
         }
-        deps.tickets.pluginTool("agenthq_archive", args)
+        deps.tickets.pluginTool("infantry_archive", args)
             .onSuccess { rows = parseArchiveLines(it); total = it.lineSequence().firstOrNull().orEmpty(); error = null }
             .onFailure { rows = emptyList(); error = it.message }
     }
@@ -83,7 +83,7 @@ fun BoardArchiveDialog(deps: BoardDeps, onClose: () -> Unit) {
                                     enabled = canRestore, modifier = Modifier.testTag(ARCHIVE_RESTORE_TAG_PREFIX + t.id),
                                     onClick = {
                                         scope.launch {
-                                            deps.tickets.pluginTool("agenthq_ticket_restore", buildJsonObject {
+                                            deps.tickets.pluginTool("infantry_ticket_restore", buildJsonObject {
                                                 put("ids", JsonArray(listOf(JsonPrimitive(t.id))))
                                             }).onFailure { error = it.message }
                                             load()

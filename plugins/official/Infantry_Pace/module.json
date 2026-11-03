@@ -6,7 +6,7 @@
   "description": "Pacing trend charts for every harness: history of percent used, pace delta and the forecast to reset, with up/down momentum.",
   "tier": "official",
   "sequence": [],
-  "entry": "com.superiorsoftllc.agenthq.plugins.official.pace.PacePlugin",
+  "entry": "com.superiorsoftllc.infantry.plugins.official.pace.PacePlugin",
   "jar": "build/libs/Infantry_Pace.jar",
   "buildOrder": 170,
   "services": ["daemon"],
@@ -15,11 +15,11 @@
     { "into": "infantry.shell.stats", "name": "usagefit", "at": "last", "order": 100 }
   ],
   "daemon": {
-    "entry": "com.superiorsoftllc.agenthq.plugins.official.pace.daemon.PaceDaemonPlugin",
+    "entry": "com.superiorsoftllc.infantry.plugins.official.pace.daemon.PaceDaemonPlugin",
     "jar": "daemon/build/libs/Infantry_Pace-daemon.jar",
     "apiAtLeast": "1.10.0",
     "tools": [
-      { "name": "agenthq_pace", "action": "pace.read", "kind": "read", "description": "Pacing history, momentum and the forecast to reset per provider window." }
+      { "name": "infantry_pace", "action": "pace.read", "kind": "read", "description": "Pacing history, momentum and the forecast to reset per provider window." }
     ],
     "frames": [
       { "type": "pace_get", "action": "pace.read", "kind": "read" }

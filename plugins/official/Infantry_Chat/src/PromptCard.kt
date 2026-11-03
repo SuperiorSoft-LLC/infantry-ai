@@ -1,6 +1,6 @@
-package com.superiorsoftllc.agenthq.plugins.official.chat
+package com.superiorsoftllc.infantry.plugins.official.chat
 
-import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.infantry.ui.*
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -39,9 +39,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.model.PromptCards
-import com.superiorsoftllc.agenthq.ui.protocol.PromptRequestView
-import com.superiorsoftllc.agenthq.ui.protocol.PromptResponseWire
+import com.superiorsoftllc.infantry.ui.model.PromptCards
+import com.superiorsoftllc.infantry.ui.protocol.PromptRequestView
+import com.superiorsoftllc.infantry.ui.protocol.PromptResponseWire
 
 const val PROMPT_CARD_TAG = "prompt-card"
 const val PROMPT_POSITION_TAG = "prompt-card-position"

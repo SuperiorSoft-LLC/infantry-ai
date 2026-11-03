@@ -1,6 +1,6 @@
-package com.superiorsoftllc.agenthq.plugins.official.changes
+package com.superiorsoftllc.infantry.plugins.official.changes
 
-import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.infantry.ui.*
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -49,23 +49,23 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.model.AppState
-import com.superiorsoftllc.agenthq.ui.model.BranchChangesView
-import com.superiorsoftllc.agenthq.ui.model.branchChangesView
-import com.superiorsoftllc.agenthq.ui.model.DiffBody
-import com.superiorsoftllc.agenthq.ui.model.DiffLineKind
-import com.superiorsoftllc.agenthq.ui.model.DiffRow
-import com.superiorsoftllc.agenthq.ui.model.DiffTarget
-import com.superiorsoftllc.agenthq.ui.model.PatchView
-import com.superiorsoftllc.agenthq.ui.model.diffBody
-import com.superiorsoftllc.agenthq.ui.model.diffTargets
-import com.superiorsoftllc.agenthq.ui.model.label
-import com.superiorsoftllc.agenthq.ui.model.projectChangesView
-import com.superiorsoftllc.agenthq.ui.model.projectPatchView
-import com.superiorsoftllc.agenthq.ui.model.worktreeChangesView
-import com.superiorsoftllc.agenthq.ui.model.worktreeStatusKey
-import com.superiorsoftllc.agenthq.ui.model.step
-import com.superiorsoftllc.agenthq.ui.net.Controller
+import com.superiorsoftllc.infantry.ui.model.AppState
+import com.superiorsoftllc.infantry.ui.model.BranchChangesView
+import com.superiorsoftllc.infantry.ui.model.branchChangesView
+import com.superiorsoftllc.infantry.ui.model.DiffBody
+import com.superiorsoftllc.infantry.ui.model.DiffLineKind
+import com.superiorsoftllc.infantry.ui.model.DiffRow
+import com.superiorsoftllc.infantry.ui.model.DiffTarget
+import com.superiorsoftllc.infantry.ui.model.PatchView
+import com.superiorsoftllc.infantry.ui.model.diffBody
+import com.superiorsoftllc.infantry.ui.model.diffTargets
+import com.superiorsoftllc.infantry.ui.model.label
+import com.superiorsoftllc.infantry.ui.model.projectChangesView
+import com.superiorsoftllc.infantry.ui.model.projectPatchView
+import com.superiorsoftllc.infantry.ui.model.worktreeChangesView
+import com.superiorsoftllc.infantry.ui.model.worktreeStatusKey
+import com.superiorsoftllc.infantry.ui.model.step
+import com.superiorsoftllc.infantry.ui.net.Controller
 
 const val DIFF_MODAL_TAG = "diff-modal"
 const val DIFF_MODAL_CLOSE_TAG = "diff-modal-close"

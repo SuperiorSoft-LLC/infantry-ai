@@ -1,0 +1,8 @@
+# PERF-2: the Infantry JVM caps, one flag per line ('#' lines and blanks ignored). Single source for the packaged app
+# (infantryUi compose jvmArgs, which also runs the daemon in-process), infantryUi run/runRealDaemon/runSmoke,
+# infantry runDaemon, and the perfProfile children. PERF-1 measured 8 GB MaxHeap / 504 MB InitialHeap defaults for a
+# 10-16 MB live heap, with ~61 MB of G1 bookkeeping per JVM (remembered sets / card tables scale with MaxHeap).
+# GC stays the JVM default (G1). -XX:+UseSerialGC measured lower working set (95 vs 132 MB daemon) but the UI startup
+# read +12-17% in three profile runs with it, over the 10% limit; PM decision 2026-10-21: caps only.
+-Xms32m
+-Xmx512m

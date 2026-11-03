@@ -6,7 +6,7 @@
   "description": "The chat feed: the session's messages, thinking, comms cards, finished lines and automation rows, drawn by kind.",
   "tier": "official",
   "sequence": [],
-  "entry": "com.superiorsoftllc.agenthq.plugins.official.chatfeed.ChatFeedPlugin",
+  "entry": "com.superiorsoftllc.infantry.plugins.official.chatfeed.ChatFeedPlugin",
   "jar": "build/libs/Infantry_ChatFeed.jar",
   "buildOrder": 210,
   "panels": [

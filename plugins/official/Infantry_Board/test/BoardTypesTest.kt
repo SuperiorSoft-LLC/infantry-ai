@@ -1,9 +1,9 @@
-package com.superiorsoftllc.agenthq.plugins.official.board
+package com.superiorsoftllc.infantry.plugins.official.board
 
-import com.superiorsoftllc.agenthq.ui.*
-import com.superiorsoftllc.agenthq.ui.shell.blocks.*
+import com.superiorsoftllc.infantry.ui.*
+import com.superiorsoftllc.infantry.ui.shell.blocks.*
 
-import com.superiorsoftllc.agenthq.ui.plugin.TabFactory
+import com.superiorsoftllc.infantry.ui.plugin.TabFactory
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive

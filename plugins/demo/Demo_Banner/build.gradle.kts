@@ -1,5 +1,5 @@
 // OVERRIDE-1 (docs/PLUGIN-OVERRIDES.md section 6): a demo-only module. It is compiled into the web and Android builds only
-// when -Pdemo=true (agenthqAppUi:generateModuleList); the desktop and the production builds never see it. No jar, no signing.
+// when -Pdemo=true (infantryAppUi:generateModuleList); the desktop and the production builds never see it. No jar, no signing.
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidKotlinMultiplatformLibrary)
@@ -13,7 +13,7 @@ kotlin {
     @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
     wasmJs { browser() }
     androidLibrary {
-        namespace = "com.superiorsoftllc.agenthq.plugins.demo.banner"
+        namespace = "com.superiorsoftllc.infantry.plugins.demo.banner"
         compileSdk = 36
         minSdk = 24
     }
@@ -21,7 +21,7 @@ kotlin {
     sourceSets {
         commonMain { kotlin.srcDir("src") }
         commonMain.dependencies {
-            api(project(":superiorSoftLibrary:agenthqUiCore"))
+            api(project(":superiorSoftLibrary:infantryUiCore"))
             // DEMO-MERGE-1: the notice comes from Demo_Lock, which wraps the frame this banner sits in.
             implementation(project(":plugins:demo:Demo_Lock"))
             implementation(compose.runtime)

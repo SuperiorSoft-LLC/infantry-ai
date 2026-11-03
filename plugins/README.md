@@ -47,11 +47,11 @@ These rules are enforced:
   community module also needs each one listed under `allow`.
 - Daemon access covers only the routes the module declares (`"GET /health"`). Under the demo lock it is also limited
   to `demoLock.allowRoutes`.
-- With `AGENTHQ_DEMO_LOCK` set, no community module loads; core is unchanged. The route rule applies to the `daemon`
+- With `INFANTRY_DEMO_LOCK` set, no community module loads; core is unchanged. The route rule applies to the `daemon`
   service; the built-in core tabs talk to the daemon through the app's own connection, exactly as without the lock.
 - A core update never touches `community/`.
-- An **official** module (`official/`, in the plugins root or in the install's bundled modules root, `-Dagenthq.plugins.bundled`
-  / `AGENTHQ_BUNDLED_MODULES`) is on by default and its declared services are granted without `allow`, but it loads
+- An **official** module (`official/`, in the plugins root or in the install's bundled modules root, `-Dinfantry.plugins.bundled`
+  / `INFANTRY_BUNDLED_MODULES`) is on by default and its declared services are granted without `allow`, but it loads
   through a filtered class loader and gets no core right. Class visibility per tier (LOADER-1): **core** unfiltered;
   **official** sees `plugin.api`, `ui.plugin`, `ui.model`, `ui.protocol`, `ui.block`, plus `ui.shell` and the classes directly
   in the `ui` package (ShellContext, ChatPanelState, kit composables); **community** sees only the first five. `ui.net`
@@ -60,7 +60,7 @@ These rules are enforced:
   `PluginClassLoader(dir, jar, parent, Tier.OFFICIAL)`, every host class the plugin's composables and context use
   (see `PluginClassLoaderTest`), so RUNTIME-23..26 extractions fail in the test, not at composition. Its jar must be signed by the Infantry
   key (a certificate in `trusted-keys/`) and carry a signed `module.json` that claims `"tier": "official"` and equals the
-  one on disk; otherwise it is refused. Dev runs may skip that with `-Dagenthq.plugins.devTrust=true` (never set by the
+  one on disk; otherwise it is refused. Dev runs may skip that with `-Dinfantry.plugins.devTrust=true` (never set by the
   packaged launcher). Safe mode skips official modules too. A modules.json without an `official` folder still scans it.
 
 A module that has invalid JSON, a missing dependency, a dependency cycle, a different `apiVersion`, a wrong name, or a
@@ -121,7 +121,7 @@ jar that will not load is skipped, with one log line saying why. It never stops 
   - `modules.loaded` (`modules`, comma-separated in load order; `count`): once, when the window has bound its modules;
   - `ticket.changed` (`id`, `status`, `title`, `change` = `created`, `updated` or `removed`): one per ticket that a
     board update changes. The first board a window receives is the baseline, so it publishes nothing.
-- `entry` is a class implementing `com.superiorsoftllc.agenthq.ui.plugin.UiPlugin`. It registers its tabs, panel
+- `entry` is a class implementing `com.superiorsoftllc.infantry.ui.plugin.UiPlugin`. It registers its tabs, panel
   sections, interceptors, blocks and observers by the names declared above. Anything it registers without declaring
   is refused.
 - `actions` (optional, POLICY-1, docs/POLICY.md): the named actions this module's controls perform, so a policy preset can
@@ -133,8 +133,8 @@ jar that will not load is skipped, with one log line saying why. It never stops 
   to another action. An undeclared control that only checks `canWrite` is the generic write (id `""`, kind `write`): any
   preset that turns writes off dims it too. A control that checks neither cannot be dimmed (its frame is still refused).
   A module may also ship presets as data: `policies/*.json` next to its module.json (the demo preset is
-  `plugins/demo/Demo_Lock/policies/demo.json`); the daemon finds them under the plugins root and `AGENTHQ_POLICY_DIRS`.
-- The API (manifest, services, events, the loading rules) lives in `superiorSoftLibrary/agenthqPlugins`. It depends
+  `plugins/demo/Demo_Lock/policies/demo.json`); the daemon finds them under the plugins root and `INFANTRY_POLICY_DIRS`.
+- The API (manifest, services, events, the loading rules) lives in `superiorSoftLibrary/infantryPlugins`. It depends
   on nothing in the app. Whole screens, a module's own state, and background work are reserved contribution types and
   will come the same way.
 
@@ -150,7 +150,7 @@ jar that will not load is skipped, with one log line saying why. It never stops 
 }
 ```
 
-The plugins root is `AGENTHQ_PLUGINS_ROOT`, else the `agenthq.plugins.root` system property, else
+The plugins root is `INFANTRY_PLUGINS_ROOT`, else the `infantry.plugins.root` system property, else
 `<state dir>/plugins`. The Gradle dev runs (`run`, `runRealDaemon`, `runTabShots`) point it at this folder.
 
 ## Adding a community module

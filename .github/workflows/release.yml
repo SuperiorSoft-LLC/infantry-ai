@@ -26,14 +26,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - id: v
-        name: Tag must equal agenthqVersion in gradle.properties
+        name: Tag must equal infantryVersion in gradle.properties
         shell: bash
         run: |
           set -euo pipefail
-          declared="$(sed -n 's/^agenthqVersion=\(.*\)$/\1/p' gradle.properties | tr -d '[:space:]')"
+          declared="$(sed -n 's/^infantryVersion=\(.*\)$/\1/p' gradle.properties | tr -d '[:space:]')"
           tag="${GITHUB_REF_NAME#v}"
-          [[ "$declared" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "gradle.properties agenthqVersion='$declared' is not MAJOR.MINOR.BUILD"; exit 1; }
-          [[ "$declared" == "$tag" ]] || { echo "tag $GITHUB_REF_NAME does not match agenthqVersion=$declared"; exit 1; }
+          [[ "$declared" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "gradle.properties infantryVersion='$declared' is not MAJOR.MINOR.BUILD"; exit 1; }
+          [[ "$declared" == "$tag" ]] || { echo "tag $GITHUB_REF_NAME does not match infantryVersion=$declared"; exit 1; }
           echo "version=$declared" >> "$GITHUB_OUTPUT"
 
   windows:
@@ -53,12 +53,12 @@ jobs:
         run: |
           set -euo pipefail
           V='${{ needs.version.outputs.version }}'
-          ./gradlew --no-daemon :superiorSoftLibrary:agentHqUi:createDistributable -PagenthqVersion="$V"
+          ./gradlew --no-daemon :superiorSoftLibrary:infantryUi:createDistributable -PinfantryVersion="$V"
           mkdir -p out
-          app="$(ls -d superiorSoftLibrary/agentHqUi/build/compose/binaries/main/app/InfantryAI)"
+          app="$(ls -d superiorSoftLibrary/infantryUi/build/compose/binaries/main/app/InfantryAI)"
           (cd "$(dirname "$app")" && 7z a -tzip "$GITHUB_WORKSPACE/out/InfantryAI-$V-windows.zip" InfantryAI >/dev/null)
-          if ./gradlew --no-daemon :superiorSoftLibrary:agentHqUi:releaseAssets -PagenthqVersion="$V"; then
-            cp "superiorSoftLibrary/agentHqUi/build/release/$V/InfantryAI-$V.msi" out/
+          if ./gradlew --no-daemon :superiorSoftLibrary:infantryUi:releaseAssets -PinfantryVersion="$V"; then
+            cp "superiorSoftLibrary/infantryUi/build/release/$V/InfantryAI-$V.msi" out/
           else
             echo "::warning::MSI packaging failed unsigned on this runner; publishing the app-image zip only (the in-app updater needs the MSI)"
           fi
@@ -74,10 +74,10 @@ jobs:
     permissions:
       contents: read
     env:
-      KEYSTORE_B64: ${{ secrets.AGENTHQ_ANDROID_RELEASE_KEYSTORE_BASE64 }}
-      AGENTHQ_ANDROID_RELEASE_STORE_PASSWORD: ${{ secrets.AGENTHQ_ANDROID_RELEASE_STORE_PASSWORD }}
-      AGENTHQ_ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.AGENTHQ_ANDROID_RELEASE_KEY_ALIAS }}
-      AGENTHQ_ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.AGENTHQ_ANDROID_RELEASE_KEY_PASSWORD }}
+      KEYSTORE_B64: ${{ secrets.INFANTRY_ANDROID_RELEASE_KEYSTORE_BASE64 }}
+      INFANTRY_ANDROID_RELEASE_STORE_PASSWORD: ${{ secrets.INFANTRY_ANDROID_RELEASE_STORE_PASSWORD }}
+      INFANTRY_ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.INFANTRY_ANDROID_RELEASE_KEY_ALIAS }}
+      INFANTRY_ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.INFANTRY_ANDROID_RELEASE_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -96,18 +96,18 @@ jobs:
           set -euo pipefail
           V='${{ needs.version.outputs.version }}'
           mkdir -p out
-          if [ -n "${KEYSTORE_B64:-}" ] && [ -n "${AGENTHQ_ANDROID_RELEASE_STORE_PASSWORD:-}" ] \
-             && [ -n "${AGENTHQ_ANDROID_RELEASE_KEY_ALIAS:-}" ] && [ -n "${AGENTHQ_ANDROID_RELEASE_KEY_PASSWORD:-}" ]; then
+          if [ -n "${KEYSTORE_B64:-}" ] && [ -n "${INFANTRY_ANDROID_RELEASE_STORE_PASSWORD:-}" ] \
+             && [ -n "${INFANTRY_ANDROID_RELEASE_KEY_ALIAS:-}" ] && [ -n "${INFANTRY_ANDROID_RELEASE_KEY_PASSWORD:-}" ]; then
             printf '%s' "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.keystore"
-            export AGENTHQ_ANDROID_RELEASE_STORE_FILE="$RUNNER_TEMP/release.keystore"
-            ./gradlew --no-daemon :superiorSoftLibrary:agentHqAndroid:assembleRelease -PagenthqVersion="$V"
-            apk="$(ls superiorSoftLibrary/agentHqAndroid/build/outputs/apk/release/*.apk | head -n1)"
+            export INFANTRY_ANDROID_RELEASE_STORE_FILE="$RUNNER_TEMP/release.keystore"
+            ./gradlew --no-daemon :superiorSoftLibrary:infantryAndroid:assembleRelease -PinfantryVersion="$V"
+            apk="$(ls superiorSoftLibrary/infantryAndroid/build/outputs/apk/release/*.apk | head -n1)"
             case "$apk" in *unsigned*) echo "release APK came out unsigned"; exit 1;; esac
             cp "$apk" "out/InfantryAI-$V.apk"
           else
             echo "::warning::No release keystore secrets; building a DEBUG-signed APK. Updates over an installed build need a stable key."
-            ./gradlew --no-daemon :superiorSoftLibrary:agentHqAndroid:assembleDebug -PagenthqVersion="$V"
-            apk="$(ls superiorSoftLibrary/agentHqAndroid/build/outputs/apk/debug/*.apk | head -n1)"
+            ./gradlew --no-daemon :superiorSoftLibrary:infantryAndroid:assembleDebug -PinfantryVersion="$V"
+            apk="$(ls superiorSoftLibrary/infantryAndroid/build/outputs/apk/debug/*.apk | head -n1)"
             cp "$apk" "out/InfantryAI-$V-debug.apk"
           fi
       - uses: actions/upload-artifact@v4
@@ -138,9 +138,9 @@ jobs:
         run: |
           set -euo pipefail
           V='${{ needs.version.outputs.version }}'
-          ./gradlew --no-daemon :superiorSoftLibrary:agentHq:headlessDist -PagenthqVersion="$V"
+          ./gradlew --no-daemon :superiorSoftLibrary:infantry:headlessDist -PinfantryVersion="$V"
           mkdir -p out
-          cp superiorSoftLibrary/agentHq/build/distributions/InfantryAI-server-"$V"-* out/
+          cp superiorSoftLibrary/infantry/build/distributions/InfantryAI-server-"$V"-* out/
       - uses: actions/upload-artifact@v4
         with:
           name: headless-${{ matrix.os }}
@@ -211,7 +211,7 @@ jobs:
           java-version: ${{ env.JAVA_VERSION }}
       - uses: gradle/actions/setup-gradle@v4
       - name: Build the Docker context
-        run: ./gradlew --no-daemon :superiorSoftLibrary:agentHq:dockerContext -PagenthqVersion='${{ needs.version.outputs.version }}'
+        run: ./gradlew --no-daemon :superiorSoftLibrary:infantry:dockerContext -PinfantryVersion='${{ needs.version.outputs.version }}'
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -219,9 +219,9 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       - uses: docker/build-push-action@v6
         with:
-          context: superiorSoftLibrary/agentHq/build/docker
+          context: superiorSoftLibrary/infantry/build/docker
           push: true
-          build-args: AGENTHQ_VERSION=${{ needs.version.outputs.version }}
+          build-args: INFANTRY_VERSION=${{ needs.version.outputs.version }}
           tags: |
             ${{ env.IMAGE }}:${{ needs.version.outputs.version }}
             ${{ env.IMAGE }}:latest

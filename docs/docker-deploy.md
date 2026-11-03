@@ -15,8 +15,8 @@ A 2 GB droplet cannot comfortably run Gradle and the WebAssembly build. Build on
 copy the image over.
 
 ```bash
-./gradlew :superiorSoftLibrary:agentHq:dockerContext          # daemon + web UI + Dockerfile + entrypoint -> build/docker
-docker build -t infantryai/infantry-ai:dev superiorSoftLibrary/agentHq/build/docker
+./gradlew :superiorSoftLibrary:infantry:dockerContext          # daemon + web UI + Dockerfile + entrypoint -> build/docker
+docker build -t infantryai/infantry-ai:dev superiorSoftLibrary/infantry/build/docker
 docker save infantryai/infantry-ai:dev | gzip > infantry-ai.tar.gz   # ~420 MB compressed content
 ```
 
@@ -64,7 +64,7 @@ Option B, private (recommended when the demo is not public): install Tailscale a
 
 ```bash
 curl -fsSL https://tailscale.com/install.sh | sh && tailscale up
-tailscale ip -4                    # e.g. 100.x.y.z -> use it as AGENTHQ_BIND below; no Cloud Firewall rule needed
+tailscale ip -4                    # e.g. 100.x.y.z -> use it as INFANTRY_BIND below; no Cloud Firewall rule needed
 ```
 
 Plain HTTP carries the token in clear text. For a public demo on a domain, use the `tls` profile of
@@ -76,9 +76,9 @@ Plain HTTP carries the token in clear text. For a public demo on a domain, use t
 cd /root
 docker load < infantry-ai.tar.gz
 cat > .env <<'EOF'
-AGENTHQ_BIND=0.0.0.0               # Option B: the Tailscale IP instead
-AGENTHQ_HOST_PORT=8787
-AGENTHQ_WEB_HOSTS=<droplet-ip>     # or your domain / Tailscale name; the browser is refused on any other host name
+INFANTRY_BIND=0.0.0.0               # Option B: the Tailscale IP instead
+INFANTRY_HOST_PORT=8787
+INFANTRY_WEB_HOSTS=<droplet-ip>     # or your domain / Tailscale name; the browser is refused on any other host name
 EOF
 docker compose -f docker-compose.yml --env-file .env up -d
 docker compose -f docker-compose.yml ps        # STATUS: Up ... (healthy) after ~40 s
@@ -87,14 +87,14 @@ curl -fsS http://127.0.0.1:8787/health          # {"status":"ok",...,"database":
 
 If the database stops answering, `/health` says so at once (HTTP 503, `"database":"stuck"`) and the daemon's health
 watchdog halts it after 3 failed self-checks 10 s apart (exit 3), so `restart: unless-stopped` restarts it: Docker on its
-own never restarts a container that is only *unhealthy*. Tune or turn it off with `AGENTHQ_LIMIT_HEALTH_WATCHDOG_*`
+own never restarts a container that is only *unhealthy*. Tune or turn it off with `INFANTRY_LIMIT_HEALTH_WATCHDOG_*`
 (`FAILURES=0` = off) in `.env`; `docker inspect -f '{{.RestartCount}}'` counts the restarts.
 
 Then the two settings that matter on 2 GB (stored in the volume, so once is enough):
 
 ```bash
-docker compose -f docker-compose.yml exec infantry-ai agenthq settings set session.keepAliveMinutes 0
-docker compose -f docker-compose.yml exec infantry-ai agenthq settings set processes.floorMb 256
+docker compose -f docker-compose.yml exec infantry-ai infantry settings set session.keepAliveMinutes 0
+docker compose -f docker-compose.yml exec infantry-ai infantry settings set processes.floorMb 256
 ```
 
 - `session.keepAliveMinutes` (default 30): an opencode session keeps an `opencode serve` process of ~420 MB alive
@@ -165,75 +165,75 @@ What this means for 2 GB: the daemon alone is ~115 MiB; each live opencode sessi
 ## 10. Settings that bound the demo
 
 All in `docker/docker-compose.yml`, each overridable in `.env`, and changeable live in Settings > Limits or with
-`agenthq settings set <key> <n>` (the stored setting wins over the environment). From `settings/LimitRegistry.kt`:
+`infantry settings set <key> <n>` (the stored setting wins over the environment). From `settings/LimitRegistry.kt`:
 
 | Env | Setting | Demo value | Meaning |
 |---|---|---|---|
-| `AGENTHQ_LIMIT_CONCURRENCY_MAX_SESSIONS` | `limits.concurrency.maxSessions` | 2 | sessions of the whole daemon OPEN at once (working, or idle with their CLI process kept alive), any path; at the cap a start is refused with "Demo busy: 2 agents are open" until one is stopped (Stop agent button in its chat) or times out (0 = unlimited) |
-| `AGENTHQ_SESSION_KEEP_ALIVE_MINUTES` | `session.keepAliveMinutes` | 2 | minutes an idle agent keeps its CLI process, and so its slot above (normal app default 30; 0 = one-shot, a slot is held only during a turn) |
-| `AGENTHQ_ALLOWED_MODELS` | `limits.models.allowed` | `opencode-go/beam-free` | the only models that may be picked or run (comma list, `*` = any characters); the daemon refuses every other one and the pickers hide them; a harness with no allowed model is shown dimmed. Empty = every model |
-| `AGENTHQ_ALLOWED_ROLES` | `limits.roles.allowed` | (empty = all roles; optional, off in the demo) | when set, the only roles that may be started, assigned to a ticket or picked in the New agent dialog; the daemon refuses every other one. Sessions with no role are not affected. Empty = every role |
-| `AGENTHQ_LIMIT_CONCURRENCY_MAX_PER_POD` | `limits.concurrency.maxPerPod` | 2 | sessions one session / MCP connection may add (legacy `AGENTHQ_POD_SPAWN_CAP`) |
-| `AGENTHQ_LIMIT_CONCURRENCY_MCP_MAX_SPAWNS` | `limits.concurrency.mcpMaxSpawns` | 2 | sessions one MCP connection may hold open |
-| `AGENTHQ_LIMIT_CONCURRENCY_MAX_DEPTH` | `limits.concurrency.maxDepth` | 1 | spawn nesting (legacy `AGENTHQ_POD_SPAWN_DEPTH`) |
-| `AGENTHQ_LIMIT_CONCURRENCY_LANE_DEFAULT` | `limits.concurrency.laneDefault` | 1 | agents of one role at once per project |
-| `AGENTHQ_LIMIT_PACING_MAX_WORKERS_CEILING` | `limits.pacing.maxWorkersCeiling` | 2 | highest worker count the usage pacing rule accepts |
-| `AGENTHQ_LIMIT_BUILD_MAX_WORKERS` / `..._MAX_PARALLEL_FORKS` | `limits.build.*` | 1 / 1 | Gradle workers / test forks of a worker's build |
-| `AGENTHQ_LIMIT_WATCHDOG_TICKET_DEADLINE_MINUTES` | `limits.watchdog.ticketDeadlineMinutes` | 60 | unattended ticket worker deadline (legacy `AGENTHQ_TICKET_DEADLINE_MIN`) |
-| `AGENTHQ_LIMIT_WATCHDOG_DEADLINE_MINUTES` | `limits.watchdog.deadlineMinutes` | 30 | other unattended runs |
-| `AGENTHQ_LIMIT_WATCHDOG_STALL_MINUTES` | `limits.watchdog.stallMinutes` | 15 | silent run stopped as stalled |
-| (also) `..._KILL_RETRY_MINUTES`, `..._SILENT_MINUTES`, `AGENTHQ_LIMIT_CPU_ALERT_PERCENT/_MINUTES`, `AGENTHQ_LIMIT_PROCESSES_WATCH_INTERVAL_SECONDS` | | defaults | see `LimitRegistry.kt` |
+| `INFANTRY_LIMIT_CONCURRENCY_MAX_SESSIONS` | `limits.concurrency.maxSessions` | 2 | sessions of the whole daemon OPEN at once (working, or idle with their CLI process kept alive), any path; at the cap a start is refused with "Demo busy: 2 agents are open" until one is stopped (Stop agent button in its chat) or times out (0 = unlimited) |
+| `INFANTRY_SESSION_KEEP_ALIVE_MINUTES` | `session.keepAliveMinutes` | 2 | minutes an idle agent keeps its CLI process, and so its slot above (normal app default 30; 0 = one-shot, a slot is held only during a turn) |
+| `INFANTRY_ALLOWED_MODELS` | `limits.models.allowed` | `opencode-go/beam-free` | the only models that may be picked or run (comma list, `*` = any characters); the daemon refuses every other one and the pickers hide them; a harness with no allowed model is shown dimmed. Empty = every model |
+| `INFANTRY_ALLOWED_ROLES` | `limits.roles.allowed` | (empty = all roles; optional, off in the demo) | when set, the only roles that may be started, assigned to a ticket or picked in the New agent dialog; the daemon refuses every other one. Sessions with no role are not affected. Empty = every role |
+| `INFANTRY_LIMIT_CONCURRENCY_MAX_PER_POD` | `limits.concurrency.maxPerPod` | 2 | sessions one session / MCP connection may add (legacy `INFANTRY_POD_SPAWN_CAP`) |
+| `INFANTRY_LIMIT_CONCURRENCY_MCP_MAX_SPAWNS` | `limits.concurrency.mcpMaxSpawns` | 2 | sessions one MCP connection may hold open |
+| `INFANTRY_LIMIT_CONCURRENCY_MAX_DEPTH` | `limits.concurrency.maxDepth` | 1 | spawn nesting (legacy `INFANTRY_POD_SPAWN_DEPTH`) |
+| `INFANTRY_LIMIT_CONCURRENCY_LANE_DEFAULT` | `limits.concurrency.laneDefault` | 1 | agents of one role at once per project |
+| `INFANTRY_LIMIT_PACING_MAX_WORKERS_CEILING` | `limits.pacing.maxWorkersCeiling` | 2 | highest worker count the usage pacing rule accepts |
+| `INFANTRY_LIMIT_BUILD_MAX_WORKERS` / `..._MAX_PARALLEL_FORKS` | `limits.build.*` | 1 / 1 | Gradle workers / test forks of a worker's build |
+| `INFANTRY_LIMIT_WATCHDOG_TICKET_DEADLINE_MINUTES` | `limits.watchdog.ticketDeadlineMinutes` | 60 | unattended ticket worker deadline (legacy `INFANTRY_TICKET_DEADLINE_MIN`) |
+| `INFANTRY_LIMIT_WATCHDOG_DEADLINE_MINUTES` | `limits.watchdog.deadlineMinutes` | 30 | other unattended runs |
+| `INFANTRY_LIMIT_WATCHDOG_STALL_MINUTES` | `limits.watchdog.stallMinutes` | 15 | silent run stopped as stalled |
+| (also) `..._KILL_RETRY_MINUTES`, `..._SILENT_MINUTES`, `INFANTRY_LIMIT_CPU_ALERT_PERCENT/_MINUTES`, `INFANTRY_LIMIT_PROCESSES_WATCH_INTERVAL_SECONDS` | | defaults | see `LimitRegistry.kt` |
 | `JAVA_OPTS` | | `-Xms32m -Xmx512m` | daemon heap |
-| `AGENTHQ_MEM_LIMIT` | | 1600m | whole container (daemon + CLIs) |
+| `INFANTRY_MEM_LIMIT` | | 1600m | whole container (daemon + CLIs) |
 
 `limits.concurrency.maxSessions` (ticket f9e181af) closes the old gap: a person in the browser can no longer open more
 sessions than that by hand. It counts OPEN sessions: working on a turn, or idle with their CLI process still kept alive
 (`session.keepAliveMinutes`, 2 min in the demo), so an idle agent frees its slot when it is stopped or times out.
 
 The model allowlist is stored-setting > env: anyone holding the owner token can lift it in Settings
-(`agenthq settings set limits.models.allowed '[]'`).
+(`infantry settings set limits.models.allowed '[]'`).
 
 ## 11. Linux / container notes (what was found making this work)
 
 1. **Native libraries vs a noexec `/tmp`** (fixed in `docker/entrypoint.sh`). sqlite-jdbc (and JNA) extract their `.so`
    into `java.io.tmpdir` and load it; compose `tmpfs: /tmp` is mounted noexec, so the daemon died at
-   `db/AgentHQDatabase.kt:38` (`JdbcSqliteDriver`) with "failed to map segment from shared object" and
+   `db/InfantryDatabase.kt:38` (`JdbcSqliteDriver`) with "failed to map segment from shared object" and
    `NativeLibraryNotFoundException ... Linux/x86_64`. The entrypoint passes `-Dorg.sqlite.tmpdir` and `-Djna.tmpdir` =
-   `/data/native-libs` (`AGENTHQ_NATIVE_DIR`). This also affected the existing `docker/compose.yaml` (read-only root +
+   `/data/native-libs` (`INFANTRY_NATIVE_DIR`). This also affected the existing `docker/compose.yaml` (read-only root +
    tmpfs `/tmp`); `docker/smoke.sh` now passes against it.
 2. **How each CLI is found**: `executables/ExecutableResolver.kt:31-62`, in order: Settings override > env
-   (`AGENTHQ_CLAUDE_EXE` / `AGENTHQ_OPENCODE_EXE` / `AGENTHQ_PI_EXE`, `executables/CliTools.kt:44,76,116`) > the app's own
-   npm prefix `<AGENTHQ_HOME>/harness-tools/bin/<id>` (`executables/HarnessPrefix.kt:20-24`) > the Linux default
+   (`INFANTRY_CLAUDE_EXE` / `INFANTRY_OPENCODE_EXE` / `INFANTRY_PI_EXE`, `executables/CliTools.kt:44,76,116`) > the app's own
+   npm prefix `<INFANTRY_HOME>/harness-tools/bin/<id>` (`executables/HarnessPrefix.kt:20-24`) > the Linux default
    locations (`CliTools.kt:63` claude, `:99` opencode, `:129` pi: `~/.local/bin`, `/usr/local/bin`, ...) > `PATH`. The
    image installs with `npm -g` into `/usr/local/bin`, which is both a default location and on PATH: no setting needed.
-3. **Home directory / credentials**: the container user is `agenthq` (uid 10001), `HOME=/home/agenthq`, kept in the
+3. **Home directory / credentials**: the container user is `infantry` (uid 10001), `HOME=/home/infantry`, kept in the
    `infantry-home` volume. opencode, pi and claude keep their logins and config under it (`~/.local/share/opencode`,
    `~/.config/opencode`, `~/.pi`, `~/.claude`); nothing is read from the host.
 4. **Windows-only jars**: none in the image. The skiko runtime (`skiko-awt-runtime-windows-x64`) and the Compose jars
-   are on the DESKTOP app's classpath only (`agentHqUi`); the image uses `:agentHq:installDist`, whose `lib/` has 36 jars,
+   are on the DESKTOP app's classpath only (`infantryUi`); the image uses `:infantry:installDist`, whose `lib/` has 36 jars,
    no skiko, no Compose. JNA and sqlite-jdbc carry their Linux natives.
 5. **PTY vs piped runner**: Linux uses the same piped runner as Windows (`runner/RunnerFactory.kt:9-13`, default
-   `piped`); `AGENTHQ_RUNNER=pty` throws by design (`runner/PtyProcessRunner.kt`). Nothing to change.
+   `piped`); `INFANTRY_RUNNER=pty` throws by design (`runner/PtyProcessRunner.kt`). Nothing to change.
 6. **Kept opencode server**: with `session.keepAliveMinutes` > 0 each opencode session keeps an `opencode serve` child
    (~420 MB) between turns (`session/host/HarnessSessionAdapter.kt:28` default 30, `opencode/OpenCodeServeAdapter.kt`).
    Settings-only, no env name.
 7. **Memory-pressure floor**: `session/ProcessWatch.kt:23` default `floorMb = 4096`; a warning only (auto-reap is off by
    default), but it fires on any box under ~4 GB free. Settings-only (`processes.floorMb`).
 8. **Browser host check**: inside a container the daemon cannot see the droplet's public address, so `/` answers 403
-   to any Host header but localhost until `AGENTHQ_WEB_HOSTS` names it (`daemon/AccessPolicy.kt:326`). Measured: 403
+   to any Host header but localhost until `INFANTRY_WEB_HOSTS` names it (`daemon/AccessPolicy.kt:326`). Measured: 403
    without, 200 with.
-9. **Token**: the image sets `AGENTHQ_TOKEN_FILE=/data/access-token`; the daemon refuses both a file AND a non-blank
-   `AGENTHQ_TOKEN` (`daemon/AccessPolicy.kt:337`), so the entrypoint drops the file when a token is given explicitly.
-   `AGENTHQ_TOKEN_AUTO=false` restores the strict "refuse to start without a token" rule (`docker/smoke.sh` step 1).
-10. **`agenthq` CLI inside the container** is a JVM per call (Node is only for the harness CLIs); agents that call it
+9. **Token**: the image sets `INFANTRY_TOKEN_FILE=/data/access-token`; the daemon refuses both a file AND a non-blank
+   `INFANTRY_TOKEN` (`daemon/AccessPolicy.kt:337`), so the entrypoint drops the file when a token is given explicitly.
+   `INFANTRY_TOKEN_AUTO=false` restores the strict "refuse to start without a token" rule (`docker/smoke.sh` step 1).
+10. **`infantry` CLI inside the container** is a JVM per call (Node is only for the harness CLIs); agents that call it
     often pay a JVM start each time.
 
 ## 12. Sandbox: agents confined to their directory (SANDBOX-1, ticket d4c1dbd9)
 
-`docker/docker-compose.yml` turns it on (`AGENTHQ_LIMIT_SANDBOX_MODE=1`). It is a daemon setting, default **off**
+`docker/docker-compose.yml` turns it on (`INFANTRY_LIMIT_SANDBOX_MODE=1`). It is a daemon setting, default **off**
 everywhere else: `limits.sandbox.mode` (0/1) and `limits.sandbox.allowedDirs` (JSON array of absolute paths; env
-`AGENTHQ_LIMIT_SANDBOX_ALLOWED_DIRS`, comma separated), both in Settings > Limits / `agenthq settings`. The Limits tab and
-the startup line `[agentHq] sandbox: ...` say what is really enforced on that machine. Code: `runner/Sandbox.kt`.
+`INFANTRY_LIMIT_SANDBOX_ALLOWED_DIRS`, comma separated), both in Settings > Limits / `infantry settings`. The Limits tab and
+the startup line `[infantry] sandbox: ...` say what is really enforced on that machine. Code: `runner/Sandbox.kt`.
 
 Every agent CLI launch (all three runner seams of the session manager) goes through `SandboxRunner`. With the mode on:
 
@@ -241,17 +241,17 @@ Every agent CLI launch (all three runner seams of the session manager) goes thro
    That tier (`daemon/AgentTier.kt`) may read, mail, report progress/bg jobs, ask questions and work its tickets and
    knowledge; it is refused `settings_set`, CLI locations, harness installs, role/agent/skill/trait/prompt edits, tool
    approval, secrets, projects, commands, triggers, spawns (`new`, pods), prompting or killing sessions, and every
-   HTTP route except `/health`, `/ws`, `/mail/*`, `GET /attention`. `AGENTHQ_TOKEN_FILE` is blanked for agents.
+   HTTP route except `/health`, `/ws`, `/mail/*`, `GET /attention`. `INFANTRY_TOKEN_FILE` is blanked for agents.
    This fixes QA 950f4251's finding (the owner token in `/proc/<pid>/environ` of `opencode serve`).
 2. **Harness permissions (first layer), per CLI:**
-   - **opencode 1.19.4**: inline `OPENCODE_CONFIG_CONTENT` `permission` merged over the daemon's own (the `agenthq_*`
+   - **opencode 1.19.4**: inline `OPENCODE_CONFIG_CONTENT` `permission` merged over the daemon's own (the `infantry_*`
      MCP allow and the MCP server entry are kept): `bash: deny`, `webfetch: deny`, `websearch: deny`,
      `external_directory: {"*": deny, "<workdir>/**": allow, "<allowedDir>/**": allow}`, `edit` denied on
      `**/opencode.json(c)`, `**/.opencode/**`, `**/.config/opencode/**`, `**/.pi/**`, `**/.claude/**`; plus
      `OPENCODE_DISABLE_PROJECT_CONFIG=1` (an `opencode.json` an agent writes is ignored), `OPENCODE_DISABLE_AUTOUPDATE`,
      `OPENCODE_DISABLE_CLAUDE_CODE`.
    - **pi 1.4.0**: has no permission system (only which tools exist): `--exclude-tools bash,powershell`. read/edit/write
-     stay and are path-confined by the OS layer ONLY. Its mail path is the agenthq MCP server (`.pi/mcp.json`, the pi
+     stay and are path-confined by the OS layer ONLY. Its mail path is the infantry MCP server (`.pi/mcp.json`, the pi
      tool bridge, switched on for every pi session while the sandbox is on).
    - **claude**: `--disallowedTools Bash WebFetch WebSearch`, `--settings` with `permissions.deny` on its own config
      (`~/.claude/**`, `~/.claude.json`, `**/.claude/settings*.json`), `--add-dir` for each allowed dir. Not tested in
@@ -273,15 +273,15 @@ Proven inside the running container (2026-10-25, Docker Desktop WSL2 kernel 6.6.
 | Attack | Result |
 |---|---|
 | agent shell call (`cat /data/access-token`) | no shell tool exists for the agent (bash denied) |
-| owner token in the agent's env | agent `AGENTHQ_TOKEN=378632...`, owner `/data/access-token` = `3609ae...`; `AGENTHQ_TOKEN_FILE=` |
+| owner token in the agent's env | agent `INFANTRY_TOKEN=378632...`, owner `/data/access-token` = `3609ae...`; `INFANTRY_TOKEN_FILE=` |
 | agent token: `settings set limits.sandbox.mode 0` | `sandbox: 'settings_set' is not available to a sandboxed agent` |
 | agent token: `harness-install claude` / `project config set` | refused the same way; `POST /update/apply` = 403 |
-| Landlock policy: `cat /data/access-token`, `/data/agenthq.db`, `ls /data` | `Permission denied` |
+| Landlock policy: `cat /data/access-token`, `/data/infantry.db`, `ls /data` | `Permission denied` |
 | Landlock policy: write `~/.config/opencode/opencode.json` (add a model) | `Permission denied` |
 | Landlock policy: write `/tmp/pwned`, `/work/pwned` | `Permission denied` |
 | Landlock policy: read `/proc/1/environ` | `Permission denied` |
 | allowed: write `/work/sbx/allowed.txt`; read CLI config | works |
-| pm -> backend mail via the `agenthq_message` MCP tool, shell off | `state: DELIVERED` |
+| pm -> backend mail via the `infantry_message` MCP tool, shell off | `state: DELIVERED` |
 | two turns at once (pm + backend, opencode free model) | both IDLE in 4.9 s / 2.6 s, overlapping |
 
 Memory with the sandbox on, 2 kept opencode sessions, during and after two concurrent turns: **853-862 MiB**
@@ -290,7 +290,7 @@ sessions, not the 800 MiB of section 9; `mem_limit` 1600m + 2 GB swap still fits
 
 ## 13. Locked public demo (DEMO-LOCK, ticket 2f154f5f, branch `demo-build` only)
 
-`AGENTHQ_DEMO_LOCK=1` makes the daemon default-deny for EVERY token, the owner's included: only reading the demo project,
+`INFANTRY_DEMO_LOCK=1` makes the daemon default-deny for EVERY token, the owner's included: only reading the demo project,
 prompting / stopping its two seeded agents and mail between those two get through; everything else is refused
 (`demo: ...` frame error / HTTP 403). The flag is read once at start-up and is not a stored setting, so no token can turn
 it off; to change it, redeploy. Without the overlay below the same image runs the normal app.
@@ -298,13 +298,13 @@ it off; to change it, redeploy. Without the overlay below the same image runs th
 The seed (`docker/demo-seed.env`): on the first locked start the entrypoint makes `/work/demo` a git repository and the
 daemon creates "Demo project" on it plus one session per seat (`backend` and `pm`, opencode, `opencode-go/beam-free`),
 persisted in `/data`; later starts find the same ones. The notice shown above each agent's composer is
-`AGENTHQ_DEMO_NOTICE`. To re-seed: `docker compose ... down -v` (removes the volumes, the token too).
+`INFANTRY_DEMO_NOTICE`. To re-seed: `docker compose ... down -v` (removes the volumes, the token too).
 
 Build and ship (on your PC, from the `demo-build` checkout):
 
 ```bash
-./gradlew :superiorSoftLibrary:agentHq:dockerContext --max-workers=2
-docker build -t infantryai/infantry-ai:demolock superiorSoftLibrary/agentHq/build/docker
+./gradlew :superiorSoftLibrary:infantry:dockerContext --max-workers=2
+docker build -t infantryai/infantry-ai:demolock superiorSoftLibrary/infantry/build/docker
 docker save infantryai/infantry-ai:demolock | gzip > infantry-ai-demolock.tar.gz
 scp infantry-ai-demolock.tar.gz docker/docker-compose.yml docker/docker-compose.demo.yml docker/demo-seed.env root@<droplet>:/root/
 ```
@@ -314,10 +314,10 @@ On the droplet:
 ```bash
 cd /root && docker load < infantry-ai-demolock.tar.gz
 cat > .env <<'ENV'
-AGENTHQ_IMAGE=infantryai/infantry-ai:demolock
-AGENTHQ_BIND=127.0.0.1             # only Caddy reaches it
-AGENTHQ_HOST_PORT=8787
-AGENTHQ_WEB_HOSTS=demo.example.com # your domain; the browser is refused on any other host name
+INFANTRY_IMAGE=infantryai/infantry-ai:demolock
+INFANTRY_BIND=127.0.0.1             # only Caddy reaches it
+INFANTRY_HOST_PORT=8787
+INFANTRY_WEB_HOSTS=demo.example.com # your domain; the browser is refused on any other host name
 OPENCODE_API_KEY=<the opencode-go key>
 ENV
 chmod 600 .env

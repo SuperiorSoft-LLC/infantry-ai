@@ -1,11 +1,11 @@
-package com.superiorsoftllc.agenthq.plugins.official.chat
+package com.superiorsoftllc.infantry.plugins.official.chat
 
-import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.infantry.ui.*
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import com.superiorsoftllc.agenthq.ui.model.AppState
-import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
+import com.superiorsoftllc.infantry.ui.model.AppState
+import com.superiorsoftllc.infantry.ui.plugin.TabContainers
 
 const val CENTER_TAB_BAR_TAG = "center-tab-bar"
 

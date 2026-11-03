@@ -6,7 +6,7 @@
   "description": "Demo build only: a strip above the app body saying this is the demo (OVERRIDE-1 example of a demo override).",
   "tier": "official",
   "sequence": [],
-  "entry": "com.superiorsoftllc.agenthq.plugins.demo.banner.DemoBannerPlugin",
+  "entry": "com.superiorsoftllc.infantry.plugins.demo.banner.DemoBannerPlugin",
   "buildOrder": 900,
   "shell": [
     { "node": "infantry.shell.frame/infantry.shell.body", "name": "banner", "mode": "before", "priority": 10 }

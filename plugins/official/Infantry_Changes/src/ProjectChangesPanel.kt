@@ -1,6 +1,6 @@
-package com.superiorsoftllc.agenthq.plugins.official.changes
+package com.superiorsoftllc.infantry.plugins.official.changes
 
-import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.infantry.ui.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -41,39 +41,39 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.model.BranchChangesView
-import com.superiorsoftllc.agenthq.ui.model.ChangesView
-import com.superiorsoftllc.agenthq.ui.model.DiffTarget
-import com.superiorsoftllc.agenthq.ui.model.HistoryView
-import com.superiorsoftllc.agenthq.ui.model.ProjectView
-import com.superiorsoftllc.agenthq.ui.model.badge
-import com.superiorsoftllc.agenthq.ui.model.branchChangesView
-import com.superiorsoftllc.agenthq.ui.model.aheadHint
-import com.superiorsoftllc.agenthq.ui.model.contractAtLeast
-import com.superiorsoftllc.agenthq.ui.model.headline
-import com.superiorsoftllc.agenthq.ui.model.label
-import com.superiorsoftllc.agenthq.ui.model.markers
-import com.superiorsoftllc.agenthq.ui.model.name
-import com.superiorsoftllc.agenthq.ui.model.optionKey
-import com.superiorsoftllc.agenthq.ui.model.projectChangesView
-import com.superiorsoftllc.agenthq.ui.model.summary
-import com.superiorsoftllc.agenthq.ui.protocol.ProjectGitWorktreeList
-import com.superiorsoftllc.agenthq.ui.model.whenText
-import com.superiorsoftllc.agenthq.ui.model.worktreeChangesView
-import com.superiorsoftllc.agenthq.ui.model.worktreeHeader
-import com.superiorsoftllc.agenthq.ui.model.worktreeHistoryView
-import com.superiorsoftllc.agenthq.ui.net.CommandResult
-import com.superiorsoftllc.agenthq.ui.shell.ChangesContext
-import com.superiorsoftllc.agenthq.ui.shell.GitContext
-import com.superiorsoftllc.agenthq.ui.shell.LinkContext
-import com.superiorsoftllc.agenthq.ui.shell.SessionContext
-import com.superiorsoftllc.agenthq.ui.net.PROJECT_GIT_BRANCHES_UNSUPPORTED
-import com.superiorsoftllc.agenthq.ui.net.PROJECT_GIT_UNSUPPORTED
-import com.superiorsoftllc.agenthq.ui.protocol.BranchChangedFile
-import com.superiorsoftllc.agenthq.ui.protocol.ChangedFile
-import com.superiorsoftllc.agenthq.ui.protocol.GitCommit
-import com.superiorsoftllc.agenthq.ui.protocol.GitWorktree
-import com.superiorsoftllc.agenthq.ui.protocol.ProjectGitWorktreeStatus
+import com.superiorsoftllc.infantry.ui.model.BranchChangesView
+import com.superiorsoftllc.infantry.ui.model.ChangesView
+import com.superiorsoftllc.infantry.ui.model.DiffTarget
+import com.superiorsoftllc.infantry.ui.model.HistoryView
+import com.superiorsoftllc.infantry.ui.model.ProjectView
+import com.superiorsoftllc.infantry.ui.model.badge
+import com.superiorsoftllc.infantry.ui.model.branchChangesView
+import com.superiorsoftllc.infantry.ui.model.aheadHint
+import com.superiorsoftllc.infantry.ui.model.contractAtLeast
+import com.superiorsoftllc.infantry.ui.model.headline
+import com.superiorsoftllc.infantry.ui.model.label
+import com.superiorsoftllc.infantry.ui.model.markers
+import com.superiorsoftllc.infantry.ui.model.name
+import com.superiorsoftllc.infantry.ui.model.optionKey
+import com.superiorsoftllc.infantry.ui.model.projectChangesView
+import com.superiorsoftllc.infantry.ui.model.summary
+import com.superiorsoftllc.infantry.ui.protocol.ProjectGitWorktreeList
+import com.superiorsoftllc.infantry.ui.model.whenText
+import com.superiorsoftllc.infantry.ui.model.worktreeChangesView
+import com.superiorsoftllc.infantry.ui.model.worktreeHeader
+import com.superiorsoftllc.infantry.ui.model.worktreeHistoryView
+import com.superiorsoftllc.infantry.ui.net.CommandResult
+import com.superiorsoftllc.infantry.ui.shell.ChangesContext
+import com.superiorsoftllc.infantry.ui.shell.GitContext
+import com.superiorsoftllc.infantry.ui.shell.LinkContext
+import com.superiorsoftllc.infantry.ui.shell.SessionContext
+import com.superiorsoftllc.infantry.ui.net.PROJECT_GIT_BRANCHES_UNSUPPORTED
+import com.superiorsoftllc.infantry.ui.net.PROJECT_GIT_UNSUPPORTED
+import com.superiorsoftllc.infantry.ui.protocol.BranchChangedFile
+import com.superiorsoftllc.infantry.ui.protocol.ChangedFile
+import com.superiorsoftllc.infantry.ui.protocol.GitCommit
+import com.superiorsoftllc.infantry.ui.protocol.GitWorktree
+import com.superiorsoftllc.infantry.ui.protocol.ProjectGitWorktreeStatus
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -175,9 +175,9 @@ data class ChangesFileItem(val file: ChangedFile, val staged: Boolean)
 class ChangesPaneHost internal constructor(
     val link: LinkContext,
     val session: SessionContext,
-    /** S4b: the working tree and the branch list (the shell's [com.superiorsoftllc.agenthq.ui.shell.ShellContext.git]). */
+    /** S4b: the working tree and the branch list (the shell's [com.superiorsoftllc.infantry.ui.shell.ShellContext.git]). */
     val git: GitContext,
-    /** S4b: the worktrees, branch changes and polls (the shell's [com.superiorsoftllc.agenthq.ui.shell.ShellContext.changes]). */
+    /** S4b: the worktrees, branch changes and polls (the shell's [com.superiorsoftllc.infantry.ui.shell.ShellContext.changes]). */
     val context: ChangesContext,
     private val scope: CoroutineScope,
     private val modeState: MutableState<ChangesMode>,

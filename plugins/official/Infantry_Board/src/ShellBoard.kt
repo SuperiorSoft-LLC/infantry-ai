@@ -1,15 +1,15 @@
-package com.superiorsoftllc.agenthq.plugins.official.board
+package com.superiorsoftllc.infantry.plugins.official.board
 
-import com.superiorsoftllc.agenthq.ui.*
-import com.superiorsoftllc.agenthq.ui.shell.blocks.*
+import com.superiorsoftllc.infantry.ui.*
+import com.superiorsoftllc.infantry.ui.shell.blocks.*
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
-import com.superiorsoftllc.agenthq.ui.block.layout.Block
-import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
-import com.superiorsoftllc.agenthq.ui.block.layout.Place
-import com.superiorsoftllc.agenthq.ui.block.layout.RenderPlaced
+import com.superiorsoftllc.infantry.ui.shell.LocalShellContext
+import com.superiorsoftllc.infantry.ui.block.layout.Block
+import com.superiorsoftllc.infantry.ui.block.layout.BlockScope
+import com.superiorsoftllc.infantry.ui.block.layout.Place
+import com.superiorsoftllc.infantry.ui.block.layout.RenderPlaced
 
 private const val BOARD = BOARD_NODE
 

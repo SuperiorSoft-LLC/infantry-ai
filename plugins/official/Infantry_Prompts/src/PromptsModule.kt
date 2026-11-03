@@ -1,15 +1,15 @@
-package com.superiorsoftllc.agenthq.plugins.official.prompts
+package com.superiorsoftllc.infantry.plugins.official.prompts
 
-import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
-import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
-import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
-import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
-import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
-import com.superiorsoftllc.agenthq.ui.plugin.TabProvider
-import com.superiorsoftllc.agenthq.ui.plugin.UiPlugin
-import com.superiorsoftllc.agenthq.ui.plugin.UiRegistrar
-import com.superiorsoftllc.agenthq.ui.plugin.tabIcon
-import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
+import com.superiorsoftllc.infantry.plugin.api.ModuleManifest
+import com.superiorsoftllc.infantry.plugin.api.TabDeclaration
+import com.superiorsoftllc.infantry.ui.plugin.InfantryModule
+import com.superiorsoftllc.infantry.ui.plugin.ModuleSource
+import com.superiorsoftllc.infantry.ui.plugin.TabContainers
+import com.superiorsoftllc.infantry.ui.plugin.TabProvider
+import com.superiorsoftllc.infantry.ui.plugin.UiPlugin
+import com.superiorsoftllc.infantry.ui.plugin.UiRegistrar
+import com.superiorsoftllc.infantry.ui.plugin.tabIcon
+import com.superiorsoftllc.infantry.ui.shell.LocalShellContext
 
 /** The Prompts tab's id. */
 const val PROMPTS_TAB_ID = "infantry.prompts"
@@ -29,7 +29,7 @@ private fun promptsTab() = TabProvider(
 }
 
 /** PLUGINS-1: Infantry_Prompts (official since RUNTIME-9), as a compiled-in module (web and Android, D9; the manifest mirrors module.json). */
-val InfantryPrompts = AgentHqModule(
+val InfantryPrompts = InfantryModule(
     ModuleManifest(
         name = "Infantry_Prompts", version = "1.0.0", author = "Infantry AI", description = "Saved prompts to insert into the chat.",
         tabs = listOf(TabDeclaration(PROMPTS_TAB_ID, TabContainers.RIGHT)),
@@ -47,5 +47,5 @@ class PromptsPlugin : UiPlugin, ModuleSource {
         registrar.tab(promptsTab())
     }
 
-    override fun modules(): List<AgentHqModule> = listOf(InfantryPrompts)
+    override fun modules(): List<InfantryModule> = listOf(InfantryPrompts)
 }

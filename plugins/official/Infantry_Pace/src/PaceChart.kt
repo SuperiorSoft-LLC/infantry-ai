@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.plugins.official.pace
+package com.superiorsoftllc.infantry.plugins.official.pace
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -42,8 +42,8 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.Palette
-import com.superiorsoftllc.agenthq.ui.clickable
+import com.superiorsoftllc.infantry.ui.Palette
+import com.superiorsoftllc.infantry.ui.clickable
 
 /**
  * The colours the pace chart draws with, all `Palette` tokens (docs/CHART-STYLE.md). The contrast test reads these lists, so a

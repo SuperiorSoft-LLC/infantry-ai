@@ -1,0 +1,7 @@
+-- BASE-1c -- migration v39 -> v40: an epic records the branch its tickets' starts cut from, overriding its project's.
+-- NOT NULL DEFAULT '' so every existing epic reads back as "no base branch set" (its tickets keep cutting from the
+-- project's base, else INFANTRY_BASE_BRANCH, else HEAD), never NULL. The column is exactly epics.sq's.
+--
+-- NEXT MIGRATION: 40.sqm (taken by IMG-3: tickets.images)
+
+ALTER TABLE epics ADD COLUMN base_branch TEXT NOT NULL DEFAULT '';

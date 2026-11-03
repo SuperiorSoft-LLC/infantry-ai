@@ -1,6 +1,6 @@
 # Shell leaks (S4, drop-in path)
 
-S4 moves the app UI out of `agenthqUiCore` into `:superiorSoftLibrary:agenthqAppUi`, which reaches core only through its
+S4 moves the app UI out of `infantryUiCore` into `:superiorSoftLibrary:infantryAppUi`, which reaches core only through its
 public API. Each place where moved code reached into core internals is a leak, and each one gets a decision:
 
 - **(a)** add a small method to the shell's API (additions only)
@@ -22,17 +22,17 @@ This file lists the S4a leaks. S4b and S4c append their own.
 
 | File | Symbol | Leak | Decision |
 |---|---|---|---|
-| agenthqUiCore/build.gradle.kts | `commonMain.srcDir(plugins/core)` | core compiled the app's modules into itself | (b): plugins/core compiles into agenthqAppUi |
+| infantryUiCore/build.gradle.kts | `commonMain.srcDir(plugins/core)` | core compiled the app's modules into itself | (b): plugins/core compiles into infantryAppUi |
 | App.kt, shell/PlatformHost.kt | `CoreModules.factory` (default `tabs`) | the shell named the app's module list | (a): `CompiledModules.factory`; the modules come from a `ModuleSource` (ServiceLoader on jvm/android, `CompiledModules.install` on wasm) |
 | jvmMain plugin/DesktopPlugins.kt | `CoreModules.all` (compiled modules) | same | (a): `CompiledModules.all` |
-| shell/blocks/CoreShell.kt | `ShellHeader`, `ShellLeftPanel`, ... as the placeholders' defaults (14 slots) | the shell's tree held the app's blocks | (b): the slots are empty `PlaceholderBlock`s (`CoreShell.slots`); `Infantry_AppUi` fills them (`ModuleManifest.fills`, `AgentHqModule.fills`, `UiRegistrar.fill`) |
-| shell/blocks/CoreShell.kt | `CoreShell.tabs`, `tabTreeTabs` (ShellGit, ShellRun, ShellNotes, ShellChanges) | same | (b): `AgentHqModule.tabTrees` / `UiRegistrar.tabTree`, read back as `TabFactory.tabTreeRoots`, `tabTreeTabs` |
+| shell/blocks/CoreShell.kt | `ShellHeader`, `ShellLeftPanel`, ... as the placeholders' defaults (14 slots) | the shell's tree held the app's blocks | (b): the slots are empty `PlaceholderBlock`s (`CoreShell.slots`); `Infantry_AppUi` fills them (`ModuleManifest.fills`, `InfantryModule.fills`, `UiRegistrar.fill`) |
+| shell/blocks/CoreShell.kt | `CoreShell.tabs`, `tabTreeTabs` (ShellGit, ShellRun, ShellNotes, ShellChanges) | same | (b): `InfantryModule.tabTrees` / `UiRegistrar.tabTree`, read back as `TabFactory.tabTreeRoots`, `tabTreeTabs` |
 | plugin/TabFactory.kt | `TabContext.controller` (internal) | 11 core modules read the controller through `internal`, which only worked while they compiled inside core | (a): `TabContext.coreController`, tier-gated (null for a community module); the modules read it through `appController` (plugins/core/CoreModules.kt) |
 | App.kt | `ReviewPane`, `PodsPane`, `podColor`, `nodeColor` (internal) | panes of a module lived in core | (b): plugins/core/Infantry_Review/ReviewPane.kt, Infantry_Pods/PodsPane.kt |
 | RolesAttention.kt | `AttentionPane`, `WatchSection` | same | (b): Infantry_Attention/AttentionPane.kt |
 | Profiles.kt | `ProfilesPane`, `ProfileRow`, `ProfileForm`, `PROFILE_FORM_ERROR_TAG`, `PendingSave` | same | (b): Infantry_Profiles/ProfilesPane.kt |
 | Triggers.kt | the Triggers pane (whole file) | same | (b): git mv to Infantry_Triggers/Triggers.kt |
-| commonTest BoardTriggersModelTest.kt | the `triggerLanes` test | the test reached a function that moved | (b): agenthqAppUi commonTest TriggerLanesTest.kt |
+| commonTest BoardTriggersModelTest.kt | the `triggerLanes` test | the test reached a function that moved | (b): infantryAppUi commonTest TriggerLanesTest.kt |
 | moved panes | `LocalHostSurface` (internal) import | an unused import copied with the code | none: the import is dropped (not a leak) |
 | Board.kt | `assigneeLabel`, `WatchFlagChip` | the moved Attention pane uses board helpers | bridge: they go to (b) with the board in S4b |
 | Profiles.kt | `ProfileExecutorField` | ProfilesPane uses it; the new-agent dialog (core until S4c) uses it too | bridge: (b) in S4c |
@@ -48,7 +48,7 @@ Counts for S4a (18 rows): a 3, b 8, c 0, d 2, bridge 4 (6 symbols), and 1 dead i
 None of these additions is on `ShellContext`; they all belong to the module contract:
 
 - `ModuleManifest.fills`
-- `AgentHqModule.fills` and `AgentHqModule.tabTrees`
+- `InfantryModule.fills` and `InfantryModule.tabTrees`
 - `UiRegistrar.fill` and `UiRegistrar.tabTree`
 - `TabFactory.baseRoot`, `TabFactory.tabTreeRoots` and `TabFactory.tabTreeTabs`
 - `CompiledModules` and `ModuleSource`
@@ -70,14 +70,14 @@ None of these additions is on `ShellContext`; they all belong to the module cont
   Node ids therefore stay addressable, and the drawn tree is the old one by construction.
   - Only core-tier modules may fill a slot, only one module per slot, and only slots declared in module.json.
 - **ServiceLoader as the jvm/android discovery path.** The service file is
-  `META-INF/services/com.superiorsoftllc.agenthq.ui.plugin.ModuleSource`.
+  `META-INF/services/com.superiorsoftllc.infantry.ui.plugin.ModuleSource`.
   - Untested on a minified (R8) Android release: a keep rule for `ModuleSource` implementations may be needed.
 - **coreController is gated on tier, not on the classloader.** A module declared core in its manifest gets the
   controller.
 
 # S4b: the panes (ticket 8724e046)
 
-S4b moves the pane groups git, run, roles, board, memory and changes into agenthqAppUi, one commit each, after one
+S4b moves the pane groups git, run, roles, board, memory and changes into infantryAppUi, one commit each, after one
 prep commit that holds everything two groups share. That way any pane commit can be dropped or reverted on its own.
 The compiler only catches `internal` leaks. `Controller`, `LocalShell` and `AppState` are public, so each moved file
 gets a symbol audit: every core symbol it touches, and a decision for each one. S4b uses the ticket's letters:
@@ -107,7 +107,7 @@ read the context only. Only that one line names `Controller` or `AppState`.
 | shell/ShellContext.kt | `ShellContext.changes` (`ChangesContext`, default `NoChanges`) | the Changes pane reads `projectWorktrees`, `changesWorktree(Status)`, `changes(Shown)Branch`, `projectGitBranchChanges`, calls 6 controller requests and polls on `controller.client.frames` | (b): `pollWorktrees` and `pollWorktreeStatus` hide the frame wait (BUG-CHANGES-BRANCH-1) in the core adapter |
 | shell/ShellContext.kt | `SessionContext.selectedAgentId`, `selectedAgent` (default null) | Notes (role / session scope) and Changes (the worktree of the selected session) read `state.selected` / `selectedId` | (b) |
 | shell/CoreShellContext.kt | `CoreNotes`, `CoreChanges`, `pollOnce` | the core's implementations; `pollOnce` moved here from ProjectChangesPanel.kt (it reads `controller.client`) | stays |
-| ProjectGitPane.kt -> ChangesSection.kt | `ChangeGroup`, `ChangedFileRow`, `GIT_LIST_TOGGLE_TAG` (were internal) | the Git and Changes panes both draw them | bridge: they go to (c) once both panes are in agenthqAppUi |
+| ProjectGitPane.kt -> ChangesSection.kt | `ChangeGroup`, `ChangedFileRow`, `GIT_LIST_TOGGLE_TAG` (were internal) | the Git and Changes panes both draw them | bridge: they go to (c) once both panes are in infantryAppUi |
 | ChangesSection.kt | `ChangedPathText` (was internal) | the Git and Changes panes and core's `ChangesSection` draw it | bridge |
 | block/layout/Placement.kt | `RenderPlaced` (Row, Column, Box; were internal) | every moved container block draws its children with it | kit: the block contract's own function, made public (no new surface, only visibility) |
 | block/layout/Placement.kt | `RenderPlain` (was internal) | the moved Notes and Changes trees draw their axis-less groups with it | kit: as `RenderPlaced` |
@@ -138,7 +138,7 @@ pre-move render, 4 of 4 shots at 0 px.
 ## Run (Infantry_Run)
 
 Moved into plugins/core/Infantry_Run: RunPane.kt, shell/blocks/ShellRun.kt. The form-rules test moves with
-`RunCommandForm` (agenthqAppUi commonTest RunCommandFormTest; the rest of RunModelTest tests the core model and
+`RunCommandForm` (infantryAppUi commonTest RunCommandFormTest; the rest of RunModelTest tests the core model and
 stays). Pixel proof: `-PtabShotsExtra=run`, 4 of 4 shots at 0 px.
 
 | File | Symbol | Decision |
@@ -148,7 +148,7 @@ stays). Pixel proof: `-PtabShotsExtra=run`, 4 of 4 shots at 0 px.
 | ShellRun.kt | `Block`, `BlockScope`, `Place`, `RenderPlaced` | kit |
 | RunPane.kt | `RunContext`, `LinkContext` (`RunPaneFrame`, `RunPaneHost`, every section) | (a) |
 | RunPane.kt | `RunPane(state, controller)`: `AppState`, `Controller`, `CoreLink`, `CoreRun`, `LocalRunConsole` | (a) through the public adapters: the outside-a-shell entry (RunPaneUiTest, RunCommandEditorUiTest) |
-| RunPills.kt | `RunPillChip`, `RunConsoleHost`, `LocalRunConsole`, `runPillTag` | stays: the desktop's console window (agentHqUi RunConsole.kt, which compiles against the shell only) draws `RunPillChip`, and App.kt provides `LocalRunConsole` to `CoreShellContext` |
+| RunPills.kt | `RunPillChip`, `RunConsoleHost`, `LocalRunConsole`, `runPillTag` | stays: the desktop's console window (infantryUi RunConsole.kt, which compiles against the shell only) draws `RunPillChip`, and App.kt provides `LocalRunConsole` to `CoreShellContext` |
 | RunPane.kt | `RunsState`, `RunState`, `CommandSpecView`, `runPills`, `CommandResult` | kit (model) |
 | RunPane.kt | `Checkbox`, `DropdownMenuItem`, `OutlinedButton`, `TextButton`, `Palette`, `Mono` | kit |
 
@@ -176,7 +176,7 @@ public `state` and `controller` are gone, and `link`, `session` and `context` re
 ## Changes (Infantry_Changes)
 
 Moved into plugins/core/Infantry_Changes: ProjectChangesPanel.kt, shell/blocks/ShellChanges.kt. The not-a-git-repository
-test moves with `isNotGitRepository` (agenthqAppUi commonTest NotGitRepositoryTest). Migrated: `ChangesPaneFrame` and
+test moves with `isNotGitRepository` (infantryAppUi commonTest NotGitRepositoryTest). Migrated: `ChangesPaneFrame` and
 `ChangesPaneHost` took `(state, controller)` and now take `LinkContext`, `SessionContext`, `GitContext` and
 `ChangesContext`. The host's `state` and `controller` become `link`, `session`, `git` and `context`, and the private
 `pollOnce` is gone (it lives in `CoreChanges`, prep). Pixel proof: `-PtabShotsExtra=changespane`, 6 of 6 shots at 0 px.
@@ -232,7 +232,7 @@ Estimated S4c addition for roles: about 12 members on `RolesContext`, plus `Trai
 ## Board (Infantry_AppUi)
 
 Moved into plugins/core/Infantry_AppUi: Board.kt, BoardModal.kt, BoardDropSession.kt, TicketExecutorField.kt,
-shell/blocks/ShellBoard.kt. BoardDropTest moves to agenthqAppUi commonTest with `BoardDropSession`. Pixel proof:
+shell/blocks/ShellBoard.kt. BoardDropTest moves to infantryAppUi commonTest with `BoardDropSession`. Pixel proof:
 `-PtabShotsExtra=board`, 4 of 4 shots at 0 px, and the default set 32 of 32.
 
 Like Roles, the board is moved but not migrated in S4b. `BoardPaneFrame` and `BoardModal` still take
@@ -282,7 +282,7 @@ Moved: shell/blocks/ShellHeader.kt (`ShellHeader`, `TitleBarBlock`, `HeaderLead*
 | File | Symbol | Decision |
 |---|---|---|
 | Contract.kt | `BlockScope.row` (was internal) | kit: the block contract's own field, made public (only visibility). The title bar's lead and agent strip emit into the bar's row with it |
-| ShellHeader.kt | `TitleBarFrame`, `TitleBarToggleLeft`, `TitleBarBrand`, `TitleBarProject`, `TitleBarAgents`, `TitleBarOverflow*`, `TitleBarWindowControls`, `TitleBarConnection`, `TitleBarRightToggle`, `TitleBarAttention`, `LocalWindowChrome` | stays: TitleBar.kt is the window's chrome. The desktop window (agentHqUi AgentHqWindow.kt) and the splash draw `TitleBar` without the app UI, and the frame pieces are its parts |
+| ShellHeader.kt | `TitleBarFrame`, `TitleBarToggleLeft`, `TitleBarBrand`, `TitleBarProject`, `TitleBarAgents`, `TitleBarOverflow*`, `TitleBarWindowControls`, `TitleBarConnection`, `TitleBarRightToggle`, `TitleBarAttention`, `LocalWindowChrome` | stays: TitleBar.kt is the window's chrome. The desktop window (infantryUi InfantryWindow.kt) and the splash draw `TitleBar` without the app UI, and the frame pieces are its parts |
 | ShellHeader.kt | `ProjectPicker` | stays: the old `TitleBar` and the projects sidebar draw it |
 | ShellHeader.kt | `ServerSwitcherChip` | stays: connect/servers is core |
 | ShellHeader.kt | `AssistantEntry` | stays with AssistantPopup.kt (see Overlays) |
@@ -403,7 +403,7 @@ the group and its sections (ConfigDialogOverridesUiTest, NodeRegistryTest) addre
 
 ## Leak test (S4c)
 
-Without agenthqAppUi the shell is the skeleton: the frame, connect/servers, and the Config dialog's trust half. The
+Without infantryAppUi the shell is the skeleton: the frame, connect/servers, and the Config dialog's trust half. The
 dialog offers only the tabs whose sections are among its children (`ConfigDialog(drawn = ...)`), so a bare shell shows
 Secrets / Devices / About (Plugins too where modules load at run time), never an empty Appearance tab. Shots:
 `-PtabShotsExtra=empty` renders shell-empty-1400 and shell-empty-config-1400 (tab-shots-baseline/empty-shell/).
@@ -415,7 +415,7 @@ Secrets / Devices / About (Plugins too where modules load at run time), never an
 | `WatchFlagChip` | core, public for the sidebar | (c) moved with the sidebar (SidebarBoardButton.kt) |
 | `ProfileExecutorField(state, ...)` | core Profiles.kt, public for Roles / Profiles | (c) Infantry_Profiles/ProfileExecutorField.kt, `internal`, reads an `ExecutorContext` (new, (b)) |
 | `ChangeGroup`, `ChangedFileRow`, `ChangedPathText` (ChangesSection.kt) | core, public for Changes / Git | (c) the whole file moved to Infantry_Changes; core drew none of it (only a UI test) |
-| `nextFireLabel`, `lastFireLabel` | core TriggerDraft.kt, public for Triggers | (c) Infantry_Triggers/TriggerLabels.kt, `internal`; their test moved to agenthqAppUi (TriggerLabelsTest) |
+| `nextFireLabel`, `lastFireLabel` | core TriggerDraft.kt, public for Triggers | (c) Infantry_Triggers/TriggerLabels.kt, `internal`; their test moved to infantryAppUi (TriggerLabelsTest) |
 | `humanDuration` | core TriggerDuration.kt, "bridge" | kit: a pure formatter over core's internal `msToMinutesText` (which `TriggerDraft`, core, uses), so it stays public |
 | `bindingSummary` | core Profiles.kt | kit: the chat (ChatSurface.kt, core) uses it |
 | `ReportFlagChip` | core BoardSidebar.kt | **still a bridge**: ChatSurface.kt draws it; closes with the ChatSurface move (S4d) |
@@ -534,7 +534,7 @@ the pins from `ExecutorContext`, the compact flag from `LayoutContext`.
 | ShellBoard.kt | `LocalShell.current.state / controller` | closed: `BoardDeps(LocalShellContext.current)` |
 
 Core adapter: `CoreTickets` (CoreShellContext.kt). Pixel proof: default 32 of 32 and `-PtabShotsExtra=board`, base
-(5424a3df) and head rendered with the same `agenthq.ui.blur=off`.
+(5424a3df) and head rendered with the same `infantry.ui.blur=off`.
 
 | Where | Added | Count |
 |---|---|---|
@@ -552,7 +552,7 @@ before any S4d change; recounted from git), so its "never grow" check fails on d
 
 Moved into plugins/core/Infantry_AppUi (`git mv`, package unchanged): ChatSurface.kt (the chat's drawing tree:
 header, transcript, status row, composer, spawn row), and the helpers only it draws: OriginRenderer.kt,
-SessionStartPane.kt, PromptCard.kt, CommsCardStyle.kt (its test moves to agenthqAppUi commonTest), ChangeBox.kt, the
+SessionStartPane.kt, PromptCard.kt, CommsCardStyle.kt (its test moves to infantryAppUi commonTest), ChangeBox.kt, the
 attachment strip and sent images (ChatAttachments.kt split: ChatAttachmentViews.kt), and `ReportFlagChip`
 (BoardSidebar.kt -> ReportFlagChip.kt). Like the S4c blocks the chat is **moved, not migrated**: its `(state,
 controller)` uses are holes, listed below and taken up by the controller close (next section).
@@ -574,7 +574,7 @@ controller)` uses are holes, listed below and taken up by the controller close (
 Core no longer holds any chat drawing code; what it keeps of the chat is the window's state (`ChatPanelState`,
 `ChatAttachment`, `ComposerTags`) and the kit renderers the markdown engine owns.
 Proof: default shots 32/32 at 0 px; opt-in `assistant,newAgent` base (5424a3df) vs head 4/4 at 0 px, both rendered
-with blur off. agentHqUi chat-scoped tests and agenthqAppUi jvm tests pass; wasm, Android compile. Two core jvmTest
+with blur off. infantryUi chat-scoped tests and infantryAppUi jvm tests pass; wasm, Android compile. Two core jvmTest
 failures are not this change: HandCursorGuardTest (the Text ratchet, above) and ShellOverridesTest "a module replaces a
 placeholder" (`infantry.shell.configEntry` locked), which fails the same way on base 5424a3df.
 
@@ -653,7 +653,7 @@ chat, sidebar, title bar or assistant. That needs a ChatContext (the composer's 
 `AppState`; each is its own ticket and is listed above so it can be counted when it is taken.
 
 Proof: default shots 32/32 at 0 px; opt-in `config,compact` base (5424a3df) vs head 18/18 at 0 px (blur off both).
-Core jvmTest 744 and agentHqUi scoped 241 (shell, header, status, questions, diff, drawer, assistant, panels, plugins,
+Core jvmTest 744 and infantryUi scoped 241 (shell, header, status, questions, diff, drawer, assistant, panels, plugins,
 tabs, registry, overrides, injections, config, chat, voice, sound, CoreTierGateUiTest) pass but for three failures that
 fail the same on base 5424a3df: HandCursorGuardTest (Text ratchet), ShellOverridesTest and InjectorUiTest "a module
 replaces the frame placeholder" (both: `infantry.shell.configEntry` is locked). App UI jvm, wasm and Android compile.

@@ -1,6 +1,6 @@
 # BLOCKS-INJECTORS: additive extension of a node's children (design only)
 
-Ticket 90588545. Base: `feature-agenthq-mvp` @5a1098d. Read-only check plus design; no code changed.
+Ticket 90588545. Base: `"feature-agenthq"-mvp` @5a1098d. Read-only check plus design; no code changed.
 
 Owner ask (2026-10-27): the CMS client's "block injectors" **add** blocks into a section, as a second extension method
 next to override. Replace and wrap allow one winner per node. Injection lets several plugins add to the same node
@@ -94,9 +94,9 @@ release would not be possible.
 **As built in J2 (ticket 91ee3dd0):**
 - module.json: `ModuleManifest.inject: List<InjectDeclaration(into, name, at = "last", order = 0)>`; `into` takes the
   bare id or `infantry.shell#<id>` (`targetId`). modules.json: `ModuleSetting.allowInject: List<String>`.
-- Kotlin: `UiRegistrar.inject(name, BlockInjection)`, kept in `AgentHqModule.inject` (by name).
+- Kotlin: `UiRegistrar.inject(name, BlockInjection)`, kept in `InfantryModule.inject` (by name).
 - **The trust rule runs in `TabFactory`, not `ModuleResolver`.** `admitInjections` and `NodeInjection` live in
-  agenthqUiCore, which agenthqPlugins cannot see. `TabFactory` takes `allowInject: (module) -> Collection<String>`
+  infantryUiCore, which infantryPlugins cannot see. `TabFactory` takes `allowInject: (module) -> Collection<String>`
   (the desktop loader passes `config.setting(it).allowInject`), binds each module's `inject` entries by name (load
   index = the module's position in load order), refuses an undeclared registration, a declaration with no
   registration and an `at` outside the grammar, then calls `admitInjections` (core = tier is not community). Every
@@ -214,7 +214,7 @@ Not targets: the skeleton and dialogs (`locked`). Overlays go in through an open
 | step | change | risk | weight |
 |---|---|---|---|
 | J1 | `InjectAt`/`BlockInjection`/`NodeInjection`/`InjectedBlock`; `BlockResolver.resolve(..., injections, ...)` with 2b.2 refusals, 2c order and 2d interplay; unit tests on plain trees | none (nothing feeds it) | 3 |
-| J2 | wire it: `ModuleManifest.inject`, `ModuleSetting.allowInject`, `ModuleResolver` trust, `UiRegistrar.inject`, `AgentHqModule.inject`, `TabFactory` split root/tabs, `problems`; fix `rightPanelArea` to read the resolved body's children | low: identity early-return kept | 3 |
+| J2 | wire it: `ModuleManifest.inject`, `ModuleSetting.allowInject`, `ModuleResolver` trust, `UiRegistrar.inject`, `InfantryModule.inject`, `TabFactory` split root/tabs, `problems`; fix `rightPanelArea` to read the resolved body's children | low: identity early-return kept | 3 |
 | J3 | `InjectorUiTest` (below) + the `_template` starter plugin gets a sample injection into `infantry.shell.footer` | none | 2 |
 | J4 | first open slot(s) in locked nodes if wanted (`infantry.shell.dock.overlays`), ids pinned in `CoreShellTreeTest` | low | 1 |
 | J5 | per-host public read-only context locals, one host per ticket (Git first) | medium: API surface | 2 each |

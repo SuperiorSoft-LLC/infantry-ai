@@ -1,15 +1,15 @@
-package com.superiorsoftllc.agenthq.plugins.official.changes
+package com.superiorsoftllc.infantry.plugins.official.changes
 
-import com.superiorsoftllc.agenthq.plugin.api.FillDeclaration
-import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
-import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
-import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
-import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
-import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
-import com.superiorsoftllc.agenthq.ui.plugin.TabProvider
-import com.superiorsoftllc.agenthq.ui.plugin.UiPlugin
-import com.superiorsoftllc.agenthq.ui.plugin.UiRegistrar
-import com.superiorsoftllc.agenthq.ui.plugin.tabIcon
+import com.superiorsoftllc.infantry.plugin.api.FillDeclaration
+import com.superiorsoftllc.infantry.plugin.api.ModuleManifest
+import com.superiorsoftllc.infantry.plugin.api.TabDeclaration
+import com.superiorsoftllc.infantry.ui.plugin.InfantryModule
+import com.superiorsoftllc.infantry.ui.plugin.ModuleSource
+import com.superiorsoftllc.infantry.ui.plugin.TabContainers
+import com.superiorsoftllc.infantry.ui.plugin.TabProvider
+import com.superiorsoftllc.infantry.ui.plugin.UiPlugin
+import com.superiorsoftllc.infantry.ui.plugin.UiRegistrar
+import com.superiorsoftllc.infantry.ui.plugin.tabIcon
 
 /** The Changes tab's id. */
 const val CHANGES_TAB_ID = "infantry.changes"
@@ -36,7 +36,7 @@ private fun changesTab() = TabProvider(
  * module (web and Android, D9; the manifest mirrors module.json). It brings its own tab tree, [ShellChanges], which the tab
  * draws (RUNTIME-8: no longer registered by Infantry_AppUi).
  */
-val InfantryChanges = AgentHqModule(
+val InfantryChanges = InfantryModule(
     ModuleManifest(
         name = "Infantry_Changes", version = "1.0.0", author = "Infantry AI", description = "The project's worktrees and their changes.",
         tabs = listOf(TabDeclaration(CHANGES_TAB_ID, TabContainers.RIGHT)),
@@ -59,5 +59,5 @@ class ChangesPlugin : UiPlugin, ModuleSource {
         registrar.fill(DIFF_FILL_ID, ShellDiff)
     }
 
-    override fun modules(): List<AgentHqModule> = listOf(InfantryChanges)
+    override fun modules(): List<InfantryModule> = listOf(InfantryChanges)
 }

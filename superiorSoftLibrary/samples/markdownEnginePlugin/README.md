@@ -7,11 +7,11 @@ file set to copy when you write your own.
 
 A jar with:
 
-1. a class implementing `com.superiorsoftllc.agenthq.ui.model.ChatMarkdownEngine` (`id`, `label`, `parse(text, streaming)`,
+1. a class implementing `com.superiorsoftllc.infantry.ui.model.ChatMarkdownEngine` (`id`, `label`, `parse(text, streaming)`,
    `supports(feature)`) and a public no-argument constructor;
-2. `META-INF/services/com.superiorsoftllc.agenthq.ui.model.ChatMarkdownEngine` naming that class (one per line).
+2. `META-INF/services/com.superiorsoftllc.infantry.ui.model.ChatMarkdownEngine` naming that class (one per line).
 
-It may use only the JDK, the Kotlin runtime and `com.superiorsoftllc.agenthq.ui.model` (`ChatBlock`, `ChatSpan`,
+It may use only the JDK, the Kotlin runtime and `com.superiorsoftllc.infantry.ui.model` (`ChatBlock`, `ChatSpan`,
 `ColumnAlign`, ...). Nothing else of the app is visible to it, and it must not bundle those classes. No Compose: to
 draw something new, return `ChatBlock.Custom(type, text, data)`; the app draws a block type it has a renderer for
 (this example's `callout` is drawn by `CalloutBlockRenderer`), and shows `text` as plain text otherwise.
@@ -46,4 +46,4 @@ draw something new, return `ChatBlock.Custom(type, text, data)`; the app draws a
 ## Test yours
 
 Copy `ChatCorpusTest`'s idea: put message bodies as `.txt` files under
-`agenthqUiCore/src/commonTest/resources/chat-corpus/`; each is checked against the built-in and the example engine.
+`infantryUiCore/src/commonTest/resources/chat-corpus/`; each is checked against the built-in and the example engine.

@@ -1,0 +1,4 @@
+# Retired environment flags that used to switch a lockdown on by themselves; one name per line.
+# Since DAEMON-PLUGINS-1 a lockdown needs INFANTRY_POLICY=<preset> plus the plugin that supplies the preset.
+# A flag listed here, set while no policy is pinned, locks nothing: LegacyLockEnvCheck refuses to start on it.
+INFANTRY_DEMO_LOCK

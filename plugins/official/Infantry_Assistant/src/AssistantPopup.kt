@@ -1,6 +1,6 @@
-package com.superiorsoftllc.agenthq.plugins.official.assistant
+package com.superiorsoftllc.infantry.plugins.official.assistant
 
-import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.infantry.ui.*
 
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -61,13 +61,13 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.foundation.draganddrop.dragAndDropTarget
 import androidx.compose.ui.draganddrop.DragAndDropEvent
 import androidx.compose.ui.draganddrop.DragAndDropTarget
-import com.superiorsoftllc.agenthq.ui.net.ImageUploadOutcome
-import com.superiorsoftllc.agenthq.ui.protocol.ImageUploadWire
-import com.superiorsoftllc.agenthq.ui.pair.applyPairing
-import com.superiorsoftllc.agenthq.ui.shell.LocalPlatformHost
-import com.superiorsoftllc.agenthq.ui.shell.ServerChoice
-import com.superiorsoftllc.agenthq.ui.shell.ServerSwitcher
-import com.superiorsoftllc.agenthq.ui.shell.PickedImage
+import com.superiorsoftllc.infantry.ui.net.ImageUploadOutcome
+import com.superiorsoftllc.infantry.ui.protocol.ImageUploadWire
+import com.superiorsoftllc.infantry.ui.pair.applyPairing
+import com.superiorsoftllc.infantry.ui.shell.LocalPlatformHost
+import com.superiorsoftllc.infantry.ui.shell.ServerChoice
+import com.superiorsoftllc.infantry.ui.shell.ServerSwitcher
+import com.superiorsoftllc.infantry.ui.shell.PickedImage
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -99,9 +99,9 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
-import com.superiorsoftllc.agenthq.ui.model.PickedModel
-import com.superiorsoftllc.agenthq.ui.model.NoticeKind
-import com.superiorsoftllc.agenthq.ui.model.localNotices
+import com.superiorsoftllc.infantry.ui.model.PickedModel
+import com.superiorsoftllc.infantry.ui.model.NoticeKind
+import com.superiorsoftllc.infantry.ui.model.localNotices
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
@@ -115,15 +115,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import com.superiorsoftllc.agenthq.ui.model.AgentGroup
-import com.superiorsoftllc.agenthq.ui.model.parseHexColor
-import com.superiorsoftllc.agenthq.ui.model.roleHue
+import com.superiorsoftllc.infantry.ui.model.AgentGroup
+import com.superiorsoftllc.infantry.ui.model.parseHexColor
+import com.superiorsoftllc.infantry.ui.model.roleHue
 import androidx.compose.foundation.horizontalScroll
-import com.superiorsoftllc.agenthq.ui.model.RightPanelWidth
-import com.superiorsoftllc.agenthq.ui.model.SidebarWidth
-import com.superiorsoftllc.agenthq.ui.model.CompactScreen
-import com.superiorsoftllc.agenthq.ui.model.PanelLayout
-import com.superiorsoftllc.agenthq.ui.model.PanelSide
+import com.superiorsoftllc.infantry.ui.model.RightPanelWidth
+import com.superiorsoftllc.infantry.ui.model.SidebarWidth
+import com.superiorsoftllc.infantry.ui.model.CompactScreen
+import com.superiorsoftllc.infantry.ui.model.PanelLayout
+import com.superiorsoftllc.infantry.ui.model.PanelSide
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextDecoration
@@ -131,65 +131,65 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.TextLinkStyles
-import com.superiorsoftllc.agenthq.ui.model.isSafeChatUrl
-import com.superiorsoftllc.agenthq.ui.model.AgentScope
-import com.superiorsoftllc.agenthq.ui.model.SlashSuggestion
-import com.superiorsoftllc.agenthq.ui.model.isSlashCommand
-import com.superiorsoftllc.agenthq.ui.model.moveSlashSelection
-import com.superiorsoftllc.agenthq.ui.model.slashHeader
-import com.superiorsoftllc.agenthq.ui.model.HarnessSwitch
-import com.superiorsoftllc.agenthq.ui.model.switchChipText
-import com.superiorsoftllc.agenthq.ui.model.slashPick
-import com.superiorsoftllc.agenthq.ui.model.slashSubmitOnEnter
-import com.superiorsoftllc.agenthq.ui.model.slashSuggestions
-import com.superiorsoftllc.agenthq.ui.model.slashTyped
-import com.superiorsoftllc.agenthq.ui.model.branchLine
-import com.superiorsoftllc.agenthq.ui.model.changesView
-import com.superiorsoftllc.agenthq.ui.model.ticketBranchFor
-import com.superiorsoftllc.agenthq.ui.model.ticketTagFull
-import com.superiorsoftllc.agenthq.ui.model.ticketTagLabel
-import com.superiorsoftllc.agenthq.ui.model.reportFlagOf
-import com.superiorsoftllc.agenthq.ui.model.watchFlagOf
-import com.superiorsoftllc.agenthq.ui.model.UiFlags
-import com.superiorsoftllc.agenthq.ui.model.ChatBlock
-import com.superiorsoftllc.agenthq.ui.model.ChatItem
-import com.superiorsoftllc.agenthq.ui.model.ChatSpan
-import com.superiorsoftllc.agenthq.ui.model.ChatStatus
-import com.superiorsoftllc.agenthq.ui.model.OutputLine
-import com.superiorsoftllc.agenthq.ui.model.USER_AVATAR_ID
-import com.superiorsoftllc.agenthq.ui.model.UserPortrait
-import com.superiorsoftllc.agenthq.ui.model.contractAtLeast
-import com.superiorsoftllc.agenthq.ui.model.avatarFor
-import com.superiorsoftllc.agenthq.ui.model.chatItems
-import com.superiorsoftllc.agenthq.ui.model.chatLineBlocks
-import com.superiorsoftllc.agenthq.ui.model.parseChatInline
-import com.superiorsoftllc.agenthq.ui.model.AgentView
-import com.superiorsoftllc.agenthq.ui.model.SessionExecutor
-import com.superiorsoftllc.agenthq.ui.model.COMPACTING_LABEL
-import com.superiorsoftllc.agenthq.ui.model.AppState
-import com.superiorsoftllc.agenthq.ui.model.DiffTarget
-import com.superiorsoftllc.agenthq.ui.model.ConnState
-import com.superiorsoftllc.agenthq.ui.model.LineKind
-import com.superiorsoftllc.agenthq.ui.model.activityTimestamp
-import com.superiorsoftllc.agenthq.ui.model.isBusy
-import com.superiorsoftllc.agenthq.ui.model.QueuedPrompt
-import com.superiorsoftllc.agenthq.ui.model.AssistantEntryStyle
-import com.superiorsoftllc.agenthq.ui.model.interruptBlocker
-import com.superiorsoftllc.agenthq.ui.model.queuedFor
-import com.superiorsoftllc.agenthq.ui.model.isRunning
-import com.superiorsoftllc.agenthq.ui.model.needsInput
-import com.superiorsoftllc.agenthq.ui.model.insertIntoPrompt
-import com.superiorsoftllc.agenthq.ui.model.promptBlocker
-import com.superiorsoftllc.agenthq.ui.model.parseNodes
-import com.superiorsoftllc.agenthq.ui.model.stateLabel
-import com.superiorsoftllc.agenthq.ui.model.visibleAgents
-import com.superiorsoftllc.agenthq.ui.net.CommandResult
-import com.superiorsoftllc.agenthq.ui.net.Controller
-import com.superiorsoftllc.agenthq.ui.protocol.SessionState
+import com.superiorsoftllc.infantry.ui.model.isSafeChatUrl
+import com.superiorsoftllc.infantry.ui.model.AgentScope
+import com.superiorsoftllc.infantry.ui.model.SlashSuggestion
+import com.superiorsoftllc.infantry.ui.model.isSlashCommand
+import com.superiorsoftllc.infantry.ui.model.moveSlashSelection
+import com.superiorsoftllc.infantry.ui.model.slashHeader
+import com.superiorsoftllc.infantry.ui.model.HarnessSwitch
+import com.superiorsoftllc.infantry.ui.model.switchChipText
+import com.superiorsoftllc.infantry.ui.model.slashPick
+import com.superiorsoftllc.infantry.ui.model.slashSubmitOnEnter
+import com.superiorsoftllc.infantry.ui.model.slashSuggestions
+import com.superiorsoftllc.infantry.ui.model.slashTyped
+import com.superiorsoftllc.infantry.ui.model.branchLine
+import com.superiorsoftllc.infantry.ui.model.changesView
+import com.superiorsoftllc.infantry.ui.model.ticketBranchFor
+import com.superiorsoftllc.infantry.ui.model.ticketTagFull
+import com.superiorsoftllc.infantry.ui.model.ticketTagLabel
+import com.superiorsoftllc.infantry.ui.model.reportFlagOf
+import com.superiorsoftllc.infantry.ui.model.watchFlagOf
+import com.superiorsoftllc.infantry.ui.model.UiFlags
+import com.superiorsoftllc.infantry.ui.model.ChatBlock
+import com.superiorsoftllc.infantry.ui.model.ChatItem
+import com.superiorsoftllc.infantry.ui.model.ChatSpan
+import com.superiorsoftllc.infantry.ui.model.ChatStatus
+import com.superiorsoftllc.infantry.ui.model.OutputLine
+import com.superiorsoftllc.infantry.ui.model.USER_AVATAR_ID
+import com.superiorsoftllc.infantry.ui.model.UserPortrait
+import com.superiorsoftllc.infantry.ui.model.contractAtLeast
+import com.superiorsoftllc.infantry.ui.model.avatarFor
+import com.superiorsoftllc.infantry.ui.model.chatItems
+import com.superiorsoftllc.infantry.ui.model.chatLineBlocks
+import com.superiorsoftllc.infantry.ui.model.parseChatInline
+import com.superiorsoftllc.infantry.ui.model.AgentView
+import com.superiorsoftllc.infantry.ui.model.SessionExecutor
+import com.superiorsoftllc.infantry.ui.model.COMPACTING_LABEL
+import com.superiorsoftllc.infantry.ui.model.AppState
+import com.superiorsoftllc.infantry.ui.model.DiffTarget
+import com.superiorsoftllc.infantry.ui.model.ConnState
+import com.superiorsoftllc.infantry.ui.model.LineKind
+import com.superiorsoftllc.infantry.ui.model.activityTimestamp
+import com.superiorsoftllc.infantry.ui.model.isBusy
+import com.superiorsoftllc.infantry.ui.model.QueuedPrompt
+import com.superiorsoftllc.infantry.ui.model.AssistantEntryStyle
+import com.superiorsoftllc.infantry.ui.model.interruptBlocker
+import com.superiorsoftllc.infantry.ui.model.queuedFor
+import com.superiorsoftllc.infantry.ui.model.isRunning
+import com.superiorsoftllc.infantry.ui.model.needsInput
+import com.superiorsoftllc.infantry.ui.model.insertIntoPrompt
+import com.superiorsoftllc.infantry.ui.model.promptBlocker
+import com.superiorsoftllc.infantry.ui.model.parseNodes
+import com.superiorsoftllc.infantry.ui.model.stateLabel
+import com.superiorsoftllc.infantry.ui.model.visibleAgents
+import com.superiorsoftllc.infantry.ui.net.CommandResult
+import com.superiorsoftllc.infantry.ui.net.Controller
+import com.superiorsoftllc.infantry.ui.protocol.SessionState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
-import com.superiorsoftllc.agenthq.ui.model.AssistantPanelWidth
+import com.superiorsoftllc.infantry.ui.model.AssistantPanelWidth
 
 /** ASSISTANT-1: tags for the top-bar entry and the popup, for UI tests. */
 const val ASSISTANT_POPUP_TAG = "assistant-popup"
@@ -284,7 +284,7 @@ fun AssistantPopupChat(state: AppState, controller: Controller, chat: ChatPanelS
         }
     } else {
         // RUNTIME-22: the shared ChatPanel is Infantry_Chat's; nothing is drawn while that module is not loaded.
-        com.superiorsoftllc.agenthq.ui.shell.ChatPanels.panel?.invoke(assistant.id, controller, modifier, chat, false, ASSISTANT_TRANSCRIPT_TAG)
+        com.superiorsoftllc.infantry.ui.shell.ChatPanels.panel?.invoke(assistant.id, controller, modifier, chat, false, ASSISTANT_TRANSCRIPT_TAG)
     }
 }
 

@@ -6,7 +6,7 @@
   "description": "Theme and blur: the pilot of manifest-driven settings.",
   "tier": "official",
   "sequence": [],
-  "entry": "com.superiorsoftllc.agenthq.plugins.official.appearance.AppearancePlugin",
+  "entry": "com.superiorsoftllc.infantry.plugins.official.appearance.AppearancePlugin",
   "jar": "build/libs/Infantry_Appearance.jar",
   "buildOrder": 215,
   "fills": [

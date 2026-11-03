@@ -1,0 +1,9 @@
+[
+  {
+    "name": "gradle",
+    "env": [
+      { "name": "GRADLE_OPTS", "value": "-Dorg.gradle.project.infantry.testForks=${maxParallelForks}", "onlyIf": "maxParallelForks" },
+      { "name": "GRADLE_OPTS", "value": "-Dorg.gradle.project.infantry.uiTestForks=${maxParallelForks}", "onlyIf": "maxParallelForks" }
+    ]
+  }
+]

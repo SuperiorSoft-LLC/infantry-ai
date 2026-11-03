@@ -9,9 +9,9 @@ kotlin {
 }
 
 dependencies {
-    compileOnly(project(":superiorSoftLibrary:agentHqHarnessApi"))
+    compileOnly(project(":superiorSoftLibrary:infantryHarnessApi"))
     compileOnly(libs.kotlinx.serialization.json)
-    testImplementation(project(":superiorSoftLibrary:agentHqHarnessApi"))
+    testImplementation(project(":superiorSoftLibrary:infantryHarnessApi"))
     testImplementation(libs.kotlinx.serialization.json)
     testImplementation(kotlin("test"))
 }

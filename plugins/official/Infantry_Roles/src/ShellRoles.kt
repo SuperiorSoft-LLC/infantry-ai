@@ -1,17 +1,17 @@
-package com.superiorsoftllc.agenthq.plugins.official.roles
+package com.superiorsoftllc.infantry.plugins.official.roles
 
-import com.superiorsoftllc.agenthq.ui.shell.gate
-import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.infantry.ui.shell.gate
+import com.superiorsoftllc.infantry.ui.*
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
-import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
-import com.superiorsoftllc.agenthq.ui.block.layout.Block
-import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
-import com.superiorsoftllc.agenthq.ui.block.layout.Place
-import com.superiorsoftllc.agenthq.ui.block.layout.RenderPlaced
+import com.superiorsoftllc.infantry.ui.shell.LocalShellContext
+import com.superiorsoftllc.infantry.ui.block.layout.Block
+import com.superiorsoftllc.infantry.ui.block.layout.BlockScope
+import com.superiorsoftllc.infantry.ui.block.layout.Place
+import com.superiorsoftllc.infantry.ui.block.layout.RenderPlaced
 
 private const val ROLES = "infantry.shell.roles"
 private const val FORM = "$ROLES.form"

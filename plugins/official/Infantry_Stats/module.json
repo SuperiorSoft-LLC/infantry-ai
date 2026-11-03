@@ -6,7 +6,7 @@
   "description": "The selected session's statistics.",
   "tier": "official",
   "sequence": [],
-  "entry": "com.superiorsoftllc.agenthq.plugins.official.stats.StatsPlugin",
+  "entry": "com.superiorsoftllc.infantry.plugins.official.stats.StatsPlugin",
   "jar": "build/libs/Infantry_Stats.jar",
   "buildOrder": 110,
   "tabs": [

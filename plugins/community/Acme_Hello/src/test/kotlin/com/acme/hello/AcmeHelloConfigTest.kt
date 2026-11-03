@@ -1,12 +1,12 @@
 package com.acme.hello
 
-import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
-import com.superiorsoftllc.agenthq.plugin.api.Tier
-import com.superiorsoftllc.agenthq.plugin.host.PluginJson
-import com.superiorsoftllc.agenthq.ui.plugin.NoPluginServices
-import com.superiorsoftllc.agenthq.ui.plugin.Panels
-import com.superiorsoftllc.agenthq.ui.plugin.TabFactory
-import com.superiorsoftllc.agenthq.ui.plugin.registerModule
+import com.superiorsoftllc.infantry.plugin.api.ModuleManifest
+import com.superiorsoftllc.infantry.plugin.api.Tier
+import com.superiorsoftllc.infantry.plugin.host.PluginJson
+import com.superiorsoftllc.infantry.ui.plugin.NoPluginServices
+import com.superiorsoftllc.infantry.ui.plugin.Panels
+import com.superiorsoftllc.infantry.ui.plugin.TabFactory
+import com.superiorsoftllc.infantry.ui.plugin.registerModule
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals

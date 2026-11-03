@@ -18,8 +18,8 @@ Legend for "exists": **yes** = the tool is built and the demo uses it; **part** 
 | # | demo edit (DEMO-MERGE row) | what it does | universal tool | exists | size |
 |---|---|---|---|---|---|
 | 1 | DemoLock class in daemon core (11, 14, 16, 17, 22, 25) | seeded project and seats, visitor token, per-IP turn limit, scoped reads, refusal of interrupt/kill | a policy preset (data) plus a **daemon plugin** that owns the seated-lockdown mechanism | part: the values are data (`policies/demo.json`), but the mechanism `DemoLock` is still a core class named after the demo | L (DAEMON-PLUGINS-1) |
-| 2 | `FrameGate.DEMO_LOCK_ALLOWED` list (SEC-FIX-1) | read-only frame list when `AGENTHQ_DEMO_LOCK=1` and no preset is installed | the policy preset (`*` off, `kind:read` on) is the same thing as data | part: kept as a fail-closed fallback | S (delete once the preset ships in every image) |
-| 3 | `AGENTHQ_DEMO_*` env vars read by core (`DemoLock.fromEnvironment`) | deployment overrides of seat values | preset `seats` fields plus a generic `AGENTHQ_POLICY_<KEY>` override, or a daemon config field | part | S |
+| 2 | `FrameGate.DEMO_LOCK_ALLOWED` list (SEC-FIX-1) | read-only frame list when `INFANTRY_DEMO_LOCK=1` and no preset is installed | the policy preset (`*` off, `kind:read` on) is the same thing as data | part: kept as a fail-closed fallback | S (delete once the preset ships in every image) |
+| 3 | `INFANTRY_DEMO_*` env vars read by core (`DemoLock.fromEnvironment`) | deployment overrides of seat values | preset `seats` fields plus a generic `INFANTRY_POLICY_<KEY>` override, or a daemon config field | part | S |
 | 4 | `/demo/visitor-token` route in core, `withDemoToken` in AccessPolicy | public visitor token for anonymous visitors | **daemon plugin route** (`endpoints`/`routes` served by a plugin) plus a generic "public guest token" access tier | no (a daemon plugin cannot declare a route) | M |
 | 5 | wasm `Main.kt` fetches `/demo/visitor-token`; offline `WebMode.Demo` with `DemoFixtures` / `FakeDaemonClient` | land a visitor connected; the offline web demo | a **web bootstrap hook** (`BootstrapProvider`: "how do I get a token / a client") that a compiled-in plugin provides | no | M |
 | 6 | `SessionManager.demoLocked` and "demo: new sessions are disabled in this demo" | refuse `new` under the lock | the policy gate (`agents.spawn` off) already refuses it; the flag is now redundant | part | S |
@@ -67,7 +67,7 @@ Ranked by how often a third-party plugin author would hit it. File references ar
    L (DAEMON-PLUGINS-1, owner decision on isolation pending).
 7. **Model catalog and device-scope migrations are constants** (`ClaudeModelCatalog.kt`, `DeviceScope.kt`). Tool: a
    provider registry and plugin-declared migrations. S each.
-8. **Feature UI still in agenthqUiCore** (`ChatPanelState`, `AssistantPanelState`, `AttentionKit`, `RunPills`,
+8. **Feature UI still in infantryUiCore** (`ChatPanelState`, `AssistantPanelState`, `AttentionKit`, `RunPills`,
    `LimitsSection`, `voice/`, `sound/`). Changing those features means editing core. This is the D4 migration
    backlog, not a new tool. L, spread over migration tickets.
 
@@ -78,15 +78,15 @@ Ranked by how often a third-party plugin author would hit it. File references ar
    the provider's module.json, looked up by the consumer. S.
 2. `BOARD_SLOT`, `REVIEW_TAB`, `openBoard` and `reviewLoaded` in `CoreShellContext` serve Infantry_Agents' sidebar.
    Tool: a plugin service ("open the board") that Infantry_Board registers and Sidebar asks for by key. S-M.
-3. `FreshShell.kt` and `agentHqUi/build.gradle.kts` filter shell jars by the literal `"Infantry_Board"`. Tool: a
+3. `FreshShell.kt` and `infantryUi/build.gradle.kts` filter shell jars by the literal `"Infantry_Board"`. Tool: a
    manifest flag (`shellJar: true`) or the drop-in list. S.
 4. **The module-list generator read only `Infantry_*/module.json` and `Demo_*/module.json`**, while the projects
    compiled every folder (an `Acme_X` official module was built but never listed). **Closed here (d)**: every folder
    not starting with `_`.
-5. `agenthqAppUi/build.gradle.kts` still adds only `plugins/core/Infantry_*` folders as srcDirs. The folder is empty
+5. `infantryAppUi/build.gradle.kts` still adds only `plugins/core/Infantry_*` folders as srcDirs. The folder is empty
    (RUNTIME-26), so this is latent. S.
-6. No guard covers Infantry_ names in core. `NoDemoInCoreGuardTest` covers only "demo" in agenthqUiCore plus official.
-   `NoPresetInCoreGuardTest` covers only the demo preset's values. The daemon, SDK, agentHqWeb and build scripts are
+6. No guard covers Infantry_ names in core. `NoDemoInCoreGuardTest` covers only "demo" in infantryUiCore plus official.
+   `NoPresetInCoreGuardTest` covers only the demo preset's values. The daemon, SDK, infantryWeb and build scripts are
    unguarded. Tool: one `NoPluginNameInCoreGuardTest` over every core module and the build scripts, with a ratchet. S.
 
 ### 2c. Core names a deployment or tier
@@ -105,7 +105,7 @@ Ranked by how often a third-party plugin author would hit it. File references ar
 
 1. `Demo_Banner` → `Demo_Lock` (`LocalDemoLock`, Gradle dependency): the only direct case (row 15).
 2. Indirect coupling through core constants (section 2b, items 1-2).
-3. Infantry_Agents, Infantry_Cli and Infantry_Settings share the package `com.superiorsoftllc.agenthq.plugins.official`.
+3. Infantry_Agents, Infantry_Cli and Infantry_Settings share the package `com.superiorsoftllc.infantry.plugins.official`.
    There are no cross-references today, but nothing stops one. Tool: one package per plugin, plus a guard that a
    plugin's sources import no other plugin's package. S.
 
@@ -167,7 +167,7 @@ full path from the root, priority, drawn, problem) is built from the resolved tr
 read-only in Settings > Plugins > Registered (`OverrideMapList`), together with any probe fault from (a).
 
 **(d) The demo module list is tested.** The generator is one function, `writeModuleList`, in
-`agenthqAppUi/build.gradle.kts`. The `testModuleListGenerator` task (wired into `jvmTest` and `check`) runs it with
+`infantryAppUi/build.gradle.kts`. The `testModuleListGenerator` task (wired into `jvmTest` and `check`) runs it with
 demo off, demo on, and off again, on the real manifests. It checks that:
 - demo off names no demo module;
 - demo on is the live list followed by exactly the demo modules, in name order;

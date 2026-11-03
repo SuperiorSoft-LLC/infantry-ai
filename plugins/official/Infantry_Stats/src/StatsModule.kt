@@ -1,15 +1,15 @@
-package com.superiorsoftllc.agenthq.plugins.official.stats
+package com.superiorsoftllc.infantry.plugins.official.stats
 
-import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
-import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
-import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
-import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
-import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
-import com.superiorsoftllc.agenthq.ui.plugin.TabProvider
-import com.superiorsoftllc.agenthq.ui.plugin.UiPlugin
-import com.superiorsoftllc.agenthq.ui.plugin.UiRegistrar
-import com.superiorsoftllc.agenthq.ui.plugin.tabIcon
-import com.superiorsoftllc.agenthq.ui.clickable
+import com.superiorsoftllc.infantry.plugin.api.ModuleManifest
+import com.superiorsoftllc.infantry.plugin.api.TabDeclaration
+import com.superiorsoftllc.infantry.ui.plugin.InfantryModule
+import com.superiorsoftllc.infantry.ui.plugin.ModuleSource
+import com.superiorsoftllc.infantry.ui.plugin.TabContainers
+import com.superiorsoftllc.infantry.ui.plugin.TabProvider
+import com.superiorsoftllc.infantry.ui.plugin.UiPlugin
+import com.superiorsoftllc.infantry.ui.plugin.UiRegistrar
+import com.superiorsoftllc.infantry.ui.plugin.tabIcon
+import com.superiorsoftllc.infantry.ui.clickable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,22 +17,22 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
+import com.superiorsoftllc.infantry.ui.shell.LocalShellContext
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Modifier
-import com.superiorsoftllc.agenthq.ui.block.layout.Block
-import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
-import com.superiorsoftllc.agenthq.ui.block.layout.Place
-import com.superiorsoftllc.agenthq.ui.block.layout.RenderPlaced
-import com.superiorsoftllc.agenthq.ui.model.AppState
-import com.superiorsoftllc.agenthq.ui.shell.UsageContext
-import com.superiorsoftllc.agenthq.ui.shell.UsageMeterContext
-import com.superiorsoftllc.agenthq.ui.shell.NoUsage
-import com.superiorsoftllc.agenthq.ui.shell.NoUsageMeter
+import com.superiorsoftllc.infantry.ui.block.layout.Block
+import com.superiorsoftllc.infantry.ui.block.layout.BlockScope
+import com.superiorsoftllc.infantry.ui.block.layout.Place
+import com.superiorsoftllc.infantry.ui.block.layout.RenderPlaced
+import com.superiorsoftllc.infantry.ui.model.AppState
+import com.superiorsoftllc.infantry.ui.shell.UsageContext
+import com.superiorsoftllc.infantry.ui.shell.UsageMeterContext
+import com.superiorsoftllc.infantry.ui.shell.NoUsage
+import com.superiorsoftllc.infantry.ui.shell.NoUsageMeter
 
 /** The Stats tab's id. */
 const val STATS_TAB_ID = "infantry.stats"
@@ -59,7 +59,7 @@ private fun statsTab() = TabProvider(
 val ShellStats = StatsPaneBlock(listOf(StatsBodyBlock))
 
 /** PLUGINS-1: Infantry_Stats (official since RUNTIME-10), the selected session's statistics, compiled in on web and Android (D9). */
-val InfantryStats = AgentHqModule(
+val InfantryStats = InfantryModule(
     ModuleManifest(
         name = "Infantry_Stats", version = "1.0.0", author = "Infantry AI", description = "The selected session's statistics.",
         tabs = listOf(TabDeclaration(STATS_TAB_ID, TabContainers.CENTER)),
@@ -79,7 +79,7 @@ class StatsPlugin : UiPlugin, ModuleSource {
         registrar.tabTree(STATS_TAB_ID, ShellStats)
     }
 
-    override fun modules(): List<AgentHqModule> = listOf(InfantryStats)
+    override fun modules(): List<InfantryModule> = listOf(InfantryStats)
 }
 
 /** Node id of the Stats tab's tree: a plugin injects a section into it (`"inject": [{"into": "infantry.shell.stats"}]`). */
@@ -123,13 +123,13 @@ private fun StatsTab(state: AppState, usage: UsageContext, meter: UsageMeterCont
 
 /** The Stats tab: the selected session's statistics, or (USAGE-1) the daemon's token meter by day / week. */
 @androidx.compose.runtime.Composable
-private fun StatsTabContent(state: com.superiorsoftllc.agenthq.ui.model.AppState, usage: com.superiorsoftllc.agenthq.ui.shell.UsageContext, meter: com.superiorsoftllc.agenthq.ui.shell.UsageMeterContext) {
+private fun StatsTabContent(state: com.superiorsoftllc.infantry.ui.model.AppState, usage: com.superiorsoftllc.infantry.ui.shell.UsageContext, meter: com.superiorsoftllc.infantry.ui.shell.UsageMeterContext) {
     var daily by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.fillMaxSize()) {
         androidx.compose.foundation.layout.Row(androidx.compose.ui.Modifier.padding(start = 14.dp, top = 8.dp)) {
             for ((label, on) in listOf("Session" to !daily, "Tokens by day/week" to daily)) {
                 androidx.compose.material3.Text(
-                    label, color = if (on) com.superiorsoftllc.agenthq.ui.Palette.Accent else com.superiorsoftllc.agenthq.ui.Palette.Muted, fontSize = 11.sp,
+                    label, color = if (on) com.superiorsoftllc.infantry.ui.Palette.Accent else com.superiorsoftllc.infantry.ui.Palette.Muted, fontSize = 11.sp,
                     modifier = androidx.compose.ui.Modifier.testTag("stats-mode-$label").clickable { daily = label != "Session" }.padding(end = 14.dp),
                 )
             }

@@ -1,7 +1,7 @@
-package com.superiorsoftllc.agenthq.plugins.official.triggers
+package com.superiorsoftllc.infantry.plugins.official.triggers
 
-import com.superiorsoftllc.agenthq.ui.shell.gate
-import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.infantry.ui.shell.gate
+import com.superiorsoftllc.infantry.ui.*
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -32,10 +32,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.model.AppState
-import com.superiorsoftllc.agenthq.ui.net.CommandResult
-import com.superiorsoftllc.agenthq.ui.shell.TriggersContext
-import com.superiorsoftllc.agenthq.ui.protocol.TriggerView
+import com.superiorsoftllc.infantry.ui.model.AppState
+import com.superiorsoftllc.infantry.ui.net.CommandResult
+import com.superiorsoftllc.infantry.ui.shell.TriggersContext
+import com.superiorsoftllc.infantry.ui.protocol.TriggerView
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
 
@@ -59,7 +59,7 @@ internal fun triggerLanes(state: AppState): List<String> =
 internal fun triggerTarget(state: AppState, t: TriggerView): String =
     t.action.agentId?.takeIf { it.isNotBlank() }?.let { "next ticket assigned to ${assigneeLabel(state.visibleProfiles, it)}" } ?: "next startable ticket"
 
-/** One line: when it fires and what it does -- "every 7 min: mail role:qa in AgentHQ: ..." / "manual: next startable ticket". */
+/** One line: when it fires and what it does -- "every 7 min: mail role:qa in Infantry: ..." / "manual: next startable ticket". */
 internal fun triggerSummary(state: AppState, t: TriggerView): String {
     val whenText = if (t.kind == "schedule") t.intervalMs?.let { "every ${humanDuration(it)}" } ?: "schedule (no interval)" else t.kind
     val what = if (t.action.kind == "prompt") {
@@ -102,7 +102,7 @@ private fun TriggerCard(t: TriggerView, state: AppState, triggers: TriggersConte
     val live = state.connection.isLive
     // POLICY-1: write controls are named actions gated by the daemon's policy (and any write policy); reads keep live.
     val canWrite = state.connection.gate("triggers.fire").enabled
-    val canDelete = state.connection.gate("triggers.delete", com.superiorsoftllc.agenthq.plugin.api.ActionKind.DESTRUCTIVE).enabled
+    val canDelete = state.connection.gate("triggers.delete", com.superiorsoftllc.infantry.plugin.api.ActionKind.DESTRUCTIVE).enabled
     val now = Clock.System.now().toEpochMilliseconds()
     // The rows are history the daemon keeps; refresh them whenever the trigger changes while they are open.
     LaunchedEffect(t.id, t.state, t.trippedAt, t.lastFiredAt, showEvents, live) { if (showEvents && live) triggers.loadEvents(t.id) }

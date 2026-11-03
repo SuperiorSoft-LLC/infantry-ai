@@ -11,10 +11,10 @@ is each harness's own, in its translator / adapter. No harness name appears in c
 
 | Layer | What was added (all additive) |
 |---|---|
-| Harness API 2.1.0 (`agentHqHarnessApi`) | `HarnessRequest.contextLimit: Int?`, `Harness.contextLimit: ContextLimitCapability` (default `UNSUPPORTED`), `ContextLimitSupport { SUPPORTED, BEST_EFFORT, UNSUPPORTED }`, `ContextLimitCapability(support, how)` |
+| Harness API 2.1.0 (`infantryHarnessApi`) | `HarnessRequest.contextLimit: Int?`, `Harness.contextLimit: ContextLimitCapability` (default `UNSUPPORTED`), `ContextLimitSupport { SUPPORTED, BEST_EFFORT, UNSUPPORTED }`, `ContextLimitCapability(support, how)` |
 | Daemon harness contract 1.7.0 | the same on the 1.x `Harness` / `HarnessRequest`; `AgentProvider.contextLimit()` + `RunRequest.contextLimit` |
 | Wire 1.146.0 | `new.contextLimit`, `ticket_save.contextLimit` (0 clears), `ticket.contextLimit` + `effectiveContextLimit {value, source, support, how}`, `session.contextLimit` + `contextLimitSupport`, `providers[].contextLimit` + `contextLimitHow` |
-| Board API 1.2.0 (`agentHqDaemonApi`) | `TicketInfo.contextLimit`, `effectiveContextLimit`, `effectiveContextLimitSource`, `contextLimitSupport` (Infantry_Board's `agenthq_ticket_get`) |
+| Board API 1.2.0 (`infantryDaemonApi`) | `TicketInfo.contextLimit`, `effectiveContextLimit`, `effectiveContextLimitSource`, `contextLimitSupport` (Infantry_Board's `infantry_ticket_get`) |
 | DB v54 (`53.sqm`) | `tickets.context_limit`, `run_usage.context_limit` |
 
 Support levels:
@@ -40,9 +40,9 @@ tokens; input accepts `200000`, `200k`, `1m`, `off` (`ContextLimits.parse`).
 
 - **New agent (UI)**: the New agent dialog's *Context limit* field (blank = harness default); the chosen harness's support
   is shown next to it.
-- **Spawn**: `new` frame `contextLimit`; MCP `agenthq_spawn` `contextLimit` (`200k`, `1m`, `off`). The CLI has no spawn command.
-- **Ticket**: `ticket_save.contextLimit`; MCP `agenthq_ticket_create` / `agenthq_ticket_update` `contextLimit`; CLI
-  `agenthq ticket create|update --context-limit 200k|off`. `ticket show` prints `CONTEXT LIMIT: 200k (ticket) / harness: supported`.
+- **Spawn**: `new` frame `contextLimit`; MCP `infantry_spawn` `contextLimit` (`200k`, `1m`, `off`). The CLI has no spawn command.
+- **Ticket**: `ticket_save.contextLimit`; MCP `infantry_ticket_create` / `infantry_ticket_update` `contextLimit`; CLI
+  `infantry ticket create|update --context-limit 200k|off`. `ticket show` prints `CONTEXT LIMIT: 200k (ticket) / harness: supported`.
   A start passes it to the worker session and names it in `start.detail`.
 - Role defaults are out of scope (source is `ticket` or `default` only).
 

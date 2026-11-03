@@ -1,16 +1,16 @@
-package com.superiorsoftllc.agenthq.plugins.official.chatfeed
+package com.superiorsoftllc.infantry.plugins.official.chatfeed
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
-import com.superiorsoftllc.agenthq.ui.LocalUserPortrait
-import com.superiorsoftllc.agenthq.ui.model.StartPlan
-import com.superiorsoftllc.agenthq.ui.model.sessionPaneAction
-import com.superiorsoftllc.agenthq.ui.net.Controller
-import com.superiorsoftllc.agenthq.ui.plugin.LocalSlotArgs
-import com.superiorsoftllc.agenthq.ui.plugin.TabContext
-import com.superiorsoftllc.agenthq.ui.shell.rememberGate
+import com.superiorsoftllc.infantry.ui.LocalUserPortrait
+import com.superiorsoftllc.infantry.ui.model.StartPlan
+import com.superiorsoftllc.infantry.ui.model.sessionPaneAction
+import com.superiorsoftllc.infantry.ui.net.Controller
+import com.superiorsoftllc.infantry.ui.plugin.LocalSlotArgs
+import com.superiorsoftllc.infantry.ui.plugin.TabContext
+import com.superiorsoftllc.infantry.ui.shell.rememberGate
 
 /** The slot arguments the host hands this section (see the host's `ChildSlot` call): the session on screen and the actions the empty states offer. */
 internal object FeedArgs {

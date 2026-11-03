@@ -1,10 +1,10 @@
 # Usage poll: weekly-meter steps (ticket b0fb747d)
 
-Read-only poll: `scratch/usage-poll/poll.py`. It samples every 30 s and appends one JSON line per sample to `poll.jsonl`. It reads scratch copies of `usage-meter.db` and `agenthq.db` (plus `-wal`/`-shm`) and `plugin-data/Infantry_Pace/samples.jsonl`. It never writes live data.
+Read-only poll: `scratch/usage-poll/poll.py`. It samples every 30 s and appends one JSON line per sample to `poll.jsonl`. It reads scratch copies of `usage-meter.db` and `infantry.db` (plus `-wal`/`-shm`) and `plugin-data/Infantry_Pace/samples.jsonl`. It never writes live data.
 
 ## Runs
 
-1. **12-record crash** (`poll-part1-crashed.jsonl`, 16:15:40Z–16:21:10Z). The run died after 12 records with `FileNotFoundError` on copy of `agenthq.db-wal`. The daemon checkpoints and removes the WAL during the copy. Fix: a missing `-wal`/`-shm` is tolerated, and each poll is wrapped in try/except.
+1. **12-record crash** (`poll-part1-crashed.jsonl`, 16:15:40Z–16:21:10Z). The run died after 12 records with `FileNotFoundError` on copy of `infantry.db-wal`. The daemon checkpoints and removes the WAL during the copy. Fix: a missing `-wal`/`-shm` is tolerated, and each poll is wrapped in try/except.
 2. **40-minute run, stopped** (`poll-part2-stopped.jsonl`, 4 records). Stopped by PID on the owner's instruction, because the window was too short for the expected next spike. Exit 127 in its job log is the expected result of stopping it, not a poll failure.
 3. **90-minute run** (`poll.jsonl`, 181 samples plus a `done` line, 16:25:50Z–17:55:23Z, exit 0). This is the main sample.
 
@@ -59,4 +59,4 @@ Request bursts in this run: 17:08:52–17:10:22 (up to 13 per 30 s), 17:24:52 (9
 - The 40-minute run and the crash run are partial. Their data is not used for the timeline except for the single step above.
 - The pace file has a 1-point resolution (whole percent). Sample timing is 30 s, so the step time is only known to a 30 s bucket.
 - Token counts come from `usage_meter` request rows. They are not the same as the pace percent.
-- One sample in the 90-minute run (line 178) logged `agenthq_error` (`PermissionError` on the copy of `agenthq.db`, locked by another process). It did not affect the weekly data.
+- One sample in the 90-minute run (line 178) logged `infantry_error` (`PermissionError` on the copy of `infantry.db`, locked by another process). It did not affect the weekly data.

@@ -1,7 +1,7 @@
-package com.superiorsoftllc.agenthq.plugins.official.usage
+package com.superiorsoftllc.infantry.plugins.official.usage
 
-import com.superiorsoftllc.agenthq.ui.shell.gate
-import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.infantry.ui.shell.gate
+import com.superiorsoftllc.infantry.ui.*
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -29,14 +29,14 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.model.AppState
-import com.superiorsoftllc.agenthq.ui.model.LimitsView
-import com.superiorsoftllc.agenthq.ui.model.PacingView
-import com.superiorsoftllc.agenthq.ui.shell.UsageContext
+import com.superiorsoftllc.infantry.ui.model.AppState
+import com.superiorsoftllc.infantry.ui.model.LimitsView
+import com.superiorsoftllc.infantry.ui.model.PacingView
+import com.superiorsoftllc.infantry.ui.shell.UsageContext
 import androidx.compose.runtime.rememberUpdatedState
-import com.superiorsoftllc.agenthq.ui.protocol.MeterUsage
-import com.superiorsoftllc.agenthq.ui.protocol.PacingRule
-import com.superiorsoftllc.agenthq.ui.protocol.UsageSet
+import com.superiorsoftllc.infantry.ui.protocol.MeterUsage
+import com.superiorsoftllc.infantry.ui.protocol.PacingRule
+import com.superiorsoftllc.infantry.ui.protocol.UsageSet
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 

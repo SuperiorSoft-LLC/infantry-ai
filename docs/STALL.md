@@ -17,7 +17,7 @@ probes and mail. A token is spent only by the turn a delivered notice starts.
    under the kept harness process (`BackgroundWorkScanner`, `SessionRecord.backgroundWork`): it knew a background
    `gradlew` was running and it saw it disappear, but it only used that to show the session as busy. The end produced no
    event. That is the direct cause of "the job finished and the worker was never told" when the job was started with the
-   harness's own background feature instead of `agenthq bg run --notify`.
+   harness's own background feature instead of `infantry bg run --notify`.
 3. **`bg run --notify` was opt-in**, and its wrapper read the command's output **until EOF before waiting on the
    process**. A command that leaves a child holding its stdout (a test JVM, a server, a `start`ed process) never gives
    EOF, so the wrapper never reported `done`: even the opt-in path could stall forever (proved by test (ii) below).
@@ -56,26 +56,26 @@ its parent and gets the real exit code), never the pipe's EOF; EOF is reported a
 
 | mechanism | claude | opencode | pi |
 |---|---|---|---|
-| **PATH shims** (`<state>/shims` first on every worker session's PATH): the tool profiles' `shim` programs (shipped: `gradle`, `mvn`, `npm`, `yarn`, `pnpm`) run through `agenthq bg run --attached --shim` | forced | forced | forced |
+| **PATH shims** (`<state>/shims` first on every worker session's PATH): the tool profiles' `shim` programs (shipped: `gradle`, `mvn`, `npm`, `yarn`, `pnpm`) run through `infantry bg run --attached --shim` | forced | forced | forced |
 | **hook rewrite of a long command**: a profile's `long` command by base name, path-named too (`./gradlew`, `.\gradlew.bat`, `java -jar`), into `bg run --attached --hook` (same console and exit code, plus log, END sentinel, registration) | forced in `bypassPermissions` (PreToolUse `http` hook in a `--settings` file) | forced in `allowAll` (plugin `tool.execute.before`) | forced (extension `tool_call`; pi has no permission system) |
 | **hook rewrite of ANY backgrounded command**, whatever its name (`&`, `nohup`, `setsid`, `Start-Process`, `Start-Job`, claude `run_in_background`), into `bg run --notify --hook` (detached, end mailed with exit code) | forced in `bypassPermissions` | forced in `allowAll` | forced |
 | **tree wait**: done = every member of the command's tree ended (Windows Job Object, Linux subreaper; profile `daemons` excluded) | forced | forced | forced |
 | **process-tree watch**: any top-level process under the harness that lived 30 s+ and ends is told, exit code unknown | forced | forced | forced |
 | **stall detector**: idle with ticket In Progress; BUSY-silent after a job ended; BUSY-silent inside a long foreground call (section 3) | forced | forced | forced |
-| explicit `agenthq run-watched -- <cmd>` (= `bg run --notify`) | worker's choice | worker's choice | worker's choice |
+| explicit `infantry run-watched -- <cmd>` (= `bg run --notify`) | worker's choice | worker's choice | worker's choice |
 
 **Detected, not forced.** Another PreToolUse rewriter (RTK's `rtk hook claude`, or any other hook) can win over ours.
 Claude Code runs every PreToolUse hook of every settings source and applies ONE `updatedInput`, in an order we do not
 set (STALL-2 live run: rtk won for `./gradlew`, ours won for `npm`). We do not fight it. The claude PostToolUse hook
 compares the command that ran with our rewrite of that `tool_use_id`; a mismatch is counted (`WatchMeter`), logged and
-told to the agent ("this command ran UNWATCHED ... rerun it as `agenthq run-watched -- <cmd>`"). That job is then covered
+told to the agent ("this command ran UNWATCHED ... rerun it as `infantry run-watched -- <cmd>`"). That job is then covered
 only by the process-tree watch and the stall detector (end told, exit code unknown). For opencode and pi, a later plugin
 that rewrites the command again is **not detected** (we use no post-call hook there).
 
 **Not covered** (by construction):
 
 - claude outside `bypassPermissions`, opencode outside `allowAll`: no rewrite. The rewritten command starts with
-  `agenthq` (always allowed), and a hook must never widen what a session may run. Shims, tree watch and stall detector still apply.
+  `infantry` (always allowed), and a hook must never widen what a session may run. Shims, tree watch and stall detector still apply.
 - a long tool with no profile entry, run in the foreground: neither shimmed nor rewritten (add a profile entry).
 - a tool other than the harness's shell tool (claude `Bash` / `PowerShell`, opencode `bash` / `powershell`, pi `bash`).
 - `SHELL` / `BASH_ENV` / `ComSpec` wrappers were rejected: `BASH_ENV` cannot rewrite a command line, and replacing
@@ -83,20 +83,20 @@ that rewrites the command again is **not detected** (we use no post-call hook th
 
 **Opting out.**
 
-- one command: `agenthq unwatched --reason "<why>" -- <cmd...>` (reason required; registered, counted, shown as
-  `watch OFF: <reason>`, escalated once by `watch.escalateTo`, still covered by the heartbeat and the stall detector). An `agenthq bg ...`,
+- one command: `infantry unwatched --reason "<why>" -- <cmd...>` (reason required; registered, counted, shown as
+  `watch OFF: <reason>`, escalated once by `watch.escalateTo`, still covered by the heartbeat and the stall detector). An `infantry bg ...`,
   `run-watched` or `unwatched` call is never rewritten.
-- every session (owner only): `limits.watch.forced` = 0: no shims, no hook rewrite (`AGENTHQ_WATCH=off`).
+- every session (owner only): `limits.watch.forced` = 0: no shims, no hook rewrite (`INFANTRY_WATCH=off`).
 - one tool: a profile override with `"disabled": true` (below).
 
 ## Tool profiles (STALL-3)
 
 No runner, shim, hook or process-watch code names a build tool. What they know about a tool is one data list, shipped as
-`superiorSoftLibrary/agentHq/src/main/resources/watch/tool-profiles.json` and overridable with the setting
+`superiorSoftLibrary/infantry/src/main/resources/watch/tool-profiles.json` and overridable with the setting
 `watch.toolProfiles` (a JSON array of entries in the same format, set like any other setting). The override is merged
 over the defaults by `name`: a known name replaces that entry, `"disabled": true` drops it, a new name adds a tool. The
 list is read at every session launch (a changed list rewrites the shims) and handed to the session as env
-`AGENTHQ_TOOL_PROFILES`, so the runner a worker starts reads the same list. A bad override (bad regex, bad command name,
+`INFANTRY_TOOL_PROFILES`, so the runner a worker starts reads the same list. A bad override (bad regex, bad command name,
 a `shim` that is not one of its `commands`) is refused when set.
 
 | field | type | meaning |
@@ -131,12 +131,12 @@ Layers, strongest first; each event is named by what is known:
    excluded: the tool profiles' `daemons`).
 2. **tree**: the command's whole tree is waited on (STALL-2: Windows Job Object, Linux subreaper, capped by
    `limits.watch.treeWaitMinutes`); profile daemons are excluded; after the cap the survivors are named.
-3. **END sentinel** in the log, after the wait returns: `[agenthq:done exit=<code> elapsed=<t> bytes=<n>]`
+3. **END sentinel** in the log, after the wait returns: `[infantry:done exit=<code> elapsed=<t> bytes=<n>]`
    (`bytes=0` = nothing was output). A graceful runner stop writes `exit=unknown reason=runner stopped`. Every log also has
-   `[agenthq:start pid=.. at=.. cmd=<80 chars>]` and `[agenthq:running elapsed=Xm]` every 60 s, so a silent command
+   `[infantry:start pid=.. at=.. cmd=<80 chars>]` and `[infantry:running elapsed=Xm]` every 60 s, so a silent command
    always has output. The tool profile's `args` are added (shipped: Gradle gets `--console=plain`).
-4. **pipe EOF**: `[agenthq:eof bytes=N process=running]` + an `eof` event when the output closes while the process lives;
-   `[agenthq:note output still open after exit ...]` when a child keeps it open.
+4. **pipe EOF**: `[infantry:eof bytes=N process=running]` + an `eof` event when the output closes while the process lives;
+   `[infantry:note output still open after exit ...]` when a child keeps it open.
 5. **pid gone** for processes the daemon did not launch: the process-tree watch (`SessionManager.trackTreeJobs`).
 6. **heartbeat** (`BgJobNotifier`): 15 min (`limits.bg.notifyTimeoutMinutes`), then 30, 60 up to
    `limits.watch.heartbeatCapMinutes` (60); independent of the log: elapsed, last lines or "no output since", log gone,
@@ -161,10 +161,10 @@ of life, silent since), and (STALL-3) BUSY-IN-THE-FOREGROUND (turn in flight, no
 could not rewrite; 0 = never). One nudge to the session and one escalation line (`watch.escalateTo`, STALL-4) per stretch.
 Never kills or restarts. A BUSY turn cannot be written into: the nudge queues; the escalation line goes out at once.
 
-Opt-out: `agenthq unwatched --reason "<why>" -- <cmd...>` (reason required). The command runs with the caller's stdio and
+Opt-out: `infantry unwatched --reason "<why>" -- <cmd...>` (reason required). The command runs with the caller's stdio and
 no log, but is registered with its reason: printed in the daemon log, counted (`WatchMeter.optOuts`), shown as
 `watch OFF: <reason>`, escalated once (`watch.escalateTo`), and still covered by the heartbeat and the stall detector. The owner-only
-`limits.watch.forced` = 0 turns the shims off for every session (`AGENTHQ_WATCH=off`); shipped default 1.
+`limits.watch.forced` = 0 turns the shims off for every session (`INFANTRY_WATCH=off`); shipped default 1.
 
 Visibility: `SessionRecord.watchLabel` (`watching <job> (quiet 2m)`, `watch OFF: <reason>`, `busy, silent 7m`, `stalled`,
 `idle`; none for a session with no ticket and no job). `WatchMeter` counts events, heartbeats, opt-outs and stall nudges
@@ -184,14 +184,14 @@ attention item), `user` (always the UI), `none`. The text names no one.
 
 **File watching is an option; the default is unchanged** (the output buffer is watched, as before):
 
-- `agenthq watch-file <path> [--until-pid N] [--idle-seconds S] [--name L] [--notify-on RE]` (MCP `agenthq_watch_file`):
+- `infantry watch-file <path> [--until-pid N] [--idle-seconds S] [--name L] [--notify-on RE]` (MCP `infantry_watch_file`):
   a detached watcher with the same quiet / heartbeat / pattern / done notices. Done = the pid exited, or with no pid the
   file did not grow for `limits.watch.fileIdleSeconds` (120). Zero tokens while it runs.
-- `agenthq run-watched --follow <path> -- <cmd>` (repeatable), or `watch.followRedirects` = true (default false): the
+- `infantry run-watched --follow <path> -- <cmd>` (repeatable), or `watch.followRedirects` = true (default false): the
   runner detects redirects in the command line and counts the growth of those files as output (quiet timer, heartbeat,
   stall detector, patterns, tail).
 - With the default (off), a command line that redirects to a file gets one hint in its quiet notice: "Output sent to a
-  file is not visible to the watcher; to follow it use: agenthq watch-file <path>."
+  file is not visible to the watcher; to follow it use: infantry watch-file <path>."
 - Redirect patterns are tool-profile data: `redirects` (regexes, group 1 = the file: `>`, `>>`, `2>`, `| tee`,
   `Out-File`/`Tee-Object`, in the `shell-redirects` profile) and `logFlags` (a tool's own log option, e.g. maven
   `--log-file` / `-l`). Null devices and paths with a shell variable are skipped.
@@ -200,14 +200,14 @@ attention item), `user` (always the UI), `none`. The text names no one.
 `gradle test | tail` exits with gradle's failure. A pipe whose shell has no pipefail (cmd, PowerShell, an explicit
 `bash -c "a | b"`) is named in the done line (`warning="pipe without pipefail..."`) and the notice. Tool profiles declare
 `failureMarkers` (gradle `BUILD FAILED`, `^FAILURE: `; maven `BUILD FAILURE`): an exit 0 whose output matched one ends
-as `[agenthq:done exit=0 ... warning="exit=0 but output contains failure marker: BUILD FAILED ..."]`, and the notice
+as `[infantry:done exit=0 ... warning="exit=0 but output contains failure marker: BUILD FAILED ..."]`, and the notice
 says so.
 
 ### Limits and space
 
 | Setting | Default | What it bounds |
 |---|---|---|
-| `limits.watch.logMaxMB` | 50 | one job log; past it the head is cut, the tail kept behind `[agenthq:truncated N bytes ...]` (0 = no cap) |
+| `limits.watch.logMaxMB` | 50 | one job log; past it the head is cut, the tail kept behind `[infantry:truncated N bytes ...]` (0 = no cap) |
 | `limits.watch.logTotalMB` | 500 | all finished job logs together; oldest finished jobs pruned past it |
 | `limits.watch.logKeepJobs` | 50 | finished jobs whose logs are kept (pruned when a job starts) |
 | `limits.watch.logKeepDays` | 7 | age past which any job's files are pruned (an unfinished one only by age) |

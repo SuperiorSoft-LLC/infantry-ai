@@ -1,0 +1,47 @@
+-- Phase 4.5 -- the `pods` table: the orchestration unit Phase 5 builds on.
+--
+-- WHAT A POD IS: one goal decomposed into several runs (runs.pod_id points here). Phase 5 orders
+-- those runs as a DAG, caps their concurrency, retries and cancels them. This table holds only what
+-- is a fact about the pod itself; the DAG edges between its runs are Phase 5's to model (a
+-- `run_dependencies` table in a 3.sqm), because their shape depends on decisions that ticket makes.
+--
+-- `state` is TEXT and deliberately NOT tied to a Kotlin enum yet: the pod lifecycle vocabulary is a
+-- Phase 5 decision. Same rule as runs.state: stored by NAME, never by ordinal.
+
+CREATE TABLE IF NOT EXISTS pods (
+    id TEXT NOT NULL PRIMARY KEY,
+    -- The goal the pod was created to achieve, as the user/agent stated it.
+    goal TEXT NOT NULL,
+    state TEXT NOT NULL,
+    -- Bounded concurrency is not optional (Phase 5): the cap travels with the pod so a daemon
+    -- restart resumes with the same limit. CHECK: a cap of 0 would deadlock the pod forever.
+    -- Typed Int via primitive-adapters' IntColumnAdapter (wired in InfantryDatabaseFactory).
+    max_concurrency INTEGER AS kotlin.Int NOT NULL DEFAULT 1 CHECK (max_concurrency >= 1),
+    created_at INTEGER NOT NULL,
+    -- NULL while the pod is still open -- the same "still in flight" signal as runs.ended_at.
+    ended_at INTEGER
+);
+
+insertPod:
+INSERT INTO pods(id, goal, state, max_concurrency, created_at, ended_at)
+VALUES (?, ?, ?, ?, ?, ?);
+
+getPodById:
+SELECT * FROM pods WHERE id = ?;
+
+getAllPods:
+SELECT * FROM pods ORDER BY created_at ASC;
+
+-- Pods not closed yet: what a restarted daemon has to look at.
+getOpenPods:
+SELECT * FROM pods WHERE ended_at IS NULL ORDER BY created_at ASC;
+
+updatePodState:
+UPDATE pods SET state = ? WHERE id = ?;
+
+finishPod:
+UPDATE pods SET state = ?, ended_at = ? WHERE id = ?;
+
+-- Cascades to the pod's runs (runs.pod_id) and from there to their events.
+deletePod:
+DELETE FROM pods WHERE id = ?;

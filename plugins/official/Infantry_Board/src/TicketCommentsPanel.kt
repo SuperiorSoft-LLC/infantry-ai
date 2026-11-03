@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.plugins.official.board
+package com.superiorsoftllc.infantry.plugins.official.board
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -14,9 +14,9 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.*
-import com.superiorsoftllc.agenthq.ui.model.BuiltInChatMarkdownEngine
-import com.superiorsoftllc.agenthq.ui.model.parseChatMarkdownSafely
+import com.superiorsoftllc.infantry.ui.*
+import com.superiorsoftllc.infantry.ui.model.BuiltInChatMarkdownEngine
+import com.superiorsoftllc.infantry.ui.model.parseChatMarkdownSafely
 import kotlinx.coroutines.launch
 
 const val COMMENT_TAG_PREFIX = "ticket-comment-"

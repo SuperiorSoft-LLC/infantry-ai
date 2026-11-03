@@ -1,19 +1,19 @@
-package com.superiorsoftllc.agenthq.plugins.official.changes
+package com.superiorsoftllc.infantry.plugins.official.changes
 
-import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.infantry.ui.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Modifier
-import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
-import com.superiorsoftllc.agenthq.ui.block.layout.Block
-import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
-import com.superiorsoftllc.agenthq.ui.block.layout.Place
-import com.superiorsoftllc.agenthq.ui.block.layout.RenderPlaced
-import com.superiorsoftllc.agenthq.ui.block.layout.RenderPlain
-import com.superiorsoftllc.agenthq.ui.model.DiffTarget
-import com.superiorsoftllc.agenthq.ui.protocol.BranchChangedFile
-import com.superiorsoftllc.agenthq.ui.protocol.GitCommit
+import com.superiorsoftllc.infantry.ui.shell.LocalShellContext
+import com.superiorsoftllc.infantry.ui.block.layout.Block
+import com.superiorsoftllc.infantry.ui.block.layout.BlockScope
+import com.superiorsoftllc.infantry.ui.block.layout.Place
+import com.superiorsoftllc.infantry.ui.block.layout.RenderPlaced
+import com.superiorsoftllc.infantry.ui.block.layout.RenderPlain
+import com.superiorsoftllc.infantry.ui.model.DiffTarget
+import com.superiorsoftllc.infantry.ui.protocol.BranchChangedFile
+import com.superiorsoftllc.infantry.ui.protocol.GitCommit
 
 private const val CHANGES = "infantry.shell.changes"
 

@@ -1,7 +1,7 @@
 # RUNTIME-PLUGINS AUDIT: what loads at compile time today vs at runtime (goal D5)
 
 Ticket be38a342. This is a read-only audit. No code was changed, nothing was built, and no test was run.
-Base: `feature-agenthq-mvp` @ 0b145701.
+Base: `"feature-agenthq"-mvp` @ 0b145701.
 
 Goal (D5, owner 2026-10-28): every plugin loads at RUNTIME, and only core is compiled in. Core (D4) = the shell, the
 configuration and the plugin orchestration. Everything else is an official plugin that can be removed (D3).
@@ -21,7 +21,7 @@ Total features audited: 30
   Desktop UI modules runtime-loaded in the SHIPPED app: 0 of 20.
 ```
 - Each of the 20 modules can be switched on or off at runtime (modules.json, Settings > Modules, applied at the next
-  start). None has its CODE loaded at runtime. They are compiled into `:agenthqAppUi`, which the desktop app ships on
+  start). None has its CODE loaded at runtime. They are compiled into `:infantryAppUi`, which the desktop app ships on
   its classpath and finds through `ServiceLoader`. Web and Android compile it in.
 - The runtime path exists and is proven by a test: `App_UI.ihq` loaded through the drop box (S6, `renderTabShotsForDiff
   -PtabShotsExtra=dropin`). It loads all 20 modules as ONE core-tier bundle. That makes it a single compiled unit
@@ -39,11 +39,11 @@ Total features audited: 30
 
 ### 1a. UI modules (plugins/core, all registered in `plugins/core/Infantry_AppUi/CoreModules.kt`)
 
-Build wiring for all of them: `superiorSoftLibrary/agenthqAppUi/build.gradle.kts` adds every `plugins/core/Infantry_*`
+Build wiring for all of them: `superiorSoftLibrary/infantryAppUi/build.gradle.kts` adds every `plugins/core/Infantry_*`
 folder as a `commonMain` srcDir, except Infantry_Board, which is its own project linked as an `api(project(...))`
-dependency. Desktop: `agentHqUi` has `runtimeOnly(agenthqAppUi)`, found by `ServiceLoader<ModuleSource>` →
-`CoreModuleSource`. Web: `agentHqWeb/Main.kt` calls `CompiledModules.install(CoreModules.all)`. Android:
-`implementation(agenthqAppUi)` + `ServiceLoader`.
+dependency. Desktop: `infantryUi` has `runtimeOnly(infantryAppUi)`, found by `ServiceLoader<ModuleSource>` →
+`CoreModuleSource`. Web: `infantryWeb/Main.kt` calls `CompiledModules.install(CoreModules.all)`. Android:
+`implementation(infantryAppUi)` + `ServiceLoader`.
 
 `ctl` = lines that use `appController` / `appShell` / `coreController` / `coreShell`. Tier = target tier per D3/D4.
 
@@ -52,22 +52,22 @@ dependency. Desktop: `agentHqUi` has `runtimeOnly(agenthqAppUi)`, found by `Serv
 | 1 | Infantry_Agents | left panel `infantry.agents` (manifest only; the list is the `TabContext.agentsList` lambda) | plugins/core/Infantry_Agents | 18 | compile-time (srcDir) | 0 | official |
 | 2 | Infantry_Cli | center tab `infantry.cli` (transcript via `TabContext.transcript`) | plugins/core/Infantry_Cli | 29 | compile-time (srcDir) | 0 | official |
 | 3 | Infantry_Settings | center host tab `infantry.settings` (groups Profiles/Triggers/Notes/Run/Git) + config field | plugins/core/Infantry_Settings | 68 | compile-time (srcDir) | 2 (`coreShell`, `LocalTabFactory`) | official |
-| 4 | Infantry_Epics | center tab; pane is `EpicsPane.kt` (192) in agenthqUiCore | plugins/core/Infantry_Epics | 31 | compile-time (srcDir) | 1 | official |
-| 5 | Infantry_Prompts | right tab; pane is `PromptsPane.kt` (163) in agenthqUiCore | plugins/core/Infantry_Prompts | 29 | compile-time (srcDir) | 1 | official |
-| 6 | Infantry_Skills | right tab; pane is `SkillsPane.kt` (178) in agenthqUiCore | plugins/core/Infantry_Skills | 29 | compile-time (srcDir) | 1 | official |
-| 7 | Infantry_Stats | center tab; pane is `StatsPane.kt` (437) in agenthqUiCore | plugins/core/Infantry_Stats | 32 | compile-time (srcDir) | 1 | official |
-| 8 | Infantry_Usage | right tab; pane is `UsagePane.kt` (241) in agenthqUiCore, plus `UsagePacingSection` (269) and `LimitsSection` (73) in the core Config | plugins/core/Infantry_Usage | 30 | compile-time (srcDir) | 1 | official |
+| 4 | Infantry_Epics | center tab; pane is `EpicsPane.kt` (192) in infantryUiCore | plugins/core/Infantry_Epics | 31 | compile-time (srcDir) | 1 | official |
+| 5 | Infantry_Prompts | right tab; pane is `PromptsPane.kt` (163) in infantryUiCore | plugins/core/Infantry_Prompts | 29 | compile-time (srcDir) | 1 | official |
+| 6 | Infantry_Skills | right tab; pane is `SkillsPane.kt` (178) in infantryUiCore | plugins/core/Infantry_Skills | 29 | compile-time (srcDir) | 1 | official |
+| 7 | Infantry_Stats | center tab; pane is `StatsPane.kt` (437) in infantryUiCore | plugins/core/Infantry_Stats | 32 | compile-time (srcDir) | 1 | official |
+| 8 | Infantry_Usage | right tab; pane is `UsagePane.kt` (241) in infantryUiCore, plus `UsagePacingSection` (269) and `LimitsSection` (73) in the core Config | plugins/core/Infantry_Usage | 30 | compile-time (srcDir) | 1 | official |
 | 9 | Infantry_Review | right tab `infantry.review` | plugins/core/Infantry_Review | 85 | compile-time (srcDir) | 1 | official |
 | 10 | Infantry_Attention | right tab `infantry.attention` | plugins/core/Infantry_Attention | 144 | compile-time (srcDir) | 1 | official |
 | 11 | Infantry_Pods | center tab `infantry.pods` | plugins/core/Infantry_Pods | 148 | compile-time (srcDir) | 1 | official |
 | 12 | Infantry_Profiles | center tab `infantry.profiles` | plugins/core/Infantry_Profiles | 248 | compile-time (srcDir) | 1 | official |
-| 13 | Infantry_Triggers | center tab `infantry.triggers`; `TriggerDraft`/`TriggerDuration` (123) in agenthqUiCore | plugins/core/Infantry_Triggers | 291 | compile-time (srcDir) | 1 | official |
-| 14 | Infantry_Run | center tab `infantry.run` (tab tree `ShellRun` registered by AppUi); `RunPills` (94) in agenthqUiCore | plugins/core/Infantry_Run | 696 | compile-time (srcDir) | 0 | official |
+| 13 | Infantry_Triggers | center tab `infantry.triggers`; `TriggerDraft`/`TriggerDuration` (123) in infantryUiCore | plugins/core/Infantry_Triggers | 291 | compile-time (srcDir) | 1 | official |
+| 14 | Infantry_Run | center tab `infantry.run` (tab tree `ShellRun` registered by AppUi); `RunPills` (94) in infantryUiCore | plugins/core/Infantry_Run | 696 | compile-time (srcDir) | 0 | official |
 | 15 | Infantry_Notes | center tab `infantry.notes` (tab tree `ShellNotes` registered by AppUi) | plugins/core/Infantry_Notes | 698 | compile-time (srcDir) | 0 | official |
 | 16 | Infantry_Git | center tab `infantry.git` (tab tree `ShellGit` registered by AppUi) | plugins/core/Infantry_Git | 862 | compile-time (srcDir) | 0 | official |
 | 17 | Infantry_Changes | right tab `infantry.changes` (tab tree `ShellChanges` registered by AppUi) | plugins/core/Infantry_Changes | 1,136 | compile-time (srcDir) | 0 | official |
 | 18 | Infantry_Roles | center tab `infantry.roles` + roles window (fill `infantry.shell.roles` registered by AppUi) | plugins/core/Infantry_Roles | 1,160 | compile-time (srcDir) | 1 | official |
-| 19 | Infantry_Board | 14 block types `board.*` + overlay (fill `infantry.shell.board` = `ShellBoard`, registered by AppUi) | plugins/core/Infantry_Board (own Gradle project) | 1,771 | compile-time (`api(project)` of agenthqAppUi; merged into App_UI.jar) | 0 | official |
+| 19 | Infantry_Board | 14 block types `board.*` + overlay (fill `infantry.shell.board` = `ShellBoard`, registered by AppUi) | plugins/core/Infantry_Board (own Gradle project) | 1,771 | compile-time (`api(project)` of infantryAppUi; merged into App_UI.jar) | 0 | official |
 | 20 | Infantry_AppUi | fills all 15 shell slots: header, left, center (chat), right, drawer, footer/status bar, assistant, toast, board, diff, sound, voice, questions (approvals), config.settings, roles | plugins/core/Infantry_AppUi | 5,459 | compile-time (srcDir) | 39 | official (toast, connection items and config host → core; see rev 4 E7) |
 
 ### 1b. Already runtime-loaded
@@ -80,19 +80,19 @@ dependency. Desktop: `agentHqUi` has `runtimeOnly(agenthqAppUi)`, found by `Serv
 | 24 | Markdown engines | `<stateDir>/markdown-engines/*.jar`, `MarkdownEnginePluginLoader` (own filtered loader: `kotlin.*` + `ui.model.*` only) | runtime | desktop | community-style |
 | 25 | Voice (TTS) plugins | `VoicePluginStore`: catalog → verified download → folder; runs as an external process | runtime (install on click) | desktop | official/community assets |
 | 26 | Plugin backends (`endpoints`, e.g. `plugins/examples/echo-backend`) | `JvmEndpointAccess`, secrets held by the host | runtime (external process/URL) | desktop | community |
-| 27 | Harness descriptors (JSON) | daemon `<AGENTHQ_HOME>/harnesses/*.json`, `HarnessDescriptorLoader` (data, not code) | runtime | daemon | official/community |
+| 27 | Harness descriptors (JSON) | daemon `<INFANTRY_HOME>/harnesses/*.json`, `HarnessDescriptorLoader` (data, not code) | runtime | daemon | official/community |
 
-### 1c. Daemon (superiorSoftLibrary/agentHq): compile-time
+### 1c. Daemon (superiorSoftLibrary/infantry): compile-time
 
 | # | Feature | Path | Loaded how | Tier (target) |
 |---|---|---|---|---|
 | 28 | Harness plugins `ClaudeHarnessPlugin`, `PiHarnessPlugin` | `harness/claude`, `harness/pi`; `META-INF/services/...HarnessPlugin` in the daemon jar | compile-time (ServiceLoader over the daemon's own classpath) | official (the `HarnessRegistry` itself = core orchestration) |
 | 29 | Provider list `opencode` / `claude` / `stub` | `provider/ProviderFactory.kt` (hard-coded `builders` map) | compile-time | official (the stub is test-only) |
-| 30 | Feature services behind the official UI plugins: tickets/backlog, mailbox, knowledge (memory/decisions/issues), roles, pods/orchestration, triggers, epics, prompts, stats, usage, projectgit, run commands, questions/attention, stories, update | `agentHq/src/main/kotlin/.../{backlog,mailbox,memory,decisions,issues,role,orchestration,triggers,epics,prompts,stats,usage,projectgit,commands,questions,attention,stories,update}` | compile-time; `DaemonPlugins` scans and resolves modules but "nothing is put on its class path" | UNDECIDED: D4 names the UI. Owner question d0e4e3fb asks whether D5 covers the daemon. |
+| 30 | Feature services behind the official UI plugins: tickets/backlog, mailbox, knowledge (memory/decisions/issues), roles, pods/orchestration, triggers, epics, prompts, stats, usage, projectgit, run commands, questions/attention, stories, update | `infantry/src/main/kotlin/.../{backlog,mailbox,memory,decisions,issues,role,orchestration,triggers,epics,prompts,stats,usage,projectgit,commands,questions,attention,stories,update}` | compile-time; `DaemonPlugins` scans and resolves modules but "nothing is put on its class path" | UNDECIDED: D4 names the UI. Owner question d0e4e3fb asks whether D5 covers the daemon. |
 
 ### 1d. What stays core (not counted as features)
 
-`agenthqUiCore` frame (`CoreShell`, 15 empty slots), loader (`DesktopPlugins`, `PluginFolders`, `ModuleResolver`,
+`infantryUiCore` frame (`CoreShell`, 15 empty slots), loader (`DesktopPlugins`, `PluginFolders`, `ModuleResolver`,
 `DependencyGraph`, `PluginClassLoader`, `IhqInstaller`, drop box, safe mode), tiers and permissions (`ServiceRegistry`,
 `RouteGate`, `EndpointGate`), daemon link (`Controller`, `DaemonLink`, `AppState`, connect/servers/update), theme and
 kit, block/layout engine, `ShellContext` + `CoreShellContext`, the trust-kernel Config (Plugins/Modules, Secrets, Pair,
@@ -107,12 +107,12 @@ match D4.
 
 | Blocker | Fact | Covered by | Missing |
 |---|---|---|---|
-| B1 Build wiring | One Gradle module (`agenthqAppUi`) compiles 19 folders as srcDirs. A hand-written list (`CoreModules.all`) names all 20. `agentHqWeb/Main.kt` imports `CoreModules`. The desktop app has `runtimeOnly(agenthqAppUi)`. | `ModuleSource` + `CompiledModules` (S4); `module.json` `entry` / `jar`; Infantry_Board's own-project pattern | One project per module (`gradle/core-module.gradle.kts`); a generated list for web/Android (rev 4 E1) |
-| B2 Shared packages | 12 of 20 modules declare classes in the shell's packages `com.superiorsoftllc.agenthq.ui` / `ui.shell.blocks`, and use same-package kit symbols with no import. Modules also share `internal` members because they compile as one Gradle module (e.g. `ProfileExecutorField`). | none | Each module gets its own package. Shell symbols are reached only through published packages. |
+| B1 Build wiring | One Gradle module (`infantryAppUi`) compiles 19 folders as srcDirs. A hand-written list (`CoreModules.all`) names all 20. `infantryWeb/Main.kt` imports `CoreModules`. The desktop app has `runtimeOnly(infantryAppUi)`. | `ModuleSource` + `CompiledModules` (S4); `module.json` `entry` / `jar`; Infantry_Board's own-project pattern | One project per module (`gradle/core-module.gradle.kts`); a generated list for web/Android (rev 4 E1) |
+| B2 Shared packages | 12 of 20 modules declare classes in the shell's packages `com.superiorsoftllc.infantry.ui` / `ui.shell.blocks`, and use same-package kit symbols with no import. Modules also share `internal` members because they compile as one Gradle module (e.g. `ProfileExecutorField`). | none | Each module gets its own package. Shell symbols are reached only through published packages. |
 | B3 Kit not exported | The filtered `PluginClassLoader` lets a plugin see only `plugin.api`, `ui.plugin`, `ui.model`, `ui.protocol`, `ui.block`, Compose and Kotlin. `ui.shell` (`ShellContext`, `LocalShellContext`) and the kit in `ui` (Theme, `AhqIcons`, controls) are NOT visible. Today a core jar loads unfiltered, so this is hidden. | `ShellContext` exists (16 domains) | Publish `ui.shell` API + `ui.kit` to the filtered loader (rev 4 E5). **Contract bump: the allowed-package list is API.** |
 | B4 Window controller | 11 tabs reach `Controller` through `appController` (`TabContext.coreController`). AppUi has 39 uses of `appShell` / `appController`. | `ShellContext` domains: link, session, git, run, board, roles, toast, config, layout, notes, changes, executor, traits, tickets, window, questions | `ChatContext`, `AgentsContext`, `ProcessesContext`, `UsageContext`, `LibraryContext`, `PodsContext`, `TriggersContext`, `ReviewContext`, `EpicsContext`, `AttentionContext` (rev 4 section 6). **Contract bump (additive) per domain.** |
-| B5 Code in the shell | 1,211 lines of Epics/Prompts/Skills/Stats/Usage panes, `UsagePacingSection` + `LimitsSection` (342), `TriggerDraft`/`Duration` (123), `RunPills` (94), and app chrome `TitleBar` (466) + `ProjectPicker` (442), chat state/renderers (~575: `ChatPanelState`, `ChatAttachments`, `ChatBlockRenderers`, `ReasoningPanelUi`, `TodoBox`), `SwitchAgentPicker`, `RestartSession`, `SessionStopActions`, `TicketImages` all sit in `agenthqUiCore`. | a `config.<entry>` contribution for settings sections (PLUGINS-1 generic contributions) | Move the code into its module. The kit keeps only generic helpers. |
-| B6 Cross-module class edges | AppUi → Git/Run/Notes/Changes (tab trees), AppUi → Roles (fill), AppUi → Board (`api` + `ShellBoard`), AppUi/Board → `ReportFlagChip`, Attention → AppUi (`WatchFlagChip`, `QuestionHistory`), Roles → Profiles (`ProfileExecutorField`): 9 edges | `AgentHqModule.tabTrees`, slot fills by the owning module | Each module registers its own tree and fill; chips go to the kit |
+| B5 Code in the shell | 1,211 lines of Epics/Prompts/Skills/Stats/Usage panes, `UsagePacingSection` + `LimitsSection` (342), `TriggerDraft`/`Duration` (123), `RunPills` (94), and app chrome `TitleBar` (466) + `ProjectPicker` (442), chat state/renderers (~575: `ChatPanelState`, `ChatAttachments`, `ChatBlockRenderers`, `ReasoningPanelUi`, `TodoBox`), `SwitchAgentPicker`, `RestartSession`, `SessionStopActions`, `TicketImages` all sit in `infantryUiCore`. | a `config.<entry>` contribution for settings sections (PLUGINS-1 generic contributions) | Move the code into its module. The kit keeps only generic helpers. |
+| B6 Cross-module class edges | AppUi → Git/Run/Notes/Changes (tab trees), AppUi → Roles (fill), AppUi → Board (`api` + `ShellBoard`), AppUi/Board → `ReportFlagChip`, Attention → AppUi (`WatchFlagChip`, `QuestionHistory`), Roles → Profiles (`ProfileExecutorField`): 9 edges | `InfantryModule.tabTrees`, slot fills by the owning module | Each module registers its own tree and fill; chips go to the kit |
 
 ### 2b. Per feature
 
@@ -152,7 +152,7 @@ SETTINGS-TAB-1 (ef796432) is merged at 0b145701, so rev 4's "after ef796432" gat
 | 6 | API: publish ui.shell (ShellContext) + ui.kit to the filtered loader; move module classes out of shell packages | 3 | [C] |
 | 7 | EXTRACT Git, Run, Notes, Changes: self-register tab trees, own packages, official jars (one ticket each) | 2 each | |
 | 8 | EXTRACT Infantry_Board: fill infantry.shell.board itself, ReportFlagChip → kit, drop the api edge from AppUi | 3 | |
-| 9 | MOVE panes Epics/Prompts/Skills/Stats/Usage + Usage config sections out of agenthqUiCore into their modules | 3 | |
+| 9 | MOVE panes Epics/Prompts/Skills/Stats/Usage + Usage config sections out of infantryUiCore into their modules | 3 | |
 | 10 | API: LibraryContext; Prompts + Skills off coreController → official jars | 2 | [C] |
 | 11 | API: UsageContext; Stats + Usage off coreController → official jars | 2 | [C] |
 | 12 | API: EpicsContext; Epics off coreController → official jar | 2 | [C] |
@@ -163,7 +163,7 @@ SETTINGS-TAB-1 (ef796432) is merged at 0b145701, so rev 4's "after ef796432" gat
 | 17 | EXTRACT Attention: QuestionHistory in, WatchFlagChip → kit, AttentionContext → official jar | 3 | [C] |
 | 18 | SPLIT AppUi part 1: toast, connection items, config host → shell; TitleBar/ProjectPicker → Header module | 4 | |
 | 19 | SPLIT AppUi part 2: Chat + Approvals modules on ChatContext/ProcessesContext; daemon stays the approval gate | 5 | [C] [D] (verify enforcement only) |
-| 20 | SPLIT AppUi part 3: Assistant, Sound+Voice, diff modules; agenthqAppUi dissolves; App_UI.ihq → NS3 composition of deps | 4 | |
+| 20 | SPLIT AppUi part 3: Assistant, Sound+Voice, diff modules; infantryAppUi dissolves; App_UI.ihq → NS3 composition of deps | 4 | |
 | 21 | CLEANUP: delete coreController/coreShell (ratchet at 0); core vs official differ only in defaults | 2 | [C] breaking (`apiVersion` 2) |
 | 22 | DAEMON: harness plugins from a harnesses/ jar folder (own loader); move claude/pi out of the daemon jar | 3 | [D] [C] (harness contract unchanged; loading rule new) |
 | 23 | DAEMON: ProviderFactory map → registry (or merge into HarnessRegistry) | 3 | [D] |
@@ -181,13 +181,13 @@ rev 4 was based (758149a5).
   consent, soft restart and unload in S7), compositions, markdown engines and voice plugins. The shipped app still
   takes its 20 modules from its own classpath. With no modules, the empty shell (drop box + Configuration) is proven
   by `DropInUiTest` and the `empty-shell` baselines.
-- **Web (wasm):** cannot load code at runtime. `Main.kt` compiles `agenthqAppUi` in and calls
+- **Web (wasm):** cannot load code at runtime. `Main.kt` compiles `infantryAppUi` in and calls
   `CompiledModules.install(CoreModules.all)`. Discovery is a no-op (`CompiledModules.wasmJs.kt`). There is no folder
   scan, so community modules, compositions and markdown/voice plugins do not exist on web today. The web bundle is
   served by the daemon (`WebBundle.kt`).
-- **Android:** `implementation(agenthqAppUi)` + `ServiceLoader` over the APK. There is no folder scan or drop-in. The
+- **Android:** `implementation(infantryAppUi)` + `ServiceLoader` over the APK. There is no folder scan or drop-in. The
   same compiled set as web.
-- **One contract today:** yes for the module model. `AgentHqModule` / `ModuleManifest` / `TabContext` / `ShellContext`
+- **One contract today:** yes for the module model. `InfantryModule` / `ModuleManifest` / `TabContext` / `ShellContext`
   are `commonMain` and the same on all three. `module.json` `platforms` (PLUGIN-PLATFORMS-1) lets a module opt out of
   a platform. What differs is only how the list is obtained, and that is the D5 shape: desktop loads at runtime, web
   and Android bundle. After step 1 the bundled list is generated from the same module.json files, so nobody keeps it
@@ -222,21 +222,21 @@ one, **new** = becomes a new official plugin. "Done" = moved in this ticket.
 | `AppController.kt` (`TabContext.appController`) + `TabContext.coreController` | 11 | tab access to the window controller | was the path | delete (0 users) | **done** |
 | `ShellSound.kt`, `ShellVoice.kt` | 32 | `infantry.shell.sound`, `infantry.shell.voice` | via appShell | **new** Infantry_Alerts (on `ShellContext.alerts`, additive) | **done** |
 | Sidebar "To review" counter (`Sidebar.kt`) | 1 | reads `AppState.reviewQueue` | no | stays in the agents list, shown only when Infantry_Review's tab is loaded | **done** |
-| `ShellToast.kt`, `ToastHost.kt` | 166 | `infantry.shell.toast` (already on `ShellContext.toast` only) | no | **shell** (rev 4 E7: core draws its own toasts) | done, RUNTIME-17: in agenthqUiCore, `ShellToast` drawn by `CoreShell` (no slot) |
-| `StatusBarBlocks.kt` (connection dot, last frame, config cog), `ProcessesBadge.kt` | 321 | `infantry.shell.footer` | via appShell | connection items + cog: **shell**; RAM/rogue badge: **new** Infantry_Processes (`ProcessesContext`) | done, RUNTIME-18: `CoreStatusBar` in agenthqUiCore, drawn by `CoreShell` (no slot); `infantry.shell.footer.processesBadge` is a slot filled by official Infantry_Processes on the additive `ShellContext.processes` |
+| `ShellToast.kt`, `ToastHost.kt` | 166 | `infantry.shell.toast` (already on `ShellContext.toast` only) | no | **shell** (rev 4 E7: core draws its own toasts) | done, RUNTIME-17: in infantryUiCore, `ShellToast` drawn by `CoreShell` (no slot) |
+| `StatusBarBlocks.kt` (connection dot, last frame, config cog), `ProcessesBadge.kt` | 321 | `infantry.shell.footer` | via appShell | connection items + cog: **shell**; RAM/rogue badge: **new** Infantry_Processes (`ProcessesContext`) | done, RUNTIME-18: `CoreStatusBar` in infantryUiCore, drawn by `CoreShell` (no slot); `infantry.shell.footer.processesBadge` is a slot filled by official Infantry_Processes on the additive `ShellContext.processes` |
 | `ShellConfigSettings.kt` (16 config sections) | 47 | `infantry.shell.config.settings` | no (sections are in core) | host: **shell**; each section to the plugin that owns it (Limits→Usage, Roles→Roles, Voice/Sound→Alerts, Questions→Attention) | follow-up F3 |
 | `ShellHeader.kt` (+ core `TitleBar`, `ProjectPicker`) | 211 (+908 in core) | `infantry.shell.header` | via appShell (10) | **new** Infantry_Header | done, RUNTIME-20: official jar `plugins/official/Infantry_Header` fills `infantry.shell.header` on the additive `ShellContext.header` (`HeaderContext`, `NoHeader` default); `WindowChrome`, `TITLE_BAR_HEIGHT` and `AssistantEntry` stay in core |
-| `ShellLeftPanel.kt`, `Sidebar.kt`, `SidebarBoardButton.kt`, `ProjectsSidebar.kt`, `ShellCompactDrawer.kt` | 589 | `infantry.shell.left`, `infantry.shell.drawer`; the agents list behind `TabContext.agentsList` | via appShell | panel frames: **shell**; the agents list → **plugin** Infantry_Agents (needs `AgentsContext`) | done, RUNTIME-21: frames stay in the shell; the list, Board button and ProjectsSidebar are official Infantry_Agents on the additive `ShellContext.agents` (`AgentsContext`, `NoAgents`); `TabContext.agentsList` deleted; `TicketTag`, `NeedsYouBadge`, New-agent consts moved to agenthqUiCore. Leftover: chat header ticket tag opens the board via `ui.showBoard` (ShellCenter, F6) |
+| `ShellLeftPanel.kt`, `Sidebar.kt`, `SidebarBoardButton.kt`, `ProjectsSidebar.kt`, `ShellCompactDrawer.kt` | 589 | `infantry.shell.left`, `infantry.shell.drawer`; the agents list behind `TabContext.agentsList` | via appShell | panel frames: **shell**; the agents list → **plugin** Infantry_Agents (needs `AgentsContext`) | done, RUNTIME-21: frames stay in the shell; the list, Board button and ProjectsSidebar are official Infantry_Agents on the additive `ShellContext.agents` (`AgentsContext`, `NoAgents`); `TabContext.agentsList` deleted; `TicketTag`, `NeedsYouBadge`, New-agent consts moved to infantryUiCore. Leftover: chat header ticket tag opens the board via `ui.showBoard` (ShellCenter, F6) |
 | `ShellRightPanel.kt` | 141 | `infantry.shell.right` (`.resize`, `.body.strip`, `.body.tab`) | via appShell (5) | **shell** (a panel frame, resize handle and tab strip) | done: the frame stays in the shell; its content is filled, not hard-coded: the tabs are the plugins' tabs in `TabContainers.RIGHT` (strip = `RightPanelStrip`, picked tab = `RightPanelTab` through `TabFactory.Content`) and module sections fill `Panels.RIGHT` around them (`PanelSections`). The agents list, Board button and ProjectsSidebar are LEFT-panel content (see the `ShellLeftPanel.kt` row), not part of this file. Leftover: chat header ticket tag opens the board via `ui.showBoard` (ShellCenter, F6) |
-| `ShellCenter.kt`, `ChatPanel.kt`, `ChatSurface.kt`, `ChatAttachmentViews.kt`, `ChangeBox.kt`, `CommsCardStyle.kt`, `OriginRenderer.kt`, `PromptCard.kt`, `SessionStartPane.kt`, `NewAgentDialog.kt` | 2,641 | `infantry.shell.center` (chat + center strip + New agent) | via appShell | centre frame + strip: **shell**; chat: **new** Infantry_Chat (`ChatContext`); New agent dialog → Infantry_Chat | done, RUNTIME-22: official Infantry_Chat (signed jar, fills `infantry.shell.center`) on the additive `ShellContext.chat` (`ChatContext`, `NoChat`); the inline `QuestionPanel` moved with it (pill and gone card stay, F7); the Assistant popup (F8) reaches the shared ChatPanel through `ChatPanels.panel`, published by the plugin. Files keep their `com.superiorsoftllc.agenthq.ui` package |
+| `ShellCenter.kt`, `ChatPanel.kt`, `ChatSurface.kt`, `ChatAttachmentViews.kt`, `ChangeBox.kt`, `CommsCardStyle.kt`, `OriginRenderer.kt`, `PromptCard.kt`, `SessionStartPane.kt`, `NewAgentDialog.kt` | 2,641 | `infantry.shell.center` (chat + center strip + New agent) | via appShell | centre frame + strip: **shell**; chat: **new** Infantry_Chat (`ChatContext`); New agent dialog → Infantry_Chat | done, RUNTIME-22: official Infantry_Chat (signed jar, fills `infantry.shell.center`) on the additive `ShellContext.chat` (`ChatContext`, `NoChat`); the inline `QuestionPanel` moved with it (pill and gone card stay, F7); the Assistant popup (F8) reaches the shared ChatPanel through `ChatPanels.panel`, published by the plugin. Files keep their `com.superiorsoftllc.infantry.ui` package |
 | `ShellQuestionPill.kt`, `QuestionWindow.kt` | 324 | `infantry.shell.questions` (approvals / owner questions) | via `QuestionsContext` + appShell | **new** Infantry_Approvals; the daemon stays the enforcement point (rev 4 C5) | follow-up F7 |
 | `ShellAssistant.kt`, `AssistantPopup.kt` | 417 | `infantry.shell.assistant` | via appShell | **new** Infantry_Assistant (on Infantry_Chat's panel) | follow-up F8 |
 | `ShellDiff.kt`, `DiffModal.kt` | 326 | `infantry.shell.diff` | via appShell (`openDiff(state, controller)`) | **plugin** Infantry_Changes (it opens the diffs) | follow-up F9 |
-| `ShellAccess.kt` (`appShell`) + core `coreShell` | 13 | the last controller path | — | delete when the 31 uses are 0, then `apiVersion` 2 | done, RUNTIME-26: `coreShell`/`appShell` deleted; `apiVersion` 2 (resolver + every module.json); Infantry_AppUi and App_UI.ihq retired; the panel frames and `ShellConfigSettings` moved into agenthqUiCore as the shell's own nodes |
+| `ShellAccess.kt` (`appShell`) + core `coreShell` | 13 | the last controller path | — | delete when the 31 uses are 0, then `apiVersion` 2 | done, RUNTIME-26: `coreShell`/`appShell` deleted; `apiVersion` 2 (resolver + every module.json); Infantry_AppUi and App_UI.ihq retired; the panel frames and `ShellConfigSettings` moved into infantryUiCore as the shell's own nodes |
 
 Follow-ups (weight 1-5): F1 toast → shell (1); F2 status bar: connection/cog → shell, Infantry_Processes on
 `ProcessesContext` (3); F3 config sections to their owners via `config.<entry>` contributions (3); F4 Infantry_Header
-(TitleBar + ProjectPicker out of agenthqUiCore) (3); F5 panel frames → shell, agents list → Infantry_Agents on
+(TitleBar + ProjectPicker out of infantryUiCore) (3); F5 panel frames → shell, agents list → Infantry_Agents on
 `AgentsContext` (3); F6 Infantry_Chat on `ChatContext` (5); F7 Infantry_Approvals (4); F8 Infantry_Assistant (2,
 after F6); F9 diff modal → Infantry_Changes (2); F10 delete `coreShell`/`appShell`, `apiVersion` 2, retire
 Infantry_AppUi and App_UI.ihq (2, after F1-F9).

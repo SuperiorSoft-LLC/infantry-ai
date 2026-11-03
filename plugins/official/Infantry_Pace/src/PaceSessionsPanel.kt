@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.plugins.official.pace
+package com.superiorsoftllc.infantry.plugins.official.pace
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -21,8 +21,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.Palette
-import com.superiorsoftllc.agenthq.ui.protocol.UsageMeterRequest
+import com.superiorsoftllc.infantry.ui.Palette
+import com.superiorsoftllc.infantry.ui.protocol.UsageMeterRequest
 
 const val PACE_SESSIONS_TAG = "pace-sessions"
 const val PACE_COMPARE_TAG = "pace-compare"
