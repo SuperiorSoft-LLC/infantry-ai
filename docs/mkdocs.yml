@@ -43,3 +43,12 @@ nav:
   - Harnesses and providers: Harnesses.md
   - Settings: Settings.md
   - Licensing (draft): licensing.md
+  - Recipes:
+      - Overview: recipes/README.md
+      - Add a UI panel plugin: recipes/add-ui-panel-plugin.md
+      - Split into a child plugin: recipes/split-into-child-plugin.md
+      - Add a daemon tool: recipes/add-daemon-tool.md
+      - Add a setting with scopes: recipes/add-setting-with-scopes.md
+      - Add a Lua hook: recipes/add-lua-hook.md
+      - Add a CLI harness: recipes/add-cli-harness.md
+      - Add a provider: recipes/add-provider.md
