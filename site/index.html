@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Infantry AI: run a team of coding agents from one board</title>
+<meta name="description" content="Tickets in, merged branches out. Claude Code, opencode and pi on one board, on your own machine.">
+<link rel="icon" href="assets/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined">
+<link rel="stylesheet" href="styles.css">
+</head><body>
+<nav class="nav">
+  <a class="brand" href="#"><img src="assets/logo.png" alt="">Infantry AI</a>
+  <a class="l" href="https://github.com/SuperiorSoft-LLC/infantry-ai/tree/feature-agenthq-mvp/docs/wiki">Docs</a>
+  <a class="l" href="https://github.com/SuperiorSoft-LLC/infantry-ai/blob/feature-agenthq-mvp/docs/wiki/make-a-plugin.md">Plugins</a>
+  <a class="l" href="#download">Download</a>
+  <a class="l opt" href="https://github.com/SuperiorSoft-LLC/infantry-ai">GitHub</a>
+</nav>
+<header class="hero">
+  <h1>Run a whole team of coding agents<br><em>from one ticket board.</em></h1>
+  <p class="sub">Every agent works on its own git branch, and you stay in charge of the merge.<br>On your own machine, with no third-party cloud in between.</p>
+  <div class="dl">
+    <!-- TODO: real download URLs do not exist yet -->
+    <a class="btn" href="#download"><span class="material-symbols-outlined">desktop_windows</span>Download for Windows</a>
+    <!-- TODO: Android download URL -->
+    <a class="ibtn" href="#download" title="Android" aria-label="Android"><span class="material-symbols-outlined">android</span></a>
+    <!-- TODO: web demo URL -->
+    <a class="ibtn" href="#download" title="Web demo" aria-label="Web demo"><span class="material-symbols-outlined">language</span></a>
+    <!-- TODO: CLI install URL -->
+    <a class="ibtn" href="#download" title="CLI" aria-label="CLI"><span class="material-symbols-outlined">terminal</span></a>
+  </div>
+  <div class="supports"><span>Supports</span>
+    <span class="chip"><span class="material-symbols-outlined">smart_toy</span>Claude Code</span>
+    <span class="chip"><span class="material-symbols-outlined">code</span>opencode</span>
+    <span class="chip"><span class="material-symbols-outlined">memory</span>pi</span>
+  </div>
+</header>
+
+<div class="tabs" role="tablist">
+  <button class="tab" role="tab" aria-selected="true" aria-controls="p0">Parallel agents</button>
+  <button class="tab" role="tab" aria-selected="false" aria-controls="p1">Board</button>
+  <button class="tab" role="tab" aria-selected="false" aria-controls="p2">Plugins</button>
+  <button class="tab" role="tab" aria-selected="false" aria-controls="p3">Scripting</button>
+</div>
+<div class="frame">
+  <div class="titlebar"><i></i><i></i><i></i></div>
+  <div class="panel" id="p0"><div class="app">
+    <div>
+      <div class="grp">Waiting on you</div><div class="row"><span class="dot w"></span>frontend</div>
+      <div class="grp">Running</div><div class="row sel"><span class="dot r"></span>backend</div><div class="row"><span class="dot r"></span>qa</div>
+      <div class="grp">Quiet</div><div class="row"><span class="dot"></span>architect</div>
+    </div>
+    <div>
+      <div class="ctabs"><b>Chat</b><span>Board</span><span>Git</span><span>Memory</span></div>
+      <div class="msg me">Add the retry setting and cover it with a test.</div>
+      <div class="msg">Running Read &middot; Running Bash</div>
+    </div>
+    <div><div class="side-tabs"><b>Changes</b><span>Review</span><span>Attention</span><span>Usage</span></div>
+      <div class="msg">The files each agent changed, on its own branch.</div></div>
+  </div></div>
+  <div class="panel" id="p1" hidden><div class="lanes">
+    <div class="lane"><h4>Backlog</h4><div class="card">Docs sweep<small>role: docs</small></div></div>
+    <div class="lane"><h4>To Do</h4><div class="card">Retry setting<small>role: backend</small></div></div>
+    <div class="lane"><h4>In Progress</h4><div class="card">Site home<small>role: frontend</small></div></div>
+    <div class="lane"><h4>Pending</h4><div class="card">Blocked by an open ticket<small>set by the daemon</small></div></div>
+    <div class="lane"><h4>Done</h4><div class="card">Docs guide<small>role: docs</small></div></div>
+  </div></div>
+  <div class="panel" id="p2" hidden><div class="plugins">
+    <div class="pcard"><b>Infantry_Board</b><span>The scrum board and its card sections.</span><div class="child">child plugins fill its slots</div></div>
+    <div class="pcard"><b>Infantry_Scripting</b><span>Hooks and scripts.</span><div class="child">Infantry_Lua: the engine</div></div>
+    <div class="pcard"><b>Infantry_Claude</b><span>Harness plugin.</span></div>
+    <div class="pcard"><b>Infantry_Git</b><span>Git state of the project.</span></div>
+    <div class="pcard"><b>Infantry_Pace</b><span>Pace trend charts per harness.</span></div>
+    <div class="pcard"><b>Your plugin</b><span>A folder with a module.json.</span></div>
+  </div></div>
+  <div class="panel" id="p3" hidden><pre><span class="c">-- hook: "lane enter done" runs on-ticket-done</span>
+<span class="k">if not</span> input.results <span class="k">then</span>
+  ih.move{ticket = input.args.ticket, status = <span class="k">"done"</span>}
+  ih.again()
+<span class="k">else</span>
+  ih.comment{ticket = input.args.ticket, text = <span class="k">"moved"</span>}
+<span class="k">end</span></pre></div>
+</div>
+
+<section class="features">
+  <div class="f"><span class="material-symbols-outlined">account_tree</span><h3>One branch per ticket</h3><p>Lanes To Do, In Progress, Pending and Done. Role, type and weight per ticket.</p></div>
+  <div class="f"><span class="material-symbols-outlined">extension</span><h3>Plugins inside plugins</h3><p>Tabs, panels, daemon tools and harnesses are plugins with a module.json.</p></div>
+  <div class="f"><span class="material-symbols-outlined">data_object</span><h3>Lua scripting and hooks</h3><p>Hooks run a script on lane changes, mail, a timer or a named event.</p></div>
+</section>
+<section id="download"><h2>Download</h2><p>Windows, Android, web demo and CLI builds are coming. No downloads are published yet.</p></section>
+<footer>
+  <p>The core is a community effort; the rest is yours.</p>
+  <p><a href="https://github.com/SuperiorSoft-LLC/infantry-ai/blob/feature-agenthq-mvp/docs/wiki/licensing.md">Licensing (draft)</a> &middot; <a href="https://github.com/SuperiorSoft-LLC/infantry-ai">GitHub</a></p>
+  <p>&copy; SuperiorSoft LLC</p>
+</footer>
+<script>
+const tabs=[...document.querySelectorAll('.tab')];
+tabs.forEach(t=>t.onclick=()=>tabs.forEach(o=>{const on=o===t;o.setAttribute('aria-selected',on);document.getElementById(o.getAttribute('aria-controls')).hidden=!on}));
+</script>
+</body></html>
