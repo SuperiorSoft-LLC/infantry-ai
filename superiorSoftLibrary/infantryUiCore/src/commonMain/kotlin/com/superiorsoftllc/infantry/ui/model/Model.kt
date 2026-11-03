@@ -46,6 +46,8 @@ import com.superiorsoftllc.infantry.ui.protocol.Story
 import com.superiorsoftllc.infantry.ui.protocol.Ticket
 import com.superiorsoftllc.infantry.ui.protocol.TicketStart
 import com.superiorsoftllc.infantry.ui.protocol.TicketColumns
+import com.superiorsoftllc.infantry.ui.protocol.AgentQueueItem
+import com.superiorsoftllc.infantry.ui.protocol.AgentQueueAnswer
 import com.superiorsoftllc.infantry.ui.protocol.TriggerEventView
 import com.superiorsoftllc.infantry.ui.protocol.TriggerView
 import com.superiorsoftllc.infantry.ui.protocol.WaitingOn
@@ -786,6 +788,8 @@ data class AppState(
     val panels: PanelLayout = PanelLayout(),
     /** Contracts 1.5.0 / 1.6.0: the daemon-owned backlog, as the daemon last said it (any order). */
     val tickets: List<Ticket> = emptyList(),
+    /** AGENT-TASKS-7: each agent profile's ticket queue (key = the `agent_queue` answer's agentId), head first, as last answered. */
+    val agentQueues: Map<String, List<AgentQueueItem>> = emptyMap(),
     /** Contract 1.14.0: the manual triggers, oldest first as the daemon lists them. */
     val triggers: List<TriggerView> = emptyList(),
     /** Contract 1.14.0: each trigger's event rows, oldest first, as last requested. */
@@ -1557,6 +1561,10 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
             )
         }
     }
+    Envelope.AGENT_QUEUE -> {
+        val q = json.decodeFromString(AgentQueueAnswer.serializer(), env.data)
+        s.copy(agentQueues = s.agentQueues + (q.agentId to q.tickets.sortedBy { it.rank }))
+    }
     Envelope.TICKET -> {
         val t = json.decodeFromString(Ticket.serializer(), env.data)
         val before = s.tickets.firstOrNull { it.id == t.id }
@@ -2311,4 +2319,15 @@ fun queueAfterTurn(held: List<QueuedPrompt>, turn: String): List<QueuedPrompt> {
     if (held.isEmpty()) return held
     val parts = turn.trim().split("\n\n").map { it.trim() }
     return held.filter { q -> q.text.trim() !in parts }
+}
+
+
+/** AGENT-TASKS-7: what an agent card shows of its work: the in-progress ticket it runs (null = none) and its queue, head first. */
+data class AgentWork(val current: Ticket?, val queue: List<AgentQueueItem>)
+
+/** AGENT-TASKS-7: the work of agent profile [agentId]; its running ticket is the in-progress one assigned to it. */
+fun AppState.agentWork(agentId: String?): AgentWork {
+    if (agentId == null) return AgentWork(null, emptyList())
+    val current = tickets.firstOrNull { it.agentId == agentId && it.status == TicketColumns.IN_PROGRESS }
+    return AgentWork(current, agentQueues[agentId].orEmpty())
 }

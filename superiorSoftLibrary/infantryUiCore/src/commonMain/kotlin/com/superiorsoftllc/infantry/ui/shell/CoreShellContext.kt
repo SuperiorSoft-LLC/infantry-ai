@@ -143,6 +143,9 @@ class CoreShellContext(private val shell: Shell, console: RunConsoleHost?) : She
         }
         override suspend fun remove(id: String) { shell.controller.removeSession(id) }
         override suspend fun assign(id: String, projectId: String) { shell.controller.assignSessionProject(id, projectId) }
+        override fun openTicket(ticketId: String) { ui.ticketModalId = ticketId }
+        override suspend fun assignTicket(ticketId: String, agentId: String) { shell.controller.assignTicket(ticketId, agentId) }
+        override suspend fun agentQueue(agentId: String, action: String, ticketId: String?, at: Int?) { shell.controller.agentQueue(agentId, action, ticketId, at) }
         override fun dismissProjectRefusal() = shell.controller.dismissProjectRefusal()
         override val openBoard: (() -> Unit)? get() = if (BOARD_SLOT in shell.tabs.fillModules) ({ ui.showBoard = true }) else null
         override val reviewLoaded get() = shell.tabs.find(REVIEW_TAB) != null

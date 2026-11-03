@@ -2591,3 +2591,11 @@ data class UsageMeterEvent(val ts: Long, val sessionId: String, val ticketId: St
 /** STATS-ACC-1: USD per million tokens for model ids containing [match], from the daemon's config (usage-prices.json). */
 @Serializable
 data class UsageMeterPrice(val match: String, val input: Double, val output: Double, val cacheRead: Double, val cacheWrite: Double)
+
+/** AGENT-TASKS-7: one queued ticket in an `agent_queue` answer (the daemon's `AgentQueueEntry`): full id, title, 1-based place. */
+@Serializable
+data class AgentQueueItem(val ticketId: String, val title: String, val rank: Int)
+
+/** AGENT-TASKS-7: the `agent_queue` answer: the agent's queue after the action, head first. */
+@Serializable
+data class AgentQueueAnswer(val agentId: String, val name: String? = null, val tickets: List<AgentQueueItem> = emptyList(), val message: String? = null)

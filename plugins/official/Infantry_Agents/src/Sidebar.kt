@@ -4,6 +4,9 @@ package com.superiorsoftllc.infantry.plugins.official.agents
 
 import com.superiorsoftllc.infantry.ui.shell.gate
 import com.superiorsoftllc.infantry.ui.*
+import com.superiorsoftllc.infantry.ui.protocol.TicketColumns
+import com.superiorsoftllc.infantry.ui.model.agentWork
+import androidx.compose.runtime.LaunchedEffect
 import com.superiorsoftllc.infantry.ui.shell.LocalShellContext
 import com.superiorsoftllc.infantry.ui.shell.NoAgents
 import androidx.compose.runtime.rememberCoroutineScope
@@ -133,6 +136,8 @@ fun Sidebar(
     projects: @Composable () -> Unit,
     /** RUNTIME-16: whether the official Infantry_Review tab is loaded; without it there is no "To review" counter. */
     showReview: Boolean = true,
+    /** AGENT-TASKS-7: what the cards do with tickets (assign by drop or menu, queue actions, open). */
+    work: AgentWorkActions = AgentWorkActions.None,
 ) {
     // PLUGINS-3: the frame (width, background, tag) is the left panel's; this is Infantry_Agents' section in it.
     Column(Modifier.fillMaxSize()) {
@@ -170,7 +175,7 @@ fun Sidebar(
                 }
             }
         }
-        AgentsList(state, visible, onSelect, onRemove, Modifier.weight(1f), onAssign)
+        AgentsList(state, visible, onSelect, onRemove, Modifier.weight(1f), onAssign, work)
         HorizontalDivider(color = Palette.Border)
         // UX-ICON-1: the same New agent icon as the composer, with its label (the sidebar has the room).
         // DEMO-MERGE-1: dimmed, with the reason as its tooltip, while the write policy refuses writes.
@@ -189,7 +194,7 @@ fun Sidebar(
  * each group under a header with its count; empty groups are not shown. Public so UI tests render the real list.
  */
 @Composable
-fun AgentsList(state: AppState, visible: List<AgentView>, onSelect: (String) -> Unit, onRemove: (String) -> Unit, modifier: Modifier = Modifier, onAssign: (String, String) -> Unit = { _, _ -> }) {
+fun AgentsList(state: AppState, visible: List<AgentView>, onSelect: (String) -> Unit, onRemove: (String) -> Unit, modifier: Modifier = Modifier, onAssign: (String, String) -> Unit = { _, _ -> }, work: AgentWorkActions = AgentWorkActions.None) {
     // BUG-UX-SHIFT-1: while any pointer is down on the list, keep the rows where they were when it went down. A session
     // changing group mid-click (BUSY -> IDLE takes the WORKING header with it) would move the row under the pointer, the
     // release would land off the 18dp "⋯" button and the click would be dropped. The fresh grouping lands on release.
@@ -213,7 +218,7 @@ fun AgentsList(state: AppState, visible: List<AgentView>, onSelect: (String) -> 
                 }
             }
             items(rows, key = { it.id }) { a ->
-                AgentRow(a, state, a.id == state.selectedId, { onSelect(a.id) }, onRemove, Modifier.padding(bottom = 6.dp), onAssign)
+                AgentRow(a, state, a.id == state.selectedId, { onSelect(a.id) }, onRemove, Modifier.padding(bottom = 6.dp), onAssign, work)
             }
         }
     }
@@ -257,7 +262,7 @@ private fun Counter(label: String, n: Int, color: Color) {
  * and a small "⋯" row menu (M2-5) on the right. The selected card gets an orange border. Public so UI tests render it.
  */
 @Composable
-fun AgentRow(a: AgentView, state: AppState, selected: Boolean, onClick: () -> Unit, onRemove: (String) -> Unit, modifier: Modifier = Modifier, onAssign: (String, String) -> Unit = { _, _ -> }) {
+fun AgentRow(a: AgentView, state: AppState, selected: Boolean, onClick: () -> Unit, onRemove: (String) -> Unit, modifier: Modifier = Modifier, onAssign: (String, String) -> Unit = { _, _ -> }, work: AgentWorkActions = AgentWorkActions.None) {
     val waiting = needsInput(a, state.waiting, state.openPrompts, state.openQuestionSessions)
     val now = Clock.System.now().toEpochMilliseconds()
     val roleColor = a.role?.let { r -> parseHexColor(state.role(r)?.color)?.let { Color(it) } ?: Color.hsv(roleHue(r), 0.45f, 0.72f) } ?: Palette.Muted
@@ -269,8 +274,12 @@ fun AgentRow(a: AgentView, state: AppState, selected: Boolean, onClick: () -> Un
     if (activeStyle != ActiveBorderStyle.NONE && ActiveBorder.animate) {
         DisposableEffect(Unit) { ActiveBorder.acquire(); onDispose { ActiveBorder.release() } }
     }
+    val profile = a.session.agentId
+    // AGENT-TASKS-7: ask for the profile's queue whenever the board changes (a start, a finish, a queued drop).
+    if (profile != null) LaunchedEffect(profile, state.tickets, state.connection.isLive) { if (state.connection.isLive) work.queue(profile, "list", null, null) }
     Row(
         modifier.fillMaxWidth().hoverable(hoverSource).clip(shape)
+            .then(if (profile != null) Modifier.dropTarget("ticket") { work.assign(it.id, profile) } else Modifier)
             .background(if (selected) Palette.Raised else Palette.Bg)
             .then(if (activeStyle != ActiveBorderStyle.NONE) Modifier.activeBorder(activeStyle, shape)
                   else Modifier.border(if (selected) 1.5.dp else 1.dp, if (selected) Palette.Accent else Palette.Border, shape))
@@ -337,13 +346,14 @@ fun AgentRow(a: AgentView, state: AppState, selected: Boolean, onClick: () -> Un
                     softWrap = false, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false).testTag("agent-row-snippet-${a.id}"),
                 )
             }
+            if (profile != null) AgentWorkBlock(a.id, state.agentWork(profile), work, profile)
         }
         Spacer(Modifier.width(6.dp))
         Column(horizontalAlignment = Alignment.End) {
             Text(ago(a.session.lastHeartbeat, now), color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.testTag("agent-row-time-${a.id}"))
             // M2-5: the row's actions live behind a small "⋯" button, shown on hover/selection (kept in the tree
             // so keyboard and screen readers still reach it). Remove goes through a confirm dialog.
-            AgentRowMenu(a, state, revealed = selected || hovered, onOpen = onClick, onRemove = onRemove, onAssign = onAssign)
+            AgentRowMenu(a, state, revealed = selected || hovered, onOpen = onClick, onRemove = onRemove, onAssign = onAssign, work = work)
         }
     }
 }
@@ -373,7 +383,7 @@ const val SESSION_ASSIGN_TAG_PREFIX = "session-assign-"
  * session is killed first by Controller.removeSession.
  */
 @Composable
-private fun AgentRowMenu(a: AgentView, state: AppState, revealed: Boolean, onOpen: () -> Unit, onRemove: (String) -> Unit, onAssign: (String, String) -> Unit) {
+private fun AgentRowMenu(a: AgentView, state: AppState, revealed: Boolean, onOpen: () -> Unit, onRemove: (String) -> Unit, onAssign: (String, String) -> Unit, work: AgentWorkActions) {
     var menuOpen by remember { mutableStateOf(false) }
     var confirming by remember { mutableStateOf(false) }
     val live = state.connection.isLive
@@ -412,6 +422,20 @@ private fun AgentRowMenu(a: AgentView, state: AppState, revealed: Boolean, onOpe
                     )
                 }
             }
+            // AGENT-TASKS-7: the phone route to a drop: pick a todo ticket to hand this agent (start if free, else queue).
+            val profile = a.session.agentId
+            val todo = state.tickets.filter { it.status == TicketColumns.TODO && (state.activeProjectId == null || it.projectId == state.activeProjectId) }
+            if (profile != null && todo.isNotEmpty()) {
+                HorizontalDivider(color = Palette.Border)
+                Text("Assign to agent...", color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
+                todo.take(AssignMenuMax).forEach { t ->
+                    DropdownMenuItem(
+                        text = { Text(t.title, color = Palette.Text, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        onClick = { menuOpen = false; work.assign(t.id, profile) },
+                        modifier = Modifier.testTag("session-assign-ticket-${a.id}-${t.id}"),
+                    )
+                }
+            }
             HorizontalDivider(color = Palette.Border)
             // DEMO-MERGE-1: the delete is a write; Remove is dimmed and says why while writes are refused.
             val policy = state.connection.gate("agents.delete", com.superiorsoftllc.infantry.plugin.api.ActionKind.DESTRUCTIVE)
@@ -446,7 +470,56 @@ fun AgentsSection() {
         onNew = a::newAgent,
         onRemove = { id -> scope.launch { a.remove(id) } },
         onAssign = { id, projectId -> scope.launch { a.assign(id, projectId) } },
+        work = AgentWorkActions(
+            assign = { ticketId, agentId -> scope.launch { a.assignTicket(ticketId, agentId) } },
+            queue = { agentId, action, ticketId, at -> scope.launch { a.agentQueue(agentId, action, ticketId, at) } },
+            open = a::openTicket,
+        ),
         projects = { ProjectsSidebar(state, onDismiss = a::dismissProjectRefusal) },
         showReview = a.reviewLoaded,
+    )
+}
+
+
+/** AGENT-TASKS-7: most todo tickets the "Assign to agent..." menu lists. */
+private const val AssignMenuMax = 12
+
+/** AGENT-TASKS-7: the card's ticket actions, supplied by the window: [assign] ticket to agent profile, [queue] (agent, action, ticket, place), [open] a ticket. */
+class AgentWorkActions(
+    val assign: (ticketId: String, agentId: String) -> Unit,
+    val queue: (agentId: String, action: String, ticketId: String?, at: Int?) -> Unit,
+    val open: (ticketId: String) -> Unit,
+) {
+    companion object { val None = AgentWorkActions({ _, _ -> }, { _, _, _, _ -> }, { }) }
+}
+
+/**
+ * AGENT-TASKS-7: an agent card's work: the ticket it is running (title, opens its detail) and its queue head first,
+ * each entry with move up / move down / remove. Empty: one muted line, so a drop target never looks like nothing.
+ */
+@Composable
+private fun AgentWorkBlock(id: String, work: com.superiorsoftllc.infantry.ui.model.AgentWork, actions: AgentWorkActions, profile: String) {
+    Column(Modifier.padding(top = 3.dp)) {
+        val cur = work.current
+        if (cur != null) Text(
+            "on: ${cur.title}", color = Palette.Text, fontSize = 11.sp, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.clickable { actions.open(cur.id) }.testTag("agent-row-current-$id"),
+        ) else if (work.queue.isEmpty()) Text("no ticket - drop one here", color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.testTag("agent-row-idle-$id"))
+        work.queue.forEachIndexed { i, q ->
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.testTag("agent-row-queued-$id-${q.ticketId}")) {
+                Text("${i + 1}. ${q.title}", color = Palette.Muted, fontSize = 10.sp, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                if (i > 0) QueueButton("Move up", "▲") { actions.queue(profile, "move", q.ticketId, i) }
+                if (i < work.queue.size - 1) QueueButton("Move down", "▼") { actions.queue(profile, "move", q.ticketId, i + 2) }
+                QueueButton("Remove from queue", "✕") { actions.queue(profile, "remove", q.ticketId, null) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun QueueButton(label: String, glyph: String, onClick: () -> Unit) {
+    Text(
+        glyph, color = Palette.Muted, fontSize = 10.sp,
+        modifier = Modifier.clickable(role = Role.Button, onClickLabel = label, onClick = onClick).semantics { contentDescription = label }.padding(horizontal = 4.dp, vertical = 2.dp),
     )
 }
