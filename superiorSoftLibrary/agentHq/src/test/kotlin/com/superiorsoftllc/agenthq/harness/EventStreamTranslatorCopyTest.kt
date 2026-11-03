@@ -17,7 +17,7 @@ class EventStreamTranslatorCopyTest {
         .joinToString("\n").replace(Regex("\n{3,}"), "\n\n").trim()
 
     @Test fun `the daemon's reader and the pi plugin's copy are the same code`() {
-        val core = File(TestDaemonPlugins.repo, "superiorSoftLibrary/agentHq/src/main/kotlin/com/superiorsoftllc/agenthq/harness/EventStreamTranslator.kt")
+        val core = File(TestDaemonPlugins.repo, "superiorSoftLibrary/agentHqCore/src/main/kotlin/com/superiorsoftllc/agenthq/harness/EventStreamTranslator.kt")
         val plugin = File(TestDaemonPlugins.repo, "plugins/official/Infantry_Pi/harness/src/main/kotlin/com/superiorsoftllc/agenthq/plugins/official/pi/harness/EventStreamTranslator.kt")
         assertTrue(core.isFile && plugin.isFile, "both copies must exist")
         fun strip(s: String) = s.lines().filterNot { it.trimStart().startsWith("*") || it.trimStart().startsWith("/**") }.joinToString("\n")

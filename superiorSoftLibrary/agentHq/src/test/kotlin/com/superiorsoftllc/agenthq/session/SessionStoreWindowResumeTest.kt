@@ -208,7 +208,7 @@ class SessionStoreWindowResumeTest {
         )
         // The line is read from the source (resumeHeld()'s own `unknown session` error), not hard-coded: a pinned number
         // broke on every unrelated edit above resume() (TRAITS-T4 added the instance chokepoint there).
-        val source = java.io.File("src/main/kotlin/com/superiorsoftllc/agenthq/session/SessionManager.kt").readLines()
+        val source = java.io.File("../agentHqCore/src/main/kotlin/com/superiorsoftllc/agenthq/session/SessionManager.kt").readLines()
         val resumeStart = source.indexOfFirst { it.contains("fun resumeHeld(sessionId: String") }
         val resumeThrowLine = source.drop(resumeStart).indexOfFirst { it.contains("error(\"unknown session") } + resumeStart + 1
         assertTrue(resumeStart >= 0 && resumeThrowLine > resumeStart, "resumeHeld()'s unknown-session line not found in the source")

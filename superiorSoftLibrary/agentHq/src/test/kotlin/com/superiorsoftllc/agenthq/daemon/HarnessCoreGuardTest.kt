@@ -11,8 +11,8 @@ import kotlin.test.assertTrue
  *      (the id is data for a mechanism, never a branch on a concrete adapter). A stale allow-list entry fails too.
  */
 class HarnessCoreGuardTest {
-    private val main = File(TestDaemonPlugins.repo, "superiorSoftLibrary/agentHq/src/main/kotlin/com/superiorsoftllc/agenthq")
-    private fun files() = main.walkTopDown().filter { it.isFile && it.extension == "kt" }.toList()
+    private val mains = listOf("agentHq", "agentHqCore").map { File(TestDaemonPlugins.repo, "superiorSoftLibrary/$it/src/main/kotlin/com/superiorsoftllc/agenthq") }
+    private fun files() = mains.flatMap { it.walkTopDown().toList() }.asSequence().filter { it.isFile && it.extension == "kt" }.toList()
     private fun code(f: File) = f.readLines().filter { l -> l.trim().let { !it.startsWith("//") && !it.startsWith("*") && !it.startsWith("/*") } }
 
     @Test fun `no core class implements the Harness SPI except the generic descriptor harness`() {

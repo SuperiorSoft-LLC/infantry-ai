@@ -80,7 +80,7 @@ class SchemaMigrationTest {
     @Test
     fun `schema version is 10 - attention records survive daemon restart`() {
         // Version = highest NN.sqm + 1; derived so each new migration does not break this test.
-        val dir = java.io.File("src/main/sqldelight/com/superiorsoftllc/agenthq/db")
+        val dir = java.io.File("../agentHqCore/src/main/sqldelight/com/superiorsoftllc/agenthq/db")
         val highest = dir.listFiles { f -> f.name.matches(Regex("[0-9]+[.]sqm")) }!!.maxOf { it.name.removeSuffix(".sqm").toLong() }
         assertEquals(highest + 1, AgentHQDatabase.Schema.version, "schema version is the highest migration file + 1")
     }
