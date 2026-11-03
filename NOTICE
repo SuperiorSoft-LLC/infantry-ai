@@ -1,0 +1,11 @@
+Infantry AI
+Copyright (c) SuperiorSoft LLC
+
+DRAFT (LICENSE-NOTICES-2): not official until the public launch. The license map (docs/LICENSE-MAP.md) is not yet
+signed off; until then LICENSE still says the license is not chosen.
+
+This product includes software developed at SuperiorSoft LLC, to be licensed under the Apache License 2.0 for the SDK,
+client, plugin and protocol parts. The engine parts are intended for MPL-2.0 (see docs/LICENSE-MAP.md).
+
+This product bundles third-party software; attributions and license terms are in THIRD-PARTY-NOTICES.md, generated from
+the SBOM (`./gradlew generateSbom`).
