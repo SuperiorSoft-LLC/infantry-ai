@@ -59,4 +59,20 @@ class PluginCliTest {
         assertEquals(2, run().first)
         assertEquals(2, run("frobnicate").first)
     }
+
+    @Test fun `catalog build writes a catalog that validate accepts and refuses a misnamed entry`() {
+        val d = File(tmp, "entries").also { it.mkdirs() }
+        val ihq = pack()
+        val sha = com.superiorsoftllc.infantry.update.ReleaseAssets.sha256(ihq)
+        File(d, "Acme_Cli.json").writeText("""{"id":"Acme_Cli","versions":[{"version":"1.0.0","grants":["net.fetch"],"url":"${ihq.name}","sha256":"$sha"}]}""")
+        File(d, "Acme_Two.json").writeText("""{"id":"Acme_Two"}""")
+        val out = File(tmp, "catalog.json")
+        val (code, _, err) = run("catalog", "build", d.path, "--id", "idx", "--class", "community", "--out", out.path)
+        assertEquals(0, code, err)
+        assertEquals(0, run("catalog", "validate", out.path).first)
+        File(d, "Wrong.json").writeText("""{"id":"Other"}""")
+        val r = run("catalog", "build", d.path, "--id", "idx", "--class", "community", "--out", out.path)
+        assertEquals(1, r.first)
+        assertTrue(r.third.contains("file name must equal"), r.third)
+    }
 }

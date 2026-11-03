@@ -224,7 +224,11 @@ the CLI, the catalog validator and the update diff all use it, so G4 closes in o
   (destructive, **owner-only**: install, grants, update, rollback, remove, sources). The demo lock refuses `plugins.manage`.
 * CLI: `infantry plugin list | search <q> [--tag t] | show <id> | install <id|file.ihq|dir|url> [--version v] [--grant g ...] [--grant-all-requested] |
   enable <id> | disable <id> | grants <id> [--grant ...] | updates | update <id|--all> | rollback <id> | remove <id> [--purge] |
-  status <id> | sources list|add|remove|refresh | catalog validate <catalog.json> [--assets dir]`. Without `--grant` an install
+  status <id> | sources list|add|remove|refresh | catalog validate <catalog.json> [--assets dir] |
+  catalog build <dir> --id <catalogId> --class <official|community> [--out catalog.json]`. `catalog build` reads every `<dir>/<id>.json` as one
+  catalog entry (file name must equal `id`, ids unique), writes a schema-1 catalog sorted by id with `generated` = now (UTC) and runs `validate` on it
+  first. Schema 1 additions (optional, so older daemons still read newer catalogs): `repo` on an entry; `yanked`/`yankedReason` on a version (never chosen
+  by install without `--version`, never offered by update; an installed yanked version shows `yanked: <reason>` in `list`/`status`). Without `--grant` an install
   prints the requested grants and stops (no interactive prompt).
 * MCP (agents): `infantry_plugin_list`, `infantry_plugin_search`, `infantry_plugin_show`, `infantry_plugin_status` (read), and
   `infantry_plugin_request` which **asks the owner** (an `ask` with the inspection: grants, licence, class) instead of installing.

@@ -324,4 +324,29 @@ class PluginManagerServiceTest {
         assertTrue(problems.any { it.contains("sha256") }, problems.toString())
         assertTrue(problems.any { it.contains("grants") }, problems.toString())
     }
+
+    @Test fun `a yanked version is never chosen or offered, an installed one shows its reason`() {
+        val v1 = pack(version = "1.0.0"); val v2 = pack(version = "1.1.0")
+        fun yankedEntry(y: Boolean) = entry(v2, "Acme_Echo", "1.1.0", emptyList()).let { e -> e.copy(repo = "https://example.org/r", versions = e.versions.map { it.copy(yanked = y, yankedReason = if (y) "broken" else null) }) }
+        catalog(entry(v1, "Acme_Echo", "1.0.0", emptyList()), yankedEntry(true))
+        val m = manager(); source(m)
+        installOk(m, "Acme_Echo")
+        assertEquals("1.0.0", m.status("Acme_Echo")!!.version, "install skips the yanked 1.1.0")
+        assertTrue(m.checkUpdates().isEmpty())
+        assertTrue(m.install("idx:Acme_Echo@1.1.0", emptySet()).message.isNotEmpty())
+        catalog(entry(v1, "Acme_Echo", "1.0.0", emptyList()).let { e -> e.copy(versions = e.versions.map { it.copy(yanked = true, yankedReason = "bad build") }) })
+        assertEquals("bad build", m.status("Acme_Echo")!!.yanked)
+    }
+
+    @Test fun `catalog builder sorts, refuses a name that differs from the id and duplicate ids`() {
+        val d = File(repo, "entries").also { it.mkdirs() }
+        File(d, "B_Two.json").writeText("""{"id":"B_Two"}""")
+        File(d, "A_One.json").writeText("""{"id":"A_One","repo":"https://x/y","unknown":1}""")
+        val (c, bad) = CatalogBuilder.build(d, "idx", "community")
+        assertTrue(bad.isEmpty(), bad.toString())
+        assertEquals(listOf("A_One", "B_Two"), c!!.plugins.map { it.id })
+        assertEquals("https://x/y", c.plugins[0].repo)
+        File(d, "Wrong.json").writeText("""{"id":"Other"}""")
+        assertTrue(CatalogBuilder.build(d, "idx", "community").second.single().contains("file name must equal"))
+    }
 }
