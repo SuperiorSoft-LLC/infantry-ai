@@ -7,7 +7,8 @@ import kotlin.test.assertFalse
 class PersonaNameScrubTest {
     @Test
     fun noBuiltInPersonaNamesTheOldProduct() {
-        val oldName = Regex("agent\s*hq", RegexOption.IGNORE_CASE)
+        // contract names (`agenthq` CLI, agenthq_* tools) are lowercase and allowed
+        val oldName = Regex("AgentHQ|Agent HQ|AgentHq|Agent hq")
         RoleBundle.load(RoleBundle.classpathReader()).forEach { role ->
             assertFalse(oldName.containsMatchIn(role.persona), "persona of '${role.id}' says the old product name")
         }
