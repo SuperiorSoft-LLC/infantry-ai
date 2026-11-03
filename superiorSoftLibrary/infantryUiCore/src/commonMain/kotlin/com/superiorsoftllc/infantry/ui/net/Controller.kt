@@ -30,6 +30,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import com.superiorsoftllc.infantry.ui.model.isBusy
 import com.superiorsoftllc.infantry.ui.model.SWITCH_WAIT_FOR_TURN
 import com.superiorsoftllc.infantry.ui.model.queueDrainTargets
+import com.superiorsoftllc.infantry.ui.model.queuedTurnText
 import com.superiorsoftllc.infantry.ui.model.queuedFor
 import com.superiorsoftllc.infantry.ui.model.withQueue
 import com.superiorsoftllc.infantry.ui.model.contractAtLeast
@@ -849,7 +850,7 @@ class Controller(
         val held = _state.value.queuedFor(sessionId)
         if (held.isNotEmpty() && !isSlashCommand(text)) {
             _state.update { it.withQueue(sessionId, emptyList()) }
-            val all = (held.map { it.text } + text).joinToString("\n\n")
+            val all = queuedTurnText(held, text)
             val r = send(Envelope(Envelope.PROMPT, all, sessionId))
             if (r is CommandResult.Sent) echo(sessionId, all)
             else _state.update { it.withQueue(sessionId, held + it.queuedFor(sessionId)) }

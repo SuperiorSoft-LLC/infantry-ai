@@ -8,6 +8,7 @@ import com.superiorsoftllc.infantry.ui.model.QueuedPrompt
 import com.superiorsoftllc.infantry.ui.model.TranscriptEntry
 import com.superiorsoftllc.infantry.ui.model.interruptBlocker
 import com.superiorsoftllc.infantry.ui.model.queueDrainTargets
+import com.superiorsoftllc.infantry.ui.model.queuedTurnText
 import com.superiorsoftllc.infantry.ui.model.reduce
 import com.superiorsoftllc.infantry.ui.model.queuedFor
 import com.superiorsoftllc.infantry.ui.model.withQueue
@@ -104,5 +105,26 @@ class QueueStuckModelTest {
     @Test fun `a busy agent is not drained`() {
         val s = st(agent(SessionState.BUSY, turn = true))
         assertEquals(emptyList(), queueDrainTargets(s, s, tracksSends = true))
+    }
+}
+
+class QueueStuckReproTest {
+    private fun a(state: SessionState) = AgentView(
+        session = SessionRecord("a", "stub", "/w", spawnedAt = 1, lastHeartbeat = 1, state = state, providerSessionId = "p", turnActive = state == SessionState.BUSY),
+        entries = emptyList(),
+    )
+    private fun st(state: SessionState) = AppState(agents = mapOf("a" to a(state))).withQueue("a", listOf(QueuedPrompt("held", 1)))
+
+    @Test fun `the old edge-only rule misses a turn end between frames, the fix does not`() {
+        val idle = st(SessionState.IDLE)
+        // frame N: idle (mail turn already ended); frame N+1: idle again. No busy->idle edge is ever seen.
+        assertEquals(emptyList(), queueDrainTargets(idle, idle, tracksSends = false), "old behaviour: stuck")
+        assertEquals(listOf("a"), queueDrainTargets(idle, idle, tracksSends = true), "fixed behaviour: drained")
+        // the genuine edge still drains on both
+        assertEquals(listOf("a"), queueDrainTargets(st(SessionState.BUSY), idle, tracksSends = false))
+    }
+
+    @Test fun `a send delivers the whole queue then the new text in order`() {
+        assertEquals("one\n\ntwo\n\nnew", queuedTurnText(listOf(QueuedPrompt("one", 1), QueuedPrompt("two", 2)), "new"))
     }
 }

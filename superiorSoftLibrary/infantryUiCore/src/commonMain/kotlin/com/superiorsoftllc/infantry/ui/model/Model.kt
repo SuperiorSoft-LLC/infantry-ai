@@ -2278,3 +2278,6 @@ fun AppState.withTimeline(items: List<TimelineItem>): AppState {
     }
     return copy(timeline = next)
 }
+
+/** QUEUE-STUCK-1: the queued messages, oldest first, then the newly typed [text], as the one turn a send delivers. */
+fun queuedTurnText(held: List<QueuedPrompt>, text: String): String = (held.map { it.text } + text).joinToString("\n\n")
