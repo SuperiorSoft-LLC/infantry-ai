@@ -31,6 +31,11 @@ and Infantry AI starts the agent on its own git branch and worktree, keeps its m
 knowledge in one daemon, and lets you watch, steer and merge the work from your desktop or your phone. The daemon runs
 on your machine or on your own server: your code, keys and agent output never pass through a third-party service.
 
+**Foundation and free, on purpose.** The core (the daemon) is the foundation: it is licensed MPL-2.0 to protect its
+integrity, so apps and plugins can rely on a stable base that does not break, with backward compatibility as the promise.
+Everything built on top (the SDKs, the UI core, the apps and every plugin) is free under Apache-2.0: build, fork, sell and
+extend it without copyleft. See [Licensing](docs/wiki/licensing.md) (draft, not yet in effect).
+
 > **Status: early preview.** The app is used daily by its own team, but it is not 1.0. Read
 > [Roadmap and known issues](#roadmap-and-known-issues) before you rely on it.
 
@@ -43,7 +48,12 @@ on your machine or on your own server: your code, keys and agent output never pa
 ![board](docs/img/board.png)
 ![session](docs/img/session.png)
 
-<!-- Screenshots still to capture from a real build (no mock-ups): see docs/img/README.md for the list of files. -->
+<!-- OWNER: capture these from a real build (no mock-ups), list in docs/launch/shot-list.md, files in docs/img/README.md:
+     board.png, session.png, question.png, scripts.png, plugins.png, pace.png, android.png, harness-pick.png -->
+
+Screenshots still to capture (placeholders for the owner): `question.png` (question panel with the recommended pick),
+`scripts.png` (a Lua script run), `pace.png` (usage forecast per harness), `android.png` (the phone client),
+`harness-pick.png` (provider and model on a ticket).
 
 ## Features
 
@@ -101,6 +111,7 @@ agent CLI harness, is a plugin with a `module.json`. Write your own in a few min
 - [Scripting](docs/wiki/Scripting.md): the Lua API, hooks, exec, chat notes, progress, the session bridge
 - [Harnesses and providers](docs/wiki/Harnesses.md): the harness API, adding a harness or a provider
 - [Settings](docs/wiki/Settings.md): scopes and the cost-saving defaults
+- [Licensing](docs/wiki/licensing.md) (draft): core MPL-2.0 vs Apache-2.0 per module, and the compatibility promise
 
 Build and preview the wiki site locally (MkDocs + Material, strict: a broken link fails; nothing is published):
 `agenthq script run wiki --args '{"mode":"serve","port":8899}'` (or `"mode":"build"` to write
@@ -353,8 +364,9 @@ Starring the repository and filing good bug reports help too.
 
 ## License
 
-The core is licensed under **MPL-2.0** and everything else (plugin API and SDK, plugins, examples) under
-**Apache-2.0**, split by directory; see [docs/LICENSE-MAP.md](docs/LICENSE-MAP.md) for which directory is which.
+The core is the foundation and is licensed **MPL-2.0** to protect its integrity; everything built on it (plugin API and
+SDK, UI core, apps, plugins, examples) is free under **Apache-2.0**, split by directory. Plain-words explainer:
+[Licensing](docs/wiki/licensing.md); directory by directory: [docs/LICENSE-MAP.md](docs/LICENSE-MAP.md).
 
 > **Not yet in force.** The license texts are not published in this repository yet: [LICENSE](LICENSE) is still a
 > placeholder. Until it is replaced, all rights are reserved by SuperiorSoft LLC.
