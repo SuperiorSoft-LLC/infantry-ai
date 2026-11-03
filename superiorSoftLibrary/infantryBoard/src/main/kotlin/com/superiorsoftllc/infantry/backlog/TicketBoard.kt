@@ -77,6 +77,9 @@ data class TicketAnswer(val ticket: Ticket, val pushed: Boolean)
 /** The answer to a whole-board request. [pushed]: it already went to every client as a [BoardEvent]. */
 data class BoardAnswer(val tickets: List<Ticket>, val pushed: Boolean)
 
+/** AGENT-TASKS-4: how `assign` places a ticket on an agent: [START] it now, or [QUEUE] it behind the agent's work. */
+enum class AssignMode { START, QUEUE }
+
 /** GAP-006b: [REPAIR] is the unbriefed sweep restarting a phantom worker: unattended, never queued. */
 private enum class HandOutOrigin { MOVE, START_NEXT, QUEUE_DRAIN, TRIGGER, REPAIR }
 
@@ -597,6 +600,12 @@ class TicketBoard(
     fun unassign(ticketId: String, now: Boolean = false, note: String? = null): TicketAnswer {
         val id = checkId(ticketId)
         val (answer, row) = unassignCommit(id)
+        return endUnassigned(answer, row, now, note)
+    }
+
+    /** The worker half of an unassign, run after the commit and outside the board lock. */
+    private fun endUnassigned(answer: TicketAnswer, row: TicketRow, now: Boolean, note: String?): TicketAnswer {
+        val id = row.id
         val sessionId = row.sessionId
         val view = sessionId?.let(host.sessions::get)?.takeIf { it.live }
         val pending = PendingEnd(id, row.projectId, note?.trim()?.takeIf { it.isNotEmpty() }, sawBusy = false, promptFirst = false)
@@ -637,8 +646,121 @@ class TicketBoard(
         return answer
     }
 
+
+    /** AGENT-TASKS-4: the refusals shared by assign and switch for putting todo ticket [id] on [agent]; returns the agent's id. */
+    private fun requireAssignable(id: String, agent: BoardAgent, needsLane: Boolean): String {
+        val agentId = agent.id ?: throw IllegalArgumentException("agent '${agent.name}' has no profile id")
+        val row = store.transaction { load() }.require(id)
+        require(row.status == TicketStatus.TODO) { "ticket $id is ${row.status}: only a todo ticket can be assigned" }
+        require(agent.projectId == null || agent.projectId == row.projectId) {
+            "agent ${agent.name} belongs to another project than ticket $id"
+        }
+        require(host.agents.roleKnown(agent.role)) { "agent ${agent.name} has role '${agent.role}', which cannot run tickets" }
+        if (needsLane) {
+            val active = host.sessions.list().filter { it.state in ACTIVE_STATE_NAMES }
+            val running = host.agents.list().filter { it.role == agent.role }.count { c -> active.any { it.agentId == c.id } }
+            require(running < laneCap(row.projectId, agent.role)) {
+                "the lane cap for role '${agent.role}' is full ($running running): end a worker or raise the cap"
+            }
+        }
+        return agentId
+    }
+
+    private fun liveSessionsOf(agentId: String): List<SessionView> = host.sessions.list().filter { it.live && it.agentId == agentId }
+
+    /** The in_progress ticket [agentId] works on (pinned to one of its live sessions, or to its profile with no session), or null. */
+    private fun currentTicketOf(agentId: String): String? {
+        val sessionIds = liveSessionsOf(agentId).map { it.id }.toSet()
+        return store.transaction {
+            load().rows.values.firstOrNull {
+                it.status == TicketStatus.IN_PROGRESS && (it.sessionId in sessionIds || (it.agentId == agentId && it.sessionId == null))
+            }?.id
+        }
+    }
+
+    /**
+     * AGENT-TASKS-4: give todo ticket [ticketId] to an existing agent ([agentRef], a profile id or unique name); sets its agentId.
+     * [AssignMode.START]: no live session -> hand out now; an IDLE session on no in-progress ticket is ended and the ticket starts on
+     * its exit (it heads the agent's queue and the exit drain starts it, on [sessionEvents]); an agent on an in-progress ticket, or
+     * BUSY, is refused. [AssignMode.QUEUE] adds to the agent's queue at [at]. Not `@Synchronized`: no start under the manager lock.
+     */
+    fun assign(ticketId: String, agentRef: String, mode: AssignMode = AssignMode.START, at: Int? = null): TicketAnswer {
+        val id = checkId(ticketId)
+        val agent = resolveQueueAgent(agentRef)
+        val live = liveSessionsOf(agent.id ?: "")
+        val agentId = requireAssignable(id, agent, needsLane = mode == AssignMode.START && live.isEmpty())
+        if (mode == AssignMode.START && live.isNotEmpty()) {
+            val onTicket = currentTicketOf(agentId)
+            require(onTicket == null) { "agent ${agent.name} is on $onTicket; use switch, or assign --queue" }
+            require(live.none { it.state == "BUSY" }) { "agent ${agent.name} is busy with no ticket; use switch, or assign --queue" }
+        }
+        setAgent(id, agentId)
+        if (mode == AssignMode.QUEUE) {
+            queue(agentId, QUEUE_ADD, id, at)
+            return TicketAnswer(get(id), pushed = false)
+        }
+        if (live.isEmpty()) return handOut(id, HandOutOrigin.MOVE)
+        queue(agentId, QUEUE_ADD, id, 1)
+        endIdleAndDrain(live, id)
+        return TicketAnswer(
+            get(id).copy(start = TicketStart(ok = true, reason = "deferred", detail = "worker ends after its turn; $id starts on exit")),
+            pushed = false,
+        )
+    }
+
+    /** Ends each idle [sessions] member on [sessionEvents]; its Exit drains the agent queue. A ticketless session drains here. */
+    private fun endIdleAndDrain(sessions: List<SessionView>, ticketId: String) {
+        try {
+            sessionEvents.execute {
+                for (view in sessions) {
+                    runCatching { host.sessions.kill(view.id, force = true, by = "board", reason = REPLACED_DETAIL) }
+                    runCatching { host.sessions.remove(view.id) }
+                    if (view.ticketId == null && queueDrainEnabled) runCatching { handOut(ticketId, HandOutOrigin.QUEUE_DRAIN) }
+                }
+            }
+        } catch (_: RejectedExecutionException) {
+            // closed
+        }
+    }
+
+    private fun setAgent(id: String, agentId: String) {
+        val outcome = commit { s -> s.rows[id] = s.rows.getValue(id).copy(agentId = agentId) }
+        if (outcome.changed.isNotEmpty()) {
+            val byId = outcome.board.associateBy { it.id }
+            push(BoardEvent.Changed(outcome.changed.map { byId.getValue(it) }))
+            announce(outcome)
+        }
+    }
+
+    /**
+     * AGENT-TASKS-4: move [agentRef] from its in-progress ticket to [toTicketId]. ONE commit: the current ticket goes to todo (top,
+     * handoff) and [toTicketId] heads the agent's queue; then the worker ends like unassign ([now] honoured) and its exit starts the
+     * new ticket, so the agent never has two in-progress tickets. With no current ticket this is [assign] (start).
+     */
+    fun switch(agentRef: String, toTicketId: String, now: Boolean = false): TicketAnswer {
+        val to = checkId(toTicketId)
+        val agent = resolveQueueAgent(agentRef)
+        val agentId = agent.id ?: throw IllegalArgumentException("agent '${agent.name}' has no profile id")
+        val current = currentTicketOf(agentId) ?: return assign(to, agentId, AssignMode.START)
+        require(current != to) { "agent ${agent.name} is already on $to" }
+        requireAssignable(to, agent, needsLane = false)
+        val queued = agentQueueIds(agentId)
+        val rest = queued.filter { it != to }
+        require(to in queued || rest.size < queueMax()) { "agent ${agent.name}'s queue is full (limits.agentTasks.queueMax = ${queueMax()})" }
+        val next = listOf(to) + rest
+        val (answer, row) = unassignCommit(current) { s ->
+            s.rows.values.filter { it.queuedAgent == agentId && it.id !in next }.forEach { s.rows[it.id] = it.copy(queuedAgent = null, queueRank = null) }
+            next.forEachIndexed { i, tid -> s.rows[tid] = s.rows.getValue(tid).copy(agentId = agentId, queuedAgent = agentId, queueRank = i + 1) }
+        }
+        endUnassigned(answer, row, now, null)
+        return TicketAnswer(
+            get(to).copy(start = TicketStart(ok = true, reason = "deferred", detail = "worker ends after its turn; $to starts on exit")),
+            pushed = false,
+        )
+    }
+
     @Synchronized
-    private fun unassignCommit(id: String): Pair<TicketAnswer, TicketRow> {
+    private fun unassignCommit(id: String, also: ((Snapshot) -> Unit)? = null): Pair<TicketAnswer, TicketRow> {
         val row = store.transaction { load() }.require(id)
         require(row.status == TicketStatus.IN_PROGRESS) {
             "ticket $id is ${row.status}, not in_progress: only an in_progress ticket can be unassigned"
@@ -647,6 +769,7 @@ class TicketBoard(
             s.place(id, TicketStatus.TODO, 0)
             s.rows[id] = s.rows.getValue(id).copy(sessionId = null)
             s.named += id
+            also?.invoke(s)
         }
         return answer(id, outcome) to row
     }
@@ -1844,6 +1967,7 @@ class TicketBoard(
 
         /** AGENT-TASKS-2: the run detail of a worker the board ended because its ticket was unassigned. */
         const val UNASSIGNED_DETAIL = "unassigned"
+        const val REPLACED_DETAIL = "replaced by an assigned ticket"
 
         /** AGENT-TASKS-3: the run detail of an idle worker the board ended because its ticket is done and its agent has a queue. */
         const val DONE_QUEUED_DETAIL = "done, agent has a queued ticket"

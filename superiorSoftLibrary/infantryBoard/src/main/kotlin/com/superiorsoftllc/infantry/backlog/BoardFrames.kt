@@ -15,6 +15,8 @@ import com.superiorsoftllc.infantry.protocol.TicketListQuery
 import com.superiorsoftllc.infantry.protocol.TicketMove
 import com.superiorsoftllc.infantry.protocol.TicketUnassign
 import com.superiorsoftllc.infantry.protocol.AgentQueueRequest
+import com.superiorsoftllc.infantry.protocol.AgentSwitch
+import com.superiorsoftllc.infantry.protocol.TicketAssign
 import com.superiorsoftllc.infantry.protocol.AgentQueueState
 import com.superiorsoftllc.infantry.protocol.TicketReorder
 import com.superiorsoftllc.infantry.protocol.TicketSave
@@ -78,6 +80,18 @@ fun registerBoardFrames(
         boardRequest(e.type) {
             val req = TicketUnassign.decode(e.data)
             board.unassign(req.id, req.now, req.note).reply(direct)
+        }
+    }
+    reg(Envelope.TICKET_ASSIGN) { e, direct ->
+        boardRequest(e.type) {
+            val req = TicketAssign.decode(e.data)
+            board.assign(req.id, req.agentId, if (req.queue) AssignMode.QUEUE else AssignMode.START, req.at).reply(direct)
+        }
+    }
+    reg(Envelope.AGENT_SWITCH) { e, direct ->
+        boardRequest(e.type) {
+            val req = AgentSwitch.decode(e.data)
+            board.switch(req.agentId, req.ticketId, req.now).reply(direct)
         }
     }
     reg(Envelope.AGENT_QUEUE) { e, _ ->

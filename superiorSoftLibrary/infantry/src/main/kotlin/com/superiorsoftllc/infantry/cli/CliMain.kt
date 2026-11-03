@@ -76,6 +76,8 @@ import com.superiorsoftllc.infantry.protocol.TicketLinkType
 import com.superiorsoftllc.infantry.protocol.TicketMove
 import com.superiorsoftllc.infantry.protocol.TicketUnassign
 import com.superiorsoftllc.infantry.protocol.AgentQueueRequest
+import com.superiorsoftllc.infantry.protocol.AgentSwitch
+import com.superiorsoftllc.infantry.protocol.TicketAssign
 import com.superiorsoftllc.infantry.protocol.AgentQueueState
 import com.superiorsoftllc.infantry.protocol.TicketSave
 import com.superiorsoftllc.infantry.protocol.TicketListQuery
@@ -442,7 +444,7 @@ internal object Cli {
                 "archive" -> runBlocking { archiveCommand(stream, parsed, out, err, getenv) }
                 "harnesses" -> harnesses(stream, out, err)
                 "harness-status" -> harnessStatus(stream, parsed, out, err)
-                "agent" -> runBlocking { agentQueue(stream, parsed, out, err) }
+                "agent" -> runBlocking { if (parsed.args.firstOrNull() == "switch") agentSwitch(stream, parsed, out, err, getenv) else agentQueue(stream, parsed, out, err) }
                 "agent-def" -> AgentDefCli.run(stream, parsed.args, out, err, getenv)
                 "run-cmd" -> RunCmdCli.run(stream, parsed.args, parsed.name, parsed.project, parsed.crossProject, parsed.force, out, err, getenv)
                 "harness-install" -> harnessInstall(stream, parsed, out, err)
@@ -1203,6 +1205,7 @@ internal object Cli {
             "update" -> updateTicket(stream, parsed, out, err, getenv)
             "move" -> moveTicket(stream, parsed, out, err, getenv)
             "unassign" -> unassignTicket(stream, parsed, out, err, getenv)
+            "assign" -> assignTicket(stream, parsed, out, err, getenv)
             "start" -> startTicket(stream, parsed, out, err, getenv)
             "link" -> linkTicket(stream, parsed, out, err, getenv)
             "files" -> ticketFiles(stream, parsed, out, err, getenv)
@@ -1297,7 +1300,51 @@ internal object Cli {
         return 0
     }
 
+    private fun printStarted(moved: Ticket, out: Appendable, label: String) {
+        val start = moved.start
+        out.appendLine("$label ${moved.id} -> ${moved.status}" + (start?.takeIf { it.reason == "deferred" }?.detail?.let { " ($it)" } ?: ""))
+    }
+
+    /** AGENT-TASKS-4: `ticket assign <id|prefix> <agent> [--queue] [--at n]`: give a todo ticket to an existing agent. */
+    private suspend fun assignTicket(stream: FrameStream, parsed: ParsedArgs, out: Appendable, err: Appendable, getenv: (String) -> String?): Int {
+        checkContract(stream, err)
+        val id = parsed.args.getOrNull(1)?.trim()?.takeIf { it.isNotEmpty() }
+        val agent = parsed.args.getOrNull(2)?.trim()?.takeIf { it.isNotEmpty() }
+        if (id == null || agent == null) { err.appendLine("usage: infantry ticket assign <id|prefix> <agent> [--queue] [--at n]"); return 1 }
+        val ticket = resolveTicket(stream, id, boardProjectOf(parsed, getenv), err) ?: return 1
+        val request = TicketAssign(id = ticket.id, agentId = agent, queue = parsed.queueFlag, at = parsed.queueAt)
+        val answer = stream.request(
+            Envelope(Envelope.TICKET_ASSIGN, json.encodeToString(TicketAssign.serializer(), request)),
+            answerType = Envelope.TICKET, what = "ticket_assign", idempotent = false,
+        )
+        val moved = try { json.decodeFromString(Ticket.serializer(), answer.data) } catch (e: Exception) {
+            err.appendLine("error: malformed ticket answer from the daemon: ${e.message}"); return 1
+        }
+        printStarted(moved, out, "assigned")
+        return 0
+    }
+
+    /** AGENT-TASKS-4: `agent switch <agent> <ticketId> [--now]`: the agent leaves its ticket for another one. */
+    private suspend fun agentSwitch(stream: FrameStream, parsed: ParsedArgs, out: Appendable, err: Appendable, getenv: (String) -> String?): Int {
+        checkContract(stream, err)
+        val agent = parsed.args.getOrNull(1)?.trim()?.takeIf { it.isNotEmpty() }
+        val id = parsed.args.getOrNull(2)?.trim()?.takeIf { it.isNotEmpty() }
+        if (agent == null || id == null) { err.appendLine("usage: infantry agent switch <agent> <ticketId> [--now]"); return 1 }
+        val ticket = resolveTicket(stream, id, boardProjectOf(parsed, getenv), err) ?: return 1
+        val request = AgentSwitch(agentId = agent, ticketId = ticket.id, now = parsed.now)
+        val answer = stream.request(
+            Envelope(Envelope.AGENT_SWITCH, json.encodeToString(AgentSwitch.serializer(), request)),
+            answerType = Envelope.TICKET, what = "agent_switch", idempotent = false,
+        )
+        val moved = try { json.decodeFromString(Ticket.serializer(), answer.data) } catch (e: Exception) {
+            err.appendLine("error: malformed ticket answer from the daemon: ${e.message}"); return 1
+        }
+        printStarted(moved, out, "switched")
+        return 0
+    }
+
     private fun agentQueueUsage(args: List<String>): String? {
+        if (args.firstOrNull() == "switch") return if (args.size < 3) "usage: infantry agent switch <agent> <ticketId> [--now]" else null
         if (args.firstOrNull() != "queue") return "usage: infantry agent queue <agent> [add <id> [--at n] | rm <id> | mv <id> <n> | clear]"
         val rest = args.drop(2)
         return when (rest.firstOrNull()) {
@@ -4598,6 +4645,8 @@ internal object Cli {
               ticket move <id|prefix> [<status>] --before <id|prefix> | --after <id|prefix> | --top | --bottom | --position <n>   Reorder: ticket order is priority
                                   (the board and `tickets` list a column in that order; new tickets go to the bottom)
               agent queue <agent> [add <id> [--at n] | rm <id> | mv <id> <n> | clear]   An agent's persistent ticket queue (agent = profile id or unique name): lists it; its worker ending starts the first queued ticket
+              ticket assign <id|prefix> <agent> [--queue] [--at n]   Give a todo ticket to an existing agent (start now, or --queue behind its work)
+              agent switch <agent> <ticketId> [--now]   The agent leaves its ticket (handoff, todo) for another; the worker ends, the new ticket starts on exit
               ticket unassign <id|prefix> [--now] [--note <text>]   Take an in_progress ticket off its worker: back to todo (top), branch and work kept, with a handoff comment
               ticket start <id|prefix>       Start ticket work this way, never with a spawn: the worker runs the ticket's
                                   role, provider and model on its own ticket/<short-id>-<slug> branch; the ticket goes
@@ -4833,6 +4882,8 @@ internal object Cli {
         val unassignNote: String? = null,
         /** AGENT-TASKS-3: `agent queue ... --at <n>`. */
         val queueAt: Int? = null,
+        /** AGENT-TASKS-4: `ticket assign ... --queue`. */
+        val queueFlag: Boolean = false,
         /** TOKEN-1: `board --columns a,b`, `inbox --offset n` / `--previews`. */
         val columns: String? = null,
         val offset: String? = null,
@@ -4963,6 +5014,7 @@ internal object Cli {
         var now = false
         var unassignNote: String? = null
         var queueAt: Int? = null
+        var queueFlag = false
         var columns: String? = null
         var offset: String? = null
         var previews = false
@@ -5337,6 +5389,10 @@ internal object Cli {
                     queueAt = flagValue(args, ++i)?.toIntOrNull() ?: return fail(err, "--at expects a place number")
                     i++
                 }
+                "--queue" -> {
+                    queueFlag = true
+                    i++
+                }
                 "--note" -> {
                     unassignNote = flagValue(args, ++i) ?: return fail(err, "--note expects the note text")
                     i++
@@ -5459,6 +5515,7 @@ internal object Cli {
             now = now,
             unassignNote = unassignNote,
             queueAt = queueAt,
+            queueFlag = queueFlag,
             columns = columns,
             offset = offset,
             previews = previews,
