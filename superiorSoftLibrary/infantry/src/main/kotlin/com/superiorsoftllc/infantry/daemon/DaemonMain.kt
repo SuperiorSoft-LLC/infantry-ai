@@ -1531,6 +1531,15 @@ class InfantryDaemon(
                             // SEC-FIX-1 H1(b): user secrets only; a built-in (the update token) never reaches a run.
                             secrets = KeystoreHandler.runSecrets(keystore::fields),
                         ),
+                        // PLUGIN-MCP-1: api.plugins, the plugin manager on this host's plugins root (reads; install only on the owner's yes).
+                        pluginCatalog = com.superiorsoftllc.infantry.daemon.plugins.LocalPluginCatalog(
+                            com.superiorsoftllc.infantry.daemon.plugins.manager.PluginManager(
+                                com.superiorsoftllc.infantry.plugin.host.PluginFolders.root(stateDir(), { System.getenv(it) }),
+                                stateDir(), com.superiorsoftllc.infantry.plugin.host.PluginFolders.bundledRoot({ System.getenv(it) }),
+                            ),
+                            asks = { pluginHost.get().serviceRegistry.find(com.superiorsoftllc.infantry.daemon.api.attention.OwnerAsks::class) },
+                            log = { System.err.println("[infantry] $it") },
+                        ),
                         // PACE-TREND-1: api.meters, the current reading of every provider window (the cached live read).
                         meters = com.superiorsoftllc.infantry.usage.PacingMeters(usagePacing, requestSource = { since -> usageMeter?.requestsSince(since).orEmpty() }),
                         // DP-7e: api.sessionNotifier, over the mail router.

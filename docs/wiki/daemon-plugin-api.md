@@ -8,7 +8,7 @@ optional. Most modules have only a UI half.
 
 Source of the API: `superiorSoftLibrary/infantryDaemonApi/src/main/kotlin/com/superiorsoftllc/infantry/daemon/api/`
 (`DaemonApi.kt` holds the core; the sub-packages hold the larger services). Host side: `superiorSoftLibrary/infantry/src/main/kotlin/com/superiorsoftllc/infantry/daemon/plugins/`
-(`DaemonPluginHost.kt`, `PluginGuard.kt`). The version is `DaemonApi.VERSION`, currently **1.35.0**.
+(`DaemonPluginHost.kt`, `PluginGuard.kt`). The version is `DaemonApi.VERSION`, currently **1.36.0**.
 
 A daemon half compiles against the module `:superiorSoftLibrary:infantryDaemonApi` with `compileOnly`. The daemon
 loads the jar in its own class loader, which hides every daemon class except the API.
@@ -284,8 +284,8 @@ Test the guard with `Acme_DaemonHello`: the tool argument `sleepMs` blocks on pu
 
 ## Open questions
 
-- `DaemonApi.kt` lists the version history out of order inside `companion object` (1.32.0 to 1.35.0 are interleaved
-  with older entries). The constant `VERSION` is 1.35.0; the order of the comments is only cosmetic.
+- `DaemonApi.kt` lists the version history out of order inside `companion object` (1.32.0 to 1.36.0 are interleaved
+  with older entries). The constant `VERSION` is 1.36.0; the order of the comments is only cosmetic.
 - The description text of `limits.plugins.callTimeoutMs` in `LimitRegistry.kt` mentions `limits.plugins.hangCeilingMs`, but
   the hang-ceiling limit's key in the registry is `limits.plugin.guard.timeoutMs` (singular `plugin`). This page uses the registry key.
 - The tool-name rule (community names carry the vendor prefix) is stated in `DaemonApi.kt` and `docs/DAEMON-PLUGINS.md`;

@@ -812,6 +812,11 @@ class DaemonPluginHost private constructor(
             require(java.io.File(dir).isDirectory) { "project '${project.id}' directory does not exist: $dir" }
             return com.superiorsoftllc.infantry.daemon.api.files.DirectoryProjectFiles(java.io.File(dir))
         }
+        // PLUGIN-MCP-1: read-only plugin manager view; official / core, or a community module with the grant `plugins.read`.
+        override val plugins: com.superiorsoftllc.infantry.daemon.api.plugins.PluginCatalogReader get() {
+            check(!p.community || "plugins.read" in p.setting.allow) { "missing grant 'plugins.read' in modules.json" }
+            return hostServices.plugins
+        }
         // CMD-1: the run surface; official / core, or a community module with the grant `runs`.
         override val runs: com.superiorsoftllc.infantry.daemon.api.runs.Runs get() {
             check(!p.community || "runs" in p.setting.allow) { "missing grant 'runs' in modules.json" }

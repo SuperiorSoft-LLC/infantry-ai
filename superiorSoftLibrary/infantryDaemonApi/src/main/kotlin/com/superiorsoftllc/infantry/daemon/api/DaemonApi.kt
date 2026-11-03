@@ -115,6 +115,9 @@ interface DaemonApi {
     /** TRIG-1 (1.28.0, additive): the ports the triggers service runs on (daemon.api.triggers). A daemon without them answers nothing. */
     val triggerHost: com.superiorsoftllc.infantry.daemon.api.triggers.TriggerHost? get() = null
 
+    /** PLUGIN-MCP-1 (1.36.0, additive): read-only plugin manager view and the owner-gated install request. Official / core, or a community module with the grant `plugins.read`. */
+    val plugins: com.superiorsoftllc.infantry.daemon.api.plugins.PluginCatalogReader get() = com.superiorsoftllc.infantry.daemon.api.plugins.NoPluginCatalog
+
     /** CMD-1 (1.31.0, additive): the cwd-bound run surface (daemon.api.runs). Official / core tier, or a community module with the grant `runs`. */
     val runs: com.superiorsoftllc.infantry.daemon.api.runs.Runs get() = com.superiorsoftllc.infantry.daemon.api.runs.NoRuns
 
@@ -153,8 +156,9 @@ interface DaemonApi {
         // 1.33.0 (AR-4b-ii-a, additive): daemon.api.roles.RoleBindings / RoleTraitLists / RoleEnvironment.
         // 1.34.0 (AR-4b-ii-b, additive): RoleBindingRecord / RoleTraitsRecord replace the protocol types on the role binding / trait ports (a plugin cannot link protocol types).
         // 1.14.0 (DP-5h-3e-b, additive): BoardRuntime.attachCore / detachCore and BoardCoreAccess (core consumers reach the plugin-built board).
+        // 1.36.0 (PLUGIN-MCP-1, additive): `plugins` (daemon.api.plugins.PluginCatalogReader) and daemon.api.attention.OwnerAsks.
         // 1.35.0 (AR-3a, additive): daemon.api.sessions.SessionBinding / FirstTurnContextProvider (core composes the first turn from a provider list).
-        const val VERSION = "1.35.0"
+        const val VERSION = "1.36.0"
     }
 }
 

@@ -68,7 +68,10 @@ class CoreDaemonServices(
     private val clientBroadcast: ((type: String, data: String) -> Unit)? = null,
     /** CMD-1: the run surface; null = none. */
     private val runService: com.superiorsoftllc.infantry.daemon.api.runs.Runs? = null,
+    /** PLUGIN-MCP-1: the plugin manager view; null = none. */
+    private val pluginCatalog: com.superiorsoftllc.infantry.daemon.api.plugins.PluginCatalogReader? = null,
 ) : DaemonServices {
+    override val plugins get() = pluginCatalog ?: com.superiorsoftllc.infantry.daemon.api.plugins.NoPluginCatalog
     override val runs get() = runService ?: com.superiorsoftllc.infantry.daemon.api.runs.NoRuns
     override fun broadcast(type: String, data: String) { clientBroadcast?.invoke(type, data) }
     override val sessionNotifier get() = notifier ?: com.superiorsoftllc.infantry.daemon.api.sessions.NoSessionNotifier
