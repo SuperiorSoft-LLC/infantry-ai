@@ -1,7 +1,8 @@
 -- on-ticket-done: the "a ticket reached done" flow as a script (SCRIPT-PROC-1; D21).
--- Hook:  infantry script hook add "lane enter done" on-ticket-done --payload '{"devBranch":"<dev branch>","vcRole":"<vc role id>","skipMarkers":["[HOLD]","[PARKED]"]}'
+-- Hook:  infantry script hook add "lane enter done" on-ticket-done --payload '{"devBranch":"<dev branch>","vcRole":"<vc role id>","skipMarkers":["[HOLD]","[PARKED]","[Q:"]}'
 -- Install: copy this file to <project>/.infantry/scripts/on-ticket-done.lua.
--- Config is hook args (data), never literals here: devBranch, vcRole (both required), skipMarkers (list, optional).
+-- Config is hook args (data), never literals here: devBranch, vcRole (both required), skipMarkers (list, optional; "[Q:" skips tickets queued to an agent).
+-- agentQueueNext (event payload, set by the daemon when the finished ticket's agent has a queued ticket): no todo ticket is started, the board starts the queue head when the worker exits.
 -- Event payload (enriched by the daemon): ticketId, title, branch, tipSha, workerSession.
 -- Phase 1: message VC, close the worker session, read the todo lane.  Phase 2: start the next ticket.  Phase 3: comment what was done.
 local a = input.args
@@ -32,6 +33,11 @@ elseif input.phase == 2 then
   local lines = board and board.json and board.json.board or {}
   local markers = a.skipMarkers or {}
   local next_id
+  if a.agentQueueNext then
+    ih.log("agent queue next " .. tostring(a.agentQueueNext) .. "; board starts it on worker exit, no todo ticket started")
+    ih.again()
+    return
+  end
   for _, line in ipairs(lines) do
     local id, rest = line:match("^  (%x+) | (.*)$")
     if id then
@@ -57,7 +63,8 @@ else
       (ok(result(1)) and " (queued)" or " (FAILED)") .. ".",
     a.workerSession and ("Closed worker session " .. a.workerSession .. (ok(result(2)) and "." or " (failed).")) or "No worker session named; none closed.",
   }
-  if didStart then parts[#parts + 1] = "Started the next todo ticket: " .. (started.text or ""):sub(1, 200)
+  if a.agentQueueNext then parts[#parts + 1] = "No todo ticket started: the agent's queue head " .. tostring(a.agentQueueNext) .. " starts when the worker exits."
+  elseif didStart then parts[#parts + 1] = "Started the next todo ticket: " .. (started.text or ""):sub(1, 200)
   else parts[#parts + 1] = "Board is empty: no startable todo ticket (skipped " .. table.concat(a.skipMarkers or {}, ", ") .. ")." end
   ih.comment{ticketId = ticket, body = table.concat(parts, " ")}
 end
