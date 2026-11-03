@@ -345,7 +345,7 @@ class LocalBoardServices(
         fun info(t: Ticket) = TicketInfo(
             id = t.id, title = t.title, description = t.description, ticketType = t.ticketType, projectId = t.projectId, epicId = t.epicId,
             status = t.status, position = t.position, wontFix = t.wontFix, links = t.links.map { TicketLinkInfo(it.type, it.ticketId) },
-            workTip = t.hasWork?.tip, workAhead = t.hasWork?.ahead, heldBy = t.heldBy, holdReason = t.holdReason, createdAt = t.createdAt, updatedAt = t.updatedAt, agentId = t.agentId,
+            workTip = t.hasWork?.tip, workAhead = t.hasWork?.ahead, queuedAgent = t.queuedAgent, queuedAgentName = t.queuedAgentName, queueRank = t.queueRank, heldBy = t.heldBy, holdReason = t.holdReason, createdAt = t.createdAt, updatedAt = t.updatedAt, agentId = t.agentId,
             provider = t.provider, model = t.model, weight = t.weight,
             effectiveProvider = t.effectiveExecutor?.provider?.value, effectiveProviderSource = t.effectiveExecutor?.provider?.source,
             effectiveModel = t.effectiveExecutor?.model?.value, effectiveModelSource = t.effectiveExecutor?.model?.source,

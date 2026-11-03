@@ -15,6 +15,7 @@ fun StoredTicket.toRow() = TicketRow(
     queuedFor = queuedFor, queuedAt = queuedAt, sessionId = sessionId, projectId = projectId, epicId = epicId, branch = branch,
     base = base, skillIds = skillIds, skillsMode = skillsMode, includeSkillsContext = includeSkillsContext, startedBy = startedBy,
     images = images, weight = weight, contextLimit = contextLimit, effort = effort,
+    queuedAgent = queuedAgent, queueRank = queueRank,
 )
 
 fun TicketRow.toStored() = StoredTicket(
@@ -24,6 +25,7 @@ fun TicketRow.toStored() = StoredTicket(
     queuedFor = queuedFor, queuedAt = queuedAt, sessionId = sessionId, projectId = projectId, epicId = epicId, branch = branch,
     base = base, skillIds = skillIds, skillsMode = skillsMode, includeSkillsContext = includeSkillsContext, startedBy = startedBy,
     images = images, weight = weight, contextLimit = contextLimit, effort = effort,
+    queuedAgent = queuedAgent, queueRank = queueRank,
 )
 
 fun StoredLink.toRow() = TicketLinkRow(ticketId, relatedId, type, createdAt)

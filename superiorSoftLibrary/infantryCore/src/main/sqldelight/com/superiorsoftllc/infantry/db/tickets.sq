@@ -54,7 +54,10 @@ CREATE TABLE IF NOT EXISTS tickets (
     -- CONTEXT-LIMIT-1 (53.sqm): the worker's context limit in tokens; NULL = none (the harness's own window).
     context_limit INTEGER CHECK (context_limit IS NULL OR context_limit > 0),
     -- EFFORT-1 (55.sqm): the worker's reasoning effort level; NULL = the harness default.
-    effort TEXT
+    effort TEXT,
+    -- AGENT-TASKS-3 (57.sqm): the agent profile whose persistent queue holds this todo ticket, and its place (lowest first); NULL = in no queue.
+    queued_agent TEXT,
+    queue_rank INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS index_tickets_on_status ON tickets(status, position);
@@ -81,12 +84,12 @@ insertTicket:
 INSERT INTO tickets(
     id, title, description, ticket_type, status, position, wont_fix, agent_id, provider, model, use_worktree,
     worktree_branch, include_linked_tasks_context, queued_for, queued_at, session_id, created_at, updated_at, project_id, epic_id,
-    branch_name, base_commit, skill_ids, skills_mode, include_skills_context, started_by, images, weight, context_limit, effort
+    branch_name, base_commit, skill_ids, skills_mode, include_skills_context, started_by, images, weight, context_limit, effort, queued_agent, queue_rank
 )
 VALUES (
     :id, :title, :description, :ticket_type, :status, :position, :wont_fix, :agent_id, :provider, :model,
     :use_worktree, :worktree_branch, :include_linked_tasks_context, :queued_for, :queued_at, :session_id,
-    :created_at, :updated_at, :project_id, :epic_id, :branch_name, :base_commit, :skill_ids, :skills_mode, :include_skills_context, :started_by, :images, :weight, :context_limit, :effort
+    :created_at, :updated_at, :project_id, :epic_id, :branch_name, :base_commit, :skill_ids, :skills_mode, :include_skills_context, :started_by, :images, :weight, :context_limit, :effort, :queued_agent, :queue_rank
 );
 
 -- Overwrites everything but id and created_at.
@@ -119,7 +122,9 @@ UPDATE tickets SET
     images = :images,
     weight = :weight,
     context_limit = :context_limit,
-    effort = :effort
+    effort = :effort,
+    queued_agent = :queued_agent,
+    queue_rank = :queue_rank
 WHERE id = :id;
 
 getTicketById:

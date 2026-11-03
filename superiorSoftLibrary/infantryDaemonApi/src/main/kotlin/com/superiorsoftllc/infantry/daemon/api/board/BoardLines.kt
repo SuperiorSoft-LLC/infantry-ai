@@ -27,9 +27,9 @@ object BoardLines {
     const val SHORT_ID_LEN = 8
 
     /** One ticket as a board line needs it. */
-    data class Row(val id: String, val title: String, val status: String, val position: Int, val sessionId: String?, val branch: String?, val workTip: String? = null, val workAhead: Int? = null)
+    data class Row(val id: String, val title: String, val status: String, val position: Int, val sessionId: String?, val branch: String?, val workTip: String? = null, val workAhead: Int? = null, val queuedAgent: String? = null, val queuedAgentName: String? = null, val queueRank: Int? = null)
 
-    fun row(t: TicketInfo) = Row(t.id, t.title, t.status, t.position, t.sessionId, t.branch, t.workTip, t.workAhead)
+    fun row(t: TicketInfo) = Row(t.id, t.title, t.status, t.position, t.sessionId, t.branch, t.workTip, t.workAhead, t.queuedAgent, t.queuedAgentName, t.queueRank)
 
     fun shortId(id: String): String = id.takeLast(SHORT_ID_LEN)
 
@@ -81,6 +81,8 @@ object BoardLines {
         t.branch?.let { b -> parts += "$b@${commitOf(t) ?: "no commit"}" }
         // AGENT-TASKS-2: a todo ticket whose branch keeps work: `[WORK <tip7> +<ahead>]`.
         if (t.workTip != null && t.workAhead != null) parts += "[WORK ${t.workTip.take(7)} +${t.workAhead}]"
+        // AGENT-TASKS-3: a todo ticket in an agent's persistent queue: `[Q:<agent name>#<place>]`.
+        if (t.queuedAgent != null && t.queueRank != null) parts += "[Q:${t.queuedAgentName ?: t.queuedAgent.take(SHORT_ID_LEN)}#${t.queueRank}]"
         return parts.joinToString(" | ")
     }
 

@@ -536,6 +536,37 @@ class TicketStartDaemonTest {
         }
     }
 
+    @Test
+    fun aRestartKeepsTheAgentQueueAndStartsNothing() {
+        val stateDir = java.nio.file.Files.createTempDirectory("infantry-agentqueue-restart").toFile()
+        var queuedId = ""
+        val context = FakeTicketContext("HANG")
+        val first = DaemonFixture.launch(stateDir = stateDir, runner = GatedRunner(), context = context)
+        try {
+            first.client.await(Envelope.READY)
+            first.client.saveProfile(profileJson("backend", "backend"))
+            val b = first.client.saveTicket("""{"title":"B","agentId":"backend"}""")
+            first.client.send(Envelope.AGENT_QUEUE, """{"agentId":"backend","action":"add","ticketId":"${b.id}"}""")
+            first.client.await(Envelope.AGENT_QUEUE)
+            queuedId = b.id
+        } finally {
+            first.stop()
+        }
+
+        val second = DaemonFixture.launch(stateDir = stateDir, runner = GatedRunner(), context = context)
+        try {
+            second.client.await(Envelope.READY)
+            val kept = second.client.board().single { it.id == queuedId }
+            assertEquals(TicketStatus.TODO, kept.status)
+            assertEquals("backend", kept.queuedAgent, "a restart keeps the persistent agent queue (clearQueueMarks only clears the capacity mark)")
+            assertEquals(1, kept.queueRank)
+            assertEquals(0, second.daemon.manager.list().size, "nothing starts on boot")
+        } finally {
+            second.stop()
+            second.deleteState()
+        }
+    }
+
     // --- j. ticket_runs and lastRun -------------------------------------------------------------
 
     @Test

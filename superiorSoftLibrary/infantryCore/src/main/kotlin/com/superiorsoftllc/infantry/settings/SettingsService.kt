@@ -72,6 +72,7 @@ class SettingsService(
             QUESTIONS_MAX_PER_HOUR to JsonPrimitive(questionsMaxPerHour()),
             TICKET_EXIT_BEHAVIOR to JsonPrimitive(ticketExitBehavior()),
             TICKET_HANDOFF_NOTE to JsonPrimitive(ticketHandoffNote()),
+            TICKET_CLOSE_DONE_WORKER_WHEN_QUEUED to JsonPrimitive(runCatching { storedBoolean(TICKET_CLOSE_DONE_WORKER_WHEN_QUEUED)?.booleanOrNull }.getOrNull() ?: true),
             TICKET_WEIGHT_EXECUTORS to weightExecutors().toJson(),
             TICKET_WEIGHT_CONTEXT to weightContext().toJson(),
             USAGE_PACING to UsagePacing.ruleJson(usagePacing()),
@@ -400,6 +401,7 @@ class SettingsService(
             QUESTIONS_MAX_OPEN_PER_AGENT, QUESTIONS_MAX_PER_HOUR -> JsonPrimitive(requireQuestionLimit(key, value))
             TICKET_EXIT_BEHAVIOR -> JsonPrimitive(requireExitBehavior(value))
             TICKET_HANDOFF_NOTE -> JsonPrimitive(requireHandoffNote(value))
+            TICKET_CLOSE_DONE_WORKER_WHEN_QUEUED -> JsonPrimitive(requireBoolean(key, value))
             TICKET_WEIGHT_EXECUTORS -> try {
                 WeightExecutors.parse(value).toJson()
             } catch (e: IllegalArgumentException) {
@@ -894,6 +896,8 @@ class SettingsService(
         const val TICKET_EXIT_BEHAVIOR = "tickets.exitBehavior"
         /** AGENT-TASKS-2: who writes the handoff note when a ticket is unassigned: `auto` (default, the board), `worker` (one last turn) or `off`. */
         const val TICKET_HANDOFF_NOTE = "tickets.agentTasks.handoffNote"
+        /** AGENT-TASKS-3: end a done ticket's idle worker when its agent has a queued ticket (default true). */
+        const val TICKET_CLOSE_DONE_WORKER_WHEN_QUEUED = "tickets.agentTasks.closeDoneWorkerWhenQueued"
         private val HANDOFF_NOTES = listOf("auto", "worker", "off")
         /** TICKET-WEIGHT: JSON object weight ("1".."5") -> {provider, model}; see [WeightExecutors]. */
         const val TICKET_WEIGHT_EXECUTORS = WeightExecutors.SETTING

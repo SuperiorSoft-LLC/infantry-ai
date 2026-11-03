@@ -51,6 +51,9 @@ data class TicketRow(
     val contextLimit: Int? = null,
     /** EFFORT-1: the worker's reasoning effort level; null = the harness default. */
     val effort: String? = null,
+    /** AGENT-TASKS-3: the agent profile whose persistent queue holds this ticket, and its place there. */
+    val queuedAgent: String? = null,
+    val queueRank: Int? = null,
 ) {
     init {
         require(position >= 0) { "position must be >= 0, was $position" }

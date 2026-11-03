@@ -2,7 +2,10 @@
 // Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.plugins.official.board.daemon
 
+import com.superiorsoftllc.infantry.daemon.api.Caller
 import com.superiorsoftllc.infantry.daemon.api.DaemonApi
+import com.superiorsoftllc.infantry.daemon.api.board.BoardResult
+import com.superiorsoftllc.infantry.daemon.api.board.TicketQuery
 import com.superiorsoftllc.infantry.daemon.api.board.TicketEvent
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -16,13 +19,23 @@ import kotlinx.serialization.json.put
 object TicketMovedEvent {
     const val NAME = "ticket.moved"
 
-    fun payload(e: TicketEvent): String = buildJsonObject {
+    fun payload(e: TicketEvent, agentQueueNext: String? = null): String = buildJsonObject {
         put("ticketId", e.ticketId)
         put("kind", e.kind)
         e.from?.let { put("from", it) }
         e.to?.let { put("to", it) }
         put("seq", e.seq)
+        agentQueueNext?.let { put("agentQueueNext", it) }
     }.toString()
+
+    /** AGENT-TASKS-3: the head of the queue of the agent that owned the done ticket (a ticket id), or null when it has none. */
+    fun agentQueueNext(api: DaemonApi, ticketId: String): String? = runCatching {
+        val by = Caller(owner = true)
+        val done = (api.tickets.get(ticketId, by) as? BoardResult.Ok)?.value ?: return null
+        val agent = done.agentId?.takeUnless { it.startsWith("role:") } ?: return null
+        val page = (api.tickets.list(by, TicketQuery(projectId = done.projectId, status = setOf("todo"))) as? BoardResult.Ok)?.value ?: return null
+        page.items.filter { it.queuedAgent == agent }.minByOrNull { it.queueRank ?: Int.MAX_VALUE }?.id
+    }.getOrNull()
 
     /** Subscribes to the ticket events; the returned handle ends the subscription. */
     fun attach(api: DaemonApi): AutoCloseable {
@@ -31,7 +44,7 @@ object TicketMovedEvent {
         return api.events.onTicket("script-ticket-moved") { e ->
             if (e.isTransition && e.seq > lastSeq) {
                 lastSeq = e.seq
-                runCatching { api.events.publish(NAME, payload(e)) }
+                runCatching { api.events.publish(NAME, payload(e, if (e.to == "done") agentQueueNext(api, e.ticketId) else null)) }
             }
         }
     }

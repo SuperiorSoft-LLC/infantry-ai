@@ -44,10 +44,11 @@ class BoardDaemonPlugin : DaemonPlugin {
         var commentsError: String? = null
         val comments = runCatching { CommentsWiring.create(api) }.onFailure { commentsError = it.message; api.log("ticket comments unavailable: ${it.message}") }.getOrNull()
         // AGENT-TASKS-2: an unassign writes its handoff as a resolved `handoff` comment; the next start brief reads the latest one.
-        if (comments != null) ownBoard?.let { b ->
-            b.handoffSink = { id, project, body -> comments.add(id, project, "", TicketComments.Author.daemon, "handoff", TicketComments.RESOLVED, body) }
-            b.latestHandoff = { id -> comments.read(id, "latest", "handoff", null).firstOrNull()?.body }
-        }
+        comments?.let { store -> ownBoard?.let { b ->
+            b.handoffSink = { id, project, body -> store.add(id, project, "", TicketComments.Author.daemon, "handoff", TicketComments.RESOLVED, body) }
+            b.queueNoteSink = { id, project, body -> store.add(id, project, "", TicketComments.Author.daemon, "note", TicketComments.RESOLVED, body) }
+            b.latestHandoff = { id -> store.read(id, "latest", "handoff", null).firstOrNull()?.body }
+        } }
         api.tools.register(TicketGetTool(api, comments))
         // COMMENT-TOOL-1: the comment tools are always listed; without the store they refuse with the reason instead of vanishing from every worker's tool list.
         val why = commentsError?.let { "${CommentsWiring.UNAVAILABLE}: $it" } ?: CommentsWiring.UNAVAILABLE
@@ -68,6 +69,7 @@ class BoardDaemonPlugin : DaemonPlugin {
         api.tools.register(EpicBaseTool)
         api.tools.register(TicketMoveTool(api))
         api.tools.register(TicketUnassignTool(api))
+        api.tools.register(AgentQueueTool(api))
         api.tools.register(TicketDeleteTool(api))
         api.tools.register(TicketCreateTool(api, comments))
         api.tools.register(TicketUpdateTool(api, comments))

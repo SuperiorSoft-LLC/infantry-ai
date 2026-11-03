@@ -2,7 +2,7 @@
 -- `ticket_links`) and lives here with every column intact, plus its epic's and project's snapshot, so board reads never scan it.
 -- ticket_files is NOT moved: the related-ticket file lists keep finding an archived ticket's changed files.
 --
--- NEXT MIGRATION: 57.sqm
+-- NEXT MIGRATION: 58.sqm (57 is AGENT-TASKS-3 queued_agent)
 
 CREATE TABLE IF NOT EXISTS archived_tickets (
     id TEXT NOT NULL PRIMARY KEY,

@@ -170,6 +170,13 @@ object LimitRegistry {
         zeroMeans = "do not wait: end the worker at once",
     )
 
+    /** AGENT-TASKS-3: how many todo tickets one agent's persistent queue holds. */
+    val AGENT_QUEUE_MAX = LimitDef(
+        "limits.agentTasks.queueMax", 5, "tickets",
+        "How many todo tickets one agent's persistent queue may hold; adding past it is refused.",
+        zeroMeans = "no agent queue: adding is refused",
+    )
+
     /** AGENT-TASKS-2: commit subjects listed in the auto handoff note. */
     val HANDOFF_COMMITS = LimitDef(
         "limits.agentTasks.handoffCommits", 10, "commits",
@@ -667,7 +674,7 @@ object LimitRegistry {
         MAX_PER_POD, MAX_SESSIONS, MAX_DEPTH, MCP_MAX_SPAWNS, LANE_DEFAULT, PACING_CEILING,
         BUILD_MAX_WORKERS, BUILD_MAX_PARALLEL_FORKS, CPU_ALERT_PERCENT, CPU_ALERT_MINUTES,
         TICKET_DEADLINE_MINUTES, UNATTENDED_DEADLINE_MINUTES, STALL_MINUTES, KILL_RETRY_MINUTES, SILENT_MINUTES, PROGRESS_STALE_MINUTES, IDLE_NUDGE_MINUTES, MAIL_WAKE_MAX_SECONDS, IDLE_NOTICE_MINUTES, IDLE_COMMENT, UNBRIEFED_GRACE_MINUTES,
-        UNASSIGN_WAIT_SECONDS, HANDOFF_COMMITS, HANDOFF_CHARS,
+        UNASSIGN_WAIT_SECONDS, HANDOFF_COMMITS, HANDOFF_CHARS, AGENT_QUEUE_MAX,
         AUTO_DONE_MIN_OUTPUTS, PROCESS_WATCH_INTERVAL_SECONDS, RUN_SCROLLBACK_BYTES, RUN_HISTORY,
         RUN_INPUT_BYTES_PER_SECOND, RUN_INPUT_MAX_FRAME_BYTES, RUN_INPUT_QUEUE_BYTES, RUN_MAX_COLS, RUN_MAX_ROWS,
         QUESTION_TTL_MINUTES, BG_NOTIFY_TAIL_LINES, BG_NOTIFY_TIMEOUT_MINUTES, BG_NOTIFY_PATTERN_GRACE_SECONDS,

@@ -75,6 +75,8 @@ import com.superiorsoftllc.infantry.protocol.TicketLinkRequest
 import com.superiorsoftllc.infantry.protocol.TicketLinkType
 import com.superiorsoftllc.infantry.protocol.TicketMove
 import com.superiorsoftllc.infantry.protocol.TicketUnassign
+import com.superiorsoftllc.infantry.protocol.AgentQueueRequest
+import com.superiorsoftllc.infantry.protocol.AgentQueueState
 import com.superiorsoftllc.infantry.protocol.TicketSave
 import com.superiorsoftllc.infantry.protocol.TicketListQuery
 import com.superiorsoftllc.infantry.protocol.TicketStatus
@@ -440,6 +442,7 @@ internal object Cli {
                 "archive" -> runBlocking { archiveCommand(stream, parsed, out, err, getenv) }
                 "harnesses" -> harnesses(stream, out, err)
                 "harness-status" -> harnessStatus(stream, parsed, out, err)
+                "agent" -> runBlocking { agentQueue(stream, parsed, out, err) }
                 "agent-def" -> AgentDefCli.run(stream, parsed.args, out, err, getenv)
                 "run-cmd" -> RunCmdCli.run(stream, parsed.args, parsed.name, parsed.project, parsed.crossProject, parsed.force, out, err, getenv)
                 "harness-install" -> harnessInstall(stream, parsed, out, err)
@@ -1291,6 +1294,48 @@ internal object Cli {
             return 1
         }
         out.appendLine("unassigned ${ticket.id} -> ${moved.status}")
+        return 0
+    }
+
+    private fun agentQueueUsage(args: List<String>): String? {
+        if (args.firstOrNull() != "queue") return "usage: infantry agent queue <agent> [add <id> [--at n] | rm <id> | mv <id> <n> | clear]"
+        val rest = args.drop(2)
+        return when (rest.firstOrNull()) {
+            null, "clear" -> null
+            "add", "rm" -> if (rest.size < 2) "usage: infantry agent queue <agent> ${rest[0]} <id>${if (rest[0] == "add") " [--at n]" else ""}" else null
+            "mv" -> if (rest.size < 3 || rest[2].toIntOrNull() == null) "usage: infantry agent queue <agent> mv <id> <n>" else null
+            else -> "usage: infantry agent queue <agent> [add <id> [--at n] | rm <id> | mv <id> <n> | clear]"
+        }
+    }
+
+    /** AGENT-TASKS-3: `agent queue <agent> [add <id> [--at n] | rm <id> | mv <id> <n> | clear]`; prints the queue after the action, head first. */
+    private suspend fun agentQueue(stream: FrameStream, parsed: ParsedArgs, out: Appendable, err: Appendable): Int {
+        checkContract(stream, err)
+        agentQueueUsage(parsed.args)?.let { err.appendLine(it); return 1 }
+        val agent = parsed.args[1]
+        val rest = parsed.args.drop(2)
+        val (action, ticketId, at) = when (rest.firstOrNull()) {
+            null -> Triple("list", null, null)
+            "add" -> Triple("add", rest[1], parsed.queueAt)
+            "rm" -> Triple("remove", rest[1], null)
+            "mv" -> Triple("move", rest[1], rest[2].toInt())
+            else -> Triple("clear", null, null)
+        }
+        val request = AgentQueueRequest(agentId = agent, action = action, ticketId = ticketId, at = at)
+        val answer = stream.request(
+            Envelope(Envelope.AGENT_QUEUE, json.encodeToString(AgentQueueRequest.serializer(), request)),
+            answerType = Envelope.AGENT_QUEUE,
+            what = "agent_queue",
+            idempotent = action == "list",
+        )
+        val state = try {
+            AgentQueueState.decode(answer.data)
+        } catch (e: Exception) {
+            err.appendLine("error: malformed queue answer from the daemon: ${e.message}")
+            return 1
+        }
+        out.appendLine("queue of ${state.name ?: state.agentId}: ${state.tickets.size} ticket(s)" + (state.message?.let { " ($it)" } ?: ""))
+        state.tickets.forEach { out.appendLine("#${it.rank} ${it.ticketId} ${it.title}") }
         return 0
     }
 
@@ -4552,6 +4597,7 @@ internal object Cli {
                                   in_progress is a start (see ticket start): a refused or held one exits 1 with the reason
               ticket move <id|prefix> [<status>] --before <id|prefix> | --after <id|prefix> | --top | --bottom | --position <n>   Reorder: ticket order is priority
                                   (the board and `tickets` list a column in that order; new tickets go to the bottom)
+              agent queue <agent> [add <id> [--at n] | rm <id> | mv <id> <n> | clear]   An agent's persistent ticket queue (agent = profile id or unique name): lists it; its worker ending starts the first queued ticket
               ticket unassign <id|prefix> [--now] [--note <text>]   Take an in_progress ticket off its worker: back to todo (top), branch and work kept, with a handoff comment
               ticket start <id|prefix>       Start ticket work this way, never with a spawn: the worker runs the ticket's
                                   role, provider and model on its own ticket/<short-id>-<slug> branch; the ticket goes
@@ -4785,6 +4831,8 @@ internal object Cli {
         /** AGENT-TASKS-2: `ticket unassign --now` ends the worker at once; `--note <text>` joins the handoff comment. */
         val now: Boolean = false,
         val unassignNote: String? = null,
+        /** AGENT-TASKS-3: `agent queue ... --at <n>`. */
+        val queueAt: Int? = null,
         /** TOKEN-1: `board --columns a,b`, `inbox --offset n` / `--previews`. */
         val columns: String? = null,
         val offset: String? = null,
@@ -4914,6 +4962,7 @@ internal object Cli {
         var dryRun = false
         var now = false
         var unassignNote: String? = null
+        var queueAt: Int? = null
         var columns: String? = null
         var offset: String? = null
         var previews = false
@@ -5284,6 +5333,10 @@ internal object Cli {
                     now = true
                     i++
                 }
+                "--at" -> {
+                    queueAt = flagValue(args, ++i)?.toIntOrNull() ?: return fail(err, "--at expects a place number")
+                    i++
+                }
                 "--note" -> {
                     unassignNote = flagValue(args, ++i) ?: return fail(err, "--note expects the note text")
                     i++
@@ -5405,6 +5458,7 @@ internal object Cli {
             dryRun = dryRun,
             now = now,
             unassignNote = unassignNote,
+            queueAt = queueAt,
             columns = columns,
             offset = offset,
             previews = previews,
@@ -5549,6 +5603,7 @@ internal object Cli {
         "harnesses" -> if (parsed.args.isNotEmpty()) "harnesses takes no arguments: infantry harnesses" else null
         "harness-status" -> if (parsed.args.isNotEmpty()) "harness-status takes no arguments: infantry harness-status [--check]" else null
         "harness-install" -> null
+        "agent" -> if (parsed.args.firstOrNull().isNullOrBlank() || parsed.args.size == 1) null else agentQueueUsage(parsed.args)
         "agent-def" -> AgentDefCli.usageError(parsed.args)
         "run-cmd" -> RunCmdCli.usageError(parsed.args)
         "processes" -> ProcessesCli.usageError(parsed.args, parsed.all)
@@ -5767,7 +5822,7 @@ internal object Cli {
         "submit", "watch", "pods", "runs", "logs", "cancel", "tickets", "board", "ticket", "agents", "send", "inbox",
         "read", "threads", "thread", "waiting", "epics", "stories", "epic", "project", "mcp", "knowledge", "memory", "decision", "pipeline", "notify", "issue",
         "trait", "skill", "role", "ask", "harnesses", "harness-status", "archive", "harness-install", "image", "session", "remote", "bg", "kill", "usage",
-        "processes", "settings", "agent-def", "run-cmd", "event", "tests", "tool", "script",
+        "processes", "settings", "agent", "agent-def", "run-cmd", "event", "tests", "tool", "script",
     )
 
     /** `infantry remote on|off|status`: edits `<stateDir>/network.properties`; takes effect on the next daemon restart. */

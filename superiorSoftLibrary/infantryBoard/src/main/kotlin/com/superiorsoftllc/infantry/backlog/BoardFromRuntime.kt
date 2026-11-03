@@ -30,6 +30,8 @@ object BoardFromRuntime {
     const val UNASSIGN_WAIT_SECONDS = "limits.agentTasks.unassignWaitSeconds"
     const val HANDOFF_COMMITS = "limits.agentTasks.handoffCommits"
     const val HANDOFF_CHARS = "limits.agentTasks.handoffChars"
+    const val QUEUE_MAX = "limits.agentTasks.queueMax"
+    const val CLOSE_DONE_WORKER_WHEN_QUEUED = "tickets.agentTasks.closeDoneWorkerWhenQueued"
     private val EXIT_BEHAVIORS = setOf("leave", "done")
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -90,6 +92,8 @@ object BoardFromRuntime {
             unassignWaitSeconds = { runtime.limit(UNASSIGN_WAIT_SECONDS) ?: 120L },
             handoffCommits = { runtime.limit(HANDOFF_COMMITS) ?: 10L },
             handoffChars = { runtime.limit(HANDOFF_CHARS) ?: 1500L },
+            queueMax = { runtime.limit(QUEUE_MAX) ?: 5L },
+            closeDoneWorkerWhenQueued = { runtime.setting(CLOSE_DONE_WORKER_WHEN_QUEUED)?.trim() != "false" },
             relatedDescription = RelatedDescription { d ->
                 runtime.relatedDescription(
                     BoardRelatedDraft(

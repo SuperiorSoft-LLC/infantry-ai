@@ -30,6 +30,8 @@ import com.superiorsoftllc.infantry.persistence.toRow
 import com.superiorsoftllc.infantry.persistence.toStored
 import com.superiorsoftllc.infantry.persistence.TicketLinkRow
 import com.superiorsoftllc.infantry.persistence.TicketRow
+import com.superiorsoftllc.infantry.protocol.AgentQueueEntry
+import com.superiorsoftllc.infantry.protocol.AgentQueueState
 import com.superiorsoftllc.infantry.protocol.EffectiveExecutor
 import com.superiorsoftllc.infantry.protocol.ExecutorOverrides
 import com.superiorsoftllc.infantry.protocol.ExecutorField
@@ -163,6 +165,10 @@ class TicketBoard(
     private val handoffCommits: () -> Long = { 10 },
     /** AGENT-TASKS-2: `limits.agentTasks.handoffChars`: the worker message kept in a handoff note. */
     private val handoffChars: () -> Long = { 1500 },
+    /** AGENT-TASKS-3: `limits.agentTasks.queueMax`: how many todo tickets one agent's persistent queue holds. */
+    private val queueMax: () -> Long = { 5 },
+    /** AGENT-TASKS-3: `tickets.agentTasks.closeDoneWorkerWhenQueued`: end a done ticket's idle worker when its agent has a queued ticket. */
+    private val closeDoneWorkerWhenQueued: () -> Boolean = { true },
 ) {
 
     /** DP-5f-3d: whether the host has a session manager (was a null check on the constructor's manager). */
@@ -267,7 +273,7 @@ class TicketBoard(
         val candidates = store.transaction {
             val s = load()
             boardOrder(s.rows.values)
-                .filter { it.status == TicketStatus.TODO && s.holding(it.id).isEmpty() }
+                .filter { it.status == TicketStatus.TODO && s.holding(it.id).isEmpty() && it.queuedAgent == null } // AGENT-TASKS-3: a queued ticket runs only from its agent's queue
                 .map { it.id }
         }
         val notStarted = mutableListOf<Ticket>()
@@ -304,7 +310,7 @@ class TicketBoard(
         val candidates = store.transaction {
             val s = load()
             boardOrder(s.rows.values)
-                .filter { it.status == TicketStatus.TODO && s.holding(it.id).isEmpty() }
+                .filter { it.status == TicketStatus.TODO && s.holding(it.id).isEmpty() && it.queuedAgent == null }
                 .filter { matchesTriggerAgent(it.agentId, agentFilter) }
                 .map { it.id }
         }
@@ -357,6 +363,118 @@ class TicketBoard(
         )) {
             is SessionStartResult.Started -> PromptLaunch.Started(started.session.id)
             is SessionStartResult.Refused -> PromptLaunch.Refused(started.reason)
+        }
+    }
+
+    /** AGENT-TASKS-3: writes a plain note on a ticket (set by the board plugin; null = comments unavailable, the refusal is not written). */
+    var queueNoteSink: ((ticketId: String, projectId: String?, body: String) -> Unit)? = null
+
+    /** AGENT-TASKS-3: the (ticket, reason) pairs a refused queue drain already commented. */
+    private val reportedQueueRefusals = java.util.Collections.synchronizedSet(HashSet<String>())
+
+    private fun noteQueueRefusal(ticketId: String, projectId: String?, why: String) {
+        if (!reportedQueueRefusals.add("$ticketId|$why")) return
+        runCatching { queueNoteSink?.invoke(ticketId, projectId, "Queue start refused, the ticket stays queued: $why") }
+    }
+
+    /** AGENT-TASKS-3: ids of [agentId]'s queued todo tickets, lowest rank first. */
+    private fun agentQueueIds(agentId: String): List<String> = store.transaction {
+        val snapshot = load()
+        boardOrder(snapshot.rows.values)
+            .filter { it.status == TicketStatus.TODO && it.queuedAgent == agentId && snapshot.holding(it.id).isEmpty() }
+            .sortedBy { it.queueRank ?: Int.MAX_VALUE }
+            .map { it.id }
+    }
+
+    /** AGENT-TASKS-3: the head of [agentId]'s queue (a ticket id), or null when it is empty. */
+    fun agentQueueHead(agentId: String): String? = agentQueueIds(agentId).firstOrNull()
+
+    private fun resolveQueueAgent(ref: String): BoardAgent {
+        val key = ref.trim()
+        require(key.isNotEmpty()) { "an agent (profile id or unique name) is required" }
+        host.agents.get(key)?.let { return it }
+        val byName = host.agents.list().filter { it.name.equals(key, ignoreCase = true) }
+        require(byName.isNotEmpty()) { "no agent '${key.take(80)}'" }
+        require(byName.size == 1) { "agent name '${key.take(80)}' is ambiguous (${byName.size} agents): use the profile id" }
+        return byName.single()
+    }
+
+    /**
+     * AGENT-TASKS-3: an agent's persistent ticket queue (docs/AGENT-TASKS-DESIGN.md 2.4). [action] is `list`, `add` (ticket, at = 1-based
+     * place, default the end), `remove`, `move` (ticket, at) or `clear`. Only todo tickets, one queue per ticket, at most
+     * `limits.agentTasks.queueMax` per agent. Never starts anything: the agent's worker ending does (drainProfileLane).
+     */
+    @Synchronized
+    fun queue(agentRef: String, action: String = QUEUE_LIST, ticketId: String? = null, at: Int? = null): AgentQueueState {
+        val agent = resolveQueueAgent(agentRef)
+        val agentId = agent.id ?: throw IllegalArgumentException("agent '${agent.name}' has no profile id")
+        require(action in QUEUE_ACTIONS) { "unknown queue action '${action.take(40)}': use ${QUEUE_ACTIONS.joinToString("|")}" }
+        var message: String? = null
+        if (action != QUEUE_LIST) {
+            val id = if (action == QUEUE_CLEAR) null else checkId(ticketId ?: throw IllegalArgumentException("queue $action needs a ticket id"))
+            if (action == QUEUE_MOVE) require(at != null) { "queue move needs a place (at)" }
+            at?.let { require(it >= 1) { "place must be 1 or more" } }
+            val ordered = agentQueueIds(agentId).toMutableList()
+            when (action) {
+                QUEUE_ADD, QUEUE_MOVE -> {
+                    val row = store.transaction { load() }.require(id!!)
+                    require(row.status == TicketStatus.TODO) { "ticket $id is ${row.status}: only a todo ticket can be queued" }
+                    require(row.queuedAgent == null || row.queuedAgent == agentId) {
+                        "ticket $id is already queued for agent ${row.queuedAgent}: remove it there first"
+                    }
+                    val member = id in ordered
+                    require(action != QUEUE_MOVE || member) { "ticket $id is not in agent ${agent.name}'s queue" }
+                    require(member || ordered.size < queueMax()) { "agent ${agent.name}'s queue is full (limits.agentTasks.queueMax = ${queueMax()})" }
+                    ordered.remove(id)
+                    ordered.add(((at ?: (ordered.size + 1)) - 1).coerceIn(0, ordered.size), id)
+                }
+                QUEUE_REMOVE -> {
+                    require(id in ordered) { "ticket $id is not in agent ${agent.name}'s queue" }
+                    ordered.remove(id)
+                }
+                QUEUE_CLEAR -> {
+                    message = "cleared ${ordered.size}"
+                    ordered.clear()
+                }
+            }
+            val outcome = commit { s ->
+                // Everything of this agent's that was queued and is no longer listed leaves; the listed get places 1..n.
+                s.rows.values.filter { it.queuedAgent == agentId && it.id !in ordered }.forEach {
+                    s.rows[it.id] = it.copy(queuedAgent = null, queueRank = null)
+                }
+                ordered.forEachIndexed { i, tid -> s.rows[tid] = s.rows.getValue(tid).copy(queuedAgent = agentId, queueRank = i + 1) }
+            }
+            if (outcome.changed.isNotEmpty()) {
+                val byId = outcome.board.associateBy { it.id }
+                push(BoardEvent.Changed(outcome.changed.map { byId.getValue(it) }))
+                announce(outcome)
+            }
+        }
+        val snapshot = store.transaction { load() }
+        val entries = agentQueueIds(agentId).mapIndexed { i, tid -> AgentQueueEntry(tid, snapshot.rows.getValue(tid).title, i + 1) }
+        return AgentQueueState(agentId, agent.name, entries, message)
+    }
+
+    /**
+     * AGENT-TASKS-3: a done ticket's worker is ended once it is IDLE when its agent has a queued ticket, so the exit drains the queue
+     * even if no hook closes the worker (`tickets.agentTasks.closeDoneWorkerWhenQueued`). Runs on [sessionEvents], never under a lock.
+     */
+    private fun closeDoneWorkerWhenQueued(sessionId: String) {
+        if (!closeDoneWorkerWhenQueued() || !queueDrainEnabled) return
+        try {
+            sessionEvents.execute {
+                runCatching {
+                    val view = host.sessions.get(sessionId)?.takeIf { it.live && it.state == "IDLE" } ?: return@runCatching
+                    val ticketId = view.ticketId ?: return@runCatching
+                    val agentId = view.agentId ?: return@runCatching
+                    val done = store.transaction { store.tickets.get(ticketId)?.status == TicketStatus.DONE }
+                    if (done && agentQueueIds(agentId).isNotEmpty()) {
+                        host.sessions.kill(sessionId, force = true, by = "board", reason = DONE_QUEUED_DETAIL)
+                    }
+                }
+            }
+        } catch (_: RejectedExecutionException) {
+            // closed
         }
     }
 
@@ -446,6 +564,7 @@ class TicketBoard(
                     if (record.view.state == "BUSY") pending.sawBusy = true
                     else if (record.view.state == "IDLE" && pending.sawBusy) queueUnassignStep(record.view.id)
                 }
+                if (record.view.state == "IDLE") closeDoneWorkerWhenQueued(record.view.id)
                 val ticketId = record.view.ticketId
                 if (ticketId != null && record.view.runCount == 0) {
                     ensureRunRow(record)
@@ -886,7 +1005,7 @@ class TicketBoard(
         // ROUTING-1: the project's first matching rule (none when the ticket pins its own provider / model or the project
         // has no rules). Its setRole is the role of a ticket that has none; it never replaces the ticket's own.
         val rule = routingChoice(row)
-        val assigned = row.agentId ?: rule?.setRole?.let { "role:$it" }
+        val assigned = (if (origin == HandOutOrigin.QUEUE_DRAIN) row.queuedAgent else null) ?: row.agentId ?: rule?.setRole?.let { "role:$it" } // AGENT-TASKS-3: a drained ticket runs on the queue's own agent
         val assignment = resolveAssignment(assigned, row.projectId)
         if (assignment.refusal != null) return refusedStart(initialTicket, assignment.refusal)
         // BUG-WT-1: with no repo configured and no explicit pin, a project folder that is a git checkout IS the
@@ -1077,7 +1196,7 @@ class TicketBoard(
         // refused start. So the commit failing (SQLITE_BUSY_SNAPSHOT, a full disk) is compensated here: the
         // session it would have recorded is killed, never left running against a ticket still filed as todo.
         val outcome = try {
-            commitStarted(id, started.id, ticketWorktree, startedBy)
+            commitStarted(id, started.id, ticketWorktree, startedBy, keepQueue = origin == HandOutOrigin.QUEUE_DRAIN)
         } catch (e: Throwable) {
             runCatching { host.sessions.kill(started.id, force = true, by = "ticket start rollback", reason = "the start could not be committed") }
                 .onFailure { e.addSuppressed(it) }
@@ -1271,12 +1390,14 @@ class TicketBoard(
         store.tickets.all().firstOrNull { it.sessionId == workerSessionId }?.startedBy
     }
 
-    private fun commitStarted(id: String, sessionId: String, ticketWorktree: TicketWorktree?, startedBy: String?): Outcome =
+    private fun commitStarted(id: String, sessionId: String, ticketWorktree: TicketWorktree?, startedBy: String?, keepQueue: Boolean = false): Outcome =
         commit { snapshot ->
-            snapshot.require(id)
+            val queued = snapshot.require(id)
             snapshot.place(id, TicketStatus.IN_PROGRESS, null)
             val current = snapshot.rows.getValue(id)
+            // AGENT-TASKS-3: any start pulls the ticket out of its queue (place); a queue drain also takes the queue's agent as the ticket's.
             snapshot.rows[id] = current.copy(
+                agentId = if (keepQueue && queued.queuedAgent != null) queued.queuedAgent else current.agentId,
                 sessionId = sessionId,
                 // BUG-MAIL-2: each start names its own starter; a UI start (null) clears an earlier one.
                 startedBy = startedBy,
@@ -1500,7 +1621,15 @@ class TicketBoard(
                     (ticket.queuedFor == profileId || (role != null && ticket.queuedFor == "role:$role"))
             }.map { it.id }
         }
-        candidates.firstOrNull()?.let { handOut(it, HandOutOrigin.QUEUE_DRAIN) }
+        // AGENT-TASKS-3: the agent's own queue goes first (lowest rank); a refusal leaves it untouched and says why once.
+        val own = agentQueueIds(profileId).firstOrNull()
+        val drained = own?.let { id ->
+            val answer = runCatching { handOut(id, HandOutOrigin.QUEUE_DRAIN) }.getOrNull()
+            val start = answer?.ticket?.start
+            if (start?.ok != true && start != null) noteQueueRefusal(id, answer.ticket.projectId, "${start.reason}${start.detail?.let { ": $it" } ?: ""}")
+            start?.ok == true
+        } == true
+        if (!drained) candidates.firstOrNull()?.let { handOut(it, HandOutOrigin.QUEUE_DRAIN) }
         if (role != null) pruneIdleClones(role)
     }
 
@@ -1515,7 +1644,7 @@ class TicketBoard(
                 val snapshot = load()
                 boardOrder(snapshot.rows.values).filter { ticket ->
                     ticket.status == TicketStatus.TODO && ticket.projectId == projectId &&
-                        ticket.queuedFor?.startsWith("role:") == true && snapshot.holding(ticket.id).isEmpty()
+                        ticket.queuedFor?.startsWith("role:") == true && snapshot.holding(ticket.id).isEmpty() && ticket.queuedAgent == null
                 }.map { it.id }
             }
             val refusedRoles = mutableSetOf<String?>()
@@ -1678,6 +1807,8 @@ class TicketBoard(
         val order = outcome.changed.filter { it == primary } + outcome.changed.filter { it != primary }
         push(BoardEvent.Changed(order.map { byId.getValue(it) }))
         announce(outcome)
+        // AGENT-TASKS-3: a ticket that just went done may leave an idle worker behind while its agent has a queue.
+        outcome.changed.map { byId.getValue(it) }.filter { it.status == TicketStatus.DONE }.forEach { t -> t.sessionId?.let(::closeDoneWorkerWhenQueued) }
         return TicketAnswer(ticket, pushed = primary in outcome.changed)
     }
 
@@ -1713,6 +1844,17 @@ class TicketBoard(
 
         /** AGENT-TASKS-2: the run detail of a worker the board ended because its ticket was unassigned. */
         const val UNASSIGNED_DETAIL = "unassigned"
+
+        /** AGENT-TASKS-3: the run detail of an idle worker the board ended because its ticket is done and its agent has a queue. */
+        const val DONE_QUEUED_DETAIL = "done, agent has a queued ticket"
+
+        /** AGENT-TASKS-3: the `queue` actions. */
+        const val QUEUE_LIST = "list"
+        const val QUEUE_ADD = "add"
+        const val QUEUE_REMOVE = "remove"
+        const val QUEUE_MOVE = "move"
+        const val QUEUE_CLEAR = "clear"
+        val QUEUE_ACTIONS = listOf(QUEUE_LIST, QUEUE_ADD, QUEUE_REMOVE, QUEUE_MOVE, QUEUE_CLEAR)
 
         /** AGENT-TASKS-2: `tickets.agentTasks.handoffNote` values. */
         const val HANDOFF_AUTO = "auto"
@@ -1895,6 +2037,9 @@ class TicketBoard(
                 effectiveEffort = effectiveEffort(row),
                 queuedFor = row.queuedFor,
                 queuedAt = row.queuedAt,
+                queuedAgent = row.queuedAgent,
+                queueRank = row.queueRank,
+                queuedAgentName = row.queuedAgent?.let { runCatching { host.agents.get(it)?.name }.getOrNull() },
                 sessionId = row.sessionId,
                 hasWork = hasWork(row),
                 executorOverrides = ExecutorOverrides(provider = row.provider, model = row.model),
@@ -2118,7 +2263,18 @@ class TicketBoard(
                 status = status,
                 queuedFor = if (status == TicketStatus.TODO) row.queuedFor else null,
                 queuedAt = if (status == TicketStatus.TODO) row.queuedAt else null,
+                // AGENT-TASKS-3: leaving todo drops the ticket from its agent's queue; a move back into todo keeps it.
+                queuedAgent = if (status == TicketStatus.TODO) row.queuedAgent else null,
+                queueRank = if (status == TicketStatus.TODO) row.queueRank else null,
             )
+            // The queue the ticket left closes up: the tickets behind it move one place forward.
+            val left = row.queuedAgent
+            val rank = row.queueRank
+            if (left != null && rank != null && status != TicketStatus.TODO) {
+                rows.values.filter { it.queuedAgent == left && (it.queueRank ?: 0) > rank }.forEach {
+                    rows[it.id] = it.copy(queueRank = it.queueRank!! - 1)
+                }
+            }
         }
 
         fun addLink(link: TicketLinkRow) {
