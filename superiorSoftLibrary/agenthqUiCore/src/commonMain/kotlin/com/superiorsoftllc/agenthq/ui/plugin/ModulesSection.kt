@@ -1,6 +1,10 @@
 package com.superiorsoftllc.agenthq.ui.plugin
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -88,6 +92,9 @@ const val MODULE_CRUMBS_TAG = "plugin-crumbs"
 const val MODULE_CRUMB_TAG_PREFIX = "plugin-crumb-"
 const val MODULE_BACK_TAG = "plugin-crumb-back"
 const val MODULE_CASCADE_TAG = "plugin-modules-cascade"
+const val MODULE_CHILDREN_TAG_PREFIX = "plugin-module-children-"
+const val MODULE_NO_SETTINGS_TAG = "plugin-no-settings"
+const val MODULE_CHILD_TAG_PREFIX = "plugin-module-child-"
 const val MODULE_EMPTY_TAG = "plugin-modules-empty"
 
 /** A card is never narrower than this; the grid takes as many columns as fit, up to [MaxColumns]. */
@@ -100,6 +107,7 @@ private const val MaxColumns = 3
  * license, what it needs and what needs it, why it is not loaded, and its state. With [TabFactory.changes] each card
  * can be enabled or disabled; a refusal is shown on the card, in the rules' own words.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ModulesSection(
     factory: TabFactory,
@@ -131,7 +139,10 @@ fun ModulesSection(
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         if (path.isNotEmpty()) {
-            Row(Modifier.testTag(MODULE_CRUMBS_TAG), verticalAlignment = Alignment.CenterVertically) {
+            // Stepping in must be seen: the section may be scrolled far below its top, so bring the crumbs into view.
+            val crumbsView = remember { BringIntoViewRequester() }
+            LaunchedEffect(path) { crumbsView.bringIntoView() }
+            Row(Modifier.bringIntoViewRequester(crumbsView).testTag(MODULE_CRUMBS_TAG), verticalAlignment = Alignment.CenterVertically) {
                 TextButton({ path = emptyList() }, Modifier.testTag(MODULE_CRUMB_TAG_PREFIX + "root")) { Text("Plugins") }
                 path.forEachIndexed { i, n ->
                     Text(">", color = Palette.Muted, fontSize = 12.sp)
@@ -142,10 +153,12 @@ fun ModulesSection(
             }
             // This plugin's own configuration: its module.json config fields, through the same field view at every level.
             val nodes = factory.statuses.firstOrNull { it.name == here }?.manifest?.config?.map { it.node }?.distinct().orEmpty()
+            var anyFields = false
             for (node in nodes) {
                 val fields = factory.configTree.fields[node].orEmpty()
-                if (fields.isNotEmpty()) NodeFieldGroups(factory, node, fields, editable = ready, locked = false)
+                if (fields.isNotEmpty()) { anyFields = true; NodeFieldGroups(factory, node, fields, editable = ready, locked = false) }
             }
+            if (!anyFields) Text("No settings", color = Palette.Muted, fontSize = 12.sp, modifier = Modifier.testTag(MODULE_NO_SETTINGS_TAG))
         }
         if (factory.statuses.isEmpty()) {
             Text("No modules were found under the plugins root.", color = Palette.Muted, fontSize = 12.sp, modifier = Modifier.testTag(MODULE_EMPTY_TAG))
@@ -172,7 +185,8 @@ fun ModulesSection(
                                     { val e = d.remove(s.name); if (e != null) removeNotes[s.name] = e; restart?.invoke() }
                                 },
                                 parents = tree.parentsOf(s.name),
-                                hasChildren = tree.childrenOf(s.name).isNotEmpty(),
+                                children = tree.childrenOf(s.name).toList().sorted(),
+                                onOpenChild = { c -> path = path + s.name + c },
                                 onEdit = { path = path + s.name },
                                 onToggle = changes?.let { c ->
                                     { on: Boolean ->
@@ -217,7 +231,7 @@ internal fun moduleByline(m: ModuleManifest): String? =
         .takeIf { it.isNotEmpty() }?.joinToString(" · ")
 
 @Composable
-private fun ModuleCard(s: ModuleStatus, graph: DependencyGraph, enabled: Boolean, message: ModuleChange?, removeNote: String?, onRemove: (() -> Unit)?, onToggle: ((Boolean) -> Unit)?, modifier: Modifier, harnessStatus: String? = null, parents: List<String> = emptyList(), hasChildren: Boolean = false, onEdit: () -> Unit = {}) {
+private fun ModuleCard(s: ModuleStatus, graph: DependencyGraph, enabled: Boolean, message: ModuleChange?, removeNote: String?, onRemove: (() -> Unit)?, onToggle: ((Boolean) -> Unit)?, modifier: Modifier, harnessStatus: String? = null, parents: List<String> = emptyList(), children: List<String> = emptyList(), onOpenChild: (String) -> Unit = {}, onEdit: () -> Unit = {}) {
     Column(
         modifier.clip(RoundedCornerShape(6.dp)).background(Palette.Raised).padding(10.dp).testTag(MODULE_ROW_TAG_PREFIX + s.name),
         verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -254,6 +268,15 @@ private fun ModuleCard(s: ModuleStatus, graph: DependencyGraph, enabled: Boolean
         if (parents.isNotEmpty()) {
             Text("Used by: " + parents.joinToString(", "), Modifier.testTag(MODULE_USED_BY_TAG_PREFIX + s.name), color = Palette.Muted, fontSize = 11.sp)
         }
+        if (children.isNotEmpty()) {
+            Row(Modifier.testTag(MODULE_CHILDREN_TAG_PREFIX + s.name), verticalAlignment = Alignment.CenterVertically) {
+                Text("Children: ", color = Palette.Muted, fontSize = 11.sp)
+                children.forEachIndexed { i, c ->
+                    if (i > 0) Text(", ", color = Palette.Muted, fontSize = 11.sp)
+                    TextButton({ onOpenChild(c) }, Modifier.testTag(MODULE_CHILD_TAG_PREFIX + c), contentPadding = PaddingValues(horizontal = 2.dp)) { Text(c, fontSize = 11.sp) }
+                }
+            }
+        }
         val requiredBy = graph.requiredBy(s.name)
         if (requiredBy.isNotEmpty()) {
             Text("Required by: " + requiredBy.joinToString(", "), Modifier.testTag(MODULE_REQUIRED_BY_TAG_PREFIX + s.name), color = Palette.Muted, fontSize = 11.sp)
@@ -275,7 +298,7 @@ private fun ModuleCard(s: ModuleStatus, graph: DependencyGraph, enabled: Boolean
         Row(verticalAlignment = Alignment.CenterVertically) {
             Chip(stateLabel(s.state), if (s.state == ModuleState.LOADED) Palette.Accent else Palette.Muted, textModifier = Modifier.testTag(MODULE_STATE_TAG_PREFIX + s.name))
             Spacer(Modifier.weight(1f))
-            if (s.manifest != null && (hasChildren || s.manifest?.config?.isNotEmpty() == true || parents.isNotEmpty())) TextButton(
+            if (s.manifest != null && (children.isNotEmpty() || s.manifest?.config?.isNotEmpty() == true || parents.isNotEmpty())) TextButton(
                 onClick = onEdit,
                 modifier = Modifier.height(28.dp).testTag(MODULE_EDIT_TAG_PREFIX + s.name),
                 contentPadding = PaddingValues(horizontal = 8.dp),
