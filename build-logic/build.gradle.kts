@@ -30,6 +30,12 @@ dependencies {
 }
 
 // Local publication only (java-gradle-plugin adds the plugin marker); nothing is published to a remote repository.
-publishing { repositories { maven { name = "local"; url = layout.buildDirectory.dir("repo").get().asFile.toURI() } } }
+publishing {
+    repositories {
+        maven { name = "local"; url = layout.buildDirectory.dir("repo").get().asFile.toURI() }
+        // TEMPLATE-REPO-1: the same dry-run repo the SDK modules publish to, so templates/plugin-repo resolves the plugin offline.
+        maven { name = "dryRun"; url = rootDir.resolve("../build/m2").toURI() }
+    }
+}
 
 tasks.test { useJUnitPlatform() }
