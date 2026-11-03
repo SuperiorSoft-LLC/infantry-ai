@@ -23,8 +23,10 @@ class BoardDaemonPlugin : DaemonPlugin {
         // the typed binding and the spawn-charge port (DP-5h-3a2: with the story and epic handlers built from the runtime inputs). While core still builds the
         // board (BoardWiring), only the tools below are registered.
         val runtime = api.boardRuntime
+        var ownBoard: com.superiorsoftllc.infantry.backlog.TicketBoard? = null
         if (!runtime.coreBuiltBoard && runtime.host !== NoBoardHost) {
             val board = BoardFromRuntime.build(runtime, BoardFromRuntime.contextOf(runtime))
+            ownBoard = board
             val h = BoardBuild.handlers(runtime, board)
             BoardBuild.startup(runtime, board)
             registerBoardFrames(api.frames.table, board, api.spawns.charge, h.epics, h.stories, h.storyBoard)
@@ -39,6 +41,11 @@ class BoardDaemonPlugin : DaemonPlugin {
         // TICKET-COMMENTS-2: comments, createdBy and the notify list (plugin tables); without storage the board works as before.
         var commentsError: String? = null
         val comments = runCatching { CommentsWiring.create(api) }.onFailure { commentsError = it.message; api.log("ticket comments unavailable: ${it.message}") }.getOrNull()
+        // AGENT-TASKS-2: an unassign writes its handoff as a resolved `handoff` comment; the next start brief reads the latest one.
+        if (comments != null) ownBoard?.let { b ->
+            b.handoffSink = { id, project, body -> comments.add(id, project, "", TicketComments.Author.daemon, "handoff", TicketComments.RESOLVED, body) }
+            b.latestHandoff = { id -> comments.read(id, "latest", "handoff", null).firstOrNull()?.body }
+        }
         api.tools.register(TicketGetTool(api, comments))
         // COMMENT-TOOL-1: the comment tools are always listed; without the store they refuse with the reason instead of vanishing from every worker's tool list.
         val why = commentsError?.let { "${CommentsWiring.UNAVAILABLE}: $it" } ?: CommentsWiring.UNAVAILABLE
@@ -58,6 +65,7 @@ class BoardDaemonPlugin : DaemonPlugin {
         // RUNTIME-LOAD-4 (F5): the board's write tools, moved out of the CLI's MCP server.
         api.tools.register(EpicBaseTool)
         api.tools.register(TicketMoveTool(api))
+        api.tools.register(TicketUnassignTool(api))
         api.tools.register(TicketDeleteTool(api))
         api.tools.register(TicketCreateTool(api, comments))
         api.tools.register(TicketUpdateTool(api, comments))

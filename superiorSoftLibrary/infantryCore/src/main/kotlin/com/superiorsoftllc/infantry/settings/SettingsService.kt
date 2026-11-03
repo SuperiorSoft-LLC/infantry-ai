@@ -69,6 +69,7 @@ class SettingsService(
             QUESTIONS_MAX_OPEN_PER_AGENT to JsonPrimitive(questionsMaxOpenPerAgent()),
             QUESTIONS_MAX_PER_HOUR to JsonPrimitive(questionsMaxPerHour()),
             TICKET_EXIT_BEHAVIOR to JsonPrimitive(ticketExitBehavior()),
+            TICKET_HANDOFF_NOTE to JsonPrimitive(ticketHandoffNote()),
             TICKET_WEIGHT_EXECUTORS to weightExecutors().toJson(),
             TICKET_WEIGHT_CONTEXT to weightContext().toJson(),
             USAGE_PACING to UsagePacing.ruleJson(usagePacing()),
@@ -349,6 +350,21 @@ class SettingsService(
         return parsed?.takeIf { it in EXIT_BEHAVIORS } ?: EXIT_LEAVE
     }
 
+    /** `auto` (default), `worker` or `off`: see [TICKET_HANDOFF_NOTE]; read at every unassign. */
+    fun ticketHandoffNote(): String {
+        val stored = store.settings.get(TICKET_HANDOFF_NOTE)?.value ?: return HANDOFF_NOTES.first()
+        val parsed = runCatching { (Json.parseToJsonElement(stored) as? JsonPrimitive)?.takeIf { it.isString }?.content }.getOrNull()
+        return parsed?.takeIf { it in HANDOFF_NOTES } ?: HANDOFF_NOTES.first()
+    }
+
+    private fun requireHandoffNote(value: JsonElement): String {
+        val mode = (value as? JsonPrimitive)?.takeIf { it.isString }?.content
+        require(mode != null && mode in HANDOFF_NOTES) {
+            "setting '$TICKET_HANDOFF_NOTE' must be one of ${HANDOFF_NOTES.joinToString { "\"$it\"" }}"
+        }
+        return mode
+    }
+
     private fun requireExitBehavior(value: JsonElement): String {
         val behavior = (value as? JsonPrimitive)?.takeIf { it.isString }?.content
         require(behavior != null && behavior in EXIT_BEHAVIORS) {
@@ -381,6 +397,7 @@ class SettingsService(
             CHAT_IMAGE_RETENTION_DAYS -> JsonPrimitive(requireChatImageRetentionDays(value))
             QUESTIONS_MAX_OPEN_PER_AGENT, QUESTIONS_MAX_PER_HOUR -> JsonPrimitive(requireQuestionLimit(key, value))
             TICKET_EXIT_BEHAVIOR -> JsonPrimitive(requireExitBehavior(value))
+            TICKET_HANDOFF_NOTE -> JsonPrimitive(requireHandoffNote(value))
             TICKET_WEIGHT_EXECUTORS -> try {
                 WeightExecutors.parse(value).toJson()
             } catch (e: IllegalArgumentException) {
@@ -873,6 +890,9 @@ class SettingsService(
         const val DEFAULT_QUESTIONS_MAX_PER_HOUR = 6
         /** What a clean worker exit does to its ticket: `leave` it in_progress (default) or move it to `done`. */
         const val TICKET_EXIT_BEHAVIOR = "tickets.exitBehavior"
+        /** AGENT-TASKS-2: who writes the handoff note when a ticket is unassigned: `auto` (default, the board), `worker` (one last turn) or `off`. */
+        const val TICKET_HANDOFF_NOTE = "tickets.agentTasks.handoffNote"
+        private val HANDOFF_NOTES = listOf("auto", "worker", "off")
         /** TICKET-WEIGHT: JSON object weight ("1".."5") -> {provider, model}; see [WeightExecutors]. */
         const val TICKET_WEIGHT_EXECUTORS = WeightExecutors.SETTING
 

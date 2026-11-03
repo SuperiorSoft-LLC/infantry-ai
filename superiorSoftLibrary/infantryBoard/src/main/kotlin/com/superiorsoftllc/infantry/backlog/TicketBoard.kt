@@ -31,6 +31,7 @@ import com.superiorsoftllc.infantry.persistence.TicketRow
 import com.superiorsoftllc.infantry.protocol.EffectiveExecutor
 import com.superiorsoftllc.infantry.protocol.ExecutorOverrides
 import com.superiorsoftllc.infantry.protocol.ExecutorField
+import com.superiorsoftllc.infantry.protocol.HasWork
 import com.superiorsoftllc.infantry.protocol.TicketWeight
 import com.superiorsoftllc.infantry.protocol.FinishedPayload
 import com.superiorsoftllc.infantry.protocol.Ticket
@@ -152,6 +153,14 @@ class TicketBoard(
     private val relatedDescription: RelatedDescription = RelatedDescription.NONE,
     /** Skill ids that no stored skill carries (part c moves this onto the host); the default knows none, so any named skill is refused. */
     private val unknownSkills: (List<String>) -> List<String> = { it },
+    /** AGENT-TASKS-2: `tickets.agentTasks.handoffNote`, read at every unassign: `auto` (default), `worker` or `off`. */
+    private val handoffMode: () -> String = { "auto" },
+    /** AGENT-TASKS-2: `limits.agentTasks.unassignWaitSeconds`: how long an unassign waits for a busy worker before forcing it. */
+    private val unassignWaitSeconds: () -> Long = { 120 },
+    /** AGENT-TASKS-2: `limits.agentTasks.handoffCommits`: commit subjects listed in a handoff note. */
+    private val handoffCommits: () -> Long = { 10 },
+    /** AGENT-TASKS-2: `limits.agentTasks.handoffChars`: the worker message kept in a handoff note. */
+    private val handoffChars: () -> Long = { 1500 },
 ) {
 
     /** DP-5f-3d: whether the host has a session manager (was a null check on the constructor's manager). */
@@ -176,6 +185,30 @@ class TicketBoard(
     private val sessionEvents = Executors.newSingleThreadExecutor { r ->
         Thread(r, "infantry-ticket-session-events").also { it.isDaemon = true }
     }
+
+    /** AGENT-TASKS-2: fires the bounded wait of an unassign ([unassignWaitSeconds]); a daemon thread, stopped by [close]. */
+    private val waitTimer = java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r ->
+        Thread(r, "infantry-ticket-unassign-wait").also { it.isDaemon = true }
+    }
+
+    /**
+     * AGENT-TASKS-2: where the handoff comment goes (set by the board plugin once its comment store exists): ticket id,
+     * project id, body. Null = no comment store, so no note is written.
+     */
+    @Volatile
+    var handoffSink: ((ticketId: String, projectId: String?, body: String) -> Unit)? = null
+
+    /** AGENT-TASKS-2: the latest `handoff` comment's body of a ticket (set by the board plugin); the next start brief carries it. */
+    @Volatile
+    var latestHandoff: ((ticketId: String) -> String?)? = null
+
+    /** AGENT-TASKS-2: an unassigned ticket's worker that has not ended yet, and what it still owes before it is ended. */
+    private class PendingEnd(val ticketId: String, val projectId: String?, val note: String?, var sawBusy: Boolean, var promptFirst: Boolean)
+
+    private val pendingEnds = java.util.concurrent.ConcurrentHashMap<String, PendingEnd>()
+
+    /** AGENT-TASKS-2: sessions the board ended through an unassign; their run is recorded with detail [UNASSIGNED_DETAIL]. */
+    private val unassigned: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
 
     /** DP-5f-3c: the board hears sessions only through the host's port; closed by [close]. */
     private val sessionSubscription: AutoCloseable = host.sessions.subscribe(::onSessionEvent)
@@ -357,6 +390,7 @@ class TicketBoard(
      */
     fun close() {
         sessionSubscription.close()
+        waitTimer.shutdownNow()
         sessionEvents.shutdown()
         if (!sessionEvents.awaitTermination(CLOSE_DRAIN_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
             System.err.println("[infantry] board session events did not drain within ${CLOSE_DRAIN_TIMEOUT_MS}ms")
@@ -405,6 +439,11 @@ class TicketBoard(
         when (event) {
             is BoardSessionEvent.Status -> {
                 val record = facts ?: return
+                pendingEnds[record.view.id]?.let { pending ->
+                    // AGENT-TASKS-2: only a turn that STARTED and then ended counts; the end itself runs off this monitor.
+                    if (record.view.state == "BUSY") pending.sawBusy = true
+                    else if (record.view.state == "IDLE" && pending.sawBusy) queueUnassignStep(record.view.id)
+                }
                 val ticketId = record.view.ticketId
                 if (ticketId != null && record.view.runCount == 0) {
                     ensureRunRow(record)
@@ -418,12 +457,145 @@ class TicketBoard(
             is BoardSessionEvent.Exit -> {
                 val record = facts ?: return
                 val ticketId = record.view.ticketId ?: return
+                // AGENT-TASKS-2: a turn that ran ends with an Exit (the session stays resumable), which is the signal a pending unassign waits for.
+                pendingEnds[record.view.id]?.let { if (it.sawBusy) queueUnassignStep(record.view.id) }
                 ensureRunRow(record)
                 finishTicketRun(record)
                 publishRunUpdate(ticketId)
                 drainProfileLane(record)
             }
         }
+    }
+
+    /**
+     * AGENT-TASKS-2: an in_progress ticket goes back to todo (top of the column), its branch, base, agent and worktree kept.
+     * ONE write commit first, so the ticket is in todo at once; THEN its worker is ended OUTSIDE the board lock (lock order
+     * is board, then sessions): an idle worker at once, a busy one when its turn ends, or after
+     * `limits.agentTasks.unassignWaitSeconds`; [now] ends it without waiting. Not `@Synchronized` for that reason.
+     */
+    fun unassign(ticketId: String, now: Boolean = false, note: String? = null): TicketAnswer {
+        val id = checkId(ticketId)
+        val (answer, row) = unassignCommit(id)
+        val sessionId = row.sessionId
+        val view = sessionId?.let(host.sessions::get)?.takeIf { it.live }
+        val pending = PendingEnd(id, row.projectId, note?.trim()?.takeIf { it.isNotEmpty() }, sawBusy = false, promptFirst = false)
+        if (sessionId == null || view == null) {
+            writeHandoff(pending, sessionId?.let(host.sessions::get), row)
+            sessionId?.let { sid -> runCatching { host.sessions.remove(sid) } } // an ended (not live) session is only removed
+            return answer
+        }
+        unassigned += sessionId
+        val busy = host.sessions.detail(sessionId)?.busy == true
+        if (now) {
+            endWorker(sessionId, pending, row)
+            return answer
+        }
+        pending.sawBusy = busy
+        pending.promptFirst = handoffMode() == HANDOFF_WORKER
+        if (!busy && !pending.promptFirst) {
+            endWorker(sessionId, pending, row)
+            return answer
+        }
+        pendingEnds[sessionId] = pending
+        if (!busy) {
+            // worker mode, idle: ask for the handoff now; a refused prompt means there is nothing to wait for.
+            pending.promptFirst = false
+            if (!host.sessions.prompt(sessionId, HANDOFF_PROMPT)) {
+                pendingEnds.remove(sessionId)?.let { endWorker(sessionId, it, row) }
+                return answer
+            }
+        }
+        val wait = unassignWaitSeconds().coerceAtLeast(0)
+        try {
+            waitTimer.schedule({
+                try { sessionEvents.execute { pendingEnds.remove(sessionId)?.let { endWorker(sessionId, it, null) } } } catch (_: RejectedExecutionException) { }
+            }, wait, TimeUnit.SECONDS)
+        } catch (_: RejectedExecutionException) {
+            // closed: nothing left to wait with
+        }
+        return answer
+    }
+
+    @Synchronized
+    private fun unassignCommit(id: String): Pair<TicketAnswer, TicketRow> {
+        val row = store.transaction { load() }.require(id)
+        require(row.status == TicketStatus.IN_PROGRESS) {
+            "ticket $id is ${row.status}, not in_progress: only an in_progress ticket can be unassigned"
+        }
+        val outcome = commit { s ->
+            s.place(id, TicketStatus.TODO, 0)
+            s.rows[id] = s.rows.getValue(id).copy(sessionId = null)
+            s.named += id
+        }
+        return answer(id, outcome) to row
+    }
+
+    /** AGENT-TASKS-2: a pending unassign hit its next step (a worker turn ended); runs on [sessionEvents], never under a lock. */
+    private fun queueUnassignStep(sessionId: String) {
+        try {
+            sessionEvents.execute {
+                val pending = pendingEnds[sessionId] ?: return@execute
+                if (pending.promptFirst) {
+                    pending.promptFirst = false
+                    pending.sawBusy = false
+                    if (host.sessions.prompt(sessionId, HANDOFF_PROMPT)) return@execute
+                }
+                pendingEnds.remove(sessionId)?.let { endWorker(sessionId, it, null) }
+            }
+        } catch (_: RejectedExecutionException) {
+            // closed
+        }
+    }
+
+    /** Write the handoff, then kill and remove the worker; every failure is swallowed (the ticket is already in todo). */
+    private fun endWorker(sessionId: String, pending: PendingEnd, row: TicketRow?) {
+        runCatching { writeHandoff(pending, host.sessions.get(sessionId), row) }
+        runCatching { host.sessions.kill(sessionId, force = true, by = "board", reason = UNASSIGNED_DETAIL) }
+        runCatching { host.sessions.remove(sessionId) }
+    }
+
+    private fun writeHandoff(pending: PendingEnd, view: SessionView?, row: TicketRow? = null) {
+        val mode = handoffMode()
+        if (mode == HANDOFF_OFF) return
+        val sink = handoffSink ?: return
+        val current = row ?: store.transaction { store.tickets.get(pending.ticketId) } ?: return
+        val body = handoffBody(current, view, pending.note)
+        runCatching { sink(pending.ticketId, pending.projectId, body) }
+    }
+
+    /** AGENT-TASKS-2: branch, tip, commits ahead with subjects, dirty files, the worker's last message, then the caller's note. */
+    private fun handoffBody(row: TicketRow, view: SessionView?, note: String?): String {
+        val branch = row.branch
+        val base = row.base
+        val repoPath = (view?.repoRoot ?: cutRepo(row.projectId)?.path)
+        val facts = if (branch != null && base != null && repoPath != null) {
+            runCatching { host.git.handoffFacts(repoPath, branch, base, view?.worktreePath, handoffCommits().toInt().coerceAtLeast(0)) }.getOrNull()
+        } else null
+        val last = view?.id?.let { runCatching { host.sessions.lastAssistantText(it) }.getOrNull() }?.trim()?.takeIf { it.isNotEmpty() }
+        return buildString {
+            append("Handed back to todo.")
+            if (branch != null) append("\nBranch: ").append(branch).append(base?.let { " (base $it)" } ?: "")
+            if (facts != null) {
+                append("\nTip: ").append(facts.tip.take(7)).append(", ").append(facts.ahead).append(" commit(s) ahead")
+                facts.subjects.forEach { append("\n- ").append(it) }
+                facts.dirtyFiles?.let { append("\nUncommitted files: ").append(it) }
+            }
+            if (last != null) {
+                val max = handoffChars().toInt().coerceAtLeast(0)
+                append("\nLast worker message:\n").append(if (last.length > max) last.take(max) + "..." else last)
+            }
+            if (note != null) append("\nNote: ").append(note)
+        }
+    }
+
+    /** AGENT-TASKS-2: a todo ticket whose recorded branch is ahead of its base keeps work a second start continues. */
+    private fun hasWork(row: TicketRow): HasWork? {
+        val branch = row.branch ?: return null
+        val base = row.base ?: return null
+        if (row.status != TicketStatus.TODO) return null
+        val repoPath = runCatching { cutRepo(row.projectId)?.path }.getOrNull() ?: return null
+        val facts = runCatching { host.git.handoffFacts(repoPath, branch, base, null, 0) }.getOrNull() ?: return null
+        return if (facts.ahead > 0) HasWork(branch, facts.tip, facts.ahead) else null
     }
 
     /** Create a ticket (no id) or edit one (see [TicketSave]). */
@@ -1044,7 +1216,9 @@ class TicketBoard(
     ) = ContextInput(
         instructions = instance?.instructions,
         title = row.title,
-        description = row.description,
+        // AGENT-TASKS-2: only the LATEST handoff comment rides along, so a ticket handed over many times stays one note long.
+        description = row.description + (latestHandoff?.let { runCatching { it(row.id) }.getOrNull() }?.takeIf { it.isNotBlank() }
+            ?.let { "\n\n## Handoff from the previous worker\n$it" } ?: ""),
         links = linkLines(row.id, snapshot),
         includeLinkedOverride = row.includeLinkedTasksContext,
         ticketId = row.id,
@@ -1284,11 +1458,13 @@ class TicketBoard(
             endedAt = record.lastHeartbeat,
             outcome = outcome.name,
             detail = when {
+                record.view.id in unassigned -> UNASSIGNED_DETAIL
                 autoDone -> AUTO_DONE_DETAIL
                 noWork != null -> NO_WORK_DETAIL + noWork
                 else -> record.view.lastError ?: ""
             },
         )
+        if (!record.view.live) unassigned.remove(record.view.id)
         if (autoDone) {
             // The ticket frame itself goes out from publishRunUpdate, with this run as lastRun; only the transition
             // is announced here, so a ship trigger fires exactly as for a move into done by hand.
@@ -1533,6 +1709,19 @@ class TicketBoard(
         /** How long [close] waits for the session events already queued to land; see there. */
         const val CLOSE_DRAIN_TIMEOUT_MS = 5_000L
 
+        /** AGENT-TASKS-2: the run detail of a worker the board ended because its ticket was unassigned. */
+        const val UNASSIGNED_DETAIL = "unassigned"
+
+        /** AGENT-TASKS-2: `tickets.agentTasks.handoffNote` values. */
+        const val HANDOFF_AUTO = "auto"
+        const val HANDOFF_WORKER = "worker"
+        const val HANDOFF_OFF = "off"
+
+        /** AGENT-TASKS-2: what a `worker`-mode unassign asks the idle worker to do in its one last turn. */
+        const val HANDOFF_PROMPT =
+            "This ticket is being unassigned from you. Write a short handoff for the next worker: what is done, what is " +
+                "left, anything surprising. Send it with the report script (status info), commit nothing new, then stop."
+
         /** BUG-E2E-2: lastRun.detail of a run whose ticket the daemon moved to done itself. */
         const val AUTO_DONE_DETAIL =
             "moved to done by the daemon: the run SUCCEEDED and the ticket was still in_progress"
@@ -1705,6 +1894,7 @@ class TicketBoard(
                 queuedFor = row.queuedFor,
                 queuedAt = row.queuedAt,
                 sessionId = row.sessionId,
+                hasWork = hasWork(row),
                 executorOverrides = ExecutorOverrides(provider = row.provider, model = row.model),
                 effectiveExecutor = effectiveExecutor(row),
                 effectiveContext = context.effective(row.includeLinkedTasksContext, row.includeSkillsContext),

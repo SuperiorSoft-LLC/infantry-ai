@@ -154,7 +154,7 @@ data class Envelope(
          */
         val CORRELATED_REQUESTS: Set<String> = setOf(
             TICKET_SAVE, TICKET_GET, TICKET_LIST, TICKET_MOVE, TICKET_LINK,
-            TICKET_UNLINK, TICKET_REORDER, TICKET_DELETE, TICKET_START_NEXT,
+            TICKET_UNLINK, TICKET_REORDER, TICKET_DELETE, TICKET_START_NEXT, TICKET_UNASSIGN,
         )
 
         const val READY = "ready"
@@ -443,6 +443,8 @@ data class Envelope(
         const val TICKET_GET = "ticket_get"
         const val TICKET_LIST = "ticket_list"
         const val TICKET_MOVE = "ticket_move"
+        /** AGENT-TASKS-2: an in_progress ticket goes back to todo, its work kept; see [TicketUnassign]. */
+        const val TICKET_UNASSIGN = "ticket_unassign"
         const val TICKET_LINK = "ticket_link"
         const val TICKET_UNLINK = "ticket_unlink"
         const val TICKET_REORDER = "ticket_reorder"

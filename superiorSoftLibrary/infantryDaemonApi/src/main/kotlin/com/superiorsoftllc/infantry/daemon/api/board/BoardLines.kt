@@ -25,9 +25,9 @@ object BoardLines {
     const val SHORT_ID_LEN = 8
 
     /** One ticket as a board line needs it. */
-    data class Row(val id: String, val title: String, val status: String, val position: Int, val sessionId: String?, val branch: String?)
+    data class Row(val id: String, val title: String, val status: String, val position: Int, val sessionId: String?, val branch: String?, val workTip: String? = null, val workAhead: Int? = null)
 
-    fun row(t: TicketInfo) = Row(t.id, t.title, t.status, t.position, t.sessionId, t.branch)
+    fun row(t: TicketInfo) = Row(t.id, t.title, t.status, t.position, t.sessionId, t.branch, t.workTip, t.workAhead)
 
     fun shortId(id: String): String = id.takeLast(SHORT_ID_LEN)
 
@@ -77,6 +77,8 @@ object BoardLines {
             worker.progress?.let { parts += "progress " + ProgressText.line(it, now) }
         } else if (t.sessionId != null) parts += "worker ${t.sessionId.take(8)} gone"
         t.branch?.let { b -> parts += "$b@${commitOf(t) ?: "no commit"}" }
+        // AGENT-TASKS-2: a todo ticket whose branch keeps work: `[WORK <tip7> +<ahead>]`.
+        if (t.workTip != null && t.workAhead != null) parts += "[WORK ${t.workTip.take(7)} +${t.workAhead}]"
         return parts.joinToString(" | ")
     }
 

@@ -28,7 +28,7 @@ object BoardSummary {
         return BoardLines.render(tickets.map(::row), sessions.map(SessionViews::of), now, { r -> byId[r.id]?.let(commitOf) }, options)
     }
 
-    private fun row(t: Ticket) = BoardLines.Row(t.id, t.title, t.status, t.position, t.sessionId, t.branch)
+    private fun row(t: Ticket) = BoardLines.Row(t.id, t.title, t.status, t.position, t.sessionId, t.branch, t.hasWork?.tip, t.hasWork?.ahead)
 
     const val TITLE_WIDTH = BoardLines.TITLE_WIDTH
     const val ELLIPSIS = BoardLines.ELLIPSIS

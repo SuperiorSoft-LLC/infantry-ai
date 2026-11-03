@@ -161,6 +161,27 @@ object LimitRegistry {
         zeroMeans = "any clean exit counts, silent or not",
     )
 
+    /** AGENT-TASKS-2: how long unassigning a ticket waits for its busy worker to finish its turn before ending it anyway. */
+    val UNASSIGN_WAIT_SECONDS = LimitDef(
+        "limits.agentTasks.unassignWaitSeconds", 120, "seconds",
+        "How long unassigning a ticket waits for its busy worker to end its current turn before the worker is ended anyway; the ticket is back in todo at once.",
+        zeroMeans = "do not wait: end the worker at once",
+    )
+
+    /** AGENT-TASKS-2: commit subjects listed in the auto handoff note. */
+    val HANDOFF_COMMITS = LimitDef(
+        "limits.agentTasks.handoffCommits", 10, "commits",
+        "How many commit subjects the handoff note of an unassigned ticket lists.",
+        zeroMeans = "list none",
+    )
+
+    /** AGENT-TASKS-2: worker message length kept in the auto handoff note. */
+    val HANDOFF_CHARS = LimitDef(
+        "limits.agentTasks.handoffChars", 1500, "characters",
+        "How many characters of the worker's last message the handoff note of an unassigned ticket keeps.",
+        zeroMeans = "keep none",
+    )
+
     /** RUN-CONSOLE (ticket 67f117b6, contract 1.134.0): the raw terminal output a run keeps for a console to replay. */
     val RUN_SCROLLBACK_BYTES = LimitDef(
         "limits.run.scrollbackBytes", 2L * 1024 * 1024, "bytes",
@@ -644,6 +665,7 @@ object LimitRegistry {
         MAX_PER_POD, MAX_SESSIONS, MAX_DEPTH, MCP_MAX_SPAWNS, LANE_DEFAULT, PACING_CEILING,
         BUILD_MAX_WORKERS, BUILD_MAX_PARALLEL_FORKS, CPU_ALERT_PERCENT, CPU_ALERT_MINUTES,
         TICKET_DEADLINE_MINUTES, UNATTENDED_DEADLINE_MINUTES, STALL_MINUTES, KILL_RETRY_MINUTES, SILENT_MINUTES, PROGRESS_STALE_MINUTES, IDLE_NUDGE_MINUTES, MAIL_WAKE_MAX_SECONDS, IDLE_NOTICE_MINUTES, IDLE_COMMENT, UNBRIEFED_GRACE_MINUTES,
+        UNASSIGN_WAIT_SECONDS, HANDOFF_COMMITS, HANDOFF_CHARS,
         AUTO_DONE_MIN_OUTPUTS, PROCESS_WATCH_INTERVAL_SECONDS, RUN_SCROLLBACK_BYTES, RUN_HISTORY,
         RUN_INPUT_BYTES_PER_SECOND, RUN_INPUT_MAX_FRAME_BYTES, RUN_INPUT_QUEUE_BYTES, RUN_MAX_COLS, RUN_MAX_ROWS,
         QUESTION_TTL_MINUTES, BG_NOTIFY_TAIL_LINES, BG_NOTIFY_TIMEOUT_MINUTES, BG_NOTIFY_PATTERN_GRACE_SECONDS,

@@ -184,6 +184,8 @@ data class Ticket(
     val queuedFor: String? = null,
     val queuedAt: Long? = null,
     val sessionId: String? = null,
+    /** AGENT-TASKS-2 (additive, derived, never stored): a todo ticket whose recorded branch is ahead of its base. */
+    val hasWork: HasWork? = null,
     val executorOverrides: ExecutorOverrides? = null,
     val effectiveExecutor: EffectiveExecutor? = null,
     val effectiveContext: EffectiveContext? = null,
@@ -478,6 +480,14 @@ data class TicketMove(
     }
 }
 
+/** `ticket_unassign`: [id] goes back to todo (work kept); [now] ends its worker at once; [note] joins the handoff comment. */
+@Serializable
+data class TicketUnassign(val id: String, val now: Boolean = false, val note: String? = null) {
+    companion object {
+        fun decode(text: String): TicketUnassign = StrictJson.decode(serializer(), text, "ticket_unassign payload")
+    }
+}
+
 /**
  * `ticket_link` / `ticket_unlink`: "[ticketId] [type] [relatedId]", [type] one of [TicketLinkType.ALL].
  * Answered with [ticketId]'s ticket.
@@ -531,3 +541,7 @@ data class SettingsSet(
         fun decode(text: String): SettingsSet = StrictJson.decode(serializer(), text, "settings_set payload")
     }
 }
+
+/** AGENT-TASKS-2: the work a todo ticket keeps on its own branch: the branch, its tip commit and the commits ahead of the base. */
+@kotlinx.serialization.Serializable
+data class HasWork(val branch: String, val tip: String, val ahead: Int)

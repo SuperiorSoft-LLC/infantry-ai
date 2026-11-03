@@ -20,7 +20,7 @@ object AgentFrames {
     val ALLOWED: Set<String> = setOf(
         "replay_request", "mail_send", "mail_read", "mail_inbox", "mail_outbox", "mail_thread", "mail_threads", "mail_waiting",
         "progress", "bg_job", "question_ask", "question_cancel", "question_list", "prompt_ask",
-        "ticket_get", "ticket_list", "ticket_move", "ticket_save", "ticket_link", "ticket_unlink",
+        "ticket_get", "ticket_list", "ticket_move", "ticket_unassign", "ticket_save", "ticket_link", "ticket_unlink",
         "memory_search", "memory_list", "memory_get", "memory_save", "decision_list", "decision_get", "decision_add",
         "issue_list", "issue_get", "issue_open", "issue_attempt", "issue_fix", "issue_precheck",
         "providers", "models", "settings_get", "limit_catalog", "limits", "usage_get", "role_list", "role_binding_list",

@@ -23,7 +23,7 @@ class FrameTable {
 object BoardFrames {
     val TYPES: Set<String> = setOf(
         Envelope.TICKET_SAVE, Envelope.TICKET_GET, Envelope.TICKET_LIST, Envelope.TICKET_MOVE, Envelope.TICKET_LINK,
-        Envelope.TICKET_UNLINK, Envelope.TICKET_REORDER, Envelope.TICKET_DELETE, Envelope.TICKET_START_NEXT,
+        Envelope.TICKET_UNLINK, Envelope.TICKET_REORDER, Envelope.TICKET_DELETE, Envelope.TICKET_START_NEXT, Envelope.TICKET_UNASSIGN,
         Envelope.STORY_SAVE, Envelope.STORY_GET, Envelope.STORY_MOVE, Envelope.STORY_LIST,
         Envelope.EPIC_SAVE, Envelope.EPIC_LIST, Envelope.EPIC_BASE,
     )

@@ -109,6 +109,9 @@ data class TicketInfo(
     val effectiveEffort: String? = null,
     val effectiveEffortSource: String? = null,
     val effortSupport: String? = null,
+    /** AGENT-TASKS-2: the tip and commits-ahead of a todo ticket's kept work (null = none). */
+    val workTip: String? = null,
+    val workAhead: Int? = null,
 )
 
 /** A new ticket. [description] is kept verbatim. [clientKey] makes the create idempotent. */

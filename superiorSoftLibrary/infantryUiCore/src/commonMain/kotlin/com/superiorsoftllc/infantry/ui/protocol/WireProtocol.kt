@@ -238,6 +238,7 @@ data class Envelope(
         const val TICKET_SAVE = "ticket_save"
         const val TICKET_LIST = "ticket_list"
         const val TICKET_MOVE = "ticket_move"
+        const val TICKET_UNASSIGN = "ticket_unassign"
         const val TICKET_DELETE = "ticket_delete"
         const val TICKET_START_NEXT = "ticket_start_next"
         // Contract 1.83.0 -- IMG-1: `image_upload` ([ImageUploadWire], client -> daemon) stores an image in the project;
