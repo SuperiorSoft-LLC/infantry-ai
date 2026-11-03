@@ -305,4 +305,5 @@ Order is a chain except where noted; each ticket names only its own test classes
 Deferred, not ticketed: `ui.chart` and `icon` (level 2), page patches, `source` bindings (O2), placements `panel` and
 `settings`, composition pages served as views, offline cache of the last page.
 
-Tickets created for this plan (todo, except DV-8 in backlog): listed in the DECL-UI-0 report and comment.
+Tickets created for this plan: DV-1a e6fbdd6a, DV-1b 70072106, DV-2 e9ab5822, DV-3 0ea1fbe0, DV-4 98493bb3, DV-5 e3a0760b,
+DV-6 16304c5e, DV-7 ebfb1a6a (all todo, claude/sonnet), DV-8 462d87fd (backlog).
