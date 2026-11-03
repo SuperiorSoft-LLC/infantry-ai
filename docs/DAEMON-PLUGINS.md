@@ -28,6 +28,7 @@ older hosts ignore them, a module without them loads no daemon code (default: no
   "hooks":  [ "frameGate", "httpGate", "admission", "mailGate", "ready", "spawnGate", "turns", "sessions", "policyProvider" ],
   "routes": [ "GET /demo/visitor-token" ],           // top-level routes, official/core only; plugin routes go under /plugins/<id>/
   "publicRoutes": [ "GET /demo/visitor-token" ],     // answered without the bearer token (official/core only)
+  "views":  [ { "id": "main", "title": "Hello", "place": "tab", "action": "acme.hello.read", "layout": "layout/main.json", "platforms": ["android", "web"] } ],  // declarative views (DV-1a); community modules need the grant daemon.view
   "env": [ "INFANTRY_DEMO_NOTICE" ],                  // env vars the plugin may read through DaemonApi.env
   "secrets": [ "acme.apiKey" ],                      // keystore secrets the plugin may read (granted, never pushed)
   "limits": { "callTimeoutMs": 2000, "cpuMsPerCall": 2000, "routeRequestsPerMinute": 600, "memoryMbHint": 64 }
