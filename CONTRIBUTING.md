@@ -7,6 +7,13 @@ Thank you for wanting to help. Please read this page before you open an issue or
 > Bug reports, feature requests and documentation feedback are welcome now. This section will change once a license
 > (and, if needed, a contributor agreement) is published.
 
+<!-- Wording to use once the CLA bot is enabled (docs/legal/CLA.md is then official), replacing the notice above:
+**Sign the CLA.** Before we can merge a pull request you sign the [Contributor License Agreement](docs/legal/CLA.md).
+A bot comments on your first pull request; reply with the sentence it shows. Companies sign the corporate part.
+You keep your copyright; the CLA lets SuperiorSoft LLC relicense a file when it moves between the MPL-2.0 core and
+the Apache-2.0 rest.
+-->
+
 Everyone who takes part follows the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Filing an issue
