@@ -1,0 +1,9 @@
+{
+  "id": "Example_Starter",
+  "description": "Example entry showing the shape of a community catalog entry. Not a real plugin.",
+  "tags": ["example"],
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/example-org/Example_Starter",
+  "repo": "example-org/Example_Starter",
+  "versions": []
+}

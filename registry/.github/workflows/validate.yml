@@ -1,0 +1,42 @@
+name: validate
+on:
+  pull_request:
+env:
+  INFANTRY_VERSION: latest   # pin a release tag here to freeze the CLI
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '21' }
+      - name: Install infantry CLI
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          mkdir -p "$RUNNER_TEMP/cli"
+          if [ "$INFANTRY_VERSION" = latest ]; then tag=""; else tag="$INFANTRY_VERSION"; fi
+          gh release download $tag -R SuperiorSoft-LLC/infantry -p 'infantry-cli*.zip' -D "$RUNNER_TEMP/cli"
+          unzip -q "$RUNNER_TEMP/cli"/*.zip -d "$RUNNER_TEMP/cli"
+          echo "$(dirname "$(find "$RUNNER_TEMP/cli" -name infantry -type f | head -1)")" >> "$GITHUB_PATH"
+      - name: Build catalogs
+        run: |
+          for c in official community; do
+            [ -d "$c" ] || continue
+            infantry plugin catalog build "$c" --id "infantry-$c" --class "$c" --out "build/$c.json"
+          done
+      - name: Validate assets (sha256, size, grants)
+        run: |
+          for c in official community; do
+            [ -f "build/$c.json" ] && infantry plugin catalog validate "build/$c.json" --assets
+          done
+      - name: Check urls are under the entry repo releases
+        run: |
+          sudo apt-get install -y jq >/dev/null
+          bad=0
+          for f in build/*.json; do
+            jq -r '.plugins[] | .id as $i | (.repo // "") as $r | .versions[] | [$i,$r,.url] | @tsv' "$f" |
+            while IFS=$'\t' read -r id repo url; do
+              case "$url" in "https://github.com/$repo/releases/"*) ;; *) echo "::error::$id: $url not under https://github.com/$repo/releases/"; exit 1;; esac
+            done || bad=1
+          done
+          exit $bad

@@ -1,0 +1,30 @@
+name: publish
+on:
+  push:
+    branches: [main]
+permissions: { contents: read, pages: write, id-token: write }
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: { name: github-pages, url: "${{ steps.deploy.outputs.page_url }}" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '21' }
+      - name: Install infantry CLI
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          mkdir -p "$RUNNER_TEMP/cli"
+          gh release download -R SuperiorSoft-LLC/infantry -p 'infantry-cli*.zip' -D "$RUNNER_TEMP/cli"
+          unzip -q "$RUNNER_TEMP/cli"/*.zip -d "$RUNNER_TEMP/cli"
+          echo "$(dirname "$(find "$RUNNER_TEMP/cli" -name infantry -type f | head -1)")" >> "$GITHUB_PATH"
+      - name: Build official.json and community.json
+        run: |
+          mkdir -p site
+          infantry plugin catalog build official --id infantry-official --class official --out site/official.json
+          infantry plugin catalog build community --id infantry-community --class community --out site/community.json
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: site }
+      - id: deploy
+        uses: actions/deploy-pages@v4

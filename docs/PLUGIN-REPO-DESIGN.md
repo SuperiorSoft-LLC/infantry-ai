@@ -137,6 +137,8 @@ The registry **is a schema-1 catalog** (`PluginCatalog.kt`), so the manager, `in
 
 ### 3.1 Layout
 
+> **Built (REGISTRY-1b):** `registry/` holds the scaffold: `official/` (README only), `community/Example_Starter.json`, `schema/catalog-entry.schema.json`, `CODEOWNERS`, `CONTRIBUTING.md`, and `.github/workflows/validate.yml` + `publish.yml`. It is the content of the future `infantry-plugins` repo; nothing is pushed. The example has `tags:["example"]` and `versions: []`, so `catalog build` passes and `--assets` has nothing to download (CONTRIBUTING states the skip).
+
 ```
 official/<Id>.json       one CatalogEntry per file (class official); CODEOWNERS: maintainers only
 community/<Id>.json      one CatalogEntry per file (class community); open to PRs
