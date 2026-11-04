@@ -158,7 +158,7 @@ object ViewWidgets {
         BlockTypeDeclaration("ui.badge", "Badge", listOf(text("text", "Text"), tone())),
         BlockTypeDeclaration("ui.stat", "Stat", listOf(text("label", "Label"), text("value", "Value"), tone(), text("hint", "Hint"))),
         BlockTypeDeclaration(UNKNOWN_TYPE, "Unknown widget", listOf(text("text", "Text"))),
-    ) + ViewControls.declarations + ViewForms.declarations
+    ) + ViewControls.declarations
 
     val registered: Map<String, BlockType> = linkedMapOf(
         "ui.section" to BlockType { id, c -> SectionBlock(id, c) },
@@ -166,7 +166,7 @@ object ViewWidgets {
         "ui.badge" to BlockType { id, _ -> BadgeBlock(id) },
         "ui.stat" to BlockType { id, _ -> StatBlock(id) },
         UNKNOWN_TYPE to BlockType { id, _ -> UnknownBlock(id) },
-    ) + ViewControls.registered + ViewForms.registered
+    ) + ViewControls.registered
 
     /** Core's layout primitives plus these widgets: everything a view page may use. */
     val types: BlockTypes by lazy { BlockTypes.of(listOf(Triple("Infantry_Views", declarations, registered))) }
