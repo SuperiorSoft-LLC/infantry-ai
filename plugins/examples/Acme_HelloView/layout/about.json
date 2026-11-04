@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "widgets": 1,
+  "root": {
+    "blockType": "ui.section",
+    "id": "about",
+    "config": { "title": "About Acme_HelloView", "subtitle": "A static view: no code answers it" },
+    "children": [
+      { "blockType": "ui.text", "id": "about-text", "config": { "text": "This page is a JSON file in the module folder. The daemon serves it when no provider is registered for the view." } },
+      { "blockType": "ui.badge", "id": "about-badge", "config": { "text": "static", "tone": "muted" } }
+    ]
+  }
+}
