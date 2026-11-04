@@ -289,17 +289,25 @@ class UsageMeter private constructor(
         val watch: com.superiorsoftllc.infantry.mailbox.WatchMeter.Counts? = null,
     )
 
+    /** LOCAL-TIME-1: the zone usage days are cut in (display.timeZone; default the system zone). Stored rows stay UTC epoch ms. */
+    @Volatile var zone: java.time.ZoneId = java.time.ZoneId.systemDefault()
+
     /** One row per day per (role, provider, model, source): live runs grouped by day, plus the daily rollups. */
     fun report(): Report {
         val rows = ArrayList<Row>()
         synchronized(conn) {
             conn.createStatement().use { st ->
                 st.executeQuery(
-                    """SELECT d, role, provider, model, source, SUM(r), SUM(turns), SUM(input), SUM(output), SUM(cr), SUM(cw), SUM(ctx), SUM(cost) FROM (
-                        SELECT strftime('%Y-%m-%d', ended_at/1000, 'unixepoch') d, role, provider, model, source, 1 r, turns, input, output,
-                        cache_read cr, cache_write cw, context_sum ctx, cost FROM meter_run
-                        UNION ALL SELECT day, role, provider, model, source, runs, turns, input, output, cache_read, cache_write, context_sum, cost FROM meter_day)
-                        GROUP BY d, role, provider, model, source ORDER BY d""",
+                    "SELECT ended_at, role, provider, model, source, turns, input, output, cache_read, cache_write, context_sum, cost FROM meter_run",
+                ).use { rs ->
+                    while (rs.next()) {
+                        val cost = rs.getDouble(12).takeUnless { rs.wasNull() }
+                        rows += Row(localDay(rs.getLong(1), zone), rs.getString(2), rs.getString(3), rs.getString(4), rs.getString(5),
+                            1, rs.getLong(6), rs.getLong(7), rs.getLong(8), rs.getLong(9), rs.getLong(10), rs.getLong(11), cost)
+                    }
+                }
+                st.executeQuery(
+                    "SELECT day, role, provider, model, source, runs, turns, input, output, cache_read, cache_write, context_sum, cost FROM meter_day",
                 ).use { rs ->
                     while (rs.next()) {
                         val cost = rs.getDouble(13).takeUnless { rs.wasNull() }
@@ -309,8 +317,17 @@ class UsageMeter private constructor(
                 }
             }
         }
+        val merged = LinkedHashMap<List<String>, Row>()
+        for (r in rows.sortedBy { it.day }) {
+            val k = listOf(r.day, r.role, r.provider, r.model, r.source)
+            val o = merged[k]
+            merged[k] = if (o == null) r else o.copy(runs = o.runs + r.runs, turns = o.turns + r.turns, input = o.input + r.input,
+                output = o.output + r.output, cacheRead = o.cacheRead + r.cacheRead, cacheWrite = o.cacheWrite + r.cacheWrite,
+                contextSum = o.contextSum + r.contextSum, cost = if (o.cost == null) r.cost else if (r.cost == null) o.cost else o.cost + r.cost)
+        }
+        rows.clear(); rows.addAll(merged.values)
         // Runs still in flight count now (their turns are already recorded), so the pane never lags until the process exits.
-        val today = Instant.ofEpochMilli(clock()).atZone(ZoneOffset.UTC).toLocalDate().toString()
+        val today = localDay(clock(), zone)
         for ((_, p) in pending) {
             val t = p.acc.totals() ?: continue
             val rec = p.rec ?: continue
@@ -369,3 +386,6 @@ class UsageMeter private constructor(
         }
     }
 }
+
+/** LOCAL-TIME-1: the calendar day (`yyyy-MM-dd`) of [epochMs] in [zone]: local midnight to local midnight, not UTC. */
+fun localDay(epochMs: Long, zone: java.time.ZoneId): String = Instant.ofEpochMilli(epochMs).atZone(zone).toLocalDate().toString()

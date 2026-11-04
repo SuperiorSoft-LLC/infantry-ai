@@ -163,7 +163,7 @@ class ProjectGitModelTest {
         assertEquals("branch main @ 1a2b3c4d", ProjectGitStatus("A", available = true, branch = "main", head = "1a2b3c4d5e6f").headline())
         assertEquals("detached HEAD @ 1a2b3c4d", ProjectGitStatus("A", available = true, branch = null, head = "1a2b3c4d5e6f").headline())
         assertEquals("branch main, no commits yet", ProjectGitStatus("A", available = true, branch = "main", head = null).headline())
-        assertEquals("2023-11-14 10:13 PM", GitCommit("h", "h", "Ann", 1_700_000_000, "s").whenText(), "epoch seconds, shown in UTC")
+        assertEquals("2023-11-14 10:13 PM", GitCommit("h", "h", "Ann", 1_700_000_000, "s").whenText(kotlinx.datetime.TimeZone.UTC), "epoch seconds, shown in the given zone")
     }
 
     // ---- BUG-PGIT-LOAD -------------------------------------------------------------------------------

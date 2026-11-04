@@ -5976,10 +5976,10 @@ internal object Cli {
 
     /**
      * How [iso] renders a message's `sentAt`. Epoch millis are exact but unreadable at a terminal;
-     * the mailbox stamps UTC, so the stamp is UTC and says so with its trailing `Z`.
+     * LOCAL-TIME-1: shown in the local zone with its offset, e.g. `2026-11-03 20:41 -05:00`.
      */
     private val WHEN_FORMAT: DateTimeFormatter =
-        DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'").withZone(ZoneOffset.UTC)
+        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm xxx").withZone(java.time.ZoneId.systemDefault())
 }
 
 /** PROMPT-5: what `infantry ask` prints on stdout. */
