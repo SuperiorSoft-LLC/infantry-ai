@@ -290,22 +290,57 @@ class SessionManager(
      * another lock (the board's) while this one is held closes a cycle with any caller that holds that lock and asks
      * this manager for something (`TicketBoard.move -> handOut -> startNew`).
      */
-    private val pendingEvents = ThreadLocal.withInitial { ArrayDeque<SessionEvent>() }
+    private class Outgoing(val event: SessionEvent, @Volatile var ready: Boolean)
 
-    /** Hand [event] to [eventSink]: at once when the lock is free, else after the outermost [locked] section ends. */
+    /** CHAT-ORDER-1: every event in the order it was raised, whichever thread raised it. */
+    private val outbox = java.util.concurrent.ConcurrentLinkedQueue<Outgoing>()
+    private val heldHere = ThreadLocal.withInitial { ArrayList<Outgoing>() }
+    private val drainLock = java.util.concurrent.locks.ReentrantLock()
+
+    /**
+     * Hand [event] to [eventSink]. An event raised under the lock is deferred until the outermost [locked] section ends
+     * (DEADLOCK-1), and CHAT-ORDER-1: it keeps its place in the one outbox, so an event another thread raises meanwhile
+     * (the reply a live process printed for the prompt this section just sent) is delivered AFTER it, never before.
+     */
     private fun emit(event: SessionEvent) {
-        if (Thread.holdsLock(this)) { pendingEvents.get().addLast(event); return }
-        flushEvents()
-        eventSink?.invoke(event)
+        if (Thread.holdsLock(this)) {
+            val item = Outgoing(event, ready = false)
+            outbox.add(item)
+            heldHere.get().add(item)
+            return
+        }
+        if (drainLock.isHeldByCurrentThread) { // raised by a listener while this thread delivers: as before, at once
+            runCatching { eventSink?.invoke(event) }
+            return
+        }
+        outbox.add(Outgoing(event, ready = true))
+        drain()
     }
 
-    /** Deliver the events this thread queued under the lock. Called only with the lock released. */
+    /** The outermost lock section ended: its deferred events are deliverable, in their original place. */
     private fun flushEvents() {
-        val queue = pendingEvents.get()
+        val mine = heldHere.get()
+        mine.forEach { it.ready = true }
+        mine.clear()
+        drain()
+    }
+
+    /** Deliver the ready head of the outbox, in order; one thread drains at a time, nobody waits for it. */
+    private fun drain() {
         while (true) {
-            val next = queue.removeFirstOrNull() ?: return
-            runCatching { eventSink?.invoke(next) }
-                .onFailure { System.err.println("[infantry] session event listener failed: ${it.message}") }
+            if (!drainLock.tryLock()) return
+            try {
+                while (true) {
+                    val head = outbox.peek() ?: break
+                    if (!head.ready) break
+                    outbox.poll()
+                    runCatching { eventSink?.invoke(head.event) }
+                        .onFailure { System.err.println("[infantry] session event listener failed: ${it.message}") }
+                }
+            } finally {
+                drainLock.unlock()
+            }
+            if (outbox.peek()?.ready != true) return
         }
     }
 
