@@ -40,6 +40,9 @@ class ChatPanelState {
         private set
     var attachError by mutableStateOf<String?>(null)
     var spawnMode by mutableStateOf(false)
+    /** CHAT-MINIMIZE-1: the composer is removed from view (draft, attachments and queue are kept here) / grown to a tall editor. Per window. */
+    var composerMinimized by mutableStateOf(false)
+    var composerExpanded by mutableStateOf(false)
     var switchAsk by mutableStateOf<SwitchAgentAsk?>(null)
     val focus: FocusRequester = FocusRequester()
 

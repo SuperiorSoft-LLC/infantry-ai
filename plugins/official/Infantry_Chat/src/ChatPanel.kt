@@ -325,6 +325,12 @@ internal fun ChatPanelHost.Transcript(modifier: Modifier) {
             var sidePanel by remember(agent.id) { mutableStateOf(com.superiorsoftllc.infantry.ui.model.SidePanel.NONE) }
             ChatSideSlot(reasoning, agent.todos, sidePanel) { sidePanel = it }
         }
+        if (chat.composerMinimized) {
+            // CHAT-MINIMIZE-1: the floating restore button; 48dp touch target, inset so it never covers system navigation.
+            androidx.compose.foundation.layout.Box(Modifier.align(Alignment.BottomEnd).padding(12.dp).testTag(COMPOSER_RESTORE_TAG)) {
+                IconAction(AhqIcons.OpenInFull, COMPOSER_RESTORE_LABEL, { chat.composerMinimized = false }, style = IconActionStyle.FILLED)
+            }
+        }
     }
 }
 
@@ -367,6 +373,8 @@ internal fun ChatPanelHost.SwitchPicker() {
 
 @Composable
 internal fun ChatPanelHost.Composer() {
+    // CHAT-MINIMIZE-1: minimized = not composed at all; the restore button floats over the transcript (Transcript()).
+    if (chat.composerMinimized) return
     PromptBox(
         chat.draft, chat::edit, { chat.submit(controller, scope, agent) }, chat.focus, chat.spawnMode, agent, controller,
         onSpawnToggle = { if (allowSpawn) chat.spawnMode = !chat.spawnMode },
@@ -375,5 +383,7 @@ internal fun ChatPanelHost.Composer() {
         onAttach = { chat.attach(it, controller, scope, agent, state) },
         onRemoveAttachment = chat::removeAttachment,
         wire = chat::wire,
+        expanded = chat.composerExpanded, onToggleExpand = { chat.composerExpanded = !chat.composerExpanded },
+        onMinimize = { chat.composerMinimized = true },
     )
 }
