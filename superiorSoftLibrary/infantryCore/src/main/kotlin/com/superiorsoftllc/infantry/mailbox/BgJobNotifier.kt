@@ -386,7 +386,7 @@ class BgJobNotifier(
             w.readError != null -> "the watcher could not read the log (${w.readError})"
             primary == null -> "no log (output not watched${job.optOut?.let { ": watch OFF, $it" } ?: ""})"
             !File(primary).isFile -> "the log is gone (${primary.takeLast(80)})"
-            lines.isEmpty() || now - w.lastOutputAt >= 60_000L -> "no output since ${java.time.Instant.ofEpochMilli(w.lastOutputAt)}"
+            lines.isEmpty() || now - w.lastOutputAt >= 60_000L -> "no output since ${com.superiorsoftllc.infantry.DisplayZone.stamp(w.lastOutputAt)}"
             else -> "last output ${fmt(now - w.lastOutputAt)} ago"
         }
         val proc = if (alive(job)) "its process is still running" else "its process is GONE (the end report has not arrived)"

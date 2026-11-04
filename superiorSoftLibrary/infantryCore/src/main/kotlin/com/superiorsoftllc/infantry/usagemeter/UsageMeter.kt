@@ -290,7 +290,8 @@ class UsageMeter private constructor(
     )
 
     /** LOCAL-TIME-1: the zone usage days are cut in (display.timeZone; default the system zone). Stored rows stay UTC epoch ms. */
-    @Volatile var zone: java.time.ZoneId = java.time.ZoneId.systemDefault()
+    @Volatile var zone: java.time.ZoneId? = null
+    private val z get() = zone ?: com.superiorsoftllc.infantry.DisplayZone.zone
 
     /** One row per day per (role, provider, model, source): live runs grouped by day, plus the daily rollups. */
     fun report(): Report {
@@ -302,7 +303,7 @@ class UsageMeter private constructor(
                 ).use { rs ->
                     while (rs.next()) {
                         val cost = rs.getDouble(12).takeUnless { rs.wasNull() }
-                        rows += Row(localDay(rs.getLong(1), zone), rs.getString(2), rs.getString(3), rs.getString(4), rs.getString(5),
+                        rows += Row(localDay(rs.getLong(1), z), rs.getString(2), rs.getString(3), rs.getString(4), rs.getString(5),
                             1, rs.getLong(6), rs.getLong(7), rs.getLong(8), rs.getLong(9), rs.getLong(10), rs.getLong(11), cost)
                     }
                 }
@@ -327,7 +328,7 @@ class UsageMeter private constructor(
         }
         rows.clear(); rows.addAll(merged.values)
         // Runs still in flight count now (their turns are already recorded), so the pane never lags until the process exits.
-        val today = localDay(clock(), zone)
+        val today = localDay(clock(), z)
         for ((_, p) in pending) {
             val t = p.acc.totals() ?: continue
             val rec = p.rec ?: continue

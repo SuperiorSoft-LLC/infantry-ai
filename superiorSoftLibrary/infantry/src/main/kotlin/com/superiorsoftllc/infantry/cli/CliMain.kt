@@ -3491,7 +3491,7 @@ internal object Cli {
                 decision.authorSessionId?.let { "session $it" },
             ).ifEmpty { listOf("-") }.joinToString(", "),
         )
-        out.appendLine("CREATED: ${java.time.Instant.ofEpochMilli(decision.createdAt)}")
+        out.appendLine("CREATED: ${com.superiorsoftllc.infantry.DisplayZone.stamp(decision.createdAt)}")
         if (decision.body.isNotEmpty()) {
             out.appendLine()
             out.appendLine(decision.body)
@@ -3622,14 +3622,14 @@ internal object Cli {
         if (state.commits.isEmpty()) out.appendLine("No commits recorded.")
         for (c in state.commits) {
             out.appendLine(
-                "${c.commit} | ${c.stage} | ${c.movedBy ?: "-"} | ${java.time.Instant.ofEpochMilli(c.movedAt)}" +
+                "${c.commit} | ${c.stage} | ${c.movedBy ?: "-"} | ${com.superiorsoftllc.infantry.DisplayZone.stamp(c.movedAt)}" +
                     (c.evidence?.let { " | $it" } ?: ""),
             )
         }
         for (c in state.checks) {
             out.appendLine(
-                "RUNNING [${c.scope.ifEmpty { "default" }}] ${c.commit} | ${c.what} | started ${java.time.Instant.ofEpochMilli(c.startedAt)}" +
-                    " | last output ${java.time.Instant.ofEpochMilli(c.lastOutputAt)} | ${c.startedBy ?: "-"}",
+                "RUNNING [${c.scope.ifEmpty { "default" }}] ${c.commit} | ${c.what} | started ${com.superiorsoftllc.infantry.DisplayZone.stamp(c.startedAt)}" +
+                    " | last output ${com.superiorsoftllc.infantry.DisplayZone.stamp(c.lastOutputAt)} | ${c.startedBy ?: "-"}",
             )
         }
     }
@@ -3878,7 +3878,7 @@ internal object Cli {
                 issue.openedBySession?.let { "session $it" },
             ).ifEmpty { listOf("-") }.joinToString(", "),
         )
-        out.appendLine("CREATED: ${java.time.Instant.ofEpochMilli(issue.createdAt)}")
+        out.appendLine("CREATED: ${com.superiorsoftllc.infantry.DisplayZone.stamp(issue.createdAt)}")
         if (issue.events.isEmpty()) {
             out.appendLine("No attempts yet.")
             return
@@ -4342,7 +4342,7 @@ internal object Cli {
             ?.jsonObject?.get("value")?.jsonPrimitive?.longOrNull
     }.getOrNull() ?: def.default
 
-    private fun iso(epochMillis: Long): String = WHEN_FORMAT.format(Instant.ofEpochMilli(epochMillis))
+    private fun iso(epochMillis: Long): String = com.superiorsoftllc.infantry.DisplayZone.stamp(epochMillis)
 
     /** The first non-blank line of a body, clipped so one long line cannot break the `inbox` table. */
     private fun firstLineOf(body: String): String =
