@@ -465,4 +465,25 @@ class ClaudeTtySessionTest {
         s.c.tick()
         assertEquals(SessionTurnEnd.INTERRUPTED, s.out.ends.single().first)
     }
+
+    @Test fun `a resumed long session reads only what claude adds after launch, never its history as live`() {
+        val id = "11111111-2222-3333-4444-555555555555"
+        val interrupted = """{"type":"user","uuid":"u-i","message":{"role":"user","content":[{"type":"text","text":"[Request interrupted by user]"}]}}"""
+        repeat(2000) { record(prompt); record(toolUse); record(toolResult); record(assistant("old$it", "old reply $it", 4)) }
+        record(notice); record(interrupted) // history ends on a notice and an interruption that are long over
+        val s = start(resume = id)
+        up(s)
+        s.c.tick()
+        assertTrue(s.out.lines.none { "old reply" in it || "toolu_1" in it }, "no history replayed into the feed: ${s.out.lines.size} lines")
+        assertEquals(1, s.out.lines.size, "only the init line")
+        assertTrue(s.out.starts.isEmpty(), "an old notice starts no turn: ${s.out.starts}")
+        s.c.sendTurn(request("mail"))
+        s.c.tick(); now += ClaudeTtySession.PASTE_SETTLE_MS; s.c.tick()
+        event(s, "submit"); record(pasted); record(assistant("m1", "read the mail", 2))
+        event(s, "stop")
+        settle(s)
+        assertEquals(listOf(Triple<SessionTurnEnd, Int?, String?>(SessionTurnEnd.COMPLETED, 0, null)), s.out.ends, "the old interruption does not end the new turn")
+        assertEquals("read the mail", Json.parseToJsonElement(s.out.lines.last()).jsonObject["result"]!!.jsonPrimitive.content)
+        assertTrue(s.out.lines.none { "old reply" in it })
+    }
 }

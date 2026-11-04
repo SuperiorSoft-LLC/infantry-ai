@@ -146,9 +146,9 @@ private fun JsonObject.str(key: String): String? = (this[key] as? JsonPrimitive)
 
 private fun JsonObject.bool(key: String): Boolean = (this[key] as? JsonPrimitive)?.contentOrNull == "true"
 
-/** Reads the lines appended to a file since the last call; a line still being written waits for its newline. One caller thread. */
-class AppendedLines(private val file: () -> File?) {
-    private var offset = 0L
+/** Reads the lines appended to a file since the last call, from byte [start] on; a line still being written waits for its newline. One caller thread. */
+class AppendedLines(start: Long = 0L, private val file: () -> File?) {
+    private var offset = start
     private var partial = StringBuilder()
     private val bytes = java.io.ByteArrayOutputStream()
 

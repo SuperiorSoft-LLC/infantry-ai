@@ -61,7 +61,8 @@ class ClaudeTtySession(
     override fun idleMinutes(): Int = idleMinutes.invoke()
 
     /** What [launch] decided for a process, until [connect] takes it. Keyed by identity: the host hands back the very object. */
-    data class Launch(val sessionId: String, val cwd: String, val events: File, val settings: File, val mcpPid: File? = null)
+    /** [transcriptStart] = CLI-PTY-4: the length of a resumed session's transcript at launch; what is before it is history, never read as live. */
+    data class Launch(val sessionId: String, val cwd: String, val events: File, val settings: File, val mcpPid: File? = null, val transcriptStart: Long = 0)
 
     private val launches = IdentityHashMap<HarnessProcess, Launch>()
 
@@ -107,9 +108,13 @@ class ClaudeTtySession(
             command = argv(executable(), request, if (resume == null) id else null, resume, settings.absolutePath, env, mapOf(MCP_PID_FILE_ENV to mcpPid.absolutePath)),
             env = mapOf("CLAUDE_CODE_ENABLE_TODO_TOOLS" to "1") + ClaudeCommand.contextLimitEnv(request.contextLimit),
         )
-        synchronized(launches) { launches[process] = Launch(id, request.project, events, settings, mcpPid) }
+        synchronized(launches) { launches[process] = Launch(id, request.project, events, settings, mcpPid, transcriptStart(resume, request.project)) }
         return process
     }
+
+    /** A resumed session's transcript already holds its whole history (long sessions: many MB); only what claude adds after launch is this process's. */
+    private fun transcriptStart(resume: String?, cwd: String): Long =
+        resume?.let { ClaudeTranscripts.find(configDir(), cwd, it)?.length() } ?: 0L
 
     override fun connect(out: SessionOutput): SessionConnection = error("an interactive claude connects with its launched process")
 
@@ -141,7 +146,7 @@ class ClaudeTtySession(
         private val mapper = TranscriptMapper(launch.sessionId)
         private val events = AppendedLines { launch.events }
         private var transcriptFile: File? = null
-        private val transcript = AppendedLines { transcriptFile ?: ClaudeTranscripts.find(configDir, launch.cwd, launch.sessionId)?.also { transcriptFile = it } }
+        private val transcript = AppendedLines(launch.transcriptStart) { transcriptFile ?: ClaudeTranscripts.find(configDir, launch.cwd, launch.sessionId)?.also { transcriptFile = it } }
         private val queue = ArrayDeque<Turn>()
         private var active: Turn? = null
         private val launchedAt = clock()
