@@ -4,6 +4,7 @@ package com.superiorsoftllc.infantry.plugins.official.chatfeed
 
 import com.superiorsoftllc.infantry.ui.model.SessionPaneAction
 import androidx.compose.runtime.Composable
+import com.superiorsoftllc.infantry.ui.FloatingChips
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
@@ -24,6 +25,8 @@ internal object FeedArgs {
     const val ON_APPLY_START = "onApplyStart"
     const val ON_RESUME = "onResume"
     const val ON_LATER = "onLater"
+    /** CHAT-MINIMIZE-5: the host's floating chips, a [FloatingChips], drawn in the bottom-right float row. */
+    const val FLOATERS = "floaters"
 }
 
 /**
@@ -42,6 +45,7 @@ internal fun FeedSection(ctx: TabContext) {
     val onApplyStart = args[FeedArgs.ON_APPLY_START] as? ((StartPlan) -> Unit) ?: {}
     val onResume = args[FeedArgs.ON_RESUME] as? ((String) -> Unit) ?: {}
     val onLater = args[FeedArgs.ON_LATER] as? (() -> Unit) ?: {}
+    val floaters = (args[FeedArgs.FLOATERS] as? FloatingChips)?.content ?: {}
     val scope = rememberCoroutineScope()
     CompositionLocalProvider(LocalUserPortrait provides state.userPortrait) {
         OutputPane(
@@ -53,6 +57,7 @@ internal fun FeedSection(ctx: TabContext) {
             paneAction = agent?.let { feedPaneAction(it, state.tickets) },
             onApplyStart = onApplyStart,
             onResume = onResume,
+            floaters = floaters,
         ) {
             // ASK-1: this session's pending question, inline above the Activity box.
             QuestionPanel(

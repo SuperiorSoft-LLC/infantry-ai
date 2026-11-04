@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -208,10 +209,13 @@ fun OutputPane(
     onResume: (String) -> Unit = {},
     /** SCRIPT-VIS-1b: lines plugins contributed to this session's chat (automation runs); empty = none. */
     contributions: List<TimelineItem> = emptyList(),
+    /** CHAT-MINIMIZE-5: the host's floating chips (Expand, Minimize / Restore), drawn in the bottom-right float row. */
+    floaters: @Composable RowScope.() -> Unit = {},
     questionSlot: @Composable () -> Unit = {},
 ) {
     if (a == null) {
         Box(Modifier.fillMaxSize(), Alignment.Center) {
+            Box(Modifier.align(Alignment.BottomEnd)) { FloatRow(floaters) }
             if (spawnMode) return@Box
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 BrandEmblem(72.dp)
@@ -226,6 +230,7 @@ fun OutputPane(
     if (com.superiorsoftllc.infantry.ui.model.showsResumeSplash(a.session, paneAction) || a.output.isEmpty() && contributions.none { !it.isStats } && a.chatStatus(Clock.System.now().toEpochMilliseconds()) == null) {
       Column(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f).fillMaxWidth(), Alignment.Center) {
+            Box(Modifier.align(Alignment.BottomEnd)) { FloatRow(floaters) }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 BrandEmblem(72.dp)
                 Spacer(Modifier.height(10.dp))
@@ -244,7 +249,7 @@ fun OutputPane(
       }
         return
     }
-    AgentChat(a, roleColor = roleColor, questionSlot = questionSlot, contributions = contributions)
+    AgentChat(a, roleColor = roleColor, questionSlot = questionSlot, contributions = contributions, floaters = floaters)
 }
 
 /** Test tag on the transient status row under the transcript (or in place of the empty state). */
@@ -261,7 +266,7 @@ const val ACTIVITY_LINE_TAG = "activity-line"
  * The status row sits under the last line and is absent once [AgentView.chatStatus] is null.
  */
 @Composable
-fun AgentChat(agent: AgentView, nowProvider: () -> Long = { Clock.System.now().toEpochMilliseconds() }, roleColor: String? = null, questionSlot: @Composable () -> Unit = {}, contributions: List<TimelineItem> = emptyList()) {
+fun AgentChat(agent: AgentView, nowProvider: () -> Long = { Clock.System.now().toEpochMilliseconds() }, roleColor: String? = null, questionSlot: @Composable () -> Unit = {}, contributions: List<TimelineItem> = emptyList(), floaters: @Composable RowScope.() -> Unit = {}) {
     val list = rememberLazyListState()
     // The elapsed label must age on its own: no status frame may arrive for seconds while the agent
     // works, so a one-second ticker keeps "Thinking... 3s" counting with the transcript otherwise still.
@@ -293,7 +298,7 @@ fun AgentChat(agent: AgentView, nowProvider: () -> Long = { Clock.System.now().t
                 }
             }
         }
-        Box(Modifier.align(Alignment.BottomEnd)) { ActivityBox(agent) }
+        Box(Modifier.align(Alignment.BottomEnd)) { ActivityBox(agent, floaters) }
         }
         questionSlot()
     }
@@ -313,29 +318,31 @@ private const val ACTIVITY_AUTO_OPEN_KEY = "activityBox.autoOpenWhileRunning"
  * switches. The `activityBox.autoOpenWhileRunning` setting (default off) restores opening while the session runs.
  */
 @Composable
-fun ActivityBox(agent: AgentView) {
+fun ActivityBox(agent: AgentView, floaters: @Composable RowScope.() -> Unit = {}) {
     val entries = agent.activityLog
-    if (entries.isEmpty()) return
     // ACTIVITY-BOX-1: collapsed unless the user chose otherwise (remembered per window) or the setting asks for
     // auto-open while the session runs.
     val autoOpen = LocalShellContext.current?.config?.values("infantry.chatfeed")?.boolean(ACTIVITY_AUTO_OPEN_KEY) ?: false
-    val expanded = activityBoxChoice ?: (autoOpen && isRunning(agent.session.state))
-    Column(Modifier.testTag(ACTIVITY_BOX_TAG), horizontalAlignment = Alignment.End) {
+    val expanded = entries.isNotEmpty() && (activityBoxChoice ?: (autoOpen && isRunning(agent.session.state)))
+    Column(horizontalAlignment = Alignment.End) {
         if (expanded) Box(Modifier.padding(horizontal = 8.dp)) { ActivityLines(entries) }
-        // CHAT-MINIMIZE-2: a small round floating icon (48dp touch target) with the count; the label stays as its description.
-        val label = "Activity (${entries.size})"
-        // CHAT-MINIMIZE-3: hand cursor and a hover tone, so the round icon reads as clickable.
-        val hover = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-        val hovered by hover.collectIsHoveredAsState()
-        Box(
-            Modifier.padding(8.dp).size(48.dp).clip(androidx.compose.foundation.shape.CircleShape).background(if (hovered) Palette.Raised else Palette.Panel)
-                .hoverable(hover).handCursor()
-                .clickable { activityBoxChoice = !expanded }.semantics { contentDescription = label },
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(AhqIcons.Activity, contentDescription = null, tint = Palette.Muted, modifier = Modifier.size(22.dp))
-            Text(entries.size.toString(), color = Palette.Text, fontSize = 9.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.TopEnd).padding(6.dp))
+        // CHAT-MINIMIZE-5: one row of floating chips at the bottom-right: the host's floaters (Expand, Minimize / Restore),
+        // then the Activity chip. No count on the chip (it capped and stopped meaning anything); the icon alone.
+        FloatRow(floaters) {
+            if (entries.isNotEmpty()) FloatingChip(AhqIcons.Activity, ACTIVITY_LABEL, { activityBoxChoice = !expanded }, Modifier.testTag(ACTIVITY_BOX_TAG))
         }
+    }
+}
+
+/** CHAT-MINIMIZE-5: the Activity chip's tooltip and screen-reader name. */
+const val ACTIVITY_LABEL = "Activity"
+
+/** CHAT-MINIMIZE-5: the bottom-right row of floating chips: [floaters] from the host, then [trailing] (this feed's own). */
+@Composable
+fun FloatRow(floaters: @Composable RowScope.() -> Unit, trailing: @Composable RowScope.() -> Unit = {}) {
+    Row(Modifier.padding(end = 6.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        floaters()
+        trailing()
     }
 }
 
