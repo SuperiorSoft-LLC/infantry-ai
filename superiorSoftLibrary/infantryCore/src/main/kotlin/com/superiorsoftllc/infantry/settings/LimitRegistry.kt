@@ -574,16 +574,6 @@ object LimitRegistry {
         "DV-1a: the deepest nesting of one declarative view page; a deeper one is refused.",
         min = 1, zeroIsUnlimited = false,
     )
-    val VIEWS_CHANGED_COALESCE_MS = LimitDef(
-        "limits.views.changedCoalesceMs", 1_000, "ms",
-        "DV-1b: calls to views.changed for one (module, view, params) inside this window collapse into one plugin_view_changed push.",
-        min = 1, zeroIsUnlimited = false,
-    )
-    val VIEWS_MAX_SUBSCRIPTIONS = LimitDef(
-        "limits.views.maxSubscriptionsPerConnection", 16, "subscriptions",
-        "DV-1b: the most plugin_view subscriptions one connection holds; opening one more drops its oldest.",
-        min = 1, zeroIsUnlimited = false,
-    )
     val PLUGIN_START_TIMEOUT_MS = LimitDef(
         "limits.plugins.startTimeoutMs", 30_000, "ms",
         "How long a daemon plugin's start (and each policy-change callback) may run before the plugin is disabled.",
@@ -718,7 +708,7 @@ object LimitRegistry {
         WATCH_READ_MAX_KB, WATCH_TAIL_READ_KB, WATCH_SPACE_CHECK_SECONDS,
         TICKET_FILES_MAX_LINES, TICKET_FILES_RELATED_TOP,
         RELATED_BRIEF_TICKETS, RELATED_BRIEF_FILES, RELATED_BRIEF_CHARS, RELATED_BLOCK_TICKETS, RELATED_BLOCK_FILES, RELATED_BLOCK_CHARS,
-        PLUGIN_CALL_TIMEOUT_MS, PLUGIN_HANG_CEILING_MS, PLUGIN_GUARD_STRIKES, PLUGIN_GUARD_COOLDOWN_MS, PLUGIN_POOL_SIZE, PLUGIN_QUEUE_LIMIT, PLUGIN_TOOL_TIMEOUT_MS, PLUGIN_TOOL_MAX_TIMEOUT_MS, PLUGIN_ROUTE_RATE, VIEWS_MAX_PAGE_BYTES, VIEWS_MAX_NODES, VIEWS_MAX_DEPTH, VIEWS_CHANGED_COALESCE_MS, VIEWS_MAX_SUBSCRIPTIONS, PLUGIN_START_TIMEOUT_MS, PLUGIN_STOP_TIMEOUT_MS,
+        PLUGIN_CALL_TIMEOUT_MS, PLUGIN_HANG_CEILING_MS, PLUGIN_GUARD_STRIKES, PLUGIN_GUARD_COOLDOWN_MS, PLUGIN_POOL_SIZE, PLUGIN_QUEUE_LIMIT, PLUGIN_TOOL_TIMEOUT_MS, PLUGIN_TOOL_MAX_TIMEOUT_MS, PLUGIN_ROUTE_RATE, VIEWS_MAX_PAGE_BYTES, VIEWS_MAX_NODES, VIEWS_MAX_DEPTH, PLUGIN_START_TIMEOUT_MS, PLUGIN_STOP_TIMEOUT_MS,
         RUN_MAX_SECRETS, KEYSTORE_MAX_FIELDS, KEYSTORE_MAX_SECRETS,
         SANDBOX_MODE,
         HEALTH_DB_TIMEOUT_SECONDS, HEALTH_WATCHDOG_FAILURES, HEALTH_WATCHDOG_INTERVAL_SECONDS, HEALTH_WATCHDOG_TIMEOUT_SECONDS,
