@@ -221,23 +221,6 @@ data class DaemonCapabilities(
     val limits: DaemonPluginLimits = DaemonPluginLimits(),
     /** DAEMON-STORAGE-1: plugin-owned tables; `adopt` lists existing core tables an OFFICIAL module takes over. */
     val storage: DaemonStorageDeclaration = DaemonStorageDeclaration(),
-    /** DV-1a (docs/DECL-UI-DESIGN.md 3.1): the declarative views the daemon half answers (or a static [DaemonViewDeclaration.layout] file serves). */
-    val views: List<DaemonViewDeclaration> = emptyList(),
-)
-
-/**
- * DV-1a: one declarative view. [place] is `tab` (listed as a screen) or `none` (reached only by an open action); [action] is its
- * policy action id (kind read); [layout] is a static page file inside the module folder served when no provider answers the id;
- * [platforms] uses the PLUGIN-PLATFORMS-1 vocabulary (absent = every client).
- */
-@Serializable
-data class DaemonViewDeclaration(
-    val id: String,
-    val title: String = "",
-    val place: String = "tab",
-    val action: String,
-    val layout: String? = null,
-    val platforms: List<String>? = null,
 )
 
 /** DAEMON-STORAGE-1: [adopt] = core tables an official module takes over (a community module declaring any is refused). */

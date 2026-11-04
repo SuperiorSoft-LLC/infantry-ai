@@ -3790,13 +3790,6 @@ private suspend fun handleConnection(
                     }
                 }
 
-                // DV-1a (contract 1.150.0): declarative views. The list is cheap; a page is built off the loop (a provider runs plugin code).
-                com.superiorsoftllc.infantry.daemon.plugins.DaemonPluginHost.PLUGIN_VIEWS -> plugins.viewsResult(caller)
-                com.superiorsoftllc.infantry.daemon.plugins.DaemonPluginHost.PLUGIN_VIEW -> {
-                    session.launch(kotlinx.coroutines.Dispatchers.IO) { outgoing.trySend(plugins.answerView(envelope, caller)) }
-                    null
-                }
-
                 // DAEMON-PLUGINS-1: a frame a plugin declared and answers; anything else is unknown.
                 // DP-5d: a board-family frame is answered by the table its owner registered into; with no handler the
                 // daemon has no board.
