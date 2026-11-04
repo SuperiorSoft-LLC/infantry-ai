@@ -216,6 +216,8 @@ fun OutputPane(
     contributions: List<TimelineItem> = emptyList(),
     /** CHAT-MINIMIZE-5: the host's floating chips (Expand, Minimize / Restore), drawn in the bottom-right float row. */
     floaters: @Composable RowScope.() -> Unit = {},
+    /** CHAT-SENDING-1: the messages sent to this session that the transcript does not show yet, and their retry / discard. */
+    pending: PendingSendsView = PendingSendsView(),
     questionSlot: @Composable () -> Unit = {},
 ) {
     if (a == null) {
@@ -232,7 +234,7 @@ fun OutputPane(
         }
         return
     }
-    if (com.superiorsoftllc.infantry.ui.model.showsResumeSplash(a.session, paneAction) || a.output.isEmpty() && contributions.none { !it.isStats } && a.chatStatus(Clock.System.now().toEpochMilliseconds()) == null) {
+    if (com.superiorsoftllc.infantry.ui.model.showsResumeSplash(a.session, paneAction) || a.output.isEmpty() && pending.items.isEmpty() && contributions.none { !it.isStats } && a.chatStatus(Clock.System.now().toEpochMilliseconds()) == null) {
       Column(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f).fillMaxWidth(), Alignment.Center) {
             Box(Modifier.align(Alignment.BottomEnd)) { FloatRow(floaters) }
@@ -254,8 +256,15 @@ fun OutputPane(
       }
         return
     }
-    AgentChat(a, roleColor = roleColor, questionSlot = questionSlot, contributions = contributions, floaters = floaters)
+    AgentChat(a, roleColor = roleColor, questionSlot = questionSlot, contributions = contributions, floaters = floaters, pending = pending)
 }
+
+/** CHAT-SENDING-1: one session's pending sends ([PendingSendRow]) and what their actions do. */
+data class PendingSendsView(
+    val items: List<com.superiorsoftllc.infantry.ui.model.PendingSend> = emptyList(),
+    val onRetry: (String) -> Unit = {},
+    val onDiscard: (String) -> Unit = {},
+)
 
 /** Test tag on the transient status row under the transcript (or in place of the empty state). */
 const val CHAT_STATUS_TAG = "chat-status"
@@ -271,7 +280,7 @@ const val ACTIVITY_LINE_TAG = "activity-line"
  * The status row sits under the last line and is absent once [AgentView.chatStatus] is null.
  */
 @Composable
-fun AgentChat(agent: AgentView, nowProvider: () -> Long = { Clock.System.now().toEpochMilliseconds() }, roleColor: String? = null, questionSlot: @Composable () -> Unit = {}, contributions: List<TimelineItem> = emptyList(), floaters: @Composable RowScope.() -> Unit = {}) {
+fun AgentChat(agent: AgentView, nowProvider: () -> Long = { Clock.System.now().toEpochMilliseconds() }, roleColor: String? = null, questionSlot: @Composable () -> Unit = {}, contributions: List<TimelineItem> = emptyList(), floaters: @Composable RowScope.() -> Unit = {}, pending: PendingSendsView = PendingSendsView()) {
     val list = rememberLazyListState()
     // The elapsed label must age on its own: no status frame may arrive for seconds while the agent
     // works, so a one-second ticker keeps "Thinking... 3s" counting with the transcript otherwise still.
@@ -282,8 +291,12 @@ fun AgentChat(agent: AgentView, nowProvider: () -> Long = { Clock.System.now().t
     val status = agent.chatStatus(now)
     // Keyed on the status PRESENCE, not its value: the ticker changes it every second, and that must
     // not restart the scroll effect.
-    LaunchedEffect(agent.id, rows.size, agent.output.lastOrNull()?.text?.length, status != null) {
-        val last = rows.size + (if (status != null) 1 else 0) - 1
+    val sends = pending.items
+    // A phone-width pane: the bubble's retry / discard become 48dp touch targets.
+    val compact = com.superiorsoftllc.infantry.ui.model.PanelLayout.isCompact(com.superiorsoftllc.infantry.ui.block.layout.LocalBlockSize.current.width.value)
+    // CHAT-SENDING-1: a new pending send scrolls to the bottom too, so the human sees it the moment Send is pressed.
+    LaunchedEffect(agent.id, rows.size, agent.output.lastOrNull()?.text?.length, status != null, sends.size) {
+        val last = rows.size + sends.size + (if (status != null) 1 else 0) - 1
         if (last >= 0) list.requestScrollToItem(last)
     }
     val name = agent.session.worktreeBranch ?: agent.id.take(8)
@@ -297,9 +310,13 @@ fun AgentChat(agent: AgentView, nowProvider: () -> Long = { Clock.System.now().t
                     // M2-2: the agent's portrait opens each run of agent-side lines, like a chat. KINDS-1: the row is drawn by the renderer of its kind.
                     FeedRow(RowItem(rows[i], agent.id, name, agent.role, roleColor), startsAgentRun(rows, i, agentSide))
                 }
+                // CHAT-SENDING-1: the human's just-sent messages, after the transcript, until the daemon's echo replaces each.
+                items(sends.size, key = { "pending-" + sends[it].clientId }) { i ->
+                    PendingSendRow(sends[i], pending.onRetry, pending.onDiscard, compact = compact)
+                }
                 // The live status row is agent-side too: it opens a run only when no agent line precedes it.
                 if (status != null) item {
-                    AgentSideRow(startsAgentRun(rows, rows.size, agentSide), agent.role, agent.id, roleColor) { ChatStatusRow(status) }
+                    AgentSideRow(sends.isNotEmpty() || startsAgentRun(rows, rows.size, agentSide), agent.role, agent.id, roleColor) { ChatStatusRow(status) }
                 }
             }
         }
@@ -515,7 +532,7 @@ const val CARD_TITLE_TAG = "card-title"
  * [style]'s tone. Compact: one text line of header plus small padding; the body has the normal padding.
  */
 @Composable
-fun CommsCard(style: CommsCardStyle, at: Long, body: @Composable () -> Unit) {
+fun CommsCard(style: CommsCardStyle, at: Long, trailing: (@Composable () -> Unit)? = null, body: @Composable () -> Unit) {
     val shape = RoundedCornerShape(8.dp)
     Column(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(shape).background(style.tone.body)) {
         Row(
@@ -534,7 +551,9 @@ fun CommsCard(style: CommsCardStyle, at: Long, body: @Composable () -> Unit) {
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f).testTag(CARD_TITLE_TAG),
             )
-            if (style.showTime) {
+            // CHAT-SENDING-1: [trailing] (a pending send's state marker) takes the time's place.
+            if (trailing != null) trailing()
+            else if (style.showTime) {
                 Text(
                     activityTimestamp(at), color = Palette.Muted, fontFamily = Mono, fontSize = 10.sp,
                     maxLines = 1, softWrap = false, textAlign = TextAlign.End,

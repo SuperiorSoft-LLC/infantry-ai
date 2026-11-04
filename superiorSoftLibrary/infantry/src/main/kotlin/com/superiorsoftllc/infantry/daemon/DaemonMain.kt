@@ -1305,6 +1305,8 @@ class InfantryDaemon(
                         .let { t -> t == null || t.status != com.superiorsoftllc.infantry.protocol.TicketStatus.IN_PROGRESS || t.sessionId != r.id }
                 },
             )
+            // CHAT-SENDING-1: one store for every connection, so a resend after a reconnect is recognised.
+            val promptSendIds = PromptSendIds { settings.limit(LimitRegistry.CHAT_SENT_IDS_KEPT).toInt() }
             val ticketStartCharge = TicketStartCharge(spawnGuard, { boardPorts.startMoves() }, manager::get, manager::setSpawner)
             orchestrator.sessionStartedSink = { _, sessionId, parent -> spawnGuard.record(sessionId, parent); manager.setSpawner(sessionId, parent) }
             settings.limitEnvProblems().forEach { println("[infantry] limit ignored: $it") }
@@ -1920,6 +1922,7 @@ class InfantryDaemon(
                             daemonConfig = daemonConfig,
                             tier = call.attributes.getOrNull(ACCESS_TIER) ?: AccessTier.OWNER,
                             policies = policies,
+                            promptSendIds = promptSendIds,
                         ) } finally {
                             System.err.println("[infantry] ws close from $wsPeer: ${runCatching { closeReason.await() }.getOrNull() ?: "no reason"}")
                         }
@@ -2471,6 +2474,8 @@ private suspend fun handleConnection(
      * tier); this connection is sent the `policy` frame after `ready` and again on every switch.
      */
     policies: com.superiorsoftllc.infantry.policy.PolicyRuntime = com.superiorsoftllc.infantry.policy.PolicyRuntime(emptyList(), { null }, null, java.io.File(".")),
+    /** CHAT-SENDING-1: the client message ids of recent prompts, daemon-wide (a resend arrives on a new connection). */
+    promptSendIds: PromptSendIds = PromptSendIds { LimitRegistry.CHAT_SENT_IDS_KEPT.default.toInt() },
 ) {
     println("[infantry] ws connected (provider=${manager.providerId})")
     // DP-5d: the board-family frames, registered by their owner; the loop below only looks them up.
@@ -2794,6 +2799,10 @@ private suspend fun handleConnection(
                         // A client that NAMES its session (a reconnecting client carries it on every frame)
                         // continues exactly that one. A missing or non-resumable session is refused here,
                         // never silently forked into a new session the client did not ask for.
+                        // CHAT-SENDING-1 (1.151.0): a client message id is claimed before the turn runs; a resend of one
+                        // already taken is acknowledged and not run again. A refused prompt releases its id, so a retry runs.
+                        val sendKey = promptSendIds.keyOf(envelope.sessionId, envelope.requestId)
+                        if (sendKey != null && !promptSendIds.claim(sendKey)) promptAck(envelope, duplicate = true) else
                         try {
                             val named = manager.get(envelope.sessionId!!)
                             named?.let { launchWarning(manager, it.provider)?.let(outgoing::trySend) }
@@ -2808,11 +2817,13 @@ private suspend fun handleConnection(
                             }
                             active = manager.resume(envelope.sessionId!!, turn).id
                             plugins.turnAccepted(envelope, caller)
-                            pluginSessionsAck(envelope, manager)
+                            pluginSessionsAck(envelope, manager) ?: sendKey?.let { promptAck(envelope, duplicate = false) }
                         } catch (e: RunInFlightException) {
+                            sendKey?.let(promptSendIds::release)
                             // 1.96.0: typed, so the client that sent it (its requestId is echoed below) can queue it again.
                             Envelope(Envelope.ERROR, "$RUN_IN_FLIGHT ${e.sessionId}: ${e.message}")
                         } catch (e: Exception) {
+                            sendKey?.let(promptSendIds::release)
                             Envelope(Envelope.ERROR, e.message ?: "resume failed")
                         }
                     } else {

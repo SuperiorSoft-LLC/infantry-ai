@@ -27,6 +27,18 @@ A daemon plugin tool runs in the daemon, which cannot open the agent's files. `i
 A client below 1.147.0 sends plain strings and no `client.projectId`: such a tool sees no local files (a path it cannot read is refused as
 "does not exist") and no default project. A daemon below 1.147.0 never lists `localFiles`, and ignores `client.projectId`.
 
+### CHAT-SENDING-1 (contract 1.151.0, additive): a sent message is acknowledged, and a resend is never run twice
+
+A `prompt` that names its session (`sessionId`) and carries a client message id (`requestId` = `send:<unique id>`) is answered with
+`prompt_ack` (`data` = `accepted`, the frame's `sessionId` and `requestId` echoed) once the daemon has taken it as a turn. The daemon
+remembers the last `limits.chat.sentIdsKept` ids (default 500), daemon-wide: a `prompt` with a remembered id (a resend after a lost ack,
+often on a new connection) is answered `prompt_ack` `duplicate` and NOT run again. A refused prompt (`error`, `run_in_flight` included,
+with its `requestId`) is forgotten, so a retry runs. Only ids with the `send:` prefix are remembered.
+
+Clients show the message at once as "sending...", settle it on `prompt_ack` (or the echoed `turn`), and offer "not sent - retry" after
+`limits.chat.sendAckSeconds` (default 45) without an answer, or on a refusal or a dropped link; the retry resends the same id.
+A daemon below 1.151.0 sends no `prompt_ack`: the client settles on the `turn` echo alone.
+
 ### CHAT-QUEUE-1 (contract 1.150.0, additive + behavioural): the daemon holds messages typed while a turn runs
 
 A message typed while a session's turn runs is held by the daemon, on the session record, so every client and script sees the same queue:
@@ -2317,6 +2329,7 @@ apart from the 1.3.0, 1.4.0, 1.5.0, 1.6.0 and 1.28.0 additions marked in the tab
 | `limit_catalog` | request: empty data. Answer: `{limits: [{key, value, default, unit, description, min, max?, zeroMeans?, env}]}`, every daemon limit with its value in force (1.133.0) | both |
 | `resume` | `"<sessionId>\n<prompt>"` | client → daemon |
 | `kill` | `"<sessionId> [force]"` | client → daemon |
+| `prompt_ack` | `accepted` / `duplicate`: the `prompt` with this `requestId` (a `send:` client message id) was taken; a duplicate was not run again (1.151.0) | daemon → client |
 | `queue_add` | frame `sessionId` = the session, `data` = the message: held on `session.queued` while a turn runs, sent as a turn now when none runs (1.150.0) | client → daemon |
 | `queue_remove` | frame `sessionId`, `data` = the held item id: dropped, never delivered (1.150.0) | client → daemon |
 | `queue_force` | frame `sessionId`, `data` = the held item id: delivered into the running turn (harness `MID_TURN_INPUT`) or as a turn when none runs; refused with `error` otherwise, it stays held (1.150.0) | client → daemon |

@@ -59,6 +59,10 @@ data class Envelope(
         const val QUEUE_ADD = "queue_add"
         const val QUEUE_REMOVE = "queue_remove"
         const val QUEUE_FORCE = "queue_force"
+        /** CHAT-SENDING-1 (1.151.0): the daemon took the `prompt` whose client message id is this frame's `requestId` (`accepted` / `duplicate`). */
+        const val PROMPT_ACK = "prompt_ack"
+        /** CHAT-SENDING-1: the `requestId` prefix of a client message id (unique per message; the daemon dedupes on it). */
+        const val CLIENT_SEND_PREFIX = "send:"
         const val NEW = "new"
         /** Contract 1.34.0: ask for every provider's models; answered with a `models` frame ([ProviderModels] list). */
         const val MODELS = "models"

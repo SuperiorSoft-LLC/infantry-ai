@@ -8,6 +8,7 @@ import com.superiorsoftllc.infantry.ui.FloatingChips
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
+import com.superiorsoftllc.infantry.ui.model.pendingSendsFor
 import com.superiorsoftllc.infantry.ui.LocalUserPortrait
 import com.superiorsoftllc.infantry.ui.model.StartPlan
 import com.superiorsoftllc.infantry.ui.model.sessionPaneAction
@@ -58,6 +59,12 @@ internal fun FeedSection(ctx: TabContext) {
             onApplyStart = onApplyStart,
             onResume = onResume,
             floaters = floaters,
+            // CHAT-SENDING-1: this session's just-sent messages ("sending...", "not sent - retry") until the daemon's echo.
+            pending = PendingSendsView(
+                agent?.let { state.pendingSendsFor(it.id) }.orEmpty(),
+                onRetry = { id -> scope.launch { controller.retrySend(id) } },
+                onDiscard = controller::discardSend,
+            ),
         ) {
             // ASK-1: this session's pending question, inline above the Activity box.
             QuestionPanel(
