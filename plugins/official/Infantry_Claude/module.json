@@ -20,7 +20,7 @@
   },
   "harness": {
     "jar": "harness/build/libs/Infantry_Claude-harness.jar",
-    "contract": "2.13.0",
+    "contract": "2.14.0",
     "ids": ["claude"],
     "cli": { "id": "claude", "command": "claude", "label": "Claude Code" },
     "settings": ["harness.claude.liveIdleMinutes", "harness.claude.mode"],

@@ -347,6 +347,15 @@ class SessionHost(
     /** True while [sessionId] has a hosted process (a one-shot session's logical handle counts). */
     fun hasProcess(sessionId: String): Boolean = synchronized(lock) { slots[sessionId]?.process?.isAlive == true }
 
+    /**
+     * CLI-PTY-3: ask [sessionId]'s live process to reconnect its MCP servers in place. null = no live process (the next turn starts one,
+     * with fresh servers); true = the harness reconnected them; false = it cannot (the caller restarts the process, keeping the conversation).
+     */
+    fun reconnectMcp(sessionId: String): Boolean? {
+        val slot = synchronized(lock) { slots[sessionId]?.takeIf { it.process.isAlive } } ?: return null
+        return runCatching { slot.adapter.reconnectMcp(slot.process) }.getOrDefault(false)
+    }
+
     private inner class SlotSink(private val slot: Slot) : AdapterSink {
         private val tail = ArrayDeque<String>()
 
@@ -365,6 +374,8 @@ class SessionHost(
         override fun detail(text: String) = events.activity(slot.sessionId, text)
 
         override fun providerSession(id: String) = events.providerSession(slot.sessionId, id)
+
+        override fun mcpState(state: String, reason: String?) = events.mcpState(slot.sessionId, state, reason)
 
         override fun turnEnded(end: TurnEnd, exitCode: Int?, reason: String?) =
             endTurn(slot, slot.turn, end, exitCode, reason, processExited = false)

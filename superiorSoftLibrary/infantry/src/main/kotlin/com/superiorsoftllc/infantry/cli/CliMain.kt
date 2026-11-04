@@ -411,6 +411,11 @@ internal object Cli {
                     (config.projectId?.let { "project $it" } ?: "no default project"),
             )
             val tools = McpTools({ FrameStream.open(target, err) }, narrowing, getenv, defaultProjectId = config.projectId)
+            // CLI-PTY-3: say which process this server is, so the harness of a live CLI can tell when it dies.
+            getenv(com.superiorsoftllc.infantry.harness.api.MCP_PID_FILE_ENV)?.takeIf { it.isNotBlank() }?.let { path ->
+                runCatching { File(path).apply { parentFile?.mkdirs() }.writeText(ProcessHandle.current().pid().toString()) }
+                    .onFailure { err.appendLine("infantry mcp: could not write the pid file $path: ${it.message}") }
+            }
             return McpServer(input().buffered(), out, err, tools).serve()
         }
 

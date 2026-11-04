@@ -28,4 +28,28 @@ class PathEnvTest {
         val plain = mapOf("PATH" to "/y")
         assertEquals(plain, PathEnv.withBinOnPath(plain, "/z", ":"))
     }
+
+    /** CLI-PTY-3: a real worker shell started with the session env resolves `infantry` from the launcher directory. */
+    @Test
+    fun aWorkerShellResolvesInfantryOnPath() {
+        val bin = kotlin.io.path.createTempDirectory("infantry-bin").toFile()
+        try {
+            val win = System.getProperty("os.name").lowercase().contains("win")
+            java.io.File(bin, "infantry.cmd").writeText("@echo infantry-ok\r\n")
+            java.io.File(bin, "infantry").apply { writeText("#!/bin/sh\necho infantry-ok\n"); setExecutable(true) }
+            val inherited = System.getenv("PATH") ?: System.getenv("Path")
+            val env = PathEnv.withBinOnPath(mapOf(PathEnv.BIN_ENV to bin.absolutePath), inherited)
+            val cmd = if (win) listOf("cmd.exe", "/c", "infantry") else listOf("sh", "-c", "infantry")
+            val pb = ProcessBuilder(cmd).redirectErrorStream(true)
+            pb.environment().keys.removeIf { it.equals("PATH", ignoreCase = true) }
+            pb.environment().putAll(env)
+            val p = pb.start()
+            val out = p.inputStream.bufferedReader().readText()
+            kotlin.test.assertTrue(p.waitFor(30, java.util.concurrent.TimeUnit.SECONDS))
+            assertEquals(0, p.exitValue(), out)
+            kotlin.test.assertTrue("infantry-ok" in out, out)
+        } finally {
+            bin.deleteRecursively()
+        }
+    }
 }

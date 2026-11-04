@@ -72,8 +72,13 @@ import java.io.File
  * (this launched process runs in a terminal: its output is a screen, handed to [SessionConnection.onStdout] in decoded chunks and never forwarded as
  * a stdout record; the session reports its records itself through [SessionOutput.output], and [SessionOutput.write] is keyboard input) and
  * [SessionConnection.onExit] (the launched process ended). A 2.8 - 2.12 plugin keeps the defaults: pipes, no exit callback.
+ *
+ * 2.14.0 (CLI-PTY-3, additive): the session's own MCP server as a live process sees it. [SessionOutput.mcpState] (the plugin noticed the server
+ * connect, drop or come back: recorded on the session, nothing acted on) and [SessionConnection.reconnectMcp] (bring the servers back inside the
+ * live CLI; false = it cannot, the host restarts the process and resumes the same conversation). A 2.8 - 2.13 plugin keeps the defaults:
+ * nothing reported, no in-place reconnect.
  */
-const val HARNESS_API_VERSION: String = "2.13.0"
+const val HARNESS_API_VERSION: String = "2.14.0"
 
 /** What a harness jar ships: registers its harnesses, given the [HarnessHost] scoped to its module. */
 interface HarnessPlugin {
@@ -266,7 +271,22 @@ interface SessionOutput {
      * Default: nobody can prompt, so DENY.
      */
     fun requestApproval(tool: String, input: String): ApprovalReply = ApprovalReply.DENY
+
+    /**
+     * 2.14.0: the session's MCP server is now [state] ([reason] = what showed it, short). Report changes only. The host records it on the
+     * session and tells scripts; it never reconnects anything by itself. Default: dropped.
+     */
+    fun mcpState(state: McpState, reason: String? = null) {}
 }
+
+/** 2.14.0: the session's MCP server link, as the harness sees it. */
+enum class McpState { CONNECTED, DISCONNECTED, RECONNECTING }
+
+/**
+ * 2.14.0: set in the env of the daemon's own MCP server (`infantry mcp`), this names a file the server writes its process id to when it
+ * starts. A harness that puts it there can tell whether the server of a live CLI still runs ([SessionOutput.mcpState]).
+ */
+const val MCP_PID_FILE_ENV: String = "INFANTRY_MCP_PID_FILE"
 
 /** 2.12.0: the owner's answer to [SessionOutput.requestApproval]. */
 enum class ApprovalReply { ALLOW_ONCE, ALLOW_SESSION, ALLOW_ALWAYS, DENY }
@@ -290,6 +310,12 @@ interface SessionConnection {
 
     /** 2.13.0: the launched process ended with [exitCode] (any reason), after its last [onStdout]. Default: ignored. */
     fun onExit(exitCode: Int) {}
+
+    /**
+     * 2.14.0: bring the session's MCP servers back inside the LIVE process (the CLI's own reconnect), keeping the conversation. Called only when
+     * asked (a script or tool), never on the plugin's own say. false (default) = it cannot; the host then restarts the process and resumes.
+     */
+    fun reconnectMcp(): Boolean = false
 }
 
 /** 2.7.0: the only roots a contributed sandbox dir may sit under: the module's own data folder and the session worktree. */

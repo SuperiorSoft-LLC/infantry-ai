@@ -76,4 +76,38 @@ class SessionToolsTest {
         repeat(6) { tools.read.call(call("{}")) }
         assertTrue(tools.read.call(call("{}")).isError)
     }
+
+    // CLI-PTY-3 ------------------------------------------------------------------------------------------------------------------
+
+    private val reconnects = mutableListOf<Pair<String, Boolean>>()
+    private val mcpTools = SessionTools(
+        { if (it.startsWith("s")) SessionInfo(it, "p1", "backend", null, false, 0, state, false, "prov-1", 1, mcp = "disconnected", mcpChangedAt = 42L) else null },
+        { SessionStatus(it, state, null, null, null) }, { _, _ -> emptyList() }, { true }, { _, _, _ -> },
+        reconnectMcp = { id, force ->
+            reconnects += id to force
+            if (state == "BUSY" && !force) throw IllegalArgumentException("session '$id' is mid-turn") else "process restarted"
+        },
+    )
+
+    @Test fun `read carries the mcp link and when it changed`() {
+        val o = Json.parseToJsonElement(mcpTools.read.call(call("""{"sessionId":"s2"}""")).text).jsonObject
+        assertEquals("\"disconnected\"", o["mcp"].toString())
+        assertEquals("42", o["mcpChangedAt"].toString())
+    }
+
+    @Test fun `mcp_reconnect calls the primitive, refuses mid-turn without force`() {
+        state = "IDLE"
+        val ok = mcpTools.act.call(call("""{"action":"mcp_reconnect","sessionId":"s2"}"""))
+        assertTrue(!ok.isError && "process restarted" in ok.text, ok.text)
+        state = "BUSY"
+        val busy = mcpTools.act.call(call("""{"action":"mcp_reconnect","sessionId":"s2"}"""))
+        assertTrue(busy.isError && "mid-turn" in busy.text, busy.text)
+        assertTrue(!mcpTools.act.call(call("""{"action":"mcp_reconnect","sessionId":"s2","force":true}""")).isError)
+        assertEquals(listOf("s2" to false, "s2" to false, "s2" to true), reconnects)
+    }
+
+    @Test fun `mcp_reconnect without the primitive is a refusal, not a crash`() {
+        val r = tools.act.call(call("""{"action":"mcp_reconnect","sessionId":"s2"}"""))
+        assertTrue(r.isError && "cannot reconnect" in r.text, r.text)
+    }
 }

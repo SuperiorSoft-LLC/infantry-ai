@@ -118,6 +118,7 @@ class CoreDaemonServices(
         override fun interrupt(id: String): Boolean = manager.get(id)?.let { runCatching { manager.interrupt(id) }.isSuccess } ?: false
         override fun suppressNotice(name: String, sessionId: String?, ms: Long) = noticeSuppressor(name, sessionId, ms)
         override fun setAutomation(id: String, mark: AutomationMark?) { manager.setAutomation(id, mark?.let { SessionAutomation(it.script, it.hookId, it.since) }) }
+        override fun reconnectMcp(id: String, force: Boolean): String = manager.reconnectMcp(id, force)
     }
 
     override fun policy(): Policy = object : Policy {
@@ -136,6 +137,7 @@ class CoreDaemonServices(
         fun info(r: SessionRecord) = SessionInfo(
             id = r.id, projectId = r.projectId, role = r.role, agentId = r.agentId, global = r.global, spawnedAt = r.spawnedAt,
             state = r.state.name, neverRun = r.neverRun, providerSessionId = r.providerSessionId, runCount = r.runCount,
+            mcp = r.mcp, mcpChangedAt = r.mcpChangedAt,
         )
 
         private fun Frame.envelope() = Envelope(type, data, sessionId = sessionId, requestId = requestId)

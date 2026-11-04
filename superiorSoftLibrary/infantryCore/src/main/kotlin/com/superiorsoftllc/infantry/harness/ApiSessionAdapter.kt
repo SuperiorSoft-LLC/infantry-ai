@@ -4,6 +4,7 @@ package com.superiorsoftllc.infantry.harness
 
 import com.superiorsoftllc.infantry.harness.api.ApprovalReply
 import com.superiorsoftllc.infantry.harness.api.HarnessSession
+import com.superiorsoftllc.infantry.harness.api.McpState
 import com.superiorsoftllc.infantry.prompts.Decision
 import com.superiorsoftllc.infantry.harness.api.SessionConnection
 import com.superiorsoftllc.infantry.harness.api.SessionOutput
@@ -65,6 +66,12 @@ internal class ApiSessionAdapter(
 
     override fun close(process: HostedProcess): Boolean = try { (process as Hosted).connection.close() } catch (t: Throwable) { onFailure(PluginFailure(pluginId, PluginFailurePhase.RUN, t)); false }
 
+    /** CLI-PTY-3 (API 2.14): an older plugin has no such method on its connection; that, or a throw, is "cannot". */
+    override fun reconnectMcp(process: HostedProcess): Boolean = try { (process as Hosted).connection.reconnectMcp() } catch (t: Throwable) {
+        if (t !is AbstractMethodError && t !is NoSuchMethodError) onFailure(PluginFailure(pluginId, PluginFailurePhase.RUN, t))
+        false
+    }
+
     private fun <T> attributed(block: () -> T): T = try {
         block()
     } catch (t: Throwable) {
@@ -96,6 +103,7 @@ internal class ApiSessionAdapter(
             Decision.DENY -> ApprovalReply.DENY
         }
         override fun providerSession(id: String) = sink.providerSession(id)
+        override fun mcpState(state: McpState, reason: String?) = sink.mcpState(state.name, reason)
         override fun turnEnded(end: SessionTurnEnd, exitCode: Int?, reason: String?) {
             sink.turnEnded(TurnEnd.valueOf(end.name), exitCode, reason)
         }

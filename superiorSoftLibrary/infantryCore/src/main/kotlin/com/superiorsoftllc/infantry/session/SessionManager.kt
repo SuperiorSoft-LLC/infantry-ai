@@ -736,7 +736,7 @@ class SessionManager(
             // STALL-1: a watched (`--notify`) job is KEPT across the restart: its runner re-registers by its next beat, or the pid
             // probe drops it and the watcher reports it ("exit N" from its exit file, else "runner lost, exit unknown").
             val persisted = loadedRecord.copy(
-                keptProcess = null, backgroundWork = null, automation = null, watch = null, progress = null, watchLabel = null,
+                keptProcess = null, backgroundWork = null, automation = null, watch = null, progress = null, watchLabel = null, mcp = null, mcpChangedAt = null,
                 bgJobs = loadedRecord.bgJobs.filter { it.notify != null }.map { it.copy(lastBeat = clock()) },
             ).let {
                 if ((loadedRecord.backgroundWork != null || loadedRecord.bgJobs.isNotEmpty()) && it.state == SessionState.BUSY && it.childPid == null) it.copy(state = SessionState.IDLE) else it
@@ -1228,6 +1228,37 @@ class SessionManager(
                 isProcessAlive = false, lastHeartbeat = clock(),
             )
         }
+    } }
+
+    /**
+     * CLI-PTY-3 (`session_act mcp_reconnect`): bring [sessionId]'s MCP servers back without losing the session. Only ever called by that
+     * action: the daemon has no policy of its own for when to reconnect. First the live process is asked to reconnect in place (the
+     * harness's own reconnect); when it cannot, the process is stopped and the record keeps its provider session, so the next turn
+     * resumes the same conversation (same id, model and context) with fresh servers. A turn in flight is refused unless [force].
+     * Returns one line saying what happened; throws [IllegalArgumentException] for an unknown session or a refused busy one.
+     */
+    fun reconnectMcp(sessionId: String, force: Boolean = false): String { return locked {
+        val session = sessions[sessionId] ?: throw IllegalArgumentException("unknown session '$sessionId'")
+        when (host.reconnectMcp(sessionId)) {
+            null -> {
+                update(sessionId) { if (it.mcp == null) it else it.copy(mcp = null, mcpChangedAt = clock()) }
+                return "no live process: the next turn starts its MCP servers fresh"
+            }
+            true -> {
+                update(sessionId) { it.copy(mcp = MCP_CONNECTED, mcpChangedAt = clock()) }
+                bootLine(sessionId, "infantry tools reconnected")
+                return "reconnected in place"
+            }
+            false -> Unit
+        }
+        val busy = runs.containsKey(sessionId)
+        require(!busy || force) { "session '$sessionId' is mid-turn (state=${session.state}); wait for the turn to end, or pass force to stop it first" }
+        update(sessionId) { it.copy(mcp = MCP_RECONNECTING, mcpChangedAt = clock()) }
+        // force on a busy session: the turn ends as an owner interrupt would end it (the session stays usable, not killed).
+        if (busy) runCatching { interrupt(sessionId) }
+        host.stop(sessionId, force = busy)
+        bootLine(sessionId, "infantry tools reconnected: the process was restarted; the next turn resumes this conversation with fresh MCP servers")
+        return "process restarted; the next turn resumes provider session ${session.providerSessionId ?: "(none yet)"}"
     } }
 
     /**
@@ -1810,7 +1841,19 @@ class SessionManager(
         }
 
         override fun keptProcessEnded(sessionId: String, pid: Long) {
-            update(sessionId) { if (it.keptProcess?.pid == pid) it.copy(keptProcess = null) else it }
+            // CLI-PTY-3: the link of a process that is gone means nothing; a reconnect in progress keeps its mark until the next process reports.
+            update(sessionId) {
+                if (it.keptProcess?.pid != pid) it
+                else if (it.mcp == MCP_RECONNECTING) it.copy(keptProcess = null)
+                else it.copy(keptProcess = null, mcp = null, mcpChangedAt = it.mcp?.let { clock() } ?: it.mcpChangedAt)
+            }
+        }
+
+        override fun mcpState(sessionId: String, state: String, reason: String?) {
+            val s = state.trim().lowercase()
+            if (sessions[sessionId]?.mcp == s) return
+            update(sessionId) { it.copy(mcp = s, mcpChangedAt = clock()) } ?: return
+            activity(sessionId, "MCP server $s" + reason?.let { ": $it" }.orEmpty())
         }
 
         // PROMPT-4: the adapter calls this on a thread of its own; it blocks until the prompt resolves (turn end included).
@@ -1948,7 +1991,9 @@ class SessionManager(
         // id it carries (what resume and the interrupt snapshot need) must still reach clients as its own status.
         val backgroundChanged = next.backgroundWork != current.backgroundWork || next.bgJobs.map { it.id } != current.bgJobs.map { it.id }
         val progressChanged = next.progress != current.progress
-        if (stateChanged || identityChanged || backgroundChanged || progressChanged) emit(SessionEvent.Status(next))
+        // CLI-PTY-3: the MCP link is pushed as a status of its own (scripts get `session.mcp` from it).
+        val mcpChanged = next.mcp != current.mcp
+        if (stateChanged || identityChanged || backgroundChanged || progressChanged || mcpChanged) emit(SessionEvent.Status(next))
         return next
     } }
 
@@ -1998,6 +2043,8 @@ class SessionManager(
 
     private companion object {
         const val HEARTBEAT_PERSIST_MS = 1_000L
+        const val MCP_CONNECTED = "connected"
+        const val MCP_RECONNECTING = "reconnecting"
         val DEFAULT_UNATTENDED_DEADLINE_MS = com.superiorsoftllc.infantry.settings.LimitRegistry.UNATTENDED_DEADLINE_MINUTES.default * 60_000L
         val DEFAULT_UNATTENDED_STALL_MS = com.superiorsoftllc.infantry.settings.LimitRegistry.STALL_MINUTES.default * 60_000L
         const val DEFAULT_WATCHDOG_POLL_MS = 1_000L
