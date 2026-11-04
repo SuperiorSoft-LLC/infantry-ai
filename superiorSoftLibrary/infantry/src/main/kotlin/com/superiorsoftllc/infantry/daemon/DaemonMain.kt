@@ -4140,7 +4140,11 @@ private fun triggerPrompt(
 class TicketServices private constructor(val files: TicketFiles, val filesText: TicketFilesText, val events: TicketEventLog) {
     companion object {
         /** The event log alone: the board host appends to it, so it exists before any consumer and before the board. */
-        fun eventLog(store: InfantryStore): TicketEventLog = TicketEventLog((store as SqlInfantryStore).database)
+        /** BOARD-REENTRY-1: delivery runs on its own daemon thread, so a move answers before its hooks run (and they may call the board). */
+        fun eventLog(store: InfantryStore): TicketEventLog = TicketEventLog(
+            (store as SqlInfantryStore).database,
+            executor = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "ticket-events").apply { isDaemon = true } },
+        )
 
         fun create(
             store: InfantryStore,

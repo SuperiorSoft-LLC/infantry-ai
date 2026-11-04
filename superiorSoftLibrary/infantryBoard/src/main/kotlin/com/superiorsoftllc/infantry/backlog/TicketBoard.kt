@@ -230,8 +230,9 @@ class TicketBoard(
 
     /**
      * BOARD-API-2 (DP-4b): the typed event log (docs/DAEMON-BOARD-API.md). A commit records its events inside its own transaction,
-     * and [announce] delivers them after the commit, still under the board monitor (every public board method is `@Synchronized`),
-     * so a consumer that takes a lock does so in board -> consumer order. `TriggerService.onTicketTransition` briefly takes the
+     * and [announce] asks for their delivery after the commit. BOARD-REENTRY-1: the daemon's log delivers on its own thread, so a
+     * consumer runs after the board monitor is released and may call the board (a lane hook's ticket_get) without waiting on the move;
+     * a log that delivers inline (tests) still runs under the monitor, in board -> consumer order. `TriggerService.onTicketTransition` briefly takes the
      * TriggerService monitor (its `fire`); the order board -> TriggerService cannot cycle because TriggerService never calls the
      * board under its own lock -- a trigger's `start_next` runs on its own single-thread executor, off-lock. An unchanged re-commit
      * is no event, so a ship trigger fires once per move into done. Null = the board keeps no log (tests).
