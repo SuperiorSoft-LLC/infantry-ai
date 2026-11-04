@@ -2,17 +2,39 @@
 // Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.plugins.official
 
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -21,7 +43,17 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -35,8 +67,10 @@ import com.superiorsoftllc.infantry.plugin.api.RefreshView
 import com.superiorsoftllc.infantry.plugin.api.SourceView
 import com.superiorsoftllc.infantry.plugin.api.UpdateView
 import com.superiorsoftllc.infantry.ui.Button
-import com.superiorsoftllc.infantry.ui.Checkbox
+import com.superiorsoftllc.infantry.ui.Chip
+import com.superiorsoftllc.infantry.ui.FilterChip
 import com.superiorsoftllc.infantry.ui.Palette
+import com.superiorsoftllc.infantry.ui.Switch
 import com.superiorsoftllc.infantry.ui.TextButton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -62,6 +96,19 @@ const val SOURCE_LOCATION_TAG = "plugins-source-location"
 const val SOURCE_ADD_TAG = "plugins-source-add"
 const val SOURCE_REMOVE_PREFIX = "plugins-source-remove-"
 const val SOURCE_REFRESH_TAG = "plugins-source-refresh"
+const val PLUGINS_QUERY_TAG = "plugins-installed-query"
+const val PLUGINS_FILTER_PREFIX = "plugins-filter-"
+const val PLUGINS_EMPTY_TAG = "plugins-installed-empty"
+const val PLUGIN_EXPAND_PREFIX = "plugin-expand-"
+const val PLUGIN_DETAILS_PREFIX = "plugin-details-"
+const val PLUGIN_PENDING_PREFIX = "plugin-pending-"
+const val PLUGIN_DESCRIPTION_PREFIX = "plugin-description-"
+const val DISABLE_CONFIRM_TAG = "plugin-disable-confirm"
+const val DISABLE_CONFIRM_OK_TAG = "plugin-disable-confirm-ok"
+const val DISABLE_CONFIRM_CANCEL_TAG = "plugin-disable-confirm-cancel"
+
+/** PLUGINS-UI-1: the Installed list's filter chips, in order. */
+val PLUGIN_FILTERS = listOf("All", "Official", "Bundled", "User", "Disabled")
 
 private val SECTIONS = listOf("Installed", "Browse", "Sources")
 
@@ -84,6 +131,8 @@ fun PluginsScreen(port: PluginManagerPort) {
     var busy by remember { mutableStateOf(false) }
     var version by remember { mutableStateOf(0) }
     val scope = rememberCoroutineScope()
+    /** PLUGINS-UI-1: plugin id -> the state its switch was flipped to, while the daemon applies it. */
+    val pending = remember { mutableStateMapOf<String, Boolean>() }
 
     /** Runs [call] off the UI thread; a restart answer sets the one banner. */
     val act: Act = { call, then ->
@@ -109,23 +158,32 @@ fun PluginsScreen(port: PluginManagerPort) {
         }
     }
 
-    Column(Modifier.fillMaxSize().padding(12.dp).testTag(PLUGINS_SCREEN_TAG), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        banner?.let { Text("Restart needed: $it", color = Palette.Danger, fontSize = 13.sp, modifier = Modifier.testTag(PLUGINS_BANNER_TAG)) }
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            for (s in SECTIONS) TextButton(onClick = { section = s }, modifier = Modifier.testTag(PLUGINS_SECTION_PREFIX + s)) {
-                Text(s, fontWeight = if (s == section) FontWeight.Bold else FontWeight.Normal)
-            }
-        }
+    CompositionLocalProvider(LocalContentColor provides Palette.Text) {
+    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp).testTag(PLUGINS_SCREEN_TAG), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        banner?.let { Text("Restart needed: $it", color = Palette.Warn, fontSize = 13.sp, modifier = Modifier.testTag(PLUGINS_BANNER_TAG)) }
+        SectionTabs(section) { section = it }
         note?.let { Text(it, color = Palette.Muted, fontSize = 12.sp, modifier = Modifier.testTag(PLUGINS_NOTE_TAG)) }
+        val body = Modifier.weight(1f).fillMaxWidth()
         when (section) {
-            "Installed" -> Installed(port, version, busy, act)
-            "Browse" -> Browse(port, version, busy) { hit ->
+            "Installed" -> Installed(port, version, busy, pending, act, body) { id, on ->
+                pending[id] = on; note = null
+                scope.launch {
+                    val r = withContext(Dispatchers.Default) { runCatching { port.setEnabled(id, on) }.getOrElse { ActionResult(false, "failed: ${it.message}") } }
+                    note = r.message
+                    if (r.restartNeeded) banner = r.message
+                    // On success the switch stays pending until the reloaded list shows the new state (no flicker back).
+                    if (!r.ok) pending.remove(id)
+                    version++
+                }
+            }
+            "Browse" -> Browse(port, version, busy, body) { hit ->
                 val ref = "${hit.source}:${hit.id}"
                 askConsent(ref, "Install ${hit.id}?") { g, t -> port.install(ref, g, t) }
             }
-            else -> Sources(port, version, busy, act)
+            else -> Sources(port, version, busy, act, body)
         }
         if (section != "Sources") FileInstall(busy) { path -> askConsent(path, "Install this plugin?") { g, t -> port.install(path, g, t) } }
+    }
     }
     consent?.let { c ->
         PluginConsentDialog(c.title, c.view, consentError, busy,
@@ -145,65 +203,281 @@ private fun <T> loaded(key: Any, load: () -> T): T? {
     return value
 }
 
+
+/** PLUGINS-UI-1: Installed / Browse / Sources as tabs: the selected one in primary text over an accent bar, each 48dp high. */
 @Composable
-private fun Installed(port: PluginManagerPort, version: Int, busy: Boolean, act: Act) {
+private fun SectionTabs(selected: String, pick: (String) -> Unit) {
+    Column {
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            for (s in SECTIONS) {
+                val on = s == selected
+                Column(
+                    Modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(6.dp)).clickable(role = Role.Tab) { pick(s) }
+                        .padding(horizontal = 12.dp).testTag(PLUGINS_SECTION_PREFIX + s),
+                    horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Bottom,
+                ) {
+                    Text(s, color = if (on) Palette.Text else Palette.Muted, fontSize = 14.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
+                        modifier = Modifier.padding(top = 14.dp, bottom = 10.dp))
+                    Box(Modifier.height(2.dp).width(32.dp).background(if (on) Palette.Accent else Color.Transparent))
+                }
+            }
+        }
+        HorizontalDivider(color = Palette.Border)
+    }
+}
+
+/** `Infantry_Agents` reads as "Infantry Agents". */
+internal fun displayName(id: String) = id.replace('_', ' ')
+
+/** PLUGINS-UI-1: does [p] pass filter chip [filter] and the search [query] (name, description, what it adds)? */
+internal fun matches(p: PluginView, filter: String, query: String): Boolean {
+    val inFilter = when (filter) {
+        "Official" -> p.cls == "official"
+        "Bundled" -> p.bundled
+        "User" -> !p.bundled
+        "Disabled" -> !p.enabled
+        else -> true
+    }
+    val q = query.trim()
+    return inFilter && (q.isEmpty() || (listOf(p.id, displayName(p.id), p.description) + p.contributes).any { it.contains(q, ignoreCase = true) })
+}
+
+/** Official first, then by name. */
+internal fun pluginOrder(rows: List<PluginView>) = rows.sortedWith(compareBy<PluginView>({ it.cls != "official" }, { it.id.lowercase() }))
+
+/** PLUGINS-UI-1: turning [p] off asks first when the app ships it as an official plugin, or an enabled plugin needs it. */
+internal fun needsDisableConfirm(p: PluginView) = p.enabled && ((p.cls == "official" && p.bundled) || p.requiredBy.isNotEmpty())
+
+@Composable
+private fun Installed(
+    port: PluginManagerPort, version: Int, busy: Boolean, pending: MutableMap<String, Boolean>, act: Act, modifier: Modifier,
+    toggle: (String, Boolean) -> Unit,
+) {
     val rows = loaded(version) { port.list() }
     val offers = loaded(version) { port.updates() }.orEmpty().associateBy { it.id }
-    when {
-        rows == null -> Text("Loading plugins ...", color = Palette.Muted)
-        rows.isEmpty() -> Text("No plugin is installed. Use Browse, or install a .ihq file.", color = Palette.Muted)
-        else -> Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            for (p in rows) InstalledRow(port, p, offers[p.id], busy, act)
+    var query by remember { mutableStateOf("") }
+    var filter by remember { mutableStateOf(PLUGIN_FILTERS[0]) }
+    var expanded by remember { mutableStateOf(setOf<String>()) }
+    var confirm by remember { mutableStateOf<PluginView?>(null) }
+    LaunchedEffect(rows) { rows?.forEach { r -> if (pending[r.id] == r.enabled) pending.remove(r.id) } }
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        when {
+            rows == null -> Text("Loading plugins ...", color = Palette.Muted, fontSize = 13.sp)
+            rows.isEmpty() -> Text("No plugin is installed. Use Browse, or install a .ihq file.", color = Palette.Muted, fontSize = 13.sp)
+            else -> {
+                OutlinedTextField(query, { query = it }, placeholder = { Text("Search installed plugins", color = Palette.Muted) }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag(PLUGINS_QUERY_TAG))
+                FilterRow(filter, rows) { filter = it }
+                val shown = pluginOrder(rows.filter { matches(it, filter, query) })
+                Text("${shown.size} of ${rows.size} plugins · ${rows.count { it.enabled }} on", color = Palette.Muted, fontSize = 12.sp)
+                Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (shown.isEmpty()) Text("No plugin matches.", color = Palette.Muted, fontSize = 13.sp, modifier = Modifier.padding(vertical = 8.dp).testTag(PLUGINS_EMPTY_TAG))
+                    for (p in shown) InstalledRow(
+                        port, p, offers[p.id], busy, pending[p.id], p.id in expanded, act,
+                        onExpand = { expanded = if (p.id in expanded) expanded - p.id else expanded + p.id },
+                        onToggle = { on -> if (!on && needsDisableConfirm(p)) confirm = p else toggle(p.id, on) },
+                    )
+                }
+            }
+        }
+    }
+    confirm?.let { p -> DisableConfirm(p, onYes = { confirm = null; toggle(p.id, false) }, onNo = { confirm = null }) }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun FilterRow(selected: String, rows: List<PluginView>, pick: (String) -> Unit) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        for (f in PLUGIN_FILTERS) {
+            val n = rows.count { matches(it, f, "") }
+            FilterChip(selected = f == selected, onClick = { pick(f) }, label = { Text("$f  $n", fontSize = 12.sp) },
+                modifier = Modifier.heightIn(min = 40.dp).testTag(PLUGINS_FILTER_PREFIX + f))
         }
     }
 }
 
+/** A list row: a rounded panel with a thin border. */
 @Composable
-private fun InstalledRow(port: PluginManagerPort, p: PluginView, offer: UpdateView?, busy: Boolean, act: Act) {
-    Column(Modifier.fillMaxWidth().testTag(PLUGIN_ROW_PREFIX + p.id), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("${p.id} ${p.version}", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-            Text("[${p.cls}] [${if (p.bundled) "bundled" else "installed"}]", color = Palette.Muted, fontSize = 12.sp)
-            Checkbox(checked = p.enabled, onCheckedChange = { on -> act({ port.setEnabled(p.id, on) }, {}) }, enabled = !busy, modifier = Modifier.testTag(PLUGIN_ENABLE_PREFIX + p.id))
-            Text(if (p.enabled) "enabled" else "disabled", fontSize = 12.sp)
-        }
-        Text("Licence: ${p.license ?: "licence not stated"} · Signer: ${p.signer ?: "unsigned"}", color = Palette.Muted, fontSize = 12.sp)
-        Text("Grants: ${if (p.granted.isEmpty()) "none" else p.granted.joinToString()}", color = Palette.Muted, fontSize = 12.sp)
-        p.yanked?.let { Text("Withdrawn: $it", color = Palette.Danger, fontSize = 12.sp) }
-        if (offer != null) {
-            Text(
-                "Update ${offer.to} available" + if (offer.newGrants.isNotEmpty()) " - asks for new permissions: ${offer.newGrants.joinToString()}" else "",
-                fontSize = 12.sp, color = if (offer.newGrants.isNotEmpty()) Palette.Danger else Palette.Text,
-            )
-        }
-        if (!p.bundled) Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            TextButton(onClick = { act({ port.update(p.id, null) }, {}) }, enabled = !busy && offer != null, modifier = Modifier.testTag(PLUGIN_UPDATE_PREFIX + p.id)) { Text("Update") }
-            TextButton(onClick = { act({ port.rollback(p.id) }, {}) }, enabled = !busy && p.canRollback, modifier = Modifier.testTag(PLUGIN_ROLLBACK_PREFIX + p.id)) { Text("Rollback") }
-            TextButton(onClick = { act({ port.remove(p.id) }, {}) }, enabled = !busy, modifier = Modifier.testTag(PLUGIN_REMOVE_PREFIX + p.id)) { Text("Remove") }
+private fun RowCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    val shape = RoundedCornerShape(8.dp)
+    Column(modifier.fillMaxWidth().clip(shape).background(Palette.Panel).border(1.dp, Palette.Border, shape), content = content)
+}
+
+/** The plugin's initial (after the vendor prefix) in a round tile. */
+@Composable
+private fun Initial(id: String) {
+    val letter = id.substringAfter('_', id).firstOrNull { it.isLetterOrDigit() }?.uppercaseChar() ?: '?'
+    Box(Modifier.size(36.dp).clip(CircleShape).background(Palette.Raised).border(1.dp, Palette.Border, CircleShape), contentAlignment = Alignment.Center) {
+        Text(letter.toString(), color = Palette.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+/** The leading part every row shares: initial, name, version, badges, then up to two lines of description. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun RowHead(id: String, version: String?, badges: List<Pair<String, Color>>, description: String?, modifier: Modifier) {
+    Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Initial(id)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(3.dp), itemVerticalAlignment = Alignment.CenterVertically) {
+                Text(displayName(id), color = Palette.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                version?.takeIf { it.isNotBlank() }?.let { Text(it, color = Palette.Muted, fontSize = 12.sp) }
+                for ((b, c) in badges) Chip(b, c)
+            }
+            if (!description.isNullOrBlank()) Text(description, color = Palette.Muted, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.testTag(PLUGIN_DESCRIPTION_PREFIX + id))
         }
     }
 }
 
+/** A chevron pointing right (collapsed) or down (open), in a 48dp target. */
 @Composable
-private fun Browse(port: PluginManagerPort, version: Int, busy: Boolean, install: (HitView) -> Unit) {
+private fun Chevron(open: Boolean, name: String, modifier: Modifier, onClick: () -> Unit) {
+    Box(
+        modifier.size(48.dp).clip(CircleShape).clickable(role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = (if (open) "Hide details of " else "Show details of ") + name },
+        contentAlignment = Alignment.Center,
+    ) {
+        val c = Palette.Muted
+        Canvas(Modifier.size(12.dp).rotate(if (open) 90f else 0f)) {
+            val w = size.width; val h = size.height
+            drawLine(c, Offset(w * 0.3f, h * 0.1f), Offset(w * 0.75f, h * 0.5f), strokeWidth = 2.dp.toPx(), cap = StrokeCap.Round)
+            drawLine(c, Offset(w * 0.75f, h * 0.5f), Offset(w * 0.3f, h * 0.9f), strokeWidth = 2.dp.toPx(), cap = StrokeCap.Round)
+        }
+    }
+}
+
+/** One label / value line of a row's details; the label column is fixed so the values align. */
+@Composable
+private fun Detail(label: String, value: String, color: Color = Palette.Text) {
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(label, color = Palette.Muted, fontSize = 12.sp, modifier = Modifier.width(96.dp))
+        Text(value, color = color, fontSize = 12.sp, modifier = Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun InstalledRow(
+    port: PluginManagerPort, p: PluginView, offer: UpdateView?, busy: Boolean, pendingTo: Boolean?, open: Boolean, act: Act,
+    onExpand: () -> Unit, onToggle: (Boolean) -> Unit,
+) {
+    val badges = buildList {
+        if (p.cls == "official") add("Official" to Palette.Info) else add(p.cls.replaceFirstChar { it.uppercase() } to Palette.Muted)
+        if (p.bundled) add("Bundled" to Palette.Muted)
+        if (!p.bundled && p.signer == null) add("Unsigned" to Palette.Warn)
+        if (offer != null) add("Update ${offer.to}" to Palette.Ok)
+        if (p.yanked != null) add("Withdrawn" to Palette.Danger)
+    }
+    val on = pendingTo ?: p.enabled
+    RowCard(Modifier.testTag(PLUGIN_ROW_PREFIX + p.id)) {
+        Row(
+            Modifier.fillMaxWidth().clickable(onClick = onExpand).heightIn(min = 64.dp).padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            RowHead(p.id, p.version, badges, p.description, Modifier.weight(1f))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(start = 8.dp)) {
+                if (pendingTo != null) CircularProgressIndicator(Modifier.size(16.dp).testTag(PLUGIN_PENDING_PREFIX + p.id), color = Palette.Muted, strokeWidth = 2.dp)
+                Switch(
+                    checked = on, onCheckedChange = onToggle, enabled = !busy && pendingTo == null,
+                    modifier = Modifier.testTag(PLUGIN_ENABLE_PREFIX + p.id).semantics {
+                        contentDescription = displayName(p.id)
+                        stateDescription = when (pendingTo) { true -> "turning on"; false -> "turning off"; null -> if (on) "on" else "off" }
+                    },
+                )
+                Chevron(open, displayName(p.id), Modifier.testTag(PLUGIN_EXPAND_PREFIX + p.id), onExpand)
+            }
+        }
+        if (open) {
+            HorizontalDivider(color = Palette.Border)
+            Column(
+                Modifier.fillMaxWidth().padding(start = 60.dp, end = 16.dp, top = 10.dp, bottom = 12.dp).testTag(PLUGIN_DETAILS_PREFIX + p.id),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Detail("License", p.license ?: "Not stated")
+                Detail("Signed by", p.signer ?: if (p.bundled) "Ships with the app" else "Not signed")
+                Detail("Permissions", if (p.granted.isEmpty()) "None granted" else p.granted.joinToString(", "))
+                val refused = p.requested.filter { it !in p.granted }
+                if (refused.isNotEmpty()) Detail("Not granted", refused.joinToString(", "))
+                Detail("Adds", if (p.contributes.isEmpty()) "Nothing in the window (works in the background)" else p.contributes.joinToString("\n"))
+                if (p.requiredBy.isNotEmpty()) Detail("Needed by", p.requiredBy.joinToString(", ") { displayName(it) })
+                p.yanked?.let { Detail("Withdrawn", it, Palette.Danger) }
+                offer?.let {
+                    Detail("Update", "${it.to} is available" + if (it.newGrants.isNotEmpty()) "; asks for new permissions: ${it.newGrants.joinToString()}" else "",
+                        if (it.newGrants.isNotEmpty()) Palette.Warn else Palette.Text)
+                }
+                if (!p.bundled) Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    TextButton(onClick = { act({ port.update(p.id, null) }, {}) }, enabled = !busy && offer != null, modifier = Modifier.testTag(PLUGIN_UPDATE_PREFIX + p.id)) { Text("Update") }
+                    TextButton(onClick = { act({ port.rollback(p.id) }, {}) }, enabled = !busy && p.canRollback, modifier = Modifier.testTag(PLUGIN_ROLLBACK_PREFIX + p.id)) { Text("Roll back") }
+                    TextButton(onClick = { act({ port.remove(p.id) }, {}) }, enabled = !busy, modifier = Modifier.testTag(PLUGIN_REMOVE_PREFIX + p.id)) { Text("Remove", color = Palette.Danger) }
+                }
+            }
+        }
+    }
+}
+
+/** PLUGINS-UI-1: "turn this off?" for a plugin the app ships or another plugin needs. */
+@Composable
+private fun DisableConfirm(p: PluginView, onYes: () -> Unit, onNo: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onNo,
+        modifier = Modifier.testTag(DISABLE_CONFIRM_TAG),
+        title = { Text("Turn off ${displayName(p.id)}?") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (p.cls == "official" && p.bundled) Text("It ships with the app. What it adds disappears until you turn it back on.", fontSize = 13.sp)
+                if (p.contributes.isNotEmpty()) Text("It adds: " + p.contributes.joinToString(", "), color = Palette.Muted, fontSize = 12.sp)
+                if (p.requiredBy.isNotEmpty()) Text("These plugins need it and will stop working: " + p.requiredBy.joinToString(", ") { displayName(it) },
+                    color = Palette.Warn, fontSize = 13.sp)
+            }
+        },
+        confirmButton = { TextButton(onClick = onYes, modifier = Modifier.testTag(DISABLE_CONFIRM_OK_TAG)) { Text("Turn off", color = Palette.Danger) } },
+        dismissButton = { TextButton(onClick = onNo, modifier = Modifier.testTag(DISABLE_CONFIRM_CANCEL_TAG)) { Text("Keep on") } },
+    )
+}
+
+@Composable
+private fun Browse(port: PluginManagerPort, version: Int, busy: Boolean, modifier: Modifier, install: (HitView) -> Unit) {
     var query by remember { mutableStateOf("") }
     var submitted by remember { mutableStateOf("") }
     val hits = loaded(version to submitted) { port.search(submitted) }
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        OutlinedTextField(query, { query = it }, label = { Text("Search plugins") }, singleLine = true, modifier = Modifier.weight(1f).testTag(BROWSE_QUERY_TAG))
-        Button(onClick = { submitted = query }, modifier = Modifier.testTag(BROWSE_SEARCH_TAG)) { Text("Search") }
-    }
-    when {
-        hits == null -> Text("Searching ...", color = Palette.Muted)
-        hits.isEmpty() -> Text("Nothing found. Add a source on the Sources tab, or refresh it.", color = Palette.Muted)
-        else -> Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            for (h in hits) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Column(Modifier.weight(1f)) {
-                    Text("${h.id} ${h.version ?: ""} [${h.cls}] from ${h.source}", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                    Text(h.description + " · " + (h.license ?: "licence not stated"), color = Palette.Muted, fontSize = 12.sp)
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(query, { query = it }, placeholder = { Text("Search plugin sources", color = Palette.Muted) }, singleLine = true,
+                modifier = Modifier.weight(1f).testTag(BROWSE_QUERY_TAG))
+            Button(onClick = { submitted = query }, modifier = Modifier.heightIn(min = 48.dp).testTag(BROWSE_SEARCH_TAG)) { Text("Search") }
+        }
+        when {
+            hits == null -> Text("Searching ...", color = Palette.Muted, fontSize = 13.sp)
+            hits.isEmpty() -> Text("Nothing found. Add a source on the Sources tab, or refresh it.", color = Palette.Muted, fontSize = 13.sp)
+            else -> Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (h in hits) RowCard {
+                    Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        val official = h.cls == "official"
+                        val badges = listOf(
+                            (if (official) "Official" else h.cls.replaceFirstChar { it.uppercase() }) to (if (official) Palette.Info else Palette.Muted),
+                            "from ${h.source}" to Palette.Muted,
+                        )
+                        RowHead(h.id, h.version, badges, h.description, Modifier.weight(1f))
+                        Button(onClick = { install(h) }, enabled = !busy && !h.installed, modifier = Modifier.padding(start = 8.dp).heightIn(min = 48.dp).testTag(BROWSE_INSTALL_PREFIX + h.id)) {
+                            Text(if (h.installed) "Installed" else "Install")
+                        }
+                    }
                 }
-                Button(onClick = { install(h) }, enabled = !busy && !h.installed, modifier = Modifier.testTag(BROWSE_INSTALL_PREFIX + h.id)) { Text(if (h.installed) "Installed" else "Install") }
             }
+        }
+    }
+}
+
+/** The fields side by side when wide, stacked under 560dp; the buttons follow. */
+@Composable
+private fun FormRow(fields: @Composable (Boolean) -> Unit, buttons: @Composable () -> Unit) {
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        if (maxWidth < 560.dp) Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            fields(true)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { buttons() }
+        } else Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) { fields(false) }
+            buttons()
         }
     }
 }
@@ -211,42 +485,54 @@ private fun Browse(port: PluginManagerPort, version: Int, busy: Boolean, install
 @Composable
 private fun FileInstall(busy: Boolean, install: (String) -> Unit) {
     var path by remember { mutableStateOf("") }
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        OutlinedTextField(path, { path = it }, label = { Text("Install from a .ihq file or folder") }, singleLine = true, modifier = Modifier.weight(1f).testTag(FILE_PATH_TAG))
-        Button(onClick = { install(path.trim()) }, enabled = !busy && path.isNotBlank(), modifier = Modifier.testTag(FILE_INSTALL_TAG)) { Text("Install file") }
-    }
+    FormRow(
+        fields = { OutlinedTextField(path, { path = it }, label = { Text("Install from a .ihq file or folder") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag(FILE_PATH_TAG)) },
+        buttons = { Button(onClick = { install(path.trim()) }, enabled = !busy && path.isNotBlank(), modifier = Modifier.heightIn(min = 48.dp).testTag(FILE_INSTALL_TAG)) { Text("Install file") } },
+    )
 }
 
 @Composable
-private fun Sources(port: PluginManagerPort, version: Int, busy: Boolean, act: Act) {
+private fun Sources(port: PluginManagerPort, version: Int, busy: Boolean, act: Act, modifier: Modifier) {
     var id by remember { mutableStateOf("") }
     var location by remember { mutableStateOf("") }
     var refreshed by remember { mutableStateOf<List<RefreshView>>(emptyList()) }
     val sources = loaded(version) { port.sources() }
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        OutlinedTextField(id, { id = it }, label = { Text("Name") }, singleLine = true, modifier = Modifier.weight(1f).testTag(SOURCE_ID_TAG))
-        OutlinedTextField(location, { location = it }, label = { Text("URL or folder") }, singleLine = true, modifier = Modifier.weight(2f).testTag(SOURCE_LOCATION_TAG))
-        Button(onClick = { act({ port.addSource(id.trim(), "custom", location.trim()) }) { if (it.ok) { id = ""; location = "" } } }, enabled = !busy && id.isNotBlank() && location.isNotBlank(), modifier = Modifier.testTag(SOURCE_ADD_TAG)) { Text("Add") }
-        Button(onClick = { act({ refreshed = port.refresh(); ActionResult(true, "Sources refreshed.") }, {}) }, enabled = !busy, modifier = Modifier.testTag(SOURCE_REFRESH_TAG)) { Text("Refresh") }
-    }
-    when {
-        sources == null -> Text("Loading sources ...", color = Palette.Muted)
-        sources.isEmpty() -> Text("No source is configured. Add a catalog URL or a folder.", color = Palette.Muted)
-        else -> for (s in sources) SourceRow(s, refreshed.firstOrNull { it.source == s.id }) { act({ port.removeSource(s.id) }, {}) }
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        FormRow(
+            fields = { stacked ->
+                OutlinedTextField(id, { id = it }, label = { Text("Name") }, singleLine = true,
+                    modifier = (if (stacked) Modifier.fillMaxWidth() else Modifier.width(180.dp)).testTag(SOURCE_ID_TAG))
+                OutlinedTextField(location, { location = it }, label = { Text("URL or folder") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag(SOURCE_LOCATION_TAG))
+            },
+            buttons = {
+                Button(onClick = { act({ port.addSource(id.trim(), "custom", location.trim()) }) { if (it.ok) { id = ""; location = "" } } },
+                    enabled = !busy && id.isNotBlank() && location.isNotBlank(), modifier = Modifier.heightIn(min = 48.dp).testTag(SOURCE_ADD_TAG)) { Text("Add") }
+                Button(onClick = { act({ refreshed = port.refresh(); ActionResult(true, "Sources refreshed.") }, {}) }, enabled = !busy,
+                    modifier = Modifier.heightIn(min = 48.dp).testTag(SOURCE_REFRESH_TAG)) { Text("Refresh") }
+            },
+        )
+        when {
+            sources == null -> Text("Loading sources ...", color = Palette.Muted, fontSize = 13.sp)
+            sources.isEmpty() -> Text("No source is configured. Add a catalog URL or a folder.", color = Palette.Muted, fontSize = 13.sp)
+            else -> Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (s in sources) SourceRow(s, refreshed.firstOrNull { it.source == s.id }) { act({ port.removeSource(s.id) }, {}) }
+            }
+        }
     }
 }
 
 @Composable
 private fun SourceRow(s: SourceView, state: RefreshView?, remove: () -> Unit) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Text("${s.id} [${s.cls}]", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-            Text(s.location, color = Palette.Muted, fontSize = 12.sp)
-            state?.let {
-                val text = if (!it.ok) "offline" + (if (it.stale) ", showing the last copy (stale)" else "") + ": ${it.message}" else "${it.plugins} plugin(s)"
-                Text(text, color = if (it.ok) Palette.Muted else Palette.Danger, fontSize = 12.sp)
-            }
+    val badges = buildList {
+        add(s.cls.replaceFirstChar { it.uppercase() } to (if (s.cls == "official") Palette.Info else Palette.Muted))
+        if (!s.enabled) add("Off" to Palette.Muted)
+        state?.let { add((if (it.ok) "${it.plugins} plugin(s)" else if (it.stale) "Offline, last copy" else "Offline") to (if (it.ok) Palette.Ok else Palette.Danger)) }
+    }
+    val detail = s.location + (state?.takeIf { !it.ok }?.let { "\n" + it.message } ?: "")
+    RowCard {
+        Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            RowHead(s.id, null, badges, detail, Modifier.weight(1f))
+            TextButton(onClick = remove, modifier = Modifier.padding(start = 8.dp).heightIn(min = 48.dp).testTag(SOURCE_REMOVE_PREFIX + s.id)) { Text("Remove", color = Palette.Danger) }
         }
-        TextButton(onClick = remove, modifier = Modifier.testTag(SOURCE_REMOVE_PREFIX + s.id)) { Text("Remove") }
     }
 }
