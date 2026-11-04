@@ -117,6 +117,13 @@ class ClaudeTtySessionTest {
         assertTrue("PreToolUse" in merged && "Stop" in merged)
     }
 
+    @Test fun `interactive launch requests summarized thinking by flag and by settings`() {
+        val cmd = ClaudeCommand.interactiveCommand("claude", null, null, emptyList(), true, "s1", null)
+        assertEquals("summarized", cmd[cmd.indexOf("--thinking-display") + 1])
+        val root = Json.parseToJsonElement(ClaudeCommand.ttySettings("e", null, bypass = false)).jsonObject
+        assertEquals("true", root["showThinkingSummaries"].toString())
+    }
+
     @Test fun `the mode setting picks the session and is part of the fingerprint`() {
         var mode: String? = null
         val headless = ClaudeSession({ "claude.exe" }, { null to emptyMap() })
