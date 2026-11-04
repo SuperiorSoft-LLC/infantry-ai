@@ -72,7 +72,7 @@ fun PluginsSection(plugins: VoicePlugins) {
                 Column(Modifier.testTag(PLUGIN_ROW_TAG_PREFIX + r.id), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(r.name, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                     if (r.description.isNotBlank()) Text(r.description, fontSize = 12.sp)
-                    if (r.license.isNotBlank()) Text("Licence: ${r.license}", color = Palette.Muted, fontSize = 11.sp)
+                    if (r.license.isNotBlank()) Text("License: ${r.license}", color = Palette.Muted, fontSize = 11.sp)
                     Text(PluginsSetting.statusText(r), color = Palette.Muted, fontSize = 11.sp, modifier = Modifier.testTag(PLUGIN_STATUS_TAG_PREFIX + r.id))
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         if (r.state == "missing") {
