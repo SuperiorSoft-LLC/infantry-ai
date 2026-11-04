@@ -4,6 +4,8 @@ package com.superiorsoftllc.infantry.plugins.official.claude.harness
 
 import com.superiorsoftllc.infantry.harness.api.HarnessEvent
 import com.superiorsoftllc.infantry.harness.api.HarnessRequest
+import com.superiorsoftllc.infantry.harness.api.MCP_PID_FILE_ENV
+import com.superiorsoftllc.infantry.harness.api.McpState
 import com.superiorsoftllc.infantry.harness.api.SessionOutput
 import com.superiorsoftllc.infantry.harness.api.SessionTurnEnd
 import com.superiorsoftllc.infantry.harness.api.ToolApproval
@@ -36,6 +38,8 @@ class ClaudeTtySessionTest {
         val lines = mutableListOf<String>()
         val ends = mutableListOf<Triple<SessionTurnEnd, Int?, String?>>()
         val sessions = mutableListOf<String>()
+        val mcp = mutableListOf<McpState>()
+        override fun mcpState(state: McpState, reason: String?) { mcp += state }
         override fun write(text: String): Boolean { written += text; return true }
         override fun closeInput() {}
         override fun detail(text: String) {}
@@ -348,5 +352,37 @@ class ClaudeTtySessionTest {
     @Test fun `screen text drops escapes for matching`() {
         assertEquals("abc", ScreenText.strip("\u001b[31ma\u001b]0;title\u0007b\u001b(Bc"))
         assertEquals("itrustthisfolder", ScreenText.squeeze("I trust\nthis  Folder"))
+    }
+
+    // ---- CLI-PTY-3: the MCP server's link ------------------------------------------------------------------------------
+
+    @Test fun `the MCP server pid file is watched and each change reported once, with no action taken`() {
+        val alive = mutableSetOf(4242L)
+        val watched = ClaudeTtySession(
+            executable = { "claude.exe" }, mcp = { listOf("infantry", "mcp") to emptyMap() }, stateDir = { state }, configDir = { config },
+            newSessionId = { "11111111-2222-3333-4444-555555555555" }, clock = { now }, poll = false, pidAlive = { it in alive },
+        )
+        val launched = watched.launch(request(""), emptyMap())
+        if (ClaudeCommand.userMcpConfigs().none(ClaudeCommand::definesInfantry)) {
+            val configs = launched.command.withIndex().filter { (i, _) -> i > 0 && launched.command[i - 1] == "--mcp-config" }.map { it.value }
+            assertTrue(configs.any { (if (it.trimStart().startsWith("{")) it else File(it).readText()).contains(MCP_PID_FILE_ENV) }, "the server is told its pid file: $configs")
+        }
+        val pidFile = File(File(state, ClaudeTtySession.TTY_DIR), "11111111-2222-3333-4444-555555555555.mcp.pid")
+        val out = Recorder()
+        val c = watched.connect(out, launched) as ClaudeTtySession.TtyConnection
+        fun step() { now += ClaudeTtySession.MCP_CHECK_MS; c.tick() }
+        c.tick()
+        assertEquals(emptyList(), out.mcp, "no pid file yet: the server has not started, nothing to say")
+        pidFile.writeText("4242")
+        step(); step()
+        assertEquals(listOf(McpState.CONNECTED), out.mcp)
+        alive.clear()
+        step(); step()
+        assertEquals(listOf(McpState.CONNECTED, McpState.DISCONNECTED), out.mcp, "the server died: reported once")
+        pidFile.writeText("5151"); alive += 5151L
+        step()
+        assertEquals(listOf(McpState.CONNECTED, McpState.DISCONNECTED, McpState.CONNECTED), out.mcp, "a new server came up")
+        assertTrue(out.written.isEmpty(), "detection types nothing into the CLI: ${out.written}")
+        assertFalse(c.reconnectMcp(), "no in-place reconnect: the host restarts and resumes")
     }
 }

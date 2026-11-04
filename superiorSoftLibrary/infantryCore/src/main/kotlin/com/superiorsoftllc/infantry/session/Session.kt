@@ -203,6 +203,14 @@ data class SessionRecord(
      * daemon start clears it), cleared when the session ends or a turn ends with no report in it. Omitted when none.
      */
     @EncodeDefault(EncodeDefault.Mode.NEVER) val progress: SessionProgress? = null,
+    /**
+     * CLI-PTY-3: the live process's own MCP server link as its harness reports it (`connected`, `disconnected`, `reconnecting`); omitted
+     * when the harness reports nothing (headless runs start their servers per turn). Recorded only: the daemon acts on it nowhere; a project
+     * script reads it (or the `session.mcp` event) and calls `session_act mcp_reconnect`. Cleared when the process ends and on a daemon start.
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val mcp: String? = null,
+    /** CLI-PTY-3: epoch millis of the last change of [mcp]; omitted with it. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val mcpChangedAt: Long? = null,
 ) {
     /**
      * Whether this session is LIVE (a run is in flight) or HISTORY (none is).

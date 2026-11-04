@@ -12,6 +12,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
@@ -36,6 +37,8 @@ class SessionTools(
     private val maxChars: Int = 300,
     private val perMinute: Int = 60,
     private val noticeNames: () -> Set<String> = { emptySet() },
+    /** CLI-PTY-3: `mcp_reconnect` (session id, force) -> what happened; throws IllegalArgumentException when refused. */
+    private val reconnectMcp: (String, Boolean) -> String = { _, _ -> throw UnsupportedOperationException("this daemon cannot reconnect MCP servers") },
 ) {
     private val recent = java.util.concurrent.ConcurrentHashMap<String, java.util.ArrayDeque<Long>>()
 
@@ -57,6 +60,7 @@ class SessionTools(
                 st?.lastAction?.let { put("lastAction", it.take(maxChars)) }
                 st?.lastOutputAt?.let { put("lastOutputAt", it) }
                 st?.lastEventAt?.let { put("lastEventAt", it) }
+                session(target)?.let { s -> s.mcp?.let { put("mcp", it) }; s.mcpChangedAt?.let { put("mcpChangedAt", it) } }
                 put("lines", buildJsonArray { lines(target, n.coerceIn(1, maxLines)).takeLast(n.coerceIn(1, maxLines)).forEach { add(JsonPrimitive(it.take(maxChars))) } })
             }.toString())
         }
@@ -64,16 +68,24 @@ class SessionTools(
 
     val act: DaemonTool = object : DaemonTool {
         override val name = ACT
-        override val description = "Act on a session's turn. action=interrupt stops the turn in flight now (refused when none runs); action=end_turn does the same only if a turn runs and is a no-op on an idle session. " +
+        override val description = "Act on a session's turn. action=interrupt stops the turn in flight now (refused when none runs); action=end_turn does the same only if a turn runs and is a no-op on an idle session; " +
+            "action=mcp_reconnect brings the session's MCP servers back (session field mcp, event session.mcp) without losing it: reconnect in the live CLI, else restart it so the next turn resumes the same conversation " +
+            "(same session id, model and context); refused mid-turn unless force=true. The daemon never does this on its own. " +
             "Same project only, rate limited. Posting a note and prompting stay with chat_note (wake=true) . Script: ih.session_act{sessionId=..., action='interrupt'}."
         override val inputSchema: JsonObject = Json.parseToJsonElement(
-            """{"type":"object","properties":{"sessionId":{"type":"string","description":"target session (default: the caller's own)"},"action":{"type":"string","description":"interrupt | end_turn"}},"required":["action"]}""",
+            """{"type":"object","properties":{"sessionId":{"type":"string","description":"target session (default: the caller's own)"},"action":{"type":"string","description":"interrupt | end_turn | mcp_reconnect"},"force":{"type":"boolean","description":"mcp_reconnect only: stop a turn in flight first"}},"required":["action"]}""",
         ).jsonObject
         override fun call(call: ToolCall): ToolResult = guarded(call, requireText = false) { target, a ->
             when (val action = (a["action"] as? JsonPrimitive)?.contentOrNull?.trim()?.lowercase()) {
                 "interrupt" -> if (interrupt(target)) ToolResult("interrupted $target") else refuse("$target has no turn running")
                 "end_turn" -> { val busy = status(target)?.state == "BUSY"; if (busy && interrupt(target)) ToolResult("turn of $target ended") else ToolResult("$target is not in a turn: nothing to end") }
-                else -> refuse("action must be interrupt or end_turn (got '${action.orEmpty()}')")
+                "mcp_reconnect" -> {
+                    val force = (a["force"] as? JsonPrimitive)?.booleanOrNull ?: false
+                    try { ToolResult("mcp_reconnect $target: ${reconnectMcp(target, force)}") }
+                    catch (e: IllegalArgumentException) { refuse(e.message ?: "refused") }
+                    catch (e: UnsupportedOperationException) { refuse(e.message ?: "not supported") }
+                }
+                else -> refuse("action must be interrupt, end_turn or mcp_reconnect (got '${action.orEmpty()}')")
             }
         }
     }

@@ -205,6 +205,10 @@ data class SessionInfo(
     val neverRun: Boolean,
     val providerSessionId: String?,
     val runCount: Int,
+    /** CLI-PTY-3 (additive): the live process's MCP link as its harness reports it (`connected`, `disconnected`, `reconnecting`); null = not reported. */
+    val mcp: String? = null,
+    /** CLI-PTY-3 (additive): epoch millis of the last change of [mcp]. */
+    val mcpChangedAt: Long? = null,
 )
 
 interface Sessions {
@@ -231,6 +235,12 @@ interface Sessions {
     fun interrupt(id: String): Boolean = false
     /** SCRIPT-SESSION-1 (additive): the daemon's built-in notice [name] (or `*`) sends nothing for [ms] millis, for [sessionId] or (null) any session. */
     fun suppressNotice(name: String, sessionId: String?, ms: Long) {}
+    /**
+     * CLI-PTY-3 (additive): bring session [id]'s MCP servers back without losing the session: reconnect inside the live process, else restart
+     * it so the next turn resumes the same conversation. A turn in flight is refused unless [force]. Returns one line saying what happened;
+     * throws [IllegalArgumentException] when refused. The daemon calls this nowhere on its own: a script or tool decides when.
+     */
+    fun reconnectMcp(id: String, force: Boolean = false): String = throw UnsupportedOperationException("this daemon cannot reconnect MCP servers")
 }
 
 /** SCRIPT-SESSION-1: [state] is the state name; [lastAction] a short text; the times are epoch millis (null = none yet). */

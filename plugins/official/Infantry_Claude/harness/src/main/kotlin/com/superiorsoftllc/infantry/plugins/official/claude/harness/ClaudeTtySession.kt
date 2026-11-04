@@ -5,6 +5,8 @@ package com.superiorsoftllc.infantry.plugins.official.claude.harness
 import com.superiorsoftllc.infantry.harness.api.HarnessProcess
 import com.superiorsoftllc.infantry.harness.api.HarnessRequest
 import com.superiorsoftllc.infantry.harness.api.HarnessSession
+import com.superiorsoftllc.infantry.harness.api.MCP_PID_FILE_ENV
+import com.superiorsoftllc.infantry.harness.api.McpState
 import com.superiorsoftllc.infantry.harness.api.SessionConnection
 import com.superiorsoftllc.infantry.harness.api.SessionOutput
 import com.superiorsoftllc.infantry.harness.api.SessionTurnEnd
@@ -35,6 +37,10 @@ import java.util.UUID
  * - **Turn end:** Claude Code's `Stop` hook (a command hook that appends to a per-session events file); an API error the CLI records ends it
  *   as FAILED. `SessionStart` marks the CLI as up, `UserPromptSubmit` that the paste was taken.
  * - **Interrupt:** Esc into the terminal; the process lives on.
+ * - **MCP link (CLI-PTY-3):** the daemon's MCP server gets [MCP_PID_FILE_ENV] (a per-session file it writes its pid to). Every
+ *   [MCP_CHECK_MS] the pid is checked; a change (up, gone, a new pid up again) is reported with [SessionOutput.mcpState] and nothing else:
+ *   no reconnect is made here. One live CLI starts its servers once, so a server that dies stays dead unless a script asks for
+ *   `session_act mcp_reconnect`.
  */
 class ClaudeTtySession(
     private val executable: () -> String,
@@ -47,13 +53,15 @@ class ClaudeTtySession(
     private val clock: () -> Long = System::currentTimeMillis,
     /** false = no poller thread; a test drives [TtyConnection.tick]. */
     private val poll: Boolean = true,
+    /** Whether a process id still runs (the MCP server check); a test fakes it. */
+    private val pidAlive: (Long) -> Boolean = ::processAlive,
 ) : HarnessSession {
     override val label: String = "claude"
 
     override fun idleMinutes(): Int = idleMinutes.invoke()
 
     /** What [launch] decided for a process, until [connect] takes it. Keyed by identity: the host hands back the very object. */
-    data class Launch(val sessionId: String, val cwd: String, val events: File, val settings: File)
+    data class Launch(val sessionId: String, val cwd: String, val events: File, val settings: File, val mcpPid: File? = null)
 
     private val launches = IdentityHashMap<HarnessProcess, Launch>()
 
@@ -61,8 +69,12 @@ class ClaudeTtySession(
 
     override fun terminal(launched: HarnessProcess): Boolean = owns(launched)
 
-    private fun argv(exe: String, request: HarnessRequest, sessionId: String?, resume: String?, settings: String?, env: Map<String, String>): List<String> {
-        val (mcpCommand, mcpEnv) = mcp(env)
+    private fun argv(
+        exe: String, request: HarnessRequest, sessionId: String?, resume: String?, settings: String?, env: Map<String, String>,
+        extraMcpEnv: Map<String, String> = emptyMap(),
+    ): List<String> {
+        val (mcpCommand, baseMcpEnv) = mcp(env)
+        val mcpEnv = baseMcpEnv + extraMcpEnv
         return ClaudeCommand.interactiveCommand(
             executable = exe,
             model = ClaudeCommand.effectiveModel(request.model),
@@ -88,13 +100,14 @@ class ClaudeTtySession(
         val dir = File(stateDir(), TTY_DIR).apply { mkdirs() }
         val events = File(dir, "$id.events").apply { delete() }
         val settings = File(dir, "$id.settings.json")
+        val mcpPid = File(dir, "$id.mcp.pid").apply { delete() }
         val watch = watchSettings(env).takeIf { request.toolApproval == ToolApproval.ALLOW_ALL }
         settings.writeText(ClaudeCommand.ttySettings(events.absolutePath, watch, bypass = ClaudeCommand.permissionMode(request.toolApproval) == "bypassPermissions"))
         val process = HarnessProcess(
-            command = argv(executable(), request, if (resume == null) id else null, resume, settings.absolutePath, env),
+            command = argv(executable(), request, if (resume == null) id else null, resume, settings.absolutePath, env, mapOf(MCP_PID_FILE_ENV to mcpPid.absolutePath)),
             env = mapOf("CLAUDE_CODE_ENABLE_TODO_TOOLS" to "1") + ClaudeCommand.contextLimitEnv(request.contextLimit),
         )
-        synchronized(launches) { launches[process] = Launch(id, request.project, events, settings) }
+        synchronized(launches) { launches[process] = Launch(id, request.project, events, settings, mcpPid) }
         return process
     }
 
@@ -102,7 +115,7 @@ class ClaudeTtySession(
 
     override fun connect(out: SessionOutput, launched: HarnessProcess): SessionConnection {
         val launch = synchronized(launches) { launches.remove(launched) } ?: error("this process was not launched by the interactive claude session")
-        return TtyConnection(out, launch, configDir(), clock, bootTimeoutMs).also { if (poll) it.startPolling() }
+        return TtyConnection(out, launch, configDir(), clock, bootTimeoutMs, pidAlive).also { if (poll) it.startPolling() }
     }
 
     /** One interactive claude in its terminal. Every state change happens in [tick] (the poller thread) or under [lock]. */
@@ -112,6 +125,7 @@ class ClaudeTtySession(
         private val configDir: File,
         private val clock: () -> Long,
         private val bootTimeoutMs: Long,
+        private val pidAlive: (Long) -> Boolean = ::processAlive,
     ) : SessionConnection {
         private class Turn(val prompt: String) {
             var abortAt: Long? = null
@@ -142,6 +156,8 @@ class ClaudeTtySession(
         private var screenTotal = 0L
         @Volatile private var running = true
         @Volatile private var exited = false
+        private var mcpCheckedAt: Long? = null
+        private var mcpSeen: Pair<Long, Boolean>? = null
         private var thread: Thread? = null
 
         fun startPolling() {
@@ -220,6 +236,7 @@ class ClaudeTtySession(
                 out.output(mapper.initLine())
             }
             answerTrust(now)
+            checkMcp(now)
             var apiError: String? = null
             for (line in transcript.read()) {
                 for (signal in mapper.map(line)) when (signal) {
@@ -274,6 +291,24 @@ class ClaudeTtySession(
                 }
             }
             for ((end, code, reason) in ends) out.turnEnded(end, code, reason)
+        }
+
+        /**
+         * CLI-PTY-3: the MCP server's pid file, read every [MCP_CHECK_MS]. No file yet = the server has not started: nothing to say. A pid
+         * that runs = connected; the same pid gone = disconnected; a new pid (the CLI started it again) that runs = connected again.
+         */
+        private fun checkMcp(now: Long) {
+            val file = launch.mcpPid ?: return
+            mcpCheckedAt?.let { if (now - it < MCP_CHECK_MS) return }
+            mcpCheckedAt = now
+            val pid = runCatching { file.takeIf { it.isFile }?.readText()?.trim()?.toLongOrNull() }.getOrNull() ?: return
+            val alive = pidAlive(pid)
+            val seen = pid to alive
+            if (seen == mcpSeen) return
+            val wasUp = mcpSeen?.second
+            mcpSeen = seen
+            if (alive && wasUp != true) out.mcpState(McpState.CONNECTED, "MCP server pid $pid runs")
+            else if (!alive && wasUp != false) out.mcpState(McpState.DISCONNECTED, "MCP server pid $pid exited")
         }
 
         /** Up = the CLI ran its SessionStart hook a moment ago; without hooks, a while after its first screen. */
@@ -337,6 +372,8 @@ class ClaudeTtySession(
         const val TRUST_SELECTED = "❯yes,itrustthisfolder"
 
         const val TICK_MS = 150L
+        /** How often the MCP server's pid is checked (CLI-PTY-3). */
+        const val MCP_CHECK_MS = 2_000L
         const val KEY_GAP_MS = 400L
         const val TRUST_RETRY_MS = 1_500L
         const val PASTE_SETTLE_MS = 400L
@@ -376,6 +413,9 @@ class ClaudeModeSession(
 
     override fun terminal(launched: HarnessProcess): Boolean = interactive.owns(launched)
 }
+
+/** CLI-PTY-3: whether process [pid] still runs. */
+internal fun processAlive(pid: Long): Boolean = ProcessHandle.of(pid).map { it.isAlive }.orElse(false)
 
 internal object TtyJson {
     val json = Json { ignoreUnknownKeys = true; isLenient = true }

@@ -1750,6 +1750,7 @@ class InfantryDaemon(
                             if (e.type == Envelope.SESSION) e.sessionId?.let(manager::get)?.let {
                                 plugins.sessionChanged("status", com.superiorsoftllc.infantry.daemon.plugins.CoreDaemonServices.info(it))
                                 eventPublisher.sessionStatus(it.id, it.state.name, it.role, it.projectId)
+                                eventPublisher.sessionMcp(it.id, it.mcp, it.mcpChangedAt, it.role, it.projectId)
                             }
                         }
                     }

@@ -62,6 +62,9 @@ interface AdapterSink {
     /** Exactly once per sendTurn. */
     fun turnEnded(end: TurnEnd, exitCode: Int? = null, reason: String? = null)
 
+    /** CLI-PTY-3: the harness saw the session's MCP server become [state] (CONNECTED / DISCONNECTED / RECONNECTING). Recorded only. */
+    fun mcpState(state: String, reason: String?) {}
+
     /** PROMPT-3: the daemon session this sink serves; what a prompt is filed under. Blank = not a daemon session. */
     val sessionId: String get() = ""
 
@@ -105,6 +108,9 @@ interface HarnessSessionAdapter {
 
     /** Ask the process to exit. false = it has no graceful exit; the host kills at once. */
     fun close(process: HostedProcess): Boolean
+
+    /** CLI-PTY-3: bring the MCP servers back inside the live [process], keeping it. false (default) = it cannot; the host restarts and resumes. */
+    fun reconnectMcp(process: HostedProcess): Boolean = false
 }
 
 /** Session-scoped callbacks, implemented once by the session manager. Never called while the host holds its lock. */
@@ -132,6 +138,9 @@ interface HostEvents {
 
     /** BUG-M2-11f: the kept process [pid] ended (any reason). Clear the record only if it still names that pid. */
     fun keptProcessEnded(sessionId: String, pid: Long) {}
+
+    /** CLI-PTY-3: [AdapterSink.mcpState] for [sessionId]. */
+    fun mcpState(sessionId: String, state: String, reason: String?) {}
 }
 
 /**

@@ -59,6 +59,7 @@ class ScriptingDaemonPlugin : DaemonPlugin {
         val sessionTools = SessionTools(
             { api.sessions.get(it) }, { api.sessions.status(it) }, { id, n -> api.sessions.recentLines(id, n) }, { api.sessions.interrupt(it) },
             { name, session, ms -> api.sessions.suppressNotice(name, session, ms) },
+            reconnectMcp = { id, force -> api.sessions.reconnectMcp(id, force) },
         )
         api.tools.register(sessionTools.read)
         api.tools.register(sessionTools.act)

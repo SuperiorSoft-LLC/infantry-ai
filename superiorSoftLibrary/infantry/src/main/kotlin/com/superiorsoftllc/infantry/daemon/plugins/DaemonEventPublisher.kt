@@ -14,6 +14,7 @@ import java.util.concurrent.ConcurrentHashMap
  */
 class DaemonEventPublisher(private val publish: (name: String, payload: String) -> Unit) {
     private val lastState = ConcurrentHashMap<String, String>()
+    private val lastMcp = ConcurrentHashMap<String, String>()
 
     private fun obj(vararg f: Pair<String, Any?>) = JsonObject(f.filter { it.second != null }.associate { (k, v) ->
         k to (if (v is Number) JsonPrimitive(v) else JsonPrimitive(v.toString()))
@@ -40,8 +41,20 @@ class DaemonEventPublisher(private val publish: (name: String, payload: String) 
         if (prev == "BUSY" && state != "BUSY") publish("session.turn_ended", p)
     }
 
+    /**
+     * CLI-PTY-3: `session.mcp` when a session's MCP link ([mcp] = `connected` / `disconnected` / `reconnecting`, null = no live process)
+     * differs from the last one seen. The first report of a session counts only when it is not null. Nothing else happens: a hook decides.
+     */
+    fun sessionMcp(sessionId: String, mcp: String?, at: Long?, role: String?, projectId: String?) {
+        val key = mcp ?: NO_MCP
+        val prev = lastMcp.put(sessionId, key)
+        if (prev == key || (prev == null && mcp == null)) return
+        publish("session.mcp", obj("sessionId" to sessionId, "state" to key, "previous" to prev?.takeIf { it != NO_MCP }, "at" to at, "role" to role, "projectId" to projectId))
+    }
+
     fun sessionEnded(sessionId: String) {
         lastState.remove(sessionId)
+        lastMcp.remove(sessionId)
         publish("session.ended", obj("sessionId" to sessionId))
     }
 
@@ -52,5 +65,10 @@ class DaemonEventPublisher(private val publish: (name: String, payload: String) 
 
     fun mail(m: Message) {
         publish("mail.sent", obj("id" to m.id, "from" to m.from, "to" to m.to, "subject" to m.subject, "threadId" to m.threadId))
+    }
+
+    private companion object {
+        /** The `session.mcp` state of a session whose process is gone (its record carries no link). */
+        const val NO_MCP = "none"
     }
 }
