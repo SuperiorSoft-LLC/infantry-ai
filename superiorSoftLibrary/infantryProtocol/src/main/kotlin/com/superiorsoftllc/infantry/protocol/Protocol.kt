@@ -186,6 +186,17 @@ data class Envelope(
          */
         const val INTERRUPT = "interrupt"
 
+        // CHAT-QUEUE-1 (contract 1.150.0, additive): the daemon holds the messages typed while a turn runs (`session.queued`).
+        /** client -> daemon: hold `data` (the message) for the frame's `sessionId` until its turn ends; a session at rest takes it as a turn now. */
+        const val QUEUE_ADD = "queue_add"
+        /** client -> daemon: take the held message `data` (its id) of the frame's `sessionId` back; it is never delivered. */
+        const val QUEUE_REMOVE = "queue_remove"
+        /**
+         * client -> daemon: deliver the held message `data` (its id) of the frame's `sessionId` now: INTO the running turn when the harness
+         * declares MID_TURN_INPUT (the turn is not stopped), as a turn of its own when none runs. Refused with [ERROR] otherwise; it stays held.
+         */
+        const val QUEUE_FORCE = "queue_force"
+
         // IN-APP BUILD (contract 1.33.0, additive): saved commands and a single in-flight run. Design:
         // docs/INFANTRY-IN-APP-BUILD-DESIGN.md section 3. The daemon sends NO argv to a client.
         /** client -> daemon, empty data: request the saved commands; answered by [COMMANDS]. */

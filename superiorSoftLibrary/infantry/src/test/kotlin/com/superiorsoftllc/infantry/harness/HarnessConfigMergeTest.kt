@@ -18,7 +18,7 @@ import kotlin.test.assertTrue
 
 /** HARNESS H8b-1: API 2.11.0 config-merge slot, host queryDb, and the in-place opencode registration through them. */
 class HarnessConfigMergeTest {
-    @Test fun apiVersionIs2_15() = assertEquals("2.15.0", HARNESS_API_VERSION)
+    @Test fun apiVersionIs2_16() = assertEquals("2.16.0", HARNESS_API_VERSION)
 
     @Test fun opencodeMergeIsNoLongerRegisteredByTheCore() {
         // H8b-3: the merge lives in the Infantry_OpenCode module (its mergeConfig); the core registers none for the id.

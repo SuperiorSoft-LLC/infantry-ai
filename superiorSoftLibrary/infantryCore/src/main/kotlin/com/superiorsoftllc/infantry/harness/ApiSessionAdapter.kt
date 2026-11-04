@@ -72,6 +72,12 @@ internal class ApiSessionAdapter(
         false
     }
 
+    /** CHAT-QUEUE-1 (API 2.16): an older plugin has no such method on its connection; that, or a throw, is "cannot". */
+    override fun injectInput(process: HostedProcess, text: String): Boolean = try { (process as Hosted).connection.injectInput(text) } catch (t: Throwable) {
+        if (t !is AbstractMethodError && t !is NoSuchMethodError) onFailure(PluginFailure(pluginId, PluginFailurePhase.RUN, t))
+        false
+    }
+
     private fun <T> attributed(block: () -> T): T = try {
         block()
     } catch (t: Throwable) {

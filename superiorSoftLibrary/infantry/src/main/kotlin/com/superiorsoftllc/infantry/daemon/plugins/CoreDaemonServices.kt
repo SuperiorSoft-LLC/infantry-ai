@@ -10,6 +10,7 @@ import com.superiorsoftllc.infantry.daemon.api.Frame
 import com.superiorsoftllc.infantry.daemon.api.Policy
 import com.superiorsoftllc.infantry.daemon.api.ProjectInfo
 import com.superiorsoftllc.infantry.daemon.api.Projects
+import com.superiorsoftllc.infantry.daemon.api.QueuedMessage
 import com.superiorsoftllc.infantry.daemon.api.SessionInfo
 import com.superiorsoftllc.infantry.daemon.api.Sessions
 import com.superiorsoftllc.infantry.daemon.bindSessionOnSpawn
@@ -119,6 +120,15 @@ class CoreDaemonServices(
         override fun suppressNotice(name: String, sessionId: String?, ms: Long) = noticeSuppressor(name, sessionId, ms)
         override fun setAutomation(id: String, mark: AutomationMark?) { manager.setAutomation(id, mark?.let { SessionAutomation(it.script, it.hookId, it.since) }) }
         override fun reconnectMcp(id: String, force: Boolean): String = manager.reconnectMcp(id, force)
+        override fun queued(id: String): List<QueuedMessage> = manager.queued(id).map { QueuedMessage(it.id, it.text, it.at) }
+        override fun queueAdd(id: String, text: String): QueuedMessage? =
+            manager.queueAdd(id, text, limits(com.superiorsoftllc.infantry.settings.LimitRegistry.CHAT_QUEUE_MAX).toInt())
+                ?.let { QueuedMessage(it.id, it.text, it.at) }
+        override fun queueRemove(id: String, itemId: String): QueuedMessage = manager.queueRemove(id, itemId).let { QueuedMessage(it.id, it.text, it.at) }
+        override fun queueForce(id: String, itemId: String): String = when (manager.queueForce(id, itemId)) {
+            SessionManager.ForceOutcome.INJECTED -> "injected"
+            SessionManager.ForceOutcome.SENT_AS_TURN -> "sent as turn"
+        }
     }
 
     override fun policy(): Policy = object : Policy {

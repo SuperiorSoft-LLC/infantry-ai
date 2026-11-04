@@ -189,6 +189,8 @@ import com.superiorsoftllc.infantry.ui.model.isBusy
 import com.superiorsoftllc.infantry.ui.model.QueuedPrompt
 import com.superiorsoftllc.infantry.ui.model.interruptBlocker
 import com.superiorsoftllc.infantry.ui.model.queuedFor
+import com.superiorsoftllc.infantry.ui.model.forcesMidTurn
+import com.superiorsoftllc.infantry.ui.block.layout.LocalBlockSize
 import com.superiorsoftllc.infantry.ui.model.isRunning
 import com.superiorsoftllc.infantry.ui.model.needsInput
 import com.superiorsoftllc.infantry.ui.model.insertIntoPrompt
@@ -363,17 +365,59 @@ fun InterruptButton(agent: AgentView, live: Boolean, controller: Controller) {
     )
 }
 
-/** The messages held for a busy agent, in send order, each marked as waiting. Empty queue renders nothing. */
+/**
+ * The messages held for a busy agent, in send order. Empty queue renders nothing. CHAT-QUEUE-1: one line per message, each with its
+ * actions at the right end: X ([onRemove], "Remove from queue": never delivered) and Force ([onForce], "Send now": into the running
+ * turn, which is not stopped). Force is disabled, with [forceWhy] as its tooltip, when [canForce] is false (the harness cannot take a
+ * message mid-turn); the message then stays queued. Null actions draw no button (an older daemon's local queue offers X only).
+ * [compact] (a phone-width pane) makes each action a 48dp touch target.
+ */
 @Composable
-fun QueuedMessages(queue: List<QueuedPrompt>) {
+fun QueuedMessages(
+    queue: List<QueuedPrompt>,
+    onRemove: ((QueuedPrompt) -> Unit)? = null,
+    onForce: ((QueuedPrompt) -> Unit)? = null,
+    canForce: Boolean = false,
+    forceWhy: String = QUEUE_FORCE_UNSUPPORTED,
+    enabled: Boolean = true,
+    compact: Boolean = PanelLayout.isCompact(LocalBlockSize.current.width.value),
+) {
     if (queue.isEmpty()) return
-    // CHAT-COMPACT-1: one line, not a stack: the count and the first message, the rest in the tooltip-free tail "+n".
-    val first = queue.first().text.lineSequence().first()
-    Text(
-        "Queued (${queue.size}): $first" + if (queue.size > 1) "  +${queue.size - 1}" else "",
-        color = Palette.Muted, fontFamily = Mono, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.fillMaxWidth().testTag(QUEUED_MESSAGES_TAG).padding(bottom = 4.dp),
-    )
+    val touch = if (compact) QUEUE_TOUCH_PHONE_DP else QUEUE_TOUCH_DESKTOP_DP
+    Column(Modifier.fillMaxWidth().testTag(QUEUED_MESSAGES_TAG).padding(bottom = 4.dp)) {
+        queue.forEachIndexed { i, item ->
+            Row(Modifier.fillMaxWidth().testTag(QUEUED_ROW_TAG), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    (if (i == 0) "Queued (${queue.size}): " else "") + item.text.lineSequence().first(),
+                    color = Palette.Muted, fontFamily = Mono, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f).padding(start = if (i == 0) 0.dp else 8.dp),
+                )
+                // A message just sent to the daemon has no id yet: its actions wait for the daemon to list it.
+                val settled = item.requestId == null
+                if (onForce != null) {
+                    QueueAction(
+                        AhqIcons.Send, if (canForce) QUEUE_FORCE_LABEL else forceWhy, touch,
+                        enabled = enabled && canForce && settled && item.id != null, tag = QUEUED_FORCE_TAG,
+                    ) { onForce(item) }
+                }
+                if (onRemove != null) {
+                    QueueAction(AhqIcons.Close, QUEUE_REMOVE_LABEL, touch, enabled = enabled && settled, tag = QUEUED_REMOVE_TAG) { onRemove(item) }
+                }
+            }
+        }
+    }
+}
+
+/** CHAT-QUEUE-1: one small icon action of a queued row; [touch] is its hit box (48dp on a phone), the drawn icon stays small. */
+@Composable
+private fun QueueAction(
+    icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, touch: Int, enabled: Boolean, tag: String, onClick: () -> Unit,
+) {
+    IconActionTooltipBox(label, null, Modifier.size(touch.dp).testTag(tag)) { m ->
+        Box(m.clickable(enabled = enabled, role = androidx.compose.ui.semantics.Role.Button, onClick = onClick), contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = null, tint = if (enabled) Palette.Text else Palette.Muted.copy(alpha = 0.5f), modifier = Modifier.size(14.dp))
+        }
+    }
 }
 
 @Composable
@@ -487,7 +531,16 @@ fun PromptBox(
                 enabled = com.superiorsoftllc.infantry.ui.shell.rememberGate("approvals.answer").allowed,
             )
         }
-        QueuedMessages(queue)
+        if (a != null) {
+            QueuedMessages(
+                queue,
+                onRemove = { item -> actionScope.launch { controller.removeQueued(a.id, item) } },
+                // Force needs the daemon to hold the queue (contract 1.150.0); an older daemon's local queue offers X only.
+                onForce = if (snapshot.connection.servesQueue) { item -> actionScope.launch { controller.forceQueued(a.id, item) } } else null,
+                canForce = snapshot.forcesMidTurn(a.id),
+                enabled = live && prompt.allowed,
+            )
+        }
         ChatAttachmentChips(attachments, attachBusy, attachError, onRemoveAttachment)
         SlashSuggestions(slashTitle, slashRows, slashIndex, onPick = { onValue(it) })
         // ATTACH-INLINE-1: each tag's one character is drawn as its pill "📎 name".
@@ -908,3 +961,13 @@ const val REMOVE_AGENT_LABEL = "Remove agent"
 
 /** Test tag on the list of messages waiting for a busy agent. */
 const val QUEUED_MESSAGES_TAG = "queued-messages"
+/** CHAT-QUEUE-1: one queued message's row, and its two actions. */
+const val QUEUED_ROW_TAG = "queued-row"
+const val QUEUED_REMOVE_TAG = "queued-remove"
+const val QUEUED_FORCE_TAG = "queued-force"
+const val QUEUE_REMOVE_LABEL = "Remove from queue"
+const val QUEUE_FORCE_LABEL = "Send now (into the running turn)"
+const val QUEUE_FORCE_UNSUPPORTED = "Send now is not available: this agent's harness cannot take a message mid-turn; it stays queued"
+/** CHAT-QUEUE-1: a queued row's action hit box: 48dp on a phone-width pane (Android touch target), small on a desktop. */
+const val QUEUE_TOUCH_PHONE_DP = 48
+const val QUEUE_TOUCH_DESKTOP_DP = 24
