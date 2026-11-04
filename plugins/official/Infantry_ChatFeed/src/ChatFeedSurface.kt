@@ -80,6 +80,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.withFrameNanos
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -287,42 +288,202 @@ fun AgentChat(agent: AgentView, nowProvider: () -> Long = { Clock.System.now().t
     // [nowProvider] is the clock (injectable so a UI test can drive it with the Compose frame clock).
     var now by remember { mutableStateOf(nowProvider()) }
     LaunchedEffect(agent.id) { while (true) { delay(1_000); now = nowProvider() } }
-    val rows = withContributions(LocalReasoningPlacement.current.chatRows(chatItems(agent.output)), contributions)
+    // CHAT-SCROLL-1: the rows are rebuilt when the transcript changes, never on the ticker's second (a long chat rebuilt
+    // thousands of rows every second before).
+    val placement = LocalReasoningPlacement.current
+    val output = agent.output
+    val rows = remember(output, contributions, placement) { withContributions(placement.chatRows(chatItems(output)), contributions) }
+    val ownerRows = remember(rows) { rows.count { it is ChatItem.Line && it.line.kind == LineKind.USER } }
+    val total = rows.size
+    val pageSize = LocalShellContext.current?.config?.values("infantry.chatfeed")?.int(CHAT_PAGE_SIZE_KEY) ?: CHAT_PAGE_SIZE_DEFAULT
+    // CHAT-SCROLL-1: only the newest page is composed on open; older pages join as the user scrolls up (ChatWindow).
+    val window = remember(agent.id, pageSize) { ChatWindow(pageSize, total) }
+    val start = window.startFor(total)
+    val shown = total - start
     val status = agent.chatStatus(now)
-    // Keyed on the status PRESENCE, not its value: the ticker changes it every second, and that must
-    // not restart the scroll effect.
+    val hasStatus = status != null
+    val totalNow by rememberUpdatedState(total)
     val sends = pending.items
     // A phone-width pane: the bubble's retry / discard become 48dp touch targets.
     val compact = com.superiorsoftllc.infantry.ui.model.PanelLayout.isCompact(com.superiorsoftllc.infantry.ui.block.layout.LocalBlockSize.current.width.value)
-    // CHAT-SENDING-1: a new pending send scrolls to the bottom too, so the human sees it the moment Send is pressed.
-    LaunchedEffect(agent.id, rows.size, agent.output.lastOrNull()?.text?.length, status != null, sends.size) {
-        val last = rows.size + sends.size + (if (status != null) 1 else 0) - 1
-        if (last >= 0) list.requestScrollToItem(last)
+    // Follow = the last item is on screen. Read off the layout only when the item count did not change in it (a new row
+    // lands below the view before the follow scroll reaches it, which is not the user scrolling away), and only once the
+    // chat has reached its bottom after opening.
+    LaunchedEffect(list, window) {
+        var lastCount = -1
+        var settled = false
+        snapshotFlow { list.layoutInfo }.collect { info ->
+            val count = info.totalItemsCount
+            val atEnd = count == 0 || info.visibleItemsInfo.lastOrNull()?.index == count - 1
+            if (atEnd) settled = true
+            // A pending jump (a search hit, jump-to-latest) decides follow itself: the layout between widening the slice and
+            // the jump still sits at the old bottom, and reading it would trim the hit's page away again.
+            if (settled && count == lastCount && atEnd != window.follow && window.pendingJump == null) {
+                window.follow = atEnd
+                if (atEnd) window.onTotal(totalNow)
+            }
+            lastCount = count
+        }
     }
+    // Scrolled near the top of the slice: the next older page joins it. Rows are keyed, so the view does not move.
+    LaunchedEffect(list, window) {
+        snapshotFlow { list.firstVisibleItemIndex }.collect { first ->
+            if (!window.follow && first < CHAT_LOAD_OLDER_WITHIN) window.loadOlder()
+        }
+    }
+    // The owner's own new message always lands in view, however far up the chat was.
+    var ownerSeen by remember(agent.id) { mutableStateOf(ownerRows) }
+    // CHAT-SENDING-1: a new pending send counts too, so the human sees it the moment Send is pressed.
+    var sendsSeen by remember(agent.id) { mutableStateOf(sends.size) }
+    LaunchedEffect(ownerRows, sends.size) {
+        if (ownerRows > ownerSeen || sends.size > sendsSeen) window.jumpToLatest(totalNow)
+        ownerSeen = ownerRows
+        sendsSeen = sends.size
+    }
+    // Keyed on the status PRESENCE, not its value: the ticker changes it every second, and that must
+    // not restart the scroll effect. Scrolled up, new rows do not move the view (they count as unread).
+    LaunchedEffect(agent.id, total, output.lastOrNull()?.text?.length, hasStatus, sends.size) {
+        window.onTotal(total)
+        if (window.follow && window.pendingJump == null) {
+            val last = total - window.startFor(total) + sends.size + (if (hasStatus) 1 else 0) - 1
+            if (last >= 0) list.requestScrollToItem(last)
+        }
+    }
+    LaunchedEffect(window.pendingJump, start, total) {
+        val jump = window.pendingJump ?: return@LaunchedEffect
+        val index = if (jump == ChatWindow.JUMP_TO_END) total - start + sends.size + (if (hasStatus) 1 else 0) - 1 else jump - start
+        if (index >= 0) list.scrollToItem(index)
+        window.pendingJump = null
+    }
+    // CHAT-SCROLL-1: search the whole transcript (text, ticket ids); a hit outside the slice loads its page.
+    var searchOpen by remember(agent.id) { mutableStateOf(false) }
+    var query by remember(agent.id) { mutableStateOf("") }
+    val hits = remember(rows, query) { chatSearchHits(rows, query) }
+    var hitPos by remember(agent.id, query) { mutableStateOf(-1) }
+    fun goToHit(pos: Int) {
+        if (hits.isEmpty()) return
+        hitPos = pos.coerceIn(0, hits.lastIndex)
+        window.reveal(hits[hitPos])
+    }
+    // A typed query jumps to its newest hit; the arrows (or Enter / Shift+Enter) walk to older and newer ones.
+    LaunchedEffect(hits) { if (hitPos < 0 && hits.isNotEmpty()) goToHit(hits.lastIndex) }
+    val currentHit = hits.getOrNull(hitPos)
     val name = agent.session.worktreeBranch ?: agent.id.take(8)
     val agentSide = agentSideOf(LocalTabFactory.current)
-    Column(Modifier.fillMaxSize()) {
+    val withSearch: @Composable RowScope.() -> Unit = {
+        floaters()
+        FloatingChip(AhqIcons.Search, CHAT_SEARCH_LABEL, { searchOpen = !searchOpen }, Modifier.testTag(CHAT_SEARCH_CHIP_TAG), shortcut = "Ctrl+F")
+    }
+    Column(Modifier.fillMaxSize().onPreviewKeyEvent { e ->
+        if (e.type == KeyEventType.KeyDown && e.isCtrlPressed && e.key == Key.F) { searchOpen = true; true } else false
+    }) {
         // CHAT-COMPACT-1: the Activity chip floats over the transcript's bottom edge: it takes no row of its own.
         Box(Modifier.weight(1f)) {
         SelectionContainer(Modifier.fillMaxSize()) {
-            LazyColumn(Modifier.fillMaxSize().padding(horizontal = ChatSidePadding), state = list, contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 10.dp)) {
-                items(rows.size) { i ->
+            LazyColumn(Modifier.fillMaxSize().padding(horizontal = ChatSidePadding).testTag(CHAT_TRANSCRIPT_TAG), state = list, contentPadding = androidx.compose.foundation.layout.PaddingValues(top = if (searchOpen) CHAT_SEARCH_BAR_ROOM_DP.dp else 10.dp, bottom = 10.dp)) {
+                // CHAT-SCROLL-1: keyed by the row's absolute index, so rows joining above (an older page) or below (new
+                // output) leave the rows on screen where they are.
+                items(shown, key = { start + it }) { i ->
+                    val abs = start + i
                     // M2-2: the agent's portrait opens each run of agent-side lines, like a chat. KINDS-1: the row is drawn by the renderer of its kind.
-                    FeedRow(RowItem(rows[i], agent.id, name, agent.role, roleColor), startsAgentRun(rows, i, agentSide))
+                    Box(if (abs == currentHit) Modifier.background(Palette.Accent.copy(alpha = 0.16f)).testTag(CHAT_SEARCH_HIT_TAG) else Modifier) {
+                        FeedRow(RowItem(rows[abs], agent.id, name, agent.role, roleColor), startsAgentRun(rows, abs, agentSide))
+                    }
                 }
                 // CHAT-SENDING-1: the human's just-sent messages, after the transcript, until the daemon's echo replaces each.
                 items(sends.size, key = { "pending-" + sends[it].clientId }) { i ->
                     PendingSendRow(sends[i], pending.onRetry, pending.onDiscard, compact = compact)
                 }
                 // The live status row is agent-side too: it opens a run only when no agent line precedes it.
-                if (status != null) item {
-                    AgentSideRow(sends.isNotEmpty() || startsAgentRun(rows, rows.size, agentSide), agent.role, agent.id, roleColor) { ChatStatusRow(status) }
+                if (status != null) item(key = CHAT_STATUS_TAG) {
+                    AgentSideRow(sends.isNotEmpty() || startsAgentRun(rows, total, agentSide), agent.role, agent.id, roleColor) { ChatStatusRow(status) }
                 }
             }
         }
-        Box(Modifier.align(Alignment.BottomEnd)) { ActivityBox(agent, floaters) }
+        if (searchOpen) Box(Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp)) {
+            ChatSearchBar(query, { query = it }, hits.size, hitPos,
+                older = { goToHit(if (hitPos < 0) hits.lastIndex else hitPos - 1) },
+                newer = { goToHit(if (hitPos < 0) hits.lastIndex else hitPos + 1) },
+                close = { searchOpen = false; query = "" })
+        }
+        if (!window.follow) Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp)) {
+            JumpToLatest(window.unread(total)) { window.jumpToLatest(total) }
+        }
+        Box(Modifier.align(Alignment.BottomEnd)) { ActivityBox(agent, withSearch) }
         }
         questionSlot()
+    }
+}
+
+/** CHAT-SCROLL-1: test tag on the transcript's lazy list. */
+const val CHAT_TRANSCRIPT_TAG = "chat-transcript"
+
+/** CHAT-SCROLL-1: test tag on the "jump to latest" button shown while scrolled up. */
+const val JUMP_LATEST_TAG = "chat-jump-latest"
+
+/** CHAT-SCROLL-1: test tag on the search chip, the search field and the row of the current hit. */
+const val CHAT_SEARCH_CHIP_TAG = "chat-search-chip"
+const val CHAT_SEARCH_FIELD_TAG = "chat-search-field"
+const val CHAT_SEARCH_HIT_TAG = "chat-search-hit"
+const val CHAT_SEARCH_OLDER_TAG = "chat-search-older"
+const val CHAT_SEARCH_NEWER_TAG = "chat-search-newer"
+
+/** CHAT-SCROLL-1: the transcript's top padding while the search bar is open, so a hit scrolled to the top shows below the bar. */
+const val CHAT_SEARCH_BAR_ROOM_DP = 56
+
+/** CHAT-SCROLL-1: the search chip's tooltip and screen-reader name. */
+const val CHAT_SEARCH_LABEL = "Search this chat"
+
+/** CHAT-SCROLL-1: "↓ Latest", with the number of rows that arrived since the user scrolled up (uncapped). */
+@Composable
+private fun JumpToLatest(unread: Int, onClick: () -> Unit) {
+    Row(
+        Modifier.clip(RoundedCornerShape(16.dp)).background(Palette.Accent).clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 5.dp).testTag(JUMP_LATEST_TAG),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(AhqIcons.ChevronDown, contentDescription = null, tint = Palette.OnAccent, modifier = Modifier.size(16.dp))
+        Spacer(Modifier.width(4.dp))
+        Text(if (unread > 0) "Latest · $unread new" else "Latest", color = Palette.OnAccent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+/** CHAT-SCROLL-1: the search bar over the transcript: the query, "n of m", older/newer hit and close. Enter = older hit, Esc = close. */
+@Composable
+private fun ChatSearchBar(query: String, onQuery: (String) -> Unit, hitCount: Int, hitPos: Int, older: () -> Unit, newer: () -> Unit, close: () -> Unit) {
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Palette.Panel).border(1.dp, Palette.Border, RoundedCornerShape(8.dp))
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(AhqIcons.Search, contentDescription = null, tint = Palette.Muted, modifier = Modifier.size(16.dp))
+        Spacer(Modifier.width(6.dp))
+        Box(Modifier.weight(1f)) {
+            if (query.isEmpty()) Text("Search this chat: text or a ticket id", color = Palette.Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            BasicTextField(
+                query, onQuery, singleLine = true,
+                textStyle = TextStyle(color = Palette.Text, fontSize = 12.sp), cursorBrush = SolidColor(Palette.Text),
+                modifier = Modifier.fillMaxWidth().focusRequester(focus).testTag(CHAT_SEARCH_FIELD_TAG).onPreviewKeyEvent { e ->
+                    if (e.type != KeyEventType.KeyDown) false
+                    else when (e.key) {
+                        Key.Enter, Key.NumPadEnter -> { if (e.isShiftPressed) newer() else older(); true }
+                        Key.Escape -> { close(); true }
+                        else -> false
+                    }
+                },
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        Text(
+            when { query.isBlank() -> ""; hitCount == 0 -> "no match"; hitPos < 0 -> "$hitCount found"; else -> "${hitPos + 1} of $hitCount" },
+            color = Palette.Muted, fontFamily = Mono, fontSize = 11.sp, maxLines = 1,
+        )
+        Spacer(Modifier.width(6.dp))
+        Text("▲", color = Palette.Text, fontSize = 12.sp, modifier = Modifier.clip(CircleShape).clickable(enabled = hitCount > 0, onClick = older).padding(4.dp).testTag(CHAT_SEARCH_OLDER_TAG))
+        Text("▼", color = Palette.Text, fontSize = 12.sp, modifier = Modifier.clip(CircleShape).clickable(enabled = hitCount > 0, onClick = newer).padding(4.dp).testTag(CHAT_SEARCH_NEWER_TAG))
+        Icon(AhqIcons.Close, contentDescription = "Close search", tint = Palette.Muted, modifier = Modifier.size(18.dp).clip(CircleShape).clickable(onClick = close).padding(2.dp))
     }
 }
 
@@ -445,7 +606,8 @@ fun ReasoningBlock(lines: List<OutputLine>) {
             fontFamily = Mono,
             fontSize = 11.sp,
             fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.testTag(REASONING_HEADER_TAG).clickable { activityBoxChoice = !expanded },
+            // CHAT-SCROLL-1: the header opens THIS block (ACTIVITY-BOX-1 had it toggling the Activity box by mistake).
+            modifier = Modifier.testTag(REASONING_HEADER_TAG).clickable { expanded = !expanded },
         )
         if (expanded) {
             Text(

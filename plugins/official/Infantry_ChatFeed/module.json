@@ -31,6 +31,28 @@
           "scope": "device"
         }
       ]
+    },
+    {
+      "node": "infantry.chatfeed",
+      "tab": "Chat",
+      "group": "Long chats",
+      "order": 20,
+      "title": "Long chats",
+      "applies": "Applies to: the chat transcript. A chat opens on its newest rows; older rows load as you scroll up.",
+      "keywords": ["scroll", "page", "history", "long", "performance"],
+      "fields": [
+        {
+          "key": "chat.pageSize",
+          "type": "number",
+          "label": "Rows a chat opens with (and loads per scroll-up)",
+          "default": 80,
+          "min": 20,
+          "max": 2000,
+          "step": 10,
+          "order": 1,
+          "scope": "device"
+        }
+      ]
     }
   ],
   "implementations": [
