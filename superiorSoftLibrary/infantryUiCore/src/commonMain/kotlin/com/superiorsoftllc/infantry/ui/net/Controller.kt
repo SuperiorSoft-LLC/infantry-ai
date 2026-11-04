@@ -37,6 +37,16 @@ import com.superiorsoftllc.infantry.ui.model.queuedTurnText
 import com.superiorsoftllc.infantry.ui.model.queuedFor
 import com.superiorsoftllc.infantry.ui.model.localQueue
 import com.superiorsoftllc.infantry.ui.model.settlePendingQueue
+import com.superiorsoftllc.infantry.ui.model.PendingSend
+import com.superiorsoftllc.infantry.ui.model.ConnectionInfo
+import com.superiorsoftllc.infantry.ui.model.PendingSends
+import com.superiorsoftllc.infantry.ui.model.SendState
+import com.superiorsoftllc.infantry.ui.model.withPendingSend
+import com.superiorsoftllc.infantry.ui.model.withoutPendingSend
+import com.superiorsoftllc.infantry.ui.model.expirePendingSend
+import com.superiorsoftllc.infantry.ui.model.pendingRefusedBusy
+import com.superiorsoftllc.infantry.ui.model.settlePendingSends
+import com.superiorsoftllc.infantry.ui.model.failSendsOnDrop
 import com.superiorsoftllc.infantry.ui.model.withQueue
 import com.superiorsoftllc.infantry.ui.model.contractAtLeast
 import com.superiorsoftllc.infantry.ui.model.withEventsAwaiting
@@ -95,6 +105,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -170,27 +181,7 @@ class Controller(
         // just confirmed -- isLive false for good, with no later info emission to repair it.
         scope.launch(start = CoroutineStart.UNDISPATCHED) {
             client.info.collect { info ->
-                _state.update { s ->
-                    val cur = s.connection
-                    // The client never reports CONNECTED (only `ready` does, via the reducer), so a late
-                    // CONNECTING emission must not downgrade a link the daemon already confirmed.
-                    if (cur.isLive && info.state == ConnState.CONNECTING && cur.url == info.url) s
-                    else s.copy(
-                        connection = info.copy(
-                            lastFrameAt = cur.lastFrameAt,
-                            contract = cur.contract,
-                            daemonProvider = cur.daemonProvider,
-                            // Kept across a drop: the next `ready` compares against it to tell a reconnect
-                            // from a restarted daemon (contract 1.11.0).
-                            instance = cur.instance,
-                            historySince = cur.historySince,
-                            // BUILD-STAMP-1: set by `ready`, like the contract; a link-state change keeps it.
-                            daemonBuild = cur.daemonBuild,
-                            readyFields = cur.readyFields,
-                            notices = cur.notices,
-                        ),
-                    )
-                }
+                _state.update { s -> failSendsOnDrop(s, linkInfo(s, info)) }
             }
         }
         scope.launch {
@@ -201,6 +192,9 @@ class Controller(
                 _state.update { reduce(it, env, Clock.System.now().toEpochMilliseconds()) }
                 _state.update { settleQueueSends(before, it) }
                 _state.update { settlePendingQueue(it, env) }
+                // CHAT-SENDING-1: a send the daemon refused because the agent got busy first goes to the queue (its row says so).
+                queueRefusedSend(env)
+                _state.update { settlePendingSends(before, it, env) }
                 sendQueuedAtRest(before, _state.value)
                 answerImageUpload(env)
                 answerPluginSecret(env)
@@ -865,11 +859,76 @@ class Controller(
             else _state.update { it.withQueue(sessionId, held + it.localQueue(sessionId)) }
             return report(r)
         }
+        // CHAT-SENDING-1: a message (not a command) to a daemon that echoes turns shows at once as "sending..." and carries a
+        // client message id; the bubble owns the text from here, so the composer may clear even when the send fails.
+        if (!isSlashCommand(text) && _state.value.connection.echoesTurns) return sendPending(sessionId, text)
         val r = send(Envelope(Envelope.PROMPT, text, sessionId))
         // A leading "/" is a command, never a prompt (CP-4): the daemon answers it with a result or an error, so it is
         // not echoed into the chat as something the user said to the agent.
         if (r is CommandResult.Sent && !isSlashCommand(text)) echo(sessionId, text)
         return report(r)
+    }
+
+    /**
+     * CHAT-SENDING-1: send [text] to [sessionId] as a pending message: shown at once ("sending..."), settled by the daemon's
+     * `prompt_ack` or `turn` echo ([settlePendingSends]), "not sent - retry" after `limits.chat.sendAckSeconds`, on a refusal or a
+     * dropped link. Answers [CommandResult.Sent] whenever the bubble holds the text (a failed one keeps it for [retrySend]).
+     */
+    private suspend fun sendPending(sessionId: String, text: String): CommandResult {
+        val now = Clock.System.now().toEpochMilliseconds()
+        val p = PendingSend(PendingSends.newClientId(now), sessionId, text, now)
+        _state.update { it.withPendingSend(p) }
+        transmitPending(p)
+        return CommandResult.Sent
+    }
+
+    /** Send pending [p] (its first send or a retry, same client id) and arm its timer; a send that cannot leave fails it now. */
+    private suspend fun transmitPending(p: PendingSend) {
+        val r = send(Envelope(Envelope.PROMPT, p.text, p.sessionId, requestId = p.clientId))
+        if (r is CommandResult.Refused) {
+            _state.update { s -> s.pendingSends[p.clientId]?.let { s.withPendingSend(it.copy(state = SendState.FAILED, reason = r.reason)) } ?: s }
+            return
+        }
+        val wait = _state.value.sendAckSeconds
+        val sentAt = p.at
+        scope.launch {
+            delay(wait * 1_000)
+            // Only the send this timer was armed for: a retry since then re-armed its own.
+            _state.update { s -> if (s.pendingSends[p.clientId]?.at == sentAt) s.expirePendingSend(p.clientId, wait) else s }
+        }
+    }
+
+    /**
+     * CHAT-SENDING-1: resend the "not sent" message [clientId] with the SAME client id, so a daemon that took it the first time answers
+     * `duplicate` and does not run it twice. An agent that is busy now gets it queued instead (the Queued row shows it).
+     */
+    suspend fun retrySend(clientId: String): CommandResult {
+        val p = _state.value.pendingSends[clientId] ?: return report(CommandResult.Refused("that message is no longer pending"))
+        if (p.state != SendState.FAILED) return CommandResult.Sent
+        val agent = _state.value.agents[p.sessionId]
+        if (agent != null && isBusy(agent)) {
+            val q = queueMessage(p.sessionId, p.text)
+            if (q !is CommandResult.Refused) _state.update { it.withoutPendingSend(clientId) }
+            return q
+        }
+        val again = p.copy(state = SendState.SENDING, reason = null, at = Clock.System.now().toEpochMilliseconds())
+        _state.update { it.withPendingSend(again) }
+        transmitPending(again)
+        return CommandResult.Sent
+    }
+
+    /** CHAT-SENDING-1: drop the "not sent" message [clientId] (the human chose not to retry it). A sending one is never dropped. */
+    fun discardSend(clientId: String) {
+        _state.update { s -> if (s.pendingSends[clientId]?.state == SendState.FAILED) s.withoutPendingSend(clientId) else s }
+    }
+
+    /** CHAT-SENDING-1: the daemon refused a pending send as `run_in_flight` (the agent got busy first): it goes to the queue instead. */
+    private suspend fun queueRefusedSend(env: Envelope) {
+        val p = _state.value.pendingRefusedBusy(env) ?: return
+        _state.update { it.withoutPendingSend(p.clientId) }
+        if (queueMessage(p.sessionId, p.text) is CommandResult.Refused) {
+            _state.update { it.withPendingSend(p.copy(state = SendState.FAILED, reason = "the agent is busy")) }
+        }
     }
 
     /**
@@ -1014,6 +1073,29 @@ class Controller(
                 report(r)
             }
         }
+    }
+
+    /** The link state [info] applied to [s]: the daemon-confirmed facts (contract, instance, build) survive a link-state change. */
+    private fun linkInfo(s: AppState, info: ConnectionInfo): AppState {
+        val cur = s.connection
+        // The client never reports CONNECTED (only `ready` does, via the reducer), so a late
+        // CONNECTING emission must not downgrade a link the daemon already confirmed.
+        return if (cur.isLive && info.state == ConnState.CONNECTING && cur.url == info.url) s
+        else s.copy(
+            connection = info.copy(
+                lastFrameAt = cur.lastFrameAt,
+                contract = cur.contract,
+                daemonProvider = cur.daemonProvider,
+                // Kept across a drop: the next `ready` compares against it to tell a reconnect
+                // from a restarted daemon (contract 1.11.0).
+                instance = cur.instance,
+                historySince = cur.historySince,
+                // BUILD-STAMP-1: set by `ready`, like the contract; a link-state change keeps it.
+                daemonBuild = cur.daemonBuild,
+                readyFields = cur.readyFields,
+                notices = cur.notices,
+            ),
+        )
     }
 
     /** A 1.11.0 daemon echoes the turn on the stream (to every window); only an older one needs a local echo. */

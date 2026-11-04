@@ -684,6 +684,10 @@ data class AppState(
      * (or a new `ready`) ends the wait.
      */
     val queueSending: Map<String, QueueSend> = emptyMap(),
+    /** CHAT-SENDING-1: the messages sent and not yet shown by the daemon's `turn` echo, by client message id ([pendingSendsFor]). */
+    val pendingSends: Map<String, PendingSend> = emptyMap(),
+    /** CHAT-SENDING-1: `limits.chat.sendAckSeconds` from the `settings` frame: how long a send may wait before "not sent - retry". */
+    val sendAckSeconds: Long = PendingSends.DEFAULT_ACK_SECONDS,
     /** Contract 1.12.0: the daemon's role catalog, in its order (canonical ids first). */
     val roles: List<Role> = emptyList(),
     /** Contract 1.40.0: what each role runs on, by role id; a role with no entry has no binding. */
@@ -1926,6 +1930,7 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
             limitCatalog = LimitsSetting.withSettingsFrame(withTimer.limitCatalog, env.data),
             allowedRoles = AllowedRoles.fromSettingsFrame(env.data) ?: withTimer.allowedRoles,
             maxSessions = AllowedRoles.maxSessionsFromSettingsFrame(env.data) ?: withTimer.maxSessions,
+            sendAckSeconds = PendingSends.ackSecondsFromSettingsFrame(env.data) ?: withTimer.sendAckSeconds,
         )
     }
 

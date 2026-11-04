@@ -197,6 +197,13 @@ data class Envelope(
          */
         const val QUEUE_FORCE = "queue_force"
 
+        // CHAT-SENDING-1 (contract 1.151.0, additive): a `prompt` naming its session and carrying a client message id
+        // (`requestId` = [CLIENT_SEND_PREFIX] + a unique id) is acknowledged, and a resend of the same id is never run twice.
+        /** daemon -> client: the `prompt` with this frame's `requestId` was taken (`data` = `accepted`, or `duplicate` for a resend of one already taken). */
+        const val PROMPT_ACK = "prompt_ack"
+        /** The `requestId` prefix of a client message id: unique per message, so the daemon may remember it for dedupe. */
+        const val CLIENT_SEND_PREFIX = "send:"
+
         // IN-APP BUILD (contract 1.33.0, additive): saved commands and a single in-flight run. Design:
         // docs/INFANTRY-IN-APP-BUILD-DESIGN.md section 3. The daemon sends NO argv to a client.
         /** client -> daemon, empty data: request the saved commands; answered by [COMMANDS]. */
