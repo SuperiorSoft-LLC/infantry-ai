@@ -352,7 +352,9 @@ fun AgentChat(agent: AgentView, nowProvider: () -> Long = { Clock.System.now().t
     LaunchedEffect(window.pendingJump, start, total) {
         val jump = window.pendingJump ?: return@LaunchedEffect
         val index = if (jump == ChatWindow.JUMP_TO_END) total - start + sends.size + (if (hasStatus) 1 else 0) - 1 else jump - start
-        if (index >= 0) list.scrollToItem(index)
+        // QA-FIX-B: requestScrollToItem, not scrollToItem: the latter forces a remeasure from this effect, which can subcompose
+        // while a composition is still pending (Compose "pending composition has not been applied", SidebarDeleteUiTest).
+        if (index >= 0) list.requestScrollToItem(index)
         window.pendingJump = null
     }
     // CHAT-SCROLL-1: search the whole transcript (text, ticket ids); a hit outside the slice loads its page.

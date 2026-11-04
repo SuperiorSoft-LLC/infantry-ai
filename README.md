@@ -366,7 +366,7 @@ Starring the repository and filing good bug reports help too.
 
 ## License
 
-**The core is a community effort; the rest is yours.**
+**<!-- shared:license_footer -->The core is a community effort; the rest is yours.<!-- /shared:license_footer -->**
 
 Infantry AI is licensed per directory. Every source file names its license in an `SPDX-License-Identifier` header.
 
