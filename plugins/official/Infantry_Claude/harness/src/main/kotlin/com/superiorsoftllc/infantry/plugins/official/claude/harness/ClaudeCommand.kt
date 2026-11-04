@@ -187,6 +187,8 @@ object ClaudeCommand {
             ?: sessionId?.takeIf { it.isNotBlank() }?.let { add("--session-id"); add(it) }
         model?.takeIf { it.isNotBlank() }?.let { add("--model"); add(it) }
         effort?.takeIf { it.isNotBlank() }?.let { add("--effort"); add(it) }
+        // CLI-PTY-2: without it the interactive transcript stores thinking blocks as signature only (empty text), as the CLI omits them.
+        add("--thinking-display"); add("summarized")
         permissionMode?.takeIf { it.isNotBlank() }?.let { add("--permission-mode"); add(it) }
         allowedTools.takeIf { it.isNotEmpty() }?.let { add("--allowedTools"); add(it.joinToString(",")) }
         settings?.takeIf { it.isNotBlank() }?.let { add("--settings"); add(it) }
@@ -217,6 +219,7 @@ object ClaudeCommand {
         }
         val root = LinkedHashMap<String, kotlinx.serialization.json.JsonElement>()
         if (bypass) root["skipDangerousModePermissionPrompt"] = JsonPrimitive(true)
+        root["showThinkingSummaries"] = JsonPrimitive(true) // CLI-PTY-2: the settings twin of --thinking-display summarized
         root["hooks"] = JsonObject(hooks)
         return JsonObject(root).toString()
     }
