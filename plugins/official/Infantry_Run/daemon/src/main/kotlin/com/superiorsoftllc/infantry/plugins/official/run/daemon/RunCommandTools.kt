@@ -54,7 +54,7 @@ class RunCommandTools(
             str(a, "cwd")?.let { put("cwd", it) }
             put("argv", JsonArray(argv.map { JsonPrimitive(it) }))
         }
-        val refusal = store.save(Json.encodeToString(JsonObject.serializer(), data), manager::unlessRunning)
+        val refusal = store.save(Json.encodeToString(JsonObject.serializer(), data), manager::unlessRunning, str(a, "project") ?: c.clientProjectId)
         if (refusal != null) return err("infantry_run_command_save refused: $refusal")
         broadcastList()
         return ToolResult("saved command '$id'")

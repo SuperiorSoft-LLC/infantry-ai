@@ -16,7 +16,7 @@ class RunDaemonPlugin : DaemonPlugin {
     override fun start(api: DaemonApi) {
         val runs = api.runs
         maxRunSecretsSource = { api.settings.limit("limits.secrets.maxPerRun")?.coerceAtMost(Int.MAX_VALUE.toLong())?.toInt() ?: 16 }
-        val store = CommandStore(File(runs.configDir, "commands.json"), runs.workRoot)
+        val store = CommandStore(File(runs.configDir, "commands.json"), runs::rootOf)
         val manager = RunManager(
             registry = { store.registry },
             runs = runs,

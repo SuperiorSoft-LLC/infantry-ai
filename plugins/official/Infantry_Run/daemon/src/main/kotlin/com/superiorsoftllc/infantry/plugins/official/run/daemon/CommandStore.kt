@@ -29,25 +29,27 @@ internal data class CommandDeleteRequest(val id: String = "")
  */
 class CommandStore(
     private val file: File,
-    private val repo: File?,
-    initial: CommandRegistry = CommandRegistry.load(file, repo),
+    private val rootOf: (String?) -> File?,
+    initial: CommandRegistry = CommandRegistry.load(file, rootOf),
 ) {
+    constructor(file: File, repo: File?) : this(file, { repo })
+
     @Volatile var registry: CommandRegistry = initial
         private set
 
     private val lock = Any()
 
     /** Upsert by id. Returns null when saved, else the refusal reason (no `command_save refused:` prefix). */
-    fun save(data: String, guard: (String, () -> String?) -> String? = NO_GUARD): String? {
+    fun save(data: String, guard: (String, () -> String?) -> String? = NO_GUARD, project: String? = null): String? {
         val entry = try {
             strict.decodeFromString(CommandFileEntry.serializer(), data)
         } catch (e: Exception) {
             // A decode message can quote the offending text (the argv): the class name only.
             return "expects {\"id\",\"name\"?,\"argv\":[...],\"cwd\"?,\"graceMillis\"?,\"secrets\"?:[...]} (${e::class.simpleName})"
         }
-        val root = CommandRegistry.canonicalRoot(repo)
-            ?: return "INFANTRY_REPO is not set or cannot be resolved, so no working directory can be checked"
-        val saved = CommandRegistry.validate(entry, root, "command").getOrElse { return it.message }
+        val projectId = (project ?: entry.project)?.takeIf { it.isNotBlank() }
+        val root = CommandRegistry.canonicalRoot(rootOf(projectId)) ?: return CommandRegistry.NO_ROOT
+        val saved = CommandRegistry.validate(entry.copy(project = projectId), root, "command").getOrElse { return it.message }
         return synchronized(lock) {
             guard(saved.id) change@{
                 val current = onDisk() ?: return@change refusedOnDisk()
@@ -77,14 +79,14 @@ class CommandStore(
     }
 
     /** The file as it stands now (a hand edit since start counts), or null when the daemon refuses it. */
-    private fun onDisk(): CommandRegistry? = CommandRegistry.load(file, repo).takeIf { it.refusal == null }
+    private fun onDisk(): CommandRegistry? = CommandRegistry.load(file, rootOf).takeIf { it.refusal == null }
 
-    private fun refusedOnDisk() = "commands.json is refused as it stands (${CommandRegistry.load(file, repo).refusal}); fix or remove it first"
+    private fun refusedOnDisk() = "commands.json is refused as it stands (${CommandRegistry.load(file, rootOf).refusal}); fix or remove it first"
 
     private fun write(commands: List<SavedCommand>, verb: String, id: String): String? {
         val text = CommandRegistry.encodeFile(commands)
         // Belt and braces: the file about to be written must load back cleanly, or nothing is written.
-        val reparsed = CommandRegistry.parse(text, repo)
+        val reparsed = CommandRegistry.parseWith(text, rootOf)
         reparsed.refusal?.let { return it }
         try {
             file.absoluteFile.parentFile?.mkdirs()
