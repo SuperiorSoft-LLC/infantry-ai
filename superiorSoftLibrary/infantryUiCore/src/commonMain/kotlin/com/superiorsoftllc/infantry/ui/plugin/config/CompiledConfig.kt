@@ -21,9 +21,6 @@ object CompiledConfig {
     private var json: String? = null
     private var platform: String? = null
 
-    /** The platform name of this compiled-in build (`web`, `android`); null on desktop, which installs nothing. */
-    val installedPlatform: String? get() = platform
-
     fun install(json: String, platform: String) {
         this.json = json
         this.platform = platform

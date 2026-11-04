@@ -36,15 +36,6 @@ import com.superiorsoftllc.infantry.ui.block.layout.BlockScope
 import com.superiorsoftllc.infantry.ui.plugin.TabContainers
 import com.superiorsoftllc.infantry.ui.plugin.TabContext
 import com.superiorsoftllc.infantry.ui.plugin.TabProvider
-import com.superiorsoftllc.infantry.plugin.api.BlockTypeDeclaration
-import com.superiorsoftllc.infantry.plugin.api.ModuleManifest
-import com.superiorsoftllc.infantry.plugin.api.TabDeclaration
-import com.superiorsoftllc.infantry.plugin.api.Tier
-import com.superiorsoftllc.infantry.ui.plugin.InfantryModule
-import com.superiorsoftllc.infantry.ui.plugin.ModuleSource
-import com.superiorsoftllc.infantry.ui.plugin.NoPluginServices
-import com.superiorsoftllc.infantry.ui.plugin.config.CompiledConfig
-import com.superiorsoftllc.infantry.ui.plugin.registerModule
 import com.superiorsoftllc.infantry.ui.plugin.UiPlugin
 import com.superiorsoftllc.infantry.ui.plugin.UiRegistrar
 import com.superiorsoftllc.infantry.ui.plugin.circle
@@ -61,22 +52,7 @@ fun tabViews(all: List<ViewInfo>, platform: String): List<ViewInfo> =
  * DV-3: Infantry_Views. Registers the `ui.*` block types and the Views tab (one sub-tab per `place: tab` view). Web and
  * Android compile it in later (DV-7); [platform] is the `platforms` name of the client it runs on.
  */
-class ViewsPlugin(private val platform: String = CompiledConfig.installedPlatform ?: "desktop") : UiPlugin, ModuleSource {
-    /** Web and Android (D9): the generated module list takes the plugin as a [ModuleSource]; the manifest mirrors module.json. */
-    override fun modules(): List<InfantryModule> = listOf(
-        registerModule(
-            ModuleManifest(
-                name = "Infantry_Views", version = "1.0.0", author = "Infantry AI",
-                description = "Draws the declarative views daemon plugins publish.", tier = "official",
-                services = listOf("views"),
-                tabs = listOf(TabDeclaration(VIEWS_TAB_ID, TabContainers.CENTER)),
-                blockTypes = ViewWidgets.registered.keys.map { BlockTypeDeclaration(type = it, takesChildren = it == "ui.section") },
-            ),
-            Tier.OFFICIAL, NoPluginServices, this,
-        ),
-    )
-
-
+class ViewsPlugin(private val platform: String = "desktop") : UiPlugin {
     override fun register(registrar: UiRegistrar) {
         for ((type, impl) in ViewWidgets.registered) registrar.blockType(type, impl)
         registrar.tab(
