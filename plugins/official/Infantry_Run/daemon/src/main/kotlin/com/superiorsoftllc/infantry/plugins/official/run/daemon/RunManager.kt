@@ -412,7 +412,7 @@ class RunManager(
                 }
             }
             val started = try {
-                runs.start(RunSpec(command.argv, relativeCwd(runs, command.workingDir), env, terminal = usePty, cols = cols, rows = rows), listener)
+                runs.start(RunSpec(command.argv, relativeCwd(runs, command), env, projectId = command.projectId, terminal = usePty, cols = cols, rows = rows), listener)
             } catch (e: Exception) {
                 // Never the argv or the message (it can quote it): the class name only.
                 finish(null, "FAILED", "spawn failed (${e::class.simpleName})")
@@ -489,7 +489,8 @@ class RunManager(
 }
 
 /** The cwd of a run relative to the surface's root (the command's working directory is canonical and inside the repo); null = the root. */
-private fun relativeCwd(runs: Runs, dir: java.io.File): String? {
-    val root = runs.workRoot?.let { runCatching { it.canonicalFile }.getOrNull() } ?: return null
+private fun relativeCwd(runs: Runs, command: SavedCommand): String? {
+    val dir = command.workingDir
+    val root = runs.rootOf(command.projectId)?.let { runCatching { it.canonicalFile }.getOrNull() } ?: return null
     return dir.relativeToOrNull(root)?.path?.takeIf { it.isNotEmpty() }?.replace('\\', '/')
 }

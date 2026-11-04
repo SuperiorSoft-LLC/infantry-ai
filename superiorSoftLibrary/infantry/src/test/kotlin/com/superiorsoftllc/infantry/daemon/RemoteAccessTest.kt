@@ -92,3 +92,19 @@ class RemoteAccessTest {
         assertNotEquals(RemoteAccess.ensureToken(dir()), RemoteAccess.ensureToken(dir()))
     }
 }
+
+/** RUN-CMD-REPO-1: an agent session's launch env carries no updater token and no PAT-like value. */
+class AgentEnvSecretScrubTest {
+    @Test
+    fun `update tokens and PAT values are blanked, INFANTRY_TOKEN is left alone`() {
+        val pat = "ghp_" + "a".repeat(36)
+        val scrub = RemoteAccess.inheritedSecretScrub(
+            mapOf(
+                "INFANTRY_UPDATE_TOKEN" to "whatever", "AGENTHQ_UPDATE_TOKEN" to "x", "SOME_OTHER" to pat,
+                "GH_THING" to "github_pat_" + "B".repeat(30), "INFANTRY_TOKEN" to "owner", "PATH" to "/bin", "INFANTRY_URL" to "http://x",
+            ),
+        )
+        assertEquals(setOf("INFANTRY_UPDATE_TOKEN", "AGENTHQ_UPDATE_TOKEN", "SOME_OTHER", "GH_THING"), scrub.keys)
+        assertTrue(scrub.values.all { it.isEmpty() })
+    }
+}

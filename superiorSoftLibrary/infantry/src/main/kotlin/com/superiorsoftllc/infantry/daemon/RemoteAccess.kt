@@ -120,6 +120,17 @@ object RemoteAccess {
      */
     fun inheritedCredentialScrub(): Map<String, String> = CREDENTIAL_ENV.associateWith { "" }
 
+    private val PAT_VALUE = Regex("^(ghp_|gho_|ghu_|ghs_|ghr_|github_pat_)[A-Za-z0-9_]{20,}$")
+
+    /**
+     * RUN-CMD-REPO-1: the child-env overrides that blank every inherited SECRET an agent session must never see: any
+     * `*_UPDATE_TOKEN` (the updater's token, a GitHub PAT) and any variable whose value is a GitHub PAT. Always on (unlike
+     * [inheritedCredentialScrub]). `INFANTRY_TOKEN` is NOT scrubbed: the daemon sets it per agent on purpose, so the CLI and the
+     * curl a delivered prompt carries can authenticate against this daemon.
+     */
+    fun inheritedSecretScrub(inherited: Map<String, String> = System.getenv()): Map<String, String> =
+        inherited.filter { (k, v) -> k.uppercase().endsWith("_UPDATE_TOKEN") || PAT_VALUE.matches(v.trim()) }.keys.associateWith { "" }
+
     /** The port from the file; the environment (`INFANTRY_PORT`) is consulted by the caller first. */
     fun filePort(dir: File): Int? = load(dir).port
 

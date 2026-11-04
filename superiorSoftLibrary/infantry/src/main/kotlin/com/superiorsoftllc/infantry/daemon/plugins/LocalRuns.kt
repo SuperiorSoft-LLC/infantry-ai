@@ -29,9 +29,14 @@ class LocalRuns(
 ) : Runs {
     override fun secretFields(name: String): Map<String, String>? = secrets(name)
 
+    override fun rootOf(projectId: String?): File? {
+        val raw = (if (projectId.isNullOrBlank()) null else projectDirectory(projectId)?.takeIf { it.isNotBlank() }) ?: workRoot?.path
+        return raw?.let { runCatching { File(it).toPath().toRealPath().toFile() }.getOrNull() }?.takeIf { it.isDirectory }
+    }
+
     /** The canonical directory a run in [projectId] (else [workRoot]) is rooted at. */
     private fun root(projectId: String?): File {
-        val raw = if (projectId.isNullOrBlank()) workRoot?.path else projectDirectory(projectId)
+        val raw = if (projectId.isNullOrBlank()) workRoot?.path else projectDirectory(projectId)?.takeIf { it.isNotBlank() } ?: workRoot?.path
         requireNotNull(raw?.takeIf { it.isNotBlank() }) { if (projectId.isNullOrBlank()) "no working root is set" else "project '${projectId.take(80)}' has no directory" }
         return runCatching { File(raw).toPath().toRealPath().toFile() }.getOrNull()?.takeIf { it.isDirectory }
             ?: throw IllegalArgumentException("the run root does not exist")

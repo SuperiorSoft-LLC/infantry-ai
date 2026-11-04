@@ -728,6 +728,8 @@ class InfantryDaemon(
                 putAll(InfantryBin.urlEnv(host, boundPort))
                 // SEC 6d635c2f: an exported app's daemon blanks the owner credential its agents would inherit.
                 if (RemoteAccess.credentialsIsolated()) putAll(RemoteAccess.inheritedCredentialScrub())
+                // RUN-CMD-REPO-1: the updater's token (a PAT) and any other inherited PAT never reach an agent session.
+                putAll(RemoteAccess.inheritedSecretScrub())
                 if (token != null) put(AccessPolicy.TOKEN_ENV, token)
                 put(AccessPolicy.MAIL_BASE_ENV, mailBase)
             }

@@ -14,6 +14,12 @@ interface Runs {
     /** The daemon's own working root (its repository), the root of a run that names no project; null = none. */
     val workRoot: File?
 
+    /**
+     * RUN-CMD-REPO-1: the canonical root a command of [projectId] is validated and run in: that project's registered directory,
+     * else [workRoot]; null when neither resolves. Additive: the default is [workRoot].
+     */
+    fun rootOf(projectId: String?): File? = workRoot
+
     /** The daemon's configuration directory (where a plugin keeps files the owner may hand-edit). */
     val configDir: File
 

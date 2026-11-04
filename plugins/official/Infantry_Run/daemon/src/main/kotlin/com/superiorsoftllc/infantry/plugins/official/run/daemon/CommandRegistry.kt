@@ -36,6 +36,8 @@ internal data class CommandFileEntry(
     val cwd: String? = null,
     @SerialName("graceMillis") val graceMillis: Long = DEFAULT_GRACE_MILLIS,
     val secrets: List<String> = emptyList(),
+    /** RUN-CMD-REPO-1: the project whose directory is the root of [cwd]; null = the daemon's own root. */
+    val project: String? = null,
 )
 
 /** A validated command, as the run manager (T3) will execute it. [workingDir] is canonical and inside the repo. */
@@ -47,10 +49,11 @@ class SavedCommand internal constructor(
     val workingDir: File,
     val graceMillis: Long,
     val secrets: List<String> = emptyList(),
+    val projectId: String? = null,
 ) {
     fun toSpec(): CommandSpec = CommandSpec(id, name, cwd, argv, graceMillis, secrets)
 
-    internal fun toFileEntry(): CommandFileEntry = CommandFileEntry(id, name, argv, cwd, graceMillis, secrets)
+    internal fun toFileEntry(): CommandFileEntry = CommandFileEntry(id, name, argv, cwd, graceMillis, secrets, projectId)
 
     // argv must never reach a log line by accident.
     override fun toString(): String = "SavedCommand(id=$id)"
@@ -97,17 +100,22 @@ class CommandRegistry private constructor(
         val EMPTY = CommandRegistry(emptyList(), null)
 
         /** Load [file] against [repo]. Logs a refusal reason to stderr; never throws. */
-        fun load(file: File, repo: File?): CommandRegistry {
+        fun load(file: File, repo: File?): CommandRegistry = load(file) { repo }
+
+        fun load(file: File, rootOf: (String?) -> File?): CommandRegistry {
             if (!file.isFile) return EMPTY
-            val result = parse(runCatching { file.readText() }.getOrElse {
+            val result = parseWith(runCatching { file.readText() }.getOrElse {
                 return refuse("commands.json unreadable (${it::class.simpleName})")
-            }, repo)
+            }, rootOf)
             result.refusal?.let { System.err.println("[infantry] commands.json refused, no commands loaded: $it") }
             return result
         }
 
         /** Parse and validate [text]. The reason never contains an argv element. */
-        fun parse(text: String, repo: File?): CommandRegistry {
+        fun parse(text: String, repo: File?): CommandRegistry = parseWith(text) { repo }
+
+        /** [parse] with a root per project (RUN-CMD-REPO-1): an entry naming a project is checked against that project's directory. */
+        fun parseWith(text: String, rootOf: (String?) -> File?): CommandRegistry {
             val entries = try {
                 reader.decodeFromString(ListSerializer(CommandFileEntry.serializer()), text)
             } catch (e: Exception) {
@@ -115,13 +123,12 @@ class CommandRegistry private constructor(
                 return refuse("not a valid JSON array of commands (${e::class.simpleName})")
             }
             if (entries.isEmpty()) return EMPTY
-            if (repo == null) return refuse("INFANTRY_REPO is not set, so no working directory can be checked")
-            val root = canonicalRoot(repo) ?: return refuse("INFANTRY_REPO cannot be resolved")
             val seen = HashSet<String>()
             val out = ArrayList<SavedCommand>()
             entries.forEachIndexed { i, e ->
                 val where = "entry #$i"
                 if (e.id.isNotBlank() && !seen.add(e.id)) return refuse("$where repeats id '${e.id}'")
+                val root = canonicalRoot(rootOf(e.project?.takeIf { it.isNotBlank() })) ?: return refuse(NO_ROOT)
                 out += validate(e, root, where).getOrElse { return refuse(it.message ?: "$where is invalid") }
             }
             return CommandRegistry(out, null)
@@ -145,7 +152,7 @@ class CommandRegistry private constructor(
             if (e.secrets.any { !CommandRegistry.isSecretName(it) }) return no("$where ('${e.id}') names an invalid secret")
             val cwd = e.cwd?.takeIf { it.isNotBlank() }
             val dir = resolveCwd(root, cwd) ?: return no("$where ('${e.id}') has a cwd outside the repo")
-            return Result.success(SavedCommand(e.id, e.name?.takeIf { it.isNotBlank() } ?: e.id, e.argv.toList(), cwd, dir, e.graceMillis, e.secrets.distinct()))
+            return Result.success(SavedCommand(e.id, e.name?.takeIf { it.isNotBlank() } ?: e.id, e.argv.toList(), cwd, dir, e.graceMillis, e.secrets.distinct(), e.project?.takeIf { it.isNotBlank() }))
         }
 
         /** The file text for [commands], in order: what `commands.json` holds after a save or a delete. */
@@ -161,6 +168,9 @@ class CommandRegistry private constructor(
             val resolved = runCatching { File(root, cwd).toPath().toRealPath().toFile() }.getOrNull() ?: return null
             return if (resolved.toPath().startsWith(root.toPath())) resolved else null
         }
+
+        /** RUN-CMD-REPO-1: the one text for "no root": says what resolves a root and how to register it. */
+        const val NO_ROOT = "no working directory can be checked: the project has no registered path and the daemon has no INFANTRY_REPO. Register the path with infantry_project_config_set (directory), or start the daemon with INFANTRY_REPO set"
 
         private fun refuse(reason: String) = CommandRegistry(emptyList(), reason)
     }
