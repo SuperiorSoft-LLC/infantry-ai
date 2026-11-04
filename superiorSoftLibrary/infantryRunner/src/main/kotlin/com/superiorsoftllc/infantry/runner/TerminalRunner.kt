@@ -35,8 +35,11 @@ interface TerminalRunner {
     fun start(spec: ProcessSpec, cols: Int, rows: Int, listener: TerminalListener): TerminalProcess
 }
 
-/** pty4j: ConPTY (winpty before Windows 10 1809) on Windows, the POSIX pty on macOS and Linux. */
-class Pty4jTerminalRunner : TerminalRunner {
+/**
+ * pty4j: the POSIX pty on macOS and Linux; on Windows winpty, or ConPTY when [useConPty] (CLI-PTY-1: what an interactive agent CLI is run in by
+ * a terminal app; the Run console keeps pty4j's default).
+ */
+class Pty4jTerminalRunner(private val useConPty: Boolean = false) : TerminalRunner {
     override fun start(spec: ProcessSpec, cols: Int, rows: Int, listener: TerminalListener): TerminalProcess {
         val env = HashMap(System.getenv())
         env.putAll(spec.env)
@@ -53,6 +56,7 @@ class Pty4jTerminalRunner : TerminalRunner {
             .setInitialRows(rows)
             .setRedirectErrorStream(true)
             .setConsole(false)
+            .apply { if (useConPty) setUseWinConPty(true) }
             .start()
         val drain = Thread({
             val buf = ByteArray(8192)

@@ -36,7 +36,7 @@ object ClaudeCommand {
      * 0 (default) = never. MEMORY COST: each live process holds roughly 150-400 MB of RAM for as long as the session exists, so many
      * long-lived sessions with 0 add up; set N to reclaim memory from sessions nobody has woken for N minutes (the next wake resumes).
      */
-    const val LIVE_IDLE_SETTING = "liveIdleMinutes"
+    const val LIVE_IDLE_SETTING = "harness.claude.liveIdleMinutes"
     const val HARNESS_ID = "claude"
 
     /** The infantry MCP server's name (the session's own `infantry mcp serve`). */
@@ -153,6 +153,72 @@ object ClaudeCommand {
             if (strictMcp) add("--strict-mcp-config")
         }
         resumeSessionId?.takeIf { it.isNotBlank() }?.let { add("--resume"); add(it) }
+    }
+
+    // ---- interactive mode (CLI-PTY-1, experimental) ----------------------------------------------------------------------
+
+    /**
+     * Module setting (`harness.claude.mode`): `headless` (default) runs `claude -p --input-format stream-json`; `interactive` runs the
+     * interactive `claude` in a pseudo-terminal and reads its transcript ([ClaudeTtySession]). Anything else = headless.
+     */
+    const val MODE_SETTING = "harness.claude.mode"
+    const val MODE_INTERACTIVE = "interactive"
+
+    fun isInteractive(mode: String?): Boolean = mode?.trim()?.lowercase() == MODE_INTERACTIVE
+
+    /**
+     * The interactive argv: no `-p` and no stream flags. [sessionId] names a NEW session (`--session-id`, so its transcript file is known);
+     * [resumeSessionId] continues one. `--mcp-config` (variadic) goes last.
+     */
+    fun interactiveCommand(
+        executable: String,
+        model: String?,
+        permissionMode: String?,
+        mcpConfigs: List<String>,
+        strictMcp: Boolean,
+        sessionId: String?,
+        resumeSessionId: String?,
+        effort: String? = null,
+        allowedTools: List<String> = allowedTools(),
+        settings: String? = null,
+    ): List<String> = buildList {
+        add(executable)
+        resumeSessionId?.takeIf { it.isNotBlank() }?.let { add("--resume"); add(it) }
+            ?: sessionId?.takeIf { it.isNotBlank() }?.let { add("--session-id"); add(it) }
+        model?.takeIf { it.isNotBlank() }?.let { add("--model"); add(it) }
+        effort?.takeIf { it.isNotBlank() }?.let { add("--effort"); add(it) }
+        permissionMode?.takeIf { it.isNotBlank() }?.let { add("--permission-mode"); add(it) }
+        allowedTools.takeIf { it.isNotEmpty() }?.let { add("--allowedTools"); add(it.joinToString(",")) }
+        settings?.takeIf { it.isNotBlank() }?.let { add("--settings"); add(it) }
+        mcpConfigs.takeIf { it.isNotEmpty() }?.let { add("--mcp-config"); addAll(it) }
+        // Strict even with no config listed: it is what keeps a project .mcp.json (and its approval dialog) out.
+        if (strictMcp) add("--strict-mcp-config")
+    }
+
+    /** A command hook that appends [event] to [eventsFile]; `echo x>>"file"` means the same in cmd and in a POSIX shell. */
+    fun eventHook(event: String, eventsFile: String): JsonObject = JsonObject(
+        mapOf(
+            "hooks" to JsonArray(listOf(JsonObject(mapOf(
+                "type" to JsonPrimitive("command"),
+                "command" to JsonPrimitive("echo $event>>\"${eventsFile.replace('\\', '/')}\""),
+            )))),
+        ),
+    )
+
+    /**
+     * The interactive session's ONE `--settings` file (claude keeps only the last `--settings`, so the watch hooks of [watchSettings] are
+     * merged in, not passed beside it): SessionStart / UserPromptSubmit / Stop append `start` / `submit` / `stop` to [eventsFile];
+     * [bypass] adds `skipDangerousModePermissionPrompt`, the documented switch for the warning that bypassPermissions shows at start.
+     */
+    fun ttySettings(eventsFile: String, watchSettings: String?, bypass: Boolean): String {
+        val hooks = LinkedHashMap<String, JsonArray>(TtyJson.hooksOf(watchSettings))
+        for ((hook, event) in listOf("SessionStart" to ClaudeTtySession.EV_START, "UserPromptSubmit" to ClaudeTtySession.EV_SUBMIT, "Stop" to ClaudeTtySession.EV_STOP)) {
+            hooks[hook] = JsonArray(hooks[hook].orEmpty() + eventHook(event, eventsFile))
+        }
+        val root = LinkedHashMap<String, kotlinx.serialization.json.JsonElement>()
+        if (bypass) root["skipDangerousModePermissionPrompt"] = JsonPrimitive(true)
+        root["hooks"] = JsonObject(hooks)
+        return JsonObject(root).toString()
     }
 
     // ---- watch (STALL-2): the PreToolUse / PostToolUse http hook, in a settings file ----------------------------------

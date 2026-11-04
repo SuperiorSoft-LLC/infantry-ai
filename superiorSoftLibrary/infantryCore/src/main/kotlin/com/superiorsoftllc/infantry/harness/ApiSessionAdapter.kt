@@ -32,6 +32,8 @@ internal class ApiSessionAdapter(
     private val onFailure: (PluginFailure) -> Unit,
     /** H6c: the daemon's additions to the launched spec (watch, sandbox, launch extras) for a session with env `env`. */
     private val decorate: (ProcessSpec, Map<String, String>) -> ProcessSpec = { spec, _ -> spec },
+    /** CLI-PTY-1 (API 2.13): the runner for a launch the plugin marks [HarnessSession.terminal]. */
+    private val terminalRunner: () -> ProcessRunner = { com.superiorsoftllc.infantry.runner.PtyProcessRunner() },
 ) : HarnessSessionAdapter {
     override val label: String = runCatching { session.label }.getOrDefault(harnessId)
     override val bootTimeoutMs: Long = runCatching { session.bootTimeoutMs }.getOrDefault(60_000L)
@@ -48,8 +50,9 @@ internal class ApiSessionAdapter(
         val spec = attributed { session.launch(request.toApi(request.resumeSessionId?.takeIf { it.isNotBlank() }), env) }
         val process = Hosted()
         val out = Output(process, sink)
+        val tty = attributed { session.terminal(spec) }
         process.connection = attributed { session.connect(out, spec) }
-        process.start(runner, decorate(ProcessSpec(spec.command, spec.workingDir ?: request.workingDir, env + spec.env), env), sink)
+        process.start(if (tty) terminalRunner() else runner, decorate(ProcessSpec(spec.command, spec.workingDir ?: request.workingDir, env + spec.env), env), sink, tty)
         return process
     }
 
@@ -121,11 +124,12 @@ internal class ApiSessionAdapter(
             sink?.turnEnded(TurnEnd.FAILED, null, f.message)
         }
 
-        fun start(runner: ProcessRunner, spec: ProcessSpec, sink: AdapterSink) {
+        /** [tty] = a terminal: its output is a screen for the plugin alone, never a raw `stdout` frame (API 2.13). */
+        fun start(runner: ProcessRunner, spec: ProcessSpec, sink: AdapterSink, tty: Boolean = false) {
             this.sink = sink
             child = runner.start(spec, object : ProcessListener {
                 override fun onStdout(line: String) {
-                    sink.output(line)
+                    if (!tty) sink.output(line)
                     try { connection.onStdout(line) } catch (t: Throwable) { fail(t) }
                 }
 
@@ -140,6 +144,7 @@ internal class ApiSessionAdapter(
                         exit = exitCode
                         handlers.toList().also { handlers.clear() }
                     }
+                    try { connection.onExit(exitCode) } catch (t: Throwable) { onFailure(PluginFailure(pluginId, PluginFailurePhase.RUN, t)) }
                     hs.forEach { runCatching { it(exitCode) } }
                 }
             })
