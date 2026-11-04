@@ -32,6 +32,7 @@ class NotesDaemonPlugin : DaemonPlugin {
         val issues = IssueStore(api.storage)
         val memory = MemoryStore(StorageMemoryPersistence(api.storage))
         api.events.onSessionRemoved { id -> memory.purgeSession(id) }
+        api.tools.register(MemoryTool { id -> api.sessions.get(id)?.projectId })
         val push = { frame: Frame -> api.boardRuntime.push(listOf(frame)) }
         // The handlers are cheap and hold no state beyond the stores; one per call keeps the caller's session lookup scoped to it.
         fun session(id: String, caller: com.superiorsoftllc.infantry.daemon.api.Caller) =
@@ -53,10 +54,14 @@ class NotesDaemonPlugin : DaemonPlugin {
                     caller = { id -> session(id, caller)?.let { MemoryCaller(it.id, it.role.orEmpty()) } },
                     // ROLE-NOTES-1: a role note changed while sessions of that role run is announced to each by mail.
                     onRoleNoteChanged = { project, role, name, deleted ->
+                        // ROLE-NOTE-READ-1: a short note travels in the notice; the exact tool call that reads any note is named.
+                        val body = if (deleted) null else memory.get(project, name, SCOPE_ROLE, role)?.body?.takeIf { it.length <= ROLE_NOTE_INLINE_CHARS }
                         api.sessionNotifier.notifyRole(
                             project, role, "Role note ${if (deleted) "deleted" else "changed"}: $name",
                             "The role note '$name' of your role '$role' was ${if (deleted) "deleted" else "added or changed"}. " +
-                                "Re-read it: `infantry memory show $name --scope role` (index: `infantry memory index --scope role`).",
+                                "Re-read it: MCP tool infantry_memory {\"action\":\"show\",\"name\":\"$name\",\"scope\":\"role\"} " +
+                                "(CLI: `infantry memory show $name --scope role`; index: infantry_memory {\"action\":\"index\",\"scope\":\"role\"})." +
+                                (body?.let { "\n\n--- $name ---\n$it" } ?: ""),
                         )
                     },
                 ).answer(frame)
@@ -96,5 +101,10 @@ class NotesDaemonPlugin : DaemonPlugin {
                 issues.list(project).filter { it.status == com.superiorsoftllc.infantry.issues.Issue.STATUS_OPEN }.sortedBy { it.number }
                     .map { KnowledgeIssue(it.ref, it.summary, it.location) }
         })
+    }
+
+    private companion object {
+        /** ROLE-NOTE-READ-1: a role note up to this long is carried in its "changed" notice; longer ones are read with infantry_memory. */
+        const val ROLE_NOTE_INLINE_CHARS = 1500
     }
 }

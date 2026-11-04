@@ -30,6 +30,9 @@
       { "type": "memory_save", "action": "memory.save", "kind": "write" },
       { "type": "memory_delete", "action": "memory.delete", "kind": "destructive" },
       { "type": "memory_purge_role", "action": "memory.delete", "kind": "destructive" }
+    ],
+    "tools": [
+      { "name": "infantry_memory", "action": "memory.read", "kind": "read", "description": "Read project memory notes and your role / session notes (show, search, index)." }
     ]
   },
   "tabs": [
