@@ -46,6 +46,8 @@
       { "type": "ticket_move", "action": "board.ticket.move", "kind": "write" },
       { "type": "ticket_unassign", "action": "board.ticket.move", "kind": "write" },
       { "type": "agent_queue", "action": "board.ticket.move", "kind": "write" },
+      { "type": "ticket_assign", "action": "board.ticket.move", "kind": "write" },
+      { "type": "agent_switch", "action": "board.ticket.move", "kind": "write" },
       { "type": "ticket_reorder", "action": "board.ticket.move", "kind": "write" },
       { "type": "ticket_delete", "action": "board.ticket.delete", "kind": "destructive" },
       { "type": "ticket_start_next", "action": "board.ticket.start", "kind": "spawn" },
@@ -90,7 +92,7 @@
   ],
   "actions": [
     { "id": "board.ticket.save", "label": "New or edit a ticket", "kind": "write", "frames": ["ticket_save", "ticket_link", "ticket_unlink"] },
-    { "id": "board.ticket.move", "label": "Move or start a ticket", "kind": "write", "frames": ["ticket_move", "ticket_reorder", "ticket_unassign", "agent_queue"] },
+    { "id": "board.ticket.move", "label": "Move or start a ticket", "kind": "write", "frames": ["ticket_move", "ticket_reorder", "ticket_unassign", "agent_queue", "ticket_assign", "agent_switch"] },
     { "id": "board.ticket.delete", "label": "Delete a ticket", "kind": "destructive", "frames": ["ticket_delete"] },
     { "id": "board.ticket.start", "label": "Start the next ticket", "kind": "spawn", "frames": ["ticket_start_next"] },
     { "id": "images.upload", "label": "Attach an image", "kind": "write", "frames": ["image_upload"] }
