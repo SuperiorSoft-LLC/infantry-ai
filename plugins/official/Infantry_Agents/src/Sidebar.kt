@@ -24,6 +24,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -386,6 +391,7 @@ const val SESSION_ASSIGN_TAG_PREFIX = "session-assign-"
 private fun AgentRowMenu(a: AgentView, state: AppState, revealed: Boolean, onOpen: () -> Unit, onRemove: (String) -> Unit, onAssign: (String, String) -> Unit, work: AgentWorkActions) {
     var menuOpen by remember { mutableStateOf(false) }
     var confirming by remember { mutableStateOf(false) }
+    var picking by remember { mutableStateOf(false) }
     val live = state.connection.isLive
     // GAP-AUDIT-1 (g): the menu opens while live (Open is a read); each write in it has its own declared action and gate.
     val canOpen = live
@@ -423,18 +429,11 @@ private fun AgentRowMenu(a: AgentView, state: AppState, revealed: Boolean, onOpe
                 }
             }
             // AGENT-TASKS-7: the phone route to a drop: pick a todo ticket to hand this agent (start if free, else queue).
+            // AGENT-MENU-1: the current ticket as one line plus one action; the todo list lives in a picker dialog, never inline.
             val profile = a.session.agentId
-            val todo = state.tickets.filter { it.status == TicketColumns.TODO && (state.activeProjectId == null || it.projectId == state.activeProjectId) }
-            if (profile != null && todo.isNotEmpty()) {
+            if (profile != null) {
                 HorizontalDivider(color = Palette.Border)
-                Text("Assign to agent...", color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
-                todo.take(AssignMenuMax).forEach { t ->
-                    DropdownMenuItem(
-                        text = { Text(t.title, color = Palette.Text, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                        onClick = { menuOpen = false; work.assign(t.id, profile) },
-                        modifier = Modifier.testTag("session-assign-ticket-${a.id}-${t.id}"),
-                    )
-                }
+                AgentMenuTicketItems(a.id, state.agentWork(profile).current, onChange = { menuOpen = false; picking = true }, onUnassign = { id -> menuOpen = false; work.unassign(id) })
             }
             HorizontalDivider(color = Palette.Border)
             // DEMO-MERGE-1: the delete is a write; Remove is dimmed and says why while writes are refused.
@@ -450,6 +449,11 @@ private fun AgentRowMenu(a: AgentView, state: AppState, revealed: Boolean, onOpe
             }
         }
     }
+    val pickProfile = a.session.agentId
+    if (picking && pickProfile != null) TicketPickerDialog(
+        a.id, state.tickets.filter { it.status == TicketColumns.TODO && (state.activeProjectId == null || it.projectId == state.activeProjectId) },
+        onDismiss = { picking = false }, onPick = { picking = false; work.assign(it, pickProfile) },
+    )
     if (confirming) RemoveAgentDialog(a, state, onDismiss = { confirming = false }, onRemove = { confirming = false; onRemove(a.id) })
 }
 
@@ -474,6 +478,7 @@ fun AgentsSection() {
             assign = { ticketId, agentId -> scope.launch { a.assignTicket(ticketId, agentId) } },
             queue = { agentId, action, ticketId, at -> scope.launch { a.agentQueue(agentId, action, ticketId, at) } },
             open = a::openTicket,
+            unassign = { id -> scope.launch { a.unassignTicket(id) } },
         ),
         projects = { ProjectsSidebar(state, onDismiss = a::dismissProjectRefusal) },
         showReview = a.reviewLoaded,
@@ -481,14 +486,79 @@ fun AgentsSection() {
 }
 
 
-/** AGENT-TASKS-7: most todo tickets the "Assign to agent..." menu lists. */
-private const val AssignMenuMax = 12
+private fun shortTicketId(id: String) = id.removePrefix("ticket-").take(8)
+
+private fun isHeld(t: com.superiorsoftllc.infantry.ui.protocol.Ticket) =
+    t.heldBy.isNotEmpty() || t.holdReason != null || t.title.startsWith("[HOLD]") || t.title.startsWith("[PARKED]")
+
+/**
+ * AGENT-MENU-1: the ticket picker: search box + scrollable list of todo tickets (short id, title); Up/Down move, Enter picks, Esc closes.
+ * [HOLD]/[PARKED] tickets are marked and hidden unless the toggle is on. Rows are 48dp tall; the dialog is near full width on phones.
+ */
+@Composable
+private fun TicketPickerDialog(agentKey: String, todo: List<com.superiorsoftllc.infantry.ui.protocol.Ticket>, onDismiss: () -> Unit, onPick: (String) -> Unit) {
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) { TicketPickerPanel(agentKey, todo, onDismiss, onPick) }
+}
+
+@Composable
+fun TicketPickerPanel(agentKey: String, todo: List<com.superiorsoftllc.infantry.ui.protocol.Ticket>, onDismiss: () -> Unit, onPick: (String) -> Unit, initialQuery: String = "", initialShowHeld: Boolean = false) {
+    var query by remember { mutableStateOf(initialQuery) }
+    var showHeld by remember { mutableStateOf(initialShowHeld) }
+    var sel by remember { mutableStateOf(0) }
+    val shown = todo.filter { (showHeld || !isHeld(it)) && (query.isBlank() || it.title.contains(query, true) || it.id.contains(query, true)) }
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focus.requestFocus() }
+        Column(
+            Modifier.fillMaxWidth(0.94f).widthIn(max = 520.dp).heightIn(max = 560.dp).clip(RoundedCornerShape(10.dp)).background(Palette.Raised).border(1.dp, Palette.Border, RoundedCornerShape(10.dp))
+                .padding(12.dp).testTag("ticket-picker-$agentKey")
+                .onPreviewKeyEvent { e ->
+                    if (e.type != androidx.compose.ui.input.key.KeyEventType.KeyDown) false else when (e.key) {
+                        Key.DirectionDown -> { sel = (sel + 1).coerceAtMost((shown.size - 1).coerceAtLeast(0)); true }
+                        Key.DirectionUp -> { sel = (sel - 1).coerceAtLeast(0); true }
+                        Key.Enter, Key.NumPadEnter -> { shown.getOrNull(sel)?.let { onPick(it.id) }; true }
+                        Key.Escape -> { onDismiss(); true }
+                        else -> false
+                    }
+                },
+        ) {
+            Text("Pick a ticket", color = Palette.Text, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            BasicTextField(
+                value = query, onValueChange = { query = it; sel = 0 }, singleLine = true,
+                textStyle = TextStyle(color = Palette.Text, fontSize = 13.sp), cursorBrush = SolidColor(Palette.Accent),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).height(40.dp).clip(RoundedCornerShape(6.dp)).border(1.dp, Palette.Border, RoundedCornerShape(6.dp))
+                    .padding(horizontal = 10.dp, vertical = 10.dp).focusRequester(focus).testTag("ticket-picker-search-$agentKey"),
+                decorationBox = { inner -> Box { if (query.isEmpty()) Text("Search todo tickets", color = Palette.Muted, fontSize = 13.sp); inner() } },
+            )
+            Row(
+                Modifier.clickable(role = Role.Switch, onClickLabel = "Show held and parked") { showHeld = !showHeld; sel = 0 }.heightIn(min = 48.dp).testTag("ticket-picker-held-$agentKey"),
+                verticalAlignment = Alignment.CenterVertically,
+            ) { Text(if (showHeld) "[x] Show HOLD / PARKED" else "[ ] Show HOLD / PARKED", color = Palette.Muted, fontSize = 12.sp) }
+            if (shown.isEmpty()) Text("No matching todo tickets", color = Palette.Muted, fontSize = 12.sp, modifier = Modifier.padding(vertical = 8.dp))
+            LazyColumn(Modifier.weight(1f, fill = false)) {
+                items(shown.size) { i ->
+                    val t = shown[i]
+                    Row(
+                        Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(6.dp)).background(if (i == sel) Palette.Border else Color.Transparent)
+                            .clickable { onPick(t.id) }.padding(horizontal = 8.dp).testTag("ticket-picker-item-${t.id}"),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(shortTicketId(t.id), color = Palette.Muted, fontFamily = Mono, fontSize = 10.sp)
+                        Spacer(Modifier.width(8.dp))
+                        Text(t.title, color = if (isHeld(t)) Palette.Muted else Palette.Text, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                        if (isHeld(t)) Text("HOLD", color = Palette.Danger, fontSize = 9.sp, modifier = Modifier.padding(start = 6.dp))
+                        t.weight?.let { w -> Text("W$w", color = Palette.Muted, fontFamily = Mono, fontSize = 10.sp, modifier = Modifier.padding(start = 6.dp).testTag("ticket-picker-weight-${t.id}")) }
+                    }
+                }
+            }
+        }
+}
 
 /** AGENT-TASKS-7: the card's ticket actions, supplied by the window: [assign] ticket to agent profile, [queue] (agent, action, ticket, place), [open] a ticket. */
 class AgentWorkActions(
     val assign: (ticketId: String, agentId: String) -> Unit,
     val queue: (agentId: String, action: String, ticketId: String?, at: Int?) -> Unit,
     val open: (ticketId: String) -> Unit,
+    val unassign: (ticketId: String) -> Unit = {},
 ) {
     companion object { val None = AgentWorkActions({ _, _ -> }, { _, _, _, _ -> }, { }) }
 }
@@ -521,5 +591,22 @@ private fun QueueButton(label: String, glyph: String, onClick: () -> Unit) {
     Text(
         glyph, color = Palette.Muted, fontSize = 10.sp,
         modifier = Modifier.clickable(role = Role.Button, onClickLabel = label, onClick = onClick).semantics { contentDescription = label }.padding(horizontal = 4.dp, vertical = 2.dp),
+    )
+}
+
+/** AGENT-MENU-1: the menu's ticket block: the current ticket as one line (or "No ticket"), Change/Assign, and Unassign while one is running. */
+@Composable
+fun AgentMenuTicketItems(key: String, cur: com.superiorsoftllc.infantry.ui.protocol.Ticket?, onChange: () -> Unit, onUnassign: (String) -> Unit) {
+    Text(
+        cur?.let { "${shortTicketId(it.id)} ${it.title}" } ?: "No ticket", color = if (cur != null) Palette.Text else Palette.Muted, fontSize = 11.sp,
+        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 260.dp).padding(horizontal = 12.dp, vertical = 4.dp).testTag("session-menu-current-$key"),
+    )
+    DropdownMenuItem(
+        text = { Text(if (cur != null) "Change ticket..." else "Assign ticket...", color = Palette.Text, fontSize = 12.sp) },
+        onClick = onChange, modifier = Modifier.testTag("session-menu-change-$key"),
+    )
+    if (cur != null) DropdownMenuItem(
+        text = { Text("Unassign", color = Palette.Text, fontSize = 12.sp) },
+        onClick = { onUnassign(cur.id) }, modifier = Modifier.testTag("session-menu-unassign-$key"),
     )
 }
