@@ -39,7 +39,7 @@ class ChatNoteTools(
             "No turn, no inbox entry, no mail unless wake=true (then the agent also gets the text as a short prompt: use it for real exceptions only). Same project only, " +
             "rate limited, text capped at $maxChars characters. Script: ih.chat_note{sessionId=..., text=..., level='ok'}."
         override val inputSchema: JsonObject = Json.parseToJsonElement(
-            """{"type":"object","properties":{"sessionId":{"type":"string","description":"target session (default: the caller's own)"},"text":{"type":"string","description":"the status line"},"level":{"type":"string","description":"info (default) | ok | fail"},"wake":{"type":"boolean","description":"also prompt the agent with the text (default false)"},"image":{"type":"string","description":"a file inside the project (or uploaded image id) shown inline with the line"}},"required":["text"]}""",
+            """{"type":"object","properties":{"sessionId":{"type":"string","description":"target session (default: the caller's own)"},"text":{"type":"string","description":"the status line"},"level":{"type":"string","description":"info (default) | ok | warn (yellow WARNING, not an error) | fail"},"wake":{"type":"boolean","description":"also prompt the agent with the text (default false)"},"image":{"type":"string","description":"a file inside the project (or uploaded image id) shown inline with the line"}},"required":["text"]}""",
         ).jsonObject
         override fun call(call: ToolCall): ToolResult = handle(call)
     }
@@ -49,7 +49,7 @@ class ChatNoteTools(
         fun s(k: String) = (a[k] as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
         val text = s("text") ?: return refuse("needs text")
         s("image")?.let { img -> return (forwardImage ?: return refuse("images are not available here")).invoke(buildJsonObject { a.forEach { (k, v) -> if (k != "image") put(k, v) }; put("path", img); put("caption", text) }, call) }
-        val level = (s("level") ?: "info").lowercase().also { if (it !in LEVELS) return refuse("level must be info, ok or fail (got '$it')") }
+        val level = (s("level") ?: "info").lowercase().also { if (it !in LEVELS) return refuse("level must be info, ok, warn or fail (got '$it')") }
         val target = s("sessionId") ?: call.clientSessionId ?: return refuse("needs sessionId")
         val targetProject = projectOf(target) ?: return refuse("unknown session $target")
         val callerProject = call.clientProjectId ?: call.clientSessionId?.let(projectOf) ?: return refuse("needs a project context")
@@ -64,7 +64,8 @@ class ChatNoteTools(
         val shown = text.take(maxChars)
         val item = buildJsonObject {
             put("id", "note-$callerProject-$now-${seq.incrementAndGet()}"); put("sessionId", target); put("at", now); put("source", "automation")
-            put("label", "AUTOMATION · note"); put("text", "AUTOMATION · $shown${if (level == "fail") " · FAILED" else ""}"); put("ok", level != "fail")
+            put("label", "AUTOMATION · note"); // CHAT-NOTE-WARN-1: warn is a warning, not a failure: ok stays true (an older client draws it as info), the label says WARNING.
+            put("text", "AUTOMATION · $shown${SUFFIX[level].orEmpty()}"); put("ok", level != "fail")
             put("meta", buildJsonObject {
                 put("level", level)
                 // CHAT-IMAGE-1: set by infantry_chat_image after it validated and stored the file; only a stored chat upload path is accepted.
@@ -86,5 +87,6 @@ class ChatNoteTools(
 
     private fun refuse(why: String) = ToolResult("$NAME refused: $why", isError = true)
 
-    companion object { const val NAME = "infantry_chat_note"; val LEVELS = setOf("info", "ok", "fail") }
+    companion object { const val NAME = "infantry_chat_note"; val LEVELS = setOf("info", "ok", "warn", "fail")
+        private val SUFFIX = mapOf("warn" to " · WARNING", "fail" to " · FAILED") }
 }

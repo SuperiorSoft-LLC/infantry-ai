@@ -156,7 +156,8 @@ duration).
 ## Chat notes
 
 `ih.chat_note{sessionId = ..., text = ..., level = "ok"}` posts a status line into a session's chat as an automation
-card (level `info`, `ok` or `fail`; optional `image`). No turn and no mail, unless `wake = true`, which also prompts
+card (level `info`, `ok`, `warn` or `fail`; optional `image`). `warn` draws a yellow WARNING line, not an
+error: use it for alerts such as low memory; `fail` is red and marked FAILED. No turn and no mail, unless `wake = true`, which also prompts
 the agent: use that for real exceptions only. Same project only, rate limited per minute, text length capped.
 
 ## Progress

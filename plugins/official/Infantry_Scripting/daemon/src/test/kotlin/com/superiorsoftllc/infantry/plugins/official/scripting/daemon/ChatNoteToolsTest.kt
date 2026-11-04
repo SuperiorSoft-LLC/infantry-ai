@@ -7,7 +7,9 @@ import com.superiorsoftllc.infantry.daemon.api.Frame
 import com.superiorsoftllc.infantry.daemon.api.ToolCall
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -47,6 +49,20 @@ class ChatNoteToolsTest {
         val broken = ChatNoteTools({ "p1" }, { pushed += it }, { stored += it }, { _, _ -> throw IllegalStateException("boom") })
         assertTrue(broken.handle(call("""{"text":"x","wake":true}""")).isError)
         assertTrue(tools.handle(call("""{"text":"x","sessionId":"zzz","wake":true}""")).isError)
+    }
+
+    @Test fun `a warn note is accepted, stored and read back with level warn, as a warning not a failure`() {
+        val log = ScriptRunLog()
+        val t = ChatNoteTools({ "p1" }, { pushed += it }, log::addNote, { _, _ -> })
+        val r = t.handle(call("""{"text":"memory low: 3750 MB free","level":"warn"}"""))
+        assertTrue(!r.isError, r.text); assertTrue(r.text.contains("warn"), r.text)
+        val back = log.timelineItems().single()
+        assertEquals("warn", back["meta"]!!.jsonObject["level"]!!.jsonPrimitive.content)
+        assertEquals(true, back["ok"]!!.jsonPrimitive.boolean)
+        val text = back["text"]!!.jsonPrimitive.content
+        assertTrue(text.endsWith(" · WARNING"), text); assertTrue("FAILED" !in text, text)
+        val fail = tools.handle(call("""{"text":"x","level":"fail"}""")); assertTrue(!fail.isError)
+        assertEquals(false, stored.last()["ok"]!!.jsonPrimitive.boolean)
     }
 
     @Test fun `rate limit`() {
