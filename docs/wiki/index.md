@@ -14,7 +14,6 @@ Every page of this wiki is listed here, one line each. The pages are written fro
 
 ## Build plugins
 
-- [Declarative views](declarative-views.md): a screen from the daemon half alone: JSON pages, the widget vocabulary, the Acme_HelloView example.
 - [Plugins](Plugins.md): `module.json`, the UI and daemon halves, config fields, building, installing, signing, a hello plugin.
 - [Make a plugin](make-a-plugin.md): step by step from the template to a built UI + daemon example.
 - [UI plugin API](plugin-api.md): every public type and function of the UI plugin API.

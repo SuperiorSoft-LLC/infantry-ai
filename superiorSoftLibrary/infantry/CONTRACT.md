@@ -27,23 +27,6 @@ A daemon plugin tool runs in the daemon, which cannot open the agent's files. `i
 A client below 1.147.0 sends plain strings and no `client.projectId`: such a tool sees no local files (a path it cannot read is refused as
 "does not exist") and no default project. A daemon below 1.147.0 never lists `localFiles`, and ignores `client.projectId`.
 
-### DV-1a (contract 1.150.0, additive): the daemon view seam
-
-A plugin's module.json may declare `daemon.views: [{id, title, place: tab|none, action, layout?, platforms?}]`. The daemon
-carries each page as opaque JSON and knows no widget name.
-
-- `plugin_views {}` -> `plugin_views_result {views:[{module,id,title,place,platforms?,widgets?}]}`: the views of loaded modules whose `action` the caller passes.
-- `plugin_view {module,view,params}` -> `plugin_view_result {module,view,params,rev,page}`, or `{module,view,params,error}` (one line). The page comes from the plugin's `DaemonApi.views.provide` provider, else from the declared `layout` file inside the module folder (a path leaving the folder is refused).
-- Limits (settings): `limits.views.maxPageBytes` 262144, `limits.views.maxNodes` 500, `limits.views.maxDepth` 16, checked on every answer.
-- Community modules need the `daemon.view` grant. A daemon below 1.150.0 answers neither frame.
-
-### DV-1b (contract 1.151.0, additive): view push, close, origin
-
-- `plugin_view {..., subscribe?}` (default true) subscribes the connection to `(module, view, canonical params)`; `rev` is a counter per that key. `plugin_view_close {module,view,params}` (no answer) and a disconnect end it. At most `limits.views.maxSubscriptionsPerConnection` (16) per connection, the oldest is dropped.
-- `DaemonApi.views.changed(view, params?)` (every tier) pushes `plugin_view_changed {module,view,params,rev}` to subscribed connections only; params null = every params. Calls inside `limits.views.changedCoalesceMs` (1000) collapse into one trailing push.
-- Hot-load: a module with views loaded, unloaded or reloaded pushes `plugin_view_changed {module,view:"*"}` to every connection with a subscription or that asked `plugin_views`; unloading drops that module's subscriptions.
-- `plugin_tool_call {name,arguments,origin?:{module,view}}`: with `origin`, a tool not registered by `origin.module` is refused ("a view may call only its own module's tools"). Without it nothing changes.
-
 ### ARCHIVE-1 (contract 1.149.0, additive): the ticket archive
 
 An archived ticket leaves the live board tables (`tickets`, `ticket_links`) and lives in `archived_tickets` with every column, its links, and a snapshot of its epic and project; board reads never scan it. `ticket_files` is untouched, so related-file lists (`ticket_files --related`, the RELATED brief block) still find archived tickets. `archive_query` (`list|show|search|count`) and `archive_apply` (`archive`: ids, an epic, or a lane filter `status` + `olderThanDays`; `restore`: puts a ticket back exactly as it was, same lane and position, links whose other end is live again) are answered by `archive_report`. An in-progress ticket is never archived. Setting `board.archive.doneAfterDays` (project value `board.archive.doneAfterDays.<projectId>`; absent or 0 = off) archives done tickets after N days. Clients below 1.149.0 never see the frames.
@@ -2292,10 +2275,6 @@ apart from the 1.3.0, 1.4.0, 1.5.0, 1.6.0 and 1.28.0 additions marked in the tab
 | `archive_query` | `ArchiveRequest` (JSON) `{op: list\|show\|search\|count, ids?, projectId?, epicId?, text?, limit?, offset?}`, answered by `archive_report` (1.149.0) | client → daemon |
 | `archive_apply` | `ArchiveRequest` (JSON) `{op: archive\|restore, ids?, epicId?, projectId?, status?, olderThanDays?, dryRun?}`, answered by `archive_report` (1.149.0) | client → daemon |
 | `archive_report` | `ArchiveReport` (JSON) `{text, items[], count}`, answering `archive_query` / `archive_apply` (1.149.0) | daemon → client |
-| `plugin_views` | `{}`, answered by `plugin_views_result` (1.150.0) | client → daemon |
-| `plugin_views_result` | `{views:[{module,id,title,place,platforms?,widgets?}]}` (1.150.0) | daemon → client |
-| `plugin_view` | `{module,view,params}`, answered by `plugin_view_result` (1.150.0) | client → daemon |
-| `plugin_view_result` | `{module,view,params,rev,page}` or `{module,view,params,error}` (1.150.0) | daemon → client |
 | `usage_set` | `UsageSet` (JSON): a meter's manual percent / override set or cleared, and/or the pacing rule; refused = `error` `usage_set refused: ...` (1.121.0) | client → daemon |
 | `providers` | — (request the list; 1.3.0) | client → daemon |
 | `providers` | list of `ProviderInfo` (JSON), the default first (1.3.0) | daemon → client |

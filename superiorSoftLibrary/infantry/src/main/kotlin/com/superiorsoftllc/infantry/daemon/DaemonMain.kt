@@ -2468,7 +2468,6 @@ private suspend fun handleConnection(
     ) == true
     val outgoing = Channel<Envelope>(Channel.UNLIMITED)
     clients.add(outgoing)
-    val viewConn = com.superiorsoftllc.infantry.daemon.plugins.ViewConnection { outgoing.trySend(it) }
     // DAEMON-PLUGINS-1: a plugin tool's own requests on this connection (requestId `plugin:<uuid>`, fed to [inbound]) are
     // answered to the waiting tool, never sent to the client.
     val pluginWaiters = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.CompletableDeferred<Envelope>>()
@@ -3772,7 +3771,7 @@ private suspend fun handleConnection(
                         val arguments = call["arguments"] as? JsonObject ?: JsonObject(emptyMap())
                         val requestId = envelope.requestId
                         session.launch(kotlinx.coroutines.Dispatchers.IO) {
-                            val result = plugins.callToolSuspending(name, arguments, caller, call["client"] as? JsonObject ?: JsonObject(emptyMap()), call["origin"] as? JsonObject) { request, timeoutMs ->
+                            val result = plugins.callToolSuspending(name, arguments, caller, call["client"] as? JsonObject ?: JsonObject(emptyMap())) { request, timeoutMs ->
                                 val id = "plugin:" + UUID.randomUUID()
                                 val waiter = kotlinx.coroutines.CompletableDeferred<Envelope>()
                                 pluginWaiters[id] = waiter
@@ -3790,15 +3789,6 @@ private suspend fun handleConnection(
                         null
                     }
                 }
-
-                // DV-1a (contract 1.150.0): declarative views. The list is cheap; a page is built off the loop (a provider runs plugin code).
-                com.superiorsoftllc.infantry.daemon.plugins.DaemonPluginHost.PLUGIN_VIEWS -> plugins.viewsResult(caller, viewConn)
-                com.superiorsoftllc.infantry.daemon.plugins.DaemonPluginHost.PLUGIN_VIEW -> {
-                    session.launch(kotlinx.coroutines.Dispatchers.IO) { outgoing.trySend(plugins.answerView(envelope, caller, viewConn)) }
-                    null
-                }
-                // DV-1b (contract 1.151.0): the client stops watching a view; no answer.
-                com.superiorsoftllc.infantry.daemon.plugins.DaemonPluginHost.PLUGIN_VIEW_CLOSE -> { plugins.closeView(envelope, viewConn); null }
 
                 // DAEMON-PLUGINS-1: a frame a plugin declared and answers; anything else is unknown.
                 // DP-5d: a board-family frame is answered by the table its owner registered into; with no handler the
@@ -3833,7 +3823,6 @@ private suspend fun handleConnection(
     } finally {
         println("[infantry] ws closed")
         clients.remove(outgoing)
-        plugins.viewConnectionClosed(viewConn)
         policySubscription.close()
         inboundPump.cancel()
         pluginWaiters.values.forEach { it.cancel() }

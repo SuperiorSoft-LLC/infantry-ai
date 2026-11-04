@@ -24,7 +24,6 @@ object ActionCatalog {
     const val POLICY_GET = "policy_get"
     const val POLICY_SET = "policy_set"
     const val PLUGIN_TOOLS = "plugin_tools"
-    const val PLUGIN_VIEWS = "plugin_views"
 
     private fun a(id: String, kind: String, vararg frames: String, scope: Scope = Scope.GLOBAL) = Action(id, kind, frames.toList(), scope)
 
@@ -77,8 +76,6 @@ object ActionCatalog {
         a("policy.read", READ, POLICY_GET),
         // Listing the daemon plugins' tools is a read; a call is gated by the called tool's own action.
         a("plugin.tools.list", READ, PLUGIN_TOOLS),
-        // DV-1a: listing the declarative views is a read; opening one is gated by the view's own declared action.
-        a("plugin.views.list", READ, PLUGIN_VIEWS),
 
         // Chat and sessions.
         a("chat.prompt", WRITE, E.PROMPT, scope = Scope.SESSION),

@@ -18,8 +18,6 @@ object Services {
     val SETTINGS = ServiceKey<PluginSettings>("settings")
     val DAEMON = ServiceKey<DaemonAccess>("daemon")
     val ENDPOINTS = ServiceKey<EndpointAccess>("endpoints")
-    /** DV-2: the daemon-provided declarative views (`plugin_view` frames). */
-    val VIEWS = ServiceKey<ViewAccess>("views")
 }
 
 /** The services one module may use. [get] is null when the service is not declared, denied, or not on this platform. */
@@ -86,27 +84,4 @@ sealed interface EndpointReply {
     data class Ok(val status: Int, val body: String, val headers: Map<String, String> = emptyMap()) : EndpointReply
     data class Refused(val reason: String) : EndpointReply
     data class Failed(val reason: String) : EndpointReply
-}
-
-/** DV-2: one view a loaded daemon module declares (`plugin_views_result`). No widget is named: [place] is `tab` or `none`. */
-data class ViewInfo(val module: String, val id: String, val title: String, val place: String, val platforms: List<String>? = null)
-
-/** DV-2: the view a button belongs to; the daemon refuses a tool its module does not own. */
-data class ViewOrigin(val module: String, val view: String)
-
-/** DV-2: what an open view shows. [Page.rev] is the daemon's counter; an older answer is never shown after a newer one. */
-sealed interface ViewState {
-    data object Loading : ViewState
-    data class Page(val rev: Long, val page: kotlinx.serialization.json.JsonObject) : ViewState
-    /** One line: why the daemon refused or could not answer. */
-    data class Error(val line: String) : ViewState
-}
-
-/** DV-2: views from the daemon. The module id is the owner's own; the host does not interpret the page. */
-interface ViewAccess {
-    suspend fun list(): List<ViewInfo>
-    /** Subscribes while collected; cancelling the collection closes the subscription. Re-opens after a reconnect. */
-    fun open(module: String, view: String, params: kotlinx.serialization.json.JsonObject): kotlinx.coroutines.flow.Flow<ViewState>
-    /** One `plugin_tool_call` carrying [origin]; success = the tool's text. */
-    suspend fun act(origin: ViewOrigin, tool: String, args: kotlinx.serialization.json.JsonObject): Result<String>
 }

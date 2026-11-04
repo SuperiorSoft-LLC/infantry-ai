@@ -35,12 +35,8 @@ import com.superiorsoftllc.infantry.daemon.api.ToolInfo
 import com.superiorsoftllc.infantry.daemon.api.ToolInvoker
 import com.superiorsoftllc.infantry.daemon.api.ToolResult
 import com.superiorsoftllc.infantry.daemon.api.Tools
-import com.superiorsoftllc.infantry.daemon.api.ViewReply
-import com.superiorsoftllc.infantry.daemon.api.ViewRequest
-import com.superiorsoftllc.infantry.daemon.api.Views
 import com.superiorsoftllc.infantry.daemon.api.TurnHook
 import com.superiorsoftllc.infantry.plugin.api.DaemonCapabilities
-import com.superiorsoftllc.infantry.plugin.api.DaemonViewDeclaration
 import com.superiorsoftllc.infantry.plugin.api.ModuleSetting
 import com.superiorsoftllc.infantry.plugin.api.ModulesConfig
 import com.superiorsoftllc.infantry.plugin.api.PolicyPreset
@@ -56,7 +52,6 @@ import com.superiorsoftllc.infantry.plugin.host.SemVer
 import com.superiorsoftllc.infantry.policy.ActionCatalog
 import com.superiorsoftllc.infantry.protocol.Envelope
 import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.Json
@@ -115,7 +110,6 @@ class DaemonPluginHost private constructor(
 
     private class Registered<T>(val owner: Loaded, val value: T)
     private class ToolEntry(val owner: Loaded, val tool: DaemonTool, val action: ActionCatalog.Action)
-    private class ViewEntry(val module: String, val decl: DaemonViewDeclaration, val dir: File?, val action: ActionCatalog.Action)
     private class FrameEntry(val owner: Loaded, val action: ActionCatalog.Action, val ownerOnly: Boolean, val handler: (Frame, Caller) -> Frame?)
     private class RouteEntry(val owner: Loaded, val method: String, val path: String, val public: Boolean, val handler: (HttpCall) -> HttpReply) {
         /** Non-null for a template path: its segments, a `{name}` one binds a path param. */
@@ -127,12 +121,6 @@ class DaemonPluginHost private constructor(
     val serviceRegistry = ServiceRegistry()
     private val statuses = ConcurrentHashMap<String, String>()
     private val toolEntries = ConcurrentHashMap<String, ToolEntry>()
-    /** DV-1a: the declared views of loaded modules, `module/view` -> entry; a code-free module's static layouts live here too. */
-    private val viewEntries = ConcurrentHashMap<String, ViewEntry>()
-    private val viewProviders = ConcurrentHashMap<String, Registered<(ViewRequest) -> ViewReply>>()
-    private val viewSubs = ViewSubscriptions(
-        { services.limit(LimitRegistry.VIEWS_CHANGED_COALESCE_MS) }, { services.limit(LimitRegistry.VIEWS_MAX_SUBSCRIPTIONS) },
-    )
     private val frameHandlers = ConcurrentHashMap<String, FrameEntry>()
     private val routeEntries = ConcurrentHashMap<String, RouteEntry>()
     private val frameGates = CopyOnWriteArrayList<Registered<FrameGateHook>>()
@@ -301,116 +289,7 @@ class DaemonPluginHost private constructor(
     /** The action of a plugin-defined frame, or of `plugin_tool_call` naming a plugin tool; null = not a plugin's. */
     fun actionFor(envelope: Envelope): ActionCatalog.Action? = when (envelope.type) {
         PLUGIN_TOOL_CALL -> toolName(envelope.data)?.let { if (it == EVENT_EMIT_TOOL) EVENT_EMIT_ACTION else if (it == TESTS_TOOL) TESTS_ACTION else toolEntries[it]?.action }
-        PLUGIN_VIEW -> viewKey(envelope.data)?.let { viewEntries[it]?.action }
         else -> frameHandlers[envelope.type]?.action
-    }
-
-    // ---- DV-1a: declarative views (docs/DECL-UI-DESIGN.md 2.2) -------------------------------------------------------
-
-    private fun viewKey(data: String): String? = runCatching {
-        val o = Json.parseToJsonElement(data) as JsonObject
-        "${(o["module"] as JsonPrimitive).content}/${(o["view"] as JsonPrimitive).content}"
-    }.getOrNull()
-
-    /** `plugin_views_result`: the views of loaded modules whose view action [caller] passes (policy and frame gates). */
-    fun viewsResult(caller: Caller, conn: ViewConnection? = null): Envelope {
-        conn?.let { viewSubs.noteLister(it) }
-        val views = viewEntries.values.sortedBy { "${it.module}/${it.decl.id}" }.filter { e ->
-            val owner = loaded.firstOrNull { it.id == e.module }
-            (owner == null || !owner.guard.disabled) && viewRefusal(e, caller) == null
-        }.map { e ->
-            JsonObject(buildMap {
-                put("module", JsonPrimitive(e.module)); put("id", JsonPrimitive(e.decl.id)); put("title", JsonPrimitive(e.decl.title))
-                put("place", JsonPrimitive(e.decl.place))
-                e.decl.platforms?.let { ps -> put("platforms", JsonArray(ps.map { JsonPrimitive(it) })) }
-            })
-        }
-        return Envelope(PLUGIN_VIEWS_RESULT, JsonObject(mapOf("views" to JsonArray(views))).toString())
-    }
-
-    private fun viewRefusal(e: ViewEntry, caller: Caller): String? {
-        val data = JsonObject(mapOf("module" to JsonPrimitive(e.module), "view" to JsonPrimitive(e.decl.id))).toString()
-        services.policy().refusal(Frame(PLUGIN_VIEW, data))?.let { return it }
-        return frameRefusal(Envelope(PLUGIN_VIEW, data), caller)
-    }
-
-    /** `plugin_view_result` for a `plugin_view` request; the policy and frame gates of the view's action are checked here too. */
-    suspend fun answerView(envelope: Envelope, caller: Caller, conn: ViewConnection? = null): Envelope {
-        val req = runCatching { Json.parseToJsonElement(envelope.data) as JsonObject }.getOrNull()
-        val module = (req?.get("module") as? JsonPrimitive)?.takeIf { it.isString }?.content
-        val view = (req?.get("view") as? JsonPrimitive)?.takeIf { it.isString }?.content
-        val params = req?.get("params") as? JsonObject ?: JsonObject(emptyMap())
-        if (module == null || view == null) return Envelope(Envelope.ERROR, "plugin_view expects {\"module\": \"<id>\", \"view\": \"<id>\", \"params\": {...}}", requestId = envelope.requestId)
-        fun reply(extra: Map<String, JsonElement>) = Envelope(PLUGIN_VIEW_RESULT, JsonObject(
-            mapOf("module" to JsonPrimitive(module), "view" to JsonPrimitive(view), "params" to params) + extra,
-        ).toString(), requestId = envelope.requestId)
-        fun error(why: String) = reply(mapOf("error" to JsonPrimitive(why)))
-        val entry = viewEntries["$module/$view"] ?: return error("plugin_view refused: no view '$view' in module '$module'")
-        viewRefusal(entry, caller)?.let { return error(it) }
-        val provider = viewProviders["${entry.module}/${entry.decl.id}"]
-        val answer: JsonObject = if (provider != null) {
-            val owner = provider.owner
-            if (owner.guard.disabled) return error("plugin_view refused: plugin ${owner.id} is disabled")
-            val r = owner.callSuspending("view($module/$view)", owner.callTimeoutMs) { provider.value(ViewRequest(view, params, caller)) }
-            when (val v = r.getOrElse { return error("plugin_view failed: plugin ${owner.id} ${it.message ?: it::class.simpleName}") }) {
-                is ViewReply.Refused -> return error("plugin_view refused: ${v.reason.lineSafe()}")
-                is ViewReply.Page -> v.page
-            }
-        } else {
-            val dir = entry.dir
-            val layout = entry.decl.layout?.takeIf { it.isNotBlank() && dir != null }
-                ?: return error("plugin_view refused: this view has no provider and no layout")
-            val file = ViewPages.layoutFile(dir!!, layout) ?: return error("plugin_view refused: layout '$layout' is not a file inside the module folder")
-            runCatching { Json.parseToJsonElement(file.readText()) as JsonObject }
-                .getOrElse { return error("plugin_view refused: layout '$layout' is not a JSON object") }
-        }
-        ViewPages.refusal(answer, services.limit(LimitRegistry.VIEWS_MAX_PAGE_BYTES), services.limit(LimitRegistry.VIEWS_MAX_NODES), services.limit(LimitRegistry.VIEWS_MAX_DEPTH))
-            ?.let { return error("plugin_view refused: $it") }
-        // rev: a counter per (module, view, params), so a client can drop an answer older than the one it shows.
-        val key = viewSubs.keyOf(module, view, params)
-        // DV-1b: a successful open subscribes the connection unless the request says `subscribe:false`.
-        if (conn != null && (req?.get("subscribe") as? JsonPrimitive)?.booleanOrNull != false) viewSubs.subscribe(conn, key)
-        return reply(mapOf("rev" to JsonPrimitive(viewSubs.rev(key)), "page" to answer))
-    }
-
-    /** `plugin_view_close {module, view, params}`: the connection stops receiving pushes for that view. */
-    fun closeView(envelope: Envelope, conn: ViewConnection) {
-        val o = runCatching { Json.parseToJsonElement(envelope.data) as JsonObject }.getOrNull() ?: return
-        val module = (o["module"] as? JsonPrimitive)?.takeIf { it.isString }?.content ?: return
-        val view = (o["view"] as? JsonPrimitive)?.takeIf { it.isString }?.content ?: return
-        viewSubs.close(conn, viewSubs.keyOf(module, view, o["params"] as? JsonObject ?: JsonObject(emptyMap())))
-    }
-
-    /** A connection ended: its subscriptions go. */
-    fun viewConnectionClosed(conn: ViewConnection) = viewSubs.disconnect(conn)
-
-    private fun String.lineSafe() = lineSequence().firstOrNull().orEmpty().take(200)
-
-    /** Why the views declared by a module may not load for [tier] and its grants; null = they may. */
-    private fun viewsRefusal(tier: Tier, d: DaemonCapabilities, setting: ModuleSetting): String? {
-        if (d.views.isEmpty()) return null
-        d.views.firstOrNull { !VIEW_ID.matches(it.id) }?.let { return "view id '${it.id}' must match ${VIEW_ID.pattern}" }
-        d.views.groupBy { it.id }.entries.firstOrNull { it.value.size > 1 }?.let { return "view '${it.key}' is declared twice" }
-        d.views.firstOrNull { it.place != "tab" && it.place != "none" }?.let { return "view '${it.id}' place '${it.place}' is not tab or none" }
-        d.views.firstOrNull { it.action.isBlank() }?.let { return "view '${it.id}' declares no action" }
-        d.views.firstOrNull { v -> ActionCatalog.forId(v.action)?.let { it.kind != "read" } == true }?.let { return "view action '${it.action}' is a core action that is not a read" }
-        if (tier != Tier.COMMUNITY) return null
-        d.views.firstOrNull { ActionCatalog.forId(it.action) != null }?.let { return "view action '${it.action}' is a core action id" }
-        if ("daemon.view" !in setting.allow) return "missing grant 'daemon.view' in modules.json"
-        return null
-    }
-
-    private fun registerViews(status: ModuleStatus, d: DaemonCapabilities) {
-        val dir = status.dir?.let { File(it) }
-        for (v in d.views) viewEntries["${status.name}/${v.id}"] = ViewEntry(status.name, v, dir, ActionCatalog.Action(v.action, "read", listOf(PLUGIN_VIEW)))
-        if (d.views.isNotEmpty()) viewSubs.moduleChanged(status.name, drop = false)
-    }
-
-    private fun dropViews(module: String) {
-        val had = viewEntries.values.any { it.module == module }
-        viewEntries.values.removeIf { it.module == module }
-        viewProviders.keys.removeIf { it.startsWith("$module/") }
-        if (had) viewSubs.moduleChanged(module, drop = true)
     }
 
     /** Every plugin frame's catalog entry (merged into the `policy` frame's catalog). */
@@ -558,16 +437,10 @@ class DaemonPluginHost private constructor(
      * connection and waits for its answer. The policy has already gated the call by the tool's action.
      */
     fun callTool(name: String, arguments: JsonObject, caller: Caller, client: JsonObject = JsonObject(emptyMap()), request: (Envelope, Long) -> Envelope): ToolResult =
-        kotlinx.coroutines.runBlocking { callToolSuspending(name, arguments, caller, client, null, request) }
+        kotlinx.coroutines.runBlocking { callToolSuspending(name, arguments, caller, client, request) }
 
     /** BOARD-STALL-2: [callTool] for the daemon's request path: suspends while the plugin works, holding no Dispatchers.IO thread. */
-    suspend fun callToolSuspending(name: String, arguments: JsonObject, caller: Caller, client: JsonObject = JsonObject(emptyMap()), origin: JsonObject? = null, request: (Envelope, Long) -> Envelope): ToolResult {
-        // DV-1b: a call made by a view may reach only the tools its own module registered.
-        if (origin != null) {
-            val from = (origin["module"] as? JsonPrimitive)?.takeIf { it.isString }?.content
-            val owner = (toolEntries[name] ?: toolEntries[com.superiorsoftllc.infantry.cli.mcp.LegacyToolNames.canonical(name)])?.owner?.id
-            if (from == null || owner != from) return ToolResult("plugin_tool_call refused: a view may call only its own module's tools", isError = true)
-        }
+    suspend fun callToolSuspending(name: String, arguments: JsonObject, caller: Caller, client: JsonObject = JsonObject(emptyMap()), request: (Envelope, Long) -> Envelope): ToolResult {
         if (com.superiorsoftllc.infantry.cli.mcp.LegacyToolNames.canonical(name) == EVENT_EMIT_TOOL) return emitTool(arguments, client)
         if (com.superiorsoftllc.infantry.cli.mcp.LegacyToolNames.canonical(name) == TESTS_TOOL) return testsTool(arguments, client)
         val entry = (toolEntries[name] ?: toolEntries[com.superiorsoftllc.infantry.cli.mcp.LegacyToolNames.canonical(name)]) ?: return ToolResult("Unknown tool: $name", isError = true)
@@ -705,13 +578,7 @@ class DaemonPluginHost private constructor(
         val daemon = m.daemon
         val notes = mutableListOf<String>()
         if (m.harness != null) notes += "the harness half of $id loads at the next daemon start (harness halves are start-only)"
-        if (daemon?.entry.isNullOrBlank()) {
-            if (daemon?.views?.isNotEmpty() == true) {
-                runCatching { load(s, src.config, src.trust) }.onFailure { statuses[id] = "refused: ${it.message}" }
-                return HotOutcome(true, "$id has no daemon half; ${viewEntries.values.count { it.module == id }} static view(s) served", notes = notes)
-            }
-            return HotOutcome(true, "$id has no daemon half; nothing to load", notes = notes)
-        }
+        if (daemon?.entry.isNullOrBlank()) return HotOutcome(true, "$id has no daemon half; nothing to load", notes = notes)
         for (dep in m.dependencies) {
             val ds = src.resolution.status(dep.id)
             if (ds?.manifest?.daemon?.entry?.isNotBlank() == true && loaded.none { it.id == dep.id && !it.guard.disabled }) {
@@ -729,7 +596,6 @@ class DaemonPluginHost private constructor(
     }
 
     private fun unloadLocked(id: String): HotOutcome {
-        dropViews(id) // a code-free module has views and no Loaded
         val target = loaded.firstOrNull { it.id == id } ?: return HotOutcome(true, "$id has no loaded daemon half")
         // A dependent cannot run without it: they leave first (reverse load order), and are reported.
         val gone = mutableSetOf(id)
@@ -771,7 +637,6 @@ class DaemonPluginHost private constructor(
     /** EVERYTHING [p] registered, public routes and gates included (a planned unload, unlike a failure, removes its gates). */
     private fun dropRegistrations(p: Loaded) {
         toolEntries.values.removeIf { it.owner === p }
-        dropViews(p.id)
         frameHandlers.values.removeIf { it.owner === p }
         routeEntries.values.removeIf { it.owner === p }
         frameGates.removeIf { it.owner === p }
@@ -802,7 +667,6 @@ class DaemonPluginHost private constructor(
             runCatching { p.loader.close() }
         }
         observerQueue.shutdownNow()
-        viewSubs.shutdown()
         testSchedule?.shutdownNow()
     }
 
@@ -837,7 +701,6 @@ class DaemonPluginHost private constructor(
 
     private fun unregister(p: Loaded) {
         toolEntries.entries.removeIf { it.value.owner === p }
-        dropViews(p.id)
         frameHandlers.entries.removeIf { it.value.owner === p }
         routeEntries.entries.removeIf { it.value.owner === p && !it.value.public }
         // Gates stay registered: a disabled gate is fail closed. Observers and providers are skipped while disabled.
@@ -847,14 +710,10 @@ class DaemonPluginHost private constructor(
     private fun load(status: ModuleStatus, config: ModulesConfig, trust: Trust) {
         val m = status.manifest ?: return
         val d = m.daemon ?: return
+        val entry = d.entry?.takeIf { it.isNotBlank() } ?: return
         val id = m.name
         fun refuse(why: String) { statuses[id] = "refused: $why"; log("[plugins] daemon half of $id refused: $why") }
         val setting = config.setting(id)
-        val entry = d.entry?.takeIf { it.isNotBlank() } ?: run {
-            // DV-1a: a code-free module may still ship static views (docs/DECL-UI-DESIGN.md 3.1).
-            if (d.views.isNotEmpty()) { viewsRefusal(status.tier, d, setting)?.let { return refuse(it) }; registerViews(status, d) }
-            return
-        }
         val dir = File(status.dir ?: return refuse("no folder"))
         refusal(status.tier, d, setting, id)?.let { return refuse(it) }
         val jarPath = d.jar?.takeIf { it.isNotBlank() } ?: return refuse("daemon.entry without daemon.jar")
@@ -865,7 +724,6 @@ class DaemonPluginHost private constructor(
         if (status.tier == Tier.OFFICIAL && !trust.trusts(dir)) {
             OfficialTrust.refusal(ModuleCandidate(dir.name, status.tier, dir.absolutePath, m), jarPath, trust.keys)?.let { return refuse("official daemon jar refused: $it") }
         }
-        registerViews(status, d)
         val loader = URLClassLoader("plugin-$id", arrayOf(jar.toURI().toURL()), DaemonApiClassLoader(DaemonPluginHost::class.java.classLoader))
         val cpu = d.limits.cpuMsPerCall ?: maxOf(d.limits.callTimeoutMs ?: services.limit(LimitRegistry.PLUGIN_CALL_TIMEOUT_MS), d.limits.toolTimeoutMs ?: services.limit(LimitRegistry.PLUGIN_TOOL_TIMEOUT_MS))
         lateinit var p: Loaded
@@ -895,7 +753,6 @@ class DaemonPluginHost private constructor(
         }
         d.hooks.firstOrNull { it !in HOOK_KINDS }?.let { return "unknown hook kind '$it' (known: ${HOOK_KINDS.joinToString()})" }
         d.tools.firstOrNull { !TOOL_NAME.matches(it.name) }?.let { return "tool name '${it.name}' must match ${TOOL_NAME.pattern}" }
-        viewsRefusal(tier, d, setting)?.let { return it }
         if (tier != Tier.COMMUNITY) return null
         if (d.storage.adopt.isNotEmpty()) return "a community module may not adopt core tables (daemon.storage.adopt)"
         val allow = setting.allow.toSet()
@@ -1014,16 +871,6 @@ class DaemonPluginHost private constructor(
                 }
                 toolEntries[tool.name] = ToolEntry(p, tool, ActionCatalog.Action(decl.action, decl.kind, listOf(PLUGIN_TOOL_CALL)))
             }
-        }
-        override val views: Views = object : Views {
-            override fun provide(view: String, provider: (ViewRequest) -> ViewReply) {
-                val k = "${p.id}/$view"
-                if (viewEntries[k] == null) { log("view '$view' is not declared in daemon.views: refused"); error("view '$view' is not declared in daemon.views") }
-                check(viewProviders[k] == null) { "view '$view' is already answered" }
-                viewProviders[k] = Registered(p, provider)
-            }
-            // DV-1b: every tier may push (unlike events.broadcast): the push reaches only connections subscribed to this module's view.
-            override fun changed(view: String, params: JsonObject?) = viewSubs.changed(p.id, view, params)
         }
         override val frames: Frames = object : Frames {
             override fun handle(type: String, handler: (Frame, Caller) -> Frame?) {
@@ -1178,14 +1025,6 @@ class DaemonPluginHost private constructor(
         val TESTS_ACTION = ActionCatalog.Action("tests.run", "write", listOf("plugin_tool_call"))
 
         const val PLUGIN_TOOL_CALL = "plugin_tool_call"
-        /** DV-1a (contract 1.150.0): the declarative view frames. */
-        const val PLUGIN_VIEWS = "plugin_views"
-        const val PLUGIN_VIEWS_RESULT = "plugin_views_result"
-        const val PLUGIN_VIEW = "plugin_view"
-        const val PLUGIN_VIEW_RESULT = "plugin_view_result"
-        const val PLUGIN_VIEW_CLOSE = "plugin_view_close"
-        const val PLUGIN_VIEW_CHANGED = "plugin_view_changed"
-        private val VIEW_ID = Regex("^[a-z][a-z0-9_-]{0,63}$")
 
         /** RUNTIME-LOAD-7: the client's `maxDepth` / `maxSpawns` / `depth` (whole numbers >= 0) and `clientKey`; null when it sent none. */
         internal fun narrowingOf(client: JsonObject): com.superiorsoftllc.infantry.daemon.api.spawns.SpawnNarrowing? {
@@ -1212,7 +1051,7 @@ class DaemonPluginHost private constructor(
         private val TOOL_NAME = Regex("^[a-z][a-z0-9_]{2,63}$")
         private val READY_KEY = Regex("^[a-zA-Z][a-zA-Z0-9_]{0,31}$")
         /** Frames core handles before its catalog (never a plugin's). */
-        private val CORE_FRAMES = setOf(PLUGIN_TOOLS, PLUGIN_TOOL_CALL, PLUGIN_TOOL_RESULT, PLUGIN_VIEWS, PLUGIN_VIEWS_RESULT, PLUGIN_VIEW, PLUGIN_VIEW_RESULT, PLUGIN_VIEW_CLOSE, PLUGIN_VIEW_CHANGED, "replay_request", "ready", "error")
+        private val CORE_FRAMES = setOf(PLUGIN_TOOLS, PLUGIN_TOOL_CALL, PLUGIN_TOOL_RESULT, "replay_request", "ready", "error")
         private val CORE_ROUTES = setOf("/health", "/ws", "/plugins", "/")
 
         private fun key(method: String, path: String) = "${method.uppercase()} $path"

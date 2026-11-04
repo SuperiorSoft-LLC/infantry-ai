@@ -54,9 +54,6 @@ interface DaemonApi {
     val routes: Routes
     val hooks: Hooks
 
-    /** DV-1a (1.37.0, additive): declarative views (docs/DECL-UI-DESIGN.md 2.3). A daemon without views ignores `provide`. */
-    val views: Views get() = NoViews
-
     /** DP-4a (1.2.0, additive): tickets, epics and the board (docs/DAEMON-BOARD-API.md). A daemon without a board answers Unavailable. */
     val tickets: com.superiorsoftllc.infantry.daemon.api.board.Tickets get() = com.superiorsoftllc.infantry.daemon.api.board.NoBoard.tickets
     val epics: com.superiorsoftllc.infantry.daemon.api.board.Epics get() = com.superiorsoftllc.infantry.daemon.api.board.NoBoard.epics
@@ -161,8 +158,7 @@ interface DaemonApi {
         // 1.14.0 (DP-5h-3e-b, additive): BoardRuntime.attachCore / detachCore and BoardCoreAccess (core consumers reach the plugin-built board).
         // 1.36.0 (PLUGIN-MCP-1, additive): `plugins` (daemon.api.plugins.PluginCatalogReader) and daemon.api.attention.OwnerAsks.
         // 1.35.0 (AR-3a, additive): daemon.api.sessions.SessionBinding / FirstTurnContextProvider (core composes the first turn from a provider list).
-        // 1.37.0 (DV-1a, additive): `views` (Views, ViewRequest, ViewReply) and module.json `daemon.views`.
-        const val VERSION = "1.37.0"
+        const val VERSION = "1.36.0"
     }
 }
 
@@ -404,27 +400,6 @@ data class ToolInfo(val name: String, val description: String, val inputSchema: 
 data class ToolInvoker(val caller: Caller, val sessionId: String? = null, val role: String? = null, val projectId: String? = null, val label: String = "")
 
 // ---- frames and routes ----------------------------------------------------------------------------------------------
-
-/** DV-1a: declarative views. The plugin answers a whole materialised page (a JSON object); the daemon checks only its shape and size. */
-interface Views {
-    /** Answers `plugin_view` for [view] (declared in `daemon.views`); runs under the plugin's call limits. */
-    fun provide(view: String, provider: (ViewRequest) -> ViewReply)
-    /** Tells subscribed clients that [view] (one [params], or all when null) changed; coalesced by the host (a stub until DV-1b). */
-    fun changed(view: String, params: kotlinx.serialization.json.JsonObject? = null)
-}
-
-/** The no-op [Views] of a daemon that has none. */
-object NoViews : Views {
-    override fun provide(view: String, provider: (ViewRequest) -> ViewReply) {}
-    override fun changed(view: String, params: kotlinx.serialization.json.JsonObject?) {}
-}
-
-data class ViewRequest(val view: String, val params: kotlinx.serialization.json.JsonObject, val caller: Caller)
-
-sealed interface ViewReply {
-    data class Page(val page: kotlinx.serialization.json.JsonObject) : ViewReply
-    data class Refused(val reason: String) : ViewReply
-}
 
 interface Frames {
     /** Answers client frames of [type] (declared in `daemon.frames`); return null for no direct answer. */
