@@ -171,6 +171,65 @@ class SessionHost(
         send(slot, request)
     }
 
+    /**
+     * CLI-PTY-5: launch [sessionId]'s process with NO turn (the owner's "Resume session"). Nothing is sent: the process starts
+     * on its resumed conversation and rests idle, so the next [runTurn] with the same launch settings reuses it (the keep-alive
+     * sweep may stop it like any idle process). A live process is left as it is. True = a process was launched now.
+     */
+    fun attach(sessionId: String, provider: AgentProvider, request: RunRequest, env: Map<String, String>): Boolean {
+        val adapter = select(provider, policy())
+        val key = adapter.javaClass.name + "\u0000" + adapter.label + "\u0000" + adapter.fingerprint(request, env)
+        val pending = Launching()
+        var replaced: Slot? = null
+        synchronized(lock) {
+            val existing = slots[sessionId]
+            if (existing != null && existing.process.isAlive && !existing.released) return false
+            if (launching.containsKey(sessionId)) return false
+            if (existing != null) {
+                existing.released = true
+                slots.remove(sessionId)
+                replaced = existing
+            }
+            crashed.remove(sessionId)
+            launching[sessionId] = pending
+        }
+        replaced?.let { stopProcess(it, force = false) }
+        val slot = Slot(sessionId, adapter, key)
+        val sink = SlotSink(slot)
+        val runner = if (adapter.needsPipes) lineRunner else runnerFor(provider)
+        val process = try {
+            adapter.launch(request, env, runner, sink)
+        } catch (e: Exception) {
+            synchronized(lock) { launching.remove(sessionId) }
+            events.bootLine(sessionId, "the ${adapter.label} process did not start: ${sink.stderrTail().ifBlank { e.message ?: e.javaClass.simpleName }}")
+            return false
+        }
+        slot.process = process
+        val stopped = synchronized(lock) {
+            launching.remove(sessionId)
+            if (!pending.stopRequested) {
+                slot.idleSince = clock()
+                slots[sessionId] = slot
+            }
+            pending.stopRequested
+        }
+        if (stopped) {
+            slot.released = true
+            runCatching { process.killTree() }
+            return false
+        }
+        process.pid?.let { pid ->
+            slot.keptPid = pid
+            events.keptProcess(sessionId, KeptProcess(pid, runCatching { processTable.startInstant(pid) }.getOrNull(), adapter.label))
+            startSweep()
+        }
+        process.onExit { code -> onProcessExit(slot, code) }
+        val model = request.model?.takeIf { it.isNotBlank() } ?: runCatching { provider.defaultModel() }.getOrNull() ?: "default"
+        events.bootLine(sessionId, "* session resumed (${adapter.label} · $model), waiting for your message")
+        process.pid?.let { events.activity(sessionId, "the ${adapter.label} process is pid $it") }
+        return true
+    }
+
     private fun send(slot: Slot, request: RunRequest) {
         val turn = Turn()
         val superseded = synchronized(lock) {

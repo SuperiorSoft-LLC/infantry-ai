@@ -197,6 +197,12 @@ object LimitRegistry {
         "Raw terminal output each saved-command run keeps (newest kept), what its console window replays when opened late or after the run.",
         min = 1024, max = Int.MAX_VALUE.toLong(), zeroIsUnlimited = false,
     )
+    /** CLI-PTY-5: the chat items each session keeps across a daemon restart (newest kept), shown at once on open. */
+    val CHAT_HISTORY_FRAMES = LimitDef(
+        "limits.chat.historyFrames", 200, "items",
+        "Chat items (messages, replies, reasoning, file writes) each session keeps on disk, so after a restart its chat shows the newest of them at once, as history, without starting its CLI. Older items are dropped. 0 = keep none.",
+        max = 100_000, zeroIsUnlimited = false, zeroMeans = "keep none",
+    )
     val RUN_HISTORY = LimitDef(
         "limits.run.history", 20, "runs",
         "Saved-command runs the daemon remembers (the Run tab's pills, each with its scrollback); the oldest finished run is forgotten first.",
@@ -710,7 +716,7 @@ object LimitRegistry {
         BUILD_MAX_WORKERS, BUILD_MAX_PARALLEL_FORKS, CPU_ALERT_PERCENT, CPU_ALERT_MINUTES,
         TICKET_DEADLINE_MINUTES, UNATTENDED_DEADLINE_MINUTES, STALL_MINUTES, KILL_RETRY_MINUTES, SILENT_MINUTES, PROGRESS_STALE_MINUTES, IDLE_NUDGE_MINUTES, MAIL_WAKE_MAX_SECONDS, IDLE_NOTICE_MINUTES, IDLE_COMMENT, UNBRIEFED_GRACE_MINUTES,
         UNASSIGN_WAIT_SECONDS, HANDOFF_COMMITS, HANDOFF_CHARS, AGENT_QUEUE_MAX,
-        AUTO_DONE_MIN_OUTPUTS, PROCESS_WATCH_INTERVAL_SECONDS, RUN_SCROLLBACK_BYTES, RUN_HISTORY,
+        AUTO_DONE_MIN_OUTPUTS, PROCESS_WATCH_INTERVAL_SECONDS, RUN_SCROLLBACK_BYTES, RUN_HISTORY, CHAT_HISTORY_FRAMES,
         RUN_INPUT_BYTES_PER_SECOND, RUN_INPUT_MAX_FRAME_BYTES, RUN_INPUT_QUEUE_BYTES, RUN_MAX_COLS, RUN_MAX_ROWS,
         QUESTION_TTL_MINUTES, BG_NOTIFY_TAIL_LINES, BG_NOTIFY_TIMEOUT_MINUTES, BG_NOTIFY_PATTERN_GRACE_SECONDS,
         WATCH_QUIET_MINUTES, WATCH_HEARTBEAT_CAP_MINUTES, WATCH_STALL_MINUTES, WATCH_FOREGROUND_STALL_MINUTES, WATCH_EXEMPT_WHEN_TICKET_DONE, WATCH_NOTICE_DEDUPE, NOTICE_MAIL_PLUGIN_HEALTH, NOTICE_MAIL_BG_STATUS, BG_NOTICE_FOLD_INTO_TURN, BG_NOTICE_SKIP_IF_RESULT_READ, WATCH_HANDLED_KEEP_MINUTES, WATCH_TREE_JOB_SECONDS, WATCH_ENABLED, WATCH_FORCED, WATCH_BG_NATIVE, WATCH_HANG_GRACE_SECONDS, WATCH_TREE_WAIT_MINUTES,

@@ -415,6 +415,18 @@ private fun AgentRowMenu(a: AgentView, state: AppState, revealed: Boolean, onOpe
                 onClick = { menuOpen = false; onOpen() },
                 modifier = Modifier.testTag("session-menu-open-${a.id}"),
             )
+            // CLI-PTY-5: a dormant session (the daemon restarted since it ran) resumes from its card too: attach, no turn.
+            if (com.superiorsoftllc.infantry.ui.showsResumeSession(a.session)) {
+                val resumeGate = state.connection.gate("chat.resume")
+                WritePolicyTooltip { m ->
+                    DropdownMenuItem(
+                        text = { Text(com.superiorsoftllc.infantry.ui.RESUME_SESSION_LABEL, color = if (resumeGate.enabled && live) Palette.Accent else Palette.Border, fontSize = 12.sp) },
+                        onClick = { menuOpen = false; work.resume(a.id) },
+                        enabled = resumeGate.enabled && live,
+                        modifier = m.testTag(com.superiorsoftllc.infantry.ui.RESUME_SESSION_MENU_TAG_PREFIX + a.id),
+                    )
+                }
+            }
             // BUG-M2-15b: only an unbound session, and only while a project is selected: bind it to that project.
             val target = state.activeProject
             if (a.session.projectId.isNullOrBlank() && target != null) {
@@ -479,6 +491,7 @@ fun AgentsSection() {
             queue = { agentId, action, ticketId, at -> scope.launch { a.agentQueue(agentId, action, ticketId, at) } },
             open = a::openTicket,
             unassign = { id -> scope.launch { a.unassignTicket(id) } },
+            resume = { id -> scope.launch { a.resumeSession(id) } },
         ),
         projects = { ProjectsSidebar(state, onDismiss = a::dismissProjectRefusal) },
         showReview = a.reviewLoaded,
@@ -559,6 +572,8 @@ class AgentWorkActions(
     val queue: (agentId: String, action: String, ticketId: String?, at: Int?) -> Unit,
     val open: (ticketId: String) -> Unit,
     val unassign: (ticketId: String) -> Unit = {},
+    /** CLI-PTY-5: "Resume session" on a dormant agent's card. */
+    val resume: (sessionId: String) -> Unit = {},
 ) {
     companion object { val None = AgentWorkActions({ _, _ -> }, { _, _, _, _ -> }, { }) }
 }

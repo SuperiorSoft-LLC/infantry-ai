@@ -886,6 +886,16 @@ class Controller(
     }
 
     /**
+     * CLI-PTY-5: the owner's "Resume session": the daemon attaches [sessionId]'s CLI to its provider conversation and sends
+     * NO turn (a `resume` frame with no prompt), so nothing runs and no tokens are spent. The session's history is already
+     * on screen; the next message goes straight to the warm process. An older daemon answers a `resume expects` error.
+     */
+    suspend fun resumeSession(sessionId: String): CommandResult {
+        if (_state.value.agents[sessionId] == null) return report(CommandResult.Refused("unknown session"))
+        return report(send(Envelope(Envelope.RESUME, sessionId)))
+    }
+
+    /**
      * GAP-006b: Apply on the start card -- start what [plan] shows, never a new unrelated instance. A ticket worker starts
      * its TICKET (the daemon restarts a worker that never took its brief, on the ticket's own role, executor and branch);
      * the pane then follows the ticket's new worker, and [message], when given, waits for it as its next turn. A plain

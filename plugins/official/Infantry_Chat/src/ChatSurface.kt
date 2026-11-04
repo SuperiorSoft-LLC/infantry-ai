@@ -490,6 +490,11 @@ fun PromptBox(
             )
         }
         QueuedMessages(queue)
+        // CLI-PTY-5: after a restart the history is on screen and nothing runs: one click attaches the CLI, no message sent.
+        if (!spawnMode && a != null && com.superiorsoftllc.infantry.ui.showsResumeSession(a.session)) {
+            val resumeGate = com.superiorsoftllc.infantry.ui.shell.rememberGate("chat.resume")
+            com.superiorsoftllc.infantry.ui.ResumeSessionBar(live && resumeGate.allowed, onResume = { actionScope.launch { controller.resumeSession(a.id) } })
+        }
         ChatAttachmentChips(attachments, attachBusy, attachError, onRemoveAttachment)
         SlashSuggestions(slashTitle, slashRows, slashIndex, onPick = { onValue(it) })
         // ATTACH-INLINE-1: each tag's one character is drawn as its pill "📎 name".
@@ -596,12 +601,17 @@ fun PromptBox(
             extras()
         if (a != null && !spawnMode) {
                 val resume = com.superiorsoftllc.infantry.ui.shell.rememberGate("chat.resume")
-                val canResume = live && resume.allowed && resumeEnabled(a.session)
+                val dormant = com.superiorsoftllc.infantry.ui.showsResumeSession(a.session)
+                val canResume = live && resume.allowed && (resumeEnabled(a.session) || dormant)
                 val ended = a.session.state in ENDED_STATES
                 val acts = listOf(
                     ComposerAct(AhqIcons.SwapHoriz, swap.label(SWITCH_AGENT_LABEL), SWITCH_AGENT_SHORTCUT, swap.allowed, run = onSwitchAgent),
-                    ComposerAct(AhqIcons.PlayArrow, resume.label("Resume"), "Ctrl+R", canResume, run = {
-                        actionScope.launch { if (controller.resume(a.id, wire(value).trim()) is CommandResult.Sent) onValue("") }
+                    ComposerAct(AhqIcons.PlayArrow, resume.label(if (dormant) com.superiorsoftllc.infantry.ui.RESUME_SESSION_LABEL else "Resume"), "Ctrl+R", canResume, run = {
+                        // CLI-PTY-5: a dormant session with an empty box resumes with NO turn; typed text is still sent as the next turn.
+                        actionScope.launch {
+                            if (dormant && value.isBlank()) controller.resumeSession(a.id)
+                            else if (controller.resume(a.id, wire(value).trim()) is CommandResult.Sent) onValue("")
+                        }
                     }),
                     // Ticket a7f33ba2: the old Kill slot reaps this session's background jobs and leaves the session alive.
                     ComposerAct(AhqIcons.Cancel, reap.label(STOP_BACKGROUND_LABEL), STOP_BACKGROUND_SHORTCUT, live && reap.allowed && backgroundProcessPids(a.session).isNotEmpty(), danger = true, run = {

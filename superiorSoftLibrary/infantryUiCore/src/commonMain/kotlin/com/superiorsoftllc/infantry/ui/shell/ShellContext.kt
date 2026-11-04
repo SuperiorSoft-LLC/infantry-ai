@@ -233,6 +233,8 @@ interface AgentsContext {
     suspend fun assignTicket(ticketId: String, agentId: String) {}
     /** AGENT-MENU-1: take ticket [ticketId] off its worker (back to todo). */
     suspend fun unassignTicket(ticketId: String) {}
+    /** CLI-PTY-5: "Resume session" on a dormant agent: attach its CLI with no turn (Controller.resumeSession). */
+    suspend fun resumeSession(id: String) {}
     /** AGENT-TASKS-7: opens ticket [ticketId]'s detail (the board's modal), where one is loaded. */
     fun openTicket(ticketId: String) {}
     /** AGENT-TASKS-7: an `agent_queue` action on [agentId]: list, remove, move. */
