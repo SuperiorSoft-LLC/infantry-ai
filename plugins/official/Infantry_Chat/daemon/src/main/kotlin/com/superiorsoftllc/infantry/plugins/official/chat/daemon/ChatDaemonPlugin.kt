@@ -52,11 +52,15 @@ class ChatDaemonPlugin : DaemonPlugin {
 object ImageFrames {
     const val IMAGE_UPLOAD = "image_upload"
     const val IMAGE = "image"
+    /** CHAT-IMAGE-REMOTE-1: a client asks for an uploaded image's bytes by id; answered by [IMAGE_BYTES] (or `error`). */
+    const val IMAGE_FETCH = "image_fetch"
+    const val IMAGE_BYTES = "image_bytes"
     const val ERROR = "error"
     @Volatile private var sweeping: AutoCloseable? = null
 
     fun install(api: DaemonApi, clock: () -> Long = System::currentTimeMillis) {
         api.frames.handle(IMAGE_UPLOAD) { frame, _ -> answer(api, frame, clock) }
+        api.frames.handle(IMAGE_FETCH) { frame, _ -> fetch({ api.projects.list().map { it.id } }, api::files, frame) }
         val retention = ChatImageRetention(
             projectIds = { api.projects.list().map { it.id } },
             filesOf = api::files,
@@ -82,6 +86,34 @@ object ImageFrames {
     } catch (e: Exception) {
         com.superiorsoftllc.infantry.daemon.api.Frame(ERROR, "$IMAGE_UPLOAD failed: ${e.message ?: e::class.simpleName}")
     }
+}
+
+/**
+ * CHAT-IMAGE-REMOTE-1: the `image_fetch` answer. A client on another host (the phone over the tailnet) cannot read the daemon's
+ * file path, so it asks by upload id (`<sha256>.<ext>`, the stored file's name): `{"id":..., "projectId"?:...}`. The answer is
+ * `image_bytes` `{"id", "mimeType", "base64"}` when found, `{"id", "missing": true}` when no project holds it (retention swept it),
+ * or `error` `image_fetch refused: <why>` for a malformed request. Only stored upload names are accepted, so no path escapes.
+ */
+internal fun ImageFrames.fetch(
+    projectIds: () -> List<String>,
+    filesOf: (String) -> com.superiorsoftllc.infantry.daemon.api.files.ProjectFiles,
+    frame: com.superiorsoftllc.infantry.daemon.api.Frame,
+): com.superiorsoftllc.infantry.daemon.api.Frame {
+    fun refuse(why: String) = com.superiorsoftllc.infantry.daemon.api.Frame(ImageFrames.ERROR, "${ImageFrames.IMAGE_FETCH} refused: $why")
+    val obj = runCatching { Json.parseToJsonElement(frame.data) as? JsonObject }.getOrNull() ?: return refuse("payload must be a JSON object")
+    val id = (obj["id"] as? JsonPrimitive)?.contentOrNull?.trim()?.lowercase().orEmpty()
+    if (!ImageUploads.isUploadId(id)) return refuse("'${id.take(80)}' is not an uploaded image id")
+    val hint = (obj["projectId"] as? JsonPrimitive)?.contentOrNull
+    val order = projectIds().let { ids -> if (hint != null && hint in ids) listOf(hint) + (ids - hint) else ids }
+    val found = order.firstNotNullOfOrNull { p -> runCatching { ImageUploads.find(filesOf(p), id) }.getOrNull() }
+    val body = buildJsonObject {
+        put("id", id)
+        if (found == null) put("missing", true) else {
+            put("mimeType", found.second)
+            put("base64", java.util.Base64.getEncoder().encodeToString(found.first))
+        }
+    }
+    return com.superiorsoftllc.infantry.daemon.api.Frame(ImageFrames.IMAGE_BYTES, body.toString())
 }
 
 object MailTools {
