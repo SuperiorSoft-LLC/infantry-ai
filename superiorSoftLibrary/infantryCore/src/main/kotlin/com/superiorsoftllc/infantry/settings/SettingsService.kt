@@ -88,6 +88,7 @@ class SettingsService(
             PROCESSES_IDLE_MINUTES to JsonPrimitive(processWatchConfig().idleMinutes),
             PROCESSES_HEAVY_MB to JsonPrimitive(processWatchConfig().heavyMb),
             PROCESSES_FLOOR_MB to JsonPrimitive(processWatchConfig().floorMb),
+            PROCESSES_REAP_KINDS to JsonArray(processesReapKinds().map(::JsonPrimitive)),
             LIMITS_BUILD_PRIORITY to JsonPrimitive(buildLimits().priority.key),
             SANDBOX_ALLOWED_DIRS to JsonArray(sandboxAllowedDirs().map(::JsonPrimitive)),
             ALLOWED_MODELS to JsonArray(allowedModels().patterns.map(::JsonPrimitive)),
@@ -190,6 +191,21 @@ class SettingsService(
     /** NUDGE-SCRIPT-1: the built-in nudges (event names) that defer to script hooks; default none = today's behaviour. */
     fun nudgeDefer(): List<String> = store.settings.get(NUDGE_DEFER)?.value
         ?.let { runCatching { (Json.parseToJsonElement(it) as? JsonArray)?.mapNotNull { e -> (e as? JsonPrimitive)?.content } }.getOrNull() }.orEmpty()
+
+    /**
+     * PROC-LEAK-1: `processes.reapKinds`, the kinds of a closing session's leftover processes that are reaped: tool profile names
+     * (`gradle`, `kotlin`, ...) and `other` (a process no profile names). `[]` (the default) = every kind.
+     */
+    fun processesReapKinds(): List<String> = store.settings.get(PROCESSES_REAP_KINDS)?.value
+        ?.let { runCatching { (Json.parseToJsonElement(it) as? JsonArray)?.mapNotNull { e -> (e as? JsonPrimitive)?.content } }.getOrNull() }.orEmpty()
+
+    private fun requireReapKinds(value: JsonElement): List<String> {
+        val items = (value as? JsonArray)?.map { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content?.trim() }
+        require(items != null && items.all { it != null && REAP_KIND.matches(it) }) {
+            "setting '$PROCESSES_REAP_KINDS' must be a JSON array of kind names (tool profile names such as \"gradle\", or \"other\"); [] = every kind is reaped"
+        }
+        return items!!.filterNotNull().map { it.lowercase() }.distinct()
+    }
 
     private fun requireNudgeNames(value: JsonElement): List<String> {
         val items = (value as? JsonArray)?.map { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }
@@ -426,6 +442,7 @@ class SettingsService(
             PROCESSES_AUTO_REAP -> JsonPrimitive(requireBoolean(key, value))
             PROCESSES_IDLE_MINUTES -> JsonPrimitive(requireIntIn(key, value, PROCESSES_IDLE_RANGE))
             PROCESSES_HEAVY_MB, PROCESSES_FLOOR_MB -> JsonPrimitive(requireIntIn(key, value, PROCESSES_MB_RANGE))
+            PROCESSES_REAP_KINDS -> JsonArray(requireReapKinds(value).map(::JsonPrimitive))
             LIMITS_BUILD_PRIORITY -> JsonPrimitive(requireBuildPriority(value).key)
             SANDBOX_ALLOWED_DIRS -> JsonArray(requireAllowedDirs(value).map(::JsonPrimitive))
             ALLOWED_MODELS -> JsonArray(requireAllowedModels(value).map(::JsonPrimitive))
@@ -929,6 +946,8 @@ class SettingsService(
         const val PROCESSES_IDLE_MINUTES = "processes.idleMinutes"
         const val PROCESSES_HEAVY_MB = "processes.heavyMb"
         const val PROCESSES_FLOOR_MB = "processes.floorMb"
+        const val PROCESSES_REAP_KINDS = "processes.reapKinds"
+        private val REAP_KIND = Regex("[A-Za-z0-9_.-]{1,64}")
         /**
          * Ticket 66153313 (contract 1.132.0): worker build limits. `limits.build.priority` = normal | belownormal | idle
          * (default belownormal); `limits.build.maxWorkers` = Gradle worker cap (default logical cores - 2, 0 = unlimited);

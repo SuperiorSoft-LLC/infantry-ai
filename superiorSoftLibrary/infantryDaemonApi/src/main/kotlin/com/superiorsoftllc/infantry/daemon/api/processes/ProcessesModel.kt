@@ -24,6 +24,8 @@ data class TrackedProcess(
     val inferred: Boolean = false,
     /** Ticket 66153313: this process's share of ALL logical cores (0-100) over the last watch pass; null until two samples. */
     val cpuPercent: Double? = null,
+    /** PROC-LEAK-1: why this client counts as stuck (`no CPU for 12 min`); null = not stuck. */
+    val stuck: String? = null,
 )
 
 @Serializable

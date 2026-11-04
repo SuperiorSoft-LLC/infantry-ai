@@ -29,6 +29,12 @@ internal object ProfileRx {
 
     fun clients(list: List<ProcessToolProfile>): Regex = anyOf(list.flatMap { it.clients })
 
+    /** PROC-LEAK-1: every profile's `stuck` client regexes. */
+    fun stuck(list: List<ProcessToolProfile>): Regex = anyOf(list.flatMap { it.stuck })
+
+    /** PROC-LEAK-1: one regex over [parts]; use with [Regex.containsMatchIn]. */
+    fun any(parts: List<String>): Regex = anyOf(parts)
+
     /** Process images worth listing when unattributed; use with [Regex.matches]. */
     fun heavyImages(list: List<ProcessToolProfile>): Regex {
         val parts = list.flatMap { it.heavyImages }.distinct()

@@ -153,6 +153,8 @@ class LocalProcesses(
     private val alert: (String, String) -> Unit = { _, _ -> },
     private val log: (String) -> Unit = { println("[infantry] $it") },
     private val instanceId: String? = null,
+    /** PROC-LEAK-1: the sessions' OS containers (the same the session manager assigns harness pids to). */
+    private val containers: com.superiorsoftllc.infantry.runner.SessionContainers = com.superiorsoftllc.infantry.runner.SessionContainers.None,
 ) {
     private val closedListeners = CopyOnWriteArrayList<(SessionClosed) -> Unit>()
     private val shutdownListeners = CopyOnWriteArrayList<() -> Unit>()
@@ -199,6 +201,11 @@ class LocalProcesses(
         override fun isProtected(p: ProcInfo) = ProcessGuard.isProtected(p)
         override fun sessions(): List<WatchedSession> = sessionList().map { it.watched() }
 
+        override fun sessionMembers(sessionId: String): List<ProcInfo> =
+            runCatching { containers.members(sessionId).mapNotNull { pid -> source.info(pid) } }.getOrDefault(emptyList())
+
+        override val containment: String get() = containers.kind
+
         override fun onSessionClosed(listener: (SessionClosed) -> Unit): AutoCloseable {
             closedListeners += listener
             return AutoCloseable { closedListeners -= listener }
@@ -222,6 +229,7 @@ class LocalProcesses(
             ProcessToolProfile(
                 p.name, p.daemons, p.sharedDaemon, p.clients, p.heavyImages, p.heavyCommands,
                 p.env.map { ProcessEnvTemplate(it.name, it.value, it.onlyIf, it.join, it.inherit) },
+                stop = p.stop, stuck = p.stuck,
             )
         }
 

@@ -158,7 +158,8 @@ interface DaemonApi {
         // 1.14.0 (DP-5h-3e-b, additive): BoardRuntime.attachCore / detachCore and BoardCoreAccess (core consumers reach the plugin-built board).
         // 1.36.0 (PLUGIN-MCP-1, additive): `plugins` (daemon.api.plugins.PluginCatalogReader) and daemon.api.attention.OwnerAsks.
         // 1.35.0 (AR-3a, additive): daemon.api.sessions.SessionBinding / FirstTurnContextProvider (core composes the first turn from a provider list).
-        const val VERSION = "1.36.0"
+        // 1.37.0 (PROC-LEAK-1, additive): Processes.sessionMembers / containment, ProcessToolProfile.stop / stuck, TrackedProcess.stuck.
+        const val VERSION = "1.37.0"
     }
 }
 

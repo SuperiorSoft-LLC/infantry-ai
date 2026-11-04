@@ -64,6 +64,17 @@ data class ToolProfile(
     val env: List<EnvTemplate> = emptyList(),
     /** STACK-NEUTRAL-3: progress readers of this tool's output, selected with `infantry run/progress --reader <name>`. */
     val progress: List<ProgressSpec> = emptyList(),
+    /**
+     * PROC-LEAK-1: the argv that stops the tool's [daemons] gracefully (`./gradlew --stop`), run in the closing session's
+     * worktree before its daemons are killed; empty = no graceful step (the kill follows the grace at once). The first entry
+     * is tried as given, then with the OS's wrapper suffixes (`.bat`, `.cmd`) on Windows.
+     */
+    val stop: List<String> = emptyList(),
+    /**
+     * PROC-LEAK-1: command-line regexes of a short-lived CLIENT that should not hang (a CLI call): one that used no CPU for
+     * `limits.processes.stuckMinutes` is reported stuck on its session.
+     */
+    val stuck: List<String> = emptyList(),
     /** In an override: drop the default entry of this [name]. */
     val disabled: Boolean = false,
 )

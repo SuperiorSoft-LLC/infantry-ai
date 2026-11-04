@@ -60,6 +60,9 @@ The default is the cheapest reasonable value. A costlier value is an opt-in. The
 | `tickets.weightExecutors` | (unset) | Provider and model per ticket weight 1 to 5 |
 | `scripting.*` | see [Scripting](Scripting.md) | Run limits, hook guards, the process bridge (off by default) |
 | `processes.autoReap` | off | Reap rogue background processes (Gradle/Kotlin daemons, node) left by ended sessions |
+| `processes.reapKinds` | `[]` (every kind) | The kinds a session's close reaps: tool profile names (`gradle`, `kotlin`, ...) or `other`; a process of an unlisted kind is spared |
+| `limits.processes.stopGraceSeconds` | 10 | How long a build daemon gets after its profile's graceful `stop` (run in the session's worktree) before it is killed by pid; 0 = no graceful step |
+| `limits.processes.stuckMinutes` | 15 | A profile's `stuck` client (a CLI call) with no CPU for this long is reported stuck in its session; 0 = off |
 | `nudges.deferToHooks` | `[]` | Built-in notices a script replaces (for example `notice.ticket_finished`) |
 
 Plugins add their own keys through `config` cards in their `module.json` (see [Plugins](Plugins.md)). The full list

@@ -7,6 +7,7 @@ import com.superiorsoftllc.infantry.daemon.api.processes.CpuAlertConfig
 import com.superiorsoftllc.infantry.daemon.api.processes.PluginSettings
 import com.superiorsoftllc.infantry.daemon.api.processes.ProcessReport
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.intOrNull
@@ -106,7 +107,14 @@ internal class ProcessWatchService private constructor(private val exec: Schedul
             }
             val autoReap = settings.stored("processes.autoReap")
                 ?.let { runCatching { (Json.parseToJsonElement(it) as? JsonPrimitive)?.booleanOrNull }.getOrNull() } ?: d.autoReap
+            // PROC-LEAK-1: `processes.reapKinds` (a JSON array of kind names; [] or unset = every kind) and the two limits.
+            val kinds = settings.stored("processes.reapKinds")?.let { stored ->
+                runCatching { (Json.parseToJsonElement(stored) as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content?.trim()?.lowercase() } }.getOrNull()
+            }.orEmpty().filter { it.isNotEmpty() }.toSet()
             return ProcessWatchConfig(
+                reapKinds = kinds,
+                stopGraceSeconds = settings.limit("limits.processes.stopGraceSeconds")?.toInt() ?: d.stopGraceSeconds,
+                stuckMinutes = settings.limit("limits.processes.stuckMinutes")?.toInt() ?: d.stuckMinutes,
                 idleMinutes = int("processes.idleMinutes", 1..1440, d.idleMinutes),
                 heavyMb = int("processes.heavyMb", 0..1_048_576, d.heavyMb.toInt()).toLong(),
                 floorMb = int("processes.floorMb", 0..1_048_576, d.floorMb.toInt()).toLong(),
