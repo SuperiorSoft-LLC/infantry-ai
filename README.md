@@ -366,12 +366,21 @@ Starring the repository and filing good bug reports help too.
 
 ## License
 
-The core is the foundation and is licensed **MPL-2.0** to protect its integrity; everything built on it (plugin API and
-SDK, UI core, apps, plugins, examples) is free under **Apache-2.0**, split by directory. Plain-words explainer:
-[Licensing](docs/wiki/licensing.md); directory by directory: [docs/LICENSE-MAP.md](docs/LICENSE-MAP.md).
+**The core is a community effort; the rest is yours.**
 
-> **Not yet in force.** The license texts are not published in this repository yet: [LICENSE](LICENSE) is still a
-> placeholder. Until it is replaced, all rights are reserved by SuperiorSoft LLC.
+Infantry AI is licensed per directory. Every source file names its license in an `SPDX-License-Identifier` header.
+
+| License | What it covers |
+|---|---|
+| **MPL-2.0** (the core) | `superiorSoftLibrary/infantryProtocol`, `superiorSoftLibrary/infantryCore`, `superiorSoftLibrary/infantryRunner`, `superiorSoftLibrary/infantry`, and the reserved `plugins/core/` |
+| **Apache-2.0** (everything else) | the plugin API and host, the SDKs, the board, the UI core, the apps, `samples/`, `plugins/`, `docs/`, `docker/`, `scripts/` and the build files |
+| **Neither** (trademark) | the name "Infantry AI", the logo and the emblem |
+
+- Full license texts: [LICENSES/](LICENSES/) ([MPL-2.0](LICENSES/MPL-2.0.txt), [Apache-2.0](LICENSES/Apache-2.0.txt)); the root [LICENSE](LICENSE) is the Apache-2.0 text, each MPL module has its own `LICENSE`.
+- Directory by directory: [docs/LICENSE-MAP.md](docs/LICENSE-MAP.md). In plain words: [Licensing](docs/wiki/licensing.md).
+- Trademark policy: [docs/legal/TRADEMARK.md](docs/legal/TRADEMARK.md). Contributor agreement: [docs/legal/CLA.md](docs/legal/CLA.md).
+
+> **Draft.** The split is applied but not official until the public launch. Not legal advice.
 
 ## Building from source
 

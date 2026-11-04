@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // The template knows only Maven coordinates: the SDK comes from GitHub Packages (needs a token with read:packages), or from a
 // local repository when you pass -Pinfantry.sdkRepo=<path> (the monorepo's CI uses its dry-run publish, build/m2).
 val sdkVersion: String = providers.gradleProperty("infantry.sdk.version").get()
