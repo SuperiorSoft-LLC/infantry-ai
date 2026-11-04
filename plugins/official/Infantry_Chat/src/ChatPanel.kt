@@ -81,6 +81,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
@@ -326,9 +327,9 @@ internal fun ChatPanelHost.Transcript(modifier: Modifier) {
             ChatSideSlot(reasoning, agent.todos, sidePanel) { sidePanel = it }
         }
         if (chat.composerMinimized) {
-            // CHAT-MINIMIZE-1: the floating restore button; 48dp touch target, inset so it never covers system navigation.
+            // CHAT-MINIMIZE-1/2: the floating restore button; 48dp touch target; the Android activity applies safeDrawingPadding to the whole app, so it never covers system navigation.
             androidx.compose.foundation.layout.Box(Modifier.align(Alignment.BottomEnd).padding(12.dp).testTag(COMPOSER_RESTORE_TAG)) {
-                IconAction(AhqIcons.OpenInFull, COMPOSER_RESTORE_LABEL, { chat.composerMinimized = false }, style = IconActionStyle.FILLED)
+                IconAction(AhqIcons.Restore, COMPOSER_RESTORE_LABEL, { chat.composerMinimized = false }, style = IconActionStyle.FILLED, modifier = Modifier.defaultMinSize(COMPOSER_TOUCH_DP.dp, COMPOSER_TOUCH_DP.dp))
             }
         }
     }

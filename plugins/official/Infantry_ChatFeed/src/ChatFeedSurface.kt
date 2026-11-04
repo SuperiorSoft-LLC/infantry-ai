@@ -10,6 +10,11 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.material3.Icon
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -79,7 +84,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.compositeOver
@@ -105,9 +109,7 @@ import com.superiorsoftllc.infantry.ui.model.chatRows
 import com.superiorsoftllc.infantry.ui.model.NoticeKind
 import com.superiorsoftllc.infantry.ui.model.noticesForSession
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
@@ -320,15 +322,16 @@ fun ActivityBox(agent: AgentView) {
     val expanded = activityBoxChoice ?: (autoOpen && isRunning(agent.session.state))
     Column(Modifier.testTag(ACTIVITY_BOX_TAG), horizontalAlignment = Alignment.End) {
         if (expanded) Box(Modifier.padding(horizontal = 8.dp)) { ActivityLines(entries) }
-        Text(
-            "Activity (${entries.size})",
-            color = Palette.Muted,
-            fontFamily = Mono,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(8.dp).background(Palette.Panel, androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
-                .clickable { activityBoxChoice = !expanded }.padding(horizontal = 10.dp, vertical = 4.dp),
-        )
+        // CHAT-MINIMIZE-2: a small round floating icon (48dp touch target) with the count; the label stays as its description.
+        val label = "Activity (${entries.size})"
+        Box(
+            Modifier.padding(8.dp).size(48.dp).clip(androidx.compose.foundation.shape.CircleShape).background(Palette.Panel)
+                .clickable { activityBoxChoice = !expanded }.semantics { contentDescription = label },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(AhqIcons.Activity, contentDescription = null, tint = Palette.Muted, modifier = Modifier.size(22.dp))
+            Text(entries.size.toString(), color = Palette.Text, fontSize = 9.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.TopEnd).padding(6.dp))
+        }
     }
 }
 
