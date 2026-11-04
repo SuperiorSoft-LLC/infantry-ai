@@ -66,6 +66,16 @@ class FakeHarnessAdapter(
         return abortAccepted
     }
 
+    /** CHAT-QUEUE-1: messages typed into a running turn, and whether the process takes them. */
+    val injected: MutableList<String> = Collections.synchronizedList(mutableListOf())
+    var injectAccepted = true
+
+    override fun injectInput(process: HostedProcess, text: String): Boolean {
+        if (!injectAccepted) return false
+        injected += text
+        return true
+    }
+
     override fun close(process: HostedProcess): Boolean {
         closes++
         if (exitOnClose) (process as FakeProcess).die(0)

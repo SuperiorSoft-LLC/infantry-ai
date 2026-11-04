@@ -60,6 +60,10 @@ class ScriptingDaemonPlugin : DaemonPlugin {
             { api.sessions.get(it) }, { api.sessions.status(it) }, { id, n -> api.sessions.recentLines(id, n) }, { api.sessions.interrupt(it) },
             { name, session, ms -> api.sessions.suppressNotice(name, session, ms) },
             reconnectMcp = { id, force -> api.sessions.reconnectMcp(id, force) },
+            queued = { api.sessions.queued(it) },
+            queueAdd = { id, text -> api.sessions.queueAdd(id, text) },
+            queueRemove = { id, item -> api.sessions.queueRemove(id, item) },
+            queueForce = { id, item -> api.sessions.queueForce(id, item) },
         )
         api.tools.register(sessionTools.read)
         api.tools.register(sessionTools.act)

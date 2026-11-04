@@ -268,7 +268,7 @@ class UsageRecorder(
 
     fun onSessionEvent(event: com.superiorsoftllc.infantry.session.SessionEvent) {
         when (event) {
-            is com.superiorsoftllc.infantry.session.SessionEvent.Turn -> {
+            is com.superiorsoftllc.infantry.session.SessionEvent.Turn -> if (!event.midTurn) {
                     buffers[event.sessionId] = java.util.Collections.synchronizedList(mutableListOf())
                     streams[event.sessionId] = com.superiorsoftllc.infantry.usagemeter.StreamUsageAccumulator()
                 }

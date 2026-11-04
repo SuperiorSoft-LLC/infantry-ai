@@ -2131,8 +2131,9 @@ private fun broadcast(
             // Contract 1.125.0: an owner turn omits `origin` (absent = Owner), so it is byte-identical to before.
             Envelope(Envelope.TURN, event.prompt, event.sessionId, origin = event.origin.takeUnless { it == MessageOrigin.Owner }),
             // 1.95.0: an accepted turn is a run that is thinking, before the harness prints a single line.
-            runActivityEnvelope(event.sessionId, runActivity.turnStarted(event.sessionId)),
-        )
+            // CHAT-QUEUE-1: a message forced into the running turn is not a turn start.
+            if (event.midTurn) null else runActivityEnvelope(event.sessionId, runActivity.turnStarted(event.sessionId)),
+        ).filterNotNull()
 
         // M2-11: run plumbing (process started, pid, resumed provider session) goes to the Activity box, on the
         // existing status frame's tool/activity fields, so the chat shows at most one boot line.
@@ -3401,6 +3402,30 @@ private suspend fun handleConnection(
                     }
                 }
 
+                // CHAT-QUEUE-1 (1.150.0): the held messages live on the session record; every change is pushed as its `session` frame.
+                Envelope.QUEUE_ADD, Envelope.QUEUE_REMOVE, Envelope.QUEUE_FORCE -> {
+                    val id = envelope.sessionId?.trim().orEmpty()
+                    val arg = envelope.data
+                    if (id.isEmpty() || arg.isBlank()) {
+                        Envelope(Envelope.ERROR, "${envelope.type} expects the frame's sessionId and a non-empty data")
+                    } else {
+                        try {
+                            when (envelope.type) {
+                                Envelope.QUEUE_ADD -> {
+                                    if (manager.queueAdd(id, arg, ((settings as? SettingsService)?.limit(LimitRegistry.CHAT_QUEUE_MAX) ?: LimitRegistry.CHAT_QUEUE_MAX.default).toInt()) == null) active = id
+                                }
+                                Envelope.QUEUE_REMOVE -> manager.queueRemove(id, arg.trim())
+                                else -> manager.queueForce(id, arg.trim())
+                            }
+                            null
+                        } catch (e: RunInFlightException) {
+                            Envelope(Envelope.ERROR, "$RUN_IN_FLIGHT ${e.sessionId}: ${e.message}")
+                        } catch (e: Exception) {
+                            Envelope(Envelope.ERROR, "${envelope.type} refused: ${e.message ?: e.javaClass.simpleName}")
+                        }
+                    }
+                }
+
                 Envelope.INTERRUPT -> {
                     // Stop the session's current turn and leave the session at rest (see SessionManager.interrupt).
                     val id = envelope.data.trim()
@@ -3880,7 +3905,8 @@ internal fun providerInfos(manager: SessionManager, harnesses: HarnessRegistry? 
         .map { id ->
             val limit = harnesses?.resolve(id)?.contextLimit
             val effort = harnesses?.resolve(id)?.effort // EFFORT-1
-            ProviderInfo(id = id, default = false, defaultModel = null, contextLimit = limit?.support?.wire, contextLimitHow = limit?.how, effort = effort?.support?.wire, effortHow = effort?.how)
+            ProviderInfo(id = id, default = false, defaultModel = null, contextLimit = limit?.support?.wire, contextLimitHow = limit?.how, effort = effort?.support?.wire, effortHow = effort?.how,
+                midTurnInput = harnesses?.resolve(id)?.capabilities?.contains(com.superiorsoftllc.infantry.harness.HarnessCapability.MID_TURN_INPUT)?.takeIf { it })
         }
     // CLIPATH-1 (1.73.0): a provider/harness whose CLI the resolver cannot find says so, with the paths it tried,
     // instead of looking usable and failing at spawn. A provider with no CLI (the stub) is always available.
@@ -3975,6 +4001,7 @@ internal fun providerInfo(provider: AgentProvider, isDefault: Boolean): Provider
         contextLimitHow = provider.contextLimit().how,
         effort = provider.effort().support.wire, // EFFORT-1
         effortHow = provider.effort().how,
+        midTurnInput = provider.midTurnInput().takeIf { it }, // CHAT-QUEUE-1
     )
 
 /**

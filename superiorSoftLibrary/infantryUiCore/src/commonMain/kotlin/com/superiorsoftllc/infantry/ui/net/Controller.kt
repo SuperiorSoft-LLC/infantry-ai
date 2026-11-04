@@ -35,6 +35,8 @@ import com.superiorsoftllc.infantry.ui.model.queueDrainTargets
 import com.superiorsoftllc.infantry.ui.model.settleQueueSends
 import com.superiorsoftllc.infantry.ui.model.queuedTurnText
 import com.superiorsoftllc.infantry.ui.model.queuedFor
+import com.superiorsoftllc.infantry.ui.model.localQueue
+import com.superiorsoftllc.infantry.ui.model.settlePendingQueue
 import com.superiorsoftllc.infantry.ui.model.withQueue
 import com.superiorsoftllc.infantry.ui.model.contractAtLeast
 import com.superiorsoftllc.infantry.ui.model.withEventsAwaiting
@@ -198,6 +200,7 @@ class Controller(
                 val before = _state.value
                 _state.update { reduce(it, env, Clock.System.now().toEpochMilliseconds()) }
                 _state.update { settleQueueSends(before, it) }
+                _state.update { settlePendingQueue(it, env) }
                 sendQueuedAtRest(before, _state.value)
                 answerImageUpload(env)
                 answerPluginSecret(env)
@@ -852,13 +855,14 @@ class Controller(
         _state.value.agents[sessionId]?.let { a -> promptBlocker(a)?.let { return report(CommandResult.Refused(it)) } }
         // QUEUE-STUCK-1: a send while the agent is at rest and messages are still queued delivers the whole queue,
         // in order, ahead of the new text, as one turn.
-        val held = _state.value.queuedFor(sessionId)
+        // CHAT-QUEUE-1: the daemon drains its own queue; only a queue this window holds (an older daemon) goes out here.
+        val held = if (_state.value.connection.servesQueue) emptyList() else _state.value.localQueue(sessionId)
         if (held.isNotEmpty() && !isSlashCommand(text)) {
             _state.update { it.withQueue(sessionId, emptyList()) }
             val all = queuedTurnText(held, text)
             val r = send(Envelope(Envelope.PROMPT, all, sessionId))
             if (r is CommandResult.Sent) echo(sessionId, all)
-            else _state.update { it.withQueue(sessionId, held + it.queuedFor(sessionId)) }
+            else _state.update { it.withQueue(sessionId, held + it.localQueue(sessionId)) }
             return report(r)
         }
         val r = send(Envelope(Envelope.PROMPT, text, sessionId))
@@ -927,18 +931,48 @@ class Controller(
      * current one has come to rest ([sendQueuedAtRest]). It is not echoed into the transcript while it waits, so a
      * queued message can never read as sent. Refused for an agent that is not busy: send it with [prompt] instead.
      */
-    fun queueMessage(sessionId: String, text: String): CommandResult {
+    suspend fun queueMessage(sessionId: String, text: String): CommandResult {
         if (text.isBlank()) return report(CommandResult.Refused("nothing to queue"))
         val a = _state.value.agents[sessionId] ?: return report(CommandResult.Refused("unknown session"))
         if (!isBusy(a)) return report(CommandResult.Refused("the agent is not busy: send the message directly"))
+        // CHAT-QUEUE-1: a 1.150.0 daemon holds the queue, so every window and script sees it; shown here until its session frame lists it.
+        val requestId = if (_state.value.connection.servesQueue) "queue-add-${++queueSends}" else null
         var position = 0
         val now = Clock.System.now().toEpochMilliseconds()
         _state.update { s ->
-            val items = s.queuedFor(sessionId) + QueuedPrompt(text, now)
-            position = items.size
-            s.withQueue(sessionId, items)
+            position = s.queuedFor(sessionId).size + 1
+            s.withQueue(sessionId, s.localQueue(sessionId) + QueuedPrompt(text, now, requestId = requestId))
+        }
+        if (requestId != null) {
+            val r = send(Envelope(Envelope.QUEUE_ADD, text, sessionId, requestId = requestId))
+            if (r !is CommandResult.Sent) {
+                _state.update { s -> s.withQueue(sessionId, s.localQueue(sessionId).filterNot { it.requestId == requestId }) }
+                return report(r)
+            }
         }
         return CommandResult.Queued(position)
+    }
+
+    /** CHAT-QUEUE-1: take the queued [item] back; it is never delivered. A daemon-held one goes by `queue_remove`, a local one is dropped here. */
+    suspend fun removeQueued(sessionId: String, item: QueuedPrompt): CommandResult {
+        val id = item.id
+        if (id == null) {
+            if (item.requestId != null) return report(CommandResult.Refused("the daemon has not listed this message yet"))
+            _state.update { s -> s.withQueue(sessionId, s.localQueue(sessionId).filterNot { it == item }) }
+            return CommandResult.Sent
+        }
+        return report(send(Envelope(Envelope.QUEUE_REMOVE, id, sessionId)))
+    }
+
+    /**
+     * CHAT-QUEUE-1: deliver the queued [item] NOW, into the agent's running turn without stopping it (the daemon refuses, and it stays
+     * queued, when the harness cannot take input mid-turn). Only a daemon-held message can be forced.
+     */
+    suspend fun forceQueued(sessionId: String, item: QueuedPrompt): CommandResult {
+        val id = item.id ?: return report(CommandResult.Refused(
+            if (item.requestId != null) "the daemon has not listed this message yet" else "this daemon cannot send a queued message mid-turn (contract 1.150.0)",
+        ))
+        return report(send(Envelope(Envelope.QUEUE_FORCE, id, sessionId)))
     }
 
     /**
@@ -952,12 +986,14 @@ class Controller(
     private var queueSends = 0
 
     private suspend fun sendQueuedAtRest(before: AppState, after: AppState) {
+        // CHAT-QUEUE-1: a 1.150.0 daemon sends its held messages itself when the turn ends.
+        if (after.connection.servesQueue) return
         val tracks = contractAtLeast(after.connection.contract, RunInFlight.SINCE_MAJOR, RunInFlight.SINCE_MINOR)
         for (sessionId in queueDrainTargets(before, after, tracks)) {
             val requestId = if (tracks) "queue-${++queueSends}" else null
             var head: QueuedPrompt? = null
             _state.update { s ->
-                val items = s.queuedFor(sessionId)
+                val items = s.localQueue(sessionId)
                 head = items.firstOrNull()
                 val sent = head
                 if (sent == null) s
@@ -973,7 +1009,7 @@ class Controller(
                 // Not sent (the link dropped): it goes back to the front, still visibly queued, and the reason is shown.
                 _state.update { s ->
                     s.copy(queueSending = if (requestId == null) s.queueSending else s.queueSending - requestId)
-                        .withQueue(sessionId, listOf(next) + s.queuedFor(sessionId))
+                        .withQueue(sessionId, listOf(next) + s.localQueue(sessionId))
                 }
                 report(r)
             }

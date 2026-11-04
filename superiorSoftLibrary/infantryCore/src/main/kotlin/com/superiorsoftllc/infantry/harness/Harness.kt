@@ -120,7 +120,8 @@ sealed interface HarnessEvent {
 fun HarnessEvent.Denial.toLine(harnessId: String): com.superiorsoftllc.infantry.protocol.EventNormalizer.Line.Denial =
     com.superiorsoftllc.infantry.protocol.EventNormalizer.Line.Denial(harnessId, tool)
 
-enum class HarnessCapability { MODEL_SELECTION, SESSION_RESUME, TOOL_CALLS, REASONING, USAGE, EFFORT_SELECTION, LIVE_SESSION }
+/** [MID_TURN_INPUT] (CHAT-QUEUE-1): mirrors the harness API capability of the same name. */
+enum class HarnessCapability { MODEL_SELECTION, SESSION_RESUME, TOOL_CALLS, REASONING, USAGE, EFFORT_SELECTION, LIVE_SESSION, MID_TURN_INPUT }
 
 /** A capability the request needs but the harness lacks. Never resolved to a default. */
 class MissingCapabilityException(val capability: HarnessCapability, val harnessId: String) :
