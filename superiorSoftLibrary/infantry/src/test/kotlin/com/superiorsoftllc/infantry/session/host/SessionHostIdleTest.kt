@@ -76,6 +76,31 @@ class SessionHostIdleTest {
     }
 
     @Test
+    fun aSessionTypeThatNeverIdlesOut_outlivesTheGlobalKeepAlive() {
+        // CLI-LIVE-1: a live CLI (harness.claude.liveIdleMinutes = 0, mapped to Int.MAX_VALUE) is never idle-stopped.
+        adapter.idleLimit = Int.MAX_VALUE
+        prompt()
+        completeTurn()
+        val kept = adapter.current
+        minutes(24 * 60)
+        assertEquals(emptyList(), host.stopIdle(), "a day at rest does not stop a never-idle session type")
+        assertTrue(kept.isAlive)
+        prompt(text = "two")
+        assertEquals(1, adapter.launches.size, "the next wake goes into the same process")
+    }
+
+    @Test
+    fun aSessionTypesOwnIdleLimit_replacesTheGlobalOne() {
+        adapter.idleLimit = 5
+        prompt()
+        completeTurn()
+        minutes(4)
+        assertEquals(emptyList(), host.stopIdle())
+        minutes(1)
+        assertEquals(listOf("s1"), host.stopIdle(), "5 idle minutes stops it although the global keep-alive is 30")
+    }
+
+    @Test
     fun aBusyProcess_isNeverIdleStopped_andIdleTimeCountsFromTheEndOfTheLastTurn() {
         prompt()
         minutes(120)

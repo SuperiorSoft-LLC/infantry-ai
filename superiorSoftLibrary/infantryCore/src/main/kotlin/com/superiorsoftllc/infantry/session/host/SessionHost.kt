@@ -89,6 +89,7 @@ class SessionHost(
         var reuse: Slot? = null
         var replaced: Slot? = null
         val wasCrashed: Boolean
+        var restartWhy: String? = null
         val pending = Launching()
         synchronized(lock) {
             val existing = slots[sessionId]
@@ -97,6 +98,12 @@ class SessionHost(
                 existing.idleSince = null
                 reuse = existing
             } else if (existing != null) {
+                // CLI-LIVE-1: say WHY a live process was replaced, so a restart that should not happen is visible.
+                restartWhy = when {
+                    existing.key != key -> "launch settings changed (fingerprint differs at ${firstDifference(existing.key, key)})"
+                    !existing.process.isAlive -> "the process had exited"
+                    else -> "the process was released"
+                }
                 existing.released = true
                 slots.remove(sessionId)
                 replaced = existing
@@ -147,6 +154,7 @@ class SessionHost(
         process.onExit { code -> onProcessExit(slot, code) }
         val model = request.model?.takeIf { it.isNotBlank() } ?: runCatching { provider.defaultModel() }.getOrNull() ?: "default"
         events.bootLine(sessionId, "* session $verb (${adapter.label} · $model)")
+        restartWhy?.let { events.activity(sessionId, "the ${adapter.label} process was replaced: $it") }
         process.pid?.let { events.activity(sessionId, "the ${adapter.label} process is pid $it") }
         if (raced.abortRequested) {
             slot.idleSince = clock()
@@ -193,13 +201,14 @@ class SessionHost(
      * Returns the sessions it stopped.
      */
     fun stopIdle(): List<String> {
-        val minutes = policy().keepAliveMinutes
+        val global = policy().keepAliveMinutes
         val now = clock()
+        fun limit(slot: Slot): Long = slot.adapter.idleMinutes(global).toLong() * MS_PER_MINUTE
         val due = synchronized(lock) {
             slots.values.filter { slot ->
                 val since = slot.idleSince
                 since != null && slot.turn == null && !slot.released && slot.keptPid != null && slot.process.isAlive &&
-                    now - since >= minutes * MS_PER_MINUTE
+                    now - since >= limit(slot)
             }.onEach { slot ->
                 slots.remove(slot.sessionId)
                 slot.released = true
@@ -211,7 +220,7 @@ class SessionHost(
             val idle = (now - (slot.idleSince ?: now)) / MS_PER_MINUTE
             events.activity(
                 slot.sessionId,
-                if (minutes == 0) "stopped the $label process: keep-alive is off"
+                if (global == 0) "stopped the $label process: keep-alive is off"
                 else "stopped the $label process after $idle idle minutes",
             )
         }
@@ -219,6 +228,15 @@ class SessionHost(
     }
 
     /** BUG-M2-11f: the keep-alive setting changed; re-evaluate every kept process now, on the host's own thread. */
+    /** The NAME of the first launch input that differs (the text before its `=`, never a value: env can hold secrets). */
+    private fun firstDifference(old: String, new: String): String {
+        val a = old.split('\u0000', ',').map { it.trim() }
+        val b = new.split('\u0000', ',').map { it.trim() }
+        val at = (0 until maxOf(a.size, b.size)).firstOrNull { a.getOrNull(it) != b.getOrNull(it) } ?: return "?"
+        val item = (b.getOrNull(at) ?: a.getOrNull(at) ?: "?")
+        return "item $at '${item.substringBefore('=').take(40)}'"
+    }
+
     fun policyChanged() {
         runCatching { timer.execute { runCatching { stopIdle() } } }
     }

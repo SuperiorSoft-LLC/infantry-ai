@@ -22,8 +22,12 @@ class FakeHarnessAdapter(
     var abortAccepted: Boolean = true,
     /** Exit on [close] (a graceful harness), or ignore it so the host has to kill after its grace. */
     var exitOnClose: Boolean = true,
+    /** CLI-LIVE-1: the session type's own idle limit; null = the host's global keep-alive. */
+    var idleLimit: Int? = null,
 ) : HarnessSessionAdapter {
     override val label = ID
+
+    override fun idleMinutes(global: Int): Int = idleLimit ?: global
 
     val launches = mutableListOf<RunRequest>()
     val turns = mutableListOf<RunRequest>()

@@ -34,8 +34,12 @@ class ClaudeSession(
     private val mcp: (Map<String, String>) -> Pair<List<String>?, Map<String, String>>,
     private val watchSettings: (Map<String, String>) -> String? = { null },
     private val requestId: () -> String = { UUID.randomUUID().toString() },
+    /** `harness.claude.liveIdleMinutes`: 0 = never stop a resting process (the default, a live CLI stays up). */
+    private val idleMinutes: () -> Int = { 0 },
 ) : HarnessSession {
     override val label: String = "claude"
+
+    override fun idleMinutes(): Int = idleMinutes.invoke()
 
     private fun argv(exe: String, request: HarnessRequest, resume: String?, env: Map<String, String>): List<String> {
         val (mcpCommand, mcpEnv) = mcp(env)

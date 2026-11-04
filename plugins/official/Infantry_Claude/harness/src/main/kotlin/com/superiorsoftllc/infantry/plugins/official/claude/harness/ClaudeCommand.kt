@@ -30,6 +30,13 @@ import java.security.MessageDigest
  */
 object ClaudeCommand {
     const val CLI_ID = "claude"
+
+    /**
+     * CLI-LIVE-1: module setting (`harness.claude.liveIdleMinutes`): minutes a RESTING live claude process may idle before it is stopped.
+     * 0 (default) = never. MEMORY COST: each live process holds roughly 150-400 MB of RAM for as long as the session exists, so many
+     * long-lived sessions with 0 add up; set N to reclaim memory from sessions nobody has woken for N minutes (the next wake resumes).
+     */
+    const val LIVE_IDLE_SETTING = "liveIdleMinutes"
     const val HARNESS_ID = "claude"
 
     /** The infantry MCP server's name (the session's own `infantry mcp serve`). */

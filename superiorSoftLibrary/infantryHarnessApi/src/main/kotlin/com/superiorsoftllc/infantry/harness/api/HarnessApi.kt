@@ -205,6 +205,12 @@ interface HarnessSession {
 
     val bootTimeoutMs: Long get() = 60_000
 
+    /**
+     * Additive (CLI-LIVE-1): minutes a RESTING process of this session type may idle before the host stops it, read at every sweep.
+     * null (default) = the host's global keep-alive setting; 0 = never (a live CLI stays up); N = N minutes.
+     */
+    fun idleMinutes(): Int? = null
+
     /** What a live process is bound to. A different value on the next turn = the host restarts the process and resumes. */
     fun fingerprint(request: HarnessRequest, env: Map<String, String>): String
 
@@ -392,7 +398,11 @@ data class HarnessRequest(
 /** How freely the run's tools may act without a human: the harness maps it to its CLI's own permission flags. */
 enum class ToolApproval { DENY, ALLOW_EDITS, ALLOW_ALL, ASK }
 
-enum class HarnessCapability { MODEL_SELECTION, SESSION_RESUME, TOOL_CALLS, REASONING, USAGE, EFFORT_SELECTION }
+/**
+ * [LIVE_SESSION] (additive, CLI-LIVE-1): the harness's [Harness.session] keeps ONE process per session and every wake (owner message, mail,
+ * note, script prompt) is a message into it, like a live CLI; `--resume`-style restore happens only on the first start or after a crash.
+ */
+enum class HarnessCapability { MODEL_SELECTION, SESSION_RESUME, TOOL_CALLS, REASONING, USAGE, EFFORT_SELECTION, LIVE_SESSION }
 
 /** Neutral events a translator produces. A run ends with exactly one [Completion] or [Error] (from [HarnessTranslator.terminal]). */
 sealed interface HarnessEvent {

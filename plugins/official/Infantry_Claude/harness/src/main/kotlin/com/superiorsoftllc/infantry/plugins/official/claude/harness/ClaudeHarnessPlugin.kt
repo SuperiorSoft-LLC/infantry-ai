@@ -59,6 +59,7 @@ class ClaudeHarness internal constructor(
         HarnessCapability.REASONING,
         HarnessCapability.USAGE,
         HarnessCapability.EFFORT_SELECTION, // --effort
+        HarnessCapability.LIVE_SESSION, // one stream-json process per session, every wake a message into it (CLI-LIVE-1)
     )
 
     private fun mcp(env: Map<String, String>): Pair<List<String>?, Map<String, String>> {
@@ -98,7 +99,10 @@ class ClaudeHarness internal constructor(
 
     override fun models(): List<HarnessModels> = ClaudeCommand.models()
 
-    override fun session(): HarnessSession = ClaudeSession(executable, ::mcp, { env -> ClaudeCommand.watchSettings(env) })
+    override fun session(): HarnessSession = ClaudeSession(
+        executable, ::mcp, { env -> ClaudeCommand.watchSettings(env) },
+        idleMinutes = { host.setting(ClaudeCommand.LIVE_IDLE_SETTING)?.trim()?.toIntOrNull()?.takeIf { it >= 0 } ?: 0 },
+    )
 
     /** The PreToolUse / PostToolUse hook, as a settings file in the module's state dir named by `--settings`. */
     override fun watch(env: Map<String, String>, launcher: String): WatchContribution? {
