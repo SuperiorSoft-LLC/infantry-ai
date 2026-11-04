@@ -94,7 +94,7 @@ class ResumeSessionShots {
                         Box(Modifier.fillMaxWidth().background(Palette.Bg).padding(8.dp)) {
                             Column {
                                 Text("Merged the session endpoint. All attach tests pass.", color = Palette.Text, fontSize = 13.sp, modifier = Modifier.padding(bottom = 12.dp))
-                                PromptBox("", {}, {}, androidx.compose.ui.focus.FocusRequester(), false, controller.state.value.agents.getValue(record.id), controller, {}, onMinimize = {})
+                                PromptBox("", {}, {}, androidx.compose.ui.focus.FocusRequester(), false, controller.state.value.agents.getValue(record.id), controller, {})
                             }
                         }
                     }
