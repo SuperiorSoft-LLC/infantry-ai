@@ -72,7 +72,8 @@ class ClaudeSession(
 
     override fun connect(out: SessionOutput): SessionConnection = Connection(out, requestId)
 
-    private class Turn(private val out: SessionOutput) {
+    /** [own] = CLI-PTY-4: claude began it by itself; no sendTurn stands behind it. */
+    private class Turn(private val out: SessionOutput, val own: Boolean = false) {
         private val ended = AtomicBoolean(false)
         val abortRequested = AtomicBoolean(false)
 
@@ -85,16 +86,26 @@ class ClaudeSession(
         private val lock = Any()
         private var active: Turn? = null
         private var staleResults = 0
+        /** CLI-PTY-4: turns claude began itself that were still running when a turn was sent; results end them first, in order. */
+        private val ownAhead = ArrayDeque<Turn>()
 
         override fun onStdout(line: String) {
             val record = parse(line) ?: return
-            if (record.str("type") != "result") return
+            val type = record.str("type")
+            if (type == OWN_TURN_RECORD) {
+                // CLI-PTY-4: claude answers with no turn sent (it took up a notice of its own, e.g. a background task that ended): a turn
+                // the host must track like a sent one, ended by its `result` below.
+                val own = synchronized(lock) { if (active == null && staleResults == 0) Turn(out, own = true).also { active = it } else null }
+                own?.let { out.turnStarted("claude began a turn of its own") }
+                return
+            }
+            if (type != "result") return
             val turn = synchronized(lock) {
                 if (staleResults > 0) {
                     staleResults--
                     return
                 }
-                active.also { active = null }
+                ownAhead.removeFirstOrNull() ?: active.also { active = null }
             } ?: return
             when {
                 turn.abortRequested.get() -> turn.end(SessionTurnEnd.INTERRUPTED, null, null)
@@ -107,6 +118,7 @@ class ClaudeSession(
             val turn = Turn(out)
             val failure = synchronized(lock) {
                 if (active?.abortRequested?.get() == true) staleResults++
+                else active?.takeIf { it.own }?.let { ownAhead.addLast(it) }
                 active = turn
                 if (out.write(userLine(request.prompt) + "\n")) null else { active = null; "could not send the turn to claude" }
             }
@@ -127,6 +139,9 @@ class ClaudeSession(
 
     companion object {
         private val json = Json { ignoreUnknownKeys = true; isLenient = true }
+
+        /** CLI-PTY-4: the stream-json record type that shows a turn is running (a reply); seen with no turn open, claude began one itself. */
+        const val OWN_TURN_RECORD = "assistant"
 
         /** The one stdin line a turn is. */
         fun userLine(prompt: String): String = buildJsonObject {

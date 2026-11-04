@@ -77,8 +77,12 @@ import java.io.File
  * connect, drop or come back: recorded on the session, nothing acted on) and [SessionConnection.reconnectMcp] (bring the servers back inside the
  * live CLI; false = it cannot, the host restarts the process and resumes the same conversation). A 2.8 - 2.13 plugin keeps the defaults:
  * nothing reported, no in-place reconnect.
+ *
+ * 2.15.0 (CLI-PTY-4, additive): a turn the live process began by itself. [SessionOutput.turnStarted] (an interactive CLI answering a notice of
+ * its own, e.g. a background task that ended: the host tracks it like a sent turn, so the session reads busy and is not sent another turn
+ * until it ends; its end comes through [SessionOutput.turnEnded] like any turn). A 2.8 - 2.14 plugin keeps the default: nothing reported.
  */
-const val HARNESS_API_VERSION: String = "2.14.0"
+const val HARNESS_API_VERSION: String = "2.15.0"
 
 /** What a harness jar ships: registers its harnesses, given the [HarnessHost] scoped to its module. */
 interface HarnessPlugin {
@@ -256,8 +260,14 @@ interface SessionOutput {
     /** The harness's own session id once known. */
     fun providerSession(id: String)
 
-    /** Exactly once per [SessionConnection.sendTurn]. */
+    /** Exactly once per [SessionConnection.sendTurn], and once per [turnStarted]. */
     fun turnEnded(end: SessionTurnEnd, exitCode: Int? = null, reason: String? = null)
+
+    /**
+     * 2.15.0: the process began a turn nobody sent ([reason] = what started it, short). Report it once, when the turn is seen, and end it
+     * with [turnEnded] exactly once. Turns end in the order the process runs them: one begun before a sent turn it has not started yet ends first. Default: dropped (the host then never knows the turn ran).
+     */
+    fun turnStarted(reason: String? = null) {}
 
     /** 2.12.0: [line] as if the process had printed it to stdout: the host forwards it to the raw stream and reads it with [Harness.newTranslator]. Default: dropped. */
     fun output(line: String) {}

@@ -149,6 +149,7 @@ class RecordingEvents : HostEvents {
         log += "end $end code=$exitCode processExited=$processExited"
     }
     override fun processExited(sessionId: String, exitCode: Int) { log += "exit $exitCode" }
+    override fun turnStarted(sessionId: String, reason: String?) { log += "start $reason" }
     override fun keptProcess(sessionId: String, kept: KeptProcess) { log += "kept $sessionId pid=${kept.pid} startedAt=${kept.startedAt} ${kept.label}" }
     override fun keptProcessEnded(sessionId: String, pid: Long) { log += "keptEnded $sessionId pid=$pid" }
 }

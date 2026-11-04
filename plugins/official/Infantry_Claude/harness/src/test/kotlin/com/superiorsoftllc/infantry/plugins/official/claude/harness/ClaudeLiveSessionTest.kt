@@ -21,6 +21,8 @@ class ClaudeLiveSessionTest {
         override fun detail(text: String) {}
         override fun providerSession(id: String) {}
         override fun turnEnded(end: SessionTurnEnd, exitCode: Int?, reason: String?) { ends += Triple(end, exitCode, reason) }
+        val starts = mutableListOf<String?>()
+        override fun turnStarted(reason: String?) { starts += reason }
     }
 
     private val session = ClaudeSession({ "claude" }, { null to emptyMap() }, requestId = { "req-1" })
@@ -91,5 +93,34 @@ class ClaudeLiveSessionTest {
         assertEquals(0, session.idleMinutes())
         val tuned = ClaudeSession({ "claude" }, { null to emptyMap() }, idleMinutes = { 45 })
         assertEquals(45, tuned.idleMinutes())
+    }
+
+    // ---- CLI-PTY-4: a turn claude begins by itself ---------------------------------------------------------------------
+
+    @Test fun `a reply with no turn sent is a turn of claude's own, reported once and ended by its result`() {
+        val out = Recorder()
+        val c = session.connect(out)
+        c.sendTurn(request("go")); c.onStdout(ok)
+        // claude took up a background task's notice by itself
+        c.onStdout("""{"type":"assistant","message":{"id":"m1"}}""")
+        c.onStdout("""{"type":"assistant","message":{"id":"m2"}}""")
+        assertEquals(1, out.starts.size, "one start per own turn")
+        assertEquals(1, out.ends.size, "only the sent turn has ended so far")
+        c.onStdout(ok)
+        assertEquals(2, out.ends.size, "the own turn ends on its result")
+    }
+
+    @Test fun `a turn sent while claude runs one of its own ends after it, in order`() {
+        val out = Recorder()
+        val c = session.connect(out)
+        c.onStdout("""{"type":"assistant","message":{"id":"m1"}}""")
+        assertEquals(1, out.starts.size)
+        c.sendTurn(request("mail"))
+        c.onStdout(ok) // the own turn's result
+        assertEquals(1, out.ends.size)
+        c.onStdout("""{"type":"assistant","message":{"id":"m2"}}""")
+        assertEquals(1, out.starts.size, "a reply inside the sent turn is no new turn")
+        c.onStdout(ok) // the sent turn's result
+        assertEquals(2, out.ends.size)
     }
 }

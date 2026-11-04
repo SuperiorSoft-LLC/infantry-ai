@@ -127,7 +127,8 @@ class ClaudeTtySession(
         private val bootTimeoutMs: Long,
         private val pidAlive: (Long) -> Boolean = ::processAlive,
     ) : SessionConnection {
-        private class Turn(val prompt: String) {
+        /** [own] = CLI-PTY-4: the CLI began it by itself (nothing to paste); reported with [SessionOutput.turnStarted]. */
+        private class Turn(val prompt: String, val own: Boolean = false) {
             var abortAt: Long? = null
             var pastedAt: Long? = null
             var enteredAt: Long? = null
@@ -159,6 +160,10 @@ class ClaudeTtySession(
         private var mcpCheckedAt: Long? = null
         private var mcpSeen: Pair<Long, Boolean>? = null
         private var thread: Thread? = null
+        /** CLI-PTY-4: why the CLI began a turn by itself, seen while no turn was open (or the open one had stopped); started at the next step. */
+        private var ownPending: String? = null
+        /** CLI-PTY-4: a Stop seen while no turn was open; a turn of its own seen in the same read is that turn (it was over that fast). */
+        private var unclaimedStopAt: Long? = null
 
         fun startPolling() {
             thread = Thread({
@@ -226,8 +231,12 @@ class ClaudeTtySession(
             for (e in events.read()) {
                 when (e.trim().lowercase()) {
                     EV_START -> synchronized(lock) { if (startedAt == null) startedAt = now }
-                    EV_SUBMIT -> synchronized(lock) { active?.submitted = true }
-                    EV_STOP -> synchronized(lock) { active?.let { if (it.submitted || it.enteredAt != null) it.stopAt = it.stopAt ?: now } }
+                    EV_SUBMIT -> synchronized(lock) { active?.takeIf { it.stopAt == null }?.let { it.submitted = true } ?: own("a prompt nobody sent") }
+                    EV_STOP -> synchronized(lock) {
+                        val turn = active
+                        if (turn != null && (turn.submitted || turn.enteredAt != null || turn.own)) turn.stopAt = turn.stopAt ?: now
+                        else if (turn == null) unclaimedStopAt = now
+                    }
                 }
             }
             if (!initSent) {
@@ -238,21 +247,26 @@ class ClaudeTtySession(
             answerTrust(now)
             checkMcp(now)
             var apiError: String? = null
-            for (line in transcript.read()) {
-                for (signal in mapper.map(line)) when (signal) {
-                    is TranscriptSignal.Line -> out.output(signal.json)
-                    TranscriptSignal.PromptRecorded -> synchronized(lock) { active?.submitted = true }
-                    TranscriptSignal.Interrupted -> synchronized(lock) { interruptedSeen = true }
-                    is TranscriptSignal.ApiError -> apiError = signal.text
-                }
-            }
+            for (line in transcript.read()) for (signal in mapper.map(line)) onSignal(signal)?.let { apiError = it }
             val ends = ArrayList<Triple<SessionTurnEnd, Int?, String?>>()
+            val starts = ArrayList<String?>()
             synchronized(lock) {
                 val turn = active
                 when {
+                    turn == null && ownPending != null -> {
+                        // CLI-PTY-4: the CLI is working on a turn of its own: track it, and paste nothing into it until it ends.
+                        val why = ownPending
+                        ownPending = null
+                        val own = Turn("", own = true).apply { submitted = true }
+                        unclaimedStopAt?.let { own.stopAt = it }
+                        unclaimedStopAt = null
+                        active = own
+                        starts += why
+                    }
                     turn == null -> {
                         if (queue.isNotEmpty() && ready(now)) {
                             val next = queue.poll()
+                            unclaimedStopAt = null
                             active = next
                             paste(next.prompt)
                             next.pastedAt = now
@@ -274,7 +288,8 @@ class ClaudeTtySession(
                     }
                     turn.stopAt != null && now - turn.stopAt!! >= STOP_SETTLE_MS -> {
                         // The hook can fire just before the last record is flushed: one more read, then the turn's result.
-                        for (line in transcript.read()) for (signal in mapper.map(line)) if (signal is TranscriptSignal.Line) out.output(signal.json)
+                        // A turn the CLI begins at once after this one (a queued notice) is noticed here too, never lost.
+                        for (line in transcript.read()) for (signal in mapper.map(line)) onSignal(signal)
                         out.output(mapper.resultLine())
                         ends += Triple(SessionTurnEnd.COMPLETED, 0, null)
                         active = null
@@ -291,7 +306,26 @@ class ClaudeTtySession(
                 }
             }
             for ((end, code, reason) in ends) out.turnEnded(end, code, reason)
+            for (why in starts) out.turnStarted(why)
+            synchronized(lock) { unclaimedStopAt?.let { if (now - it >= STOP_CLAIM_MS) unclaimedStopAt = null } }
         }
+
+        /** One transcript signal; returns an API error's text. */
+        private fun onSignal(signal: TranscriptSignal): String? {
+            when (signal) {
+                is TranscriptSignal.Line -> out.output(signal.json)
+                TranscriptSignal.PromptRecorded -> synchronized(lock) { active?.takeIf { it.stopAt == null }?.let { it.submitted = true } ?: own("a prompt typed in the terminal", specific = true) }
+                is TranscriptSignal.OwnPrompt -> synchronized(lock) { active?.takeIf { it.stopAt == null }?.let { it.submitted = true } ?: own(ownReason(signal.kind), specific = true) }
+                TranscriptSignal.Interrupted -> synchronized(lock) { interruptedSeen = true }
+                is TranscriptSignal.ApiError -> return signal.text
+            }
+            return null
+        }
+
+        /** CLI-PTY-4: a turn began with none open (or the open one already stopped). Called under [lock]; the first reason wins. */
+        private fun own(why: String, specific: Boolean = false) { if (ownPending == null || specific) ownPending = why }
+
+        private fun ownReason(kind: String) = if (kind == ORIGIN_TASK_NOTIFICATION) "a background task ended" else "a $kind"
 
         /**
          * CLI-PTY-3: the MCP server's pid file, read every [MCP_CHECK_MS]. No file yet = the server has not started: nothing to say. A pid
@@ -358,6 +392,8 @@ class ClaudeTtySession(
         const val EV_START = "start"
         const val EV_SUBMIT = "submit"
         const val EV_STOP = "stop"
+        /** The `origin.kind` claude gives the prompt it makes when one of its background tasks ends. */
+        const val ORIGIN_TASK_NOTIFICATION = "task-notification"
 
         const val ESC = "\u001b"
         const val ENTER = "\r"
@@ -379,6 +415,8 @@ class ClaudeTtySession(
         const val PASTE_SETTLE_MS = 400L
         const val SUBMIT_RETRY_MS = 4_000L
         const val STOP_SETTLE_MS = 300L
+        /** CLI-PTY-4: how long a Stop seen with no turn open can still end a turn of the CLI's own whose prompt record is read after it. */
+        const val STOP_CLAIM_MS = 2_000L
         const val ABORT_GRACE_MS = 3_000L
         const val READY_AFTER_START_MS = 1_500L
         const val READY_FALLBACK_MS = 8_000L
