@@ -44,7 +44,8 @@ class SessionHost(
     /** PROMPT-3: where an adapter relays a Tool approval `ask` prompt (the daemon's PendingPrompts); read at each use. */
     private val prompts: () -> com.superiorsoftllc.infantry.prompts.PromptAsker = { com.superiorsoftllc.infantry.prompts.PromptAsker.CANNOT_PROMPT },
 ) {
-    private class Turn {
+    /** [own] = CLI-PTY-4: the process began it by itself ([ownTurn]); no sendTurn stands behind it. */
+    private class Turn(val own: Boolean = false) {
         val ended = AtomicBoolean(false)
         @Volatile var abortRequested = false
     }
@@ -61,6 +62,12 @@ class SessionHost(
 
         /** BUG-M2-11f: the OS pid reported through [HostEvents.keptProcess], or null for a handle with no OS process. */
         @Volatile var keptPid: Long? = null
+
+        /**
+         * CLI-PTY-4: turns the process began by itself ahead of [turn] (a sent turn it has not started yet). The process runs them first, so
+         * the next this many ends are theirs, not [turn]'s. Guarded by the host lock.
+         */
+        var ownAhead = 0
     }
 
     /** A launch in progress: what an abort or a stop asked for before the process existed. */
@@ -166,7 +173,13 @@ class SessionHost(
 
     private fun send(slot: Slot, request: RunRequest) {
         val turn = Turn()
-        val superseded = synchronized(lock) { slot.turn.also { slot.turn = turn } }
+        val superseded = synchronized(lock) {
+            slot.turn.also {
+                slot.turn = turn
+                // CLI-PTY-4: a turn the process began by itself is still running: its end comes first and is not this turn's.
+                if (it != null && it.own && !it.ended.get()) slot.ownAhead++
+            }
+        }
         // BUG-M2-11c-FLAKE: an interrupted turn the manager already settled, whose provider had not confirmed the stop
         // before this prompt. It is over: its abort grace must not kill the process now serving the new turn.
         superseded?.ended?.set(true)
@@ -177,6 +190,26 @@ class SessionHost(
             return
         }
         if (!turn.ended.get()) slot.process.pid?.let { events.process(slot.sessionId, it) }
+    }
+
+    /**
+     * CLI-PTY-4: the process of [slot] began a turn nobody sent. With no turn open it becomes the slot's turn (the session is busy until it
+     * ends, so nothing else is sent into it); with a sent turn open that the process has not started yet, it runs first: it is counted
+     * and its end is absorbed ([Slot.ownAhead]).
+     */
+    private fun ownTurn(slot: Slot, reason: String?) {
+        val fresh = synchronized(lock) {
+            if (slot.released) return
+            if (slot.turn != null) { slot.ownAhead++; false }
+            else { slot.turn = Turn(own = true); slot.idleSince = null; true }
+        }
+        if (fresh) events.turnStarted(slot.sessionId, reason)
+        else events.activity(slot.sessionId, "the ${slot.adapter.label} process began a turn of its own" + reason?.let { ": $it" }.orEmpty())
+    }
+
+    /** CLI-PTY-4: true = this end belongs to a turn the process began while a sent turn was open; it ends nothing the host tracks. */
+    private fun absorbOwnEnd(slot: Slot): Boolean = synchronized(lock) {
+        if (slot.ownAhead > 0) { slot.ownAhead--; true } else false
     }
 
     private fun endTurn(slot: Slot, turn: Turn?, end: TurnEnd, exitCode: Int?, reason: String?, processExited: Boolean) {
@@ -377,8 +410,12 @@ class SessionHost(
 
         override fun mcpState(state: String, reason: String?) = events.mcpState(slot.sessionId, state, reason)
 
-        override fun turnEnded(end: TurnEnd, exitCode: Int?, reason: String?) =
+        override fun turnEnded(end: TurnEnd, exitCode: Int?, reason: String?) {
+            if (absorbOwnEnd(slot)) return
             endTurn(slot, slot.turn, end, exitCode, reason, processExited = false)
+        }
+
+        override fun turnStarted(reason: String?) = ownTurn(slot, reason)
 
         override val sessionId: String get() = slot.sessionId
 

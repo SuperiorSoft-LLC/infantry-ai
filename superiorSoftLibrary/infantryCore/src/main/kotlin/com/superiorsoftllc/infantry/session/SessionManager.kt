@@ -1418,6 +1418,25 @@ class SessionManager(
         host.runTurn(sessionId, provider, request, runEnv)
     }
 
+    /**
+     * CLI-PTY-4: the session's live process began a turn nobody sent (an interactive CLI answering a background task that ended). It is a
+     * run like any other from here: the session reads BUSY, mail waits for it (busy = retry), the watchdog and the feed see it, and its end
+     * ([HostEvents.turnEnded]) settles it. A run already in flight keeps it.
+     */
+    private fun startOwnTurn(sessionId: String, reason: String?) {
+        val provider: String? = locked {
+            val session = sessions[sessionId] ?: return@locked null
+            if (runs.containsKey(sessionId)) return@locked null
+            interruptedTurns.remove(sessionId)
+            runs[sessionId] = ActiveRun(clock())
+            update(sessionId) {
+                it.copy(state = SessionState.BUSY, runCount = it.runCount + 1, lastHeartbeat = clock(), isProcessAlive = true, backgroundWork = null, killedBy = null, killReason = null)
+            }
+            session.provider
+        }
+        if (provider != null) emit(SessionEvent.Activity(sessionId, provider, "the CLI began a turn of its own" + reason?.let { ": $it" }.orEmpty()))
+    }
+
     /** Ticket 7e9bed2a: told once per silence when a BUSY session has had no output for [silentMs] and is not provably dead. */
     @Volatile
     var silentSink: ((SessionRecord, Long) -> Unit)? = null
@@ -1866,6 +1885,8 @@ class SessionManager(
 
         override fun turnEnded(sessionId: String, end: TurnEnd, exitCode: Int?, processExited: Boolean, reason: String?) =
             finishHosted(sessionId, end, exitCode, processExited, reason)
+
+        override fun turnStarted(sessionId: String, reason: String?) = startOwnTurn(sessionId, reason)
 
         override fun processExited(sessionId: String, exitCode: Int) {
             emit(SessionEvent.ProcessExit(sessionId, exitCode))

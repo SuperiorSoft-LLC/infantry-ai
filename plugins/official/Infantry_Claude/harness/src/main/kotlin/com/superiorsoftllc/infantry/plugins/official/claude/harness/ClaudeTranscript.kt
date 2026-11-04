@@ -31,6 +31,9 @@ sealed interface TranscriptSignal {
     /** The typed prompt was recorded (the turn started). */
     data object PromptRecorded : TranscriptSignal
 
+    /** CLI-PTY-4: the CLI recorded a prompt it made itself ([kind] = its `origin.kind`, e.g. `task-notification`): a turn nobody typed. */
+    data class OwnPrompt(val kind: String) : TranscriptSignal
+
     /** The CLI recorded that the user interrupted the turn (Esc). */
     data object Interrupted : TranscriptSignal
 
@@ -89,8 +92,10 @@ class TranscriptMapper(private val sessionId: String) {
             is JsonPrimitive -> content.contentOrNull.orEmpty()
             else -> blocks.filter { it.str("type") == "text" }.mapNotNull { it.str("text") }.joinToString("\n")
         }
+        val origin = (record["origin"] as? JsonObject)?.str("kind")?.takeIf { it.isNotBlank() }
         return when {
             text.startsWith(INTERRUPTED_PREFIX) -> listOf(TranscriptSignal.Interrupted)
+            origin != null && origin != ORIGIN_HUMAN && text.isNotBlank() -> listOf(TranscriptSignal.OwnPrompt(origin))
             text.isNotBlank() -> listOf(TranscriptSignal.PromptRecorded)
             else -> emptyList()
         }
@@ -131,6 +136,8 @@ class TranscriptMapper(private val sessionId: String) {
         /** The model name the CLI gives the messages it writes itself (e.g. after an interrupt); not a model reply. */
         const val SYNTHETIC_MODEL = "<synthetic>"
         const val INTERRUPTED_PREFIX = "[Request interrupted by user"
+        /** The `origin.kind` of a prompt typed (or pasted) into the terminal; any other kind is one the CLI made itself. */
+        const val ORIGIN_HUMAN = "human"
         val USAGE_KEYS = listOf("input_tokens", "output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")
     }
 }
@@ -139,9 +146,9 @@ private fun JsonObject.str(key: String): String? = (this[key] as? JsonPrimitive)
 
 private fun JsonObject.bool(key: String): Boolean = (this[key] as? JsonPrimitive)?.contentOrNull == "true"
 
-/** Reads the lines appended to a file since the last call; a line still being written waits for its newline. One caller thread. */
-class AppendedLines(private val file: () -> File?) {
-    private var offset = 0L
+/** Reads the lines appended to a file since the last call, from byte [start] on; a line still being written waits for its newline. One caller thread. */
+class AppendedLines(start: Long = 0L, private val file: () -> File?) {
+    private var offset = start
     private var partial = StringBuilder()
     private val bytes = java.io.ByteArrayOutputStream()
 

@@ -107,6 +107,8 @@ internal class ApiSessionAdapter(
         override fun turnEnded(end: SessionTurnEnd, exitCode: Int?, reason: String?) {
             sink.turnEnded(TurnEnd.valueOf(end.name), exitCode, reason)
         }
+        // CLI-PTY-4 (API 2.15): a turn the process began by itself.
+        override fun turnStarted(reason: String?) = sink.turnStarted(reason)
     }
 
     private inner class Hosted : HostedProcess {

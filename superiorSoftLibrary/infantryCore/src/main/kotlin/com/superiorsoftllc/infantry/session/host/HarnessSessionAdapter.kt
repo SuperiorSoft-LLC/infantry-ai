@@ -59,8 +59,14 @@ interface AdapterSink {
     /** The provider's session id once known. */
     fun providerSession(id: String)
 
-    /** Exactly once per sendTurn. */
+    /** Exactly once per sendTurn, and once per [turnStarted]. */
     fun turnEnded(end: TurnEnd, exitCode: Int? = null, reason: String? = null)
+
+    /**
+     * CLI-PTY-4: the live process began a turn nobody sent ([reason] = what started it). The host tracks it like a sent turn; it ends with
+     * [turnEnded]. Turns end in the order the process runs them (one begun before a sent turn it has not started yet ends first). Default: dropped.
+     */
+    fun turnStarted(reason: String?) {}
 
     /** CLI-PTY-3: the harness saw the session's MCP server become [state] (CONNECTED / DISCONNECTED / RECONNECTING). Recorded only. */
     fun mcpState(state: String, reason: String?) {}
@@ -126,6 +132,9 @@ interface HostEvents {
     /** The session's live OS process, or none. */
     fun process(sessionId: String, pid: Long?)
     fun turnEnded(sessionId: String, end: TurnEnd, exitCode: Int?, processExited: Boolean, reason: String?)
+
+    /** CLI-PTY-4: the live process of [sessionId] began a turn of its own ([AdapterSink.turnStarted]) while the session had none. */
+    fun turnStarted(sessionId: String, reason: String?) {}
 
     /** PROMPT-4: [AdapterSink.requestApproval] for [sessionId]. Blocking; default: nobody can prompt. */
     fun requestApproval(sessionId: String, tool: String, input: String): Decision = Decision.DENY

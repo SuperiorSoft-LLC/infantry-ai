@@ -46,6 +46,8 @@ class ClaudeTtySessionTest {
         override fun providerSession(id: String) { sessions += id }
         override fun output(line: String) { lines += line }
         override fun turnEnded(end: SessionTurnEnd, exitCode: Int?, reason: String?) { ends += Triple(end, exitCode, reason) }
+        val starts = mutableListOf<String?>()
+        override fun turnStarted(reason: String?) { starts += reason }
     }
 
     private val session = ClaudeTtySession(
@@ -384,5 +386,104 @@ class ClaudeTtySessionTest {
         assertEquals(listOf(McpState.CONNECTED, McpState.DISCONNECTED, McpState.CONNECTED), out.mcp, "a new server came up")
         assertTrue(out.written.isEmpty(), "detection types nothing into the CLI: ${out.written}")
         assertFalse(c.reconnectMcp(), "no in-place reconnect: the host restarts and resumes")
+    }
+
+    // ---- CLI-PTY-4: a turn the CLI begins by itself ---------------------------------------------------------------------
+
+    private val notice = """{"type":"user","uuid":"u-n","entrypoint":"cli","origin":{"kind":"task-notification","producer":"session-task"},"message":{"role":"user","content":"<task-notification>\n<task-id>b1</task-id>\n<status>completed</status>\n</task-notification>"}}"""
+    private val pasted = """{"type":"user","uuid":"u-h","entrypoint":"cli","origin":{"kind":"human"},"message":{"role":"user","content":"NEW MAIL (1)"}}"""
+
+    private fun settle(s: Started) { s.c.tick(); now += ClaudeTtySession.STOP_SETTLE_MS; s.c.tick() }
+
+    @Test fun `a prompt the cli made itself is told apart from a typed one`() {
+        val m = TranscriptMapper("sid")
+        assertEquals(listOf(TranscriptSignal.OwnPrompt("task-notification")), m.map(notice))
+        assertEquals(listOf(TranscriptSignal.PromptRecorded), m.map(pasted), "a pasted prompt is the human's")
+    }
+
+    @Test fun `a background task that ends while idle is a tracked turn, and nothing is pasted into it`() {
+        val s = start()
+        up(s)
+        record(notice); record(toolUse)
+        s.c.tick()
+        assertEquals(listOf<String?>("a background task ended"), s.out.starts, "reported once, when seen")
+        assertTrue(s.out.lines.any { "toolu_1" in it }, "its tool call is live output")
+        s.c.sendTurn(request("mail"))
+        s.c.tick()
+        assertTrue(s.out.written.isEmpty(), "a turn sent meanwhile waits: ${s.out.written}")
+        record(toolResult); record(assistant("m9", "checked the log", 3))
+        event(s, "stop")
+        settle(s)
+        assertEquals(listOf(Triple<SessionTurnEnd, Int?, String?>(SessionTurnEnd.COMPLETED, 0, null)), s.out.ends)
+        assertEquals("checked the log", Json.parseToJsonElement(s.out.lines.last()).jsonObject["result"]!!.jsonPrimitive.content)
+        s.c.tick()
+        assertEquals(ClaudeTtySession.PASTE_START + "mail" + ClaudeTtySession.PASTE_END, s.out.written.single(), "then the waiting turn is pasted")
+        assertEquals(1, s.out.starts.size)
+    }
+
+    @Test fun `a notice the cli takes up right after a sent turn stops is the next turn, not lost`() {
+        val s = start()
+        up(s)
+        s.c.sendTurn(request("build"))
+        s.c.tick(); now += ClaudeTtySession.PASTE_SETTLE_MS; s.c.tick()
+        event(s, "submit"); record(pasted); s.c.tick()
+        record(assistant("m1", "build started", 2))
+        event(s, "stop")
+        s.c.tick()
+        record(notice) // dequeued by the CLI as soon as the sent turn stopped, inside the settle window
+        now += ClaudeTtySession.STOP_SETTLE_MS
+        s.c.tick()
+        assertEquals(1, s.out.ends.size, "the sent turn ended")
+        assertEquals("build started", Json.parseToJsonElement(s.out.lines.last { "\"result\"" in it }).jsonObject["result"]!!.jsonPrimitive.content)
+        s.c.tick()
+        assertEquals(listOf<String?>("a background task ended"), s.out.starts)
+        record(assistant("m2", "build passed", 2))
+        event(s, "stop")
+        settle(s)
+        assertEquals(2, s.out.ends.size, "the own turn ended on its own Stop")
+    }
+
+    @Test fun `an own turn over before its prompt is read still ends`() {
+        val s = start()
+        up(s)
+        event(s, "stop")
+        record(notice); record(assistant("m3", "ok", 1))
+        s.c.tick()
+        assertEquals(1, s.out.starts.size)
+        now += ClaudeTtySession.STOP_SETTLE_MS
+        s.c.tick()
+        assertEquals(SessionTurnEnd.COMPLETED, s.out.ends.single().first)
+    }
+
+    @Test fun `an own turn can be interrupted like a sent one`() {
+        val s = start()
+        up(s)
+        record(notice); s.c.tick()
+        assertTrue(s.c.abortTurn())
+        assertEquals(ClaudeTtySession.ESC, s.out.written.last())
+        now += ClaudeTtySession.ABORT_GRACE_MS
+        s.c.tick()
+        assertEquals(SessionTurnEnd.INTERRUPTED, s.out.ends.single().first)
+    }
+
+    @Test fun `a resumed long session reads only what claude adds after launch, never its history as live`() {
+        val id = "11111111-2222-3333-4444-555555555555"
+        val interrupted = """{"type":"user","uuid":"u-i","message":{"role":"user","content":[{"type":"text","text":"[Request interrupted by user]"}]}}"""
+        repeat(2000) { record(prompt); record(toolUse); record(toolResult); record(assistant("old$it", "old reply $it", 4)) }
+        record(notice); record(interrupted) // history ends on a notice and an interruption that are long over
+        val s = start(resume = id)
+        up(s)
+        s.c.tick()
+        assertTrue(s.out.lines.none { "old reply" in it || "toolu_1" in it }, "no history replayed into the feed: ${s.out.lines.size} lines")
+        assertEquals(1, s.out.lines.size, "only the init line")
+        assertTrue(s.out.starts.isEmpty(), "an old notice starts no turn: ${s.out.starts}")
+        s.c.sendTurn(request("mail"))
+        s.c.tick(); now += ClaudeTtySession.PASTE_SETTLE_MS; s.c.tick()
+        event(s, "submit"); record(pasted); record(assistant("m1", "read the mail", 2))
+        event(s, "stop")
+        settle(s)
+        assertEquals(listOf(Triple<SessionTurnEnd, Int?, String?>(SessionTurnEnd.COMPLETED, 0, null)), s.out.ends, "the old interruption does not end the new turn")
+        assertEquals("read the mail", Json.parseToJsonElement(s.out.lines.last()).jsonObject["result"]!!.jsonPrimitive.content)
+        assertTrue(s.out.lines.none { "old reply" in it })
     }
 }
