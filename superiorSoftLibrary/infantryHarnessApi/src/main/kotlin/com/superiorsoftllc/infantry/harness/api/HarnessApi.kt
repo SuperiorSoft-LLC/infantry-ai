@@ -67,8 +67,13 @@ import java.io.File
  * 2.12.0 (HARNESS H8b-2, additive): a persistent session whose protocol is not the process's own stdin/stdout (opencode serve: HTTP + server-sent
  * events). [SessionOutput.output] (a record as if the process had printed it: raw stream + translator), [SessionOutput.diagnostic],
  * [SessionOutput.requestApproval] (ask the owner about one tool call, blocking), [SessionConnection.onStderr] and [HarnessSession.connect] with the launched process. A 2.8 - 2.11 plugin keeps the defaults.
+ *
+ * 2.13.0 (CLI-PTY-1, additive): a persistent session whose process is an INTERACTIVE program that needs a pseudo-terminal. [HarnessSession.terminal]
+ * (this launched process runs in a terminal: its output is a screen, handed to [SessionConnection.onStdout] in decoded chunks and never forwarded as
+ * a stdout record; the session reports its records itself through [SessionOutput.output], and [SessionOutput.write] is keyboard input) and
+ * [SessionConnection.onExit] (the launched process ended). A 2.8 - 2.12 plugin keeps the defaults: pipes, no exit callback.
  */
-const val HARNESS_API_VERSION: String = "2.12.0"
+const val HARNESS_API_VERSION: String = "2.13.0"
 
 /** What a harness jar ships: registers its harnesses, given the [HarnessHost] scoped to its module. */
 interface HarnessPlugin {
@@ -225,6 +230,13 @@ interface HarnessSession {
      * e.g. a per-process password). Default: [connect]. The host always calls this one.
      */
     fun connect(out: SessionOutput, launched: HarnessProcess): SessionConnection = connect(out)
+
+    /**
+     * 2.13.0: true = [launched] (what [launch] returned) runs in a pseudo-terminal, as a person would run it. The host then hands its screen to
+     * [SessionConnection.onStdout] in decoded chunks (a terminal has no lines; colours and cursor moves included) and forwards NONE of it to the
+     * raw stream or the translator: the session reports its records through [SessionOutput.output]. Default false: stdin/stdout pipes.
+     */
+    fun terminal(launched: HarnessProcess): Boolean = false
 }
 
 /** 2.8.0: the plugin's handle on one launched process. Thread-safe. */
@@ -275,6 +287,9 @@ interface SessionConnection {
 
     /** Ask the process to exit (usually [SessionOutput.closeInput]). false (default) = no graceful exit; the host kills at once. */
     fun close(): Boolean = false
+
+    /** 2.13.0: the launched process ended with [exitCode] (any reason), after its last [onStdout]. Default: ignored. */
+    fun onExit(exitCode: Int) {}
 }
 
 /** 2.7.0: the only roots a contributed sandbox dir may sit under: the module's own data folder and the session worktree. */

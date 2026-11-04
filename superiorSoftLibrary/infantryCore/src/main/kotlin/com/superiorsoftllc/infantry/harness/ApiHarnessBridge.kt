@@ -214,7 +214,7 @@ class ApiCliHarness(
         if (!hookAllowed("session")) return null
         val s = try { api.session() } catch (t: Throwable) { onFailure(PluginFailure(pluginId, PluginFailurePhase.RUN, t)); null } ?: return null
         // H6c: the persistent process gets the same watch / sandbox contributions as a one-shot spec, plus the daemon's generic launch extras for this id.
-        return ApiSessionAdapter(api.id, pluginId, s, onFailure) { spec, env -> HarnessLaunchExtras.apply(api.id, decorate(spec, env), env) }
+        return ApiSessionAdapter(api.id, pluginId, s, onFailure, decorate = { spec, env -> HarnessLaunchExtras.apply(api.id, decorate(spec, env), env) })
     }
 
     /** H6a: the plugin's model listing behind the `harness.hook.models` grant; a throw is isolated into one noted row by the caller. */

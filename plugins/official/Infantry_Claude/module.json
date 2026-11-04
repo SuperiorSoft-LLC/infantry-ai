@@ -5,13 +5,25 @@
   "author": "Infantry AI",
   "license": "NOASSERTION",
   "tier": "official",
-  "description": "The Claude Code harness (HARNESS H7b-2/3): launches claude (-p stream-json, or the persistent --input-format stream-json), reads its event stream, maps tool approval to permission modes, routes its tool calls through the watched runner, lists its models, and reads its session store and plan limits. Setting liveIdleMinutes (harness.claude.liveIdleMinutes, default 0 = never): minutes a resting live claude process may idle before it is stopped; each live process holds about 150-400 MB of RAM while it exists, so lower it to reclaim memory from sessions nobody wakes (the next wake resumes).",
+  "description": "The Claude Code harness (HARNESS H7b-2/3): launches claude (-p stream-json, or the persistent --input-format stream-json), reads its event stream, maps tool approval to permission modes, routes its tool calls through the watched runner, lists its models, and reads its session store and plan limits. Setting harness.claude.liveIdleMinutes ( default 0 = never): minutes a resting live claude process may idle before it is stopped; each live process holds about 150-400 MB of RAM while it exists, so lower it to reclaim memory from sessions nobody wakes (the next wake resumes). Setting harness.claude.mode (experimental, default headless): interactive runs the interactive claude in a pseudo-terminal (ConPTY on Windows) and reads its session transcript instead of claude -p stream-json; requests are then labelled cli instead of sdk-cli. Interactive mode answers the CLI's folder trust question for the session's worktree, always passes --strict-mcp-config (so a project .mcp.json is not loaded and its approval dialog never shows), and a one-shot run (keep-alive 0) has no watch hook in it.",
+  "daemon": {
+    "config": [
+      {
+        "node": "infantry.claude", "group": "Harnesses", "title": "Claude Code", "tab": "Plugins", "order": 940,
+        "keywords": ["claude", "harness", "live", "interactive", "pty"],
+        "fields": [
+          { "key": "harness.claude.liveIdleMinutes", "type": "number", "label": "Stop a resting live claude after (minutes, 0 = never)", "default": 0, "min": 0, "max": 10080, "step": 1, "scope": "daemon", "order": 1 },
+          { "key": "harness.claude.mode", "type": "text", "label": "Mode (headless or interactive, experimental)", "default": "headless", "scope": "daemon", "order": 2 }
+        ]
+      }
+    ]
+  },
   "harness": {
     "jar": "harness/build/libs/Infantry_Claude-harness.jar",
-    "contract": "2.12.0",
+    "contract": "2.13.0",
     "ids": ["claude"],
     "cli": { "id": "claude", "command": "claude", "label": "Claude Code" },
-    "settings": ["liveIdleMinutes"],
+    "settings": ["harness.claude.liveIdleMinutes", "harness.claude.mode"],
     "hooks": ["watch", "mcp", "session", "models", "stats", "usage"]
   }
 }

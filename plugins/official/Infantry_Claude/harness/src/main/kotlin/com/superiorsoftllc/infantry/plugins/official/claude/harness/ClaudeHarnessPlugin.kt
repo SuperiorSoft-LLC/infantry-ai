@@ -59,7 +59,7 @@ class ClaudeHarness internal constructor(
         HarnessCapability.REASONING,
         HarnessCapability.USAGE,
         HarnessCapability.EFFORT_SELECTION, // --effort
-        HarnessCapability.LIVE_SESSION, // one stream-json process per session, every wake a message into it (CLI-LIVE-1)
+        HarnessCapability.LIVE_SESSION, // one process per session, every wake a message into it (CLI-LIVE-1); stream-json or the interactive CLI (CLI-PTY-1)
     )
 
     private fun mcp(env: Map<String, String>): Pair<List<String>?, Map<String, String>> {
@@ -99,16 +99,25 @@ class ClaudeHarness internal constructor(
 
     override fun models(): List<HarnessModels> = ClaudeCommand.models()
 
-    override fun session(): HarnessSession = ClaudeSession(
-        executable, ::mcp, { env -> ClaudeCommand.watchSettings(env) },
-        idleMinutes = { host.setting(ClaudeCommand.LIVE_IDLE_SETTING)?.trim()?.toIntOrNull()?.takeIf { it >= 0 } ?: 0 },
+    private fun liveIdle(): Int = host.setting(ClaudeCommand.LIVE_IDLE_SETTING)?.trim()?.toIntOrNull()?.takeIf { it >= 0 } ?: 0
+
+    private fun interactive(): Boolean = ClaudeCommand.isInteractive(host.setting(ClaudeCommand.MODE_SETTING))
+
+    /** headless stream-json, or (CLI-PTY-1, `harness.claude.mode = interactive`) the interactive CLI in a terminal; decided at every launch. */
+    override fun session(): HarnessSession = ClaudeModeSession(
+        headless = ClaudeSession(executable, ::mcp, { env -> ClaudeCommand.watchSettings(env) }, idleMinutes = ::liveIdle),
+        interactive = ClaudeTtySession(executable, ::mcp, { env -> ClaudeCommand.watchSettings(env) }, stateDir = { host.stateDir }, idleMinutes = ::liveIdle),
+        mode = { host.setting(ClaudeCommand.MODE_SETTING) },
     )
 
-    /** The PreToolUse / PostToolUse hook, as a settings file in the module's state dir named by `--settings`. */
+    /**
+     * The PreToolUse / PostToolUse hook, as a settings file in the module's state dir named by `--settings`. In interactive mode the session's own
+     * settings file carries these hooks (claude keeps only the last `--settings`), so no second flag is added.
+     */
     override fun watch(env: Map<String, String>, launcher: String): WatchContribution? {
         val settings = ClaudeCommand.watchSettings(env) ?: return null
         return WatchContribution(
-            extraArgs = listOf("--settings", File(host.stateDir, ClaudeCommand.WATCH_SETTINGS_FILE).absolutePath),
+            extraArgs = if (interactive()) emptyList() else listOf("--settings", File(host.stateDir, ClaudeCommand.WATCH_SETTINGS_FILE).absolutePath),
             files = mapOf(ClaudeCommand.WATCH_SETTINGS_FILE to settings),
         )
     }

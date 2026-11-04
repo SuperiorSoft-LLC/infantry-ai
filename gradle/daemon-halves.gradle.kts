@@ -12,10 +12,15 @@
 //       [expected] (folder names) is not staged at all: a missing half can never ship silently.
 // `verifyDaemonHalvesGuard` (wired into :superiorSoftLibrary:infantry:check) runs the check on scratch folders.
 
-/** `daemon.jar` of `<moduleDir>/module.json`; null when the module declares no daemon half. A `daemon` block without a jar fails. */
+/**
+ * `daemon.jar` of `<moduleDir>/module.json`; null when the module declares no daemon half. A `daemon` block with an `entry`
+ * but no jar fails. A block with neither (only `daemon.config`, CLI-PTY-1) is config only: the daemon runs no code for it
+ * (DaemonPluginHost skips a block without an entry), so there is no half to ship.
+ */
 fun daemonJar(moduleDir: File): String? {
     val json = File(moduleDir, "module.json").takeIf { it.isFile } ?: return null
     val daemon = (groovy.json.JsonSlurper().parse(json) as Map<*, *>)["daemon"] as? Map<*, *> ?: return null
+    if ((daemon["entry"] as? String).isNullOrBlank() && (daemon["jar"] as? String).isNullOrBlank()) return null
     return (daemon["jar"] as? String)?.takeIf { it.isNotBlank() }
         ?: throw GradleException("PACKAGE-1: $json has a daemon block without daemon.jar")
 }
