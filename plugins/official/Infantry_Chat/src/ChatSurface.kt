@@ -11,6 +11,9 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.focusable
@@ -502,9 +505,17 @@ fun PromptBox(
             modifier = Modifier.padding(start = 6.dp, bottom = 2.dp).testTag(COMPOSER_STATUS_TAG),
         )
         var boxFocused by remember { mutableStateOf(false) }
-        Box(Modifier.fillMaxWidth()) {
+        // CHAT-MINIMIZE-4: ONE outline for box + groups: the theme's neutral border at rest, the accent (focused or hovered) for the whole unit.
+        val boxSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+        val boxHovered by boxSource.collectIsHoveredAsState()
+        val lit = boxFocused || boxHovered
+        val ringColor = if (lit) Palette.Accent else Palette.Border
+        val borderDp = if (lit) COMPOSER_BORDER_DP else 1
+        Box(Modifier.fillMaxWidth().hoverable(boxSource)) {
             OutlinedTextField(
-                colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(unfocusedBorderColor = Palette.Accent),
+                colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                    unfocusedBorderColor = ringColor, focusedBorderColor = ringColor, disabledBorderColor = ringColor,
+                ),
                 value = shown,
                 onValueChange = { next -> field = next; if (next.text != value) onValue(next.text) },
                 visualTransformation = tags,
@@ -568,8 +579,14 @@ fun PromptBox(
         // CHAT-MINIMIZE-2: tab-shaped groups hanging from the box's bottom edge (pulled up over its border), tools left, Stop/Send right.
         val tab = androidx.compose.foundation.shape.RoundedCornerShape(bottomStart = 14.dp, bottomEnd = 14.dp)
         // CHAT-MINIMIZE-3: same border colour (accent, the text box's) and thickness as the box, solid accent fill; the 48dp hit areas leave an even 6dp inside.
-        val borderDp = if (boxFocused) COMPOSER_BORDER_DP else 1
-        val tabModifier = Modifier.offset(y = (-borderDp).dp).background(Palette.Accent, tab).border(borderDp.dp, Palette.Accent, tab)
+        // The groups are the box's own outline continued: solid fill over the box's bottom line, open top, same colour and thickness.
+        val groupFill = Palette.Panel
+        val tabModifier = Modifier.offset(y = (-borderDp).dp).background(groupFill, tab).drawBehind {
+            val w = borderDp.dp.toPx()
+            clipRect(top = w) {
+                drawOutline(tab.createOutline(size, layoutDirection, this), ringColor, style = androidx.compose.ui.graphics.drawscope.Stroke(w * 2))
+            }
+        }
         Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
           Row(tabModifier.weight(1f, fill = false).horizontalScroll(rememberScrollState()).testTag(COMPOSER_TOOLS_TAB_TAG), horizontalArrangement = Arrangement.spacedBy(0.dp), verticalAlignment = Alignment.CenterVertically) {
             ComposerRound(
