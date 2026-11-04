@@ -210,6 +210,56 @@ object AhqIcons {
         }
     }
 
+    /** Material "Filled.Minimize". */
+    val Minimize: ImageVector by lazy {
+        icon("Minimize", autoMirror = false) {
+            moveTo(6.0f, 19.0f)
+            horizontalLineToRelative(12.0f)
+            verticalLineToRelative(2.0f)
+            horizontalLineTo(6.0f)
+            close()
+        }
+    }
+
+    /** Material "Filled.OpenInFull". */
+    val OpenInFull: ImageVector by lazy {
+        icon("OpenInFull", autoMirror = false) {
+            moveTo(21.0f, 11.0f)
+            verticalLineTo(3.0f)
+            horizontalLineToRelative(-8.0f)
+            lineToRelative(3.29f, 3.29f)
+            lineToRelative(-10.0f, 10.0f)
+            lineTo(3.0f, 13.0f)
+            verticalLineToRelative(8.0f)
+            horizontalLineToRelative(8.0f)
+            lineToRelative(-3.29f, -3.29f)
+            lineToRelative(10.0f, -10.0f)
+            close()
+        }
+    }
+
+    /** Material "Filled.CloseFullscreen". */
+    val CloseFullscreen: ImageVector by lazy {
+        icon("CloseFullscreen", autoMirror = false) {
+            moveTo(22.0f, 3.41f)
+            lineTo(16.71f, 8.7f)
+            lineTo(20.0f, 12.0f)
+            horizontalLineToRelative(-8.0f)
+            verticalLineTo(4.0f)
+            lineToRelative(3.29f, 3.29f)
+            lineTo(20.59f, 2.0f)
+            close()
+            moveTo(3.41f, 22.0f)
+            lineToRelative(5.29f, -5.29f)
+            lineTo(12.0f, 20.0f)
+            verticalLineToRelative(-8.0f)
+            horizontalLineTo(4.0f)
+            lineToRelative(3.29f, 3.29f)
+            lineTo(2.0f, 20.59f)
+            close()
+        }
+    }
+
     /** Material "Filled.Close". */
     val Close: ImageVector by lazy {
         icon("Close", autoMirror = false) {

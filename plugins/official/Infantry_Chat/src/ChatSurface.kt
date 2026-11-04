@@ -394,6 +394,10 @@ fun PromptBox(
     wire: (String) -> String = { it },
     /** CHAT-COMPACT-1: the composer's plugin slot. Draws inline in the one row (a chip, icon or menu item), never a new row. */
     extras: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {},
+    /** CHAT-MINIMIZE-1: the tall editor on/off, its toggle, and Minimize (the host removes the composer and floats a restore button). */
+    expanded: Boolean = false,
+    onToggleExpand: () -> Unit = {},
+    onMinimize: () -> Unit = {},
 ) {
     val actionScope = rememberCoroutineScope()
     val host = LocalPlatformHost.current
@@ -485,23 +489,16 @@ fun PromptBox(
         SlashSuggestions(slashTitle, slashRows, slashIndex, onPick = { onValue(it) })
         // ATTACH-INLINE-1: each tag's one character is drawn as its pill "📎 name".
         val tags = remember(attachments) { ComposerTags.transformation(attachments, SpanStyle(color = Palette.Accent, background = Palette.Raised)) }
-        BoxWithConstraints(Modifier.fillMaxWidth()) {
-        // CHAT-COMPACT-1: one row. Wide: every action inline. Narrow (phone): Send and Stop stay, the rest sit in the "..." menu.
-        val narrow = maxWidth < COMPOSER_NARROW_DP.dp
-        var menuOpen by remember { mutableStateOf(false) }
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.Bottom) {
+        // CHAT-MINIMIZE-1: one large rounded box; its actions hang below it in two tab groups (tools left, send right).
+        var confirmingRemove by remember(a?.id) { mutableStateOf(false) }
+        var confirmingRestart by remember(a?.id) { mutableStateOf(false) }
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Box(Modifier.fillMaxWidth()) {
             OutlinedTextField(
                 value = shown,
                 onValueChange = { next -> field = next; if (next.text != value) onValue(next.text) },
                 visualTransformation = tags,
-                // ATTACH-INLINE-1: the paperclip sits in the box, next to the text; paste (Ctrl+V) and drop attach too.
-                trailingIcon = {
-                    IconAction(
-                        AhqIcons.AttachFile, ATTACH_FILE_LABEL, onClick = pick, shortcut = ATTACH_FILE_SHORTCUT,
-                        enabled = live && host.canPickAttachment, style = IconActionStyle.TEXT,
-                        modifier = Modifier.testTag(CHAT_IMAGE_ATTACH_TAG),
-                    )
-                },
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
                 placeholder = {
                     Text(
                         when {
@@ -515,7 +512,7 @@ fun PromptBox(
                         color = Palette.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
                 },
-                modifier = Modifier.weight(1f).focusRequester(focus).testTag(PROMPT_BOX_TAG).onPreviewKeyEvent { e ->
+                modifier = Modifier.fillMaxWidth().padding(end = 0.dp).focusRequester(focus).testTag(PROMPT_BOX_TAG).onPreviewKeyEvent { e ->
                     if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     val listOpen = slashRows.isNotEmpty()
                     when {
@@ -545,27 +542,28 @@ fun PromptBox(
                         else -> false
                     }
                 },
-                // CHAT-COMPACT-1: one line by default, grows to 5 lines, then scrolls.
-                minLines = 1, maxLines = COMPOSER_MAX_LINES, textStyle = TextStyle(fontFamily = Mono, fontSize = 13.sp),
+                minLines = if (expanded) COMPOSER_EXPANDED_LINES else COMPOSER_MIN_LINES,
+                maxLines = if (expanded) COMPOSER_EXPANDED_LINES * 2 else COMPOSER_MAX_LINES,
+                textStyle = TextStyle(fontFamily = Mono, fontSize = 13.sp),
+            )
+            Row(Modifier.align(Alignment.TopEnd).padding(top = 2.dp, end = 2.dp)) {
+                IconAction(
+                    if (expanded) AhqIcons.CloseFullscreen else AhqIcons.OpenInFull,
+                    if (expanded) COMPOSER_COLLAPSE_LABEL else COMPOSER_EXPAND_LABEL, onToggleExpand,
+                    style = IconActionStyle.TEXT, modifier = Modifier.testTag(COMPOSER_EXPAND_TAG),
+                )
+                IconAction(AhqIcons.Minimize, COMPOSER_MINIMIZE_LABEL, onMinimize, style = IconActionStyle.TEXT, modifier = Modifier.testTag(COMPOSER_MINIMIZE_TAG))
+            }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
+          Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconAction(
+                AhqIcons.AttachFile, ATTACH_FILE_LABEL, onClick = pick, shortcut = ATTACH_FILE_SHORTCUT,
+                enabled = live && host.canPickAttachment, style = IconActionStyle.TEXT,
+                modifier = Modifier.testTag(CHAT_IMAGE_ATTACH_TAG),
             )
             extras()
-            IconAction(
-                AhqIcons.Send,
-                when {
-                    // DEMO-MERGE-1: while writes are refused a `/` command is not a chat message; Send is dimmed and says why.
-                    writeLocked && value.trimStart().startsWith("/") -> "Slash commands: ${policy.reason.orEmpty()}"
-                    promptLocked -> prompt.label("Send")
-                    spawnMode || a == null -> "Spawn"
-                    isBusy(a) -> "Queue"
-                    else -> "Send"
-                },
-                onSubmit, shortcut = "Enter", enabled = live && (value.isNotBlank() || attachments.isNotEmpty()) && !attachBusy && blocker == null &&
-                    !(!spawn.allowed && (spawnMode || a == null)) && !(writeLocked && value.trimStart().startsWith("/")) && !promptLocked,
-                style = IconActionStyle.FILLED,
-            )
-            var confirmingRemove by remember(a?.id) { mutableStateOf(false) }
-            var confirmingRestart by remember(a?.id) { mutableStateOf(false) }
-            if (a != null && !spawnMode) {
+        if (a != null && !spawnMode) {
                 val resume = com.superiorsoftllc.infantry.ui.shell.rememberGate("chat.resume")
                 val canResume = live && resume.allowed && resumeEnabled(a.session)
                 val ended = a.session.state in ENDED_STATES
@@ -586,20 +584,37 @@ fun PromptBox(
                     }),
                     ComposerAct(AhqIcons.Refresh, restart.label(RESTART_SESSION_LABEL), null, live && restart.allowed, run = { confirmingRestart = true }),
                 )
-                InterruptButton(a, live, controller)
-                if (!narrow) acts.forEach { it.Button(dangerColors) }
-                else Box {
-                    IconAction(AhqIcons.MoreVert, COMPOSER_MORE_LABEL, { menuOpen = true }, modifier = Modifier.testTag(COMPOSER_MORE_TAG))
-                    DropdownMenu(menuOpen, { menuOpen = false }) {
-                        acts.forEach { act ->
-                            DropdownMenuItem(
-                                text = { Text(act.label, color = if (act.danger) Palette.Danger else Palette.Text) },
-                                leadingIcon = { Icon(act.icon, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                                enabled = act.enabled, onClick = { menuOpen = false; act.run() },
-                            )
-                        }
-                    }
-                }
+                acts.forEach { it.Button(dangerColors) }
+            } else {
+                IconAction(
+                    if (spawnMode) AhqIcons.Close else AhqIcons.PersonAdd,
+                    if (spawnMode) "Cancel new agent" else spawn.label(NEW_AGENT_LABEL),
+                    onSpawnToggle, shortcut = NEW_AGENT_SHORTCUT,
+                    // DEMO-MERGE-1: a new session is a write; the button is dimmed with the reason as its tooltip.
+                    enabled = spawnMode || spawn.allowed,
+                )
+            }
+          }
+          Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (a != null && !spawnMode) InterruptButton(a, live, controller)
+            IconAction(
+                AhqIcons.Send,
+                when {
+                    // DEMO-MERGE-1: while writes are refused a `/` command is not a chat message; Send is dimmed and says why.
+                    writeLocked && value.trimStart().startsWith("/") -> "Slash commands: ${policy.reason.orEmpty()}"
+                    promptLocked -> prompt.label("Send")
+                    spawnMode || a == null -> "Spawn"
+                    isBusy(a) -> "Queue"
+                    else -> "Send"
+                },
+                onSubmit, shortcut = "Enter", enabled = live && (value.isNotBlank() || attachments.isNotEmpty()) && !attachBusy && blocker == null &&
+                    !(!spawn.allowed && (spawnMode || a == null)) && !(writeLocked && value.trimStart().startsWith("/")) && !promptLocked,
+                style = IconActionStyle.FILLED,
+            )
+          }
+        }
+        }
+        if (a != null && !spawnMode) {
                 if (confirmingRemove) {
                     RemoveAgentDialog(
                         a, snapshot, onDismiss = { confirmingRemove = false },
@@ -612,16 +627,6 @@ fun PromptBox(
                         onRestart = { confirmingRestart = false; actionScope.launch { controller.restartSession(a.id, confirmed = true) } },
                     )
                 }
-            } else {
-                IconAction(
-                    if (spawnMode) AhqIcons.Close else AhqIcons.PersonAdd,
-                    if (spawnMode) "Cancel new agent" else spawn.label(NEW_AGENT_LABEL),
-                    onSpawnToggle, shortcut = NEW_AGENT_SHORTCUT,
-                    // DEMO-MERGE-1: a new session is a write; the button is dimmed with the reason as its tooltip.
-                    enabled = spawnMode || spawn.allowed,
-                )
-            }
-        }
         }
         // A hint shows as one short line under the row only when there is something to say; it never stacks.
         val busyNow = a != null && a.session.state in setOf(SessionState.STARTING, SessionState.BUSY, SessionState.WAITING_INPUT)
@@ -654,7 +659,16 @@ private class ComposerAct(
 }
 
 /** CHAT-COMPACT-1: the most lines the input grows to before it scrolls. */
-const val COMPOSER_MAX_LINES = 5
+const val COMPOSER_MAX_LINES = 8
+const val COMPOSER_MIN_LINES = 3
+const val COMPOSER_EXPANDED_LINES = 14
+const val COMPOSER_MINIMIZE_LABEL = "Minimize"
+const val COMPOSER_EXPAND_LABEL = "Expand"
+const val COMPOSER_COLLAPSE_LABEL = "Collapse"
+const val COMPOSER_MINIMIZE_TAG = "composer-minimize"
+const val COMPOSER_EXPAND_TAG = "composer-expand"
+const val COMPOSER_RESTORE_TAG = "composer-restore"
+const val COMPOSER_RESTORE_LABEL = "Show composer"
 /** CHAT-COMPACT-1: below this width (dp) the secondary actions move into the "..." menu. */
 const val COMPOSER_NARROW_DP = 560
 const val COMPOSER_MORE_LABEL = "More actions"
