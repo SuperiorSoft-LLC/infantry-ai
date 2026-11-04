@@ -32,7 +32,6 @@ kotlin {
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(compose.material3)
-            implementation("org.jetbrains.compose.ui:ui-backhandler:${libs.versions.composeMultiplatform.get()}")
         }
         // The ServiceLoader entry is JVM only: on Android the generated module list already names NotesPlugin.
         jvmTest { kotlin.srcDir("test") }

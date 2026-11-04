@@ -30,7 +30,6 @@ import androidx.compose.ui.unit.dp
 import com.superiorsoftllc.infantry.plugin.api.Services
 import com.superiorsoftllc.infantry.plugin.api.ViewAccess
 import com.superiorsoftllc.infantry.plugin.api.ViewInfo
-import com.superiorsoftllc.infantry.plugin.api.ViewOrigin
 import com.superiorsoftllc.infantry.plugin.api.ViewState
 import com.superiorsoftllc.infantry.ui.block.layout.BlockScope
 import com.superiorsoftllc.infantry.ui.plugin.TabContainers
@@ -68,7 +67,7 @@ class ViewsPlugin(private val platform: String = "desktop") : UiPlugin {
 
 /** The Views tab: a strip of the listed views and the picked one's host. Empty, loading and error states are one line each. */
 @Composable
-fun ViewsTab(context: TabContext, platform: String, kinds: ToolKinds? = null) {
+fun ViewsTab(context: TabContext, platform: String) {
     val access = context.services.get(Services.VIEWS)
     if (access == null) {
         Line("Plugin views are not available here.", "views-unavailable")
@@ -93,7 +92,7 @@ fun ViewsTab(context: TabContext, platform: String, kinds: ToolKinds? = null) {
                             label = { Text(v.title, maxLines = 1) }, modifier = Modifier.testTag("views-subtab-${v.module}-${v.id}"),
                         )
                     }
-                    TabViewStack(access, current, kinds)
+                    ViewHost(access, current.module, current.id, Modifier.fillMaxSize())
                 }
             }
         }
@@ -110,42 +109,11 @@ private fun Line(text: String, tag: String) {
  * it. Loading, error (one line and Retry) and a page made for a newer app (one line banner) are all handled; it never throws.
  */
 @Composable
-fun ViewHost(
-    access: ViewAccess, module: String, view: String, modifier: Modifier = Modifier, params: JsonObject = JsonObject(emptyMap()),
-    kinds: ToolKinds? = null, onOpen: (ViewRef) -> Unit = {},
-) {
+fun ViewHost(access: ViewAccess, module: String, view: String, modifier: Modifier = Modifier, params: JsonObject = JsonObject(emptyMap())) {
     var attempt by remember { mutableStateOf(0) }
-    var toast by remember(module, view) { mutableStateOf<String?>(null) }
     val flow = remember(access, module, view, params, attempt) { access.open(module, view, params) }
     val state by flow.collectAsState(ViewState.Loading)
-    val actions = remember(access, module, view, kinds, onOpen) {
-        ViewActionHost(ActionRunner(access, ViewOrigin(module, view), refresh = { attempt++ }, toast = { toast = it }, open = onOpen), kinds)
-    }
-    Column(modifier) {
-        toast?.let { t ->
-            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp).testTag("view-toast"), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                Text(t.lineSequence().firstOrNull().orEmpty(), Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
-                TextButton({ toast = null }) { Text("Dismiss") }
-            }
-        }
-        CompositionLocalProvider(LocalViewActions provides actions) { ViewStateBody(state, module, view, Modifier.fillMaxSize()) { attempt++ } }
-    }
-}
-
-/** One tab's view with its back stack: a toolbar back row and the system back pop it. The stack resets when the root view changes. */
-@Composable
-@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
-private fun TabViewStack(access: ViewAccess, root: ViewInfo, kinds: ToolKinds?) {
-    val stack = remember(root.module, root.id) { ViewBackStack(ViewRef(root.id)) }
-    var depth by remember(stack) { mutableStateOf(stack.depth) }
-    val top = stack.top
-    androidx.compose.ui.backhandler.BackHandler(enabled = depth > 1) { stack.back(); depth = stack.depth }
-    Column(Modifier.fillMaxSize()) {
-        if (depth > 1) TextButton({ stack.back(); depth = stack.depth }, Modifier.testTag("view-back")) { Text("‹ Back") }
-        androidx.compose.runtime.key(depth) {
-            ViewHost(access, root.module, top.view, Modifier.fillMaxSize(), top.params, kinds, onOpen = { stack.open(it); depth = stack.depth })
-        }
-    }
+    ViewStateBody(state, module, view, modifier) { attempt++ }
 }
 
 /** Draws one [ViewState]; separate from [ViewHost] so a test can drive each state. */
