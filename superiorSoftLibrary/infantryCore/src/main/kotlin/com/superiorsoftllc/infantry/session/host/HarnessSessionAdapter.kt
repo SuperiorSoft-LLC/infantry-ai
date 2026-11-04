@@ -85,6 +85,9 @@ interface HarnessSessionAdapter {
 
     val bootTimeoutMs: Long get() = 60_000
 
+    /** CLI-LIVE-1: idle minutes before the host stops a resting process; [global] is `session.keepAliveMinutes`. [Int.MAX_VALUE] = never. */
+    fun idleMinutes(global: Int): Int = global
+
     /** A line protocol cannot run over a PTY (echo, CRLF, line limits), so it gets the host's piped runner. */
     val needsPipes: Boolean get() = true
 

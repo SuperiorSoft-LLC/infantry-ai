@@ -36,6 +36,10 @@ internal class ApiSessionAdapter(
     override val label: String = runCatching { session.label }.getOrDefault(harnessId)
     override val bootTimeoutMs: Long = runCatching { session.bootTimeoutMs }.getOrDefault(60_000L)
 
+    /** CLI-LIVE-1: the session type's own idle limit (0 = never); null or a throw = the host's global keep-alive. */
+    override fun idleMinutes(global: Int): Int =
+        runCatching { session.idleMinutes() }.getOrNull()?.let { if (it <= 0) Int.MAX_VALUE else it } ?: global
+
     /** The resume id is never part of the fingerprint: a changed model or effort restarts the process and resumes. */
     override fun fingerprint(request: RunRequest, env: Map<String, String>): String =
         attributed { session.fingerprint(request.toApi(null), env) }

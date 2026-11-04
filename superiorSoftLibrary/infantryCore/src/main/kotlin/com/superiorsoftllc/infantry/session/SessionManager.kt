@@ -1335,9 +1335,11 @@ class SessionManager(
         val shownModel = session.model?.takeIf { it.isNotBlank() }
             ?: defaultModel?.let { "$it (provider default)" }
             ?: "default"
+        // CLI-LIVE-1: "starting <cli>" is said only when a process really starts; a wake into a live process is a message, not a start.
+        val liveProcess = host.hasProcess(sessionId)
         val bootDetails = buildList {
             if (resuming) add("Resuming session $sessionId...")
-            add("starting ${provider.id} model $shownModel in ${session.workingDir}")
+            if (!liveProcess) add("starting ${provider.id} model $shownModel in ${session.workingDir}")
             session.providerSessionId?.let { add("resuming provider session $it") }
         }
         // M2-12: the status follows the TURN, not the process. The turn was accepted above, so the agent is WORKING
