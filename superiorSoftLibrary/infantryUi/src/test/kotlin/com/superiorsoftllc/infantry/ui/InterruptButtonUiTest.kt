@@ -55,7 +55,8 @@ class InterruptButtonUiTest {
         runDesktopComposeUiTest(900, 300) {
             setContent { QueuedMessages(listOf(QueuedPrompt("then check the logs", 2))) }
             onNodeWithTag(QUEUED_MESSAGES_TAG).assertExists()
-            onNodeWithText("1. then check the logs").assertExists()
+            // CHAT-QUEUE-1 (3e83a4bd): the first row reads "Queued (N): <text>", no numbering.
+            onNodeWithText("Queued (1): then check the logs").assertExists()
         }
         runDesktopComposeUiTest(900, 300) {
             setContent { QueuedMessages(emptyList()) }
