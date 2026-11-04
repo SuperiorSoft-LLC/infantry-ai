@@ -98,8 +98,11 @@ class BoardDaemonPlugin : DaemonPlugin {
                 push = { runtime.push(listOf(it)) },
             )
         }
-        for (type in listOf("pipeline_config", "pipeline_show", "pipeline_record", "pipeline_check")) {
+        for (type in PIPELINE_FRAMES) {
             api.frames.handle(type) { frame, caller -> handler(caller).answer(frame) }
         }
     }
 }
+
+/** BOARD-FRAMES-1: the pipeline frame types [BoardDaemonPlugin] answers; each must be declared in module.json's daemon.frames. */
+internal val PIPELINE_FRAMES = listOf("pipeline_config", "pipeline_show", "pipeline_record", "pipeline_check")
