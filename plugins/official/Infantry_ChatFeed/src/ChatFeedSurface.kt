@@ -106,6 +106,8 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
 import com.superiorsoftllc.infantry.ui.model.PickedModel
 import com.superiorsoftllc.infantry.ui.model.chatRows
+import com.superiorsoftllc.infantry.ui.model.NOTE_LEVEL_FAIL
+import com.superiorsoftllc.infantry.ui.model.NOTE_LEVEL_WARN
 import com.superiorsoftllc.infantry.ui.model.NoticeKind
 import com.superiorsoftllc.infantry.ui.model.noticesForSession
 import androidx.compose.ui.semantics.Role
@@ -539,21 +541,27 @@ const val CARD_COMMS_ICON_TAG = "card-comms-icon"
 /** SCRIPT-VIS-1b: test tag on a plugin-contributed (automation) chat row. */
 const val CONTRIBUTION_ROW_TAG = "contribution-row"
 
+/** CHAT-NOTE-WARN-1: test tag on a contributed row's mark (gear, or the warning sign for a warn note). */
+const val CONTRIBUTION_MARK_TAG = "contribution-mark"
+
 /** SCRIPT-VIS-1b: test tag on the expanded details of a contributed row. */
 const val CONTRIBUTION_DETAILS_TAG = "contribution-details"
 
 /**
  * SCRIPT-VIS-1b: a line a plugin put in the chat without a turn. Drawn as automation (a gear mark, its label, a muted panel), never as the
  * agent's speech; click to expand its [TimelineItem.details] (the run's actions and log lines). A failure is drawn in the error colour.
+ * CHAT-NOTE-WARN-1: a warn note ([TimelineItem.noteLevel]) is drawn in the warning colour with a warning mark.
  */
 @Composable
 fun ContributionRow(item: TimelineItem) {
     var open by remember(item.id) { mutableStateOf(false) }
-    val tint = if (item.ok) Palette.Muted else Palette.Danger
+    // CHAT-NOTE-WARN-1: warn is the theme's warning colour with a warning mark, otherwise drawn like info (no error styling).
+    val level = item.noteLevel
+    val tint = when (level) { NOTE_LEVEL_FAIL -> Palette.Danger; NOTE_LEVEL_WARN -> Palette.Warn; else -> Palette.Muted }
     Column(Modifier.fillMaxWidth().padding(vertical = 3.dp).background(Palette.Panel).testTag(CONTRIBUTION_ROW_TAG)
         .clickable(enabled = item.details.isNotEmpty()) { open = !open }.padding(horizontal = 10.dp, vertical = 5.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("⚙", color = tint, fontSize = 13.sp)
+            Text(if (level == NOTE_LEVEL_WARN) "⚠" else "⚙", color = tint, fontSize = 13.sp, modifier = Modifier.testTag(CONTRIBUTION_MARK_TAG))
             Spacer(Modifier.width(8.dp))
             Text(item.text.ifBlank { item.label }, color = tint, fontFamily = Mono, fontSize = 12.sp, modifier = Modifier.weight(1f))
             // SCRIPT-LINE-TS-1: the run's time, top right, same formatter/font as the message cards.

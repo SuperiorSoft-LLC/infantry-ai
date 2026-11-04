@@ -2266,7 +2266,19 @@ data class TimelineItem(
 ) {
     /** True for an item that is data for a badge / panel, not a chat row. */
     val isStats: Boolean get() = source == AUTOMATION_STATS_SOURCE
+
+    /**
+     * CHAT-NOTE-WARN-1: the note's level from `meta.level` (info, ok, warn, fail). [ok] false is always fail; a level this client
+     * does not know (a newer daemon) or none at all reads as info, never as an error.
+     */
+    val noteLevel: String get() = if (!ok) NOTE_LEVEL_FAIL else meta["level"]?.lowercase()?.takeIf { it in NOTE_LEVELS && it != NOTE_LEVEL_FAIL } ?: NOTE_LEVEL_INFO
 }
+
+const val NOTE_LEVEL_INFO = "info"
+const val NOTE_LEVEL_OK = "ok"
+const val NOTE_LEVEL_WARN = "warn"
+const val NOTE_LEVEL_FAIL = "fail"
+val NOTE_LEVELS = setOf(NOTE_LEVEL_INFO, NOTE_LEVEL_OK, NOTE_LEVEL_WARN, NOTE_LEVEL_FAIL)
 
 const val AUTOMATION_STATS_SOURCE = "automation-stats"
 
