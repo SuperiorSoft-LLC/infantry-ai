@@ -162,6 +162,12 @@ data class SessionRecord(
      */
     val isProcessAlive: Boolean = false,
     /**
+     * CLI-PTY-5: the daemon restarted since this session last ran, and nothing has attached its CLI since. A client shows
+     * a "Resume session" action for it; [SessionManager.attach] (or any turn) clears it. Set by [SessionManager.loadAndReconcile]
+     * for every session that has a provider conversation to resume.
+     */
+    val dormant: Boolean = false,
+    /**
      * BUG-M2-11f: the OS process the session host keeps for this session between turns (pid + start instant), set at
      * launch and cleared when it ends. Persisted so the next daemon start can reap a process that outlived a hard-killed
      * daemon (opencode serve does), killing it only when BOTH pid and start instant still match. Omitted when null, so

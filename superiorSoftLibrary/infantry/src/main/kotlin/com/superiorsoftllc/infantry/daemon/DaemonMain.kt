@@ -1254,7 +1254,9 @@ class InfantryDaemon(
             )
             mail.reportCheck = { from, body -> orchestratorLink.reviewReport(from, body).refusalOrNull() }
 
-            val streamSequencer = SessionFrameSequencer()
+            // CLI-PTY-5: each session's chat, kept across a restart so a resumed session shows its history at once.
+            val chatHistory = SessionHistoryStore(File(stateDir(), "chat-history"), { settings.limit(LimitRegistry.CHAT_HISTORY_FRAMES).toInt() })
+            val streamSequencer = SessionFrameSequencer(chatHistory)
             // Contract 1.95.0 (1c24fdc4): each session's harness-neutral run activity, carried on `status` frames.
             val runActivity = com.superiorsoftllc.infantry.protocol.RunActivityTracker()
             // Story 9.7b: a run's usage is recorded when it ends and published on its session's stream.
@@ -1713,6 +1715,14 @@ class InfantryDaemon(
             manager.addSessionEndedListener(com.superiorsoftllc.infantry.session.SessionFeed::forget)
             ticketEvents?.subscribe("core:named-events", eventPublisher::ticket)
             println("[infantry] reconcile: ${manager.loadAndReconcile()}")
+            // CLI-PTY-5: the kept chat of every session goes back on its replay stream, as history: no process, no turn.
+            run {
+                val started = System.nanoTime()
+                val loaded = runCatching { chatHistory.loadAll(manager.list().map { it.id }.toSet()) }
+                    .onFailure { System.err.println("[infantry] chat history load failed: ${it.message}") }.getOrDefault(emptyMap())
+                for ((id, history) in loaded) streamSequencer.seed(id, history)
+                println("[infantry] chat history: ${loaded.size} sessions, ${loaded.values.sumOf { it.frames.size }} items in ${(System.nanoTime() - started) / 1_000_000} ms")
+            }
             worktrees.reconcile(manager.list().mapNotNull { it.toWorktreeRef() })
 
             // Phase 5b -- CRASH RECOVERY, in this order and explicitly, before the port opens.
@@ -1778,7 +1788,11 @@ class InfantryDaemon(
             triggers.start()
             // Contract 1.11.0: this process's identity, taken AFTER reconciliation and recovery so a session
             // they touched (and that streamed nothing here) reads as older than the replay history.
-            val identity = DaemonIdentity(UUID.randomUUID().toString(), System.currentTimeMillis())
+            // CLI-PTY-5: with kept chat history every session may have history here, whatever its last heartbeat.
+            val identity = DaemonIdentity(
+                UUID.randomUUID().toString(),
+                if (settings.limit(LimitRegistry.CHAT_HISTORY_FRAMES) > 0) 0L else System.currentTimeMillis(),
+            )
             println(
                 if (projectDirs && repo == null) {
                     "[infantry] worktree repo=<per project> (sessions and ticket starts run in their project's directory; " +
@@ -2178,7 +2192,7 @@ private fun com.superiorsoftllc.infantry.protocol.RunPhase.sessionState(): Sessi
 }
 
 /** Assign each live session-stream frame exactly one increasing sequence before publishing it. */
-private class SessionFrameSequencer {
+private class SessionFrameSequencer(private val history: SessionHistoryStore? = null) {
     private class State {
         var latestSequence = 0L
         var evictedCount = 0L
@@ -2206,6 +2220,7 @@ private class SessionFrameSequencer {
                             state.evictedCount++
                         }
                         state.frames.addLast(sequenced)
+                        history?.record(sequenced)
                     }
                 } else {
                     frame
@@ -2213,6 +2228,27 @@ private class SessionFrameSequencer {
                 for (client in clients) client.trySend(published)
             }
         }
+    }
+
+    /**
+     * CLI-PTY-5: put [loaded] (a session's kept history) on [sessionId]'s stream before anything live. The frames are numbered
+     * after the dropped ones, so a replay from 0 also answers a gap that says how many older items were dropped.
+     */
+    fun seed(sessionId: String, loaded: SessionHistoryStore.Loaded) {
+        val state = sessions.computeIfAbsent(sessionId) { State() }
+        synchronized(state) {
+            if (state.latestSequence != 0L) return
+            val kept = loaded.frames.takeLast(SESSION_REPLAY_BUFFER_CAPACITY)
+            state.evictedCount = loaded.dropped + (loaded.frames.size - kept.size)
+            state.latestSequence = state.evictedCount
+            for (frame in kept) state.frames.addLast(frame.copy(sequence = ++state.latestSequence))
+        }
+    }
+
+    /** CLI-PTY-5: the session was deleted: its stream and its kept history go. */
+    fun forget(sessionId: String) {
+        sessions.remove(sessionId)
+        history?.forget(sessionId)
     }
 
     fun replayAfter(sessionId: String, lastSequence: Long): ReplayBatch? {
@@ -2764,7 +2800,8 @@ private suspend fun handleConnection(
                     else -> {
                         val replay = streamSequencer.replayAfter(sessionId, request.lastSequence)
                         if (replay == null) {
-                            outgoing.trySend(Envelope(Envelope.ERROR, "no replay history for session '$sessionId'"))
+                            // CLI-PTY-5: a known session with nothing kept simply has no history yet; only an unknown one is an error.
+                            if (manager.get(sessionId) == null) outgoing.trySend(Envelope(Envelope.ERROR, "no replay history for session '$sessionId'"))
                         } else {
                             replay.gap?.let { gap ->
                                 outgoing.trySend(
@@ -3409,7 +3446,16 @@ private suspend fun handleConnection(
 
                 Envelope.RESUME -> {
                     val (id, prompt) = splitResume(envelope.data)
-                    if (id.isNullOrBlank() || prompt.isNullOrBlank()) {
+                    if (!id.isNullOrBlank() && prompt.isNullOrBlank()) {
+                        // CLI-PTY-5: `resume` with no prompt = the owner's "Resume session": attach the CLI, send no turn.
+                        try {
+                            manager.attach(id)
+                            active = id
+                            null
+                        } catch (e: Exception) {
+                            Envelope(Envelope.ERROR, "resume failed: ${e.message ?: e::class.simpleName}", id)
+                        }
+                    } else if (id.isNullOrBlank() || prompt.isNullOrBlank()) {
                         Envelope(Envelope.ERROR, "resume expects '<sessionId>\\n<prompt>'")
                     } else {
                         try {
@@ -3588,6 +3634,7 @@ private suspend fun handleConnection(
                             // SESSION-GHOST-1: an id this daemon does not hold is already gone: a clean no-op, but the
                             // fresh `sessions` push below still goes out so a client holding a ghost row reconciles.
                             if (manager.get(id) != null) manager.delete(id)
+                            streamSequencer.forget(id)
                             // Contract 1.26.0: the delete itself gets no direct reply -- every client
                             // (not just the one that asked) hears about it through a fresh `sessions`
                             // push, exactly like any other session-list mutation.
@@ -3901,7 +3948,7 @@ private fun pluginSessionsAck(envelope: Envelope, manager: SessionManager): Enve
 
 private fun splitResume(data: String): Pair<String?, String?> {
     val newline = data.indexOf('\n')
-    if (newline < 0) return null to null
+    if (newline < 0) return data.trim().takeIf { it.isNotEmpty() } to null
     return data.substring(0, newline).trim() to data.substring(newline + 1)
 }
 

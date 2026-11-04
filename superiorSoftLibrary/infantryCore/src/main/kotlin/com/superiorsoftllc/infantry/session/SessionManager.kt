@@ -826,6 +826,11 @@ class SessionManager(
                 }
             }
         }
+        // CLI-PTY-5: every session with a conversation to resume is DORMANT until something attaches its CLI or runs a turn.
+        for ((id, record) in sessions.toMap()) {
+            val dormant = record.providerSessionId != null && record.state != SessionState.ORPHANED
+            if (record.dormant != dormant) sessions[id] = record.copy(dormant = dormant)
+        }
         if (loaded.isNotEmpty()) writeAll()
         return ReconcileReport(exited, orphaned, unchanged, reapedCount)
     } }
@@ -1351,6 +1356,65 @@ class SessionManager(
         return next
     }
 
+    /** The [RunRequest] and environment a turn of [session] (or an attach, with a blank [prompt]) launches its process with. */
+    private fun launchInputs(session: SessionRecord, provider: AgentProvider, prompt: String): Pair<RunRequest, Map<String, String>> {
+        val request = RunRequest(
+            prompt = prompt,
+            workingDir = File(session.workingDir),
+            resumeSessionId = session.providerSessionId,
+            model = session.model,
+            // EFFORT-1: only to a harness that applies it; an unsupported one keeps its own default (recorded as such).
+            effort = session.effort?.takeIf { provider.effort().applies },
+            toolApproval = toolApprovalFor(session.id).mode,
+            // CONTEXT-LIMIT-1: only to a harness that applies it; an unsupported one keeps its own window (recorded as such).
+            contextLimit = session.contextLimit?.takeIf { provider.contextLimit().applies },
+        )
+        // Contract AGENT-UX-13: every run carries the agent's OWN identity -- its session id is the
+        // `from` of any handoff it initiates -- and the daemon's mail base (`childEnv`, set by the
+        // daemon) so it can address a colleague without a delivered prompt having taught it who it is.
+        // BUG-808ce596: and WHO it runs as -- its role and bound agent profile, when it has them -- on every
+        // run, so a role-only spawn (the New agent modal) knows its role from the env too.
+        val limitsEnv = runCatching { buildEnv(com.superiorsoftllc.infantry.daemon.api.processes.LaunchInfo(session.id, session.role, session.projectId)) }.onFailure { System.err.println("[infantry] build limits env failed: ${it.message}") }.getOrDefault(emptyMap())
+        runCatching { GradleProgressInit.install() }
+        val runEnv = PathEnv.withBinOnPath(childEnv + limitsEnv + buildMap {
+            put(GradleProgressInit.ENV, "1")
+            put(AccessPolicy.SESSION_ID_ENV, session.id)
+            session.projectId?.let { put(AccessPolicy.PROJECT_ID_ENV, it) }
+            session.agentId?.takeIf { it.isNotBlank() }?.let { put(AccessPolicy.AGENT_ID_ENV, it) }
+            session.role?.takeIf { it.isNotBlank() }?.let { put(AccessPolicy.ROLE_ENV, it) }
+        })
+        return request to runEnv
+    }
+
+    /**
+     * CLI-PTY-5: attach [sessionId]'s CLI to its provider conversation WITHOUT a turn: no prompt is sent and nothing runs, so
+     * no tokens are spent beyond the process start. A harness that keeps a process between turns (interactive claude, opencode
+     * serve) launches it now with `--resume`, so the next message goes straight into a warm process; a one-shot harness has
+     * nothing to start, and its next turn resumes as always. Either way the session stops being [SessionRecord.dormant].
+     * Refused while a run is in flight; a session with no provider conversation only clears the flag.
+     */
+    fun attach(sessionId: String): SessionRecord { return locked {
+        if (sessionId in held) throw RunInFlightException(sessionId, "session $sessionId is switching harness; resume it once it has switched")
+        val session = sessions[sessionId] ?: throw IllegalArgumentException("unknown session '$sessionId'")
+        if (runs.containsKey(sessionId)) throw RunInFlightException(sessionId, "session $sessionId already has a run in flight")
+        val target = lookup(session.provider)
+        require(target != null) {
+            "session $sessionId runs on provider '${session.provider}', which this daemon is not configured with (configured: ${configured.keys.joinToString()})"
+        }
+        val revived = session.copy(
+            state = if (session.state == SessionState.EXITED || session.state == SessionState.FAILED || session.state == SessionState.ORPHANED) SessionState.IDLE else session.state,
+            dormant = false, killOutcome = null, lastError = null, lastHeartbeat = clock(),
+        )
+        sessions[sessionId] = revived
+        persist(sessionId, force = true)
+        emit(SessionEvent.Status(revived))
+        if (session.providerSessionId == null || host.hasProcess(sessionId)) return sessions.getValue(sessionId)
+        val (request, env) = launchInputs(revived, target.provider, "")
+        emit(SessionEvent.Activity(sessionId, target.provider.id, "Resuming session $sessionId: attaching provider session ${session.providerSessionId} (no turn sent)"))
+        host.attach(sessionId, target.provider, request, env)
+        return sessions.getValue(sessionId)
+    } }
+
     private fun startRun(sessionId: String, prompt: String, resuming: Boolean = false, origin: MessageOrigin = MessageOrigin.Owner) {
         val session = sessions[sessionId] ?: return
         if (runs.containsKey(sessionId)) {
@@ -1373,31 +1437,7 @@ class SessionManager(
         val history = if (carryPending.remove(sessionId)) conversation.history(sessionId) else emptyList()
         conversation.turn(sessionId, prompt)
         val delivered = if (history.isEmpty()) prompt else provider.conversationCarry().seed(history, prompt)
-        val request = RunRequest(
-            prompt = delivered,
-            workingDir = File(session.workingDir),
-            resumeSessionId = session.providerSessionId,
-            model = session.model,
-            // EFFORT-1: only to a harness that applies it; an unsupported one keeps its own default (recorded as such).
-            effort = session.effort?.takeIf { provider.effort().applies },
-            toolApproval = toolApprovalFor(sessionId).mode,
-            // CONTEXT-LIMIT-1: only to a harness that applies it; an unsupported one keeps its own window (recorded as such).
-            contextLimit = session.contextLimit?.takeIf { provider.contextLimit().applies },
-        )
-        // Contract AGENT-UX-13: every run carries the agent's OWN identity -- its session id is the
-        // `from` of any handoff it initiates -- and the daemon's mail base (`childEnv`, set by the
-        // daemon) so it can address a colleague without a delivered prompt having taught it who it is.
-        // BUG-808ce596: and WHO it runs as -- its role and bound agent profile, when it has them -- on every
-        // run, so a role-only spawn (the New agent modal) knows its role from the env too.
-        val limitsEnv = runCatching { buildEnv(com.superiorsoftllc.infantry.daemon.api.processes.LaunchInfo(session.id, session.role, session.projectId)) }.onFailure { System.err.println("[infantry] build limits env failed: ${it.message}") }.getOrDefault(emptyMap())
-        runCatching { GradleProgressInit.install() }
-        val runEnv = PathEnv.withBinOnPath(childEnv + limitsEnv + buildMap {
-            put(GradleProgressInit.ENV, "1")
-            put(AccessPolicy.SESSION_ID_ENV, session.id)
-            session.projectId?.let { put(AccessPolicy.PROJECT_ID_ENV, it) }
-            session.agentId?.takeIf { it.isNotBlank() }?.let { put(AccessPolicy.AGENT_ID_ENV, it) }
-            session.role?.takeIf { it.isNotBlank() }?.let { put(AccessPolicy.ROLE_ENV, it) }
-        })
+        val (request, runEnv) = launchInputs(session, provider, delivered)
         val active = ActiveRun(clock())
         interruptedTurns.remove(sessionId)
         runs[sessionId] = active
@@ -1421,7 +1461,7 @@ class SessionManager(
         // M2-12: the status follows the TURN, not the process. The turn was accepted above, so the agent is WORKING
         // (BUSY) from now until the turn ends; booting a process for it is plumbing and never a STARTING flip.
         update(sessionId) {
-            it.copy(state = SessionState.BUSY, childPid = null, runCount = it.runCount + 1, lastHeartbeat = clock(), isProcessAlive = true, backgroundWork = null, killedBy = null, killReason = null)
+            it.copy(state = SessionState.BUSY, dormant = false, childPid = null, runCount = it.runCount + 1, lastHeartbeat = clock(), isProcessAlive = true, backgroundWork = null, killedBy = null, killReason = null)
         }
         // BUG-M2-11b-1: the host owns the process and the ONE chat line per launch; the per-turn plumbing is Activity.
         bootDetails.forEach { emit(SessionEvent.Activity(sessionId, provider.id, it)) }

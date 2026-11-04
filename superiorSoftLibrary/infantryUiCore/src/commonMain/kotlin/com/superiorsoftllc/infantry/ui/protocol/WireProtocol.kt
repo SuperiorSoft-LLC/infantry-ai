@@ -1157,6 +1157,8 @@ data class SessionRecord(
     val backgroundWork: BackgroundWorkView? = null,
     /** Jobs the agent registered through `infantry bg run`; the wire state reads BUSY while any is present. */
     val bgJobs: List<BgJobView> = emptyList(),
+    /** CLI-PTY-5: the daemon restarted since this session last ran and its CLI is not attached: the chat offers "Resume session". */
+    val dormant: Boolean = false,
     /** SCRIPT-VIS-1b: set while a script hook works for the session; display only (the state is untouched). Null = none or an older daemon. */
     val automation: AutomationView? = null,
     /** Contract 1.112.0: a turn is in flight (state BUSY alone may be background work only); null from an older daemon. */

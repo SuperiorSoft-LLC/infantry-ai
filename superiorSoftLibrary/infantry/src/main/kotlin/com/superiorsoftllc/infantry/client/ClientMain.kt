@@ -50,7 +50,7 @@ private val json = Json { ignoreUnknownKeys = true }
  *  - `/cleanup <id> [f]` -> remove a session's worktree (refuses a dirty one unless `force`)
  *  - `/kill <id> [force]`-> terminate a session (graceful, or `force` immediately)
  *  - `/interrupt <id>`   -> stop a BUSY session's current turn; the session stays alive and returns to rest
- *  - `/resume <id> <p>`  -> resume a finished/dead session with the next turn `p`
+ *  - `/resume <id> [p]`  -> resume a finished/dead session with the next turn `p`; no `p` attaches it with no turn
  *  - `/new`              -> the next prompt starts a fresh session instead of continuing
  *  - `/new <provider> [model]` -> the same, on that provider and model (contract 1.3.0); the choice
  *                           holds for every session this connection starts until the next `/new`
@@ -183,8 +183,11 @@ fun main(args: Array<String>) {
                         trimmed.startsWith("/resume") -> {
                             val rest = trimmed.removePrefix("/resume").trim()
                             val split = rest.indexOf(' ')
-                            if (split < 0) {
-                                println("[infantry-client] usage: /resume <sessionId> <prompt>")
+                            if (rest.isEmpty()) {
+                                println("[infantry-client] usage: /resume <sessionId> [prompt]")
+                            } else if (split < 0) {
+                                // CLI-PTY-5: no prompt = attach the session's CLI and send no turn.
+                                socket.send(Envelope(Envelope.RESUME, rest))
                             } else {
                                 socket.send(
                                     Envelope(
