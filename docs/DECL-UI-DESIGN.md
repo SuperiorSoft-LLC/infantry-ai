@@ -243,10 +243,6 @@ served as a view too; that unification is deferred (it needs `fills` semantics o
   instance id's values are the node's inline `config` first, then the type's declared defaults. A widget therefore reads its
   fields the same way in a view and in a configured composition. If wrapping `ShellContext` turns out not to fit, the
   fallback is a `LocalViewProps` composition local read by the widgets (decided inside DV-3, invisible to plugins).
-  **Decided in DV-3: `LocalViewProps`.** `ShellContext.config` is one per-window store, so the widgets read the node's inline
-  `config` (prefixed id -> object) from the composition local, with the widget's own defaults behind it. The "Views" tab draws
-  its own chip strip (selection kept through `TabContext.subTab/pickSubTab`) because `SubTabs` lists static `TabProvider`s;
-  per-view tabs wait for DV-8.
 
 ## 5. Options compared, trade-offs, what is expensive to reverse
 
