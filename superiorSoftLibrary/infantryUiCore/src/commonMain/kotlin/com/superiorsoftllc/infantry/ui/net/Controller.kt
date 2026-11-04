@@ -202,6 +202,7 @@ class Controller(
                 answerImageUpload(env)
                 answerPluginSecret(env)
                 answerPluginTool(env)
+                answerImageFetch(env)
                 answerSpawnCatalog(env)
                 if (env.type == Envelope.SPOKEN) {
                     runCatching { json.decodeFromString(com.superiorsoftllc.infantry.ui.voice.SpokenNotice.serializer(), env.data) }
@@ -1292,6 +1293,58 @@ class Controller(
         }
     }
 
+    /**
+     * CHAT-IMAGE-REMOTE-1: an uploaded image's bytes, by upload id (`image_fetch`, answered `image_bytes` matched by request id). A
+     * client on another host cannot read the daemon's file path, so every client loads images it cannot read locally this way, over
+     * its own authenticated connection. Answers are cached (bytes, newest kept within [IMAGE_CACHE_BYTES]); a failure is not cached.
+     */
+    suspend fun fetchUploadedImage(id: String): com.superiorsoftllc.infantry.ui.DaemonImage {
+        imageCacheLock.withLock { imageCache.remove(id)?.let { imageCache[id] = it; return com.superiorsoftllc.infantry.ui.DaemonImage.Bytes(it) } }
+        val requestId = "image-fetch-${++imageFetchRequests}"
+        val answer = CompletableDeferred<Envelope>()
+        pendingImageFetches[requestId] = answer
+        val got = try {
+            val body = buildJsonObject { put("id", id); _state.value.activeProjectId?.let { put("projectId", it) } }
+            if (!client.send(Envelope(IMAGE_FETCH, body.toString(), requestId = requestId))) {
+                com.superiorsoftllc.infantry.ui.DaemonImage.Failed("not connected to the daemon")
+            } else {
+                val env = withTimeoutOrNull(IMAGE_FETCH_TIMEOUT_MS) { answer.await() }
+                when {
+                    env == null -> com.superiorsoftllc.infantry.ui.DaemonImage.Failed("the daemon did not answer")
+                    env.type != IMAGE_BYTES -> com.superiorsoftllc.infantry.ui.DaemonImage.Failed(env.data.take(200))
+                    else -> runCatching {
+                        val o = json.parseToJsonElement(env.data).jsonObject
+                        if (o["missing"]?.jsonPrimitive?.contentOrNull == "true") com.superiorsoftllc.infantry.ui.DaemonImage.Missing
+                        else com.superiorsoftllc.infantry.ui.DaemonImage.Bytes(Base64.decode(o["base64"]!!.jsonPrimitive.content))
+                    }.getOrElse { com.superiorsoftllc.infantry.ui.DaemonImage.Failed("the daemon's answer could not be read") }
+                }
+            }
+        } finally {
+            pendingImageFetches.remove(requestId)
+        }
+        if (got is com.superiorsoftllc.infantry.ui.DaemonImage.Bytes) imageCacheLock.withLock {
+            imageCache[id] = got.bytes
+            var total = imageCache.values.sumOf { it.size.toLong() }
+            val it = imageCache.keys.iterator()
+            while (total > IMAGE_CACHE_BYTES && imageCache.size > 1 && it.hasNext()) { val k = it.next(); total -= imageCache[k]!!.size; it.remove() }
+        }
+        return got
+    }
+
+    /** [fetchUploadedImage] as the UI's image source ([com.superiorsoftllc.infantry.ui.LocalDaemonImages]). */
+    val images = com.superiorsoftllc.infantry.ui.DaemonImageSource { fetchUploadedImage(it) }
+
+    private val imageCacheLock = Mutex()
+    /** Insertion order = recency (a hit is re-inserted), so the first key is the least recently used. */
+    private val imageCache = LinkedHashMap<String, ByteArray>()
+    private var imageFetchRequests = 0
+    private val pendingImageFetches = mutableMapOf<String, CompletableDeferred<Envelope>>()
+
+    private fun answerImageFetch(env: Envelope) {
+        val id = env.requestId ?: return
+        pendingImageFetches[id]?.complete(env)
+    }
+
     private val imageUploadLock = Mutex()
     @kotlin.concurrent.Volatile
     private var pendingImageUpload: CompletableDeferred<ImageUploadOutcome>? = null
@@ -1976,6 +2029,13 @@ class Controller(
         const val IMAGE_UPLOAD_TIMEOUT_MS = 30_000L
         const val PLUGIN_SECRET_TIMEOUT_MS = 10_000L
         const val PLUGIN_TOOL_TIMEOUT_MS = 20_000L
+        /** CHAT-IMAGE-REMOTE-1: the frame that asks the daemon (Infantry_Chat) for an uploaded image by id, and its answer. */
+        const val IMAGE_FETCH = "image_fetch"
+        const val IMAGE_BYTES = "image_bytes"
+        /** CHAT-IMAGE-REMOTE-1: how long an image fetch waits for its answer. */
+        const val IMAGE_FETCH_TIMEOUT_MS = 30_000L
+        /** CHAT-IMAGE-REMOTE-1: the fetched-image bytes kept in memory per connection (least recently used dropped first). */
+        const val IMAGE_CACHE_BYTES = 48L * 1024 * 1024
         /** CP-4(e): how long a `/` line in the New agent box waits for the daemon's full command list. */
         const val SPAWN_CATALOG_TIMEOUT_MS = 5_000L
 

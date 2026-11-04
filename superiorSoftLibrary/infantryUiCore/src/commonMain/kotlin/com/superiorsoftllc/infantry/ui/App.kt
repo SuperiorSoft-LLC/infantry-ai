@@ -428,6 +428,7 @@ fun App(
       // IMG-VIEW-1: chat images open full size over the whole window (the Board keeps its own host, above it).
       androidx.compose.runtime.CompositionLocalProvider(
           LocalModalBlur provides modalBlur,
+          LocalDaemonImages provides controller.images,
           LocalProgressStaleMin provides flags.progressStaleMin,
           LocalReasoningPlacement provides flags.reasoningPlacement,
           LocalTabFactory provides tabs,

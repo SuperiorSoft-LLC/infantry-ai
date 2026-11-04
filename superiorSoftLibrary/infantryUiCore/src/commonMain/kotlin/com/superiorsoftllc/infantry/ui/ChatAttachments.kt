@@ -49,6 +49,8 @@ const val CHAT_IMAGE_ERROR_TAG = "chat-image-error"
 const val CHAT_IMAGE_SENT_TAG_PREFIX = "chat-image-sent-"
 /** IMG-5: a sent image the daemon's retention sweep has deleted. */
 const val CHAT_IMAGE_EXPIRED_TAG_PREFIX = "chat-image-expired-"
+/** CHAT-IMAGE-REMOTE-1: a sent image whose load failed (not expired): tap to retry. */
+const val CHAT_IMAGE_RETRY_TAG_PREFIX = "chat-image-retry-"
 /** ATTACH-INLINE-1: shown while an attachment is on its way to the daemon. */
 const val CHAT_ATTACH_BUSY_TAG = "chat-attach-busy"
 /** ATTACH-INLINE-1: the paperclip's label (its tooltip adds [ATTACH_FILE_SHORTCUT]). */

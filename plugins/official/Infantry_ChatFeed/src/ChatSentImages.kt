@@ -23,6 +23,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,33 +50,40 @@ import kotlinx.coroutines.withContext
 /**
  * IMG-2: a sent turn's images, read back from its `[image: …]` lines; a click opens one full size. IMG-5: one the
  * retention sweep has deleted shows "image expired" instead of a blank thumbnail; the turn's text is untouched.
+ * CHAT-IMAGE-REMOTE-1: a client that cannot read the daemon's file (a phone, a browser) loads it from the daemon by upload id,
+ * lazily and cached; "image expired" only when the daemon says it is gone, "could not load (retry)" with a retry tap otherwise.
  */
 @Composable
 internal fun ChatSentImages(paths: List<String>, inline: ByteArray? = null) {
     if (paths.isEmpty()) return
-    val host = LocalPlatformHost.current
     Row(Modifier.padding(vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         paths.forEach { path ->
-            // Only a host that can look and finds nothing says expired; one that cannot look (null) keeps the thumb.
-            val expired by produceState(false, path) { value = inline == null && withContext(Dispatchers.Default) { host.fileExists(path) == false } }
-            if (expired) {
-                Box(
+            var attempt by remember(path) { mutableStateOf(0) }
+            when (val load = rememberDaemonImage(path, inline, attempt)) {
+                ImageLoad.Expired -> Box(
                     Modifier.size(SENT_DP.dp).clip(RoundedCornerShape(4.dp)).background(Palette.Panel)
                         .testTag(CHAT_IMAGE_EXPIRED_TAG_PREFIX + path),
                 ) {
                     Text("image expired", color = Palette.Muted, fontSize = 9.sp, modifier = Modifier.align(Alignment.Center))
                 }
-            } else {
-                Box(Modifier.testTag(CHAT_IMAGE_SENT_TAG_PREFIX + path)) { SentImage(path, path.substringAfterLast('/').substringAfterLast('\\'), inline) }
+                is ImageLoad.Failed -> Box(
+                    Modifier.size(SENT_DP.dp).clip(RoundedCornerShape(4.dp)).background(Palette.Panel)
+                        .clickable(role = Role.Button, onClickLabel = "Retry loading the image") { attempt++ }
+                        .testTag(CHAT_IMAGE_RETRY_TAG_PREFIX + path),
+                ) {
+                    Text("could not load\n(retry)", color = Palette.Muted, fontSize = 9.sp, textAlign = TextAlign.Center, modifier = Modifier.align(Alignment.Center))
+                }
+                else -> Box(Modifier.testTag(CHAT_IMAGE_SENT_TAG_PREFIX + path)) {
+                    SentImage((load as? ImageLoad.Shown)?.bitmap, path.substringAfterLast('/').substringAfterLast('\\'))
+                }
             }
         }
     }
 }
 
-/** A sent chat image [SENT_IMAGE_WIDTH_DP] wide at most, aspect kept, rounded; click opens it full size. */
+/** A sent chat image [SENT_IMAGE_WIDTH_DP] wide at most, aspect kept, rounded; click opens it full size. Null = still loading. */
 @Composable
-private fun SentImage(path: String, name: String, inline: ByteArray? = null) {
-    val bitmap = rememberImage(path, inline)
+private fun SentImage(bitmap: ImageBitmap?, name: String) {
     val view = LocalImageViewer.current
     if (bitmap == null) {
         Box(Modifier.size(SENT_DP.dp).clip(RoundedCornerShape(8.dp)).background(Palette.Panel)) {

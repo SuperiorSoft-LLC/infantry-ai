@@ -168,6 +168,20 @@ object ImageUploads {
         )
     }
 
+    /** The image purposes a fetch by id looks in, in order. */
+    private val FETCH_PURPOSES = listOf(ImageUpload.PURPOSE_CHAT, ImageUpload.PURPOSE_TICKET)
+    private val UPLOAD_ID = Regex("^[0-9a-f]{64}\\.(png|jpg|gif|webp)$")
+
+    /** CHAT-IMAGE-REMOTE-1: [id] is a stored image upload's file name (`<sha256>.<ext>`), the only name a fetch accepts. */
+    fun isUploadId(id: String): Boolean = UPLOAD_ID.matches(id)
+
+    /** CHAT-IMAGE-REMOTE-1: the bytes and mime type of the image upload named [id] in [files], or null when none holds it. */
+    fun find(files: ProjectFiles, id: String): Pair<ByteArray, String>? {
+        if (!isUploadId(id)) return null
+        val type = ImageType.entries.first { it.extension == id.substringAfterLast('.') }
+        return FETCH_PURPOSES.firstNotNullOfOrNull { purpose -> files.get("$UPLOADS/$purpose/$id") }?.let { it to type.mimeType }
+    }
+
     private fun tooLarge(limit: Int) = "the file is over the ${limit / (1024 * 1024)} MB limit ($limit bytes)"
 
     /** ATTACH-INLINE-1: [fileName]'s extension when it is 1-10 letters or digits, lowercased; `bin` otherwise. */

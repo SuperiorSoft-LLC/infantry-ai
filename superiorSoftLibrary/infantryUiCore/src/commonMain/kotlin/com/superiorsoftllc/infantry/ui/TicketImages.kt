@@ -243,22 +243,17 @@ private fun TicketImageThumb(relPath: String, path: String?, fallback: ByteArray
     }
 }
 
-/** The image at [path] (read through the platform host), else [fallback]'s bytes; null while loading or unreadable. */
-@OptIn(ExperimentalResourceApi::class)
+/**
+ * The image at [path] (read through the platform host; CHAT-IMAGE-REMOTE-1: else fetched from the daemon by upload id, so a remote
+ * client shows it too), else [fallback]'s bytes; null while loading or unreadable.
+ */
 @Composable
 fun rememberImage(path: String?, fallback: ByteArray?): ImageBitmap? {
     val host = LocalPlatformHost.current
-    val bitmap by produceState<ImageBitmap?>(null, path, fallback) {
-        value = withContext(Dispatchers.Default) {
-            val bytes = path?.let(host::readBytes) ?: fallback
-            try {
-                bytes?.decodeToImageBitmap()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                null
-            }
-        }
+    val source = LocalDaemonImages.current
+    val bitmap by produceState<ImageBitmap?>(null, path, fallback, source) {
+        val local = path?.let { loadImage(it, null, host::readBytes, { null }, source) }
+        value = (local as? ImageLoad.Shown)?.bitmap ?: fallback?.let { (loadImage(null, it, host::readBytes, { null }, null) as? ImageLoad.Shown)?.bitmap }
     }
     return bitmap
 }
