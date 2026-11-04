@@ -1315,13 +1315,13 @@ class SessionManager(
         // run, so a role-only spawn (the New agent modal) knows its role from the env too.
         val limitsEnv = runCatching { buildEnv(com.superiorsoftllc.infantry.daemon.api.processes.LaunchInfo(session.id, session.role, session.projectId)) }.onFailure { System.err.println("[infantry] build limits env failed: ${it.message}") }.getOrDefault(emptyMap())
         runCatching { GradleProgressInit.install() }
-        val runEnv = childEnv + limitsEnv + buildMap {
+        val runEnv = PathEnv.withBinOnPath(childEnv + limitsEnv + buildMap {
             put(GradleProgressInit.ENV, "1")
             put(AccessPolicy.SESSION_ID_ENV, session.id)
             session.projectId?.let { put(AccessPolicy.PROJECT_ID_ENV, it) }
             session.agentId?.takeIf { it.isNotBlank() }?.let { put(AccessPolicy.AGENT_ID_ENV, it) }
             session.role?.takeIf { it.isNotBlank() }?.let { put(AccessPolicy.ROLE_ENV, it) }
-        }
+        })
         val active = ActiveRun(clock())
         interruptedTurns.remove(sessionId)
         runs[sessionId] = active
