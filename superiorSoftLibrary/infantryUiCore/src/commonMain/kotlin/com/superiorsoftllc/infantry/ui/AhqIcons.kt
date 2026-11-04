@@ -210,6 +210,34 @@ object AhqIcons {
         }
     }
 
+    /** Material "Filled.FilterNone" (two overlapping windows): the restore / "show composer" glyph. */
+    val Restore: ImageVector by lazy {
+        icon("Restore", autoMirror = false) {
+            moveTo(3.0f, 5.0f); horizontalLineTo(1.0f); verticalLineToRelative(16.0f)
+            curveToRelative(0.0f, 1.1f, 0.9f, 2.0f, 2.0f, 2.0f); horizontalLineToRelative(16.0f); verticalLineToRelative(-2.0f)
+            horizontalLineTo(3.0f); close()
+            moveTo(21.0f, 1.0f); horizontalLineTo(7.0f)
+            curveToRelative(-1.1f, 0.0f, -2.0f, 0.9f, -2.0f, 2.0f); verticalLineToRelative(14.0f)
+            curveToRelative(0.0f, 1.1f, 0.9f, 2.0f, 2.0f, 2.0f); horizontalLineToRelative(14.0f)
+            curveToRelative(1.1f, 0.0f, 2.0f, -0.9f, 2.0f, -2.0f); verticalLineTo(3.0f)
+            curveToRelative(0.0f, -1.1f, -0.9f, -2.0f, -2.0f, -2.0f); close()
+            moveTo(21.0f, 17.0f); horizontalLineTo(7.0f); verticalLineTo(3.0f); horizontalLineToRelative(14.0f); verticalLineToRelative(14.0f); close()
+        }
+    }
+
+    /** Material "Filled.History" simplified: the round Activity icon (a clock). */
+    val Activity: ImageVector by lazy {
+        icon("Activity", autoMirror = false) {
+            moveTo(12.0f, 2.0f)
+            curveTo(6.48f, 2.0f, 2.0f, 6.48f, 2.0f, 12.0f); reflectiveCurveToRelative(4.48f, 10.0f, 10.0f, 10.0f)
+            reflectiveCurveToRelative(10.0f, -4.48f, 10.0f, -10.0f); reflectiveCurveTo(17.52f, 2.0f, 12.0f, 2.0f); close()
+            moveTo(12.0f, 20.0f); curveToRelative(-4.41f, 0.0f, -8.0f, -3.59f, -8.0f, -8.0f); reflectiveCurveToRelative(3.59f, -8.0f, 8.0f, -8.0f)
+            reflectiveCurveToRelative(8.0f, 3.59f, 8.0f, 8.0f); reflectiveCurveToRelative(-3.59f, 8.0f, -8.0f, 8.0f); close()
+            moveTo(12.5f, 7.0f); horizontalLineTo(11.0f); verticalLineToRelative(6.0f); lineToRelative(5.25f, 3.15f); lineToRelative(0.75f, -1.23f)
+            lineToRelative(-4.5f, -2.67f); close()
+        }
+    }
+
     /** Material "Filled.Minimize". */
     val Minimize: ImageVector by lazy {
         icon("Minimize", autoMirror = false) {

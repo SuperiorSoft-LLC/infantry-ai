@@ -11,6 +11,8 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -353,7 +355,7 @@ fun InterruptButton(agent: AgentView, live: Boolean, controller: Controller) {
         AhqIcons.Stop, gate.label(STOP_TURN_LABEL),
         onClick = { actionScope.launch { controller.interrupt(agent.id) } },
         enabled = gate.allowed && live && busy,
-        modifier = Modifier.testTag(INTERRUPT_BUTTON_TAG),
+        modifier = Modifier.defaultMinSize(COMPOSER_TOUCH_DP.dp, COMPOSER_TOUCH_DP.dp).testTag(INTERRUPT_BUTTON_TAG),
         colors = ButtonDefaults.outlinedButtonColors(contentColor = Palette.Danger),
     )
 }
@@ -492,7 +494,13 @@ fun PromptBox(
         // CHAT-MINIMIZE-1: one large rounded box; its actions hang below it in two tab groups (tools left, send right).
         var confirmingRemove by remember(a?.id) { mutableStateOf(false) }
         var confirmingRestart by remember(a?.id) { mutableStateOf(false) }
-        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(Modifier.fillMaxWidth()) {
+        // CHAT-MINIMIZE-2: the mode/status line, ONE small line just above the box.
+        Text(
+            composerStatusLine(snapshot.toolApproval?.effective, snapshot.agents.size, a?.stateText),
+            color = Palette.Muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(start = 6.dp, bottom = 2.dp).testTag(COMPOSER_STATUS_TAG),
+        )
         Box(Modifier.fillMaxWidth()) {
             OutlinedTextField(
                 value = shown,
@@ -550,17 +558,20 @@ fun PromptBox(
                 IconAction(
                     if (expanded) AhqIcons.CloseFullscreen else AhqIcons.OpenInFull,
                     if (expanded) COMPOSER_COLLAPSE_LABEL else COMPOSER_EXPAND_LABEL, onToggleExpand,
-                    style = IconActionStyle.TEXT, modifier = Modifier.testTag(COMPOSER_EXPAND_TAG),
+                    style = IconActionStyle.TEXT, modifier = Modifier.defaultMinSize(COMPOSER_TOUCH_DP.dp, COMPOSER_TOUCH_DP.dp).testTag(COMPOSER_EXPAND_TAG),
                 )
-                IconAction(AhqIcons.Minimize, COMPOSER_MINIMIZE_LABEL, onMinimize, style = IconActionStyle.TEXT, modifier = Modifier.testTag(COMPOSER_MINIMIZE_TAG))
+                IconAction(AhqIcons.Minimize, COMPOSER_MINIMIZE_LABEL, onMinimize, style = IconActionStyle.TEXT, modifier = Modifier.defaultMinSize(COMPOSER_TOUCH_DP.dp, COMPOSER_TOUCH_DP.dp).testTag(COMPOSER_MINIMIZE_TAG))
             }
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
-          Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        // CHAT-MINIMIZE-2: tab-shaped groups hanging from the box's bottom edge (pulled up over its border), tools left, Stop/Send right.
+        val tab = androidx.compose.foundation.shape.RoundedCornerShape(bottomStart = 14.dp, bottomEnd = 14.dp)
+        val tabModifier = Modifier.offset(y = (-1).dp).background(Palette.Panel, tab).border(1.dp, Palette.Muted, tab).padding(horizontal = 6.dp)
+        Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
+          Row(tabModifier.weight(1f, fill = false).horizontalScroll(rememberScrollState()).testTag(COMPOSER_TOOLS_TAB_TAG), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconAction(
                 AhqIcons.AttachFile, ATTACH_FILE_LABEL, onClick = pick, shortcut = ATTACH_FILE_SHORTCUT,
                 enabled = live && host.canPickAttachment, style = IconActionStyle.TEXT,
-                modifier = Modifier.testTag(CHAT_IMAGE_ATTACH_TAG),
+                modifier = Modifier.defaultMinSize(COMPOSER_TOUCH_DP.dp, COMPOSER_TOUCH_DP.dp).testTag(CHAT_IMAGE_ATTACH_TAG),
             )
             extras()
         if (a != null && !spawnMode) {
@@ -589,13 +600,14 @@ fun PromptBox(
                 IconAction(
                     if (spawnMode) AhqIcons.Close else AhqIcons.PersonAdd,
                     if (spawnMode) "Cancel new agent" else spawn.label(NEW_AGENT_LABEL),
-                    onSpawnToggle, shortcut = NEW_AGENT_SHORTCUT,
+                    onSpawnToggle, modifier = Modifier.defaultMinSize(COMPOSER_TOUCH_DP.dp, COMPOSER_TOUCH_DP.dp), shortcut = NEW_AGENT_SHORTCUT,
                     // DEMO-MERGE-1: a new session is a write; the button is dimmed with the reason as its tooltip.
                     enabled = spawnMode || spawn.allowed,
                 )
             }
           }
-          Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+          Spacer(Modifier.width(12.dp))
+          Row(tabModifier.testTag(COMPOSER_SEND_TAB_TAG), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
             if (a != null && !spawnMode) InterruptButton(a, live, controller)
             IconAction(
                 AhqIcons.Send,
@@ -609,7 +621,7 @@ fun PromptBox(
                 },
                 onSubmit, shortcut = "Enter", enabled = live && (value.isNotBlank() || attachments.isNotEmpty()) && !attachBusy && blocker == null &&
                     !(!spawn.allowed && (spawnMode || a == null)) && !(writeLocked && value.trimStart().startsWith("/")) && !promptLocked,
-                style = IconActionStyle.FILLED,
+                style = IconActionStyle.FILLED, modifier = Modifier.defaultMinSize(COMPOSER_TOUCH_DP.dp, COMPOSER_TOUCH_DP.dp),
             )
           }
         }
@@ -647,7 +659,7 @@ private class ComposerAct(
     @Composable
     fun Button(dangerColors: ButtonColors) {
         IconAction(
-            icon, label, run, shortcut = shortcut, enabled = enabled,
+            icon, label, run, modifier = Modifier.defaultMinSize(COMPOSER_TOUCH_DP.dp, COMPOSER_TOUCH_DP.dp), shortcut = shortcut, enabled = enabled,
             style = if (filled) IconActionStyle.FILLED else IconActionStyle.OUTLINED,
             colors = when {
                 filled -> ButtonDefaults.buttonColors(containerColor = Palette.Danger, contentColor = androidx.compose.ui.graphics.Color.White)
@@ -672,6 +684,16 @@ const val COMPOSER_RESTORE_LABEL = "Show composer"
 /** CHAT-COMPACT-1: below this width (dp) the secondary actions move into the "..." menu. */
 const val COMPOSER_NARROW_DP = 560
 const val COMPOSER_MORE_LABEL = "More actions"
+const val COMPOSER_STATUS_TAG = "composer-status"
+const val COMPOSER_TOOLS_TAB_TAG = "composer-tools-tab"
+const val COMPOSER_SEND_TAB_TAG = "composer-send-tab"
+/** CHAT-MINIMIZE-2: the smallest touch target (dp) of every composer button. */
+const val COMPOSER_TOUCH_DP = 48
+
+/** CHAT-MINIMIZE-2: the one status line above the box: permission mode, agent count, session state (unknown parts left out). */
+fun composerStatusLine(mode: String?, agents: Int, state: String?): String =
+    listOfNotNull(mode?.let { "permissions: $it" }, "$agents agent${if (agents == 1) "" else "s"}", state).joinToString(" · ")
+
 const val COMPOSER_MORE_TAG = "composer-more"
 
 /** The one-line strip that shows the latest notice: a refused `/command`, or what a `/command` did. */
