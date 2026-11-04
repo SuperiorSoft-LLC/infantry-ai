@@ -6,12 +6,23 @@
   "license": "NOASSERTION",
   "tier": "official",
   "description": "The opencode harness (HARNESS H8b-2/3): launches opencode (run --format json, or the persistent opencode serve over HTTP/SSE), maps tool approval to its permissions, merges the session's MCP server and the watch plugin into its inline config, lists its models carries the / command catalog and reads its session store.",
+  "daemon": {
+    "config": [
+      {
+        "node": "infantry.opencode", "group": "Harnesses", "title": "OpenCode", "tab": "Plugins", "order": 945,
+        "keywords": ["opencode", "harness", "retry", "quota"],
+        "fields": [
+          { "key": "harness.opencode.maxRetries", "type": "number", "label": "Provider retries before the turn fails (0 = never give up)", "default": 2, "min": 0, "max": 100, "step": 1, "scope": "daemon", "order": 1 }
+        ]
+      }
+    ]
+  },
   "harness": {
     "jar": "harness/build/libs/Infantry_OpenCode-harness.jar",
     "contract": "2.15.0",
     "ids": ["opencode"],
     "cli": { "id": "opencode", "command": "opencode", "label": "OpenCode" },
-    "settings": [],
+    "settings": ["harness.opencode.maxRetries"],
     "hooks": ["watch", "mcp", "config", "session", "models", "stats"]
   }
 }

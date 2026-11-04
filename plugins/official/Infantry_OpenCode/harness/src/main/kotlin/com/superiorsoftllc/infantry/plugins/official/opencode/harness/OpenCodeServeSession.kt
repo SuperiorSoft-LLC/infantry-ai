@@ -126,7 +126,7 @@ class OpenCodeServeSession(
 
         override fun sendTurn(request: HarnessRequest) {
             val model = modelFor(request.model)
-            val turn = Turn(out, model) { recentStderr.toList() }.also { active = it }
+            val turn = Turn(out, model, maxRetries = maxRetries(), giveUp = { abortProviderTurn() }) { recentStderr.toList() }.also { active = it }
             toolApproval = request.toolApproval
             // The boot wait and the HTTP calls run off the host's thread; the turn ends exactly once either way.
             Thread({
@@ -165,12 +165,18 @@ class OpenCodeServeSession(
         }
 
         /** Stops the TURN (`/abort`); the server lives on. The turn ends now, so a late idle for it is ignored. */
-        override fun abortTurn(): Boolean {
-            withdrawPrompts()
-            val turn = active ?: return true
+        private fun maxRetries(): Int = host?.setting(MAX_RETRIES_SETTING)?.trim()?.toIntOrNull()?.takeIf { it >= 0 } ?: DEFAULT_MAX_RETRIES
+
+        private fun abortProviderTurn() {
             providerSessionId?.let { ses ->
                 Thread({ runCatching { post("/session/$ses/abort", "{}") } }, "infantry-opencode-abort").apply { isDaemon = true; start() }
             }
+        }
+
+        override fun abortTurn(): Boolean {
+            withdrawPrompts()
+            val turn = active ?: return true
+            abortProviderTurn()
             turn.end(SessionTurnEnd.INTERRUPTED, 130, null)
             return true
         }
@@ -257,7 +263,7 @@ class OpenCodeServeSession(
 
     // --- one turn -------------------------------------------------------------------------------------
 
-    class Turn(private val out: SessionOutput, private val model: String, private val stderrTail: () -> List<String> = { emptyList() }) {
+    class Turn(private val out: SessionOutput, private val model: String, private val maxRetries: Int = DEFAULT_MAX_RETRIES, private val giveUp: () -> Unit = {}, private val stderrTail: () -> List<String> = { emptyList() }) {
         private val done = AtomicBoolean(false)
         private val userMessages = ConcurrentHashMap.newKeySet<String>()
         @Volatile private var replied = false
@@ -276,10 +282,23 @@ class OpenCodeServeSession(
             else -> end(SessionTurnEnd.COMPLETED, 0, null)
         }
 
+        /** opencode retries a refusing provider (quota, 429) forever and sends no error: show it, and give up after [maxRetries] (0 = never). */
+        private fun onRetry(status: JsonObject) {
+            val attempt = (status["attempt"] as? JsonPrimitive)?.longOrNull ?: 0
+            val message = status["message"].str() ?: "provider error"
+            sawBusy = true
+            out.diagnostic("[infantry] opencode: $message, retry $attempt")
+            if (maxRetries > 0 && attempt > maxRetries) {
+                giveUp()
+                end(SessionTurnEnd.FAILED, 1, "opencode: $message (gave up after $maxRetries retries)")
+            }
+        }
+
         fun onEvent(type: String, props: JsonObject, part: JsonObject?, sessionId: String) {
             if (done.get()) return
             when (type) {
                 "session.status" -> when ((props["status"] as? JsonObject)?.get("type").str()) {
+                    "retry" -> onRetry(props["status"] as JsonObject)
                     "busy" -> sawBusy = true
                     "idle" -> if (sawBusy) idle()
                 }
@@ -328,6 +347,9 @@ class OpenCodeServeSession(
     }
 
     companion object {
+        const val MAX_RETRIES_SETTING = "harness.opencode.maxRetries"
+        const val DEFAULT_MAX_RETRIES = 2
+
         /** `opencode serve` reads its basic-auth password from here; set per child so no other local process can drive it. */
         const val PASSWORD_ENV = "OPENCODE_SERVER_PASSWORD"
 
