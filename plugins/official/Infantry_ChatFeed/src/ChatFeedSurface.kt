@@ -324,8 +324,12 @@ fun ActivityBox(agent: AgentView) {
         if (expanded) Box(Modifier.padding(horizontal = 8.dp)) { ActivityLines(entries) }
         // CHAT-MINIMIZE-2: a small round floating icon (48dp touch target) with the count; the label stays as its description.
         val label = "Activity (${entries.size})"
+        // CHAT-MINIMIZE-3: hand cursor and a hover tone, so the round icon reads as clickable.
+        val hover = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+        val hovered by hover.collectIsHoveredAsState()
         Box(
-            Modifier.padding(8.dp).size(48.dp).clip(androidx.compose.foundation.shape.CircleShape).background(Palette.Panel)
+            Modifier.padding(8.dp).size(48.dp).clip(androidx.compose.foundation.shape.CircleShape).background(if (hovered) Palette.Raised else Palette.Panel)
+                .hoverable(hover).handCursor()
                 .clickable { activityBoxChoice = !expanded }.semantics { contentDescription = label },
             contentAlignment = Alignment.Center,
         ) {

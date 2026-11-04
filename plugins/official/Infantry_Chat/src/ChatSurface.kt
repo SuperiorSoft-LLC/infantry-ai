@@ -77,6 +77,7 @@ import com.superiorsoftllc.infantry.ui.shell.PickedImage
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.rememberCoroutineScope
@@ -351,12 +352,11 @@ fun InterruptButton(agent: AgentView, live: Boolean, controller: Controller) {
     val actionScope = rememberCoroutineScope()
     val gate = com.superiorsoftllc.infantry.ui.shell.rememberGate("chat.interrupt")
     val busy = isBusy(agent)
-    IconAction(
+    ComposerRound(
         AhqIcons.Stop, gate.label(STOP_TURN_LABEL),
         onClick = { actionScope.launch { controller.interrupt(agent.id) } },
         enabled = gate.allowed && live && busy,
-        modifier = Modifier.defaultMinSize(COMPOSER_TOUCH_DP.dp, COMPOSER_TOUCH_DP.dp).testTag(INTERRUPT_BUTTON_TAG),
-        colors = ButtonDefaults.outlinedButtonColors(contentColor = Palette.Danger),
+        modifier = Modifier.testTag(INTERRUPT_BUTTON_TAG), content = Palette.Danger,
     )
 }
 
@@ -501,8 +501,10 @@ fun PromptBox(
             color = Palette.Muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(start = 6.dp, bottom = 2.dp).testTag(COMPOSER_STATUS_TAG),
         )
+        var boxFocused by remember { mutableStateOf(false) }
         Box(Modifier.fillMaxWidth()) {
             OutlinedTextField(
+                colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(unfocusedBorderColor = Palette.Accent),
                 value = shown,
                 onValueChange = { next -> field = next; if (next.text != value) onValue(next.text) },
                 visualTransformation = tags,
@@ -520,7 +522,7 @@ fun PromptBox(
                         color = Palette.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
                 },
-                modifier = Modifier.fillMaxWidth().padding(end = 0.dp).focusRequester(focus).testTag(PROMPT_BOX_TAG).onPreviewKeyEvent { e ->
+                modifier = Modifier.fillMaxWidth().padding(end = 0.dp).focusRequester(focus).onFocusChanged { boxFocused = it.isFocused }.testTag(PROMPT_BOX_TAG).onPreviewKeyEvent { e ->
                     if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     val listOpen = slashRows.isNotEmpty()
                     when {
@@ -565,20 +567,20 @@ fun PromptBox(
         }
         // CHAT-MINIMIZE-2: tab-shaped groups hanging from the box's bottom edge (pulled up over its border), tools left, Stop/Send right.
         val tab = androidx.compose.foundation.shape.RoundedCornerShape(bottomStart = 14.dp, bottomEnd = 14.dp)
-        val tabModifier = Modifier.offset(y = (-1).dp).background(Palette.Panel, tab).border(1.dp, Palette.Muted, tab).padding(horizontal = 6.dp)
+        // CHAT-MINIMIZE-3: same border colour (accent, the text box's) and thickness as the box, solid accent fill; the 48dp hit areas leave an even 6dp inside.
+        val borderDp = if (boxFocused) COMPOSER_BORDER_DP else 1
+        val tabModifier = Modifier.offset(y = (-borderDp).dp).background(Palette.Accent, tab).border(borderDp.dp, Palette.Accent, tab)
         Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
-          Row(tabModifier.weight(1f, fill = false).horizontalScroll(rememberScrollState()).testTag(COMPOSER_TOOLS_TAB_TAG), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconAction(
+          Row(tabModifier.weight(1f, fill = false).horizontalScroll(rememberScrollState()).testTag(COMPOSER_TOOLS_TAB_TAG), horizontalArrangement = Arrangement.spacedBy(0.dp), verticalAlignment = Alignment.CenterVertically) {
+            ComposerRound(
                 AhqIcons.AttachFile, ATTACH_FILE_LABEL, onClick = pick, shortcut = ATTACH_FILE_SHORTCUT,
-                enabled = live && host.canPickAttachment, style = IconActionStyle.TEXT,
-                modifier = Modifier.defaultMinSize(COMPOSER_TOUCH_DP.dp, COMPOSER_TOUCH_DP.dp).testTag(CHAT_IMAGE_ATTACH_TAG),
+                enabled = live && host.canPickAttachment, modifier = Modifier.testTag(CHAT_IMAGE_ATTACH_TAG),
             )
             extras()
         if (a != null && !spawnMode) {
                 val resume = com.superiorsoftllc.infantry.ui.shell.rememberGate("chat.resume")
                 val canResume = live && resume.allowed && resumeEnabled(a.session)
                 val ended = a.session.state in ENDED_STATES
-                val dangerColors = ButtonDefaults.outlinedButtonColors(contentColor = Palette.Danger)
                 val acts = listOf(
                     ComposerAct(AhqIcons.SwapHoriz, swap.label(SWITCH_AGENT_LABEL), SWITCH_AGENT_SHORTCUT, swap.allowed, run = onSwitchAgent),
                     ComposerAct(AhqIcons.PlayArrow, resume.label("Resume"), "Ctrl+R", canResume, run = {
@@ -595,21 +597,21 @@ fun PromptBox(
                     }),
                     ComposerAct(AhqIcons.Refresh, restart.label(RESTART_SESSION_LABEL), null, live && restart.allowed, run = { confirmingRestart = true }),
                 )
-                acts.forEach { it.Button(dangerColors) }
+                acts.forEach { it.Button() }
             } else {
-                IconAction(
+                ComposerRound(
                     if (spawnMode) AhqIcons.Close else AhqIcons.PersonAdd,
                     if (spawnMode) "Cancel new agent" else spawn.label(NEW_AGENT_LABEL),
-                    onSpawnToggle, modifier = Modifier.defaultMinSize(COMPOSER_TOUCH_DP.dp, COMPOSER_TOUCH_DP.dp), shortcut = NEW_AGENT_SHORTCUT,
+                    onSpawnToggle, shortcut = NEW_AGENT_SHORTCUT,
                     // DEMO-MERGE-1: a new session is a write; the button is dimmed with the reason as its tooltip.
                     enabled = spawnMode || spawn.allowed,
                 )
             }
           }
           Spacer(Modifier.width(12.dp))
-          Row(tabModifier.testTag(COMPOSER_SEND_TAB_TAG), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+          Row(tabModifier.testTag(COMPOSER_SEND_TAB_TAG), horizontalArrangement = Arrangement.spacedBy(0.dp), verticalAlignment = Alignment.CenterVertically) {
             if (a != null && !spawnMode) InterruptButton(a, live, controller)
-            IconAction(
+            ComposerRound(
                 AhqIcons.Send,
                 when {
                     // DEMO-MERGE-1: while writes are refused a `/` command is not a chat message; Send is dimmed and says why.
@@ -621,7 +623,7 @@ fun PromptBox(
                 },
                 onSubmit, shortcut = "Enter", enabled = live && (value.isNotBlank() || attachments.isNotEmpty()) && !attachBusy && blocker == null &&
                     !(!spawn.allowed && (spawnMode || a == null)) && !(writeLocked && value.trimStart().startsWith("/")) && !promptLocked,
-                style = IconActionStyle.FILLED, modifier = Modifier.defaultMinSize(COMPOSER_TOUCH_DP.dp, COMPOSER_TOUCH_DP.dp),
+                content = Palette.Accent,
             )
           }
         }
@@ -657,16 +659,33 @@ private class ComposerAct(
     val danger: Boolean = false, val filled: Boolean = false, val run: () -> Unit,
 ) {
     @Composable
-    fun Button(dangerColors: ButtonColors) {
-        IconAction(
-            icon, label, run, modifier = Modifier.defaultMinSize(COMPOSER_TOUCH_DP.dp, COMPOSER_TOUCH_DP.dp), shortcut = shortcut, enabled = enabled,
-            style = if (filled) IconActionStyle.FILLED else IconActionStyle.OUTLINED,
-            colors = when {
-                filled -> ButtonDefaults.buttonColors(containerColor = Palette.Danger, contentColor = androidx.compose.ui.graphics.Color.White)
-                danger -> dangerColors
-                else -> null
-            },
+    fun Button() {
+        ComposerRound(
+            icon, label, run, shortcut = shortcut, enabled = enabled,
+            container = if (filled) Palette.Danger else Palette.Raised,
+            content = when { filled -> Color.White; danger -> Palette.Danger; else -> Palette.Text },
         )
+    }
+}
+
+/**
+ * CHAT-MINIMIZE-3: one round composer button. A 36dp disc in a secondary surface tone (stands out from the accent fill of
+ * its group) inside a 48dp hit area; hand cursor and the usual tooltip. [modifier] carries the test tag.
+ */
+@Composable
+fun ComposerRound(
+    icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit, modifier: Modifier = Modifier,
+    shortcut: String? = null, enabled: Boolean = true, container: Color = Palette.Raised, content: Color = Palette.Text,
+) {
+    IconActionTooltipBox(label, shortcut, modifier.size(COMPOSER_TOUCH_DP.dp)) { m ->
+        Box(m.clickable(enabled = enabled, role = androidx.compose.ui.semantics.Role.Button, onClick = onClick), contentAlignment = Alignment.Center) {
+            Box(
+                Modifier.size(COMPOSER_BUTTON_DP.dp).clip(CircleShape).background(if (enabled) container else container.copy(alpha = 0.5f))
+                    // A red End button on a red accent needs a ring to be seen.
+                    .then(if (container == Palette.Danger) Modifier.border(2.dp, Palette.Raised, CircleShape) else Modifier),
+                contentAlignment = Alignment.Center,
+            ) { Icon(icon, contentDescription = null, tint = if (enabled) content else content.copy(alpha = 0.4f), modifier = Modifier.size(18.dp)) }
+        }
     }
 }
 
@@ -689,6 +708,9 @@ const val COMPOSER_TOOLS_TAB_TAG = "composer-tools-tab"
 const val COMPOSER_SEND_TAB_TAG = "composer-send-tab"
 /** CHAT-MINIMIZE-2: the smallest touch target (dp) of every composer button. */
 const val COMPOSER_TOUCH_DP = 48
+/** CHAT-MINIMIZE-3: the drawn diameter (dp) of a composer button, and the group border thickness (the text box's focused border). */
+const val COMPOSER_BUTTON_DP = 36
+const val COMPOSER_BORDER_DP = 2
 
 /** CHAT-MINIMIZE-2: the one status line above the box: permission mode, agent count, session state (unknown parts left out). */
 fun composerStatusLine(mode: String?, agents: Int, state: String?): String =
