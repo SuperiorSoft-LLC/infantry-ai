@@ -6,7 +6,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -93,14 +99,17 @@ fun SwitchAgentPicker(
     val changed = role != currentRole || picked != stored
     val canApply = state.connection.isLive && !busy && !awaiting && picked != null && resolvedModel != null && changed
 
+    // SWITCH-MODAL-ANDROID-1: a fixed footer OUTSIDE a scrolling body, the whole bounded to 75% of the height it is given.
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
     Column(
-        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).background(Palette.Raised).border(1.dp, Palette.Border)
+        Modifier.fillMaxWidth().heightIn(max = maxHeight * 0.75f).padding(horizontal = 12.dp, vertical = 4.dp).background(Palette.Raised).border(1.dp, Palette.Border)
             .padding(10.dp).testTag(SWITCH_AGENT_PICKER_TAG),
     ) {
+      Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
         Text(SWITCH_AGENT_LABEL, color = Palette.Text, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
         Text("Same session: the conversation carries over to the agent you pick.", color = Palette.Muted, fontSize = 11.sp)
         Spacer(Modifier.height(6.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("Role", color = Palette.Muted, fontSize = 11.sp)
             if (a.session.global) {
                 // ASSISTANT-1: the global Assistant keeps its role; only its model is free.
@@ -145,8 +154,9 @@ fun SwitchAgentPicker(
         (refusal ?: if (agentId != null) state.agentError?.takeIf { it.startsWith("agent_swap ") } else state.sessionSwitchError)?.let {
             Text(it, color = Palette.Danger, fontSize = 11.sp, modifier = Modifier.padding(top = 6.dp).testTag(EXECUTOR_SWITCH_ERROR_TAG))
         }
+      }
         Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End)) {
-            OutlinedButton(onClick = onClose) { Text("Cancel") }
+            OutlinedButton(onClick = onClose, modifier = Modifier.defaultMinSize(minHeight = 48.dp)) { Text("Cancel", maxLines = 1, softWrap = false) }
             IconActionTooltipBox(if (busy) SWITCH_WAIT_FOR_TURN else "Switch this session to the picked agent", describe = false) { m ->
                 Button(
                     onClick = {
@@ -159,9 +169,10 @@ fun SwitchAgentPicker(
                         }
                     },
                     enabled = canApply,
-                    modifier = m.testTag(EXECUTOR_SWITCH_APPLY_TAG),
-                ) { Text("Apply") }
+                    modifier = m.defaultMinSize(minHeight = 48.dp).testTag(EXECUTOR_SWITCH_APPLY_TAG),
+                ) { Text("Apply", maxLines = 1, softWrap = false) }
             }
         }
+    }
     }
 }
