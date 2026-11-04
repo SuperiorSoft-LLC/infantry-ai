@@ -1335,6 +1335,12 @@ class Controller(
         return report(send(Envelope(Envelope.TICKET_ASSIGN, body.toString())))
     }
 
+    /** AGENT-MENU-1: take in_progress ticket [id] off its worker (back to todo, work kept). */
+    suspend fun unassignTicket(id: String): CommandResult {
+        val body = buildJsonObject { put("id", id) }
+        return report(send(Envelope(Envelope.TICKET_UNASSIGN, body.toString())))
+    }
+
     /** AGENT-TASKS-7: an `agent_queue` action (list, remove, move, clear) on [agentId]; the answer updates [AppState.agentQueues]. */
     suspend fun agentQueue(agentId: String, action: String = "list", ticketId: String? = null, at: Int? = null): CommandResult {
         val body = buildJsonObject {

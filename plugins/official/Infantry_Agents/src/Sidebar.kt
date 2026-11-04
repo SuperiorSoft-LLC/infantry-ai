@@ -433,16 +433,7 @@ private fun AgentRowMenu(a: AgentView, state: AppState, revealed: Boolean, onOpe
             val profile = a.session.agentId
             if (profile != null) {
                 HorizontalDivider(color = Palette.Border)
-                val cur = state.agentWork(profile).current
-                Text(
-                    cur?.let { "${shortTicketId(it.id)} ${it.title}" } ?: "No ticket", color = if (cur != null) Palette.Text else Palette.Muted, fontSize = 11.sp,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 260.dp).padding(horizontal = 12.dp, vertical = 4.dp).testTag("session-menu-current-${a.id}"),
-                )
-                DropdownMenuItem(
-                    text = { Text(if (cur != null) "Change ticket..." else "Assign ticket...", color = Palette.Text, fontSize = 12.sp) },
-                    onClick = { menuOpen = false; picking = true },
-                    modifier = Modifier.testTag("session-menu-change-${a.id}"),
-                )
+                AgentMenuTicketItems(a.id, state.agentWork(profile).current, onChange = { menuOpen = false; picking = true }, onUnassign = { id -> menuOpen = false; work.unassign(id) })
             }
             HorizontalDivider(color = Palette.Border)
             // DEMO-MERGE-1: the delete is a write; Remove is dimmed and says why while writes are refused.
@@ -487,6 +478,7 @@ fun AgentsSection() {
             assign = { ticketId, agentId -> scope.launch { a.assignTicket(ticketId, agentId) } },
             queue = { agentId, action, ticketId, at -> scope.launch { a.agentQueue(agentId, action, ticketId, at) } },
             open = a::openTicket,
+            unassign = { id -> scope.launch { a.unassignTicket(id) } },
         ),
         projects = { ProjectsSidebar(state, onDismiss = a::dismissProjectRefusal) },
         showReview = a.reviewLoaded,
@@ -505,13 +497,17 @@ private fun isHeld(t: com.superiorsoftllc.infantry.ui.protocol.Ticket) =
  */
 @Composable
 private fun TicketPickerDialog(agentKey: String, todo: List<com.superiorsoftllc.infantry.ui.protocol.Ticket>, onDismiss: () -> Unit, onPick: (String) -> Unit) {
-    var query by remember { mutableStateOf("") }
-    var showHeld by remember { mutableStateOf(false) }
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) { TicketPickerPanel(agentKey, todo, onDismiss, onPick) }
+}
+
+@Composable
+fun TicketPickerPanel(agentKey: String, todo: List<com.superiorsoftllc.infantry.ui.protocol.Ticket>, onDismiss: () -> Unit, onPick: (String) -> Unit, initialQuery: String = "", initialShowHeld: Boolean = false) {
+    var query by remember { mutableStateOf(initialQuery) }
+    var showHeld by remember { mutableStateOf(initialShowHeld) }
     var sel by remember { mutableStateOf(0) }
     val shown = todo.filter { (showHeld || !isHeld(it)) && (query.isBlank() || it.title.contains(query, true) || it.id.contains(query, true)) }
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
-    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
         Column(
             Modifier.fillMaxWidth(0.94f).widthIn(max = 520.dp).heightIn(max = 560.dp).clip(RoundedCornerShape(10.dp)).background(Palette.Raised).border(1.dp, Palette.Border, RoundedCornerShape(10.dp))
                 .padding(12.dp).testTag("ticket-picker-$agentKey")
@@ -550,11 +546,11 @@ private fun TicketPickerDialog(agentKey: String, todo: List<com.superiorsoftllc.
                         Spacer(Modifier.width(8.dp))
                         Text(t.title, color = if (isHeld(t)) Palette.Muted else Palette.Text, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                         if (isHeld(t)) Text("HOLD", color = Palette.Danger, fontSize = 9.sp, modifier = Modifier.padding(start = 6.dp))
+                        t.weight?.let { w -> Text("W$w", color = Palette.Muted, fontFamily = Mono, fontSize = 10.sp, modifier = Modifier.padding(start = 6.dp).testTag("ticket-picker-weight-${t.id}")) }
                     }
                 }
             }
         }
-    }
 }
 
 /** AGENT-TASKS-7: the card's ticket actions, supplied by the window: [assign] ticket to agent profile, [queue] (agent, action, ticket, place), [open] a ticket. */
@@ -562,6 +558,7 @@ class AgentWorkActions(
     val assign: (ticketId: String, agentId: String) -> Unit,
     val queue: (agentId: String, action: String, ticketId: String?, at: Int?) -> Unit,
     val open: (ticketId: String) -> Unit,
+    val unassign: (ticketId: String) -> Unit = {},
 ) {
     companion object { val None = AgentWorkActions({ _, _ -> }, { _, _, _, _ -> }, { }) }
 }
@@ -594,5 +591,22 @@ private fun QueueButton(label: String, glyph: String, onClick: () -> Unit) {
     Text(
         glyph, color = Palette.Muted, fontSize = 10.sp,
         modifier = Modifier.clickable(role = Role.Button, onClickLabel = label, onClick = onClick).semantics { contentDescription = label }.padding(horizontal = 4.dp, vertical = 2.dp),
+    )
+}
+
+/** AGENT-MENU-1: the menu's ticket block: the current ticket as one line (or "No ticket"), Change/Assign, and Unassign while one is running. */
+@Composable
+fun AgentMenuTicketItems(key: String, cur: com.superiorsoftllc.infantry.ui.protocol.Ticket?, onChange: () -> Unit, onUnassign: (String) -> Unit) {
+    Text(
+        cur?.let { "${shortTicketId(it.id)} ${it.title}" } ?: "No ticket", color = if (cur != null) Palette.Text else Palette.Muted, fontSize = 11.sp,
+        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 260.dp).padding(horizontal = 12.dp, vertical = 4.dp).testTag("session-menu-current-$key"),
+    )
+    DropdownMenuItem(
+        text = { Text(if (cur != null) "Change ticket..." else "Assign ticket...", color = Palette.Text, fontSize = 12.sp) },
+        onClick = onChange, modifier = Modifier.testTag("session-menu-change-$key"),
+    )
+    if (cur != null) DropdownMenuItem(
+        text = { Text("Unassign", color = Palette.Text, fontSize = 12.sp) },
+        onClick = { onUnassign(cur.id) }, modifier = Modifier.testTag("session-menu-unassign-$key"),
     )
 }

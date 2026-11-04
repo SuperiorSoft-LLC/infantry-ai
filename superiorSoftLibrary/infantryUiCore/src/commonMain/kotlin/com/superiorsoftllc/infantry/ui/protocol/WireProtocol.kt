@@ -495,6 +495,8 @@ data class Ticket(
     val queuedAgent: String? = null,
     val queuedAgentName: String? = null,
     val queueRank: Int? = null,
+    /** TICKET-WEIGHT: 1..5 or null = unweighted. */
+    val weight: Int? = null,
     /** AGENT-TASKS-6: a todo ticket whose branch is ahead of its base (tip sha, commits ahead); null = no kept work. */
     val hasWork: TicketHasWork? = null,
     val sessionId: String? = null,
