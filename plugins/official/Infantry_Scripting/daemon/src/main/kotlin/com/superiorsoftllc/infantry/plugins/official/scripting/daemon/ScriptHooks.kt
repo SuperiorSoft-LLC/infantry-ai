@@ -53,6 +53,8 @@ class ScriptHooks(
     private val limits: () -> ScriptLimits,
     private val guard: () -> HookGuardConfig = { HookGuardConfig() },
     private val enabled: () -> Boolean = { true },
+    /** NOTICE-ROUTE-1: true = a hook failure with no ticket to comment on is also mailed to the hook owner (default off). */
+    private val mailFailures: () -> Boolean = { false },
     /** (project, branch) -> the branch's tip sha, or null. */
     private val tip: (String, String) -> String? = { _, _ -> null },
     private val log: (String) -> Unit = {},
@@ -357,13 +359,14 @@ class ScriptHooks(
         report(project, hook, ticketId, text)
     }
 
-    /** A failure is never silent: a comment on the triggering ticket when there is one, else (or if that fails) mail to the hook's owner. */
+    /** A failure is never silent: logged, plus a comment on the triggering ticket when there is one; mail to the hook's owner only when scripting.hooks.mailFailures is on. */
     private fun report(project: String, hook: Hook, ticketId: String?, text: String) {
         val sys = ToolInvoker(Caller(owner = true), null, null, project, "script-hooks")
         if (ticketId != null) {
             val r = runCatching { tools.invoke("infantry_ticket_comment", buildJsonObject { put("ticketId", ticketId); put("kind", "issue"); put("body", text) }, sys) }.getOrNull()
             if (r != null && !r.isError) return
         }
+        if (!mailFailures()) return
         val to = hook.ownerSession ?: hook.ownerRole ?: "pm"
         val r = runCatching { tools.invoke("infantry_message", buildJsonObject { put("to", to); put("body", text) }, sys) }.getOrNull()
         if (r == null || r.isError) log("hook ${hook.id} ($project): report could not be delivered: ${r?.text?.take(200)}")

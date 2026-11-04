@@ -1359,6 +1359,7 @@ class InfantryDaemon(
                 patternGraceMs = { settings.limit(LimitRegistry.BG_NOTIFY_PATTERN_GRACE_SECONDS) * 1000L },
                 quietMs = { LimitRegistry.minutesMs(settings.limit(LimitRegistry.WATCH_QUIET_MINUTES), LimitRegistry.WATCH_QUIET_MINUTES) },
                 heartbeatCapMs = { settings.limit(LimitRegistry.WATCH_HEARTBEAT_CAP_MINUTES) * 60_000L },
+                statusNotices = { settings.limit(LimitRegistry.NOTICE_MAIL_BG_STATUS) != 0L },
                 inTurn = { sid -> manager.get(sid)?.isBusy() == true },
                 recipientOf = { sid -> watchRecipientOf(manager.get(sid)) },
                 lineChars = { settings.limit(LimitRegistry.WATCH_NOTICE_LINE_CHARS).toInt() },
