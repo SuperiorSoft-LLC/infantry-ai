@@ -33,31 +33,31 @@ import java.io.File
 import javax.imageio.ImageIO
 import kotlin.test.Test
 
-/** CHAT-MINIMIZE-3: screenshots of the composer (dark/light, desktop/phone width, normal/expanded/minimized, Activity hover) under build/composer-shots; asserts nothing. */
+/** CHAT-MINIMIZE-3/5: screenshots (narrow = the owner's ~350dp chat) of the composer (dark/light, desktop/phone width, normal/expanded/minimized, Activity hover) under build/composer-shots; asserts nothing. */
 @OptIn(ExperimentalTestApi::class)
 class ComposerShots {
     private val agent = AgentView(
         session = SessionRecord(id = "a", provider = "stub", workingDir = "/w", spawnedAt = 1, lastHeartbeat = 1, state = SessionState.BUSY, providerSessionId = "p"),
-        activityLog = listOf(AgentActivity("bash", "gradle test", 1L)),
+        activityLog = List(200) { AgentActivity("bash", "gradle test", 1L) },
     )
 
     private fun shoot(name: String, w: Int, dark: Boolean, expanded: Boolean = false, minimized: Boolean = false, hover: Boolean = false, focused: Boolean = false) {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         Palette.theme = ThemeSettings(dark = dark)
-        runDesktopComposeUiTest(w, 330) {
+        resetActivityBoxChoice()
+        runDesktopComposeUiTest(w, if (expanded) 480 else 300) {
             val controller = Controller(scope)
             val chat = ChatPanelState().also { it.draft = "half-written prompt" }
             setContent {
                 InfantryTheme {
                     Box(Modifier.fillMaxWidth().background(Palette.Bg).padding(8.dp)) {
                         Column {
-                            if (!minimized) {
-                                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) { ActivityBox(agent) }
-                                PromptBox(chat.draft, chat::edit, {}, chat.focus, false, agent, controller, {}, expanded = expanded, onMinimize = {})
+                            // CHAT-MINIMIZE-5: the float row (Expand, Minimize, Activity) above the box, as the feed draws it.
+                            val floaters: @androidx.compose.runtime.Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
+                                ComposerFloaters(minimized, expanded, {}, {}, {})
                             }
-                        }
-                        if (minimized) Box(Modifier.align(Alignment.BottomEnd).padding(12.dp)) {
-                            IconAction(AhqIcons.Restore, COMPOSER_RESTORE_LABEL, {}, style = IconActionStyle.FILLED)
+                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) { ActivityBox(agent, floaters) }
+                            if (!minimized) PromptBox(chat.draft, chat::edit, {}, chat.focus, false, agent, controller, {}, expanded = expanded)
                         }
                     }
                 }
@@ -65,7 +65,7 @@ class ComposerShots {
             waitForIdle()
             if (focused) runOnIdle { chat.focus.requestFocus() }
             waitForIdle()
-            if (hover) onNodeWithTag(ACTIVITY_BOX_TAG).performMouseInput { moveTo(centerRight - androidx.compose.ui.geometry.Offset(30f, 0f)) }
+            if (hover) onNodeWithTag(ACTIVITY_BOX_TAG).performMouseInput { moveTo(center) }
             waitForIdle()
             val dir = File("build/composer-shots").apply { mkdirs() }
             ImageIO.write(onAllNodes(isRoot())[0].captureToImage().toAwtImage(), "png", File(dir, "$name.png"))
@@ -84,4 +84,10 @@ class ComposerShots {
     @Test fun darkPhoneFocused() = shoot("dark-phone-focused", 400, true, focused = true)
     @Test fun darkHover() = shoot("dark-hover", 900, true, hover = true)
     @Test fun darkMinimized() = shoot("dark-minimized", 400, true, minimized = true)
+    @Test fun darkNarrow() = shoot("dark-narrow", 366, true)
+    @Test fun lightNarrow() = shoot("light-narrow", 366, false)
+    @Test fun darkNarrowFocused() = shoot("dark-narrow-focused", 366, true, focused = true)
+    @Test fun lightNarrowFocused() = shoot("light-narrow-focused", 366, false, focused = true)
+    @Test fun lightExpanded() = shoot("light-expanded", 900, false, expanded = true)
+    @Test fun darkPhoneTiny() = shoot("dark-phone-360", 360, true)
 }

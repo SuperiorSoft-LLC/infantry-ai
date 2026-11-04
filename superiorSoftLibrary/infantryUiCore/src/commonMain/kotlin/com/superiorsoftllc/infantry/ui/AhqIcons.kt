@@ -238,13 +238,16 @@ object AhqIcons {
         }
     }
 
-    /** Material "Filled.Minimize". */
+    /**
+     * CHAT-MINIMIZE-5: the minimize dash, vertically CENTRED in its 24 box (Material "Filled.Remove"), so it sits in the middle of
+     * its round chip and on the same centre line as Expand; Material's "Minimize" bar sits at the bottom and looked off.
+     */
     val Minimize: ImageVector by lazy {
         icon("Minimize", autoMirror = false) {
-            moveTo(6.0f, 19.0f)
-            horizontalLineToRelative(12.0f)
-            verticalLineToRelative(2.0f)
-            horizontalLineTo(6.0f)
+            moveTo(19.0f, 13.0f)
+            horizontalLineTo(5.0f)
+            verticalLineToRelative(-2.0f)
+            horizontalLineToRelative(14.0f)
             close()
         }
     }

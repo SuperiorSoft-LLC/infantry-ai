@@ -302,6 +302,14 @@ private const val CHAT_FEED_SLOT = "chat.feed"
 
 @Composable
 internal fun ChatPanelHost.Transcript(modifier: Modifier) {
+    // CHAT-MINIMIZE-1/5: minimized, the composer is gone and Restore is the one floater; otherwise Expand/Collapse and Minimize.
+    val composerFloaters = FloatingChips {
+        ComposerFloaters(
+            minimized = chat.composerMinimized, expanded = chat.composerExpanded,
+            onToggleExpand = { chat.composerExpanded = !chat.composerExpanded },
+            onMinimize = { chat.composerMinimized = true }, onRestore = { chat.composerMinimized = false },
+        )
+    }
     Box(modifier.fillMaxWidth().testTag(transcriptTag)) {
         content {
             Column(Modifier.fillMaxSize()) {
@@ -316,7 +324,8 @@ internal fun ChatPanelHost.Transcript(modifier: Modifier) {
                         "onApplyStart" to { plan: com.superiorsoftllc.infantry.ui.model.StartPlan -> scope.launch { controller.startSession(plan, ComposerTags.toPrompt(chat.draft, chat.attachments).trim()).let { r -> if (r is CommandResult.Sent) chat.edit("") } }; Unit },
                         "onResume" to { id: String -> scope.launch { controller.resume(id, ComposerTags.toPrompt(chat.draft, chat.attachments).trim()).let { r -> if (r is CommandResult.Sent) chat.edit("") } }; Unit },
                         "onLater" to { chat.focus.requestFocus() },
-                    ),
+                    // CHAT-MINIMIZE-5: Expand and Minimize (or Restore, minimized) float in the feed's bottom-right row, beside its Activity chip.
+                    ) + ("floaters" to composerFloaters),
                 )
             }
         }
@@ -325,12 +334,6 @@ internal fun ChatPanelHost.Transcript(modifier: Modifier) {
             val reasoning = remember(agent.output) { com.superiorsoftllc.infantry.ui.model.reasoningLines(agent.output) }
             var sidePanel by remember(agent.id) { mutableStateOf(com.superiorsoftllc.infantry.ui.model.SidePanel.NONE) }
             ChatSideSlot(reasoning, agent.todos, sidePanel) { sidePanel = it }
-        }
-        if (chat.composerMinimized) {
-            // CHAT-MINIMIZE-1/2: the floating restore button; 48dp touch target; the Android activity applies safeDrawingPadding to the whole app, so it never covers system navigation.
-            androidx.compose.foundation.layout.Box(Modifier.align(Alignment.BottomEnd).padding(12.dp).testTag(COMPOSER_RESTORE_TAG)) {
-                IconAction(AhqIcons.Restore, COMPOSER_RESTORE_LABEL, { chat.composerMinimized = false }, style = IconActionStyle.FILLED, modifier = Modifier.defaultMinSize(COMPOSER_TOUCH_DP.dp, COMPOSER_TOUCH_DP.dp))
-            }
         }
     }
 }
@@ -384,7 +387,6 @@ internal fun ChatPanelHost.Composer() {
         onAttach = { chat.attach(it, controller, scope, agent, state) },
         onRemoveAttachment = chat::removeAttachment,
         wire = chat::wire,
-        expanded = chat.composerExpanded, onToggleExpand = { chat.composerExpanded = !chat.composerExpanded },
-        onMinimize = { chat.composerMinimized = true },
+        expanded = chat.composerExpanded,
     )
 }
