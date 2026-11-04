@@ -146,7 +146,7 @@ class ProviderStateTracker(
 
 data class BudgetSnapshot(val runs: Int, val tokens: Long)
 
-/** Operator budget counted from the daemon's own runs per UTC day. Never called "quota". */
+/** Operator budget counted from the daemon's own runs per local calendar day (display.timeZone). Never called "quota". */
 class OperatorBudget(
     private val maxRunsPerDay: Int?,
     private val maxTokensPerDay: Long?,
@@ -156,7 +156,7 @@ class OperatorBudget(
 
     private val days = HashMap<String, Day>()
 
-    private fun today() = clock() / 86_400_000L
+    private fun today() = java.time.Instant.ofEpochMilli(clock()).atZone(com.superiorsoftllc.infantry.DisplayZone.zone).toLocalDate().toEpochDay()
 
     @Synchronized
     fun record(usage: RunUsage) {

@@ -107,7 +107,7 @@ class AgentWatchdog(
                         sessionId = v.session.id,
                         outcome = "watchdog_" + state.name.lowercase(),
                         detail = "Agent ${label(v.session)} is ${state.name} since " +
-                            "${Instant.ofEpochMilli(watch.pendingSince ?: watch.lastActivityAt)}: ${watch.pending ?: "no report mail"}; " +
+                            "${com.superiorsoftllc.infantry.DisplayZone.stamp(watch.pendingSince ?: watch.lastActivityAt)}: ${watch.pending ?: "no report mail"}; " +
                             "${ep.nudges} nudge(s) and the PM did not resolve it.",
                     )
                 }
@@ -122,7 +122,7 @@ class AgentWatchdog(
             val sent = send(
                 MailSendRequest(
                     from = SYSTEM, to = pmRole, subject = PM_SUBJECT,
-                    body = "Watchdog ${Instant.ofEpochMilli(now)}: ${toPm.size} agent(s) need a look.\n" + toPm.joinToString("\n") { "- $it" },
+                    body = "Watchdog ${com.superiorsoftllc.infantry.DisplayZone.stamp(now)}: ${toPm.size} agent(s) need a look.\n" + toPm.joinToString("\n") { "- $it" },
                 ),
             )
             val stamp = if (sent is MailResult.Sent) now else 0L
@@ -135,11 +135,11 @@ class AgentWatchdog(
 
     private fun line(s: SessionRecord, w: AgentWatch, now: Long): String {
         val since = w.pendingSince ?: w.lastActivityAt
-        return "${label(s)} ${w.state} for ${(now - since) / 60_000} min (last activity ${Instant.ofEpochMilli(w.lastActivityAt)}): ${w.pending ?: "no item"}"
+        return "${label(s)} ${w.state} for ${(now - since) / 60_000} min (last activity ${com.superiorsoftllc.infantry.DisplayZone.stamp(w.lastActivityAt)}): ${w.pending ?: "no item"}"
     }
 
     private fun nudge(s: SessionRecord, w: AgentWatch): Boolean {
-        val since = w.pendingSince?.let { Instant.ofEpochMilli(it).toString() } ?: "your last run"
+        val since = w.pendingSince?.let { com.superiorsoftllc.infantry.DisplayZone.stamp(it) } ?: "your last run"
         val body = if (w.state == WatchState.UNREPORTED.name) {
             "You finished without telling anyone (pending since $since): ${w.pending}. Reply with status or finish it: mail your report to the role that started you."
         } else {

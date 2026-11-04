@@ -41,6 +41,10 @@ class SettingsService(
     @Volatile
     var onKeepAliveChanged: (() -> Unit)? = null
 
+    init {
+        runCatching { store.settings.get(DISPLAY_TIME_ZONE)?.value?.let { com.superiorsoftllc.infantry.DisplayZone.set((Json.parseToJsonElement(it) as JsonPrimitive).content) } }
+    }
+
     /** SETTINGS-SCOPES-1: the layered view (session > role > project > app > default) over this service. */
     val scoped: ScopedSettings by lazy { ScopedSettings(store, this) }
 
@@ -79,6 +83,7 @@ class SettingsService(
             USAGE_MANUAL to UsagePacing.manualJson(usageManual()),
             USAGE_OVERRIDES to UsagePacing.overridesJson(usageOverrides()),
             USAGE_REFRESH_MINUTES to JsonPrimitive(usageRefreshMinutes()),
+            DISPLAY_TIME_ZONE to JsonPrimitive(store.settings.get(DISPLAY_TIME_ZONE)?.value?.let { runCatching { (Json.parseToJsonElement(it) as JsonPrimitive).content }.getOrNull() } ?: ""),
             PROCESSES_AUTO_REAP to JsonPrimitive(processWatchConfig().autoReap),
             PROCESSES_IDLE_MINUTES to JsonPrimitive(processWatchConfig().idleMinutes),
             PROCESSES_HEAVY_MB to JsonPrimitive(processWatchConfig().heavyMb),
@@ -417,6 +422,7 @@ class SettingsService(
             USAGE_MANUAL -> UsagePacing.manualJson(usageSetting(key) { UsagePacing.parseManual(value) })
             USAGE_OVERRIDES -> UsagePacing.overridesJson(usageSetting(key) { UsagePacing.parseOverrides(value, pacingCeiling()) })
             USAGE_REFRESH_MINUTES -> JsonPrimitive(requireIntIn(key, value, USAGE_REFRESH_RANGE))
+            DISPLAY_TIME_ZONE -> JsonPrimitive(((value as? JsonPrimitive)?.content ?: "").trim().also { com.superiorsoftllc.infantry.DisplayZone.set(it) })
             PROCESSES_AUTO_REAP -> JsonPrimitive(requireBoolean(key, value))
             PROCESSES_IDLE_MINUTES -> JsonPrimitive(requireIntIn(key, value, PROCESSES_IDLE_RANGE))
             PROCESSES_HEAVY_MB, PROCESSES_FLOOR_MB -> JsonPrimitive(requireIntIn(key, value, PROCESSES_MB_RANGE))
@@ -910,6 +916,8 @@ class SettingsService(
         const val USAGE_OVERRIDES = UsagePacing.OVERRIDES_SETTING
         /** USAGE-AUTO (1.124.0): minutes between automatic live usage reads (0 = off). */
         const val USAGE_REFRESH_MINUTES = "usage.refreshMinutes"
+        /** LOCAL-TIME-1: IANA zone every person-facing time and usage day uses; blank = the system zone. */
+        const val DISPLAY_TIME_ZONE = "display.timeZone"
         const val USAGE_REFRESH_DEFAULT = 5
         private val USAGE_REFRESH_RANGE = 0..1440
         const val EXIT_LEAVE = "leave"

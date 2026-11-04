@@ -91,7 +91,7 @@ class UsagePacing(
         val pace = m.paceDelta?.let { " (${if (it >= 0) "+" else ""}${fmt(it)} vs even pace)" } ?: ""
         val by = if (m.override != null) "override" else "rule"
         val projected = if (m.override == null) m.projectedPercent?.let { ", projected ${fmt(it)}% at reset" } ?: "" else ""
-        val resets = m.resetsAt?.let { "; resets ${java.time.Instant.ofEpochMilli(it)}" } ?: ""
+        val resets = m.resetsAt?.let { "; resets ${com.superiorsoftllc.infantry.DisplayZone.stamp(it)}" } ?: ""
         return "usage pacing: ${m.meter} at $pct$pace$projected, allowance ${m.allowance} ($by), running ${m.running}$resets. " +
             "Wait for a worker to finish, or ask the owner for an override (infantry usage override ${m.meter} <n|none>)."
     }

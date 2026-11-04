@@ -3496,7 +3496,7 @@ internal object Cli {
                 decision.authorSessionId?.let { "session $it" },
             ).ifEmpty { listOf("-") }.joinToString(", "),
         )
-        out.appendLine("CREATED: ${java.time.Instant.ofEpochMilli(decision.createdAt)}")
+        out.appendLine("CREATED: ${com.superiorsoftllc.infantry.DisplayZone.stamp(decision.createdAt)}")
         if (decision.body.isNotEmpty()) {
             out.appendLine()
             out.appendLine(decision.body)
@@ -3627,14 +3627,14 @@ internal object Cli {
         if (state.commits.isEmpty()) out.appendLine("No commits recorded.")
         for (c in state.commits) {
             out.appendLine(
-                "${c.commit} | ${c.stage} | ${c.movedBy ?: "-"} | ${java.time.Instant.ofEpochMilli(c.movedAt)}" +
+                "${c.commit} | ${c.stage} | ${c.movedBy ?: "-"} | ${com.superiorsoftllc.infantry.DisplayZone.stamp(c.movedAt)}" +
                     (c.evidence?.let { " | $it" } ?: ""),
             )
         }
         for (c in state.checks) {
             out.appendLine(
-                "RUNNING [${c.scope.ifEmpty { "default" }}] ${c.commit} | ${c.what} | started ${java.time.Instant.ofEpochMilli(c.startedAt)}" +
-                    " | last output ${java.time.Instant.ofEpochMilli(c.lastOutputAt)} | ${c.startedBy ?: "-"}",
+                "RUNNING [${c.scope.ifEmpty { "default" }}] ${c.commit} | ${c.what} | started ${com.superiorsoftllc.infantry.DisplayZone.stamp(c.startedAt)}" +
+                    " | last output ${com.superiorsoftllc.infantry.DisplayZone.stamp(c.lastOutputAt)} | ${c.startedBy ?: "-"}",
             )
         }
     }
@@ -3883,7 +3883,7 @@ internal object Cli {
                 issue.openedBySession?.let { "session $it" },
             ).ifEmpty { listOf("-") }.joinToString(", "),
         )
-        out.appendLine("CREATED: ${java.time.Instant.ofEpochMilli(issue.createdAt)}")
+        out.appendLine("CREATED: ${com.superiorsoftllc.infantry.DisplayZone.stamp(issue.createdAt)}")
         if (issue.events.isEmpty()) {
             out.appendLine("No attempts yet.")
             return
@@ -4347,7 +4347,7 @@ internal object Cli {
             ?.jsonObject?.get("value")?.jsonPrimitive?.longOrNull
     }.getOrNull() ?: def.default
 
-    private fun iso(epochMillis: Long): String = WHEN_FORMAT.format(Instant.ofEpochMilli(epochMillis))
+    private fun iso(epochMillis: Long): String = com.superiorsoftllc.infantry.DisplayZone.stamp(epochMillis)
 
     /** The first non-blank line of a body, clipped so one long line cannot break the `inbox` table. */
     private fun firstLineOf(body: String): String =
@@ -5981,10 +5981,10 @@ internal object Cli {
 
     /**
      * How [iso] renders a message's `sentAt`. Epoch millis are exact but unreadable at a terminal;
-     * the mailbox stamps UTC, so the stamp is UTC and says so with its trailing `Z`.
+     * LOCAL-TIME-1: shown in the local zone with its offset, e.g. `2026-11-03 20:41 -05:00`.
      */
     private val WHEN_FORMAT: DateTimeFormatter =
-        DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'").withZone(ZoneOffset.UTC)
+        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm xxx").withZone(java.time.ZoneId.systemDefault())
 }
 
 /** PROMPT-5: what `infantry ask` prints on stdout. */

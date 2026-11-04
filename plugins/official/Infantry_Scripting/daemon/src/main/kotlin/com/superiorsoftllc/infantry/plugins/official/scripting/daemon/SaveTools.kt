@@ -57,7 +57,7 @@ class SaveTools(private val store: ScriptStore, private val hooks: HookStore, pr
                 ToolResult(
                     if (rows.isEmpty()) "no scripts in project $project"
                     else "${rows.size} script(s) in project $project:\n" + rows.joinToString("\n") { e ->
-                        "  ${e.name}  engine=${engines.byExtension(e.extension)?.id ?: e.extension}  ${e.size} bytes  modified ${java.time.Instant.ofEpochMilli(e.modifiedMillis)}  saved by ${e.savedBy ?: "(unknown)"}  hooks: ${used[e.name]?.joinToString { it.id } ?: "none"}"
+                        "  ${e.name}  engine=${engines.byExtension(e.extension)?.id ?: e.extension}  ${e.size} bytes  modified ${com.superiorsoftllc.infantry.DisplayZone.stamp(e.modifiedMillis)}  saved by ${e.savedBy ?: "(unknown)"}  hooks: ${used[e.name]?.joinToString { it.id } ?: "none"}"
                     },
                 )
             } catch (e: IllegalStateException) {

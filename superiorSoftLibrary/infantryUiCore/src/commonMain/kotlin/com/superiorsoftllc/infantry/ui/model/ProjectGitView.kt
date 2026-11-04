@@ -75,9 +75,9 @@ fun ProjectGitStatus.headline(): String {
     return if (head == null) "$where, no commits yet" else "$where @ ${head.take(SHORT)}"
 }
 
-/** `2023-11-14 10:13 PM` (UTC) from the commit's epoch seconds. */
-fun GitCommit.whenText(): String {
-    val t = Instant.fromEpochSeconds(timestamp).toLocalDateTime(TimeZone.UTC)
+/** `2023-11-14 10:13 PM` in the local zone from the commit's epoch seconds. */
+fun GitCommit.whenText(zone: TimeZone = TimeZone.currentSystemDefault()): String {
+    val t = Instant.fromEpochSeconds(timestamp).toLocalDateTime(zone)
     return "${t.date} ${TimeFormat.clock12(t.hour, t.minute)}"
 }
 

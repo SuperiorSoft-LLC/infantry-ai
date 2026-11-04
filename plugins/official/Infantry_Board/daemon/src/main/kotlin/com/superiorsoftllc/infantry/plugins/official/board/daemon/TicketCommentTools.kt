@@ -61,7 +61,7 @@ internal object CommentsWiring {
     }
 
     fun line(c: TicketComments.Comment, full: Boolean): String {
-        val head = "${c.shortId} ${c.kind}/${c.state} by ${c.author.label} ${Instant.ofEpochMilli(c.createdAt)}"
+        val head = "${c.shortId} ${c.kind}/${c.state} by ${c.author.label} ${com.superiorsoftllc.infantry.DisplayZone.stamp(c.createdAt)}"
         val text = if (full) c.body else c.body.lineSequence().firstOrNull().orEmpty().take(200)
         return "$head: $text"
     }
