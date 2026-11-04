@@ -432,4 +432,4 @@ The chat composer under the conversation is **one row** with a fixed footprint: 
 the action buttons (on a phone width the less-used ones sit in a "More actions" menu). The Activity header is a chip over
 the transcript's bottom edge; the queue is one line. `PromptBox` (in `Infantry_Chat`) takes an `extras` parameter that
 draws inline in that row: add a chip, an icon button or a menu item there. A plugin must not stack a new full-width row
-under the chat; the height tests in `CompactComposerUiTest` fail when the default composer grows past one row.
+under the chat (`MinimizeComposerUiTest` covers the composer layout).
