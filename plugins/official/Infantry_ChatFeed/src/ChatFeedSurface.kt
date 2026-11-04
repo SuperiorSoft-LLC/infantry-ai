@@ -199,6 +199,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
 
+/** CHAT-PAD-1: the one horizontal padding of every chat's content (empty state, transcript, notes, cards). */
+val ChatSidePadding = 14.dp
+
 @Composable
 fun OutputPane(
     a: AgentView?,
@@ -219,10 +222,10 @@ fun OutputPane(
         Box(Modifier.fillMaxSize(), Alignment.Center) {
             Box(Modifier.align(Alignment.BottomEnd)) { FloatRow(floaters) }
             if (spawnMode) return@Box
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = ChatSidePadding), horizontalAlignment = Alignment.CenterHorizontally) {
                 BrandEmblem(72.dp)
                 Spacer(Modifier.height(10.dp))
-                Text("No live session. Start one to see its output here.", color = Palette.Muted, fontSize = 12.sp)
+                Text("No live session. Start one to see its output here.", color = Palette.Muted, fontSize = 12.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                 Spacer(Modifier.height(10.dp))
                 if (onStartSession != null) OutlinedButton(onClick = onStartSession) { Text("Start a session") }
             }
@@ -233,13 +236,13 @@ fun OutputPane(
       Column(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f).fillMaxWidth(), Alignment.Center) {
             Box(Modifier.align(Alignment.BottomEnd)) { FloatRow(floaters) }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = ChatSidePadding), horizontalAlignment = Alignment.CenterHorizontally) {
                 BrandEmblem(72.dp)
                 Spacer(Modifier.height(10.dp))
                 Text(
                     if (a.session.global) "Ask the Assistant anything about Infantry AI: how a screen works, why something failed, or tell it what to do (create a ticket, start an agent, change a setting)."
                     else "Nothing on screen for this session yet.\nThe daemon replays a session's recent output only while the process that ran it is up; older history is not kept.",
-                    color = Palette.Muted, fontSize = 12.sp,
+                    color = Palette.Muted, fontSize = 12.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 )
                 Spacer(Modifier.height(10.dp))
                 // GAP-006b: a session on screen starts or resumes ITSELF; the New agent box would cut a second instance.
@@ -289,7 +292,7 @@ fun AgentChat(agent: AgentView, nowProvider: () -> Long = { Clock.System.now().t
         // CHAT-COMPACT-1: the Activity chip floats over the transcript's bottom edge: it takes no row of its own.
         Box(Modifier.weight(1f)) {
         SelectionContainer(Modifier.fillMaxSize()) {
-            LazyColumn(Modifier.fillMaxSize().padding(horizontal = 14.dp), state = list, contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 10.dp)) {
+            LazyColumn(Modifier.fillMaxSize().padding(horizontal = ChatSidePadding), state = list, contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 10.dp)) {
                 items(rows.size) { i ->
                     // M2-2: the agent's portrait opens each run of agent-side lines, like a chat. KINDS-1: the row is drawn by the renderer of its kind.
                     FeedRow(RowItem(rows[i], agent.id, name, agent.role, roleColor), startsAgentRun(rows, i, agentSide))
@@ -354,7 +357,7 @@ private fun ActivityLines(entries: List<com.superiorsoftllc.infantry.ui.model.Ag
     run {
         Column(Modifier.fillMaxWidth().background(Palette.Panel).heightIn(max = 160.dp).verticalScroll(rememberScrollState())) {
             entries.asReversed().forEach { e ->
-                Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 1.dp)) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = ChatSidePadding, vertical = 1.dp)) {
                     Text(activityTimestamp(e.at), color = Palette.Muted, fontFamily = Mono, fontSize = 11.sp)
                     Spacer(Modifier.width(8.dp))
                     Text(e.label, color = Palette.Text, fontFamily = Mono, fontSize = 11.sp, modifier = Modifier.testTag(ACTIVITY_LINE_TAG))
