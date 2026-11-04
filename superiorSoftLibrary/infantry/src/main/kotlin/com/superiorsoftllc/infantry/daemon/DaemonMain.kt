@@ -1129,6 +1129,15 @@ class InfantryDaemon(
                         .map { r -> UsageMeters.meterFor(r.provider, r.model ?: manager.providerFor(r.provider)?.defaultModel()) }
                 },
             )
+            // USAGE-CARD-1: the stale limit, backoff and manual floor of the plan meters, read from the settings at every read.
+            limits.tuning = {
+                com.superiorsoftllc.infantry.usage.UsageReadTuning(
+                    staleMaxMs = settings.limit(LimitRegistry.USAGE_STALE_MAX_HOURS) * 3_600_000L,
+                    backoffBaseMs = settings.usageRefreshMinutes().takeIf { it > 0 }?.let { it * 60_000L } ?: LimitService.DEFAULT_MIN_INTERVAL_MS,
+                    backoffMaxMs = settings.limit(LimitRegistry.USAGE_BACKOFF_MAX_MINUTES) * 60_000L,
+                    manualFloorMs = settings.limit(LimitRegistry.USAGE_MANUAL_REFRESH_FLOOR_SECONDS) * 1000L,
+                )
+            }
             // USAGE-AUTO (1.124.0): every usage.refreshMinutes (default 5, 0 = off) a live read, pushed to every client.
             val usageRefresher = com.superiorsoftllc.infantry.usage.UsageRefresher(
                 read = { limits.snapshot(force = true) },

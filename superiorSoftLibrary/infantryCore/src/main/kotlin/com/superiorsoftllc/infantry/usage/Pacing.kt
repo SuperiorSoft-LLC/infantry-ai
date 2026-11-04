@@ -75,6 +75,9 @@ class UsagePacing(
         val warning = when {
             override != null -> null
             percent == null && rule.enabled -> "usage unknown${live?.reason?.let { " ($it)" } ?: ""}: pacing off for $meter (fail open)"
+            // USAGE-CARD-1: a failed read keeps the last good reading (younger than limits.usage.staleMaxHours); pacing stays on it.
+            top != null && live?.stale == true && rule.enabled ->
+                "usage reading ${(now - live.observedAt).coerceAtLeast(0) / 60_000} min old (${live.reason ?: "read failed"}): pacing on the last good reading for $meter"
             else -> null
         }
         return MeterUsage(

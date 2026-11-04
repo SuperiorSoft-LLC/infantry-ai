@@ -10,7 +10,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 /**
  * USAGE-AUTO (contract 1.124.0): re-reads every live plan meter on its own every `usage.refreshMinutes` (default 5,
  * 0 = off), pushing the new report to clients through [onRefreshed]. One thread, one read at a time (an overlapping
- * tick is skipped); a failed read doubles the wait (up to [MAX_BACKOFF_MS]) and a good read resets it. The thread wakes
+ * tick is skipped); a failed read waits until the source's `retryAt` (USAGE-CARD-1), else doubles the wait (up to
+ * [MAX_BACKOFF_MS]); a good read resets it. The thread wakes
  * at most once a minute, never faster. Manual meters are never read here (they have no source).
  */
 class UsageRefresher(
@@ -18,6 +19,7 @@ class UsageRefresher(
     private val minutes: () -> Int,
     private val onRefreshed: () -> Unit,
     private val log: (String) -> Unit = { System.err.println(it) },
+    private val clock: () -> Long = System::currentTimeMillis,
 ) {
     private val running = AtomicBoolean(false)
     @Volatile private var failures = 0
@@ -35,6 +37,13 @@ class UsageRefresher(
                 val results = read()
                 if (results.any { isFailure(it) }) failures++ else failures = 0
                 runCatching { onRefreshed() }
+                // USAGE-CARD-1: a source backing off (Retry-After or the service's exponential wait) says when it may be
+                // read again; wake then rather than on a guess of our own.
+                if (failures > 0) {
+                    val now = clock()
+                    results.filter { isFailure(it) }.mapNotNull { it.retryAt?.minus(now) }.filter { it > 0 }.minOrNull()
+                        ?.let { return it.coerceIn(IDLE_RECHECK_MS, maxOf(MAX_BACKOFF_MS, it)) }
+                }
             } catch (e: Exception) {
                 failures++
                 log("[infantry] usage refresh failed: ${e::class.simpleName}")
@@ -64,9 +73,9 @@ class UsageRefresher(
 
     companion object {
         const val IDLE_RECHECK_MS = 60_000L
-        const val MAX_BACKOFF_MS = 30 * 60_000L
+        const val MAX_BACKOFF_MS = 60 * 60_000L
 
-        /** [minutes] doubled once per consecutive failure, at least a minute, at most 30 minutes. */
+        /** [minutes] doubled once per consecutive failure, at least a minute, at most 60 minutes (USAGE-CARD-1; was 30). */
         fun delayFor(minutes: Int, failures: Int): Long {
             val base = minutes.coerceAtLeast(1) * 60_000L
             var d = base

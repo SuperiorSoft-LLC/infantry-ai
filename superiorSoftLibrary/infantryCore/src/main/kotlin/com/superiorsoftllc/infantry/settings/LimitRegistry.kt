@@ -77,6 +77,24 @@ object LimitRegistry {
         "Highest worker count the usage pacing rule (`usage.pacing`) accepts for maxWorkers and tier workers.",
         min = 1, zeroIsUnlimited = false,
     )
+    /** USAGE-CARD-1: how long a plan meter's last good reading is kept (card shows it stale, pacing uses it) after reads fail. */
+    val USAGE_STALE_MAX_HOURS = LimitDef(
+        "limits.usage.staleMaxHours", 6, "hours",
+        "How long a plan meter's last good reading stays on the Usage card (marked with its age) and keeps usage pacing on while live reads fail (rate limited, network); past this the meter reads unknown and pacing fails open.",
+        min = 1, max = 168, zeroIsUnlimited = false,
+    )
+    /** USAGE-CARD-1: ceiling of the exponential wait after a failed plan meter read (no Retry-After). */
+    val USAGE_BACKOFF_MAX_MINUTES = LimitDef(
+        "limits.usage.backoffMaxMinutes", 60, "minutes",
+        "Longest wait before a plan meter whose read failed is asked again; the wait starts at usage.refreshMinutes and doubles per failure up to this (a Retry-After from the provider wins).",
+        min = 1, max = 1440, zeroIsUnlimited = false,
+    )
+    /** USAGE-CARD-1: a manual Refresh inside this many seconds of the last read answers that read. */
+    val USAGE_MANUAL_REFRESH_FLOOR_SECONDS = LimitDef(
+        "limits.usage.manualRefreshFloorSeconds", 60, "seconds",
+        "Shortest gap between two plan meter reads asked by the Refresh button (or usage_get force); a click inside it answers the last read, so clicks cannot hammer the provider's endpoint.",
+        max = 3600, zeroMeans = "no floor",
+    )
 
     /** Ticket 66153313 (contract 1.132.0): build worker cap handed to worker sessions (the tool profiles' env templates). */
     val BUILD_MAX_WORKERS = LimitDef(
@@ -703,6 +721,7 @@ object LimitRegistry {
         MCP_MAX_RESULT_CHARS,
         TOOLS_INBOX_LIMIT, TOOLS_LIST_LIMIT, TOOLS_SESSION_TAIL_LINES, TOOLS_BOARD_QUEUE_SHOWN, TOOLS_BOARD_DONE_SHOWN,
         MAX_PER_POD, MAX_SESSIONS, MAX_DEPTH, MCP_MAX_SPAWNS, LANE_DEFAULT, PACING_CEILING,
+        USAGE_STALE_MAX_HOURS, USAGE_BACKOFF_MAX_MINUTES, USAGE_MANUAL_REFRESH_FLOOR_SECONDS,
         BUILD_MAX_WORKERS, BUILD_MAX_PARALLEL_FORKS, CPU_ALERT_PERCENT, CPU_ALERT_MINUTES,
         TICKET_DEADLINE_MINUTES, UNATTENDED_DEADLINE_MINUTES, STALL_MINUTES, KILL_RETRY_MINUTES, SILENT_MINUTES, PROGRESS_STALE_MINUTES, IDLE_NUDGE_MINUTES, MAIL_WAKE_MAX_SECONDS, IDLE_NOTICE_MINUTES, IDLE_COMMENT, UNBRIEFED_GRACE_MINUTES,
         UNASSIGN_WAIT_SECONDS, HANDOFF_COMMITS, HANDOFF_CHARS, AGENT_QUEUE_MAX, CHAT_QUEUE_MAX,
