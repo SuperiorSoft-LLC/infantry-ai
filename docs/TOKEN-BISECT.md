@@ -13,7 +13,7 @@ NOT measured: per-role tokens/turns/cache-reads 12-18h vs 18h-now. The CLI (`inf
 | KNOWLEDGE-PTR-1/2 | per start only | Related-files list in the start brief; one-time per ticket, offset by TOKEN-5 trim. |
 | TOKEN-1/5/6 | reduce | slimmer responses and digest. |
 | TOKEN-4 | cannot | stats split only. |
-| **TOKEN-7 (ddcdd49c)** | **CAN raise** | `WeightContext.DEFAULT` gives every ticket an effort when the ticket/role pins none: w1-2 low, w3 medium, **w4-5 high**. `TicketBoard` does `effort = executor.effort ?: byWeightContext?.effort`. Before, such workers had no flag (harness default). `high` = more thinking output per turn on the heaviest tickets. contextLimit 100-200k only moves compaction. |
+| **TOKEN-7 (ddcdd49c)** | **CAN raise** | `WeightContext.DEFAULT` gives every ticket an effort when the ticket/role pins none: w1-2 low, w3 medium, **w4-5 high**. `TicketBoard` does `effort = executor.effort ?: byWeightContext?.effort`. Before, such workers had no flag (harness default). `high` = more thinking output per turn on the heaviest tickets. contextLimit (WEIGHT-CONTEXT-2: 250k for every weight, was 100-200k) only moves compaction. |
 | CONTEXT-LIMIT-2 | cannot | env `CLAUDE_CODE_AUTO_COMPACT_WINDOW` only; nothing disables caching (no DISABLE_PROMPT_CACHING in code). |
 | DAEMON-PLUGIN-1..7, UI/bug commits | cannot | refactors / UI. |
 

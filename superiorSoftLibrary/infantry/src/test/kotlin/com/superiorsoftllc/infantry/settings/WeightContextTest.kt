@@ -10,11 +10,11 @@ import kotlin.test.assertNull
 
 class WeightContextTest {
     @Test fun defaultsCoverEveryWeight() {
-        assertEquals(WeightContextEntry(100_000, "low"), WeightContext.DEFAULT.forWeight(1))
+        assertEquals(WeightContextEntry(250_000, "low"), WeightContext.DEFAULT.forWeight(1))
         assertEquals("low", WeightContext.DEFAULT.forWeight(2)?.effort)
-        assertEquals(WeightContextEntry(150_000, null), WeightContext.DEFAULT.forWeight(3))
-        assertEquals(WeightContextEntry(200_000, null), WeightContext.DEFAULT.forWeight(4))
-        assertEquals(WeightContextEntry(200_000, null), WeightContext.DEFAULT.forWeight(5))
+        assertEquals(WeightContextEntry(250_000, null), WeightContext.DEFAULT.forWeight(3))
+        assertEquals(WeightContextEntry(250_000, null), WeightContext.DEFAULT.forWeight(4))
+        assertEquals(WeightContextEntry(250_000, null), WeightContext.DEFAULT.forWeight(5))
         assertNull(WeightContext.DEFAULT.forWeight(null))
     }
 
