@@ -89,6 +89,7 @@ class SessionHost(
         var reuse: Slot? = null
         var replaced: Slot? = null
         val wasCrashed: Boolean
+        var restartWhy: String? = null
         val pending = Launching()
         synchronized(lock) {
             val existing = slots[sessionId]
@@ -97,6 +98,12 @@ class SessionHost(
                 existing.idleSince = null
                 reuse = existing
             } else if (existing != null) {
+                // CLI-LIVE-1: say WHY a live process was replaced, so a restart that should not happen is visible.
+                restartWhy = when {
+                    existing.key != key -> "launch settings changed (fingerprint differs)"
+                    !existing.process.isAlive -> "the process had exited"
+                    else -> "the process was released"
+                }
                 existing.released = true
                 slots.remove(sessionId)
                 replaced = existing
@@ -147,6 +154,7 @@ class SessionHost(
         process.onExit { code -> onProcessExit(slot, code) }
         val model = request.model?.takeIf { it.isNotBlank() } ?: runCatching { provider.defaultModel() }.getOrNull() ?: "default"
         events.bootLine(sessionId, "* session $verb (${adapter.label} · $model)")
+        restartWhy?.let { events.activity(sessionId, "the ${adapter.label} process was replaced: $it") }
         process.pid?.let { events.activity(sessionId, "the ${adapter.label} process is pid $it") }
         if (raced.abortRequested) {
             slot.idleSince = clock()
