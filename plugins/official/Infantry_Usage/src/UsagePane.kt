@@ -127,17 +127,21 @@ private fun PlanLimits(state: AppState, now: Long, onRefresh: (() -> Unit)?) {
             color = Palette.Muted, fontSize = 11.sp,
         )
         limits.isEmpty() -> Text("The daemon reported no plan-limit source.", color = Palette.Muted, fontSize = 11.sp)
-        else -> limits.forEach { PlanLimitCard(it) }
+        else -> limits.forEach { PlanLimitCard(it, now) }
     }
 }
 
 @Composable
-private fun PlanLimitCard(p: ProviderLimits) {
+private fun PlanLimitCard(p: ProviderLimits, now: Long) {
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(Palette.Raised).padding(10.dp).testTag("limits-card-${p.provider}"),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(LimitsView.providerName(p.provider), color = Palette.Text, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+        // USAGE-CARD-1: a failed read keeps the last good reading; say how old it is and when the daemon tries again.
+        LimitsView.staleText(p, now)?.let {
+            Text(it, color = Palette.Accent, fontSize = 11.sp, modifier = Modifier.testTag("limits-stale-${p.provider}"))
+        }
         if (p.windows.isEmpty()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(LimitsView.reasonText(p.reason), color = Palette.Muted, fontSize = 11.sp, modifier = Modifier.weight(1f))

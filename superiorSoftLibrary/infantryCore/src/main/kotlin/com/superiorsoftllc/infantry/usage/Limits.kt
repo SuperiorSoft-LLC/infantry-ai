@@ -4,6 +4,7 @@ package com.superiorsoftllc.infantry.usage
 
 import com.superiorsoftllc.infantry.daemon.api.usage.LimitWindow
 import com.superiorsoftllc.infantry.session.InfantryEnv
+import com.superiorsoftllc.infantry.settings.LimitRegistry
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -44,6 +45,13 @@ data class ProviderLimits(
     /** Null when ok, else a fixed code: see [LimitReason]. */
     val reason: String?,
     val observedAt: Long,
+    /**
+     * USAGE-CARD-1: true when the last read failed ([reason]) and [windows] are the last GOOD reading, kept while it is
+     * younger than `limits.usage.staleMaxHours`; [observedAt] is then when that good reading was taken.
+     */
+    val stale: Boolean = false,
+    /** USAGE-CARD-1: when the source will be read again after a failure (Retry-After or backoff); null = no backoff. */
+    val retryAt: Long? = null,
 ) {
     companion object {
         fun unknown(provider: String, now: Long, reason: String) = ProviderLimits(provider, "unknown", emptyList(), reason, now)
@@ -72,7 +80,17 @@ object LimitReason {
     }
 }
 
-data class LimitHttpResponse(val status: Int, val body: String)
+/** [retryAfterMs]: the response's `Retry-After` as a delay in ms (seconds or an HTTP date), null when absent or unreadable. */
+data class LimitHttpResponse(val status: Int, val body: String, val retryAfterMs: Long? = null)
+
+/** `Retry-After`: delta-seconds or an HTTP date (RFC 1123), as a delay from [now]; null when it reads as neither. */
+fun parseRetryAfter(value: String?, now: Long): Long? {
+    val v = value?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    v.toLongOrNull()?.let { return if (it >= 0) it * 1000 else null }
+    return runCatching {
+        java.time.ZonedDateTime.parse(v, java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME).toInstant().toEpochMilli() - now
+    }.getOrNull()?.coerceAtLeast(0)
+}
 
 /** The one HTTP call a live source makes; injectable so tests never touch the network. Throws on a network failure. */
 fun interface LimitHttp {
@@ -88,7 +106,8 @@ object JdkLimitHttp : LimitHttp {
         val request = HttpRequest.newBuilder(URI.create(url)).timeout(timeout).GET()
         headers.forEach { (k, v) -> request.header(k, v) }
         val response = client.send(request.build(), HttpResponse.BodyHandlers.ofString())
-        return LimitHttpResponse(response.statusCode(), response.body() ?: "")
+        val retryAfter = parseRetryAfter(response.headers().firstValue("Retry-After").orElse(null), System.currentTimeMillis())
+        return LimitHttpResponse(response.statusCode(), response.body() ?: "", retryAfter)
     }
 }
 
@@ -126,7 +145,10 @@ private fun liveRead(
     } catch (e: Exception) {
         return ProviderLimits.unknown(provider, now, LimitReason.NETWORK)
     }
-    LimitReason.ofStatus(response.status)?.let { return ProviderLimits.unknown(provider, now, it) }
+    LimitReason.ofStatus(response.status)?.let { reason ->
+        // USAGE-CARD-1: the provider's own Retry-After, when it sent one, is when the service may ask again.
+        return ProviderLimits.unknown(provider, now, reason).copy(retryAt = response.retryAfterMs?.let { now + it })
+    }
     val windows = runCatching { parse(response.body, now) }.getOrNull()
     if (windows.isNullOrEmpty()) return ProviderLimits.unknown(provider, now, LimitReason.BAD_RESPONSE)
     return ProviderLimits(provider, "ok", windows, null, now)
@@ -254,9 +276,38 @@ private fun JsonObject.obj(key: String): JsonObject? = this[key] as? JsonObject
 private fun JsonObject.str(key: String): String? = (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.isNotBlank() }
 
 /**
+ * USAGE-CARD-1: how the service rides out a failing source. [staleMaxMs]: a last good reading is kept (shown stale, and used
+ * by pacing) while it is younger than this. [backoffBaseMs] / [backoffMaxMs]: after a transient failure with no
+ * `Retry-After`, the source is not asked again for base x 2^(failures-1), at most max. [manualFloorMs]: a forced read
+ * (the Refresh button, `usage_get force`) inside this long after the last read answers the last read instead.
+ */
+data class UsageReadTuning(
+    val staleMaxMs: Long = LimitRegistry.USAGE_STALE_MAX_HOURS.default * 3_600_000L,
+    val backoffBaseMs: Long = LimitService.DEFAULT_MIN_INTERVAL_MS,
+    val backoffMaxMs: Long = LimitRegistry.USAGE_BACKOFF_MAX_MINUTES.default * 60_000L,
+    val manualFloorMs: Long = LimitRegistry.USAGE_MANUAL_REFRESH_FLOOR_SECONDS.default * 1000L,
+) {
+    /** base x 2^(failures-1), capped at max (never below base); 0 failures = no wait. */
+    fun backoffMs(failures: Int): Long {
+        if (failures <= 0) return 0
+        val base = backoffBaseMs.coerceAtLeast(1)
+        val cap = backoffMaxMs.coerceAtLeast(base)
+        var d = base
+        repeat((failures - 1).coerceAtMost(30)) { d = (d * 2).coerceAtMost(cap) }
+        return d
+    }
+}
+
+/**
  * The daemon's limit meters: every source, read on request at most once per [minIntervalMs] (the answer in between is
  * the cached one, so a burst of requests cannot earn a 429). [liveEnabled] false = no source runs, no file is read, no
  * HTTP call is made; every provider reads `unknown` / `live_sources_off`.
+ *
+ * USAGE-CARD-1: ONE source per provider (the first listed wins: a harness plugin that polls the same provider as a
+ * built-in source is not asked, so one refresh is one call to that endpoint and the panel shows one card). Per provider
+ * the service keeps the last good reading: a transient failure (429, network, bad answer, `http_*`) answers that reading
+ * marked [ProviderLimits.stale] while it is younger than [UsageReadTuning.staleMaxMs], and the source is not asked again
+ * until its backoff ends (`Retry-After`, else exponential), whoever asks (the refresher, a client's Refresh, pacing).
  */
 class LimitService(
     private val sources: List<LimitSource>,
@@ -267,7 +318,25 @@ class LimitService(
     /** HARNESS H5c: usage sources contributed by harness plugins, read on every call (a module may load or unload). */
     private val extraSources: () -> List<LimitSource> = { emptyList() },
 ) {
-    private fun allSources(): List<LimitSource> = sources + runCatching(extraSources).getOrDefault(emptyList())
+    /** USAGE-CARD-1: read at every snapshot, so a changed setting counts at once. The daemon wires it to its settings. */
+    @Volatile var tuning: () -> UsageReadTuning = { UsageReadTuning() }
+
+    private val loggedDuplicates = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    private fun allSources(): List<LimitSource> {
+        val all = sources + runCatching(extraSources).getOrDefault(emptyList())
+        val kept = all.distinctBy { it.provider }
+        if (kept.size != all.size) {
+            all.filter { s -> kept.none { it === s } }.map { it.provider }.filter { loggedDuplicates.add(it) }
+                .forEach { log("[infantry] limits $it: a second usage source for the same provider is ignored (one read per refresh)") }
+        }
+        return kept
+    }
+
+    /** Per provider: the last good reading, the consecutive transient failures, and when it may be read again. */
+    private class SourceState(var lastGood: ProviderLimits? = null, var failures: Int = 0, var retryAt: Long = 0, var lastReason: String? = null)
+    private val states = HashMap<String, SourceState>()
+
     private var cached: List<ProviderLimits>? = null
     private var cachedAt = 0L
     /** One thread at most; it ends when idle (ticket 3b30398d: a daemon's limit service never kept a thread after it stopped). */
@@ -281,28 +350,67 @@ class LimitService(
     fun snapshot(force: Boolean = false): List<ProviderLimits> {
         val now = clock()
         if (!liveEnabled()) return allSources().map { ProviderLimits.unknown(it.provider, now, LimitReason.LIVE_SOURCES_OFF) }
-        if (!force) cached?.let { if (now - cachedAt < minIntervalMs) return it }
-        val fresh = allSources().map { s ->
-            runCatching { s.read(now) }.getOrElse { ProviderLimits.unknown(s.provider, now, LimitReason.SOURCE_FAILED) }
+        val t = tuning()
+        cached?.let { last ->
+            val age = now - cachedAt
+            if (!force && age < minIntervalMs) return expire(last, now, t)
+            // A forced read just after the last one (a double click) answers the last one: a click cannot hammer the endpoint.
+            if (force && age < t.manualFloorMs) return expire(last, now, t)
         }
-        // The reason is a fixed code, never an exception message: nothing here can echo a credential.
-        fresh.filter { it.reason != null }.forEach { log("[infantry] limits ${it.provider}: unknown (${it.reason})") }
+        val fresh = allSources().map { readOne(it, now, t) }
         cached = fresh
         cachedAt = now
         return fresh
     }
 
+    private fun readOne(s: LimitSource, now: Long, t: UsageReadTuning): ProviderLimits {
+        val st = states.getOrPut(s.provider) { SourceState() }
+        if (st.retryAt > now) return failedView(s.provider, st, now, t) // backing off: the source is not asked
+        val r = runCatching { s.read(now) }.getOrElse { ProviderLimits.unknown(s.provider, now, LimitReason.SOURCE_FAILED) }
+        if (r.reason == null) {
+            st.lastGood = r; st.failures = 0; st.retryAt = 0; st.lastReason = null
+            return r
+        }
+        if (!UsageRefresher.isFailure(r)) {
+            // Not signed in, no subscription...: a retry cannot fix it, and an old reading would mislead.
+            st.lastGood = null; st.failures = 0; st.retryAt = 0; st.lastReason = r.reason
+            log("[infantry] limits ${s.provider}: unknown (${r.reason})")
+            return r
+        }
+        st.failures++
+        st.lastReason = r.reason
+        st.retryAt = r.retryAt?.coerceAtLeast(now) ?: (now + t.backoffMs(st.failures))
+        // The reason is a fixed code, never an exception message: nothing here can echo a credential.
+        log("[infantry] limits ${s.provider}: unknown (${r.reason}); next read in ${(st.retryAt - now) / 60_000} min")
+        return failedView(s.provider, st, now, t)
+    }
+
+    private fun failedView(provider: String, st: SourceState, now: Long, t: UsageReadTuning): ProviderLimits {
+        val reason = st.lastReason ?: LimitReason.SOURCE_FAILED
+        val retry = st.retryAt.takeIf { it > now }
+        val good = st.lastGood?.takeIf { now - it.observedAt < t.staleMaxMs }
+        return good?.copy(stale = true, reason = reason, retryAt = retry)
+            ?: ProviderLimits.unknown(provider, now, reason).copy(retryAt = retry)
+    }
+
+    /** A reading that grew older than the stale limit while cached is unknown from then on (pacing fails open). */
+    private fun expire(list: List<ProviderLimits>, now: Long, t: UsageReadTuning): List<ProviderLimits> = list.map { p ->
+        if (p.windows.isNotEmpty() && now - p.observedAt >= t.staleMaxMs)
+            ProviderLimits.unknown(p.provider, now, p.reason ?: LimitReason.SOURCE_FAILED).copy(retryAt = p.retryAt)
+        else p
+    }
+
     /**
      * USAGE-PACE: the last read, never blocking (the pacing gate runs inside the board's synchronized start). A stale or
-     * missing read starts a refresh off this thread; until it lands the answer is the old read, or every source
-     * `unknown` (the pacer then fails open).
+     * missing read starts a refresh off this thread; until it lands the answer is the old read (a stale-but-young one
+     * included, USAGE-CARD-1), or every source `unknown` (the pacer then fails open).
      */
     fun cachedOrRefresh(): List<ProviderLimits> {
         val now = clock()
         if (!liveEnabled()) return allSources().map { ProviderLimits.unknown(it.provider, now, LimitReason.LIVE_SOURCES_OFF) }
         val (last, at) = synchronized(this) { cached to cachedAt }
         if (last == null || now - at >= minIntervalMs) snapshotAsync {}
-        return last ?: sources.map { ProviderLimits.unknown(it.provider, now, LimitReason.NOT_READ_YET) }
+        return last?.let { expire(it, now, tuning()) } ?: allSources().map { ProviderLimits.unknown(it.provider, now, LimitReason.NOT_READ_YET) }
     }
 
     /** [snapshot] off the caller's thread (a live read can take 12 s per source), then [onReady]. */

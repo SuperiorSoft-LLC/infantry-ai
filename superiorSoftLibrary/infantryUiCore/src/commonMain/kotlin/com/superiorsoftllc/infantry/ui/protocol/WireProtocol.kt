@@ -813,6 +813,10 @@ data class ProviderLimits(
     val windows: List<LimitWindow> = emptyList(),
     val reason: String? = null,
     val observedAt: Long = 0,
+    /** USAGE-CARD-1: the last read failed ([reason]); [windows] are the last good reading, taken at [observedAt]. */
+    val stale: Boolean = false,
+    /** USAGE-CARD-1: when the daemon reads this provider again after a failure; null = no backoff. */
+    val retryAt: Long? = null,
 )
 
 /**

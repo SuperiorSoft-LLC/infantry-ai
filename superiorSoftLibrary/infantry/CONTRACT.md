@@ -3247,6 +3247,9 @@ ADDITIVE + BEHAVIOURAL; `contract=1.133.0`. Owner rule 2026-10-25: no hard-coded
 | `limits.concurrency.mcpMaxSpawns` | 4 | unlimited | `McpGuardrails.DEFAULT_MAX_SPAWNS`; `--max-spawns` / `.infantry/mcp.json` still override per connection |
 | `limits.concurrency.laneDefault` | 1 | unlimited | the built-in cap of a role a project sets no lane cap for |
 | `limits.pacing.maxWorkersCeiling` | 50 | (min 1) | `PacingRule.MAX_WORKERS`, the highest `usage.pacing` maxWorkers / tier workers / override accepted |
+| `limits.usage.staleMaxHours` | 6 | (min 1) | USAGE-CARD-1: a plan meter's last good reading stays on the card (`stale: true` on its `limits` row) and keeps pacing on while reads fail |
+| `limits.usage.backoffMaxMinutes` | 60 | (min 1) | USAGE-CARD-1: cap of the wait after a failed plan meter read (usage.refreshMinutes doubled per failure; Retry-After wins) |
+| `limits.usage.manualRefreshFloorSeconds` | 60 | no floor | USAGE-CARD-1: a forced read inside this gap answers the last read |
 | `limits.build.maxWorkers`, `limits.build.maxParallelForks`, `limits.cpu.alertPercent`, `limits.cpu.alertMinutes` | as 1.132.0 | as 1.132.0 | unchanged keys, now in the registry (catalog, env) |
 | `limits.watchdog.ticketDeadlineMinutes` | 180 | no deadline | `INFANTRY_TICKET_DEADLINE_MIN` (still read) |
 | `limits.watchdog.deadlineMinutes` | 60 | no deadline | fixed 60 min for unattended non-ticket runs |
