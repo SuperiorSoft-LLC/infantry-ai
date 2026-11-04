@@ -296,6 +296,16 @@ object LimitRegistry {
         "STALL-6: 1 = a bg job's queued and future notices are dropped once its owner read its log/status after it ended or ran `infantry bg ack <id>`, a newer job with the same label superseded it, or its end made the 'closed output' notice stale; one 'closed output' and one 'finished' notice per job at most. 0 = every notice is sent.",
         max = 1, zeroIsUnlimited = false,
     )
+    val NOTICE_MAIL_PLUGIN_HEALTH = LimitDef(
+        "limits.notice.mailPluginHealth", 0, "switch",
+        "NOTICE-ROUTE-1: 0 (cheapest) = a daemon plugin cooling down / recovered / failed is written to the daemon log only, no agent mailbox is woken; 1 = also mailed to each project's PM (one full-context wake per notice).",
+        max = 1, zeroIsUnlimited = false,
+    )
+    val NOTICE_MAIL_BG_STATUS = LimitDef(
+        "limits.notice.mailBgStatus", 0, "switch",
+        "NOTICE-ROUTE-1: 0 (cheapest) = a bg job tells its session only that it finished; the 'quiet for Nm' and 'still running after Nm' notices are not sent; 1 = they are mailed too (each a standalone wake).",
+        max = 1, zeroIsUnlimited = false,
+    )
     val BG_NOTICE_FOLD_INTO_TURN = LimitDef(
         "limits.bg.noticeFoldIntoTurn", 1, "switch",
         "BG-FOLD-1: 1 (cheapest) = a job-finished notice that arrives while its session is mid-turn waits for the turn to end and is dropped if the result was read meanwhile; 0 = it is queued at once and costs a standalone full-context wake (about 80-100K cache-read tokens).",
@@ -703,7 +713,7 @@ object LimitRegistry {
         AUTO_DONE_MIN_OUTPUTS, PROCESS_WATCH_INTERVAL_SECONDS, RUN_SCROLLBACK_BYTES, RUN_HISTORY,
         RUN_INPUT_BYTES_PER_SECOND, RUN_INPUT_MAX_FRAME_BYTES, RUN_INPUT_QUEUE_BYTES, RUN_MAX_COLS, RUN_MAX_ROWS,
         QUESTION_TTL_MINUTES, BG_NOTIFY_TAIL_LINES, BG_NOTIFY_TIMEOUT_MINUTES, BG_NOTIFY_PATTERN_GRACE_SECONDS,
-        WATCH_QUIET_MINUTES, WATCH_HEARTBEAT_CAP_MINUTES, WATCH_STALL_MINUTES, WATCH_FOREGROUND_STALL_MINUTES, WATCH_EXEMPT_WHEN_TICKET_DONE, WATCH_NOTICE_DEDUPE, BG_NOTICE_FOLD_INTO_TURN, BG_NOTICE_SKIP_IF_RESULT_READ, WATCH_HANDLED_KEEP_MINUTES, WATCH_TREE_JOB_SECONDS, WATCH_ENABLED, WATCH_FORCED, WATCH_BG_NATIVE, WATCH_HANG_GRACE_SECONDS, WATCH_TREE_WAIT_MINUTES,
+        WATCH_QUIET_MINUTES, WATCH_HEARTBEAT_CAP_MINUTES, WATCH_STALL_MINUTES, WATCH_FOREGROUND_STALL_MINUTES, WATCH_EXEMPT_WHEN_TICKET_DONE, WATCH_NOTICE_DEDUPE, NOTICE_MAIL_PLUGIN_HEALTH, NOTICE_MAIL_BG_STATUS, BG_NOTICE_FOLD_INTO_TURN, BG_NOTICE_SKIP_IF_RESULT_READ, WATCH_HANDLED_KEEP_MINUTES, WATCH_TREE_JOB_SECONDS, WATCH_ENABLED, WATCH_FORCED, WATCH_BG_NATIVE, WATCH_HANG_GRACE_SECONDS, WATCH_TREE_WAIT_MINUTES,
         WATCH_NOTICE_LINE_CHARS, WATCH_LOG_MAX_MB, WATCH_LOG_TOTAL_MB, WATCH_LOG_KEEP_JOBS, WATCH_LOG_KEEP_DAYS, WATCH_MIN_FREE_MB, WATCH_FILE_IDLE_SECONDS,
         WATCH_READ_MAX_KB, WATCH_TAIL_READ_KB, WATCH_SPACE_CHECK_SECONDS,
         TICKET_FILES_MAX_LINES, TICKET_FILES_RELATED_TOP,

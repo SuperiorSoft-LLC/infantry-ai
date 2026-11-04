@@ -826,6 +826,9 @@ class DaemonPluginHost private constructor(
     private fun announceRecovered(id: String) = announceNotice("Daemon plugin $id recovered", "Daemon plugin $id answered a probe call and is back in service.")
 
     private fun announceNotice(subject: String, body: String) {
+        // NOTICE-ROUTE-1: infrastructure health goes to the daemon log; an agent mailbox only when the setting asks.
+        log("[plugins] $subject: $body")
+        if (services.limit(LimitRegistry.NOTICE_MAIL_PLUGIN_HEALTH) == 0L) return
         observerQueue.execute {
             runCatching { services.projects.list().forEach { services.sessionNotifier.notifyRole(it.id, "pm", subject, body) } }
                 .onFailure { log("[plugins] could not announce '$subject': ${it.message}") }

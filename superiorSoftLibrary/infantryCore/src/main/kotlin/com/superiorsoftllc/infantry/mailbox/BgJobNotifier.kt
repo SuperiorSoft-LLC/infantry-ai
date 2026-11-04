@@ -55,6 +55,8 @@ class BgJobNotifier(
     private val quietMs: () -> Long = { 5 * 60_000L },
     /** The heartbeat interval stops growing here; the first beat at it is also told to [recipientOf]. */
     private val heartbeatCapMs: () -> Long = { 60 * 60_000L },
+    /** NOTICE-ROUTE-1: false = no QUIET / HEARTBEAT notice is sent; only the job's end is. */
+    private val statusNotices: () -> Boolean = { true },
     /** Whether [sessionId] has a turn in flight right now. */
     private val inTurn: (sessionId: String) -> Boolean = { false },
     private val pidAlive: (Long) -> Boolean = { pid -> ProcessHandle.of(pid).map { it.isAlive }.orElse(false) },
@@ -332,7 +334,9 @@ class BgJobNotifier(
             }
             val beat = heartbeatDue(w, notify.timeoutMinutes, now)
             // The watcher itself failing is reported at once, through the heartbeat (which does not need the log).
-            if (beat || (w.readError != null && !w.errorSent)) {
+            if (!statusNotices()) {
+                // NOTICE-ROUTE-1: status notices are opt-in; the end notice is unaffected.
+            } else if (beat || (w.readError != null && !w.errorSent)) {
                 if (w.readError != null) w.errorSent = true
                 heartbeat(sid, job, w, now)
                 w.quietSent = true

@@ -73,7 +73,7 @@ class ScriptingDaemonPlugin : DaemonPlugin {
         val hooks = ScriptHooks(
             hookStore, store, engines, api.tools, ScriptDispatcher(api.tools, aliases, maxPhases, sessionProject = { api.sessions.get(it)?.projectId }),
             projects = { api.projects.list().map { it.id } }, limits = { limits.current() },
-            guard = { HookSettings.guard { api.config(it) } }, enabled = { HookSettings.enabled { api.config(it) } },
+            guard = { HookSettings.guard { api.config(it) } }, enabled = { HookSettings.enabled { api.config(it) } }, mailFailures = { api.config("scripting.hooks.mailFailures")?.trim()?.lowercase() == "true" },
             tip = { project, branch -> ScriptHooks.gitTip(File(api.files(project).absolutePath("x")).parentFile.parentFile, branch) },
             log = { api.log(it) }, runLog = runLog,
             automation = marks.setter,
