@@ -141,7 +141,17 @@ class SessionManager(
      * (tests) = the fixed [deadlineMs], [stallMs], [killRetryMs] and [silentMs] above.
      */
     private val limitSource: ((com.superiorsoftllc.infantry.settings.LimitDef) -> Long)? = null,
+    /**
+     * PROC-LEAK-1 (ticket 55312934): every harness pid a session reports is put in that session's OS container (a Windows Job
+     * Object), so all it starts stays attributable after its parent exits. [com.superiorsoftllc.infantry.runner.SessionContainers.None] = no container.
+     */
+    private val containers: com.superiorsoftllc.infantry.runner.SessionContainers = com.superiorsoftllc.infantry.runner.SessionContainers.None,
 ) {
+    /** PROC-LEAK-1: [pid] into [sessionId]'s container; a refusal (no container, an OS error) leaves the tree walk as attribution. */
+    private fun contain(sessionId: String, pid: Long) {
+        runCatching { containers.assign(sessionId, pid) }
+    }
+
     val providerId: String get() = provider.id
 
     /** [def] in ms from [limitSource] (0 on a disable-able limit = never reached), else [fixed]. */
@@ -1880,6 +1890,7 @@ class SessionManager(
 
         override fun process(sessionId: String, pid: Long?) {
             if (pid == null || runs[sessionId] == null) return
+            contain(sessionId, pid)
             update(sessionId) { it.copy(childPid = pid, lastHeartbeat = clock(), isProcessAlive = true) }
         }
 
@@ -1893,6 +1904,7 @@ class SessionManager(
         }
 
         override fun keptProcess(sessionId: String, kept: KeptProcess) {
+            contain(sessionId, kept.pid)
             update(sessionId) { it.copy(keptProcess = kept.copy(ownerId = instanceId)) }
         }
 

@@ -821,6 +821,8 @@ class InfantryDaemon(
                         tailReadKb = settings.limit(LimitRegistry.WATCH_TAIL_READ_KB),
                     )
             })
+            // PROC-LEAK-1: one OS container per session (a Windows Job Object), shared by the manager (assigns) and api.processes (reads).
+            val sessionContainers = com.superiorsoftllc.infantry.runner.SessionContainers.forHost(instanceId)
             val manager = SessionManager(
                 provider,
                 sandboxed(runner),
@@ -862,6 +864,7 @@ class InfantryDaemon(
                 // No-hard-coded-limits S2: the watchdog and silent sweeper read limits.watchdog.* live.
                 limitSource = settings::limit,
                 idFactory = sessionIds,
+                containers = sessionContainers,
             )
             // BUG-M2-11f: a new keep-alive value applies to the processes already kept, not only to the next launch.
             settings.onKeepAliveChanged = manager::lifecyclePolicyChanged
@@ -900,6 +903,7 @@ class InfantryDaemon(
                 pressure = { reportJson -> for (c in clients.toList()) c.trySend(Envelope(Envelope.PROCESS_PRESSURE, reportJson)) },
                 alert = { outcome, detail -> alertSink.get().invoke(outcome, detail) },
                 instanceId = instanceId,
+                containers = sessionContainers,
             )
             // Ticket b785f383: a closing session's background processes die with it (the plugin's listener does it, after a grace).
             manager.onSessionClosed = { c -> localProcesses.fireSessionClosed(c) }

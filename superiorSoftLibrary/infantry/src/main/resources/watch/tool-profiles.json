@@ -8,6 +8,7 @@
     "daemons": ["GradleDaemon", "org\\.gradle\\.launcher\\.daemon"],
     "sharedDaemon": true,
     "clients": ["gradlew", "GradleWrapperMain", "GradleMain"],
+    "stop": ["gradlew", "--stop"],
     "heavyImages": ["gradle.*"],
     "heavyCommands": ["gradle"],
     "env": [
@@ -69,5 +70,9 @@
       "\\|\\s*tee\\s+(?:-a\\s+)?(\"[^\"]+\"|'[^']+'|[^\\s;|&<>()]+)",
       "(?i)\\|\\s*(?:Out-File|Tee-Object|Add-Content|Set-Content)\\s+(?:-(?:FilePath|Path|LiteralPath)\\s+)?(\"[^\"]+\"|'[^']+'|[^\\s;|&<>()]+)"
     ]
+  },
+  {
+    "name": "infantry-cli",
+    "stuck": ["(?:ClientMainKt|CliMainKt)(?!\\s+(?:mcp\\s+serve|bg\\s+wait)\\b)"]
   }
 ]

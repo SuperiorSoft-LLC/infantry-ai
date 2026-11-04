@@ -216,3 +216,6 @@ com/superiorsoftllc/infantry/settings/RoutingRules.kt:MAX_RULES | pending S2-S4 
 com/superiorsoftllc/infantry/stats/ReadOnlyDb.kt:BUSY_TIMEOUT_MS | added since 65cc7ac3 without a LimitRegistry entry (LAUNCH-QA-1: allowlisted so the guard is green; migrate to the settings model)
 com/superiorsoftllc/infantry/testrun/JunitXmlParser.kt:OUTPUT_MAX | added since 65cc7ac3 without a LimitRegistry entry (LAUNCH-QA-1: allowlisted so the guard is green; migrate to the settings model)
 com/superiorsoftllc/infantry/testrun/ProcessSuite.kt:MAX_OUT | added since 65cc7ac3 without a LimitRegistry entry (LAUNCH-QA-1: allowlisted so the guard is green; migrate to the settings model)
+com/superiorsoftllc/infantry/runner/SessionContainers.kt:JOB_OBJECT_BASIC_LIMIT_INFORMATION | Win32 JOBOBJECTINFOCLASS value (API constant, not a limit) (PROC-LEAK-1)
+com/superiorsoftllc/infantry/runner/SessionContainers.kt:JOB_OBJECT_LIMIT_BREAKAWAY_OK | Win32 job LimitFlags bit (API constant, not a limit) (PROC-LEAK-1)
+com/superiorsoftllc/infantry/runner/SessionContainers.kt:NAME_PART_MAX | layout: the length of one part of a kernel object name (Job Object names stay well under MAX_PATH) (PROC-LEAK-1)

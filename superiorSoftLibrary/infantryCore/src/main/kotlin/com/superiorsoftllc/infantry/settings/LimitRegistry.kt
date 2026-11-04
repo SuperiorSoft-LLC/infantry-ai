@@ -236,6 +236,20 @@ object LimitRegistry {
         min = 1, max = 3600, zeroIsUnlimited = false,
     )
 
+    /** PROC-LEAK-1: how long a closing session's build daemons get after their profile's graceful `stop` before they are killed. */
+    val PROCESS_STOP_GRACE_SECONDS = LimitDef(
+        "limits.processes.stopGraceSeconds", 10, "seconds",
+        "When a session closes, its build daemons are first asked to stop (their tool profile's stop command, run in the session's worktree, only when no other process of that profile is alive); whatever is still alive after this many seconds is killed. 0 = kill at once, no graceful step.",
+        min = 0, max = 600, zeroMeans = "no graceful step",
+    )
+
+    /** PROC-LEAK-1: a tool profile's `stuck` client (a CLI call) that used no CPU for this long is reported stuck on its session. */
+    val PROCESS_STUCK_MINUTES = LimitDef(
+        "limits.processes.stuckMinutes", 15, "minutes",
+        "A short-lived client process of a session (a tool profile's stuck list: the infantry CLI) that has used no CPU for this many minutes is reported as stuck in the processes list and raised once to the owner. 0 = off.",
+        min = 0, max = 1440, zeroMeans = "off",
+    )
+
     /** Stale owner questions: an open question whose asker sits idle this long is orphaned by the question sweep. */
     val QUESTION_TTL_MINUTES = LimitDef(
         "limits.questions.ttlMinutes", 1440, "minutes",
@@ -685,7 +699,7 @@ object LimitRegistry {
         BUILD_MAX_WORKERS, BUILD_MAX_PARALLEL_FORKS, CPU_ALERT_PERCENT, CPU_ALERT_MINUTES,
         TICKET_DEADLINE_MINUTES, UNATTENDED_DEADLINE_MINUTES, STALL_MINUTES, KILL_RETRY_MINUTES, SILENT_MINUTES, PROGRESS_STALE_MINUTES, IDLE_NUDGE_MINUTES, MAIL_WAKE_MAX_SECONDS, IDLE_NOTICE_MINUTES, IDLE_COMMENT, UNBRIEFED_GRACE_MINUTES,
         UNASSIGN_WAIT_SECONDS, HANDOFF_COMMITS, HANDOFF_CHARS, AGENT_QUEUE_MAX,
-        AUTO_DONE_MIN_OUTPUTS, PROCESS_WATCH_INTERVAL_SECONDS, RUN_SCROLLBACK_BYTES, RUN_HISTORY,
+        AUTO_DONE_MIN_OUTPUTS, PROCESS_WATCH_INTERVAL_SECONDS, PROCESS_STOP_GRACE_SECONDS, PROCESS_STUCK_MINUTES, RUN_SCROLLBACK_BYTES, RUN_HISTORY,
         RUN_INPUT_BYTES_PER_SECOND, RUN_INPUT_MAX_FRAME_BYTES, RUN_INPUT_QUEUE_BYTES, RUN_MAX_COLS, RUN_MAX_ROWS,
         QUESTION_TTL_MINUTES, BG_NOTIFY_TAIL_LINES, BG_NOTIFY_TIMEOUT_MINUTES, BG_NOTIFY_PATTERN_GRACE_SECONDS,
         WATCH_QUIET_MINUTES, WATCH_HEARTBEAT_CAP_MINUTES, WATCH_STALL_MINUTES, WATCH_FOREGROUND_STALL_MINUTES, WATCH_EXEMPT_WHEN_TICKET_DONE, WATCH_NOTICE_DEDUPE, NOTICE_MAIL_PLUGIN_HEALTH, NOTICE_MAIL_BG_STATUS, BG_NOTICE_FOLD_INTO_TURN, BG_NOTICE_SKIP_IF_RESULT_READ, WATCH_HANDLED_KEEP_MINUTES, WATCH_TREE_JOB_SECONDS, WATCH_ENABLED, WATCH_FORCED, WATCH_BG_NATIVE, WATCH_HANG_GRACE_SECONDS, WATCH_TREE_WAIT_MINUTES,

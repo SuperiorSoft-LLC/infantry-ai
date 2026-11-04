@@ -71,6 +71,10 @@ data class ProcessToolProfile(
     val heavyImages: List<String> = emptyList(),
     val heavyCommands: List<String> = emptyList(),
     val env: List<ProcessEnvTemplate> = emptyList(),
+    /** PROC-LEAK-1 (1.37.0): the argv that stops [daemons] gracefully, run in the session's worktree; empty = none. */
+    val stop: List<String> = emptyList(),
+    /** PROC-LEAK-1 (1.37.0): command-line regexes of a short-lived client that is reported stuck when it hangs. */
+    val stuck: List<String> = emptyList(),
 )
 
 /**
@@ -112,6 +116,15 @@ interface Processes {
 
     /** Every session with its roots, state, worktree, ticket and keep set, as of now. */
     fun sessions(): List<WatchedSession>
+
+    /**
+     * PROC-LEAK-1 (1.37.0): the live processes in session [sessionId]'s OS container (a Windows Job Object its harness was put
+     * in at launch): every process the session started, its parent alive or not. Empty where the OS has no container.
+     */
+    fun sessionMembers(sessionId: String): List<ProcInfo> = emptyList()
+
+    /** PROC-LEAK-1 (1.37.0): what [sessionMembers] reads: `job object`, or `none`. */
+    val containment: String get() = "none"
 
     /** Session id to its root pids (kept harness pid + child pid); sessions with none are left out. */
     fun sessionRoots(): Map<String, List<Long>> = sessions().associate { it.id to it.rootPids }.filterValues { it.isNotEmpty() }
