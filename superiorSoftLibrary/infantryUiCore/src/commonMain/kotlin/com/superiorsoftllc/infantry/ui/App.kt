@@ -339,7 +339,6 @@ fun App(
     LaunchedEffect(url, token) { DaemonLink.window.connect(url, token) }
     // PLUGIN-ENDPOINTS-2: a module's endpoint credential comes over this window's (owner) connection, never to the plugin.
     LaunchedEffect(controller) { DaemonLink.window.pluginSecret = controller::pluginSecret }
-    LaunchedEffect(controller) { DaemonLink.window.views = controller.views }
     // P1 step 2 (6s B): once the link is live, the merged config tree seeds the daemon's node_config and the window takes its copy.
     val linkLive = state.connection.isLive
     tabs.config.daemonRowsClosed = state.connection.policy.restricted
@@ -429,6 +428,7 @@ fun App(
       // IMG-VIEW-1: chat images open full size over the whole window (the Board keeps its own host, above it).
       androidx.compose.runtime.CompositionLocalProvider(
           LocalModalBlur provides modalBlur,
+          LocalDaemonImages provides controller.images,
           LocalProgressStaleMin provides flags.progressStaleMin,
           LocalReasoningPlacement provides flags.reasoningPlacement,
           LocalTabFactory provides tabs,

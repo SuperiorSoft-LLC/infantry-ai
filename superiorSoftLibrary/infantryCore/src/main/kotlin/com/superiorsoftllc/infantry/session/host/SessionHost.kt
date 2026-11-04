@@ -436,6 +436,17 @@ class SessionHost(
         runCatching { timer.shutdownNow() }
     }
 
+    /**
+     * CHAT-QUEUE-1: hand [text] to the turn running in [sessionId]'s live process, without stopping it. false = no turn in flight, the
+     * process is gone, or its harness cannot take input mid-turn (the caller keeps the message queued).
+     */
+    fun injectInput(sessionId: String, text: String): Boolean {
+        val slot = synchronized(lock) { slots[sessionId] } ?: return false
+        val turn = slot.turn ?: return false
+        if (turn.ended.get() || turn.abortRequested || !slot.process.isAlive) return false
+        return runCatching { slot.adapter.injectInput(slot.process, text) }.getOrDefault(false)
+    }
+
     /** True while [sessionId] has a hosted process (a one-shot session's logical handle counts). */
     fun hasProcess(sessionId: String): Boolean = synchronized(lock) { slots[sessionId]?.process?.isAlive == true }
 

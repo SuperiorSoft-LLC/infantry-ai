@@ -54,9 +54,6 @@ interface DaemonApi {
     val routes: Routes
     val hooks: Hooks
 
-    /** DV-1a (1.37.0, additive): declarative views (docs/DECL-UI-DESIGN.md 2.3). A daemon without views ignores `provide`. */
-    val views: Views get() = NoViews
-
     /** DP-4a (1.2.0, additive): tickets, epics and the board (docs/DAEMON-BOARD-API.md). A daemon without a board answers Unavailable. */
     val tickets: com.superiorsoftllc.infantry.daemon.api.board.Tickets get() = com.superiorsoftllc.infantry.daemon.api.board.NoBoard.tickets
     val epics: com.superiorsoftllc.infantry.daemon.api.board.Epics get() = com.superiorsoftllc.infantry.daemon.api.board.NoBoard.epics
@@ -161,8 +158,9 @@ interface DaemonApi {
         // 1.14.0 (DP-5h-3e-b, additive): BoardRuntime.attachCore / detachCore and BoardCoreAccess (core consumers reach the plugin-built board).
         // 1.36.0 (PLUGIN-MCP-1, additive): `plugins` (daemon.api.plugins.PluginCatalogReader) and daemon.api.attention.OwnerAsks.
         // 1.35.0 (AR-3a, additive): daemon.api.sessions.SessionBinding / FirstTurnContextProvider (core composes the first turn from a provider list).
-        // 1.37.0 (DV-1a, additive): `views` (Views, ViewRequest, ViewReply) and module.json `daemon.views`.
-        const val VERSION = "1.37.0"
+        // 1.37.0 (PROC-LEAK-1, additive): Processes.sessionMembers / containment, ProcessToolProfile.stop / stuck, TrackedProcess.stuck.
+        // 1.38.0 (CHAT-QUEUE-1, additive): Sessions.queued / queueAdd / queueRemove / queueForce and QueuedMessage.
+        const val VERSION = "1.38.0"
     }
 }
 
@@ -241,7 +239,25 @@ interface Sessions {
      * throws [IllegalArgumentException] when refused. The daemon calls this nowhere on its own: a script or tool decides when.
      */
     fun reconnectMcp(id: String, force: Boolean = false): String = throw UnsupportedOperationException("this daemon cannot reconnect MCP servers")
+
+    /** CHAT-QUEUE-1 (1.38.0, additive): the messages the daemon holds for session [id]'s next turn, oldest first (empty = none or unknown). */
+    fun queued(id: String): List<QueuedMessage> = emptyList()
+    /**
+     * CHAT-QUEUE-1 (1.38.0, additive): hold [text] for session [id] until its turn ends; a session at rest takes it as a turn now (null is
+     * returned: nothing was held). Throws [IllegalArgumentException] when refused (unknown session, blank text, the queue is full).
+     */
+    fun queueAdd(id: String, text: String): QueuedMessage? = throw UnsupportedOperationException("this daemon holds no message queue")
+    /** CHAT-QUEUE-1 (1.38.0, additive): drop the held message [itemId]; it is never delivered. Throws [IllegalArgumentException] for an unknown one. */
+    fun queueRemove(id: String, itemId: String): QueuedMessage = throw UnsupportedOperationException("this daemon holds no message queue")
+    /**
+     * CHAT-QUEUE-1 (1.38.0, additive): deliver the held message [itemId] now: into the running turn when the harness takes input mid-turn
+     * (`injected`), as a turn of its own when none runs (`sent as turn`). Throws when refused; the message then stays held.
+     */
+    fun queueForce(id: String, itemId: String): String = throw UnsupportedOperationException("this daemon holds no message queue")
 }
+
+/** CHAT-QUEUE-1: one message held for a busy session: its [id], the [text], when it was queued ([at], epoch millis). */
+data class QueuedMessage(val id: String, val text: String, val at: Long)
 
 /** SCRIPT-SESSION-1: [state] is the state name; [lastAction] a short text; the times are epoch millis (null = none yet). */
 data class SessionStatus(val id: String, val state: String, val lastAction: String?, val lastOutputAt: Long?, val lastEventAt: Long?)
@@ -404,27 +420,6 @@ data class ToolInfo(val name: String, val description: String, val inputSchema: 
 data class ToolInvoker(val caller: Caller, val sessionId: String? = null, val role: String? = null, val projectId: String? = null, val label: String = "")
 
 // ---- frames and routes ----------------------------------------------------------------------------------------------
-
-/** DV-1a: declarative views. The plugin answers a whole materialised page (a JSON object); the daemon checks only its shape and size. */
-interface Views {
-    /** Answers `plugin_view` for [view] (declared in `daemon.views`); runs under the plugin's call limits. */
-    fun provide(view: String, provider: (ViewRequest) -> ViewReply)
-    /** Tells subscribed clients that [view] (one [params], or all when null) changed; coalesced by the host (a stub until DV-1b). */
-    fun changed(view: String, params: kotlinx.serialization.json.JsonObject? = null)
-}
-
-/** The no-op [Views] of a daemon that has none. */
-object NoViews : Views {
-    override fun provide(view: String, provider: (ViewRequest) -> ViewReply) {}
-    override fun changed(view: String, params: kotlinx.serialization.json.JsonObject?) {}
-}
-
-data class ViewRequest(val view: String, val params: kotlinx.serialization.json.JsonObject, val caller: Caller)
-
-sealed interface ViewReply {
-    data class Page(val page: kotlinx.serialization.json.JsonObject) : ViewReply
-    data class Refused(val reason: String) : ViewReply
-}
 
 interface Frames {
     /** Answers client frames of [type] (declared in `daemon.frames`); return null for no direct answer. */

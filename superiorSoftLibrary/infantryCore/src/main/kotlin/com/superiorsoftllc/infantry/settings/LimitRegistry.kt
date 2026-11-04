@@ -77,6 +77,24 @@ object LimitRegistry {
         "Highest worker count the usage pacing rule (`usage.pacing`) accepts for maxWorkers and tier workers.",
         min = 1, zeroIsUnlimited = false,
     )
+    /** USAGE-CARD-1: how long a plan meter's last good reading is kept (card shows it stale, pacing uses it) after reads fail. */
+    val USAGE_STALE_MAX_HOURS = LimitDef(
+        "limits.usage.staleMaxHours", 6, "hours",
+        "How long a plan meter's last good reading stays on the Usage card (marked with its age) and keeps usage pacing on while live reads fail (rate limited, network); past this the meter reads unknown and pacing fails open.",
+        min = 1, max = 168, zeroIsUnlimited = false,
+    )
+    /** USAGE-CARD-1: ceiling of the exponential wait after a failed plan meter read (no Retry-After). */
+    val USAGE_BACKOFF_MAX_MINUTES = LimitDef(
+        "limits.usage.backoffMaxMinutes", 60, "minutes",
+        "Longest wait before a plan meter whose read failed is asked again; the wait starts at usage.refreshMinutes and doubles per failure up to this (a Retry-After from the provider wins).",
+        min = 1, max = 1440, zeroIsUnlimited = false,
+    )
+    /** USAGE-CARD-1: a manual Refresh inside this many seconds of the last read answers that read. */
+    val USAGE_MANUAL_REFRESH_FLOOR_SECONDS = LimitDef(
+        "limits.usage.manualRefreshFloorSeconds", 60, "seconds",
+        "Shortest gap between two plan meter reads asked by the Refresh button (or usage_get force); a click inside it answers the last read, so clicks cannot hammer the provider's endpoint.",
+        max = 3600, zeroMeans = "no floor",
+    )
 
     /** Ticket 66153313 (contract 1.132.0): build worker cap handed to worker sessions (the tool profiles' env templates). */
     val BUILD_MAX_WORKERS = LimitDef(
@@ -177,6 +195,27 @@ object LimitRegistry {
         zeroMeans = "no agent queue: adding is refused",
     )
 
+    /** CHAT-QUEUE-1: how many messages one session holds while its turn runs. */
+    val CHAT_QUEUE_MAX = LimitDef(
+        "limits.chat.queueMax", 20, "messages",
+        "How many messages typed while an agent is busy one session may hold for its next turn; queueing past it is refused.",
+        min = 1, zeroIsUnlimited = false,
+    )
+
+    /** CHAT-SENDING-1: how long a client shows a sent message as "sending..." before it offers "not sent - retry". */
+    val CHAT_SEND_ACK_SECONDS = LimitDef(
+        "limits.chat.sendAckSeconds", 45, "seconds",
+        "How long the chat waits for the daemon to accept a sent message before it marks it \"not sent - retry\" (the text is kept).",
+        min = 1, zeroIsUnlimited = false,
+    )
+
+    /** CHAT-SENDING-1: how many client message ids the daemon remembers so a resend of an accepted message is not run twice. */
+    val CHAT_SENT_IDS_KEPT = LimitDef(
+        "limits.chat.sentIdsKept", 500, "ids",
+        "How many recent client message ids the daemon remembers; a resend with a remembered id is acknowledged, never run twice.",
+        min = 1, zeroIsUnlimited = false,
+    )
+
     /** AGENT-TASKS-2: commit subjects listed in the auto handoff note. */
     val HANDOFF_COMMITS = LimitDef(
         "limits.agentTasks.handoffCommits", 10, "commits",
@@ -240,6 +279,20 @@ object LimitRegistry {
         "limits.processes.watchIntervalSeconds", 10, "seconds",
         "How often the process watch walks the session process trees (rogue-process ledger, CPU sampling); also the delay of the start-up cleanup.",
         min = 1, max = 3600, zeroIsUnlimited = false,
+    )
+
+    /** PROC-LEAK-1: how long a closing session's build daemons get after their profile's graceful `stop` before they are killed. */
+    val PROCESS_STOP_GRACE_SECONDS = LimitDef(
+        "limits.processes.stopGraceSeconds", 10, "seconds",
+        "When a session closes, its build daemons are first asked to stop (their tool profile's stop command, run in the session's worktree, only when no other process of that profile is alive); whatever is still alive after this many seconds is killed. 0 = kill at once, no graceful step.",
+        min = 0, max = 600, zeroMeans = "no graceful step",
+    )
+
+    /** PROC-LEAK-1: a tool profile's `stuck` client (a CLI call) that used no CPU for this long is reported stuck on its session. */
+    val PROCESS_STUCK_MINUTES = LimitDef(
+        "limits.processes.stuckMinutes", 15, "minutes",
+        "A short-lived client process of a session (a tool profile's stuck list: the infantry CLI) that has used no CPU for this many minutes is reported as stuck in the processes list and raised once to the owner. 0 = off.",
+        min = 0, max = 1440, zeroMeans = "off",
     )
 
     /** Stale owner questions: an open question whose asker sits idle this long is orphaned by the question sweep. */
@@ -565,31 +618,6 @@ object LimitRegistry {
         "limits.plugins.routeRequestsPerMinute", 600, "requests",
         "HTTP requests a minute one daemon plugin's routes answer before 429 (daemon.limits.routeRequestsPerMinute overrides it).",
     )
-    val VIEWS_MAX_PAGE_BYTES = LimitDef(
-        "limits.views.maxPageBytes", 262_144, "bytes",
-        "DV-1a: the largest declarative view page (its JSON text) a plugin may answer; a bigger one is refused with a one-line error.",
-        min = 1, zeroIsUnlimited = false,
-    )
-    val VIEWS_MAX_NODES = LimitDef(
-        "limits.views.maxNodes", 500, "nodes",
-        "DV-1a: the most objects one declarative view page may hold; a bigger one is refused.",
-        min = 1, zeroIsUnlimited = false,
-    )
-    val VIEWS_MAX_DEPTH = LimitDef(
-        "limits.views.maxDepth", 16, "levels",
-        "DV-1a: the deepest nesting of one declarative view page; a deeper one is refused.",
-        min = 1, zeroIsUnlimited = false,
-    )
-    val VIEWS_CHANGED_COALESCE_MS = LimitDef(
-        "limits.views.changedCoalesceMs", 1_000, "ms",
-        "DV-1b: calls to views.changed for one (module, view, params) inside this window collapse into one plugin_view_changed push.",
-        min = 1, zeroIsUnlimited = false,
-    )
-    val VIEWS_MAX_SUBSCRIPTIONS = LimitDef(
-        "limits.views.maxSubscriptionsPerConnection", 16, "subscriptions",
-        "DV-1b: the most plugin_view subscriptions one connection holds; opening one more drops its oldest.",
-        min = 1, zeroIsUnlimited = false,
-    )
     val PLUGIN_START_TIMEOUT_MS = LimitDef(
         "limits.plugins.startTimeoutMs", 30_000, "ms",
         "How long a daemon plugin's start (and each policy-change callback) may run before the plugin is disabled.",
@@ -713,10 +741,11 @@ object LimitRegistry {
         MCP_MAX_RESULT_CHARS,
         TOOLS_INBOX_LIMIT, TOOLS_LIST_LIMIT, TOOLS_SESSION_TAIL_LINES, TOOLS_BOARD_QUEUE_SHOWN, TOOLS_BOARD_DONE_SHOWN,
         MAX_PER_POD, MAX_SESSIONS, MAX_DEPTH, MCP_MAX_SPAWNS, LANE_DEFAULT, PACING_CEILING,
+        USAGE_STALE_MAX_HOURS, USAGE_BACKOFF_MAX_MINUTES, USAGE_MANUAL_REFRESH_FLOOR_SECONDS,
         BUILD_MAX_WORKERS, BUILD_MAX_PARALLEL_FORKS, CPU_ALERT_PERCENT, CPU_ALERT_MINUTES,
         TICKET_DEADLINE_MINUTES, UNATTENDED_DEADLINE_MINUTES, STALL_MINUTES, KILL_RETRY_MINUTES, SILENT_MINUTES, PROGRESS_STALE_MINUTES, IDLE_NUDGE_MINUTES, MAIL_WAKE_MAX_SECONDS, IDLE_NOTICE_MINUTES, IDLE_COMMENT, UNBRIEFED_GRACE_MINUTES,
-        UNASSIGN_WAIT_SECONDS, HANDOFF_COMMITS, HANDOFF_CHARS, AGENT_QUEUE_MAX,
-        AUTO_DONE_MIN_OUTPUTS, PROCESS_WATCH_INTERVAL_SECONDS, RUN_SCROLLBACK_BYTES, RUN_HISTORY, CHAT_HISTORY_FRAMES,
+        UNASSIGN_WAIT_SECONDS, HANDOFF_COMMITS, HANDOFF_CHARS, AGENT_QUEUE_MAX, CHAT_QUEUE_MAX, CHAT_SEND_ACK_SECONDS, CHAT_SENT_IDS_KEPT, CHAT_HISTORY_FRAMES,
+        AUTO_DONE_MIN_OUTPUTS, PROCESS_WATCH_INTERVAL_SECONDS, PROCESS_STOP_GRACE_SECONDS, PROCESS_STUCK_MINUTES, RUN_SCROLLBACK_BYTES, RUN_HISTORY,
         RUN_INPUT_BYTES_PER_SECOND, RUN_INPUT_MAX_FRAME_BYTES, RUN_INPUT_QUEUE_BYTES, RUN_MAX_COLS, RUN_MAX_ROWS,
         QUESTION_TTL_MINUTES, BG_NOTIFY_TAIL_LINES, BG_NOTIFY_TIMEOUT_MINUTES, BG_NOTIFY_PATTERN_GRACE_SECONDS,
         WATCH_QUIET_MINUTES, WATCH_HEARTBEAT_CAP_MINUTES, WATCH_STALL_MINUTES, WATCH_FOREGROUND_STALL_MINUTES, WATCH_EXEMPT_WHEN_TICKET_DONE, WATCH_NOTICE_DEDUPE, NOTICE_MAIL_PLUGIN_HEALTH, NOTICE_MAIL_BG_STATUS, BG_NOTICE_FOLD_INTO_TURN, BG_NOTICE_SKIP_IF_RESULT_READ, WATCH_HANDLED_KEEP_MINUTES, WATCH_TREE_JOB_SECONDS, WATCH_ENABLED, WATCH_FORCED, WATCH_BG_NATIVE, WATCH_HANG_GRACE_SECONDS, WATCH_TREE_WAIT_MINUTES,
@@ -724,7 +753,7 @@ object LimitRegistry {
         WATCH_READ_MAX_KB, WATCH_TAIL_READ_KB, WATCH_SPACE_CHECK_SECONDS,
         TICKET_FILES_MAX_LINES, TICKET_FILES_RELATED_TOP,
         RELATED_BRIEF_TICKETS, RELATED_BRIEF_FILES, RELATED_BRIEF_CHARS, RELATED_BLOCK_TICKETS, RELATED_BLOCK_FILES, RELATED_BLOCK_CHARS,
-        PLUGIN_CALL_TIMEOUT_MS, PLUGIN_HANG_CEILING_MS, PLUGIN_GUARD_STRIKES, PLUGIN_GUARD_COOLDOWN_MS, PLUGIN_POOL_SIZE, PLUGIN_QUEUE_LIMIT, PLUGIN_TOOL_TIMEOUT_MS, PLUGIN_TOOL_MAX_TIMEOUT_MS, PLUGIN_ROUTE_RATE, VIEWS_MAX_PAGE_BYTES, VIEWS_MAX_NODES, VIEWS_MAX_DEPTH, VIEWS_CHANGED_COALESCE_MS, VIEWS_MAX_SUBSCRIPTIONS, PLUGIN_START_TIMEOUT_MS, PLUGIN_STOP_TIMEOUT_MS,
+        PLUGIN_CALL_TIMEOUT_MS, PLUGIN_HANG_CEILING_MS, PLUGIN_GUARD_STRIKES, PLUGIN_GUARD_COOLDOWN_MS, PLUGIN_POOL_SIZE, PLUGIN_QUEUE_LIMIT, PLUGIN_TOOL_TIMEOUT_MS, PLUGIN_TOOL_MAX_TIMEOUT_MS, PLUGIN_ROUTE_RATE, PLUGIN_START_TIMEOUT_MS, PLUGIN_STOP_TIMEOUT_MS,
         RUN_MAX_SECRETS, KEYSTORE_MAX_FIELDS, KEYSTORE_MAX_SECRETS,
         SANDBOX_MODE,
         HEALTH_DB_TIMEOUT_SECONDS, HEALTH_WATCHDOG_FAILURES, HEALTH_WATCHDOG_INTERVAL_SECONDS, HEALTH_WATCHDOG_TIMEOUT_SECONDS,

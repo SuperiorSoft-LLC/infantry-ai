@@ -131,6 +131,16 @@ class ClaudeSession(
             out.write(interruptLine(requestId()) + "\n")
         }
 
+        /**
+         * CHAT-QUEUE-1: a user message on the open input stream while a turn runs; claude takes it into that turn at its next step. A
+         * `result` it may answer it with after the turn's own is a turn of its own (CLI-PTY-4 path above). Refused with no turn running.
+         */
+        override fun injectInput(text: String): Boolean = synchronized(lock) {
+            val turn = active ?: return false
+            if (turn.abortRequested.get()) return false
+            out.write(userLine(text) + "\n")
+        }
+
         override fun close(): Boolean {
             out.closeInput()
             return true

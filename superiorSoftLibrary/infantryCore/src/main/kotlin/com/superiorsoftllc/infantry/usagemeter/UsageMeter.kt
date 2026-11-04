@@ -98,7 +98,7 @@ class UsageMeter private constructor(
 
     fun onSessionEvent(event: SessionEvent, sessions: (String) -> SessionRecord?) {
         when (event) {
-            is SessionEvent.Turn -> {
+            is SessionEvent.Turn -> if (!event.midTurn) {
                 val rec = sessions(event.sessionId)
                 val p = Pending(sourceOf(rec, event.origin), rec)
                 p.acc.onTurn = { t -> recordTurn(event.sessionId, p, t) }

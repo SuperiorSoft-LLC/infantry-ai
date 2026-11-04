@@ -1,8 +1,7 @@
 # Plugins (modules)
 
 New here? [GUIDE.md](GUIDE.md) gets you from the starter template (`_template/`) to a working module in about
-10 minutes. A screen with no UI code, only a daemon half: [declarative views](../docs/wiki/declarative-views.md) and
-the example `examples/Acme_HelloView/`.
+10 minutes.
 
 Infantry AI is built from modules, Magento style. Every tab you see is a module's contribution. The window never
 names a tab: it asks a factory for the tabs of a container (`center`, `right`) and draws the one picked.

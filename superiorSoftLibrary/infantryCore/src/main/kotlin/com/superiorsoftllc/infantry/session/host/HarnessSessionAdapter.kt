@@ -117,6 +117,9 @@ interface HarnessSessionAdapter {
 
     /** CLI-PTY-3: bring the MCP servers back inside the live [process], keeping it. false (default) = it cannot; the host restarts and resumes. */
     fun reconnectMcp(process: HostedProcess): Boolean = false
+
+    /** CHAT-QUEUE-1: deliver [text] into the turn running on [process] without stopping it. false (default) = it cannot now. */
+    fun injectInput(process: HostedProcess, text: String): Boolean = false
 }
 
 /** Session-scoped callbacks, implemented once by the session manager. Never called while the host holds its lock. */

@@ -50,7 +50,7 @@ Quick test: `"command": "cmd", "args": ["/c", "echo", "{prompt}"]` on Windows. S
 
 The only thing a harness jar compiles against is the module `infantryHarnessApi`
 (`com.superiorsoftllc.infantry.harness.api`). It depends on the Kotlin stdlib only. The version is semver;
-`HARNESS_API_VERSION` in the source is **2.15.0** (older docs stop at 2.11). A plugin states the version it was built
+`HARNESS_API_VERSION` in the source is **2.15.0** (`HarnessContractGuardTest` fails the build when a repo harness module declares another). A plugin states the version it was built
 against in `contractVersion`; the daemon refuses a different major or a newer minor. Minor bumps only add members
 with defaults, so an old plugin keeps working.
 

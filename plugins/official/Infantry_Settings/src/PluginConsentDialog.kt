@@ -40,7 +40,7 @@ const val CONSENT_TICK_PREFIX = "plugin-consent-tick-"
 
 /**
  * PLUGIN-UI-1: the one consent dialog for installing or updating a plugin (Browse, a grant-raising update, a `.ihq` file).
- * Shows class, signer, licence and every requested grant with a tick; [onConfirm] gets exactly the ticked grants.
+ * Shows class, signer, license and every requested grant with a tick; [onConfirm] gets exactly the ticked grants.
  * [error] is the refusal of the last attempt; [busy] disables Install while it runs.
  */
 @Composable
@@ -62,7 +62,7 @@ fun PluginConsentDialog(
                 Text("${view.id} ${view.version}", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                 Text("Class: ${view.cls}", fontSize = 13.sp)
                 Text("Signed by: ${view.signer ?: "nobody (unsigned)"}", fontSize = 13.sp)
-                Text("Licence: ${view.license ?: "licence not stated"}", fontSize = 13.sp)
+                Text("License: ${view.license ?: "Not stated"}", fontSize = 13.sp)
                 Text(NOT_SANDBOXED_WARNING, color = Palette.Danger, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.testTag(CONSENT_WARNING_TAG))
                 for (w in view.warnings) Text(w, color = Palette.Muted, fontSize = 12.sp)
                 if (view.grants.isEmpty()) Text("It asks for no permissions.", color = Palette.Muted, fontSize = 12.sp)

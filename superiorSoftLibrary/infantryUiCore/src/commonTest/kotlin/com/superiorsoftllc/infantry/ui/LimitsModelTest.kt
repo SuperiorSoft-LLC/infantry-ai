@@ -64,4 +64,17 @@ class LimitsModelTest {
         assertEquals("Resets Oct 19 3:05 PM", LimitsView.resetText(1_792_422_300_000L, TimeZone.UTC))
         assertNull(LimitsView.resetText(null))
     }
+
+    /** USAGE-CARD-1: a stale card says how old its reading is, why and when the daemon retries; a fresh one says nothing. */
+    @Test fun `a stale reading reads its age, reason and retry time`() {
+        val now = 1_800_000_000_000L
+        val p = com.superiorsoftllc.infantry.ui.protocol.ProviderLimits(
+            "claude", "ok", emptyList(), "rate_limited", now - 14 * 60_000L, stale = true, retryAt = now + 9 * 60_000L,
+        )
+        val text = LimitsView.staleText(p, now, TimeZone.UTC)!!
+        assertTrue(text.startsWith("updated 14 min ago · rate limited, retrying at "), text)
+        assertEquals("updated 2 h 5 min ago · read failed, retrying soon",
+            LimitsView.staleText(p.copy(reason = "source_failed", observedAt = now - 125 * 60_000L, retryAt = null), now, TimeZone.UTC))
+        assertNull(LimitsView.staleText(p.copy(stale = false), now))
+    }
 }

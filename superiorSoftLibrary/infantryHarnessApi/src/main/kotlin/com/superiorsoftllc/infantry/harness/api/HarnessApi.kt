@@ -81,8 +81,12 @@ import java.io.File
  * 2.15.0 (CLI-PTY-4, additive): a turn the live process began by itself. [SessionOutput.turnStarted] (an interactive CLI answering a notice of
  * its own, e.g. a background task that ended: the host tracks it like a sent turn, so the session reads busy and is not sent another turn
  * until it ends; its end comes through [SessionOutput.turnEnded] like any turn). A 2.8 - 2.14 plugin keeps the default: nothing reported.
+ *
+ * 2.16.0 (CHAT-QUEUE-1, additive): input INTO a running turn. [HarnessCapability.MID_TURN_INPUT] declares it and
+ * [SessionConnection.injectInput] delivers it (a user message the agent takes in at its next step, the turn is not stopped). A 2.8 - 2.15
+ * plugin keeps the default: false, so the daemon keeps the message queued for the next turn.
  */
-const val HARNESS_API_VERSION: String = "2.15.0"
+const val HARNESS_API_VERSION: String = "2.16.0"
 
 /** What a harness jar ships: registers its harnesses, given the [HarnessHost] scoped to its module. */
 interface HarnessPlugin {
@@ -326,6 +330,13 @@ interface SessionConnection {
      * asked (a script or tool), never on the plugin's own say. false (default) = it cannot; the host then restarts the process and resumes.
      */
     fun reconnectMcp(): Boolean = false
+
+    /**
+     * 2.16.0: deliver [text] as a user message INTO the turn in flight, without stopping it: the agent sees it at its next step. Called only
+     * while a turn runs, never on the plugin's own say. false (default) = it cannot now (no turn, the turn not yet submitted, no such input);
+     * the daemon then keeps the message queued for the next turn. Declare [HarnessCapability.MID_TURN_INPUT] when this can return true.
+     */
+    fun injectInput(text: String): Boolean = false
 }
 
 /** 2.7.0: the only roots a contributed sandbox dir may sit under: the module's own data folder and the session worktree. */
@@ -452,8 +463,11 @@ enum class ToolApproval { DENY, ALLOW_EDITS, ALLOW_ALL, ASK }
 /**
  * [LIVE_SESSION] (additive, CLI-LIVE-1): the harness's [Harness.session] keeps ONE process per session and every wake (owner message, mail,
  * note, script prompt) is a message into it, like a live CLI; `--resume`-style restore happens only on the first start or after a crash.
+ *
+ * [MID_TURN_INPUT] (additive, 2.16.0): the live process takes a user message while a turn runs ([SessionConnection.injectInput]) without
+ * stopping it, the way a person typing into a busy CLI steers it. Clients show "Send now" on a queued message only for such a harness.
  */
-enum class HarnessCapability { MODEL_SELECTION, SESSION_RESUME, TOOL_CALLS, REASONING, USAGE, EFFORT_SELECTION, LIVE_SESSION }
+enum class HarnessCapability { MODEL_SELECTION, SESSION_RESUME, TOOL_CALLS, REASONING, USAGE, EFFORT_SELECTION, LIVE_SESSION, MID_TURN_INPUT }
 
 /** Neutral events a translator produces. A run ends with exactly one [Completion] or [Error] (from [HarnessTranslator.terminal]). */
 sealed interface HarnessEvent {

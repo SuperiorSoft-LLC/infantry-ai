@@ -100,7 +100,6 @@ object DesktopPlugins {
             provide(Services.STORAGE) { s -> FilePluginStorage(dataDir(stateDir, s.name)) }
             provide(Services.SETTINGS) { s -> FilePluginSettings(FilePluginStorage(dataDir(stateDir, s.name))) }
             provide(Services.DAEMON) { s -> RouteGate.gated(s.manifest!!, lockdown, config, DaemonLink.window::send) }
-            provide(Services.VIEWS) { _ -> DelegatingViews { DaemonLink.window.views } }
             provide(Services.ENDPOINTS) { s -> JvmEndpointAccess(s.manifest!!, s.tier, config, lockdown, say) }
         }
         val services = resolution.loaded.associate { it.name to registry.forModule(it) }

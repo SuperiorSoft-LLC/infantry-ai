@@ -25,9 +25,6 @@ internal class DaemonLink {
         internal val window = DaemonLink()
     }
 
-    /** DV-2: the controller's views service; null until a window has set it. */
-    @kotlin.concurrent.Volatile var views: com.superiorsoftllc.infantry.plugin.api.ViewAccess? = null
-
     /**
      * PLUGIN-ENDPOINTS-2 (D3): reads one field of `plugin.<module>` over the window's owner connection (`plugin_secret_get`).
      * Only a module's EndpointAccess calls it, and it keeps the value in its own closure. Null until a window sets it.
@@ -62,13 +59,4 @@ internal class DaemonLink {
             DaemonReply.Failed("could not reach the daemon (${e::class.simpleName ?: "error"})")
         }
     }
-}
-
-/** DV-2: the views service handed to a module before a window exists; each call goes to the window's current service. */
-class DelegatingViews(private val target: () -> com.superiorsoftllc.infantry.plugin.api.ViewAccess?) : com.superiorsoftllc.infantry.plugin.api.ViewAccess {
-    override suspend fun list() = target()?.list().orEmpty()
-    override fun open(module: String, view: String, params: kotlinx.serialization.json.JsonObject) =
-        target()?.open(module, view, params) ?: kotlinx.coroutines.flow.flowOf(com.superiorsoftllc.infantry.plugin.api.ViewState.Error("not connected to the daemon"))
-    override suspend fun act(origin: com.superiorsoftllc.infantry.plugin.api.ViewOrigin, tool: String, args: kotlinx.serialization.json.JsonObject) =
-        target()?.act(origin, tool, args) ?: Result.failure(IllegalStateException("not connected to the daemon"))
 }

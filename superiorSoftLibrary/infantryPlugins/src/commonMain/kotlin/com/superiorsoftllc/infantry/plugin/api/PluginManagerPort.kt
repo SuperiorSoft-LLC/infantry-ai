@@ -26,11 +26,16 @@ interface PluginManagerPort {
     fun refresh(): List<RefreshView>
 }
 
-/** One installed or bundled plugin. [cls] = official / community / custom. */
+/**
+ * One installed or bundled plugin. [cls] = official / community / custom. PLUGINS-UI-1: [description] is module.json's
+ * (empty = none), [contributes] what it adds to the window (`tab <id>`, `panel <side>: <id>`, `block <slot>: <name>`),
+ * [requiredBy] the enabled plugins that declare it a dependency (turning it off stops them).
+ */
 data class PluginView(
     val id: String, val version: String, val cls: String, val bundled: Boolean, val enabled: Boolean,
     val license: String?, val signer: String?, val requested: List<String>, val granted: List<String>,
     val canRollback: Boolean, val yanked: String?,
+    val description: String = "", val contributes: List<String> = emptyList(), val requiredBy: List<String> = emptyList(),
 )
 
 /** A newer version offered for an installed plugin; [newGrants] non-empty = "asks for new permissions". */

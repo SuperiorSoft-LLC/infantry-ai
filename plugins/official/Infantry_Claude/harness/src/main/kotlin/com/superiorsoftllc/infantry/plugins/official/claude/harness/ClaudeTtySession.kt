@@ -149,6 +149,8 @@ class ClaudeTtySession(
         private val transcript = AppendedLines(launch.transcriptStart) { transcriptFile ?: ClaudeTranscripts.find(configDir, launch.cwd, launch.sessionId)?.also { transcriptFile = it } }
         private val queue = ArrayDeque<Turn>()
         private var active: Turn? = null
+        /** CHAT-QUEUE-1: messages pasted into the busy CLI (its own queue takes them into the running turn), each awaiting its Enter. */
+        private val injects = ArrayDeque<Long>()
         private val launchedAt = clock()
         private var firstScreenAt: Long? = null
         private var startedAt: Long? = null
@@ -208,6 +210,20 @@ class ClaudeTtySession(
             true
         }
 
+        /**
+         * CHAT-QUEUE-1: type [text] into the CLI while its turn runs (pasted now, Enter after [PASTE_SETTLE_MS] in [tick]); the interactive
+         * claude takes a message entered while busy into the running turn at its next step, without stopping it. Refused (false) with no
+         * turn running, one being stopped or one whose own prompt is not entered yet.
+         */
+        override fun injectInput(text: String): Boolean = synchronized(lock) {
+            val turn = active ?: return false
+            if (exited || turn.stopAt != null || turn.abortAt != null || !(turn.own || turn.enteredAt != null)) return false
+            if (injects.isNotEmpty()) return false
+            paste(text)
+            injects.addLast(clock())
+            true
+        }
+
         override fun close(): Boolean {
             synchronized(lock) { key(ESC) }
             Thread.sleep(KEY_GAP_MS)
@@ -226,6 +242,7 @@ class ClaudeTtySession(
                 exited = true
                 active = null
                 queue.clear()
+                injects.clear()
             }
             thread?.interrupt()
         }
@@ -269,7 +286,7 @@ class ClaudeTtySession(
                         starts += why
                     }
                     turn == null -> {
-                        if (queue.isNotEmpty() && ready(now)) {
+                        if (queue.isNotEmpty() && injects.isEmpty() && ready(now)) {
                             val next = queue.poll()
                             unclaimedStopAt = null
                             active = next
@@ -309,6 +326,11 @@ class ClaudeTtySession(
                         turn.enterRetried = true
                     }
                 }
+            }
+            synchronized(lock) {
+                // CHAT-QUEUE-1: the Enter of a message typed into the running turn, once its paste settled.
+                val pastedAt = injects.peekFirst()
+                if (pastedAt != null && now - pastedAt >= PASTE_SETTLE_MS) { injects.pollFirst(); key(ENTER) }
             }
             for ((end, code, reason) in ends) out.turnEnded(end, code, reason)
             for (why in starts) out.turnStarted(why)

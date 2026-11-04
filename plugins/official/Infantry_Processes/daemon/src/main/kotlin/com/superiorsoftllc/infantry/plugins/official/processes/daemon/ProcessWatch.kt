@@ -6,11 +6,13 @@ import com.superiorsoftllc.infantry.daemon.api.processes.CpuAlertConfig
 import com.superiorsoftllc.infantry.daemon.api.processes.KillResult
 import com.superiorsoftllc.infantry.daemon.api.processes.ProcInfo
 import com.superiorsoftllc.infantry.daemon.api.processes.ProcessReport
+import com.superiorsoftllc.infantry.daemon.api.processes.ProcessToolProfile
 import com.superiorsoftllc.infantry.daemon.api.processes.Processes
 import com.superiorsoftllc.infantry.daemon.api.processes.ProcessesAnswer
 import com.superiorsoftllc.infantry.daemon.api.processes.ProcessesRequest
 import com.superiorsoftllc.infantry.daemon.api.processes.TrackedProcess
 import com.superiorsoftllc.infantry.daemon.api.processes.WatchedSession
+import java.io.File
 
 /*
  * ROGUE-1 (ticket 8a40b481, contract 1.120.0), moved out of core by STACK-NEUTRAL-2: the rogue background process detector.
@@ -31,12 +33,21 @@ data class ProcessWatchConfig(
     /** Free RAM below this raises a pressure warning (the same 4 GB floor as the gate rule). */
     val floorMb: Long = 4096,
     val autoReap: Boolean = false,
+    /** PROC-LEAK-1 `processes.reapKinds`: the kinds a session's close reaps (tool profile names, or `other`); empty = every kind. */
+    val reapKinds: Set<String> = emptySet(),
+    /** PROC-LEAK-1 `limits.processes.stopGraceSeconds`: how long daemons get after their profile's graceful stop; 0 = no graceful step. */
+    val stopGraceSeconds: Int = 10,
+    /** PROC-LEAK-1 `limits.processes.stuckMinutes`: a profile's `stuck` client with no CPU for this long is stuck; 0 = off. */
+    val stuckMinutes: Int = 15,
 )
 
 /** Ticket 66153313: per-process CPU share from two samples of cumulative CPU time (100 = every logical core busy). */
 class CpuMeter(private val cpuNanos: (Long) -> Long?, private val cores: Int = Runtime.getRuntime().availableProcessors()) {
     private var last: Map<Long, Long> = emptyMap()
     private var lastAt: Long? = null
+
+    /** PROC-LEAK-1: the cumulative CPU nanos of the last sample, by pid. */
+    val lastNanos: Map<Long, Long> get() = last
 
     /** The latest shares by pid. */
     var shares: Map<Long, Double> = emptyMap()
@@ -104,6 +115,10 @@ class ProcessWatch(
     /** The watch's off switch (`limits.watch.enabled`), read at every entry point. Off = nothing recorded, nothing reaped. */
     private val enabled: () -> Boolean = { true },
     private val log: (String) -> Unit = { println("[Infantry_Processes] $it") },
+    /** PROC-LEAK-1: runs a profile's graceful `stop` argv in a worktree, waiting at most the given millis. Injected for tests. */
+    private val stopRunner: (argv: List<String>, dir: java.io.File, timeoutMs: Long) -> Unit = ::runStop,
+    /** PROC-LEAK-1: waits until the given pids (pid to start instant) are gone, at most the given millis. Injected for tests. */
+    private val waitGone: ((pids: Map<Long, Long>, timeoutMs: Long) -> Unit)? = null,
 ) {
     private fun on(): Boolean = runCatching(enabled).getOrDefault(false)
     private fun tools() = runCatching { os.toolProfiles() }.getOrDefault(emptyList())
@@ -119,6 +134,14 @@ class ProcessWatch(
 
     private var lastPressureAt: Long? = null
     private var lastAutoReapAt: Long? = null
+
+    /** PROC-LEAK-1: what each session's OS container holds now (nothing where the host has no containers). */
+    private fun members(records: List<WatchedSession>): Map<String, List<ProcInfo>> =
+        records.associate { r -> r.id to runCatching { os.sessionMembers(r.id) }.getOrDefault(emptyList()) }.filterValues { it.isNotEmpty() }
+
+    /** PROC-LEAK-1: pid to (its CPU nanos, since when they have not moved), for the stuck-client rule. */
+    private val cpuQuietSince = HashMap<Long, Pair<Long, Long>>()
+    private val stuckAlerted = HashSet<Long>()
 
     /** The roots of every session that may still own a live process: its kept harness pid and its running child pid. */
     private fun roots(records: List<WatchedSession>): Map<String, Collection<Long>> =
@@ -142,12 +165,14 @@ class ProcessWatch(
     fun tick() {
         if (!on()) return
         val records = sessions()
-        ledger.observe(roots(records))
+        ledger.observe(roots(records), members(records))
         ledger.adopt(records.mapNotNull { r -> r.worktreePath?.let { r.id to it } }.toMap())
         releaseEndedOwnersLock(records)
         val cfg = config()
         val now = clock()
         val shares = cpuMeter.sample(ledger.entries().map { it.pid }, now)
+        trackQuiet(now)
+        alertStuck(records, cfg, now)
         val total = if (shares.isEmpty() && ledger.entries().isNotEmpty()) null else shares.values.sum()
         val cpuCfg = runCatching(cpuAlert).getOrDefault(CpuAlertConfig())
         if (cpuSustain.update(total, cpuCfg, now)) runCatching { onCpuSustained(report()) }
@@ -180,6 +205,7 @@ class ProcessWatch(
         val daemons = ProfileRx.daemons(tools)
         val now = clock()
         val bySession = sessions().associateBy { it.id }
+        val stuckRx = ProfileRx.stuck(tools)
         val mem = runCatching { os.memory() }.getOrDefault(emptyList())
         val mbByPid = mem.associate { it.pid to it.mb }
         val tracked = ledger.entries().map { e ->
@@ -188,6 +214,7 @@ class ProcessWatch(
             TrackedProcess(
                 e.pid, forSession(e.command, e.sessionId), e.sessionId, e.startedAt, mb, reason != null, reason, e.inferred,
                 cpuPercent = cpuMeter.shares[e.pid]?.let(::round1),
+                stuck = if (reason == null) stuckReason(e, bySession[e.sessionId], stuckRx, cfg, now) else null,
             )
         }
         val ledgerPids = tracked.mapTo(HashSet()) { it.pid }
@@ -272,7 +299,7 @@ class ProcessWatch(
 
     private fun reapProcesses(sessionId: String, closedAt: Long, keepPids: Set<Long>, reason: String): List<TrackedProcess> {
         val records = sessions()
-        runCatching { ledger.observe(roots(records)) } // last-moment children, and drop what is already gone
+        runCatching { ledger.observe(roots(records), members(records)) } // last-moment children, and drop what is already gone
         val mine = ledger.entries().filter { it.sessionId == sessionId }
         if (mine.isEmpty()) return emptyList()
         val all = ledger.allProcesses().associateBy { it.pid }
@@ -287,6 +314,7 @@ class ProcessWatch(
         val shared = ProfileRx.sharedDaemons(tools)
         val clients = ProfileRx.clients(tools)
         val otherClient = ledger.entries().firstOrNull { it.sessionId in liveOthers && clients.containsMatchIn(it.command) }?.sessionId
+        val cfg = config()
 
         val doomed = ArrayList<LedgerEntry>()
         for (e in mine) {
@@ -301,14 +329,25 @@ class ProcessWatch(
                     ledger.reassign(e.pid, otherClient)
                     log("close cleanup: shared daemon pid ${e.pid} handed from session $sessionId to $otherClient")
                 }
+                cfg.reapKinds.isNotEmpty() && kindOf(e.command, tools) !in cfg.reapKinds ->
+                    log("close cleanup: spared pid ${e.pid} of session $sessionId (kind ${kindOf(e.command, tools)} is not in processes.reapKinds)")
                 else -> doomed += e
             }
         }
         val doomedPids = doomed.mapTo(HashSet()) { it.pid }
+        val stopped = stopGracefully(sessionId, doomed, doomedPids, all.values, tools, cfg, records)
         // Leaf first: the deepest process, then the latest started.
         val order = doomed.sortedWith(compareByDescending<LedgerEntry> { ancestors(it.pid).count() }.thenByDescending { it.startedAt })
         val mem = if (order.isEmpty()) emptyMap() else runCatching { os.memory() }.getOrDefault(emptyList()).associate { it.pid to it.mb }
         return order.mapNotNull { e ->
+            if (e.pid in stopped && runCatching { os.startInstant(e.pid) }.getOrNull() != e.startedAt) {
+                // PROC-LEAK-1: its profile's graceful stop ended it: counted as reaped, nothing killed.
+                val view = TrackedProcess(e.pid, e.command, e.sessionId, e.startedAt, mem[e.pid], true, "$reason (stopped gracefully)", e.inferred)
+                ledger.forget(e.pid)
+                log("stopped pid ${e.pid} (${e.command}) of session ${e.sessionId} gracefully")
+                runCatching { onReaped(view) }
+                return@mapNotNull view
+            }
             // A live descendant we do not kill (kept, foreign, newer, shared) must survive: then the process goes alone.
             val spareBelow = all.values.any { p -> p.pid !in doomedPids && ancestors(p.pid).any { it == e.pid } }
             val view = TrackedProcess(e.pid, e.command, e.sessionId, e.startedAt, mem[e.pid], true, reason, e.inferred)
@@ -352,6 +391,94 @@ class ProcessWatch(
         return ReapResult.Reaped(view)
     }
 
+    /**
+     * PROC-LEAK-1: the graceful step before the kill. For every tool profile with a `stop` argv whose daemons are among [doomed],
+     * and only when NO other live process matches that profile's daemons (a tool's stop command reaches every daemon of its
+     * kind, the owner's own included), run the argv in the session's worktree and wait up to the grace for those daemons to end.
+     * Returns the pids the step was tried on; whatever is still alive afterwards is killed as before.
+     */
+    private fun stopGracefully(
+        sessionId: String, doomed: List<LedgerEntry>, doomedPids: Set<Long>, all: Collection<ProcInfo>,
+        tools: List<ProcessToolProfile>, cfg: ProcessWatchConfig, records: List<WatchedSession>,
+    ): Set<Long> {
+        val graceMs = cfg.stopGraceSeconds.coerceAtLeast(0) * 1000L
+        if (graceMs == 0L || doomed.isEmpty()) return emptySet()
+        val dir = records.firstOrNull { it.id == sessionId }?.worktreePath?.let(::File)?.takeIf { it.isDirectory } ?: return emptySet()
+        val tried = HashSet<Long>()
+        for (profile in tools.filter { it.stop.isNotEmpty() && it.daemons.isNotEmpty() }) {
+            val rx = ProfileRx.any(profile.daemons)
+            val theirs = doomed.filter { rx.containsMatchIn(it.command) }
+            if (theirs.isEmpty()) continue
+            if (all.any { p -> p.pid !in doomedPids && rx.containsMatchIn(p.command) }) {
+                log("close cleanup: no graceful ${profile.name} stop for session $sessionId (another ${profile.name} daemon is alive); killing its own")
+                continue
+            }
+            // The stop command must be the worktree's own (a wrapper script there); never a PATH lookup of some other install.
+            val command = resolveIn(dir, profile.stop.first()) ?: continue
+            val argv = listOf(command) + profile.stop.drop(1)
+            log("close cleanup: graceful ${profile.name} stop in $dir for session $sessionId (${theirs.size} daemon(s))")
+            runCatching { stopRunner(argv, dir, graceMs) }.onFailure { log("close cleanup: ${profile.name} stop failed: ${it.message}") }
+            val pids = theirs.associate { it.pid to it.startedAt }
+            runCatching { (waitGone ?: { p, ms -> pollGone(p, ms) })(pids, graceMs) }
+            tried += pids.keys
+        }
+        return tried
+    }
+
+    private fun pollGone(pids: Map<Long, Long>, timeoutMs: Long) {
+        val until = System.currentTimeMillis() + timeoutMs
+        while (pids.any { (pid, at) -> runCatching { os.startInstant(pid) }.getOrNull() == at } && System.currentTimeMillis() < until) {
+            Thread.sleep(POLL_MS)
+        }
+    }
+
+    /** PROC-LEAK-1: a kind for [command]: the first profile whose daemons, clients or stuck list match, then heavyCommands; else `other`. */
+    private fun kindOf(command: String, tools: List<ProcessToolProfile>): String =
+        tools.firstOrNull { p -> listOf(p.daemons, p.clients, p.stuck).any { it.isNotEmpty() && ProfileRx.any(it).containsMatchIn(command) } }?.name?.lowercase()
+            ?: tools.firstOrNull { p -> p.heavyCommands.isNotEmpty() && ProfileRx.any(p.heavyCommands).containsMatchIn(command) }?.name?.lowercase()
+            ?: OTHER_KIND
+
+    /** PROC-LEAK-1: note when each ledger pid's CPU time last moved. */
+    private fun trackQuiet(now: Long) {
+        val nanos = cpuMeter.lastNanos
+        cpuQuietSince.keys.retainAll(nanos.keys)
+        stuckAlerted.retainAll(nanos.keys)
+        for ((pid, ns) in nanos) {
+            val prev = cpuQuietSince[pid]
+            if (prev == null || prev.first != ns) cpuQuietSince[pid] = ns to now
+        }
+    }
+
+    /** PROC-LEAK-1: why [e] (of a live session) is a stuck client: it matches a profile's `stuck`, has no live child, used no CPU for the limit. */
+    private fun stuckReason(e: LedgerEntry, owner: WatchedSession?, rx: Regex, cfg: ProcessWatchConfig, now: Long): String? {
+        if (cfg.stuckMinutes <= 0 || e.root || owner == null || owner.ended) return null
+        if (!rx.containsMatchIn(e.command)) return null
+        val since = cpuQuietSince[e.pid]?.second ?: return null
+        val quietMs = now - since
+        if (quietMs < cfg.stuckMinutes * 60_000L) return null
+        if (runCatching { os.descendants(e.pid) }.getOrDefault(emptyList()).isNotEmpty()) return null // a wrapper waiting on its command
+        return "no CPU for ${quietMs / 60_000} min"
+    }
+
+    /** PROC-LEAK-1: raise each newly stuck client once to the owner. */
+    private fun alertStuck(records: List<WatchedSession>, cfg: ProcessWatchConfig, now: Long) {
+        if (cfg.stuckMinutes <= 0) return
+        val rx = ProfileRx.stuck(tools())
+        val bySession = records.associateBy { it.id }
+        for (e in ledger.entries()) {
+            if (e.pid in stuckAlerted) continue
+            val why = stuckReason(e, bySession[e.sessionId], rx, cfg, now) ?: continue
+            stuckAlerted += e.pid
+            log("stuck client pid ${e.pid} (${e.command}) of session ${e.sessionId}: $why")
+            runCatching {
+                os.raiseAlert(
+                    "client_stuck",
+                    "Session ${e.sessionId.take(8)} has a stuck client: pid ${e.pid} ${e.command.take(STUCK_COMMAND_MAX)} ($why; limits.processes.stuckMinutes, 0 = off)",
+                )
+            }
+        }
+    }
+
     private fun rogueReason(e: LedgerEntry, owner: WatchedSession?, mb: Long?, cfg: ProcessWatchConfig, now: Long): String? {
         if (owner == null) return "session removed"
         if (owner.ended) return "session ended (${owner.state})"
@@ -364,6 +491,24 @@ class ProcessWatch(
 
     companion object {
         const val OFF_REASON = "the process watch is off (limits.watch.enabled = 0): nothing is tracked or reaped"
+        /** PROC-LEAK-1: the `processes.reapKinds` name of a process no tool profile names. */
+        const val OTHER_KIND = "other"
+        private const val POLL_MS = 250L
+        private const val STUCK_COMMAND_MAX = 80
+
+        /** [name] as a file in [dir] (with `.bat` / `.cmd` / `.exe` first on Windows), or null when [dir] has none. */
+        internal fun resolveIn(dir: File, name: String): String? {
+            val windows = System.getProperty("os.name").orEmpty().lowercase().contains("win")
+            val suffixes = if (windows) listOf(".bat", ".cmd", ".exe", "") else listOf("")
+            return suffixes.map { File(dir, name + it) }.firstOrNull { it.isFile }?.absolutePath
+        }
+
+        /** The real graceful stop: [argv] in [dir], output discarded, force-ended when it outlives [timeoutMs]. */
+        internal fun runStop(argv: List<String>, dir: File, timeoutMs: Long) {
+            val p = ProcessBuilder(argv).directory(dir).redirectErrorStream(true)
+                .redirectOutput(ProcessBuilder.Redirect.DISCARD).start()
+            if (!p.waitFor(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)) p.destroyForcibly()
+        }
         private const val UNATTRIBUTED_MIN_MB = 200L
         private const val UNATTRIBUTED_MAX = 10
     }

@@ -97,6 +97,8 @@ data class ProviderInfo(
     /** EFFORT-1 (1.148.0, ADDITIVE): how this provider honours a session's `effort` (`supported` / `best_effort` / `unsupported`) and how, in words. Null from an older daemon. */
     val effort: String? = null,
     val effortHow: String? = null,
+    /** CHAT-QUEUE-1 (1.150.0, ADDITIVE): true = a held message can be forced INTO a running turn (harness MID_TURN_INPUT). Null = cannot / older daemon. */
+    val midTurnInput: Boolean? = null,
 )
 
 /**

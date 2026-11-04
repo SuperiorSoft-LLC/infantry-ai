@@ -134,10 +134,12 @@ class ProcessLedger(
 
     /**
      * One pass: drop entries that are gone (or whose pid now belongs to another process), record [roots] (session id to
-     * its harness pid) and everything under them, then everything under the surviving entries.
+     * its harness pid) and everything under them, then (PROC-LEAK-1) every process in a session's OS container ([members]:
+     * session id to the live processes of its Job Object, orphans included, so a detached child whose parent already exited
+     * is still the session's), then everything under the surviving entries.
      */
     @Synchronized
-    fun observe(roots: Map<String, Collection<Long>>) {
+    fun observe(roots: Map<String, Collection<Long>>, members: Map<String, Collection<ProcInfo>> = emptyMap()) {
         var changed = prune()
         val walked = HashSet<Long>()
         for ((sessionId, pids) in roots) {
@@ -149,6 +151,9 @@ class ProcessLedger(
                     walked += p.pid
                 }
             }
+        }
+        for ((sessionId, procs) in members) {
+            for (p in procs) changed = record(p, sessionId, root = false) || changed
         }
         // An entry already covered by a root walk needs no walk of its own; the rest are orphans (dead parent).
         for (entry in entries.values.toList()) {

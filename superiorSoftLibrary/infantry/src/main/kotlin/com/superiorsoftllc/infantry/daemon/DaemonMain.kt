@@ -821,6 +821,8 @@ class InfantryDaemon(
                         tailReadKb = settings.limit(LimitRegistry.WATCH_TAIL_READ_KB),
                     )
             })
+            // PROC-LEAK-1: one OS container per session (a Windows Job Object), shared by the manager (assigns) and api.processes (reads).
+            val sessionContainers = com.superiorsoftllc.infantry.runner.SessionContainers.forHost(instanceId)
             val manager = SessionManager(
                 provider,
                 sandboxed(runner),
@@ -862,6 +864,7 @@ class InfantryDaemon(
                 // No-hard-coded-limits S2: the watchdog and silent sweeper read limits.watchdog.* live.
                 limitSource = settings::limit,
                 idFactory = sessionIds,
+                containers = sessionContainers,
             )
             // BUG-M2-11f: a new keep-alive value applies to the processes already kept, not only to the next launch.
             settings.onKeepAliveChanged = manager::lifecyclePolicyChanged
@@ -900,6 +903,7 @@ class InfantryDaemon(
                 pressure = { reportJson -> for (c in clients.toList()) c.trySend(Envelope(Envelope.PROCESS_PRESSURE, reportJson)) },
                 alert = { outcome, detail -> alertSink.get().invoke(outcome, detail) },
                 instanceId = instanceId,
+                containers = sessionContainers,
             )
             // Ticket b785f383: a closing session's background processes die with it (the plugin's listener does it, after a grace).
             manager.onSessionClosed = { c -> localProcesses.fireSessionClosed(c) }
@@ -1125,6 +1129,15 @@ class InfantryDaemon(
                         .map { r -> UsageMeters.meterFor(r.provider, r.model ?: manager.providerFor(r.provider)?.defaultModel()) }
                 },
             )
+            // USAGE-CARD-1: the stale limit, backoff and manual floor of the plan meters, read from the settings at every read.
+            limits.tuning = {
+                com.superiorsoftllc.infantry.usage.UsageReadTuning(
+                    staleMaxMs = settings.limit(LimitRegistry.USAGE_STALE_MAX_HOURS) * 3_600_000L,
+                    backoffBaseMs = settings.usageRefreshMinutes().takeIf { it > 0 }?.let { it * 60_000L } ?: LimitService.DEFAULT_MIN_INTERVAL_MS,
+                    backoffMaxMs = settings.limit(LimitRegistry.USAGE_BACKOFF_MAX_MINUTES) * 60_000L,
+                    manualFloorMs = settings.limit(LimitRegistry.USAGE_MANUAL_REFRESH_FLOOR_SECONDS) * 1000L,
+                )
+            }
             // USAGE-AUTO (1.124.0): every usage.refreshMinutes (default 5, 0 = off) a live read, pushed to every client.
             val usageRefresher = com.superiorsoftllc.infantry.usage.UsageRefresher(
                 read = { limits.snapshot(force = true) },
@@ -1294,6 +1307,8 @@ class InfantryDaemon(
                         .let { t -> t == null || t.status != com.superiorsoftllc.infantry.protocol.TicketStatus.IN_PROGRESS || t.sessionId != r.id }
                 },
             )
+            // CHAT-SENDING-1: one store for every connection, so a resend after a reconnect is recognised.
+            val promptSendIds = PromptSendIds { settings.limit(LimitRegistry.CHAT_SENT_IDS_KEPT).toInt() }
             val ticketStartCharge = TicketStartCharge(spawnGuard, { boardPorts.startMoves() }, manager::get, manager::setSpawner)
             orchestrator.sessionStartedSink = { _, sessionId, parent -> spawnGuard.record(sessionId, parent); manager.setSpawner(sessionId, parent) }
             settings.limitEnvProblems().forEach { println("[infantry] limit ignored: $it") }
@@ -1921,6 +1936,7 @@ class InfantryDaemon(
                             daemonConfig = daemonConfig,
                             tier = call.attributes.getOrNull(ACCESS_TIER) ?: AccessTier.OWNER,
                             policies = policies,
+                            promptSendIds = promptSendIds,
                         ) } finally {
                             System.err.println("[infantry] ws close from $wsPeer: ${runCatching { closeReason.await() }.getOrNull() ?: "no reason"}")
                         }
@@ -2141,8 +2157,9 @@ private fun broadcast(
             // Contract 1.125.0: an owner turn omits `origin` (absent = Owner), so it is byte-identical to before.
             Envelope(Envelope.TURN, event.prompt, event.sessionId, origin = event.origin.takeUnless { it == MessageOrigin.Owner }),
             // 1.95.0: an accepted turn is a run that is thinking, before the harness prints a single line.
-            runActivityEnvelope(event.sessionId, runActivity.turnStarted(event.sessionId)),
-        )
+            // CHAT-QUEUE-1: a message forced into the running turn is not a turn start.
+            if (event.midTurn) null else runActivityEnvelope(event.sessionId, runActivity.turnStarted(event.sessionId)),
+        ).filterNotNull()
 
         // M2-11: run plumbing (process started, pid, resumed provider session) goes to the Activity box, on the
         // existing status frame's tool/activity fields, so the chat shows at most one boot line.
@@ -2493,6 +2510,8 @@ private suspend fun handleConnection(
      * tier); this connection is sent the `policy` frame after `ready` and again on every switch.
      */
     policies: com.superiorsoftllc.infantry.policy.PolicyRuntime = com.superiorsoftllc.infantry.policy.PolicyRuntime(emptyList(), { null }, null, java.io.File(".")),
+    /** CHAT-SENDING-1: the client message ids of recent prompts, daemon-wide (a resend arrives on a new connection). */
+    promptSendIds: PromptSendIds = PromptSendIds { LimitRegistry.CHAT_SENT_IDS_KEPT.default.toInt() },
 ) {
     println("[infantry] ws connected (provider=${manager.providerId})")
     // DP-5d: the board-family frames, registered by their owner; the loop below only looks them up.
@@ -2504,7 +2523,6 @@ private suspend fun handleConnection(
     ) == true
     val outgoing = Channel<Envelope>(Channel.UNLIMITED)
     clients.add(outgoing)
-    val viewConn = com.superiorsoftllc.infantry.daemon.plugins.ViewConnection { outgoing.trySend(it) }
     // DAEMON-PLUGINS-1: a plugin tool's own requests on this connection (requestId `plugin:<uuid>`, fed to [inbound]) are
     // answered to the waiting tool, never sent to the client.
     val pluginWaiters = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.CompletableDeferred<Envelope>>()
@@ -2818,6 +2836,10 @@ private suspend fun handleConnection(
                         // A client that NAMES its session (a reconnecting client carries it on every frame)
                         // continues exactly that one. A missing or non-resumable session is refused here,
                         // never silently forked into a new session the client did not ask for.
+                        // CHAT-SENDING-1 (1.151.0): a client message id is claimed before the turn runs; a resend of one
+                        // already taken is acknowledged and not run again. A refused prompt releases its id, so a retry runs.
+                        val sendKey = promptSendIds.keyOf(envelope.sessionId, envelope.requestId)
+                        if (sendKey != null && !promptSendIds.claim(sendKey)) promptAck(envelope, duplicate = true) else
                         try {
                             val named = manager.get(envelope.sessionId!!)
                             named?.let { launchWarning(manager, it.provider)?.let(outgoing::trySend) }
@@ -2832,11 +2854,13 @@ private suspend fun handleConnection(
                             }
                             active = manager.resume(envelope.sessionId!!, turn).id
                             plugins.turnAccepted(envelope, caller)
-                            pluginSessionsAck(envelope, manager)
+                            pluginSessionsAck(envelope, manager) ?: sendKey?.let { promptAck(envelope, duplicate = false) }
                         } catch (e: RunInFlightException) {
+                            sendKey?.let(promptSendIds::release)
                             // 1.96.0: typed, so the client that sent it (its requestId is echoed below) can queue it again.
                             Envelope(Envelope.ERROR, "$RUN_IN_FLIGHT ${e.sessionId}: ${e.message}")
                         } catch (e: Exception) {
+                            sendKey?.let(promptSendIds::release)
                             Envelope(Envelope.ERROR, e.message ?: "resume failed")
                         }
                     } else {
@@ -3444,6 +3468,30 @@ private suspend fun handleConnection(
                     }
                 }
 
+                // CHAT-QUEUE-1 (1.150.0): the held messages live on the session record; every change is pushed as its `session` frame.
+                Envelope.QUEUE_ADD, Envelope.QUEUE_REMOVE, Envelope.QUEUE_FORCE -> {
+                    val id = envelope.sessionId?.trim().orEmpty()
+                    val arg = envelope.data
+                    if (id.isEmpty() || arg.isBlank()) {
+                        Envelope(Envelope.ERROR, "${envelope.type} expects the frame's sessionId and a non-empty data")
+                    } else {
+                        try {
+                            when (envelope.type) {
+                                Envelope.QUEUE_ADD -> {
+                                    if (manager.queueAdd(id, arg, ((settings as? SettingsService)?.limit(LimitRegistry.CHAT_QUEUE_MAX) ?: LimitRegistry.CHAT_QUEUE_MAX.default).toInt()) == null) active = id
+                                }
+                                Envelope.QUEUE_REMOVE -> manager.queueRemove(id, arg.trim())
+                                else -> manager.queueForce(id, arg.trim())
+                            }
+                            null
+                        } catch (e: RunInFlightException) {
+                            Envelope(Envelope.ERROR, "$RUN_IN_FLIGHT ${e.sessionId}: ${e.message}")
+                        } catch (e: Exception) {
+                            Envelope(Envelope.ERROR, "${envelope.type} refused: ${e.message ?: e.javaClass.simpleName}")
+                        }
+                    }
+                }
+
                 Envelope.INTERRUPT -> {
                     // Stop the session's current turn and leave the session at rest (see SessionManager.interrupt).
                     val id = envelope.data.trim()
@@ -3819,7 +3867,7 @@ private suspend fun handleConnection(
                         val arguments = call["arguments"] as? JsonObject ?: JsonObject(emptyMap())
                         val requestId = envelope.requestId
                         session.launch(kotlinx.coroutines.Dispatchers.IO) {
-                            val result = plugins.callToolSuspending(name, arguments, caller, call["client"] as? JsonObject ?: JsonObject(emptyMap()), call["origin"] as? JsonObject) { request, timeoutMs ->
+                            val result = plugins.callToolSuspending(name, arguments, caller, call["client"] as? JsonObject ?: JsonObject(emptyMap())) { request, timeoutMs ->
                                 val id = "plugin:" + UUID.randomUUID()
                                 val waiter = kotlinx.coroutines.CompletableDeferred<Envelope>()
                                 pluginWaiters[id] = waiter
@@ -3837,15 +3885,6 @@ private suspend fun handleConnection(
                         null
                     }
                 }
-
-                // DV-1a (contract 1.150.0): declarative views. The list is cheap; a page is built off the loop (a provider runs plugin code).
-                com.superiorsoftllc.infantry.daemon.plugins.DaemonPluginHost.PLUGIN_VIEWS -> plugins.viewsResult(caller, viewConn)
-                com.superiorsoftllc.infantry.daemon.plugins.DaemonPluginHost.PLUGIN_VIEW -> {
-                    session.launch(kotlinx.coroutines.Dispatchers.IO) { outgoing.trySend(plugins.answerView(envelope, caller, viewConn)) }
-                    null
-                }
-                // DV-1b (contract 1.151.0): the client stops watching a view; no answer.
-                com.superiorsoftllc.infantry.daemon.plugins.DaemonPluginHost.PLUGIN_VIEW_CLOSE -> { plugins.closeView(envelope, viewConn); null }
 
                 // DAEMON-PLUGINS-1: a frame a plugin declared and answers; anything else is unknown.
                 // DP-5d: a board-family frame is answered by the table its owner registered into; with no handler the
@@ -3880,7 +3919,6 @@ private suspend fun handleConnection(
     } finally {
         println("[infantry] ws closed")
         clients.remove(outgoing)
-        plugins.viewConnectionClosed(viewConn)
         policySubscription.close()
         inboundPump.cancel()
         pluginWaiters.values.forEach { it.cancel() }
@@ -3934,7 +3972,8 @@ internal fun providerInfos(manager: SessionManager, harnesses: HarnessRegistry? 
         .map { id ->
             val limit = harnesses?.resolve(id)?.contextLimit
             val effort = harnesses?.resolve(id)?.effort // EFFORT-1
-            ProviderInfo(id = id, default = false, defaultModel = null, contextLimit = limit?.support?.wire, contextLimitHow = limit?.how, effort = effort?.support?.wire, effortHow = effort?.how)
+            ProviderInfo(id = id, default = false, defaultModel = null, contextLimit = limit?.support?.wire, contextLimitHow = limit?.how, effort = effort?.support?.wire, effortHow = effort?.how,
+                midTurnInput = harnesses?.resolve(id)?.capabilities?.contains(com.superiorsoftllc.infantry.harness.HarnessCapability.MID_TURN_INPUT)?.takeIf { it })
         }
     // CLIPATH-1 (1.73.0): a provider/harness whose CLI the resolver cannot find says so, with the paths it tried,
     // instead of looking usable and failing at spawn. A provider with no CLI (the stub) is always available.
@@ -4029,6 +4068,7 @@ internal fun providerInfo(provider: AgentProvider, isDefault: Boolean): Provider
         contextLimitHow = provider.contextLimit().how,
         effort = provider.effort().support.wire, // EFFORT-1
         effortHow = provider.effort().how,
+        midTurnInput = provider.midTurnInput().takeIf { it }, // CHAT-QUEUE-1
     )
 
 /**

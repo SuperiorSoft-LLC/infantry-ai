@@ -99,6 +99,12 @@ data class PluginRow(
     val yanked: String? = null,
     /** PLUGIN-UI-1: who signed the installed copy (the ledger's); null = unsigned or bundled. */
     val signer: String? = null,
+    /** PLUGINS-UI-1: module.json's description; empty = none. */
+    val description: String = "",
+    /** PLUGINS-UI-1: what the module adds to the window, one readable line each (tabs, panels, blocks). */
+    val contributes: List<String> = emptyList(),
+    /** PLUGINS-UI-1: the enabled modules that list this one in their `dependencies`. */
+    val requiredBy: List<String> = emptyList(),
 )
 
 data class CatalogHit(val source: String, val cls: PluginClass, val entry: CatalogEntry, val latest: CatalogVersion?)
@@ -299,7 +305,11 @@ class PluginManager(
         val cfg = config()
         val led = ledger().installed
         val cat = runCatching { loaded() }.getOrDefault(emptyList()).flatMap { it.catalog.plugins }
-        return PluginFolders.scan(root, cfg, bundledRoot).mapNotNull { c ->
+        val scanned = PluginFolders.scan(root, cfg, bundledRoot)
+        val dependents = scanned.filter { c -> c.manifest != null && (cfg.modules[c.folderName]?.enabled ?: (c.tier != Tier.COMMUNITY)) }
+            .flatMap { c -> c.manifest!!.dependencies.map { it.id to c.folderName } }
+            .groupBy({ it.first }, { it.second })
+        return scanned.mapNotNull { c ->
             val m = c.manifest ?: return@mapNotNull null
             val bundled = bundledRoot != null && c.dir != null && File(c.dir!!).canonicalPath.startsWith(bundledRoot.canonicalPath + File.separator)
             val row = led[c.folderName]
@@ -313,6 +323,9 @@ class PluginManager(
                 yanked = cat.filter { it.id == c.folderName }.flatMap { it.versions }.firstOrNull { it.version == m.version && it.yanked }
                     ?.let { it.yankedReason ?: "no reason given" },
                 signer = row?.signer,
+                description = m.description,
+                contributes = m.tabs.map { "tab ${it.id}" } + m.panels.map { "panel ${it.panel}: ${it.id}" } + m.blocks.map { "block ${it.slot}: ${it.name}" },
+                requiredBy = dependents[c.folderName].orEmpty().sorted(),
             )
         }.sortedBy { it.id }
     }

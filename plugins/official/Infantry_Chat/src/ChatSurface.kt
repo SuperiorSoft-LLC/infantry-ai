@@ -46,7 +46,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.Icon
 import androidx.compose.foundation.hoverable
@@ -109,6 +108,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.layout.onSizeChanged
 import com.superiorsoftllc.infantry.ui.model.PickedModel
 import com.superiorsoftllc.infantry.ui.model.chatRows
 import com.superiorsoftllc.infantry.ui.model.NoticeKind
@@ -189,6 +189,8 @@ import com.superiorsoftllc.infantry.ui.model.isBusy
 import com.superiorsoftllc.infantry.ui.model.QueuedPrompt
 import com.superiorsoftllc.infantry.ui.model.interruptBlocker
 import com.superiorsoftllc.infantry.ui.model.queuedFor
+import com.superiorsoftllc.infantry.ui.model.forcesMidTurn
+import com.superiorsoftllc.infantry.ui.block.layout.LocalBlockSize
 import com.superiorsoftllc.infantry.ui.model.isRunning
 import com.superiorsoftllc.infantry.ui.model.needsInput
 import com.superiorsoftllc.infantry.ui.model.insertIntoPrompt
@@ -363,17 +365,59 @@ fun InterruptButton(agent: AgentView, live: Boolean, controller: Controller) {
     )
 }
 
-/** The messages held for a busy agent, in send order, each marked as waiting. Empty queue renders nothing. */
+/**
+ * The messages held for a busy agent, in send order. Empty queue renders nothing. CHAT-QUEUE-1: one line per message, each with its
+ * actions at the right end: X ([onRemove], "Remove from queue": never delivered) and Force ([onForce], "Send now": into the running
+ * turn, which is not stopped). Force is disabled, with [forceWhy] as its tooltip, when [canForce] is false (the harness cannot take a
+ * message mid-turn); the message then stays queued. Null actions draw no button (an older daemon's local queue offers X only).
+ * [compact] (a phone-width pane) makes each action a 48dp touch target.
+ */
 @Composable
-fun QueuedMessages(queue: List<QueuedPrompt>) {
+fun QueuedMessages(
+    queue: List<QueuedPrompt>,
+    onRemove: ((QueuedPrompt) -> Unit)? = null,
+    onForce: ((QueuedPrompt) -> Unit)? = null,
+    canForce: Boolean = false,
+    forceWhy: String = QUEUE_FORCE_UNSUPPORTED,
+    enabled: Boolean = true,
+    compact: Boolean = PanelLayout.isCompact(LocalBlockSize.current.width.value),
+) {
     if (queue.isEmpty()) return
-    // CHAT-COMPACT-1: one line, not a stack: the count and the first message, the rest in the tooltip-free tail "+n".
-    val first = queue.first().text.lineSequence().first()
-    Text(
-        "Queued (${queue.size}): $first" + if (queue.size > 1) "  +${queue.size - 1}" else "",
-        color = Palette.Muted, fontFamily = Mono, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.fillMaxWidth().testTag(QUEUED_MESSAGES_TAG).padding(bottom = 4.dp),
-    )
+    val touch = if (compact) QUEUE_TOUCH_PHONE_DP else QUEUE_TOUCH_DESKTOP_DP
+    Column(Modifier.fillMaxWidth().testTag(QUEUED_MESSAGES_TAG).padding(bottom = 4.dp)) {
+        queue.forEachIndexed { i, item ->
+            Row(Modifier.fillMaxWidth().testTag(QUEUED_ROW_TAG), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    (if (i == 0) "Queued (${queue.size}): " else "") + item.text.lineSequence().first(),
+                    color = Palette.Muted, fontFamily = Mono, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f).padding(start = if (i == 0) 0.dp else 8.dp),
+                )
+                // A message just sent to the daemon has no id yet: its actions wait for the daemon to list it.
+                val settled = item.requestId == null
+                if (onForce != null) {
+                    QueueAction(
+                        AhqIcons.Send, if (canForce) QUEUE_FORCE_LABEL else forceWhy, touch,
+                        enabled = enabled && canForce && settled && item.id != null, tag = QUEUED_FORCE_TAG,
+                    ) { onForce(item) }
+                }
+                if (onRemove != null) {
+                    QueueAction(AhqIcons.Close, QUEUE_REMOVE_LABEL, touch, enabled = enabled && settled, tag = QUEUED_REMOVE_TAG) { onRemove(item) }
+                }
+            }
+        }
+    }
+}
+
+/** CHAT-QUEUE-1: one small icon action of a queued row; [touch] is its hit box (48dp on a phone), the drawn icon stays small. */
+@Composable
+private fun QueueAction(
+    icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, touch: Int, enabled: Boolean, tag: String, onClick: () -> Unit,
+) {
+    IconActionTooltipBox(label, null, Modifier.size(touch.dp).testTag(tag)) { m ->
+        Box(m.clickable(enabled = enabled, role = androidx.compose.ui.semantics.Role.Button, onClick = onClick), contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = null, tint = if (enabled) Palette.Text else Palette.Muted.copy(alpha = 0.5f), modifier = Modifier.size(14.dp))
+        }
+    }
 }
 
 @Composable
@@ -399,10 +443,8 @@ fun PromptBox(
     wire: (String) -> String = { it },
     /** CHAT-COMPACT-1: the composer's plugin slot. Draws inline in the one row (a chip, icon or menu item), never a new row. */
     extras: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {},
-    /** CHAT-MINIMIZE-1: the tall editor on/off, its toggle, and Minimize (the host removes the composer and floats a restore button). */
+    /** CHAT-MINIMIZE-1: the tall editor on/off. CHAT-MINIMIZE-5: its toggle and Minimize are floaters ([ComposerFloaters]), outside the box. */
     expanded: Boolean = false,
-    onToggleExpand: () -> Unit = {},
-    onMinimize: () -> Unit = {},
 ) {
     val actionScope = rememberCoroutineScope()
     val host = LocalPlatformHost.current
@@ -489,7 +531,16 @@ fun PromptBox(
                 enabled = com.superiorsoftllc.infantry.ui.shell.rememberGate("approvals.answer").allowed,
             )
         }
-        QueuedMessages(queue)
+        if (a != null) {
+            QueuedMessages(
+                queue,
+                onRemove = { item -> actionScope.launch { controller.removeQueued(a.id, item) } },
+                // Force needs the daemon to hold the queue (contract 1.150.0); an older daemon's local queue offers X only.
+                onForce = if (snapshot.connection.servesQueue) { item -> actionScope.launch { controller.forceQueued(a.id, item) } } else null,
+                canForce = snapshot.forcesMidTurn(a.id),
+                enabled = live && prompt.allowed,
+            )
+        }
         // CLI-PTY-5: after a restart the history is on screen and nothing runs: one click attaches the CLI, no message sent.
         if (!spawnMode && a != null && com.superiorsoftllc.infantry.ui.showsResumeSession(a.session)) {
             val resumeGate = com.superiorsoftllc.infantry.ui.shell.rememberGate("chat.resume")
@@ -572,86 +623,78 @@ fun PromptBox(
                 maxLines = if (expanded) COMPOSER_EXPANDED_LINES * 2 else COMPOSER_MAX_LINES,
                 textStyle = TextStyle(fontFamily = Mono, fontSize = 13.sp),
             )
-            Row(Modifier.align(Alignment.TopEnd).padding(top = 2.dp, end = 2.dp)) {
-                IconAction(
-                    if (expanded) AhqIcons.CloseFullscreen else AhqIcons.OpenInFull,
-                    if (expanded) COMPOSER_COLLAPSE_LABEL else COMPOSER_EXPAND_LABEL, onToggleExpand,
-                    style = IconActionStyle.TEXT, modifier = Modifier.defaultMinSize(COMPOSER_TOUCH_DP.dp, COMPOSER_TOUCH_DP.dp).testTag(COMPOSER_EXPAND_TAG),
-                )
-                IconAction(AhqIcons.Minimize, COMPOSER_MINIMIZE_LABEL, onMinimize, style = IconActionStyle.TEXT, modifier = Modifier.defaultMinSize(COMPOSER_TOUCH_DP.dp, COMPOSER_TOUCH_DP.dp).testTag(COMPOSER_MINIMIZE_TAG))
-            }
         }
-        // CHAT-MINIMIZE-2: tab-shaped groups hanging from the box's bottom edge (pulled up over its border), tools left, Stop/Send right.
-        val tab = androidx.compose.foundation.shape.RoundedCornerShape(bottomStart = 14.dp, bottomEnd = 14.dp)
-        // CHAT-MINIMIZE-3: same border colour (accent, the text box's) and thickness as the box, solid accent fill; the 48dp hit areas leave an even 6dp inside.
-        // The groups are the box's own outline continued: solid fill over the box's bottom line, open top, same colour and thickness.
-        val groupFill = Palette.Panel
-        val tabModifier = Modifier.offset(y = (-borderDp).dp).background(groupFill, tab).drawBehind {
-            val w = borderDp.dp.toPx()
-            clipRect(top = w) {
-                drawOutline(tab.createOutline(size, layoutDirection, this), ringColor, style = androidx.compose.ui.graphics.drawscope.Stroke(w * 2))
-            }
-        }
-        Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
-          Row(tabModifier.weight(1f, fill = false).horizontalScroll(rememberScrollState()).testTag(COMPOSER_TOOLS_TAB_TAG), horizontalArrangement = Arrangement.spacedBy(0.dp), verticalAlignment = Alignment.CenterVertically) {
-            ComposerRound(
-                AhqIcons.AttachFile, ATTACH_FILE_LABEL, onClick = pick, shortcut = ATTACH_FILE_SHORTCUT,
-                enabled = live && host.canPickAttachment, modifier = Modifier.testTag(CHAT_IMAGE_ATTACH_TAG),
-            )
-            extras()
-        if (a != null && !spawnMode) {
-                val resume = com.superiorsoftllc.infantry.ui.shell.rememberGate("chat.resume")
+        // CHAT-MINIMIZE-2: tab-shaped groups hanging from the box's bottom edge, tools left, Stop/Send right.
+        // CHAT-MINIMIZE-3/4: solid fill, the box's own outline continued (same colour and thickness), open top.
+        // CHAT-MINIMIZE-5: each side meets the box's bottom line in a small concave fillet, so the outline turns down cleanly.
+        val tabModifier = Modifier.offset(y = (-borderDp).dp).composerTab(ringColor, borderDp, Palette.Panel)
+        val resume = com.superiorsoftllc.infantry.ui.shell.rememberGate("chat.resume")
+        val tools = buildList {
+            add(ComposerAct(AhqIcons.AttachFile, ATTACH_FILE_LABEL, ATTACH_FILE_SHORTCUT, live && host.canPickAttachment, tag = CHAT_IMAGE_ATTACH_TAG, run = pick))
+            if (a != null && !spawnMode) {
                 val dormant = com.superiorsoftllc.infantry.ui.showsResumeSession(a.session)
                 val canResume = live && resume.allowed && (resumeEnabled(a.session) || dormant)
                 val ended = a.session.state in ENDED_STATES
-                val acts = listOf(
-                    ComposerAct(AhqIcons.SwapHoriz, swap.label(SWITCH_AGENT_LABEL), SWITCH_AGENT_SHORTCUT, swap.allowed, run = onSwitchAgent),
-                    ComposerAct(AhqIcons.PlayArrow, resume.label(if (dormant) com.superiorsoftllc.infantry.ui.RESUME_SESSION_LABEL else "Resume"), "Ctrl+R", canResume, run = {
-                        // CLI-PTY-5: a dormant session with an empty box resumes with NO turn; typed text is still sent as the next turn.
-                        actionScope.launch {
-                            if (dormant && value.isBlank()) controller.resumeSession(a.id)
-                            else if (controller.resume(a.id, wire(value).trim()) is CommandResult.Sent) onValue("")
-                        }
-                    }),
-                    // Ticket a7f33ba2: the old Kill slot reaps this session's background jobs and leaves the session alive.
-                    ComposerAct(AhqIcons.Cancel, reap.label(STOP_BACKGROUND_LABEL), STOP_BACKGROUND_SHORTCUT, live && reap.allowed && backgroundProcessPids(a.session).isNotEmpty(), danger = true, run = {
-                        actionScope.launch { controller.stopBackgroundProcesses(a.id) }
-                    }),
-                    // SESSION-RM-1: an ended session's trash removes it from the list (after confirm); otherwise End session.
+                add(ComposerAct(AhqIcons.SwapHoriz, swap.label(SWITCH_AGENT_LABEL), SWITCH_AGENT_SHORTCUT, swap.allowed, run = onSwitchAgent))
+                add(ComposerAct(AhqIcons.PlayArrow, resume.label(if (dormant) com.superiorsoftllc.infantry.ui.RESUME_SESSION_LABEL else "Resume"), "Ctrl+R", canResume, run = {
+                    // CLI-PTY-5: a dormant session with an empty box resumes with NO turn; typed text is still sent as the next turn.
+                    actionScope.launch {
+                        if (dormant && value.isBlank()) controller.resumeSession(a.id)
+                        else if (controller.resume(a.id, wire(value).trim()) is CommandResult.Sent) onValue("")
+                    }
+                }))
+                // Ticket a7f33ba2: the old Kill slot reaps this session's background jobs and leaves the session alive.
+                add(ComposerAct(AhqIcons.Cancel, reap.label(STOP_BACKGROUND_LABEL), STOP_BACKGROUND_SHORTCUT, live && reap.allowed && backgroundProcessPids(a.session).isNotEmpty(), danger = true, run = {
+                    actionScope.launch { controller.stopBackgroundProcesses(a.id) }
+                }))
+                // SESSION-RM-1: an ended session's trash removes it from the list (after confirm); otherwise End session.
+                add(
                     if (ended) ComposerAct(AhqIcons.DeleteForever, remove.label(REMOVE_AGENT_LABEL), null, live && remove.allowed, danger = true, run = { confirmingRemove = true })
                     else ComposerAct(AhqIcons.DeleteForever, kill.label(END_SESSION_LABEL), END_SESSION_SHORTCUT, live && kill.allowed, danger = true, filled = true, run = {
                         actionScope.launch { controller.endSession(a.id) }
                     }),
-                    ComposerAct(AhqIcons.Refresh, restart.label(RESTART_SESSION_LABEL), null, live && restart.allowed, run = { confirmingRestart = true }),
                 )
-                acts.forEach { it.Button() }
+                add(ComposerAct(AhqIcons.Refresh, restart.label(RESTART_SESSION_LABEL), null, live && restart.allowed, run = { confirmingRestart = true }))
             } else {
-                ComposerRound(
+                // DEMO-MERGE-1: a new session is a write; the button is dimmed with the reason as its tooltip.
+                add(ComposerAct(
                     if (spawnMode) AhqIcons.Close else AhqIcons.PersonAdd,
-                    if (spawnMode) "Cancel new agent" else spawn.label(NEW_AGENT_LABEL),
-                    onSpawnToggle, shortcut = NEW_AGENT_SHORTCUT,
-                    // DEMO-MERGE-1: a new session is a write; the button is dimmed with the reason as its tooltip.
-                    enabled = spawnMode || spawn.allowed,
+                    if (spawnMode) "Cancel new agent" else spawn.label(NEW_AGENT_LABEL), NEW_AGENT_SHORTCUT, spawnMode || spawn.allowed, run = onSpawnToggle,
+                ))
+            }
+        }
+        val sendCount = if (a != null && !spawnMode) 2 else 1
+        // CHAT-MINIMIZE-5: the plugin slot's width, measured, so the overflow rule counts it.
+        var extrasPx by remember { mutableStateOf(0) }
+        val density = androidx.compose.ui.platform.LocalDensity.current
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+          val extrasDp = with(density) { extrasPx.toDp() }.value.toInt()
+          val fit = composerToolsThatFit(maxWidth.value.toInt(), sendCount, extrasDp)
+          val (inline, overflow) = splitComposerTools(tools.size, fit)
+          Row(Modifier.fillMaxWidth().padding(horizontal = COMPOSER_GROUP_INSET_DP.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
+            Row(tabModifier.testTag(COMPOSER_TOOLS_TAB_TAG), verticalAlignment = Alignment.CenterVertically) {
+                tools.take(inline).forEach { it.Button() }
+                Row(Modifier.onSizeChanged { extrasPx = it.width }, verticalAlignment = Alignment.CenterVertically) { extras() }
+                if (overflow > 0) ComposerMore(tools.takeLast(overflow))
+            }
+            Spacer(Modifier.width(COMPOSER_GROUP_GAP_DP.dp))
+            Row(tabModifier.testTag(COMPOSER_SEND_TAB_TAG), verticalAlignment = Alignment.CenterVertically) {
+                if (a != null && !spawnMode) InterruptButton(a, live, controller)
+                ComposerRound(
+                    AhqIcons.Send,
+                    when {
+                        // DEMO-MERGE-1: while writes are refused a `/` command is not a chat message; Send is dimmed and says why.
+                        writeLocked && value.trimStart().startsWith("/") -> "Slash commands: ${policy.reason.orEmpty()}"
+                        promptLocked -> prompt.label("Send")
+                        spawnMode || a == null -> "Spawn"
+                        isBusy(a) -> "Queue"
+                        else -> "Send"
+                    },
+                    onSubmit, shortcut = "Enter", enabled = live && (value.isNotBlank() || attachments.isNotEmpty()) && !attachBusy && blocker == null &&
+                        !(!spawn.allowed && (spawnMode || a == null)) && !(writeLocked && value.trimStart().startsWith("/")) && !promptLocked,
+                    content = Palette.Accent,
                 )
             }
-          }
-          Spacer(Modifier.width(12.dp))
-          Row(tabModifier.testTag(COMPOSER_SEND_TAB_TAG), horizontalArrangement = Arrangement.spacedBy(0.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (a != null && !spawnMode) InterruptButton(a, live, controller)
-            ComposerRound(
-                AhqIcons.Send,
-                when {
-                    // DEMO-MERGE-1: while writes are refused a `/` command is not a chat message; Send is dimmed and says why.
-                    writeLocked && value.trimStart().startsWith("/") -> "Slash commands: ${policy.reason.orEmpty()}"
-                    promptLocked -> prompt.label("Send")
-                    spawnMode || a == null -> "Spawn"
-                    isBusy(a) -> "Queue"
-                    else -> "Send"
-                },
-                onSubmit, shortcut = "Enter", enabled = live && (value.isNotBlank() || attachments.isNotEmpty()) && !attachBusy && blocker == null &&
-                    !(!spawn.allowed && (spawnMode || a == null)) && !(writeLocked && value.trimStart().startsWith("/")) && !promptLocked,
-                content = Palette.Accent,
-            )
           }
         }
         }
@@ -680,10 +723,10 @@ fun PromptBox(
     }
 }
 
-/** CHAT-COMPACT-1: one composer action, drawn as an inline icon button (wide) or a "..." menu item (narrow). */
+/** CHAT-COMPACT-1: one composer action, drawn as a round button in the tools group or (CHAT-MINIMIZE-5) a row of its "More" menu. */
 private class ComposerAct(
     val icon: androidx.compose.ui.graphics.vector.ImageVector, val label: String, val shortcut: String?, val enabled: Boolean,
-    val danger: Boolean = false, val filled: Boolean = false, val run: () -> Unit,
+    val danger: Boolean = false, val filled: Boolean = false, val tag: String? = null, val run: () -> Unit,
 ) {
     @Composable
     fun Button() {
@@ -691,8 +734,100 @@ private class ComposerAct(
             icon, label, run, shortcut = shortcut, enabled = enabled,
             container = if (filled) Palette.Danger else Palette.Raised,
             content = when { filled -> Color.White; danger -> Palette.Danger; else -> Palette.Text },
+            modifier = if (tag != null) Modifier.testTag(tag) else Modifier,
         )
     }
+
+    /** CHAT-MINIMIZE-5: the same action as a row of the "More" menu (icon, then its label; dimmed when disabled). */
+    @Composable
+    fun MenuItem(close: () -> Unit) {
+        val tint = when { !enabled -> Palette.Muted; danger -> Palette.Danger; else -> Palette.Text }
+        DropdownMenuItem(
+            text = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Text(label, color = tint, fontSize = 12.sp)
+                }
+            },
+            onClick = { close(); run() }, enabled = enabled,
+            modifier = if (tag != null) Modifier.testTag(tag) else Modifier,
+        )
+    }
+}
+
+/** CHAT-MINIMIZE-5: the last button of a narrow tools group: "More actions" opens the actions that did not fit. */
+@Composable
+private fun ComposerMore(rest: List<ComposerAct>) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        ComposerRound(AhqIcons.MoreHoriz, COMPOSER_MORE_LABEL, { open = true }, modifier = Modifier.testTag(COMPOSER_MORE_TAG))
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }, modifier = Modifier.background(Palette.Raised)) {
+            rest.forEach { it.MenuItem { open = false } }
+        }
+    }
+}
+
+/**
+ * CHAT-MINIMIZE-5: how many 48dp tool buttons fit in the tools group of a composer [widthDp] wide, next to a send group of
+ * [sendCount] buttons and the plugin slot's [extrasDp]. Never negative.
+ */
+fun composerToolsThatFit(widthDp: Int, sendCount: Int, extrasDp: Int = 0): Int {
+    val free = widthDp - 2 * COMPOSER_GROUP_INSET_DP - COMPOSER_GROUP_GAP_DP - sendCount * COMPOSER_TOUCH_DP - extrasDp
+    return (free / COMPOSER_TOUCH_DP).coerceAtLeast(0)
+}
+
+/**
+ * CHAT-MINIMIZE-5: the narrow rule. [count] tools in [fit] slots: all inline when they fit; otherwise the first `fit - 1` stay
+ * inline (in their order, so the everyday ones stay put) and the rest go behind the "More" button, which takes the last slot.
+ * Answers (inline, overflow); a button is never clipped, squeezed or hidden under another.
+ */
+fun splitComposerTools(count: Int, fit: Int): Pair<Int, Int> =
+    if (count <= fit) count to 0 else (fit - 1).coerceAtLeast(0).let { it to count - it }
+
+/**
+ * CHAT-MINIMIZE-5: the hanging group's outline: the box's bottom line continues into a concave fillet ([COMPOSER_JOIN_RADIUS_DP])
+ * down each side, then rounded bottom corners ([COMPOSER_TAB_RADIUS_DP]); open at the top. The fill covers the box's line
+ * under the opening, so box and group read as ONE outline of [borderDp] in [ring].
+ */
+private fun Modifier.composerTab(ring: Color, borderDp: Int, fill: Color): Modifier = drawBehind {
+    val b = borderDp.dp.toPx()
+    val c = b / 2
+    val r = COMPOSER_JOIN_RADIUS_DP.dp.toPx()
+    val corner = COMPOSER_TAB_RADIUS_DP.dp.toPx()
+    val w = size.width
+    val h = size.height
+    fun circle(cx: Float, cy: Float, rad: Float) = androidx.compose.ui.geometry.Rect(androidx.compose.ui.geometry.Offset(cx, cy), rad)
+    fun androidx.compose.ui.graphics.Path.outline() {
+        moveTo(c - r, c)
+        arcTo(circle(c - r, c + r, r), -90f, 90f, false)
+        lineTo(c, h - c - corner)
+        arcTo(circle(c + corner, h - c - corner, corner), 180f, -90f, false)
+        lineTo(w - c - corner, h - c)
+        arcTo(circle(w - c - corner, h - c - corner, corner), 90f, -90f, false)
+        lineTo(w - c, c + r)
+        arcTo(circle(w - c + r, c + r, r), 180f, 90f, false)
+    }
+    val body = androidx.compose.ui.graphics.Path().apply { outline(); lineTo(w - c + r, 0f); lineTo(c - r, 0f); close() }
+    drawPath(body, fill)
+    drawPath(androidx.compose.ui.graphics.Path().apply { outline() }, ring, style = androidx.compose.ui.graphics.drawscope.Stroke(b))
+}
+
+/**
+ * CHAT-MINIMIZE-5: the composer's floating chips, drawn by the host in the feed's bottom-right float row (beside Activity), never
+ * over the typed text: Expand/Collapse and Minimize; minimized, Restore alone.
+ */
+@Composable
+fun ComposerFloaters(minimized: Boolean, expanded: Boolean, onToggleExpand: () -> Unit, onMinimize: () -> Unit, onRestore: () -> Unit) {
+    if (minimized) {
+        FloatingChip(AhqIcons.Restore, COMPOSER_RESTORE_LABEL, onRestore, Modifier.testTag(COMPOSER_RESTORE_TAG))
+        return
+    }
+    FloatingChip(
+        if (expanded) AhqIcons.CloseFullscreen else AhqIcons.OpenInFull, if (expanded) COMPOSER_COLLAPSE_LABEL else COMPOSER_EXPAND_LABEL,
+        onToggleExpand, Modifier.testTag(COMPOSER_EXPAND_TAG),
+    )
+    FloatingChip(AhqIcons.Minimize, COMPOSER_MINIMIZE_LABEL, onMinimize, Modifier.testTag(COMPOSER_MINIMIZE_TAG))
 }
 
 /**
@@ -727,9 +862,16 @@ const val COMPOSER_MINIMIZE_TAG = "composer-minimize"
 const val COMPOSER_EXPAND_TAG = "composer-expand"
 const val COMPOSER_RESTORE_TAG = "composer-restore"
 const val COMPOSER_RESTORE_LABEL = "Show composer"
-/** CHAT-COMPACT-1: below this width (dp) the secondary actions move into the "..." menu. */
-const val COMPOSER_NARROW_DP = 560
 const val COMPOSER_MORE_LABEL = "More actions"
+const val COMPOSER_MORE_TAG = "composer-more"
+/** CHAT-MINIMIZE-5: the hanging groups' inset from the box's sides (dp): clear of its 16dp corner plus the join fillet. */
+const val COMPOSER_GROUP_INSET_DP = 26
+/** CHAT-MINIMIZE-5: the gap between the two groups (dp): both fillets plus a run of the box's line. */
+const val COMPOSER_GROUP_GAP_DP = 24
+/** CHAT-MINIMIZE-5: the concave fillet where a group's side meets the box's bottom line (dp). */
+const val COMPOSER_JOIN_RADIUS_DP = 6
+/** CHAT-MINIMIZE-5: a group's bottom corners (dp). */
+const val COMPOSER_TAB_RADIUS_DP = 12
 const val COMPOSER_STATUS_TAG = "composer-status"
 const val COMPOSER_TOOLS_TAB_TAG = "composer-tools-tab"
 const val COMPOSER_SEND_TAB_TAG = "composer-send-tab"
@@ -743,7 +885,6 @@ const val COMPOSER_BORDER_DP = 2
 fun composerStatusLine(mode: String?, agents: Int, state: String?): String =
     listOfNotNull(mode?.let { "permissions: $it" }, "$agents agent${if (agents == 1) "" else "s"}", state).joinToString(" · ")
 
-const val COMPOSER_MORE_TAG = "composer-more"
 
 /** The one-line strip that shows the latest notice: a refused `/command`, or what a `/command` did. */
 const val NOTICE_TAG = "notice-strip"
@@ -830,3 +971,13 @@ const val REMOVE_AGENT_LABEL = "Remove agent"
 
 /** Test tag on the list of messages waiting for a busy agent. */
 const val QUEUED_MESSAGES_TAG = "queued-messages"
+/** CHAT-QUEUE-1: one queued message's row, and its two actions. */
+const val QUEUED_ROW_TAG = "queued-row"
+const val QUEUED_REMOVE_TAG = "queued-remove"
+const val QUEUED_FORCE_TAG = "queued-force"
+const val QUEUE_REMOVE_LABEL = "Remove from queue"
+const val QUEUE_FORCE_LABEL = "Send now (into the running turn)"
+const val QUEUE_FORCE_UNSUPPORTED = "Send now is not available: this agent's harness cannot take a message mid-turn; it stays queued"
+/** CHAT-QUEUE-1: a queued row's action hit box: 48dp on a phone-width pane (Android touch target), small on a desktop. */
+const val QUEUE_TOUCH_PHONE_DP = 48
+const val QUEUE_TOUCH_DESKTOP_DP = 24

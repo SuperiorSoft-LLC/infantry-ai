@@ -161,6 +161,8 @@ data class ConnectionInfo(
     val clearsTicketEpic: Boolean get() = contractAtLeast(contract, 1, 60)
     /** CONFIG-8 (contract 1.142.0): the daemon serves `config_schema`; below it the dialog uses the hand-written daemon sections. */
     val servesConfigSchema: Boolean get() = contractAtLeast(contract, 1, 142)
+    /** CHAT-QUEUE-1 (contract 1.150.0): the daemon holds the queue (`queue_add` / `queue_remove` / `queue_force`); below it this window does. */
+    val servesQueue: Boolean get() = contractAtLeast(contract, 1, 150)
 }
 
 /** Insert [p], or replace the stored profile with its id. */
@@ -682,6 +684,10 @@ data class AppState(
      * (or a new `ready`) ends the wait.
      */
     val queueSending: Map<String, QueueSend> = emptyMap(),
+    /** CHAT-SENDING-1: the messages sent and not yet shown by the daemon's `turn` echo, by client message id ([pendingSendsFor]). */
+    val pendingSends: Map<String, PendingSend> = emptyMap(),
+    /** CHAT-SENDING-1: `limits.chat.sendAckSeconds` from the `settings` frame: how long a send may wait before "not sent - retry". */
+    val sendAckSeconds: Long = PendingSends.DEFAULT_ACK_SECONDS,
     /** Contract 1.12.0: the daemon's role catalog, in its order (canonical ids first). */
     val roles: List<Role> = emptyList(),
     /** Contract 1.40.0: what each role runs on, by role id; a role with no entry has no binding. */
@@ -1189,8 +1195,12 @@ fun queueDrainTargets(before: AppState, after: AppState, tracksSends: Boolean): 
         else before.agents[sessionId]?.let { isBusy(it) } ?: false
     }
 
-/** A message held while its agent is busy: the text as the human typed it, and when it was queued. */
-data class QueuedPrompt(val text: String, val at: Long)
+/**
+ * A message held while its agent is busy: the text as the human typed it, and when it was queued. CHAT-QUEUE-1: [id] = the daemon
+ * holds it (contract 1.150.0; it can be removed or forced by id); [requestId] = sent to the daemon with `queue_add`, shown here until
+ * the daemon's session frame lists it (or refuses it). Neither = this window holds it (an older daemon).
+ */
+data class QueuedPrompt(val text: String, val at: Long, val id: String? = null, val requestId: String? = null)
 
 /** A queued [prompt] sent to [sessionId] as its next turn, until the daemon takes or refuses it. */
 data class QueueSend(val sessionId: String, val prompt: QueuedPrompt)
@@ -1204,7 +1214,7 @@ private fun requeueRefused(s: AppState, env: Envelope): AppState? {
     val sending = s.queueSending[requestId] ?: return null
     if (!env.data.startsWith(RunInFlight.PREFIX + " ")) return null
     return s.copy(queueSending = s.queueSending - requestId)
-        .withQueue(sending.sessionId, listOf(sending.prompt) + s.queuedFor(sending.sessionId))
+        .withQueue(sending.sessionId, listOf(sending.prompt) + s.localQueue(sending.sessionId))
 }
 
 /** "running: gate, build" while the agent's registered `bg run` jobs are what keeps it busy; null otherwise. Desktop and mobile share it. */
@@ -1242,8 +1252,45 @@ fun Ticket.branchLine(): String? {
     return "$name · base $commit"
 }
 
-/** The messages queued for [sessionId], oldest first (empty when none). */
-fun AppState.queuedFor(sessionId: String): List<QueuedPrompt> = queued[sessionId].orEmpty()
+/**
+ * The messages queued for [sessionId], oldest first (empty when none): CHAT-QUEUE-1, the ones the daemon holds (its session record,
+ * each with its [QueuedPrompt.id]) then the ones this window holds or has just sent with `queue_add`.
+ */
+fun AppState.queuedFor(sessionId: String): List<QueuedPrompt> =
+    agents[sessionId]?.session?.queued.orEmpty().map { QueuedPrompt(it.text, it.at, id = it.id) } + localQueue(sessionId)
+
+/** The messages THIS window holds for [sessionId] (an older daemon's queue, or `queue_add`s not yet listed by the daemon). */
+fun AppState.localQueue(sessionId: String): List<QueuedPrompt> = queued[sessionId].orEmpty()
+
+/** CHAT-QUEUE-1: whether [sessionId]'s harness takes a forced message INTO its running turn (`providers` entry `midTurnInput`). */
+fun AppState.forcesMidTurn(sessionId: String): Boolean {
+    val provider = agents[sessionId]?.session?.provider ?: return false
+    return providers.firstOrNull { it.id == provider }?.midTurnInput == true
+}
+
+/**
+ * CHAT-QUEUE-1: a `queue_add` this window sent is shown until the daemon answers: dropped once the daemon's queue lists a message with
+ * its text (each daemon item settles one), or when the daemon refused that request ([env] an `error` with its requestId). A message
+ * the daemon sent as a turn at once is dropped by its `turn` frame ([queueAfterTurn]).
+ */
+fun settlePendingQueue(s: AppState, env: Envelope): AppState {
+    if (s.queued.values.none { q -> q.any { it.requestId != null } }) return s
+    var out = s
+    for ((sessionId, items) in s.queued) {
+        if (items.none { it.requestId != null }) continue
+        val held = s.agents[sessionId]?.session?.queued.orEmpty().map { it.text }.toMutableList()
+        val kept = items.filter { q ->
+            when {
+                q.requestId == null -> true
+                env.type == Envelope.ERROR && env.requestId == q.requestId -> false
+                held.remove(q.text) -> false
+                else -> true
+            }
+        }
+        if (kept != items) out = out.withQueue(sessionId, kept)
+    }
+    return out
+}
 
 /** Replace [sessionId]'s queue; an empty list removes the entry, so "no queue" has one representation. */
 fun AppState.withQueue(sessionId: String, items: List<QueuedPrompt>): AppState =
@@ -1358,7 +1405,7 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
         .let { t -> t.copy(queueSending = t.queueSending.filterValues { it.sessionId != env.sessionId || !turnCarries(env.data, it.prompt.text) }) }
         // QUEUE-STUCK-2: a turn the agent took by ANY path (an interrupt, an injected input, another window) delivers the
         // queued messages whose text it carries: they leave the queue now, so the at-rest drain never sends them twice.
-        .let { t -> env.sessionId?.let { id -> t.withQueue(id, queueAfterTurn(t.queuedFor(id), env.data)) } ?: t }
+        .let { t -> env.sessionId?.let { id -> t.withQueue(id, queueAfterTurn(t.localQueue(id), env.data)) } ?: t }
 
     Envelope.TEXT_DELTA -> s.stream(env) { a, _ -> a.withEntry(TranscriptEntry(env.sequence, LineKind.TEXT, env.data, now)) }
 
@@ -1883,6 +1930,7 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
             limitCatalog = LimitsSetting.withSettingsFrame(withTimer.limitCatalog, env.data),
             allowedRoles = AllowedRoles.fromSettingsFrame(env.data) ?: withTimer.allowedRoles,
             maxSessions = AllowedRoles.maxSessionsFromSettingsFrame(env.data) ?: withTimer.maxSessions,
+            sendAckSeconds = PendingSends.ackSecondsFromSettingsFrame(env.data) ?: withTimer.sendAckSeconds,
         )
     }
 
@@ -2266,7 +2314,19 @@ data class TimelineItem(
 ) {
     /** True for an item that is data for a badge / panel, not a chat row. */
     val isStats: Boolean get() = source == AUTOMATION_STATS_SOURCE
+
+    /**
+     * CHAT-NOTE-WARN-1: the note's level from `meta.level` (info, ok, warn, fail). [ok] false is always fail; a level this client
+     * does not know (a newer daemon) or none at all reads as info, never as an error.
+     */
+    val noteLevel: String get() = if (!ok) NOTE_LEVEL_FAIL else meta["level"]?.lowercase()?.takeIf { it in NOTE_LEVELS && it != NOTE_LEVEL_FAIL } ?: NOTE_LEVEL_INFO
 }
+
+const val NOTE_LEVEL_INFO = "info"
+const val NOTE_LEVEL_OK = "ok"
+const val NOTE_LEVEL_WARN = "warn"
+const val NOTE_LEVEL_FAIL = "fail"
+val NOTE_LEVELS = setOf(NOTE_LEVEL_INFO, NOTE_LEVEL_OK, NOTE_LEVEL_WARN, NOTE_LEVEL_FAIL)
 
 const val AUTOMATION_STATS_SOURCE = "automation-stats"
 

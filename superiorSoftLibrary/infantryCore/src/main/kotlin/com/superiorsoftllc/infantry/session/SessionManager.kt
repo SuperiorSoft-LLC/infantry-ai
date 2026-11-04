@@ -141,7 +141,17 @@ class SessionManager(
      * (tests) = the fixed [deadlineMs], [stallMs], [killRetryMs] and [silentMs] above.
      */
     private val limitSource: ((com.superiorsoftllc.infantry.settings.LimitDef) -> Long)? = null,
+    /**
+     * PROC-LEAK-1 (ticket 55312934): every harness pid a session reports is put in that session's OS container (a Windows Job
+     * Object), so all it starts stays attributable after its parent exits. [com.superiorsoftllc.infantry.runner.SessionContainers.None] = no container.
+     */
+    private val containers: com.superiorsoftllc.infantry.runner.SessionContainers = com.superiorsoftllc.infantry.runner.SessionContainers.None,
 ) {
+    /** PROC-LEAK-1: [pid] into [sessionId]'s container; a refusal (no container, an OS error) leaves the tree walk as attribution. */
+    private fun contain(sessionId: String, pid: Long) {
+        runCatching { containers.assign(sessionId, pid) }
+    }
+
     val providerId: String get() = provider.id
 
     /** [def] in ms from [limitSource] (0 on a disable-able limit = never reached), else [fixed]. */
@@ -1630,7 +1640,96 @@ class SessionManager(
         }
         emit(SessionEvent.Exit(sessionId, exitCode, outcome, processExited = processExited))
         if (state == SessionState.FAILED) closed(sessionId, "turn failed", resumable = true)
+        if (state == SessionState.IDLE) scheduleQueueDrain(sessionId)
     }
+
+    // --- CHAT-QUEUE-1: messages held while a turn runs ------------------------------------------------
+
+    /** What [queueForce] did with the message: delivered into the running turn, or (nothing was running) sent as a turn of its own. */
+    enum class ForceOutcome { INJECTED, SENT_AS_TURN }
+
+    /** The messages held for [sessionId], oldest first (empty for an unknown session). */
+    fun queued(sessionId: String): List<QueuedTurn> = sessions[sessionId]?.queued.orEmpty()
+
+    /** Whether [sessionId]'s harness takes a message into a running turn (MID_TURN_INPUT), so [queueForce] can deliver it mid-turn. */
+    fun midTurnInput(sessionId: String): Boolean =
+        sessions[sessionId]?.let { s -> runCatching { lookup(s.provider)?.provider?.midTurnInput() }.getOrNull() } ?: false
+
+    /**
+     * Hold [text] for [sessionId] while its turn runs; the daemon sends the oldest held message as the next turn when the session comes to
+     * rest. A session with no turn in flight takes it as a turn now (null is returned: nothing was queued). Refused: an unknown session, a
+     * blank text, a full queue ([maxQueued], setting `limits.chat.queueMax`).
+     */
+    fun queueAdd(sessionId: String, text: String, maxQueued: Int): QueuedTurn? { return locked {
+        val session = sessions[sessionId] ?: throw IllegalArgumentException("unknown session $sessionId")
+        require(text.isNotBlank()) { "nothing to queue" }
+        if (!runs.containsKey(sessionId) && sessionId !in held) {
+            resume(sessionId, text)
+            return null
+        }
+        require(session.queued.size < maxQueued) { "the queue of $sessionId is full ($maxQueued messages)" }
+        val item = QueuedTurn("q-" + java.util.UUID.randomUUID().toString().take(8), text, clock())
+        update(sessionId) { it.copy(queued = it.queued + item) }
+        return item
+    } }
+
+    /** Take the held message [id] back: it is never delivered. Refused (IllegalArgumentException) when [sessionId] holds no such message. */
+    fun queueRemove(sessionId: String, id: String): QueuedTurn { return locked {
+        val session = sessions[sessionId] ?: throw IllegalArgumentException("unknown session $sessionId")
+        val item = session.queued.firstOrNull { it.id == id } ?: throw IllegalArgumentException("no queued message $id on $sessionId")
+        update(sessionId) { r -> r.copy(queued = r.queued.filterNot { it.id == id }) }
+        return item
+    } }
+
+    /**
+     * Deliver the held message [id] NOW. While a turn runs it goes INTO that turn through the harness (MID_TURN_INPUT): the turn is not
+     * stopped, the agent sees it at its next step, and it shows in the transcript at that place. With no turn running it is sent as the next
+     * turn. Refused, the message staying queued: an unknown message, a harness that cannot take input mid-turn, or a process that could not
+     * take it right now (IllegalStateException, with the reason).
+     */
+    fun queueForce(sessionId: String, id: String, origin: MessageOrigin = MessageOrigin.Owner): ForceOutcome { return locked {
+        val session = sessions[sessionId] ?: throw IllegalArgumentException("unknown session $sessionId")
+        val item = session.queued.firstOrNull { it.id == id } ?: throw IllegalArgumentException("no queued message $id on $sessionId")
+        if (!runs.containsKey(sessionId) && sessionId !in held) {
+            update(sessionId) { r -> r.copy(queued = r.queued.filterNot { it.id == id }) }
+            try {
+                resume(sessionId, item.text, origin, wakeReason = "queue")
+            } catch (e: Exception) {
+                update(sessionId) { r -> r.copy(queued = listOf(item) + r.queued) }
+                throw e
+            }
+            return ForceOutcome.SENT_AS_TURN
+        }
+        check(midTurnInput(sessionId)) { "the ${session.provider} harness cannot take a message mid-turn; it stays queued for the next turn" }
+        check(host.injectInput(sessionId, item.text)) { "the agent's process could not take the message right now; it stays queued" }
+        update(sessionId) { r -> r.copy(queued = r.queued.filterNot { it.id == id }) }
+        emit(SessionEvent.Turn(sessionId, item.text, origin, midTurn = true))
+        return ForceOutcome.INJECTED
+    } }
+
+    /** The session came to rest: send its oldest held message as the next turn, off the thread that settled the turn. */
+    private fun scheduleQueueDrain(sessionId: String) {
+        if (sessions[sessionId]?.queued.isNullOrEmpty()) return
+        runCatching { watchdog.execute { runCatching { drainQueue(sessionId) } } }
+    }
+
+    /**
+     * Send [sessionId]'s oldest held message as its next turn, when the session is at rest. A refusal because another run started first
+     * (mail, typically) puts it back at the front for the next time the session comes to rest; any other refusal is said on the stream and
+     * it stays held.
+     */
+    internal fun drainQueue(sessionId: String) { locked {
+        val session = sessions[sessionId] ?: return
+        val head = session.queued.firstOrNull() ?: return
+        if (runs.containsKey(sessionId) || sessionId in held || session.state != SessionState.IDLE) return
+        update(sessionId) { r -> r.copy(queued = r.queued.drop(1)) }
+        try {
+            resume(sessionId, head.text, MessageOrigin.Owner, wakeReason = "queue")
+        } catch (e: Exception) {
+            update(sessionId) { r -> r.copy(queued = listOf(head) + r.queued) }
+            if (e !is RunInFlightException) bootLine(sessionId, "a queued message was not sent: ${e.message ?: e.javaClass.simpleName}; it stays queued")
+        }
+    } }
 
     /**
      * Interrupt the CURRENT turn of [sessionId] and return the session to rest.
@@ -1675,6 +1774,7 @@ class SessionManager(
                 isProcessAlive = false,
             )
         }
+        scheduleQueueDrain(sessionId)
     } }
 
     /** UI-BOOT-1: an additive STDERR line (no new frame type) explaining what the daemon is doing. */
@@ -1920,6 +2020,7 @@ class SessionManager(
 
         override fun process(sessionId: String, pid: Long?) {
             if (pid == null || runs[sessionId] == null) return
+            contain(sessionId, pid)
             update(sessionId) { it.copy(childPid = pid, lastHeartbeat = clock(), isProcessAlive = true) }
         }
 
@@ -1933,6 +2034,7 @@ class SessionManager(
         }
 
         override fun keptProcess(sessionId: String, kept: KeptProcess) {
+            contain(sessionId, kept.pid)
             update(sessionId) { it.copy(keptProcess = kept.copy(ownerId = instanceId)) }
         }
 
@@ -2082,14 +2184,16 @@ class SessionManager(
         // STALL-2: a watched job registered or ended is on disk at once, so a daemon restart keeps the watch (a beat that only
         // moves lastBeat is not: the reload stamps a fresh beat anyway).
         val jobsChanged = next.bgJobs.map { it.id } != current.bgJobs.map { it.id }
-        persist(sessionId, force = stateChanged || identityChanged || pidChanged || liveChanged || keptChanged || jobsChanged)
+        // CHAT-QUEUE-1: the held messages are on disk and on every client at once.
+        val queueChanged = next.queued != current.queued
+        persist(sessionId, force = stateChanged || identityChanged || pidChanged || liveChanged || keptChanged || jobsChanged || queueChanged)
         // M2-12: a turn is BUSY from its start, so the first output no longer changes the state; the provider session
         // id it carries (what resume and the interrupt snapshot need) must still reach clients as its own status.
         val backgroundChanged = next.backgroundWork != current.backgroundWork || next.bgJobs.map { it.id } != current.bgJobs.map { it.id }
         val progressChanged = next.progress != current.progress
         // CLI-PTY-3: the MCP link is pushed as a status of its own (scripts get `session.mcp` from it).
         val mcpChanged = next.mcp != current.mcp
-        if (stateChanged || identityChanged || backgroundChanged || progressChanged || mcpChanged) emit(SessionEvent.Status(next))
+        if (stateChanged || identityChanged || backgroundChanged || progressChanged || mcpChanged || queueChanged) emit(SessionEvent.Status(next))
         return next
     } }
 

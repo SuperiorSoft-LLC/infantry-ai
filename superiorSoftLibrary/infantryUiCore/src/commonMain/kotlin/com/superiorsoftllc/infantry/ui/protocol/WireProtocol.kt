@@ -55,6 +55,14 @@ data class Envelope(
         const val RESUME = "resume"
         /** Stop the session's current turn; the daemon answers by settling the session IDLE (contract 1.31.0 daemon). */
         const val INTERRUPT = "interrupt"
+        /** CHAT-QUEUE-1 (1.150.0): hold / take back / force a message of the frame's `sessionId` (data = the text, or the held item's id). */
+        const val QUEUE_ADD = "queue_add"
+        const val QUEUE_REMOVE = "queue_remove"
+        const val QUEUE_FORCE = "queue_force"
+        /** CHAT-SENDING-1 (1.151.0): the daemon took the `prompt` whose client message id is this frame's `requestId` (`accepted` / `duplicate`). */
+        const val PROMPT_ACK = "prompt_ack"
+        /** CHAT-SENDING-1: the `requestId` prefix of a client message id (unique per message; the daemon dedupes on it). */
+        const val CLIENT_SEND_PREFIX = "send:"
         const val NEW = "new"
         /** Contract 1.34.0: ask for every provider's models; answered with a `models` frame ([ProviderModels] list). */
         const val MODELS = "models"
@@ -813,6 +821,10 @@ data class ProviderLimits(
     val windows: List<LimitWindow> = emptyList(),
     val reason: String? = null,
     val observedAt: Long = 0,
+    /** USAGE-CARD-1: the last read failed ([reason]); [windows] are the last good reading, taken at [observedAt]. */
+    val stale: Boolean = false,
+    /** USAGE-CARD-1: when the daemon reads this provider again after a failure; null = no backoff. */
+    val retryAt: Long? = null,
 )
 
 /**
@@ -997,6 +1009,8 @@ data class ProviderInfo(
     /** EFFORT-1 (1.148.0): `supported` / `best_effort` / `unsupported` for a reasoning effort, and how; null = older daemon. */
     val effort: String? = null,
     val effortHow: String? = null,
+    /** CHAT-QUEUE-1 (1.150.0): true = a queued message can be forced into a running turn; null = cannot, or an older daemon. */
+    val midTurnInput: Boolean? = null,
 )
 
 /**
@@ -1160,6 +1174,8 @@ data class SessionRecord(
      * `busy, silent Nm`, `stalled`, `idle`); null = nothing to say, or an older daemon.
      */
     val watchLabel: String? = null,
+    /** CHAT-QUEUE-1 (1.150.0): the messages the daemon holds for this session's next turn, oldest first; empty from an older daemon. */
+    val queued: List<QueuedTurnView> = emptyList(),
 ) {
     val resumable: Boolean
         get() = providerSessionId != null &&
@@ -1209,6 +1225,10 @@ data class ProgressView(
     /** PROGRESS-ALL: the daemon saw no tool/event activity for its stale limit (limits.progress.staleMinutes); origin = auto = a daemon-computed estimate. */
     val stale: Boolean? = null,
 )
+
+/** CHAT-QUEUE-1 (1.150.0): one message the daemon holds for a busy session ([id] names it in `queue_remove` / `queue_force`). */
+@Serializable
+data class QueuedTurnView(val id: String, val text: String, val at: Long = 0)
 
 @Serializable
 data class BgJobView(val id: String, val label: String, val pid: Long = 0, val startedAt: Long = 0)

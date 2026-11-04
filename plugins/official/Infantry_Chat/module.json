@@ -14,7 +14,8 @@
     "jar": "daemon/build/libs/Infantry_Chat-daemon.jar",
     "apiAtLeast": "1.21.0",
     "frames": [
-      { "type": "image_upload", "action": "images.upload", "kind": "write" }
+      { "type": "image_upload", "action": "images.upload", "kind": "write" },
+      { "type": "image_fetch", "action": "images.read", "kind": "read" }
     ],
     "tools": [
       { "name": "infantry_inbox", "action": "mail.read", "kind": "read", "description": "List the COMMS mail addressed to you." },

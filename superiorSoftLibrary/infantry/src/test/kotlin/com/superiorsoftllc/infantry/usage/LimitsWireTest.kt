@@ -54,7 +54,8 @@ class LimitsWireTest {
         val frame = fixture.client.await(Envelope.LIMITS)
         assertFalse(frame.data.contains(secret), "the credential never reaches the wire")
         val answer = json.decodeFromString(ListSerializer(ProviderLimits.serializer()), frame.data)
-        assertEquals(ProviderLimits.unknown("claude", now, "rate_limited"), answer[0])
+        // USAGE-CARD-1: a 429 also says when the daemon reads again (first backoff step = usage.refreshMinutes, default 5).
+        assertEquals(ProviderLimits.unknown("claude", now, "rate_limited").copy(retryAt = now + 5 * 60_000L), answer[0])
         assertEquals(
             ProviderLimits(
                 "opencode-go", "ok",

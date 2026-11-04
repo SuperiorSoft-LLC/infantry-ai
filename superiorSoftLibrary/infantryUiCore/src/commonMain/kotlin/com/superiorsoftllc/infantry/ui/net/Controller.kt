@@ -35,6 +35,18 @@ import com.superiorsoftllc.infantry.ui.model.queueDrainTargets
 import com.superiorsoftllc.infantry.ui.model.settleQueueSends
 import com.superiorsoftllc.infantry.ui.model.queuedTurnText
 import com.superiorsoftllc.infantry.ui.model.queuedFor
+import com.superiorsoftllc.infantry.ui.model.localQueue
+import com.superiorsoftllc.infantry.ui.model.settlePendingQueue
+import com.superiorsoftllc.infantry.ui.model.PendingSend
+import com.superiorsoftllc.infantry.ui.model.ConnectionInfo
+import com.superiorsoftllc.infantry.ui.model.PendingSends
+import com.superiorsoftllc.infantry.ui.model.SendState
+import com.superiorsoftllc.infantry.ui.model.withPendingSend
+import com.superiorsoftllc.infantry.ui.model.withoutPendingSend
+import com.superiorsoftllc.infantry.ui.model.expirePendingSend
+import com.superiorsoftllc.infantry.ui.model.pendingRefusedBusy
+import com.superiorsoftllc.infantry.ui.model.settlePendingSends
+import com.superiorsoftllc.infantry.ui.model.failSendsOnDrop
 import com.superiorsoftllc.infantry.ui.model.withQueue
 import com.superiorsoftllc.infantry.ui.model.contractAtLeast
 import com.superiorsoftllc.infantry.ui.model.withEventsAwaiting
@@ -93,6 +105,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -168,27 +181,7 @@ class Controller(
         // just confirmed -- isLive false for good, with no later info emission to repair it.
         scope.launch(start = CoroutineStart.UNDISPATCHED) {
             client.info.collect { info ->
-                _state.update { s ->
-                    val cur = s.connection
-                    // The client never reports CONNECTED (only `ready` does, via the reducer), so a late
-                    // CONNECTING emission must not downgrade a link the daemon already confirmed.
-                    if (cur.isLive && info.state == ConnState.CONNECTING && cur.url == info.url) s
-                    else s.copy(
-                        connection = info.copy(
-                            lastFrameAt = cur.lastFrameAt,
-                            contract = cur.contract,
-                            daemonProvider = cur.daemonProvider,
-                            // Kept across a drop: the next `ready` compares against it to tell a reconnect
-                            // from a restarted daemon (contract 1.11.0).
-                            instance = cur.instance,
-                            historySince = cur.historySince,
-                            // BUILD-STAMP-1: set by `ready`, like the contract; a link-state change keeps it.
-                            daemonBuild = cur.daemonBuild,
-                            readyFields = cur.readyFields,
-                            notices = cur.notices,
-                        ),
-                    )
-                }
+                _state.update { s -> failSendsOnDrop(s, linkInfo(s, info)) }
             }
         }
         scope.launch {
@@ -198,11 +191,15 @@ class Controller(
                 val before = _state.value
                 _state.update { reduce(it, env, Clock.System.now().toEpochMilliseconds()) }
                 _state.update { settleQueueSends(before, it) }
+                _state.update { settlePendingQueue(it, env) }
+                // CHAT-SENDING-1: a send the daemon refused because the agent got busy first goes to the queue (its row says so).
+                queueRefusedSend(env)
+                _state.update { settlePendingSends(before, it, env) }
                 sendQueuedAtRest(before, _state.value)
                 answerImageUpload(env)
                 answerPluginSecret(env)
                 answerPluginTool(env)
-                views.onFrame(env)
+                answerImageFetch(env)
                 answerSpawnCatalog(env)
                 if (env.type == Envelope.SPOKEN) {
                     runCatching { json.decodeFromString(com.superiorsoftllc.infantry.ui.voice.SpokenNotice.serializer(), env.data) }
@@ -287,7 +284,6 @@ class Controller(
         }
         scope.launch {
             client.opened.collect {
-                views.reopen()
                 // Resync everything the daemon does not replay on its own after (re)connect.
                 client.send(Envelope(Envelope.MAIL_WAITING))
                 // The Role picker / Role detail data and the attention history (contracts 1.12.0, 1.4.0, 1.3.0, 1.9.0).
@@ -787,12 +783,12 @@ class Controller(
      * TICKET-COMMENTS-3: one call of a daemon plugin's tool (`plugin_tool_call`, contract 1.144.0), answered by `plugin_tool_result`
      * matched by request id. Success = the tool's text; failure = its refusal / error text or why nothing was sent.
      */
-    suspend fun pluginTool(name: String, arguments: kotlinx.serialization.json.JsonObject, origin: kotlinx.serialization.json.JsonObject? = null): Result<String> {
+    suspend fun pluginTool(name: String, arguments: kotlinx.serialization.json.JsonObject): Result<String> {
         val requestId = "plugin-tool-${++pluginToolRequests}"
         val answer = CompletableDeferred<Envelope>()
         pendingPluginTools[requestId] = answer
         try {
-            val body = kotlinx.serialization.json.buildJsonObject { put("name", name); put("arguments", arguments); origin?.let { put("origin", it) } }
+            val body = kotlinx.serialization.json.buildJsonObject { put("name", name); put("arguments", arguments) }
             if (!client.send(Envelope("plugin_tool_call", body.toString(), requestId = requestId))) return Result.failure(IllegalStateException("not connected to the daemon"))
             val env = withTimeoutOrNull(PLUGIN_TOOL_TIMEOUT_MS) { answer.await() } ?: return Result.failure(IllegalStateException("the daemon did not answer $name"))
             if (env.type != "plugin_tool_result") return Result.failure(IllegalStateException(env.data.take(300)))
@@ -807,9 +803,6 @@ class Controller(
             pendingPluginTools.remove(requestId)
         }
     }
-
-    /** DV-2: the views service over the `plugin_view*` frames. */
-    val views: ViewsClient = ViewsClient(send = { client.send(it) }, tool = { n, a, o -> pluginTool(n, a, o) })
 
     private var pluginToolRequests = 0
     private val pendingPluginTools = mutableMapOf<String, CompletableDeferred<Envelope>>()
@@ -856,20 +849,86 @@ class Controller(
         _state.value.agents[sessionId]?.let { a -> promptBlocker(a)?.let { return report(CommandResult.Refused(it)) } }
         // QUEUE-STUCK-1: a send while the agent is at rest and messages are still queued delivers the whole queue,
         // in order, ahead of the new text, as one turn.
-        val held = _state.value.queuedFor(sessionId)
+        // CHAT-QUEUE-1: the daemon drains its own queue; only a queue this window holds (an older daemon) goes out here.
+        val held = if (_state.value.connection.servesQueue) emptyList() else _state.value.localQueue(sessionId)
         if (held.isNotEmpty() && !isSlashCommand(text)) {
             _state.update { it.withQueue(sessionId, emptyList()) }
             val all = queuedTurnText(held, text)
             val r = send(Envelope(Envelope.PROMPT, all, sessionId))
             if (r is CommandResult.Sent) echo(sessionId, all)
-            else _state.update { it.withQueue(sessionId, held + it.queuedFor(sessionId)) }
+            else _state.update { it.withQueue(sessionId, held + it.localQueue(sessionId)) }
             return report(r)
         }
+        // CHAT-SENDING-1: a message (not a command) to a daemon that echoes turns shows at once as "sending..." and carries a
+        // client message id; the bubble owns the text from here, so the composer may clear even when the send fails.
+        if (!isSlashCommand(text) && _state.value.connection.echoesTurns) return sendPending(sessionId, text)
         val r = send(Envelope(Envelope.PROMPT, text, sessionId))
         // A leading "/" is a command, never a prompt (CP-4): the daemon answers it with a result or an error, so it is
         // not echoed into the chat as something the user said to the agent.
         if (r is CommandResult.Sent && !isSlashCommand(text)) echo(sessionId, text)
         return report(r)
+    }
+
+    /**
+     * CHAT-SENDING-1: send [text] to [sessionId] as a pending message: shown at once ("sending..."), settled by the daemon's
+     * `prompt_ack` or `turn` echo ([settlePendingSends]), "not sent - retry" after `limits.chat.sendAckSeconds`, on a refusal or a
+     * dropped link. Answers [CommandResult.Sent] whenever the bubble holds the text (a failed one keeps it for [retrySend]).
+     */
+    private suspend fun sendPending(sessionId: String, text: String): CommandResult {
+        val now = Clock.System.now().toEpochMilliseconds()
+        val p = PendingSend(PendingSends.newClientId(now), sessionId, text, now)
+        _state.update { it.withPendingSend(p) }
+        transmitPending(p)
+        return CommandResult.Sent
+    }
+
+    /** Send pending [p] (its first send or a retry, same client id) and arm its timer; a send that cannot leave fails it now. */
+    private suspend fun transmitPending(p: PendingSend) {
+        val r = send(Envelope(Envelope.PROMPT, p.text, p.sessionId, requestId = p.clientId))
+        if (r is CommandResult.Refused) {
+            _state.update { s -> s.pendingSends[p.clientId]?.let { s.withPendingSend(it.copy(state = SendState.FAILED, reason = r.reason)) } ?: s }
+            return
+        }
+        val wait = _state.value.sendAckSeconds
+        val sentAt = p.at
+        scope.launch {
+            delay(wait * 1_000)
+            // Only the send this timer was armed for: a retry since then re-armed its own.
+            _state.update { s -> if (s.pendingSends[p.clientId]?.at == sentAt) s.expirePendingSend(p.clientId, wait) else s }
+        }
+    }
+
+    /**
+     * CHAT-SENDING-1: resend the "not sent" message [clientId] with the SAME client id, so a daemon that took it the first time answers
+     * `duplicate` and does not run it twice. An agent that is busy now gets it queued instead (the Queued row shows it).
+     */
+    suspend fun retrySend(clientId: String): CommandResult {
+        val p = _state.value.pendingSends[clientId] ?: return report(CommandResult.Refused("that message is no longer pending"))
+        if (p.state != SendState.FAILED) return CommandResult.Sent
+        val agent = _state.value.agents[p.sessionId]
+        if (agent != null && isBusy(agent)) {
+            val q = queueMessage(p.sessionId, p.text)
+            if (q !is CommandResult.Refused) _state.update { it.withoutPendingSend(clientId) }
+            return q
+        }
+        val again = p.copy(state = SendState.SENDING, reason = null, at = Clock.System.now().toEpochMilliseconds())
+        _state.update { it.withPendingSend(again) }
+        transmitPending(again)
+        return CommandResult.Sent
+    }
+
+    /** CHAT-SENDING-1: drop the "not sent" message [clientId] (the human chose not to retry it). A sending one is never dropped. */
+    fun discardSend(clientId: String) {
+        _state.update { s -> if (s.pendingSends[clientId]?.state == SendState.FAILED) s.withoutPendingSend(clientId) else s }
+    }
+
+    /** CHAT-SENDING-1: the daemon refused a pending send as `run_in_flight` (the agent got busy first): it goes to the queue instead. */
+    private suspend fun queueRefusedSend(env: Envelope) {
+        val p = _state.value.pendingRefusedBusy(env) ?: return
+        _state.update { it.withoutPendingSend(p.clientId) }
+        if (queueMessage(p.sessionId, p.text) is CommandResult.Refused) {
+            _state.update { it.withPendingSend(p.copy(state = SendState.FAILED, reason = "the agent is busy")) }
+        }
     }
 
     /**
@@ -941,18 +1000,48 @@ class Controller(
      * current one has come to rest ([sendQueuedAtRest]). It is not echoed into the transcript while it waits, so a
      * queued message can never read as sent. Refused for an agent that is not busy: send it with [prompt] instead.
      */
-    fun queueMessage(sessionId: String, text: String): CommandResult {
+    suspend fun queueMessage(sessionId: String, text: String): CommandResult {
         if (text.isBlank()) return report(CommandResult.Refused("nothing to queue"))
         val a = _state.value.agents[sessionId] ?: return report(CommandResult.Refused("unknown session"))
         if (!isBusy(a)) return report(CommandResult.Refused("the agent is not busy: send the message directly"))
+        // CHAT-QUEUE-1: a 1.150.0 daemon holds the queue, so every window and script sees it; shown here until its session frame lists it.
+        val requestId = if (_state.value.connection.servesQueue) "queue-add-${++queueSends}" else null
         var position = 0
         val now = Clock.System.now().toEpochMilliseconds()
         _state.update { s ->
-            val items = s.queuedFor(sessionId) + QueuedPrompt(text, now)
-            position = items.size
-            s.withQueue(sessionId, items)
+            position = s.queuedFor(sessionId).size + 1
+            s.withQueue(sessionId, s.localQueue(sessionId) + QueuedPrompt(text, now, requestId = requestId))
+        }
+        if (requestId != null) {
+            val r = send(Envelope(Envelope.QUEUE_ADD, text, sessionId, requestId = requestId))
+            if (r !is CommandResult.Sent) {
+                _state.update { s -> s.withQueue(sessionId, s.localQueue(sessionId).filterNot { it.requestId == requestId }) }
+                return report(r)
+            }
         }
         return CommandResult.Queued(position)
+    }
+
+    /** CHAT-QUEUE-1: take the queued [item] back; it is never delivered. A daemon-held one goes by `queue_remove`, a local one is dropped here. */
+    suspend fun removeQueued(sessionId: String, item: QueuedPrompt): CommandResult {
+        val id = item.id
+        if (id == null) {
+            if (item.requestId != null) return report(CommandResult.Refused("the daemon has not listed this message yet"))
+            _state.update { s -> s.withQueue(sessionId, s.localQueue(sessionId).filterNot { it == item }) }
+            return CommandResult.Sent
+        }
+        return report(send(Envelope(Envelope.QUEUE_REMOVE, id, sessionId)))
+    }
+
+    /**
+     * CHAT-QUEUE-1: deliver the queued [item] NOW, into the agent's running turn without stopping it (the daemon refuses, and it stays
+     * queued, when the harness cannot take input mid-turn). Only a daemon-held message can be forced.
+     */
+    suspend fun forceQueued(sessionId: String, item: QueuedPrompt): CommandResult {
+        val id = item.id ?: return report(CommandResult.Refused(
+            if (item.requestId != null) "the daemon has not listed this message yet" else "this daemon cannot send a queued message mid-turn (contract 1.150.0)",
+        ))
+        return report(send(Envelope(Envelope.QUEUE_FORCE, id, sessionId)))
     }
 
     /**
@@ -966,12 +1055,14 @@ class Controller(
     private var queueSends = 0
 
     private suspend fun sendQueuedAtRest(before: AppState, after: AppState) {
+        // CHAT-QUEUE-1: a 1.150.0 daemon sends its held messages itself when the turn ends.
+        if (after.connection.servesQueue) return
         val tracks = contractAtLeast(after.connection.contract, RunInFlight.SINCE_MAJOR, RunInFlight.SINCE_MINOR)
         for (sessionId in queueDrainTargets(before, after, tracks)) {
             val requestId = if (tracks) "queue-${++queueSends}" else null
             var head: QueuedPrompt? = null
             _state.update { s ->
-                val items = s.queuedFor(sessionId)
+                val items = s.localQueue(sessionId)
                 head = items.firstOrNull()
                 val sent = head
                 if (sent == null) s
@@ -987,11 +1078,34 @@ class Controller(
                 // Not sent (the link dropped): it goes back to the front, still visibly queued, and the reason is shown.
                 _state.update { s ->
                     s.copy(queueSending = if (requestId == null) s.queueSending else s.queueSending - requestId)
-                        .withQueue(sessionId, listOf(next) + s.queuedFor(sessionId))
+                        .withQueue(sessionId, listOf(next) + s.localQueue(sessionId))
                 }
                 report(r)
             }
         }
+    }
+
+    /** The link state [info] applied to [s]: the daemon-confirmed facts (contract, instance, build) survive a link-state change. */
+    private fun linkInfo(s: AppState, info: ConnectionInfo): AppState {
+        val cur = s.connection
+        // The client never reports CONNECTED (only `ready` does, via the reducer), so a late
+        // CONNECTING emission must not downgrade a link the daemon already confirmed.
+        return if (cur.isLive && info.state == ConnState.CONNECTING && cur.url == info.url) s
+        else s.copy(
+            connection = info.copy(
+                lastFrameAt = cur.lastFrameAt,
+                contract = cur.contract,
+                daemonProvider = cur.daemonProvider,
+                // Kept across a drop: the next `ready` compares against it to tell a reconnect
+                // from a restarted daemon (contract 1.11.0).
+                instance = cur.instance,
+                historySince = cur.historySince,
+                // BUILD-STAMP-1: set by `ready`, like the contract; a link-state change keeps it.
+                daemonBuild = cur.daemonBuild,
+                readyFields = cur.readyFields,
+                notices = cur.notices,
+            ),
+        )
     }
 
     /** A 1.11.0 daemon echoes the turn on the stream (to every window); only an older one needs a local echo. */
@@ -1305,6 +1419,58 @@ class Controller(
                 pendingImageUpload = null
             }
         }
+    }
+
+    /**
+     * CHAT-IMAGE-REMOTE-1: an uploaded image's bytes, by upload id (`image_fetch`, answered `image_bytes` matched by request id). A
+     * client on another host cannot read the daemon's file path, so every client loads images it cannot read locally this way, over
+     * its own authenticated connection. Answers are cached (bytes, newest kept within [IMAGE_CACHE_BYTES]); a failure is not cached.
+     */
+    suspend fun fetchUploadedImage(id: String): com.superiorsoftllc.infantry.ui.DaemonImage {
+        imageCacheLock.withLock { imageCache.remove(id)?.let { imageCache[id] = it; return com.superiorsoftllc.infantry.ui.DaemonImage.Bytes(it) } }
+        val requestId = "image-fetch-${++imageFetchRequests}"
+        val answer = CompletableDeferred<Envelope>()
+        pendingImageFetches[requestId] = answer
+        val got = try {
+            val body = buildJsonObject { put("id", id); _state.value.activeProjectId?.let { put("projectId", it) } }
+            if (!client.send(Envelope(IMAGE_FETCH, body.toString(), requestId = requestId))) {
+                com.superiorsoftllc.infantry.ui.DaemonImage.Failed("not connected to the daemon")
+            } else {
+                val env = withTimeoutOrNull(IMAGE_FETCH_TIMEOUT_MS) { answer.await() }
+                when {
+                    env == null -> com.superiorsoftllc.infantry.ui.DaemonImage.Failed("the daemon did not answer")
+                    env.type != IMAGE_BYTES -> com.superiorsoftllc.infantry.ui.DaemonImage.Failed(env.data.take(200))
+                    else -> runCatching {
+                        val o = json.parseToJsonElement(env.data).jsonObject
+                        if (o["missing"]?.jsonPrimitive?.contentOrNull == "true") com.superiorsoftllc.infantry.ui.DaemonImage.Missing
+                        else com.superiorsoftllc.infantry.ui.DaemonImage.Bytes(Base64.decode(o["base64"]!!.jsonPrimitive.content))
+                    }.getOrElse { com.superiorsoftllc.infantry.ui.DaemonImage.Failed("the daemon's answer could not be read") }
+                }
+            }
+        } finally {
+            pendingImageFetches.remove(requestId)
+        }
+        if (got is com.superiorsoftllc.infantry.ui.DaemonImage.Bytes) imageCacheLock.withLock {
+            imageCache[id] = got.bytes
+            var total = imageCache.values.sumOf { it.size.toLong() }
+            val it = imageCache.keys.iterator()
+            while (total > IMAGE_CACHE_BYTES && imageCache.size > 1 && it.hasNext()) { val k = it.next(); total -= imageCache[k]!!.size; it.remove() }
+        }
+        return got
+    }
+
+    /** [fetchUploadedImage] as the UI's image source ([com.superiorsoftllc.infantry.ui.LocalDaemonImages]). */
+    val images = com.superiorsoftllc.infantry.ui.DaemonImageSource { fetchUploadedImage(it) }
+
+    private val imageCacheLock = Mutex()
+    /** Insertion order = recency (a hit is re-inserted), so the first key is the least recently used. */
+    private val imageCache = LinkedHashMap<String, ByteArray>()
+    private var imageFetchRequests = 0
+    private val pendingImageFetches = mutableMapOf<String, CompletableDeferred<Envelope>>()
+
+    private fun answerImageFetch(env: Envelope) {
+        val id = env.requestId ?: return
+        pendingImageFetches[id]?.complete(env)
     }
 
     private val imageUploadLock = Mutex()
@@ -1991,6 +2157,13 @@ class Controller(
         const val IMAGE_UPLOAD_TIMEOUT_MS = 30_000L
         const val PLUGIN_SECRET_TIMEOUT_MS = 10_000L
         const val PLUGIN_TOOL_TIMEOUT_MS = 20_000L
+        /** CHAT-IMAGE-REMOTE-1: the frame that asks the daemon (Infantry_Chat) for an uploaded image by id, and its answer. */
+        const val IMAGE_FETCH = "image_fetch"
+        const val IMAGE_BYTES = "image_bytes"
+        /** CHAT-IMAGE-REMOTE-1: how long an image fetch waits for its answer. */
+        const val IMAGE_FETCH_TIMEOUT_MS = 30_000L
+        /** CHAT-IMAGE-REMOTE-1: the fetched-image bytes kept in memory per connection (least recently used dropped first). */
+        const val IMAGE_CACHE_BYTES = 48L * 1024 * 1024
         /** CP-4(e): how long a `/` line in the New agent box waits for the daemon's full command list. */
         const val SPAWN_CATALOG_TIMEOUT_MS = 5_000L
 

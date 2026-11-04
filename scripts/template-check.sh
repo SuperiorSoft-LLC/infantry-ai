@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) SuperiorSoft LLC
 # TEMPLATE-REPO-1: proves templates/plugin-repo builds against the SDK as published (dry run into build/m2), so the template
 # cannot rot. Steps: publish the SDK + the Gradle plugin into build/m2, then build the template with -Pinfantry.sdkRepo and `ihq`.
 set -euo pipefail

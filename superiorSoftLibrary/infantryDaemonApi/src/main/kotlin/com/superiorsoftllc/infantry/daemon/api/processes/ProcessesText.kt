@@ -23,6 +23,12 @@ object ProcessesText {
         appendLine("rogue (${rogue.size}):" + if (rogue.isEmpty()) " none" else "")
         rogue.forEach { appendLine("  " + line(it, now)) }
         if (rogue.isNotEmpty()) appendLine("  reap: infantry processes reap <pid>   or all: infantry processes reap --all")
+        // PROC-LEAK-1: a hung client of a live session (a CLI call that never returned) is named even without --all.
+        val stuck = r.tracked.filter { it.stuck != null && !it.rogue }
+        if (stuck.isNotEmpty()) {
+            appendLine("stuck (${stuck.size}):")
+            stuck.forEach { appendLine("  " + line(it, now)) }
+        }
         if (!showAll) {
             appendLine("(${r.tracked.count { !it.rogue }} healthy tracked, ${r.unattributed.count { !it.rogue }} unattributed: infantry processes --all)")
             return
@@ -42,6 +48,7 @@ object ProcessesText {
         append(" | session ").append(p.sessionId?.take(8) ?: "none").append(if (p.inferred) " (inferred)" else "")
         append(" | ").append(p.command)
         p.reason?.let { append(" | ").append(it) }
+        p.stuck?.let { append(" | stuck: ").append(it) }
     }
 
     fun age(ms: Long): String {

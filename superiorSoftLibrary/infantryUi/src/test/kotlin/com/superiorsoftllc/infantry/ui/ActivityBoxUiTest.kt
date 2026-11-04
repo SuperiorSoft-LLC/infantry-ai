@@ -75,7 +75,7 @@ class ActivityBoxUiTest {
             mainClock.advanceTimeByFrame()
 
             onNodeWithTag(ACTIVITY_BOX_TAG).assertExists()
-            onNodeWithContentDescription("Activity (3)").performClick()
+            onNodeWithContentDescription(ACTIVITY_LABEL).performClick()
             mainClock.advanceTimeByFrame()
             onNodeWithText("bash: gradle test").assertExists()
             onNodeWithText("grep: TicketBoard").assertExists()
@@ -101,13 +101,13 @@ class ActivityBoxUiTest {
             mainClock.advanceTimeByFrame()
 
             onNodeWithText("read: Model.kt").assertDoesNotExist()
-            onNodeWithContentDescription("Activity (2)").performClick()
+            onNodeWithContentDescription(ACTIVITY_LABEL).performClick()
             mainClock.advanceTimeByFrame()
             onNodeWithText("read: Model.kt").assertExists()
-            onNodeWithContentDescription("Activity (2)").performClick()
+            onNodeWithContentDescription(ACTIVITY_LABEL).performClick()
             mainClock.advanceTimeByFrame()
 
-            onNodeWithContentDescription("Activity (2)").assertExists()
+            onNodeWithContentDescription(ACTIVITY_LABEL).assertExists()
             onNodeWithText("read: Model.kt").assertDoesNotExist()
             onNodeWithText("bash: gradle test").assertDoesNotExist()
         }
@@ -124,7 +124,7 @@ class ActivityBoxUiTest {
             setContent { AgentChat(a, nowProvider = { t0 }) }
             mainClock.advanceTimeByFrame()
 
-            onNodeWithContentDescription("Activity (2)").assertExists()
+            onNodeWithContentDescription(ACTIVITY_LABEL).assertExists()
             onNodeWithText("read: Model.kt").assertDoesNotExist()
         }
     }
@@ -145,7 +145,7 @@ class ActivityBoxUiTest {
             setContent { AgentChat(current.value, nowProvider = { t0 }) }
             mainClock.advanceTimeByFrame()
 
-            onNodeWithContentDescription("Activity (2)").performClick()
+            onNodeWithContentDescription(ACTIVITY_LABEL).performClick()
             mainClock.advanceTimeByFrame()
             onNodeWithText("read: Model.kt").assertExists()
 
@@ -153,7 +153,7 @@ class ActivityBoxUiTest {
             mainClock.advanceTimeByFrame()
 
             // The open choice is remembered across the session switch.
-            onNodeWithContentDescription("Activity (1)").assertExists()
+            onNodeWithContentDescription(ACTIVITY_LABEL).assertExists()
             onNodeWithText("grep: TicketBoard").assertExists()
             onNodeWithText("read: Model.kt").assertDoesNotExist()
         }
@@ -166,7 +166,7 @@ class ActivityBoxUiTest {
             mainClock.autoAdvance = false
             setContent { AgentChat(a, nowProvider = { t0 }) }
             mainClock.advanceTimeByFrame()
-            onNodeWithContentDescription("Activity (1)").assertExists()
+            onNodeWithContentDescription(ACTIVITY_LABEL).assertExists()
             onNodeWithText("read: Model.kt").assertDoesNotExist()
         }
     }

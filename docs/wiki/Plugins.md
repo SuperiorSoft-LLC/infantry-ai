@@ -6,8 +6,6 @@ Infantry AI works like a small operating system: the app is the OS, plugins are 
 section, board card and daemon tool comes from a plugin (also called a module). A plugin is a folder named
 `Vendor_Module` holding a `module.json` and, usually, one or two jars.
 
-A plugin can also show a screen with no UI jar at all: see [Declarative views](declarative-views.md).
-
 ## Trust tiers
 
 The folder decides the tier. The tier is a **trust label, not a sandbox**: a loaded jar runs inside the app with the

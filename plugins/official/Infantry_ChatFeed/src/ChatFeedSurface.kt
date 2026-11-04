@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -106,6 +107,8 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
 import com.superiorsoftllc.infantry.ui.model.PickedModel
 import com.superiorsoftllc.infantry.ui.model.chatRows
+import com.superiorsoftllc.infantry.ui.model.NOTE_LEVEL_FAIL
+import com.superiorsoftllc.infantry.ui.model.NOTE_LEVEL_WARN
 import com.superiorsoftllc.infantry.ui.model.NoticeKind
 import com.superiorsoftllc.infantry.ui.model.noticesForSession
 import androidx.compose.ui.semantics.Role
@@ -196,6 +199,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
 
+/** CHAT-PAD-1: the one horizontal padding of every chat's content (empty state, transcript, notes, cards). */
+val ChatSidePadding = 14.dp
+
 @Composable
 fun OutputPane(
     a: AgentView?,
@@ -208,31 +214,37 @@ fun OutputPane(
     onResume: (String) -> Unit = {},
     /** SCRIPT-VIS-1b: lines plugins contributed to this session's chat (automation runs); empty = none. */
     contributions: List<TimelineItem> = emptyList(),
+    /** CHAT-MINIMIZE-5: the host's floating chips (Expand, Minimize / Restore), drawn in the bottom-right float row. */
+    floaters: @Composable RowScope.() -> Unit = {},
+    /** CHAT-SENDING-1: the messages sent to this session that the transcript does not show yet, and their retry / discard. */
+    pending: PendingSendsView = PendingSendsView(),
     questionSlot: @Composable () -> Unit = {},
 ) {
     if (a == null) {
         Box(Modifier.fillMaxSize(), Alignment.Center) {
+            Box(Modifier.align(Alignment.BottomEnd)) { FloatRow(floaters) }
             if (spawnMode) return@Box
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = ChatSidePadding), horizontalAlignment = Alignment.CenterHorizontally) {
                 BrandEmblem(72.dp)
                 Spacer(Modifier.height(10.dp))
-                Text("No live session. Start one to see its output here.", color = Palette.Muted, fontSize = 12.sp)
+                Text("No live session. Start one to see its output here.", color = Palette.Muted, fontSize = 12.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                 Spacer(Modifier.height(10.dp))
                 if (onStartSession != null) OutlinedButton(onClick = onStartSession) { Text("Start a session") }
             }
         }
         return
     }
-    if (com.superiorsoftllc.infantry.ui.model.showsResumeSplash(a.session, paneAction) || a.output.isEmpty() && contributions.none { !it.isStats } && a.chatStatus(Clock.System.now().toEpochMilliseconds()) == null) {
+    if (com.superiorsoftllc.infantry.ui.model.showsResumeSplash(a.session, paneAction) || a.output.isEmpty() && pending.items.isEmpty() && contributions.none { !it.isStats } && a.chatStatus(Clock.System.now().toEpochMilliseconds()) == null) {
       Column(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f).fillMaxWidth(), Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(Modifier.align(Alignment.BottomEnd)) { FloatRow(floaters) }
+            Column(Modifier.fillMaxWidth().padding(horizontal = ChatSidePadding), horizontalAlignment = Alignment.CenterHorizontally) {
                 BrandEmblem(72.dp)
                 Spacer(Modifier.height(10.dp))
                 Text(
                     if (a.session.global) "Ask the Assistant anything about Infantry AI: how a screen works, why something failed, or tell it what to do (create a ticket, start an agent, change a setting)."
                     else "Nothing on screen for this session yet.\nThe daemon replays a session's recent output only while the process that ran it is up; older history is not kept.",
-                    color = Palette.Muted, fontSize = 12.sp,
+                    color = Palette.Muted, fontSize = 12.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 )
                 Spacer(Modifier.height(10.dp))
                 // GAP-006b: a session on screen starts or resumes ITSELF; the New agent box would cut a second instance.
@@ -244,8 +256,15 @@ fun OutputPane(
       }
         return
     }
-    AgentChat(a, roleColor = roleColor, questionSlot = questionSlot, contributions = contributions)
+    AgentChat(a, roleColor = roleColor, questionSlot = questionSlot, contributions = contributions, floaters = floaters, pending = pending)
 }
+
+/** CHAT-SENDING-1: one session's pending sends ([PendingSendRow]) and what their actions do. */
+data class PendingSendsView(
+    val items: List<com.superiorsoftllc.infantry.ui.model.PendingSend> = emptyList(),
+    val onRetry: (String) -> Unit = {},
+    val onDiscard: (String) -> Unit = {},
+)
 
 /** Test tag on the transient status row under the transcript (or in place of the empty state). */
 const val CHAT_STATUS_TAG = "chat-status"
@@ -261,7 +280,7 @@ const val ACTIVITY_LINE_TAG = "activity-line"
  * The status row sits under the last line and is absent once [AgentView.chatStatus] is null.
  */
 @Composable
-fun AgentChat(agent: AgentView, nowProvider: () -> Long = { Clock.System.now().toEpochMilliseconds() }, roleColor: String? = null, questionSlot: @Composable () -> Unit = {}, contributions: List<TimelineItem> = emptyList()) {
+fun AgentChat(agent: AgentView, nowProvider: () -> Long = { Clock.System.now().toEpochMilliseconds() }, roleColor: String? = null, questionSlot: @Composable () -> Unit = {}, contributions: List<TimelineItem> = emptyList(), floaters: @Composable RowScope.() -> Unit = {}, pending: PendingSendsView = PendingSendsView()) {
     val list = rememberLazyListState()
     // The elapsed label must age on its own: no status frame may arrive for seconds while the agent
     // works, so a one-second ticker keeps "Thinking... 3s" counting with the transcript otherwise still.
@@ -272,8 +291,12 @@ fun AgentChat(agent: AgentView, nowProvider: () -> Long = { Clock.System.now().t
     val status = agent.chatStatus(now)
     // Keyed on the status PRESENCE, not its value: the ticker changes it every second, and that must
     // not restart the scroll effect.
-    LaunchedEffect(agent.id, rows.size, agent.output.lastOrNull()?.text?.length, status != null) {
-        val last = rows.size + (if (status != null) 1 else 0) - 1
+    val sends = pending.items
+    // A phone-width pane: the bubble's retry / discard become 48dp touch targets.
+    val compact = com.superiorsoftllc.infantry.ui.model.PanelLayout.isCompact(com.superiorsoftllc.infantry.ui.block.layout.LocalBlockSize.current.width.value)
+    // CHAT-SENDING-1: a new pending send scrolls to the bottom too, so the human sees it the moment Send is pressed.
+    LaunchedEffect(agent.id, rows.size, agent.output.lastOrNull()?.text?.length, status != null, sends.size) {
+        val last = rows.size + sends.size + (if (status != null) 1 else 0) - 1
         if (last >= 0) list.requestScrollToItem(last)
     }
     val name = agent.session.worktreeBranch ?: agent.id.take(8)
@@ -282,18 +305,22 @@ fun AgentChat(agent: AgentView, nowProvider: () -> Long = { Clock.System.now().t
         // CHAT-COMPACT-1: the Activity chip floats over the transcript's bottom edge: it takes no row of its own.
         Box(Modifier.weight(1f)) {
         SelectionContainer(Modifier.fillMaxSize()) {
-            LazyColumn(Modifier.fillMaxSize().padding(horizontal = 14.dp), state = list, contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 10.dp)) {
+            LazyColumn(Modifier.fillMaxSize().padding(horizontal = ChatSidePadding), state = list, contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 10.dp)) {
                 items(rows.size) { i ->
                     // M2-2: the agent's portrait opens each run of agent-side lines, like a chat. KINDS-1: the row is drawn by the renderer of its kind.
                     FeedRow(RowItem(rows[i], agent.id, name, agent.role, roleColor), startsAgentRun(rows, i, agentSide))
                 }
+                // CHAT-SENDING-1: the human's just-sent messages, after the transcript, until the daemon's echo replaces each.
+                items(sends.size, key = { "pending-" + sends[it].clientId }) { i ->
+                    PendingSendRow(sends[i], pending.onRetry, pending.onDiscard, compact = compact)
+                }
                 // The live status row is agent-side too: it opens a run only when no agent line precedes it.
                 if (status != null) item {
-                    AgentSideRow(startsAgentRun(rows, rows.size, agentSide), agent.role, agent.id, roleColor) { ChatStatusRow(status) }
+                    AgentSideRow(sends.isNotEmpty() || startsAgentRun(rows, rows.size, agentSide), agent.role, agent.id, roleColor) { ChatStatusRow(status) }
                 }
             }
         }
-        Box(Modifier.align(Alignment.BottomEnd)) { ActivityBox(agent) }
+        Box(Modifier.align(Alignment.BottomEnd)) { ActivityBox(agent, floaters) }
         }
         questionSlot()
     }
@@ -313,29 +340,31 @@ private const val ACTIVITY_AUTO_OPEN_KEY = "activityBox.autoOpenWhileRunning"
  * switches. The `activityBox.autoOpenWhileRunning` setting (default off) restores opening while the session runs.
  */
 @Composable
-fun ActivityBox(agent: AgentView) {
+fun ActivityBox(agent: AgentView, floaters: @Composable RowScope.() -> Unit = {}) {
     val entries = agent.activityLog
-    if (entries.isEmpty()) return
     // ACTIVITY-BOX-1: collapsed unless the user chose otherwise (remembered per window) or the setting asks for
     // auto-open while the session runs.
     val autoOpen = LocalShellContext.current?.config?.values("infantry.chatfeed")?.boolean(ACTIVITY_AUTO_OPEN_KEY) ?: false
-    val expanded = activityBoxChoice ?: (autoOpen && isRunning(agent.session.state))
-    Column(Modifier.testTag(ACTIVITY_BOX_TAG), horizontalAlignment = Alignment.End) {
+    val expanded = entries.isNotEmpty() && (activityBoxChoice ?: (autoOpen && isRunning(agent.session.state)))
+    Column(horizontalAlignment = Alignment.End) {
         if (expanded) Box(Modifier.padding(horizontal = 8.dp)) { ActivityLines(entries) }
-        // CHAT-MINIMIZE-2: a small round floating icon (48dp touch target) with the count; the label stays as its description.
-        val label = "Activity (${entries.size})"
-        // CHAT-MINIMIZE-3: hand cursor and a hover tone, so the round icon reads as clickable.
-        val hover = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-        val hovered by hover.collectIsHoveredAsState()
-        Box(
-            Modifier.padding(8.dp).size(48.dp).clip(androidx.compose.foundation.shape.CircleShape).background(if (hovered) Palette.Raised else Palette.Panel)
-                .hoverable(hover).handCursor()
-                .clickable { activityBoxChoice = !expanded }.semantics { contentDescription = label },
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(AhqIcons.Activity, contentDescription = null, tint = Palette.Muted, modifier = Modifier.size(22.dp))
-            Text(entries.size.toString(), color = Palette.Text, fontSize = 9.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.TopEnd).padding(6.dp))
+        // CHAT-MINIMIZE-5: one row of floating chips at the bottom-right: the host's floaters (Expand, Minimize / Restore),
+        // then the Activity chip. No count on the chip (it capped and stopped meaning anything); the icon alone.
+        FloatRow(floaters) {
+            if (entries.isNotEmpty()) FloatingChip(AhqIcons.Activity, ACTIVITY_LABEL, { activityBoxChoice = !expanded }, Modifier.testTag(ACTIVITY_BOX_TAG))
         }
+    }
+}
+
+/** CHAT-MINIMIZE-5: the Activity chip's tooltip and screen-reader name. */
+const val ACTIVITY_LABEL = "Activity"
+
+/** CHAT-MINIMIZE-5: the bottom-right row of floating chips: [floaters] from the host, then [trailing] (this feed's own). */
+@Composable
+fun FloatRow(floaters: @Composable RowScope.() -> Unit, trailing: @Composable RowScope.() -> Unit = {}) {
+    Row(Modifier.padding(end = 6.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        floaters()
+        trailing()
     }
 }
 
@@ -345,7 +374,7 @@ private fun ActivityLines(entries: List<com.superiorsoftllc.infantry.ui.model.Ag
     run {
         Column(Modifier.fillMaxWidth().background(Palette.Panel).heightIn(max = 160.dp).verticalScroll(rememberScrollState())) {
             entries.asReversed().forEach { e ->
-                Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 1.dp)) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = ChatSidePadding, vertical = 1.dp)) {
                     Text(activityTimestamp(e.at), color = Palette.Muted, fontFamily = Mono, fontSize = 11.sp)
                     Spacer(Modifier.width(8.dp))
                     Text(e.label, color = Palette.Text, fontFamily = Mono, fontSize = 11.sp, modifier = Modifier.testTag(ACTIVITY_LINE_TAG))
@@ -503,7 +532,7 @@ const val CARD_TITLE_TAG = "card-title"
  * [style]'s tone. Compact: one text line of header plus small padding; the body has the normal padding.
  */
 @Composable
-fun CommsCard(style: CommsCardStyle, at: Long, body: @Composable () -> Unit) {
+fun CommsCard(style: CommsCardStyle, at: Long, trailing: (@Composable () -> Unit)? = null, body: @Composable () -> Unit) {
     val shape = RoundedCornerShape(8.dp)
     Column(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(shape).background(style.tone.body)) {
         Row(
@@ -522,7 +551,9 @@ fun CommsCard(style: CommsCardStyle, at: Long, body: @Composable () -> Unit) {
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f).testTag(CARD_TITLE_TAG),
             )
-            if (style.showTime) {
+            // CHAT-SENDING-1: [trailing] (a pending send's state marker) takes the time's place.
+            if (trailing != null) trailing()
+            else if (style.showTime) {
                 Text(
                     activityTimestamp(at), color = Palette.Muted, fontFamily = Mono, fontSize = 10.sp,
                     maxLines = 1, softWrap = false, textAlign = TextAlign.End,
@@ -539,21 +570,27 @@ const val CARD_COMMS_ICON_TAG = "card-comms-icon"
 /** SCRIPT-VIS-1b: test tag on a plugin-contributed (automation) chat row. */
 const val CONTRIBUTION_ROW_TAG = "contribution-row"
 
+/** CHAT-NOTE-WARN-1: test tag on a contributed row's mark (gear, or the warning sign for a warn note). */
+const val CONTRIBUTION_MARK_TAG = "contribution-mark"
+
 /** SCRIPT-VIS-1b: test tag on the expanded details of a contributed row. */
 const val CONTRIBUTION_DETAILS_TAG = "contribution-details"
 
 /**
  * SCRIPT-VIS-1b: a line a plugin put in the chat without a turn. Drawn as automation (a gear mark, its label, a muted panel), never as the
  * agent's speech; click to expand its [TimelineItem.details] (the run's actions and log lines). A failure is drawn in the error colour.
+ * CHAT-NOTE-WARN-1: a warn note ([TimelineItem.noteLevel]) is drawn in the warning colour with a warning mark.
  */
 @Composable
 fun ContributionRow(item: TimelineItem) {
     var open by remember(item.id) { mutableStateOf(false) }
-    val tint = if (item.ok) Palette.Muted else Palette.Danger
+    // CHAT-NOTE-WARN-1: warn is the theme's warning colour with a warning mark, otherwise drawn like info (no error styling).
+    val level = item.noteLevel
+    val tint = when (level) { NOTE_LEVEL_FAIL -> Palette.Danger; NOTE_LEVEL_WARN -> Palette.Warn; else -> Palette.Muted }
     Column(Modifier.fillMaxWidth().padding(vertical = 3.dp).background(Palette.Panel).testTag(CONTRIBUTION_ROW_TAG)
         .clickable(enabled = item.details.isNotEmpty()) { open = !open }.padding(horizontal = 10.dp, vertical = 5.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("⚙", color = tint, fontSize = 13.sp)
+            Text(if (level == NOTE_LEVEL_WARN) "⚠" else "⚙", color = tint, fontSize = 13.sp, modifier = Modifier.testTag(CONTRIBUTION_MARK_TAG))
             Spacer(Modifier.width(8.dp))
             Text(item.text.ifBlank { item.label }, color = tint, fontFamily = Mono, fontSize = 12.sp, modifier = Modifier.weight(1f))
             // SCRIPT-LINE-TS-1: the run's time, top right, same formatter/font as the message cards.
