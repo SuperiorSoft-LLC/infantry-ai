@@ -41,7 +41,7 @@ class ComposerShots {
         activityLog = listOf(AgentActivity("bash", "gradle test", 1L)),
     )
 
-    private fun shoot(name: String, w: Int, dark: Boolean, expanded: Boolean = false, minimized: Boolean = false, hover: Boolean = false) {
+    private fun shoot(name: String, w: Int, dark: Boolean, expanded: Boolean = false, minimized: Boolean = false, hover: Boolean = false, focused: Boolean = false) {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         Palette.theme = ThemeSettings(dark = dark)
         runDesktopComposeUiTest(w, 330) {
@@ -63,6 +63,8 @@ class ComposerShots {
                 }
             }
             waitForIdle()
+            if (focused) runOnIdle { chat.focus.requestFocus() }
+            waitForIdle()
             if (hover) onNodeWithTag(ACTIVITY_BOX_TAG).performMouseInput { moveTo(centerRight - androidx.compose.ui.geometry.Offset(30f, 0f)) }
             waitForIdle()
             val dir = File("build/composer-shots").apply { mkdirs() }
@@ -76,6 +78,10 @@ class ComposerShots {
     @Test fun darkPhone() = shoot("dark-phone", 400, true)
     @Test fun lightPhone() = shoot("light-phone", 400, false)
     @Test fun darkExpanded() = shoot("dark-expanded", 900, true, expanded = true)
+    @Test fun darkFocused() = shoot("dark-focused", 900, true, focused = true)
+    @Test fun lightFocused() = shoot("light-focused", 900, false, focused = true)
+    @Test fun lightPhoneFocused() = shoot("light-phone-focused", 400, false, focused = true)
+    @Test fun darkPhoneFocused() = shoot("dark-phone-focused", 400, true, focused = true)
     @Test fun darkHover() = shoot("dark-hover", 900, true, hover = true)
     @Test fun darkMinimized() = shoot("dark-minimized", 400, true, minimized = true)
 }
