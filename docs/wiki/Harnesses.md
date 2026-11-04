@@ -50,7 +50,7 @@ Quick test: `"command": "cmd", "args": ["/c", "echo", "{prompt}"]` on Windows. S
 
 The only thing a harness jar compiles against is the module `infantryHarnessApi`
 (`com.superiorsoftllc.infantry.harness.api`). It depends on the Kotlin stdlib only. The version is semver;
-`HARNESS_API_VERSION` in the source is **2.12.0** (older docs stop at 2.11). A plugin states the version it was built
+`HARNESS_API_VERSION` in the source is **2.15.0** (`HarnessContractGuardTest` fails the build when a repo harness module declares another). A plugin states the version it was built
 against in `contractVersion`; the daemon refuses a different major or a newer minor. Minor bumps only add members
 with defaults, so an old plugin keeps working.
 
@@ -95,7 +95,7 @@ From `Infantry_Pi`:
 ```json
 "harness": {
   "jar": "harness/build/libs/Infantry_Pi-harness.jar",
-  "contract": "2.12.0",
+  "contract": "2.15.0",
   "ids": ["pi"],
   "cli": { "id": "pi", "command": "pi", "label": "Pi" },
   "settings": [],
@@ -157,7 +157,7 @@ and `HarnessHost.kt`, `plugins/examples/Acme_EchoHarness/`.
 
 | Member | Meaning |
 |---|---|
-| `moduleId`, `apiVersion` | Your module name and the harness API version the daemon implements (2.12.0). |
+| `moduleId`, `apiVersion` | Your module name and the harness API version the daemon implements (2.15.0). |
 | `stateDir` | `<state>/plugin-data/<Module>/`, created on first use. |
 | `log(line)` | One line in the daemon log, prefixed with your module name. |
 | `setting(key)` | A value of a setting you declared in `harness.settings`; null when unset or undeclared. |
@@ -190,7 +190,7 @@ turns implements `HarnessSession` instead of a one-shot `process`.
 harness, `echo`, in `register(registrar)`. `EchoHarness.process` returns the daemon's own Java running a small
 `EchoCli` class, with `ECHO_PREFIX` taken from `host.setting("echo.prefix")`. `EchoTranslator` turns a line starting
 `session: ` into `SessionStarted`, any other line into `TextDelta`, and the exit code into `Completion` or `Error`.
-Its `module.json` `harness` block sets `jar`, `contract` `2.12.0`, `ids` `["echo"]`, `aliases`, `cli`, `icon`,
+Its `module.json` `harness` block sets `jar`, `contract` `2.15.0`, `ids` `["echo"]`, `aliases`, `cli`, `icon`,
 `settings` `["echo.prefix"]` and `hooks` `[]`; a community copy needs the grants `harness.code`,
 `harness.setting:echo.prefix`, `harness.cli` and `harness.cli.install` in `modules.json`.
 

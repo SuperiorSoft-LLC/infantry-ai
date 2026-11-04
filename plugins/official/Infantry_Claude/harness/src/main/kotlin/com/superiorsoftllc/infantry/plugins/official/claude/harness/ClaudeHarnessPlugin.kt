@@ -60,6 +60,7 @@ class ClaudeHarness internal constructor(
         HarnessCapability.USAGE,
         HarnessCapability.EFFORT_SELECTION, // --effort
         HarnessCapability.LIVE_SESSION, // one process per session, every wake a message into it (CLI-LIVE-1); stream-json or the interactive CLI (CLI-PTY-1)
+        HarnessCapability.MID_TURN_INPUT, // CHAT-QUEUE-1: a message written into the running turn (stream-json user line / typed into the busy CLI)
     )
 
     private fun mcp(env: Map<String, String>): Pair<List<String>?, Map<String, String>> {

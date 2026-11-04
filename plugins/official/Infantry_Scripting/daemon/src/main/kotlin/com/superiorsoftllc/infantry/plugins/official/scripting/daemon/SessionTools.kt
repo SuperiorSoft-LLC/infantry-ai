@@ -3,6 +3,7 @@
 package com.superiorsoftllc.infantry.plugins.official.scripting.daemon
 
 import com.superiorsoftllc.infantry.daemon.api.DaemonTool
+import com.superiorsoftllc.infantry.daemon.api.QueuedMessage
 import com.superiorsoftllc.infantry.daemon.api.SessionInfo
 import com.superiorsoftllc.infantry.daemon.api.SessionStatus
 import com.superiorsoftllc.infantry.daemon.api.ToolCall
@@ -39,6 +40,11 @@ class SessionTools(
     private val noticeNames: () -> Set<String> = { emptySet() },
     /** CLI-PTY-3: `mcp_reconnect` (session id, force) -> what happened; throws IllegalArgumentException when refused. */
     private val reconnectMcp: (String, Boolean) -> String = { _, _ -> throw UnsupportedOperationException("this daemon cannot reconnect MCP servers") },
+    /** CHAT-QUEUE-1: the daemon's held-message queue (`queue_list` / `queue_add` / `queue_remove` / `queue_force`); the defaults = none. */
+    private val queued: (String) -> List<QueuedMessage> = { emptyList() },
+    private val queueAdd: (String, String) -> QueuedMessage? = { _, _ -> throw UnsupportedOperationException("this daemon holds no message queue") },
+    private val queueRemove: (String, String) -> QueuedMessage = { _, _ -> throw UnsupportedOperationException("this daemon holds no message queue") },
+    private val queueForce: (String, String) -> String = { _, _ -> throw UnsupportedOperationException("this daemon holds no message queue") },
 ) {
     private val recent = java.util.concurrent.ConcurrentHashMap<String, java.util.ArrayDeque<Long>>()
 
@@ -71,9 +77,11 @@ class SessionTools(
         override val description = "Act on a session's turn. action=interrupt stops the turn in flight now (refused when none runs); action=end_turn does the same only if a turn runs and is a no-op on an idle session; " +
             "action=mcp_reconnect brings the session's MCP servers back (session field mcp, event session.mcp) without losing it: reconnect in the live CLI, else restart it so the next turn resumes the same conversation " +
             "(same session id, model and context); refused mid-turn unless force=true. The daemon never does this on its own. " +
+            "Held messages (what is typed while the agent is busy): action=queue_list lists them [{id,text,at}]; queue_add (text) holds one for the next turn (sent at once when idle); " +
+            "queue_remove (id) drops one, never delivered; queue_force (id) delivers it now INTO the running turn without stopping it (harnesses with mid-turn input), or as a turn when idle. " +
             "Same project only, rate limited. Posting a note and prompting stay with chat_note (wake=true) . Script: ih.session_act{sessionId=..., action='interrupt'}."
         override val inputSchema: JsonObject = Json.parseToJsonElement(
-            """{"type":"object","properties":{"sessionId":{"type":"string","description":"target session (default: the caller's own)"},"action":{"type":"string","description":"interrupt | end_turn | mcp_reconnect"},"force":{"type":"boolean","description":"mcp_reconnect only: stop a turn in flight first"}},"required":["action"]}""",
+            """{"type":"object","properties":{"sessionId":{"type":"string","description":"target session (default: the caller's own)"},"action":{"type":"string","description":"interrupt | end_turn | mcp_reconnect | queue_list | queue_add | queue_remove | queue_force"},"force":{"type":"boolean","description":"mcp_reconnect only: stop a turn in flight first"},"id":{"type":"string","description":"queue_remove / queue_force: the held message id"},"text":{"type":"string","description":"queue_add: the message"}},"required":["action"]}""",
         ).jsonObject
         override fun call(call: ToolCall): ToolResult = guarded(call, requireText = false) { target, a ->
             when (val action = (a["action"] as? JsonPrimitive)?.contentOrNull?.trim()?.lowercase()) {
@@ -85,7 +93,23 @@ class SessionTools(
                     catch (e: IllegalArgumentException) { refuse(e.message ?: "refused") }
                     catch (e: UnsupportedOperationException) { refuse(e.message ?: "not supported") }
                 }
-                else -> refuse("action must be interrupt, end_turn or mcp_reconnect (got '${action.orEmpty()}')")
+                "queue_list" -> ToolResult(buildJsonArray {
+                    queued(target).forEach { q -> add(buildJsonObject { put("id", q.id); put("text", q.text); put("at", q.at) }) }
+                }.toString())
+                "queue_add", "queue_remove", "queue_force" -> {
+                    val key = if (action == "queue_add") "text" else "id"
+                    val arg = (a[key] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() } ?: return@guarded refuse("$action needs $key")
+                    try {
+                        when (action) {
+                            "queue_add" -> ToolResult(queueAdd(target, arg)?.let { "queued ${it.id} on $target" } ?: "$target was at rest: sent as a turn")
+                            "queue_remove" -> ToolResult("removed ${queueRemove(target, arg.trim()).id} from $target's queue")
+                            else -> ToolResult("queue_force ${arg.trim()} on $target: ${queueForce(target, arg.trim())}")
+                        }
+                    } catch (e: IllegalArgumentException) { refuse(e.message ?: "refused") }
+                    catch (e: IllegalStateException) { refuse(e.message ?: "refused") }
+                    catch (e: UnsupportedOperationException) { refuse(e.message ?: "not supported") }
+                }
+                else -> refuse("action must be interrupt, end_turn, mcp_reconnect, queue_list, queue_add, queue_remove or queue_force (got '${action.orEmpty()}')")
             }
         }
     }

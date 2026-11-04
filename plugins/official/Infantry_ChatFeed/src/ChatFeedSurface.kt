@@ -200,6 +200,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
 
+/** CHAT-PAD-1: the one horizontal padding of every chat's content (empty state, transcript, notes, cards). */
+val ChatSidePadding = 14.dp
+
 @Composable
 fun OutputPane(
     a: AgentView?,
@@ -214,33 +217,35 @@ fun OutputPane(
     contributions: List<TimelineItem> = emptyList(),
     /** CHAT-MINIMIZE-5: the host's floating chips (Expand, Minimize / Restore), drawn in the bottom-right float row. */
     floaters: @Composable RowScope.() -> Unit = {},
+    /** CHAT-SENDING-1: the messages sent to this session that the transcript does not show yet, and their retry / discard. */
+    pending: PendingSendsView = PendingSendsView(),
     questionSlot: @Composable () -> Unit = {},
 ) {
     if (a == null) {
         Box(Modifier.fillMaxSize(), Alignment.Center) {
             Box(Modifier.align(Alignment.BottomEnd)) { FloatRow(floaters) }
             if (spawnMode) return@Box
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = ChatSidePadding), horizontalAlignment = Alignment.CenterHorizontally) {
                 BrandEmblem(72.dp)
                 Spacer(Modifier.height(10.dp))
-                Text("No live session. Start one to see its output here.", color = Palette.Muted, fontSize = 12.sp)
+                Text("No live session. Start one to see its output here.", color = Palette.Muted, fontSize = 12.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                 Spacer(Modifier.height(10.dp))
                 if (onStartSession != null) OutlinedButton(onClick = onStartSession) { Text("Start a session") }
             }
         }
         return
     }
-    if (com.superiorsoftllc.infantry.ui.model.showsResumeSplash(a.session, paneAction) || a.output.isEmpty() && contributions.none { !it.isStats } && a.chatStatus(Clock.System.now().toEpochMilliseconds()) == null) {
+    if (com.superiorsoftllc.infantry.ui.model.showsResumeSplash(a.session, paneAction) || a.output.isEmpty() && pending.items.isEmpty() && contributions.none { !it.isStats } && a.chatStatus(Clock.System.now().toEpochMilliseconds()) == null) {
       Column(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f).fillMaxWidth(), Alignment.Center) {
             Box(Modifier.align(Alignment.BottomEnd)) { FloatRow(floaters) }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = ChatSidePadding), horizontalAlignment = Alignment.CenterHorizontally) {
                 BrandEmblem(72.dp)
                 Spacer(Modifier.height(10.dp))
                 Text(
                     if (a.session.global) "Ask the Assistant anything about Infantry AI: how a screen works, why something failed, or tell it what to do (create a ticket, start an agent, change a setting)."
                     else "Nothing on screen for this session yet.\nThe daemon replays a session's recent output only while the process that ran it is up; older history is not kept.",
-                    color = Palette.Muted, fontSize = 12.sp,
+                    color = Palette.Muted, fontSize = 12.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 )
                 Spacer(Modifier.height(10.dp))
                 // GAP-006b: a session on screen starts or resumes ITSELF; the New agent box would cut a second instance.
@@ -252,8 +257,15 @@ fun OutputPane(
       }
         return
     }
-    AgentChat(a, roleColor = roleColor, questionSlot = questionSlot, contributions = contributions, floaters = floaters)
+    AgentChat(a, roleColor = roleColor, questionSlot = questionSlot, contributions = contributions, floaters = floaters, pending = pending)
 }
+
+/** CHAT-SENDING-1: one session's pending sends ([PendingSendRow]) and what their actions do. */
+data class PendingSendsView(
+    val items: List<com.superiorsoftllc.infantry.ui.model.PendingSend> = emptyList(),
+    val onRetry: (String) -> Unit = {},
+    val onDiscard: (String) -> Unit = {},
+)
 
 /** Test tag on the transient status row under the transcript (or in place of the empty state). */
 const val CHAT_STATUS_TAG = "chat-status"
@@ -269,7 +281,7 @@ const val ACTIVITY_LINE_TAG = "activity-line"
  * The status row sits under the last line and is absent once [AgentView.chatStatus] is null.
  */
 @Composable
-fun AgentChat(agent: AgentView, nowProvider: () -> Long = { Clock.System.now().toEpochMilliseconds() }, roleColor: String? = null, questionSlot: @Composable () -> Unit = {}, contributions: List<TimelineItem> = emptyList(), floaters: @Composable RowScope.() -> Unit = {}) {
+fun AgentChat(agent: AgentView, nowProvider: () -> Long = { Clock.System.now().toEpochMilliseconds() }, roleColor: String? = null, questionSlot: @Composable () -> Unit = {}, contributions: List<TimelineItem> = emptyList(), floaters: @Composable RowScope.() -> Unit = {}, pending: PendingSendsView = PendingSendsView()) {
     val list = rememberLazyListState()
     // The elapsed label must age on its own: no status frame may arrive for seconds while the agent
     // works, so a one-second ticker keeps "Thinking... 3s" counting with the transcript otherwise still.
@@ -291,6 +303,9 @@ fun AgentChat(agent: AgentView, nowProvider: () -> Long = { Clock.System.now().t
     val status = agent.chatStatus(now)
     val hasStatus = status != null
     val totalNow by rememberUpdatedState(total)
+    val sends = pending.items
+    // A phone-width pane: the bubble's retry / discard become 48dp touch targets.
+    val compact = com.superiorsoftllc.infantry.ui.model.PanelLayout.isCompact(com.superiorsoftllc.infantry.ui.block.layout.LocalBlockSize.current.width.value)
     // Follow = the last item is on screen. Read off the layout only when the item count did not change in it (a new row
     // lands below the view before the follow scroll reaches it, which is not the user scrolling away), and only once the
     // chat has reached its bottom after opening.
@@ -318,22 +333,25 @@ fun AgentChat(agent: AgentView, nowProvider: () -> Long = { Clock.System.now().t
     }
     // The owner's own new message always lands in view, however far up the chat was.
     var ownerSeen by remember(agent.id) { mutableStateOf(ownerRows) }
-    LaunchedEffect(ownerRows) {
-        if (ownerRows > ownerSeen) window.jumpToLatest(totalNow)
+    // CHAT-SENDING-1: a new pending send counts too, so the human sees it the moment Send is pressed.
+    var sendsSeen by remember(agent.id) { mutableStateOf(sends.size) }
+    LaunchedEffect(ownerRows, sends.size) {
+        if (ownerRows > ownerSeen || sends.size > sendsSeen) window.jumpToLatest(totalNow)
         ownerSeen = ownerRows
+        sendsSeen = sends.size
     }
     // Keyed on the status PRESENCE, not its value: the ticker changes it every second, and that must
     // not restart the scroll effect. Scrolled up, new rows do not move the view (they count as unread).
-    LaunchedEffect(agent.id, total, output.lastOrNull()?.text?.length, hasStatus) {
+    LaunchedEffect(agent.id, total, output.lastOrNull()?.text?.length, hasStatus, sends.size) {
         window.onTotal(total)
         if (window.follow && window.pendingJump == null) {
-            val last = total - window.startFor(total) + (if (hasStatus) 1 else 0) - 1
+            val last = total - window.startFor(total) + sends.size + (if (hasStatus) 1 else 0) - 1
             if (last >= 0) list.requestScrollToItem(last)
         }
     }
     LaunchedEffect(window.pendingJump, start, total) {
         val jump = window.pendingJump ?: return@LaunchedEffect
-        val index = if (jump == ChatWindow.JUMP_TO_END) total - start + (if (hasStatus) 1 else 0) - 1 else jump - start
+        val index = if (jump == ChatWindow.JUMP_TO_END) total - start + sends.size + (if (hasStatus) 1 else 0) - 1 else jump - start
         if (index >= 0) list.scrollToItem(index)
         window.pendingJump = null
     }
@@ -362,7 +380,7 @@ fun AgentChat(agent: AgentView, nowProvider: () -> Long = { Clock.System.now().t
         // CHAT-COMPACT-1: the Activity chip floats over the transcript's bottom edge: it takes no row of its own.
         Box(Modifier.weight(1f)) {
         SelectionContainer(Modifier.fillMaxSize()) {
-            LazyColumn(Modifier.fillMaxSize().padding(horizontal = 14.dp).testTag(CHAT_TRANSCRIPT_TAG), state = list, contentPadding = androidx.compose.foundation.layout.PaddingValues(top = if (searchOpen) CHAT_SEARCH_BAR_ROOM_DP.dp else 10.dp, bottom = 10.dp)) {
+            LazyColumn(Modifier.fillMaxSize().padding(horizontal = ChatSidePadding).testTag(CHAT_TRANSCRIPT_TAG), state = list, contentPadding = androidx.compose.foundation.layout.PaddingValues(top = if (searchOpen) CHAT_SEARCH_BAR_ROOM_DP.dp else 10.dp, bottom = 10.dp)) {
                 // CHAT-SCROLL-1: keyed by the row's absolute index, so rows joining above (an older page) or below (new
                 // output) leave the rows on screen where they are.
                 items(shown, key = { start + it }) { i ->
@@ -372,9 +390,13 @@ fun AgentChat(agent: AgentView, nowProvider: () -> Long = { Clock.System.now().t
                         FeedRow(RowItem(rows[abs], agent.id, name, agent.role, roleColor), startsAgentRun(rows, abs, agentSide))
                     }
                 }
+                // CHAT-SENDING-1: the human's just-sent messages, after the transcript, until the daemon's echo replaces each.
+                items(sends.size, key = { "pending-" + sends[it].clientId }) { i ->
+                    PendingSendRow(sends[i], pending.onRetry, pending.onDiscard, compact = compact)
+                }
                 // The live status row is agent-side too: it opens a run only when no agent line precedes it.
                 if (status != null) item(key = CHAT_STATUS_TAG) {
-                    AgentSideRow(startsAgentRun(rows, total, agentSide), agent.role, agent.id, roleColor) { ChatStatusRow(status) }
+                    AgentSideRow(sends.isNotEmpty() || startsAgentRun(rows, total, agentSide), agent.role, agent.id, roleColor) { ChatStatusRow(status) }
                 }
             }
         }
@@ -513,7 +535,7 @@ private fun ActivityLines(entries: List<com.superiorsoftllc.infantry.ui.model.Ag
     run {
         Column(Modifier.fillMaxWidth().background(Palette.Panel).heightIn(max = 160.dp).verticalScroll(rememberScrollState())) {
             entries.asReversed().forEach { e ->
-                Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 1.dp)) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = ChatSidePadding, vertical = 1.dp)) {
                     Text(activityTimestamp(e.at), color = Palette.Muted, fontFamily = Mono, fontSize = 11.sp)
                     Spacer(Modifier.width(8.dp))
                     Text(e.label, color = Palette.Text, fontFamily = Mono, fontSize = 11.sp, modifier = Modifier.testTag(ACTIVITY_LINE_TAG))
@@ -672,7 +694,7 @@ const val CARD_TITLE_TAG = "card-title"
  * [style]'s tone. Compact: one text line of header plus small padding; the body has the normal padding.
  */
 @Composable
-fun CommsCard(style: CommsCardStyle, at: Long, body: @Composable () -> Unit) {
+fun CommsCard(style: CommsCardStyle, at: Long, trailing: (@Composable () -> Unit)? = null, body: @Composable () -> Unit) {
     val shape = RoundedCornerShape(8.dp)
     Column(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(shape).background(style.tone.body)) {
         Row(
@@ -691,7 +713,9 @@ fun CommsCard(style: CommsCardStyle, at: Long, body: @Composable () -> Unit) {
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f).testTag(CARD_TITLE_TAG),
             )
-            if (style.showTime) {
+            // CHAT-SENDING-1: [trailing] (a pending send's state marker) takes the time's place.
+            if (trailing != null) trailing()
+            else if (style.showTime) {
                 Text(
                     activityTimestamp(at), color = Palette.Muted, fontFamily = Mono, fontSize = 10.sp,
                     maxLines = 1, softWrap = false, textAlign = TextAlign.End,

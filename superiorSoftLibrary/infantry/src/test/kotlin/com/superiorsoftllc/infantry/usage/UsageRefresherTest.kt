@@ -28,16 +28,25 @@ class UsageRefresherTest {
     }
 
     @Test
-    fun failuresDoubleUpTo30MinutesAndASuccessResets() {
+    fun failuresDoubleUpTo60MinutesAndASuccessResets() {
+        // USAGE-CARD-1 raised the cap from 30 to 60 minutes (owner spec: 8, 16, 32, cap 60).
         var next = bad()
         val r = UsageRefresher({ next }, { 5 }, {})
         assertEquals(10 * 60_000L, r.tick())
         assertEquals(20 * 60_000L, r.tick())
-        assertEquals(30 * 60_000L, r.tick())
-        assertEquals(30 * 60_000L, r.tick())
+        assertEquals(40 * 60_000L, r.tick())
+        assertEquals(60 * 60_000L, r.tick())
+        assertEquals(60 * 60_000L, r.tick())
         next = ok()
         assertEquals(5 * 60_000L, r.tick())
         assertEquals(0, r.failureCount())
+    }
+
+    @Test
+    fun aBackingOffSourceWakesTheRefresherAtItsRetryTime() {
+        val now = 1_000_000_000L
+        val r = UsageRefresher({ listOf(ProviderLimits.unknown("claude", now, LimitReason.RATE_LIMITED).copy(retryAt = now + 25 * 60_000L)) }, { 8 }, {}, clock = { now })
+        assertEquals(25 * 60_000L, r.tick(), "USAGE-CARD-1: Retry-After / the service's backoff decides the next read")
     }
 
     @Test

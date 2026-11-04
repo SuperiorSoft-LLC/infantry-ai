@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
 // The UI half. The Infantry Gradle plugin reads module.json, adds the SDK, and registers `ihq` and `catalogEntry`.
 // Delete src/ and the Compose lines for a daemon-only plugin.
 plugins {

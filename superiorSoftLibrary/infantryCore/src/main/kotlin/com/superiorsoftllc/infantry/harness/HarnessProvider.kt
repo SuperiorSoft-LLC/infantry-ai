@@ -21,6 +21,8 @@ class HarnessProvider(private val harness: CliHarness) : AgentProvider {
 
     override fun effort(): com.superiorsoftllc.infantry.harness.EffortCapability = harness.effort
 
+    override fun midTurnInput(): Boolean = HarnessCapability.MID_TURN_INPUT in harness.capabilities
+
     override fun spec(request: RunRequest): ProcessSpec {
         val spec = harness.processSpec(
             HarnessRequest(

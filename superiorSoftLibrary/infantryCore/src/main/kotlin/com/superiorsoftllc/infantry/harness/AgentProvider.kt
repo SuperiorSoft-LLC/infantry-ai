@@ -156,6 +156,9 @@ interface AgentProvider {
      * EFFORT-1 (docs/EFFORT.md): how this provider honours [RunRequest.effort]. Default unsupported: an effort set on its
      * session is recorded and reported as not applied, never passed on.
      */
+    /** CHAT-QUEUE-1: the harness takes a user message INTO a running turn (declares MID_TURN_INPUT). Default false: queued for the next turn. */
+    fun midTurnInput(): Boolean = false
+
     fun effort(): com.superiorsoftllc.infantry.harness.EffortCapability =
         com.superiorsoftllc.infantry.harness.EffortCapability.UNSUPPORTED
 }

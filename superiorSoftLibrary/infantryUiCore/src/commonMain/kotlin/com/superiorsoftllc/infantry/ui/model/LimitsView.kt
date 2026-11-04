@@ -77,6 +77,30 @@ object LimitsView {
     fun barDescription(w: LimitWindow): String =
         "${w.label}: ${percentText(w.percent)} used, " + if (ahead(w)) "ahead of pace" else "under pace"
 
+    /**
+     * USAGE-CARD-1: the line a stale card shows over its last good reading, e.g.
+     * "updated 14 min ago · rate limited, retrying at 12:40 PM"; null when [p] is not stale.
+     */
+    fun staleText(p: ProviderLimits, now: Long, zone: TimeZone = TimeZone.currentSystemDefault()): String? {
+        if (!p.stale) return null
+        val retry = p.retryAt?.takeIf { it > now }?.let {
+            val t = Instant.fromEpochMilliseconds(it).toLocalDateTime(zone)
+            ", retrying at ${TimeFormat.clock12(t.hour, t.minute)}"
+        } ?: ", retrying soon"
+        return "updated ${ageText(now - p.observedAt)} ago · ${reasonText(p.reason)}$retry"
+    }
+
+    /** "under a minute", "14 min", "2 h 5 min". */
+    fun ageText(ms: Long): String {
+        val min = (ms.coerceAtLeast(0) / 60_000).toInt()
+        return when {
+            min < 1 -> "under a minute"
+            min < 60 -> "$min min"
+            min % 60 == 0 -> "${min / 60} h"
+            else -> "${min / 60} h ${min % 60} min"
+        }
+    }
+
     /** The freshest read among [limits], for "updated Xm ago"; null when nothing was read. */
     fun observedAt(limits: List<ProviderLimits>): Long? = limits.maxOfOrNull { it.observedAt }?.takeIf { it > 0 }
 }

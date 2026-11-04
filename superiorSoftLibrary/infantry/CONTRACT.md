@@ -27,6 +27,32 @@ A daemon plugin tool runs in the daemon, which cannot open the agent's files. `i
 A client below 1.147.0 sends plain strings and no `client.projectId`: such a tool sees no local files (a path it cannot read is refused as
 "does not exist") and no default project. A daemon below 1.147.0 never lists `localFiles`, and ignores `client.projectId`.
 
+### CHAT-SENDING-1 (contract 1.151.0, additive): a sent message is acknowledged, and a resend is never run twice
+
+A `prompt` that names its session (`sessionId`) and carries a client message id (`requestId` = `send:<unique id>`) is answered with
+`prompt_ack` (`data` = `accepted`, the frame's `sessionId` and `requestId` echoed) once the daemon has taken it as a turn. The daemon
+remembers the last `limits.chat.sentIdsKept` ids (default 500), daemon-wide: a `prompt` with a remembered id (a resend after a lost ack,
+often on a new connection) is answered `prompt_ack` `duplicate` and NOT run again. A refused prompt (`error`, `run_in_flight` included,
+with its `requestId`) is forgotten, so a retry runs. Only ids with the `send:` prefix are remembered.
+
+Clients show the message at once as "sending...", settle it on `prompt_ack` (or the echoed `turn`), and offer "not sent - retry" after
+`limits.chat.sendAckSeconds` (default 45) without an answer, or on a refusal or a dropped link; the retry resends the same id.
+A daemon below 1.151.0 sends no `prompt_ack`: the client settles on the `turn` echo alone.
+
+### CHAT-QUEUE-1 (contract 1.150.0, additive + behavioural): the daemon holds messages typed while a turn runs
+
+A message typed while a session's turn runs is held by the daemon, on the session record, so every client and script sees the same queue:
+
+- `queue_add` (frame `sessionId` = the session, `data` = the message): held as `{id, text, at}` at the end of `session.queued`. A session with no turn in flight takes it as a turn now (as `resume`). Refused when the queue holds `limits.chat.queueMax` messages (default 20).
+- `queue_remove` (`data` = the item id): the message is dropped and never delivered.
+- `queue_force` (`data` = the item id): delivered NOW. While a turn runs it goes INTO that turn through the harness (the turn is not stopped; a `turn` frame for it arrives mid-turn, so the transcript shows it at its real place; no new `runActivity` and no new usage turn). With no turn running it is sent as a turn. Refused with `error` when the harness does not declare `MID_TURN_INPUT` or the process could not take it; the message stays queued.
+- When the session comes to rest (`finished` / an interrupt), the daemon sends the oldest held message as the next turn, one per turn end.
+- Every change pushes the `session` frame. `providers` entries gain `midTurnInput` (true = Force can deliver mid-turn; absent = cannot).
+- Harness API 2.16.0 (additive): `HarnessCapability.MID_TURN_INPUT` and `SessionConnection.injectInput(text)` (default false = not taken).
+- DaemonApi 1.38.0: `Sessions.queued / queueAdd / queueRemove / queueForce`; the scripting plugin's `session_act` gains `queue_list`, `queue_add`, `queue_remove`, `queue_force`.
+
+A client below 1.150.0 keeps its own queue and never sends the frames; a daemon below 1.150.0 answers them with `error` (unknown frame).
+
 ### ARCHIVE-1 (contract 1.149.0, additive): the ticket archive
 
 An archived ticket leaves the live board tables (`tickets`, `ticket_links`) and lives in `archived_tickets` with every column, its links, and a snapshot of its epic and project; board reads never scan it. `ticket_files` is untouched, so related-file lists (`ticket_files --related`, the RELATED brief block) still find archived tickets. `archive_query` (`list|show|search|count`) and `archive_apply` (`archive`: ids, an epic, or a lane filter `status` + `olderThanDays`; `restore`: puts a ticket back exactly as it was, same lane and position, links whose other end is live again) are answered by `archive_report`. An in-progress ticket is never archived. Setting `board.archive.doneAfterDays` (project value `board.archive.doneAfterDays.<projectId>`; absent or 0 = off) archives done tickets after N days. Clients below 1.149.0 never see the frames.
@@ -2303,6 +2329,10 @@ apart from the 1.3.0, 1.4.0, 1.5.0, 1.6.0 and 1.28.0 additions marked in the tab
 | `limit_catalog` | request: empty data. Answer: `{limits: [{key, value, default, unit, description, min, max?, zeroMeans?, env}]}`, every daemon limit with its value in force (1.133.0) | both |
 | `resume` | `"<sessionId>\n<prompt>"` | client → daemon |
 | `kill` | `"<sessionId> [force]"` | client → daemon |
+| `prompt_ack` | `accepted` / `duplicate`: the `prompt` with this `requestId` (a `send:` client message id) was taken; a duplicate was not run again (1.151.0) | daemon → client |
+| `queue_add` | frame `sessionId` = the session, `data` = the message: held on `session.queued` while a turn runs, sent as a turn now when none runs (1.150.0) | client → daemon |
+| `queue_remove` | frame `sessionId`, `data` = the held item id: dropped, never delivered (1.150.0) | client → daemon |
+| `queue_force` | frame `sessionId`, `data` = the held item id: delivered into the running turn (harness `MID_TURN_INPUT`) or as a turn when none runs; refused with `error` otherwise, it stays held (1.150.0) | client → daemon |
 | `interrupt` | the session id, a bare string: stops the session's CURRENT turn and keeps the session at rest (`IDLE`), same conversation; sends NO `finished` frame; refused with `error` when no turn is in flight (1.32.1) | client → daemon |
 | `models` | request: empty data. Answer: a JSON list of `ProviderModels` `{provider, group, label, models, note}` for every configured provider; an empty `models` carries a `note` (1.34.0). Answered off the request loop: may arrive after later replies on the same connection, FIFO among `models` replies (see 1.34.0) | both |
 | `role_binding_list` | empty data: request every stored role binding, answered by `role_bindings` (1.40.0) | client → daemon |
@@ -3247,6 +3277,9 @@ ADDITIVE + BEHAVIOURAL; `contract=1.133.0`. Owner rule 2026-10-25: no hard-coded
 | `limits.concurrency.mcpMaxSpawns` | 4 | unlimited | `McpGuardrails.DEFAULT_MAX_SPAWNS`; `--max-spawns` / `.infantry/mcp.json` still override per connection |
 | `limits.concurrency.laneDefault` | 1 | unlimited | the built-in cap of a role a project sets no lane cap for |
 | `limits.pacing.maxWorkersCeiling` | 50 | (min 1) | `PacingRule.MAX_WORKERS`, the highest `usage.pacing` maxWorkers / tier workers / override accepted |
+| `limits.usage.staleMaxHours` | 6 | (min 1) | USAGE-CARD-1: a plan meter's last good reading stays on the card (`stale: true` on its `limits` row) and keeps pacing on while reads fail |
+| `limits.usage.backoffMaxMinutes` | 60 | (min 1) | USAGE-CARD-1: cap of the wait after a failed plan meter read (usage.refreshMinutes doubled per failure; Retry-After wins) |
+| `limits.usage.manualRefreshFloorSeconds` | 60 | no floor | USAGE-CARD-1: a forced read inside this gap answers the last read |
 | `limits.build.maxWorkers`, `limits.build.maxParallelForks`, `limits.cpu.alertPercent`, `limits.cpu.alertMinutes` | as 1.132.0 | as 1.132.0 | unchanged keys, now in the registry (catalog, env) |
 | `limits.watchdog.ticketDeadlineMinutes` | 180 | no deadline | `INFANTRY_TICKET_DEADLINE_MIN` (still read) |
 | `limits.watchdog.deadlineMinutes` | 60 | no deadline | fixed 60 min for unattended non-ticket runs |

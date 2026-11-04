@@ -197,4 +197,40 @@ class OpenCodePluginTest {
         val none = OpenCodeCommand.models(emptyList(), listOf("note"))
         assertTrue(none.single().note!!.startsWith("opencode reported no configured models; note"))
     }
+
+    @Test fun `provider retry events are shown and the turn fails after maxRetries`() {
+        val ends = mutableListOf<Pair<SessionTurnEnd, String?>>()
+        val diags = mutableListOf<String>()
+        var aborted = 0
+        val out = object : SessionOutput {
+            override fun write(text: String) = true
+            override fun closeInput() = Unit
+            override fun detail(text: String) = Unit
+            override fun providerSession(id: String) = Unit
+            override fun turnEnded(end: SessionTurnEnd, exitCode: Int?, reason: String?) { ends += end to reason }
+            override fun diagnostic(line: String) { diags += line }
+        }
+        val turn = OpenCodeServeSession.Turn(out, "p/m", maxRetries = 2, giveUp = { aborted++ })
+        turn.onEvent("session.status", obj("""{"status":{"type":"busy"}}"""), null, "ses_1")
+        for (n in 1..3) turn.onEvent("session.status", obj("""{"status":{"type":"retry","attempt":$n,"message":"Free usage limit reached","next":1}}"""), null, "ses_1")
+        assertEquals(3, diags.size)
+        assertTrue(diags[0].contains("Free usage limit reached, retry 1"))
+        assertEquals(1, aborted)
+        assertEquals(listOf(SessionTurnEnd.FAILED), ends.map { it.first })
+        assertTrue(ends.single().second!!.contains("Free usage limit reached"))
+    }
+
+    @Test fun `maxRetries 0 never gives up`() {
+        val ends = mutableListOf<SessionTurnEnd>()
+        val out = object : SessionOutput {
+            override fun write(text: String) = true
+            override fun closeInput() = Unit
+            override fun detail(text: String) = Unit
+            override fun providerSession(id: String) = Unit
+            override fun turnEnded(end: SessionTurnEnd, exitCode: Int?, reason: String?) { ends += end }
+        }
+        val turn = OpenCodeServeSession.Turn(out, "p/m", maxRetries = 0)
+        for (n in 1..50) turn.onEvent("session.status", obj("""{"status":{"type":"retry","attempt":$n,"message":"x"}}"""), null, "ses_1")
+        assertTrue(ends.isEmpty())
+    }
 }

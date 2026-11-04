@@ -110,7 +110,7 @@ fun QuestionPanel(
                 else q.options.firstOrNull { it.label == q.recommended }?.let { answer(QuestionAnswerWire(q.id, answer = it.label)) }
             }
             val shape = RoundedCornerShape(10.dp)
-            Box(Modifier.fillMaxWidth().background(Palette.Panel).padding(horizontal = 14.dp, vertical = 8.dp).testTag(QUESTION_WINDOW_TAG)) {
+            Box(Modifier.fillMaxWidth().background(Palette.Panel).padding(horizontal = ChatSidePadding, vertical = 8.dp).testTag(QUESTION_WINDOW_TAG)) {
             Column(
                 Modifier.fillMaxWidth().heightIn(max = 360.dp).clip(shape).background(Palette.Raised)
                     .border(1.dp, Palette.Accent, shape).focusRequester(focus).focusable()

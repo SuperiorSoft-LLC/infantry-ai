@@ -17,10 +17,12 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import com.superiorsoftllc.infantry.ui.net.Controller
+import com.superiorsoftllc.infantry.ui.model.ThemeSettings
 import com.superiorsoftllc.infantry.ui.net.DaemonClient
 import com.superiorsoftllc.infantry.ui.protocol.Envelope
 import kotlinx.coroutines.CoroutineScope
@@ -148,6 +150,53 @@ class UsageLimitsPanelUiTest {
             }
         } finally {
             scope.cancel()
+        }
+    }
+
+    /** USAGE-CARD-1: a rate-limited read keeps the last good reading on the card, with its age and the retry time. */
+    @Test fun `a stale card keeps the last reading with its age and retry time, dark and light`() {
+        val read = now - 14 * 60_000L
+        val retryAt = now + 9 * 60_000L
+        val staleJson = """
+            [
+              {"provider":"claude","status":"ok","reason":"rate_limited","observedAt":$read,"stale":true,"retryAt":$retryAt,"windows":[
+                {"provider":"claude","label":"Current session","windowMinutes":300,"percent":42.0,"resetsAt":$sessionReset,"observedAt":$read,"source":"live","paceDelta":-12.3},
+                {"provider":"claude","label":"Current week","windowMinutes":10080,"percent":81.0,"resetsAt":$weekReset,"observedAt":$read,"source":"live","paceDelta":9.5}
+              ]},
+              {"provider":"opencode-go","status":"unknown","reason":"no_subscription","observedAt":$now,"windows":[]}
+            ]
+        """.trimIndent()
+        val retryClock = DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH).format(Instant.ofEpochMilli(retryAt).atZone(ZoneId.systemDefault()))
+        for ((mode, dark) in listOf("dark" to true, "light" to false)) {
+            Palette.theme = ThemeSettings(dark = dark)
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            try {
+                val link = LimitsFakeDaemonClient(scope)
+                val controller = Controller(scope, link)
+                runDesktopComposeUiTest(520, 520) {
+                    setContent {
+                        val state by controller.state.collectAsState()
+                        Box(Modifier.fillMaxSize().background(Palette.Panel).testTag("shot")) { UsagePane(state, null) }
+                    }
+                    link.push(Envelope(Envelope.READY, "contract=1.59.0 provider=stub instance=i1"))
+                    waitUntil(timeoutMillis = 10_000) { controller.state.value.connection.isLive }
+                    link.push(Envelope("limits", staleJson))
+                    waitUntil(timeoutMillis = 10_000) { runCatching { onNodeWithTag("limits-stale-claude").assertExists() }.isSuccess }
+                    // The last good reading stays: its percents, never "—".
+                    onNodeWithText("42%").assertExists()
+                    onNodeWithText("81%").assertExists()
+                    onNodeWithText("updated 14 min ago · rate limited, retrying at $retryClock").assertExists()
+                    // Only one Claude card.
+                    assertEquals(1, onAllNodesWithText("Claude").fetchSemanticsNodes().size)
+
+                    val out = File("build/reports/usage-card-1/usage-card-stale-$mode.png").apply { parentFile.mkdirs() }
+                    ImageIO.write(onNodeWithTag("shot").captureToImage().toAwtImage(), "png", out)
+                    println("USAGE-CARD-1 screenshot: ${out.absolutePath}")
+                }
+            } finally {
+                scope.cancel()
+                Palette.theme = ThemeSettings()
+            }
         }
     }
 }

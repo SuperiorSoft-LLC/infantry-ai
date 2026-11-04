@@ -48,6 +48,10 @@ enum class KillOutcome {
  * after a kill or a daemon crash.
  */
 /** SCRIPT-VIS-1b: which script hook currently works for a session (display only). */
+/** CHAT-QUEUE-1: one message held for a busy session: its daemon-given [id], the [text] as typed, and when it was queued ([at], epoch millis). */
+@Serializable
+data class QueuedTurn(val id: String, val text: String, val at: Long)
+
 @Serializable
 data class SessionAutomation(val script: String, val hookId: String, val since: Long)
 
@@ -211,6 +215,11 @@ data class SessionRecord(
     @EncodeDefault(EncodeDefault.Mode.NEVER) val mcp: String? = null,
     /** CLI-PTY-3: epoch millis of the last change of [mcp]; omitted with it. */
     @EncodeDefault(EncodeDefault.Mode.NEVER) val mcpChangedAt: Long? = null,
+    /**
+     * Contract 1.150.0 (CHAT-QUEUE-1): messages held while a turn runs, oldest first. The daemon sends the oldest as the next turn when
+     * the session comes to rest; `queue_remove` takes one back, `queue_force` delivers one into the running turn. Persisted; omitted when empty.
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val queued: List<QueuedTurn> = emptyList(),
 ) {
     /**
      * Whether this session is LIVE (a run is in flight) or HISTORY (none is).
@@ -319,7 +328,13 @@ val SessionListWire: KSerializer<List<SessionRecord>> = kotlinx.serialization.bu
 sealed interface SessionEvent {
     data class Status(val session: SessionRecord) : SessionEvent
     /** [origin] (contract 1.125.0): who the turn came from; [MessageOrigin.Owner] unless its creator said otherwise. */
-    data class Turn(val sessionId: String, val prompt: String, val origin: MessageOrigin = MessageOrigin.Owner) : SessionEvent
+    data class Turn(
+        val sessionId: String,
+        val prompt: String,
+        val origin: MessageOrigin = MessageOrigin.Owner,
+        /** CHAT-QUEUE-1: a message delivered INTO the turn already running (`queue_force`), not a new turn: shown in the transcript, never counted as a turn start. */
+        val midTurn: Boolean = false,
+    ) : SessionEvent
     /** [afterInterrupt]: BUG-M2-11c-INTERRUPT, the line belongs to a turn the owner interrupted. */
     data class Stdout(val sessionId: String, val line: String, val afterInterrupt: Boolean = false) : SessionEvent
     data class Stderr(val sessionId: String, val line: String) : SessionEvent

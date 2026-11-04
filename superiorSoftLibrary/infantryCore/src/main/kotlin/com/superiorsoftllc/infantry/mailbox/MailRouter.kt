@@ -463,6 +463,10 @@ class MailRouter(
             }
             manager.resume(session.id, turn, source.origin, if (replaced != null) "mail-hook-delivered" else "mail", group.joinToString(",") { it.id })
             DeliveryOutcome.Delivered("resumed ${session.id}", folded.map { it.id })
+        } catch (e: com.superiorsoftllc.infantry.session.RunInFlightException) {
+            // CHAT-QUEUE-1: another run (the daemon's queue drain, typically) started between the busy check above and this resume:
+            // the same as busy, so the mail stays queued for the next time the session comes to rest; never failed.
+            DeliveryOutcome.Retry("recipient '${session.id}' has a run in flight")
         } catch (e: Exception) {
             DeliveryOutcome.Failed("resume of '${session.id}' failed: ${e.message}")
         }

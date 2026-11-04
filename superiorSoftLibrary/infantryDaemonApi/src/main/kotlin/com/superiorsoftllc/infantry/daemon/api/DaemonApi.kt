@@ -159,7 +159,8 @@ interface DaemonApi {
         // 1.36.0 (PLUGIN-MCP-1, additive): `plugins` (daemon.api.plugins.PluginCatalogReader) and daemon.api.attention.OwnerAsks.
         // 1.35.0 (AR-3a, additive): daemon.api.sessions.SessionBinding / FirstTurnContextProvider (core composes the first turn from a provider list).
         // 1.37.0 (PROC-LEAK-1, additive): Processes.sessionMembers / containment, ProcessToolProfile.stop / stuck, TrackedProcess.stuck.
-        const val VERSION = "1.37.0"
+        // 1.38.0 (CHAT-QUEUE-1, additive): Sessions.queued / queueAdd / queueRemove / queueForce and QueuedMessage.
+        const val VERSION = "1.38.0"
     }
 }
 
@@ -238,7 +239,25 @@ interface Sessions {
      * throws [IllegalArgumentException] when refused. The daemon calls this nowhere on its own: a script or tool decides when.
      */
     fun reconnectMcp(id: String, force: Boolean = false): String = throw UnsupportedOperationException("this daemon cannot reconnect MCP servers")
+
+    /** CHAT-QUEUE-1 (1.38.0, additive): the messages the daemon holds for session [id]'s next turn, oldest first (empty = none or unknown). */
+    fun queued(id: String): List<QueuedMessage> = emptyList()
+    /**
+     * CHAT-QUEUE-1 (1.38.0, additive): hold [text] for session [id] until its turn ends; a session at rest takes it as a turn now (null is
+     * returned: nothing was held). Throws [IllegalArgumentException] when refused (unknown session, blank text, the queue is full).
+     */
+    fun queueAdd(id: String, text: String): QueuedMessage? = throw UnsupportedOperationException("this daemon holds no message queue")
+    /** CHAT-QUEUE-1 (1.38.0, additive): drop the held message [itemId]; it is never delivered. Throws [IllegalArgumentException] for an unknown one. */
+    fun queueRemove(id: String, itemId: String): QueuedMessage = throw UnsupportedOperationException("this daemon holds no message queue")
+    /**
+     * CHAT-QUEUE-1 (1.38.0, additive): deliver the held message [itemId] now: into the running turn when the harness takes input mid-turn
+     * (`injected`), as a turn of its own when none runs (`sent as turn`). Throws when refused; the message then stays held.
+     */
+    fun queueForce(id: String, itemId: String): String = throw UnsupportedOperationException("this daemon holds no message queue")
 }
+
+/** CHAT-QUEUE-1: one message held for a busy session: its [id], the [text], when it was queued ([at], epoch millis). */
+data class QueuedMessage(val id: String, val text: String, val at: Long)
 
 /** SCRIPT-SESSION-1: [state] is the state name; [lastAction] a short text; the times are epoch millis (null = none yet). */
 data class SessionStatus(val id: String, val state: String, val lastAction: String?, val lastOutputAt: Long?, val lastEventAt: Long?)
