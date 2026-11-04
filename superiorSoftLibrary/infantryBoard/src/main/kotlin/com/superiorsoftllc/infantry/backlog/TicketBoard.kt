@@ -407,13 +407,26 @@ class TicketBoard(
      * place, default the end), `remove`, `move` (ticket, at) or `clear`. Only todo tickets, one queue per ticket, at most
      * `limits.agentTasks.queueMax` per agent. Never starts anything: the agent's worker ending does (drainProfileLane).
      */
-    @Synchronized
     fun queue(agentRef: String, action: String = QUEUE_LIST, ticketId: String? = null, at: Int? = null): AgentQueueState {
+        // AGENT-QUEUE-HANG-1: the agent is resolved (a host call-out) BEFORE any board lock; a list is one lock-free snapshot read.
         val agent = resolveQueueAgent(agentRef)
         val agentId = agent.id ?: throw IllegalArgumentException("agent '${agent.name}' has no profile id")
         require(action in QUEUE_ACTIONS) { "unknown queue action '${action.take(40)}': use ${QUEUE_ACTIONS.joinToString("|")}" }
+        if (action == QUEUE_LIST) return queueState(agentId, agent.name, null)
+        return synchronized(this) { queueMutate(agent, agentId, action, ticketId, at) }
+    }
+
+    private fun queueState(agentId: String, agentName: String, message: String?): AgentQueueState {
+        val snapshot = store.transaction { load() }
+        val ids = boardOrder(snapshot.rows.values)
+            .filter { it.status == TicketStatus.TODO && it.queuedAgent == agentId && snapshot.holding(it.id).isEmpty() }
+            .sortedBy { it.queueRank ?: Int.MAX_VALUE }
+        return AgentQueueState(agentId, agentName, ids.mapIndexed { i, r -> AgentQueueEntry(r.id, r.title, i + 1) }, message)
+    }
+
+    private fun queueMutate(agent: BoardAgent, agentId: String, action: String, ticketId: String?, at: Int?): AgentQueueState {
         var message: String? = null
-        if (action != QUEUE_LIST) {
+        run {
             val id = if (action == QUEUE_CLEAR) null else checkId(ticketId ?: throw IllegalArgumentException("queue $action needs a ticket id"))
             if (action == QUEUE_MOVE) require(at != null) { "queue move needs a place (at)" }
             at?.let { require(it >= 1) { "place must be 1 or more" } }
@@ -453,9 +466,7 @@ class TicketBoard(
                 announce(outcome)
             }
         }
-        val snapshot = store.transaction { load() }
-        val entries = agentQueueIds(agentId).mapIndexed { i, tid -> AgentQueueEntry(tid, snapshot.rows.getValue(tid).title, i + 1) }
-        return AgentQueueState(agentId, agent.name, entries, message)
+        return queueState(agentId, agent.name, message)
     }
 
     /**

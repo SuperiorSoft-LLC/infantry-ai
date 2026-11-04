@@ -36,6 +36,25 @@ class AgentQueueTest {
     private val stores = mutableListOf<SqlInfantryStore>()
     private val boards = mutableListOf<TicketBoard>()
 
+    /** AGENT-QUEUE-HANG-1: a list never waits for the board monitor (a board write or hook holding it). */
+    @Test
+    fun listDoesNotBlockOnHeldBoardMonitor() {
+        val r = rig()
+        r.board.queue(r.xId, "add", r.ticket("a"))
+        val held = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        val holder = Thread { synchronized(r.board) { held.countDown(); release.await() } }.also { it.start() }
+        held.await()
+        try {
+            val t0 = System.nanoTime()
+            repeat(20) { assertEquals(1, r.board.queue(r.xId).tickets.size) }
+            val ms = (System.nanoTime() - t0) / 1_000_000
+            assertTrue(ms < 2000, "20 lists took $ms ms while the board monitor was held")
+        } finally {
+            release.countDown(); holder.join()
+        }
+    }
+
     @AfterTest
     fun cleanUp() {
         boards.forEach { runCatching { it.close() } }
