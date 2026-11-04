@@ -28,7 +28,7 @@ LICENSE-APPLY-1 (67e0d704, hold).
 | manager + CLI | `PluginManager.kt`, `cli/PluginCli.kt` | sources, search, inspect, install, enable/disable, grants, update, rollback, remove, `catalog validate` |
 | MCP tools for plugins | none | backed out: `BuiltinToolsListGuardTest`; needs a DaemonApi seam |
 | Settings > Plugins screen | none (PM-8) | the drop-in is the only UI path |
-| contract versions | `PLUGIN_API_VERSION = 2` (`ModuleManifest.kt`), `DaemonApi.VERSION = "1.35.0"`, `HARNESS_API_VERSION = "2.12.0"`, `BOARD_API_VERSION` | constants in code |
+| contract versions | `PLUGIN_API_VERSION = 2` (`ModuleManifest.kt`), `DaemonApi.VERSION = "1.35.0"`, `HARNESS_API_VERSION = "2.15.0"`, `BOARD_API_VERSION` | constants in code |
 | publishing | no `maven-publish` on any SDK module | none |
 | toolchain the host provides | Kotlin 2.3.10, Compose Multiplatform 1.10.3, JDK 21 (`gradle/libs.versions.toml`) | part of the UI contract in practice |
 
@@ -46,7 +46,7 @@ surfaces are small and already fenced by class loaders.
 | `infantry-plugin-api` | `infantryPlugins` | jvm, android, wasmJs | `2.<minor>.<patch>`, major = `PLUGIN_API_VERSION` | stable contract |
 | `infantry-protocol` | `infantryProtocol` | as the module | app version | stable (api dependency of the two below) |
 | `infantry-daemon-api` | `infantryDaemonApi` | jvm | `DaemonApi.VERSION` (1.35.0) | stable contract |
-| `infantry-harness-api` | `infantryHarnessApi` | jvm | `HARNESS_API_VERSION` (2.12.0) | stable contract |
+| `infantry-harness-api` | `infantryHarnessApi` | jvm | `HARNESS_API_VERSION` (2.15.0) | stable contract |
 | `infantry-ui-core` | `infantryUiCore` | jvm only (desktop plugins) | app version | **unstable**: published as is, marked so in its POM description |
 | `infantry-sdk-bom` | new (java-platform) | - | app version | pins one compatible set |
 | `infantry-sdk-catalog` | new (`version-catalog` plugin) | - | app version | Kotlin, Compose, serialization versions the host runs, plus the SDK artifacts |

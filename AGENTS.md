@@ -135,6 +135,7 @@ All under `superiorSoftLibrary/infantry/src/test/kotlin/com/superiorsoftllc/infa
 | `runner/StackNeutralGuardTest.kt` | Core main code names no build stack. |
 | `settings/LimitsGuardTest.kt` | No unnamed numeric limit in `src/main`. |
 | `daemon/TestPortGuardTest.kt` | Tests never bind 8787 or 8788. |
+| `daemon/HarnessContractGuardTest.kt` | Every repo harness module's `harness.contract` equals `HARNESS_API_VERSION` (a lagging one is refused at load). |
 | `DocsFreshnessGuardTest.kt` | Every file path and public type named in this file and `docs/wiki/**` exists. |
 
 The docs guard: when you rename or delete a file or type, it fails with the doc line that names it. Fix the doc.
