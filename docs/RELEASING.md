@@ -30,6 +30,21 @@ Old folders from before BUILD-LOC-1 are never deleted by the script; remove them
 Pushing a tag `v<MAJOR.MINOR.BUILD>` runs `.github/workflows/release.yml`, which builds the Windows app and the
 Android APK and publishes them to that tag's GitHub Release.
 
+## LAUNCH CHECKLIST (LAUNCH-PREP-1)
+
+The launch-day switch, in this order. Do not skip ahead: each step assumes the one before it is done.
+
+1. **Tokens rotated** (RELEASE-SECRETS-1): every repository secret and signing token is fresh, none was ever in a commit.
+2. **Final QA clean on the launch commit**: the full gate passes on the exact commit that ships.
+3. **Release builds** (Windows, Android, wasm) via the tag workflow (`.github/workflows/release.yml`, see *Cut a release*).
+4. **Updater switched to public** (UPDATER-1): installed copies read the public Release feed (see *Updater configuration*).
+5. **Fast-forward `main`** to the launch commit.
+6. **Merge the LAUNCH-PREP-1 branch** (drops the LICENSE DRAFT banners, enables the CLA bot, opens contributions).
+7. **Make the repository public** (this also lifts the *Private repository limitation* below).
+8. **Website download link live**, pointing at the launch Release.
+9. **Post-launch smoke test**: download from the website, install, start, connect a client, open a pull request from
+   an outside account and see the CLA bot comment.
+
 ## Cut a release
 
 1. Edit `infantryVersion=` in the root `gradle.properties` (the single version source: the MSI/app-image, the APK

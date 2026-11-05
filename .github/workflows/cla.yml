@@ -1,4 +1,4 @@
-# DISABLED DRAFT. Move to .github/workflows/cla.yml when the owner makes the CLA official (see docs/legal/CLA.md).
+# CLA Assistant: config mirrors .github/cla.json; agreement docs/legal/CLA.md.
 name: CLA
 on:
   issue_comment:
@@ -22,4 +22,4 @@ jobs:
           path-to-signatures: signatures/cla.json
           path-to-document: https://github.com/SuperiorSoft-LLC/infantry-ai/blob/main/docs/legal/CLA.md
           branch: cla-signatures
-          allowlist: dependabot[bot],github-actions[bot]
+          allowlist: numerical25,dependabot[bot],github-actions[bot]
