@@ -55,13 +55,30 @@ above, the time is stamped when a packaging task runs (else HEAD's commit time),
 
 | Asset | Source |
 |---|---|
-| `Infantry-<v>.msi` | Windows job, `releaseAssets` (unsigned MSI). This is what the in-app updater downloads. |
-| `Infantry-<v>-windows.zip` | Windows job, `createDistributable` app-image (also the fallback if MSI packaging fails on the runner; then the updater has nothing to install). |
-| `Infantry-<v>.apk` | Android job, signed `assembleRelease`, when the keystore secrets exist. |
-| `Infantry-<v>-debug.apk` | Android job fallback (`assembleDebug`) when they do not. **The debug key differs per build machine, so Android will refuse to update an installed app signed with another key.** Use a stable release key for anything users keep. |
-| `InfantryAI-server-<v>-<os>-<arch>.{zip\|tar.gz}` | Headless job (`headlessDist`): the daemon + CLI + a bundled Java runtime, one per OS (linux-x64, windows-x64 zip, macos-arm64). This is what `infantry update` downloads; the release job fails unless all three are present and listed in `SHA256SUMS`. |
+| `InfantryAI-<v>.msi` | Windows job, `releaseAssets` (unsigned MSI). This is what the in-app updater downloads. |
+| `InfantryAI-<v>-windows.zip` | Windows job, `createDistributable` app-image (also the fallback if MSI packaging fails on the runner; then the updater has nothing to install). Do not update a zip-extracted copy with the MSI (see Windows notes). |
+| `InfantryAI-<v>.apk` | Android job, signed `assembleRelease`, when the keystore secrets exist. |
+| `InfantryAI-<v>-debug.apk` | Android job fallback (`assembleDebug`) when they do not. **The debug key differs per build, so Android refuses to update an installed app signed with another key.** Use a stable release key for anything users keep. |
+| `InfantryAI-server-<v>-<os>-<arch>.{zip\|tar.gz}` | Headless job (`headlessDist`): the daemon + CLI + a bundled Java runtime, one per OS (linux-x64, windows-x64 zip, macos-arm64). This is what `infantry update` downloads; the release job fails unless all three are present, pass the smoke gate, and are listed in `SHA256SUMS`. |
 | `SHA256SUMS` | `sha256sum` of every asset above (the format the updater parses). |
+| `SHA256SUMS.sig` | ed25519 signature of `SHA256SUMS`, only when the signing secret exists (see below). |
 | `latest.json` | `{version, tag, published, assets:[{name, sha256, size, url}]}` for any other consumer (the Windows updater itself reads the GitHub Releases API plus `SHA256SUMS`). |
+
+## Release gates (UPDATER-1)
+
+Two checks stop a broken release before it is published:
+
+- **Split-package scan**, `scripts/split-packages.sh <lib dir>`: fails when one module's jar is present twice (a stale
+  jar left by a half-update) or when a package of ours is split over two jars and is not listed in
+  `scripts/split-packages.baseline`. The baseline holds the 14 splits the module split left (infantryCore /
+  infantryBoard / infantry / infantryProtocol, infantryUi / infantryUiCore-jvm). Remove a line when its split is cleaned
+  up; never add one to make a release pass. Runs on the Windows app image and inside the smoke test.
+- **Server smoke test**, `scripts/release-smoke.sh <server archive> [timeout s]`: unpacks the archive, runs the scan
+  on its `lib/`, starts `bin/infantry-server` on a random free port (20000-59999, `INFANTRY_PORT_STRICT=1`) with a
+  throwaway state dir and none of the caller's `INFANTRY_*` / `AGENTHQ_*` env, requires `GET /health` = 200 and no
+  `[plugins] daemon half of ... refused` line, then stops it. The headless job runs it on every server archive.
+
+Run either locally the same way (Git Bash on Windows).
 
 ## Headless server updates (SERVER-UPDATE-1..5)
 
@@ -74,10 +91,68 @@ Docker images cannot replace themselves: the daemon reports the newer release an
 
 ## Owner setup (repository secrets, Settings > Secrets and variables > Actions)
 
+### Android signing key (owner action before launch)
+
 Android signing (all four, or the build falls back to debug):
 `INFANTRY_ANDROID_RELEASE_KEYSTORE_BASE64` (`base64 -w0 release.keystore`), `INFANTRY_ANDROID_RELEASE_STORE_PASSWORD`,
 `INFANTRY_ANDROID_RELEASE_KEY_ALIAS`, `INFANTRY_ANDROID_RELEASE_KEY_PASSWORD`. No key or certificate is committed.
+
+**Current state (2026-11-05): the four secrets hold a throwaway TEST key.** UPDATER-1 found that every CI run built
+the APK with a different debug key, so the phone refused rc2 over rc1 (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`,
+"signatures do not match"). To prove the phone update, a test keystore was generated on the dev machine
+(`%USERPROFILE%\.infantry-test-android-key\infantry-TEST-ONLY.jks`, outside the repo) and the four secrets were set from
+it through the GitHub API. With it, rc1 -> rc2 updated in place on the phone.
+
+Replace it with the permanent key **before any user installs the APK**. An app signed with one key can never update
+to an APK signed with another: everyone who installed a test-key build must uninstall (losing the app's local data)
+and install again.
+
+1. Create the key once, on a machine you trust, and keep it (and its passwords) backed up offline. Losing it means no
+   phone can ever update again:
+   ```
+   keytool -genkeypair -v -keystore infantry-release.jks -alias infantry -keyalg RSA -keysize 4096 -validity 10000
+   ```
+2. Replace the four secrets: `INFANTRY_ANDROID_RELEASE_KEYSTORE_BASE64` = `base64 -w0 infantry-release.jks`, the store
+   password, the alias (`infantry`) and the key password.
+3. Delete the test keystore folder above, uninstall the test-key app from your own phones, and install the first
+   real-key release.
+
+What a user sees when sideloading the APK: the first install asks to allow "Install unknown apps" for the browser or
+file manager; Play Protect may show "App scan recommended" (the APK is not from Play); the in-app update is in
+Settings > About > Updates.
+
+### Release signature (ed25519, optional)
+
+The release job signs `SHA256SUMS` when the secret `INFANTRY_RELEASE_SIGNING_KEY` exists, and uploads
+`SHA256SUMS.sig` (base64 of the 64 raw signature bytes). Without the secret the step prints a warning and the release
+goes out unsigned. The key lives only in Actions secrets, never in the repo or a build.
+
+1. Create the key (openssl 3): `openssl genpkey -algorithm ed25519 -out release-signing.pem`. Back it up offline.
+2. Set the secret `INFANTRY_RELEASE_SIGNING_KEY` to the PEM (or its base64).
+3. Optional pin: set the repository **variable** `INFANTRY_RELEASE_PUBLIC_KEY` to the base64 of the 32-byte public key
+   (`openssl pkey -in release-signing.pem -pubout -outform DER | tail -c 32 | base64`). The job then fails if the
+   secret's key does not match the pin. The job prints only the public key.
+
+Verify a release by hand: `openssl pkeyutl -verify -pubin -inkey release-signing.pub.pem -rawin -in SHA256SUMS
+-sigfile <(base64 -d SHA256SUMS.sig)`. The updater does not check the signature yet (a later ticket); it checks each
+asset's SHA-256 against `SHA256SUMS`.
+
+### Windows
+
 Windows code signing is still HELD: the MSI is unsigned (SmartScreen will warn).
+
+## Windows update notes (UPDATER-1 rc tests)
+
+- The MSI installs per user (`INSTALLDIR`). An MSI-installed copy major-upgrades cleanly (`RemoveExistingProducts`).
+- **Do not update a copy unpacked from `-windows.zip` with the MSI.** msiexec over files it did not install skips the
+  unversioned files it sees as "modified" (595 in the test), a silent half-update. A zip copy must be replaced by
+  hand, or reinstalled from the MSI (a later ticket makes the updater refuse or handle this).
+- The window's update: download the MSI, verify its SHA-256, then `apply.cmd` waits for the app's PID to exit, runs
+  `msiexec /i <msi> INSTALLDIR=<launcher's parent> /passive /norestart /l*v <log>`, writes `apply.result` and starts
+  the app again.
+- There is no download progress yet: the screen says "Downloading and verifying" for the whole download (about 3.5
+  minutes for the MSI at 0.8 MB/s in the test). A later ticket adds progress.
+- An MSI install has no `BUILD-INFO.txt`; the build string is in Configuration > About.
 
 ## Updater configuration
 
