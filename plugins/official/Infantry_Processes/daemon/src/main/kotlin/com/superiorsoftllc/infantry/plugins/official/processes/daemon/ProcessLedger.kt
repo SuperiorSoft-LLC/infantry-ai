@@ -51,6 +51,8 @@ class ProcessLedger(
     private val isProtected: (ProcInfo) -> Boolean = os::isProtected,
     /** STACK-NEUTRAL-1: the tool profiles in force; their `heavyCommands` say what [adopt] may adopt by worktree path. */
     private val profiles: () -> List<com.superiorsoftllc.infantry.daemon.api.processes.ProcessToolProfile> = os::toolProfiles,
+    /** PROC-LEAK-2: reads where an orphan build daemon last built (a profile's `daemonDir`). Injected for tests. */
+    private val daemonDirs: DaemonDirReader = DaemonDirReader(),
 ) {
     private val entries = LinkedHashMap<Long, LedgerEntry>()
 
@@ -73,6 +75,11 @@ class ProcessLedger(
      * is gone) whose command line names a session's worktree path at a path boundary (the longest path wins) and matches a
      * profile's `heavyCommands`. A process with a live parent outside the ledger (one the owner started by hand, from a
      * shell or an IDE in that worktree) is never adopted. No start-time guessing. [sessionDirs] = session id to worktree path.
+     *
+     * (iii) PROC-LEAK-2: an ORPHAN matching a profile's `daemons` whose `daemonDir` source (the daemon's own log) names a
+     * session's worktree as the directory it last built in. This claims a detached build daemon whose client exited while
+     * no tick saw it (a daemon restart in between, or a build shorter than the tick); ended sessions are in [sessionDirs]
+     * too, so their daemons are adopted and then show as rogue.
      */
     @Synchronized
     fun adopt(sessionDirs: Map<String, String>) {
@@ -82,10 +89,14 @@ class ProcessLedger(
         val all = allProcesses()
         if (all.isEmpty()) return
         val byPid = all.associateBy { it.pid }
-        val heavy = ProfileRx.heavyCommand(runCatching(profiles).getOrDefault(emptyList()))
+        val tools = runCatching(profiles).getOrDefault(emptyList())
+        val heavy = ProfileRx.heavyCommand(tools)
+        val dirSources = tools.mapNotNull { t -> t.daemonDir?.takeIf { t.daemons.isNotEmpty() && it.paths.isNotEmpty() && it.match.isNotEmpty() }?.let { ProfileRx.any(t.daemons) to it } }
+        daemonDirs.retain(byPid.keys)
         var changed = false
         for (p in all) {
-            if (!heavy.containsMatchIn(p.command)) continue
+            val dirSource = dirSources.firstOrNull { it.first.containsMatchIn(p.command) }?.second
+            if (dirSource == null && !heavy.containsMatchIn(p.command)) continue
             val started = p.startedAt ?: continue
             if (entries[p.pid]?.startedAt == started) continue
             var owner: String? = null
@@ -99,6 +110,10 @@ class ProcessLedger(
             if (owner == null && (p.parentPid == null || p.parentPid !in byPid)) {
                 val cmd = norm(p.command)
                 owner = dirs.firstOrNull { atBoundary(cmd, it.value) }?.key
+                if (owner == null && dirSource != null && !runCatching { isProtected(p) }.getOrDefault(true)) {
+                    val built = daemonDirs.dirOf(p, dirSource)?.let(::norm)
+                    if (built != null) owner = dirs.firstOrNull { atBoundary(built, it.value) && built.startsWith(it.value) }?.key
+                }
             }
             if (owner != null) changed = record(p, owner, root = false, inferred = true) || changed
         }

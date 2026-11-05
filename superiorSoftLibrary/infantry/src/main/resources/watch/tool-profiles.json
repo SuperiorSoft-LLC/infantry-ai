@@ -9,6 +9,10 @@
     "sharedDaemon": true,
     "clients": ["gradlew", "GradleWrapperMain", "GradleMain"],
     "stop": ["gradlew", "--stop"],
+    "daemonDir": {
+      "paths": ["${env:GRADLE_USER_HOME}/daemon/*/daemon-${pid}.out.log", "${home}/.gradle/daemon/*/daemon-${pid}.out.log"],
+      "match": "Received command: Build[{].*?currentDir=([^,}]+)"
+    },
     "heavyImages": ["gradle.*"],
     "heavyCommands": ["gradle"],
     "env": [

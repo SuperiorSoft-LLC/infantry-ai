@@ -12,7 +12,7 @@
   "daemon": {
     "entry": "com.superiorsoftllc.infantry.plugins.official.processes.daemon.ProcessesDaemonPlugin",
     "jar": "daemon/build/libs/Infantry_Processes-daemon.jar",
-    "apiAtLeast": "1.8.0",
+    "apiAtLeast": "1.39.0",
     "tools": [
       { "name": "infantry_processes", "action": "host.processes.read", "kind": "read", "description": "List rogue background processes and free RAM." },
       { "name": "infantry_processes_reap", "action": "host.processes.reap", "kind": "destructive", "description": "Kill one rogue process or all of them." }
