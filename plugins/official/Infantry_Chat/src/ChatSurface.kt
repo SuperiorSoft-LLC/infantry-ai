@@ -818,7 +818,9 @@ private fun Modifier.composerTab(ring: Color, borderDp: Int, fill: Color): Modif
         lineTo(w - c, c + r)
         arcTo(circle(w - c + r, c + r, r), 180f, 90f, false)
     }
-    val body = androidx.compose.ui.graphics.Path().apply { outline(); lineTo(w - c + r, 0f); lineTo(c - r, 0f); close() }
+    // PROMPT-BORDER-2: the fill reaches above the box's stroke, so a pixel-rounded offset (phone densities) never leaves a row of it.
+    val top = composerTabFillTop(b)
+    val body = androidx.compose.ui.graphics.Path().apply { outline(); lineTo(w - c + r, c); lineTo(w - c + r, top); lineTo(c - r, top); lineTo(c - r, c); close() }
     drawPath(body, fill)
     drawPath(androidx.compose.ui.graphics.Path().apply { outline() }, ring, style = androidx.compose.ui.graphics.drawscope.Stroke(b))
 }
@@ -890,6 +892,14 @@ const val COMPOSER_TOUCH_DP = 48
 /** CHAT-MINIMIZE-3: the drawn diameter (dp) of a composer button, and the group border thickness (the text box's focused border). */
 const val COMPOSER_BUTTON_DP = 36
 const val COMPOSER_BORDER_DP = 2
+
+/**
+ * PROMPT-BORDER-2: where a hanging tab's fill starts (px, in the tab's own coordinates; negative = above it). The tab sits at
+ * `-borderDp` rounded to whole pixels, while the box's stroke is drawn at the exact (fractional) width with an antialiased edge;
+ * the fill must start at least one whole pixel above that stroke, or a thin line of it shows across the group's top. Above the
+ * stroke is the box's own fill (same colour), so the extra reach is invisible.
+ */
+fun composerTabFillTop(borderPx: Float): Float = -(kotlin.math.ceil(borderPx) + 1f)
 
 /** PROMPT-BORDER-1: the composer outline: the same geometry (thickness) for hover and focus, only idle differs. */
 data class ComposerOutline(val color: Color, val dp: Int)
