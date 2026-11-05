@@ -61,8 +61,39 @@ class UsageFitModelTest {
     @Test fun `chart colours are readable in dark and light`() {
         ThemeContrastAssert.assertReadable(
             text = emptyList(),
-            graphics = (0 until 6).map { i -> Token("role colour $i") { UsageFitColors.role(i) } } +
+            graphics = (0 until SeriesPalette.size).map { i -> Token("series colour $i") { SeriesPalette.colors[i] } } +
                 listOf(Token("actual") { UsageFitColors.actual }, Token("fitted") { UsageFitColors.fitted }, Token("line") { UsageFitColors.line }),
         )
+    }
+
+    @Test fun `N roles get N distinct colours and each keeps its colour`() {
+        val all = listOf("architect", "frontend", "fullstack", "version-control", "backend", "pm", "automation", "mobile",
+            "devops", "qa", "assistant", "marketing")
+        val slots = SeriesPalette.assign(all)
+        assertEquals(all.size, slots.values.toSet().size)
+        for (n in 1..all.size) assertEquals(n, SeriesPalette.assign(all.take(n)).values.toSet().size)
+        // the same role keeps its colour when run again and in a set where it has no collision
+        assertEquals(slots, SeriesPalette.assign(all.reversed()))
+        assertEquals(SeriesPalette.assign(listOf("qa"))["qa"], SeriesPalette.assign(listOf("qa", "devops"))["qa"])
+    }
+
+    @Test fun `more series than colours fold the smallest into other`() {
+        val totals = (1..15).associate { "r$it" to it.toLong() }
+        val order = SeriesPalette.order(totals)
+        assertEquals(SeriesPalette.size, order.size)
+        assertEquals(SeriesPalette.OTHER, order.last())
+        assertEquals("r15", order.first())
+        assertEquals(SeriesPalette.size - 1, SeriesPalette.assign(order).values.toSet().size)
+    }
+
+    @Test fun `no series colour is the accent or danger red`() {
+        val saved = com.superiorsoftllc.infantry.ui.Palette.theme
+        try {
+            for (dark in listOf(true, false)) {
+                com.superiorsoftllc.infantry.ui.Palette.theme = com.superiorsoftllc.infantry.ui.model.ThemeSettings(dark = dark)
+                val reds = setOf(com.superiorsoftllc.infantry.ui.Palette.Accent, com.superiorsoftllc.infantry.ui.Palette.Danger)
+                SeriesPalette.colors.forEach { kotlin.test.assertTrue(it !in reds) }
+            }
+        } finally { com.superiorsoftllc.infantry.ui.Palette.theme = saved }
     }
 }

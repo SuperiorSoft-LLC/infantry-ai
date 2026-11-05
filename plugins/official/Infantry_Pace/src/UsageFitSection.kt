@@ -48,13 +48,60 @@ const val USAGEFIT_HEADER_TAG = "usagefit-header"
 const val USAGEFIT_BODY_TAG = "usagefit-body"
 const val USAGEFIT_REFRESH_MS = 60_000L
 
-/** Colours of the charts, all checked against Palette.Raised (UsageFitContrastTest). */
+/** Colours of the charts, all checked against Palette.Raised (UsageFitModelTest). */
 object UsageFitColors {
-    val roles: List<Color> get() = listOf(Palette.Accent, Palette.Info, Palette.Ok, Palette.Warn, Palette.Muted, Palette.Danger)
-    fun role(i: Int): Color = roles[i % roles.size]
     val actual: Color get() = Palette.Info
     val fitted: Color get() = Palette.Warn
     val line: Color get() = Palette.Accent
+}
+
+/**
+ * STATS-COLORS-1: the categorical series palette (12 distinct, colour-blind-aware hues, one set per theme, none of them the
+ * accent red, which reads as an alert). [assign] gives each series id a stable colour: hashed into the palette, collisions
+ * probe to the next free slot in id order. Past [size] series the smallest go to [OTHER] in one neutral grey.
+ */
+object SeriesPalette {
+    const val OTHER = "other"
+    private val dark = listOf(
+        0xFF56B4E9, 0xFFE69F00, 0xFF2EC4B6, 0xFFF0E442, 0xFFCC79A7, 0xFF6699FF,
+        0xFF9BD148, 0xFFB48EF0, 0xFFD9A66B, 0xFF7FE0B0, 0xFFE8A0F0, 0xFFC9B458,
+    ).map { Color(it) }
+    private val light = listOf(
+        0xFF0072B2, 0xFFA65200, 0xFF00796B, 0xFF7A6C00, 0xFFA23E7A, 0xFF3355CC,
+        0xFF4D7A12, 0xFF6F42C1, 0xFF8B5A2B, 0xFF00748A, 0xFF9C27B0, 0xFF5C6B2E,
+    ).map { Color(it) }
+    val colors: List<Color> get() = if (Palette.theme.dark) dark else light
+    val size: Int get() = dark.size
+    val other: Color get() = Palette.Muted
+
+    /** Series in stack/legend order: largest [totals] first, the tail past the palette folded into [OTHER]. */
+    fun order(totals: Map<String, Long>): List<String> {
+        val ranked = totals.entries.sortedWith(compareByDescending<Map.Entry<String, Long>> { it.value }.thenBy { it.key }).map { it.key }
+        return if (ranked.size <= size) ranked else ranked.take(size - 1) + OTHER
+    }
+
+    /** Palette slot per id (ids without [OTHER]); the same id keeps its slot whatever the other ids. */
+    fun assign(ids: Collection<String>): Map<String, Int> {
+        val used = BooleanArray(size)
+        val out = HashMap<String, Int>()
+        for (id in ids.filter { it != OTHER }.distinct().sorted()) {
+            var slot = ((stableHash(id) % size) + size) % size
+            var tries = 0
+            while (used[slot] && tries < size) { slot = (slot + 1) % size; tries++ }
+            used[slot] = true
+            out[id] = slot
+        }
+        return out
+    }
+
+    fun color(slots: Map<String, Int>, id: String): Color = slots[id]?.let { colors[it] } ?: other
+
+    /** FNV-1a: stable across runs and platforms (String.hashCode would do too, this keeps it explicit). */
+    private fun stableHash(s: String): Int {
+        var h = 0x811C9DC5.toInt()
+        for (c in s) { h = h xor c.code; h *= 0x01000193 }
+        return h
+    }
 }
 
 sealed interface UsageFitState {
@@ -199,7 +246,13 @@ private fun PerPointChart(w: FitWindowView) {
 
 @Composable
 private fun RoleShareChart(w: FitWindowView) {
-    val roles = w.series.flatMap { it.byRole.keys }.distinct().sorted()
+    val totals = HashMap<String, Long>()
+    w.series.forEach { s -> s.byRole.forEach { (r, v) -> totals[r] = (totals[r] ?: 0L) + v } }
+    val roles = SeriesPalette.order(totals)
+    val slots = SeriesPalette.assign(roles)
+    val shown = roles.toSet()
+    fun share(byRole: Map<String, Long>, r: String): Long =
+        if (r == SeriesPalette.OTHER) byRole.filterKeys { it !in shown }.values.sum() else byRole[r] ?: 0L
     ChartFrame(
         "Who used the tokens, step by step", "time (one bar per meter step)", "share of that step's cache-read tokens (full height = 100%)",
         "Each colour is a role (see the key). Tall bands mean that role did most of the work in that step.", "usagefit-chart-roles",
@@ -210,16 +263,16 @@ private fun RoleShareChart(w: FitWindowView) {
                 val total = s.byRole.values.sum().coerceAtLeast(1L).toFloat()
                 var y = size.height
                 roles.forEachIndexed { ri, r ->
-                    val h = size.height * (s.byRole[r] ?: 0L) / total
+                    val h = size.height * share(s.byRole, r) / total
                     y -= h
-                    drawRect(UsageFitColors.role(ri), Offset(i * bw + 1f, y), Size((bw - 2f).coerceAtLeast(1f), h))
+                    drawRect(SeriesPalette.color(slots, r), Offset(i * bw + 1f, y), Size((bw - 2f).coerceAtLeast(1f), h))
                 }
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             roles.forEachIndexed { i, r ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Row(Modifier.width(10.dp).height(10.dp).background(UsageFitColors.role(i))) {}
+                    Row(Modifier.width(10.dp).height(10.dp).background(SeriesPalette.color(slots, r))) {}
                     Text(" $r", color = Palette.Text, fontSize = 10.sp)
                 }
             }
