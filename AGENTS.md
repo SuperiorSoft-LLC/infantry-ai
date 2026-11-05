@@ -120,6 +120,7 @@ plugin can do it. Before you change a file, ask the knowledge base: `infantry is
 - [Plugins](docs/wiki/Plugins.md) and [Make a plugin](docs/wiki/make-a-plugin.md): `module.json`, a built example.
 - [UI plugin API](docs/wiki/plugin-api.md), [Daemon plugin API](docs/wiki/daemon-plugin-api.md), [Harnesses](docs/wiki/Harnesses.md).
 - [Scripting](docs/wiki/Scripting.md), [Settings](docs/wiki/Settings.md), [Licensing](docs/wiki/licensing.md).
+- [Kotlin notes](docs/wiki/kotlin-notes.md): toolchain versions, UI core source sets and expect/actual, Compose MP pitfalls, the build flags.
 - Design records (older, dated; the code wins): [DAEMON-CORE](docs/DAEMON-CORE.md),
   [AGENT-QUICKREF](superiorSoftLibrary/infantry/docs/AGENT-QUICKREF.md) (the CLI), [MCP](superiorSoftLibrary/infantry/docs/MCP.md).
 - [llms.txt](llms.txt): the same map in the llms.txt format.

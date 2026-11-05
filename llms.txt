@@ -17,6 +17,7 @@ Read AGENTS.md first. Facts in these docs come from the code; where an older des
 - [UI plugin API](docs/wiki/plugin-api.md): every public type of the UI plugin API.
 - [Daemon plugin API](docs/wiki/daemon-plugin-api.md): tools, routes, hooks, events, services, storage, the guard.
 - [Harnesses and providers](docs/wiki/Harnesses.md): adding an agent CLI and a model group.
+- [Kotlin notes](docs/wiki/kotlin-notes.md): toolchain versions, UI core source sets and expect/actual, Compose MP pitfalls, why incremental is off.
 
 ## Automate and configure
 
