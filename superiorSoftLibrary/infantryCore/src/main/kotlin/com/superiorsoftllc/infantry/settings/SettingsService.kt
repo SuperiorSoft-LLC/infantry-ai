@@ -108,7 +108,7 @@ class SettingsService(
             MAIL_AUTOMATION_FOOTER to JsonPrimitive(automationFooter("system") ?: ""),
             MAIL_WAKE_MODE to JsonPrimitive(wakeMode(null, null)),
             MAIL_DELIVERY_MODE to JsonPrimitive(deliveryMode(null, null)),
-        ) + LimitRegistry.ALL.associate { it.key to JsonPrimitive(limit(it)) } + (userPortrait()?.let { mapOf(USER_PORTRAIT to JsonPrimitive(it)) } ?: emptyMap()),
+        ) + LimitRegistry.ALL.associate { it.key to JsonPrimitive(limit(it)) } + EndpointRegistry.ALL.associate { it.key to JsonPrimitive(endpoint(it)) } + (userPortrait()?.let { mapOf(USER_PORTRAIT to JsonPrimitive(it)) } ?: emptyMap()),
     )
 
     /** USER-PORTRAIT (1.107.0): the stored base64 portrait, or null while unset (clients then show their bundled default). */
@@ -154,6 +154,14 @@ class SettingsService(
             ?.let { runCatching { (Json.parseToJsonElement(it) as? JsonPrimitive)?.takeIf { p -> !p.isString }?.content?.toLongOrNull() }.getOrNull() }
             ?.takeIf { def.accepts(it) }
         return stored ?: runCatching { LimitRegistry.fromEnv(def, env) }.getOrDefault(def.default)
+    }
+
+    /**
+     * DOMAIN-ENV-1: [def]'s effective URL / repo / image: the environment variable, else the saved setting, else the
+     * built-in default ([EndpointRegistry.resolve]). Read at every use, so a change applies at once.
+     */
+    fun endpoint(def: EndpointDef): String = EndpointRegistry.resolve(def, env) { key ->
+        store.settings.get(key)?.value?.let { runCatching { (Json.parseToJsonElement(it) as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }.getOrNull() }
     }
 
     /** SANDBOX-1: what the sandbox really does on this machine (set by the daemon); shown under limits.sandbox.mode. */
@@ -287,7 +295,7 @@ class SettingsService(
     /** One line per environment variable that holds an unusable limit (reported at daemon start, then ignored). */
     fun limitEnvProblems(): List<String> = LimitRegistry.ALL.mapNotNull { def ->
         runCatching { LimitRegistry.fromEnv(def, env) }.exceptionOrNull()?.message
-    }
+    } + EndpointRegistry.problems(env)
 
     private fun pacingCeiling(): Int = limitCap(LimitRegistry.PACING_CEILING)
 
@@ -474,7 +482,10 @@ class SettingsService(
                 JsonPrimitive(requireWakeMode(key, value))
             } else if (key.startsWith("$MAIL_AUTOMATION_FOOTER.") && key.length > MAIL_AUTOMATION_FOOTER.length + 1) {
                 JsonPrimitive(requireFooterText(key, value))
-            } else LimitRegistry.get(key)?.let { JsonPrimitive(requireLimit(it, value)) }
+            } else EndpointRegistry.get(key)?.let { def ->
+                JsonPrimitive(EndpointRegistry.validate(def, (value as? JsonPrimitive)?.takeIf { it.isString }?.content
+                    ?: throw IllegalArgumentException("setting '$key' must be a string: ${def.kind.hint} (\"\" = the default)")))
+            } ?: LimitRegistry.get(key)?.let { JsonPrimitive(requireLimit(it, value)) }
                 ?: declaredField(key)?.let { com.superiorsoftllc.infantry.plugin.api.ConfigFieldValidator.validate(it, value) }
                 ?: throw IllegalArgumentException("unknown setting '$key'")
         }

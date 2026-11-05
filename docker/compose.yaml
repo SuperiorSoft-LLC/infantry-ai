@@ -23,6 +23,14 @@ services:
       INFANTRY_BASE_BRANCH: ${INFANTRY_BASE_BRANCH:-main}
       # Host name(s) the browser uses (comma separated), e.g. agents.example.com. Empty: the daemon's own addresses only.
       INFANTRY_WEB_HOSTS: ${INFANTRY_WEB_HOSTS:-}
+      # --- Domains and URLs (DOMAIN-ENV-1, settings/EndpointRegistry.kt): empty = the built-in default. Moving the site,
+      # the docs or the release files is an env change here, not a new image. See docs/wiki/Settings.md#domains-and-urls.
+      INFANTRY_SITE_URL: ${INFANTRY_SITE_URL:-}
+      INFANTRY_DOCS_URL: ${INFANTRY_DOCS_URL:-}
+      INFANTRY_DOWNLOAD_URL: ${INFANTRY_DOWNLOAD_URL:-}
+      INFANTRY_UPDATE_REPO: ${INFANTRY_UPDATE_REPO:-}
+      INFANTRY_UPDATE_API: ${INFANTRY_UPDATE_API:-}
+      INFANTRY_DOCKER_IMAGE: ${INFANTRY_DOCKER_IMAGE:-}
       # Health watchdog (ticket 55d60a5e): halts the daemon after FAILURES failed /health self-checks in a row so the restart
       # policy restarts it (Docker never restarts an unhealthy container). 0 = off. See docker-compose.yml.
       INFANTRY_LIMIT_HEALTH_WATCHDOG_FAILURES: ${INFANTRY_LIMIT_HEALTH_WATCHDOG_FAILURES:-3}

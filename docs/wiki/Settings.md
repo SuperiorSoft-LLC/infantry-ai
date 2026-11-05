@@ -66,6 +66,34 @@ The default is the cheapest reasonable value. A costlier value is an opt-in. The
 | `nudges.deferToHooks` | `[]` | Built-in notices a script replaces (for example `notice.ticket_finished`) |
 | `harness.claude.mode` | `interactive` | How Claude agents run. `interactive`: the real `claude` CLI in its own terminal, as you run Claude Code yourself, so usage behaves like normal Claude Code use. `headless`: `claude -p` stream-json (SDK), a machine-readable stream that may be metered differently. Switch in Settings (Plugins tab, Harnesses > Claude Code, field "Mode") or `infantry settings set harness.claude.mode headless`; it applies at the next session launch. See [Harnesses](Harnesses.md#claude-code-the-real-cli-by-default) |
 
+## Domains and URLs
+
+Every domain, URL and repository the product reaches is one entry of `EndpointRegistry`
+(`superiorSoftLibrary/infantryCore/src/main/kotlin/com/superiorsoftllc/infantry/settings/EndpointRegistry.kt`), the one
+place their defaults live. Each resolves in this order:
+
+**environment variable > saved setting > built-in default**
+
+The environment wins so a deployment (`docker run -e`, compose `.env`) repoints an image without touching its data. A
+blank value counts as unset; a value that does not fit its kind (URL, `owner/repo`, image name) is refused on
+`settings set` and ignored (reported at daemon start) when it comes from the environment. `settings set <key> ""`
+resets a key to its default. These keys are app-scope only. Daemon code reads them with `SettingsService.endpoint(def)`.
+
+| Env var | Setting | Default | What reads it |
+|---|---|---|---|
+| `INFANTRY_SITE_URL` | `urls.site` | `https://github.com/SuperiorSoft-LLC/infantry-ai` | The product home page clients link to (About, help menus) |
+| `INFANTRY_DOCS_URL` | `urls.docs` | `https://github.com/SuperiorSoft-LLC/infantry-ai/tree/main/docs/wiki` | The documentation root clients link to (Help, wiki links) |
+| `INFANTRY_DOWNLOAD_URL` | `urls.downloads` | `https://github.com/SuperiorSoft-LLC/infantry-ai/releases` | The page installers are downloaded from by hand |
+| `INFANTRY_UPDATE_REPO` | `urls.releasesRepo` | none: updates stay off until set | `owner/repo` whose releases hold the update files (the updater) |
+| `INFANTRY_UPDATE_API` | `urls.releasesApi` | `https://api.github.com` | The releases API base the updater asks (a mirror or a fake server in tests) |
+| `INFANTRY_DOCKER_IMAGE` | `urls.dockerImage` | `infantryai/infantry-ai` | The image a Docker install reports for `docker pull` |
+
+Not in the registry, because they are not the product's own addresses: `INFANTRY_WEB_HOSTS` (the host names the
+browser client may use), `INFANTRY_DOMAIN` (Caddy's site address in `docker/compose.yaml`'s `tls` profile) and
+`INFANTRY_IMAGE` (the image compose runs). The browser client dials the host that served it, so the web demo needs no
+daemon URL setting. Build-time links (`gradle/sdk-publish.gradle.kts`: `-Pinfantry.url`, `-Pinfantry.scm.url`) are
+Gradle properties; the CI workflows use `${GITHUB_REPOSITORY}`.
+
 Plugins add their own keys through `config` cards in their `module.json` (see [Plugins](Plugins.md)). The full list
 for your build: `infantry settings`, and the Settings tab (searchable). Environment variables (`INFANTRY_*`, also read
 as `INFANTRY_*`) set machine-level values such as the port, state dir and token; see the README.
