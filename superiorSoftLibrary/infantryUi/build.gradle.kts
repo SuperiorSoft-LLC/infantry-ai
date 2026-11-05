@@ -917,6 +917,26 @@ tasks.register<JavaExec>("runShell") {
     argumentProviders += CommandLineArgumentProvider { listOf("--app", shellAppDir.get().absolutePath) }
 }
 
+// SHELL-SHOW-1: the runShell java command as files, so scripts/show-empty-shell.ps1 starts the shell JVM itself (it owns the
+// PID, the app dir, the temp home and the environment): build/shell/launch/java.txt (the toolchain java) and shell.args
+// (a java @argfile: heap caps, build stamp, -cp of the shell-only classpath, main class). No --app: the caller adds it.
+tasks.register("shellLaunchFiles") {
+    group = "application"
+    description = "SHELL-SHOW-1: writes build/shell/launch/{java.txt,shell.args}, the runShell command for a launcher script."
+    val cp = sourceSets["main"].runtimeClasspath.filter(::isShellJar)
+    dependsOn(cp)
+    val launcher = javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(21)) }
+    val out = layout.buildDirectory.dir("shell/launch")
+    val stamp = infantryBuildStamp
+    doLast {
+        val d = out.get().asFile.apply { mkdirs() }
+        File(d, "java.txt").writeText(launcher.get().executablePath.asFile.absolutePath)
+        fun q(s: String) = "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+        val lines = infantryJvmCaps + listOf("-Dinfantry.build=$stamp", "-cp", cp.files.joinToString(File.pathSeparator) { it.absolutePath }, "com.superiorsoftllc.infantry.ui.AppMainKt")
+        File(d, "shell.args").writeText(lines.joinToString("\n") { q(it) } + "\n")
+    }
+}
+
 // The shell's jars: this module's jar plus its filtered runtime classpath (the jpackage --input).
 val shellJars = tasks.register<Sync>("shellJars") {
     group = "distribution"
