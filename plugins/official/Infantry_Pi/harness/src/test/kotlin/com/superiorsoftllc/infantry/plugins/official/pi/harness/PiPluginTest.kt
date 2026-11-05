@@ -298,6 +298,18 @@ class PiPluginTest {
         assertTrue(out.closed)
     }
 
+    @Test fun `injectInput steers a running turn and is refused when idle`() {
+        val out = FakeOut()
+        val c = session(out)
+        assertFalse(c.injectInput("early"))
+        c.sendTurn(request())
+        assertTrue(c.injectInput("now"))
+        assertEquals("now", out.sent("steer").single()["message"]!!.jsonPrimitive.content)
+        c.onStdout("""{"type":"agent_settled"}""")
+        assertFalse(c.injectInput("late"))
+        assertEquals(1, out.sent("steer").size)
+    }
+
     @Test fun `a dialog request is answered cancelled`() {
         val out = FakeOut()
         val c = session(out)
