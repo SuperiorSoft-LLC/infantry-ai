@@ -32,3 +32,22 @@ The image now carries the opencode and pi CLIs (claude with `--build-arg INSTALL
 configured, `entrypoint.sh` generates one into `/data/access-token` on first start (`INFANTRY_TOKEN_AUTO=false` turns that
 off). `docker-compose.yml` is the 2 GB droplet demo (limits as env settings, `mem_limit`, token in the volume); the full
 DigitalOcean recipe, the measured memory and the Linux notes are in `docs/docker-deploy.md`.
+
+## Domains and URLs
+
+Every domain, URL and repository the product uses is a setting with an environment override (env var > saved setting
+> built-in default), so a redeploy on a new domain, a moved site or a separate releases repo is an env change, not a
+new image. Pass them with `-e` on `docker run`, or set them in `.env` (both compose files forward them; empty = the
+default):
+
+| Variable | Setting | Default |
+|---|---|---|
+| `INFANTRY_SITE_URL` | `urls.site` | `https://github.com/SuperiorSoft-LLC/infantry-ai` |
+| `INFANTRY_DOCS_URL` | `urls.docs` | `https://github.com/SuperiorSoft-LLC/infantry-ai/tree/main/docs/wiki` |
+| `INFANTRY_DOWNLOAD_URL` | `urls.downloads` | `https://github.com/SuperiorSoft-LLC/infantry-ai/releases` |
+| `INFANTRY_UPDATE_REPO` | `urls.releasesRepo` | none (updates not configured) |
+| `INFANTRY_UPDATE_API` | `urls.releasesApi` | `https://api.github.com` |
+| `INFANTRY_DOCKER_IMAGE` | `urls.dockerImage` | `infantryai/infantry-ai` |
+
+The host name the browser uses is separate: `INFANTRY_WEB_HOSTS` (the daemon refuses other Host headers) and, with the
+`tls` profile, `INFANTRY_DOMAIN` (Caddy's site address). The full list: `docs/wiki/Settings.md`, section "Domains and URLs".

@@ -85,6 +85,13 @@ docker compose -f docker-compose.yml ps        # STATUS: Up ... (healthy) after 
 curl -fsS http://127.0.0.1:8787/health          # {"status":"ok",...,"database":"ok"}
 ```
 
+Moving the demo to another domain, or the release files to another repository, is an env change in the same `.env`:
+`INFANTRY_WEB_HOSTS` and `INFANTRY_DOMAIN` (the `tls` profile) name the host, and `INFANTRY_SITE_URL`,
+`INFANTRY_DOCS_URL`, `INFANTRY_DOWNLOAD_URL`, `INFANTRY_UPDATE_REPO`, `INFANTRY_UPDATE_API` and `INFANTRY_DOCKER_IMAGE`
+point the product's links and updates (empty = the built-in default; the list and defaults are in
+[Settings](wiki/Settings.md#domains-and-urls) and `docker/README.md`). Then `docker compose ... up -d` again; the
+image and the volumes stay as they are.
+
 If the database stops answering, `/health` says so at once (HTTP 503, `"database":"stuck"`) and the daemon's health
 watchdog halts it after 3 failed self-checks 10 s apart (exit 3), so `restart: unless-stopped` restarts it: Docker on its
 own never restarts a container that is only *unhealthy*. Tune or turn it off with `INFANTRY_LIMIT_HEALTH_WATCHDOG_*`

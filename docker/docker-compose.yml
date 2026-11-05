@@ -28,6 +28,14 @@ services:
       # Host name(s)/IP the browser uses (comma separated), e.g. 203.0.113.7 or demo.example.com. Inside a container the
       # daemon cannot see the droplet's public address, so the browser UI refuses other hosts until this is set.
       INFANTRY_WEB_HOSTS: ${INFANTRY_WEB_HOSTS:-}
+      # --- Domains and URLs (DOMAIN-ENV-1, settings/EndpointRegistry.kt): empty = the built-in default. Moving the site,
+      # the docs or the release files is an env change here, not a new image. See docs/wiki/Settings.md#domains-and-urls.
+      INFANTRY_SITE_URL: ${INFANTRY_SITE_URL:-}
+      INFANTRY_DOCS_URL: ${INFANTRY_DOCS_URL:-}
+      INFANTRY_DOWNLOAD_URL: ${INFANTRY_DOWNLOAD_URL:-}
+      INFANTRY_UPDATE_REPO: ${INFANTRY_UPDATE_REPO:-}
+      INFANTRY_UPDATE_API: ${INFANTRY_UPDATE_API:-}
+      INFANTRY_DOCKER_IMAGE: ${INFANTRY_DOCKER_IMAGE:-}
       # --- Limits (settings/LimitRegistry.kt; env INFANTRY_LIMIT_<KEY>, also changeable live in Settings > Limits) ---
       # How deep spawns may nest (1 = a session may spawn, its spawns may not).
       INFANTRY_LIMIT_CONCURRENCY_MAX_DEPTH: ${INFANTRY_LIMIT_CONCURRENCY_MAX_DEPTH:-1}
