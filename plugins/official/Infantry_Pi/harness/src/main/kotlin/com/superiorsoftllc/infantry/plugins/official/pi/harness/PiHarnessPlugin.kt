@@ -58,6 +58,7 @@ class PiHarness internal constructor(
         HarnessCapability.REASONING, // thinking_delta
         HarnessCapability.USAGE, // assistant message usage
         HarnessCapability.EFFORT_SELECTION, // --thinking
+        HarnessCapability.MID_TURN_INPUT, // HARNESS-GAP G10: rpc `steer` into the running agent
     )
 
     override fun process(request: HarnessRequest): HarnessProcess {

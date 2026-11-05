@@ -105,6 +105,11 @@ internal class PiSession(
         /** Stops the current run and keeps the process (`agent_settled {"aborted":true}` in 9 ms in the probe). */
         fun abortLine(id: String): String = buildJsonObject { put("id", id); put("type", "abort") }.toString()
 
+        /** HARNESS-GAP G10: a steering message for the running agent (pi docs/rpc-commands.md "steer"); delivered after the current tool calls, the turn goes on. */
+        fun steerLine(id: String, message: String): String = buildJsonObject {
+            put("id", id); put("type", "steer"); put("message", message)
+        }.toString()
+
         /** HARNESS-GAP G5: the answer to an approval confirm dialog. */
         fun confirmLine(id: String, confirmed: Boolean): String = buildJsonObject {
             put("type", "extension_ui_response"); put("id", id); put("confirmed", confirmed)
@@ -260,6 +265,12 @@ internal class PiSession(
             val turn = active ?: return true
             turn.abortRequested.set(true)
             return out.write(abortLine(nextId("abort")) + "\n")
+        }
+
+        /** HARNESS-GAP G10: `steer` into the running agent. False (the daemon keeps it queued) when no agent run is live. */
+        override fun injectInput(text: String): Boolean {
+            if (active == null || held != null) return false
+            return out.write(steerLine(nextId("steer"), text) + "\n")
         }
 
         override fun close(): Boolean {

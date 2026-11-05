@@ -145,7 +145,7 @@ G17 6f4c36b1, G18 5a69ec0f, G19 5ccc0b8c, G20 ba7f1956, G21 d4945c15.
 | G7 | `chat_note wake=true` to a busy session is dropped: merge NOTE-WAKE-PTY-1 (`96975c45`, ticket 54f8bab9) | all | live; `Note:79-83` | |
 | G8 | `infantry_prompt` to a busy session refused, not queued | all | live; `DM:2856-2859` | |
 | G9 | A FAILED turn with no exit code: no finish/idle notice, queue never drains, worker-watch never kicks | all (opencode "no reply" most) | `SM:1679,1869-1880`; `OC:325-328` | |
-| G10 | No mid-turn input ("Send now") | pi, opencode | no `injectInput` override; `SM:1787` | |
+| G10 | No mid-turn input ("Send now") | pi, opencode | pi: FIXED (rpc `steer`, fa6ef6ed); opencode: no override, not done | |
 | G11 | MID_TURN_INPUT declared on the one-shot path, which cannot inject | claude (keep-alive 0) | `HarnessSessionAdapter.kt:128` | |
 | G12 | MCP state not reported; no in-place `mcp_reconnect` | claude headless, opencode (reconnect: all) | `CS:44-56`; `SM:1374-1396` | |
 | G13 | No reported cost and no compaction events | claude interactive | `Claude/ClaudeTranscript.kt:55-58,107-116` | |
