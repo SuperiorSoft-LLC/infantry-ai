@@ -105,7 +105,10 @@ class WindowsJobContainers(prefix: String?) : SessionContainers {
         val job = job(key, create = false) ?: return emptyList()
         val ids = runCatching { ids(job) }.getOrNull() ?: return emptyList()
         val me = ProcessHandle.current().pid()
-        val live = ids.filter { it != me }
+        // QA-FIX-D: a terminated process stays in the job's id list while ANY handle to it is still open (another process
+        // scan, an onExit waiter, the OS), so the list alone also names the dead. Only a process still running is a member;
+        // its pid cannot be reused while it is listed, so the liveness check reads the listed process itself.
+        val live = ids.filter { it != me && ProcessHandle.of(it).map { h -> h.isAlive }.orElse(false) }
         if (live.isEmpty()) release(key)
         return live
     }
