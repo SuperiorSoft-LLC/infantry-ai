@@ -241,3 +241,8 @@ kotlin {
         }
     }
 }
+
+// UPDATER-1 (release CI): AGP's art-profile tasks (prepare<Variant>ArtProfile, assembleRelease only) scan every android source
+// dir for baselineProfiles/, the generated module list dirs included, so they must run after generateModuleList (Gradle's
+// implicit-dependency validation fails the release build otherwise).
+tasks.matching { it.name.endsWith("ArtProfile") }.configureEach { dependsOn(generateModuleList) }

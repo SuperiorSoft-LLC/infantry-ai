@@ -91,6 +91,8 @@ testImplementation(project(":plugins:official:Infantry_Pace"))
     // daemon is a runtime dependency of the desktop, not only of the tests. ktor-server-core is needed on the
     // compile classpath for EmbeddedServer.start; the engine and websocket modules arrive via :infantry.
     implementation(project(":superiorSoftLibrary:infantry"))
+    // UPDATER-1: the update engine (UpdateService, MsiHandoff) is Infantry_Updater's; the window runs it in-process.
+    implementation(project(":daemon-plugin-official-Infantry_Updater"))
     implementation(libs.ktor.server.core)
     // NS4: app.json (ShellApp.kt).
     implementation(libs.kotlinx.serialization.json)

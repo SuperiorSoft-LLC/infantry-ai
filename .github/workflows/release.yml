@@ -48,24 +48,48 @@ jobs:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
       - uses: gradle/actions/setup-gradle@v4
+      # UPDATER-1: CI memory (the wasm production compile outgrew the 3 GB Kotlin daemon) and the official-plugin signing key:
+      # the Infantry key from secrets INFANTRY_PLUGIN_KEYSTORE_BASE64 / INFANTRY_PLUGIN_KEY_ALIAS / IHQ_STOREPASS, else a
+      # throwaway dev key with a warning (a test release only, like the debug APK fallback). $IHQ_SIGN goes on every gradlew.
+      - name: CI Gradle memory and plugin signing
+        shell: bash
+        env:
+          PLUGIN_KS_B64: ${{ secrets.INFANTRY_PLUGIN_KEYSTORE_BASE64 }}
+          PLUGIN_KS_ALIAS: ${{ secrets.INFANTRY_PLUGIN_KEY_ALIAS }}
+          IHQ_STOREPASS: ${{ secrets.IHQ_STOREPASS }}
+        run: |
+          set -euo pipefail
+          gu="${GRADLE_USER_HOME:-$HOME/.gradle}"; mkdir -p "$gu"
+          printf 'org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -XX:+UseParallelGC\nkotlin.daemon.jvmargs=-Xmx4g\n' >> "$gu/gradle.properties"
+          if [ -n "${PLUGIN_KS_B64:-}" ] && [ -n "${PLUGIN_KS_ALIAS:-}" ] && [ -n "${IHQ_STOREPASS:-}" ]; then
+            printf '%s' "$PLUGIN_KS_B64" | base64 -d > "$RUNNER_TEMP/infantry-plugins.p12"
+            echo "IHQ_SIGN=-Pihq.keystore=$RUNNER_TEMP/infantry-plugins.p12 -Pihq.alias=$PLUGIN_KS_ALIAS" >> "$GITHUB_ENV"
+            echo "IHQ_STOREPASS=$IHQ_STOREPASS" >> "$GITHUB_ENV"
+          else
+            echo "::warning::No plugin signing secrets; official plugins are signed with a THROWAWAY dev key (test release only)."
+            echo "IHQ_SIGN=-Pihq.devSign=true" >> "$GITHUB_ENV"
+          fi
       - name: Build MSI and app-image
         shell: bash
         run: |
           set -euo pipefail
           V='${{ needs.version.outputs.version }}'
-          ./gradlew --no-daemon :superiorSoftLibrary:infantryUi:createDistributable -PinfantryVersion="$V"
-          mkdir -p out
+          ./gradlew --no-daemon :superiorSoftLibrary:infantryUi:createDistributable -PinfantryVersion="$V" $IHQ_SIGN
+          # UPDATER-1: outside the checkout, or the packaging guard (clean tree) refuses releaseAssets and the MSI is skipped.
+          out="$RUNNER_TEMP/out"; mkdir -p "$out"
           app="$(ls -d superiorSoftLibrary/infantryUi/build/compose/binaries/main/app/InfantryAI)"
-          (cd "$(dirname "$app")" && 7z a -tzip "$GITHUB_WORKSPACE/out/InfantryAI-$V-windows.zip" InfantryAI >/dev/null)
-          if ./gradlew --no-daemon :superiorSoftLibrary:infantryUi:releaseAssets -PinfantryVersion="$V"; then
-            cp "superiorSoftLibrary/infantryUi/build/release/$V/InfantryAI-$V.msi" out/
+          # UPDATER-1 gate: no new package of ours split over two jars of the app (docs/RELEASING.md).
+          scripts/split-packages.sh "$app/app"
+          (cd "$(dirname "$app")" && 7z a -tzip "$out/InfantryAI-$V-windows.zip" InfantryAI >/dev/null)
+          if ./gradlew --no-daemon :superiorSoftLibrary:infantryUi:releaseAssets -PinfantryVersion="$V" $IHQ_SIGN; then
+            cp "superiorSoftLibrary/infantryUi/build/release/$V/InfantryAI-$V.msi" "$out/"
           else
             echo "::warning::MSI packaging failed unsigned on this runner; publishing the app-image zip only (the in-app updater needs the MSI)"
           fi
       - uses: actions/upload-artifact@v4
         with:
           name: windows
-          path: out/*
+          path: ${{ runner.temp }}/out/*
           if-no-files-found: error
 
   android:
@@ -90,6 +114,27 @@ jobs:
         shell: bash
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
       - uses: gradle/actions/setup-gradle@v4
+      # UPDATER-1: CI memory (the wasm production compile outgrew the 3 GB Kotlin daemon) and the official-plugin signing key:
+      # the Infantry key from secrets INFANTRY_PLUGIN_KEYSTORE_BASE64 / INFANTRY_PLUGIN_KEY_ALIAS / IHQ_STOREPASS, else a
+      # throwaway dev key with a warning (a test release only, like the debug APK fallback). $IHQ_SIGN goes on every gradlew.
+      - name: CI Gradle memory and plugin signing
+        shell: bash
+        env:
+          PLUGIN_KS_B64: ${{ secrets.INFANTRY_PLUGIN_KEYSTORE_BASE64 }}
+          PLUGIN_KS_ALIAS: ${{ secrets.INFANTRY_PLUGIN_KEY_ALIAS }}
+          IHQ_STOREPASS: ${{ secrets.IHQ_STOREPASS }}
+        run: |
+          set -euo pipefail
+          gu="${GRADLE_USER_HOME:-$HOME/.gradle}"; mkdir -p "$gu"
+          printf 'org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -XX:+UseParallelGC\nkotlin.daemon.jvmargs=-Xmx4g\n' >> "$gu/gradle.properties"
+          if [ -n "${PLUGIN_KS_B64:-}" ] && [ -n "${PLUGIN_KS_ALIAS:-}" ] && [ -n "${IHQ_STOREPASS:-}" ]; then
+            printf '%s' "$PLUGIN_KS_B64" | base64 -d > "$RUNNER_TEMP/infantry-plugins.p12"
+            echo "IHQ_SIGN=-Pihq.keystore=$RUNNER_TEMP/infantry-plugins.p12 -Pihq.alias=$PLUGIN_KS_ALIAS" >> "$GITHUB_ENV"
+            echo "IHQ_STOREPASS=$IHQ_STOREPASS" >> "$GITHUB_ENV"
+          else
+            echo "::warning::No plugin signing secrets; official plugins are signed with a THROWAWAY dev key (test release only)."
+            echo "IHQ_SIGN=-Pihq.devSign=true" >> "$GITHUB_ENV"
+          fi
       - name: Build APK (signed if the keystore secrets exist, else debug)
         shell: bash
         run: |
@@ -100,13 +145,13 @@ jobs:
              && [ -n "${INFANTRY_ANDROID_RELEASE_KEY_ALIAS:-}" ] && [ -n "${INFANTRY_ANDROID_RELEASE_KEY_PASSWORD:-}" ]; then
             printf '%s' "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.keystore"
             export INFANTRY_ANDROID_RELEASE_STORE_FILE="$RUNNER_TEMP/release.keystore"
-            ./gradlew --no-daemon :superiorSoftLibrary:infantryAndroid:assembleRelease -PinfantryVersion="$V"
+            ./gradlew --no-daemon :superiorSoftLibrary:infantryAndroid:assembleRelease -PinfantryVersion="$V" $IHQ_SIGN
             apk="$(ls superiorSoftLibrary/infantryAndroid/build/outputs/apk/release/*.apk | head -n1)"
             case "$apk" in *unsigned*) echo "release APK came out unsigned"; exit 1;; esac
             cp "$apk" "out/InfantryAI-$V.apk"
           else
             echo "::warning::No release keystore secrets; building a DEBUG-signed APK. Updates over an installed build need a stable key."
-            ./gradlew --no-daemon :superiorSoftLibrary:infantryAndroid:assembleDebug -PinfantryVersion="$V"
+            ./gradlew --no-daemon :superiorSoftLibrary:infantryAndroid:assembleDebug -PinfantryVersion="$V" $IHQ_SIGN
             apk="$(ls superiorSoftLibrary/infantryAndroid/build/outputs/apk/debug/*.apk | head -n1)"
             cp "$apk" "out/InfantryAI-$V-debug.apk"
           fi
@@ -133,14 +178,42 @@ jobs:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
       - uses: gradle/actions/setup-gradle@v4
+      # UPDATER-1: CI memory (the wasm production compile outgrew the 3 GB Kotlin daemon) and the official-plugin signing key:
+      # the Infantry key from secrets INFANTRY_PLUGIN_KEYSTORE_BASE64 / INFANTRY_PLUGIN_KEY_ALIAS / IHQ_STOREPASS, else a
+      # throwaway dev key with a warning (a test release only, like the debug APK fallback). $IHQ_SIGN goes on every gradlew.
+      - name: CI Gradle memory and plugin signing
+        shell: bash
+        env:
+          PLUGIN_KS_B64: ${{ secrets.INFANTRY_PLUGIN_KEYSTORE_BASE64 }}
+          PLUGIN_KS_ALIAS: ${{ secrets.INFANTRY_PLUGIN_KEY_ALIAS }}
+          IHQ_STOREPASS: ${{ secrets.IHQ_STOREPASS }}
+        run: |
+          set -euo pipefail
+          gu="${GRADLE_USER_HOME:-$HOME/.gradle}"; mkdir -p "$gu"
+          printf 'org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -XX:+UseParallelGC\nkotlin.daemon.jvmargs=-Xmx4g\n' >> "$gu/gradle.properties"
+          if [ -n "${PLUGIN_KS_B64:-}" ] && [ -n "${PLUGIN_KS_ALIAS:-}" ] && [ -n "${IHQ_STOREPASS:-}" ]; then
+            printf '%s' "$PLUGIN_KS_B64" | base64 -d > "$RUNNER_TEMP/infantry-plugins.p12"
+            echo "IHQ_SIGN=-Pihq.keystore=$RUNNER_TEMP/infantry-plugins.p12 -Pihq.alias=$PLUGIN_KS_ALIAS" >> "$GITHUB_ENV"
+            echo "IHQ_STOREPASS=$IHQ_STOREPASS" >> "$GITHUB_ENV"
+          else
+            echo "::warning::No plugin signing secrets; official plugins are signed with a THROWAWAY dev key (test release only)."
+            echo "IHQ_SIGN=-Pihq.devSign=true" >> "$GITHUB_ENV"
+          fi
       - name: Build the headless server archive
         shell: bash
         run: |
           set -euo pipefail
           V='${{ needs.version.outputs.version }}'
-          ./gradlew --no-daemon :superiorSoftLibrary:infantry:headlessDist -PinfantryVersion="$V"
+          ./gradlew --no-daemon :superiorSoftLibrary:infantry:headlessDist -PinfantryVersion="$V" $IHQ_SIGN
           mkdir -p out
           cp superiorSoftLibrary/infantry/build/distributions/InfantryAI-server-"$V"-* out/
+      # UPDATER-1 gate: an archive is published only when it starts (/health 200, no refused plugin) and has no new split
+      # package. A free port and a throwaway state dir; the runner's INFANTRY_* never reach it (docs/RELEASING.md).
+      - name: Smoke-test the server archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in out/InfantryAI-server-*; do scripts/release-smoke.sh "$f" 240; done
       - uses: actions/upload-artifact@v4
         with:
           name: headless-${{ matrix.os }}
@@ -181,15 +254,48 @@ jobs:
           jq -n --arg v "$V" --arg t "$GITHUB_REF_NAME" --arg d "$(date -u +%FT%TZ)" --argjson a "$assets" \
             '{version:$v, tag:$t, published:$d, assets:$a}' > latest.json
           cat latest.json
+      # UPDATER-1: an ed25519 signature of SHA256SUMS (SHA256SUMS.sig, base64 of the 64 raw bytes), so a client that pins
+      # the public key trusts the hashes and not only the host. The private key lives ONLY in the Actions secret
+      # INFANTRY_RELEASE_SIGNING_KEY (PEM, or base64 of the PEM); it is written to the runner's temp dir, used, and deleted.
+      # No secret: the release goes out unsigned with a warning. Repo variable INFANTRY_RELEASE_PUBLIC_KEY (base64 of the
+      # 32-byte public key) set: the signature must verify against it, so a wrong key in the secret fails the release.
+      - name: Sign SHA256SUMS (ed25519)
+        shell: bash
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.INFANTRY_RELEASE_SIGNING_KEY }}
+          RELEASE_PUBLIC_KEY: ${{ vars.INFANTRY_RELEASE_PUBLIC_KEY }}
+        run: |
+          set -euo pipefail
+          cd dl
+          if [ -z "${RELEASE_SIGNING_KEY:-}" ]; then
+            echo "::warning::No INFANTRY_RELEASE_SIGNING_KEY secret: SHA256SUMS is published UNSIGNED (no SHA256SUMS.sig). See docs/RELEASING.md."
+            exit 0
+          fi
+          umask 077
+          key="$RUNNER_TEMP/release-signing.pem"; pub="$RUNNER_TEMP/release-signing.pub.pem"
+          trap 'rm -f "$key" "$pub" "$RUNNER_TEMP/sig.bin"' EXIT
+          if printf '%s' "$RELEASE_SIGNING_KEY" | grep -q 'BEGIN PRIVATE KEY'; then printf '%s\n' "$RELEASE_SIGNING_KEY" > "$key"
+          else printf '%s' "$RELEASE_SIGNING_KEY" | base64 -d > "$key"; fi
+          openssl pkey -in "$key" -noout -text 2>/dev/null | grep -qi 'ED25519' || { echo "INFANTRY_RELEASE_SIGNING_KEY is not an ed25519 private key" >&2; exit 1; }
+          openssl pkeyutl -sign -inkey "$key" -rawin -in SHA256SUMS -out "$RUNNER_TEMP/sig.bin"
+          openssl pkey -in "$key" -pubout -out "$pub"
+          openssl pkeyutl -verify -pubin -inkey "$pub" -rawin -in SHA256SUMS -sigfile "$RUNNER_TEMP/sig.bin" >/dev/null
+          derived="$(openssl pkey -pubin -in "$pub" -outform DER | tail -c 32 | base64 -w0)"
+          if [ -n "${RELEASE_PUBLIC_KEY:-}" ] && [ "$derived" != "$RELEASE_PUBLIC_KEY" ]; then
+            echo "the signing key does not match the pinned INFANTRY_RELEASE_PUBLIC_KEY" >&2; exit 1
+          fi
+          base64 -w0 "$RUNNER_TEMP/sig.bin" > SHA256SUMS.sig
+          echo "SHA256SUMS signed; public key (base64): $derived"
       - name: Create or update the GitHub Release
         shell: bash
         run: |
           set -euo pipefail
           cd dl
+          extra=(); [ -f SHA256SUMS.sig ] && extra+=(SHA256SUMS.sig)
           if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" InfantryAI-* SHA256SUMS latest.json --clobber --repo "$GITHUB_REPOSITORY"
+            gh release upload "$GITHUB_REF_NAME" InfantryAI-* SHA256SUMS "${extra[@]}" latest.json --clobber --repo "$GITHUB_REPOSITORY"
           else
-            gh release create "$GITHUB_REF_NAME" InfantryAI-* SHA256SUMS latest.json --repo "$GITHUB_REPOSITORY" \
+            gh release create "$GITHUB_REF_NAME" InfantryAI-* SHA256SUMS "${extra[@]}" latest.json --repo "$GITHUB_REPOSITORY" \
               --title "Infantry AI ${GITHUB_REF_NAME#v}" --generate-notes
           fi
 
@@ -210,8 +316,29 @@ jobs:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
       - uses: gradle/actions/setup-gradle@v4
+      # UPDATER-1: CI memory (the wasm production compile outgrew the 3 GB Kotlin daemon) and the official-plugin signing key:
+      # the Infantry key from secrets INFANTRY_PLUGIN_KEYSTORE_BASE64 / INFANTRY_PLUGIN_KEY_ALIAS / IHQ_STOREPASS, else a
+      # throwaway dev key with a warning (a test release only, like the debug APK fallback). $IHQ_SIGN goes on every gradlew.
+      - name: CI Gradle memory and plugin signing
+        shell: bash
+        env:
+          PLUGIN_KS_B64: ${{ secrets.INFANTRY_PLUGIN_KEYSTORE_BASE64 }}
+          PLUGIN_KS_ALIAS: ${{ secrets.INFANTRY_PLUGIN_KEY_ALIAS }}
+          IHQ_STOREPASS: ${{ secrets.IHQ_STOREPASS }}
+        run: |
+          set -euo pipefail
+          gu="${GRADLE_USER_HOME:-$HOME/.gradle}"; mkdir -p "$gu"
+          printf 'org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -XX:+UseParallelGC\nkotlin.daemon.jvmargs=-Xmx4g\n' >> "$gu/gradle.properties"
+          if [ -n "${PLUGIN_KS_B64:-}" ] && [ -n "${PLUGIN_KS_ALIAS:-}" ] && [ -n "${IHQ_STOREPASS:-}" ]; then
+            printf '%s' "$PLUGIN_KS_B64" | base64 -d > "$RUNNER_TEMP/infantry-plugins.p12"
+            echo "IHQ_SIGN=-Pihq.keystore=$RUNNER_TEMP/infantry-plugins.p12 -Pihq.alias=$PLUGIN_KS_ALIAS" >> "$GITHUB_ENV"
+            echo "IHQ_STOREPASS=$IHQ_STOREPASS" >> "$GITHUB_ENV"
+          else
+            echo "::warning::No plugin signing secrets; official plugins are signed with a THROWAWAY dev key (test release only)."
+            echo "IHQ_SIGN=-Pihq.devSign=true" >> "$GITHUB_ENV"
+          fi
       - name: Build the Docker context
-        run: ./gradlew --no-daemon :superiorSoftLibrary:infantry:dockerContext -PinfantryVersion='${{ needs.version.outputs.version }}'
+        run: ./gradlew --no-daemon :superiorSoftLibrary:infantry:dockerContext -PinfantryVersion='${{ needs.version.outputs.version }}' $IHQ_SIGN
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:

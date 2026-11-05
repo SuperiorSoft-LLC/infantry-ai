@@ -3,10 +3,10 @@
 package com.superiorsoftllc.infantry.ui
 
 import com.superiorsoftllc.infantry.session.infantrySetting
-import com.superiorsoftllc.infantry.update.MsiHandoff
-import com.superiorsoftllc.infantry.update.UpdateService
+import com.superiorsoftllc.infantry.plugins.official.updater.MsiHandoff
+import com.superiorsoftllc.infantry.plugins.official.updater.UpdateService
 import com.superiorsoftllc.infantry.keystore.Keystore
-import com.superiorsoftllc.infantry.update.UpdateSettings
+import com.superiorsoftllc.infantry.plugins.official.updater.UpdateSettings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -14,7 +14,7 @@ import java.io.File
 
 /**
  * UPDATE-1: builds the installed app's [UpdateService] from the installed profile. Wiring only: the rules
- * (dev builds never update, where the repo and token come from) are [UpdateSettings.resolve]'s, in the core.
+ * (dev builds never update, where the repo and token come from) are [UpdateSettings.resolve]'s, in the Infantry_Updater plugin.
  */
 object InstalledUpdates {
     /** The running version, from the launcher (`-Dinfantry.version`, set by infantryUi/build.gradle.kts). */

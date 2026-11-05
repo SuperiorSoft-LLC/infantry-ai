@@ -30,7 +30,7 @@ if exist "%APP_HOME%\runtime\bin\java.exe" (
 ) else (
     set "JAVA=java.exe"
 )
-set CLI="%JAVA%" -Xmx256m -Djava.awt.headless=true -cp "%APP_HOME%\lib\*" com.superiorsoftllc.infantry.update.ServerUpdateCliKt
+set CLI="%JAVA%" -Xmx256m -Djava.awt.headless=true -cp "%APP_HOME%\lib\*;%APP_HOME%\modules\official\Infantry_Updater\daemon\build\libs\Infantry_Updater-daemon.jar" com.superiorsoftllc.infantry.plugins.official.updater.ServerUpdateCliKt
 
 rem A freshly unpacked archive: copy it to <parent>\versions\<v>, then run from there.
 for %%I in ("%APP_HOME%\..") do set "PARENT=%%~fI"

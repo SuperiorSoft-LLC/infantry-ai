@@ -30,12 +30,15 @@ object BuildInfo {
             { version },
         ).firstNotNullOfOrNull { it()?.trim()?.replace(Regex("""\s+"""), "")?.takeIf { s -> s.isNotEmpty() } } ?: "dev"
 
+    /** The running version the launcher sets (`-Dinfantry.version`), the same key the updater plugin reads. */
+    const val VERSION_PROPERTY = "infantry.version"
+
     /** This JVM's build string. */
     val current: String by lazy {
         resolve(
             System.getProperty(PROPERTY),
             com.superiorsoftllc.infantry.session.InfantryEnv.get("INFANTRY_APP_HOME")?.let(::File)?.takeIf { it.isDirectory },
-            System.getProperty(UpdateSettings.VERSION_PROPERTY),
+            System.getProperty(VERSION_PROPERTY),
         )
     }
 }

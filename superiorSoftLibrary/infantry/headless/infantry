@@ -30,7 +30,7 @@ else
     JAVA=java
 fi
 run_cli() {
-    "$JAVA" -Xmx256m -Djava.awt.headless=true -cp "$APP_HOME/lib/*" com.superiorsoftllc.infantry.update.ServerUpdateCliKt "$@"
+    "$JAVA" -Xmx256m -Djava.awt.headless=true -cp "$APP_HOME/lib/*:$APP_HOME/modules/official/Infantry_Updater/daemon/build/libs/Infantry_Updater-daemon.jar" com.superiorsoftllc.infantry.plugins.official.updater.ServerUpdateCliKt "$@"
 }
 
 # A freshly unpacked archive: copy it to <parent>/versions/<v>, then run from there.

@@ -203,7 +203,7 @@ fun AndroidConnectGate(
                     val cb = attachCallback; attachCallback = null
                     cb?.invoke(uri?.let { u -> runCatching { readPickedAttachment(context, u, attachMax) }.getOrNull() })
                 }
-                val host = remember(g) { AndroidPlatformHost(g.settings, attachPicker = { images, max, cb -> attachCallback = cb; attachMax = max; attachLauncher.launch(if (images) arrayOf("image/*") else arrayOf("*/*")) }, soundPlayer = soundPlayer, customSoundStore = soundStore, soundPicker = { cb -> soundCallback = cb; soundLauncher.launch(arrayOf("audio/*")) }, onChangeConnection = { gate = Gate.Form() }, speaker = speaker, savedServers = ConnectionSavedServers(store), uiPrefs = PrefsKeyValueStore(context.getSharedPreferences("infantry_ui", android.content.Context.MODE_PRIVATE)), appBuild = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull()) }
+                val host = remember(g) { AndroidPlatformHost(g.settings, attachPicker = { images, max, cb -> attachCallback = cb; attachMax = max; attachLauncher.launch(if (images) arrayOf("image/*") else arrayOf("*/*")) }, soundPlayer = soundPlayer, customSoundStore = soundStore, soundPicker = { cb -> soundCallback = cb; soundLauncher.launch(arrayOf("audio/*")) }, onChangeConnection = { gate = Gate.Form() }, speaker = speaker, savedServers = ConnectionSavedServers(store), uiPrefs = PrefsKeyValueStore(context.getSharedPreferences("infantry_ui", android.content.Context.MODE_PRIVATE)), appBuild = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull(), appContext = context) }
                 InfantryShell(host)
             }
         }

@@ -3,7 +3,6 @@
 package com.superiorsoftllc.infantry.keystore
 
 import com.superiorsoftllc.infantry.protocol.Envelope
-import com.superiorsoftllc.infantry.update.UpdateSettings
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.Test
@@ -278,23 +277,6 @@ class KeystoreTest {
         val status = h.answer(Envelope(Envelope.SECRET_STATUS, "{}"))!!
         assertTrue(status.data.contains(""""locked":true"""))
         assertFalse(status.data.contains(secret))
-    }
-
-    @Test
-    fun `update token comes from env first then the keystore then the git credential store`() {
-        fun token(env: String?, keystore: String?, git: String?): String? {
-            val settings = UpdateSettings.resolve(
-                installed = true, version = "1.0.0", stateDir = null,
-                setting = { if (it == UpdateSettings.REPO) "o/r" else null },
-                env = { if (it == UpdateSettings.TOKEN_ENV) env else null },
-                keystore = { keystore }, credentialStore = { git },
-            ) as UpdateSettings.Enabled
-            return settings.config.token
-        }
-        assertEquals("E", token("E", "K", "G"))
-        assertEquals("K", token(null, "K", "G"))
-        assertEquals("G", token(null, null, "G"))
-        assertNull(token(null, null, null))
     }
 
     @Test

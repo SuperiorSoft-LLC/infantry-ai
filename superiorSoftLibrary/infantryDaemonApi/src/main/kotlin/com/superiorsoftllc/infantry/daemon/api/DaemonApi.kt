@@ -130,6 +130,13 @@ interface DaemonApi {
     /** CMD-1 (1.31.0, additive): the cwd-bound run surface (daemon.api.runs). Official / core tier, or a community module with the grant `runs`. */
     val runs: com.superiorsoftllc.infantry.daemon.api.runs.Runs get() = com.superiorsoftllc.infantry.daemon.api.runs.NoRuns
 
+    /**
+     * UPDATE-ENGINE-1 (1.39.0, additive): the update engine (daemon.api.updates, docs/wiki/Updates.md): every component (the app and
+     * each module with an `update` block), its source, check / fetch / verify / stage, and the appliers. Registering a source type
+     * needs it in `daemon.updateSources`. A daemon without one answers [com.superiorsoftllc.infantry.daemon.api.updates.NoUpdates].
+     */
+    val updates: com.superiorsoftllc.infantry.daemon.api.updates.Updates get() = com.superiorsoftllc.infantry.daemon.api.updates.NoUpdates
+
     companion object {
         // 1.31.0 (CMD-1, additive): `runs` (daemon.api.runs.Runs) and `PluginSettings.hint`.
         // 1.30.0 (MAIL-HOOK-1, additive): `hooks.incomingMail` (IncomingMailHook, IncomingMail, MailVerdict): a pre-delivery look at each accepted mail.
@@ -171,6 +178,7 @@ interface DaemonApi {
         // 1.38.0 (CHAT-QUEUE-1, additive): Sessions.queued / queueAdd / queueRemove / queueForce and QueuedMessage.
         // 1.39.0 (DEMO-CHECK-1, additive): `whenStarted`, work a plugin runs once the whole daemon (all daemon halves and harnesses) is up.
         // 1.39.0 (PROC-LEAK-2, additive): ProcessToolProfile.daemonDir / ProcessDaemonDir.
+        // 1.39.0 (UPDATE-ENGINE-1, additive): `updates` (daemon.api.updates.Updates): the one update engine; source types and appliers by plugins.
         const val VERSION = "1.39.0"
     }
 }
