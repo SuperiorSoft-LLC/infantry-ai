@@ -165,3 +165,23 @@ More guards outside that folder or not listed above (same rule: read the failure
 The docs guard: when you rename or delete a file or type, it fails with the doc line that names it. Fix the doc.
 An example path that the reader is meant to create goes inside a fenced code block, or on a line that carries the
 marker `docs-freshness: ignore` in an HTML comment.
+
+## 7. Old names
+
+The product was renamed from AgentHQ to Infantry AI (RENAME-2). Code still reads the old names as fallbacks, so search
+for either spelling. Facts below come from `InfantryEnv`, `LegacyToolNames`, `McpServeConfig`, `ProjectFiles`,
+`StateDirMigration`, `RunnerFactory` and `AhqRoleIcons`.
+
+| Old name | Current name | Still read? |
+|---|---|---|
+| `AGENTHQ_<X>` env var (e.g. `AGENTHQ_PORT`, `AGENTHQ_TOKEN`, `AGENTHQ_TOKEN_FILE`) | `INFANTRY_<X>` | Yes. `INFANTRY_*` wins; the old name is a fallback. `InfantryEnv.all` mirrors both ways. |
+| `AGENTHQ_RUNNER` | `INFANTRY_RUNNER` | Yes, fallback. |
+| `AGENTHQ_UPDATE_TOKEN` | `INFANTRY_UPDATE_TOKEN` | Yes, via `InfantryEnv`; scrubbed from child processes under both names. |
+| `-Dagenthq.<x>` system property | `-Dinfantry.<x>` | Yes. `InfantryEnv.mirrorProperties` copies it unless the new one is set. |
+| `agenthq_<tool>` MCP/tool name (e.g. `agenthq_ticket_get`) | `infantry_<tool>` | Yes, as an alias. Only `infantry_*` is listed. Scripts map it too. |
+| `agenthq` CLI command | `infantry` | Yes, a deprecated alias for the same launcher. |
+| `.agenthq/mcp.json` | `.infantry/mcp.json` | Yes, read when the new file is absent. |
+| `.agenthq/` project folder (uploads, files) | `.infantry/` | Yes, read when a file is not under the new folder. Writes go to `.infantry/`. |
+| `~/.agenthq` state dir | `~/.infantry` | Migrated on first start (`StateDirMigration`); names containing `agenthq` are renamed in the copy. |
+| `feature-agenthq-mvp` branch | (none) | Still the name of the project branch. It is not renamed in code. |
+| `Ahq*` prefix (e.g. `AhqRoleIcons`) | (none yet) | Still the class name; a naming leftover, not an alias. |
