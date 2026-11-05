@@ -34,3 +34,11 @@ class CommsCardStyleTest {
         assertEquals(CardTone.AgentReply, AgentReplyCardStyle.tone)
     }
 }
+
+class OwnerMessageTextTest {
+    @Test
+    fun ownerBodyUsesTheThemeTextToneNotTheAccent() {
+        assertEquals(com.superiorsoftllc.infantry.ui.Palette.Text, OwnerMessageText)
+        assertNotEquals(com.superiorsoftllc.infantry.ui.Palette.Accent, OwnerMessageText)
+    }
+}
