@@ -54,8 +54,11 @@ class HarnessCarryDaemonTest {
         }
 
     private fun DaemonFixture.turn(sessionId: String, text: String, runs: Int) {
+        val before = turnsOf(sessionId).size
         send(Envelope(Envelope.PROMPT, text, sessionId = sessionId))
         awaitAtRest(sessionId, runs)
+        // The rest state is read in-process; the turn frame crosses the socket, so at rest does not mean it has arrived yet.
+        await(what = "the turn frame for '$text'") { turnsOf(sessionId).size > before }
     }
 
     private fun DaemonFixture.turnsOf(sessionId: String): List<String> =

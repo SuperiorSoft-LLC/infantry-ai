@@ -43,6 +43,12 @@ interface HostedProcess {
     fun onExit(handler: (exitCode: Int) -> Unit)
 
     fun killTree()
+
+    /**
+     * QA-FIX-A: true = the handle stays alive between turns but every turn launches a fresh CLI process (one-shot), so a turn
+     * sent into it is a real start ("starting <cli>"), not a message into a live process (CLI-LIVE-1).
+     */
+    val startsProcessPerTurn: Boolean get() = false
 }
 
 /** Where an adapter reports. Thread-safe. */

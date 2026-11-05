@@ -270,7 +270,8 @@ class LocalBoardHost(
 
         override fun detail(sessionId: String) = sessionManager()?.get(sessionId)?.let(::detailOf)
         override fun details() = sessionManager()?.list().orEmpty().map(::detailOf)
-        override fun holdsSessionsLock(): Boolean = sessionManager()?.let { Thread.holdsLock(it) } ?: false
+        // QA-FIX-A: an event raised under the lock and delivered after it (DEADLOCK-1) counts as under it, so the board still queues it.
+        override fun holdsSessionsLock(): Boolean = sessionManager()?.let { Thread.holdsLock(it) || it.deliveringLockedEvent() } ?: false
         override fun available(): Boolean = sessionManager() != null
         override fun instance(sessionId: String) = sessionManager()?.instance(sessionId)?.toBoard()
 

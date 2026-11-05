@@ -450,6 +450,10 @@ class SessionHost(
     /** True while [sessionId] has a hosted process (a one-shot session's logical handle counts). */
     fun hasProcess(sessionId: String): Boolean = synchronized(lock) { slots[sessionId]?.process?.isAlive == true }
 
+    /** QA-FIX-A: a live process the next turn is sent into, not a handle that launches a new CLI per turn ([HostedProcess.startsProcessPerTurn]). */
+    fun hasLiveTurnProcess(sessionId: String): Boolean =
+        synchronized(lock) { slots[sessionId]?.process?.let { it.isAlive && !it.startsProcessPerTurn } == true }
+
     /**
      * CLI-PTY-3: ask [sessionId]'s live process to reconnect its MCP servers in place. null = no live process (the next turn starts one,
      * with fresh servers); true = the harness reconnected them; false = it cannot (the caller restarts the process, keeping the conversation).

@@ -15,7 +15,8 @@ import kotlin.test.assertTrue
  */
 class EventStreamTranslatorCopyTest {
     private fun body(f: File): String = f.readText().replace("\r\n", "\n").lines()
-        .filterNot { it.startsWith("package ") || it.startsWith("import ") }
+        // The SPDX line differs by design (LICENSE-APPLY-1: core MPL-2.0, plugins Apache-2.0).
+        .filterNot { it.startsWith("package ") || it.startsWith("import ") || it.startsWith("// SPDX-License-Identifier:") }
         .joinToString("\n").replace(Regex("\n{3,}"), "\n\n").trim()
 
     @Test fun `the daemon's reader and the pi plugin's copy are the same code`() {
