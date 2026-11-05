@@ -75,9 +75,21 @@ data class ToolProfile(
      * `limits.processes.stuckMinutes` is reported stuck on its session.
      */
     val stuck: List<String> = emptyList(),
+    /**
+     * PROC-LEAK-2: where one of [daemons] names the directory it last built in (Gradle: its per-pid daemon log), so the
+     * process watch can give a detached daemon whose client is gone to the session whose worktree that is. Null = none.
+     */
+    val daemonDir: DaemonDirSource? = null,
     /** In an override: drop the default entry of this [name]. */
     val disabled: Boolean = false,
 )
+
+/**
+ * PROC-LEAK-2: [paths] are file templates (`${pid}`, `${home}`, `${env:NAME}`; `*` = one directory level; a template naming an
+ * unset variable is skipped); [match] is a regex over the file's lines whose group 1 is the directory (the last match wins).
+ */
+@Serializable
+data class DaemonDirSource(val paths: List<String> = emptyList(), val match: String = "")
 
 /**
  * STACK-NEUTRAL-1: one env value a worker session gets. [value] may name the build limits as `${maxWorkers}` and

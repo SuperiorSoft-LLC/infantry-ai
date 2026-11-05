@@ -170,6 +170,7 @@ interface DaemonApi {
         // 1.37.0 (PROC-LEAK-1, additive): Processes.sessionMembers / containment, ProcessToolProfile.stop / stuck, TrackedProcess.stuck.
         // 1.38.0 (CHAT-QUEUE-1, additive): Sessions.queued / queueAdd / queueRemove / queueForce and QueuedMessage.
         // 1.39.0 (DEMO-CHECK-1, additive): `whenStarted`, work a plugin runs once the whole daemon (all daemon halves and harnesses) is up.
+        // 1.39.0 (PROC-LEAK-2, additive): ProcessToolProfile.daemonDir / ProcessDaemonDir.
         const val VERSION = "1.39.0"
     }
 }

@@ -66,6 +66,7 @@ data) by `name` (replace, `disabled: true` drops, a new name appends).
 | `clients` | regexes of the tool's client process command line |
 | `heavyImages` | image regexes (full match, `.exe` optional) the processes list shows when no session owns them |
 | `heavyCommands` | command-line regexes the ledger may adopt by a session's worktree path |
+| `daemonDir` | (PROC-LEAK-2) `{paths, match}`: file templates (`${pid}`, `${home}`, `${env:NAME}`, `*` = one directory level) and a regex whose group 1 is the directory one of `daemons` last built in (the last match wins). The ledger adopts an ORPHAN daemon it never saw for the session whose worktree that is; Gradle reads its per-pid daemon log |
 | `env` | `{name, value, onlyIf?, join=" ", inherit=true}` templates; `value` may use `${maxWorkers}` / `${maxParallelForks}` (settings `limits.build.*`); `onlyIf` drops the template while that limit is 0; templates of one name are joined, after the daemon's own value when `inherit` |
 | `notifyOn`, `failureMarkers`, `redirects`, `logFlags` | (STALL-4) bg notice patterns |
 

@@ -75,7 +75,16 @@ data class ProcessToolProfile(
     val stop: List<String> = emptyList(),
     /** PROC-LEAK-1 (1.37.0): command-line regexes of a short-lived client that is reported stuck when it hangs. */
     val stuck: List<String> = emptyList(),
+    /** PROC-LEAK-2 (1.39.0): where one of [daemons] names the directory it last built in; null = the tool says nothing. */
+    val daemonDir: ProcessDaemonDir? = null,
 )
+
+/**
+ * PROC-LEAK-2 (1.39.0): how to learn which project a detached daemon serves when its client is gone. [paths] are file templates
+ * (`${pid}`, `${home}`, `${env:NAME}`; a `*` stands for one directory level; a template naming an unset variable is skipped);
+ * [match] is a regex over that file's lines whose group 1 is the directory, the last match winning (the daemon's latest build).
+ */
+data class ProcessDaemonDir(val paths: List<String> = emptyList(), val match: String = "")
 
 /**
  * The host process service. Official / core tier only; a community plugin needs the grant `daemon.processes` and never gets [kill]

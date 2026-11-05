@@ -230,6 +230,7 @@ class LocalProcesses(
                 p.name, p.daemons, p.sharedDaemon, p.clients, p.heavyImages, p.heavyCommands,
                 p.env.map { ProcessEnvTemplate(it.name, it.value, it.onlyIf, it.join, it.inherit) },
                 stop = p.stop, stuck = p.stuck,
+                daemonDir = p.daemonDir?.let { com.superiorsoftllc.infantry.daemon.api.processes.ProcessDaemonDir(it.paths, it.match) },
             )
         }
 
