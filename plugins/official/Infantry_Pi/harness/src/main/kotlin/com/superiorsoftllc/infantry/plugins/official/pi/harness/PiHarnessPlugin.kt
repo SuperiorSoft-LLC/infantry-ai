@@ -60,11 +60,13 @@ class PiHarness internal constructor(
         HarnessCapability.EFFORT_SELECTION, // --thinking
     )
 
-    override fun process(request: HarnessRequest): HarnessProcess =
-        HarnessProcess(
-            PiCommand.command(launcher(), request.model, request.sessionId, request.effort) + PiExtensions.launchArgs(host.stateDir, PiExtensions.APPROVAL),
-            env = mapOf(PiExtensions.APPROVAL_ENV to request.toolApproval.name),
+    override fun process(request: HarnessRequest): HarnessProcess {
+        val mcp = host.mcpLaunch(emptyMap())
+        return HarnessProcess(
+            PiCommand.command(launcher(), request.model, request.sessionId, request.effort) + PiExtensions.launchArgs(host.stateDir, PiExtensions.APPROVAL) + PiExtensions.mcpArgs(host.stateDir, mcp),
+            env = mapOf(PiExtensions.APPROVAL_ENV to request.toolApproval.name) + PiExtensions.mcpEnv(mcp),
         )
+    }
 
     override fun newTranslator(): HarnessTranslator = EventStreamTranslator()
 

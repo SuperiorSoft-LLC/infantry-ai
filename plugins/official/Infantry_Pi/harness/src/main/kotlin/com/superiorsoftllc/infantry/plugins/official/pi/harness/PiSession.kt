@@ -66,7 +66,10 @@ internal class PiSession(
         val resume = request.sessionId?.takeIf { it.isNotBlank() }
         val todo = host?.let { PiExtensions.launchArgs(it.stateDir, PiExtensions.TODO) }.orEmpty()
         val approval = host?.let { PiExtensions.launchArgs(it.stateDir, PiExtensions.APPROVAL) }.orEmpty()
-        return HarnessProcess(argv(launcher(), request, resume) + todo + approval, env = mapOf(PiExtensions.APPROVAL_ENV to request.toolApproval.name))
+        val mcpLaunch = host?.mcpLaunch(env)
+        val mcp = host?.let { PiExtensions.mcpArgs(it.stateDir, mcpLaunch) }.orEmpty()
+        val mcpEnv = PiExtensions.mcpEnv(mcpLaunch)
+        return HarnessProcess(argv(launcher(), request, resume) + todo + approval + mcp, env = mapOf(PiExtensions.APPROVAL_ENV to request.toolApproval.name) + mcpEnv)
     }
 
     override fun connect(out: SessionOutput): SessionConnection = PiConnection(out)
