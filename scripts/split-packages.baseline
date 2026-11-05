@@ -1,0 +1,16 @@
+# UPDATER-1: split packages the module split left (package, then the modules sharing it). scripts/split-packages.sh
+# fails on any split not listed here. Remove a line once its split is gone; never add one to make a release pass.
+com.superiorsoftllc.infantry.agents infantryBoard infantryCore infantryProtocol
+com.superiorsoftllc.infantry.archive infantry infantryBoard
+com.superiorsoftllc.infantry.backlog infantry infantryBoard
+com.superiorsoftllc.infantry.daemon infantry infantryCore
+com.superiorsoftllc.infantry.epics infantry infantryBoard
+com.superiorsoftllc.infantry.harness infantryCore infantryProtocol
+com.superiorsoftllc.infantry.mvp infantryBoard infantryCore
+com.superiorsoftllc.infantry.persistence infantryBoard infantryCore
+com.superiorsoftllc.infantry.session infantryBoard infantryCore infantryProtocol
+com.superiorsoftllc.infantry.settings infantryBoard infantryCore
+com.superiorsoftllc.infantry.ticketfiles infantry infantryBoard
+com.superiorsoftllc.infantry.ui infantryUi infantryUiCore-jvm
+com.superiorsoftllc.infantry.usage infantryBoard infantryCore
+com.superiorsoftllc.infantry.worktree infantryBoard infantryCore

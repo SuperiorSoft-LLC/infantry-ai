@@ -78,6 +78,8 @@ jobs:
           # UPDATER-1: outside the checkout, or the packaging guard (clean tree) refuses releaseAssets and the MSI is skipped.
           out="$RUNNER_TEMP/out"; mkdir -p "$out"
           app="$(ls -d superiorSoftLibrary/infantryUi/build/compose/binaries/main/app/InfantryAI)"
+          # UPDATER-1 gate: no new package of ours split over two jars of the app (docs/RELEASING.md).
+          scripts/split-packages.sh "$app/app"
           (cd "$(dirname "$app")" && 7z a -tzip "$out/InfantryAI-$V-windows.zip" InfantryAI >/dev/null)
           if ./gradlew --no-daemon :superiorSoftLibrary:infantryUi:releaseAssets -PinfantryVersion="$V" $IHQ_SIGN; then
             cp "superiorSoftLibrary/infantryUi/build/release/$V/InfantryAI-$V.msi" "$out/"
@@ -205,6 +207,13 @@ jobs:
           ./gradlew --no-daemon :superiorSoftLibrary:infantry:headlessDist -PinfantryVersion="$V" $IHQ_SIGN
           mkdir -p out
           cp superiorSoftLibrary/infantry/build/distributions/InfantryAI-server-"$V"-* out/
+      # UPDATER-1 gate: an archive is published only when it starts (/health 200, no refused plugin) and has no new split
+      # package. A free port and a throwaway state dir; the runner's INFANTRY_* never reach it (docs/RELEASING.md).
+      - name: Smoke-test the server archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in out/InfantryAI-server-*; do scripts/release-smoke.sh "$f" 240; done
       - uses: actions/upload-artifact@v4
         with:
           name: headless-${{ matrix.os }}
