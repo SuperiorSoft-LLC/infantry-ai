@@ -433,3 +433,157 @@ the action buttons (on a phone width the less-used ones sit in a "More actions" 
 the transcript's bottom edge; the queue is one line. `PromptBox` (in `Infantry_Chat`) takes an `extras` parameter that
 draws inline in that row: add a chip, an icon button or a menu item there. A plugin must not stack a new full-width row
 under the chat. `MinimizeComposerUiTest` covers the composer now (CHAT-MINIMIZE-1 replaced the one-row layout and its height test): Minimize keeps the draft, and on a narrow width the last tools move into "More".
+
+## Type index (every other public type)
+
+Generated for the `infantryPlugins` guard `SdkTypesDocumentedGuardTest`: every public top-level type of the module is named on this page. Types above are explained in full; the rest are listed by source file with the first line of their KDoc. Read the file for the members.
+
+### `ActionPolicy.kt`
+
+- `ActionDeclaration`: POLICY-1: one entry of module.json `actions`: an action a plugin's controls perform.
+- `ActionKind`: POLICY-1 (docs/POLICY.md): what a named action does.
+- `ActionPolicyMatcher`: POLICY-1: the ONE matcher.
+- `FrameAction`: GAP-AUDIT-1 (h): one catalog entry of [PolicyWire.frames]: the action a frame performs and its kind.
+- `PolicyChoice`: POLICY-1: a preset a client may pick in Settings.
+- `PolicyPreset`: POLICY-1: one preset file (`policies/<id>.json`).
+- `PolicyRefusal`: GAP-AUDIT-1 (h): the ONE refusal text, the daemon's and the client's send gate's (a preset's `refusal` template).
+- `PolicyWire`: POLICY-1: the `policy` frame (daemon -> client, after `ready` and on every change).
+- `SeatsSpec`: POLICY-1: a preset's seated lockdown: a project, its role seats and the visitor limits (docs/POLICY.md section 2).
+
+### `AgentDefinition.kt`
+
+- `AgentDefinition`: AGENT-REGISTRY-1 (docs/AGENT-REGISTRY.md section 3): one agent a module contributes, as data.
+- `AgentDefinitions`: AGENT-REGISTRY-1: the rules every contributed [AgentDefinition] passes, the same on every platform.
+- `AgentSchedule`: `agents[].schedule`: every [everyMinutes] (at least 1), the agent is given [prompt].
+- `AgentUiHints`: `agents[].ui`: a `#rrggbb` [color] and a client icon key [icon] (`[a-z0-9-]`).
+
+### `DependencyGraph.kt`
+
+- `DependencyGraph`: PLUGINS-2: the dependency rules, pure, shared by the loader ([ModuleResolver]) and by Settings when it changes modules.json: - a dependency must be installed, enabled and inside its version range; - a
+- `ModuleChange`: PLUGINS-2: the outcome of asking to enable, disable or remove a module.
+- `ModuleNode`: PLUGINS-2: one installed module as the dependency rules see it.
+
+### `EndpointGate.kt`
+
+- `EndpointGate`: PLUGIN-ENDPOINTS-1 (docs/PLUGIN-ENDPOINTS-DESIGN.md D1, D5): the pure rule every platform shares for a module's backend call.
+
+### `GrantPattern.kt`
+
+- `GrantPattern`: GAP-AUDIT-1 (e): how a modules.json grant (`allowOverride`, `allowInject`) matches a node id or selector.
+
+### `IhqInstaller.kt`
+
+- `IhqInstaller`: S5: installs a `.ihq` (a zip with `module.json`, the jars under `lib/` <!-- docs-freshness: ignore --> and a jarsigner signature over the whole zip) into the tier folder that [PluginFolders.scan] already reads.
+- `IhqRefusal`
+- `IhqResult`
+- `InstallSettings`: S5 (desktop JVM only): the settings of an install, `<plugins root>/install.json`.
+- `NestedDep`: NS3: one `deps/<name>.ihq` of a composition: its own [tier] from its own [signer].
+
+### `ModuleManifest.kt`
+
+- `BlockDeclaration`: A block named [name] the module adds to slot [slot].
+- `BlockTypeDeclaration`: NS1 / PB1 (6t.2): a block type, `vendor.name` (core's layout primitives are `layout.row` ...).
+- `DaemonCapabilities`: NS3 (1a): `daemon.needs` (refused = the module does not work) and `daemon.wants` (refused = it degrades).
+- `DaemonFrameDeclaration`: DAEMON-PLUGINS-1: one plugin-defined frame; [ownerOnly] frames are refused to a community module.
+- `DaemonPluginLimits`: DAEMON-PLUGINS-1: a daemon half's limits; null = the host default.
+- `DaemonStorageDeclaration`: DAEMON-STORAGE-1: [adopt] = core tables an official module takes over (a community module declaring any is refused).
+- `DaemonToolDeclaration`: DAEMON-PLUGINS-1: one daemon tool: its name, its policy action id and kind, and a one-line description.
+- `DependencyDeclaration`: PLUGINS-2: module [id] (`Vendor_Module`) must be installed, enabled and at a version in [version] (e.g.
+- `EndpointAuth`: [kind] is `none / bearer / header / basic`; [name] is the header name for `header`; [field] the keystore field (D3, later).
+- `EndpointDeclaration`: PLUGIN-ENDPOINTS-1 (D1): one backend the module calls by [id], never by URL.
+- `FillDeclaration`: NS3: a fill of shell slot [node]; [layout] (a `layout/<name>.json` path in the module folder) when the tree is data.
+- `FillDeclarationSerializer`: NS3: a fill entry is a plain node id string or the object form.
+- `HarnessCliDeclaration`: HARNESS-PLUGIN-3 H4: `harness.cli`, the CLI the harness drives; [install] is how the harness installer gets it.
+- `HarnessCliInstall`: `harness.cli.install`: an npm package and the bin script inside it.
+- `HarnessDeclaration`: HARNESS-PLUGIN-3 H4: module.json `harness`.
+- `ImplementationDeclaration`: P1 step 2: the module registers an implementation under [key] of registry [registry] (e.g.
+- `InjectDeclaration`: BLOCKS-INJECTORS J2 (docs/BLOCKS-INJECTORS.md section 2a): the module's code [name] (registered with `UiRegistrar.inject`) is drawn as a child `<module>.<name>` of node [into] (a node id, or its addre
+- `InterceptorDeclaration`: A hook named [name] on contribution [target]; [kind] is before, after or around.
+- `NodeDeclaration`: GAP-AUDIT-1 (b): a node the module draws; [overridable] false = locked against every other module.
+- `ObserverDeclaration`: An observer named [name] of event [event].
+- `PanelDeclaration`: PLUGINS-3: a section the module adds to side panel [panel] (`left` or `right`).
+- `PreferenceDeclaration`: The module replaces contribution [replace] (by id) with its own contribution [with].
+- `ShellOverrideDeclaration`: BLOCKS-LAYOUT L5: the module's code [name] (registered with `UiRegistrar.shell`) takes over core shell node [node] (a node id such as `infantry.shell.footer`, or its address `infantry.shell#infantry.s
+- `TabDeclaration`: A tab the module contributes (the first contribution type; a panel or a whole screen come the same way later).
+
+### `ModuleResolver.kt`
+
+- `AcceptedPreference`: A preference the rules let through: [module] replaces [replace] with its own [with].
+- `AcceptedShellOverride`: BLOCKS-LAYOUT L5: an override of core shell node [node] the trust rules let through ([mode] `replace` or `wrap`).
+- `ModuleCandidate`: A module found in a plugin folder, or compiled into the app ([dir] null).
+- `Resolution`: The outcome of one load: every module's status (in load order for the loaded ones, then the rest), the preferences and shell overrides that apply (in load order), and the log lines (one per module, pl
+
+### `ModulesConfig.kt`
+
+- `DemoLockConfig`: What the demo lock lets a module's daemon access through, on top of the routes the module declared.
+- `EndpointSetting`
+- `ModuleSetting`: The owner's say over one module.
+- `PluginFolder`: One plugin subfolder of the plugins root and the tier of everything in it.
+
+### `NodeConfig.kt`
+
+- `ConfigChangedFrame`: CONFIG-8: `config_changed`, pushed to every connected client after a write; [by] is who wrote it.
+- `ConfigClassSlot`: CONFIG-9: one slot of a `classes` field.
+- `ConfigDeclaration`: P1 step 2 (docs/BLOCKS-LAYOUT-DESIGN.md section 6s A): the config fields a module declares for node [node] (an `infantry.shell.*` id it owns or is granted), shown in the configuration view under tab [
+- `ConfigFieldTypes`: The built-in field types (6s A).
+- `ConfigFieldValidator`: CONFIG-8: the check a declared field applies to a written value; the daemon and a client share it.
+- `ConfigManifest`: CONFIG-3 (docs/CONFIG-MANIFEST-DESIGN.md section 2): one host's compiled unified manifest, as `GET/PUT /config-manifest` carry it.
+- `ConfigManifestSource`: One contributor to a [ConfigManifest]: a module, its version and the hash of its own `config`.
+- `ConfigSchemaFrame`: CONFIG-8 (docs/CONFIG-MANIFEST-DESIGN.md section 6): `config_schema`, the daemon's own `scope:"daemon"` declarations; [rev] moves on every schema or value change.
+- `ConfigScopes`: CONFIG-4: the override scopes a field may declare.
+- `ConfigSetBy`: Who wrote a stored value: the merged JSON tree on first load, or the user from the configuration view.
+- `ConfigSetFrame`: CONFIG-8: `config_set` (client to daemon).
+- `ConfigValuesFrame`: CONFIG-8: `config_values`, the stored value of every declared daemon key (a key never set is absent: the client resolves the default).
+- `ConfigVisibleWhen`: CONFIG-FIELDS-2: show a field only while the sibling field [key] holds [eq] (compared as text; `true`/`false` for a checkbox).
+- `NodeConfigEntry`: The wire form of one `node_config` row (6s B): `GET /node-config` answers a list of them, `POST /node-config/seed` takes one (only missing keys are inserted), `PUT /node-config` writes one ([value] nu
+
+### `OfficialTrust.kt`
+
+- `OfficialTrust`: RUNTIME-2 (EMPTY-SHELL-DESIGN 3b): an official module loads only when its jar proves it was made by Infantry.
+
+### `PluginFolders.kt`
+
+- `FilePluginSettings`: A module's settings, one JSON object in its data area.
+- `FilePluginStorage`: A module's private data area: files directly in [dir] (names cannot climb out of it).
+- `ModulesFile`: PLUGINS-2: writes the owner's enable list back to `<root>/modules.json` after Settings changed it.
+- `PluginFolders`: PLUGINS-1 (JVM): where the plugins live and what is in them.
+
+### `PluginManagerPort.kt`
+
+- `ActionResult`: What a change did.
+- `HitView`
+- `InspectOutcome`: Exactly one of [view] and [error] is set.
+- `InspectView`: What the consent dialog shows.
+- `PluginManagerPort`: PLUGIN-UI-1 (docs/PLUGIN-MANAGER.md section 4.3): the plugin manager as a UI plugin sees it.
+- `PluginView`: One installed or bundled plugin.
+- `RefreshView`
+- `SourceView`
+- `UpdateView`: A newer version offered for an installed plugin; [newGrants] non-empty = "asks for new permissions".
+
+### `PluginTree.kt`
+
+- `PluginTree`: PLUGIN-TREE-UI-1: the parent/child relation between modules, from manifest data only.
+
+### `SemVer.kt`
+
+- `SemVer`: PLUGINS-2: a semantic version, `MAJOR.MINOR.PATCH[-pre][+build]`.
+- `VersionRange`: PLUGINS-2: a version range, the npm subset a module.json needs, parsed without a library: - `*`, `x` or empty: any version; - comparators `>=1.2`, `>1.2`, `<=2`, `<2`, `=1.2.3`, joined by spaces (all 
+
+### `ServiceRegistry.kt`
+
+- `ConfigReadGate`: CONFIG-FIELDS-3 (G8): who may read another node's config.
+- `GatedEventBus`: One module's view of the bus: it may publish and observe only the events it declared.
+- `RouteGate`: The daemon rule: a route must be declared, and under the lockdown also allowed by the lock.
+- `ServiceGate`: The service rules: declared in module.json, not denied by the owner, and for a community module, allowed.
+- `ServiceRegistry`: PLUGINS-1: the host's service registry, the extension point for platform services.
+- `SimpleEventBus`: A plain in-process event bus.
+
+### `Services.kt`
+
+- `ServiceKey`: PLUGINS-1: platform services.
+
+### `UpdateDeclaration.kt`
+
+- `UpdateCredentialRef`: The NAMES under which a source's secret is looked up, in this order: the environment variable [env], then the daemon keystore entry [secret].
+- `UpdateDeclaration`: UPDATE-ENGINE-1 (docs/wiki/Updates.md): a component's update declaration, the `update` object of a module.json (and the `update.source.*` settings for the app itself).
+- `UpdateSourceRef`: Where one component's new versions live.
