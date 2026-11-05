@@ -2,7 +2,6 @@
 composeMultiplatform = "1.10.3"
 junit = "4.13.2"
 kotlin = "2.3.10"
-ktorClientCio = "3.2.3"
 ktorClientCore = "3.4.1"
 ktor = "3.4.1"
 runner = "1.7.0"
@@ -29,12 +28,12 @@ kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-c
 ktor-client-cio = { module = "io.ktor:ktor-client-cio", version.ref = "ktorClientCore" }
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktorClientCore" }
 ktor-client-js = { module = "io.ktor:ktor-client-js", version.ref = "ktorClientCore" }
-ktor-client-websockets = { module = "io.ktor:ktor-client-websockets", version.ref = "ktorClientCio" }
+ktor-client-websockets = { module = "io.ktor:ktor-client-websockets", version.ref = "ktor" }
 ktor-serialization-kotlinx-json = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
-ktor-server-core = { module = "io.ktor:ktor-server-core", version.ref = "ktorClientCio" }
-ktor-server-cio = { module = "io.ktor:ktor-server-cio", version.ref = "ktorClientCio" }
+ktor-server-core = { module = "io.ktor:ktor-server-core", version.ref = "ktor" }
+ktor-server-cio = { module = "io.ktor:ktor-server-cio", version.ref = "ktor" }
 ktor-server-content-negotiation = { module = "io.ktor:ktor-server-content-negotiation", version.ref = "ktor" }
-ktor-server-websockets = { module = "io.ktor:ktor-server-websockets", version.ref = "ktorClientCio" }
+ktor-server-websockets = { module = "io.ktor:ktor-server-websockets", version.ref = "ktor" }
 primitive-adapters = { module = "app.cash.sqldelight:primitive-adapters", version.ref = "sqldelight" }
 sqldelight-runtime = { group = "app.cash.sqldelight", name = "runtime", version.ref = "sqldelight" }
 sqldelight-jdbc-driver = { group = "app.cash.sqldelight", name = "jdbc-driver", version.ref = "sqldelight" }

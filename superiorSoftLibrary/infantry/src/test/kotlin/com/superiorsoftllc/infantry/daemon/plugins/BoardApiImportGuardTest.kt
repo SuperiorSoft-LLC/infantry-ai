@@ -6,7 +6,14 @@ import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
-/** DP-4a: the plugin-facing board API names no daemon class (a plugin sees `infantryDaemonApi` and nothing else). */
+/**
+ * DP-4a. Rule: the plugin-facing board API (`infantryDaemonApi`, package `...daemon.api.board`) imports and names no
+ * class of the daemon. A plugin compiles against `infantryDaemonApi` and nothing else.
+ * Why: a daemon class in the API would pull the whole daemon onto every plugin's compile path and break the SDK line.
+ * Fix a failure: the listed file imports or names a `com.superiorsoftllc.infantry.<daemon package>` type. Move that
+ * type behind an API type in `infantryDaemonApi` (or into `daemon.api`/`plugin.api`) and have the daemon implement it.
+ * Do not add the package to the allow-list to make it pass.
+ */
 class BoardApiImportGuardTest {
     private fun apiDir(): File {
         var dir: File? = File("").absoluteFile
@@ -26,7 +33,7 @@ class BoardApiImportGuardTest {
             f.readLines().filter { it.trimStart().startsWith("import com.superiorsoftllc.infantry.") }
                 .filter { line -> allowed.none { line.contains("import $it") } }.map { "${f.name}: $it" }
         }
-        assertTrue(offenders.isEmpty(), "api imports from the daemon: $offenders")
+        assertTrue(offenders.isEmpty(), "api imports from the daemon (fix: move the type behind an infantryDaemonApi type): $offenders")
         val board = files.filter { it.path.replace('\\', '/').contains("/api/board/") }
         assertTrue(board.isNotEmpty())
         val foreign = Regex("com\\.superiorsoftllc\\.infantry\\.(?!daemon\\.api|plugin\\.api)")
