@@ -40,8 +40,27 @@ class RunCommandToolsTest {
         })
     }
 
-    @Test fun `five tools are offered`() {
-        assertEquals(setOf("infantry_run_commands", "infantry_run_command_save", "infantry_run_command_delete", "infantry_run_start", "infantry_run_stop"), tools.keys)
+    @Test fun `six tools are offered`() {
+        assertEquals(setOf("infantry_run_commands", "infantry_run_command_save", "infantry_run_command_delete", "infantry_run_start", "infantry_run_secrets", "infantry_run_stop"), tools.keys)
+    }
+
+    // SECRETS-2b: names and scopes only, the caller's project by default, the cross-project refusal as for the other tools.
+    @Test fun `the secrets tool lists names and scopes for the caller's project`() {
+        val asked = mutableListOf<String?>()
+        val t = RunCommandTools(store, manager, {}, {}, { p -> asked += p; if (p == "p1") mapOf("deploy" to "project", "android-signing" to "app") else mapOf("android-signing" to "app") })
+            .all().associateBy { it.name }
+        fun secrets(project: String?, vararg args: Pair<String, Any>): ToolResult = t.getValue("infantry_run_secrets").call(object : ToolCall {
+            override val arguments = JsonObject(args.associate { (k, v) -> k to if (v is Boolean) JsonPrimitive(v) else JsonPrimitive(v.toString()) })
+            override val caller: Caller get() = error("unused")
+            override val clientProjectId = project
+            override fun request(type: String, data: String, sessionId: String?, timeoutMs: Long) = error("unused")
+        })
+        assertEquals("android-signing  (app)\ndeploy  (project)", secrets("p1").text)
+        assertEquals("deploy  (project)", secrets("p1", "scope" to "project").text)
+        assertEquals("p1", asked.last())
+        assertTrue(secrets("p1", "project" to "p2").isError, "another project needs allowCrossProject")
+        assertEquals("android-signing  (app)", secrets("p1", "project" to "p2", "allowCrossProject" to true).text)
+        assertTrue(secrets("p1", "scope" to "nope").isError)
     }
 
     @Test fun `save then list then delete`() {

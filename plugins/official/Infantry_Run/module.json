@@ -18,6 +18,7 @@
       { "name": "infantry_run_command_save", "action": "commands.save", "kind": "write", "description": "Add or edit a saved command." },
       { "name": "infantry_run_command_delete", "action": "commands.save", "kind": "write", "description": "Delete a saved command." },
       { "name": "infantry_run_start", "action": "runs.start", "kind": "spawn", "description": "Start a saved command; returns the run id." },
+      { "name": "infantry_run_secrets", "action": "commands.read", "kind": "read", "description": "List the secret names a project's commands can use, with their scope." },
       { "name": "infantry_run_stop", "action": "runs.stop", "kind": "destructive", "description": "Stop a run." }
     ],
     "frames": [

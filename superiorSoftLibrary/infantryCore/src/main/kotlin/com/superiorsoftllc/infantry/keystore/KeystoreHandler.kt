@@ -18,17 +18,22 @@ class SecretSet(val name: String, val value: String) {
     override fun toString(): String = "SecretSet(name=$name)"
 }
 
+/** [project] (SECRETS-2b, 1.152.0): the scope of a user-secret frame; null = the app scope. Ignored by the built-in frames. */
 @Serializable
-class SecretName(val name: String)
+class SecretName(val name: String, val project: String? = null)
 
 /** SECRETS-2 (1.135.0) `secret_field_set`: one field of a user secret. The value goes in once and never comes back. */
 @Serializable
-class SecretFieldSet(val name: String, val field: String, val value: String) {
-    override fun toString(): String = "SecretFieldSet(name=$name, field=$field)"
+class SecretFieldSet(val name: String, val field: String, val value: String, val project: String? = null) {
+    override fun toString(): String = "SecretFieldSet(name=$name, field=$field, project=$project)"
 }
 
 @Serializable
-class SecretFieldName(val name: String, val field: String)
+class SecretFieldName(val name: String, val field: String, val project: String? = null)
+
+/** SECRETS-2b (1.152.0) `secret_move`: secret [name] from scope [from] to scope [to] (null = the app scope). No value travels. */
+@Serializable
+class SecretMove(val name: String, val from: String? = null, val to: String? = null)
 
 /** PLUGIN-ENDPOINTS-2 (1.138.0) `plugin_secret_get`: one field of the secret `plugin.<module>`. */
 @Serializable
@@ -47,9 +52,15 @@ class SecretRow(val name: String, val label: String, val set: Boolean, val tail:
 @Serializable
 class SecretFieldRow(val name: String, val tail: String)
 
-/** SECRETS-2: one user secret (a name that is not a [KnownSecret]) and its fields. */
+/** SECRETS-2: one user secret (a name that is not a [KnownSecret]) and its fields. SECRETS-2b: [project] its scope (null = the app's). */
+@OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
 @Serializable
-class SecretEntryRow(val name: String, val fields: List<SecretFieldRow>)
+class SecretEntryRow(
+    val name: String,
+    val fields: List<SecretFieldRow>,
+    /** SECRETS-2b: the owning project; null (the app scope) is left off the wire, so an app entry reads as before. */
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER) val project: String? = null,
+)
 
 /**
  * [secrets]: the built-in single-value secrets. 1.135.0 (SECRETS-2): [entries] the user's key/value secrets, and [locked]
@@ -93,14 +104,19 @@ class KeystoreHandler(
             }
             Envelope.SECRET_FIELD_SET -> change(envelope.type) {
                 val req = json.decodeFromString(SecretFieldSet.serializer(), envelope.data)
-                keystore.setField(user(req.name), req.field, req.value)
+                keystore.setField(user(req.name), req.field, req.value, scope(req.project))
             }
             Envelope.SECRET_FIELD_DELETE -> change(envelope.type) {
                 val req = json.decodeFromString(SecretFieldName.serializer(), envelope.data)
-                if (!keystore.deleteField(user(req.name), req.field)) throw IllegalArgumentException("no such field")
+                if (!keystore.deleteField(user(req.name), req.field, scope(req.project))) throw IllegalArgumentException("no such field")
             }
             Envelope.SECRET_DELETE -> change(envelope.type) {
-                if (!keystore.clear(user(name(envelope)))) throw IllegalArgumentException("no such secret")
+                val req = json.decodeFromString(SecretName.serializer(), envelope.data)
+                if (!keystore.clear(user(req.name), scope(req.project))) throw IllegalArgumentException("no such secret")
+            }
+            Envelope.SECRET_MOVE -> change(envelope.type) {
+                val req = json.decodeFromString(SecretMove.serializer(), envelope.data)
+                keystore.move(user(req.name), scope(req.from), scope(req.to))
             }
             Envelope.PLUGIN_SECRET_GET -> return pluginSecret(envelope)
             else -> return null
@@ -121,6 +137,11 @@ class KeystoreHandler(
             },
             keystore.names().filter { it !in builtIn }.map { name ->
                 SecretEntryRow(name, keystore.describe(name).map { SecretFieldRow(it.name, it.tail) })
+            } + keystore.projects().flatMap { project ->
+                // SECRETS-2b: each project's own secrets, after the app's; a client shows them in that project's configuration.
+                keystore.names(project).map { name ->
+                    SecretEntryRow(name, keystore.describe(name, project).map { SecretFieldRow(it.name, it.tail) }, project)
+                }
             },
             locked = restricted(),
         )
@@ -151,6 +172,9 @@ class KeystoreHandler(
     }
 
     private fun name(envelope: Envelope) = json.decodeFromString(SecretName.serializer(), envelope.data).name
+
+    /** A frame's scope: null / blank = the app scope, else a valid project id. */
+    private fun scope(project: String?): String? = project?.trim()?.takeIf { it.isNotEmpty() }?.also(Keystore::checkProject)
 
     private fun known(name: String): KnownSecret = known.firstOrNull { it.name == name } ?: throw IllegalArgumentException("unknown secret '${name.take(64)}'")
 
@@ -189,6 +213,15 @@ class KeystoreHandler(
         fun runSecrets(fields: (String) -> Map<String, String>?, known: List<KnownSecret> = DEFAULT): (String) -> Map<String, String>? = { name ->
             require(known.none { it.name == name }) { "secret '$name' is built in and never goes to a run" }
             fields(name)
+        }
+
+        /**
+         * SECRETS-2b: [runSecrets] for a run of a project: the project's own secret first, then the app's ([Keystore.resolve]).
+         * A built-in is refused whatever the scope.
+         */
+        fun projectRunSecrets(keystore: Keystore, known: List<KnownSecret> = DEFAULT): (String, String?) -> Map<String, String>? = { name, project ->
+            require(known.none { it.name == name }) { "secret '$name' is built in and never goes to a run" }
+            keystore.resolve(name, project)
         }
     }
 }

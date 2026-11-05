@@ -750,11 +750,25 @@ class Controller(
     fun supportsKeyValueSecrets(): Boolean = contractAtLeast(_state.value.connection.contract, 1, 135)
 
     /** SECRETS-2: store [value] as field [field] of the user secret [name] (add or replace). The value is never kept here. */
-    suspend fun setSecretField(name: String, field: String, value: String): CommandResult = keyValueFrame(WireRequests.secretFieldSet(name, field, value))
+    suspend fun setSecretField(name: String, field: String, value: String, project: String? = null): CommandResult =
+        scopedFrame(project != null, WireRequests.secretFieldSet(name, field, value, project))
 
-    suspend fun deleteSecretField(name: String, field: String): CommandResult = keyValueFrame(WireRequests.secretFieldDelete(name, field))
+    suspend fun deleteSecretField(name: String, field: String, project: String? = null): CommandResult =
+        scopedFrame(project != null, WireRequests.secretFieldDelete(name, field, project))
 
-    suspend fun deleteSecret(name: String): CommandResult = keyValueFrame(WireRequests.secretDelete(name))
+    suspend fun deleteSecret(name: String, project: String? = null): CommandResult = scopedFrame(project != null, WireRequests.secretDelete(name, project))
+
+    /** True when the connected daemon speaks contract 1.152.0 or later (SECRETS-2b: project-scoped secrets, `secret_move`). */
+    fun supportsProjectSecrets(): Boolean = contractAtLeast(_state.value.connection.contract, 1, 152)
+
+    /** SECRETS-2b: move secret [name] between the app scope (null) and a project's scope, on the daemon's side. */
+    suspend fun moveSecret(name: String, from: String?, to: String?): CommandResult = scopedFrame(true, WireRequests.secretMove(name, from, to))
+
+    /** A frame naming a project scope (or a move) needs 1.152.0; an app-scope one only the key/value secrets. */
+    private suspend fun scopedFrame(needsScopes: Boolean, frame: Envelope): CommandResult {
+        if (needsScopes && !supportsProjectSecrets()) return report(CommandResult.Refused("this daemon has no project secrets (needs contract 1.152.0)"))
+        return keyValueFrame(frame)
+    }
 
     /**
      * PLUGIN-ENDPOINTS-2 (1.138.0, D3): field [field] of the secret `plugin.<module>`, for [module]'s EndpointAccess only (it adds

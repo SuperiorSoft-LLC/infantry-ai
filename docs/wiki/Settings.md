@@ -67,6 +67,41 @@ The default is the cheapest reasonable value. A costlier value is an opt-in. The
 | `nudges.deferToHooks` | `[]` | Built-in notices a script replaces (for example `notice.ticket_finished`) |
 | `harness.claude.mode` | `interactive` | How Claude agents run. `interactive`: the real `claude` CLI in its own terminal, as you run Claude Code yourself, so usage behaves like normal Claude Code use. `headless`: `claude -p` stream-json (SDK), a machine-readable stream that may be metered differently. Switch in Settings (Plugins tab, Harnesses > Claude Code, field "Mode") or `infantry settings set harness.claude.mode headless`; it applies at the next session launch. See [Harnesses](Harnesses.md#claude-code-the-real-cli-by-default) |
 
+## Secrets
+
+A secret is a named set of fields, for example `android-signing` with `storeFile`, `storePassword`, `keyAlias` and
+`keyPassword`. The daemon keeps them in its own encrypted keystore (`keystore.json` in the state folder, each field
+sealed with AES-256-GCM under a key from `INFANTRY_KEYSTORE_KEY`, the OS vault, or a key file, in that order). A value
+is never stored in clear, never written to the repository, never shown again after you save it (the UI shows only a
+masked tail) and never logged.
+
+**Two scopes.**
+
+| Scope | Where you manage it | Who gets it |
+|---|---|---|
+| App | Configuration > Secrets | Every project's run commands |
+| Project | Project settings > Secrets (the project picker's menu) | Only that project's run commands |
+
+Secrets saved before scopes existed are app secrets; nothing moves on its own. Each card shows its scope (App or
+Project) and a button that moves it to the other scope: an app secret to the project on screen, a project secret to the
+app. A move re-seals every field under the new place in one write; it is refused when the other scope already holds a
+secret of that name. The built-in secrets (for example the update token) are the app's own and never go to a run.
+
+**Resolution order.** A run command of a project that names a secret gets **that project's secret first, else the app
+secret** of the same name. So a project overrides a shared secret by creating its own with the same name; the app card
+then says it is overridden in that project. A name found in neither scope fails the run before it starts.
+
+**How a run command uses a secret.** A saved command lists secret names in its `secrets` (the Run tab's editor, or the
+commands file). When it starts, every field of each named secret becomes an environment variable of the child process,
+the field name as the variable name (`storePassword=...`). Any printed value is masked in the run's output, its replay
+and its log lines.
+
+**Tools.** Agents never hold the owner credential, so they cannot read or change a secret. They can see which names a
+project's commands can use and where each resolves: `infantry run-cmd secrets [project|app|all]` or the MCP tool
+`infantry_run_secrets` (names and scopes only, the caller's project by default; another project needs
+`allowCrossProject`). The wire frames that change secrets (`secret_field_set`, `secret_field_delete`, `secret_delete`
+with an optional `project`, and `secret_move`) are owner-only.
+
 ## Domains and URLs
 
 Every domain, URL and repository the product reaches is one entry of `EndpointRegistry`

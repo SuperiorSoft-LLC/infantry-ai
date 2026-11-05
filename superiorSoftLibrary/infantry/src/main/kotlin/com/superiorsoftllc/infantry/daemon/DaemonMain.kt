@@ -1548,7 +1548,13 @@ class InfantryDaemon(
                             pipes = com.superiorsoftllc.infantry.runner.PipedProcessRunner(),
                             pty = com.superiorsoftllc.infantry.runner.Pty4jTerminalRunner(),
                             // SEC-FIX-1 H1(b): user secrets only; a built-in (the update token) never reaches a run.
-                            secrets = KeystoreHandler.runSecrets(keystore::fields),
+                            secrets = KeystoreHandler.runSecrets({ keystore.fields(it) }),
+                            // SECRETS-2b: a project's run resolves a name in that project first, then the app scope.
+                            projectSecrets = KeystoreHandler.projectRunSecrets(keystore),
+                            secretNames = { project -> buildMap {
+                                keystore.names().filter { n -> KeystoreHandler.DEFAULT.none { it.name == n } }.forEach { put(it, Keystore.SCOPE_APP) }
+                                if (!project.isNullOrBlank()) runCatching { keystore.names(project) }.getOrDefault(emptyList()).forEach { put(it, Keystore.SCOPE_PROJECT) }
+                            } },
                         ),
                         // PLUGIN-MCP-1: api.plugins, the plugin manager on this host's plugins root (reads; install only on the owner's yes).
                         pluginCatalog = com.superiorsoftllc.infantry.daemon.plugins.LocalPluginCatalog(
@@ -3841,7 +3847,7 @@ private suspend fun handleConnection(
                 // SECRETS-1 (contract 1.100.0): the keystore. Answered by `secret_state`; a value never travels back.
                 // SECRETS-2 (1.135.0): and the user's key/value secrets.
                 Envelope.SECRET_SET, Envelope.SECRET_CLEAR, Envelope.SECRET_IMPORT, Envelope.SECRET_STATUS,
-                Envelope.SECRET_FIELD_SET, Envelope.SECRET_FIELD_DELETE, Envelope.SECRET_DELETE,
+                Envelope.SECRET_FIELD_SET, Envelope.SECRET_FIELD_DELETE, Envelope.SECRET_DELETE, Envelope.SECRET_MOVE,
                 Envelope.PLUGIN_SECRET_GET -> keystoreFrames.answer(envelope)
 
                 // POLICY-1 (docs/POLICY.md): read the active policy; the owner switches it (refused while an env pins it).

@@ -333,6 +333,7 @@ private fun ProjectConfigDialog(state: AppState, controller: Controller, project
                             }
                         }
                     }
+                    ProjectSettingsRegistry.SECRETS -> ProjectSecretsTab(state, controller, project, live)
                     else -> ToggleSection(state, controller, project, canWrite, tab)
                 }
             }
@@ -459,4 +460,45 @@ private fun DirectorySetting(state: AppState, controller: Controller, project: P
     }
     (localError ?: state.projectsRefusal()?.takeIf { it.at > seenAt }?.text)
         ?.let { Text(it, color = Palette.Danger, fontSize = 11.sp) }
+}
+
+/**
+ * SECRETS-2b: the project's own secrets, in the same bordered cards as Configuration > Secrets. A run command of this project
+ * resolves a secret name here first, then in the app scope. "Move to app" makes one shared by every project.
+ */
+@Composable
+private fun ProjectSecretsTab(state: AppState, controller: Controller, project: ProjectView, live: Boolean) {
+    val scope = rememberCoroutineScope()
+    var error by remember { mutableStateOf<String?>(null) }
+    val secrets = state.secrets
+    Column(Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        when {
+            !live -> Text("Connect to a daemon to see this project's secrets.", color = Palette.Muted, fontSize = 11.sp)
+            !controller.supportsProjectSecrets() || secrets == null ->
+                Text("Project secrets need a daemon on contract 1.152.0 or newer; app secrets are in Configuration > Secrets.", color = Palette.Muted, fontSize = 11.sp)
+            else -> {
+                fun run(block: suspend () -> CommandResult) {
+                    error = null
+                    scope.launch { (block() as? CommandResult.Refused)?.let { error = it.reason } }
+                }
+                val appNames = secrets.entries.filter { it.project == null }.map { it.name }.toSet()
+                SecretsScopeEditor(
+                    entries = secrets.entries.filter { it.project == project.id },
+                    locked = secrets.locked,
+                    title = "${project.name} secrets",
+                    hint = SecretForm.PROJECT_APPLIES_TO,
+                    scopeBadge = SecretForm.SCOPE_PROJECT,
+                    actions = SecretScopeActions(
+                        setField = { n, f, v -> run { controller.setSecretField(n, f, v, project.id) } },
+                        deleteField = { n, f -> run { controller.deleteSecretField(n, f, project.id) } },
+                        delete = { n -> run { controller.deleteSecret(n, project.id) } },
+                        move = { n -> run { controller.moveSecret(n, project.id, null) } },
+                        moveLabel = "Move to app",
+                    ),
+                    note = { n -> if (n in appNames) "Overrides the app secret of the same name" else null },
+                )
+                error?.let { Text(it, color = Palette.Danger, fontSize = 11.sp) }
+            }
+        }
+    }
 }

@@ -27,6 +27,8 @@ object ProjectSettingsRegistry {
     const val PIPELINE = "pipeline"
     const val LANES = "lanes"
     const val SKILLS = "skills"
+    /** SECRETS-2b: the project's own secrets (they win over an app secret of the same name inside the project). */
+    const val SECRETS = "secrets"
 
     /** The `Project.experiments` key behind the watchdog switch; the daemon reads the same key. */
     const val WATCHDOG_KEY = "agentWatchdog"
@@ -36,6 +38,7 @@ object ProjectSettingsRegistry {
         SettingsSection(PIPELINE, "Pipeline", "project-config-tab-pipeline"),
         SettingsSection(LANES, "Lanes / Roles", "project-config-tab-lanes"),
         SettingsSection(SKILLS, "Skills", "project-config-tab-skills"),
+        SettingsSection(SECRETS, "Secrets", "project-config-tab-secrets"),
     )
 
     val toggles: List<SettingToggle> = listOf(

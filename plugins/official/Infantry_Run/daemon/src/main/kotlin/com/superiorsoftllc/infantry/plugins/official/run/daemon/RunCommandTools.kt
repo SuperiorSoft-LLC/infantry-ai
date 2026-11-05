@@ -30,6 +30,8 @@ class RunCommandTools(
     private val manager: RunManager,
     private val broadcastList: () -> Unit,
     private val emit: (Envelope) -> Unit,
+    /** SECRETS-2b: the secret names a project's run can use, with the scope each resolves to (names only). */
+    private val secretNames: (String?) -> Map<String, String> = { emptyMap() },
 ) {
     fun all(): List<DaemonTool> = listOf(
         tool("infantry_run_commands", "List a project's saved Run-tab commands (id, name, cwd, argv, project) and the unassigned ones; default: your project.",
@@ -40,6 +42,8 @@ class RunCommandTools(
                 "project" to "project id the command is for", "allowCrossProject" to "boolean: allow a project other than the caller's"), listOf("id"), false) { save(it) },
         tool("infantry_run_command_delete", "Delete a saved command by id.", listOf("id" to "command id", "project" to "project id", "allowCrossProject" to "boolean"), listOf("id"), false) { delete(it) },
         tool("infantry_run_start", "Start a saved command; returns the run id.", listOf("id" to "command id", "project" to "project id", "allowCrossProject" to "boolean"), listOf("id"), false) { start(it) },
+        tool("infantry_run_secrets", "List the secret names a project's saved commands can use and the scope each resolves to (project first, then app). Names only, never a value; secrets are created in Configuration by the owner.",
+            listOf("project" to "project id (default: yours)", "scope" to "project | app | all (default: all)", "allowCrossProject" to "boolean"), listOf(), true) { secretList(it) },
         tool("infantry_run_stop", "Stop a run by run id (force=true kills at once).", listOf("runId" to "run id", "force" to "boolean"), listOf("runId"), false) { stop(it) },
     )
 
@@ -47,6 +51,17 @@ class RunCommandTools(
     private fun list(c: ToolCall): ToolResult {
         crossProjectRefusal(c)?.let { return err(it) }
         return ToolResult(store.refreshUnrooted().specsJson(target(c)))
+    }
+
+    /** SECRETS-2b: names and scopes only; no value ever reaches a tool. */
+    private fun secretList(c: ToolCall): ToolResult {
+        crossProjectRefusal(c)?.let { return err(it) }
+        val scope = str(c.arguments, "scope")?.lowercase() ?: "all"
+        if (scope !in setOf("project", "app", "all")) return err("scope is project, app or all")
+        val project = target(c)
+        val rows = secretNames(project).filter { scope == "all" || it.value == scope }.toSortedMap()
+        if (rows.isEmpty()) return ToolResult("no secrets" + (project?.let { " for project '$it'" } ?: "") + if (scope == "all") "" else " in scope $scope")
+        return ToolResult(rows.entries.joinToString("\n") { (n, s) -> "$n  ($s)" })
     }
 
     /** The project a call acts in: its `project` argument, else the caller's own. */

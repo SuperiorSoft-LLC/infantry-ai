@@ -31,6 +31,18 @@ interface Runs {
 
     /** The fields of keystore secret [name] (a built-in one is refused with [IllegalArgumentException]); null = no such secret. */
     fun secretFields(name: String): Map<String, String>?
+
+    /**
+     * SECRETS-2b (1.41.0, additive): the fields of secret [name] as a run of [projectId] sees it: the project's own secret of that
+     * name first, then the app's (shared by every project). Built-ins refused as [secretFields]. Default: the app scope only.
+     */
+    fun secretFields(name: String, projectId: String?): Map<String, String>? = secretFields(name)
+
+    /**
+     * SECRETS-2b (1.41.0, additive): the secret names a run of [projectId] can use, each with the scope it resolves to
+     * (`project` or `app`; a project's own wins). Names only, never a value. Default: none.
+     */
+    fun secretNames(projectId: String?): Map<String, String> = emptyMap()
 }
 
 data class RunSpec(

@@ -86,73 +86,138 @@ class Keystore(
     @Synchronized
     fun set(name: String, value: String) = setField(name, VALUE_FIELD, value)
 
-    /** Removes the whole secret, every field of it. */
+    /**
+     * Removes the whole secret, every field of it. SECRETS-2b: [project] null = the app scope (shared by every project),
+     * else that project's own secret of the same name.
+     */
     @Synchronized
-    fun clear(name: String): Boolean {
-        checkName(name)
+    fun clear(name: String, project: String? = null): Boolean {
+        val key = key(name, project)
         val current = read()
-        if (name !in current.secrets && name !in current.entries) return false
-        write(current, current.secrets - name, current.entries - name)
+        if (key !in current.secrets && key !in current.entries) return false
+        write(current, current.secrets - key, current.entries - key)
         return true
     }
 
     @Synchronized
-    fun field(name: String, field: String): String? {
-        checkName(name)
+    fun field(name: String, field: String, project: String? = null): String? {
+        val key = key(name, project)
         checkField(field)
-        return opened(read())[name]?.get(field)
+        return opened(read())[key]?.get(field)
     }
 
-    /** Every field of [name] that opens, in name order; null when there is no such secret. Daemon side only. */
+    /** Every field of [name] in [project] (null = app scope) that opens, in name order; null when there is no such secret. Daemon side only. */
     @Synchronized
-    fun fields(name: String): Map<String, String>? {
-        checkName(name)
-        return opened(read())[name]?.toSortedMap()
+    fun fields(name: String, project: String? = null): Map<String, String>? {
+        val key = key(name, project)
+        return opened(read())[key]?.toSortedMap()
+    }
+
+    /**
+     * SECRETS-2b: the secret a run or agent of [project] means by [name]: the project's own first, then the app's.
+     * Null when neither holds it. Daemon side only.
+     */
+    @Synchronized
+    fun resolve(name: String, project: String?): Map<String, String>? =
+        project?.takeIf { it.isNotBlank() }?.let { fields(name, it) } ?: fields(name)
+
+    /** SECRETS-2b: where [resolve] finds [name] for [project]: [SCOPE_PROJECT], [SCOPE_APP], or null (in neither). */
+    @Synchronized
+    fun scopeOf(name: String, project: String?): String? = when {
+        !project.isNullOrBlank() && key(name, project) in storedKeys() -> SCOPE_PROJECT
+        key(name, null) in storedKeys() -> SCOPE_APP
+        else -> null
     }
 
     @Synchronized
-    fun setField(name: String, field: String, value: String) {
-        checkName(name)
+    fun setField(name: String, field: String, value: String, project: String? = null) {
+        val key = key(name, project)
         checkField(field)
         val clean = value.trim()
         require(clean.isNotEmpty()) { "the secret is empty" }
         require(clean.length <= MAX_LENGTH) { "the secret is longer than $MAX_LENGTH characters" }
         val current = read()
-        val fields = current.secrets[name].orEmpty()
+        val fields = current.secrets[key].orEmpty()
         val maxFields = Keystore.maxFields
         val maxSecrets = Keystore.maxSecrets
         require(field in fields || fields.size < maxFields) { "a secret holds at most $maxFields fields" }
-        require(name in current.secrets || name in current.entries || current.secrets.size < maxSecrets) {
+        require(key in current.secrets || key in current.entries || current.secrets.size < maxSecrets) {
             "the keystore holds at most $maxSecrets secrets"
         }
-        write(current, current.secrets + (name to fields + (field to seal(name, field, clean))))
+        write(current, current.secrets + (key to fields + (field to seal(key, field, clean))))
     }
 
     /** Removes one field; the secret goes with its last field. */
     @Synchronized
-    fun deleteField(name: String, field: String): Boolean {
-        checkName(name)
+    fun deleteField(name: String, field: String, project: String? = null): Boolean {
+        val key = key(name, project)
         checkField(field)
         val current = read()
-        val legacyOnly = field == VALUE_FIELD && name in current.entries && current.secrets[name]?.containsKey(field) != true
+        val legacyOnly = field == VALUE_FIELD && key in current.entries && current.secrets[key]?.containsKey(field) != true
         if (legacyOnly) {
-            write(current, current.secrets, current.entries - name)
+            write(current, current.secrets, current.entries - key)
             return true
         }
-        val fields = current.secrets[name] ?: return false
+        val fields = current.secrets[key] ?: return false
         if (field !in fields) return false
         val rest = fields - field
-        write(current, if (rest.isEmpty()) current.secrets - name else current.secrets + (name to rest))
+        write(current, if (rest.isEmpty()) current.secrets - key else current.secrets + (key to rest))
         return true
     }
 
-    /** The names of every stored secret, sorted. */
+    /**
+     * SECRETS-2b: moves secret [name] from scope [from] to scope [to] (null = app scope), every field re-sealed under its new
+     * place, in one write. The value never leaves the daemon. Refused when the source is missing or the target already exists.
+     */
     @Synchronized
-    fun names(): List<String> = read().let { (it.secrets.keys + it.entries.keys).toSortedSet().toList() }
+    fun move(name: String, from: String?, to: String?) {
+        val src = key(name, from)
+        val dst = key(name, to)
+        require(src != dst) { "the secret is already there" }
+        val current = read()
+        val fields = opened(current)[src] ?: throw IllegalArgumentException("no such secret")
+        require(dst !in current.secrets && dst !in current.entries) {
+            "a secret named '$name' already exists in ${if (to == null) "the app scope" else "project '$to'"}"
+        }
+        val resealed = fields.mapValues { (f, v) -> seal(dst, f, v) }
+        write(current, current.secrets - src + (dst to resealed), current.entries - src)
+    }
 
-    /** Each field of [name] with a masked tail (fields that do not open are left out); empty when there is no such secret. */
+    /** The names of the stored secrets of [project] (null = the app scope), sorted. */
     @Synchronized
-    fun describe(name: String): List<FieldInfo> = fields(name).orEmpty().map { (f, v) -> FieldInfo(f, maskedTail(v)) }
+    fun names(project: String? = null): List<String> {
+        val prefix = project?.let { checkProject(it); "$PROJECT_MARK$it/" }
+        return storedKeys().mapNotNull { k ->
+            when {
+                prefix == null -> k.takeUnless { it.startsWith(PROJECT_MARK) }
+                k.startsWith(prefix) -> k.removePrefix(prefix)
+                else -> null
+            }
+        }.sorted()
+    }
+
+    /** SECRETS-2b: every project that holds at least one secret of its own, sorted. */
+    @Synchronized
+    fun projects(): List<String> = storedKeys().filter { it.startsWith(PROJECT_MARK) }
+        .map { it.removePrefix(PROJECT_MARK).substringBefore('/') }.distinct().sorted()
+
+    /** Each field of [name] in [project] with a masked tail (fields that do not open are left out); empty when there is no such secret. */
+    @Synchronized
+    fun describe(name: String, project: String? = null): List<FieldInfo> = fields(name, project).orEmpty().map { (f, v) -> FieldInfo(f, maskedTail(v)) }
+
+    private fun storedKeys(): Set<String> = read().let { it.secrets.keys + it.entries.keys }
+
+    /**
+     * SECRETS-2b: where a secret is stored: its name in the app scope, `@<project>/<name>` in a project's. Neither '@' nor '/'
+     * occurs in a name, so the two never clash, and the key is the AAD's first part, so a sealed field moved between scopes
+     * by hand does not open.
+     */
+    private fun key(name: String, project: String?): String {
+        checkName(name)
+        if (project == null) return name
+        checkProject(project)
+        return "$PROJECT_MARK$project/$name"
+    }
 
     /** Set / not set and a masked tail for each of [names]. */
     @Synchronized
@@ -284,6 +349,18 @@ class Keystore(
         fun checkField(field: String) = require(FIELD.matches(field)) { "field names are letters, digits and '_', not starting with a digit" }
 
         fun isName(name: String): Boolean = NAME.matches(name)
+
+        /** SECRETS-2b: a project id as a secret scope: letters, digits, '.', '_' and '-' (no '/', so it cannot leave its prefix). */
+        private val PROJECT = Regex("""^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$""")
+
+        fun checkProject(project: String) = require(PROJECT.matches(project)) { "invalid project id" }
+
+        /** The prefix of a project-scoped key (see [key]). */
+        private const val PROJECT_MARK = "@"
+
+        /** SECRETS-2b: the two scopes a secret lives in. */
+        const val SCOPE_APP = "app"
+        const val SCOPE_PROJECT = "project"
 
         /** The last 4 characters, and only for a value long enough that 4 reveal little; shorter values show only dots. */
         fun maskedTail(value: String): String = if (value.length >= 16) "••••${value.takeLast(4)}" else "••••"

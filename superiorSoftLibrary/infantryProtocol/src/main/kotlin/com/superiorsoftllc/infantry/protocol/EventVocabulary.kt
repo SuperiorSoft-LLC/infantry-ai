@@ -390,7 +390,8 @@ object EventVocabulary {
     // **1.149.0 (ARCHIVE-1, ticket-719fcaf4) is ADDITIVE**: the ticket archive. `archive_query` (list / show / search / count) and `archive_apply` (archive / unarchive a ticket, an epic or a lane filter) -> `archive_report` (text + items). Setting `board.archive.doneAfterDays` (default off) archives done tickets after N days. See CONTRACT.md.
     // **1.150.0 (CHAT-QUEUE-1, ticket-378071eb) is ADDITIVE + BEHAVIOURAL**: the daemon holds messages typed while a turn runs. Frames `queue_add`, `queue_remove`, `queue_force`; sessions `queued` [{id, text, at}]; `turn` frames of a forced message arrive mid-turn; `providers` entries `midTurnInput`. Harness API 2.16.0 `MID_TURN_INPUT` + `SessionConnection.injectInput`. Setting `limits.chat.queueMax`. See CONTRACT.md.
     // **1.151.0 (CHAT-SENDING-1, ticket-04fc0898) is ADDITIVE**: a `prompt` with a `sessionId` and a client message id (`requestId` "send:<id>") is answered with `prompt_ack` (accepted / duplicate); a resend of a remembered id is acknowledged and never run twice (`limits.chat.sentIdsKept`). Setting `limits.chat.sendAckSeconds` (client "not sent - retry" after it). See CONTRACT.md.
-    const val VERSION = "1.151.0"
+    // **1.152.0 (SECRETS-2b, ticket-8e2b3f70) is ADDITIVE + BEHAVIOURAL**: project-scoped secrets. `secret_field_set` / `secret_field_delete` / `secret_delete` take `project` (absent = app scope); `secret_state.entries[].project`; frame `secret_move` ({name, from?, to?}); a saved command's run resolves each secret name in its project first, then the app scope. See CONTRACT.md.
+    const val VERSION = "1.152.0"
 
     /** Frame type carrying incremental assistant text (payload: a plain String, the delta). */
     const val TEXT_DELTA = Envelope.TEXT_DELTA

@@ -8,6 +8,7 @@ import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -290,4 +291,82 @@ class KeystoreTest {
         assertTrue(reply.data.contains(secret))
         assertTrue(pushed.isEmpty(), "a plugin secret is a direct answer only")
     }
+
+    // SECRETS-2b: the project scope.
+
+    @Test
+    fun `a project secret wins inside its project, the app secret elsewhere, and both stay sealed`() {
+        val d = dir()
+        val ks = Keystore(d, env = { null }, vault = null)
+        ks.setField("deploy", "TOKEN", "app-value-1234")
+        ks.setField("deploy", "TOKEN", "proj-value-5678", project = "p1")
+        assertEquals("proj-value-5678", ks.resolve("deploy", "p1")?.get("TOKEN"))
+        assertEquals("app-value-1234", ks.resolve("deploy", "p2")?.get("TOKEN"), "another project falls back to the app")
+        assertEquals("app-value-1234", ks.resolve("deploy", null)?.get("TOKEN"))
+        assertEquals(Keystore.SCOPE_PROJECT, ks.scopeOf("deploy", "p1"))
+        assertEquals(Keystore.SCOPE_APP, ks.scopeOf("deploy", "p2"))
+        assertNull(ks.scopeOf("nothing", "p1"))
+        val text = everyFileText(d)
+        assertFalse(text.contains("app-value-1234") || text.contains("proj-value-5678"), "no value in clear on disk")
+        assertEquals(listOf("deploy"), ks.names(), "app names never list a project's key")
+        assertEquals(listOf("deploy"), ks.names("p1"))
+        assertEquals(listOf("p1"), ks.projects())
+    }
+
+    @Test
+    fun `existing secrets stay in the app scope`() {
+        val d = dir()
+        Keystore(d, env = { null }, vault = null).setField("android-signing", "storePassword", secret)
+        val ks = Keystore(d, env = { null }, vault = null)
+        assertEquals(Keystore.SCOPE_APP, ks.scopeOf("android-signing", "any-project"))
+        assertTrue(ks.names("any-project").isEmpty())
+    }
+
+    @Test
+    fun `move re-seals every field under the other scope and refuses a clash or a missing source`() {
+        val d = dir()
+        val ks = Keystore(d, env = { null }, vault = null)
+        ks.setField("deploy", "TOKEN", secret)
+        ks.setField("deploy", "USER", "bot-user-42")
+        ks.move("deploy", null, "p1")
+        assertNull(ks.fields("deploy"), "gone from the app scope")
+        assertEquals(mapOf("TOKEN" to secret, "USER" to "bot-user-42"), Keystore(d, env = { null }, vault = null).fields("deploy", "p1"))
+        assertFailsWith<IllegalArgumentException> { ks.move("missing", null, "p1") }
+        ks.setField("deploy", "TOKEN", "other-app-9999")
+        assertFailsWith<IllegalArgumentException> { ks.move("deploy", "p1", null) }
+        ks.clear("deploy")
+        ks.move("deploy", "p1", null)
+        assertEquals(secret, ks.field("deploy", "TOKEN"))
+        assertTrue(ks.projects().isEmpty())
+    }
+
+    @Test
+    fun `a bad project id is refused`() {
+        val ks = Keystore(dir(), env = { null }, vault = null)
+        assertFailsWith<IllegalArgumentException> { ks.setField("deploy", "TOKEN", secret, project = "../x") }
+        assertFailsWith<IllegalArgumentException> { ks.setField("deploy", "TOKEN", secret, project = "a/b") }
+    }
+
+    @Test
+    fun `the handler edits and moves project secrets, lists their scope, and a run resolves project first`() {
+        val ks = Keystore(dir(), env = { null }, vault = null)
+        val h = KeystoreHandler(ks, env = { null })
+        val set = h.answer(Envelope(Envelope.SECRET_FIELD_SET, """{"name":"deploy","field":"TOKEN","value":"$secret","project":"p1"}"""))!!
+        assertEquals(Envelope.SECRET_STATE, set.type, set.data)
+        assertTrue(set.data.contains(""""project":"p1""""), set.data)
+        assertFalse(set.data.contains(secret))
+        assertNull(ks.fields("deploy"), "a project set never writes the app scope")
+        val run = KeystoreHandler.projectRunSecrets(ks)
+        assertEquals(secret, run("deploy", "p1")?.get("TOKEN"))
+        assertNull(run("deploy", "p2"))
+        assertFailsWith<IllegalArgumentException> { run(Keystore.UPDATE_TOKEN, "p1") }
+        val moved = h.answer(Envelope(Envelope.SECRET_MOVE, """{"name":"deploy","from":"p1"}"""))!!
+        assertEquals(Envelope.SECRET_STATE, moved.type, moved.data)
+        assertEquals(secret, ks.field("deploy", "TOKEN"))
+        assertEquals(secret, run("deploy", "p2")?.get("TOKEN"), "now shared by every project")
+        assertEquals(Envelope.ERROR, h.answer(Envelope(Envelope.SECRET_MOVE, """{"name":"deploy","from":"p1"}"""))!!.type)
+        val del = h.answer(Envelope(Envelope.SECRET_DELETE, """{"name":"deploy"}"""))!!
+        assertTrue(del.data.contains(""""entries":[]"""), del.data)
+    }
 }
+

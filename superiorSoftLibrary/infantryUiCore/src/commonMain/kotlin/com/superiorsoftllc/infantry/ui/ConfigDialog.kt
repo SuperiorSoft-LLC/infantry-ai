@@ -32,6 +32,9 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.TextButton
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -51,6 +54,7 @@ import com.superiorsoftllc.infantry.ui.model.HarnessInstallSetting
 import com.superiorsoftllc.infantry.ui.protocol.CliLocation
 import com.superiorsoftllc.infantry.ui.protocol.HarnessInstallReport
 import com.superiorsoftllc.infantry.ui.protocol.HarnessInstallStatus
+import com.superiorsoftllc.infantry.ui.protocol.SecretEntryRow
 import com.superiorsoftllc.infantry.ui.protocol.SecretRow
 import com.superiorsoftllc.infantry.ui.protocol.SecretState
 import com.superiorsoftllc.infantry.ui.model.ToolApprovalSetting
@@ -886,9 +890,13 @@ private fun LogsSection(logs: LogsFolder) {
 const val SECRETS_TITLE = "Secrets"
 const val SECRETS_APPLIES_TO = "Stored encrypted by the Infantry AI daemon. A saved secret is never shown again, only whether it is set"
 
+/** SECRETS-2b: the project on screen, so an app secret can be moved into it. */
+data class SecretProjectRef(val id: String, val name: String)
+
 /**
  * SECRETS-1: what the Secrets section can ask of the daemon. SECRETS-2: [setField] / [deleteField] / [delete] edit the user's
- * key/value secrets; null (an older daemon) hides that part.
+ * key/value secrets in the app scope; null (an older daemon) hides that part. SECRETS-2b: [move] (name, from, to; null = the app
+ * scope) moves a secret between scopes, and [currentProject] is where an app secret can go; null hides the move.
  */
 class SecretActions(
     val set: (name: String, value: String) -> Unit,
@@ -897,6 +905,20 @@ class SecretActions(
     val setField: ((name: String, field: String, value: String) -> Unit)? = null,
     val deleteField: ((name: String, field: String) -> Unit)? = null,
     val delete: ((name: String) -> Unit)? = null,
+    val move: ((name: String, from: String?, to: String?) -> Unit)? = null,
+    val currentProject: SecretProjectRef? = null,
+)
+
+/**
+ * SECRETS-2b: the edits of ONE scope (the app's, or one project's), so the same cards serve Configuration > Secrets and a
+ * project's settings. [move] sends a secret to the other scope ([moveLabel] names it); null hides the button.
+ */
+class SecretScopeActions(
+    val setField: (name: String, field: String, value: String) -> Unit,
+    val deleteField: ((name: String, field: String) -> Unit)? = null,
+    val delete: ((name: String) -> Unit)? = null,
+    val move: ((name: String) -> Unit)? = null,
+    val moveLabel: String = "",
 )
 
 /** SECRETS-2: what the add forms accept, the daemon's own rules, so a bad name is caught before it is sent. */
@@ -906,10 +928,18 @@ object SecretForm {
     fun nameOk(name: String) = NAME.matches(name)
     fun fieldOk(field: String) = FIELD.matches(field)
     const val NAME_HINT = "Lowercase letters, digits, '.', '_' and '-', e.g. android-signing"
-    const val FIELD_HINT = "Becomes the environment variable's name: letters, digits and '_', e.g. storePassword"
-    const val TITLE = "Your secrets"
-    const val APPLIES_TO = "Each secret holds named fields. A saved command that names a secret gets every field as an environment variable, masked in its output"
+    const val FIELD_HINT = "The field name becomes the environment variable's name: letters, digits and '_', e.g. storePassword"
+    const val TITLE = "App secrets"
+    const val APPLIES_TO = "Shared by every project. A project's own secret of the same name wins inside that project"
+    const val PROJECT_APPLIES_TO = "Only this project's run commands get these. A name here wins over an app secret of the same name"
+    const val EMPTY = "No secrets yet. A secret is a named set of fields (e.g. android-signing: storeFile, storePassword); a saved run command " +
+        "that names it gets every field as an environment variable, masked in its output"
     const val LOCKED = "Locked: the daemon's lockdown is on, so secrets cannot be changed and no run gets one"
+    const val BUILT_IN_TITLE = "Built-in"
+    const val BUILT_IN_APPLIES_TO = "Secrets the app itself uses. They never go to a run command"
+    const val SCOPE_APP = "App"
+    const val SCOPE_PROJECT = "Project"
+    fun projectsNote(count: Int) = "$count project secret${if (count == 1) "" else "s"} live in their projects: Project settings > Secrets"
 }
 
 /** The text a row shows: set (with its masked tail) or not set. Never a value. */
@@ -919,163 +949,237 @@ fun secretStatusText(row: SecretRow): String = when {
     else -> "Not set"
 }
 
+/** SECRETS-2b: the card frame every secret sits in: raised, a border you can see, the popup/card corner token. */
+private fun Modifier.secretCard(): Modifier = this.fillMaxWidth()
+    .background(Palette.Raised, Palette.PopupShape)
+    .border(1.dp, Palette.Muted.copy(alpha = 0.45f), Palette.PopupShape)
+    .padding(12.dp)
+
 @Composable
 private fun SecretsSection(state: SecretState, actions: SecretActions) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        for (row in state.secrets) {
-            var draft by remember { mutableStateOf("") }
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(row.label, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                Text(secretStatusText(row), fontSize = 12.sp, modifier = Modifier.testTag("$SECRET_STATUS_TAG-${row.name}"))
-                OutlinedTextField(
-                    value = draft, onValueChange = { draft = it }, singleLine = true,
-                    label = { Text(if (row.set) "Replace with" else "Paste it here") },
-                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
-                    modifier = Modifier.fillMaxWidth().testTag("$SECRET_INPUT_TAG-${row.name}"),
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(
-                        onClick = { actions.set(row.name, draft); draft = "" }, enabled = draft.isNotBlank(),
-                        modifier = Modifier.testTag("$SECRET_SAVE_TAG-${row.name}"),
-                    ) { Text(if (row.set) "Replace" else "Save") }
-                    if (row.set) OutlinedButton(onClick = { actions.clear(row.name) }, modifier = Modifier.testTag("$SECRET_DELETE_TAG-${row.name}")) { Text("Delete") }
-                    if (row.importable) OutlinedButton(onClick = { actions.import(row.name) }, modifier = Modifier.testTag("$SECRET_IMPORT_TAG-${row.name}")) {
-                        Text("Import from environment")
-                    }
-                }
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        if (state.secrets.isNotEmpty()) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SecretsHeading(SecretForm.BUILT_IN_TITLE, SecretForm.BUILT_IN_APPLIES_TO)
+                for (row in state.secrets) androidx.compose.runtime.key(row.name) { BuiltInSecretCard(row, actions) }
             }
         }
-        if (actions.setField != null) KeyValueSecrets(state, actions, actions.setField)
+        val setField = actions.setField
+        if (setField != null) {
+            val project = actions.currentProject
+            val ownInProject = project?.let { p -> state.entries.filter { it.project == p.id }.map { it.name }.toSet() }.orEmpty()
+            val move = actions.move
+            SecretsScopeEditor(
+                entries = state.entries.filter { it.project == null },
+                locked = state.locked,
+                title = SecretForm.TITLE,
+                hint = SecretForm.APPLIES_TO,
+                scopeBadge = SecretForm.SCOPE_APP,
+                actions = SecretScopeActions(
+                    setField = setField, deleteField = actions.deleteField, delete = actions.delete,
+                    move = if (move != null && project != null) { name -> move(name, null, project.id) } else null,
+                    moveLabel = project?.let { "Move to ${it.name}" }.orEmpty(),
+                ),
+                note = { name -> if (name in ownInProject) "Overridden in ${project?.name} by its own secret" else null },
+            )
+            val elsewhere = state.entries.count { it.project != null }
+            if (elsewhere > 0) Text(SecretForm.projectsNote(elsewhere), color = Palette.Muted, fontSize = 11.sp, modifier = Modifier.testTag(SECRET_PROJECTS_NOTE_TAG))
+        }
         Text("Protected by: ${protectionText(state.protection)}", color = Palette.Muted, fontSize = 11.sp)
     }
 }
 
-/** SECRETS-2: the user's key/value secrets: each with its fields (name + masked tail), and forms to add, replace, delete. */
 @Composable
-private fun KeyValueSecrets(state: SecretState, actions: SecretActions, setField: (String, String, String) -> Unit) {
-    val editable = !state.locked
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.testTag(SECRET_ENTRIES_TAG)) {
-        Text(SecretForm.TITLE, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-        Text(SecretForm.APPLIES_TO, color = Palette.Muted, fontSize = 11.sp)
-        if (state.locked) Text(SecretForm.LOCKED, color = Palette.Danger, fontSize = 11.sp, modifier = Modifier.testTag(SECRET_LOCKED_TAG))
-        for (entry in state.entries) {
-            androidx.compose.runtime.key(entry.name) { SecretEntryCard(entry, editable, actions, setField) }
+private fun SecretsHeading(title: String, hint: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Palette.Text)
+        Text(hint, color = Palette.Muted, fontSize = 11.sp)
+    }
+}
+
+/** SECRETS-1: a built-in single-value secret as one card: its status, then its input and actions inside the same card. */
+@Composable
+private fun BuiltInSecretCard(row: SecretRow, actions: SecretActions) {
+    var draft by remember { mutableStateOf("") }
+    Column(Modifier.secretCard(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(row.label, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Palette.Text, modifier = Modifier.weight(1f))
+            Text(secretStatusText(row), fontSize = 12.sp, color = if (row.set) Palette.Ok else Palette.Muted, modifier = Modifier.testTag("$SECRET_STATUS_TAG-${row.name}"))
         }
-        if (editable) NewSecretForm(state.entries.map { it.name }.toSet(), setField)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            MaskedInput(draft, { draft = it }, if (row.set) "Replace with" else "Paste it here", Modifier.weight(1f).testTag("$SECRET_INPUT_TAG-${row.name}"))
+            SecretButton(if (row.set) "Replace" else "Save", draft.isNotBlank(), "$SECRET_SAVE_TAG-${row.name}") { actions.set(row.name, draft); draft = "" }
+            if (row.set) SecretButton("Delete", true, "$SECRET_DELETE_TAG-${row.name}", danger = true) { actions.clear(row.name) }
+            if (row.importable) SecretButton("Import from environment", true, "$SECRET_IMPORT_TAG-${row.name}") { actions.import(row.name) }
+        }
+    }
+}
+
+/**
+ * SECRETS-2b: one scope's key/value secrets: a heading, each secret as a bordered card (header, its fields as rows, an inline
+ * add-field row), then a separate "New secret" card. Public so a project's settings show the same cards for its own scope.
+ * [note] adds a line under a secret's header (e.g. "overridden in ..."); [editable] false shows without any change control.
+ */
+@Composable
+fun SecretsScopeEditor(
+    entries: List<SecretEntryRow>,
+    locked: Boolean,
+    title: String,
+    hint: String,
+    scopeBadge: String,
+    actions: SecretScopeActions,
+    modifier: Modifier = Modifier,
+    editable: Boolean = !locked,
+    note: (String) -> String? = { null },
+) {
+    Column(modifier.testTag(SECRET_ENTRIES_TAG), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        SecretsHeading(title, hint)
+        if (locked) Text(SecretForm.LOCKED, color = Palette.Danger, fontSize = 11.sp, modifier = Modifier.testTag(SECRET_LOCKED_TAG))
+        if (entries.isEmpty()) Text(SecretForm.EMPTY, color = Palette.Muted, fontSize = 12.sp, modifier = Modifier.testTag(SECRET_EMPTY_TAG))
+        for (entry in entries) {
+            androidx.compose.runtime.key(entry.project, entry.name) { SecretEntryCard(entry, editable, actions, scopeBadge, note(entry.name)) }
+        }
+        if (editable) NewSecretCard(entries.map { it.name }.toSet(), actions.setField)
     }
 }
 
 @Composable
-private fun SecretEntryCard(
-    entry: com.superiorsoftllc.infantry.ui.protocol.SecretEntryRow,
-    editable: Boolean,
-    actions: SecretActions,
-    setField: (String, String, String) -> Unit,
-) {
+private fun SecretEntryCard(entry: SecretEntryRow, editable: Boolean, actions: SecretScopeActions, scopeBadge: String, note: String?) {
     var confirmDelete by remember { mutableStateOf(false) }
     var replacing by remember { mutableStateOf<String?>(null) }
     var draft by remember { mutableStateOf("") }
-    Column(
-        Modifier.fillMaxWidth().border(1.dp, Palette.Border, androidx.compose.foundation.shape.RoundedCornerShape(6.dp)).padding(8.dp)
-            .testTag("$SECRET_ENTRY_TAG-${entry.name}"),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
+    Column(Modifier.secretCard().testTag("$SECRET_ENTRY_TAG-${entry.name}"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        // Header: name, field count, scope, then the secret-wide actions.
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(entry.name, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text(entry.name, fontFamily = Mono, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Palette.Text)
+            Text("${entry.fields.size} field${if (entry.fields.size == 1) "" else "s"}", color = Palette.Muted, fontSize = 11.sp)
+            ScopeBadge(scopeBadge, Modifier.testTag("$SECRET_SCOPE_TAG-${entry.name}"))
+            Spacer(Modifier.weight(1f))
+            val move = actions.move
+            if (editable && move != null && !confirmDelete) {
+                TextButton(onClick = { move(entry.name) }, modifier = Modifier.testTag("$SECRET_MOVE_TAG-${entry.name}")) { Text(actions.moveLabel, fontSize = 12.sp, color = Palette.Text) }
+            }
             val delete = actions.delete
             if (editable && delete != null && !confirmDelete) {
                 TextButton(onClick = { confirmDelete = true }, modifier = Modifier.testTag("$SECRET_ENTRY_DELETE_TAG-${entry.name}")) {
-                    Text("Delete secret", fontSize = 12.sp)
+                    Text("Delete secret", fontSize = 12.sp, color = Palette.Danger)
                 }
             }
             if (confirmDelete && delete != null) {
                 Text("Delete it and its ${entry.fields.size} fields?", color = Palette.Danger, fontSize = 12.sp)
-                OutlinedButton(onClick = { confirmDelete = false; delete(entry.name) }, modifier = Modifier.testTag("$SECRET_ENTRY_DELETE_CONFIRM_TAG-${entry.name}")) {
-                    Text("Delete", fontSize = 12.sp, color = Palette.Danger)
-                }
-                TextButton(onClick = { confirmDelete = false }) { Text("Cancel", fontSize = 12.sp) }
+                SecretButton("Delete", true, "$SECRET_ENTRY_DELETE_CONFIRM_TAG-${entry.name}", danger = true) { confirmDelete = false; delete(entry.name) }
+                TextButton(onClick = { confirmDelete = false }) { Text("Cancel", fontSize = 12.sp, color = Palette.Text) }
             }
         }
+        if (note != null) Text(note, color = Palette.Warn, fontSize = 11.sp, modifier = Modifier.testTag("$SECRET_NOTE_TAG-${entry.name}"))
+        androidx.compose.material3.HorizontalDivider(color = Palette.Muted.copy(alpha = 0.25f))
+        // Its fields, one row each, on the darker inner surface.
         for (field in entry.fields) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.testTag("$SECRET_FIELD_TAG-${entry.name}-${field.name}")) {
-                Text(field.name, fontFamily = Mono, fontSize = 12.sp, modifier = Modifier.weight(1f))
-                Text(field.tail.ifEmpty { "set" }, color = Palette.Muted, fontSize = 12.sp)
+            Row(
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth().background(Palette.Panel, androidx.compose.foundation.shape.RoundedCornerShape(6.dp))
+                    .padding(horizontal = 10.dp, vertical = 2.dp).testTag("$SECRET_FIELD_TAG-${entry.name}-${field.name}"),
+            ) {
+                Text(field.name, fontFamily = Mono, fontSize = 12.sp, color = Palette.Text, modifier = Modifier.weight(1f))
+                Text(field.tail.ifEmpty { "set" }, fontFamily = Mono, color = Palette.Muted, fontSize = 12.sp)
                 if (editable) {
                     TextButton(onClick = { replacing = if (replacing == field.name) null else field.name; draft = "" }, modifier = Modifier.testTag("$SECRET_FIELD_REPLACE_TAG-${entry.name}-${field.name}")) {
-                        Text("Replace", fontSize = 12.sp)
+                        Text("Replace", fontSize = 12.sp, color = Palette.Text)
                     }
                     actions.deleteField?.let { del ->
                         TextButton(onClick = { del(entry.name, field.name) }, modifier = Modifier.testTag("$SECRET_FIELD_DELETE_TAG-${entry.name}-${field.name}")) {
-                            Text("Delete", fontSize = 12.sp)
+                            Text("Delete", fontSize = 12.sp, color = Palette.Danger)
                         }
                     }
                 }
             }
             if (editable && replacing == field.name) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(start = 10.dp)) {
                     MaskedInput(draft, { draft = it }, "New value for ${field.name}", Modifier.weight(1f).testTag("$SECRET_FIELD_INPUT_TAG-${entry.name}-${field.name}"))
-                    OutlinedButton(
-                        onClick = { setField(entry.name, field.name, draft); draft = ""; replacing = null }, enabled = draft.isNotBlank(),
-                        modifier = Modifier.testTag("$SECRET_FIELD_SAVE_TAG-${entry.name}-${field.name}"),
-                    ) {
-                        Text("Save", fontSize = 12.sp)
+                    SecretButton("Save", draft.isNotBlank(), "$SECRET_FIELD_SAVE_TAG-${entry.name}-${field.name}") {
+                        actions.setField(entry.name, field.name, draft); draft = ""; replacing = null
                     }
                 }
             }
         }
-        if (editable) AddFieldRow(entry, setField)
+        if (editable) AddFieldRow(entry, actions.setField)
     }
 }
 
+/** A small outlined chip naming a secret's scope (App / Project). */
 @Composable
-private fun AddFieldRow(entry: com.superiorsoftllc.infantry.ui.protocol.SecretEntryRow, setField: (String, String, String) -> Unit) {
+private fun ScopeBadge(label: String, modifier: Modifier = Modifier) {
+    Text(
+        label, fontSize = 10.sp, color = Palette.Info,
+        modifier = modifier.border(1.dp, Palette.Info.copy(alpha = 0.6f), Palette.PopupShape).padding(horizontal = 6.dp, vertical = 1.dp),
+    )
+}
+
+@Composable
+private fun AddFieldRow(entry: SecretEntryRow, setField: (String, String, String) -> Unit) {
     var field by remember { mutableStateOf("") }
     var value by remember { mutableStateOf("") }
     val taken = entry.fields.any { it.name == field.trim() }
     val ok = SecretForm.fieldOk(field.trim()) && !taken && value.isNotBlank()
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedTextField(
-            value = field, onValueChange = { field = it }, singleLine = true, label = { Text("Field") },
-            isError = field.isNotBlank() && (!SecretForm.fieldOk(field.trim()) || taken),
-            modifier = Modifier.weight(1f).testTag("$SECRET_ADD_FIELD_NAME_TAG-${entry.name}"),
-        )
-        MaskedInput(value, { value = it }, "Value", Modifier.weight(1f).testTag("$SECRET_ADD_FIELD_VALUE_TAG-${entry.name}"))
-        OutlinedButton(
-            onClick = { setField(entry.name, field.trim(), value); field = ""; value = "" }, enabled = ok,
-            modifier = Modifier.testTag("$SECRET_ADD_FIELD_TAG-${entry.name}"),
-        ) { Text("Add field", fontSize = 12.sp) }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(top = 4.dp)) {
+        Text("Add a field to ${entry.name}", color = Palette.Muted, fontSize = 11.sp)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SecretTextField(
+                field, { field = it }, "Field name", isError = field.isNotBlank() && (!SecretForm.fieldOk(field.trim()) || taken),
+                modifier = Modifier.weight(1f).testTag("$SECRET_ADD_FIELD_NAME_TAG-${entry.name}"),
+            )
+            MaskedInput(value, { value = it }, "Value", Modifier.weight(1f).testTag("$SECRET_ADD_FIELD_VALUE_TAG-${entry.name}"))
+            SecretButton("Add field", ok, "$SECRET_ADD_FIELD_TAG-${entry.name}") { setField(entry.name, field.trim(), value); field = ""; value = "" }
+        }
     }
 }
 
 @Composable
-private fun NewSecretForm(existing: Set<String>, setField: (String, String, String) -> Unit) {
+private fun NewSecretCard(existing: Set<String>, setField: (String, String, String) -> Unit) {
     var name by remember { mutableStateOf("") }
     var field by remember { mutableStateOf("") }
     var value by remember { mutableStateOf("") }
     val n = name.trim()
     val nameBad = n.isNotEmpty() && (!SecretForm.nameOk(n) || n in existing)
     val fieldBad = field.isNotBlank() && !SecretForm.fieldOk(field.trim())
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.testTag(SECRET_NEW_TAG)) {
-        Text("New secret", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-        OutlinedTextField(
-            value = name, onValueChange = { name = it }, singleLine = true, label = { Text("Secret name") }, isError = nameBad,
-            supportingText = { Text(if (n in existing) "A secret with this name exists; add a field to it above" else SecretForm.NAME_HINT, fontSize = 11.sp) },
-            modifier = Modifier.fillMaxWidth().testTag(SECRET_NEW_NAME_TAG),
+    Column(Modifier.padding(top = 8.dp).secretCard().testTag(SECRET_NEW_TAG), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("New secret", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Palette.Text)
+        SecretTextField(name, { name = it }, "Secret name", isError = nameBad, modifier = Modifier.fillMaxWidth().testTag(SECRET_NEW_NAME_TAG))
+        Text(
+            if (n in existing) "A secret with this name exists; add a field to it above" else SecretForm.NAME_HINT,
+            color = if (nameBad) Palette.Danger else Palette.Muted, fontSize = 11.sp,
         )
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(
-                value = field, onValueChange = { field = it }, singleLine = true, label = { Text("First field") }, isError = fieldBad,
-                modifier = Modifier.weight(1f).testTag(SECRET_NEW_FIELD_TAG),
-            )
+            SecretTextField(field, { field = it }, "First field", isError = fieldBad, modifier = Modifier.weight(1f).testTag(SECRET_NEW_FIELD_TAG))
             MaskedInput(value, { value = it }, "Value", Modifier.weight(1f).testTag(SECRET_NEW_VALUE_TAG))
         }
         Text(SecretForm.FIELD_HINT, color = Palette.Muted, fontSize = 11.sp)
-        OutlinedButton(
-            onClick = { setField(n, field.trim(), value); name = ""; field = ""; value = "" },
-            enabled = SecretForm.nameOk(n) && n !in existing && SecretForm.fieldOk(field.trim()) && value.isNotBlank(),
-            modifier = Modifier.testTag(SECRET_NEW_SAVE_TAG),
-        ) { Text("Add secret", fontSize = 12.sp) }
+        Row {
+            Spacer(Modifier.weight(1f))
+            SecretButton(
+                "Create secret", SecretForm.nameOk(n) && n !in existing && SecretForm.fieldOk(field.trim()) && value.isNotBlank(), SECRET_NEW_SAVE_TAG,
+            ) { setField(n, field.trim(), value); name = ""; field = ""; value = "" }
+        }
     }
+}
+
+/** Inputs with an outline you can see on the dialog (the theme's border tone alone nearly vanishes there). */
+@Composable
+private fun secretFieldColors() = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+    unfocusedBorderColor = Palette.Muted.copy(alpha = 0.6f),
+    focusedBorderColor = Palette.Accent,
+    disabledBorderColor = Palette.Muted.copy(alpha = 0.3f),
+    unfocusedContainerColor = Palette.Panel,
+    focusedContainerColor = Palette.Panel,
+    unfocusedLabelColor = Palette.Muted,
+)
+
+@Composable
+private fun SecretTextField(value: String, onChange: (String) -> Unit, label: String, isError: Boolean, modifier: Modifier) {
+    OutlinedTextField(
+        value = value, onValueChange = onChange, singleLine = true, label = { Text(label) }, isError = isError,
+        shape = Palette.PopupShape, colors = secretFieldColors(), modifier = modifier,
+    )
 }
 
 /** A value input that never shows what is typed (no reveal: the owner's rule). */
@@ -1087,8 +1191,20 @@ private fun MaskedInput(value: String, onChange: (String) -> Unit, label: String
         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
             keyboardType = androidx.compose.ui.text.input.KeyboardType.Password, autoCorrectEnabled = false,
         ),
+        shape = Palette.PopupShape, colors = secretFieldColors(),
         modifier = modifier,
     )
+}
+
+/** An outlined action whose outline shows; dim (not hidden) until it can act. */
+@Composable
+private fun SecretButton(label: String, enabled: Boolean, tag: String, danger: Boolean = false, onClick: () -> Unit) {
+    val tone = if (danger) Palette.Danger else Palette.Text
+    OutlinedButton(
+        onClick = onClick, enabled = enabled, shape = Palette.PopupShape,
+        border = androidx.compose.foundation.BorderStroke(1.dp, if (enabled) tone.copy(alpha = 0.7f) else Palette.Muted.copy(alpha = 0.3f)),
+        modifier = Modifier.testTag(tag),
+    ) { Text(label, fontSize = 12.sp, color = if (enabled) tone else Palette.Muted) }
 }
 
 private fun protectionText(wire: String): String = when (wire) {
@@ -1121,6 +1237,11 @@ const val SECRET_NEW_NAME_TAG = "secret-new-name"
 const val SECRET_NEW_FIELD_TAG = "secret-new-field"
 const val SECRET_NEW_VALUE_TAG = "secret-new-value"
 const val SECRET_NEW_SAVE_TAG = "secret-new-save"
+const val SECRET_EMPTY_TAG = "secret-empty"
+const val SECRET_SCOPE_TAG = "secret-scope"
+const val SECRET_MOVE_TAG = "secret-move"
+const val SECRET_NOTE_TAG = "secret-note"
+const val SECRET_PROJECTS_NOTE_TAG = "secret-projects-note"
 
 /** UPDATE-1: Configuration > Updates. [check] asks the installed app's updater to look for a newer release now. */
 class UpdatesEntry(val version: String, val check: () -> Unit) {

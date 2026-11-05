@@ -64,7 +64,8 @@ fun RunManager(
     registry: () -> CommandRegistry, runner: ProcessRunner, emit: (Envelope) -> Unit, now: () -> Long = System::currentTimeMillis,
     terminal: TerminalRunner? = null, limits: RunManager.RunLimits = RunManager.RunLimits(), restricted: () -> Boolean = { false },
     secrets: (String) -> Map<String, String>? = { null },
-) = RunManager(registry, TestRuns(runner, terminal, secrets), emit, now, limits = limits, restricted = restricted, secrets = secrets)
+    projectSecrets: (String, String?) -> Map<String, String>? = { name, _ -> secrets(name) },
+) = RunManager(registry, TestRuns(runner, terminal, secrets), emit, now, limits = limits, restricted = restricted, secrets = secrets, projectSecrets = projectSecrets)
 
 fun RunManager(registry: CommandRegistry, runner: ProcessRunner, emit: (Envelope) -> Unit, now: () -> Long = System::currentTimeMillis) =
     RunManager({ registry }, runner, emit, now)

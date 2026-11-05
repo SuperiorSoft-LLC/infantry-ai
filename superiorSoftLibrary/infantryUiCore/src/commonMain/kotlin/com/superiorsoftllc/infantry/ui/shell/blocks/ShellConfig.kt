@@ -25,6 +25,7 @@ import com.superiorsoftllc.infantry.ui.LocalShell
 import com.superiorsoftllc.infantry.ui.PairEntry
 import com.superiorsoftllc.infantry.ui.Palette
 import com.superiorsoftllc.infantry.ui.SecretActions
+import com.superiorsoftllc.infantry.ui.SecretProjectRef
 import com.superiorsoftllc.infantry.ui.THEME_PREF_KEY
 import com.superiorsoftllc.infantry.ui.block.layout.Block
 import com.superiorsoftllc.infantry.ui.block.layout.BlockScope
@@ -132,6 +133,9 @@ class ConfigBlock(children: List<Block>, place: Place = Place()) : Block(CONFIG,
                 setField = if (controller.supportsKeyValueSecrets()) { n, f, v -> actionScope.launch { controller.setSecretField(n, f, v) }; Unit } else null,
                 deleteField = { n, f -> actionScope.launch { controller.deleteSecretField(n, f) } },
                 delete = { n -> actionScope.launch { controller.deleteSecret(n) } },
+                // SECRETS-2b: an app secret can move to the project on screen (1.152.0).
+                move = if (controller.supportsProjectSecrets()) { n, from, to -> actionScope.launch { controller.moveSecret(n, from, to) }; Unit } else null,
+                currentProject = state.projects.firstOrNull { it.id == state.activeProjectId }?.let { SecretProjectRef(it.id, it.name) },
             ),
             onOpenRoles = { ui.showRoles = true },
             limits = state.limitCatalog,
