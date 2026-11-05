@@ -93,6 +93,7 @@ class ProcessLedger(
         val heavy = ProfileRx.heavyCommand(tools)
         val dirSources = tools.mapNotNull { t -> t.daemonDir?.takeIf { t.daemons.isNotEmpty() && it.paths.isNotEmpty() && it.match.isNotEmpty() }?.let { ProfileRx.any(t.daemons) to it } }
         daemonDirs.retain(byPid.keys)
+        fullCommands.keys.retainAll(byPid.keys)
         var changed = false
         for (p in all) {
             val dirSource = dirSources.firstOrNull { it.first.containsMatchIn(p.command) }?.second
@@ -107,17 +108,34 @@ class ProcessLedger(
                 if (e != null && os.startInstant(up) == e.startedAt) owner = e.sessionId
                 up = byPid[up]?.parentPid
             }
+            var rec = p
             if (owner == null && (p.parentPid == null || p.parentPid !in byPid)) {
-                val cmd = norm(p.command)
+                // PROC-LEAK-2: the OS-wide snapshot holds only the image path on Windows (the JDK gives no command line for a
+                // process this JVM did not start), so an orphan's real command line is read once here, per pid + start.
+                rec = p.copy(command = fullCommand(p))
+                val cmd = norm(rec.command)
                 owner = dirs.firstOrNull { atBoundary(cmd, it.value) }?.key
-                if (owner == null && dirSource != null && !runCatching { isProtected(p) }.getOrDefault(true)) {
-                    val built = daemonDirs.dirOf(p, dirSource)?.let(::norm)
+                val source = dirSource ?: dirSources.firstOrNull { it.first.containsMatchIn(rec.command) }?.second
+                if (owner == null && source != null && !runCatching { isProtected(rec) }.getOrDefault(true)) {
+                    val built = daemonDirs.dirOf(rec, source)?.let(::norm)
                     if (built != null) owner = dirs.firstOrNull { atBoundary(built, it.value) && built.startsWith(it.value) }?.key
                 }
             }
-            if (owner != null) changed = record(p, owner, root = false, inferred = true) || changed
+            if (owner != null) changed = record(rec, owner, root = false, inferred = true) || changed
         }
         if (changed) save()
+    }
+
+    /** pid to (start instant, full command line) of the orphans [adopt] looked at; pruned to the live pids every pass. */
+    private val fullCommands = HashMap<Long, Pair<Long, String>>()
+
+    private fun fullCommand(p: ProcInfo): String {
+        val started = p.startedAt ?: return p.command
+        fullCommands[p.pid]?.takeIf { it.first == started }?.let { return it.second }
+        val full = runCatching { os.info(p.pid) }.getOrNull()?.takeIf { it.startedAt == null || it.startedAt == started }
+            ?.command?.takeIf { it.isNotBlank() } ?: p.command
+        fullCommands[p.pid] = started to full
+        return full
     }
 
     private fun norm(s: String) = s.replace('\\', '/').trimEnd('/').lowercase()

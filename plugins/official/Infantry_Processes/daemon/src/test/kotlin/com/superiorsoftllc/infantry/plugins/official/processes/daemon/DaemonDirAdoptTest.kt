@@ -117,6 +117,26 @@ class DaemonDirAdoptTest {
         assertEquals("s1", after.get(gradleDaemon)?.sessionId, "the last build's currentDir wins")
     }
 
+    @Test fun `on Windows the snapshot holds only the image path, and the orphan's full command line is read to match its profile`() {
+        // The live repro: the JDK gives `C:\jdk\bin\java.exe` alone for a process this JVM did not start.
+        val win = object : FakeOs() {
+            override fun snapshot() = super.snapshot().map { it.copy(command = it.command.substringBefore(" -")) }
+        }
+        win.sessionList = os.sessionList; win.profiles = profiles; win.gate = os.gate
+        win.start(harness, null, "claude --session", 1_000)
+        sessions["s1"] = SessionRecord(
+            id = "s1", provider = "claude", workingDir = ".", spawnedAt = 0, lastHeartbeat = now, state = SessionState.IDLE,
+            keptProcess = KeptProcess(harness, 1_000, "claude"), lastOutputAt = now, worktreePath = worktree,
+        )
+        win.start(gradleDaemon, 777_777L, "\"C:\\jdk\\bin\\java.exe\" -Xmx3g -cp gradle-launcher.jar org.gradle.launcher.daemon.bootstrap.GradleDaemon 9.4.1", 6_000, memMb = 2_000)
+        daemonLog(gradleDaemon, worktree)
+        val l = ProcessLedger(win, null, "me", { now }, profiles = { profiles }, daemonDirs = reader)
+        ProcessWatch(l, win, { ProcessWatchConfig() }, { now }, enabled = { true }, log = {}).tick()
+        val e = l.get(gradleDaemon)
+        assertEquals("s1", e?.sessionId)
+        assertTrue(e!!.inferred)
+    }
+
     @Test fun `a daemon log naming no session worktree, or an older log of a recycled pid, adopts nothing`() {
         session("s1")
         orphanDaemon()
