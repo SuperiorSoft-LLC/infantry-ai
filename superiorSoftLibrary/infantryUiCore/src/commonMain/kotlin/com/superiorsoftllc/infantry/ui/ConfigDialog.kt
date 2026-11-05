@@ -98,6 +98,7 @@ fun ConfigDialog(
     onHarnessCheck: ((checkLatest: Boolean) -> Unit)? = null,
     onHarnessInstall: ((ids: List<String>, update: Boolean) -> Unit)? = null,
     /** CLIPATH-1: a platform file picker (title -> chosen path, null = cancelled); null = no Browse button on this platform. */
+    /** Superseded by PATH-PICKER-1 (path fields use the shell's picker); kept so callers still compile. */
     onBrowse: ((title: String) -> String?)? = null,
     /** BUG-PERM-1: the daemon's global Tool approval (null = not read yet / an older daemon). */
     toolApproval: ToolApprovalInfo? = null,
@@ -435,7 +436,7 @@ fun ConfigCliLocationsSection(config: ConfigDialogHost, modifier: Modifier = Mod
     val onHarnessCheck = config.onHarnessCheck
     val onHarnessInstall = config.onHarnessInstall
     FlagSection(ConfigEntry.CLI_LOCATIONS, config.highlight, modifier) {
-        CliLocationsSection(config.cliLocations, onCliLocation, config.onBrowse, harnessInstall, config.harnessInstallBusy, onHarnessInstall)
+        CliLocationsSection(config.cliLocations, onCliLocation, harnessInstall, config.harnessInstallBusy, onHarnessInstall)
         if (harnessInstall != null && onHarnessCheck != null && onHarnessInstall != null) {
             HarnessInstallControls(harnessInstall, config.harnessInstallBusy, config.harnessInstallLog, onHarnessCheck, onHarnessInstall)
         }
@@ -780,7 +781,6 @@ private fun KeepAliveDropdown(value: Int?, onPick: (Int) -> Unit) {
 private fun CliLocationsSection(
     locations: List<CliLocation>?,
     onSave: (id: String, path: String?) -> Unit,
-    onBrowse: ((title: String) -> String?)?,
     harness: HarnessInstallReport?,
     harnessBusy: Boolean,
     onInstall: ((ids: List<String>, update: Boolean) -> Unit)?,
@@ -790,7 +790,7 @@ private fun CliLocationsSection(
         return
     }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        locations.forEach { location -> CliLocationRow(location, onSave, onBrowse, harness?.harnesses?.firstOrNull { it.id == location.id }, harnessBusy, onInstall) }
+        locations.forEach { location -> CliLocationRow(location, onSave, harness?.harnesses?.firstOrNull { it.id == location.id }, harnessBusy, onInstall) }
     }
 }
 
@@ -798,7 +798,6 @@ private fun CliLocationsSection(
 private fun CliLocationRow(
     location: CliLocation,
     onSave: (id: String, path: String?) -> Unit,
-    onBrowse: ((title: String) -> String?)?,
     check: HarnessInstallStatus?,
     busy: Boolean,
     onInstall: ((ids: List<String>, update: Boolean) -> Unit)?,
@@ -830,20 +829,13 @@ private fun CliLocationRow(
         CliLocationsSetting.triedLines(location).forEach { tried ->
             Text("tried: $tried", color = Palette.Muted, fontSize = 10.sp)
         }
-        OutlinedTextField(
-            value = text,
-            onValueChange = { text = it },
-            singleLine = true,
-            placeholder = { Text("Absolute path to the ${location.label} executable", fontSize = 11.sp) },
-            modifier = Modifier.fillMaxWidth().testTag(CLI_FIELD_TAG_PREFIX + location.id),
+        // PATH-PICKER-1: the shared path field; Browse (a native file dialog, off the UI thread) fills it, Save stores it.
+        PathField(
+            text, { text = it }, PathKind.FILE, "${location.label} executable", Modifier.fillMaxWidth(),
+            tag = CLI_FIELD_TAG_PREFIX + location.id, title = "Locate ${location.label}",
+            placeholder = "Absolute path to the ${location.label} executable",
         )
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            if (onBrowse != null) {
-                TextButton(
-                    onClick = { onBrowse("Locate ${location.label}")?.let { text = it } },
-                    modifier = Modifier.testTag(CLI_BROWSE_TAG_PREFIX + location.id),
-                ) { Text("Browse...") }
-            }
             val toSave = CliLocationsSetting.pathToSave(text)
             TextButton(
                 onClick = { onSave(location.id, toSave) },
@@ -1139,6 +1131,7 @@ const val LOGS_OPEN_FAILED_TAG = "logs-open-failed"
 const val CLI_LOCATIONS_PENDING_TAG = "cli-locations-pending"
 const val CLI_STATUS_TAG_PREFIX = "cli-status-"
 const val CLI_FIELD_TAG_PREFIX = "cli-path-field-"
+/** PATH-PICKER-1: a CLI path field's Browse is `CLI_FIELD_TAG_PREFIX + id + PATH_FIELD_BROWSE_TAG_SUFFIX`; this prefix is no longer drawn. */
 const val CLI_BROWSE_TAG_PREFIX = "cli-browse-"
 const val CLI_SAVE_TAG_PREFIX = "cli-save-"
 const val CLI_CLEAR_TAG_PREFIX = "cli-clear-"

@@ -2,6 +2,8 @@
 // Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.plugins.official.git
 
+import com.superiorsoftllc.infantry.ui.PathField
+import com.superiorsoftllc.infantry.ui.PathKind
 import com.superiorsoftllc.infantry.ui.shell.gate
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -147,6 +149,9 @@ fun GitBaseSection(git: GitPaneHost, modifier: Modifier = Modifier) {
     BaseBranchPicker(git.link, git.session, git.context, git.project.id, git.project.baseBranch, git.live, modifier)
 }
 
+/** PATH-PICKER-1: the project directory box; its Browse is `GIT_DIRECTORY_FIELD_TAG + PATH_FIELD_BROWSE_TAG_SUFFIX`. */
+const val GIT_DIRECTORY_FIELD_TAG = "git-directory-field"
+
 /** The project's directory (project-scoped settings) and the last refusal, under a divider. [modifier] goes on the directory line. */
 @Composable
 fun GitDirectorySection(git: GitPaneHost, modifier: Modifier = Modifier) {
@@ -158,26 +163,13 @@ fun GitDirectorySection(git: GitPaneHost, modifier: Modifier = Modifier) {
     // GATE-PANES-1: the directory is part of the project (`projects.save`), dimmed while the policy refuses it.
     val canEdit = git.link.gate("projects.save").enabled && git.supported
     Text("Directory: ${active.directory.ifBlank { "not set" }}", modifier = modifier, color = Palette.Text, fontSize = 12.sp, fontFamily = Mono)
-    OutlinedTextField(
-        draft, { draft = it }, label = { Text("Project directory") }, singleLine = true, enabled = canEdit,
-        textStyle = TextStyle(fontSize = 12.sp), modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+    // PATH-PICKER-1: the shared path field; a folder picked with Browse fills the box and is saved at once.
+    PathField(
+        draft, { draft = it }, PathKind.FOLDER, "Project directory", Modifier.fillMaxWidth().padding(top = 6.dp),
+        tag = GIT_DIRECTORY_FIELD_TAG, title = "Choose the project directory", enabled = canEdit,
+        onPicked = { chosen -> draft = chosen; git.run { ctx.saveDirectory(active.id, chosen) } },
     )
-    val picker = LocalDirectoryPicker.current
     Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        if (picker != null) {
-            OutlinedButton(
-                onClick = {
-                    git.scope.launch {
-                        val chosen = picker.pick(draft.ifBlank { active.directory })?.trim().orEmpty()
-                        if (chosen.isNotEmpty()) {
-                            draft = chosen
-                            git.run { ctx.saveDirectory(active.id, chosen) }
-                        }
-                    }
-                },
-                enabled = canEdit,
-            ) { Text("Open directory…", fontSize = 12.sp) }
-        }
         OutlinedButton(
             onClick = { git.run { ctx.saveDirectory(active.id, draft) } },
             enabled = canEdit && draft.trim() != active.directory,

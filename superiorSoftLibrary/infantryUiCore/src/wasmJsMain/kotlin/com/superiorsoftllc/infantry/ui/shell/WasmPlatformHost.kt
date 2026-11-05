@@ -24,6 +24,9 @@ class WasmPlatformHost(
 
     override fun readTextFile(path: String): String? = null
 
+    /** PATH-PICKER-1: a browser cannot hand out a path on the daemon's computer, so path fields have no Browse; they say so. */
+    override val pathPickerNote: String get() = PATH_TYPED_NOTE
+
     override fun uiPref(key: String): String? = BrowserStorage.get(UI_PREFIX + key)
 
     override fun saveUiPref(key: String, value: String) = BrowserStorage.set(UI_PREFIX + key, value)

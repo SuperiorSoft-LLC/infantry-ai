@@ -34,7 +34,7 @@ plugins/community/Acme_Notes/daemon/src/main/kotlin/com/acme/notes/daemon/NotesD
 ```
 
    `type` is one of the built-ins in `ConfigFieldTypes` (`text`, `textarea`, `number`, `checkbox`, `select`, `radio`,
-   `multiSelect`, `color`, `list`, `group`, ...). The field's `scope` says where the user's override lives: `device`
+   `multiSelect`, `color`, `list`, `group`, `path`, `file`, ...). The field's `scope` says where the user's override lives: `device`
    (this host's UI preferences), `daemon` (stored by the daemon, so the daemon half can read it), or none (the default
    `node_config` rows). Every field key is documented in [Make a plugin](../make-a-plugin.md), section 3 (`config`).
 2. Read it in the UI half with `context.config("acme.notes")` (`config.string("heading")`, `config.boolean("shout")`).

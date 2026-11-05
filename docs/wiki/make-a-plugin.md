@@ -120,8 +120,10 @@ A field (`ConfigFieldDeclaration`): `key`, `type`, `label`, `default`, `options`
 `palette`, `display` (`"dropdown"` draws a `select` as a menu), `fields` (for `group`, and for a `list` of objects).
 
 Built-in field types (`ConfigFieldTypes`): `text`, `textarea`, `number`, `checkbox`, `toggle` (an alias of
-`checkbox`), `select`, `radio`, `multiSelect`, `implementation`, `color`, `classes`, `list`, `group`. A module can add
-more with `fieldTypes`.
+`checkbox`), `select`, `radio`, `multiSelect`, `implementation`, `color`, `classes`, `list`, `group`, `path` (a folder)
+and `file` (a file, narrowed by the field's `extensions`, e.g. `["ihq"]`). A `path` or `file` field is drawn with the
+shared `PathField`: a text box plus Browse, the platform's native chooser (no Browse on web and Android, where paths
+are typed). A module can add more with `fieldTypes`.
 
 **Scopes.** A field's `scope` says where the user's override lives: `device` (this host's UI preferences), `daemon`
 (the daemon; the daemon half reads it with `api.config(key)` and only `daemon` fields are served), or none (the

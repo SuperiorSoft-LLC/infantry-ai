@@ -83,7 +83,7 @@ class FieldTypes(private val types: Map<String, RegisteredFieldType> = emptyMap(
                     val items = (value as? JsonArray)?.map { (it as? JsonPrimitive)?.content } ?: return "Not a list"
                     if (field.options.isNotEmpty() && items.any { it == null || it !in field.options }) "Not all among: ${field.options.joinToString()}" else null
                 }
-                ConfigFieldTypes.TEXT, ConfigFieldTypes.TEXTAREA -> if (value is JsonPrimitive) null else "Not text"
+                ConfigFieldTypes.TEXT, ConfigFieldTypes.TEXTAREA, ConfigFieldTypes.PATH, ConfigFieldTypes.FILE -> if (value is JsonPrimitive) null else "Not text"
                 ConfigFieldTypes.CLASSES, ConfigFieldTypes.LIST, ConfigFieldTypes.GROUP ->
                     runCatching { ConfigFieldValidator.validate(field, value) }.exceptionOrNull()?.message?.let { it.substringAfter("' ", it).replaceFirstChar(Char::uppercase) }
                 else -> null

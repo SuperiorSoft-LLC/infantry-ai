@@ -33,6 +33,12 @@ class AndroidPlatformHost(
     /** UPDATER-1: a plugin may offer the APK update ([SELF_UPDATE_REGISTRY] key `android`) when there is a context to install with. */
     override val selfUpdateKey: String? get() = if (appContext != null) "android" else null
 
+    /**
+     * PATH-PICKER-1: the system document picker answers a content:// URI on the phone, never a path the daemon (on another
+     * computer) can open, so path fields have no Browse here; they say to type the daemon computer's path.
+     */
+    override val pathPickerNote: String get() = PATH_TYPED_NOTE
+
     override val canPickAttachment: Boolean get() = attachPicker != null
     override fun pickAttachment(title: String, imagesOnly: Boolean, maxBytes: Long, onPicked: (PickedImage?) -> Unit) {
         attachPicker?.invoke(imagesOnly, maxBytes, onPicked) ?: onPicked(null)

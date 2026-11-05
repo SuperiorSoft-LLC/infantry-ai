@@ -191,7 +191,7 @@ private fun GeneratedField(factory: TabFactory, card: ConfigCard, f: ConfigField
                     )
                     TextEditor(declared, tag, value, editable, ::write)
                 }
-                ConfigFieldTypes.TEXT, ConfigFieldTypes.NUMBER -> TextEditor(declared, tag, value, editable, ::write)
+                ConfigFieldTypes.TEXT, ConfigFieldTypes.NUMBER, ConfigFieldTypes.PATH, ConfigFieldTypes.FILE -> TextEditor(declared, tag, value, editable, ::write)
                 ConfigFieldTypes.MULTI_SELECT -> {
                     val picked = (value as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content }.orEmpty()
                     for (o in f.options) Option(tag, o, f.optionLabels[o] ?: o, o in picked, editable) {

@@ -41,6 +41,8 @@ import com.superiorsoftllc.infantry.ui.Checkbox
 import com.superiorsoftllc.infantry.ui.Chip
 import com.superiorsoftllc.infantry.ui.FilterChip
 import com.superiorsoftllc.infantry.ui.Palette
+import com.superiorsoftllc.infantry.ui.PathField
+import com.superiorsoftllc.infantry.ui.PathKind
 import com.superiorsoftllc.infantry.ui.SectionLabel
 import com.superiorsoftllc.infantry.ui.TextButton
 import com.superiorsoftllc.infantry.ui.handCursor
@@ -108,7 +110,7 @@ fun NodeFields(factory: TabFactory, node: String, fields: List<DeclaredField>, e
                         (value as? JsonPrimitive)?.booleanOrNull ?: false, if (can) { on -> write(JsonPrimitive(on)) } else null, enabled = can,
                         modifier = Modifier.testTag(NODE_FIELD_CHECK_TAG_PREFIX + tag).semantics { contentDescription = f.field.label },
                     )
-                    ConfigFieldTypes.TEXT, ConfigFieldTypes.TEXTAREA, ConfigFieldTypes.NUMBER, ConfigFieldTypes.COLOR -> TextEditor(f, tag, value, can, ::write)
+                    ConfigFieldTypes.TEXT, ConfigFieldTypes.TEXTAREA, ConfigFieldTypes.NUMBER, ConfigFieldTypes.COLOR, ConfigFieldTypes.PATH, ConfigFieldTypes.FILE -> TextEditor(f, tag, value, can, ::write)
                     ConfigFieldTypes.SELECT, ConfigFieldTypes.RADIO -> if (f.field.type == ConfigFieldTypes.SELECT && f.field.display == "dropdown") SelectDropdown(f.field, tag, value, can, ::write) else for (o in f.field.options) Option(tag, o, f.field.optionLabels[o] ?: o, (value as? JsonPrimitive)?.content == o, can) { write(JsonPrimitive(o)) }
                     ConfigFieldTypes.MULTI_SELECT -> {
                         val picked = (value as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content }.orEmpty()
@@ -226,7 +228,18 @@ internal fun TextEditor(f: DeclaredField, tag: String, value: JsonElement?, enab
         max != null && parsed > max -> "At most $max"
         else -> null
     }
-    OutlinedTextField(
+    val pathKind = when (f.field.type) {
+        ConfigFieldTypes.PATH -> PathKind.FOLDER
+        ConfigFieldTypes.FILE -> PathKind.FILE
+        else -> null
+    }
+    // PATH-PICKER-1: a `path` / `file` field is the shared path field: Browse fills the draft, Save stores it as for text.
+    if (pathKind != null) PathField(
+        draft, { draft = it }, pathKind, f.field.label, Modifier.widthIn(min = 220.dp, max = 420.dp),
+        tag = NODE_FIELD_INPUT_TAG_PREFIX + tag, extensions = f.field.extensions, enabled = enabled, isError = problem != null,
+        placeholder = f.field.placeholder,
+    )
+    else OutlinedTextField(
         value = draft, onValueChange = { draft = it }, singleLine = !area, minLines = if (area) 3 else 1, enabled = enabled, isError = problem != null,
         placeholder = f.field.placeholder?.let { { Text(it, fontSize = 12.sp) } },
         modifier = Modifier.widthIn(min = 160.dp, max = 320.dp).testTag(NODE_FIELD_INPUT_TAG_PREFIX + tag).semantics { contentDescription = f.field.label },

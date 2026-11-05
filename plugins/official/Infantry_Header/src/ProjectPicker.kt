@@ -2,6 +2,9 @@
 // Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.plugins.official.header
 
+import androidx.compose.material3.LocalTextStyle
+import com.superiorsoftllc.infantry.ui.PathField
+import com.superiorsoftllc.infantry.ui.PathKind
 import com.superiorsoftllc.infantry.ui.*
 
 import androidx.compose.foundation.background
@@ -239,10 +242,10 @@ private fun NewProjectDialog(
                     name, { name = it; error = null }, label = { Text("Project name") }, singleLine = true, enabled = live,
                     modifier = Modifier.fillMaxWidth().focusRequester(nameFocus).testTag(NEW_PROJECT_NAME_TAG),
                 )
-                if (askDirectory) OutlinedTextField(
-                    directory, { directory = it; error = null }, label = { Text("Directory / repo (optional)") }, singleLine = true, enabled = live,
-                    supportingText = { Text("Path on the daemon machine; tickets cannot start without one.", fontSize = 10.sp) },
-                    modifier = Modifier.fillMaxWidth().testTag(NEW_PROJECT_DIRECTORY_TAG),
+                if (askDirectory) PathField(
+                    directory, { directory = it; error = null }, PathKind.FOLDER, "Directory / repo (optional)", Modifier.fillMaxWidth(),
+                    tag = NEW_PROJECT_DIRECTORY_TAG, title = "Choose the project folder", enabled = live, textStyle = LocalTextStyle.current,
+                    supportingText = "Path on the daemon machine; tickets cannot start without one.",
                 )
                 if (!live) Text("Connect to a daemon to create a project.", color = Palette.Muted, fontSize = 11.sp)
                 error?.let { Text(it, color = Palette.Danger, fontSize = 11.sp) }
@@ -442,10 +445,10 @@ private fun DirectorySetting(state: AppState, controller: Controller, project: P
         localError = null
         scope.launch { (controller.saveProjectDirectory(project.id, directory) as? CommandResult.Refused)?.let { localError = it.reason } }
     }
-    OutlinedTextField(
-        draft, { draft = it; localError = null }, label = { Text("Project directory") }, singleLine = true, enabled = live,
-        supportingText = { Text(if (project.directory.isBlank()) "Not set; tickets cannot start without one." else "Path on the daemon machine.", fontSize = 10.sp) },
-        modifier = Modifier.fillMaxWidth().testTag(PROJECT_DIRECTORY_FIELD_TAG),
+    PathField(
+        draft, { draft = it; localError = null }, PathKind.FOLDER, "Project directory", Modifier.fillMaxWidth(),
+        tag = PROJECT_DIRECTORY_FIELD_TAG, title = "Choose the project folder", enabled = live, textStyle = LocalTextStyle.current,
+        supportingText = if (project.directory.isBlank()) "Not set; tickets cannot start without one." else "Path on the daemon machine.",
     )
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedButton(

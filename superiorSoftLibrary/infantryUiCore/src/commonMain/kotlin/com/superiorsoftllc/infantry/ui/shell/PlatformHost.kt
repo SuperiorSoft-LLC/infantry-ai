@@ -75,6 +75,12 @@ interface PlatformHost {
     /** CLIPATH-1: let the user choose a file, titled [title]; its absolute path, or null when cancelled / unsupported. */
     fun pickFile(title: String): String? = null
 
+    /** PATH-PICKER-1: the native folder/file chooser behind every path field's Browse; null = no Browse here. */
+    val pathPicker: com.superiorsoftllc.infantry.ui.PathPicker? get() = null
+
+    /** PATH-PICKER-1: what a path field says where [pathPicker] is null (why there is no Browse, what to type); null = nothing. */
+    val pathPickerNote: String? get() = null
+
     /** ANDROID-ATTACH-1: whether [pickAttachment] can ask for a file here (desktop dialog, Android system picker). */
     val canPickAttachment: Boolean get() = canPickFiles
 
@@ -228,6 +234,9 @@ val LocalPlatformHost = staticCompositionLocalOf<PlatformHost> { defaultPlatform
 
 /** The default host of the running platform (desktop environment on the JVM, a context-free default on Android). */
 expect fun defaultPlatformHost(): PlatformHost
+
+/** PATH-PICKER-1: the note of a path field on a platform with no usable chooser (web, Android). */
+const val PATH_TYPED_NOTE = "Type the full path on the computer that runs the daemon."
 
 /** Setting keys shared with the CLI so one environment configures every client. */
 object ShellKeys {

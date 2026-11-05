@@ -175,7 +175,7 @@ class ProjectGitPaneUiTest {
         onNodeWithText("Directory: C:\\work\\alpha").assertExists()
     }
 
-    @Test fun `Open directory fills the box, saves the chosen path, and a cancel changes nothing`() {
+    @Test fun `Browse fills the box, saves the chosen path, and a cancel changes nothing`() {
         var answer: String? = "/picked/dir"
         picker = DirectoryPicker { answer }
         try {
@@ -183,21 +183,21 @@ class ProjectGitPaneUiTest {
                 link.push(projects(Project("p1", "Alpha")))
                 waitUntil(timeoutMillis = 10_000) { controller.state.value.activeProjectId == "p1" }
                 answer = null
-                onNodeWithText("Open directory…").performClick()
+                onNodeWithTag(GIT_DIRECTORY_FIELD_TAG + PATH_FIELD_BROWSE_TAG_SUFFIX).performClick()
                 Thread.sleep(300)
                 assertTrue(link.sentOf(Envelope.PROJECT_SAVE).isEmpty(), "cancelled picker saves nothing")
                 answer = "/picked/dir"
-                onNodeWithText("Open directory…").performClick()
+                onNodeWithTag(GIT_DIRECTORY_FIELD_TAG + PATH_FIELD_BROWSE_TAG_SUFFIX).performClick()
                 waitUntil(timeoutMillis = 10_000) { link.sentOf(Envelope.PROJECT_SAVE).isNotEmpty() }
                 assertEquals("""{"id":"p1","directory":"/picked/dir"}""", link.sentOf(Envelope.PROJECT_SAVE).single().data)
             }
         } finally { picker = null }
     }
 
-    @Test fun `no picker, no Open directory button, text box remains`() = withPane("1.36.0") { link, controller ->
+    @Test fun `no picker, no Browse button, text box remains`() = withPane("1.36.0") { link, controller ->
         link.push(projects(Project("p1", "Alpha")))
         waitUntil(timeoutMillis = 10_000) { controller.state.value.activeProjectId == "p1" }
-        onNodeWithText("Open directory…").assertDoesNotExist()
+        onNodeWithTag(GIT_DIRECTORY_FIELD_TAG + PATH_FIELD_BROWSE_TAG_SUFFIX).assertDoesNotExist()
         onNodeWithText("Project directory").assertExists()
     }
 
