@@ -75,18 +75,19 @@ jobs:
           set -euo pipefail
           V='${{ needs.version.outputs.version }}'
           ./gradlew --no-daemon :superiorSoftLibrary:infantryUi:createDistributable -PinfantryVersion="$V" $IHQ_SIGN
-          mkdir -p out
+          # UPDATER-1: outside the checkout, or the packaging guard (clean tree) refuses releaseAssets and the MSI is skipped.
+          out="$RUNNER_TEMP/out"; mkdir -p "$out"
           app="$(ls -d superiorSoftLibrary/infantryUi/build/compose/binaries/main/app/InfantryAI)"
-          (cd "$(dirname "$app")" && 7z a -tzip "$GITHUB_WORKSPACE/out/InfantryAI-$V-windows.zip" InfantryAI >/dev/null)
+          (cd "$(dirname "$app")" && 7z a -tzip "$out/InfantryAI-$V-windows.zip" InfantryAI >/dev/null)
           if ./gradlew --no-daemon :superiorSoftLibrary:infantryUi:releaseAssets -PinfantryVersion="$V" $IHQ_SIGN; then
-            cp "superiorSoftLibrary/infantryUi/build/release/$V/InfantryAI-$V.msi" out/
+            cp "superiorSoftLibrary/infantryUi/build/release/$V/InfantryAI-$V.msi" "$out/"
           else
             echo "::warning::MSI packaging failed unsigned on this runner; publishing the app-image zip only (the in-app updater needs the MSI)"
           fi
       - uses: actions/upload-artifact@v4
         with:
           name: windows
-          path: out/*
+          path: ${{ runner.temp }}/out/*
           if-no-files-found: error
 
   android:
