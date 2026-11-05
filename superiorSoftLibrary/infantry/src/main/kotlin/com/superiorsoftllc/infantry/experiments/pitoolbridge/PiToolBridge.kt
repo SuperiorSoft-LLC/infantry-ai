@@ -51,7 +51,7 @@ object PiToolBridge {
     private val MUTATING: List<String> = listOf(
         "infantry_ticket_create", "infantry_ticket_update", "infantry_ticket_move", "infantry_ticket_delete", "infantry_ticket_start",
         "infantry_project_config_set", "infantry_role_create", "infantry_role_update", "infantry_role_delete", "infantry_skill_save", "infantry_skill_delete",
-        "infantry_harness_install", "infantry_pipeline_record", "infantry_epic_base",
+        "infantry_harness_install", "infantry_pipeline_record", "infantry_epic_base", "infantry_ticket_epic",
     )
     private val DESTRUCTIVE: List<String> = listOf(
         "infantry_spawn", "infantry_kill", "infantry_prompt", "infantry_session_remove", "infantry_session_restart", "infantry_processes_reap",

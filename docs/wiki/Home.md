@@ -18,6 +18,7 @@ wins, and the page says so.
 - [Daemon plugin API](daemon-plugin-api.md): tools, routes, hooks, events, services, storage, lifecycle, the guard.
 - [Scripting](Scripting.md): the Lua API, hooks, `ih.again` phases, the process bridge (`exec`), chat notes, progress, the session bridge, settings.
 - [Harnesses and providers](Harnesses.md): the harness API, its contributions, how the three built-in harnesses use it, adding a harness and a provider.
+- [Board and epics](Board.md): the ticket board, epics, and moving tickets between epics (board, MCP, CLI).
 - [Settings](Settings.md): scopes (app, project, role, session), cost-saving defaults and what each opt-in costs.
 - [Licensing (DRAFT)](licensing.md): why the core is MPL-2.0 and everything else Apache-2.0, per module, the compatibility promise as implemented.
 

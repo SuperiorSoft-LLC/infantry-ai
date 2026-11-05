@@ -75,6 +75,8 @@ class BoardDaemonPlugin : DaemonPlugin {
         api.tools.register(TicketDeleteTool(api))
         api.tools.register(TicketCreateTool(api, comments))
         api.tools.register(TicketUpdateTool(api, comments))
+        // EPIC-MOVE-1: move one or many tickets to an epic (or none).
+        api.tools.register(TicketEpicTool(api))
         // RUNTIME-LOAD-5 (F5 remainder): the board summary, over the host's sessions read model.
         api.tools.register(BoardTool(api))
         // RUNTIME-LOAD-7 (F5 last): the ticket start, over the host spawn service.

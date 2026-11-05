@@ -249,6 +249,8 @@ class BoardPaneHost internal constructor(
     internal val drag: BoardDrag,
     internal val session: BoardDropSession,
     private val hoverState: State<DragHover?>,
+    /** EPIC-MOVE-1: the tickets ticked for a bulk Move to epic. */
+    val selection: BoardSelection = BoardSelection(),
 ) {
     val live: Boolean get() = deps.live
     /** POLICY-1: whether the named action [actionId] may be performed now (live, and the daemon's policy allows it). */
@@ -295,7 +297,9 @@ fun BoardPaneFrame(deps: BoardDeps, onOpenAgent: (String) -> Unit, content: @Com
     LaunchedEffect(session) { current.tickets.updates.collect { visible -> session.observe(visible, currentColumnOf) } }
     val hover = remember(deps.tickets.visible, active) { derivedStateOf { drag.hover(columnOf) } }
     var origin by remember { mutableStateOf(Offset.Zero) }
-    val board = BoardPaneHost(deps, onOpenAgent, actionScope, filterState, creating, epics, active, columnOf, drag, session, hover)
+    // EPIC-MOVE-1: the multi-select lives in memory only, and resets when the shell switches project.
+    val selection = remember(projectId) { BoardSelection() }
+    val board = BoardPaneHost(deps, onOpenAgent, actionScope, filterState, creating, epics, active, columnOf, drag, session, hover, selection)
     // IMG-4: a ticket's thumbnail opens full size over the whole board.
     ImageViewerHost {
     Box(
@@ -352,6 +356,8 @@ fun BoardFiltersSection(board: BoardPaneHost, modifier: Modifier = Modifier) {
         Spacer(Modifier.width(6.dp))
         Button(onClick = { board.toggleCreating() }, enabled = board.can("board.ticket.save")) { Text(if (board.creating) "Close" else "+ New ticket", fontSize = 12.sp) }
     }
+    // EPIC-MOVE-1: N selected, Move to epic..., Clear (only while tickets are ticked).
+    BoardSelectionBar(board)
 }
 
 /** BLOCKS-LAYOUT L16: the "N unassigned tickets not shown" line, with a project selected; [modifier] goes on the line. */
@@ -626,6 +632,11 @@ class BoardCardHost internal constructor(
     suspend fun move(status: String): CommandResult = deps.tickets.move(ticket.id, status)
     fun delete() { scope.launch { deps.tickets.delete(ticket.id) } }
     fun openAgent(sessionId: String) = board.onOpenAgent(sessionId)
+    /** EPIC-MOVE-1: the card is ticked for a bulk move. */
+    val selected: Boolean get() = board.selection.has(ticket.id)
+    fun toggleSelected() = board.selection.toggle(ticket.id)
+    /** The project's epics (for the card's Move to epic...). */
+    val epics: List<EpicView> get() = board.epics
 }
 
 /**
@@ -654,6 +665,8 @@ fun TicketCardSummarySection(card: BoardCardHost, modifier: Modifier = Modifier,
     Row(modifier, verticalAlignment = Alignment.Top) {
         card.handle()
         Spacer(Modifier.width(4.dp))
+        TicketSelectBox(card.selected, card.ticket.title, card.ticket.id) { card.toggleSelected() }
+        Spacer(Modifier.width(6.dp))
         Column(
             Modifier.weight(1f)
                 .clickable(role = Role.Button, onClickLabel = if (card.open) "Close the ticket" else "Edit the ticket") { card.toggleOpen() }

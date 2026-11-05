@@ -27,6 +27,7 @@ Every page of this wiki is listed here, one line each. The pages are written fro
 
 ## Configure
 
+- [Board and epics](Board.md): epics, and moving tickets between epics.
 - [Settings](Settings.md): scopes (app, project, role, session) and the cost-saving defaults.
 - [Updates](Updates.md): the one update engine for the app and every plugin; per-plugin sources, private and paid ones.
 

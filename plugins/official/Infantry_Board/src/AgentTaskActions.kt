@@ -52,12 +52,14 @@ fun AgentTaskBadges(t: Ticket) {
 /**
  * AGENT-TASKS-6: one overflow menu on the card (phone width: a menu, not more buttons). In progress: Unassign (confirm) and
  * Switch to...; to do: Assign to... (Start now / Add to queue). Every pick calls the board tool; no local state guess.
+ * EPIC-MOVE-1: every card's menu also has Move to epic... (the board's epic move dialog), and each item wears an icon.
  */
 @Composable
 fun AgentTaskMenu(card: BoardCardHost) {
     val t = card.ticket
     val deps = card.deps
     val canMove = card.can("board.ticket.move")
+    val canSave = card.can("board.ticket.save")
     val scope = rememberCoroutineScope()
     var menu by remember { mutableStateOf(false) }
     var step by remember { mutableStateOf<String?>(null) } // unassign | switch | assign
@@ -65,20 +67,25 @@ fun AgentTaskMenu(card: BoardCardHost) {
     var error by remember { mutableStateOf<String?>(null) }
     val inProgress = t.status == TicketColumns.IN_PROGRESS
     val todo = t.status == TicketColumns.TODO
-    if (!inProgress && !todo) return
+    val agentItems = canMove && (inProgress || todo)
     fun run(c: AgentTaskCall) {
         step = null; picked = null; menu = false
         scope.launch { deps.tickets.pluginTool(c.tool, c.args).onFailure { error = it.message } }
     }
     Box {
-        TextButton(onClick = { menu = true }, enabled = canMove, modifier = Modifier.testTag(AGENT_MENU_TAG_PREFIX + t.id)) { Text("More", fontSize = 11.sp) }
+        TextButton(onClick = { menu = true }, enabled = agentItems || canSave, modifier = Modifier.testTag(AGENT_MENU_TAG_PREFIX + t.id)) { Text("More", fontSize = 11.sp) }
         com.superiorsoftllc.infantry.ui.InfantryDropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-            if (inProgress) {
-                DropdownMenuItem(text = { Text("Unassign") }, onClick = { menu = false; step = "unassign" })
-                if (t.agentId != null) DropdownMenuItem(text = { Text("Switch to...") }, onClick = { menu = false; step = "switch" })
-            } else {
-                DropdownMenuItem(text = { Text("Assign to...") }, onClick = { menu = false; step = "assign" })
+            if (agentItems && inProgress) {
+                DropdownMenuItem(text = { BoardMenuLabel(AhqIcons.Cancel, "Unassign") }, onClick = { menu = false; step = "unassign" })
+                if (t.agentId != null) DropdownMenuItem(text = { BoardMenuLabel(AhqIcons.PlayArrow, "Switch to...") }, onClick = { menu = false; step = "switch" })
+            } else if (agentItems) {
+                DropdownMenuItem(text = { BoardMenuLabel(AhqIcons.PersonAdd, "Assign to...") }, onClick = { menu = false; step = "assign" })
             }
+            if (canSave) DropdownMenuItem(
+                text = { BoardMenuLabel(AhqIcons.SwapHoriz, "Move to epic...") },
+                onClick = { menu = false; step = "epic" },
+                modifier = Modifier.testTag(TICKET_MENU_MOVE_EPIC_TAG_PREFIX + t.id),
+            )
         }
     }
     val close = { step = null; picked = null }
@@ -116,6 +123,7 @@ fun AgentTaskMenu(card: BoardCardHost) {
             } },
             confirmButton = {}, dismissButton = { TextButton(onClick = close) { Text("Cancel") } },
         )
+        "epic" -> EpicMoveDialog(deps, listOf(t.id), card.epics, onClose = close)
     }
     error?.let { msg -> AlertDialog(onDismissRequest = { error = null }, title = { Text("Refused") }, text = { Text(msg) }, confirmButton = { TextButton(onClick = { error = null }) { Text("OK") } }) }
 }
