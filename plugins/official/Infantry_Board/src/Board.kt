@@ -10,6 +10,8 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.ui.layout.layout
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -425,6 +427,10 @@ fun BoardColumnsSection(board: BoardPaneHost, modifier: Modifier = Modifier, car
     // above the columns share the width as before.
     val compact = board.deps.layout.compact
     val columnsScroll = rememberScrollState()
+    val host = LocalPlatformHost.current
+    val projectId = board.deps.session.activeProjectId
+    val lanes = remember(projectId, host) { LaneCollapse(projectId, host::uiPref, host::saveUiPref) }
+    drag.collapsed = if (compact) emptySet() else lanes.snapshot()
     Row(
         modifier.fillMaxWidth().then(if (compact) Modifier.horizontalScroll(columnsScroll) else Modifier).padding(horizontal = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -435,6 +441,11 @@ fun BoardColumnsSection(board: BoardPaneHost, modifier: Modifier = Modifier, car
             val target = hover?.takeIf { it.column == status }
             val refused = target?.plan is DropPlan.NotAllowed
             val shape = RoundedCornerShape(6.dp)
+            // LANE-COLLAPSE-1: only where lanes sit side by side (not the compact, scrolling row).
+            if (!compact && lanes.isCollapsed(status)) {
+                CollapsedLane(status, title, color, tickets.size, target != null, refused, shape, drag) { lanes.toggle(status) }
+                return@forEach
+            }
             Column(
                 (if (compact) Modifier.width(BoardCompactColumnWidth) else Modifier.weight(1f)).fillMaxHeight()
                     .onGloballyPositioned { drag.columns[status] = it.boundsInRoot() }
@@ -447,6 +458,13 @@ fun BoardColumnsSection(board: BoardPaneHost, modifier: Modifier = Modifier, car
                     Text(title.uppercase(), color = color, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                     if (refused) Text("can't drop here", color = Palette.Danger, fontSize = 10.sp, modifier = Modifier.padding(end = 6.dp))
                     Chip("${tickets.size}", color)
+                    if (!compact) {
+                        IconAction(
+                            AhqIcons.ChevronLeft, "Collapse lane", { lanes.toggle(status) },
+                            Modifier.padding(start = 4.dp).testTag(BOARD_LANE_COLLAPSE_TAG_PREFIX + status),
+                            style = IconActionStyle.TEXT, compact = true,
+                        )
+                    }
                 }
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 6.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     // The drop indicator: a line in the gap at the slot the card would land in.
@@ -496,6 +514,8 @@ internal class BoardDrag {
         private set
     val columns = mutableStateMapOf<String, Rect>()
     val cards = mutableStateMapOf<String, Rect>()
+    /** LANE-COLLAPSE-1: the lanes drawn as strips now. */
+    var collapsed: Set<String> = emptySet()
 
     fun begin(t: Ticket, at: Offset) {
         grab = at - (cards[t.id]?.topLeft ?: at)
@@ -512,10 +532,52 @@ internal class BoardDrag {
     fun hover(columnOf: (String) -> List<Ticket>): DragHover? {
         val t = ticket ?: return null
         val column = columns.entries.firstOrNull { it.value.contains(pointer) }?.key ?: return null
-        val centers = columnOf(column).filter { it.id != t.id }.map { cards[it.id]?.center?.y ?: 0f }
-        val slot = BoardDrop.slotAt(centers, pointer.y)
+        val others = columnOf(column).filter { it.id != t.id }
+        // LANE-COLLAPSE-1: a collapsed lane shows no cards; a drop on its strip goes to the lane's end.
+        val slot = if (column in collapsed) others.size else BoardDrop.slotAt(others.map { cards[it.id]?.center?.y ?: 0f }, pointer.y)
         return DragHover(column, slot, BoardDrop.plan(columnOf, t, column, slot))
     }
+}
+
+/**
+ * LANE-COLLAPSE-1: a collapsed lane, a narrow vertical strip: the expand chevron, the lane's name rotated, its count.
+ * A click anywhere on it expands it; it stays a drop target (its bounds are the lane's) and keeps its place in the row.
+ */
+@Composable
+private fun CollapsedLane(
+    status: String, title: String, color: androidx.compose.ui.graphics.Color, count: Int,
+    targeted: Boolean, refused: Boolean, shape: RoundedCornerShape, drag: BoardDrag, onExpand: () -> Unit,
+) {
+    Column(
+        Modifier.width(BoardCollapsedLaneWidth).fillMaxHeight()
+            .onGloballyPositioned { drag.columns[status] = it.boundsInRoot() }
+            .clip(shape).background(Palette.Panel)
+            .then(if (targeted) Modifier.border(2.dp, if (refused) Palette.Danger else Palette.Accent, shape) else Modifier)
+            .clickable(onClickLabel = "Expand lane", role = Role.Button) { onExpand() }
+            .semantics { contentDescription = "$title lane, collapsed, $count tickets" }
+            .testTag(BOARD_LANE_STRIP_TAG_PREFIX + status)
+            .padding(vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        IconAction(AhqIcons.ChevronRight, "Expand lane", onExpand, style = IconActionStyle.TEXT, compact = true)
+        Spacer(Modifier.height(6.dp))
+        Chip("$count", color)
+        Spacer(Modifier.height(10.dp))
+        // The name reads bottom-to-top; the layout box is swapped so the strip stays narrow.
+        Text(
+            title.uppercase(), color = color, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false,
+            modifier = Modifier.verticalText(),
+        )
+    }
+}
+
+/** The collapsed strip's width. */
+internal val BoardCollapsedLaneWidth = 36.dp
+
+/** Lays the content out rotated -90 degrees, measuring it with width and height swapped. */
+private fun Modifier.verticalText(): Modifier = layout { measurable, constraints ->
+    val p = measurable.measure(androidx.compose.ui.unit.Constraints(maxWidth = constraints.maxHeight.takeIf { it != androidx.compose.ui.unit.Constraints.Infinity } ?: androidx.compose.ui.unit.Constraints.Infinity))
+    layout(p.height, p.width) { p.placeWithLayer(-(p.width - p.height) / 2, (p.width - p.height) / 2) { rotationZ = -90f } }
 }
 
 internal data class DragHover(val column: String, val slot: Int, val plan: DropPlan)
