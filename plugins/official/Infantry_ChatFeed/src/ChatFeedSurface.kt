@@ -302,6 +302,10 @@ fun AgentChat(agent: AgentView, nowProvider: () -> Long = { Clock.System.now().t
     val shown = total - start
     val status = agent.chatStatus(now)
     val hasStatus = status != null
+    // CHAT-BG-1: the turn ended but background jobs still run: ONE quiet row, the list's last item (never a message).
+    val bgWork = trailingBackgroundWork(agent.session, status)
+    val hasBg = bgWork != null
+    val footerRows = (if (hasStatus) 1 else 0) + (if (hasBg) 1 else 0)
     val totalNow by rememberUpdatedState(total)
     val sends = pending.items
     // A phone-width pane: the bubble's retry / discard become 48dp touch targets.
@@ -342,16 +346,16 @@ fun AgentChat(agent: AgentView, nowProvider: () -> Long = { Clock.System.now().t
     }
     // Keyed on the status PRESENCE, not its value: the ticker changes it every second, and that must
     // not restart the scroll effect. Scrolled up, new rows do not move the view (they count as unread).
-    LaunchedEffect(agent.id, total, output.lastOrNull()?.text?.length, hasStatus, sends.size) {
+    LaunchedEffect(agent.id, total, output.lastOrNull()?.text?.length, hasStatus, hasBg, sends.size) {
         window.onTotal(total)
         if (window.follow && window.pendingJump == null) {
-            val last = total - window.startFor(total) + sends.size + (if (hasStatus) 1 else 0) - 1
+            val last = total - window.startFor(total) + sends.size + footerRows - 1
             if (last >= 0) list.requestScrollToItem(last)
         }
     }
     LaunchedEffect(window.pendingJump, start, total) {
         val jump = window.pendingJump ?: return@LaunchedEffect
-        val index = if (jump == ChatWindow.JUMP_TO_END) total - start + sends.size + (if (hasStatus) 1 else 0) - 1 else jump - start
+        val index = if (jump == ChatWindow.JUMP_TO_END) total - start + sends.size + footerRows - 1 else jump - start
         // QA-FIX-B: requestScrollToItem, not scrollToItem: the latter forces a remeasure from this effect, which can subcompose
         // while a composition is still pending (Compose "pending composition has not been applied", SidebarDeleteUiTest).
         if (index >= 0) list.requestScrollToItem(index)
@@ -399,6 +403,9 @@ fun AgentChat(agent: AgentView, nowProvider: () -> Long = { Clock.System.now().t
                 // The live status row is agent-side too: it opens a run only when no agent line precedes it.
                 if (status != null) item(key = CHAT_STATUS_TAG) {
                     AgentSideRow(sends.isNotEmpty() || startsAgentRun(rows, total, agentSide), agent.role, agent.id, roleColor) { ChatStatusRow(status) }
+                }
+                if (bgWork != null) item(key = CHAT_BG_ROW_TAG) {
+                    AgentSideRow(status == null && (sends.isNotEmpty() || startsAgentRun(rows, total, agentSide)), agent.role, agent.id, roleColor) { BackgroundWorkRow(bgWork, now) }
                 }
             }
         }
