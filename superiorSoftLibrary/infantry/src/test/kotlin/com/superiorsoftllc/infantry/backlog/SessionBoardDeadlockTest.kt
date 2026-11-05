@@ -112,21 +112,20 @@ class SessionBoardDeadlockTest {
         var ticket = rig.ticket(0)
         assertEquals("started", rig.board.move(TicketMove(ticket, IN_PROGRESS)).ticket.start?.reason)
         var running: ScriptedProcess = rig.runner.processes.last()
-        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(TIME_LIMIT_SECONDS)
         for (round in 1..ROUNDS) {
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(ROUND_LIMIT_SECONDS)
             val next = rig.ticket(round)
             val ending = running
             val barrier = CyclicBarrier(2)
             val turnEnd = pool.submit { barrier.await(); ending.exit(0) }
             val start = pool.submit<String?> { barrier.await(); rig.board.move(TicketMove(next, IN_PROGRESS)).ticket.start?.reason }
-            val left = deadline - System.nanoTime()
             val started = try {
-                turnEnd.get(left.coerceAtLeast(1), TimeUnit.NANOSECONDS)
+                turnEnd.get((deadline - System.nanoTime()).coerceAtLeast(1), TimeUnit.NANOSECONDS)
                 start.get((deadline - System.nanoTime()).coerceAtLeast(1), TimeUnit.NANOSECONDS)
             } catch (e: java.util.concurrent.TimeoutException) {
                 hung = true
                 val stuck = ManagementFactory.getThreadMXBean().findDeadlockedThreads()?.size ?: 0
-                fail("round $round of $ROUNDS did not finish within $TIME_LIMIT_SECONDS s; deadlocked threads: $stuck")
+                fail("round $round of $ROUNDS did not finish within $ROUND_LIMIT_SECONDS s; deadlocked threads: $stuck")
             }
             assertEquals("started", started, "round $round: the ticket start went through")
             running = rig.runner.processes.last()
@@ -145,8 +144,8 @@ class SessionBoardDeadlockTest {
         var ticket = rig.ticket(0)
         assertEquals("started", rig.board.move(TicketMove(ticket, IN_PROGRESS)).ticket.start?.reason)
         var running: ScriptedProcess = rig.runner.processes.last()
-        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(TIME_LIMIT_SECONDS)
         for (round in 1..UNASSIGN_ROUNDS) {
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(ROUND_LIMIT_SECONDS)
             val next = rig.ticket(round)
             val ending = running
             val barrier = CyclicBarrier(3)
@@ -160,7 +159,7 @@ class SessionBoardDeadlockTest {
             } catch (e: java.util.concurrent.TimeoutException) {
                 hung = true
                 val stuck = ManagementFactory.getThreadMXBean().findDeadlockedThreads()?.size ?: 0
-                fail("round $round of $UNASSIGN_ROUNDS did not finish within $TIME_LIMIT_SECONDS s; deadlocked threads: $stuck")
+                fail("round $round of $UNASSIGN_ROUNDS did not finish within $ROUND_LIMIT_SECONDS s; deadlocked threads: $stuck")
             }
             running = rig.runner.processes.last()
             ticket = next
@@ -232,8 +231,8 @@ class SessionBoardDeadlockTest {
         var ticket = rig.ticket(0)
         assertEquals("started", rig.board.move(TicketMove(ticket, IN_PROGRESS)).ticket.start?.reason)
         var running: ScriptedProcess = runner.lastHere.get()!!
-        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(TIME_LIMIT_SECONDS)
         for (round in 1..HOOK_ROUNDS) {
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(ROUND_LIMIT_SECONDS)
             val next = rig.ticket(round)
             val h = Handover(rig.board.get(ticket).sessionId!!, ticket, next)
             pending.set(h)
@@ -254,7 +253,7 @@ class SessionBoardDeadlockTest {
             } catch (e: java.util.concurrent.TimeoutException) {
                 hung = true
                 val stuck = ManagementFactory.getThreadMXBean().findDeadlockedThreads()?.size ?: 0
-                fail("round $round of $HOOK_ROUNDS did not finish within $TIME_LIMIT_SECONDS s; deadlocked threads: $stuck")
+                fail("round $round of $HOOK_ROUNDS did not finish within $ROUND_LIMIT_SECONDS s; deadlocked threads: $stuck")
             }
             assertEquals("started", h.startReason, "round $round: the hook's ticket_start went through")
             assertEquals(DONE, rig.board.get(ticket).status, "round $round: the finished ticket is done")
@@ -270,6 +269,11 @@ class SessionBoardDeadlockTest {
         const val ROUNDS = 500
         const val HOOK_ROUNDS = 200
         const val UNASSIGN_ROUNDS = 40 // each round also ends and removes a worker, so it is slower than a plain race round
-        const val TIME_LIMIT_SECONDS = 120L
+        /**
+         * QA-FIX-D: a deadlocked round never finishes, so the limit is per ROUND. It was one 120 s budget for all rounds: alone
+         * the 500 plain rounds take ~85 s (each one writes the board's SQLite store), and a loaded full suite pushed that past
+         * the budget with no thread stuck. A round that takes this long is a hang on any machine.
+         */
+        const val ROUND_LIMIT_SECONDS = 30L
     }
 }

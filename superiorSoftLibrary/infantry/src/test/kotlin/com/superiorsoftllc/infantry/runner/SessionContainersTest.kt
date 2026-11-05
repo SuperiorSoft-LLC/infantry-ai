@@ -2,6 +2,8 @@
 // Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.runner
 
+import com.sun.jna.platform.win32.Kernel32
+import com.sun.jna.platform.win32.WinNT
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import kotlin.test.Test
@@ -53,6 +55,33 @@ class SessionContainersTest {
         } finally {
             detached.forEach { runCatching { it.destroyForcibly() } }
             shell.destroyForcibly()
+            c.release(key)
+        }
+    }
+
+    /**
+     * QA-FIX-D: in the full suite the test above saw a member left after its detached child was killed: a terminated process
+     * stays in the job's id list while any handle to it is open (another test's process scan held one). Here the test holds
+     * that handle itself: the killed process is not a member any more, the handle still open.
+     */
+    @Test fun `a killed member is no longer a member while a handle to it is still open`() {
+        if (!windows) return
+        val c = SessionContainers.forHost("test-" + UUID.randomUUID().toString().take(8))
+        val key = "session-" + UUID.randomUUID().toString().take(8)
+        val child = ProcessBuilder("ping", "-n", "120", "127.0.0.1").redirectErrorStream(true)
+            .redirectOutput(ProcessBuilder.Redirect.DISCARD).start()
+        val k32 = Kernel32.INSTANCE
+        val held = k32.OpenProcess(WinNT.SYNCHRONIZE or WinNT.PROCESS_QUERY_LIMITED_INFORMATION, false, child.pid().toInt())
+        try {
+            assertTrue(held != null, "the test holds a handle to the child")
+            assertTrue(c.assign(key, child.pid()), "the child joins the session's job")
+            assertEquals(listOf(child.pid()), c.members(key), "a running child is a member")
+            child.destroyForcibly()
+            assertTrue(child.waitFor(10, TimeUnit.SECONDS), "the child is killed")
+            assertTrue(c.members(key).isEmpty(), "a dead process is no member, even while a handle keeps it in the job's list")
+        } finally {
+            held?.let { k32.CloseHandle(it) }
+            child.destroyForcibly()
             c.release(key)
         }
     }
