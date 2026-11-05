@@ -111,11 +111,34 @@ read through `host.setting`.
 
 | Harness | Plugin | Hooks | Notes |
 |---|---|---|---|
-| Claude Code (`claude`) | `Infantry_Claude` | watch, mcp, session, models, stats, usage | Runs `claude -p` stream-json, or the persistent `--input-format stream-json`. Maps tool approval to permission modes, routes tool calls through the watched runner, reads its session store and plan limits. |
+| Claude Code (`claude`) | `Infantry_Claude` | watch, mcp, session, models, stats, usage | By default runs the interactive `claude` CLI in its own terminal (see below); headless mode runs `claude -p` stream-json, or the persistent `--input-format stream-json`. Maps tool approval to permission modes, routes tool calls through the watched runner, reads its session store and plan limits. |
 | pi (`pi`) | `Infantry_Pi` | watch, sandbox, session, models | `--mode json` or the persistent `--mode rpc`. Carries a to-do extension; reads provider cache split. |
 | opencode (`opencode`) | `Infantry_OpenCode` | watch, mcp, config, session, models, stats | `run --format json`, or the persistent `opencode serve` over HTTP + SSE (the 2.12 slots). Merges the MCP server and the watch plugin into its inline config; reads its session store with `queryDb`. |
 
 Read their `harness/` folders under `plugins/official/` as the reference implementations.
+
+### Claude Code: the real CLI by default
+
+By default each Claude agent runs the real interactive `claude` CLI in its own terminal (a pseudo-terminal, ConPTY on
+Windows), exactly as you would run Claude Code yourself. The daemon types into that terminal and reads the session
+transcript the CLI writes; nothing about the CLI is patched or spoofed. Its requests are the CLI's own, so usage
+behaves like normal Claude Code use. You get this without changing anything.
+
+The setting is `harness.claude.mode`:
+
+| Value | What runs | Trade-off |
+|---|---|---|
+| `interactive` (default; also used when unset or unrecognised) | The interactive `claude` in a terminal | Parity with using Claude Code yourself |
+| `headless` | `claude -p --output-format stream-json` (the SDK path; the persistent form adds `--input-format stream-json`) | A machine-readable event stream; may be metered differently from interactive use |
+
+To switch to headless (SDK):
+
+- **Settings UI:** Settings, Plugins tab, Harnesses > Claude Code (or search "claude"), field "Mode", type `headless`.
+- **CLI:** `infantry settings set harness.claude.mode headless` (MCP: `infantry_settings_set` with the same key and value).
+
+The mode is read at every session launch: a running agent keeps its mode, and its next launch (a new session, or a
+restart) uses the new one. To go back, set `interactive` or clear the key. A value you saved yourself is never
+changed by an update.
 
 ## Add a new harness, step by step
 

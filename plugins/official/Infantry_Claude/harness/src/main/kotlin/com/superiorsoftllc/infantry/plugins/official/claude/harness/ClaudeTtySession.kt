@@ -21,7 +21,7 @@ import java.util.IdentityHashMap
 import java.util.UUID
 
 /**
- * CLI-PTY-1 (experimental, `harness.claude.mode = interactive`): Claude Code run as a person runs it: the interactive `claude` (no `-p`) in a
+ * CLI-PTY-1 (the default, `harness.claude.mode = interactive`): Claude Code run as a person runs it: the interactive `claude` (no `-p`) in a
  * pseudo-terminal the host gives it ([terminal], API 2.13), so its requests are the CLI's own (entrypoint `cli`). Nothing is spoofed: no
  * entrypoint variable, no edited header, no patched CLI; the daemon only types into the terminal and reads the files the CLI writes.
  *
@@ -453,7 +453,7 @@ class ClaudeTtySession(
     }
 }
 
-/** headless (default) or interactive, read at every launch; a change restarts the process (the mode is part of the fingerprint). */
+/** interactive (default) or headless (explicit opt-in), read at every launch; a change restarts the process (the mode is part of the fingerprint). */
 class ClaudeModeSession(
     private val headless: HarnessSession,
     private val interactive: ClaudeTtySession,
