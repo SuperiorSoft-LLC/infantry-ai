@@ -125,6 +125,11 @@ data class ModuleManifest(
      * place a block beside or inject into it. A community module may lock only ids under its own name (`<name>.`).
      */
     val nodes: List<NodeDeclaration> = emptyList(),
+    /**
+     * UPDATE-ENGINE-1 (docs/wiki/Updates.md): where THIS module's new versions come from. Null = the module is not updated on
+     * its own (it ships with the app). The engine reads it for every installed module, 3rd-party ones included.
+     */
+    val update: UpdateDeclaration? = null,
 ) {
     /** NS3: the node ids of [fills]. */
     val fillNodes: List<String> get() = fills.map { it.node }
@@ -221,6 +226,11 @@ data class DaemonCapabilities(
     val limits: DaemonPluginLimits = DaemonPluginLimits(),
     /** DAEMON-STORAGE-1: plugin-owned tables; `adopt` lists existing core tables an OFFICIAL module takes over. */
     val storage: DaemonStorageDeclaration = DaemonStorageDeclaration(),
+    /**
+     * UPDATE-ENGINE-1: the update source TYPES this daemon half registers (`DaemonApi.updates.registerSource`), for example
+     * `github`. An undeclared registration is refused; a community module also needs the grant `daemon.updateSource:<type>`.
+     */
+    val updateSources: List<String> = emptyList(),
 )
 
 /** DAEMON-STORAGE-1: [adopt] = core tables an official module takes over (a community module declaring any is refused). */

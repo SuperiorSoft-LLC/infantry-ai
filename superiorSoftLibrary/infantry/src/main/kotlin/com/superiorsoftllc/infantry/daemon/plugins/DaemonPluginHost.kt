@@ -117,6 +117,23 @@ class DaemonPluginHost private constructor(
     }
 
     private val loaded = CopyOnWriteArrayList<Loaded>()
+
+    /** UPDATE-ENGINE-1: every resolved module (daemon half or not), as the update engine lists them. */
+    @Volatile private var resolvedModules: List<HostUpdates.Module> = emptyList()
+
+    /** UPDATE-ENGINE-1 (docs/wiki/Updates.md): the one update engine; plugins reach it through [DaemonApi.updates]. */
+    val updates = HostUpdates(
+        modules = { resolvedModules },
+        coreVersion = { com.superiorsoftllc.infantry.update.BuildInfo.current.substringBefore('+') },
+        env = { services.env(it) },
+        secret = { services.secret(it) },
+        stagingRoot = File(stateDir, "updates"),
+        log = log,
+    )
+
+    private fun remember(resolution: Resolution, config: ModulesConfig) {
+        resolvedModules = resolution.loaded.mapNotNull { s -> s.manifest?.let { HostUpdates.Module(s.name, s.tier, it, config.setting(s.name).allow.toSet()) } }
+    }
     /** AR-5: the typed service registry; core callers query it here, plugins through [DaemonApi.services]. */
     val serviceRegistry = ServiceRegistry()
     private val statuses = ConcurrentHashMap<String, String>()
@@ -573,6 +590,7 @@ class DaemonPluginHost private constructor(
             unloadLocked(id) // a failed one: take it out first (frees its class loader), then start it afresh
         }
         val s = src.resolution.status(id) ?: return HotOutcome(false, "no module '$id' in the plugins root")
+        remember(src.resolution, src.config)
         if (s.state != ModuleState.LOADED) return HotOutcome(false, "$id does not load: ${s.state.name.lowercase()}${s.reason?.let { " ($it)" }.orEmpty()}")
         val m = s.manifest ?: return HotOutcome(false, "$id has no readable module.json")
         val daemon = m.daemon
@@ -973,6 +991,9 @@ class DaemonPluginHost private constructor(
             return hostServices.plugins
         }
         // CMD-1: the run surface; official / core, or a community module with the grant `runs`.
+        override val updates: com.superiorsoftllc.infantry.daemon.api.updates.Updates =
+            this@DaemonPluginHost.updates.scoped(p.id, p.tier, d.updateSources, p.setting.allow.toSet())
+
         override val runs: com.superiorsoftllc.infantry.daemon.api.runs.Runs get() {
             check(!p.community || "runs" in p.setting.allow) { "missing grant 'runs' in modules.json" }
             return hostServices.runs
@@ -1077,6 +1098,7 @@ class DaemonPluginHost private constructor(
             log: (String) -> Unit = { System.err.println(it) },
         ): DaemonPluginHost {
             val host = DaemonPluginHost(services, stateDir, log)
+            host.remember(resolution, config)
             for (s in resolution.loaded) runCatching { host.load(s, config, trust) }
                 .onFailure { host.statuses[s.name] = "refused: ${it.message}"; log("[plugins] daemon half of ${s.name} refused: ${it.message}") }
             host.startTestSchedule()

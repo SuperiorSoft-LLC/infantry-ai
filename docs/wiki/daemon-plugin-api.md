@@ -76,6 +76,7 @@ the source comment names a grant, a community module needs it in `modules.json` 
 | `files(projectId)` | `api.files` | the project's `.infantry/` folder; official, or grant `files` |
 | `runs` | `api.runs` | run a process in a working root; grant `runs` |
 | `triggerHost` | `api.triggers` | trigger store and run events |
+| `updates` | `api.updates` | the update engine ([Updates](Updates.md)): components, sources, check / fetch / apply; declare source types in `daemon.updateSources`, grant `daemon.updateSource:<type>` |
 
 The grants and the version each member was added in are in the comments of `DaemonApi.kt` (the history list inside
 `companion object`).
@@ -234,7 +235,7 @@ version; a version already recorded or higher is a no-op. A community module nee
 
 A community module is off until `enabled: true` in `modules.json`, and gets only what is listed in `allow`:
 `daemon.code` (needed to load any daemon jar), `daemon.tool`, `daemon.frame`, `daemon.route`, `daemon.hook.<kind>`,
-`daemon.env:<NAME>`, `daemon.secret:<name>`, and the service grants named above. Without `daemon.code` the module
+`daemon.env:<NAME>`, `daemon.secret:<name>`, `daemon.updateSource:<type>`, and the service grants named above. Without `daemon.code` the module
 loads its UI half only and shows "community daemon code needs the 'daemon.code' grant in modules.json". Source:
 `DaemonPluginHost.kt` and `docs/DAEMON-PLUGINS.md`.
 
