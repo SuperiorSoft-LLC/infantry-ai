@@ -140,6 +140,8 @@ object ClaudeCommand {
         allowedTools: List<String> = allowedTools(),
         permissionPromptTool: String? = null,
         settings: String? = null,
+        /** G2: names a NEW session (`--session-id`); ignored when [resumeSessionId] is set. */
+        sessionId: String? = null,
     ): List<String> = buildList {
         add(executable)
         add("-p")
@@ -158,6 +160,7 @@ object ClaudeCommand {
             if (strictMcp) add("--strict-mcp-config")
         }
         resumeSessionId?.takeIf { it.isNotBlank() }?.let { add("--resume"); add(it) }
+            ?: sessionId?.takeIf { it.isNotBlank() }?.let { add("--session-id"); add(it) }
     }
 
     // ---- interactive mode (CLI-PTY-1, the default since CLI-DEFAULT-1) ---------------------------------------------------

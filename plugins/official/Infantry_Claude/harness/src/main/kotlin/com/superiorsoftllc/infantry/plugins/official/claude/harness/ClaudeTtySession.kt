@@ -70,9 +70,14 @@ class ClaudeTtySession(
     /** What [launch] decided for a process, until [connect] takes it. Keyed by identity: the host hands back the very object. */
     /** [transcriptStart] = CLI-PTY-4: the length of a resumed session's transcript at launch; what is before it is history, never read as live. */
     /** [approval] / [hookToken] = G3: the Tool approval the permission hook answers from, and the token in its URL (null = no hook). */
+    /**
+     * [firstPrompt] = G2: where this session's first prompt is kept until claude records it; [recovered] = the launch was asked to resume an
+     * id claude has no transcript for, so it starts that id fresh and its first turn carries the kept first prompt again ([ClaudeResume]).
+     */
     data class Launch(
         val sessionId: String, val cwd: String, val events: File, val settings: File, val mcpPid: File? = null, val transcriptStart: Long = 0,
         val approval: ToolApproval = ToolApproval.ALLOW_ALL, val hookToken: String? = null,
+        val firstPrompt: File? = null, val recovered: Boolean = false,
     )
 
     private val launches = IdentityHashMap<HarnessProcess, Launch>()
@@ -107,8 +112,11 @@ class ClaudeTtySession(
             (env + ClaudeCommand.contextLimitEnv(request.contextLimit)).toSortedMap()
 
     override fun launch(request: HarnessRequest, env: Map<String, String>): HarnessProcess {
-        val resume = request.sessionId?.takeIf { it.isNotBlank() }
-        val id = resume ?: newSessionId()
+        val stored = request.sessionId?.takeIf { it.isNotBlank() }
+        // G2: an id claude never wrote a transcript for cannot be resumed: start it fresh under the same id (no new id to report).
+        val recovered = stored != null && !ClaudeResume.resumable(configDir(), request.project, stored)
+        val resume = stored.takeUnless { recovered }
+        val id = stored ?: newSessionId()
         val dir = File(stateDir(), TTY_DIR).apply { mkdirs() }
         val events = File(dir, "$id.events").apply { delete() }
         val settings = File(dir, "$id.settings.json")
@@ -121,7 +129,11 @@ class ClaudeTtySession(
             command = argv(executable(), request, if (resume == null) id else null, resume, settings.absolutePath, env, mapOf(MCP_PID_FILE_ENV to mcpPid.absolutePath)),
             env = mapOf("CLAUDE_CODE_ENABLE_TODO_TOOLS" to "1") + ClaudeCommand.contextLimitEnv(request.contextLimit),
         )
-        synchronized(launches) { launches[process] = Launch(id, request.project, events, settings, mcpPid, transcriptStart(resume, request.project), request.toolApproval, hookToken) }
+        synchronized(launches) { launches[process] = Launch(
+                id, request.project, events, settings, mcpPid, transcriptStart(resume, request.project), request.toolApproval, hookToken,
+                // Only a session that starts a conversation here keeps (or gets back) a first prompt; a real resume has its own history.
+                firstPrompt = if (resume == null) ClaudeResume.firstPromptFile(stateDir(), id) else null, recovered = recovered,
+            ) }
         return process
     }
 
@@ -162,7 +174,15 @@ class ClaudeTtySession(
         private val mapper = TranscriptMapper(launch.sessionId)
         private val events = AppendedLines { launch.events }
         private var transcriptFile: File? = null
-        private val transcript = AppendedLines(launch.transcriptStart) { transcriptFile ?: ClaudeTranscripts.find(configDir, launch.cwd, launch.sessionId)?.also { transcriptFile = it } }
+        private val transcript = AppendedLines(launch.transcriptStart) {
+            transcriptFile ?: ClaudeTranscripts.find(configDir, launch.cwd, launch.sessionId)?.also {
+                transcriptFile = it
+                // G2: claude has recorded the conversation; its first prompt need not be kept for a recovery any more.
+                launch.firstPrompt?.delete()
+            }
+        }
+        /** G2: the first turn of a [Launch.recovered] launch still owes the session's lost first prompt. */
+        private var recoveryOwed = launch.recovered
         private val queue = ArrayDeque<Turn>()
         private var active: Turn? = null
         /** CHAT-QUEUE-1: messages pasted into the busy CLI (its own queue takes them into the running turn), each awaiting its Enter. */
@@ -170,9 +190,12 @@ class ClaudeTtySession(
         private val launchedAt = clock()
         private var firstScreenAt: Long? = null
         private var startedAt: Long? = null
+        private var trustSeen = false
         private var trustDownAt: Long? = null
-        private var trustDownMark = 0L
+        private var trustDowns = 0
         private var trustEnterDone = false
+        /** When the screen last changed (the trust answer waits for it to settle). */
+        private var lastOutputAt = 0L
         private var interruptedSeen = false
         private var initSent = false
         private val screen = StringBuilder()
@@ -226,7 +249,9 @@ class ClaudeTtySession(
         override fun onStdout(line: String) {
             val text = ScreenText.strip(line)
             synchronized(lock) {
-                if (firstScreenAt == null) firstScreenAt = clock()
+                val at = clock()
+                if (firstScreenAt == null) firstScreenAt = at
+                lastOutputAt = at
                 screen.append(text)
                 screenTotal += text.length
                 if (screen.length > SCREEN_KEEP_CHARS) screen.delete(0, screen.length - SCREEN_KEEP_CHARS)
@@ -234,9 +259,24 @@ class ClaudeTtySession(
         }
 
         override fun sendTurn(request: HarnessRequest) {
-            val turn = Turn(request.prompt)
+            val turn = Turn(firstPrompt(request.prompt))
             val failed = synchronized(lock) { if (exited) true else { queue.add(turn); false } }
             if (failed) out.turnEnded(SessionTurnEnd.FAILED, null, "the interactive claude has exited")
+        }
+
+        /**
+         * G2: a new session keeps its first prompt (the daemon's brief rides on it) until claude records it; a recovered launch's first turn
+         * sends that prompt again ahead of its own, as the conversation it was in never reached the model.
+         */
+        private fun firstPrompt(prompt: String): String {
+            val file = launch.firstPrompt ?: return prompt
+            if (!synchronized(lock) { recoveryOwed.also { recoveryOwed = false } }) {
+                if (transcriptFile == null && !launch.recovered) ClaudeResume.keepFirstPrompt(file, prompt)
+                return prompt
+            }
+            val saved = ClaudeResume.savedFirstPrompt(file)
+            out.detail(ClaudeResume.recoveredDetail(launch.sessionId, briefResent = saved != null && saved != prompt))
+            return ClaudeResume.recoveryPrompt(saved, prompt)
         }
 
         override fun abortTurn(): Boolean = synchronized(lock) {
@@ -415,30 +455,43 @@ class ClaudeTtySession(
 
         /** Up = the CLI ran its SessionStart hook a moment ago; without hooks, a while after its first screen. */
         private fun ready(now: Long): Boolean {
-            if (trustDownAt != null && !trustEnterDone) return false
+            if (trustSeen && !trustEnterDone) return false
             startedAt?.let { return now - it >= READY_AFTER_START_MS }
             return firstScreenAt?.let { now - it >= READY_FALLBACK_MS } ?: false
         }
 
         /**
-         * The folder trust question: "No, exit" is preselected, so Down, then Enter once the screen shows the pointer on the
-         * accept option (a key sent before the menu takes input is lost, and Enter on "No, exit" quits the CLI). Down is sent
-         * again every [TRUST_RETRY_MS] until the selection shows.
+         * The folder trust question: a two-row menu ("No, exit" preselected) where Down wraps, so a key is never sent blind
+         * (HARNESS-GAP f0b7173f: a retried Down plus a late redraw put the pointer back on "No, exit" and Enter quit the CLI).
+         * The selected row is read from the screen: whichever pointer line was drawn last. Down is pressed only while "No, exit"
+         * is selected: once, then again only after [TRUST_RETRY_MS] with no Down taken (no redraw). Enter only while the accept
+         * row is selected and the screen has settled: [KEY_GAP_MS] after the one Down, or, once Down was sent more than once
+         * (a slow redraw of an earlier key may still come), [TRUST_RETRY_MS] with no new output.
          */
         private fun answerTrust(now: Long) = synchronized(lock) {
             if (trustEnterDone) return@synchronized
-            val down = trustDownAt
-            if (down == null) {
-                if (ScreenText.squeeze(screen.takeLast(TRUST_WINDOW_CHARS).toString()).contains(TRUST_OPTION)) pressDown(now)
-                return@synchronized
+            val tail = ScreenText.squeeze(screen.takeLast(TRUST_WINDOW_CHARS).toString())
+            if (!trustSeen) {
+                if (!tail.contains(TRUST_OPTION)) return@synchronized
+                trustSeen = true
             }
-            val since = (screenTotal - trustDownMark).coerceIn(0L, screen.length.toLong()).toInt()
-            when {
-                ScreenText.squeeze(screen.takeLast(since).toString()).contains(TRUST_SELECTED) && now - down >= KEY_GAP_MS -> {
+            val onYes = tail.lastIndexOf(TRUST_SELECTED) > tail.lastIndexOf(TRUST_DECLINE_SELECTED)
+            val quiet = now - lastOutputAt
+            val down = trustDownAt
+            if (onYes) {
+                val settled = when {
+                    down == null -> quiet >= KEY_GAP_MS
+                    trustDowns == 1 -> now - down >= KEY_GAP_MS
+                    else -> now - down >= KEY_GAP_MS && quiet >= TRUST_RETRY_MS
+                }
+                if (settled) {
                     key(ENTER)
                     trustEnterDone = true
                 }
-                now - down >= TRUST_RETRY_MS -> pressDown(now)
+            } else if (down == null || (now - down >= TRUST_RETRY_MS && quiet >= TRUST_RETRY_MS)) {
+                key(DOWN)
+                trustDownAt = now
+                trustDowns++
             }
         }
 
@@ -461,12 +514,6 @@ class ClaudeTtySession(
             dialogMark = screenTotal
             dialogSeenAt = null
             key(ESC)
-        }
-
-        private fun pressDown(now: Long) {
-            key(DOWN)
-            trustDownAt = now
-            trustDownMark = screenTotal
         }
 
         private fun screenTail(): String = ScreenText.squeeze(screen.takeLast(SCREEN_TAIL_CHARS).toString()).ifBlank { "(blank)" }
@@ -495,6 +542,9 @@ class ClaudeTtySession(
 
         /** The accept option with the menu pointer on it, spaces squeezed out. */
         const val TRUST_SELECTED = "❯yes,itrustthisfolder"
+
+        /** The decline option with the menu pointer on it, spaces squeezed out. */
+        const val TRUST_DECLINE_SELECTED = "❯no,exit"
 
         const val TICK_MS = 150L
         /** How often the MCP server's pid is checked (CLI-PTY-3). */
