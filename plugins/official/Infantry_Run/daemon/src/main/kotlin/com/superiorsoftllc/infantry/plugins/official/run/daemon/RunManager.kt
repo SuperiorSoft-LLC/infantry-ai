@@ -162,6 +162,18 @@ class RunManager(
         // The lookup is under [lock] too, so a save or delete running in [unlessRunning] cannot slip between them.
         synchronized(lock) {
             command = registry().find(commandId) ?: return refuse("run_start refused: unknown command '$commandId'")
+            // RUN-SCOPE-1: a start that names its project runs only that project's (or an unassigned) command.
+            val wanted = (obj["project"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.isNotBlank() }
+            val owner = command.projectId
+            if (wanted != null && owner != null && owner != wanted) {
+                return refuse("run_start refused: command '$commandId' belongs to project '$owner', not '$wanted'")
+            }
+            if (!command.rooted) {
+                return refuse(
+                    if (owner == null) "run_start refused: command '$commandId' belongs to no project; assign it to a project first"
+                    else "run_start refused: project '$owner' has no folder registered; set the project folder first",
+                )
+            }
             if (inFlight != null) return refuse("run_start refused: a run is already in flight")
             val env = secretEnv(command.secrets.distinct()).getOrElse { return refuse("run_start refused: ${it.message}") }
             run = Run(UUID.randomUUID().toString(), command, now(), interactive, cols, rows, env)

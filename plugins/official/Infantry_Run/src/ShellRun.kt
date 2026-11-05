@@ -91,7 +91,23 @@ object RunOutput : Block("runOutput", "$RUN.output", Place(weight = 1f)) {
     }
 }
 
-val ShellRun = RunPaneBlock(listOf(RunEmpty, RunToolbar, RunPills, RunConfirm, RunEditor, RunNotices, RunOutput))
+/** RUN-SCOPE-1: "no project folder" and Set project folder, while the shown project has none; its placement goes on the column. */
+object RunFolder : Block("runFolder", "$RUN.folder") {
+    @Composable
+    override fun Render(scope: BlockScope) {
+        RunFolderSection(LocalRunPaneHost.current ?: return, scope.modifier)
+    }
+}
+
+/** RUN-SCOPE-1: the commands of no project, each with Assign; its placement goes on the column. */
+object RunUnassigned : Block("runUnassigned", "$RUN.unassigned") {
+    @Composable
+    override fun Render(scope: BlockScope) {
+        RunUnassignedSection(LocalRunPaneHost.current ?: return, scope.modifier)
+    }
+}
+
+val ShellRun = RunPaneBlock(listOf(RunFolder, RunEmpty, RunToolbar, RunPills, RunConfirm, RunUnassigned, RunEditor, RunNotices, RunOutput))
 
 /** The Run tab's content: [ShellRun] as the window resolved it (a module's override in), filling the tab. */
 @Composable

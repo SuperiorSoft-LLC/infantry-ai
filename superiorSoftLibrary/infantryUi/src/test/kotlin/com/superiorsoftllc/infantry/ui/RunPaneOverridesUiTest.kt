@@ -115,7 +115,7 @@ class RunPaneOverridesUiTest {
         val tabs = factory("infantry.shell.run.toolbar", OverrideModes.REPLACE, BlockOverride { scope, inner ->
             Text(if (inner == null) "acme toolbar" else "bad", scope.modifier.testTag("acme-toolbar"))
         })
-        assertIs<OverrideBlock>(tabs.tabTree("infantry.shell.run")!!.children[1])
+        assertIs<OverrideBlock>(tabs.tabTree("infantry.shell.run")!!.children[2]) // RUN-SCOPE-1: folder, empty, toolbar
         withRunTab(tabs) {
             onNode(hasTestTag("acme-toolbar") and hasAnyAncestor(hasTestTag(RUN_PANE_TAG))).assertExists()
             // The core toolbar is gone; the title and the output stay.

@@ -649,6 +649,16 @@ interface RunContext {
     fun open(runId: String)
     suspend fun saveCommand(id: String, name: String, argv: List<String>, cwd: String?, graceMillis: Long, secrets: List<String>): CommandResult
     suspend fun deleteCommand(id: String): CommandResult
+
+    /** RUN-SCOPE-1: the project the Run tab shows (the window's active one); null with none. */
+    val project: ProjectView? get() = null
+    /** RUN-SCOPE-1: [saveCommand] for [project] (its cwd is relative to that project's folder). */
+    suspend fun saveCommand(id: String, name: String, argv: List<String>, cwd: String?, graceMillis: Long, secrets: List<String>, project: String?): CommandResult =
+        saveCommand(id, name, argv, cwd, graceMillis, secrets)
+    /** RUN-SCOPE-1: [start] that names the project; the daemon refuses another project's command. */
+    suspend fun start(commandId: String, interactive: Boolean, project: String?): CommandResult = start(commandId, interactive)
+    /** RUN-SCOPE-1: registers [projectId]'s folder (what `project_config_set directory` does); "" clears it. */
+    suspend fun setProjectFolder(projectId: String, directory: String): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
 }
 
 /** S4b: the tab trees ([com.superiorsoftllc.infantry.ui.plugin.InfantryModule.tabTrees]) with the modules' overrides in. */

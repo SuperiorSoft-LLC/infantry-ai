@@ -7,6 +7,8 @@ import androidx.compose.ui.Modifier
 import com.superiorsoftllc.infantry.plugins.official.run.RunConfirmSection
 import com.superiorsoftllc.infantry.plugins.official.run.RunEditorSection
 import com.superiorsoftllc.infantry.plugins.official.run.RunEmptySection
+import com.superiorsoftllc.infantry.plugins.official.run.RunFolderSection
+import com.superiorsoftllc.infantry.plugins.official.run.RunUnassignedSection
 import com.superiorsoftllc.infantry.plugins.official.run.RunNoticesSection
 import com.superiorsoftllc.infantry.plugins.official.run.RunOutputSection
 import com.superiorsoftllc.infantry.plugins.official.run.RunPaneFrame
@@ -24,10 +26,12 @@ import com.superiorsoftllc.infantry.ui.shell.CoreRun
 @Composable
 fun RunPane(state: AppState, controller: Controller) {
     RunPaneFrame(CoreLink(state), CoreRun(state, controller, LocalRunConsole.current)) { run ->
+        RunFolderSection(run)
         RunEmptySection(run)
         RunToolbarSection(run)
         RunPillsSection(run)
         RunConfirmSection(run)
+        RunUnassignedSection(run)
         RunEditorSection(run, Modifier.weight(1f))
         RunNoticesSection(run)
         RunOutputSection(run, Modifier.weight(1f))

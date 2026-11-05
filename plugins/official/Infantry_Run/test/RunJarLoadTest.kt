@@ -76,7 +76,7 @@ class RunJarLoadTest {
             assertTrue(f.tabs(TabContainers.CENTER).any { t -> t.id == RUN_TAB_ID }, "no Settings jar: Run stays in the strip")
             assertEquals(RUN_TAB_ID, f.tabTreeTabs["infantry.shell.run"])
             assertEquals(
-                listOf("empty", "toolbar", "pills", "confirm", "editor", "notices", "output").map { s -> "infantry.shell.run.$s" },
+                listOf("folder", "empty", "toolbar", "pills", "confirm", "unassigned", "editor", "notices", "output").map { s -> "infantry.shell.run.$s" },
                 f.tabTree("infantry.shell.run")!!.children.map { c -> c.id },
             )
         }

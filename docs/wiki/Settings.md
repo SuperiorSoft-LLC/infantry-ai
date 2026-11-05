@@ -58,6 +58,7 @@ The default is the cheapest reasonable value. A costlier value is an opt-in. The
 | Key | Default | Meaning |
 |---|---|---|
 | `tickets.weightExecutors` | (unset) | Provider and model per ticket weight 1 to 5 |
+| project `directory` (`infantry_project_config_set`) | (unset) | The project's folder. The Run tab's commands belong to one project each and run relative to this folder; see [Plugins](Plugins.md#run-tab-commands-as-tools-infantry_run) |
 | `scripting.*` | see [Scripting](Scripting.md) | Run limits, hook guards, the process bridge (off by default) |
 | `processes.autoReap` | off | Reap rogue background processes (Gradle/Kotlin daemons, node) left by ended sessions |
 | `processes.reapKinds` | `[]` (every kind) | The kinds a session's close reaps: tool profile names (`gradle`, `kotlin`, ...) or `other`; a process of an unlisted kind is spared |

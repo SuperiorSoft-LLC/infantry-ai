@@ -60,7 +60,7 @@ class RunCommandToolsTest {
     @Test fun `a bad cwd is refused like the frame refuses it`() {
         val r = call("infantry_run_command_save", "p1", "id" to "x", "argv" to listOf("echo"), "cwd" to "../out")
         assertTrue(r.isError)
-        assertTrue(r.text.contains("cwd outside the repo"), r.text)
+        assertTrue(r.text.contains("cwd outside the project folder"), r.text)
     }
 
     @Test fun `start returns a run id and stop stops it`() {

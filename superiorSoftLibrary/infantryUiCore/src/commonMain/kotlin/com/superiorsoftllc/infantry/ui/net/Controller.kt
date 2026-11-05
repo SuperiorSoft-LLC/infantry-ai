@@ -1833,12 +1833,12 @@ class Controller(
      * RUN-CONSOLE: start [commandId] with a pty of [cols] x [rows]; [interactive] lets its console type into it. On a
      * daemon older than 1.134.0 this is the plain [startRun] (no keys, no size).
      */
-    suspend fun startRun(commandId: String, interactive: Boolean, cols: Int? = null, rows: Int? = null): CommandResult {
+    suspend fun startRun(commandId: String, interactive: Boolean, cols: Int? = null, rows: Int? = null, project: String? = null): CommandResult {
         if (!supportsRunConsole()) {
             return if (interactive) report(CommandResult.Refused("this daemon cannot run interactively (needs contract 1.134.0)")) else startRun(commandId)
         }
         if (commandId.isBlank()) return report(CommandResult.Refused("pick a command to run"))
-        return report(send(WireRequests.runStart(commandId, interactive, cols, rows)))
+        return report(send(WireRequests.runStart(commandId, interactive, cols, rows, project)))
     }
 
     /** RUN-CONSOLE: show [runId]'s lines in the Run tab's output pane (its pill was clicked). */
@@ -1870,13 +1870,15 @@ class Controller(
      */
     suspend fun saveCommand(
         id: String, name: String, argv: List<String>, cwd: String?, graceMillis: Long, secrets: List<String> = emptyList(),
+        /** RUN-SCOPE-1: the project the command belongs to; its cwd is relative to that project's folder. */
+        project: String? = null,
     ): CommandResult {
         if (!supportsCommandEdit()) return CommandResult.Refused("this daemon cannot edit commands (needs contract 1.94.0)")
         if (id.isBlank()) return CommandResult.Refused("the command needs an id")
         if (argv.isEmpty()) return CommandResult.Refused("the command needs at least one argument (the program)")
         if (secrets.isNotEmpty() && !supportsKeyValueSecrets()) return CommandResult.Refused("this daemon cannot give a run secrets (needs contract 1.135.0)")
         _state.update { it.copy(runs = it.runs.copy(commandError = null)) }
-        return send(WireRequests.commandSave(id, name, argv, cwd, graceMillis, secrets))
+        return send(WireRequests.commandSave(id, name, argv, cwd, graceMillis, secrets, project))
     }
 
     /** RUN-CMD-2: delete the saved command [id] (`command_delete`); answered like [saveCommand]. */
