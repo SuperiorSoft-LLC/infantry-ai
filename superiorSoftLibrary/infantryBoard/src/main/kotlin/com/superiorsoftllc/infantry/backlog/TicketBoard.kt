@@ -669,8 +669,8 @@ class TicketBoard(
         }
         require(host.agents.roleKnown(agent.role)) { "agent ${agent.name} has role '${agent.role}', which cannot run tickets" }
         if (needsLane) {
-            val active = host.sessions.list().filter { it.state in ACTIVE_STATE_NAMES }
-            val running = host.agents.list().filter { it.role == agent.role }.count { c -> active.any { it.agentId == c.id } }
+            val occupied = occupiedAgents(id)
+            val running = host.agents.list().filter { it.role == agent.role }.count { c -> c.id in occupied }
             require(running < laneCap(row.projectId, agent.role)) {
                 "the lane cap for role '${agent.role}' is full ($running running): end a worker or raise the cap"
             }
@@ -1084,6 +1084,10 @@ class TicketBoard(
             }
         }
 
+        // AUTOSTART-SAME-AGENT-1: the worker of an in-progress ticket that leaves the column, so its agent's queue drains.
+        val leavingWorker = if (status != null && status != TicketStatus.IN_PROGRESS) {
+            store.transaction { store.tickets.get(id) }?.takeIf { it.status == TicketStatus.IN_PROGRESS }?.sessionId
+        } else null
         val outcome = commit { s ->
             val row = s.require(id)
             val target = status ?: row.status
@@ -1114,6 +1118,7 @@ class TicketBoard(
             s.rows[id] = s.rows.getValue(id).copy(wontFix = wontFix)
             s.named += id
         }
+        leavingWorker?.let { drainAfterLeave(id, it) }
         return answer(id, outcome)
     }
 
@@ -1141,7 +1146,7 @@ class TicketBoard(
         // has no rules). Its setRole is the role of a ticket that has none; it never replaces the ticket's own.
         val rule = routingChoice(row)
         val assigned = (if (origin == HandOutOrigin.QUEUE_DRAIN) row.queuedAgent else null) ?: row.agentId ?: rule?.setRole?.let { "role:$it" } // AGENT-TASKS-3: a drained ticket runs on the queue's own agent
-        val assignment = resolveAssignment(assigned, row.projectId)
+        val assignment = resolveAssignment(assigned, row.projectId, id)
         if (assignment.refusal != null) return refusedStart(initialTicket, assignment.refusal)
         // BUG-WT-1: with no repo configured and no explicit pin, a project folder that is a git checkout IS the
         // repo: the ticket gets its own branch and worktree there, never the checkout itself.
@@ -1440,6 +1445,15 @@ class TicketBoard(
                     run?.detail?.takeIf { it.startsWith(NO_WORK_DETAIL) }?.let {
                         surface("Ticket is in progress but its worker ${worker.view.id} exited cleanly having done no work (${it.removePrefix(NO_WORK_DETAIL)}): resume or start it again.")
                     }
+                    // AUTOSTART-SAME-AGENT-1: the run's no-work detail is only written under tickets.exitBehavior=done, and a
+                    // harness that names its provider session at launch (claude interactive's --session-id) never reads as
+                    // unbriefed. So a worker at rest that has produced nothing at all ("out never") is flagged here directly.
+                    if (run?.detail?.startsWith(NO_WORK_DETAIL) != true && worker.view.runCount > 0 &&
+                        runCatching { host.sessions.workEvents(worker.view.id) }.getOrDefault(-1) == 0
+                    ) {
+                        surface("Ticket is in progress but its worker ${worker.view.id} is at rest and has produced no output at all " +
+                            "(${worker.view.runCount} run(s)): its brief may never have landed. Resume or start it again.")
+                    }
                 }
                 continue
             }
@@ -1597,29 +1611,53 @@ class TicketBoard(
         return TicketAnswer(answer, pushed = id in outcome.changed)
     }
 
+    /**
+     * AUTOSTART-SAME-AGENT-1: the agents that cannot take a ticket now: those with a turn in flight, and those whose session
+     * works ANOTHER in-progress ticket (other than [exceptTicket]) even while it rests between turns (waiting on mail or a
+     * background job). Counting only turns in flight let auto-start hand three tickets to one idle-between-turns agent; the
+     * extra sessions could never run beside it (one agent works one ticket in one session) and sat unbriefed for hours.
+     * A FAILED or killed worker holds nothing: its run did not end by itself, and the worker sweep surfaces its ticket.
+     */
+    private fun occupiedAgents(exceptTicket: String? = null): Set<String> {
+        val sessions = host.sessions.list()
+        val workers = store.transaction { store.tickets.all() }
+            .filter { it.status == TicketStatus.IN_PROGRESS && it.id != exceptTicket }
+            .mapNotNull { it.sessionId }
+            .toSet()
+        return sessions.filter { view ->
+            view.state in ACTIVE_STATE_NAMES ||
+                (view.id in workers && view.state != BoardSessionStates.FAILED && view.killOutcome == null)
+        }.mapNotNull { it.agentId }.toSet()
+    }
+
     private fun resolveAssignment(
         assigned: String?,
         projectId: String? = null,
+        /** AUTOSTART-SAME-AGENT-1: the ticket being started; null for a ticketless start (a trigger's prompt). */
+        ticketId: String? = null,
     ): AssignmentResolution {
         assigned ?: return AssignmentResolution(
             refusal = "ticket has no role; set one with `infantry ticket update <id> --role <role id>` " +
                 "or infantry_ticket_update's role",
         )
-        val active = host.sessions.list().filter { it.state in ACTIVE_STATE_NAMES }
+        // A ticketless start keeps the old rule (only a turn in flight occupies an agent); a ticket start also counts the
+        // workers of the other in-progress tickets.
+        val occupied = if (ticketId != null) occupiedAgents(ticketId) else
+            host.sessions.list().filter { it.state in ACTIVE_STATE_NAMES }.mapNotNull { it.agentId }.toSet()
         if (assigned.startsWith("role:")) {
             val role = assigned.removePrefix("role:")
             val matching = host.agents.list().filter { it.role == role }.ifEmpty {
                 firstRunProfile(role, projectId)?.let(::listOf).orEmpty()
             }
             if (matching.isEmpty()) return AssignmentResolution(refusal = "no agent profile has role '$role'")
-            val profile = matching.firstOrNull { candidate -> active.none { it.agentId == candidate.id } }
-                ?: extraAgent(matching, active, role, projectId)
+            val profile = matching.firstOrNull { candidate -> candidate.id !in occupied }
+                ?: extraAgent(matching, occupied, role, projectId)
                 ?: return AssignmentResolution(queueLane = assigned, busy = true)
             return AssignmentResolution(profile = profile, queueLane = assigned)
         }
         val profile = host.agents.get(assigned)
             ?: return AssignmentResolution(refusal = "no agent profile '$assigned'")
-        return if (active.any { it.agentId == profile.id }) {
+        return if (profile.id in occupied) {
             AssignmentResolution(queueLane = profile.id, busy = true)
         } else {
             AssignmentResolution(profile = profile, queueLane = profile.id)
@@ -1633,11 +1671,11 @@ class TicketBoard(
      */
     private fun extraAgent(
         matching: List<BoardAgent>,
-        active: List<SessionView>,
+        occupied: Set<String>,
         role: String,
         projectId: String?,
     ): BoardAgent? {
-        val running = matching.count { candidate -> active.any { it.agentId == candidate.id } }
+        val running = matching.count { candidate -> candidate.id in occupied }
         if (running >= laneCap(projectId, role)) return null
         val template = matching.first()
         val taken = host.agents.list().map { it.name }.toSet()
@@ -1745,10 +1783,34 @@ class TicketBoard(
         if (store.tickets.get(ticketId) != null) push(BoardEvent.Changed(listOf(get(ticketId))))
     }
 
-    private fun drainProfileLane(record: RunFacts) {
+    private fun drainProfileLane(record: RunFacts) = drainProfileLane(record.view.agentId, record.view.role)
+
+    /**
+     * AUTOSTART-SAME-AGENT-1: in-progress ticket [ticketId] just left the column while its worker [sessionId] rests between
+     * turns. That worker held its agent ([occupiedAgents]), so a ticket queued on the agent or its role waited for it; no
+     * Exit follows (the worker is already at rest), so its lane is drained here, off the move's own answer.
+     */
+    private fun drainAfterLeave(ticketId: String, sessionId: String) {
+        if (!queueDrainEnabled || !sessionsOn) return
+        try {
+            sessionEvents.execute {
+                runCatching {
+                    synchronized(this@TicketBoard) {
+                        val view = host.sessions.get(sessionId) ?: return@runCatching
+                        if (view.state in ACTIVE_STATE_NAMES) return@runCatching // its turn's Exit drains the lane
+                        if (store.transaction { store.tickets.get(ticketId) }?.status == TicketStatus.IN_PROGRESS) return@runCatching
+                        drainProfileLane(view.agentId, view.role)
+                    }
+                }.onFailure { System.err.println("[infantry] ticket $ticketId: draining its agent's lane failed: ${it.message}") }
+            }
+        } catch (_: RejectedExecutionException) {
+            // closed
+        }
+    }
+
+    private fun drainProfileLane(agentId: String?, role: String?) {
         if (!queueDrainEnabled) return
-        val profileId = record.view.agentId ?: return
-        val role = record.view.role
+        val profileId = agentId ?: return
         val candidates = store.transaction {
             val snapshot = load()
             boardOrder(snapshot.rows.values).filter { ticket ->
@@ -1803,13 +1865,14 @@ class TicketBoard(
         val matching = host.agents.list().filter { it.role == role }
         val original = matching.firstOrNull() ?: return
         val cap = maxOf(1, laneCap(original.projectId, role))
-        val active = host.sessions.list().filter { it.state in ACTIVE_STATE_NAMES }
+        // AUTOSTART-SAME-AGENT-1: a clone resting between turns of an in-progress ticket is running, never pruned.
+        val occupied = occupiedAgents()
         val clone = Regex("^" + Regex.escape(original.name) + " \\d+$")
         var excess = matching.size - cap
         for (candidate in matching.drop(1).reversed()) {
             if (excess <= 0) break
             val id = candidate.id ?: continue
-            if (!clone.matches(candidate.name) || active.any { it.agentId == id }) continue
+            if (!clone.matches(candidate.name) || id in occupied) continue
             runCatching { host.agents.delete(id) }.onSuccess { excess-- }
         }
     }
