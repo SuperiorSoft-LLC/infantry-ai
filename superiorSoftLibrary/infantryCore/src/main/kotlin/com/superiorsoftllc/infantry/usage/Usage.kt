@@ -102,11 +102,29 @@ class ProviderStateTracker(
     private val clock: () -> Long = System::currentTimeMillis,
     private val sink: (ProviderState) -> Unit = {},
     private val exhaustion: (rawLine: String) -> Boolean = { false },
+    /** G15: true when a raw output line is a harness-reported quota error (free tier exceeded and the like). */
+    private val quotaHit: (rawLine: String) -> Boolean = ::isQuotaErrorLine,
+    /** G15: how long a quota hit holds the provider EXHAUSTED (setting [com.superiorsoftllc.infantry.settings.LimitRegistry.USAGE_QUOTA_HIT_HOLD_MINUTES]). */
+    private val quotaHitHoldMs: Long = com.superiorsoftllc.infantry.settings.LimitRegistry.USAGE_QUOTA_HIT_HOLD_MINUTES.default * 60_000L,
 ) {
     private val states = LinkedHashMap<String, ProviderState>()
 
+    /** A stored state; a quota-hit EXHAUSTED mark whose reset time has passed reads as [ProviderStatus.UNKNOWN] again. */
     @Synchronized
-    fun state(provider: String): ProviderState = states[provider] ?: ProviderState(provider, ProviderStatus.UNKNOWN)
+    fun state(provider: String): ProviderState {
+        val s = states[provider] ?: return ProviderState(provider, ProviderStatus.UNKNOWN)
+        val expired = s.status == ProviderStatus.EXHAUSTED && s.source == QUOTA_HIT_SOURCE &&
+            s.resetsAt != null && clock() >= s.resetsAt
+        return if (expired) ProviderState(provider, ProviderStatus.UNKNOWN) else s
+    }
+
+    /**
+     * G15: a harness reported a quota hit (for example a free tier's "usage exceeded"). The provider reads as
+     * [ProviderStatus.EXHAUSTED] until [resetsAt] (epoch millis; null = until another observation replaces it), so
+     * the launch gate refuses unattended starts and `infantry usage` shows it.
+     */
+    fun markQuotaHit(provider: String, resetsAt: Long? = null): ProviderState =
+        publish(ProviderState(provider, ProviderStatus.EXHAUSTED, resetsAt = resetsAt, observedAt = clock(), source = QUOTA_HIT_SOURCE))
 
     @Synchronized
     fun states(): List<ProviderState> = states.values.toList()
@@ -119,6 +137,7 @@ class ProviderStateTracker(
 
     /** Returns the new state when [line] is a `rate_limit_event`, else null. */
     fun observeStreamLine(provider: String, line: String): ProviderState? {
+        if (quotaHit(line)) return markQuotaHit(provider, resetsAt = clock() + quotaHitHoldMs)
         val obj = runCatching { Json.parseToJsonElement(line).jsonObject }.getOrNull() ?: return null
         if (obj["type"]?.jsonPrimitive?.takeIf { it.isString }?.content != "rate_limit_event") return null
         val info = obj["rate_limit_info"] as? JsonObject
@@ -141,6 +160,19 @@ class ProviderStateTracker(
         synchronized(this) { states[next.provider] = next }
         sink(next)
         return next
+    }
+
+    companion object {
+        /** The [ProviderState.source] of a quota-hit mark; only these marks expire at [ProviderState.resetsAt]. */
+        const val QUOTA_HIT_SOURCE = "quota-hit"
+
+        /** Phrases harnesses print on a quota error (opencode Zen: "Free usage exceeded"; OpenAI-style insufficient_quota). */
+        val QUOTA_ERROR_PHRASES = listOf("free usage exceeded", "usage exceeded", "insufficient_quota", "quota exceeded")
+
+        fun isQuotaErrorLine(line: String): Boolean {
+            val l = line.lowercase()
+            return QUOTA_ERROR_PHRASES.any { l.contains(it) }
+        }
     }
 }
 
