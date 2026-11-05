@@ -364,6 +364,12 @@ tasks.withType<Test>().matching { it.name in setOf("test", "testFast", "testSlow
     dependsOn(":superiorSoftLibrary:infantry:testForkAgentJar")
     dependsOn(":daemon-plugin-official-Infantry_Chat:jar")
     dependsOn(":daemon-plugin-official-Infantry_Board:jar") // TICKET-IMAGES-UI-TEST-1: TicketImagesUiTest loads the board daemon jar
+    // QA-FIX-E: a real-daemon UI test resolves the repository plugins root, and its harness registry comes from the official
+    // modules' harness halves (module.json harness.jar). Unbuilt, the daemon has no harness but its configured provider
+    // (ProfileHarnessChangeUiTest: no claude / pi), which only passed when another task had built them first (the full QA).
+    val harnessJarOf = rootProject.extra["ihqHarnessJar"] as (File) -> String?
+    rootProject.file("plugins/official").listFiles { f -> f.isDirectory && !f.name.startsWith("_") && harnessJarOf(f) != null }.orEmpty()
+        .forEach { dir -> dependsOn(":harness-plugin-official-${dir.name}:jar") }
     inputs.file(forkAgentJar).withPropertyName("testForkAgent").withNormalizer(ClasspathNormalizer::class.java)
     systemProperty("INFANTRY_STATE_DIR", uiTestState.absolutePath)
     jvmArgs("-Djava.io.tmpdir=${uiTestTmp.absolutePath}")

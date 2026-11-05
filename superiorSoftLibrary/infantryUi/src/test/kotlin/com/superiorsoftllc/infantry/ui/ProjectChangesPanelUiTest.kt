@@ -28,6 +28,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import com.superiorsoftllc.infantry.ui.model.ConnectionInfo
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
@@ -36,11 +39,19 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-internal class ChangesFakeLink(scope: CoroutineScope) : DaemonClient(scope) {
+internal class ChangesFakeLink(scope: CoroutineScope, url: String = "ws://127.0.0.1:1/ws") : DaemonClient(scope) {
     val sent = CopyOnWriteArrayList<Envelope>()
     private val incoming = MutableSharedFlow<Envelope>(extraBufferCapacity = 64)
     override val frames: SharedFlow<Envelope> get() = incoming
+    // The link's address from the start (the Controller applies it in its constructor), so the window shows the URL
+    // without a dial and no later link-state emission can race the pushed `ready`.
+    override val info: StateFlow<ConnectionInfo> = MutableStateFlow(ConnectionInfo(url = url))
     override suspend fun send(envelope: Envelope): Boolean { sent += envelope; return true }
+    // QA-FIX-E: a fake link never dials. App's first effect calls connect(url); the inherited one opened a real socket to
+    // the test's dead url, and its refusal (RECONNECTING, then a retry each backoff) overwrote the CONNECTED that the
+    // pushed `ready` had set, so under load `isLive` never held (AssistantOverridesUiTest). Same as every NoDialLink.
+    override fun connect(url: String, token: String?) {}
+    override fun disconnect() {}
     fun push(e: Envelope) {
         val deadline = System.currentTimeMillis() + 10_000
         while (incoming.subscriptionCount.value == 0 && System.currentTimeMillis() < deadline) Thread.sleep(10)

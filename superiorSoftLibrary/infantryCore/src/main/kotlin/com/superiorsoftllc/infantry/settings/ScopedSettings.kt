@@ -132,7 +132,8 @@ class ScopedSettings(private val store: InfantryStore, private val settings: Set
         }.trimEnd()
     }
 
-    private fun isKnown(key: String) = key in settings.all() || settings.isBuiltIn(key) || settings.storedDeclared(key) != null || settings.declaredField(key) != null
+    // QA-FIX-E: isBuiltIn covers every key of all() without reading their values.
+    private fun isKnown(key: String) = settings.isBuiltIn(key) || settings.storedDeclared(key) != null || settings.declaredField(key) != null
 
     private fun roleTarget(context: SettingContext): String? {
         val project = context.projectId?.takeIf { it.isNotBlank() } ?: return null
