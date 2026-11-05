@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -75,7 +74,7 @@ fun ServerSwitcherChip(switcher: ServerSwitcher, onSelect: (ServerChoice) -> Uni
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text("▾ ${active?.name ?: "No server"}", color = Palette.Text, fontSize = 11.sp, maxLines = 1)
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        InfantryDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             switcher.choices().forEach { c ->
                 DropdownMenuItem(
                     text = {

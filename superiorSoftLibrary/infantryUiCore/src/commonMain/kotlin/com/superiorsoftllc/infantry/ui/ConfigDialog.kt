@@ -727,7 +727,7 @@ private fun AgentScopeDropdown(value: AgentScope, onPick: (AgentScope) -> Unit) 
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                 modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).handCursor(overrideDescendants = true).fillMaxWidth().testTag("agent-scope-field"),
             )
-            ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, shape = Palette.PopupShape, containerColor = Palette.Raised) {
                 AgentScope.entries.forEach { option ->
                     DropdownMenuItem(
                         text = { Text(option.label) },
@@ -759,7 +759,7 @@ private fun KeepAliveDropdown(value: Int?, onPick: (Int) -> Unit) {
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).handCursor(overrideDescendants = true).fillMaxWidth().testTag(KEEP_ALIVE_FIELD_TAG),
         )
-        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, shape = Palette.PopupShape, containerColor = Palette.Raised) {
             LifecycleSetting.options(value).forEach { minutes ->
                 DropdownMenuItem(
                     text = { Text(LifecycleSetting.label(minutes)) },
@@ -1162,7 +1162,7 @@ private fun ToolApprovalDropdown(value: ToolApprovalInfo?, onPick: (String) -> U
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                 modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).handCursor(overrideDescendants = true).fillMaxWidth().testTag(TOOL_APPROVAL_FIELD_TAG),
             )
-            ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, shape = Palette.PopupShape, containerColor = Palette.Raised) {
                 ToolApprovalSetting.options(value).forEach { mode ->
                     DropdownMenuItem(
                         text = { Text(ToolApprovalSetting.label(mode)) },
@@ -1238,7 +1238,7 @@ fun PromptTimerControl(
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                 modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).handCursor(overrideDescendants = true).fillMaxWidth().testTag(PROMPT_ON_TIMEOUT_FIELD_TAG),
             )
-            ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, shape = Palette.PopupShape, containerColor = Palette.Raised) {
                 setting.ON_TIMEOUT_CHOICES.forEach { choice ->
                     DropdownMenuItem(
                         text = { Text(setting.onTimeoutLabel(choice)) },
@@ -1420,7 +1420,7 @@ private fun MarkdownEngineDropdown(value: String, onPick: (String) -> Unit) {
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).handCursor(overrideDescendants = true).fillMaxWidth().testTag("markdown-engine-field"),
         )
-        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, shape = Palette.PopupShape, containerColor = Palette.Raised) {
             engines.available().forEach { option ->
                 DropdownMenuItem(
                     text = { Text(option.label) },

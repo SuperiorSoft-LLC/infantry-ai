@@ -8,7 +8,6 @@ import androidx.compose.foundation.Canvas
 import com.superiorsoftllc.infantry.ui.model.PanelLayout
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -291,7 +290,7 @@ fun TitleBarOverflow(modifier: Modifier = Modifier, entries: @Composable ColumnS
                 contentAlignment = Alignment.Center,
             ) { Icon(AhqIcons.MoreHoriz, contentDescription = null, tint = Palette.Text, modifier = Modifier.size(18.dp)) }
         }
-        DropdownMenu(
+        com.superiorsoftllc.infantry.ui.InfantryDropdownMenu(
             expanded = open, onDismissRequest = { open = false },
             modifier = Modifier.background(Palette.Raised).testTag(TITLE_BAR_OVERFLOW_MENU_TAG),
         ) {

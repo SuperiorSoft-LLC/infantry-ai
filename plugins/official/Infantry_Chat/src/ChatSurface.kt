@@ -45,7 +45,6 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.Icon
 import androidx.compose.foundation.hoverable
@@ -769,7 +768,7 @@ private fun ComposerMore(rest: List<ComposerAct>) {
     var open by remember { mutableStateOf(false) }
     Box {
         ComposerRound(AhqIcons.MoreHoriz, COMPOSER_MORE_LABEL, { open = true }, modifier = Modifier.testTag(COMPOSER_MORE_TAG))
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }, modifier = Modifier.background(Palette.Raised)) {
+        com.superiorsoftllc.infantry.ui.InfantryDropdownMenu(expanded = open, onDismissRequest = { open = false }, modifier = Modifier.background(Palette.Raised)) {
             rest.forEach { it.MenuItem { open = false } }
         }
     }

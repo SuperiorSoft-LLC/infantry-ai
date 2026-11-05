@@ -542,7 +542,7 @@ fun FloatRow(floaters: @Composable RowScope.() -> Unit, trailing: @Composable Ro
 @Composable
 private fun ActivityLines(entries: List<com.superiorsoftllc.infantry.ui.model.AgentActivity>) {
     run {
-        Column(Modifier.fillMaxWidth().background(Palette.Panel).heightIn(max = 160.dp).verticalScroll(rememberScrollState())) {
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Palette.Panel).border(1.dp, Palette.Border, RoundedCornerShape(8.dp)).heightIn(max = 160.dp).verticalScroll(rememberScrollState())) {
             entries.asReversed().forEach { e ->
                 Row(Modifier.fillMaxWidth().padding(horizontal = ChatSidePadding, vertical = 1.dp)) {
                     Text(activityTimestamp(e.at), color = Palette.Muted, fontFamily = Mono, fontSize = 11.sp)

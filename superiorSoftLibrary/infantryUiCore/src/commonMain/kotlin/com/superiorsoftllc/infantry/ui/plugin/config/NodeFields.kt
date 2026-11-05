@@ -7,7 +7,6 @@ import androidx.compose.foundation.border
 import com.superiorsoftllc.infantry.ui.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.ui.semantics.Role
 import com.superiorsoftllc.infantry.ui.DropdownMenuItem
 import androidx.compose.foundation.layout.Arrangement
@@ -189,7 +188,7 @@ internal fun SelectDropdown(field: ConfigFieldDeclaration, tag: String, value: J
         TextButton({ open = true }, Modifier.testTag(NODE_FIELD_INPUT_TAG_PREFIX + tag).semantics { contentDescription = field.label }, enabled = enabled) {
             Text((current?.let { field.optionLabels[it] ?: it } ?: field.placeholder ?: "Choose") + " ▾")
         }
-        DropdownMenu(open, { open = false }) {
+        com.superiorsoftllc.infantry.ui.InfantryDropdownMenu(open, { open = false }) {
             for (o in field.options) DropdownMenuItem(
                 { Text(field.optionLabels[o] ?: o, fontSize = 12.sp) },
                 { open = false; write(JsonPrimitive(o)) },
