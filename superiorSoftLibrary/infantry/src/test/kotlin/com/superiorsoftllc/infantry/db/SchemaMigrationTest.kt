@@ -738,6 +738,44 @@ class SchemaMigrationTest {
     }
 
     /**
+     * ATTN-KIND-1: every [AttentionKinds] constant, and a plugin's own kind, is accepted by a fresh file AND by a file migrated
+     * through the whole chain; a v58 file's rows survive the 58.sqm rebuild that drops the closed CHECK (it refused
+     * `session_failed`, so a failed session never reached Attention).
+     */
+    @Test
+    fun `every attention kind is stored by a fresh and a migrated database`() {
+        val kinds = com.superiorsoftllc.infantry.daemon.api.attention.AttentionKinds::class.java.declaredFields
+            .filter { java.lang.reflect.Modifier.isStatic(it.modifiers) && it.type == String::class.java }
+            .map { it.isAccessible = true; it.get(null) as String }
+        assertTrue("session_failed" in kinds && kinds.size >= 9, "reflection found the kinds: $kinds")
+
+        val created = newDatabasePath()
+        InfantryDatabaseFactory.open(created).close()
+        val migrated = newDatabasePath()
+        JdbcSqliteDriver("jdbc:sqlite:$migrated").use { driver ->
+            InfantryDatabase.Schema.migrate(driver, 1, 58)
+            driver.execute(null, "PRAGMA user_version = 58;", 0)
+        }
+        exec(migrated, "INSERT INTO attention(id, created_at, kind, outcome, detail, acked_at) VALUES ('old', 5, 'stalled', 'o', 'd', 7);")
+        assertFailsWith<java.sql.SQLException>("a v58 file refuses session_failed (the bug)") {
+            exec(migrated, "INSERT INTO attention(id, created_at, kind, outcome, detail) VALUES ('x', 1, 'session_failed', 'o', 'd');")
+        }
+        val before = rows(migrated, "SELECT * FROM attention ORDER BY id;")
+        InfantryDatabaseFactory.open(migrated).close()
+        assertEquals(InfantryDatabase.Schema.version.toString(), rows(migrated, "PRAGMA user_version;").single().single())
+        assertEquals(before, rows(migrated, "SELECT * FROM attention ORDER BY id;"), "rows survive the rebuild")
+        assertTrue((shape(migrated, "attention")["indexes"] as Map<*, *>).keys.contains("index_attention_on_acknowledged_created_at"))
+
+        for (path in listOf(created, migrated)) {
+            (kinds + "some_plugin_kind").forEachIndexed { i, kind ->
+                exec(path, "INSERT INTO attention(id, created_at, kind, outcome, detail) VALUES ('k$i', ${100 + i}, '$kind', 'o', 'd');")
+            }
+            val stored = rows(path, "SELECT kind FROM attention WHERE id LIKE 'k%' ORDER BY created_at;").map { it[0] }
+            assertEquals(kinds + "some_plugin_kind", stored, "every kind stored ($path)")
+        }
+    }
+
+    /**
      * TRAITS-T6: 30.sqm (v30 -> v31) REBUILDS `attention` so its `kind` CHECK admits `unreported` (SQLite cannot alter a
      * CHECK). A real v30 file holding an open and an acked item is opened through the factory: both rows must survive
      * byte for byte, the index must be back, the old CHECK must have refused `unreported` before the migration, the new
@@ -767,9 +805,7 @@ class SchemaMigrationTest {
         assertTrue(rows(path, "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'attention_new';").isEmpty())
         assertTrue((shape(path, "attention")["indexes"] as Map<*, *>).keys.contains("index_attention_on_acknowledged_created_at"))
         exec(path, "INSERT INTO attention(id, created_at, kind, outcome, detail) VALUES ('a3', 30, 'unreported', 'unreported', 'no report');")
-        assertFailsWith<java.sql.SQLException>("an unknown kind is still refused") {
-            exec(path, "INSERT INTO attention(id, created_at, kind, outcome, detail) VALUES ('y', 1, 'bogus', 'o', 'd');")
-        }
+        // ATTN-KIND-1 (58.sqm): the current version has no closed kind list any more, so no unknown-kind refusal is checked here.
         SqlInfantryStore.open(path).use { store ->
             val kinds = rows(path, "SELECT id, kind FROM attention ORDER BY created_at, id").map { it[0]!! to it[1]!! }
             assertEquals(listOf("a1" to "stalled", "a2" to "queue_cleared", "a3" to "unreported"), kinds)

@@ -1,12 +1,10 @@
 -- Phase 9.4: operator attention history. It has no ticket/trigger foreign keys deliberately: the
 -- record remains useful after an associated ticket or trigger is removed. TRAITS-T6 (30.sqm) added 'unreported'.
+-- ATTN-KIND-1 (58.sqm) dropped the closed `kind` CHECK: kinds are open (plugins add theirs); the names live in AttentionKinds.
 CREATE TABLE IF NOT EXISTS attention (
     id TEXT NOT NULL PRIMARY KEY,
     created_at INTEGER NOT NULL,
-    kind TEXT NOT NULL CHECK (kind IN (
-        'trigger_tripped', 'deadline', 'stalled', 'ceiling', 'launch_blocked',
-        'prerequisite_declined', 'queue_cleared', 'unreported'
-    )),
+    kind TEXT NOT NULL,
     trigger_id TEXT,
     ticket_id TEXT,
     pod_id TEXT,
