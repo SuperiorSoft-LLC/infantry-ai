@@ -342,8 +342,60 @@ class ClaudeTtySessionTest {
         s.c.onStdout("  No, exit\r\n❯ Yes, I trust this folder\r\n")
         now += ClaudeTtySession.KEY_GAP_MS
         s.c.tick()
+        assertEquals(2, s.out.written.size, "two Downs sent, one redraw seen: the other may still come, so Enter waits for the screen to settle")
+        now += ClaudeTtySession.TRUST_RETRY_MS
+        s.c.tick()
         assertEquals(ClaudeTtySession.ENTER, s.out.written.last())
         assertTrue(s.c.screenText().contains("trust this folder"), "the screen is kept for debugging after the answer")
+    }
+
+    // HARNESS-GAP f0b7173f: the redraws below are the bytes Claude Code 2.1.318 wrote on Windows (ConPTY) for each Down.
+    private val redrawYes = "\u001b[1D\u001b[4B\r\u001b[1C\u001b[4A \u001b[4GNo, exit\r\u001b[1C\u001b[1B\u001b[38;2;177;185;249m❯\u001b[4GYes, I trust this folder\u001b[39m\r\n\n\n\u001b[1C\u001b[3A"
+    private val redrawNo = "\u001b[1D\u001b[3B\r\u001b[1C\u001b[4A\u001b[38;2;177;185;249m❯\u001b[4GNo, exit\r\u001b[1C\u001b[1B\u001b[39m \u001b[4GYes, I trust this folder\r\n\n\n\u001b[1C\u001b[4A"
+    private val trustMenu = "\u001b[2GQuick\u001b[8Gsafety\u001b[15Gcheck:\r\n\u001b[2G\u001b[38;2;177;185;249m❯\u001b[4GNo,\u001b[8Gexit\u001b[39m\r\n\u001b[4GYes,\u001b[9GI\u001b[11Gtrust\u001b[17Gthis\u001b[22Gfolder\r\n"
+
+    @Test fun `a slow redraw after a retried Down never gets an Enter on No, exit`() {
+        // The live failure: Down 1 was taken but redrawn late, so Down 2 went out; redraw 1 (Yes) then redraw 2 (No) arrived.
+        val s = start()
+        s.c.sendTurn(request("x"))
+        s.c.onStdout(trustMenu)
+        s.c.tick()
+        now += ClaudeTtySession.TRUST_RETRY_MS
+        s.c.tick()
+        assertEquals(listOf(ClaudeTtySession.DOWN, ClaudeTtySession.DOWN), s.out.written)
+        s.c.onStdout(redrawYes)
+        repeat(3) { now += ClaudeTtySession.TICK_MS; s.c.tick() }
+        s.c.onStdout(redrawNo)
+        repeat(11) { now += ClaudeTtySession.TICK_MS; s.c.tick() }
+        assertTrue(ClaudeTtySession.ENTER !in s.out.written, "never Enter while No, exit may be (or is) selected: " + s.out.written)
+        assertEquals(3, s.out.written.count { it == ClaudeTtySession.DOWN }, "No, exit is selected and settled: Down once more")
+        s.c.onStdout(redrawYes)
+        now += ClaudeTtySession.TRUST_RETRY_MS
+        s.c.tick()
+        assertEquals(ClaudeTtySession.ENTER, s.out.written.last())
+    }
+
+    @Test fun `a slow redraw of the one Down is waited for, never pressed again`() {
+        val s = start()
+        s.c.onStdout(trustMenu)
+        s.c.tick()
+        now += ClaudeTtySession.TRUST_RETRY_MS - ClaudeTtySession.TICK_MS
+        s.c.tick()
+        s.c.onStdout(redrawYes)
+        repeat(20) { now += ClaudeTtySession.TICK_MS; s.c.tick() }
+        assertEquals(listOf(ClaudeTtySession.DOWN, ClaudeTtySession.ENTER), s.out.written)
+    }
+
+    @Test fun `Down is never pressed while the accept row is selected`() {
+        val s = start()
+        s.c.onStdout(trustMenu)
+        s.c.tick()
+        s.c.onStdout(redrawYes)
+        s.c.tick()
+        assertEquals(listOf(ClaudeTtySession.DOWN), s.out.written, "Enter waits KEY_GAP_MS after the Down")
+        now += ClaudeTtySession.TRUST_RETRY_MS * 3
+        s.c.tick()
+        assertEquals(listOf(ClaudeTtySession.DOWN, ClaudeTtySession.ENTER), s.out.written)
     }
 
     @Test fun `a cli that never comes up fails the waiting turn with the screen`() {
