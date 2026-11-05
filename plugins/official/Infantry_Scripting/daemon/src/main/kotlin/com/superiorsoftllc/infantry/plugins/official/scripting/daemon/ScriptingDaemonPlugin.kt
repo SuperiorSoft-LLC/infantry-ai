@@ -51,6 +51,7 @@ class ScriptingDaemonPlugin : DaemonPlugin {
         api.tools.register(ChatNoteTools(
             { api.sessions.get(it)?.projectId }, { runCatching { api.events.broadcast(TIMELINE_ITEM, it.toString()) } }, runLog::addNote,
             { id, text -> api.sessions.resume(id, text) },
+            queueWake = { id, text -> api.sessions.queueAdd(id, text) },
             forwardImage = { args, call ->
                 api.tools.invoke("infantry_chat_image", args, com.superiorsoftllc.infantry.daemon.api.ToolInvoker(call.caller, call.clientSessionId, call.clientRole, call.clientProjectId, "chat_note"))
             },

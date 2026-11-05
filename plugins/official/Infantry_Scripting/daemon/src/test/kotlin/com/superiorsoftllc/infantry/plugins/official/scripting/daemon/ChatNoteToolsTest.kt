@@ -42,10 +42,33 @@ class ChatNoteToolsTest {
         assertTrue(tools.handle(call("""{"text":"x","level":"loud"}""")).isError)
     }
 
-    @Test fun `wake on a busy session succeeds, other wake failures and unknown sessions still fail`() {
-        val busy = ChatNoteTools({ "p1" }, { pushed += it }, { stored += it }, { _, _ -> throw IllegalStateException("session s1 already has a run in flight") })
+    @Test fun `wake on an idle session is a turn now and queues nothing`() {
+        val queued = mutableListOf<Pair<String, String>>()
+        val t = ChatNoteTools({ "p1" }, { pushed += it }, { stored += it }, { i, x -> woken += i to x }, queueWake = { i, x -> queued += i to x })
+        val r = t.handle(call("""{"text":"wake up","wake":true,"sessionId":"s2"}"""))
+        assertTrue(!r.isError, r.text); assertTrue(r.text.contains("woken"), r.text)
+        assertEquals(listOf("s2" to "wake up"), woken); assertTrue(queued.isEmpty())
+    }
+
+    @Test fun `NOTE-WAKE-PTY-1 wake on a busy session is queued as its next turn`() {
+        val queued = mutableListOf<Pair<String, String>>()
+        val busy = ChatNoteTools({ "p1" }, { pushed += it }, { stored += it }, { _, _ -> throw IllegalStateException("session s1 already has a run in flight") },
+            queueWake = { i, x -> queued += i to x })
         val r = busy.handle(call("""{"text":"x","wake":true}"""))
-        assertTrue(!r.isError, r.text); assertTrue(r.text.contains("busy"), r.text); assertEquals(1, stored.size)
+        assertTrue(!r.isError, r.text); assertTrue(r.text.contains("queued"), r.text); assertEquals(1, stored.size)
+        assertEquals(listOf("s1" to "x"), queued)
+    }
+
+    @Test fun `a busy wake that cannot be queued is an error, never a silent drop`() {
+        val full = ChatNoteTools({ "p1" }, { pushed += it }, { stored += it }, { _, _ -> throw IllegalStateException("session s1 already has a run in flight") },
+            queueWake = { _, _ -> throw IllegalArgumentException("the queue of s1 is full (5 messages)") })
+        val r = full.handle(call("""{"text":"x","wake":true}"""))
+        assertTrue(r.isError, r.text); assertTrue(r.text.contains("full"), r.text)
+        val none = ChatNoteTools({ "p1" }, { pushed += it }, { stored += it }, { _, _ -> throw IllegalStateException("session s1 already has a run in flight") })
+        assertTrue(none.handle(call("""{"text":"x","wake":true}""")).isError)
+    }
+
+    @Test fun `other wake failures and unknown sessions still fail`() {
         val broken = ChatNoteTools({ "p1" }, { pushed += it }, { stored += it }, { _, _ -> throw IllegalStateException("boom") })
         assertTrue(broken.handle(call("""{"text":"x","wake":true}""")).isError)
         assertTrue(tools.handle(call("""{"text":"x","sessionId":"zzz","wake":true}""")).isError)
