@@ -52,8 +52,13 @@ class DemoLockPlugin : DaemonPlugin {
             if (visitor != null) HttpReply(body = visitor, headers = mapOf("Cache-Control" to "no-store"))
             else HttpReply(status = 404, body = "no demo visitor token")
         }
-        seat(api.policy.active())
-        subscription = api.policy.onChange { seat(it) }
+        // DEMO-CHECK-1: lock now (fail closed), seat once the whole daemon is up: the seats need the Roles port and the
+        // seats' harness (opencode), which other modules provide and which are not all loaded while this start() runs.
+        lock = DemoLock.of(api.policy.active(), api::env, api.stateDir)
+        api.whenStarted {
+            seat(api.policy.active())
+            subscription = api.policy.onChange { seat(it) }
+        }
     }
 
     override fun stop() {

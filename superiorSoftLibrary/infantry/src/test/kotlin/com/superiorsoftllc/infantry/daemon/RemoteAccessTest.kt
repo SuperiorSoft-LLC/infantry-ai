@@ -107,4 +107,16 @@ class AgentEnvSecretScrubTest {
         assertEquals(setOf("INFANTRY_UPDATE_TOKEN", "AGENTHQ_UPDATE_TOKEN", "SOME_OTHER", "GH_THING"), scrub.keys)
         assertTrue(scrub.values.all { it.isEmpty() })
     }
+
+    /** DEMO-CHECK-1: a daemon run with a token FILE hands its children the token alone, which the CLI then accepts. */
+    @Test
+    fun `the daemon token reaches a child without the inherited token file`() {
+        val tokenFile = Files.createTempFile("daemon-token", ".txt").toFile().apply { writeText("file-token"); deleteOnExit() }
+        val inherited = mapOf(AccessPolicy.TOKEN_FILE_ENV to tokenFile.path, "PATH" to "/bin")
+        val child = inherited + RemoteAccess.daemonTokenEnv("daemon-token")
+        assertEquals("daemon-token", child[AccessPolicy.TOKEN_ENV])
+        assertEquals("", child[AccessPolicy.TOKEN_FILE_ENV])
+        assertEquals("/bin", child["PATH"])
+        assertEquals("daemon-token", AccessPolicy.tokenFromEnvironment { child[it] })
+    }
 }

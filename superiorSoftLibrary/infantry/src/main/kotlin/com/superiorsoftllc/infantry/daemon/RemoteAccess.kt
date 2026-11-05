@@ -120,6 +120,14 @@ object RemoteAccess {
      */
     fun inheritedCredentialScrub(): Map<String, String> = CREDENTIAL_ENV.associateWith { "" }
 
+    /**
+     * DEMO-CHECK-1: the child-env entries that hand a spawned process THIS daemon's [token]: every inherited credential
+     * name blanked, then `INFANTRY_TOKEN` set. A daemon started with `INFANTRY_TOKEN_FILE` (the docker image does) used to
+     * pass that name on too, so every `infantry` child (the agents' `infantry mcp serve`) saw both and refused to start
+     * ("set INFANTRY_TOKEN_FILE or INFANTRY_TOKEN, not both"): no agent of such a daemon had its infantry tools.
+     */
+    fun daemonTokenEnv(token: String): Map<String, String> = inheritedCredentialScrub() + (AccessPolicy.TOKEN_ENV to token)
+
     private val PAT_VALUE = Regex("^(ghp_|gho_|ghu_|ghs_|ghr_|github_pat_)[A-Za-z0-9_]{20,}$")
 
     /**

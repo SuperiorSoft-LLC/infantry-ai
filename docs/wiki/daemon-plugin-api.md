@@ -52,6 +52,7 @@ class HelloDaemon : DaemonPlugin {
 | `env(name)` | an environment variable you listed in `daemon.env` (community: and was granted), else null |
 | `secret(name)` | a keystore secret you listed in `daemon.secrets` (community: and was granted), else null |
 | `schedule(name, periodMs, job): AutoCloseable` | run `job` every `periodMs` (at least 1000) under the plugin's limits; close the handle to stop |
+| `whenStarted(block)` | run `block` once the whole daemon is up (every daemon half started, every harness registered, before the server binds); `start` runs while later modules still load, so boot work that needs another plugin's service or a harness (spawning a session) goes here. A live-loaded plugin runs it at once. Since 1.39.0 |
 | `projects` | `list()`, `create(name, goal, directory)` |
 | `sessions` | `list()`, `get(id)`, `spawn(provider, model, role, projectId)`, `resume(id, prompt)`, `restart(id)`, `status(id)`, `recentLines(id, max)`, `interrupt(id)`, `setAutomation(id, mark)`, `suppressNotice(name, sessionId, ms)` |
 | `policy` | the active policy preset: `active()`, `onChange`, `actionOf(frame)`, `refusal(frame)`, `refusalText(type)`, `claimSeats()` |
