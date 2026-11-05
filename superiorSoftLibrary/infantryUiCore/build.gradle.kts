@@ -109,6 +109,9 @@ kotlin {
             implementation(libs.zxing.core)
             // The mp3 decoder of the incoming-comms sound (LGPL, ~100 KB); isolated in JvmSoundPlayer.
             implementation(libs.jlayer)
+            // NATIVE-PICKER-1: the Explorer-style file/folder dialog (IFileOpenDialog over COM). Already in the desktop app
+            // (infantryUi, the daemon), same version: no new jar in the build, native dispatch for win-x64 and arm64 included.
+            implementation("net.java.dev.jna:jna-platform:5.18.1")
         }
         wasmJsMain.dependencies {
             implementation(libs.ktor.client.js)
