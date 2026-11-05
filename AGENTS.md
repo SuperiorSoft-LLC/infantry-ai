@@ -122,6 +122,7 @@ plugin can do it. Before you change a file, ask the knowledge base: `infantry is
 - [Scripting](docs/wiki/Scripting.md), [Settings](docs/wiki/Settings.md), [Licensing](docs/wiki/licensing.md).
 - Design records (older, dated; the code wins): [DAEMON-CORE](docs/DAEMON-CORE.md),
   [AGENT-QUICKREF](superiorSoftLibrary/infantry/docs/AGENT-QUICKREF.md) (the CLI), [MCP](superiorSoftLibrary/infantry/docs/MCP.md).
+- [docs/README.md](docs/README.md): one line per `docs/*.md` file, marked current reference, design record (dated) or history, with the wiki page that replaces a record. Search it before you grep `docs/`.
 - [llms.txt](llms.txt): the same map in the llms.txt format.
 
 ## 6. Guards (tests that keep the rules true)

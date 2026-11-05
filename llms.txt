@@ -32,6 +32,8 @@ Read AGENTS.md first. Facts in these docs come from the code; where an older des
 
 ## Optional
 
+- [docs index](docs/README.md): every docs/*.md file marked current reference, design record (dated) or history, with its replacement wiki page.
+
 - [DAEMON-CORE](docs/DAEMON-CORE.md): the design record of the daemon core split (dated).
 - [AGENT-QUICKREF](superiorSoftLibrary/infantry/docs/AGENT-QUICKREF.md): the CLI for agents.
 - [MCP](superiorSoftLibrary/infantry/docs/MCP.md): the MCP server and its tools.
