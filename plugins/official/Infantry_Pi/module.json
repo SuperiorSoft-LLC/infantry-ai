@@ -12,6 +12,6 @@
     "ids": ["pi"],
     "cli": { "id": "pi", "command": "pi", "label": "Pi" },
     "settings": [],
-    "hooks": ["watch", "sandbox", "session", "models"]
+    "hooks": ["watch", "mcp", "sandbox", "session", "models"]
   }
 }

@@ -36,14 +36,14 @@ class PiPluginTest {
 
     @AfterTest fun cleanup() { dir.deleteRecursively() }
 
-    private class FakeHost(override val stateDir: File, private val cli: String? = "/opt/pi/pi") : HarnessHost {
+    private class FakeHost(override val stateDir: File, private val cli: String? = "/opt/pi/pi", private val mcp: HarnessProcess? = null) : HarnessHost {
         override val moduleId = "Infantry_Pi"
         override val apiVersion = HARNESS_API_VERSION
         override fun log(line: String) = Unit
         override fun setting(key: String): String? = null
         override fun resolveCli(tool: String): String? = if (tool == "pi") cli else if (tool == "node") "/opt/node/bin/node" else null
         override fun start(process: HarnessProcess, listener: HarnessProcessListener): HarnessRunningProcess = error("not used")
-        override fun mcpLaunch(sessionEnv: Map<String, String>): HarnessProcess? = null
+        override fun mcpLaunch(sessionEnv: Map<String, String>): HarnessProcess? = mcp
         override fun watchLauncher(sessionEnv: Map<String, String>): String? = null
         override suspend fun ask(sessionId: String, question: HarnessQuestion): HarnessAnswer = HarnessAnswer.NONE
     }
@@ -68,6 +68,29 @@ class PiPluginTest {
         assertEquals(HARNESS_API_VERSION, plugin.contractVersion)
         assertEquals("Infantry_Pi", plugin.pluginId)
         assertEquals("pi", harness().id)
+    }
+
+    @Test fun `G6 a granted MCP launch loads the bridge extension and hands it the server command in the env`() {
+        val fake = FakeHost(dir, mcp = HarnessProcess(listOf("/bin/infantry", "mcp", "serve"), env = mapOf("INFANTRY_URL" to "ws://x")))
+        var registered: Harness? = null
+        PiHarnessPlugin().register(object : HarnessRegistrar {
+            override val host: HarnessHost = fake
+            override fun register(harness: Harness) { registered = harness }
+        })
+        val p = registered!!.process(request())
+        val bridge = listOf("-e", File(dir, PiExtensions.MCP).absolutePath)
+        assertTrue(p.command.takeLast(2) == bridge)
+        val spec = p.env.getValue(PiExtensions.MCP_ENV)
+        assertTrue(spec.contains("\"/bin/infantry\",\"mcp\",\"serve\"") && spec.contains("\"INFANTRY_URL\":\"ws://x\""))
+        assertTrue(PiExtensions.source(PiExtensions.MCP).contains("tools/list"))
+        val rpc = PiSession(fake, { listOf("pi") }).launch(request(), emptyMap())
+        assertTrue(rpc.command.takeLast(2) == bridge && rpc.env.containsKey(PiExtensions.MCP_ENV))
+    }
+
+    @Test fun `G6 without an MCP launch there is no bridge and no env`() {
+        val p = harness().process(request())
+        assertFalse(p.command.any { it.endsWith(PiExtensions.MCP) })
+        assertFalse(p.env.containsKey(PiExtensions.MCP_ENV))
     }
 
     // ---- argv ---------------------------------------------------------------------------------
