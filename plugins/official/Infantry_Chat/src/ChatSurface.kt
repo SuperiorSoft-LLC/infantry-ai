@@ -477,8 +477,9 @@ fun PromptBox(
     }
     val pick = {
         // ANDROID-ATTACH-1: content, not a path; the answer may arrive later (Android's system picker).
-        if (live && host.canPickAttachment) host.pickAttachment(ATTACH_FILE_LABEL, false, CHAT_FILE_MAX_BYTES.toLong()) { p ->
-            if (p != null) insertPicked(listOf(p))
+        // NATIVE-PICKER-1: several files at once where the platform's dialog allows it (one tag each, in pick order).
+        if (live && host.canPickAttachment) host.pickAttachments(ATTACH_FILE_LABEL, false, CHAT_FILE_MAX_BYTES.toLong()) { picked ->
+            if (picked.isNotEmpty()) insertPicked(picked)
             // QA-FIX-B: the paperclip (a focusable composer button since CHAT-MINIMIZE-3) took the focus; give it back
             // whatever the pick gave (a tag, a refusal, a cancel), so typing, Backspace and Ctrl+Shift+A go on at the caret.
             runCatching { focus.requestFocus() }

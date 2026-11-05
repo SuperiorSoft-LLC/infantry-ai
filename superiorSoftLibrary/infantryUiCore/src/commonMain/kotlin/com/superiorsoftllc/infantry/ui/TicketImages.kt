@@ -192,7 +192,7 @@ fun TicketImagesSection(
                 style = IconActionStyle.TEXT,
                 modifier = Modifier.testTag(TICKET_IMAGE_ATTACH_TAG),
                 onClick = {
-                    host.pickAttachment("Attach an image", true, ImageUploadWire.MAX_BYTES.toLong()) { p -> if (p != null) onAttach(listOf(p)) }
+                    host.pickAttachments("Attach an image", true, ImageUploadWire.MAX_BYTES.toLong()) { picked -> if (picked.isNotEmpty()) onAttach(picked) }
                 },
             )
             IconAction(

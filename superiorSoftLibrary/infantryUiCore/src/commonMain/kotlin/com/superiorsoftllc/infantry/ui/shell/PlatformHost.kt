@@ -98,6 +98,13 @@ interface PlatformHost {
         onPicked(bytes?.let { PickedImage(name, PickedImage.mimeOf(name), it, size ?: it.size.toLong()) })
     }
 
+    /**
+     * NATIVE-PICKER-1: [pickAttachment] with multi-select where the platform's chooser has it (the desktop's native dialog);
+     * [onPicked] gets every chosen file at once, an empty list when cancelled. Default: one file through [pickAttachment].
+     */
+    fun pickAttachments(title: String, imagesOnly: Boolean, maxBytes: Long, onPicked: (List<PickedImage>) -> Unit) =
+        pickAttachment(title, imagesOnly, maxBytes) { onPicked(listOfNotNull(it)) }
+
     /** PKG-3: the folder this app writes its log files to (the installed desktop app), or null when it writes none. */
     val logsDir: String? get() = null
 

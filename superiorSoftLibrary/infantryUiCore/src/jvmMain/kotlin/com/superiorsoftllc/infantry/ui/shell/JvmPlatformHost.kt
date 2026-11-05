@@ -67,13 +67,26 @@ class JvmPlatformHost(
     /** CLIPATH-1: the native file dialog, when there is a display (never on a headless JVM). */
     override val canPickFiles: Boolean get() = !java.awt.GraphicsEnvironment.isHeadless()
 
-    /** CLIPATH-1: a modal native "open file" dialog; the chosen file's absolute path, or null when cancelled. */
-    override fun pickFile(title: String): String? = runCatching {
-        val dialog = java.awt.FileDialog(null as java.awt.Frame?, title, java.awt.FileDialog.LOAD)
-        dialog.isVisible = true // modal: returns once the user chose or cancelled
-        val name = dialog.file ?: return@runCatching null
-        File(dialog.directory, name).absolutePath
-    }.getOrNull()
+    /**
+     * CLIPATH-1 / NATIVE-PICKER-1: the OS's own "open file" dialog (Explorer-style on Windows), modal to the app window;
+     * the chosen file's absolute path, or null when cancelled. The dialog runs off the UI thread ([awaitOffUiThread]).
+     */
+    override fun pickFile(title: String): String? = pickPaths(title, emptyList(), multi = false).firstOrNull()
+
+    /** NATIVE-PICKER-1: several files in one native dialog; images only narrows it to pictures (with an "All files" row). */
+    override fun pickAttachments(title: String, imagesOnly: Boolean, maxBytes: Long, onPicked: (List<PickedImage>) -> Unit) {
+        val paths = pickPaths(title, if (imagesOnly) IMAGE_EXTENSIONS else emptyList(), multi = true)
+        onPicked(paths.mapNotNull { path ->
+            val name = File(path).name
+            val size = fileSize(path)
+            val bytes = if (size != null && size > maxBytes) ByteArray(0) else readBytes(path)
+            bytes?.let { PickedImage(name, PickedImage.mimeOf(name), it, size ?: it.size.toLong()) }
+        })
+    }
+
+    private fun pickPaths(title: String, extensions: List<String>, multi: Boolean): List<String> = runCatching {
+        awaitOffUiThread { DesktopPathPicker.choose(folders = false, title, "", extensions, multi) }.orEmpty()
+    }.getOrDefault(emptyList())
 
     /** PATH-PICKER-1: the native folder/file dialog, when there is a display (never on a headless JVM). */
     override val pathPicker: com.superiorsoftllc.infantry.ui.PathPicker?
@@ -204,6 +217,8 @@ class JvmPlatformHost(
     }
 
     private companion object {
+        /** NATIVE-PICKER-1: what an images-only attachment dialog offers. */
+        val IMAGE_EXTENSIONS = listOf("png", "jpg", "jpeg", "gif", "webp", "bmp")
         const val DEFAULT_PORT = 8787
         /** No file over the chat's largest limit (20 MB) is read into memory. */
         const val READ_LIMIT = 20L * 1024 * 1024
