@@ -254,15 +254,48 @@ jobs:
           jq -n --arg v "$V" --arg t "$GITHUB_REF_NAME" --arg d "$(date -u +%FT%TZ)" --argjson a "$assets" \
             '{version:$v, tag:$t, published:$d, assets:$a}' > latest.json
           cat latest.json
+      # UPDATER-1: an ed25519 signature of SHA256SUMS (SHA256SUMS.sig, base64 of the 64 raw bytes), so a client that pins
+      # the public key trusts the hashes and not only the host. The private key lives ONLY in the Actions secret
+      # INFANTRY_RELEASE_SIGNING_KEY (PEM, or base64 of the PEM); it is written to the runner's temp dir, used, and deleted.
+      # No secret: the release goes out unsigned with a warning. Repo variable INFANTRY_RELEASE_PUBLIC_KEY (base64 of the
+      # 32-byte public key) set: the signature must verify against it, so a wrong key in the secret fails the release.
+      - name: Sign SHA256SUMS (ed25519)
+        shell: bash
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.INFANTRY_RELEASE_SIGNING_KEY }}
+          RELEASE_PUBLIC_KEY: ${{ vars.INFANTRY_RELEASE_PUBLIC_KEY }}
+        run: |
+          set -euo pipefail
+          cd dl
+          if [ -z "${RELEASE_SIGNING_KEY:-}" ]; then
+            echo "::warning::No INFANTRY_RELEASE_SIGNING_KEY secret: SHA256SUMS is published UNSIGNED (no SHA256SUMS.sig). See docs/RELEASING.md."
+            exit 0
+          fi
+          umask 077
+          key="$RUNNER_TEMP/release-signing.pem"; pub="$RUNNER_TEMP/release-signing.pub.pem"
+          trap 'rm -f "$key" "$pub" "$RUNNER_TEMP/sig.bin"' EXIT
+          if printf '%s' "$RELEASE_SIGNING_KEY" | grep -q 'BEGIN PRIVATE KEY'; then printf '%s\n' "$RELEASE_SIGNING_KEY" > "$key"
+          else printf '%s' "$RELEASE_SIGNING_KEY" | base64 -d > "$key"; fi
+          openssl pkey -in "$key" -noout -text 2>/dev/null | grep -qi 'ED25519' || { echo "INFANTRY_RELEASE_SIGNING_KEY is not an ed25519 private key" >&2; exit 1; }
+          openssl pkeyutl -sign -inkey "$key" -rawin -in SHA256SUMS -out "$RUNNER_TEMP/sig.bin"
+          openssl pkey -in "$key" -pubout -out "$pub"
+          openssl pkeyutl -verify -pubin -inkey "$pub" -rawin -in SHA256SUMS -sigfile "$RUNNER_TEMP/sig.bin" >/dev/null
+          derived="$(openssl pkey -pubin -in "$pub" -outform DER | tail -c 32 | base64 -w0)"
+          if [ -n "${RELEASE_PUBLIC_KEY:-}" ] && [ "$derived" != "$RELEASE_PUBLIC_KEY" ]; then
+            echo "the signing key does not match the pinned INFANTRY_RELEASE_PUBLIC_KEY" >&2; exit 1
+          fi
+          base64 -w0 "$RUNNER_TEMP/sig.bin" > SHA256SUMS.sig
+          echo "SHA256SUMS signed; public key (base64): $derived"
       - name: Create or update the GitHub Release
         shell: bash
         run: |
           set -euo pipefail
           cd dl
+          extra=(); [ -f SHA256SUMS.sig ] && extra+=(SHA256SUMS.sig)
           if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" InfantryAI-* SHA256SUMS latest.json --clobber --repo "$GITHUB_REPOSITORY"
+            gh release upload "$GITHUB_REF_NAME" InfantryAI-* SHA256SUMS "${extra[@]}" latest.json --clobber --repo "$GITHUB_REPOSITORY"
           else
-            gh release create "$GITHUB_REF_NAME" InfantryAI-* SHA256SUMS latest.json --repo "$GITHUB_REPOSITORY" \
+            gh release create "$GITHUB_REF_NAME" InfantryAI-* SHA256SUMS "${extra[@]}" latest.json --repo "$GITHUB_REPOSITORY" \
               --title "Infantry AI ${GITHUB_REF_NAME#v}" --generate-notes
           fi
 
