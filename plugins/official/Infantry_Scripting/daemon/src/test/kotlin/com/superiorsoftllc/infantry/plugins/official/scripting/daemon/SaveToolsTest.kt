@@ -28,7 +28,7 @@ class SaveToolsTest {
     private val engines = ScriptEngines({ mapOf(ScriptEngineWire.PREFIX + "lua" to ScriptEngineWire.asEndpoint(Lua())) })
     private val store = ScriptStore({ files }, { engines.extensions() })
     private val hooks = HookStore { files }
-    private val save = SaveTools(store, hooks, engines)
+    private val save = SaveTools(store, hooks, engines, { "stamp($it)" })
 
     private fun call(args: String) = object : ToolCall {
         override val arguments = Json.parseToJsonElement(args).jsonObject
@@ -47,7 +47,7 @@ class SaveToolsTest {
         val ran = tools.run.call(call("""{"name":"hello"}"""))
         assertFalse(ran.isError, ran.text); assertTrue("ran:x=22" in ran.text, ran.text)
         val list = save.list.call(call("{}")).text
-        assertTrue("hello" in list && "engine=lua" in list && "sess-1 (qa)" in list && "hooks: none" in list, list)
+        assertTrue("hello" in list && "engine=lua" in list && "sess-1 (qa)" in list && "hooks: none" in list && "modified stamp(" in list, list)
     }
 
     @Test fun `save is refused on a parse error and writes nothing`() {

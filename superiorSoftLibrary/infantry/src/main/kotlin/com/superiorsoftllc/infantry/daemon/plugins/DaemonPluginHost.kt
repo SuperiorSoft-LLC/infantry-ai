@@ -702,6 +702,7 @@ class DaemonPluginHost private constructor(
             runCatching { p.loader.close() }
         }
         observerQueue.shutdownNow()
+        reloadTimer.shutdownNow()
         testSchedule?.shutdownNow()
     }
 
@@ -710,14 +711,42 @@ class DaemonPluginHost private constructor(
     private fun failClosed(owner: Loaded, what: String): String = "refused: plugin ${owner.id}'s $what failed (fail closed)"
 
     /** BOARD-DOWN-1: a plugin marked failed is mailed to every live pm, so an outage is seen at once (generic, any plugin). */
-    private fun announceFailure(id: String, why: String) {
+    private fun announceFailure(id: String, why: String, next: String) {
         observerQueue.execute {
             runCatching {
                 val subject = "Daemon plugin $id FAILED"
-                val body = "Daemon plugin $id was marked failed and unregistered: $why. Its tools and frames are gone until the daemon restarts."
+                val body = "Daemon plugin $id was marked failed and unregistered: $why. $next"
                 services.projects.list().forEach { services.sessionNotifier.notifyRole(it.id, "pm", subject, body) }
             }.onFailure { log("[plugins] could not announce failure of $id: ${it.message}") }
         }
+    }
+
+    /** SCRIPTING-NCDFE-1: automatic reloads done per module id this daemon run (limits.plugins.autoReload.attempts caps them). */
+    private val autoReloads = ConcurrentHashMap<String, Int>()
+    private val reloadTimer = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "daemon-plugin-auto-reload").apply { isDaemon = true } }
+
+    /**
+     * SCRIPTING-NCDFE-1: a plugin marked failed at run time is reloaded by itself after limits.plugins.autoReload.delayMs, at
+     * most limits.plugins.autoReload.attempts times per daemon run (a reload whose start fails counts and tries again). A module
+     * unloaded on purpose meanwhile is left alone. Returns the sentence for the failure mail: what happens next.
+     */
+    private fun scheduleAutoReload(id: String): String {
+        val max = services.limit(LimitRegistry.PLUGIN_AUTO_RELOAD_ATTEMPTS).toInt()
+        if (max <= 0 || hotSource == null) return "Its tools and frames are gone until the daemon restarts (automatic reload is off: limits.plugins.autoReload.attempts)."
+        val n = autoReloads.merge(id, 1, Int::plus) ?: 1
+        if (n > max) return "It already had $max automatic reloads this run, so its tools and frames are gone until the daemon restarts or the plugin is reloaded."
+        val delayMs = services.limit(LimitRegistry.PLUGIN_AUTO_RELOAD_DELAY_MS)
+        runCatching {
+            reloadTimer.schedule({
+                val down = loaded.any { it.id == id && it.guard.disabled } || statuses[id]?.startsWith("failed") == true
+                if (!down) { log("[plugins] automatic reload of $id skipped: it is no longer marked failed"); return@schedule }
+                val out = runCatching { reload(id) }.getOrElse { HotOutcome(false, "reload threw ${it::class.java.simpleName}: ${it.message}") }
+                log("[plugins] automatic reload $n of $max of $id: ${out.message}")
+                if (out.ok) announceNotice("Daemon plugin $id reloaded", "Daemon plugin $id was reloaded automatically (attempt $n of $max) and is back in service.")
+                else if (!loaded.any { it.id == id && !it.guard.disabled }) scheduleAutoReload(id).let { log("[plugins] $id: $it") }
+            }, delayMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+        }.onFailure { return "Its tools and frames are gone until the daemon restarts (the automatic reload could not be scheduled: ${it.message})." }
+        return "It is reloaded automatically in ${(delayMs + 999) / 1000}s (attempt $n of $max); until then its tools and frames are gone."
     }
 
     private fun announceTrip(id: String, why: String) = announceNotice("Daemon plugin $id cooling down", "Daemon plugin $id timed out repeatedly ($why). Its calls are refused for a short cooldown, then it is probed and comes back by itself; no restart needed.")
@@ -762,7 +791,7 @@ class DaemonPluginHost private constructor(
         val loader = URLClassLoader("plugin-$id", arrayOf(jar.toURI().toURL()), DaemonApiClassLoader(DaemonPluginHost::class.java.classLoader))
         val cpu = d.limits.cpuMsPerCall ?: maxOf(d.limits.callTimeoutMs ?: services.limit(LimitRegistry.PLUGIN_CALL_TIMEOUT_MS), d.limits.toolTimeoutMs ?: services.limit(LimitRegistry.PLUGIN_TOOL_TIMEOUT_MS))
         lateinit var p: Loaded
-        val guard = PluginGuard(id, loader, cpu, log, hangCeilingMs = services.limit(LimitRegistry.PLUGIN_HANG_CEILING_MS), poolSize = services.limit(LimitRegistry.PLUGIN_POOL_SIZE).toInt(), queueLimit = services.limit(LimitRegistry.PLUGIN_QUEUE_LIMIT).toInt(), timeoutStrikes = services.limit(LimitRegistry.PLUGIN_GUARD_STRIKES).toInt(), cooldownMs = services.limit(LimitRegistry.PLUGIN_GUARD_COOLDOWN_MS), onTripped = { why -> announceTrip(id, why) }, onRecovered = { announceRecovered(id) }, onDisabled = { why -> if (!p.unloading) { unregister(p); announceFailure(id, why) } })
+        val guard = PluginGuard(id, loader, cpu, log, hangCeilingMs = services.limit(LimitRegistry.PLUGIN_HANG_CEILING_MS), poolSize = services.limit(LimitRegistry.PLUGIN_POOL_SIZE).toInt(), queueLimit = services.limit(LimitRegistry.PLUGIN_QUEUE_LIMIT).toInt(), timeoutStrikes = services.limit(LimitRegistry.PLUGIN_GUARD_STRIKES).toInt(), cooldownMs = services.limit(LimitRegistry.PLUGIN_GUARD_COOLDOWN_MS), onTripped = { why -> announceTrip(id, why) }, onRecovered = { announceRecovered(id) }, onDisabled = { why -> if (!p.unloading) { val atRunTime = statuses[id] == "loaded"; unregister(p); announceFailure(id, why, if (atRunTime) scheduleAutoReload(id) else "It did not start; it stays down until the daemon restarts or the plugin is reloaded.") } })
         p = Loaded(id, status.tier, d, setting, guard, loader, m.dependencies.map { it.id })
         loaded += p
         val api = Api(p)
@@ -818,6 +847,7 @@ class DaemonPluginHost private constructor(
 
     private inner class Api(private val p: Loaded) : DaemonApi {
         private val hostServices = this@DaemonPluginHost.services
+        override fun displayStamp(epochMs: Long): String = com.superiorsoftllc.infantry.DisplayZone.stamp(epochMs)
         private val d = p.declared
         override val moduleId = p.id
         override val tier = p.tier.name.lowercase()

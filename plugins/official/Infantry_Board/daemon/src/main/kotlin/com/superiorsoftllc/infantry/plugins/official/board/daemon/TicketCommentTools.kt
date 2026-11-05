@@ -60,8 +60,8 @@ internal object CommentsWiring {
         return array.map { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content ?: throw IllegalArgumentException("$key must be an array of agent ids") }
     }
 
-    fun line(c: TicketComments.Comment, full: Boolean): String {
-        val head = "${c.shortId} ${c.kind}/${c.state} by ${c.author.label} ${com.superiorsoftllc.infantry.DisplayZone.stamp(c.createdAt)}"
+    fun line(api: DaemonApi, c: TicketComments.Comment, full: Boolean): String {
+        val head = "${c.shortId} ${c.kind}/${c.state} by ${c.author.label} ${api.displayStamp(c.createdAt)}"
         val text = if (full) c.body else c.body.lineSequence().firstOrNull().orEmpty().take(200)
         return "$head: $text"
     }
@@ -144,7 +144,7 @@ class TicketCommentsTool(private val api: DaemonApi, private val store: TicketCo
         val limit = (args["limit"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull()
         val found = comments.read(ticket.id, which, ToolArgs.string(args, "kind")?.lowercase(), limit)
         val full = which != "all"
-        ToolResult(if (found.isEmpty()) "no comments (${which}) on ${WireTickets.shortId(ticket.id)}" else found.joinToString("\n") { CommentsWiring.line(it, full) })
+        ToolResult(if (found.isEmpty()) "no comments (${which}) on ${WireTickets.shortId(ticket.id)}" else found.joinToString("\n") { CommentsWiring.line(api, it, full) })
     } catch (e: IllegalArgumentException) {
         TicketSave.refused("$READ refused: ${e.message}")
     }

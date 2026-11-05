@@ -5,6 +5,10 @@ package com.superiorsoftllc.infantry.daemon.api
 import com.superiorsoftllc.infantry.plugin.api.PolicyPreset
 import kotlinx.serialization.json.JsonObject
 import java.io.File
+import java.time.format.DateTimeFormatter
+
+/** [DaemonApi.displayStamp]'s default pattern (the host's own formatter uses the same one). */
+private val DISPLAY_STAMP: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm xxx")
 
 /**
  * DAEMON-PLUGINS-1 (docs/DAEMON-PLUGINS.md): the class a module's `daemon.entry` names. It needs a public no-arg constructor.
@@ -53,6 +57,13 @@ interface DaemonApi {
      * its own thread. The default (a host without the signal) runs it at once.
      */
     fun whenStarted(block: () -> Unit) { block() }
+
+    /**
+     * SCRIPTING-NCDFE-1 (1.40.0, additive): [epochMs] (UTC) as a person reads it, `2026-11-03 20:41 -05:00`, in the daemon's
+     * `display.timeZone` setting (blank = the system zone). A plugin's class loader cannot link core's time helper, so this is
+     * a plugin's way to the daemon's display zone. The default (a host without the setting) uses the system zone.
+     */
+    fun displayStamp(epochMs: Long): String = DISPLAY_STAMP.format(java.time.Instant.ofEpochMilli(epochMs).atZone(java.time.ZoneId.systemDefault()))
 
     val projects: Projects
     val sessions: Sessions
@@ -179,7 +190,8 @@ interface DaemonApi {
         // 1.39.0 (DEMO-CHECK-1, additive): `whenStarted`, work a plugin runs once the whole daemon (all daemon halves and harnesses) is up.
         // 1.39.0 (PROC-LEAK-2, additive): ProcessToolProfile.daemonDir / ProcessDaemonDir.
         // 1.39.0 (UPDATE-ENGINE-1, additive): `updates` (daemon.api.updates.Updates): the one update engine; source types and appliers by plugins.
-        const val VERSION = "1.39.0"
+        // 1.40.0 (SCRIPTING-NCDFE-1, additive): `displayStamp`, a time in the daemon's display zone (a plugin cannot link core's DisplayZone).
+        const val VERSION = "1.40.0"
     }
 }
 

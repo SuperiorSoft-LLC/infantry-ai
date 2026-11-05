@@ -623,6 +623,16 @@ object LimitRegistry {
         "How long a daemon plugin's start (and each policy-change callback) may run before the plugin is disabled.",
         min = 1, zeroIsUnlimited = false,
     )
+    val PLUGIN_AUTO_RELOAD_ATTEMPTS = LimitDef(
+        "limits.plugins.autoReload.attempts", 3, "reloads",
+        "SCRIPTING-NCDFE-1: how many times per daemon run a daemon plugin that was marked failed (a call threw, ran away) is reloaded by itself, after limits.plugins.autoReload.delayMs; 0 = off (a failed plugin stays down until a restart or a manual reload).",
+        min = 0, zeroIsUnlimited = false,
+    )
+    val PLUGIN_AUTO_RELOAD_DELAY_MS = LimitDef(
+        "limits.plugins.autoReload.delayMs", 30_000, "ms",
+        "SCRIPTING-NCDFE-1: how long after a daemon plugin is marked failed its automatic reload runs (see limits.plugins.autoReload.attempts).",
+        min = 0, zeroIsUnlimited = false,
+    )
     val PLUGIN_STOP_TIMEOUT_MS = LimitDef(
         "limits.plugins.stopTimeoutMs", 5_000, "ms",
         "How long the daemon waits for a daemon plugin's stop when it closes.",
@@ -753,7 +763,7 @@ object LimitRegistry {
         WATCH_READ_MAX_KB, WATCH_TAIL_READ_KB, WATCH_SPACE_CHECK_SECONDS,
         TICKET_FILES_MAX_LINES, TICKET_FILES_RELATED_TOP,
         RELATED_BRIEF_TICKETS, RELATED_BRIEF_FILES, RELATED_BRIEF_CHARS, RELATED_BLOCK_TICKETS, RELATED_BLOCK_FILES, RELATED_BLOCK_CHARS,
-        PLUGIN_CALL_TIMEOUT_MS, PLUGIN_HANG_CEILING_MS, PLUGIN_GUARD_STRIKES, PLUGIN_GUARD_COOLDOWN_MS, PLUGIN_POOL_SIZE, PLUGIN_QUEUE_LIMIT, PLUGIN_TOOL_TIMEOUT_MS, PLUGIN_TOOL_MAX_TIMEOUT_MS, PLUGIN_ROUTE_RATE, PLUGIN_START_TIMEOUT_MS, PLUGIN_STOP_TIMEOUT_MS,
+        PLUGIN_CALL_TIMEOUT_MS, PLUGIN_HANG_CEILING_MS, PLUGIN_GUARD_STRIKES, PLUGIN_GUARD_COOLDOWN_MS, PLUGIN_POOL_SIZE, PLUGIN_QUEUE_LIMIT, PLUGIN_TOOL_TIMEOUT_MS, PLUGIN_TOOL_MAX_TIMEOUT_MS, PLUGIN_ROUTE_RATE, PLUGIN_START_TIMEOUT_MS, PLUGIN_STOP_TIMEOUT_MS, PLUGIN_AUTO_RELOAD_ATTEMPTS, PLUGIN_AUTO_RELOAD_DELAY_MS,
         RUN_MAX_SECRETS, KEYSTORE_MAX_FIELDS, KEYSTORE_MAX_SECRETS,
         SANDBOX_MODE,
         HEALTH_DB_TIMEOUT_SECONDS, HEALTH_WATCHDOG_FAILURES, HEALTH_WATCHDOG_INTERVAL_SECONDS, HEALTH_WATCHDOG_TIMEOUT_SECONDS,

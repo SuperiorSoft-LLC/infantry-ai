@@ -83,7 +83,7 @@ class TicketGetTool(private val api: DaemonApi, private val comments: TicketComm
             put("createdBy", meta?.createdBy)
             put("notify", buildJsonArray { meta?.notify.orEmpty().forEach { add(JsonPrimitive(it)) } })
             put("openComments", sum.open)
-            sum.latestOpen?.let { put("latestOpenComment", CommentsWiring.line(it, full = false)) }
+            sum.latestOpen?.let { put("latestOpenComment", CommentsWiring.line(api, it, full = false)) }
             if (sum.undelivered.isNotEmpty()) put("undeliveredTo", buildJsonArray { sum.undelivered.forEach { add(JsonPrimitive(it)) } })
         })
     }
