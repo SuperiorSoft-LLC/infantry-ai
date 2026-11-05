@@ -75,6 +75,10 @@ class JvmPlatformHost(
         File(dialog.directory, name).absolutePath
     }.getOrNull()
 
+    /** PATH-PICKER-1: the native folder/file dialog, when there is a display (never on a headless JVM). */
+    override val pathPicker: com.superiorsoftllc.infantry.ui.PathPicker?
+        get() = if (java.awt.GraphicsEnvironment.isHeadless()) null else DesktopPathPicker
+
     /** PKG-3: the desktop file manager (Explorer on Windows), when there is a display and the platform supports it. */
     override fun openFolder(path: String): Boolean = runCatching {
         val dir = File(path).apply { mkdirs() }

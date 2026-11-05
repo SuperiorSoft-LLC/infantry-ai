@@ -2,6 +2,9 @@
 // Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.plugins.official
 
+import androidx.compose.material3.LocalTextStyle
+import com.superiorsoftllc.infantry.ui.PathField
+import com.superiorsoftllc.infantry.ui.PathKind
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -486,7 +489,8 @@ private fun FormRow(fields: @Composable (Boolean) -> Unit, buttons: @Composable 
 private fun FileInstall(busy: Boolean, install: (String) -> Unit) {
     var path by remember { mutableStateOf("") }
     FormRow(
-        fields = { OutlinedTextField(path, { path = it }, label = { Text("Install from a .ihq file or folder") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag(FILE_PATH_TAG)) },
+        // PATH-PICKER-1: Browse opens a file chooser narrowed to .ihq; a plugin folder can still be typed.
+        fields = { PathField(path, { path = it }, PathKind.FILE, "Install from a .ihq file or folder", Modifier.fillMaxWidth(), tag = FILE_PATH_TAG, title = "Choose a plugin (.ihq)", extensions = listOf("ihq"), textStyle = LocalTextStyle.current) },
         buttons = { Button(onClick = { install(path.trim()) }, enabled = !busy && path.isNotBlank(), modifier = Modifier.heightIn(min = 48.dp).testTag(FILE_INSTALL_TAG)) { Text("Install file") } },
     )
 }
@@ -502,7 +506,7 @@ private fun Sources(port: PluginManagerPort, version: Int, busy: Boolean, act: A
             fields = { stacked ->
                 OutlinedTextField(id, { id = it }, label = { Text("Name") }, singleLine = true,
                     modifier = (if (stacked) Modifier.fillMaxWidth() else Modifier.width(180.dp)).testTag(SOURCE_ID_TAG))
-                OutlinedTextField(location, { location = it }, label = { Text("URL or folder") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag(SOURCE_LOCATION_TAG))
+                PathField(location, { location = it }, PathKind.FOLDER, "URL or folder", Modifier.fillMaxWidth(), tag = SOURCE_LOCATION_TAG, title = "Choose a plugin source folder", textStyle = LocalTextStyle.current)
             },
             buttons = {
                 Button(onClick = { act({ port.addSource(id.trim(), "custom", location.trim()) }) { if (it.ok) { id = ""; location = "" } } },

@@ -40,7 +40,12 @@ fun InfantryShell(host: PlatformHost, controller: Controller? = null) {
     // S6: the module set, owned here: a drop-in install reloads it (the soft restart), and the window is composed again
     // with it (key), in the same process and with the same controller and connection.
     var tabs by remember(host) { mutableStateOf(host.tabFactory) }
-    CompositionLocalProvider(LocalPlatformHost provides host, LocalSoftRestart provides { tabs = host.reloadTabs() }) {
+    // PATH-PICKER-1: every path field's Browse uses the host's chooser, unless an outer composition already supplied one.
+    val pathPicker = com.superiorsoftllc.infantry.ui.LocalPathPicker.current ?: host.pathPicker
+    CompositionLocalProvider(
+        LocalPlatformHost provides host, LocalSoftRestart provides { tabs = host.reloadTabs() },
+        com.superiorsoftllc.infantry.ui.LocalPathPicker provides pathPicker,
+    ) {
         key(tabs) {
             App(
                 active, config.url, config.token,

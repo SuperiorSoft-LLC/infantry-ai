@@ -88,6 +88,8 @@ data class ConfigFieldDeclaration(
     val display: String? = null,
     /** CONFIG-FIELDS-4 (G3): a `group` field's nested fields; on a `list` it makes each item an object of these fields. */
     val fields: List<ConfigFieldDeclaration> = emptyList(),
+    /** PATH-PICKER-1: a `file` field's chooser filter (`ihq`, no dot); empty = any file. */
+    val extensions: List<String> = emptyList(),
 )
 
 /** CONFIG-FIELDS-2: show a field only while the sibling field [key] holds [eq] (compared as text; `true`/`false` for a checkbox). */
@@ -126,7 +128,11 @@ object ConfigFieldTypes {
     const val TEXTAREA = "textarea"
     /** CONFIG-FIELDS-4 (G3): a JSON object whose keys are the field's nested `fields`; an unknown key is kept. */
     const val GROUP = "group"
-    val BUILT_IN = setOf(TEXT, TEXTAREA, NUMBER, CHECKBOX, SELECT, MULTI_SELECT, IMPLEMENTATION, TOGGLE, RADIO, COLOR, CLASSES, LIST, GROUP)
+    /** PATH-PICKER-1: a folder path (a string like [TEXT]), drawn as a path field with Browse (the platform's folder chooser). */
+    const val PATH = "path"
+    /** PATH-PICKER-1: a file path (a string like [TEXT]), drawn with Browse (a file chooser narrowed to the field's `extensions`). */
+    const val FILE = "file"
+    val BUILT_IN = setOf(TEXT, TEXTAREA, NUMBER, CHECKBOX, SELECT, MULTI_SELECT, IMPLEMENTATION, TOGGLE, RADIO, COLOR, CLASSES, LIST, GROUP, PATH, FILE)
 }
 
 /** Who wrote a stored value: the merged JSON tree on first load, or the user from the configuration view. */
@@ -242,7 +248,7 @@ object ConfigFieldValidator {
                 require(COLOR.matches(text())) { "setting '$name' must be #RRGGBB or #AARRGGBB" }
                 prim!!
             }
-            ConfigFieldTypes.TEXT, ConfigFieldTypes.TEXTAREA, ConfigFieldTypes.IMPLEMENTATION -> { text(); prim!! }
+            ConfigFieldTypes.TEXT, ConfigFieldTypes.TEXTAREA, ConfigFieldTypes.IMPLEMENTATION, ConfigFieldTypes.PATH, ConfigFieldTypes.FILE -> { text(); prim!! }
             ConfigFieldTypes.CLASSES -> {
                 val obj = value as? kotlinx.serialization.json.JsonObject
                 require(obj != null && obj.values.all { it is kotlinx.serialization.json.JsonPrimitive && it.isString }) { "setting '$name' must be an object of strings" }

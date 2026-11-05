@@ -90,7 +90,7 @@ internal fun NestedEditor(field: ConfigFieldDeclaration, tag: String, value: Jso
             (value as? JsonPrimitive)?.booleanOrNull ?: false, if (enabled) { on -> write(JsonPrimitive(on)) } else null, enabled = enabled,
             modifier = Modifier.testTag(NODE_FIELD_CHECK_TAG_PREFIX + tag).semantics { contentDescription = field.label },
         )
-        ConfigFieldTypes.TEXT, ConfigFieldTypes.TEXTAREA, ConfigFieldTypes.NUMBER, ConfigFieldTypes.COLOR -> TextEditor(declared, tag, value, enabled, write)
+        ConfigFieldTypes.TEXT, ConfigFieldTypes.TEXTAREA, ConfigFieldTypes.NUMBER, ConfigFieldTypes.COLOR, ConfigFieldTypes.PATH, ConfigFieldTypes.FILE -> TextEditor(declared, tag, value, enabled, write)
         ConfigFieldTypes.SELECT, ConfigFieldTypes.RADIO ->
             if (field.type == ConfigFieldTypes.SELECT && field.display == "dropdown") SelectDropdown(field, tag, value, enabled, write)
             else for (o in field.options) Option(tag, o, field.optionLabels[o] ?: o, (value as? JsonPrimitive)?.content == o, enabled) { write(JsonPrimitive(o)) }

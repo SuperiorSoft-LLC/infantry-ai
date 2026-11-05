@@ -30,7 +30,7 @@ fun runDevUi() = application {
     // RUN-CONSOLE: a pill's console windows live beside the main window.
     val consoles = remember { DesktopRunConsoles() }
     InfantryWindow(onCloseRequest = ::exitApplication) {
-        CompositionLocalProvider(LocalDirectoryPicker provides SwingDirectoryPicker, LocalRunConsole provides consoles) {
+        CompositionLocalProvider(LocalRunConsole provides consoles) {
             SplashHost { InfantryShell(defaultPlatformHost()) }
         }
     }

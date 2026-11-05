@@ -2,6 +2,10 @@
 // Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.plugins.official.run
 
+import com.superiorsoftllc.infantry.ui.PathField
+import com.superiorsoftllc.infantry.ui.PathKind
+import com.superiorsoftllc.infantry.ui.PathRequest
+import com.superiorsoftllc.infantry.ui.currentPathPicker
 import com.superiorsoftllc.infantry.ui.shell.gate
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -20,6 +24,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -301,7 +306,7 @@ fun RunPaneFrame(link: LinkContext, ctx: RunContext, modifier: Modifier = Modifi
 fun RunFolderSection(run: RunPaneHost, modifier: Modifier = Modifier) {
     val project = run.project ?: return
     if (!run.noFolder) return
-    val picker = LocalDirectoryPicker.current
+    val picker = currentPathPicker(PathKind.FOLDER)
     val scope = rememberCoroutineScope()
     var typing by remember(project.id) { mutableStateOf(false) }
     var path by remember(project.id) { mutableStateOf("") }
@@ -313,18 +318,22 @@ fun RunFolderSection(run: RunPaneHost, modifier: Modifier = Modifier) {
         )
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), itemVerticalAlignment = Alignment.CenterVertically) {
             OutlinedButton(
+                // PATH-PICKER-1: shows the path field (typed, or Browse) and, where there is a chooser, opens it at once.
                 onClick = {
-                    if (picker == null) typing = true
-                    else scope.launch { picker.pick("")?.let { run.setFolder(it) } }
+                    typing = true
+                    if (picker != null) scope.launch {
+                        picker.pick(PathRequest(PathKind.FOLDER, "Choose the project folder", run.project?.directory.orEmpty()))
+                            ?.trim()?.takeIf { it.isNotEmpty() }?.let { path = it; run.setFolder(it) }
+                    }
                 },
                 enabled = canSet,
                 modifier = Modifier.testTag(RUN_SET_FOLDER_TAG),
             ) { Text("Set project folder", fontSize = 12.sp) }
             if (typing) {
-                OutlinedTextField(
-                    value = path, onValueChange = { path = it }, singleLine = true,
-                    label = { Text("Folder (absolute path)") },
-                    modifier = Modifier.testTag(RUN_FOLDER_PATH_TAG),
+                PathField(
+                    path, { path = it }, PathKind.FOLDER, "Folder (absolute path)", Modifier.widthIn(min = 260.dp, max = 480.dp),
+                    tag = RUN_FOLDER_PATH_TAG, title = "Choose the project folder",
+                    onPicked = { path = it; run.setFolder(it) },
                 )
                 OutlinedButton(
                     onClick = { run.setFolder(path) },
