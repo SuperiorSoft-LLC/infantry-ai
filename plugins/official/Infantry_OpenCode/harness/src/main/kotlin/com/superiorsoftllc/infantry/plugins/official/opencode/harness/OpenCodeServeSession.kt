@@ -8,6 +8,7 @@ import com.superiorsoftllc.infantry.harness.api.HarnessHost
 import com.superiorsoftllc.infantry.harness.api.HarnessProcess
 import com.superiorsoftllc.infantry.harness.api.HarnessRequest
 import com.superiorsoftllc.infantry.harness.api.HarnessSession
+import com.superiorsoftllc.infantry.harness.api.McpState
 import com.superiorsoftllc.infantry.harness.api.SessionConnection
 import com.superiorsoftllc.infantry.harness.api.SessionOutput
 import com.superiorsoftllc.infantry.harness.api.SessionTurnEnd
@@ -115,9 +116,30 @@ class OpenCodeServeSession(
             sse = Thread({ readEvents() }, "infantry-opencode-sse").apply { isDaemon = true; start() }
             Thread({
                 if (!subscribed.await(bootTimeoutMs, TimeUnit.MILLISECONDS) || stopped.get()) ready.completeExceptionally(IllegalStateException("opencode serve at $url never opened its event stream"))
-                else ready.complete(Unit)
+                else { ready.complete(Unit); startMcpWatch() }
             }, "infantry-opencode-boot").apply { isDaemon = true; start() }
         }
+
+        /** HARNESS-GAP G12: poll `GET /mcp` and report the infantry server's state with [SessionOutput.mcpState] on every change. */
+        private fun startMcpWatch() {
+            Thread({
+                var last: McpState? = null
+                while (!stopped.get()) {
+                    runCatching { mcpStateOf(get("/mcp")) }.getOrNull()?.let { now ->
+                        if (now != last) { last = now; out.mcpState(now, "opencode reports the infantry MCP server " + now.name.lowercase()) }
+                    }
+                    try { Thread.sleep(MCP_CHECK_MS) } catch (_: InterruptedException) { break }
+                }
+            }, "infantry-opencode-mcp").apply { isDaemon = true; start() }
+        }
+
+        /** In place: opencode serve disconnects and connects the server again through its API; the process and the conversation stay. */
+        override fun reconnectMcp(): Boolean = runCatching {
+            if (!ready.isDone || stopped.get()) return false
+            runCatching { post("/mcp/$MCP_SERVER/disconnect", "{}") }
+            post("/mcp/$MCP_SERVER/connect", "{}")
+            true
+        }.getOrDefault(false)
 
         override fun onStderr(line: String) {
             recentStderr += line
@@ -403,6 +425,16 @@ class OpenCodeServeSession(
     companion object {
         const val MAX_RETRIES_SETTING = "harness.opencode.maxRetries"
         const val DEFAULT_MAX_RETRIES = 2
+
+        /** HARNESS-GAP G12: the key of the daemon's MCP server in opencode's config (`mcp.infantry`) and in its `GET /mcp` answer. */
+        const val MCP_SERVER = "infantry"
+        const val MCP_CHECK_MS = 2_000L
+
+        /** `GET /mcp` answers `{name: {status: connected|failed|disabled|needs_auth|...}}`; null = no entry for the infantry server. */
+        fun mcpStateOf(body: String): McpState? {
+            val entry = (Json.parseToJsonElement(body) as? JsonObject)?.get(MCP_SERVER) as? JsonObject ?: return null
+            return if ((entry["status"] as? JsonPrimitive)?.contentOrNull == "connected") McpState.CONNECTED else McpState.DISCONNECTED
+        }
 
         /** `opencode serve` reads its basic-auth password from here; set per child so no other local process can drive it. */
         const val PASSWORD_ENV = "OPENCODE_SERVER_PASSWORD"

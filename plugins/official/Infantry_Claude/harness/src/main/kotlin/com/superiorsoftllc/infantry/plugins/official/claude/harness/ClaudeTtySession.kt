@@ -39,8 +39,8 @@ import java.util.UUID
  * - **Interrupt:** Esc into the terminal; the process lives on.
  * - **MCP link (CLI-PTY-3):** the daemon's MCP server gets [MCP_PID_FILE_ENV] (a per-session file it writes its pid to). Every
  *   [MCP_CHECK_MS] the pid is checked; a change (up, gone, a new pid up again) is reported with [SessionOutput.mcpState] and nothing else:
- *   no reconnect is made here. One live CLI starts its servers once, so a server that dies stays dead unless a script asks for
- *   `session_act mcp_reconnect`.
+ *   no reconnect is made here. Claude has no in-place reconnect API (no harness overrides `reconnectMcp`), so a server that dies stays
+ *   dead until a script asks for `session_act mcp_reconnect`, which stops the process and resumes the conversation.
  * - **Permissions (G3, ticket 11754e3b):** in every mode but allowAll the settings carry a `PermissionRequest` http hook to this plugin's
  *   loopback [PermissionHookServer], answered from the Tool approval ([ClaudePermissionHook]: deny, or the owner under ask). Should the CLI
  *   still show its permission dialog with no hook call open (the hook timed out or failed), it is answered No (Esc) after [DIALOG_GRACE_MS]
