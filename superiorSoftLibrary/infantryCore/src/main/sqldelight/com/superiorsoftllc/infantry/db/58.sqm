@@ -1,0 +1,31 @@
+-- ATTN-KIND-1 (ticket 56622f31) -- migration v58 -> v59: `attention.kind` loses its closed CHECK list.
+-- The list (9.sqm, widened by 30.sqm) lagged `AttentionKinds`: `session_failed` was refused, so a failed session never reached
+-- Attention. Attention kinds are OPEN by design (a plugin adds its own), so the column is now plain TEXT NOT NULL and a new
+-- kind needs no schema change; the wire names live in `AttentionKinds` (infantryDaemonApi). SQLite cannot drop a CHECK, so
+-- the table is REBUILT exactly like 30.sqm: new table, rows copied verbatim, old dropped, new renamed, index re-created.
+-- Column order and the index are exactly attention.sq's (SchemaMigrationTest).
+--
+-- NEXT MIGRATION: 59.sqm
+
+CREATE TABLE attention_new (
+    id TEXT NOT NULL PRIMARY KEY,
+    created_at INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    trigger_id TEXT,
+    ticket_id TEXT,
+    pod_id TEXT,
+    session_id TEXT,
+    outcome TEXT NOT NULL,
+    detail TEXT NOT NULL,
+    acked_at INTEGER
+);
+
+INSERT INTO attention_new(id, created_at, kind, trigger_id, ticket_id, pod_id, session_id, outcome, detail, acked_at)
+SELECT id, created_at, kind, trigger_id, ticket_id, pod_id, session_id, outcome, detail, acked_at FROM attention;
+
+DROP TABLE attention;
+
+ALTER TABLE attention_new RENAME TO attention;
+
+CREATE INDEX IF NOT EXISTS index_attention_on_acknowledged_created_at
+    ON attention(acked_at, created_at, id);
