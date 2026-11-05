@@ -158,7 +158,8 @@ class FinishNoticeMonitor(
         val commit = (session.worktreePath ?: session.repoRoot)?.let { commitOf(File(it)) }
         val reason = when {
             killed -> "killed by ${session.killedBy ?: "unknown"}${session.killReason?.let { " ($it)" }.orEmpty()}; the ticket is still ${ticket.status}"
-            failed -> "exit code ${event.code ?: "unknown"}"
+            // HARNESS-GAP G9: a turn that failed with no exit code says the harness's own reason.
+            failed -> "exit code ${event.code ?: "unknown"}" + (if (event.code == null) session.lastError?.let { " ($it)" }.orEmpty() else "")
             else -> null
         }
         if (gate.handled(if (failed) NudgeGate.TICKET_FAILED else NudgeGate.TICKET_FINISHED, mapOf(

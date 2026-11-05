@@ -1698,7 +1698,7 @@ class SessionManager(
         when {
             run.interruptRequested.get() || end == TurnEnd.INTERRUPTED -> settleInterrupted(sessionId, exitCode)
             run.killRequested.get() -> settle(sessionId, run, exitCode, processExited = false)
-            exitCode == null && end == TurnEnd.FAILED -> failRun(sessionId, IllegalStateException(reason ?: "the turn failed"))
+            exitCode == null && end == TurnEnd.FAILED -> failRun(sessionId, IllegalStateException(reason ?: "the turn failed"), processExited)
             else -> settle(sessionId, run, exitCode ?: if (end == TurnEnd.COMPLETED) 0 else 1, processExited)
         }
     } }
@@ -1746,7 +1746,7 @@ class SessionManager(
         }
         emit(SessionEvent.Exit(sessionId, exitCode, outcome, processExited = processExited))
         if (state == SessionState.FAILED) closed(sessionId, "turn failed", resumable = true)
-        if (state == SessionState.IDLE) scheduleQueueDrain(sessionId)
+        if (state == SessionState.IDLE || state == SessionState.FAILED) scheduleQueueDrain(sessionId)
     }
 
     // --- CHAT-QUEUE-1: messages held while a turn runs ------------------------------------------------
@@ -1813,6 +1813,13 @@ class SessionManager(
         return ForceOutcome.INJECTED
     } }
 
+    /**
+     * At rest for the queue: IDLE, or a FAILED turn that [resume] still takes (it has a provider conversation to go on with).
+     * A FAILED session that never opened one is refused by [resume], so its messages stay held rather than fail one by one.
+     */
+    private fun drainable(session: SessionRecord): Boolean =
+        session.state == SessionState.IDLE || (session.state == SessionState.FAILED && session.providerSessionId != null)
+
     /** The session came to rest: send its oldest held message as the next turn, off the thread that settled the turn. */
     private fun scheduleQueueDrain(sessionId: String) {
         if (sessions[sessionId]?.queued.isNullOrEmpty()) return
@@ -1827,7 +1834,7 @@ class SessionManager(
     internal fun drainQueue(sessionId: String) { locked {
         val session = sessions[sessionId] ?: return
         val head = session.queued.firstOrNull() ?: return
-        if (runs.containsKey(sessionId) || sessionId in held || session.state != SessionState.IDLE) return
+        if (runs.containsKey(sessionId) || sessionId in held || !drainable(session)) return
         update(sessionId) { r -> r.copy(queued = r.queued.drop(1)) }
         try {
             resume(sessionId, head.text, MessageOrigin.Owner, wakeReason = "queue")
@@ -1888,17 +1895,25 @@ class SessionManager(
         emit(SessionEvent.Stderr(sessionId, "[infantry] $text"))
     }
 
-    private fun failRun(sessionId: String, e: Exception) {
+    /**
+     * A turn that failed with no exit code (the harness reported an error stop, or the run never started). HARNESS-GAP G9
+     * (ticket b908f8fa): it ends like any other failed turn -- an `Exit` (code null) so the finish notice and its listeners
+     * see it, and the queue drain, so messages held for the session are not stranded behind the failure.
+     */
+    private fun failRun(sessionId: String, e: Exception, processExited: Boolean = false) {
         update(sessionId) {
             it.copy(
                 state = SessionState.FAILED,
                 lastError = e.message ?: e.javaClass.simpleName,
+                lastExitCode = null,
                 childPid = null,
                 lastHeartbeat = clock(),
                 isProcessAlive = false,
             )
         }
+        emit(SessionEvent.Exit(sessionId, code = null, processExited = processExited))
         closed(sessionId, "turn failed", resumable = true)
+        scheduleQueueDrain(sessionId)
     }
 
     // --- kill -----------------------------------------------------------------------------------
