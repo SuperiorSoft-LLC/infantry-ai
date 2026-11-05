@@ -774,6 +774,8 @@ data class AppState(
     val processAutoReap: Boolean? = null,
     /** USER-PORTRAIT (1.107.0): the daemon's `user.portrait` (base64 PNG); null = unset, the bundled default shows. */
     val userPortrait: String? = null,
+    /** CONTRIB-1: the daemon's `urls.sourceRepo` as its last `settings` frame said; null = not read (About shows no links). */
+    val sourceRepo: String? = null,
     /** CLIPATH-1 (1.73.0): where the daemon runs each CLI from, as its last `cli_locations` said. Null = not read yet. */
     val cliLocations: List<com.superiorsoftllc.infantry.ui.protocol.CliLocation>? = null,
     /** HARNESS-INSTALL-1 (1.100.0): the daemon's last harness check (null = not read / older daemon), whether an install is running, and its log. */
@@ -1938,6 +1940,7 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
             allowedRoles = AllowedRoles.fromSettingsFrame(env.data) ?: withTimer.allowedRoles,
             maxSessions = AllowedRoles.maxSessionsFromSettingsFrame(env.data) ?: withTimer.maxSessions,
             sendAckSeconds = PendingSends.ackSecondsFromSettingsFrame(env.data) ?: withTimer.sendAckSeconds,
+            sourceRepo = SourceLinks.repoFromSettingsFrame(env.data) ?: withTimer.sourceRepo,
         )
     }
 

@@ -91,7 +91,14 @@ object EndpointRegistry {
         "The image a Docker install reports for `docker pull` when an update exists.",
     )
 
-    val ALL: List<EndpointDef> = listOf(SITE, DOCS, DOWNLOADS, RELEASES_REPO, RELEASES_API, DOCKER_IMAGE)
+    /** CONTRIB-1: the source repository's web page (About > Contribute, Report a problem, View on GitHub). "" hides those links. */
+    val SOURCE_REPO = EndpointDef(
+        "urls.sourceRepo", "INFANTRY_SOURCE_URL", EndpointKind.URL,
+        "https://github.com/SuperiorSoft-LLC/infantry-ai",
+        "The source repository's web page; About links to its CONTRIBUTING.md, new issue form and home. Empty = the links hide.",
+    )
+
+    val ALL: List<EndpointDef> = listOf(SITE, DOCS, DOWNLOADS, SOURCE_REPO, RELEASES_REPO, RELEASES_API, DOCKER_IMAGE)
 
     private val byKey = ALL.associateBy { it.key }
 
