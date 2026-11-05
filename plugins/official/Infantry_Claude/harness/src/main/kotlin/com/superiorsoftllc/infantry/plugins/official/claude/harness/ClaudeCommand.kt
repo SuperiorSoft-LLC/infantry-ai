@@ -155,16 +155,18 @@ object ClaudeCommand {
         resumeSessionId?.takeIf { it.isNotBlank() }?.let { add("--resume"); add(it) }
     }
 
-    // ---- interactive mode (CLI-PTY-1, experimental) ----------------------------------------------------------------------
+    // ---- interactive mode (CLI-PTY-1, the default since CLI-DEFAULT-1) ---------------------------------------------------
 
     /**
-     * Module setting (`harness.claude.mode`): `headless` (default) runs `claude -p --input-format stream-json`; `interactive` runs the
-     * interactive `claude` in a pseudo-terminal and reads its transcript ([ClaudeTtySession]). Anything else = headless.
+     * Module setting (`harness.claude.mode`): `interactive` (the default) runs the interactive `claude` in a pseudo-terminal and reads its
+     * transcript ([ClaudeTtySession]), as a person runs Claude Code; `headless` (the opt-in) runs `claude -p --input-format stream-json`.
+     * Only an explicit `headless` picks headless: unset, blank or any other value = interactive. This is the one place the default lives.
      */
     const val MODE_SETTING = "harness.claude.mode"
     const val MODE_INTERACTIVE = "interactive"
+    const val MODE_HEADLESS = "headless"
 
-    fun isInteractive(mode: String?): Boolean = mode?.trim()?.lowercase() == MODE_INTERACTIVE
+    fun isInteractive(mode: String?): Boolean = mode?.trim()?.lowercase() != MODE_HEADLESS
 
     /**
      * The interactive argv: no `-p` and no stream flags. [sessionId] names a NEW session (`--session-id`, so its transcript file is known);

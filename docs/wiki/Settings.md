@@ -64,6 +64,7 @@ The default is the cheapest reasonable value. A costlier value is an opt-in. The
 | `limits.processes.stopGraceSeconds` | 10 | How long a build daemon gets after its profile's graceful `stop` (run in the session's worktree) before it is killed by pid; 0 = no graceful step |
 | `limits.processes.stuckMinutes` | 15 | A profile's `stuck` client (a CLI call) with no CPU for this long is reported stuck in its session; 0 = off |
 | `nudges.deferToHooks` | `[]` | Built-in notices a script replaces (for example `notice.ticket_finished`) |
+| `harness.claude.mode` | `interactive` | How Claude agents run. `interactive`: the real `claude` CLI in its own terminal, as you run Claude Code yourself, so usage behaves like normal Claude Code use. `headless`: `claude -p` stream-json (SDK), a machine-readable stream that may be metered differently. Switch in Settings (Plugins tab, Harnesses > Claude Code, field "Mode") or `infantry settings set harness.claude.mode headless`; it applies at the next session launch. See [Harnesses](Harnesses.md#claude-code-the-real-cli-by-default) |
 
 Plugins add their own keys through `config` cards in their `module.json` (see [Plugins](Plugins.md)). The full list
 for your build: `infantry settings`, and the Settings tab (searchable). Environment variables (`INFANTRY_*`, also read

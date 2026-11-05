@@ -104,7 +104,7 @@ class ClaudeHarness internal constructor(
 
     private fun interactive(): Boolean = ClaudeCommand.isInteractive(host.setting(ClaudeCommand.MODE_SETTING))
 
-    /** headless stream-json, or (CLI-PTY-1, `harness.claude.mode = interactive`) the interactive CLI in a terminal; decided at every launch. */
+    /** the interactive CLI in a terminal (CLI-PTY-1, the default), or headless stream-json when `harness.claude.mode = headless`; decided at every launch. */
     override fun session(): HarnessSession = ClaudeModeSession(
         headless = ClaudeSession(executable, ::mcp, { env -> ClaudeCommand.watchSettings(env) }, idleMinutes = ::liveIdle),
         interactive = ClaudeTtySession(executable, ::mcp, { env -> ClaudeCommand.watchSettings(env) }, stateDir = { host.stateDir }, idleMinutes = ::liveIdle),

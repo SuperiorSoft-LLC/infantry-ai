@@ -9,6 +9,12 @@ plugins/official/Infantry_OpenCode/module.json
 plugins/official/Infantry_Pi/module.json
 docs/wiki/Harnesses.md
 
+## Real Claude Code CLI by default
+Each Claude agent runs the real interactive `claude` CLI in its own terminal, exactly as you would use Claude Code yourself, so usage behaves like normal Claude Code use. No setup; headless (SDK, `claude -p` stream-json) is an opt-in setting, `harness.claude.mode headless`.
+plugins/official/Infantry_Claude/module.json
+plugins/official/Infantry_Claude/harness/src/main/kotlin/com/superiorsoftllc/infantry/plugins/official/claude/harness/ClaudeTtySession.kt
+docs/wiki/Harnesses.md
+
 ## Ticket board, one branch and worktree per ticket
 Lanes To Do, In Progress, Pending, Done (plus Backlog); role, type and weight per ticket; Pending set by the daemon while a blocking ticket is open; weight can map to a provider and model (setting `tickets.weightExecutors`).
 plugins/official/Infantry_Board/module.json

@@ -130,8 +130,13 @@ class ClaudeTtySessionTest {
         assertEquals("true", root["showThinkingSummaries"].toString())
     }
 
+    @Test fun `the mode defaults to interactive and only an explicit headless picks headless`() {
+        for (unset in listOf(null, "", "  ", "bogus", "interactive", " Interactive ")) assertTrue(ClaudeCommand.isInteractive(unset), "'$unset' -> interactive")
+        for (h in listOf("headless", " HEADLESS ")) assertFalse(ClaudeCommand.isInteractive(h), "'$h' -> headless")
+    }
+
     @Test fun `the mode setting picks the session and is part of the fingerprint`() {
-        var mode: String? = null
+        var mode: String? = "headless"
         val headless = ClaudeSession({ "claude.exe" }, { null to emptyMap() })
         val modal = ClaudeModeSession(headless, session, { mode })
         val r = request("x")
@@ -139,7 +144,7 @@ class ClaudeTtySessionTest {
         assertTrue("-p" in a.command)
         assertFalse(modal.terminal(a))
         val headlessPrint = modal.fingerprint(r, emptyMap())
-        mode = "interactive"
+        mode = null
         assertTrue(modal.fingerprint(r, emptyMap()) != headlessPrint, "switching mode restarts the process")
         val b = modal.launch(r, emptyMap())
         assertFalse("-p" in b.command)
