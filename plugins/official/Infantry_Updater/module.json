@@ -5,7 +5,7 @@
   "author": "Infantry AI",
   "tier": "official",
   "sequence": [],
-  "entry": "com.superiorsoftllc.infantry.plugins.official.updater.UpdaterPlugin",
+  "entry": "com.superiorsoftllc.infantry.plugins.official.updater.ui.UpdaterPlugin",
   "jar": "build/libs/Infantry_Updater.jar",
   "buildOrder": 905,
   "implementations": [

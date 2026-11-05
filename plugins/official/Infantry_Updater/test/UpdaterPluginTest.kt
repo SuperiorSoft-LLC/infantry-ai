@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
-package com.superiorsoftllc.infantry.plugins.official.updater
+package com.superiorsoftllc.infantry.plugins.official.updater.ui
 
 import com.superiorsoftllc.infantry.ui.shell.SELF_UPDATE_REGISTRY
 import com.superiorsoftllc.infantry.ui.shell.SelfUpdateProvider
