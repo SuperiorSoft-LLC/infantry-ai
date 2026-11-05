@@ -73,16 +73,17 @@ class PiPluginTest {
     // ---- argv ---------------------------------------------------------------------------------
 
     @Test fun `a one-shot run is pi --mode json with the model, thinking level and session`() {
-        assertEquals(listOf("/opt/pi/pi", "--mode", "json"), harness().process(request()).command)
+        val gate = listOf("-e", File(dir, PiExtensions.APPROVAL).absolutePath)
+        assertEquals(listOf("/opt/pi/pi", "--mode", "json") + gate, harness().process(request()).command)
         assertEquals(
-            listOf("/opt/pi/pi", "--mode", "json", "--model", "m", "--thinking", "high", "--session", "s-1"),
+            listOf("/opt/pi/pi", "--mode", "json", "--model", "m", "--thinking", "high", "--session", "s-1") + gate,
             harness().process(request("m", "s-1", "high")).command,
         )
     }
 
     @Test fun `a js entry point runs on the node the daemon resolves, a native pi needs none`() {
-        assertEquals(listOf("/opt/node/bin/node", "/x/cli.js", "--mode", "json"), harness("/x/cli.js").process(request()).command)
-        assertEquals(listOf("/x/pi.cmd", "--mode", "json"), harness("/x/pi.cmd").process(request()).command)
+        assertEquals(listOf("/opt/node/bin/node", "/x/cli.js", "--mode", "json", "-e", File(dir, PiExtensions.APPROVAL).absolutePath), harness("/x/cli.js").process(request()).command)
+        assertEquals(listOf("/x/pi.cmd", "--mode", "json", "-e", File(dir, PiExtensions.APPROVAL).absolutePath), harness("/x/pi.cmd").process(request()).command)
         assertEquals(listOf("node", "/x/cli.js"), PiCommand.launcherFor("/x/cli.js", node = { "node" }))
     }
 
@@ -209,7 +210,10 @@ class PiPluginTest {
         val ends = mutableListOf<Triple<SessionTurnEnd, Int?, String?>>()
         var closed = false
         var writable = true
-        override fun write(text: String): Boolean { if (writable) written += text; return writable }
+        var reply = com.superiorsoftllc.infantry.harness.api.ApprovalReply.DENY
+        val asked = mutableListOf<Pair<String, String>>()
+        override fun requestApproval(tool: String, input: String): com.superiorsoftllc.infantry.harness.api.ApprovalReply { asked += tool to input; return reply }
+        @Synchronized override fun write(text: String): Boolean { if (writable) written += text; return writable }
         override fun closeInput() { closed = true }
         override fun detail(text: String) { details += text }
         override fun providerSession(id: String) { sessions += id }
@@ -223,7 +227,8 @@ class PiPluginTest {
     @Test fun `launch is pi --mode rpc, resumes the provider session and loads the todo extension`() {
         val s = PiSession(FakeHost(dir), { listOf("pi") })
         val p = s.launch(request("m", "prov-1", "low"), emptyMap())
-        assertEquals(listOf("pi", "--mode", "rpc", "--model", "m", "--thinking", "low", "--session", "prov-1", "-e", File(dir, PiExtensions.TODO).absolutePath), p.command)
+        assertEquals(listOf("pi", "--mode", "rpc", "--model", "m", "--thinking", "low", "--session", "prov-1", "-e", File(dir, PiExtensions.TODO).absolutePath, "-e", File(dir, PiExtensions.APPROVAL).absolutePath), p.command)
+        assertEquals("DENY", p.env[PiExtensions.APPROVAL_ENV])
         // A different session id does not change the fingerprint (the host resumes), a different model does.
         assertEquals(s.fingerprint(request("m", "a"), emptyMap()), s.fingerprint(request("m", "b"), emptyMap()))
         assertFalse(s.fingerprint(request("m"), emptyMap()) == s.fingerprint(request("n"), emptyMap()))
@@ -278,6 +283,38 @@ class PiPluginTest {
         val reply = out.sent("extension_ui_response").single()
         assertEquals("d1", reply["id"]!!.jsonPrimitive.content)
         assertEquals("true", reply["cancelled"]!!.jsonPrimitive.content)
+    }
+
+    @Test fun `HARNESS-GAP G5 the approval mode reaches pi's env in both modes and changes the fingerprint`() {
+        for (mode in com.superiorsoftllc.infantry.harness.api.ToolApproval.values()) {
+            val r = request().copy(toolApproval = mode)
+            assertEquals(mode.name, harness().process(r).env[PiExtensions.APPROVAL_ENV])
+            assertEquals(mode.name, PiSession(FakeHost(dir), { listOf("pi") }).launch(r, emptyMap()).env[PiExtensions.APPROVAL_ENV])
+        }
+        val s = PiSession(FakeHost(dir), { listOf("pi") })
+        assertFalse(s.fingerprint(request(), emptyMap()) == s.fingerprint(request().copy(toolApproval = com.superiorsoftllc.infantry.harness.api.ToolApproval.ALLOW_ALL), emptyMap()))
+    }
+
+    @Test fun `HARNESS-GAP G5 the approval extension blocks per mode and fails closed`() {
+        val ts = PiExtensions.source(PiExtensions.APPROVAL)
+        assertTrue(ts.contains("block: true"))
+        assertTrue(ts.contains("""|| "DENY""""))
+        for (m in listOf("ALLOW_ALL", "ALLOW_EDITS", "ASK", "DENY")) assertTrue(ts.contains(m), m)
+    }
+
+    @Test fun `HARNESS-GAP G5 an approval confirm is relayed to the owner and answered`() {
+        for ((reply, expected) in listOf(
+            com.superiorsoftllc.infantry.harness.api.ApprovalReply.ALLOW_ONCE to "true",
+            com.superiorsoftllc.infantry.harness.api.ApprovalReply.DENY to "false",
+        )) {
+            val out = FakeOut().also { it.reply = reply }
+            session(out).onStdout("""{"type":"extension_ui_request","id":"a1","method":"confirm","title":"infantry-approval:bash","message":"rm -rf x"}""")
+            val deadline = System.currentTimeMillis() + 5000
+            while (out.sent("extension_ui_response").isEmpty() && System.currentTimeMillis() < deadline) Thread.sleep(10)
+            assertEquals(listOf("bash" to "rm -rf x"), out.asked)
+            val r = out.sent("extension_ui_response").single()
+            assertEquals(expected, r["confirmed"]!!.jsonPrimitive.content)
+        }
     }
 
     @Test fun `a write that fails ends the turn FAILED`() {
