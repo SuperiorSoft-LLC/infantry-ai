@@ -42,11 +42,12 @@ sealed interface TranscriptSignal {
 }
 
 /** Pure: transcript record -> stream-json lines and turn signals. One per session (it sums the turn's usage). */
-class TranscriptMapper(private val sessionId: String) {
+class TranscriptMapper(private val sessionId: String, private val prices: List<ModelPrice> = ModelPrice.LIST) {
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
     /** The last usage of each assistant message id in the current turn (the CLI writes one record per content block, each with the usage so far). */
     private val usageByMessage = LinkedHashMap<String, JsonObject>()
+    private val modelByMessage = HashMap<String, String>()
     private var lastText: String = ""
 
     fun map(line: String): List<TranscriptSignal> {
@@ -55,6 +56,7 @@ class TranscriptMapper(private val sessionId: String) {
         return when (record.str("type")) {
             "assistant" -> assistant(record)
             "user" -> user(record)
+            "system" -> system(record)
             else -> emptyList()
         }
     }
@@ -63,7 +65,10 @@ class TranscriptMapper(private val sessionId: String) {
         val message = record["message"] as? JsonObject ?: return emptyList()
         if (record.bool("isApiErrorMessage")) return listOf(TranscriptSignal.ApiError(texts(message["content"]).ifBlank { "claude reported an API error" }))
         if (message.str("model") == SYNTHETIC_MODEL) return emptyList()
-        message.str("id")?.let { id -> (message["usage"] as? JsonObject)?.let { usageByMessage[id] = it } }
+        message.str("id")?.let { id ->
+            (message["usage"] as? JsonObject)?.let { usageByMessage[id] = it }
+            message.str("model")?.let { modelByMessage[id] = it }
+        }
         texts(message["content"]).takeIf { it.isNotBlank() }?.let { lastText = it }
         return listOf(TranscriptSignal.Line(buildJsonObject {
             put("type", "assistant")
@@ -71,6 +76,23 @@ class TranscriptMapper(private val sessionId: String) {
             put("parent_tool_use_id", JsonNull)
             put("session_id", sessionId)
             record.str("uuid")?.let { put("uuid", it) }
+        }.toString()))
+    }
+
+    /** G13: the CLI's `compact_boundary` record reaches the meter as the stream-json line headless prints. */
+    private fun system(record: JsonObject): List<TranscriptSignal> {
+        if (record.str("subtype") != "compact_boundary") return emptyList()
+        return listOf(TranscriptSignal.Line(buildJsonObject {
+            put("type", "system")
+            put("subtype", "compact_boundary")
+            (record["compactMetadata"] ?: record["compact_metadata"])?.let { md ->
+                val o = md as? JsonObject
+                put("compact_metadata", buildJsonObject {
+                    (o?.get("trigger") as? JsonPrimitive)?.let { put("trigger", it) }
+                    ((o?.get("preTokens") ?: o?.get("pre_tokens")) as? JsonPrimitive)?.let { put("pre_tokens", it) }
+                })
+            }
+            put("session_id", sessionId)
         }.toString()))
     }
 
@@ -113,8 +135,12 @@ class TranscriptMapper(private val sessionId: String) {
             if (usage.isNotEmpty()) put("usage", buildJsonObject {
                 for (key in USAGE_KEYS) put(key, usage.sumOf { (it[key] as? JsonPrimitive)?.longOrNull ?: 0L })
             })
+            // G13: interactive claude reports no cost; estimate it per request from list prices (models matching nothing add none).
+            val costs = usageByMessage.mapNotNull { (id, u) -> modelByMessage[id]?.let { m -> ModelPrice.cost(prices, m, u) } }
+            if (costs.isNotEmpty()) { put("total_cost_usd", costs.sum()); put("cost_estimated", true) }
         }.toString()
         usageByMessage.clear()
+        modelByMessage.clear()
         lastText = ""
         return line
     }
@@ -139,6 +165,25 @@ class TranscriptMapper(private val sessionId: String) {
         /** The `origin.kind` of a prompt typed (or pasted) into the terminal; any other kind is one the CLI made itself. */
         const val ORIGIN_HUMAN = "human"
         val USAGE_KEYS = listOf("input_tokens", "output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")
+    }
+}
+
+/** USD per million tokens; the first entry whose [match] is in the model id wins. An estimate at list price, not a bill. */
+data class ModelPrice(val match: String, val input: Double, val output: Double, val cacheRead: Double, val cacheWrite: Double) {
+    companion object {
+        val LIST = listOf(
+            ModelPrice("haiku", 1.0, 5.0, 0.10, 1.25),
+            ModelPrice("sonnet", 3.0, 15.0, 0.30, 3.75),
+            ModelPrice("opus", 5.0, 25.0, 0.50, 6.25),
+        )
+        private const val PER_MILLION = 1_000_000.0
+
+        fun cost(prices: List<ModelPrice>, model: String, u: JsonObject): Double? {
+            val p = prices.firstOrNull { it.match in model } ?: return null
+            fun n(k: String) = (u[k] as? JsonPrimitive)?.longOrNull ?: 0L
+            return (n("input_tokens") * p.input + n("output_tokens") * p.output +
+                n("cache_read_input_tokens") * p.cacheRead + n("cache_creation_input_tokens") * p.cacheWrite) / PER_MILLION
+        }
     }
 }
 
