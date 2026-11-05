@@ -22,7 +22,8 @@ import com.superiorsoftllc.infantry.harness.api.HarnessHost
  *    (`CreateProcess error=193`) and a `.cmd` hop would put a shell between us and the process we have to kill.
  *  - Sessions are persisted (no `--no-session`), because a run that cannot be resumed would make the `SessionStarted` id useless.
  *  - Pi has NO approval gate (audited on pi 1.3.0, BUG-PERM-3): every enabled tool runs without asking in `--mode json` and `--mode rpc` alike,
- *    so no tool-approval level needs a flag, and Pi never denies a call, so its stream carries no denial.
+ *    so no tool-approval level needs a flag. HARNESS-GAP G5: the modes are enforced by the `infantry-approval.ts` extension instead
+ *    (env `INFANTRY_TOOL_APPROVAL`; DENY blocks non-read tools, ALLOW_EDITS also lets edit/write run, ASK relays a rpc confirm dialog).
  */
 internal object PiCommand {
     const val CLI_ID = "pi"

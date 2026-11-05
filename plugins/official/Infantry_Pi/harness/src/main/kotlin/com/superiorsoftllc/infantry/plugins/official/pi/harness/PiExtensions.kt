@@ -12,6 +12,11 @@ internal object PiExtensions {
     /** STALL-3 / watch: rewrites a shell tool call so it runs through the watched runner (the daemon's one rule set), when the session's watch is on. */
     const val WATCH = "infantry-watch.ts"
 
+    /** HARNESS-GAP G5: enforces the session's ToolApproval mode (env [APPROVAL_ENV]) in pi's `tool_call` handler; ASK goes through a rpc confirm dialog ([APPROVAL_MARKER]). */
+    const val APPROVAL = "infantry-approval.ts"
+    const val APPROVAL_ENV = "INFANTRY_TOOL_APPROVAL"
+    const val APPROVAL_MARKER = "infantry-approval:"
+
     fun source(name: String): String =
         requireNotNull(PiExtensions::class.java.getResource("/pi/$name")) { "missing resource /pi/$name" }.readText()
 

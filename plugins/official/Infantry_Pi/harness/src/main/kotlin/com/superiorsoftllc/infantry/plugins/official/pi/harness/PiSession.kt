@@ -2,6 +2,7 @@
 // Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.plugins.official.pi.harness
 
+import com.superiorsoftllc.infantry.harness.api.ApprovalReply
 import com.superiorsoftllc.infantry.harness.api.ContextLimitCapability
 import com.superiorsoftllc.infantry.harness.api.ContextLimitSupport
 import com.superiorsoftllc.infantry.harness.api.HarnessEvent
@@ -59,12 +60,13 @@ internal class PiSession(
      * it does not vary per session, and resolving it can throw outside the host's launch guard.
      */
     override fun fingerprint(request: HarnessRequest, env: Map<String, String>): String =
-        argv(listOf("pi"), request, resume = null).joinToString("\u0000") + "\u0000" + request.project + "\u0000" + env.toSortedMap()
+        argv(listOf("pi"), request, resume = null).joinToString("\u0000") + "\u0000" + request.project + "\u0000" + request.toolApproval + "\u0000" + env.toSortedMap()
 
     override fun launch(request: HarnessRequest, env: Map<String, String>): HarnessProcess {
         val resume = request.sessionId?.takeIf { it.isNotBlank() }
         val todo = host?.let { PiExtensions.launchArgs(it.stateDir, PiExtensions.TODO) }.orEmpty()
-        return HarnessProcess(argv(launcher(), request, resume) + todo)
+        val approval = host?.let { PiExtensions.launchArgs(it.stateDir, PiExtensions.APPROVAL) }.orEmpty()
+        return HarnessProcess(argv(launcher(), request, resume) + todo + approval, env = mapOf(PiExtensions.APPROVAL_ENV to request.toolApproval.name))
     }
 
     override fun connect(out: SessionOutput): SessionConnection = PiConnection(out)
@@ -99,6 +101,11 @@ internal class PiSession(
 
         /** Stops the current run and keeps the process (`agent_settled {"aborted":true}` in 9 ms in the probe). */
         fun abortLine(id: String): String = buildJsonObject { put("id", id); put("type", "abort") }.toString()
+
+        /** HARNESS-GAP G5: the answer to an approval confirm dialog. */
+        fun confirmLine(id: String, confirmed: Boolean): String = buildJsonObject {
+            put("type", "extension_ui_response"); put("id", id); put("confirmed", confirmed)
+        }.toString()
 
         fun dialogCancelLine(id: String): String = buildJsonObject {
             put("type", "extension_ui_response"); put("id", id); put("cancelled", true)
@@ -221,6 +228,17 @@ internal class PiSession(
         private fun answerDialog(record: JsonObject) {
             if (record.str("method") !in DIALOG_METHODS) return
             val id = record.str("id") ?: return
+            val title = record.str("title").orEmpty()
+            if (record.str("method") == "confirm" && title.startsWith(PiExtensions.APPROVAL_MARKER)) {
+                // ASK: relay to the owner off the stdout reader thread (requestApproval blocks); anything but an allow answers false.
+                val tool = title.removePrefix(PiExtensions.APPROVAL_MARKER)
+                val input = record.str("message").orEmpty()
+                Thread({
+                    val ok = runCatching { out.requestApproval(tool, input) != ApprovalReply.DENY }.getOrDefault(false)
+                    out.write(confirmLine(id, ok) + "\n")
+                }, "pi-approval").apply { isDaemon = true }.start()
+                return
+            }
             out.write(dialogCancelLine(id) + "\n")
         }
 

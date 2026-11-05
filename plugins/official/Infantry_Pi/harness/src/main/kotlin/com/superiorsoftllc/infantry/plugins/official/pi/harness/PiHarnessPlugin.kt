@@ -61,7 +61,10 @@ class PiHarness internal constructor(
     )
 
     override fun process(request: HarnessRequest): HarnessProcess =
-        HarnessProcess(PiCommand.command(launcher(), request.model, request.sessionId, request.effort))
+        HarnessProcess(
+            PiCommand.command(launcher(), request.model, request.sessionId, request.effort) + PiExtensions.launchArgs(host.stateDir, PiExtensions.APPROVAL),
+            env = mapOf(PiExtensions.APPROVAL_ENV to request.toolApproval.name),
+        )
 
     override fun newTranslator(): HarnessTranslator = EventStreamTranslator()
 
