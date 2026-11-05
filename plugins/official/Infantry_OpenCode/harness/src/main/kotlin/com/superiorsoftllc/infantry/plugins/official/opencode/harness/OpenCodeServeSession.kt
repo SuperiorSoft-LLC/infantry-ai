@@ -126,7 +126,8 @@ class OpenCodeServeSession(
 
         override fun sendTurn(request: HarnessRequest) {
             val model = modelFor(request.model)
-            val turn = Turn(out, model, maxRetries = maxRetries(), giveUp = { abortProviderTurn() }) { recentStderr.toList() }.also { active = it }
+            lateinit var turn: Turn
+            turn = Turn(out, model, maxRetries = maxRetries(), giveUp = { abortProviderTurn() }, recover = { reason -> recoverFreshSession(turn, request.prompt, model, reason) }) { recentStderr.toList() }.also { active = it }
             toolApproval = request.toolApproval
             // The boot wait and the HTTP calls run off the host's thread; the turn ends exactly once either way.
             Thread({
@@ -135,13 +136,7 @@ class OpenCodeServeSession(
                         return@Thread turn.end(SessionTurnEnd.FAILED, 1, "opencode serve did not start within ${bootTimeoutMs}ms" + recentStderr.toList().takeIf { it.isNotEmpty() }?.joinToString(" | ", prefix = ": ").orEmpty())
                     }
                     val ses = providerSessionId ?: establishSession(request.sessionId)
-                    val body = buildJsonObject {
-                        put("parts", buildJsonArray { add(buildJsonObject { put("type", "text"); put("text", request.prompt) }) })
-                        splitModel(model)?.let { (providerId, modelId) ->
-                            put("model", buildJsonObject { put("providerID", providerId); put("modelID", modelId) })
-                        }
-                    }
-                    post("/session/$ses/prompt_async", body.toString())
+                    post("/session/$ses/prompt_async", promptBody(request.prompt, model))
                 } catch (e: Exception) {
                     out.diagnostic("[infantry] opencode serve refused the turn: ${e.message}")
                     turn.end(SessionTurnEnd.FAILED, 1, "opencode serve refused the turn")
@@ -157,6 +152,33 @@ class OpenCodeServeSession(
             out.detail("opencode serve on $url, " + if (resumed != null) "resuming provider session $ses" else "provider session $ses")
             out.providerSession(ses)
             return ses
+        }
+
+        /**
+         * DEMO-MODEL-1: the provider refused the session's own history (a 400 `invalid_request`, e.g. a model that leaked its control tokens
+         * into a reply opencode then stored). Every later turn on that session would fail the same way, so the turn moves to a FRESH provider
+         * session, reported through [SessionOutput.providerSession] so the daemon resumes the new one from now on. The persona lived in the old
+         * session's first user message (the daemon composes it into a first turn only), so it is read back and sent again ahead of [prompt].
+         * Runs off the event thread; false = nothing to recover (no session yet).
+         */
+        private fun recoverFreshSession(turn: Turn, prompt: String, model: String, reason: String): Boolean {
+            val old = providerSessionId ?: return false
+            out.diagnostic("[infantry] opencode: the provider refused session $old's history ($reason); starting a fresh provider session")
+            Thread({
+                try {
+                    val persona = runCatching { firstUserText(get("/session/$old/message")) }.getOrNull()
+                    val fresh = createSession()
+                    providerSessionId = fresh
+                    out.detail("opencode serve on $url, provider session $fresh (replaces $old, whose history the provider refused)")
+                    out.providerSession(fresh)
+                    turn.recovered()
+                    post("/session/$fresh/prompt_async", promptBody(recoveryPrompt(persona, prompt), model))
+                } catch (e: Exception) {
+                    out.diagnostic("[infantry] opencode: the fresh provider session failed: ${e.message}")
+                    turn.end(SessionTurnEnd.FAILED, 1, "opencode: $reason (a fresh provider session failed too: ${e.message})")
+                }
+            }, "infantry-opencode-recover").apply { isDaemon = true; start() }
+            return true
         }
 
         private fun createSession(): String {
@@ -215,6 +237,13 @@ class OpenCodeServeSession(
             return response.body()
         }
 
+        private fun get(path: String): String {
+            val request = HttpRequest.newBuilder(URI.create(url + path)).timeout(Duration.ofSeconds(30)).header("Authorization", auth).GET().build()
+            val response = http.send(request, HttpResponse.BodyHandlers.ofString())
+            check(response.statusCode() in 200..299) { "opencode serve $path answered ${response.statusCode()}: ${response.body().take(300)}" }
+            return response.body()
+        }
+
         private fun readEvents() {
             try {
                 val request = HttpRequest.newBuilder(URI.create("$url/event")).header("Authorization", auth)
@@ -263,8 +292,26 @@ class OpenCodeServeSession(
 
     // --- one turn -------------------------------------------------------------------------------------
 
-    class Turn(private val out: SessionOutput, private val model: String, private val maxRetries: Int = DEFAULT_MAX_RETRIES, private val giveUp: () -> Unit = {}, private val stderrTail: () -> List<String> = { emptyList() }) {
+    class Turn(
+        private val out: SessionOutput,
+        private val model: String,
+        private val maxRetries: Int = DEFAULT_MAX_RETRIES,
+        private val giveUp: () -> Unit = {},
+        /** DEMO-MODEL-1: move the turn to a fresh provider session (the reason given); true = it is under way, the turn waits for [recovered]. */
+        private val recover: ((String) -> Boolean)? = null,
+        private val stderrTail: () -> List<String> = { emptyList() },
+    ) {
         private val done = AtomicBoolean(false)
+        private val recoveryUsed = AtomicBoolean(false)
+        /** While true the old session's trailing events (its idle after the error) are ignored. */
+        @Volatile private var recovering = false
+
+        /** DEMO-MODEL-1: the fresh session is in place; the turn now reads its events, from a clean slate. */
+        fun recovered() {
+            sawBusy = false
+            errored = false
+            recovering = false
+        }
         private val userMessages = ConcurrentHashMap.newKeySet<String>()
         @Volatile private var replied = false
         private val emitted = ConcurrentHashMap.newKeySet<String>()
@@ -295,7 +342,7 @@ class OpenCodeServeSession(
         }
 
         fun onEvent(type: String, props: JsonObject, part: JsonObject?, sessionId: String) {
-            if (done.get()) return
+            if (done.get() || recovering) return
             when (type) {
                 "session.status" -> when ((props["status"] as? JsonObject)?.get("type").str()) {
                     "retry" -> onRetry(props["status"] as JsonObject)
@@ -308,11 +355,18 @@ class OpenCodeServeSession(
                     if (info?.get("role").str() == "user") info?.get("id").str()?.let { userMessages += it }
                 }
                 "session.error" -> {
-                    errored = true
-                    sawBusy = true
                     val error = props["error"] as? JsonObject
                     val message = (error?.get("data") as? JsonObject)?.get("message").str() ?: error?.get("message").str()
                         ?: error?.get("name").str() ?: "opencode reported an error"
+                    // DEMO-MODEL-1: a poisoned history is recovered once per turn, before anything was said; otherwise it is an error as before.
+                    val recoverWith = recover
+                    if (!replied && recoverWith != null && isPoisonedHistory(error) && recoveryUsed.compareAndSet(false, true)) {
+                        recovering = true
+                        if (runCatching { recoverWith.invoke(message.take(200)) }.getOrDefault(false)) return
+                        recovering = false
+                    }
+                    errored = true
+                    sawBusy = true
                     emit(buildJsonObject {
                         put("type", "error"); put("timestamp", System.currentTimeMillis()); put("sessionID", sessionId)
                         put("error", buildJsonObject { put("message", message); error?.get("name").str()?.let { put("name", it) } })
@@ -361,6 +415,48 @@ class OpenCodeServeSession(
         fun noReply(model: String, stderr: List<String> = emptyList()): String =
             "no reply from $model: the turn ended with no assistant output" +
                 stderr.filter { it.isNotBlank() }.takeIf { it.isNotEmpty() }?.joinToString(" | ", prefix = " (opencode stderr: ", postfix = ")").orEmpty()
+
+        /**
+         * DEMO-MODEL-1: the provider refused the request itself (HTTP 400 `invalid_request`), which on a resumed session means the stored
+         * history is what it refuses (e.g. leaked harmony control tokens `<|start|>` in an earlier reply). A quota or 5xx is not this.
+         */
+        fun isPoisonedHistory(error: JsonObject?): Boolean {
+            error ?: return false
+            val status = ((error["data"] as? JsonObject)?.get("statusCode") as? JsonPrimitive)?.contentOrNull?.toIntOrNull()
+            val text = error.toString()
+            val is400 = status == 400 || (status == null && STATUS_400.containsMatchIn(text))
+            return is400 && text.contains("invalid_request", ignoreCase = true)
+        }
+
+        private val STATUS_400 = Regex("""\b400\b""")
+
+        /** The text of the first user message in a `GET /session/{id}/message` answer (the composed first turn: persona and all), or null. */
+        fun firstUserText(messages: String): String? {
+            val list = Json.parseToJsonElement(messages) as? JsonArray ?: return null
+            val first = list.firstOrNull { ((it as? JsonObject)?.get("info") as? JsonObject)?.get("role").str() == "user" } as? JsonObject ?: return null
+            val parts = first["parts"] as? JsonArray ?: return null
+            return parts.mapNotNull { p ->
+                val o = p as? JsonObject ?: return@mapNotNull null
+                if (o["type"].str() != "text" || (o["synthetic"] as? JsonPrimitive)?.contentOrNull == "true") null else o["text"].str()
+            }.joinToString("\n").takeIf { it.isNotBlank() }
+        }
+
+        /** The fresh session's first prompt: the old first turn (persona) again, a line saying why, then [prompt]. */
+        fun recoveryPrompt(persona: String?, prompt: String): String {
+            val first = persona?.trim()?.takeIf { it.isNotEmpty() && it != prompt.trim() } ?: return prompt
+            return first + "\n\n---\n\n" + RECOVERY_NOTE + "\n\n" + prompt
+        }
+
+        const val RECOVERY_NOTE = "[infantry] Your earlier conversation was lost: the provider refused its history, so this is a fresh session. " +
+            "Your first message (above) is repeated so you keep your instructions; it was already handled. Answer this message:"
+
+        /** The `prompt_async` body: the text, and the model when it names a provider. */
+        fun promptBody(prompt: String, model: String): String = buildJsonObject {
+            put("parts", buildJsonArray { add(buildJsonObject { put("type", "text"); put("text", prompt) }) })
+            splitModel(model)?.let { (providerId, modelId) ->
+                put("model", buildJsonObject { put("providerID", providerId); put("modelID", modelId) })
+            }
+        }.toString()
 
         /** Writes the watch plugin into [dir] (only when missing or different) and returns the file. */
         fun installWatchPlugin(dir: File): File {

@@ -18,6 +18,7 @@ import com.superiorsoftllc.infantry.session.JsonSessionStore
 import com.superiorsoftllc.infantry.session.SessionEvent
 import com.superiorsoftllc.infantry.session.SessionManager
 import com.superiorsoftllc.infantry.session.SessionState
+import com.superiorsoftllc.infantry.session.isBusy
 import com.superiorsoftllc.infantry.session.host.LifecyclePolicy
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -61,6 +62,8 @@ class OpenCodeServeHostTest {
         @Volatile private var alive = true
         /** False = a turn stays in flight until something else ends it (an interrupt). */
         @Volatile var answerTurns = true
+        /** DEMO-MODEL-1: sessions whose stored history the provider refuses: every prompt there ends in a 400 `invalid_request`. */
+        val poisoned: MutableSet<String> = Collections.synchronizedSet(mutableSetOf())
         private var nextSession = 0
 
         init {
@@ -88,7 +91,20 @@ class OpenCodeServeHostTest {
                     val text = ((Json.parseToJsonElement(body) as JsonObject)["parts"].toString())
                     prompts += ses to text
                     reply(ex, 204, null)
-                    if (answerTurns) Thread { answer(ses, prompts.size) }.start()
+                    if (ses in poisoned) Thread { refuse(ses) }.start()
+                    else if (answerTurns) Thread { answer(ses, prompts.size) }.start()
+                }
+                path.startsWith("/session/") && path.endsWith("/message") && ex.requestMethod == "GET" -> {
+                    val ses = path.removePrefix("/session/").removeSuffix("/message")
+                    val messages = buildJsonArray {
+                        synchronized(prompts) { prompts.filter { it.first == ses } }.forEachIndexed { i, (_, parts) ->
+                            add(buildJsonObject {
+                                put("info", buildJsonObject { put("id", "msg_$i"); put("role", "user") })
+                                put("parts", Json.parseToJsonElement(parts))
+                            })
+                        }
+                    }
+                    reply(ex, 200, messages.toString())
                 }
                 path.endsWith("/abort") -> { aborts.incrementAndGet(); reply(ex, 200, "true") }
                 path.startsWith("/permission/") && path.endsWith("/reply") -> {
@@ -106,6 +122,14 @@ class OpenCodeServeHostTest {
             push("""{"type":"message.part.updated","properties":{"sessionID":"$ses","part":{"id":"p$n-b","sessionID":"$ses","type":"text","text":"reply $n","time":{"start":1}},"time":2}}""")
             push("""{"type":"message.part.updated","properties":{"sessionID":"$ses","part":{"id":"p$n-b","sessionID":"$ses","type":"text","text":"reply $n","time":{"start":1,"end":3}},"time":3}}""")
             push("""{"type":"message.part.updated","properties":{"sessionID":"$ses","part":{"id":"p$n-c","sessionID":"$ses","type":"step-finish","reason":"stop","tokens":{"input":1,"output":1}},"time":4}}""")
+            push("""{"type":"session.status","properties":{"sessionID":"$ses","status":{"type":"idle"}}}""")
+            push("""{"type":"session.idle","properties":{"sessionID":"$ses"}}""")
+        }
+
+        /** What opencode serve sends when the provider answers 400 `invalid_request` (DEMO-CHECK-1's poisoned free-model session). */
+        private fun refuse(ses: String) {
+            push("""{"type":"session.status","properties":{"sessionID":"$ses","status":{"type":"busy"}}}""")
+            push("""{"type":"session.error","properties":{"sessionID":"$ses","error":{"name":"APIError","data":{"message":"Bad Request: invalid_request","statusCode":400,"isRetryable":false,"responseBody":"{\"error\":{\"type\":\"invalid_request\"}}"}}}}""")
             push("""{"type":"session.status","properties":{"sessionID":"$ses","status":{"type":"idle"}}}""")
             push("""{"type":"session.idle","properties":{"sessionID":"$ses"}}""")
         }
@@ -283,6 +307,50 @@ class OpenCodeServeHostTest {
         assertEquals(listOf("reply 1", "reply 2"), rig.texts().map { (it["part"] as JsonObject)["text"]!!.jsonPrimitive.content })
         assertTrue(rig.events.filterIsInstance<SessionEvent.Exit>().none { it.processExited }, "a turn end is not a process exit")
         assertEquals(0, rig.events.filterIsInstance<SessionEvent.ProcessExit>().size)
+    }
+
+    @Test
+    fun poisonedHistory400_movesTheTurnToAFreshSession_withThePersonaResent() {
+        val rig = rig()
+        val session = rig.manager.startNew("PERSONA: you are the pm seat", model = "fake/model")
+        rig.awaitTexts(1)
+        rig.awaitState(session.id, SessionState.IDLE)
+        val server = rig.launcher.servers.single()
+        server.poisoned += "ses_fake1"
+
+        rig.manager.resume(session.id, "second")
+        rig.awaitTexts(2)
+        rig.awaitState(session.id, SessionState.IDLE)
+
+        assertEquals(listOf("ses_fake1", "ses_fake1", "ses_fake2"), server.prompts.map { it.first }, "the refused turn is sent again on a fresh session")
+        val resent = server.prompts[2].second
+        assertTrue("PERSONA: you are the pm seat" in resent && "second" in resent, "the persona rides ahead of the turn: $resent")
+        assertEquals("ses_fake2", rig.manager.get(session.id)?.providerSessionId, "the daemon resumes the fresh session from now on")
+        assertTrue(rig.events.filterIsInstance<SessionEvent.Exit>().none { it.code != 0 }, "the turn did not fail: ${rig.events}")
+
+        // The next turn goes to the fresh session, with no persona repeated.
+        rig.manager.resume(session.id, "third")
+        rig.awaitTexts(3)
+        rig.awaitState(session.id, SessionState.IDLE)
+        assertEquals("ses_fake2", server.prompts[3].first)
+        assertTrue("PERSONA" !in server.prompts[3].second)
+    }
+
+    @Test
+    fun poisonedFreshSessionToo_failsTheTurnOnce_noLoop() {
+        val rig = rig()
+        val session = rig.manager.startNew("first", model = "fake/model")
+        rig.awaitTexts(1)
+        rig.awaitState(session.id, SessionState.IDLE)
+        val server = rig.launcher.servers.single()
+        server.poisoned += listOf("ses_fake1", "ses_fake2")
+
+        rig.manager.resume(session.id, "second")
+        val deadline = System.currentTimeMillis() + 10_000
+        while (rig.manager.get(session.id)?.isBusy() == true && System.currentTimeMillis() < deadline) Thread.sleep(10)
+        Thread.sleep(200)
+        assertEquals(listOf("ses_fake1", "ses_fake1", "ses_fake2"), server.prompts.map { it.first }, "one recovery per turn, never a loop")
+        assertTrue(rig.events.filterIsInstance<SessionEvent.Exit>().any { it.code == 1 }, "the turn fails visibly: ${rig.events}")
     }
 
     @Test
