@@ -170,9 +170,12 @@ class ClaudeTtySession(
         private val launchedAt = clock()
         private var firstScreenAt: Long? = null
         private var startedAt: Long? = null
+        private var trustSeen = false
         private var trustDownAt: Long? = null
-        private var trustDownMark = 0L
+        private var trustDowns = 0
         private var trustEnterDone = false
+        /** When the screen last changed (the trust answer waits for it to settle). */
+        private var lastOutputAt = 0L
         private var interruptedSeen = false
         private var initSent = false
         private val screen = StringBuilder()
@@ -226,7 +229,9 @@ class ClaudeTtySession(
         override fun onStdout(line: String) {
             val text = ScreenText.strip(line)
             synchronized(lock) {
-                if (firstScreenAt == null) firstScreenAt = clock()
+                val at = clock()
+                if (firstScreenAt == null) firstScreenAt = at
+                lastOutputAt = at
                 screen.append(text)
                 screenTotal += text.length
                 if (screen.length > SCREEN_KEEP_CHARS) screen.delete(0, screen.length - SCREEN_KEEP_CHARS)
@@ -415,30 +420,43 @@ class ClaudeTtySession(
 
         /** Up = the CLI ran its SessionStart hook a moment ago; without hooks, a while after its first screen. */
         private fun ready(now: Long): Boolean {
-            if (trustDownAt != null && !trustEnterDone) return false
+            if (trustSeen && !trustEnterDone) return false
             startedAt?.let { return now - it >= READY_AFTER_START_MS }
             return firstScreenAt?.let { now - it >= READY_FALLBACK_MS } ?: false
         }
 
         /**
-         * The folder trust question: "No, exit" is preselected, so Down, then Enter once the screen shows the pointer on the
-         * accept option (a key sent before the menu takes input is lost, and Enter on "No, exit" quits the CLI). Down is sent
-         * again every [TRUST_RETRY_MS] until the selection shows.
+         * The folder trust question: a two-row menu ("No, exit" preselected) where Down wraps, so a key is never sent blind
+         * (HARNESS-GAP f0b7173f: a retried Down plus a late redraw put the pointer back on "No, exit" and Enter quit the CLI).
+         * The selected row is read from the screen: whichever pointer line was drawn last. Down is pressed only while "No, exit"
+         * is selected: once, then again only after [TRUST_RETRY_MS] with no Down taken (no redraw). Enter only while the accept
+         * row is selected and the screen has settled: [KEY_GAP_MS] after the one Down, or, once Down was sent more than once
+         * (a slow redraw of an earlier key may still come), [TRUST_RETRY_MS] with no new output.
          */
         private fun answerTrust(now: Long) = synchronized(lock) {
             if (trustEnterDone) return@synchronized
-            val down = trustDownAt
-            if (down == null) {
-                if (ScreenText.squeeze(screen.takeLast(TRUST_WINDOW_CHARS).toString()).contains(TRUST_OPTION)) pressDown(now)
-                return@synchronized
+            val tail = ScreenText.squeeze(screen.takeLast(TRUST_WINDOW_CHARS).toString())
+            if (!trustSeen) {
+                if (!tail.contains(TRUST_OPTION)) return@synchronized
+                trustSeen = true
             }
-            val since = (screenTotal - trustDownMark).coerceIn(0L, screen.length.toLong()).toInt()
-            when {
-                ScreenText.squeeze(screen.takeLast(since).toString()).contains(TRUST_SELECTED) && now - down >= KEY_GAP_MS -> {
+            val onYes = tail.lastIndexOf(TRUST_SELECTED) > tail.lastIndexOf(TRUST_DECLINE_SELECTED)
+            val quiet = now - lastOutputAt
+            val down = trustDownAt
+            if (onYes) {
+                val settled = when {
+                    down == null -> quiet >= KEY_GAP_MS
+                    trustDowns == 1 -> now - down >= KEY_GAP_MS
+                    else -> now - down >= KEY_GAP_MS && quiet >= TRUST_RETRY_MS
+                }
+                if (settled) {
                     key(ENTER)
                     trustEnterDone = true
                 }
-                now - down >= TRUST_RETRY_MS -> pressDown(now)
+            } else if (down == null || (now - down >= TRUST_RETRY_MS && quiet >= TRUST_RETRY_MS)) {
+                key(DOWN)
+                trustDownAt = now
+                trustDowns++
             }
         }
 
@@ -461,12 +479,6 @@ class ClaudeTtySession(
             dialogMark = screenTotal
             dialogSeenAt = null
             key(ESC)
-        }
-
-        private fun pressDown(now: Long) {
-            key(DOWN)
-            trustDownAt = now
-            trustDownMark = screenTotal
         }
 
         private fun screenTail(): String = ScreenText.squeeze(screen.takeLast(SCREEN_TAIL_CHARS).toString()).ifBlank { "(blank)" }
@@ -495,6 +507,9 @@ class ClaudeTtySession(
 
         /** The accept option with the menu pointer on it, spaces squeezed out. */
         const val TRUST_SELECTED = "❯yes,itrustthisfolder"
+
+        /** The decline option with the menu pointer on it, spaces squeezed out. */
+        const val TRUST_DECLINE_SELECTED = "❯no,exit"
 
         const val TICK_MS = 150L
         /** How often the MCP server's pid is checked (CLI-PTY-3). */
