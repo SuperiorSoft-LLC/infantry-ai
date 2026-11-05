@@ -557,6 +557,11 @@ object LimitRegistry {
         "How long /health waits for the database before it answers 503 with database=stuck (the request thread is never held longer). Read at start-up.",
         min = 1, max = 3600, zeroIsUnlimited = false,
     )
+    val USAGE_QUOTA_HIT_HOLD_MINUTES = LimitDef(
+        "limits.usage.quotaHitHoldMinutes", 60, "minutes",
+        "G15: after a harness reports a quota error (e.g. opencode's \"Free usage exceeded\"), its provider reads EXHAUSTED for this long, so pacing starts no unattended work on it and `infantry usage` shows it. Read at start-up.",
+        min = 1, max = 10080, zeroIsUnlimited = false,
+    )
     val HEALTH_WATCHDOG_FAILURES = LimitDef(
         "limits.health.watchdogFailures", 0, "checks",
         "Failed /health self-checks in a row after which the headless daemon halts its JVM so its supervisor (Docker restart policy) restarts it; Docker never restarts an unhealthy container by itself. The Docker image sets 3. Read at start-up.",
@@ -765,7 +770,7 @@ object LimitRegistry {
         RELATED_BRIEF_TICKETS, RELATED_BRIEF_FILES, RELATED_BRIEF_CHARS, RELATED_BLOCK_TICKETS, RELATED_BLOCK_FILES, RELATED_BLOCK_CHARS,
         PLUGIN_CALL_TIMEOUT_MS, PLUGIN_HANG_CEILING_MS, PLUGIN_GUARD_STRIKES, PLUGIN_GUARD_COOLDOWN_MS, PLUGIN_POOL_SIZE, PLUGIN_QUEUE_LIMIT, PLUGIN_TOOL_TIMEOUT_MS, PLUGIN_TOOL_MAX_TIMEOUT_MS, PLUGIN_ROUTE_RATE, PLUGIN_START_TIMEOUT_MS, PLUGIN_STOP_TIMEOUT_MS, PLUGIN_AUTO_RELOAD_ATTEMPTS, PLUGIN_AUTO_RELOAD_DELAY_MS,
         RUN_MAX_SECRETS, KEYSTORE_MAX_FIELDS, KEYSTORE_MAX_SECRETS,
-        SANDBOX_MODE,
+        SANDBOX_MODE, USAGE_QUOTA_HIT_HOLD_MINUTES,
         HEALTH_DB_TIMEOUT_SECONDS, HEALTH_WATCHDOG_FAILURES, HEALTH_WATCHDOG_INTERVAL_SECONDS, HEALTH_WATCHDOG_TIMEOUT_SECONDS,
         MAIL_WAKE_DEBOUNCE_SECONDS, MAIL_COALESCE_MAX, WATCH_STALL_NUDGES, SCRIPT_RUN_LOG_MAX,
     )

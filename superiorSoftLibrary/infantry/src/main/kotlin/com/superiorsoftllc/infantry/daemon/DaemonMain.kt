@@ -924,6 +924,9 @@ class InfantryDaemon(
             }
             // Story 9.7b: observed limit state per provider -- persisted, pushed, and put back after a restart.
             val providerStates = ProviderStateTracker(
+                quotaHitHoldMs = com.superiorsoftllc.infantry.settings.LimitRegistry.fromEnv(
+                    com.superiorsoftllc.infantry.settings.LimitRegistry.USAGE_QUOTA_HIT_HOLD_MINUTES, System::getenv,
+                ) * 60_000L,
                 sink = { state ->
                     runCatching { store.providerStates.upsert(state) }
                         .onFailure { System.err.println("[infantry] provider state not stored: ${it.message}") }
