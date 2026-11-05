@@ -86,6 +86,8 @@ class StatsPlugin : UiPlugin, ModuleSource {
 
 /** Node id of the Stats tab's tree: a plugin injects a section into it (`"inject": [{"into": "infantry.shell.stats"}]`). */
 const val STATS_NODE = "infantry.shell.stats"
+/** STATS-TOGGLE-1: test tag of the Stats view switch (the shared SegmentedControl: Session | Tokens by day/week). */
+const val STATS_VIEW_TOGGLE_TAG = "stats-view-toggle"
 
 private class StatsHost(val state: AppState, val usage: UsageContext, val meter: UsageMeterContext)
 
@@ -128,14 +130,11 @@ private fun StatsTab(state: AppState, usage: UsageContext, meter: UsageMeterCont
 private fun StatsTabContent(state: com.superiorsoftllc.infantry.ui.model.AppState, usage: com.superiorsoftllc.infantry.ui.shell.UsageContext, meter: com.superiorsoftllc.infantry.ui.shell.UsageMeterContext) {
     var daily by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.fillMaxSize()) {
-        androidx.compose.foundation.layout.Row(androidx.compose.ui.Modifier.padding(start = 14.dp, top = 8.dp)) {
-            for ((label, on) in listOf("Session" to !daily, "Tokens by day/week" to daily)) {
-                androidx.compose.material3.Text(
-                    label, color = if (on) com.superiorsoftllc.infantry.ui.Palette.Accent else com.superiorsoftllc.infantry.ui.Palette.Muted, fontSize = 11.sp,
-                    modifier = androidx.compose.ui.Modifier.testTag("stats-mode-$label").clickable { daily = label != "Session" }.padding(end = 14.dp),
-                )
-            }
-        }
+        // STATS-TOGGLE-1: the view switch is the same shared segmented toggle as Period / Group by.
+        com.superiorsoftllc.infantry.ui.SegmentedControl(
+            "View", listOf(false, true), daily, { if (it) "Tokens by day/week" else "Session" },
+            androidx.compose.ui.Modifier.testTag(STATS_VIEW_TOGGLE_TAG).padding(start = 14.dp, top = 8.dp),
+        ) { daily = it }
         if (daily) UsageMeterPane(state, meter) else StatsPane(state, usage)
     }
 }
