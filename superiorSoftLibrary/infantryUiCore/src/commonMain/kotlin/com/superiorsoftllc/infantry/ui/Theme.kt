@@ -2,6 +2,7 @@
 // Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.ui
 
+import androidx.compose.ui.unit.dp
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.ColorScheme
@@ -67,6 +68,9 @@ object Palette {
     val Danger: Color get() = tones.danger
     val Info: Color get() = tones.info
     val Warn: Color get() = tones.warn
+
+    /** POPUP-ROUND-1: the one corner shape of every popup, dropdown menu and floating log (the chat cards' radius). */
+    val PopupShape: androidx.compose.ui.graphics.Shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
 
     /** Text on the accent: the original dark brown on light accents (amber), white on deep ones (the emblem red). */
     val OnAccent: Color get() = if (Accent.luminance() > 0.4f) Color(0xFF1A1200) else Color.White

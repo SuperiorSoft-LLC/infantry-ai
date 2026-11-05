@@ -19,7 +19,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -301,7 +300,7 @@ fun RunToolbarSection(run: RunPaneHost, modifier: Modifier = Modifier) {
                 enabled = canWrite && !inFlight && runs.commands.isNotEmpty(),
                 modifier = Modifier.testTag(RUN_COMMAND_PICKER_TAG),
             ) { Text(picked?.name ?: "Pick a command", fontSize = 12.sp) }
-            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            com.superiorsoftllc.infantry.ui.InfantryDropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                 runs.commands.forEach { c ->
                     DropdownMenuItem(
                         text = { Text(c.name, fontSize = 12.sp) },

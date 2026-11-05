@@ -35,7 +35,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Icon
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
@@ -406,12 +405,12 @@ private fun AgentRowMenu(a: AgentView, state: AppState, revealed: Boolean, onOpe
                 .testTag("session-menu-${a.id}"),
             contentAlignment = Alignment.Center,
         ) { androidx.compose.material3.Icon(AhqIcons.MoreHoriz, contentDescription = null, tint = if (live) Palette.Muted else Palette.Border, modifier = Modifier.size(14.dp)) }
-        DropdownMenu(
+        com.superiorsoftllc.infantry.ui.InfantryDropdownMenu(
             expanded = menuOpen, onDismissRequest = { menuOpen = false },
             modifier = Modifier.background(Palette.Raised).testTag("session-menu-popup-${a.id}"),
         ) {
             DropdownMenuItem(
-                text = { Text("Open", color = Palette.Text, fontSize = 12.sp) },
+                text = { MenuLabel(com.superiorsoftllc.infantry.ui.AhqIcons.OpenInFull, "Open", Palette.Text) },
                 onClick = { menuOpen = false; onOpen() },
                 modifier = Modifier.testTag("session-menu-open-${a.id}"),
             )
@@ -420,7 +419,7 @@ private fun AgentRowMenu(a: AgentView, state: AppState, revealed: Boolean, onOpe
                 val resumeGate = state.connection.gate("chat.resume")
                 WritePolicyTooltip { m ->
                     DropdownMenuItem(
-                        text = { Text(com.superiorsoftllc.infantry.ui.RESUME_SESSION_LABEL, color = if (resumeGate.enabled && live) Palette.Accent else Palette.Border, fontSize = 12.sp) },
+                        text = { MenuLabel(com.superiorsoftllc.infantry.ui.AhqIcons.Restore, com.superiorsoftllc.infantry.ui.RESUME_SESSION_LABEL, if (resumeGate.enabled && live) Palette.Accent else Palette.Border) },
                         onClick = { menuOpen = false; work.resume(a.id) },
                         enabled = resumeGate.enabled && live,
                         modifier = m.testTag(com.superiorsoftllc.infantry.ui.RESUME_SESSION_MENU_TAG_PREFIX + a.id),
@@ -433,7 +432,7 @@ private fun AgentRowMenu(a: AgentView, state: AppState, revealed: Boolean, onOpe
                 val assign = state.connection.gate("agents.project.set")
                 WritePolicyTooltip { m ->
                     DropdownMenuItem(
-                        text = { Text("Assign to ${target.name}", color = if (assign.enabled) Palette.Text else Palette.Border, fontSize = 12.sp) },
+                        text = { MenuLabel(com.superiorsoftllc.infantry.ui.AhqIcons.PersonAdd, "Assign to ${target.name}", if (assign.enabled) Palette.Text else Palette.Border) },
                         onClick = { menuOpen = false; onAssign(a.id, target.id) },
                         enabled = assign.enabled,
                         modifier = m.testTag(SESSION_ASSIGN_TAG_PREFIX + a.id),
@@ -453,7 +452,7 @@ private fun AgentRowMenu(a: AgentView, state: AppState, revealed: Boolean, onOpe
             val writeLocked = !policy.allowed
             WritePolicyTooltip { m ->
                 DropdownMenuItem(
-                    text = { Text("Remove", color = if (writeLocked) Palette.Border else Palette.Danger, fontSize = 12.sp) },
+                    text = { MenuLabel(com.superiorsoftllc.infantry.ui.AhqIcons.DeleteForever, "Remove", if (writeLocked) Palette.Border else Palette.Danger) },
                     onClick = { menuOpen = false; confirming = true },
                     enabled = !writeLocked,
                     modifier = m.testTag("session-remove-${a.id}"),
@@ -617,11 +616,21 @@ fun AgentMenuTicketItems(key: String, cur: com.superiorsoftllc.infantry.ui.proto
         maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 260.dp).padding(horizontal = 12.dp, vertical = 4.dp).testTag("session-menu-current-$key"),
     )
     DropdownMenuItem(
-        text = { Text(if (cur != null) "Change ticket..." else "Assign ticket...", color = Palette.Text, fontSize = 12.sp) },
+        text = { MenuLabel(if (cur != null) com.superiorsoftllc.infantry.ui.AhqIcons.SwapHoriz else com.superiorsoftllc.infantry.ui.AhqIcons.Add, if (cur != null) "Change ticket..." else "Assign ticket...", Palette.Text) },
         onClick = onChange, modifier = Modifier.testTag("session-menu-change-$key"),
     )
     if (cur != null) DropdownMenuItem(
-        text = { Text("Unassign", color = Palette.Text, fontSize = 12.sp) },
+        text = { MenuLabel(com.superiorsoftllc.infantry.ui.AhqIcons.Close, "Unassign", Palette.Text) },
         onClick = { onUnassign(cur.id) }, modifier = Modifier.testTag("session-menu-unassign-$key"),
     )
+}
+
+/** POPUP-ROUND-1: an agent-card menu row in the prompt "More" menu's style: an 18dp icon, a 10dp gap, the label, one tint. */
+@Composable
+private fun MenuLabel(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, tint: androidx.compose.ui.graphics.Color) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        androidx.compose.material3.Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(10.dp))
+        Text(label, color = tint, fontSize = 12.sp)
+    }
 }

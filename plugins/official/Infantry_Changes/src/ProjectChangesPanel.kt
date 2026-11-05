@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -470,7 +469,7 @@ private fun WorktreeSelect(changes: ChangesPaneHost) {
             Spacer(Modifier.weight(1f))
             Text(" ▾", color = Palette.Muted, fontSize = 11.sp)
         }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }, modifier = Modifier.widthIn(max = BRANCH_MENU_MAX_WIDTH).background(Palette.Raised)) {
+        com.superiorsoftllc.infantry.ui.InfantryDropdownMenu(expanded = open, onDismissRequest = { open = false }, modifier = Modifier.widthIn(max = BRANCH_MENU_MAX_WIDTH).background(Palette.Raised)) {
             when {
                 list == null -> Note("Loading worktrees…")
                 !list.available -> Note("Worktrees unknown: ${list.reason.ifBlank { "the daemon could not list them" }}")
@@ -620,7 +619,7 @@ private fun BranchSelect(changes: ChangesPaneHost, modifier: Modifier) {
             Spacer(Modifier.weight(1f))
             Text(" ▾", color = Palette.Muted, fontSize = 11.sp)
         }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }, modifier = Modifier.widthIn(max = BRANCH_MENU_MAX_WIDTH).background(Palette.Raised)) {
+        com.superiorsoftllc.infantry.ui.InfantryDropdownMenu(expanded = open, onDismissRequest = { open = false }, modifier = Modifier.widthIn(max = BRANCH_MENU_MAX_WIDTH).background(Palette.Raised)) {
             DropdownMenuItem(
                 text = { Text("Working tree (current)", color = Palette.Text, fontSize = 12.sp, fontWeight = if (branch == null) FontWeight.SemiBold else FontWeight.Normal) },
                 onClick = { open = false; changes.selectBranch(null) },

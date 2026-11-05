@@ -27,7 +27,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -126,7 +125,7 @@ fun ProjectPicker(state: AppState, controller: Controller) {
                 Spacer(Modifier.width(2.dp))
                 Icon(AhqIcons.ChevronDown, contentDescription = null, tint = Palette.Muted, modifier = Modifier.size(16.dp))
             }
-            DropdownMenu(expanded = open, onDismissRequest = { open = false }, modifier = Modifier.background(Palette.Raised)) {
+            com.superiorsoftllc.infantry.ui.InfantryDropdownMenu(expanded = open, onDismissRequest = { open = false }, modifier = Modifier.background(Palette.Raised)) {
                 state.projects.forEach { p ->
                     val selected = p.id == state.activeProjectId
                     DropdownMenuItem(

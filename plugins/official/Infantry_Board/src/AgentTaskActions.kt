@@ -72,7 +72,7 @@ fun AgentTaskMenu(card: BoardCardHost) {
     }
     Box {
         TextButton(onClick = { menu = true }, enabled = canMove, modifier = Modifier.testTag(AGENT_MENU_TAG_PREFIX + t.id)) { Text("More", fontSize = 11.sp) }
-        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+        com.superiorsoftllc.infantry.ui.InfantryDropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
             if (inProgress) {
                 DropdownMenuItem(text = { Text("Unassign") }, onClick = { menu = false; step = "unassign" })
                 if (t.agentId != null) DropdownMenuItem(text = { Text("Switch to...") }, onClick = { menu = false; step = "switch" })

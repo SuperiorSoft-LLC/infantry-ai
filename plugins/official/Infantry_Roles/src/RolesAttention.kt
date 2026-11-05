@@ -24,7 +24,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -386,7 +385,7 @@ private fun RoleRowMenu(r: Role, live: Boolean, locked: Boolean, onEdit: () -> U
                 .testTag(ROLE_ROW_MENU_TAG_PREFIX + r.id),
             contentAlignment = Alignment.Center,
         ) { androidx.compose.material3.Icon(AhqIcons.MoreHoriz, contentDescription = null, tint = if (live) Palette.Muted else Palette.Border, modifier = Modifier.size(14.dp)) }
-        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }, modifier = Modifier.background(Palette.Raised)) {
+        com.superiorsoftllc.infantry.ui.InfantryDropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }, modifier = Modifier.background(Palette.Raised)) {
             // DEMO-MERGE-1: role_save is a write; Edit role is dimmed and says why while writes are refused.
             WritePolicyTooltip { m ->
                 DropdownMenuItem(
