@@ -62,7 +62,14 @@ class ClaudeTtySession(
 
     /** What [launch] decided for a process, until [connect] takes it. Keyed by identity: the host hands back the very object. */
     /** [transcriptStart] = CLI-PTY-4: the length of a resumed session's transcript at launch; what is before it is history, never read as live. */
-    data class Launch(val sessionId: String, val cwd: String, val events: File, val settings: File, val mcpPid: File? = null, val transcriptStart: Long = 0)
+    /**
+     * [firstPrompt] = G2: where this session's first prompt is kept until claude records it; [recovered] = the launch was asked to resume an
+     * id claude has no transcript for, so it starts that id fresh and its first turn carries the kept first prompt again ([ClaudeResume]).
+     */
+    data class Launch(
+        val sessionId: String, val cwd: String, val events: File, val settings: File, val mcpPid: File? = null, val transcriptStart: Long = 0,
+        val firstPrompt: File? = null, val recovered: Boolean = false,
+    )
 
     private val launches = IdentityHashMap<HarnessProcess, Launch>()
 
@@ -96,8 +103,11 @@ class ClaudeTtySession(
             (env + ClaudeCommand.contextLimitEnv(request.contextLimit)).toSortedMap()
 
     override fun launch(request: HarnessRequest, env: Map<String, String>): HarnessProcess {
-        val resume = request.sessionId?.takeIf { it.isNotBlank() }
-        val id = resume ?: newSessionId()
+        val stored = request.sessionId?.takeIf { it.isNotBlank() }
+        // G2: an id claude never wrote a transcript for cannot be resumed: start it fresh under the same id (no new id to report).
+        val recovered = stored != null && !ClaudeResume.resumable(configDir(), request.project, stored)
+        val resume = stored.takeUnless { recovered }
+        val id = stored ?: newSessionId()
         val dir = File(stateDir(), TTY_DIR).apply { mkdirs() }
         val events = File(dir, "$id.events").apply { delete() }
         val settings = File(dir, "$id.settings.json")
@@ -108,7 +118,11 @@ class ClaudeTtySession(
             command = argv(executable(), request, if (resume == null) id else null, resume, settings.absolutePath, env, mapOf(MCP_PID_FILE_ENV to mcpPid.absolutePath)),
             env = mapOf("CLAUDE_CODE_ENABLE_TODO_TOOLS" to "1") + ClaudeCommand.contextLimitEnv(request.contextLimit),
         )
-        synchronized(launches) { launches[process] = Launch(id, request.project, events, settings, mcpPid, transcriptStart(resume, request.project)) }
+        synchronized(launches) { launches[process] = Launch(
+                id, request.project, events, settings, mcpPid, transcriptStart(resume, request.project),
+                // Only a session that starts a conversation here keeps (or gets back) a first prompt; a real resume has its own history.
+                firstPrompt = if (resume == null) ClaudeResume.firstPromptFile(stateDir(), id) else null, recovered = recovered,
+            ) }
         return process
     }
 
@@ -146,7 +160,15 @@ class ClaudeTtySession(
         private val mapper = TranscriptMapper(launch.sessionId)
         private val events = AppendedLines { launch.events }
         private var transcriptFile: File? = null
-        private val transcript = AppendedLines(launch.transcriptStart) { transcriptFile ?: ClaudeTranscripts.find(configDir, launch.cwd, launch.sessionId)?.also { transcriptFile = it } }
+        private val transcript = AppendedLines(launch.transcriptStart) {
+            transcriptFile ?: ClaudeTranscripts.find(configDir, launch.cwd, launch.sessionId)?.also {
+                transcriptFile = it
+                // G2: claude has recorded the conversation; its first prompt need not be kept for a recovery any more.
+                launch.firstPrompt?.delete()
+            }
+        }
+        /** G2: the first turn of a [Launch.recovered] launch still owes the session's lost first prompt. */
+        private var recoveryOwed = launch.recovered
         private val queue = ArrayDeque<Turn>()
         private var active: Turn? = null
         /** CHAT-QUEUE-1: messages pasted into the busy CLI (its own queue takes them into the running turn), each awaiting its Enter. */
@@ -195,9 +217,24 @@ class ClaudeTtySession(
         }
 
         override fun sendTurn(request: HarnessRequest) {
-            val turn = Turn(request.prompt)
+            val turn = Turn(firstPrompt(request.prompt))
             val failed = synchronized(lock) { if (exited) true else { queue.add(turn); false } }
             if (failed) out.turnEnded(SessionTurnEnd.FAILED, null, "the interactive claude has exited")
+        }
+
+        /**
+         * G2: a new session keeps its first prompt (the daemon's brief rides on it) until claude records it; a recovered launch's first turn
+         * sends that prompt again ahead of its own, as the conversation it was in never reached the model.
+         */
+        private fun firstPrompt(prompt: String): String {
+            val file = launch.firstPrompt ?: return prompt
+            if (!synchronized(lock) { recoveryOwed.also { recoveryOwed = false } }) {
+                if (transcriptFile == null && !launch.recovered) ClaudeResume.keepFirstPrompt(file, prompt)
+                return prompt
+            }
+            val saved = ClaudeResume.savedFirstPrompt(file)
+            out.detail(ClaudeResume.recoveredDetail(launch.sessionId, briefResent = saved != null && saved != prompt))
+            return ClaudeResume.recoveryPrompt(saved, prompt)
         }
 
         override fun abortTurn(): Boolean = synchronized(lock) {

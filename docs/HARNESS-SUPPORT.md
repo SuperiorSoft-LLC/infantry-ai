@@ -137,7 +137,7 @@ G17 6f4c36b1, G18 5a69ec0f, G19 5ccc0b8c, G20 ba7f1956, G21 d4945c15.
 | # | Gap | Harness | Evidence | Owner? |
 |---|---|---|---|---|
 | G1 | Folder trust auto-answer ends on "No, exit"; first start in a fresh folder fails | claude interactive | live 3/3; `Tty:383-402` (Down re-sent every 1.5 s toggles the 2-item menu) | |
-| G2 | Provider session id recorded before the CLI is up: a launch that writes no transcript wedges the session ("No conversation found" on every resume); the "no provider session" health check cannot fire | claude interactive | live; `Tty:264-266` | |
+| G2 | Provider session id recorded before the CLI is up: a launch that writes no transcript wedges the session ("No conversation found" on every resume); the "no provider session" health check cannot fire | claude interactive | live; `Tty:264-266` | fixed (d472e3f6): a launch resumes only an id claude has a transcript for; else it starts that id fresh (`--session-id`, both modes) and sends the session's kept first prompt again (`ClaudeResume.kt`). The early id report is kept, so the health check still cannot fire |
 | G3 | DENY / ASK / ALLOW_EDITS show the CLI's own permission dialog in the PTY and nothing answers it; no per-turn timeout | claude interactive | `CC:53-66`, `Tty` has no dialog handling; `TA:54` default DENY | yes: default approval mode for a new install |
 | G4 | ToolApproval ASK not relayed (acts as DENY) | claude headless + interactive | `CS:29-30` | |
 | G5 | Every approval mode is ignored (DENY runs every tool) | pi | `Pi/PiCommand.kt:24-25` | yes: gate pi through its extension API, or refuse non-ALLOW_ALL |
