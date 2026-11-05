@@ -152,6 +152,11 @@ object ProviderFactory {
         builders[id.trim().lowercase()] = builder
     }
 
+    /** QA-FIX-C: drop a registration (a test that registers a fixture removes it, so it does not leak into later classes). */
+    internal fun unregister(id: String) {
+        builders.remove(id.trim().lowercase())
+    }
+
     /**
      * PROV-1: wire a config-defined provider ONLY when its name is still free, and report whether it
      * was wired. A built-in (or an earlier registration) always wins, so a file dropped in the

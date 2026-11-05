@@ -29,12 +29,14 @@ class SessionContainersTest {
         val c = SessionContainers.forHost("test-" + UUID.randomUUID().toString().take(8))
         assertEquals("job object", c.kind)
         val key = "session-" + UUID.randomUUID().toString().take(8)
-        // The shell waits ~1 s (so it is in the job before it forks), starts a detached long ping, and exits.
-        val shell = ProcessBuilder("cmd", "/c", "ping -n 2 127.0.0.1 >nul & start \"\" /b ping -n 120 127.0.0.1 >nul")
+        // The shell waits for a line on stdin (QA-FIX-C: sent only once it is in the job; the old ~1 s ping wait lost the
+        // race under a loaded full suite and forked before assign), starts a detached long ping, and exits.
+        val shell = ProcessBuilder("cmd", "/c", "set /p gate= & start \"\" /b ping -n 120 127.0.0.1 >nul")
             .redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD).start()
         var detached: List<ProcessHandle> = emptyList()
         try {
             assertTrue(c.assign(key, shell.pid()), "the shell joins the session's job")
+            shell.outputStream.use { it.write("go\r\n".toByteArray()) }
             assertTrue(shell.waitFor(30, TimeUnit.SECONDS), "the shell exits")
             val members = c.members(key)
             detached = members.mapNotNull { ProcessHandle.of(it).orElse(null) }

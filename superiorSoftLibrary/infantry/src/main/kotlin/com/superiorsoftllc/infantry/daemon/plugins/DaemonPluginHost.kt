@@ -526,7 +526,7 @@ class DaemonPluginHost private constructor(
     /** Set by the daemon once it is up: re-reads the plugins root and the loading rules, so [load] sees what was just installed. Null = no live load. */
     @Volatile var hotSource: (() -> HotSource)? = null
 
-    // DEMO-CHECK-1 (DaemonApi 1.39.0): the `whenStarted` blocks the plugins queued during boot, run once by [markStarted].
+    // Ticket 91495a9f (DaemonApi 1.39.0): the `whenStarted` blocks the plugins queued during boot, run once by [markStarted].
     private val startedLock = Any()
     private var started = false
     private val startedQueue = mutableListOf<Pair<Loaded, () -> Unit>>()

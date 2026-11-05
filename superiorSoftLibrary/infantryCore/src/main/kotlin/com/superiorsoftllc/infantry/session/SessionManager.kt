@@ -309,6 +309,9 @@ class SessionManager(
 
     /** CHAT-ORDER-1: every undelivered event in the order it was raised, whichever thread raised it. Guarded by itself. */
     private val outbox = ArrayList<Outgoing>()
+    /** QA-FIX-C: sessions whose event is out of the outbox but still in [eventSink]; their next event waits for it. Guarded by [outbox]. */
+    private val deliveringKeys = HashMap<String, Int>()
+    private fun takeAt(i: Int): Outgoing = outbox.removeAt(i).also { deliveringKeys.merge(it.key, 1, Int::plus) }
     private val heldHere = ThreadLocal.withInitial { ArrayList<Outgoing>() }
     /** True while this thread is inside [eventSink]: an event a listener raises then is delivered at once, as before. */
     private val delivering = ThreadLocal.withInitial { false }
@@ -336,7 +339,9 @@ class SessionManager(
      * left to a helper thread that holds no lock of its caller's, and delivers it once that earlier event is out.
      */
     private fun emit(event: SessionEvent) {
-        if (delivering.get()) {
+        // QA-FIX-C: a listener that re-enters the manager (a done hook's ticket_start -> handOut -> startNew) raises events
+        // under the lock too; those are deferred like any other (DEADLOCK-1), only an unlocked one goes out at once.
+        if (delivering.get() && !Thread.holdsLock(this)) {
             runCatching { eventSink?.invoke(event) }
             return
         }
@@ -372,7 +377,7 @@ class SessionManager(
     /** Under the outbox lock: true when no earlier undelivered event of [index]'s session is still in the outbox. */
     private fun firstOfItsSession(index: Int): Boolean {
         val key = outbox[index].key
-        return (0 until index).none { outbox[it].key == key }
+        return key !in deliveringKeys && (0 until index).none { outbox[it].key == key }
     }
 
     /**
@@ -389,7 +394,7 @@ class SessionManager(
                     val item = outbox[i]
                     if (item.owner !== me || !item.ready || item.orphan) continue
                     if (item.key in blockedKeys || !firstOfItsSession(i)) { item.orphan = true; blockedKeys += item.key; continue }
-                    found = outbox.removeAt(i)
+                    found = takeAt(i)
                     break
                 }
                 found
@@ -407,7 +412,7 @@ class SessionManager(
             while (true) {
                 val next = synchronized(outbox) {
                     val i = outbox.indices.firstOrNull { outbox[it].orphan && firstOfItsSession(it) }
-                    if (i == null) { helperRunning.set(false); null } else outbox.removeAt(i)
+                    if (i == null) { helperRunning.set(false); null } else takeAt(i)
                 } ?: break
                 deliverOne(next)
             }
@@ -416,14 +421,18 @@ class SessionManager(
     }
 
     private fun deliverOne(item: Outgoing) {
+        // Nested: a listener's own locked section flushes its deferred events while the outer delivery is still running.
+        val wasDelivering = delivering.get()
+        val wasLocked = deliveringLocked.get()
         delivering.set(true)
         deliveringLocked.set(item.raisedUnderLock)
         try {
             runCatching { eventSink?.invoke(item.event) }
                 .onFailure { System.err.println("[infantry] session event listener failed: ${it.message}") }
         } finally {
-            delivering.set(false)
-            deliveringLocked.set(false)
+            delivering.set(wasDelivering)
+            deliveringLocked.set(wasLocked)
+            synchronized(outbox) { deliveringKeys.computeIfPresent(item.key) { _, n -> (n - 1).takeIf { it > 0 } } }
         }
         // Removing it may have made an orphan of its session due.
         wakeHelper()

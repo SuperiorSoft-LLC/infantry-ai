@@ -502,7 +502,7 @@ private var activityBoxChoice by mutableStateOf<Boolean?>(null)
 /** Forget the remembered open/closed choice (a fresh window; tests). */
 fun resetActivityBoxChoice() { activityBoxChoice = null }
 
-private const val ACTIVITY_AUTO_OPEN_KEY = "activityBox.autoOpenWhileRunning"
+internal const val ACTIVITY_AUTO_OPEN_KEY = "activityBox.autoOpenWhileRunning"
 
 /**
  * UI-ACT-2: the selected session's tool activity, newest first, above the chat input. Collapsible; it
