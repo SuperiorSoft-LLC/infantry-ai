@@ -38,7 +38,10 @@ class ChatOrderTest {
         try {
             val m = SessionManager(P, R, JsonSessionStore(File(dir, "s.json")))
             val seen = CopyOnWriteArrayList<String>()
-            m.eventSink = { e -> seen += when (e) { is SessionEvent.Turn -> "turn"; is SessionEvent.Stdout -> "reply"; else -> "other" } }
+            // QA-FIX-C: the reply waits behind the held turn, so the session-events helper thread delivers it (QA-FIX-A);
+            // t.join() does not cover that thread, the latch does.
+            val both = CountDownLatch(2)
+            m.eventSink = { e -> seen += when (e) { is SessionEvent.Turn -> "turn"; is SessionEvent.Stdout -> "reply"; else -> "other" }; both.countDown() }
             val cls = SessionManager::class.java
             val emit = cls.getDeclaredMethod("emit", SessionEvent::class.java).apply { isAccessible = true }
             val flush = cls.getDeclaredMethod("flushEvents").apply { isAccessible = true }
@@ -56,6 +59,7 @@ class ChatOrderTest {
             emit.invoke(m, SessionEvent.Stdout("s", "reply"))
             replyDone.countDown()
             t.join()
+            assertTrue(both.await(30, java.util.concurrent.TimeUnit.SECONDS), "both events delivered: $seen")
             assertEquals(listOf("turn", "reply"), seen.toList())
             assertTrue(seen.size == 2)
         } finally { dir.deleteRecursively() }

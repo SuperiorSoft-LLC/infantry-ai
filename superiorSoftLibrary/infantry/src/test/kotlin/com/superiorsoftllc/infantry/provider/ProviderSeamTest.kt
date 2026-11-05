@@ -67,8 +67,10 @@ class ProviderSeamTest {
     @Test
     fun registryDispatchesOnConfigurationName() {
         ProviderFactory.register("fake", ::FakeProvider)
-        // Case-insensitive, exactly as a config value would be typed.
-        assertEquals("fake", ProviderFactory.fromFlag("FAKE").id)
+        try {
+            // Case-insensitive, exactly as a config value would be typed.
+            assertEquals("fake", ProviderFactory.fromFlag("FAKE").id)
+        } finally { ProviderFactory.unregister("fake") } // QA-FIX-C: it leaked into ToolApprovalMatrixTest as an unmapped provider
     }
 
     @Test

@@ -1782,7 +1782,7 @@ class InfantryDaemon(
                     }
                 }, "daemon-plugin-events").apply { isDaemon = true }.start()
             }
-            // DEMO-CHECK-1 (DaemonApi 1.39.0): every daemon half and harness module is in and recovery is done: the plugins' `whenStarted` work runs now.
+            // Ticket 91495a9f (DaemonApi 1.39.0): every daemon half and harness module is in and recovery is done: the plugins' `whenStarted` work runs now.
             plugins.markStarted()
             // Deliver anything that was queued before the last shutdown to a session already at rest.
             mail.onStartup()
@@ -1883,7 +1883,7 @@ class InfantryDaemon(
                     // WEB-1: the browser client, one exact route per bundle file (no path resolution, nothing to traverse).
                     webBundleRoutes(webBundle)
                     webSocket("/ws") {
-                        // DEMO-CHECK-1: the address, never remoteHost. remoteHost is a reverse DNS lookup whose name the JVM then
+                        // Ticket 91495a9f: the address, never remoteHost. remoteHost is a reverse DNS lookup whose name the JVM then
                         // caches on the socket address, so the Caller's remoteAddress (hostString) became "localhost" and a
                         // loopback reverse proxy was no longer recognised: every visitor shared one per-IP turn budget.
                         val wsPeer = call.request.local.remoteAddress
