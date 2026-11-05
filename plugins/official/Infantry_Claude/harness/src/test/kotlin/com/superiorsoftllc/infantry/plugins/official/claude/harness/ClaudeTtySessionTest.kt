@@ -114,11 +114,77 @@ class ClaudeTtySessionTest {
     }
 
     @Test fun `a resumed session resumes and asks no bypass switch without bypass mode`() {
+        // G2: only an id claude wrote a transcript for is resumed.
+        File(File(File(config, "projects"), ClaudeTranscripts.slug(cwd.absolutePath)), "abc.jsonl").apply { parentFile.mkdirs(); writeText(prompt + "\n") }
         val launched = session.launch(request("", resume = "abc", approval = ToolApproval.ALLOW_EDITS), emptyMap())
         assertEquals("abc", launched.command[launched.command.indexOf("--resume") + 1])
         assertFalse("--session-id" in launched.command)
         val settings = File(File(state, ClaudeTtySession.TTY_DIR), "abc.settings.json").readText()
         assertFalse("skipDangerousModePermissionPrompt" in settings)
+    }
+
+    // ---- G2: a launch that quit before claude wrote a transcript -------------------------------------------------------
+
+    @Test fun `a session whose cli quit before its transcript starts its id fresh with the first prompt sent again`() {
+        val id = "11111111-2222-3333-4444-555555555555"
+        val first = start()
+        first.c.sendTurn(request("BRIEF: do the ticket"))
+        first.c.onExit(1) // the CLI quit at boot (e.g. the trust question): no transcript was ever written
+        val kept = ClaudeResume.firstPromptFile(state, id)
+        assertEquals("BRIEF: do the ticket", kept.readText(), "the new session's first prompt is kept until claude records it")
+        assertFalse(transcript.exists())
+
+        val again = start(resume = id)
+        assertFalse("--resume" in again.argv, "an unrecorded id is never resumed: ${again.argv}")
+        assertEquals(id, again.argv[again.argv.indexOf("--session-id") + 1], "the same id starts fresh, so the daemon's stored id stays right")
+        up(again)
+        again.c.sendTurn(request("mail: carry on"))
+        again.c.tick()
+        val pasted = again.out.written.joinToString("")
+        assertTrue("BRIEF: do the ticket" in pasted && "mail: carry on" in pasted, "the lost brief rides ahead of the new prompt: $pasted")
+        assertTrue(pasted.indexOf("BRIEF") < pasted.indexOf("mail: carry on"))
+
+        record(prompt) // claude recorded the conversation
+        again.c.tick()
+        assertFalse(kept.exists(), "a recorded session keeps no first prompt")
+    }
+
+    @Test fun `a later turn of a recovered launch is sent as it is`() {
+        val id = "11111111-2222-3333-4444-555555555555"
+        ClaudeResume.keepFirstPrompt(ClaudeResume.firstPromptFile(state, id), "BRIEF")
+        val s = start(resume = id)
+        up(s)
+        s.c.sendTurn(request("one"))
+        s.c.tick(); now += ClaudeTtySession.PASTE_SETTLE_MS; s.c.tick()
+        event(s, "submit"); s.c.tick(); event(s, "stop"); settle(s)
+        assertEquals(SessionTurnEnd.COMPLETED, s.out.ends.single().first)
+        val before = s.out.written.size
+        s.c.sendTurn(request("two"))
+        s.c.tick()
+        val second = s.out.written.drop(before).joinToString("")
+        assertTrue("two" in second && "BRIEF" !in second, "only the first turn carries the brief again: $second")
+    }
+
+    @Test fun `headless starts an unrecorded id fresh and sends the kept first prompt again`() {
+        val id = "22222222-2222-3333-4444-555555555555"
+        ClaudeResume.keepFirstPrompt(ClaudeResume.firstPromptFile(state, id), "BRIEF")
+        val headless = ClaudeSession({ "claude.exe" }, { null to emptyMap() }, configDir = { config }, stateDir = { state })
+        val launched = headless.launch(request("", resume = id), emptyMap())
+        assertFalse("--resume" in launched.command, "${launched.command}")
+        assertEquals(id, launched.command[launched.command.indexOf("--session-id") + 1])
+        val out = Recorder()
+        val c = headless.connect(out, launched)
+        c.sendTurn(request("next"))
+        val line = out.written.single()
+        assertTrue("BRIEF" in line && "next" in line, line)
+
+        File(File(File(config, "projects"), "any"), "$id.jsonl").apply { parentFile.mkdirs(); writeText(prompt + "\n") }
+        val resumed = headless.launch(request("", resume = id), emptyMap())
+        assertEquals(id, resumed.command[resumed.command.indexOf("--resume") + 1], "a recorded id resumes")
+        assertFalse("--session-id" in resumed.command)
+        val out2 = Recorder()
+        headless.connect(out2, resumed).sendTurn(request("plain"))
+        assertTrue("BRIEF" !in out2.written.single())
     }
 
     @Test fun `the watch hooks are merged into the one settings file`() {

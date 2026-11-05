@@ -16,6 +16,8 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.put
+import java.io.File
+import java.util.IdentityHashMap
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -36,12 +38,19 @@ class ClaudeSession(
     private val requestId: () -> String = { UUID.randomUUID().toString() },
     /** `harness.claude.liveIdleMinutes`: 0 = never stop a resting process (the default, a live CLI stays up). */
     private val idleMinutes: () -> Int = { 0 },
+    /** G2: claude's config folder (its transcripts), to tell a resumable id from one claude never recorded. */
+    private val configDir: () -> File = { ClaudeTranscripts.configDir() },
+    /** G2: the plugin's state folder, where the interactive session keeps a new session's first prompt; null = none to send again. */
+    private val stateDir: (() -> File)? = null,
 ) : HarnessSession {
     override val label: String = "claude"
 
     override fun idleMinutes(): Int = idleMinutes.invoke()
 
-    private fun argv(exe: String, request: HarnessRequest, resume: String?, env: Map<String, String>): List<String> {
+    /** G2: launches that start a stored id fresh (claude has no transcript for it), until [connect] takes them. */
+    private val recoveries = IdentityHashMap<HarnessProcess, String>()
+
+    private fun argv(exe: String, request: HarnessRequest, resume: String?, env: Map<String, String>, fresh: String? = null): List<String> {
         val (mcpCommand, mcpEnv) = mcp(env)
         return ClaudeCommand.command(
             executable = exe,
@@ -53,6 +62,7 @@ class ClaudeSession(
             effort = request.effort,
             streamInput = true,
             settings = watchSettings(env).takeIf { request.toolApproval == ToolApproval.ALLOW_ALL },
+            sessionId = fresh,
         )
     }
 
@@ -62,15 +72,24 @@ class ClaudeSession(
             (env + ClaudeCommand.contextLimitEnv(request.contextLimit)).toSortedMap()
 
     override fun launch(request: HarnessRequest, env: Map<String, String>): HarnessProcess {
-        val resume = request.sessionId?.takeIf { it.isNotBlank() }
-        return HarnessProcess(
-            command = argv(executable(), request, resume, env),
+        val stored = request.sessionId?.takeIf { it.isNotBlank() }
+        // G2: `--resume` of an id claude never recorded fails on every start; start that id fresh instead (the daemon keeps the same id).
+        val fresh = stored?.takeUnless { ClaudeResume.resumable(configDir(), request.project, it) }
+        val process = HarnessProcess(
+            command = argv(executable(), request, stored.takeIf { fresh == null }, env, fresh),
             // Claude Code 2.1.30x has no TodoWrite headless; this enables TaskCreate/TaskUpdate.
             env = mapOf("CLAUDE_CODE_ENABLE_TODO_TOOLS" to "1") + ClaudeCommand.contextLimitEnv(request.contextLimit),
         )
+        if (fresh != null) synchronized(recoveries) { recoveries[process] = fresh }
+        return process
     }
 
     override fun connect(out: SessionOutput): SessionConnection = Connection(out, requestId)
+
+    override fun connect(out: SessionOutput, launched: HarnessProcess): SessionConnection {
+        val fresh = synchronized(recoveries) { recoveries.remove(launched) } ?: return connect(out)
+        return Connection(out, requestId, recovery = fresh to stateDir?.let { ClaudeResume.firstPromptFile(it(), fresh) })
+    }
 
     /** [own] = CLI-PTY-4: claude began it by itself; no sendTurn stands behind it. */
     private class Turn(private val out: SessionOutput, val own: Boolean = false) {
@@ -82,7 +101,12 @@ class ClaudeSession(
         }
     }
 
-    private class Connection(private val out: SessionOutput, private val requestId: () -> String) : SessionConnection {
+    /** [recovery] = G2: the id this process starts fresh and where its lost first prompt is kept; its first turn sends that prompt again. */
+    private class Connection(
+        private val out: SessionOutput,
+        private val requestId: () -> String,
+        private var recovery: Pair<String, File?>? = null,
+    ) : SessionConnection {
         private val lock = Any()
         private var active: Turn? = null
         private var staleResults = 0
@@ -120,9 +144,18 @@ class ClaudeSession(
                 if (active?.abortRequested?.get() == true) staleResults++
                 else active?.takeIf { it.own }?.let { ownAhead.addLast(it) }
                 active = turn
-                if (out.write(userLine(request.prompt) + "\n")) null else { active = null; "could not send the turn to claude" }
+                if (out.write(userLine(prompt(request.prompt)) + "\n")) null else { active = null; "could not send the turn to claude" }
             }
             failure?.let { turn.end(SessionTurnEnd.FAILED, null, it) }
+        }
+
+        /** G2: the first turn of a recovered process carries the session's lost first prompt ahead of its own. Under [lock]. */
+        private fun prompt(prompt: String): String {
+            val (id, file) = recovery ?: return prompt
+            recovery = null
+            val saved = file?.let(ClaudeResume::savedFirstPrompt)
+            out.detail(ClaudeResume.recoveredDetail(id, briefResent = saved != null && saved != prompt))
+            return ClaudeResume.recoveryPrompt(saved, prompt)
         }
 
         override fun abortTurn(): Boolean = synchronized(lock) {
