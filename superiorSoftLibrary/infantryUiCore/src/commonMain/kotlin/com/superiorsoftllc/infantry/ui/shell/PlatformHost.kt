@@ -101,6 +101,12 @@ interface PlatformHost {
     /** UPDATE-1: Configuration > Updates (the installed desktop app only); null hides the section. */
     val updates: com.superiorsoftllc.infantry.ui.UpdatesEntry? get() = null
 
+    /**
+     * UPDATER-1: which platform's self-update a plugin may offer here ([SELF_UPDATE_REGISTRY] key, e.g. `android`), used
+     * when [updates] is null; null = this host offers none from a plugin.
+     */
+    val selfUpdateKey: String? get() = null
+
     /** SERVER-UPDATE-4: this app's own version, compared with the server's; null when the host cannot tell (then only the contract is compared). */
     val appVersion: String? get() = updates?.version
 
@@ -166,6 +172,17 @@ interface PlatformHost {
 
     /** PAIR-1: the text of the QR code in a picture's bytes, or null (none found, or this host cannot decode one). */
     fun decodeQrImage(bytes: ByteArray): String? = null
+}
+
+/**
+ * UPDATER-1: the implementations registry (module.json `implementations`) under which a plugin offers this app's own
+ * update for a platform, keyed by [PlatformHost.selfUpdateKey]. The value is a [SelfUpdateProvider].
+ */
+const val SELF_UPDATE_REGISTRY = "app.selfUpdate"
+
+/** UPDATER-1: builds Configuration > Updates for the app connected to [daemonUrl] (with [token]); null = nothing to offer here. */
+fun interface SelfUpdateProvider {
+    fun entry(daemonUrl: String, token: String?, host: PlatformHost): com.superiorsoftllc.infantry.ui.UpdatesEntry?
 }
 
 /** The largest custom incoming-comms sound accepted. */

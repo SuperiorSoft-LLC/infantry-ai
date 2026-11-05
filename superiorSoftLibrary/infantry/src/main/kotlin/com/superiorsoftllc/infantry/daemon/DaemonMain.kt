@@ -672,8 +672,6 @@ class InfantryDaemon(
              * other route. The daemon knows nothing about them (the installed desktop app adds its window activation).
              */
             extraRoutes: io.ktor.server.routing.Route.() -> Unit = {},
-            /** SERVER-UPDATE-3: this daemon's own update state; null reads it from the environment (archive / Docker / dev). */
-            updates: com.superiorsoftllc.infantry.update.ServerUpdateService? = null,
             /** Contract 1.115.0 (ASSISTANT-1): where the global Assistant runs: a folder of its own under the app's data dir. */
             assistantDir: File = File(stateDir(), "assistant"),
             /** TICKET-HANDOVER: how long a switched ticket worker's old agent gets to write its handoff note. */
@@ -1864,12 +1862,7 @@ class InfantryDaemon(
                     daemonConfigRoutes(daemonConfig)
                     // Phase 6 agent-facing mail API: how a spawned CLI agent answers a delivered message.
                     mailRoutes(mail, mailbox) { request -> plugins.mailRefusal(request.from, request.to, request.allowCrossProject) }
-                    // SERVER-UPDATE-3 (1.110.0): status / check / apply for the headless daemon's own updates.
-                    updateRoutes(
-                        updates ?: com.superiorsoftllc.infantry.update.ServerUpdateService.fromEnvironment(
-                            runningAgents = { manager.list().count { it.isBusy() } },
-                        ),
-                    )
+                    // UPDATER-1: `/update/*` (status / check / apply / client) is served by the Infantry_Updater plugin's daemon half.
                     // P9.6: signature-admitted webhook ingress (exempt from the bearer in AccessPolicy, signed per hook).
                     hookRoutes(WebhookIngress(triggers))
                     // STALL-2: the harness watch hooks (claude PreToolUse http, opencode plugin, pi extension) ask here.

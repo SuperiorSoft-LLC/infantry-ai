@@ -46,7 +46,10 @@ fun InfantryShell(host: PlatformHost, controller: Controller? = null) {
                 active, config.url, config.token,
                 pickFile = if (host.canPickFiles) host::pickFile else null,
                 logs = host.logsDir?.let { dir -> LogsFolder(dir) { host.openFolder(dir) } },
-                updates = host.updates,
+                // UPDATER-1: the host's own updater (desktop MSI), else the one a plugin registered for this platform.
+                updates = host.updates ?: host.selfUpdateKey?.let { key ->
+                    (tabs.implementations.get(SELF_UPDATE_REGISTRY, key) as? SelfUpdateProvider)?.entry(config.url, config.token, host)
+                },
                 tabs = tabs,
             )
         }

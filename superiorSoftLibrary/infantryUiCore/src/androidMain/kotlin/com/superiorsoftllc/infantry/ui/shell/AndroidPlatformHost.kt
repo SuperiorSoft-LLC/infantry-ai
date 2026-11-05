@@ -27,7 +27,12 @@ class AndroidPlatformHost(
     private val soundPicker: ((onPicked: (PickedImage?) -> Unit) -> Unit)? = null,
     /** ANDROID-ATTACH-1: the system picker (imagesOnly, maxBytes, callback), wired to the Activity result registry. */
     private val attachPicker: ((imagesOnly: Boolean, maxBytes: Long, onPicked: (PickedImage?) -> Unit) -> Unit)? = null,
+    /** UPDATER-1: the application context, for a plugin's self-update (download to cache, the system installer); null = none. */
+    val appContext: android.content.Context? = null,
 ) : PlatformHost {
+    /** UPDATER-1: a plugin may offer the APK update ([SELF_UPDATE_REGISTRY] key `android`) when there is a context to install with. */
+    override val selfUpdateKey: String? get() = if (appContext != null) "android" else null
+
     override val canPickAttachment: Boolean get() = attachPicker != null
     override fun pickAttachment(title: String, imagesOnly: Boolean, maxBytes: Long, onPicked: (PickedImage?) -> Unit) {
         attachPicker?.invoke(imagesOnly, maxBytes, onPicked) ?: onPicked(null)

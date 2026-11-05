@@ -2,6 +2,62 @@
 
 The installed app (never a dev build) checks for a newer build at start and when you click the footer button.
 
+## The Infantry_Updater plugin (UPDATER-1)
+
+Updates are a plugin, `plugins/official/Infantry_Updater`, not core:
+
+| part | what it does |
+|---|---|
+| daemon half (`daemon/`, `UpdaterDaemonPlugin`) | serves `GET /update/status`, `POST /update/check`, `POST /update/apply` (this server's own update) and `GET /update/client?platform=android&current=<x.y.z>` (the phone's APK offer); re-checks every `updater.checkIntervalHours` |
+| the engine (same jar) | GitHub / local release sources, SHA-256 checks, the MSI handoff, the server archive staging. The desktop window and the headless `infantry update` command use the same jar |
+| UI half (`src/`, `UpdaterPlugin`) | fills the `app.selfUpdate` registry: on Android, Configuration > Updates asks the daemon, downloads the APK, checks its size and SHA-256 and installs it (Android asks to confirm) |
+
+Core keeps only generic seams: the plugin route table, `PlatformHost.selfUpdateKey` and the `app.selfUpdate` implementations
+registry. The Updates config sections stay in the locked trust kernel, so an update stays checkable after a bad plugin drop.
+
+### Settings (Configuration > About > Updater, module config `infantry.updater`)
+
+| key | values | meaning |
+|---|---|---|
+| `updater.source` | `public` (default) / `private` | `public` never sends a token. `private` sends a read token (below) to the GitHub API host only |
+| `updater.repo` | `owner/repo` | the GitHub repo |
+| `updater.channel` | `production` (default) / `unstable` | production = GitHub releases, unstable = the local folder `updater.dir` |
+| `updater.dir` | folder path | the local releases folder |
+| `updater.checkIntervalHours` | 0 to 720, default 24 | the daemon re-checks this often; 0 = only at start and by hand. A check never installs |
+
+Precedence: env (`INFANTRY_UPDATE_SOURCE`, `INFANTRY_UPDATE_REPO`, `INFANTRY_UPDATE_DIR`) > `update.properties` (below; it
+also takes the `updater.*` keys) > the module config. The daemon mirrors the effective values (never a token) to
+`<state>/plugin-data/Infantry_Updater/settings.properties`, which the desktop window reads.
+
+### The private-repo token
+
+Only with `updater.source=private`, first found wins:
+
+1. env `INFANTRY_UPDATE_TOKEN` (the owner's user environment variable);
+2. the keystore secret `update-token` (Configuration > Keys, sealed in the state dir);
+3. the OS credential store (Git Credential Manager's login for github.com).
+
+Use a fine-grained token, read only (Contents: read), for this repo only. The token is never written to a file, a log, a
+reply or a crash dump; `UpdateConfig.toString` shows `token=set` or `token=none`. `UpdateTokenGuardTest` fails the build
+if a tracked file or a built jar, archive or installer holds a GitHub token, or the value of `INFANTRY_UPDATE_TOKEN`.
+The phone never gets the token: the daemon asks GitHub and gives the phone a short-lived, token-free download URL.
+
+### Launch-day switch (repo made public)
+
+1. Set `updater.source=public` (the default: remove any `private` value from the config, env and `update.properties`).
+2. Delete the token: `[Environment]::SetEnvironmentVariable('INFANTRY_UPDATE_TOKEN', $null, 'User')`, and delete the
+   keystore secret `update-token`.
+3. Check: `pwsh scripts/updater-e2e.ps1 -Source public` shows the latest release with no token sent.
+
+### Local production emulation
+
+`scripts/updater-e2e.ps1` runs the whole flow on a throwaway state dir under `%TEMP%` and port 18797 (it refuses
+8787, 8788, 8797 and 8798). Steps: `token` (set or none, never the value), `release`, `server` (an older headless build
+updates itself), `msi` (download, SHA-256, then `msiexec /a` extraction only: `/i` would upgrade the owner's own app,
+which has the same upgrade code), `apk` (a test daemon answers `/update/client`; the APK is downloaded from the
+token-free URL and checked; `-Adb` installs it on the attached phone), and `public` (no token sent). Pick steps with
+`-Steps token,release,msi`.
+
 ## Settings: `update.properties`
 A file named `update.properties` in the installed app's state dir (`INFANTRY_STATE_DIR`).
 
@@ -12,8 +68,9 @@ A file named `update.properties` in the installed app's state dir (`INFANTRY_STA
 | `dir` | folder path | the local releases folder (also `INFANTRY_UPDATE_DIR`) |
 | `repo` | `owner/repo` | the GitHub repo (also `INFANTRY_UPDATE_REPO`) |
 
-With neither `channel` nor `source`: a `dir` means local, else a `repo` means GitHub. A private repo's token comes from
-`INFANTRY_UPDATE_TOKEN` or the Git credential store, never from the file.
+With neither `channel` nor `source`: a `dir` means local, else a `repo` means GitHub. `source=local|github` is where
+releases come from; the `updater.source` key (`public` / `private`) is whether a token is sent. A private repo's token
+comes from the places above, never from the file.
 
 ## Publish locally (unstable)
 `scripts/publish-local-release.ps1 -Version 1.0.N` builds the MSI and writes `<dir>/1.0.N/{Infantry-1.0.N.msi, SHA256SUMS, RELEASE-NOTES.md}`
@@ -37,8 +94,8 @@ Footer states: up to date, checking, update available, downloading, ready to ins
 
 The headless daemon (the `InfantryAI-server-<v>-<os>-<arch>` archive, or the Docker image) updates through the same
 settings as the desktop app: `INFANTRY_UPDATE_REPO=owner/repo` or `INFANTRY_UPDATE_DIR=<folder>` (or `update.properties` in
-`INFANTRY_STATE_DIR`), and for a private repo `INFANTRY_UPDATE_TOKEN` / `INFANTRY_UPDATE_TOKEN` in the environment. The
-token is never written to a file, never returned by the API, and only sent to the GitHub API host.
+`INFANTRY_STATE_DIR`), and for a private repo `updater.source=private` with the token as above. The token is never written
+to a file, never returned by the API, and only sent to the GitHub API host.
 
 ## Archive installs
 
@@ -63,13 +120,15 @@ docker compose up -d` command (image name from `INFANTRY_DOCKER_IMAGE`), and a W
 
 ## Clients
 
-Daemon routes (contract 1.110.0, bearer token): `GET /update/status`, `POST /update/check`, `POST /update/apply`
-(`{"confirm":false}`). Configuration > Server shows the daemon version, whether an update exists, the Update button (a
+Daemon routes (contract 1.110.0, bearer token; served by Infantry_Updater's daemon half): `GET /update/status`,
+`POST /update/check`, `POST /update/apply` (`{"confirm":false}`), and `GET /update/client?platform=android&current=<x.y.z>`
+(`result`: `available` with `version`, `name`, `size`, `sha256` and a token-free `url`; or `up_to_date`, `disabled`,
+`unsupported`, `failed` with a `message`). Configuration > Server shows the daemon version, whether an update exists, the Update button (a
 confirm dialog, naming working agents) and a warning when app and server differ by more than a patch or the server's
 contract is older than the app expects.
 
 ## Testing without a GitHub release
 
 `INFANTRY_UPDATE_DIR=<folder>` with `<folder>/<v>/{InfantryAI-server-<v>-<os>-<arch>.{zip|tar.gz}, SHA256SUMS}` is a full
-local release source (`LocalDirSource`). Not testable locally: a private-repo token download, a real `docker pull`, a Windows
-service restart (the Windows launcher is a plain wrapper, not a service).
+local release source (`LocalDirSource`). A private-repo download is tested by `scripts/updater-e2e.ps1`. Not testable
+locally: a real `docker pull`, a Windows service restart (the Windows launcher is a plain wrapper, not a service).

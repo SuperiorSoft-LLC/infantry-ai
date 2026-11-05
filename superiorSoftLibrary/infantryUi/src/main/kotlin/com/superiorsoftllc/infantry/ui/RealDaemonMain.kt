@@ -23,7 +23,7 @@ import com.superiorsoftllc.infantry.ui.shell.PlatformHost
 import com.superiorsoftllc.infantry.ui.shell.ShellKeys
 import com.superiorsoftllc.infantry.ui.shell.defaultPlatformHost
 import com.superiorsoftllc.infantry.session.isBusy
-import com.superiorsoftllc.infantry.update.UpdateService
+import com.superiorsoftllc.infantry.plugins.official.updater.UpdateService
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 import java.io.InputStream

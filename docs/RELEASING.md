@@ -81,15 +81,25 @@ Windows code signing is still HELD: the MSI is unsigned (SmartScreen will warn).
 
 ## Updater configuration
 
-The installed app resolves "latest" with `GET /repos/{repo}/releases/latest` (`UpdateSettings`): set
-`INFANTRY_UPDATE_REPO=owner/repo` (or `repo=` in `<stateDir>/update.properties`). With no newer release it reports up to
-date; offline, rate-limited or a missing release it shows a message and keeps running.
+The updater is the official plugin `plugins/official/Infantry_Updater` (UPDATER-1); see
+`superiorSoftLibrary/infantry/docs/UPDATES.md`. It resolves "latest" with `GET /repos/{repo}/releases/latest`: set
+`updater.repo=owner/repo` (Configuration > About > Updater), or `INFANTRY_UPDATE_REPO`, or `repo=` in
+`<stateDir>/update.properties`. With no newer release it reports up to date; offline, rate-limited or a missing release it
+shows a message and keeps running. The desktop app installs the MSI, the headless server the `InfantryAI-server-*`
+archive, and the phone the APK (`InfantryAI-<v>.apk`, else `-debug.apk`; the daemon serves the offer at `/update/client`).
 
-## Private repository limitation
+## Private repository (before launch)
 
-Release assets of a private repo cannot be downloaded anonymously. While the repo is private, the installed app needs a
-read token in the environment (`INFANTRY_UPDATE_TOKEN` or `INFANTRY_UPDATE_TOKEN`, never in a file; or Git Credential Manager's stored login).
-End users cannot update from a private repo: it must be public (or assets hosted elsewhere) before shipping.
+Release assets of a private repo cannot be downloaded anonymously. While the repo is private, set
+`updater.source=private` and give a fine-grained read-only token (Contents: read, this repo only) in the user env var
+`INFANTRY_UPDATE_TOKEN`, or the keystore secret `update-token` (never in a file in the repo). End users cannot update
+from a private repo. Test the whole flow with `scripts/updater-e2e.ps1`.
+
+## Launch-day switch
+
+When the repo goes public: `updater.source=public` (the default), delete the env var
+(`[Environment]::SetEnvironmentVariable('INFANTRY_UPDATE_TOKEN', $null, 'User')`) and the keystore secret
+`update-token`, then run `pwsh scripts/updater-e2e.ps1 -Source public`: the latest release is found with no token sent.
 
 ## Not verified without a real Actions run
 

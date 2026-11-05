@@ -5,6 +5,9 @@
     <!-- MOBILE-ANDROID-1: the daemon speaks cleartext ws:// (Tailscale/WireGuard carries the encryption). -->
     <!-- RELEASE-ANDROID-1: allowBackup=false (MOBILE-CONNECT-1) - the stored token is Keystore-bound, so a
          restored backup could not decrypt it anyway; backing it up only spreads ciphertext. -->
+    <!-- UPDATER-1: Infantry_Updater installs a newer APK through the system installer (Android asks the owner to confirm). -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
     <application
         android:allowBackup="false"
         android:label="Infantry AI"

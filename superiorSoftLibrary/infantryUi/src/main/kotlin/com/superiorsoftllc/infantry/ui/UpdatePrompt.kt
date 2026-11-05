@@ -29,10 +29,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.infantry.update.InstallPrompt
-import com.superiorsoftllc.infantry.update.UpdateService
-import com.superiorsoftllc.infantry.update.footerLabel
-import com.superiorsoftllc.infantry.update.UpdateState
+import com.superiorsoftllc.infantry.plugins.official.updater.InstallPrompt
+import com.superiorsoftllc.infantry.plugins.official.updater.UpdateService
+import com.superiorsoftllc.infantry.plugins.official.updater.footerLabel
+import com.superiorsoftllc.infantry.plugins.official.updater.UpdateState
 
 /**
  * UPDATE-1: the window's only update UI, a pure rendering of [UpdateService.state] (HEADLESS-1: no update logic here).
