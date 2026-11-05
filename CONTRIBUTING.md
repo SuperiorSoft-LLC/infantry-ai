@@ -44,7 +44,7 @@ Common tasks, from the repository root:
     ./gradlew :superiorSoftLibrary:infantry:runDaemon        # daemon on ws://127.0.0.1:8787/ws
     ./gradlew :superiorSoftLibrary:infantryUi:runUi          # desktop UI against it
     ./gradlew :superiorSoftLibrary:infantryUi:runSmoke       # UI against an in-process stub daemon (no real CLIs)
-    ./gradlew :superiorSoftLibrary:infantry:installDist      # the infantry / infantry CLI
+    ./gradlew :superiorSoftLibrary:infantry:installDist      # the `infantry` CLI (build/install/infantry/bin)
 
 **Run one Gradle build at a time.** The test JVMs are memory hungry; two builds in parallel can exhaust the host's RAM
 and crash. More detail: [QUICKSTART.md](superiorSoftLibrary/infantry/docs/QUICKSTART.md) (from source) and

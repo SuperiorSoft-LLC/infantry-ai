@@ -42,6 +42,7 @@ Gradle project paths keep the monorepo prefix `:superiorSoftLibrary:`. "Core" me
 | `infantryBoard` | The board's lower-level packages (epics, brief, ledger, context, ticketfiles). Depends on the daemon API, never on `infantry`. | platform SDK (Apache-2.0) |
 | `infantryPlugins` | The UI plugin contract (`plugin.api`: `ModuleManifest`, config types) and the host's loading rules (`plugin.host`: `PluginTree`). No Compose. | platform SDK (Apache-2.0) |
 | `infantryUiCore` | The shared client: Compose UI shell, `Controller`, `DaemonClient`, `UiPlugin`, `UiRegistrar`. Kotlin Multiplatform (JVM, Android, wasm). | platform client (Apache-2.0) |
+| `infantrySdkBom`, `infantrySdkCatalog` | Publishing only: the SDK's Maven BOM and Gradle version catalog, so an out-of-tree plugin pins one SDK version. No sources. | platform SDK (Apache-2.0) |
 | `infantryAppUi` | The app UI outside the shell; holds the generated module list web and Android compile in. | app (Apache-2.0) |
 | `infantryUi` | The desktop window (Compose Desktop). | app (Apache-2.0) |
 | `infantryWeb` | The browser client (Kotlin/wasm); the daemon serves its bundle at `/`. | app (Apache-2.0) |
@@ -65,16 +66,21 @@ A plugin folder can hold up to three halves: the UI half (root `build.gradle.kts
 `:harness-plugin-<folder>-<Module>`). Its `module.json` declares all of them. Folders are found by scanning in
 `settings.gradle.kts`; nothing names a module.
 
+A plugin kept in its OWN repository starts from `templates/plugin-repo` instead (a standalone Gradle build against the
+published SDK; `scripts/template-check.sh` proves it still builds). `plugins/_template` is the in-repo starter.
+
 ## 3. Build, run, test
 
-JDK 21 (the toolchain resolves it). From the repository root:
+JDK 21 (the toolchain resolves it). Toolchain versions live in `gradle/libs.versions.toml` (Kotlin 2.3.10, Compose
+Multiplatform 1.10.3, Ktor 3.4.1 (the daemon build pins every `io.ktor` module to it; the catalog's `ktorClientCio` is a stale 3.2.3), kotlinx.serialization 1.10.0, AGP 9.0.1); check it before you use an API from memory.
+Gradle runs with `-Xmx6g` and the Kotlin daemon with 3 GB (`gradle.properties`). From the repository root:
 
 ```
 ./gradlew :superiorSoftLibrary:infantry:compileKotlin :superiorSoftLibrary:infantryUi:compileKotlin --console=plain
 ./gradlew :superiorSoftLibrary:infantry:runDaemon          # daemon on ws://127.0.0.1:8787/ws
 ./gradlew :superiorSoftLibrary:infantryUi:runUi            # desktop UI against it
 ./gradlew :superiorSoftLibrary:infantryUi:runSmoke         # UI against an in-process stub daemon
-./gradlew :superiorSoftLibrary:infantry:installDist        # the infantry / infantry CLI
+./gradlew :superiorSoftLibrary:infantry:installDist        # the `infantry` CLI (build/install/infantry/bin)
 ./gradlew :plugins:official:Infantry_Notes:jar            # one plugin's UI jar
 ./gradlew :daemon-plugin-official-Infantry_Notes:jar      # the same plugin's daemon jar
 ```
@@ -137,6 +143,21 @@ All under `superiorSoftLibrary/infantry/src/test/kotlin/com/superiorsoftllc/infa
 | `daemon/TestPortGuardTest.kt` | Tests never bind 8787 or 8788. |
 | `daemon/HarnessContractGuardTest.kt` | Every repo harness module's `harness.contract` equals `HARNESS_API_VERSION` (a lagging one is refused at load). |
 | `DocsFreshnessGuardTest.kt` | Every file path and public type named in this file and `docs/wiki/**` exists. |
+
+More guards outside that folder or not listed above (same rule: read the failure, fix the code, not the test):
+
+| Guard test | What it enforces |
+|---|---|
+| `LicenseMapGuardTest.kt` | Every source file carries the SPDX id `scripts/license-paths.txt` gives its path (`scripts/license-headers.sh` writes it). |
+| `SharedDocsGuardTest.kt` | Product facts (tagline, license line) are stated once in `docs/shared/product.md` and wrapped in `shared:` markers elsewhere. |
+| `harness/HarnessApiImportGuardTest.kt` | `infantryHarnessApi` names no other infantry package and depends on nothing. |
+| `daemon/plugins/PluginClassPathGuardTest.kt` | A daemon half that uses an app class outside the SDK shades it into its own jar (else NoClassDefFoundError at run time). |
+| `daemon/plugins/HookKindsGuardTest.kt`, `daemon/plugins/BoardApiImportGuardTest.kt` | Hook kinds and board API imports stay on their declared lists. |
+| `daemon/NoDemoInDaemonCoreGuardTest.kt` | The demo lockdown lives in `plugins/demo/Demo_Lock`, never in daemon core. |
+| `agents/registry/AgentRegistryLayerGuardTest.kt` | The agent registry never imports orchestration (board, tickets, worktrees, pipeline). |
+| `triggers/TriggerGuardTest.kt`, `triggers/TriggerPortsGuardTest.kt` | Trigger code reaches the board and sessions only through its ports. |
+| `infantryUiCore` jvmTest: `NoDemoInCoreGuardTest`, `PolicyGateGuardTest`, `HandCursorGuardTest`, `ControllerEchoGuardTest` | UI core names no demo; every declared plugin action asks a gate; clickables use the hand-cursor wrappers in `Clickables.kt`; the controller echo rule. |
+| `infantryUi` test: `PerfGuardTest`; `Infantry_Updater` daemon test: `UpdateTokenGuardTest` | UI perf budget; no update token ever enters the repo. |
 
 The docs guard: when you rename or delete a file or type, it fails with the doc line that names it. Fix the doc.
 An example path that the reader is meant to create goes inside a fenced code block, or on a line that carries the
