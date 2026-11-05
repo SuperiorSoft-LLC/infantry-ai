@@ -4,6 +4,9 @@ package com.superiorsoftllc.infantry.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -21,9 +24,18 @@ const val ABOUT_APP_BUILD_TAG = "about-app-build"
 const val ABOUT_DAEMON_BUILD_TAG = "about-daemon-build"
 const val ABOUT_BUILD_MISMATCH_TAG = "about-build-mismatch"
 const val FOOTER_BUILD_TAG = "footer-build"
+const val ABOUT_CONTRIBUTE_TAG = "about-contribute"
+const val ABOUT_REPORT_PROBLEM_TAG = "about-report-problem"
+const val ABOUT_VIEW_REPO_TAG = "about-view-repo"
 
 /** BUILD-STAMP-1: Configuration > About. Which build this app is, which build the connected daemon is, and whether they differ. */
-class AboutEntry(val appBuild: String?, val daemonBuild: String?, val daemonConnected: Boolean) {
+class AboutEntry(
+    val appBuild: String?,
+    val daemonBuild: String?,
+    val daemonConnected: Boolean,
+    /** CONTRIB-1: the source-repository links; null hides them (no `urls.sourceRepo`). */
+    val links: com.superiorsoftllc.infantry.ui.model.SourceLinks? = null,
+) {
     companion object {
         const val TITLE = "About"
         const val APPLIES_TO = "The exact build of this app and of the daemon it is connected to (version, UTC build time, commit)."
@@ -46,6 +58,30 @@ fun AboutSection(about: AboutEntry) {
         BuildCheck.mismatch(about.appBuild, about.daemonBuild)?.let {
             Text(it, color = Palette.Danger, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.testTag(ABOUT_BUILD_MISMATCH_TAG))
         }
+        about.links?.let { SourceLinkButtons(it) }
+    }
+}
+
+/** CONTRIB-1: Contribute / Report a problem / View on GitHub. The platform's UriHandler opens them (desktop browser, Android intent, web new tab). */
+@Composable
+private fun SourceLinkButtons(links: com.superiorsoftllc.infantry.ui.model.SourceLinks) {
+    val uri = androidx.compose.ui.platform.LocalUriHandler.current
+    androidx.compose.foundation.layout.FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = Modifier.padding(top = 6.dp),
+    ) {
+        LinkButton("Contribute", AhqIcons.Branch, ABOUT_CONTRIBUTE_TAG) { uri.openUri(links.contribute) }
+        LinkButton("Report a problem", AhqIcons.Activity, ABOUT_REPORT_PROBLEM_TAG) { uri.openUri(links.reportProblem) }
+        LinkButton("View on GitHub", AhqIcons.OpenInFull, ABOUT_VIEW_REPO_TAG) { uri.openUri(links.repo) }
+    }
+}
+
+@Composable
+private fun LinkButton(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, tag: String, onClick: () -> Unit) {
+    OutlinedButton(onClick = { runCatching(onClick) }, modifier = Modifier.testTag(tag).semantics { contentDescription = "$label (opens in the browser)" }) {
+        androidx.compose.material3.Icon(icon, contentDescription = null, tint = Palette.Info, modifier = Modifier.size(16.dp))
+        androidx.compose.foundation.layout.Spacer(Modifier.width(6.dp))
+        Text(label, fontSize = 12.sp)
     }
 }
 

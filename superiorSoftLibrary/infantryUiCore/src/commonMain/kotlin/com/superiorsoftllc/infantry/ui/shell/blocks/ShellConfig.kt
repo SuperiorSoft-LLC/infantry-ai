@@ -115,7 +115,13 @@ class ConfigBlock(children: List<Block>, place: Place = Place()) : Block(CONFIG,
             serverMismatch = s.serverMismatch,
             theme = Palette.theme,
             onTheme = { next -> Palette.theme = next; host.saveUiPref(THEME_PREF_KEY, next.encode()) },
-            about = AboutEntry(host.appBuild, state.connection.daemonBuild, state.connection.isLive),
+            about = AboutEntry(
+                host.appBuild, state.connection.daemonBuild, state.connection.isLive,
+                links = com.superiorsoftllc.infantry.ui.model.SourceLinks.of(
+                    state.sourceRepo,
+                    com.superiorsoftllc.infantry.ui.model.ReportFacts(host.appBuild, state.connection.daemonBuild, com.superiorsoftllc.infantry.ui.platformName(), state.connection.daemonProvider),
+                ),
+            ),
             secrets = state.secrets,
             pair = PairEntry(ui.url, ui.token.ifBlank { null }, null) { link ->
                 // PAIR-1: save the server + token through the host's store, then connect with the bearer.
