@@ -73,7 +73,7 @@ class ScriptingDaemonPlugin : DaemonPlugin {
         // SCRIPT-5: hooks are data (hooks.json); one subscription on the named-event bus runs them.
         val hookStore = HookStore { api.files(it) }
         api.tools.register(HookTools(hookStore, store, { HookSettings.minEverySec { api.config(it) } }).tool)
-        SaveTools(store, hookStore, engines).let { api.tools.register(it.save); api.tools.register(it.list); api.tools.register(it.delete) }
+        SaveTools(store, hookStore, engines, api::displayStamp).let { api.tools.register(it.save); api.tools.register(it.list); api.tools.register(it.delete) }
         val hooks = ScriptHooks(
             hookStore, store, engines, api.tools, ScriptDispatcher(api.tools, aliases, maxPhases, sessionProject = { api.sessions.get(it)?.projectId }),
             projects = { api.projects.list().map { it.id } }, limits = { limits.current() },

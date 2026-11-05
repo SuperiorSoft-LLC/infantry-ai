@@ -12,7 +12,13 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 
 /** SCRIPT-SAVE-1: `infantry_script_save|list|delete`, so any agent writes a script at runtime with no file access. Open to every role (D18); the caller is recorded, never tested. */
-class SaveTools(private val store: ScriptStore, private val hooks: HookStore, private val engines: ScriptEngines) {
+class SaveTools(
+    private val store: ScriptStore,
+    private val hooks: HookStore,
+    private val engines: ScriptEngines,
+    /** SCRIPTING-NCDFE-1: a time as people read it ([com.superiorsoftllc.infantry.daemon.api.DaemonApi.displayStamp]); core's DisplayZone is not on a plugin's class path. */
+    private val stamp: (Long) -> String,
+) {
     private fun schema(s: String): JsonObject = Json.parseToJsonElement(s).jsonObject
     private fun proj(c: ToolCall) = (c.arguments["project"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() } ?: c.clientProjectId
     private fun arg(c: ToolCall, k: String) = (c.arguments[k] as? JsonPrimitive)?.contentOrNull
@@ -57,7 +63,7 @@ class SaveTools(private val store: ScriptStore, private val hooks: HookStore, pr
                 ToolResult(
                     if (rows.isEmpty()) "no scripts in project $project"
                     else "${rows.size} script(s) in project $project:\n" + rows.joinToString("\n") { e ->
-                        "  ${e.name}  engine=${engines.byExtension(e.extension)?.id ?: e.extension}  ${e.size} bytes  modified ${com.superiorsoftllc.infantry.DisplayZone.stamp(e.modifiedMillis)}  saved by ${e.savedBy ?: "(unknown)"}  hooks: ${used[e.name]?.joinToString { it.id } ?: "none"}"
+                        "  ${e.name}  engine=${engines.byExtension(e.extension)?.id ?: e.extension}  ${e.size} bytes  modified ${stamp(e.modifiedMillis)}  saved by ${e.savedBy ?: "(unknown)"}  hooks: ${used[e.name]?.joinToString { it.id } ?: "none"}"
                     },
                 )
             } catch (e: IllegalStateException) {
