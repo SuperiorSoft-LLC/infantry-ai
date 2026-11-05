@@ -50,14 +50,19 @@ object ClaudeCommand {
 
     fun mcpToolRule(serverName: String): String = "mcp__${serverName}__*"
 
-    /** deny / ask = no flag (Claude's default), allowEdits = acceptEdits, allowAll = bypassPermissions. `INFANTRY_CLAUDE_PERMISSION_MODE` still wins. */
+    /**
+     * deny = dontAsk (G3: refuses every call that is not pre-allowed, never shows a dialog), ask = no flag (Claude's default; the interactive
+     * session answers its dialogs with [ClaudePermissionHook]), allowEdits = acceptEdits, allowAll = bypassPermissions.
+     * `INFANTRY_CLAUDE_PERMISSION_MODE` still wins.
+     */
     fun permissionMode(
         approval: ToolApproval,
         legacy: String? = System.getProperty("INFANTRY_CLAUDE_PERMISSION_MODE") ?: System.getenv("INFANTRY_CLAUDE_PERMISSION_MODE"),
     ): String? {
         legacy?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
         return when (approval) {
-            ToolApproval.DENY, ToolApproval.ASK -> null
+            ToolApproval.DENY -> "dontAsk"
+            ToolApproval.ASK -> null
             ToolApproval.ALLOW_EDITS -> "acceptEdits"
             ToolApproval.ALLOW_ALL -> "bypassPermissions"
         }
@@ -213,12 +218,14 @@ object ClaudeCommand {
      * The interactive session's ONE `--settings` file (claude keeps only the last `--settings`, so the watch hooks of [watchSettings] are
      * merged in, not passed beside it): SessionStart / UserPromptSubmit / Stop append `start` / `submit` / `stop` to [eventsFile];
      * [bypass] adds `skipDangerousModePermissionPrompt`, the documented switch for the warning that bypassPermissions shows at start.
+     * [permissionHook] (G3) is the `PermissionRequest` entry ([ClaudePermissionHook.entry]).
      */
-    fun ttySettings(eventsFile: String, watchSettings: String?, bypass: Boolean): String {
+    fun ttySettings(eventsFile: String, watchSettings: String?, bypass: Boolean, permissionHook: JsonObject? = null): String {
         val hooks = LinkedHashMap<String, JsonArray>(TtyJson.hooksOf(watchSettings))
         for ((hook, event) in listOf("SessionStart" to ClaudeTtySession.EV_START, "UserPromptSubmit" to ClaudeTtySession.EV_SUBMIT, "Stop" to ClaudeTtySession.EV_STOP)) {
             hooks[hook] = JsonArray(hooks[hook].orEmpty() + eventHook(event, eventsFile))
         }
+        permissionHook?.let { hooks[ClaudePermissionHook.EVENT] = JsonArray(hooks[ClaudePermissionHook.EVENT].orEmpty() + it) }
         val root = LinkedHashMap<String, kotlinx.serialization.json.JsonElement>()
         if (bypass) root["skipDangerousModePermissionPrompt"] = JsonPrimitive(true)
         root["showThinkingSummaries"] = JsonPrimitive(true) // CLI-PTY-2: the settings twin of --thinking-display summarized
