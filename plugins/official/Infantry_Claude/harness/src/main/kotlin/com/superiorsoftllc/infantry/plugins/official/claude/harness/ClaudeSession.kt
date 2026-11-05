@@ -2,6 +2,7 @@
 // Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.plugins.official.claude.harness
 
+import com.superiorsoftllc.infantry.harness.api.MCP_PID_FILE_ENV
 import com.superiorsoftllc.infantry.harness.api.ApprovalReply
 import com.superiorsoftllc.infantry.harness.api.HarnessProcess
 import com.superiorsoftllc.infantry.harness.api.HarnessRequest
@@ -46,6 +47,8 @@ class ClaudeSession(
     private val configDir: () -> File = { ClaudeTranscripts.configDir() },
     /** G2: the plugin's state folder, where the interactive session keeps a new session's first prompt; null = none to send again. */
     private val stateDir: (() -> File)? = null,
+    /** G12: whether a process id still runs (the MCP server check); a test fakes it. */
+    private val pidAlive: (Long) -> Boolean = ::processAlive,
 ) : HarnessSession {
     override val label: String = "claude"
 
@@ -54,8 +57,12 @@ class ClaudeSession(
     /** G2: launches that start a stored id fresh (claude has no transcript for it), until [connect] takes them. */
     private val recoveries = IdentityHashMap<HarnessProcess, String>()
 
-    private fun argv(exe: String, request: HarnessRequest, resume: String?, env: Map<String, String>, fresh: String? = null): List<String> {
-        val (mcpCommand, mcpEnv) = mcp(env)
+    private fun argv(
+        exe: String, request: HarnessRequest, resume: String?, env: Map<String, String>, fresh: String? = null,
+        extraMcpEnv: Map<String, String> = emptyMap(),
+    ): List<String> {
+        val (mcpCommand, baseMcpEnv) = mcp(env)
+        val mcpEnv = baseMcpEnv + extraMcpEnv
         return ClaudeCommand.command(
             executable = exe,
             model = ClaudeCommand.effectiveModel(request.model),
@@ -80,20 +87,30 @@ class ClaudeSession(
         val stored = request.sessionId?.takeIf { it.isNotBlank() }
         // G2: `--resume` of an id claude never recorded fails on every start; start that id fresh instead (the daemon keeps the same id).
         val fresh = stored?.takeUnless { ClaudeResume.resumable(configDir(), request.project, it) }
+        // G12: the MCP server writes its pid here; the connection polls it and reports session.mcp (headless claude had no signal before).
+        val mcpPid = File(File(stateDir?.invoke() ?: File(System.getProperty("java.io.tmpdir"), "infantry-claude"), "mcp").apply { mkdirs() }, "${UUID.randomUUID()}.pid")
         val process = HarnessProcess(
-            command = argv(executable(), request, stored.takeIf { fresh == null }, env, fresh),
+            command = argv(executable(), request, stored.takeIf { fresh == null }, env, fresh, mapOf(MCP_PID_FILE_ENV to mcpPid.absolutePath)),
             // Claude Code 2.1.30x has no TodoWrite headless; this enables TaskCreate/TaskUpdate.
             env = mapOf("CLAUDE_CODE_ENABLE_TODO_TOOLS" to "1") + ClaudeCommand.contextLimitEnv(request.contextLimit),
         )
         if (fresh != null) synchronized(recoveries) { recoveries[process] = fresh }
+        synchronized(pidFiles) { pidFiles[process] = mcpPid }
         return process
     }
+
+    private val pidFiles = IdentityHashMap<HarnessProcess, File>()
 
     override fun connect(out: SessionOutput): SessionConnection = Connection(out, requestId)
 
     override fun connect(out: SessionOutput, launched: HarnessProcess): SessionConnection {
-        val fresh = synchronized(recoveries) { recoveries.remove(launched) } ?: return connect(out)
-        return Connection(out, requestId, recovery = fresh to stateDir?.let { ClaudeResume.firstPromptFile(it(), fresh) })
+        val pidFile = synchronized(pidFiles) { pidFiles.remove(launched) }
+        val fresh = synchronized(recoveries) { recoveries.remove(launched) }
+        return Connection(
+            out, requestId,
+            recovery = fresh?.let { it to stateDir?.let { dir -> ClaudeResume.firstPromptFile(dir(), it) } },
+            mcpWatch = pidFile?.let { McpPidWatch(it, out, pidAlive) },
+        )
     }
 
     /** [own] = CLI-PTY-4: claude began it by itself; no sendTurn stands behind it. */
@@ -111,8 +128,18 @@ class ClaudeSession(
         private val out: SessionOutput,
         private val requestId: () -> String,
         private var recovery: Pair<String, File?>? = null,
+        private val mcpWatch: McpPidWatch? = null,
     ) : SessionConnection {
         private val lock = Any()
+        @Volatile private var watching = true
+        private val mcpThread: Thread? = mcpWatch?.let { w ->
+            Thread({
+                while (watching) {
+                    runCatching { w.check() }
+                    try { Thread.sleep(McpPidWatch.MCP_CHECK_MS) } catch (_: InterruptedException) { break }
+                }
+            }, "infantry-claude-mcp-watch").apply { isDaemon = true; start() }
+        }
         private var active: Turn? = null
         private var staleResults = 0
         /** CLI-PTY-4: turns claude began itself that were still running when a turn was sent; results end them first, in order. */
@@ -200,6 +227,8 @@ class ClaudeSession(
             if (turn.abortRequested.get()) return false
             out.write(userLine(text) + "\n")
         }
+
+        override fun onExit(exitCode: Int) { watching = false; mcpThread?.interrupt() }
 
         override fun close(): Boolean {
             out.closeInput()
