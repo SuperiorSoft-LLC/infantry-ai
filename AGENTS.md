@@ -145,6 +145,7 @@ All under `superiorSoftLibrary/infantry/src/test/kotlin/com/superiorsoftllc/infa
 | `daemon/TestPortGuardTest.kt` | Tests never bind 8787 or 8788. |
 | `daemon/HarnessContractGuardTest.kt` | Every repo harness module's `harness.contract` equals `HARNESS_API_VERSION` (a lagging one is refused at load). |
 | `DocsFreshnessGuardTest.kt` | Every file path and public type named in this file and `docs/wiki/**` exists. |
+| `SdkTypesDocumentedGuardTest.kt` | Every public top-level type of `infantryPlugins`, `infantryDaemonApi` and `infantryHarnessApi` is named in its API page (`plugin-api.md`, `daemon-plugin-api.md`, `Harnesses.md`); an internal-but-public helper goes on the guard's commented allow-list. |
 
 More guards outside that folder or not listed above (same rule: read the failure, fix the code, not the test):
 

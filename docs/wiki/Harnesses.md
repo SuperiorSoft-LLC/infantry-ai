@@ -235,3 +235,38 @@ processes, tools, usage), with the evidence for each cell and the open gaps, is 
   effort; no mid-turn input.
 - **opencode**: the only harness with a working ASK approval relay; effort and context limit are recorded but not
   applied; no mid-turn input.
+
+## Type index (every other public type)
+
+Generated for the `infantryHarnessApi` guard `SdkTypesDocumentedGuardTest`: every public top-level type of the module is named on this page. Types above are explained in full; the rest are listed by source file with the first line of their KDoc. Read the file for the members.
+
+### `HarnessApi.kt`
+
+- `ApprovalReply`: 2.12.0: the owner's answer to [SessionOutput.requestApproval].
+- `ContextLimitCapability`: [support] plus, in words, HOW the harness applies the limit (or why it cannot), shown next to the option to the user.
+- `ContextLimitSupport`: 2.1.0 (CONTEXT-LIMIT-1): how a harness honours a context limit.
+- `EffortCapability`: [support] plus, in words, HOW the harness applies the level (or why it cannot), shown next to the option to the user.
+- `EffortSupport`: 2.2.0 (EFFORT-1): how a harness honours a reasoning effort.
+- `HarnessCapability`: [LIVE_SESSION] (additive, CLI-LIVE-1): the harness's [Harness.session] keeps ONE process per session and every wake (owner message, mail, note, script prompt) is a message into it, like a live CLI; `-
+- `HarnessCommandAction`: 2.10.0: what the daemon does with a [HarnessCommandSpec]: set the next run's model, set its effort, or hand [HarnessCommandSpec.native] to the harness as the next turn.
+- `HarnessCommandSpec`: 2.10.0: one `/` command: [name] is a bare word, [argument] a hint, [values] the accepted (or suggested) values, [native] the text for [HarnessCommandAction.NATIVE] only.
+- `HarnessRegistrar`: Only valid during [HarnessPlugin.register]; a later call fails.
+- `HarnessStatEvent`: One step of a session's record, in order.
+- `HarnessStats`: 2.5.0: reads one session of this harness from its own store.
+- `HarnessStatsRow`: Every field optional; null = the store does not say (never guessed).
+- `HarnessUsageReading`: [windows] empty = no signal (the host shows the harness as unknown, never 0%).
+- `HarnessUsageSource`: 2.4.0: one harness's plan limits.
+- `HarnessUsageWindow`: One limit window: [percent] used (0-100, null = unknown), [resetsAt] epoch millis (null = unknown).
+- `McpState`: 2.14.0: the session's MCP server link, as the harness sees it.
+- `SandboxContribution`: 2.7.0: dirs added to the sandbox (read-only / read-write) and names of environment variables to let through.
+- `SandboxRoots`: 2.7.0: the only roots a contributed sandbox dir may sit under: the module's own data folder and the session worktree.
+- `SessionConnection`: 2.8.0: one launched process's protocol state.
+- `SessionTurnEnd`: 2.8.0: how a persistent turn ended.
+- `WatchContribution`: 2.6.0: [extraArgs] are appended to the harness argv, [env] is added to its environment, [files] are written by the host under the module's own [HarnessHost.stateDir] (relative path -> text; a path tha
+
+### `HarnessHost.kt`
+
+- `HarnessAnswer`
+- `HarnessProcessListener`
+- `HarnessQuestion`
+- `HarnessRunningProcess`
