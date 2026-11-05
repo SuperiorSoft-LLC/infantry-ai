@@ -380,7 +380,7 @@ class ClaudeTtySession(
                         }
                     }
                     turn.abortAt != null && (interruptedSeen || now - turn.abortAt!! >= ABORT_GRACE_MS) -> {
-                        mapper.resultLine() // drop the interrupted turn's usage
+                        out.output(mapper.resultLine()) // G13: an interrupted turn still reports the usage it spent
                         ends += Triple(SessionTurnEnd.INTERRUPTED, null, turn.abortReason)
                         active = null
                     }
