@@ -60,7 +60,15 @@ class SettingsService(
         ?.let { runCatching { Json.parseToJsonElement(it) }.getOrNull() }?.takeIf { it !is kotlinx.serialization.json.JsonNull }
 
     /** CONFIG-8: whether [key] is one this service validates itself (so a plugin cannot redeclare it). */
-    fun isBuiltIn(key: String): Boolean = key in all() || LimitRegistry.get(key) != null
+    fun isBuiltIn(key: String): Boolean = key in builtInKeys || LimitRegistry.get(key) != null || EndpointRegistry.get(key) != null
+
+    /**
+     * QA-FIX-E: [all]'s keys, read once. They are fixed (constants plus the static Limit / Endpoint registries; the portrait
+     * only shows in [all] once set, and is built in either way). `key in all()` read the stored value of every built-in
+     * setting, one SQLite connection each, to test one name: called per plugin config field on every plugin resolution,
+     * a policy switch over 36 modules took ~25 s before the daemon announced it.
+     */
+    private val builtInKeys: Set<String> by lazy { all().keys + USER_PORTRAIT }
 
     override fun all(): JsonObject = JsonObject(
         mapOf(
