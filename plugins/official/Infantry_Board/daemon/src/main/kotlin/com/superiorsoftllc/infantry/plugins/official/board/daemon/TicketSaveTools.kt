@@ -136,6 +136,7 @@ internal object TicketSave {
     class Fields(
         val title: Boolean, val description: Boolean, val agentId: Boolean, val provider: Boolean, val model: Boolean,
         val weight: Boolean, val contextLimit: Boolean, val images: Boolean, val related: Boolean = false, val effort: Boolean = false,
+        val epic: Boolean = false,
     )
 
     /**
@@ -155,6 +156,7 @@ internal object TicketSave {
             if (set.effort) add("effort" to "effort ${ticket.effort ?: "cleared"}")
             if (set.images) add("images" to "${ticket.images.size} image(s)")
             if (set.related) add("relatedTo" to "related ${ticket.links.count { it.type == RELATES_TO }} ticket(s)")
+            if (set.epic) add("epic" to "epic ${ticket.epicId ?: "none"}")
         }
         val short = WireTickets.shortId(ticket.id)
         val what = fields.joinToString(", ") { it.second }.ifEmpty { "nothing new" }
@@ -342,6 +344,8 @@ class TicketUpdateTool(private val api: DaemonApi, private val comments: TicketC
             put("images", pathsProp("The ticket's full image list, replacing the stored one ([] removes all): local image files (uploaded, as for ${TicketSave.CREATE}) or paths already under the project's .infantry/uploads/ticket/. Not with addImages / removeImages. A removed image's file is deleted once no ticket references it."))
             put("addImages", pathsProp("Images to ADD to the stored list: local image files (png, jpeg, gif or webp, at most 10 MB each) or stored paths."))
             relatedToProp()
+            put("epic", prop("EPIC-MOVE-1: file the ticket under this epic (id or name; an unknown name creates it in the ticket's project), or none to clear. An in_progress ticket whose branch was cut from another base than the new epic's is refused unless force. Many at once: ${TicketEpicTool.NAME}."))
+            put("force", ToolArgs.boolProp("With epic: move an in_progress ticket even when the new epic cuts from another base (its branch keeps its base)."))
             CommentsWiring.notifyProps(this, update = true)
             put("verbose", ToolArgs.verboseProp())
             put("removeImages", pathsProp("Images to REMOVE from the stored list, each named by its stored path (as infantry_ticket_get answers it), its file name, or the original local file. Naming an image the ticket does not have refuses the call."))
@@ -374,6 +378,16 @@ class TicketUpdateTool(private val api: DaemonApi, private val comments: TicketC
             else -> null
         }
         val relatedTo = TicketSave.relatedTo(args, tool)
+        // EPIC-MOVE-1: the epic move runs first, so its refusal (an in_progress ticket on another base) saves nothing else.
+        val epicTarget = (args["epic"] as? JsonPrimitive)?.takeIf { it.isString }?.content
+        var epicMoved = existing
+        if (epicTarget != null) {
+            val outcome = try {
+                EpicMove.run(api.tickets, api.epics, WireTickets.by(call), listOf(existing.id), epicTarget, ToolArgs.flag(args, "force"))
+            } catch (e: EpicMove.Refused) { return TicketSave.refused("$tool refused: ${e.text}") }
+            outcome.refused.firstOrNull()?.let { return TicketSave.refused("$tool refused: epic not changed: ${it.reason}") }
+            epicMoved = outcome.moved.firstOrNull() ?: existing
+        }
         val patch = TicketPatch(
             // KNOWLEDGE-PTR-1: relatedTo (even []) re-saves the stored title, which makes the board rebuild the RELATED block.
             title = ToolArgs.string(args, "title") ?: relatedTo?.let { existing.title },
@@ -395,13 +409,13 @@ class TicketUpdateTool(private val api: DaemonApi, private val comments: TicketC
         }
         val noFields = patch.title == null && patch.description == null && patch.agentId == null && patch.provider == null && patch.model == null &&
             patch.weight == null && patch.contextLimit == null && patch.effort == null && patch.images == null
-        val updated = if (notifyEdit != null && noFields) existing else TicketSave.result(api.tickets.update(existing.id, patch, WireTickets.by(call)), tool)
+        val updated = if ((notifyEdit != null || epicTarget != null) && noFields) epicMoved else TicketSave.result(api.tickets.update(existing.id, patch, WireTickets.by(call)), tool)
         notifyEdit?.let { (set, add, rem) -> comments?.editNotify(existing.id, set, add, rem) }
         val ticket = relatedTo?.let { TicketSave.linkRelated(api, call, updated, it, tool) } ?: updated
         TicketSave.saved(ticket, TicketSave.Fields(
             title = ToolArgs.string(args, "title") != null, description = patch.description != null, agentId = patch.agentId != null, provider = patch.provider != null,
             model = patch.model != null, weight = patch.weight != null, contextLimit = patch.contextLimit != null, images = patch.images != null,
-            related = relatedTo != null, effort = patch.effort != null,
+            related = relatedTo != null, effort = patch.effort != null, epic = epicTarget != null,
         ), created = false, verbose = ToolArgs.flag(args, "verbose"))
     }
 }

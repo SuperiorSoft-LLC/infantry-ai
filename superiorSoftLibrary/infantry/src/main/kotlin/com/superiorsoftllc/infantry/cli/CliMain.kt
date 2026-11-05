@@ -1216,6 +1216,7 @@ internal object Cli {
             "files" -> ticketFiles(stream, parsed, out, err, getenv)
             "archive", "restore" -> archiveCommand(stream, parsed, out, err, getenv)
             "comment" -> TicketCommentCli.run(stream, parsed.args.drop(1), out, err, getenv)
+            "epic" -> TicketEpicCli.run(stream, parsed.args.drop(1), parsed.force, out, err, getenv)
             "related" -> relatedTicket(stream, parsed, out, err, getenv)
             else -> showTicket(stream, parsed, out, err, getenv)
         }
@@ -4657,6 +4658,9 @@ internal object Cli {
                                   role, provider and model on its own ticket/<short-id>-<slug> branch; the ticket goes
                                   In Progress. A refused or held start exits 1 with the reason
               ticket link <id|prefix> <otherId|prefix> <type>   Link one ticket to another (see the link types)
+              ticket epic <id|prefix>... <epic|none> [--force]   Move one or many tickets to an epic (id or name; a new name creates it) or
+                                  out of any epic (none). Status, order, branch and worker are kept; an in_progress ticket on another
+                                  base than the new epic's is not moved unless --force
               ticket files <id|prefix> [--related] | --path <glob> | --backfill   Files a ticket changed / tickets that changed a path / related tickets' files
               ticket related <id|prefix> [--suggest]   The ticket's RELATED (auto) block (series, linked, same-file tickets and their
                                   files); --suggest rebuilds it first. ticket create/update --related-to <id|prefix> (repeatable) links one
@@ -5806,6 +5810,7 @@ internal object Cli {
                 null
             }
             "comment" -> TicketCommentCli.usageError(args.drop(1))
+            "epic" -> TicketEpicCli.usageError(args.drop(1))
             "archive", "restore" -> ArchiveCli.usageError(args.first(), args.drop(1), parsed.epic, parsed.filter)
             "files" -> TicketFilesCli.usageError(args.getOrNull(1)?.takeIf { it.isNotBlank() }, parsed.filePaths, parsed.backfill, parsed.limit)
             "show" -> if (blank(1)) {

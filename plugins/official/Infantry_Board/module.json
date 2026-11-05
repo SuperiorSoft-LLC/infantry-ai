@@ -29,6 +29,7 @@
       { "name": "infantry_ticket_delete", "action": "board.ticket.delete", "kind": "destructive", "description": "Delete ONE ticket." },
       { "name": "infantry_ticket_create", "action": "board.ticket.save", "kind": "write", "description": "Create a ticket (images from the caller's own files)." },
       { "name": "infantry_ticket_update", "action": "board.ticket.save", "kind": "write", "description": "Edit ONE ticket (images from the caller's own files)." },
+      { "name": "infantry_ticket_epic", "action": "board.ticket.save", "kind": "write", "description": "Move one or many tickets to an epic (id or name, created when new), or to none." },
       { "name": "infantry_board", "action": "board.read", "kind": "read", "description": "The board in one call: tickets by column with their workers." },
       { "name": "infantry_ticket_start", "action": "board.ticket.move", "kind": "write", "description": "Start ONE ticket (the board's own start), under the caller's spawn limits." },
       { "name": "infantry_ticket_comment", "action": "board.ticket.save", "kind": "write", "description": "Comment on a ticket (mails its notify list), or resolve a comment." },
