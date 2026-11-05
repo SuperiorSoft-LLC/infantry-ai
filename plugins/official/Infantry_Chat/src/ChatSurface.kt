@@ -567,18 +567,22 @@ fun PromptBox(
         // CHAT-MINIMIZE-4: ONE outline for box + groups: the theme's neutral border at rest, the accent (focused or hovered) for the whole unit.
         val boxSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
         val boxHovered by boxSource.collectIsHoveredAsState()
-        val lit = boxFocused || boxHovered
-        val ringColor = if (lit) Palette.Accent else Palette.Border
-        val borderDp = if (lit) COMPOSER_BORDER_DP else 1
+        // PROMPT-BORDER-1: hover and focus share ONE outline (colour + thickness); the box draws it itself, so the
+        // text field's own state-dependent border (1dp unfocused, 2dp focused) can no longer split it from the tabs.
+        val outline = composerOutline(boxFocused, boxHovered)
+        val ringColor = outline.color
+        val borderDp = outline.dp
+        val boxShape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
         Box(Modifier.fillMaxWidth().hoverable(boxSource)) {
             OutlinedTextField(
                 colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-                    unfocusedBorderColor = ringColor, focusedBorderColor = ringColor, disabledBorderColor = ringColor,
+                    unfocusedBorderColor = Color.Transparent, focusedBorderColor = Color.Transparent,
+                    disabledBorderColor = Color.Transparent, errorBorderColor = Color.Transparent,
                 ),
                 value = shown,
                 onValueChange = { next -> field = next; if (next.text != value) onValue(next.text) },
                 visualTransformation = tags,
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                shape = boxShape,
                 placeholder = {
                     Text(
                         when {
@@ -592,7 +596,7 @@ fun PromptBox(
                         color = Palette.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
                 },
-                modifier = Modifier.fillMaxWidth().padding(end = 0.dp).focusRequester(focus).onFocusChanged { boxFocused = it.isFocused }.testTag(PROMPT_BOX_TAG).onPreviewKeyEvent { e ->
+                modifier = Modifier.fillMaxWidth().border(borderDp.dp, ringColor, boxShape).focusRequester(focus).onFocusChanged { boxFocused = it.isFocused }.testTag(PROMPT_BOX_TAG).onPreviewKeyEvent { e ->
                     if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     val listOpen = slashRows.isNotEmpty()
                     when {
@@ -883,6 +887,12 @@ const val COMPOSER_TOUCH_DP = 48
 /** CHAT-MINIMIZE-3: the drawn diameter (dp) of a composer button, and the group border thickness (the text box's focused border). */
 const val COMPOSER_BUTTON_DP = 36
 const val COMPOSER_BORDER_DP = 2
+
+/** PROMPT-BORDER-1: the composer outline: the same geometry (thickness) for hover and focus, only idle differs. */
+data class ComposerOutline(val color: Color, val dp: Int)
+
+fun composerOutline(focused: Boolean, hovered: Boolean): ComposerOutline =
+    if (focused || hovered) ComposerOutline(Palette.Accent, COMPOSER_BORDER_DP) else ComposerOutline(Palette.Border, 1)
 
 /** CHAT-MINIMIZE-2: the one status line above the box: permission mode, agent count, session state (unknown parts left out). */
 fun composerStatusLine(mode: String?, agents: Int, state: String?): String =
