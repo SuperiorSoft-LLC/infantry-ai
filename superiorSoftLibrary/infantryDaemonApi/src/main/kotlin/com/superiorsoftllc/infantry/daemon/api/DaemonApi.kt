@@ -45,6 +45,15 @@ interface DaemonApi {
     /** Runs [job] every [periodMs] (at least 1 s) under the plugin's limits; close the handle to stop it. */
     fun schedule(name: String, periodMs: Long, job: () -> Unit): AutoCloseable
 
+    /**
+     * DEMO-CHECK-1 (1.39.0, additive): runs [block] once, under the plugin's limits, when the daemon has finished starting:
+     * every module's daemon half has started and every harness module is registered, before the server binds. [start] runs
+     * while later modules are still loading, so work at boot that needs another plugin's service (e.g. the Roles port) or a
+     * harness (e.g. spawning a session) belongs here. A plugin loaded after start-up (a live load) runs [block] at once, on
+     * its own thread. The default (a host without the signal) runs it at once.
+     */
+    fun whenStarted(block: () -> Unit) { block() }
+
     val projects: Projects
     val sessions: Sessions
     val policy: Policy
@@ -160,7 +169,8 @@ interface DaemonApi {
         // 1.35.0 (AR-3a, additive): daemon.api.sessions.SessionBinding / FirstTurnContextProvider (core composes the first turn from a provider list).
         // 1.37.0 (PROC-LEAK-1, additive): Processes.sessionMembers / containment, ProcessToolProfile.stop / stuck, TrackedProcess.stuck.
         // 1.38.0 (CHAT-QUEUE-1, additive): Sessions.queued / queueAdd / queueRemove / queueForce and QueuedMessage.
-        const val VERSION = "1.38.0"
+        // 1.39.0 (DEMO-CHECK-1, additive): `whenStarted`, work a plugin runs once the whole daemon (all daemon halves and harnesses) is up.
+        const val VERSION = "1.39.0"
     }
 }
 

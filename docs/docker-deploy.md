@@ -288,7 +288,7 @@ Memory with the sandbox on, 2 kept opencode sessions, during and after two concu
 (`docker stats`, 6 samples). QA 950f4251 measured 1.03-1.05 GiB on a longer run: budget **~1.05 GiB** for two
 sessions, not the 800 MiB of section 9; `mem_limit` 1600m + 2 GB swap still fits a 2 GB droplet.
 
-## 13. Locked public demo (DEMO-LOCK, ticket 2f154f5f, branch `demo-build` only)
+## 13. Locked public demo (DEMO-LOCK, ticket 2f154f5f; the `Demo_Lock` plugin, any branch)
 
 `INFANTRY_DEMO_LOCK=1` makes the daemon default-deny for EVERY token, the owner's included: only reading the demo project,
 prompting / stopping its two seeded agents and mail between those two get through; everything else is refused
@@ -300,10 +300,11 @@ daemon creates "Demo project" on it plus one session per seat (`backend` and `pm
 persisted in `/data`; later starts find the same ones. The notice shown above each agent's composer is
 `INFANTRY_DEMO_NOTICE`. To re-seed: `docker compose ... down -v` (removes the volumes, the token too).
 
-Build and ship (on your PC, from the `demo-build` checkout):
+Build and ship (on your PC, from any checkout of the dev branch; the `demo-build` branch is retired, D16).
+`-Pdemo=true` compiles the demo-only UI modules (`plugins/demo/`) into the web client:
 
 ```bash
-./gradlew :superiorSoftLibrary:infantry:dockerContext --max-workers=2
+./gradlew :superiorSoftLibrary:infantry:dockerContext -Pdemo=true --max-workers=2
 docker build -t infantryai/infantry-ai:demolock superiorSoftLibrary/infantry/build/docker
 docker save infantryai/infantry-ai:demolock | gzip > infantry-ai-demolock.tar.gz
 scp infantry-ai-demolock.tar.gz docker/docker-compose.yml docker/docker-compose.demo.yml docker/demo-seed.env root@<droplet>:/root/
@@ -330,9 +331,13 @@ Key copy: the opencode-go key goes ONLY in `/root/.env` on the droplet (mode 600
 reaches the container as `OPENCODE_API_KEY`. The agents run under Landlock (`limits.sandbox.mode=1`): `/data`
 (database, token) is out of their reach.
 
-The token: visitors paste the access token into the page. Under the lock it can do only what the allow-list permits
-(proved by `docker/demo-lock-attack.mjs`, below), so sharing it is how the demo is opened; rotate it (delete
-`/data/access-token`, restart) to cut everyone off.
+The tokens: visitors type nothing. The entrypoint writes a public visitor token to `/data/demo-public-token` (or set
+`INFANTRY_DEMO_PUBLIC_TOKEN`), the page fetches it from `GET /demo/visitor-token` and lands connected. The daemon admits
+that token only while the demo preset is active, and under the lock it can do only what the allow-list permits (proved
+by `docker/demo-lock-attack.mjs`, below). Each client IP gets `INFANTRY_DEMO_TURNS_PER_IP` turns per
+`INFANTRY_DEMO_TURN_WINDOW_HOURS` (behind Caddy, the client IP comes from `X-Forwarded-For` of a peer in
+`INFANTRY_DEMO_TRUSTED_PROXIES`, default loopback). Rotate the visitor token (delete `/data/demo-public-token`, restart)
+to cut everyone off. `/data/access-token` is the owner's token: keep it private.
 
 Caddy (TLS) on the droplet host, `/etc/caddy/Caddyfile`:
 

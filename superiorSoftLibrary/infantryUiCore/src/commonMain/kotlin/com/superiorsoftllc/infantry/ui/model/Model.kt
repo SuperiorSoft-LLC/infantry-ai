@@ -123,6 +123,13 @@ data class ConnectionInfo(
     val restricted: Boolean get() = readyFields["access"] == "restricted"
 
     /**
+     * DEMO-CHECK-1: the daemon refuses the owner's configuration and update reads on this link: `ready` says so first
+     * ([restricted]), the `policy` frame ([policy]) follows after the link is already live. Either one is enough, so a
+     * window that waited for the `policy` frame no longer makes two refused calls in between.
+     */
+    val ownerReadsClosed: Boolean get() = restricted || policy.restricted
+
+    /**
      * The GENERIC write action (an undeclared write, POLICY-1) may be enabled: live, the daemon's [policy] does not turn
      * undeclared writes off, and the nearest [com.superiorsoftllc.infantry.ui.shell.WritePolicy] allows writes. A control
      * with a named action asks [com.superiorsoftllc.infantry.ui.shell.rememberGate] instead.

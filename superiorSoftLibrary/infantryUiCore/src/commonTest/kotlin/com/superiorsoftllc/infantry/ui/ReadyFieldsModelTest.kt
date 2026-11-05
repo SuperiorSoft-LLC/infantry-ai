@@ -28,6 +28,14 @@ class ReadyFieldsModelTest {
         assertTrue(s.connection.restricted)
     }
 
+    /** DEMO-CHECK-1: the owner reads close on `ready` access=restricted, before the `policy` frame arrives (it came after the window's two refused calls). */
+    @Test
+    fun ownerReadsCloseOnReadyBeforeThePolicyFrame() {
+        assertFalse(reduce(AppState(), Envelope(Envelope.READY, base), 0).connection.ownerReadsClosed)
+        val s = reduce(AppState(), Envelope(Envelope.READY, "$base access=restricted"), 0)
+        assertTrue(s.connection.ownerReadsClosed, "closed from ready alone, policy frame not yet in")
+    }
+
     @Test
     fun aDeclaredNoticeIsKeptAndAnUndeclaredCodeIsNot() {
         val ready = reduce(AppState(), Envelope(Envelope.READY, "$base notices=turn_cap"), 0)

@@ -526,6 +526,23 @@ class DaemonPluginHost private constructor(
     /** Set by the daemon once it is up: re-reads the plugins root and the loading rules, so [load] sees what was just installed. Null = no live load. */
     @Volatile var hotSource: (() -> HotSource)? = null
 
+    // DEMO-CHECK-1 (DaemonApi 1.39.0): the `whenStarted` blocks the plugins queued during boot, run once by [markStarted].
+    private val startedLock = Any()
+    private var started = false
+    private val startedQueue = mutableListOf<Pair<Loaded, () -> Unit>>()
+
+    /** The daemon has finished starting (every daemon half and harness module is in): runs each queued `whenStarted` block once, in load order. */
+    fun markStarted() {
+        val due = synchronized(startedLock) { started = true; startedQueue.toList().also { startedQueue.clear() } }
+        for ((p, block) in due) runWhenStarted(p, block)
+    }
+
+    private fun runWhenStarted(p: Loaded, block: () -> Unit) {
+        if (p.guard.disabled) return
+        p.call("whenStarted", services.limit(LimitRegistry.PLUGIN_START_TIMEOUT_MS)) { block() }
+            .onFailure { log("[plugins] ${p.id}: whenStarted failed: ${it.message}") }
+    }
+
     /**
      * Serialises load / unload / reload (one at a time). Readers never take it: every registry is a concurrent map or a
      * copy-on-write list, a removal is one atomic step per registry, and a request that already holds an entry runs to its end
@@ -793,6 +810,12 @@ class DaemonPluginHost private constructor(
         override fun config(key: String): String? = hostServices.config(p.id, key)
         override fun env(name: String): String? = if (name in d.env) hostServices.env(name) else { log("env $name is not declared in daemon.env: refused"); null }
         override fun secret(name: String): String? = if (name in d.secrets) hostServices.secret(name) else { log("secret $name is not declared in daemon.secrets: refused"); null }
+
+        override fun whenStarted(block: () -> Unit) {
+            val now = synchronized(startedLock) { if (started) true else { startedQueue += p to block; false } }
+            // A live load: the daemon is already up, so run it now, off the thread that is still inside this plugin's start().
+            if (now) Thread({ runWhenStarted(p, block) }, "plugin-${p.id}-whenStarted").apply { isDaemon = true }.start()
+        }
 
         override fun schedule(name: String, periodMs: Long, job: () -> Unit): AutoCloseable {
             val period = periodMs.coerceAtLeast(1_000)

@@ -11,7 +11,7 @@
   "daemon": {
     "entry": "com.superiorsoftllc.infantry.plugins.demo.lock.daemon.DemoLockPlugin",
     "jar": "daemon/build/libs/Demo_Lock-daemon.jar",
-    "apiAtLeast": "1.0.0",
+    "apiAtLeast": "1.39.0",
     "hooks": ["seats", "frameGate", "httpGate", "admission", "mailGate", "spawnGate", "ready", "turns"],
     "routes": ["GET /demo/visitor-token"],
     "publicRoutes": ["GET /demo/visitor-token"],

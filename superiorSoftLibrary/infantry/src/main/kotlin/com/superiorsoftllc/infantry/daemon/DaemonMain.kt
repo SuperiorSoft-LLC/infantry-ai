@@ -730,7 +730,7 @@ class InfantryDaemon(
                 if (RemoteAccess.credentialsIsolated()) putAll(RemoteAccess.inheritedCredentialScrub())
                 // RUN-CMD-REPO-1: the updater's token (a PAT) and any other inherited PAT never reach an agent session.
                 putAll(RemoteAccess.inheritedSecretScrub())
-                if (token != null) put(AccessPolicy.TOKEN_ENV, token)
+                if (token != null) putAll(RemoteAccess.daemonTokenEnv(token))
                 put(AccessPolicy.MAIL_BASE_ENV, mailBase)
             }
             // An additional provider with no transport of its own is a CLI and needs a CLI runner. [runner]
@@ -1782,6 +1782,8 @@ class InfantryDaemon(
                     }
                 }, "daemon-plugin-events").apply { isDaemon = true }.start()
             }
+            // DEMO-CHECK-1 (DaemonApi 1.39.0): every daemon half and harness module is in and recovery is done: the plugins' `whenStarted` work runs now.
+            plugins.markStarted()
             // Deliver anything that was queued before the last shutdown to a session already at rest.
             mail.onStartup()
             // TRIGGER-NUDGE: only now may a schedule fire (a slot missed while down fires on this first pump).
@@ -1881,7 +1883,10 @@ class InfantryDaemon(
                     // WEB-1: the browser client, one exact route per bundle file (no path resolution, nothing to traverse).
                     webBundleRoutes(webBundle)
                     webSocket("/ws") {
-                        val wsPeer = call.request.local.remoteHost
+                        // DEMO-CHECK-1: the address, never remoteHost. remoteHost is a reverse DNS lookup whose name the JVM then
+                        // caches on the socket address, so the Caller's remoteAddress (hostString) became "localhost" and a
+                        // loopback reverse proxy was no longer recognised: every visitor shared one per-IP turn budget.
+                        val wsPeer = call.request.local.remoteAddress
                         System.err.println("[infantry] ws connect from $wsPeer")
                         try { handleConnection(
                             this,
