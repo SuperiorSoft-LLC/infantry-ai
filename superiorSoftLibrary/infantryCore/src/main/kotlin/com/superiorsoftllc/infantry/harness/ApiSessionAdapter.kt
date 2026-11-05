@@ -143,18 +143,25 @@ internal class ApiSessionAdapter(
         /** [tty] = a terminal: its output is a screen for the plugin alone, never a raw `stdout` frame (API 2.13). */
         fun start(runner: ProcessRunner, spec: ProcessSpec, sink: AdapterSink, tty: Boolean = false) {
             this.sink = sink
+            // HARNESS-GAP G18: the plugin sees output with known secrets masked, so nothing it keeps (a terminal's screen) holds one.
+            // A terminal's chunks can split a value, so they go through a stream masker; a piped line is whole.
+            val ttyMask = if (tty) sink.maskStream() else null
             child = runner.start(spec, object : ProcessListener {
                 override fun onStdout(line: String) {
-                    if (!tty) sink.output(line)
-                    try { connection.onStdout(line) } catch (t: Throwable) { fail(t) }
+                    val text = ttyMask?.invoke(line) ?: sink.mask(line)
+                    if (!tty) sink.output(text)
+                    if (tty && text.isEmpty()) return
+                    try { connection.onStdout(text) } catch (t: Throwable) { fail(t) }
                 }
 
                 override fun onStderr(line: String) {
-                    sink.diagnostic(line)
-                    try { connection.onStderr(line) } catch (t: Throwable) { fail(t) }
+                    val text = sink.mask(line)
+                    sink.diagnostic(text)
+                    try { connection.onStderr(text) } catch (t: Throwable) { fail(t) }
                 }
 
                 override fun onExit(exitCode: Int) {
+                    ttyMask?.invoke(null)?.takeIf { it.isNotEmpty() }?.let { rest -> try { connection.onStdout(rest) } catch (t: Throwable) { fail(t) } }
                     val hs = synchronized(lock) {
                         if (exit != null) return
                         exit = exitCode

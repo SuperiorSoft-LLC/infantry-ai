@@ -495,6 +495,10 @@ class SessionHost(
 
         override val prompts: com.superiorsoftllc.infantry.prompts.PromptAsker get() = this@SessionHost.prompts()
         override fun requestApproval(tool: String, input: String) = events.requestApproval(slot.sessionId, tool, input)
+
+        override fun mask(text: String): String = events.mask(text)
+
+        override fun maskStream(): (String?) -> String = events.maskStream()
     }
 
     private companion object {
