@@ -9,7 +9,13 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
-/** PERF-1: the profile must never touch the owner's daemon (8787/8788) or `~/.infantry`. */
+/**
+ * PERF-1. Rule: a perf profile run never touches the owner's daemon (ports 8787 and 8788) or the owner's state
+ * directory (`~/.infantry`). Every child process gets its own home, and its port is refused if it is 8787 or 8788.
+ * Why: a profile that reuses the owner's daemon or state would corrupt live data and skew the measurement.
+ * Fix a failure: the message names the port, path or child setting that crossed the line. Point the profile at a
+ * temporary home and a port from `0` (ephemeral). Do not relax `requirePort` / `requireIsolated` to pass.
+ */
 class PerfGuardTest {
     private val ownerHome = Files.createTempDirectory("perf-owner-home").toFile()
     private val ownerState = File(ownerHome, ".infantry").apply { mkdirs() }

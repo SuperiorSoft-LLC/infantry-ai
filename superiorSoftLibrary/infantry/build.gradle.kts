@@ -120,11 +120,10 @@ dependencies {
     testImplementation(gradleTestKit())
 }
 
-// The catalog is inconsistent for Ktor: `ktor-server-cio` and `ktor-server-websockets` point at
-// `ktorClientCio` (3.2.3) while `ktor-server-core` / content-negotiation / websockets-core resolve
-// to `ktor` (3.4.1). Left mixed, `webSocket("/ws")` NEVER fires -- the 3.2.3 WebSockets plugin does
-// not invoke the 3.4.1 route, so the handshake succeeds and the session dies with 1006. Pin every
-// io.ktor module to the catalog's `ktor` version.
+// Keep every io.ktor module on the catalog's `ktor` version. A mixed set (one module at 3.2.3, another at
+// 3.4.1) makes `webSocket("/ws")` NEVER fire: the older WebSockets plugin does not invoke the newer route,
+// so the handshake succeeds and the session dies with 1006. The catalog entries already share `ktor`; this pin
+// stops a transitive dependency from pulling a different io.ktor version.
 configurations.all {
     resolutionStrategy.eachDependency {
         if (requested.group == "io.ktor") {

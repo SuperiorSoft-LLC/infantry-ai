@@ -15,6 +15,9 @@ starts with `_`. The build compiles and tests it anyway, so the starting point a
 
 The full walkthrough is in [../GUIDE.md](../GUIDE.md).
 
+The table below lists the fields this README covers. The complete, code-checked list (including `slots`, `parents`, `config`, `fills`,
+`shell`, `inject`, `blockTypes`, `daemon`, and the `endpoints` of `services`) is in [../../docs/wiki/make-a-plugin.md](../../docs/wiki/make-a-plugin.md).
+
 ## module.json, field by field
 
 JSON has no comments, so the fields are explained here. Unknown keys are ignored.

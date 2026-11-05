@@ -9,6 +9,15 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.test.assertNotNull
 
+/**
+ * TRIG-guard behaviour test (not an import guard). Rule: a trigger's hourly ceiling counts starts; past the ceiling a
+ * fire is refused (`REFUSED_CEILING`) and the trigger trips (`TRIPPED`), raising one `ceiling` attention; a tripped
+ * trigger suppresses later fires until it is reset.
+ * Why: a runaway event source must not start unbounded runs. The ceiling is a named setting, so the test pins the
+ * behaviour, not a number.
+ * Fix a failure: the trigger state machine or its counting changed. Fix the code to keep the rule; update the test
+ * only if the rule itself was changed on purpose, and say so in the commit message.
+ */
 class TriggerGuardTest {
     private class FakeClock(var now: Long = 0) : TriggerClock {
         override fun nowMillis(): Long = now

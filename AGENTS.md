@@ -72,7 +72,7 @@ published SDK; `scripts/template-check.sh` proves it still builds). `plugins/_te
 ## 3. Build, run, test
 
 JDK 21 (the toolchain resolves it). Toolchain versions live in `gradle/libs.versions.toml` (Kotlin 2.3.10, Compose
-Multiplatform 1.10.3, Ktor 3.4.1 (the daemon build pins every `io.ktor` module to it; the catalog's `ktorClientCio` is a stale 3.2.3), kotlinx.serialization 1.10.0, AGP 9.0.1); check it before you use an API from memory.
+Multiplatform 1.10.3, Ktor 3.4.1 (the catalog and the daemon build both pin every `io.ktor` module to it), kotlinx.serialization 1.10.0, AGP 9.0.1); check it before you use an API from memory.
 Gradle runs with `-Xmx6g` and the Kotlin daemon with 3 GB (`gradle.properties`). From the repository root:
 
 ```

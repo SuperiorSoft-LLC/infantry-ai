@@ -18,7 +18,7 @@ differ, edit the catalog and this table together.
 | kotlinx.serialization | 1.10.0 | `serialization` |
 | kotlinx-coroutines | 1.10.2 | `kotlinx-coroutines` |
 | Ktor (daemon build) | 3.4.1 | `ktor` and `ktorClientCore` |
-| Ktor client CIO (catalog) | 3.2.3 | `ktorClientCio`, a stale pin (see section 6) |
+| Ktor (catalog) | 3.4.1 | `ktor`, one version for every `io.ktor` module |
 | SQLDelight | 2.2.1 | `sqldelight` |
 | JDK | 21 | the Gradle toolchain resolves it |
 
@@ -86,10 +86,9 @@ deliberate: do not flip them to speed up a build without a measured reason and a
 
 ## 5. The Ktor version skew
 
-The daemon build pins every `io.ktor` module to 3.4.1. The catalog still pins `ktorClientCio` to 3.2.3, and
-`ktor-client-websockets` and the `ktor-server-*` modules take that stale version. The UI core depends on several of
-them (`superiorSoftLibrary/infantryUiCore/build.gradle.kts`). Until the catalog is aligned, a fresh Ktor API may not
-exist in the version the UI core compiles against. Check the version the module actually resolves before you use one.
+The catalog now points every `io.ktor` entry at one version, `ktor` (3.4.1), and `ktorClientCio` is gone. The daemon
+build still pins every `io.ktor` module to that version as a guard against transitive drift. Check the version the
+module actually resolves before you use a Ktor API.
 
 ## 6. Where to look next
 
