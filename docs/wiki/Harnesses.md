@@ -220,3 +220,18 @@ Its `module.json` `harness` block sets `jar`, `contract` `2.15.0`, `ids` `["echo
 ### Open questions
 
 - The `HarnessSession` turn protocol (persistent sessions) was not traced for this page; read `HarnessApi.kt` (`interface HarnessSession`) before relying on it.
+
+## Feature support per harness
+
+Not every feature works the same on every harness. The full matrix (scripts and hooks, board automation, background
+processes, tools, usage), with the evidence for each cell and the open gaps, is in
+[HARNESS-SUPPORT.md](../HARNESS-SUPPORT.md) (HARNESS-AUDIT-1, 2026-11-05). In short:
+
+- **Same everywhere** (generic daemon code): mail and `mail.incoming` hooks, `infantry bg run --notify` and its
+  end-of-job wake, process attribution and reaping, model pins, resume after a daemon restart, scripted auto-merge.
+- **claude**: the interactive terminal (the default) and headless stream-json both carry MCP, effort and context
+  limit. Only headless reports cost and compaction. Tool approval ASK acts as DENY.
+- **pi**: no MCP server (agents use the `infantry` CLI); approval modes are not enforced; context limit is best
+  effort; no mid-turn input.
+- **opencode**: the only harness with a working ASK approval relay; effort and context limit are recorded but not
+  applied; no mid-turn input.
