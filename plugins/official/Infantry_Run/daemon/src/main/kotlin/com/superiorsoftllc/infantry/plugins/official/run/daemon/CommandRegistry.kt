@@ -23,6 +23,13 @@ data class CommandSpec(
     val argv: List<String> = emptyList(),
     val graceMillis: Long = DEFAULT_GRACE_MILLIS,
     val secrets: List<String> = emptyList(),
+    /** RUN-SCOPE-1: the project the command belongs to; its cwd is relative to that project's folder. Null = unassigned. */
+    val project: String? = null,
+    /**
+     * RUN-SCOPE-1: false when no folder resolves for the command (its project has none registered, or it is unassigned on a
+     * daemon without a repo). It is listed so it can be fixed or assigned, but it cannot start.
+     */
+    val rooted: Boolean = true,
 ) {
     override fun toString(): String = "CommandSpec(id=$id)"
 }
@@ -40,18 +47,28 @@ internal data class CommandFileEntry(
     val project: String? = null,
 )
 
-/** A validated command, as the run manager (T3) will execute it. [workingDir] is canonical and inside the repo. */
+/**
+ * A validated command, as the run manager (T3) will execute it. [workingDir] is canonical and inside its project's folder.
+ * RUN-SCOPE-1: [dir] is null when no folder resolves for it (see [CommandSpec.rooted]): such a command loads and lists, but
+ * [workingDir] throws and a start is refused.
+ */
 class SavedCommand internal constructor(
     val id: String,
     val name: String,
     val argv: List<String>,
     val cwd: String?,
-    val workingDir: File,
+    internal val dir: File?,
     val graceMillis: Long,
     val secrets: List<String> = emptyList(),
     val projectId: String? = null,
 ) {
-    fun toSpec(): CommandSpec = CommandSpec(id, name, cwd, argv, graceMillis, secrets)
+    val workingDir: File get() = dir ?: throw IllegalStateException("command '$id' has no folder to run in")
+    val rooted: Boolean get() = dir != null
+
+    fun toSpec(): CommandSpec = CommandSpec(id, name, cwd, argv, graceMillis, secrets, projectId, rooted)
+
+    /** The same command under [project] with [cwd], re-rooted at [dir] (the migration's assignment). */
+    internal fun movedTo(project: String, cwd: String?, dir: File): SavedCommand = SavedCommand(id, name, argv, cwd, dir, graceMillis, secrets, project)
 
     internal fun toFileEntry(): CommandFileEntry = CommandFileEntry(id, name, argv, cwd, graceMillis, secrets, projectId)
 
@@ -82,6 +99,17 @@ class CommandRegistry private constructor(
     val refusal: String?,
 ) {
     fun find(id: String): SavedCommand? = commands.firstOrNull { it.id == id }
+
+    /**
+     * RUN-SCOPE-1: the commands [project] sees: its own and the unassigned ones (so they can be assigned). A null [project]
+     * (a caller with no project, such as the owner's CLI) sees every command.
+     */
+    fun visibleTo(project: String?): List<SavedCommand> =
+        if (project.isNullOrBlank()) commands else commands.filter { it.projectId == null || it.projectId == project }
+
+    /** [specsJson] narrowed to [visibleTo]. */
+    fun specsJson(project: String?): String =
+        wire.encodeToString(ListSerializer(CommandSpec.serializer()), visibleTo(project).map { it.toSpec() })
 
     /** The client-facing list: id, name, cwd, argv, graceMillis. */
     fun specs(): List<CommandSpec> = commands.map { it.toSpec() }
@@ -128,8 +156,11 @@ class CommandRegistry private constructor(
             entries.forEachIndexed { i, e ->
                 val where = "entry #$i"
                 if (e.id.isNotBlank() && !seen.add(e.id)) return refuse("$where repeats id '${e.id}'")
-                val root = canonicalRoot(rootOf(e.project?.takeIf { it.isNotBlank() })) ?: return refuse(NO_ROOT)
-                out += validate(e, root, where).getOrElse { return refuse(it.message ?: "$where is invalid") }
+                val root = canonicalRoot(rootOf(e.project?.takeIf { it.isNotBlank() }))
+                // RUN-SCOPE-1: no folder for this entry (its project has none, or it is unassigned and the daemon has no repo):
+                // it still loads, unrooted, so the Run tab shows it and offers to set the folder or assign it. Never dropped.
+                val checked = if (root == null) unrooted(e, where) else validate(e, root, where)
+                out += checked.getOrElse { return refuse(it.message ?: "$where is invalid") }
             }
             return CommandRegistry(out, null)
         }
@@ -150,9 +181,33 @@ class CommandRegistry private constructor(
             if (e.graceMillis > MAX_GRACE_MILLIS) return no("$where ('${e.id}') has a graceMillis over $MAX_GRACE_MILLIS")
             if (e.secrets.size > maxRunSecrets) return no("$where ('${e.id}') names more than $maxRunSecrets secrets")
             if (e.secrets.any { !CommandRegistry.isSecretName(it) }) return no("$where ('${e.id}') names an invalid secret")
-            val cwd = e.cwd?.takeIf { it.isNotBlank() }
-            val dir = resolveCwd(root, cwd) ?: return no("$where ('${e.id}') has a cwd outside the repo")
+            val written = normalCwd(root, e.cwd) ?: return no("$where ('${e.id}') has a cwd outside the project folder")
+            val cwd = written.takeIf { it != "." }
+            val dir = resolveCwd(root, cwd) ?: return no("$where ('${e.id}') has a cwd outside the project folder")
             return Result.success(SavedCommand(e.id, e.name?.takeIf { it.isNotBlank() } ?: e.id, e.argv.toList(), cwd, dir, e.graceMillis, e.secrets.distinct(), e.project?.takeIf { it.isNotBlank() }))
+        }
+
+        /** [validate] with no root: the same shape rules; the cwd is kept as written and checked once a folder resolves. */
+        private fun unrooted(e: CommandFileEntry, where: String): Result<SavedCommand> {
+            val scratch = canonicalRoot(File(System.getProperty("java.io.tmpdir") ?: ".")) ?: File(".").absoluteFile
+            val shape = validate(e.copy(cwd = null), scratch, where).getOrElse { return Result.failure(it) }
+            val cwd = e.cwd?.trim()?.takeIf { it.isNotEmpty() && it != "." }
+            return Result.success(SavedCommand(shape.id, shape.name, shape.argv, cwd, null, shape.graceMillis, shape.secrets, shape.projectId))
+        }
+
+        /**
+         * RUN-SCOPE-1: [cwd] as text relative to [root]: blank or "." is "." (the project folder itself); an absolute path
+         * INSIDE [root] becomes its path relative to [root]; an absolute path outside it is null (refused). A relative path
+         * is returned as written ([resolveCwd] checks it).
+         */
+        internal fun normalCwd(root: File, cwd: String?): String? {
+            val t = cwd?.trim()?.takeIf { it.isNotEmpty() } ?: return "."
+            if (t == "." || t == "./" || t == ".\\") return "."
+            val absolute = t.startsWith("/") || t.startsWith("\\") || File(t).isAbsolute || Regex("^[A-Za-z]:").containsMatchIn(t)
+            if (!absolute) return t
+            val real = runCatching { File(t).toPath().toRealPath().toFile() }.getOrNull() ?: return null
+            if (!real.toPath().startsWith(root.toPath())) return null
+            return real.relativeTo(root).path.replace('\\', '/').ifEmpty { "." }
         }
 
         /** The file text for [commands], in order: what `commands.json` holds after a save or a delete. */

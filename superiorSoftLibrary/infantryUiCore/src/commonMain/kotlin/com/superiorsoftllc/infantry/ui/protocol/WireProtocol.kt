@@ -2295,13 +2295,18 @@ object WireRequests {
      * Contract 1.94.0 (RUN-CMD-1): upsert the saved command [id]. [argv] is one element per argument, never a shell
      * string; [cwd] is relative to the daemon's repo (null = the repo root). The daemon answers a `commands` frame.
      */
-    fun commandSave(id: String, name: String, argv: List<String>, cwd: String?, graceMillis: Long, secrets: List<String> = emptyList()): Envelope {
+    fun commandSave(
+        id: String, name: String, argv: List<String>, cwd: String?, graceMillis: Long, secrets: List<String> = emptyList(),
+        /** RUN-SCOPE-1: the project the command belongs to (its cwd is relative to that project's folder); null = sent without. */
+        project: String? = null,
+    ): Envelope {
         val fields = linkedMapOf<String, JsonElement>(
             "id" to JsonPrimitive(id),
             "name" to JsonPrimitive(name),
             "argv" to kotlinx.serialization.json.JsonArray(argv.map { JsonPrimitive(it) }),
         )
         if (cwd != null) fields["cwd"] = JsonPrimitive(cwd)
+        if (project != null) fields["project"] = JsonPrimitive(project)
         fields["graceMillis"] = JsonPrimitive(graceMillis)
         // 1.135.0 (SECRETS-2): only when there are any, so an older daemon (strict decode) still takes the save.
         if (secrets.isNotEmpty()) fields["secrets"] = kotlinx.serialization.json.JsonArray(secrets.map { JsonPrimitive(it) })
@@ -2320,9 +2325,11 @@ object WireRequests {
      * Contract 1.134.0 (RUN-CONSOLE): [runStart] that also says whether the run takes keys ([interactive]) and the
      * console's size for the pty's first byte.
      */
-    fun runStart(commandId: String, interactive: Boolean, cols: Int?, rows: Int?): Envelope =
+    fun runStart(commandId: String, interactive: Boolean, cols: Int?, rows: Int?, project: String? = null): Envelope =
         Envelope(Envelope.RUN_START, JsonObject(buildMap {
             put("commandId", JsonPrimitive(commandId))
+            // RUN-SCOPE-1: the daemon refuses another project's command (an older one ignores the key).
+            project?.let { put("project", JsonPrimitive(it)) }
             if (interactive) put("interactive", JsonPrimitive(true))
             cols?.let { put("cols", JsonPrimitive(it)) }
             rows?.let { put("rows", JsonPrimitive(it)) }

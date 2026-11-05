@@ -415,6 +415,12 @@ class CoreRun(private val state: AppState, private val controller: Controller, p
     override suspend fun saveCommand(id: String, name: String, argv: List<String>, cwd: String?, graceMillis: Long, secrets: List<String>) =
         controller.saveCommand(id, name, argv, cwd, graceMillis, secrets)
     override suspend fun deleteCommand(id: String) = controller.deleteCommand(id)
+    override val project: ProjectView? get() = state.activeProject
+    override suspend fun saveCommand(id: String, name: String, argv: List<String>, cwd: String?, graceMillis: Long, secrets: List<String>, project: String?) =
+        controller.saveCommand(id, name, argv, cwd, graceMillis, secrets, project)
+    override suspend fun start(commandId: String, interactive: Boolean, project: String?): CommandResult =
+        if (controller.supportsRunConsole()) controller.startRun(commandId, interactive, project = project) else start(commandId, interactive)
+    override suspend fun setProjectFolder(projectId: String, directory: String) = controller.saveProjectDirectory(projectId, directory)
 }
 
 /** S4c: [state]'s harnesses and model catalog, for a pane drawn outside a shell. */

@@ -17,6 +17,11 @@ class RunDaemonPlugin : DaemonPlugin {
         val runs = api.runs
         maxRunSecretsSource = { api.settings.limit("limits.secrets.maxPerRun")?.coerceAtMost(Int.MAX_VALUE.toLong())?.toInt() ?: 16 }
         val store = CommandStore(File(runs.configDir, "commands.json"), runs::rootOf)
+        // RUN-SCOPE-1: commands saved before they belonged to a project go to the project whose folder they run in.
+        runCatching {
+            val folders = api.projects.list().mapNotNull { p -> p.directory?.takeIf { it.isNotBlank() }?.let { p.id to File(it) } }
+            store.assignUnassigned(folders).takeIf { it.isNotEmpty() }?.let { println("[infantry] run commands assigned to their project: ${it.joinToString()}") }
+        }.onFailure { System.err.println("[infantry] run command migration skipped (${it::class.simpleName})") }
         val manager = RunManager(
             registry = { store.registry },
             runs = runs,
@@ -30,12 +35,14 @@ class RunDaemonPlugin : DaemonPlugin {
             .all().forEach(api.tools::register)
 
         fun reply(e: Envelope?): Frame? = e?.let { Frame(it.type, it.data) }
-        fun commandsFrame() = Frame(Envelope.COMMANDS, store.registry.specsJson())
+        // RUN-SCOPE-1: a client gets every command with its project and filters by the project it shows.
+        fun commandsFrame() = Frame(Envelope.COMMANDS, store.refreshUnrooted().specsJson())
 
         api.frames.handle(Envelope.COMMAND_LIST) { _, _ -> commandsFrame() }
         api.frames.handle(Envelope.COMMAND_SAVE) { f, _ -> change(api, f.type, store.save(f.data, manager::unlessRunning), store) }
         api.frames.handle(Envelope.COMMAND_DELETE) { f, _ -> change(api, f.type, store.delete(f.data, manager::unlessRunning), store) }
         api.frames.handle(Envelope.RUN_START) { f, _ ->
+            store.refreshUnrooted()
             val started = manager.start(f.data)
             if (started.reply.type == Envelope.ERROR) return@handle reply(started.reply)
             // The `run` answer goes out first on the same broadcast order, then the child starts and streams.

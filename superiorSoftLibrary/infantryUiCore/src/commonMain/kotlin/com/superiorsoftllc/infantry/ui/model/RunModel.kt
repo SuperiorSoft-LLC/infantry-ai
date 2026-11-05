@@ -32,7 +32,22 @@ data class CommandSpecView(
     val argv: List<String> = emptyList(),
     val graceMillis: Long? = null,
     val secrets: List<String> = emptyList(),
+    /** RUN-SCOPE-1: the project the command belongs to; null = unassigned (or a daemon from before per-project commands). */
+    val project: String? = null,
+    /** RUN-SCOPE-1: false when no folder resolves for it (its project has none registered): listed, but it cannot start. */
+    val rooted: Boolean = true,
 )
+
+/**
+ * RUN-SCOPE-1: [commands] as project [projectId]'s Run tab shows them: its own, then the unassigned ones apart. A daemon
+ * from before per-project commands sends no project at all; then every command is the project's own (nothing to assign).
+ */
+data class ProjectCommands(val own: List<CommandSpecView>, val unassigned: List<CommandSpecView>)
+
+fun projectCommands(commands: List<CommandSpecView>, projectId: String?): ProjectCommands {
+    if (projectId == null || commands.none { it.project != null }) return ProjectCommands(commands, emptyList())
+    return ProjectCommands(commands.filter { it.project == projectId }, commands.filter { it.project == null })
+}
 
 @Serializable
 data class RunRecordPayload(

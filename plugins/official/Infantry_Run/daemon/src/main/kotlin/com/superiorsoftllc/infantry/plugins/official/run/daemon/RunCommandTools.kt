@@ -20,8 +20,10 @@ import kotlinx.serialization.json.put
  * the same [CommandStore] / [RunManager] the frames use, so validation and refusals are identical; the host gates each tool by the
  * action module.json declares for it (commands.read, commands.save, runs.start, runs.stop).
  *
- * Project scope: a saved command lives in the daemon's one commands.json (its cwd is inside the repo). A call may name `project`;
- * when that differs from the caller's own project the call is refused unless `allowCrossProject` is true (as for cross-project mail).
+ * Project scope (RUN-SCOPE-1): a saved command belongs to one project and its cwd is relative to that project's folder. Every call
+ * acts in a project: its `project` argument, else the caller's own. List shows that project's commands and the unassigned ones;
+ * delete and start refuse another project's command. A `project` other than the caller's own is refused unless
+ * `allowCrossProject` is true (as for cross-project mail).
  */
 class RunCommandTools(
     private val store: CommandStore,
@@ -30,16 +32,25 @@ class RunCommandTools(
     private val emit: (Envelope) -> Unit,
 ) {
     fun all(): List<DaemonTool> = listOf(
-        tool("infantry_run_commands", "List the saved Run-tab commands (id, name, cwd, argv).", listOf(), listOf(), true) { list() },
-        tool("infantry_run_command_save", "Add or edit a saved command. Give `argv` (array) or `command` (a shell line, run through the system shell).",
-            listOf("id" to "command id (upsert key)", "name" to "display name", "command" to "shell command line", "cwd" to "working dir, relative to the repo",
+        tool("infantry_run_commands", "List a project's saved Run-tab commands (id, name, cwd, argv, project) and the unassigned ones; default: your project.",
+            listOf("project" to "project id (default: yours)", "allowCrossProject" to "boolean"), listOf(), true) { list(it) },
+        tool("infantry_run_command_save", "Add or edit a project's saved command. Give `argv` (array) or `command` (a shell line, run through the system shell).",
+            listOf("id" to "command id (upsert key)", "name" to "display name", "command" to "shell command line",
+                "cwd" to "working dir relative to the project's folder (. or blank = the folder itself; an absolute path must be inside it)",
                 "project" to "project id the command is for", "allowCrossProject" to "boolean: allow a project other than the caller's"), listOf("id"), false) { save(it) },
         tool("infantry_run_command_delete", "Delete a saved command by id.", listOf("id" to "command id", "project" to "project id", "allowCrossProject" to "boolean"), listOf("id"), false) { delete(it) },
         tool("infantry_run_start", "Start a saved command; returns the run id.", listOf("id" to "command id", "project" to "project id", "allowCrossProject" to "boolean"), listOf("id"), false) { start(it) },
         tool("infantry_run_stop", "Stop a run by run id (force=true kills at once).", listOf("runId" to "run id", "force" to "boolean"), listOf("runId"), false) { stop(it) },
     )
 
-    private fun list(): ToolResult = ToolResult(store.registry.specsJson())
+    /** RUN-SCOPE-1: the target project's commands and the unassigned ones; a caller with no project sees them all. */
+    private fun list(c: ToolCall): ToolResult {
+        crossProjectRefusal(c)?.let { return err(it) }
+        return ToolResult(store.refreshUnrooted().specsJson(target(c)))
+    }
+
+    /** The project a call acts in: its `project` argument, else the caller's own. */
+    private fun target(c: ToolCall): String? = str(c.arguments, "project") ?: c.clientProjectId
 
     private fun save(c: ToolCall): ToolResult {
         crossProjectRefusal(c)?.let { return err(it) }
@@ -63,7 +74,7 @@ class RunCommandTools(
     private fun delete(c: ToolCall): ToolResult {
         crossProjectRefusal(c)?.let { return err(it) }
         val id = str(c.arguments, "id") ?: return err("id is required")
-        val refusal = store.delete(Json.encodeToString(JsonObject.serializer(), buildJsonObject { put("id", id) }), manager::unlessRunning)
+        val refusal = store.delete(Json.encodeToString(JsonObject.serializer(), buildJsonObject { put("id", id) }), manager::unlessRunning, target(c))
         if (refusal != null) return err("infantry_run_command_delete refused: $refusal")
         broadcastList()
         return ToolResult("deleted command '$id'")
@@ -72,7 +83,11 @@ class RunCommandTools(
     private fun start(c: ToolCall): ToolResult {
         crossProjectRefusal(c)?.let { return err(it) }
         val id = str(c.arguments, "id") ?: return err("id is required")
-        val started = manager.start(Json.encodeToString(JsonObject.serializer(), buildJsonObject { put("commandId", id) }))
+        store.refreshUnrooted()
+        val started = manager.start(Json.encodeToString(JsonObject.serializer(), buildJsonObject {
+            put("commandId", id)
+            target(c)?.let { put("project", it) }
+        }))
         if (started.reply.type == Envelope.ERROR) return err(started.reply.data)
         emit(started.reply)
         started.launch()

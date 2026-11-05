@@ -203,11 +203,27 @@ Screenshot: `docs/img/hello-plugin.png` in the repo.
 
 ## Run tab commands as tools (Infantry_Run)
 
+**Commands are per project.** A saved command belongs to one project (stored with its `project` id in the daemon's
+`commands.json`), and its `cwd` is relative to that project's registered folder (`infantry_project_config_set` with
+`directory`, or the Git tab's / Run tab's "Set project folder"): blank or `.` is the folder itself, an absolute path inside
+the folder is stored as the relative path, and anything outside the folder (`..`, another absolute path, a link that leaves
+it) is refused. The Run tab lists only the selected project's commands, and switching projects switches the list. When the
+selected project has no folder, the tab says so with a "Set project folder" action (the platform's folder chooser, else a
+path field); its commands still load and list, but cannot start until the folder is set. Command ids are unique across
+projects: a save never overwrites another project's command.
+
+Migration: a command saved before commands were per project (no `project`) is assigned, when the daemon starts, to the
+project whose folder contains its working directory (the deepest folder wins), its `cwd` rewritten relative to it. One that
+no project folder contains stays visible under **Unassigned** in every project's Run tab, with "Assign to &lt;project&gt;";
+it is never deleted silently.
+
 The Run tab's saved commands are also daemon tools of `plugins/official/Infantry_Run/daemon`, so agents and Lua scripts can use them:
-`infantry_run_commands` (list), `infantry_run_command_save` (id, name, `argv` or a shell `command`, `cwd` inside the repo),
-`infantry_run_command_delete`, `infantry_run_start` (returns the run id) and `infantry_run_stop`. They run through the same
-`CommandStore` and `RunManager` as the frames and are gated by the same actions (`commands.read`, `commands.save`, `runs.start`,
-`runs.stop`). A call that names a `project` other than the caller's is refused unless `allowCrossProject` is true.
+`infantry_run_commands` (list: the project's commands and the unassigned ones), `infantry_run_command_save` (id, name, `argv`
+or a shell `command`, `cwd` relative to the project's folder), `infantry_run_command_delete`, `infantry_run_start` (returns the
+run id) and `infantry_run_stop`. Every call acts in a project: its `project` argument, else the caller's own; delete and start
+refuse another project's command. They run through the same `CommandStore` and `RunManager` as the frames and are gated by the
+same actions (`commands.read`, `commands.save`, `runs.start`, `runs.stop`). A call that names a `project` other than the
+caller's is refused unless `allowCrossProject` is true.
 
 CLI: `infantry run-cmd list | save <id> <cwd|.> "<command line>" [--name N] | delete <id> | start <id> | stop <runId> [--force]`
 (add `--project <id> --cross-project` to act on another project). Lua: `ih.call("infantry_run_command_save", {id = "site", command = "npm run build"})`.

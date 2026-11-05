@@ -38,6 +38,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.superiorsoftllc.infantry.ui.*
 import com.superiorsoftllc.infantry.ui.model.CommandSpecView
+import com.superiorsoftllc.infantry.ui.model.ProjectView
+import com.superiorsoftllc.infantry.ui.model.projectCommands
 import com.superiorsoftllc.infantry.ui.model.RunState
 import com.superiorsoftllc.infantry.ui.model.RunsState
 import com.superiorsoftllc.infantry.ui.net.CommandResult
@@ -71,6 +73,13 @@ const val RUN_FORM_CANCEL_TAG = "run-form-cancel"
 const val RUN_FORM_ERROR_TAG = "run-form-error"
 const val RUN_PILLS_TAG = "run-pills"
 const val RUN_INTERACTIVE_TAG = "run-interactive"
+const val RUN_FOLDER_TAG = "run-folder"
+const val RUN_SET_FOLDER_TAG = "run-set-folder"
+const val RUN_FOLDER_PATH_TAG = "run-folder-path"
+const val RUN_FOLDER_SAVE_TAG = "run-folder-save"
+const val RUN_UNASSIGNED_TAG = "run-unassigned"
+/** Followed by `-<command id>`. */
+const val RUN_ASSIGN_TAG = "run-assign"
 
 /** RUN-CMD-2: the command editor's pure rules (no Compose), shared by the pane and its tests. */
 object RunCommandForm {
@@ -145,7 +154,16 @@ class RunPaneHost internal constructor(
     val live: Boolean = link.live
     /** POLICY-1: the named action [actionId] may be performed now (live, and the daemon's policy allows it). */
     @Composable fun can(actionId: String, kind: String = com.superiorsoftllc.infantry.plugin.api.ActionKind.WRITE): Boolean = link.gate(actionId, kind).enabled
-    val picked: CommandSpecView? = runs.commands.firstOrNull { it.id == pickedId.value } ?: runs.commands.firstOrNull()
+    /** RUN-SCOPE-1: the project this tab shows; its commands run relative to its folder. */
+    val project: ProjectView? = context.project
+    private val scoped = projectCommands(runs.commands, project?.id)
+    /** RUN-SCOPE-1: the shown project's commands only; switching projects switches the list. */
+    val commands: List<CommandSpecView> = scoped.own
+    /** RUN-SCOPE-1: commands that belong to no project yet, each with "assign to this project". */
+    val unassigned: List<CommandSpecView> = scoped.unassigned
+    /** RUN-SCOPE-1: the shown project has no folder registered, so its commands have nothing to run in. */
+    val noFolder: Boolean = project != null && project.directory.isBlank()
+    val picked: CommandSpecView? = commands.firstOrNull { it.id == pickedId.value } ?: commands.firstOrNull()
     val current: RunState? = runs.current
     /** The run going now (one at a time), whichever pill is selected. */
     val active: RunState? = runs.runs.values.firstOrNull { it.state != "FINISHED" }
@@ -158,8 +176,13 @@ class RunPaneHost internal constructor(
     val confirmDelete: Boolean get() = confirming.value
     /** A save is out, not yet answered. */
     val saving: Boolean get() = savedAt.value != null
-    /** The daemon's refusal of a command edit, else the last refusal here. */
-    val error: String? get() = runs.commandError ?: localError.value
+    /** The daemon's refusal of a command edit, else the last refusal here; "no folder" in plain words. */
+    val error: String? get() = (runs.commandError ?: localError.value)?.let { plainRefusal(it) }
+
+    private fun plainRefusal(raw: String): String =
+        if ("no working directory can be checked" in raw || "has no folder registered" in raw) {
+            "${project?.name?.let { "\"$it\"" } ?: "This project"} has no project folder yet. Set the project folder, then save or run its commands."
+        } else raw
 
     /** Sends [request] and keeps its refusal. */
     fun act(request: suspend () -> CommandResult) {
@@ -173,7 +196,20 @@ class RunPaneHost internal constructor(
     fun pick(id: String) { pickedId.value = id; confirming.value = false }
 
     fun start(interactive: Boolean) {
-        picked?.let { c -> act { context.start(c.id, interactive) } }
+        picked?.let { c -> act { context.start(c.id, interactive, project?.id) } }
+    }
+
+    /** RUN-SCOPE-1: moves the unassigned command [c] into the shown project, its cwd unchanged (relative to the folder). */
+    fun assign(c: CommandSpecView) {
+        val p = project ?: return
+        act { context.saveCommand(c.id, c.name, c.argv, c.cwd, c.graceMillis ?: RunCommandForm.DEFAULT_GRACE_MILLIS, c.secrets, p.id) }
+    }
+
+    /** RUN-SCOPE-1: registers [directory] as the shown project's folder. */
+    fun setFolder(directory: String) {
+        val p = project ?: return
+        if (directory.isBlank()) return
+        act { context.setProjectFolder(p.id, directory.trim()) }
     }
 
     fun stop() { active?.let { r -> act { context.stop(r.runId) } } }
@@ -206,7 +242,7 @@ class RunPaneHost internal constructor(
             scope.launch {
                 val r = context.saveCommand(
                     d.id.trim(), d.name.trim(), RunCommandForm.argvOf(d.argv), RunCommandForm.cwdOf(d.cwd), grace,
-                    RunCommandForm.secretsOf(d.secrets),
+                    RunCommandForm.secretsOf(d.secrets), project?.id,
                 )
                 if (r is CommandResult.Refused) { localError.value = r.reason; savedAt.value = null }
             }
@@ -255,17 +291,87 @@ fun RunPaneFrame(link: LinkContext, ctx: RunContext, modifier: Modifier = Modifi
     }
 }
 
+/**
+ * RUN-SCOPE-1: when the shown project has no folder registered, says so plainly with "Set project folder": the platform's
+ * folder chooser where there is one, else a path field. Saving it is what `project_config_set directory` does. [modifier]
+ * goes on the column.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun RunFolderSection(run: RunPaneHost, modifier: Modifier = Modifier) {
+    val project = run.project ?: return
+    if (!run.noFolder) return
+    val picker = LocalDirectoryPicker.current
+    val scope = rememberCoroutineScope()
+    var typing by remember(project.id) { mutableStateOf(false) }
+    var path by remember(project.id) { mutableStateOf("") }
+    val canSet = run.live && run.can("projects.save")
+    Column(modifier.fillMaxWidth().padding(bottom = 6.dp).testTag(RUN_FOLDER_TAG), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            "\"${project.name}\" has no project folder. Run commands run relative to the project's folder; set it to save and run them.",
+            color = Palette.Danger, fontSize = 12.sp,
+        )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), itemVerticalAlignment = Alignment.CenterVertically) {
+            OutlinedButton(
+                onClick = {
+                    if (picker == null) typing = true
+                    else scope.launch { picker.pick("")?.let { run.setFolder(it) } }
+                },
+                enabled = canSet,
+                modifier = Modifier.testTag(RUN_SET_FOLDER_TAG),
+            ) { Text("Set project folder", fontSize = 12.sp) }
+            if (typing) {
+                OutlinedTextField(
+                    value = path, onValueChange = { path = it }, singleLine = true,
+                    label = { Text("Folder (absolute path)") },
+                    modifier = Modifier.testTag(RUN_FOLDER_PATH_TAG),
+                )
+                OutlinedButton(
+                    onClick = { run.setFolder(path) },
+                    enabled = canSet && path.isNotBlank(),
+                    modifier = Modifier.testTag(RUN_FOLDER_SAVE_TAG),
+                ) { Text("Save folder", fontSize = 12.sp) }
+            }
+        }
+    }
+}
+
+/**
+ * RUN-SCOPE-1: commands that belong to no project (saved before commands were per project, and not inside any project's
+ * folder), each with "Assign to <project>". Never hidden, never deleted silently. [modifier] goes on the column.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun RunUnassignedSection(run: RunPaneHost, modifier: Modifier = Modifier) {
+    val project = run.project ?: return
+    if (run.unassigned.isEmpty() || run.editing) return
+    Column(modifier.fillMaxWidth().padding(top = 6.dp).testTag(RUN_UNASSIGNED_TAG), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("UNASSIGNED", color = Palette.Muted, fontSize = 10.sp)
+        run.unassigned.forEach { c ->
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), itemVerticalAlignment = Alignment.CenterVertically) {
+                Text(c.name, color = Palette.Text, fontSize = 12.sp)
+                c.cwd?.let { Text(it, color = Palette.Muted, fontFamily = Mono, fontSize = 11.sp) }
+                OutlinedButton(
+                    onClick = { run.assign(c) },
+                    enabled = run.canEdit && !run.noFolder,
+                    modifier = Modifier.testTag("$RUN_ASSIGN_TAG-${c.id}"),
+                ) { Text("Assign to ${project.name}", fontSize = 12.sp) }
+            }
+        }
+    }
+}
+
 /** With no saved command and no editor open: says so, with Add command. [modifier] goes on the row. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun RunEmptySection(run: RunPaneHost, modifier: Modifier = Modifier) {
-    if (run.runs.commands.isNotEmpty() || run.editing) return
+    if (run.commands.isNotEmpty() || run.editing) return
     FlowRow(
         modifier,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         itemVerticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("No saved commands on this daemon.", color = Palette.Muted, fontSize = 12.sp)
+        Text(run.project?.let { "No run commands in \"${it.name}\" yet." } ?: "No saved commands on this daemon.", color = Palette.Muted, fontSize = 12.sp)
         OutlinedButton(onClick = run::openNew, enabled = run.canEdit, modifier = Modifier.testTag(RUN_ADD_TAG)) {
             Text("Add command", fontSize = 12.sp)
         }
@@ -297,11 +403,11 @@ fun RunToolbarSection(run: RunPaneHost, modifier: Modifier = Modifier) {
         Box {
             OutlinedButton(
                 onClick = { menuOpen = true },
-                enabled = canWrite && !inFlight && runs.commands.isNotEmpty(),
+                enabled = canWrite && !inFlight && run.commands.isNotEmpty(),
                 modifier = Modifier.testTag(RUN_COMMAND_PICKER_TAG),
             ) { Text(picked?.name ?: "Pick a command", fontSize = 12.sp) }
             com.superiorsoftllc.infantry.ui.InfantryDropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                runs.commands.forEach { c ->
+                run.commands.forEach { c ->
                     DropdownMenuItem(
                         text = { Text(c.name, fontSize = 12.sp) },
                         onClick = { run.pick(c.id); menuOpen = false },
@@ -312,7 +418,7 @@ fun RunToolbarSection(run: RunPaneHost, modifier: Modifier = Modifier) {
         }
         OutlinedButton(
             onClick = { run.start(interactive) },
-            enabled = canWrite && !inFlight && picked != null,
+            enabled = canWrite && !inFlight && picked != null && picked.rooted,
             modifier = Modifier.testTag(RUN_START_TAG),
         ) { Text("Start", fontSize = 12.sp) }
         // Typing into a run needs a console to type in: the desktop only, on a 1.134.0 daemon.
@@ -330,7 +436,7 @@ fun RunToolbarSection(run: RunPaneHost, modifier: Modifier = Modifier) {
             enabled = canStop && inFlight,
             modifier = Modifier.testTag(RUN_STOP_TAG),
         ) { Text("Stop", fontSize = 12.sp) }
-        if (runs.commands.isNotEmpty()) {
+        if (run.commands.isNotEmpty()) {
             OutlinedButton(
                 onClick = run::openNew,
                 enabled = run.canEdit && !run.editing,
