@@ -92,6 +92,18 @@ interface AdapterSink {
      * interrupted caller gets [Decision.DENY] too. Call it off the adapter's event thread. Default: nobody can prompt.
      */
     fun requestApproval(tool: String, input: String): Decision = Decision.DENY
+
+    /**
+     * HARNESS-GAP G18: [text] with every known secret value masked. An adapter that hands process output to plugin code (which
+     * may keep it: a terminal's screen) masks it here first. Default: unchanged.
+     */
+    fun mask(text: String): String = text
+
+    /**
+     * HARNESS-GAP G18: a masker for one stream of chunks that can split a value (a terminal's output): call it with each chunk,
+     * then once with null to get what it held back. Default: unchanged.
+     */
+    fun maskStream(): (String?) -> String = { it.orEmpty() }
 }
 
 interface HarnessSessionAdapter {
@@ -159,6 +171,12 @@ interface HostEvents {
 
     /** CLI-PTY-3: [AdapterSink.mcpState] for [sessionId]. */
     fun mcpState(sessionId: String, state: String, reason: String?) {}
+
+    /** HARNESS-GAP G18: [AdapterSink.mask]. Default: unchanged. */
+    fun mask(text: String): String = text
+
+    /** HARNESS-GAP G18: [AdapterSink.maskStream]. Default: unchanged. */
+    fun maskStream(): (String?) -> String = { it.orEmpty() }
 }
 
 /**

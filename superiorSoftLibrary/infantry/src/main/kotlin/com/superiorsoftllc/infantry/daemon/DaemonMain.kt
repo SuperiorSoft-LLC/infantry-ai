@@ -909,6 +909,8 @@ class InfantryDaemon(
             // IN-APP BUILD T3: one saved command at a time; every frame it produces goes to every client.
             // SECRETS-1: the daemon-owned keystore, in the state dir.
             val keystore = Keystore(stateDir())
+            // HARNESS-GAP G18: every known secret value is masked in all session output (chat rows, transcript, raw stream, a terminal's screen).
+            manager.outputMask = com.superiorsoftllc.infantry.keystore.SecretMask(keystore::allValues)
             // POLICY-1: "restricted" follows the ACTIVE preset (a Settings switch included), read per call. A seated preset is
             // always restricted (secrets locked), as the seated lockdown was before it became a plugin.
             val locked: () -> Boolean = { policies.current.let { it.restricted == true || it.seats != null } }

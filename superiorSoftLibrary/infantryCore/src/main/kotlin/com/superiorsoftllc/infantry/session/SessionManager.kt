@@ -220,6 +220,14 @@ class SessionManager(
     var maxSessions: () -> Int = { Int.MAX_VALUE }
 
     /**
+     * HARNESS-GAP G18: what masks known secret values in everything a session shows or keeps (stdout / stderr lines, Activity
+     * details, turn prompts, the conversation log a harness switch carries, a terminal's screen). The daemon sets it to the
+     * keystore's [com.superiorsoftllc.infantry.keystore.SecretMask]; the default masks nothing.
+     */
+    @Volatile
+    var outputMask: com.superiorsoftllc.infantry.keystore.SecretMask = com.superiorsoftllc.infantry.keystore.SecretMask.NONE
+
+    /**
      * LIMITS: refuse [model] when an allowlist is in force and does not name it. A null [model] is the harness
      * default: [provider] (when given) resolves it, and a default that is unknown or not allowed is refused too, since
      * the run would spend it. Throws [IllegalArgumentException] naming the allowed models; no restriction = no-op.
@@ -338,7 +346,8 @@ class SessionManager(
      * gate, DEADLOCK-1). Now the order is kept per session; an event queued behind another thread's held event of its session is
      * left to a helper thread that holds no lock of its caller's, and delivers it once that earlier event is out.
      */
-    private fun emit(event: SessionEvent) {
+    private fun emit(raw: SessionEvent) {
+        val event = masked(raw)
         // QA-FIX-C: a listener that re-enters the manager (a done hook's ticket_start -> handOut -> startNew) raises events
         // under the lock too; those are deferred like any other (DEADLOCK-1), only an unlocked one goes out at once.
         if (delivering.get() && !Thread.holdsLock(this)) {
@@ -352,6 +361,19 @@ class SessionManager(
             return
         }
         deliverMine()
+    }
+
+    /** HARNESS-GAP G18: [event] with every known secret value masked; the provider itself still gets what it was given. */
+    private fun masked(event: SessionEvent): SessionEvent {
+        val m = outputMask
+        if (!m.active) return event
+        return when (event) {
+            is SessionEvent.Stdout -> event.copy(line = m.mask(event.line))
+            is SessionEvent.Stderr -> event.copy(line = m.mask(event.line))
+            is SessionEvent.Activity -> event.copy(detail = m.mask(event.detail))
+            is SessionEvent.Turn -> event.copy(prompt = m.mask(event.prompt))
+            else -> event
+        }
     }
 
     /** The outermost lock section ended: its deferred events are deliverable, in their original place. */
@@ -2084,7 +2106,7 @@ class SessionManager(
             runs[sessionId]?.sawStdout = true
             val provider = sessions[sessionId]?.let { lookup(it.provider)?.provider }
             heartbeat(sessionId, provider?.sessionIdFromLine(line))
-            if (sessionId !in interruptedTurns) conversation.output(sessionId, line)
+            if (sessionId !in interruptedTurns) conversation.output(sessionId, outputMask.mask(line))
             emit(SessionEvent.Stdout(sessionId, line, afterInterrupt = sessionId in interruptedTurns))
         }
 
@@ -2094,6 +2116,10 @@ class SessionManager(
         }
 
         override fun bootLine(sessionId: String, text: String) = this@SessionManager.bootLine(sessionId, text)
+
+        override fun mask(text: String): String = outputMask.mask(text)
+
+        override fun maskStream(): (String?) -> String = outputMask.stream().let { st -> { chunk -> if (chunk == null) st.flush() else st.chunk(chunk) } }
 
         override fun activity(sessionId: String, detail: String) {
             val tool = sessions[sessionId]?.provider ?: return

@@ -207,6 +207,24 @@ class Keystore(
 
     private fun storedKeys(): Set<String> = read().let { it.secrets.keys + it.entries.keys }
 
+    private var valuesStamp: Pair<Long, Long>? = null
+    private var valuesCache: Set<String> = emptySet()
+
+    /**
+     * HARNESS-GAP G18: every value the keystore holds (every field of every secret, the app scope and every project's), for
+     * [SecretMask] only. Daemon side only; never sent anywhere. The file is re-read only when it changed (its time or size,
+     * or a write through this instance), and the SAME set object is returned until then, so a caller can cache on identity.
+     */
+    @Synchronized
+    fun allValues(): Set<String> {
+        val stamp = if (file.isFile) file.lastModified() to file.length() else 0L to 0L
+        if (stamp != valuesStamp) {
+            valuesCache = opened(read()).values.flatMapTo(LinkedHashSet()) { it.values }
+            valuesStamp = stamp
+        }
+        return valuesCache
+    }
+
     /**
      * SECRETS-2b: where a secret is stored: its name in the app scope, `@<project>/<name>` in a project's. Neither '@' nor '/'
      * occurs in a name, so the two never clash, and the key is the AAD's first part, so a sealed field moved between scopes
@@ -260,6 +278,7 @@ class Keystore(
         tmp.writeText(json.encodeToString(StoreFile.serializer(), StoreFile(entries = kept, secrets = merged)))
         restrict(tmp)
         Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        valuesStamp = null
     }
 
     private fun seal(name: String, field: String, value: String): Sealed {
