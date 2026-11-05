@@ -26,6 +26,8 @@ class ChatNoteTools(
     private val wakeSession: (String, String) -> Unit,
     /** CHAT-IMAGE-1: a call carrying `image` is handed to infantry_chat_image, which validates and stores it and posts back here with `storedImage`. */
     private val forwardImage: ((JsonObject, com.superiorsoftllc.infantry.daemon.api.ToolCall) -> ToolResult)? = null,
+    /** NOTE-WAKE-PTY-1: holds a wake for a busy session; the daemon sends it as the session's next turn when the running one ends. */
+    private val queueWake: ((String, String) -> Unit)? = null,
     private val clock: () -> Long = System::currentTimeMillis,
     private val maxChars: Int = 400,
     private val perMinute: Int = 20,
@@ -36,7 +38,7 @@ class ChatNoteTools(
     val tool: DaemonTool = object : DaemonTool {
         override val name = NAME
         override val description = "Post a status line into a session's chat as an automation card (cog icon, time, coloured by level), stored in its history. " +
-            "No turn, no inbox entry, no mail unless wake=true (then the agent also gets the text as a short prompt: use it for real exceptions only). Same project only, " +
+            "No turn, no inbox entry, no mail unless wake=true (then the agent also gets the text as a short prompt, as its next turn when it is busy: use it for real exceptions only). Same project only, " +
             "rate limited, text capped at $maxChars characters. Script: ih.chat_note{sessionId=..., text=..., level='ok'}."
         override val inputSchema: JsonObject = Json.parseToJsonElement(
             """{"type":"object","properties":{"sessionId":{"type":"string","description":"target session (default: the caller's own)"},"text":{"type":"string","description":"the status line"},"level":{"type":"string","description":"info (default) | ok | warn (yellow WARNING, not an error) | fail"},"wake":{"type":"boolean","description":"also prompt the agent with the text (default false)"},"image":{"type":"string","description":"a file inside the project (or uploaded image id) shown inline with the line"}},"required":["text"]}""",
@@ -77,9 +79,15 @@ class ChatNoteTools(
         runCatching { push(item) }
         val wake = (a["wake"] as? JsonPrimitive)?.booleanOrNull == true
         if (wake) runCatching { wakeSession(target, shown) }.onFailure {
-            // CHAT-NOTE-WAKE-1: a busy session is not an error; it sees the note in its chat when its turn ends (same as mail to a busy session).
-            if (it.javaClass.simpleName == "RunInFlightException" || it.message?.contains("already has a run in flight") == true)
-                return ToolResult("noted in $target ($level, session busy: it will see the note when its turn ends)")
+            // CHAT-NOTE-WAKE-1: a busy session is not an error. NOTE-WAKE-PTY-1: the wake is held in the session's turn queue and sent as
+            // its next turn when the running one ends (the chat card alone never reaches the agent, so it used to be lost).
+            if (it.javaClass.simpleName == "RunInFlightException" || it.message?.contains("already has a run in flight") == true) {
+                val queue = queueWake ?: return ToolResult("noted in chat, but $target is busy and this daemon holds no turn queue: the wake was not delivered", isError = true)
+                return runCatching { queue(target, shown) }.fold(
+                    { ToolResult("noted in $target ($level, session busy: the wake is queued and runs as its next turn)") },
+                    { e -> ToolResult("noted in chat, but $target is busy and the wake could not be queued: ${e.message}", isError = true) },
+                )
+            }
             return ToolResult("noted in chat, but the wake failed: ${it.message}", isError = true)
         }
         return ToolResult("noted in $target ($level${if (wake) ", woken" else ""})")
