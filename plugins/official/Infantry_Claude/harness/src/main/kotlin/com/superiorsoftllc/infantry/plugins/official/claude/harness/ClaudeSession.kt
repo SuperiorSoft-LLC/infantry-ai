@@ -2,6 +2,7 @@
 // Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.plugins.official.claude.harness
 
+import com.superiorsoftllc.infantry.harness.api.ApprovalReply
 import com.superiorsoftllc.infantry.harness.api.HarnessProcess
 import com.superiorsoftllc.infantry.harness.api.HarnessRequest
 import com.superiorsoftllc.infantry.harness.api.HarnessSession
@@ -28,8 +29,11 @@ import java.util.concurrent.atomic.AtomicBoolean
  * FAILED with the CLI's reason, INTERRUPTED after [SessionConnection.abortTurn]); abort is a `control_request` interrupt and the process
  * lives on; a `result` that belongs to an interrupted turn a newer prompt superseded ends nothing.
  *
- * NOT carried over (the harness API has no prompt relay for it): the `ask` approval relay (`--permission-prompt-tool stdio`, `can_use_tool`
- * answered by the owner). Until the plugin takes over production that stays in the daemon's adapter; here `ask` behaves like `deny`.
+ * HARNESS-GAP G4 (ticket c2f05317): Tool approval ASK launches with `--permission-prompt-tool stdio`, so every call that would ask arrives on
+ * stdout as a `control_request` `can_use_tool`; it is relayed to the owner through [SessionOutput.requestApproval] (off the read thread, it
+ * blocks until the owner answers or the host's prompt timer ends it) and answered with a `control_response` on stdin: any allow answer
+ * allows this call with its own input, anything else (deny, timeout, session gone) denies it with a message. Every other control request
+ * claude sends is answered with an error so it never waits on one.
  */
 class ClaudeSession(
     private val executable: () -> String,
@@ -61,6 +65,7 @@ class ClaudeSession(
             resumeSessionId = resume,
             effort = request.effort,
             streamInput = true,
+            permissionPromptTool = ClaudeCommand.PERMISSION_PROMPT_STDIO.takeIf { request.toolApproval == ToolApproval.ASK },
             settings = watchSettings(env).takeIf { request.toolApproval == ToolApproval.ALLOW_ALL },
             sessionId = fresh,
         )
@@ -116,6 +121,10 @@ class ClaudeSession(
         override fun onStdout(line: String) {
             val record = parse(line) ?: return
             val type = record.str("type")
+            if (type == "control_request") {
+                controlRequest(record)
+                return
+            }
             if (type == OWN_TURN_RECORD) {
                 // CLI-PTY-4: claude answers with no turn sent (it took up a notice of its own, e.g. a background task that ended): a turn
                 // the host must track like a sent one, ended by its `result` below.
@@ -137,6 +146,24 @@ class ClaudeSession(
                 else -> turn.end(SessionTurnEnd.COMPLETED, 0, null)
             }
         }
+
+        /** G4: claude asks about one tool call (`can_use_tool`); the owner answers on a thread of its own, the read loop goes on. */
+        private fun controlRequest(record: JsonObject) {
+            val id = record.str("request_id") ?: return
+            val request = record["request"] as? JsonObject
+            if (request?.str("subtype") != CAN_USE_TOOL) {
+                send(controlError(id, "unsupported control request ${request?.str("subtype")}"))
+                return
+            }
+            val tool = request.str("tool_name")?.takeIf { it.isNotBlank() } ?: "tool"
+            val input = request["input"] as? JsonObject ?: JsonObject(emptyMap())
+            Thread({
+                val reply = runCatching { out.requestApproval(tool, approvalText(input)) }.getOrDefault(ApprovalReply.DENY)
+                send(permissionResponse(id, reply != ApprovalReply.DENY, input, denyMessage(tool)))
+            }, "infantry-claude-approval").apply { isDaemon = true; start() }
+        }
+
+        private fun send(line: String) { synchronized(lock) { out.write(line + "\n") } }
 
         override fun sendTurn(request: HarnessRequest) {
             val turn = Turn(out)
@@ -182,6 +209,31 @@ class ClaudeSession(
 
     companion object {
         private val json = Json { ignoreUnknownKeys = true; isLenient = true }
+
+        /** G4: the control request subtype claude sends for a tool call that needs the owner's approval. */
+        const val CAN_USE_TOOL = "can_use_tool"
+
+        fun denyMessage(tool: String): String = "The owner denied $tool (or did not answer in time). Do not retry it; carry on without it."
+
+        /** What the owner reads for a call: a shell call's command, else the input JSON. */
+        fun approvalText(input: JsonObject): String = input.str("command") ?: input.toString()
+
+        /** G4: the answer to one `can_use_tool` request; an allow hands back the call's own input unchanged. */
+        fun permissionResponse(requestId: String, allow: Boolean, input: JsonObject, message: String): String = buildJsonObject {
+            put("type", "control_response")
+            put("response", buildJsonObject {
+                put("subtype", "success")
+                put("request_id", requestId)
+                put("response", buildJsonObject {
+                    if (allow) { put("behavior", "allow"); put("updatedInput", input) } else { put("behavior", "deny"); put("message", message) }
+                })
+            })
+        }.toString()
+
+        fun controlError(requestId: String, error: String): String = buildJsonObject {
+            put("type", "control_response")
+            put("response", buildJsonObject { put("subtype", "error"); put("request_id", requestId); put("error", error) })
+        }.toString()
 
         /** CLI-PTY-4: the stream-json record type that shows a turn is running (a reply); seen with no turn open, claude began one itself. */
         const val OWN_TURN_RECORD = "assistant"

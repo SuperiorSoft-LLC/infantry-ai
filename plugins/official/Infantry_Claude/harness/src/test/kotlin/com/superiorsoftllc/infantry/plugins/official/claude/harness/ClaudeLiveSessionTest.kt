@@ -2,7 +2,9 @@
 // Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.plugins.official.claude.harness
 
+import com.superiorsoftllc.infantry.harness.api.ApprovalReply
 import com.superiorsoftllc.infantry.harness.api.HarnessRequest
+import com.superiorsoftllc.infantry.harness.api.ToolApproval
 import com.superiorsoftllc.infantry.harness.api.SessionOutput
 import com.superiorsoftllc.infantry.harness.api.SessionTurnEnd
 import kotlin.test.Test
@@ -12,8 +14,10 @@ import kotlin.test.assertTrue
 
 /** CLI-LIVE-1: the stream-json line protocol of ONE live claude process, driven through a recording [SessionOutput]. */
 class ClaudeLiveSessionTest {
-    private class Recorder(var writeOk: Boolean = true) : SessionOutput {
-        val written = mutableListOf<String>()
+    private class Recorder(var writeOk: Boolean = true, val approval: (String, String) -> ApprovalReply = { _, _ -> ApprovalReply.DENY }) : SessionOutput {
+        val written: MutableList<String> = java.util.Collections.synchronizedList(mutableListOf())
+        val asked: MutableList<Pair<String, String>> = java.util.Collections.synchronizedList(mutableListOf())
+        override fun requestApproval(tool: String, input: String): ApprovalReply { asked += tool to input; return approval(tool, input) }
         val ends = mutableListOf<Triple<SessionTurnEnd, Int?, String?>>()
         var inputClosed = false
         override fun write(text: String): Boolean { if (writeOk) written += text; return writeOk }
@@ -122,5 +126,67 @@ class ClaudeLiveSessionTest {
         assertEquals(1, out.starts.size, "a reply inside the sent turn is no new turn")
         c.onStdout(ok) // the sent turn's result
         assertEquals(2, out.ends.size)
+    }
+
+    // G4 (ticket c2f05317): Tool approval ASK on headless claude, the `can_use_tool` control request relayed to the owner.
+    private fun canUseTool(id: String, tool: String, input: String) =
+        """{"type":"control_request","request_id":"$id","request":{"subtype":"can_use_tool","tool_name":"$tool","input":$input,"permission_suggestions":[]}}"""
+
+    private fun awaitWrites(out: Recorder, n: Int): List<String> {
+        val deadline = System.currentTimeMillis() + 5_000
+        while (out.written.size < n && System.currentTimeMillis() < deadline) Thread.sleep(10)
+        return synchronized(out.written) { out.written.toList() }
+    }
+
+    private fun launchArgv(approval: ToolApproval) =
+        session.launch(HarnessRequest(prompt = "p", harnessId = "claude", project = "p", toolApproval = approval), emptyMap()).command
+
+    @Test fun `ask launches with the stdio permission prompt tool, no other mode does`() {
+        val ask = launchArgv(ToolApproval.ASK)
+        assertEquals(ClaudeCommand.PERMISSION_PROMPT_STDIO, ask[ask.indexOf("--permission-prompt-tool") + 1])
+        for (mode in listOf(ToolApproval.DENY, ToolApproval.ALLOW_EDITS, ToolApproval.ALLOW_ALL)) {
+            assertFalse("--permission-prompt-tool" in launchArgv(mode), "$mode never asks the owner")
+        }
+    }
+
+    @Test fun `an approved call is allowed with its own input`() {
+        val out = Recorder(approval = { _, _ -> ApprovalReply.ALLOW_ONCE })
+        val c = session.connect(out)
+        c.sendTurn(request("go"))
+        c.onStdout(canUseTool("cr-1", "Bash", """{"command":"rm -rf build"}"""))
+        val reply = awaitWrites(out, 2)[1]
+        assertEquals(listOf("Bash" to "rm -rf build"), out.asked.toList(), "the owner reads the shell command")
+        assertTrue(reply.endsWith("\n"))
+        assertTrue("\"type\":\"control_response\"" in reply && "\"request_id\":\"cr-1\"" in reply, reply)
+        assertTrue("\"behavior\":\"allow\"" in reply && "\"updatedInput\":{\"command\":\"rm -rf build\"}" in reply, reply)
+        assertTrue(out.ends.isEmpty(), "an approval does not end the turn")
+    }
+
+    @Test fun `a denied or timed-out call is refused with a message`() {
+        // The host's requestApproval answers DENY for a deny, a prompt timeout and a session that ended alike.
+        val out = Recorder(approval = { _, _ -> ApprovalReply.DENY })
+        val c = session.connect(out)
+        c.sendTurn(request("go"))
+        c.onStdout(canUseTool("cr-2", "Write", """{"file_path":"a.txt","content":"x"}"""))
+        val reply = awaitWrites(out, 2)[1]
+        assertEquals("Write", out.asked.single().first)
+        assertTrue("\"file_path\"" in out.asked.single().second, "a non-shell call shows its input JSON")
+        assertTrue("\"behavior\":\"deny\"" in reply && "\"message\":" in reply && "updatedInput" !in reply, reply)
+    }
+
+    @Test fun `a failing approval prompt denies, never allows`() {
+        val out = Recorder(approval = { _, _ -> error("host gone") })
+        val c = session.connect(out)
+        c.onStdout(canUseTool("cr-3", "Bash", """{"command":"ls"}"""))
+        assertTrue("\"behavior\":\"deny\"" in awaitWrites(out, 1)[0])
+    }
+
+    @Test fun `an unknown control request is answered with an error at once`() {
+        val out = Recorder()
+        val c = session.connect(out)
+        c.onStdout("""{"type":"control_request","request_id":"cr-4","request":{"subtype":"hook_callback"}}""")
+        val reply = out.written.single()
+        assertTrue("\"subtype\":\"error\"" in reply && "\"request_id\":\"cr-4\"" in reply, reply)
+        assertTrue(out.asked.isEmpty())
     }
 }
