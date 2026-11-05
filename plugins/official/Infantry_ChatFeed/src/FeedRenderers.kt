@@ -66,7 +66,7 @@ internal val UserRow: RowRenderer = RowRenderer(agentSide = false) { row ->
         Column {
             OriginLabel(line.origin)
             CommsCard(commsCardStyle(line.origin), line.at) {
-                if (said.isNotBlank() || images.isEmpty()) Text(said, color = Palette.Accent, fontFamily = Mono, fontSize = 12.sp)
+                if (said.isNotBlank() || images.isEmpty()) Text(said, color = OwnerMessageText, fontFamily = Mono, fontSize = 12.sp)
                 ChatSentImages(images)
             }
         }
@@ -106,3 +106,6 @@ internal val DefaultFeedRenderers: Map<String, RowRenderer> = linkedMapOf(
     "user" to UserRow, "text" to TextRow, "reasoning" to ReasoningRow, "status" to StatusRow, "error" to ErrorRow,
     "finished" to FinishedRow, "log" to LogRow, "write" to WriteRow, "automation" to AutomationRow,
 )
+
+/** CHAT-OWNER-TEXT-1: the owner's message body uses the theme's on-surface text tone (white in dark, dark in light), readable on the red-tinted bubble. */
+internal val OwnerMessageText: androidx.compose.ui.graphics.Color get() = Palette.Text
