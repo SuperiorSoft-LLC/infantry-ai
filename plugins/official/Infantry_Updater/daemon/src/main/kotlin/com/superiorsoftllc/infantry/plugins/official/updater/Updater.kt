@@ -105,6 +105,15 @@ class Updater(
         return Fetched.Ok(VerifiedInstaller(update, target, actual, checksumVerified = expected != null))
     }
 
+    override fun expectedSha256(update: AvailableUpdate): Fetched<String> {
+        val sum = update.checksum ?: return Fetched.Failed(UpdateFailure.BadAsset("the release publishes no SHA-256 for ${update.installer.name}"))
+        return when (val text = readChecksum(sum)) {
+            is Fetched.Failed -> text
+            is Fetched.Ok -> parseChecksum(text.value, update.installer.name)?.let { Fetched.Ok(it) }
+                ?: Fetched.Failed(UpdateFailure.BadAsset("${sum.name} has no SHA-256 for ${update.installer.name}"))
+        }
+    }
+
     internal fun readChecksum(asset: ReleaseAsset): Fetched<String> {
         if (asset.size > MAX_CHECKSUM_BYTES) return Fetched.Failed(UpdateFailure.BadAsset("${asset.name} is too large for a checksum file"))
         return when (val got = releases.openAsset(asset, config)) {

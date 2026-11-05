@@ -28,10 +28,12 @@ class ServerInstall(val root: File, private val keep: Int = 2) {
     fun dirOf(version: String): File = File(versions, version)
 
     /** Unpack [verified]'s archive, check it looks like a server, and make it `current`. Returns the version dir. */
-    fun stage(verified: VerifiedInstaller): File {
-        val version = verified.update.latest.toString()
+    fun stage(verified: VerifiedInstaller): File = stage(verified.update.latest.toString(), verified.file)
+
+    /** UPDATER-1: [stage] for an archive core's update engine already verified (its staging folder). */
+    fun stage(version: String, archive: File): File {
         val dir = dirOf(version)
-        if (!dir.isDirectory) unpackInto(verified.file, dir)
+        if (!dir.isDirectory) unpackInto(archive, dir)
         activate(version)
         prune()
         return dir

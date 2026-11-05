@@ -9,6 +9,9 @@ import java.nio.file.Files
 interface UpdateSource {
     fun check(): UpdateCheck
     fun download(update: AvailableUpdate, into: File = Files.createTempDirectory("infantry-update-").toFile()): Fetched<VerifiedInstaller>
+
+    /** UPDATER-1: the SHA-256 the release publishes for [update]'s installer, read before any download (core's engine requires it). */
+    fun expectedSha256(update: AvailableUpdate): Fetched<String>
 }
 
 /**
@@ -41,6 +44,12 @@ class LocalDirSource(
         val checksum = ReleaseAsset(sums.name, sums.length(), url = sums.absolutePath)
         val release = GitHubRelease(tagName = "v${best.version}", body = notes, assets = listOf(installer, checksum))
         return UpdateCheck.Available(AvailableUpdate(currentVersion, best.version, release, installer, checksum))
+    }
+
+    override fun expectedSha256(update: AvailableUpdate): Fetched<String> {
+        val sums = File(update.checksum?.url ?: return Fetched.Failed(UpdateFailure.BadAsset("no ${ReleaseAssets.SUMS_FILE}")))
+        return runCatching { Updater.parseChecksum(sums.readText(), update.installer.name) }.getOrNull()?.let { Fetched.Ok(it) }
+            ?: Fetched.Failed(UpdateFailure.BadAsset("${sums.name} has no SHA-256 for ${update.installer.name}"))
     }
 
     override fun download(update: AvailableUpdate, into: File): Fetched<VerifiedInstaller> {

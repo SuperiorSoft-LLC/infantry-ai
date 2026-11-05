@@ -23,6 +23,7 @@
       "INFANTRY_SUPERVISED", "INFANTRY_DOCKER_IMAGE"
     ],
     "secrets": ["update-token"],
+    "updateSources": ["infantry-release"],
     "limits": { "callTimeoutMs": 900000, "cpuMsPerCall": 600000 },
     "config": [
       {

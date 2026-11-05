@@ -133,7 +133,28 @@ register an applier or call `apply`. With no applier for a kind, `apply` answers
 
 ## 5. Status
 
-This is the foundation. The interface, the engine and the rules above are in place and tested (`UpdateEngineTest`,
-`HostUpdatesTest`). The official Infantry_Updater plugin still runs its own GitHub check and MSI / APK install. Moving it
-onto this engine, as a `github` source type and the `core` applier, is the next step. Its settings stay the one config
-point for the app's own source. See also [Daemon plugin API](daemon-plugin-api.md) and [Plugins](Plugins.md).
+The interface, the engine and the rules above are in place and tested (`UpdateEngineTest`, `HostUpdatesTest`).
+
+The official Infantry_Updater plugin runs the daemon's own update on this engine
+(`plugins/official/Infantry_Updater/daemon/src/main/kotlin/com/superiorsoftllc/infantry/plugins/official/updater/daemon/EngineBridge.kt`,
+tested by `EngineBridgeTest`):
+
+- It registers the source type `infantry-release` (`ReleaseSourceType`): GitHub Releases or a local releases folder,
+  with the server archive for this OS / CPU and its SHA-256 from the release's `SHA256SUMS`.
+- It registers the `core` applier (`CoreArchiveApplier`): an archive install unpacks the staged archive and makes it
+  current; the launcher restarts into it.
+- It sets the app's source from its `updater.*` settings. A private repo names the token as env `INFANTRY_UPDATE_TOKEN`,
+  else the keystore entry `update-token`; the engine resolves it, and the plugin's own OS credential store lookup is
+  the last fallback.
+- Its `/update/status`, `/update/check` and `/update/apply` routes are the face of the engine (`CoreEnginePath`).
+
+Not on the engine yet:
+
+- The desktop window's own update (download the MSI, hand it to Windows). It runs in the window process, which has no
+  engine.
+- The phone's `/update/client` offer. The phone installs its own APK; the daemon only answers a token-free link.
+- Plugin updates. The engine lists every module and can check and fetch one, but no `plugin` applier is registered
+  yet, so a module's update stays staged.
+
+The plugin's settings stay the one config point for the app's own source. See also [Daemon plugin API](daemon-plugin-api.md)
+and [Plugins](Plugins.md).

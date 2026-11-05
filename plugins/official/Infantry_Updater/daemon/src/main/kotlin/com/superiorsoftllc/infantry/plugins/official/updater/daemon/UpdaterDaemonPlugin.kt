@@ -5,6 +5,7 @@ package com.superiorsoftllc.infantry.plugins.official.updater.daemon
 import com.superiorsoftllc.infantry.daemon.api.DaemonApi
 import com.superiorsoftllc.infantry.daemon.api.DaemonPlugin
 import com.superiorsoftllc.infantry.daemon.api.HttpReply
+import com.superiorsoftllc.infantry.daemon.api.updates.UpdateComponent
 import com.superiorsoftllc.infantry.plugins.official.updater.ClientUpdateOffer
 import com.superiorsoftllc.infantry.plugins.official.updater.ClientUpdates
 import com.superiorsoftllc.infantry.plugins.official.updater.RouteAnswer
@@ -27,10 +28,18 @@ import java.util.Properties
  * keystore's `update-token` ([DaemonApi.secret]), else the OS credential store; it is read only when `updater.source=private`
  * and is never logged, mirrored or answered. The effective settings (never the token) are mirrored to
  * `plugin-data/Infantry_Updater/settings.properties` for the window's own updater ([UpdateSettings.settingsMirror]).
+ *
+ * The daemon's own update runs on core's update engine (`DaemonApi.updates`, component `core`): this plugin registers the
+ * `infantry-release` source type and the `core` applier ([ReleaseSourceType], [CoreArchiveApplier]) and sets the app's
+ * source from its settings; its routes are the face of that engine ([CoreEnginePath]).
  */
 class UpdaterDaemonPlugin : DaemonPlugin {
     private lateinit var api: DaemonApi
     private var timer: AutoCloseable? = null
+    private val registrations = mutableListOf<AutoCloseable>()
+
+    /** Core's update engine for the app, when it took this plugin's source type and applier. */
+    private var engine: CoreEnginePath? = null
     private val json = Json { encodeDefaults = true; explicitNulls = false }
 
     /** The service of the current settings: rebuilt when a `updater.*` value changes, so a status survives between calls. */
@@ -52,8 +61,10 @@ class UpdaterDaemonPlugin : DaemonPlugin {
             keystore = { api.secret(UpdateSettings.TOKEN_SECRET) },
             config = { key -> now[key] },
             stateDir = stateRoot,
+            engine = engine,
         )
         built = now to service
+        engine?.let { runCatching { api.updates.setSource(UpdateComponent.CORE_ID, ReleaseSourceType.coreSource(service.config)) }.onFailure { api.log("updater: could not set the app's update source: ${it::class.simpleName}") } }
         return service
     }
 
@@ -84,6 +95,13 @@ class UpdaterDaemonPlugin : DaemonPlugin {
 
     override fun start(api: DaemonApi) {
         this.api = api
+        engine = runCatching {
+            registrations += api.updates.registerSource(
+                ReleaseSourceType(base = { service().config }, kind = { ServerUpdateService.kindFor(service().distribution) }),
+            )
+            registrations += api.updates.registerApplier(CoreArchiveApplier { service().install })
+            CoreEnginePath(api.updates)
+        }.onFailure { api.log("updater: core's update engine refused the source/applier (${it.message}); using the plugin's own path") }.getOrNull()
         api.routes.handle("GET", "/update/status") { reply(UpdateRoutes.status(service())) }
         api.routes.handle("POST", "/update/check") { reply(UpdateRoutes.check(service())) }
         api.routes.handle("POST", "/update/apply") { call -> reply(UpdateRoutes.apply(service(), call.body)) }
@@ -107,6 +125,9 @@ class UpdaterDaemonPlugin : DaemonPlugin {
     override fun stop() {
         runCatching { timer?.close() }
         timer = null
+        registrations.forEach { runCatching { it.close() } }
+        registrations.clear()
+        engine = null
     }
 
     companion object {

@@ -58,22 +58,48 @@ sealed interface ApplyResult {
 }
 
 /**
+ * UPDATER-1: the app's own update through core's ONE update engine (`DaemonApi.updates`, component `core`). The daemon
+ * half implements it (`daemon.CoreEnginePath`); this type names no daemon-API class, because the same jar also runs in
+ * the window and in `infantry update`, where there is no engine.
+ */
+interface EnginePath {
+    /** Asks the engine for the app's newest version. Network only. */
+    fun check(): EngineAnswer
+
+    /** Downloads, verifies (SHA-256) and installs the version [check] found, through the engine's `core` applier. */
+    fun install(): EngineAnswer
+}
+
+/** UPDATER-1: what [EnginePath] answers. */
+sealed interface EngineAnswer {
+    data class Available(val version: String, val notes: String) : EngineAnswer
+    data object UpToDate : EngineAnswer
+    data class Installed(val version: String) : EngineAnswer
+    data class Failed(val message: String) : EngineAnswer
+}
+
+/**
  * SERVER-UPDATE-3: the headless daemon's view of its own updates (HEADLESS-1: no UI, no HTTP in here; [updateRoutes]
  * is the HTTP face). [check] asks the configured source (GitHub or a local releases folder); [apply] downloads, verifies
  * and stages the archive through [ServerInstall], only for an [Distribution.ARCHIVE] install and, when agents are
  * working, only when the caller confirms. Nothing here restarts the process or touches the data dir.
+ *
+ * UPDATER-1: with an [engine], check and apply go through core's update engine (the daemon half); without one (the
+ * `infantry update` command, tests) they use [sourceFor] directly.
  */
 class ServerUpdateService(
     private val settings: UpdateSettings,
     val distribution: Distribution,
     val version: String,
-    private val install: ServerInstall?,
+    val install: ServerInstall?,
     private val runningAgents: () -> Int = { 0 },
     private val dockerImage: String = DEFAULT_IMAGE,
     private val sourceFor: (UpdateConfig) -> UpdateSource = { UpdateSources.forConfig(it, kindFor(distribution)) },
     private val clock: () -> Long = System::currentTimeMillis,
     /** SERVER-UPDATE-2: runs once a version is staged. Under the launcher supervisor it restarts the daemon into it; null = the next start picks it up. */
     private val onStaged: ((String) -> Unit)? = null,
+    /** UPDATER-1: core's update engine, when this runs inside the daemon. */
+    private val engine: EnginePath? = null,
 ) {
     /** True when staging a version restarts this daemon by itself (it runs under `bin/infantry`'s supervisor). */
     val restartsAfterStaging: Boolean get() = onStaged != null
@@ -81,16 +107,18 @@ class ServerUpdateService(
     private val lock = Any()
     private val working = AtomicBoolean(false)
     private var available: AvailableUpdate? = null
+    private var offer: ServerUpdateOffer? = null
     private var lastChecked: Long? = null
     private var error: String? = null
     private var staged: String? = null
     private var state = "idle"
 
-    private val config: UpdateConfig? get() = (settings as? UpdateSettings.Enabled)?.config
+    /** The resolved settings when updates are on (the daemon half hands them to the engine's source). */
+    val config: UpdateConfig? get() = (settings as? UpdateSettings.Enabled)?.config
     private val canSelfUpdate: Boolean get() = distribution == Distribution.ARCHIVE && install != null && config != null
 
     fun status(): ServerUpdateStatus = synchronized(lock) {
-        val offer = available
+        val offer = offer
         ServerUpdateStatus(
             version = version,
             distribution = distribution.wire,
@@ -98,10 +126,10 @@ class ServerUpdateService(
             enabled = config != null,
             disabledReason = (settings as? UpdateSettings.Disabled)?.reason,
             state = state,
-            available = offer?.let { ServerUpdateOffer(it.latest.toString(), it.notes) },
+            available = offer,
             lastChecked = lastChecked,
             error = error,
-            instructions = instructionsFor(offer?.latest),
+            instructions = instructionsFor(offer?.version),
             runningAgents = runCatching(runningAgents).getOrDefault(0),
             staged = staged,
         )
@@ -117,13 +145,25 @@ class ServerUpdateService(
         if (!working.compareAndSet(false, true)) return status()
         try {
             synchronized(lock) { state = "checking" }
+            engine?.let { e ->
+                val answer = runCatching { e.check() }.getOrElse { EngineAnswer.Failed(it::class.simpleName ?: "error") }
+                synchronized(lock) {
+                    lastChecked = clock()
+                    when (answer) {
+                        is EngineAnswer.Available -> { offer = ServerUpdateOffer(answer.version, answer.notes); error = null; state = if (staged == answer.version) "staged" else "available" }
+                        is EngineAnswer.Failed -> { error = answer.message; state = "error" }
+                        else -> { offer = null; error = null; state = "idle" }
+                    }
+                }
+                return status()
+            }
             val result = runCatching { sourceFor(cfg).check() }
                 .getOrElse { UpdateCheck.Failed(UpdateFailure.BadResponse(it::class.simpleName ?: "error")) }
             synchronized(lock) {
                 lastChecked = clock()
                 when (result) {
-                    is UpdateCheck.Available -> { available = result.update; error = null; state = if (staged == result.update.latest.toString()) "staged" else "available" }
-                    is UpdateCheck.UpToDate -> { available = null; error = null; state = "idle" }
+                    is UpdateCheck.Available -> { available = result.update; offer = ServerUpdateOffer(result.update.latest.toString(), result.update.notes); error = null; state = if (staged == result.update.latest.toString()) "staged" else "available" }
+                    is UpdateCheck.UpToDate -> { available = null; offer = null; error = null; state = "idle" }
                     is UpdateCheck.Failed -> { error = result.failure.message; state = "error" }
                 }
             }
@@ -137,15 +177,33 @@ class ServerUpdateService(
     fun apply(confirm: Boolean): ApplyResult {
         val cfg = config
         val inst = install
-        val offer = synchronized(lock) { available }
-        if (distribution == Distribution.DOCKER) return ApplyResult.Unsupported(instructionsFor(offer?.latest) ?: dockerHelp(null))
+        val offered = synchronized(lock) { offer }
+        val update = synchronized(lock) { available }
+        if (distribution == Distribution.DOCKER) return ApplyResult.Unsupported(instructionsFor(offered?.version) ?: dockerHelp(null))
         if (inst == null || cfg == null || distribution != Distribution.ARCHIVE) {
             return ApplyResult.Unsupported(instructionsFor(null) ?: "This daemon cannot update itself.")
         }
-        if (offer == null) return ApplyResult.NothingToApply
+        if (offered == null) return ApplyResult.NothingToApply
         val running = runCatching(runningAgents).getOrDefault(0)
         if (running > 0 && !confirm) return ApplyResult.AgentsRunning(running)
         if (!working.compareAndSet(false, true)) return ApplyResult.Failed("an update is already in progress")
+        engine?.let { e ->
+            try {
+                synchronized(lock) { state = "downloading" }
+                return when (val answer = runCatching { e.install() }.getOrElse { EngineAnswer.Failed(it::class.simpleName ?: "error") }) {
+                    is EngineAnswer.Installed -> {
+                        synchronized(lock) { staged = answer.version; state = "staged"; error = null }
+                        onStaged?.let { hook -> runCatching { hook(answer.version) } }
+                        ApplyResult.Staged(answer.version)
+                    }
+                    is EngineAnswer.Failed -> fail(answer.message)
+                    else -> fail("the update engine found nothing to install")
+                }
+            } finally {
+                working.set(false)
+            }
+        }
+        val offer = update ?: run { working.set(false); return ApplyResult.NothingToApply }
         val temp = Files.createTempDirectory("infantry-update-").toFile()
         try {
             synchronized(lock) { state = "downloading" }
@@ -170,14 +228,14 @@ class ServerUpdateService(
         return ApplyResult.Failed(message)
     }
 
-    private fun instructionsFor(latest: SemVer?): String? = when (distribution) {
+    private fun instructionsFor(latest: String?): String? = when (distribution) {
         Distribution.DOCKER -> dockerHelp(latest)
         Distribution.DEV -> "This is a development run; it never updates itself."
         Distribution.ARCHIVE -> if (canSelfUpdate) null else "Updates are not configured: ${(settings as? UpdateSettings.Disabled)?.reason ?: "no install folder"}."
     }
 
-    private fun dockerHelp(latest: SemVer?): String {
-        val tag = latest?.toString() ?: "latest"
+    private fun dockerHelp(latest: String?): String {
+        val tag = latest ?: "latest"
         return "A container cannot replace its own image. Pull the new image and recreate the container " +
             "(keep the /data volume): `docker pull $dockerImage:$tag`, then stop and remove the container and run it again " +
             "with the same options; with Compose: `docker compose pull && docker compose up -d`. " +
@@ -226,6 +284,8 @@ class ServerUpdateService(
             keystore: () -> String? = { null },
             /** UPDATER-1: the module's `updater.*` config values (the daemon half's `DaemonApi.config`); none outside the daemon. */
             config: (String) -> String? = { null },
+            /** UPDATER-1: core's update engine (the daemon half); null = this source directly. */
+            engine: EnginePath? = null,
         ): ServerUpdateService {
             val appHome = setting("INFANTRY_APP_HOME")?.let(::File)?.takeIf { it.isDirectory }
             val distribution = when (setting("INFANTRY_DISTRIBUTION")?.trim()?.lowercase()) {
@@ -259,6 +319,7 @@ class ServerUpdateService(
                 runningAgents = runningAgents,
                 dockerImage = setting("INFANTRY_DOCKER_IMAGE")?.trim()?.takeIf { it.isNotEmpty() } ?: DEFAULT_IMAGE,
                 onStaged = if (distribution == Distribution.ARCHIVE && setting("INFANTRY_SUPERVISED") == "1") restart else null,
+                engine = engine,
             )
         }
     }
