@@ -22,7 +22,7 @@
 > **Beta.** <!-- shared:beta_line -->Infantry AI is in Beta. It works and we use it every day, but not every part is fully tested yet: you are an early tester. Please report anything that breaks on GitHub.<!-- /shared:beta_line -->  
 > [Report a problem](https://github.com/SuperiorSoft-LLC/infantry-ai/issues)
 
-<p align="center"><img src="docs/img/app-screenshot.png" alt="Infantry AI desktop app: agents, chat and usage" width="900"></p>
+<p align="center"><img src="docs/img/infantry-ai-pm-chat.png" alt="Infantry AI: the PM agent's chat with the board, agents and usage pacing" width="900"></p>
 
 ---
 
