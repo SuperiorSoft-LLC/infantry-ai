@@ -7,6 +7,8 @@ scripts/infantry-gate.sh staging-agenthq          # batch gate: tests forced, co
 scripts/infantry-gate.sh --full staging-agenthq   # promotion gate (staging -> feature): nothing from the build cache
 ```
 
+A failing test that is on the [known-failure list](KNOWN-FAILURES.md) fails on dev too; check the list before you chase a failure.
+
 Run it from Git Bash inside any Infantry checkout. Long run (tens of minutes): start it as
 `infantry bg run --name gate -- sh scripts/infantry-gate.sh <ref>` so the session shows Running.
 
