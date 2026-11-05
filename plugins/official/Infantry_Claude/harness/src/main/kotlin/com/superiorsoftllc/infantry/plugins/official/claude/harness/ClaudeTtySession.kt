@@ -41,6 +41,10 @@ import java.util.UUID
  *   [MCP_CHECK_MS] the pid is checked; a change (up, gone, a new pid up again) is reported with [SessionOutput.mcpState] and nothing else:
  *   no reconnect is made here. One live CLI starts its servers once, so a server that dies stays dead unless a script asks for
  *   `session_act mcp_reconnect`.
+ * - **Permissions (G3, ticket 11754e3b):** in every mode but allowAll the settings carry a `PermissionRequest` http hook to this plugin's
+ *   loopback [PermissionHookServer], answered from the Tool approval ([ClaudePermissionHook]: deny, or the owner under ask). Should the CLI
+ *   still show its permission dialog with no hook call open (the hook timed out or failed), it is answered No (Esc) after [DIALOG_GRACE_MS]
+ *   and the turn ends INTERRUPTED with that reason, so a turn never sits on a dialog nobody sees.
  */
 class ClaudeTtySession(
     private val executable: () -> String,
@@ -55,6 +59,9 @@ class ClaudeTtySession(
     private val poll: Boolean = true,
     /** Whether a process id still runs (the MCP server check); a test fakes it. */
     private val pidAlive: (Long) -> Boolean = ::processAlive,
+    /** G3: [ClaudePermissionHook.TIMEOUT_SETTING], read at every launch. */
+    private val approvalHookSeconds: () -> Int = { ClaudePermissionHook.DEFAULT_TIMEOUT_SEC },
+    private val permissionHooks: PermissionHookServer = PermissionHookServer(),
 ) : HarnessSession {
     override val label: String = "claude"
 
@@ -62,7 +69,11 @@ class ClaudeTtySession(
 
     /** What [launch] decided for a process, until [connect] takes it. Keyed by identity: the host hands back the very object. */
     /** [transcriptStart] = CLI-PTY-4: the length of a resumed session's transcript at launch; what is before it is history, never read as live. */
-    data class Launch(val sessionId: String, val cwd: String, val events: File, val settings: File, val mcpPid: File? = null, val transcriptStart: Long = 0)
+    /** [approval] / [hookToken] = G3: the Tool approval the permission hook answers from, and the token in its URL (null = no hook). */
+    data class Launch(
+        val sessionId: String, val cwd: String, val events: File, val settings: File, val mcpPid: File? = null, val transcriptStart: Long = 0,
+        val approval: ToolApproval = ToolApproval.ALLOW_ALL, val hookToken: String? = null,
+    )
 
     private val launches = IdentityHashMap<HarnessProcess, Launch>()
 
@@ -103,12 +114,14 @@ class ClaudeTtySession(
         val settings = File(dir, "$id.settings.json")
         val mcpPid = File(dir, "$id.mcp.pid").apply { delete() }
         val watch = watchSettings(env).takeIf { request.toolApproval == ToolApproval.ALLOW_ALL }
-        settings.writeText(ClaudeCommand.ttySettings(events.absolutePath, watch, bypass = ClaudeCommand.permissionMode(request.toolApproval) == "bypassPermissions"))
+        val hookToken = UUID.randomUUID().toString().takeIf { ClaudePermissionHook.wanted(request.toolApproval) }
+        val hook = hookToken?.let { ClaudePermissionHook.entry(permissionHooks.url(it), approvalHookSeconds()) }
+        settings.writeText(ClaudeCommand.ttySettings(events.absolutePath, watch, bypass = ClaudeCommand.permissionMode(request.toolApproval) == "bypassPermissions", permissionHook = hook))
         val process = HarnessProcess(
             command = argv(executable(), request, if (resume == null) id else null, resume, settings.absolutePath, env, mapOf(MCP_PID_FILE_ENV to mcpPid.absolutePath)),
             env = mapOf("CLAUDE_CODE_ENABLE_TODO_TOOLS" to "1") + ClaudeCommand.contextLimitEnv(request.contextLimit),
         )
-        synchronized(launches) { launches[process] = Launch(id, request.project, events, settings, mcpPid, transcriptStart(resume, request.project)) }
+        synchronized(launches) { launches[process] = Launch(id, request.project, events, settings, mcpPid, transcriptStart(resume, request.project), request.toolApproval, hookToken) }
         return process
     }
 
@@ -120,7 +133,7 @@ class ClaudeTtySession(
 
     override fun connect(out: SessionOutput, launched: HarnessProcess): SessionConnection {
         val launch = synchronized(launches) { launches.remove(launched) } ?: error("this process was not launched by the interactive claude session")
-        return TtyConnection(out, launch, configDir(), clock, bootTimeoutMs, pidAlive).also { if (poll) it.startPolling() }
+        return TtyConnection(out, launch, configDir(), clock, bootTimeoutMs, pidAlive, permissionHooks).also { if (poll) it.startPolling() }
     }
 
     /** One interactive claude in its terminal. Every state change happens in [tick] (the poller thread) or under [lock]. */
@@ -131,6 +144,7 @@ class ClaudeTtySession(
         private val clock: () -> Long,
         private val bootTimeoutMs: Long,
         private val pidAlive: (Long) -> Boolean = ::processAlive,
+        private val hooks: PermissionHookServer? = null,
     ) : SessionConnection {
         /** [own] = CLI-PTY-4: the CLI began it by itself (nothing to paste); reported with [SessionOutput.turnStarted]. */
         private class Turn(val prompt: String, val own: Boolean = false) {
@@ -140,6 +154,8 @@ class ClaudeTtySession(
             var enterRetried = false
             var submitted = false
             var stopAt: Long? = null
+            /** G3: why this turn was interrupted by the session itself (a permission dialog answered No); null = the host asked. */
+            var abortReason: String? = null
         }
 
         private val lock = Any()
@@ -171,6 +187,29 @@ class ClaudeTtySession(
         private var ownPending: String? = null
         /** CLI-PTY-4: a Stop seen while no turn was open; a turn of its own seen in the same read is that turn (it was over that fast). */
         private var unclaimedStopAt: Long? = null
+        /** G3: permission hook calls being answered now (an ASK waits for the owner): the dialog fallback waits while any is open. */
+        private val hookCalls = java.util.concurrent.atomic.AtomicInteger()
+        /** G3: [screenTotal] when the last hook call was answered or the last dialog answered No; dialog text before it is history. */
+        private var dialogMark = 0L
+        private var dialogSeenAt: Long? = null
+
+        init { launch.hookToken?.let { token -> hooks?.register(token, ::answerPermission) } }
+
+        /** G3: one `PermissionRequest` hook call (a server thread): answered from the launch's Tool approval. */
+        fun answerPermission(body: String): String {
+            hookCalls.incrementAndGet()
+            try {
+                return ClaudePermissionHook.decide(launch.approval, body, { tool, input -> out.requestApproval(tool, input) }) { tool ->
+                    out.detail("interactive claude: denied $tool (tool approval ${launch.approval.name.lowercase()})")
+                }
+            } finally {
+                synchronized(lock) {
+                    hookCalls.decrementAndGet()
+                    dialogMark = screenTotal
+                    dialogSeenAt = null
+                }
+            }
+        }
 
         fun startPolling() {
             thread = Thread({
@@ -235,6 +274,7 @@ class ClaudeTtySession(
 
         override fun onExit(exitCode: Int) {
             running = false
+            launch.hookToken?.let { hooks?.unregister(it) }
             // The screen is the only account of why a terminal program quit: show its tail when it did not exit cleanly.
             if (exitCode != 0) out.detail("the interactive claude exited (code $exitCode); screen: " + synchronized(lock) { screenTail() })
             // The host ends its turn in flight itself (sent or still queued here), so nothing is ended twice.
@@ -267,6 +307,7 @@ class ClaudeTtySession(
                 out.output(mapper.initLine())
             }
             answerTrust(now)
+            answerDialog(now)
             checkMcp(now)
             var apiError: String? = null
             for (line in transcript.read()) for (signal in mapper.map(line)) onSignal(signal)?.let { apiError = it }
@@ -300,7 +341,7 @@ class ClaudeTtySession(
                     }
                     turn.abortAt != null && (interruptedSeen || now - turn.abortAt!! >= ABORT_GRACE_MS) -> {
                         mapper.resultLine() // drop the interrupted turn's usage
-                        ends += Triple(SessionTurnEnd.INTERRUPTED, null, null)
+                        ends += Triple(SessionTurnEnd.INTERRUPTED, null, turn.abortReason)
                         active = null
                     }
                     apiError != null -> {
@@ -401,6 +442,27 @@ class ClaudeTtySession(
             }
         }
 
+        /**
+         * G3: the CLI's permission dialog on screen (drawn after the last answered hook call) with no hook call open for [DIALOG_GRACE_MS]:
+         * nothing will answer it, so answer No (Esc) and end the turn as interrupted with the reason.
+         */
+        private fun answerDialog(now: Long) = synchronized(lock) {
+            val turn = active
+            if (turn == null || turn.abortAt != null || hookCalls.get() > 0) { dialogSeenAt = null; return@synchronized }
+            val since = (screenTotal - dialogMark).coerceIn(0L, screen.length.toLong()).toInt()
+            val tail = ScreenText.squeeze(screen.takeLast(minOf(since, DIALOG_WINDOW_CHARS)).toString()).lowercase()
+            if (DIALOG_MARKERS.none { it in tail }) { dialogSeenAt = null; return@synchronized }
+            val seen = dialogSeenAt ?: now.also { dialogSeenAt = it }
+            if (now - seen < DIALOG_GRACE_MS) return@synchronized
+            out.detail("interactive claude: a permission dialog nothing answered; answered No")
+            turn.abortAt = now
+            turn.abortReason = DIALOG_DENIED_REASON
+            interruptedSeen = false
+            dialogMark = screenTotal
+            dialogSeenAt = null
+            key(ESC)
+        }
+
         private fun pressDown(now: Long) {
             key(DOWN)
             trustDownAt = now
@@ -450,6 +512,13 @@ class ClaudeTtySession(
         const val SCREEN_KEEP_CHARS = 32 * 1024
         const val SCREEN_TAIL_CHARS = 600
         const val TRUST_WINDOW_CHARS = 4096
+
+        /** G3: what every permission dialog of the CLI reads as once spaces are squeezed out and lower-cased (its "No" option). */
+        val DIALOG_MARKERS = listOf("tellclaudewhattododifferently", "doyouwanttoproceed?")
+        /** G3: how long the dialog must stay on screen with no hook call open before it is answered No. */
+        const val DIALOG_GRACE_MS = 3_000L
+        const val DIALOG_WINDOW_CHARS = 4096
+        const val DIALOG_DENIED_REASON = "claude showed a permission dialog that no approval answered; it was answered No"
     }
 }
 

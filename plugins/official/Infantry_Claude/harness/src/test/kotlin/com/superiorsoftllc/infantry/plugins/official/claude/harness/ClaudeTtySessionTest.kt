@@ -2,6 +2,7 @@
 // Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.plugins.official.claude.harness
 
+import com.superiorsoftllc.infantry.harness.api.ApprovalReply
 import com.superiorsoftllc.infantry.harness.api.HarnessEvent
 import com.superiorsoftllc.infantry.harness.api.HarnessRequest
 import com.superiorsoftllc.infantry.harness.api.MCP_PID_FILE_ENV
@@ -48,6 +49,9 @@ class ClaudeTtySessionTest {
         override fun turnEnded(end: SessionTurnEnd, exitCode: Int?, reason: String?) { ends += Triple(end, exitCode, reason) }
         val starts = mutableListOf<String?>()
         override fun turnStarted(reason: String?) { starts += reason }
+        var approvalReply = ApprovalReply.DENY
+        val asked = mutableListOf<Pair<String, String>>()
+        override fun requestApproval(tool: String, input: String): ApprovalReply { asked += tool to input; return approvalReply }
     }
 
     private val session = ClaudeTtySession(
@@ -60,8 +64,8 @@ class ClaudeTtySessionTest {
 
     private class Started(val out: Recorder, val c: ClaudeTtySession.TtyConnection, val launch: ClaudeTtySession.Launch, val argv: List<String>)
 
-    private fun start(resume: String? = null): Started {
-        val launched = session.launch(request("", resume), emptyMap())
+    private fun start(resume: String? = null, approval: ToolApproval = ToolApproval.ALLOW_ALL): Started {
+        val launched = session.launch(request("", resume, approval), emptyMap())
         assertTrue(session.terminal(launched), "an interactive launch runs in a terminal")
         val id = resume ?: "11111111-2222-3333-4444-555555555555"
         val launch = ClaudeTtySession.Launch(id, cwd.absolutePath, File(File(state, ClaudeTtySession.TTY_DIR), "$id.events"), File(File(state, ClaudeTtySession.TTY_DIR), "$id.settings.json"))
@@ -490,5 +494,99 @@ class ClaudeTtySessionTest {
         assertEquals(listOf(Triple<SessionTurnEnd, Int?, String?>(SessionTurnEnd.COMPLETED, 0, null)), s.out.ends, "the old interruption does not end the new turn")
         assertEquals("read the mail", Json.parseToJsonElement(s.out.lines.last()).jsonObject["result"]!!.jsonPrimitive.content)
         assertTrue(s.out.lines.none { "old reply" in it })
+    }
+
+    // ---- G3: permission dialogs (ticket 11754e3b) ---------------------------------------------------------------------
+
+    private fun settingsOf(s: Started) = Json.parseToJsonElement(s.launch.settings.readText()).jsonObject
+
+    private fun permissionHook(s: Started): JsonObject? =
+        settingsOf(s)["hooks"]!!.jsonObject["PermissionRequest"]?.jsonArray?.single()?.jsonObject?.get("hooks")?.jsonArray?.single()?.jsonObject
+
+    private fun post(url: String, body: String): String {
+        val http = java.net.http.HttpClient.newHttpClient()
+        val req = java.net.http.HttpRequest.newBuilder(java.net.URI.create(url)).POST(java.net.http.HttpRequest.BodyPublishers.ofString(body)).build()
+        return http.send(req, java.net.http.HttpResponse.BodyHandlers.ofString()).body()
+    }
+
+    private fun behavior(reply: String) = Json.parseToJsonElement(reply).jsonObject["hookSpecificOutput"]!!.jsonObject["decision"]!!.jsonObject["behavior"]!!.jsonPrimitive.content
+
+    private val bashCall = """{"hook_event_name":"PermissionRequest","tool_name":"Bash","tool_input":{"command":"echo ${'$'}HOME"}}"""
+
+    @Test fun `deny runs dontAsk and every mode that can ask carries the permission hook, allowAll none`() {
+        val deny = start(approval = ToolApproval.DENY)
+        assertEquals("dontAsk", deny.argv[deny.argv.indexOf("--permission-mode") + 1])
+        val hook = permissionHook(deny)!!
+        assertEquals("http", hook["type"]!!.jsonPrimitive.content)
+        assertTrue(hook["url"]!!.jsonPrimitive.content.startsWith("http://127.0.0.1:"), hook.toString())
+        assertEquals(ClaudePermissionHook.DEFAULT_TIMEOUT_SEC, hook["timeout"]!!.jsonPrimitive.content.toInt())
+        assertTrue(listOf("SessionStart", "UserPromptSubmit", "Stop").all { it in settingsOf(deny)["hooks"]!!.jsonObject }, "the turn hooks stay")
+        assertNull(permissionHook(start(approval = ToolApproval.ALLOW_ALL)))
+        val ask = start(approval = ToolApproval.ASK)
+        assertFalse("--permission-mode" in ask.argv, "ask keeps claude's default mode: ${ask.argv}")
+        assertTrue(permissionHook(ask) != null)
+    }
+
+    @Test fun `the hook denies under deny and allowEdits and never asks the owner`() {
+        for (mode in listOf(ToolApproval.DENY, ToolApproval.ALLOW_EDITS)) {
+            val s = start(approval = mode)
+            s.out.approvalReply = ApprovalReply.ALLOW_ONCE
+            val reply = post(permissionHook(s)!!["url"]!!.jsonPrimitive.content, bashCall)
+            assertEquals("deny", behavior(reply), "$mode: $reply")
+            assertTrue("Do not retry" in reply, reply)
+            assertTrue(s.out.asked.isEmpty(), "$mode never prompts")
+        }
+    }
+
+    @Test fun `under ask the hook relays the call to the owner and answers with the pick`() {
+        val s = start(approval = ToolApproval.ASK)
+        val url = permissionHook(s)!!["url"]!!.jsonPrimitive.content
+        s.out.approvalReply = ApprovalReply.ALLOW_ONCE
+        assertEquals("allow", behavior(post(url, bashCall)))
+        assertEquals("Bash" to "echo \$HOME", s.out.asked.single(), "a shell call shows its command")
+        s.out.approvalReply = ApprovalReply.DENY
+        assertEquals("deny", behavior(post(url, bashCall)))
+        assertEquals("deny", behavior(post(url.substringBeforeLast('/') + "/not-a-token", bashCall)), "an unknown token is denied, never allowed")
+        assertEquals("deny", behavior(post(url, "not json")), "an unreadable call is denied")
+        s.c.onExit(0)
+        assertEquals("deny", behavior(post(url, bashCall)), "an exited session no longer answers: denied")
+    }
+
+    private val dialog = "\u001b[1mBash command\u001b[0m\r\n  echo ${'$'}HOME\r\nDo you want to proceed?\r\n❯ 1. Yes\r\n  2. No, and tell Claude what to do differently (esc)\r\n"
+
+    @Test fun `a permission dialog nothing answers is answered No and ends the turn instead of hanging`() {
+        val s = start(approval = ToolApproval.DENY)
+        up(s)
+        s.c.sendTurn(request("x"))
+        s.c.tick(); now += ClaudeTtySession.PASTE_SETTLE_MS; s.c.tick()
+        event(s, "submit")
+        s.c.onStdout(dialog)
+        s.c.tick()
+        now += ClaudeTtySession.DIALOG_GRACE_MS - 1
+        s.c.tick()
+        assertFalse(ClaudeTtySession.ESC in s.out.written, "not before the grace")
+        now += 1
+        s.c.tick()
+        assertEquals(ClaudeTtySession.ESC, s.out.written.last())
+        now += ClaudeTtySession.ABORT_GRACE_MS
+        s.c.tick()
+        assertEquals(Triple<SessionTurnEnd, Int?, String?>(SessionTurnEnd.INTERRUPTED, null, ClaudeTtySession.DIALOG_DENIED_REASON), s.out.ends.single())
+        assertEquals(1, s.out.written.count { it == ClaudeTtySession.ESC }, "answered once")
+    }
+
+    @Test fun `a dialog the hook answered is history and is not answered again`() {
+        val s = start(approval = ToolApproval.ASK)
+        up(s)
+        s.c.sendTurn(request("x"))
+        s.c.tick(); now += ClaudeTtySession.PASTE_SETTLE_MS; s.c.tick()
+        event(s, "submit")
+        s.c.onStdout(dialog)
+        s.c.tick()
+        s.out.approvalReply = ApprovalReply.ALLOW_ONCE
+        assertEquals("allow", behavior(s.c.answerPermission(bashCall)))
+        now += ClaudeTtySession.DIALOG_GRACE_MS * 2
+        s.c.tick()
+        assertFalse(ClaudeTtySession.ESC in s.out.written, "the owner answered: no Esc")
+        assertTrue(s.out.ends.isEmpty())
     }
 }
