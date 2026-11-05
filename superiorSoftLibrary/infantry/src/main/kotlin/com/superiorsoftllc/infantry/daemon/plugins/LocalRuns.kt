@@ -26,8 +26,15 @@ class LocalRuns(
     private val pipes: ProcessRunner,
     private val pty: TerminalRunner?,
     private val secrets: (String) -> Map<String, String>?,
+    /** SECRETS-2b: a run of a project resolves a name there first, then the app scope. */
+    private val projectSecrets: (String, String?) -> Map<String, String>? = { name, _ -> secrets(name) },
+    private val secretNames: (String?) -> Map<String, String> = { emptyMap() },
 ) : Runs {
     override fun secretFields(name: String): Map<String, String>? = secrets(name)
+
+    override fun secretFields(name: String, projectId: String?): Map<String, String>? = projectSecrets(name, projectId)
+
+    override fun secretNames(projectId: String?): Map<String, String> = secretNames.invoke(projectId)
 
     override fun rootOf(projectId: String?): File? {
         val raw = (if (projectId.isNullOrBlank()) null else projectDirectory(projectId)?.takeIf { it.isNotBlank() }) ?: workRoot?.path

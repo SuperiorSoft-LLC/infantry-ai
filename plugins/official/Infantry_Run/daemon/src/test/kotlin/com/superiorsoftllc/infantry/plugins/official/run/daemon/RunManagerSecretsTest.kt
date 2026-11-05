@@ -147,4 +147,30 @@ class RunManagerSecretsTest {
         val bad = CommandRegistry.parse("""[{"id":"a","argv":["x"],"secrets":["../x"]}]""", repo)
         assertTrue(bad.refusal!!.contains("invalid secret"))
     }
+
+    // SECRETS-2b: a project's run resolves a secret name in its project first, then in the app scope.
+    @Test fun `a project's command gets its project's secret first, else the app's`() {
+        val reg = CommandRegistry.parse(
+            """[{"id":"p-deploy","argv":["x"],"secrets":["deploy"],"project":"p1"},{"id":"q-deploy","argv":["x"],"secrets":["deploy"],"project":"p2"}]""",
+            repo,
+        )
+        val asked = CopyOnWriteArrayList<Pair<String, String?>>()
+        val scoped = mapOf("p1" to mapOf("deploy" to mapOf("DEPLOY_TOKEN" to "proj-token-0123456789")))
+        fun run(id: String): Map<String, String> {
+            val t = FakeTerminal()
+            val m = RunManager(
+                { reg }, ScriptedRunner(StubScript(stdoutLines = listOf("x"))), { frames += it }, terminal = t,
+                secrets = { store[it] },
+                projectSecrets = { name, project -> asked += name to project; project?.let { scoped[it]?.get(name) } ?: store[name] },
+            )
+            val s = m.start("""{"commandId":"$id"}""")
+            assertEquals(Envelope.RUN, s.reply.type, s.reply.data)
+            s.launch()
+            return t.spec!!.env
+        }
+        assertEquals("proj-token-0123456789", run("p-deploy")["DEPLOY_TOKEN"])
+        assertEquals("tok-abcdefghijklmnop", run("q-deploy")["DEPLOY_TOKEN"], "p2 has none of its own: the app's")
+        assertEquals(listOf("deploy" to "p1", "deploy" to "p2"), asked.toList())
+    }
 }
+

@@ -235,7 +235,7 @@ fun main(args: Array<String>) {
  * infantry ticket move <id> --before <id>|--after <id>|--top|--bottom|--position <n>   reorder inside its column (order = priority)
  * infantry ticket start <id>                    start ticket work (never with a spawn): its role/provider/model, its own branch
  * infantry agent-def list|show <id>|enable <id>|disable <id>   the agent registry (AGENT-REGISTRY-1): built-in and plugin agents
- * infantry run-cmd list|save|delete|start|stop   the Run tab's saved commands (RUN-CMD-TOOL-1); see RunCmdCli.USAGE
+ * infantry run-cmd list|save|delete|start|stop|secrets the Run tab's saved commands (RUN-CMD-TOOL-1); see RunCmdCli.USAGE
  * infantry harnesses                            the harnesses (provider ids) a ticket can pin, and each one's models
  * infantry harness-status [--check]            which harness CLIs (claude, opencode, pi) are installed / missing / outdated (--check asks npm for the latest)
  * infantry harness-install [id...] [--update]  npm-install the missing harness CLIs into the app prefix (--update refreshes outdated ones)

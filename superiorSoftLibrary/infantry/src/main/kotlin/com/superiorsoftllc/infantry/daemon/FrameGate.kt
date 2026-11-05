@@ -21,7 +21,7 @@ object FrameGate {
         Envelope.COMMAND_SAVE, Envelope.COMMAND_DELETE,
         Envelope.RUN_START, Envelope.RUN_STOP, Envelope.RUN_ATTACH, Envelope.RUN_RESIZE, Envelope.RUN_INPUT,
         Envelope.SECRET_SET, Envelope.SECRET_CLEAR, Envelope.SECRET_IMPORT,
-        Envelope.SECRET_FIELD_SET, Envelope.SECRET_FIELD_DELETE, Envelope.SECRET_DELETE,
+        Envelope.SECRET_FIELD_SET, Envelope.SECRET_FIELD_DELETE, Envelope.SECRET_DELETE, Envelope.SECRET_MOVE,
         // PLUGIN-ENDPOINTS-2 (1.138.0): the one frame that hands a stored value back.
         Envelope.PLUGIN_SECRET_GET,
     )

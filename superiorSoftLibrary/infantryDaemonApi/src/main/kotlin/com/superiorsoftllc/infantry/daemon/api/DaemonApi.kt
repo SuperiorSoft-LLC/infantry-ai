@@ -191,7 +191,8 @@ interface DaemonApi {
         // 1.39.0 (PROC-LEAK-2, additive): ProcessToolProfile.daemonDir / ProcessDaemonDir.
         // 1.39.0 (UPDATE-ENGINE-1, additive): `updates` (daemon.api.updates.Updates): the one update engine; source types and appliers by plugins.
         // 1.40.0 (SCRIPTING-NCDFE-1, additive): `displayStamp`, a time in the daemon's display zone (a plugin cannot link core's DisplayZone).
-        const val VERSION = "1.40.0"
+        // 1.41.0 (SECRETS-2b, additive): Runs.secretFields(name, projectId) (project first, then app) and Runs.secretNames(projectId).
+        const val VERSION = "1.41.0"
     }
 }
 

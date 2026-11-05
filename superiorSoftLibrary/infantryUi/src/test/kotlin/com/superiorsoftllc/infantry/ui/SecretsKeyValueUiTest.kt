@@ -120,6 +120,66 @@ class SecretsKeyValueUiTest {
         onNodeWithTag(SECRET_ENTRIES_TAG).assertDoesNotExist()
     }
 
+    // SECRETS-2b: scopes.
+
+    @Test fun `app secrets carry the App badge, a project's own stay out of the app list, and a note counts them`() = runDesktopComposeUiTest(1000, 1200) {
+        val withProject = state.copy(entries = state.entries + SecretEntryRow("deploy", listOf(SecretFieldRow("TOKEN", "••••abcd")), project = "p1"))
+        show(withProject, Calls())
+        onNodeWithTag("$SECRET_SCOPE_TAG-android-signing").assertExists()
+        assertEquals(1, onAllNodesWithText(SecretForm.SCOPE_APP).fetchSemanticsNodes().size)
+        onNodeWithTag("$SECRET_ENTRY_TAG-deploy").assertDoesNotExist()
+        onNodeWithTag(SECRET_PROJECTS_NOTE_TAG).assertExists()
+    }
+
+    @Test fun `no secret yet shows the one-line explanation`() = runDesktopComposeUiTest(1000, 1200) {
+        show(state.copy(entries = emptyList()), Calls())
+        onNodeWithTag(SECRET_EMPTY_TAG).assertExists()
+        onNodeWithTag(SECRET_NEW_TAG).assertExists()
+    }
+
+    @Test fun `an app secret moves into the project on screen, and a name the project overrides says so`() = runDesktopComposeUiTest(1000, 1200) {
+        val moves = mutableListOf<Triple<String, String?, String?>>()
+        val withShadow = state.copy(entries = state.entries + SecretEntryRow("android-signing", listOf(SecretFieldRow("keyAlias", "••••")), project = "p1"))
+        setContent {
+            ConfigDialog(
+                UiFlags(), onFlags = {}, onDismiss = {}, secrets = withShadow, initialTab = ConfigTab.SECRETS,
+                secretActions = SecretActions(
+                    set = { _, _ -> }, clear = {}, import = {}, setField = { _, _, _ -> }, deleteField = { _, _ -> }, delete = {},
+                    move = { n, from, to -> moves += Triple(n, from, to) }, currentProject = SecretProjectRef("p1", "Site"),
+                ),
+            )
+        }
+        onNodeWithTag("$SECRET_NOTE_TAG-android-signing").assertExists()
+        onNodeWithTag("$SECRET_MOVE_TAG-android-signing").performScrollTo().performClick()
+        assertEquals(Triple("android-signing", null, "p1"), moves.single())
+    }
+
+    @Test fun `with no project on screen there is no move`() = runDesktopComposeUiTest(1000, 1200) {
+        setContent {
+            ConfigDialog(
+                UiFlags(), onFlags = {}, onDismiss = {}, secrets = state, initialTab = ConfigTab.SECRETS,
+                secretActions = SecretActions(set = { _, _ -> }, clear = {}, import = {}, setField = { _, _, _ -> }, move = { _, _, _ -> }),
+            )
+        }
+        onNodeWithTag("$SECRET_MOVE_TAG-android-signing").assertDoesNotExist()
+    }
+
+    @Test fun `a project's editor shows its own secrets with the Project badge and moves one to the app`() = runDesktopComposeUiTest(1000, 1000) {
+        val moved = mutableListOf<String>()
+        setContent {
+            InfantryTheme {
+                SecretsScopeEditor(
+                    entries = listOf(SecretEntryRow("deploy", listOf(SecretFieldRow("TOKEN", "••••abcd")), project = "p1")),
+                    locked = false, title = "Site secrets", hint = SecretForm.PROJECT_APPLIES_TO, scopeBadge = SecretForm.SCOPE_PROJECT,
+                    actions = SecretScopeActions(setField = { _, _, _ -> }, move = { moved += it }, moveLabel = "Move to app"),
+                )
+            }
+        }
+        assertEquals(1, onAllNodesWithText(SecretForm.SCOPE_PROJECT).fetchSemanticsNodes().size)
+        onNodeWithTag("$SECRET_MOVE_TAG-deploy").performClick()
+        assertEquals(listOf("deploy"), moved)
+    }
+
     @Test fun `the run editor's secrets text becomes a list of names`() {
         assertEquals(listOf("android-signing", "deploy"), RunCommandForm.secretsOf(" android-signing\n\ndeploy, android-signing "))
     }

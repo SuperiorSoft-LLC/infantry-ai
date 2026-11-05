@@ -19,13 +19,16 @@ internal object RunCmdCli {
         "delete" to "infantry_run_command_delete",
         "start" to "infantry_run_start",
         "stop" to "infantry_run_stop",
+        // SECRETS-2b: the secret names a project's commands can use, with their scope (names only).
+        "secrets" to "infantry_run_secrets",
     )
 
-    const val USAGE = "infantry run-cmd list | save <id> <cwd|.> \"<command line>\" [--name N] | delete <id> | start <id> | stop <runId> [--force] [--project P --cross-project]"
+    const val USAGE = "infantry run-cmd list | save <id> <cwd|.> \"<command line>\" [--name N] | delete <id> | start <id> | stop <runId> [--force] | secrets [project|app|all] [--project P --cross-project]"
 
     fun usageError(args: List<String>): String? {
         val sub = args.firstOrNull() ?: return "run-cmd needs a subcommand: $USAGE"
         if (sub !in TOOLS) return "unknown run-cmd subcommand '$sub': $USAGE"
+        if (sub == "secrets") return if (args.size <= 2) null else "run-cmd secrets takes at most 1 argument: $USAGE"
         val wanted = when (sub) { "list" -> 1; "save" -> 4; else -> 2 }
         return if (args.size != wanted) "run-cmd $sub takes ${wanted - 1} argument(s): $USAGE" else null
     }
@@ -45,6 +48,7 @@ internal object RunCmdCli {
             }
             "stop" -> { m["runId"] = JsonPrimitive(args[1]); if (force) m["force"] = JsonPrimitive(true) }
             "delete", "start" -> m["id"] = JsonPrimitive(args[1])
+            "secrets" -> args.getOrNull(1)?.let { m["scope"] = JsonPrimitive(it) }
         }
         if (sub != "list" && sub != "stop") {
             project?.let { m["project"] = JsonPrimitive(it) }

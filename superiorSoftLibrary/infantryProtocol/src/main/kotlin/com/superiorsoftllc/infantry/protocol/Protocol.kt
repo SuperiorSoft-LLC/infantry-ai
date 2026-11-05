@@ -695,6 +695,10 @@ data class Envelope(
         const val SECRET_FIELD_SET = "secret_field_set"
         const val SECRET_FIELD_DELETE = "secret_field_delete"
         const val SECRET_DELETE = "secret_delete"
+        // SECRETS-2b (contract 1.152.0): project-scoped secrets. `secret_field_set` / `secret_field_delete` / `secret_delete` take
+        // an optional `project` (null = the app scope, shared by every project); `secret_state.entries` rows carry `project`.
+        // `secret_move` ({name, from?, to?}) moves a secret between scopes on the daemon's side (no value travels).
+        const val SECRET_MOVE = "secret_move"
         // PLUGIN-ENDPOINTS-2 (contract 1.138.0): `plugin_secret_get` ({module, field}) reads ONE field of the secret
         // `plugin.<module lowercased>` for the desktop host's EndpointAccess of that module. Owner connection only, refused under
         // a restricted policy, fields `INFANTRY_*` refused. Answered directly (never pushed) by `plugin_secret`

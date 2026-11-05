@@ -28,10 +28,12 @@ class RunDaemonPlugin : DaemonPlugin {
             emit = { api.events.broadcast(it.type, it.data) },
             limits = RunManager.RunLimits.from(api.settings),
             restricted = { api.policy.active().let { it.restricted == true || it.seats != null } }, // a seated preset is always restricted
-            secrets = runs::secretFields,
+            secrets = { runs.secretFields(it) },
+            // SECRETS-2b: a command's project first, then the app scope.
+            projectSecrets = { name, project -> runs.secretFields(name, project) },
         )
 
-        RunCommandTools(store, manager, { api.events.broadcast(Envelope.COMMANDS, store.registry.specsJson()) }, { api.events.broadcast(it.type, it.data) })
+        RunCommandTools(store, manager, { api.events.broadcast(Envelope.COMMANDS, store.registry.specsJson()) }, { api.events.broadcast(it.type, it.data) }, runs::secretNames)
             .all().forEach(api.tools::register)
 
         fun reply(e: Envelope?): Frame? = e?.let { Frame(it.type, it.data) }

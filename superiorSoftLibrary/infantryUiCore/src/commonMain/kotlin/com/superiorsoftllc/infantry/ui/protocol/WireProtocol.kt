@@ -222,6 +222,8 @@ data class Envelope(
         const val SECRET_FIELD_SET = "secret_field_set"
         const val SECRET_FIELD_DELETE = "secret_field_delete"
         const val SECRET_DELETE = "secret_delete"
+        // Contract 1.152.0 (SECRETS-2b): project-scoped secrets: the three frames above take `project`; `secret_move` ({name, from?, to?}).
+        const val SECRET_MOVE = "secret_move"
         // Contract 1.138.0 (PLUGIN-ENDPOINTS-2): `plugin_secret_get` ({module, field}, owner-only, off under the demo lock) is
         // answered by `plugin_secret` ({module, field, value}); only a module's EndpointAccess asks, and keeps the value to itself.
         const val PLUGIN_SECRET_GET = "plugin_secret_get"
@@ -1049,7 +1051,12 @@ data class SecretFieldRow(val name: String, val tail: String = "")
 
 /** Contract 1.135.0 (SECRETS-2): one user secret and its fields. */
 @Serializable
-data class SecretEntryRow(val name: String, val fields: List<SecretFieldRow> = emptyList())
+data class SecretEntryRow(
+    val name: String,
+    val fields: List<SecretFieldRow> = emptyList(),
+    /** Contract 1.152.0 (SECRETS-2b): the project whose own secret this is; null = the app scope (shared by every project). */
+    val project: String? = null,
+)
 
 /**
  * Contract 1.102.0 (SECRETS-1): the `secret_state` frame. 1.135.0 (SECRETS-2): [entries] the user's key/value secrets;
@@ -2265,13 +2272,26 @@ object WireRequests {
     fun secretImport(name: String): Envelope = Envelope(Envelope.SECRET_IMPORT, JsonObject(mapOf("name" to JsonPrimitive(name))).toString())
 
     /** Contract 1.135.0 (SECRETS-2): store [value] as field [field] of the user secret [name]. Never read back. */
-    fun secretFieldSet(name: String, field: String, value: String): Envelope = Envelope(
+    fun secretFieldSet(name: String, field: String, value: String, project: String? = null): Envelope = Envelope(
         Envelope.SECRET_FIELD_SET,
-        JsonObject(mapOf("name" to JsonPrimitive(name), "field" to JsonPrimitive(field), "value" to JsonPrimitive(value))).toString(),
+        JsonObject(mapOf("name" to JsonPrimitive(name), "field" to JsonPrimitive(field), "value" to JsonPrimitive(value)) + scoped(project)).toString(),
     )
 
-    fun secretFieldDelete(name: String, field: String): Envelope =
-        Envelope(Envelope.SECRET_FIELD_DELETE, JsonObject(mapOf("name" to JsonPrimitive(name), "field" to JsonPrimitive(field))).toString())
+    fun secretFieldDelete(name: String, field: String, project: String? = null): Envelope =
+        Envelope(Envelope.SECRET_FIELD_DELETE, JsonObject(mapOf("name" to JsonPrimitive(name), "field" to JsonPrimitive(field)) + scoped(project)).toString())
+
+    /** Contract 1.152.0 (SECRETS-2b): move secret [name] from scope [from] to [to] (null = app). No value travels. */
+    fun secretMove(name: String, from: String?, to: String?): Envelope = Envelope(
+        Envelope.SECRET_MOVE,
+        JsonObject(buildMap {
+            put("name", JsonPrimitive(name))
+            from?.let { put("from", JsonPrimitive(it)) }
+            to?.let { put("to", JsonPrimitive(it)) }
+        }).toString(),
+    )
+
+    /** SECRETS-2b: the `project` key, only when a project scope is meant (an older daemon refuses the key). */
+    private fun scoped(project: String?): Map<String, JsonPrimitive> = project?.let { mapOf("project" to JsonPrimitive(it)) }.orEmpty()
 
     /** Contract 1.138.0 (PLUGIN-ENDPOINTS-2): one field of `plugin.<module>`, answered by `plugin_secret` with [requestId]. */
     fun pluginSecretGet(module: String, field: String, requestId: String): Envelope = Envelope(
@@ -2280,7 +2300,8 @@ object WireRequests {
         requestId = requestId,
     )
 
-    fun secretDelete(name: String): Envelope = Envelope(Envelope.SECRET_DELETE, JsonObject(mapOf("name" to JsonPrimitive(name))).toString())
+    fun secretDelete(name: String, project: String? = null): Envelope =
+        Envelope(Envelope.SECRET_DELETE, JsonObject(mapOf("name" to JsonPrimitive(name)) + scoped(project)).toString())
 
     /** BUG-PERM-1 (1.76.0): set the global Tool approval to [mode] (`deny` / `allowEdits` / `allowAll`). */
     fun toolApprovalSet(mode: String): Envelope = Envelope(

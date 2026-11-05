@@ -27,6 +27,19 @@ A daemon plugin tool runs in the daemon, which cannot open the agent's files. `i
 A client below 1.147.0 sends plain strings and no `client.projectId`: such a tool sees no local files (a path it cannot read is refused as
 "does not exist") and no default project. A daemon below 1.147.0 never lists `localFiles`, and ignores `client.projectId`.
 
+### SECRETS-2b (contract 1.152.0, additive + behavioural): project-scoped secrets
+
+A user secret lives in one of two scopes: the **app** scope (shared by every project; every secret saved before 1.152.0 is here) or one
+**project**'s scope. `secret_field_set` (`{name, field, value, project?}`), `secret_field_delete` (`{name, field, project?}`) and
+`secret_delete` (`{name, project?}`) take an optional `project` id: absent or null = the app scope. `secret_state.entries[]` rows carry
+`project` (absent = app). The new frame **`secret_move`** (`{name, from?, to?}`, null = app) moves a secret between scopes on the daemon's
+side: every field is re-sealed under its new place, no value travels; refused when the target scope already has that name. Owner
+connection only (`FrameGate.OWNER_ONLY`) and refused under a restricted policy, as the other change frames.
+
+A saved command's run resolves each secret it names in the command's project first, then the app scope. The sealing is unchanged
+(AES-256-GCM, `<stateDir>/keystore.json`); a project secret is stored under `@<project>/<name>`, which is also its AAD prefix.
+A daemon below 1.152.0 refuses the `project` key (strict decode) and knows no `secret_move`: clients send neither to it.
+
 ### CHAT-SENDING-1 (contract 1.151.0, additive): a sent message is acknowledged, and a resend is never run twice
 
 A `prompt` that names its session (`sessionId`) and carries a client message id (`requestId` = `send:<unique id>`) is answered with
@@ -250,7 +263,7 @@ Additive; `contract=1.137.0`. **`ticket_files`** (client -> daemon, a `TicketFil
 Behavioural; `contract=1.136.0` (1.135.0 is SECRETS-2). Every client frame passes ONE gate before the dispatch, a bare non-JSON text frame (read as `prompt`) included. A refusal is an `error` frame (`<type> refused: ...`, echoing the request's `requestId`) and nothing runs.
 
 - **Demo lock.** Under `INFANTRY_DEMO_LOCK` only the read-only frames on `FrameGate.DEMO_LOCK_ALLOWED` get through (list/get/search queries, `replay_request`, `sessions`, `providers`, `models`, `settings_get`, `project_git_*` reads; `FrameGateDaemonTest` pins the list). Every other frame is refused, a frame added later included, the owner's too: `prompt`, `new`, `command_*`, `run_*`, `secret_*`, every write.
-- **Owner credential.** `command_save`, `command_delete`, `secret_set`, `secret_clear`, `secret_import`, `secret_field_set`, `secret_field_delete`, `secret_delete`, `run_start`, `run_stop`, `run_attach`, `run_resize` and `run_input` need an owner connection. A connection is the owner when its handshake carries the owner token as the `X-Infantry-Owner` header, or (a browser) as the `infantry.owner.<base64url token>` subprotocol offered next to `infantry`. The token is generated once into `<stateDir>/owner.token`; it is apart from the access token (`INFANTRY_TOKEN`, which every agent is handed) and never handed to a spawned agent. A daemon refuses to start when both are the same. Caveat: an agent runs as the same OS user, so it can still read `owner.token` (and the keystore key) from disk; run agents as another OS user to close that.
+- **Owner credential.** `command_save`, `command_delete`, `secret_set`, `secret_clear`, `secret_import`, `secret_field_set`, `secret_field_delete`, `secret_delete`, `secret_move`, `run_start`, `run_stop`, `run_attach`, `run_resize` and `run_input` need an owner connection. A connection is the owner when its handshake carries the owner token as the `X-Infantry-Owner` header, or (a browser) as the `infantry.owner.<base64url token>` subprotocol offered next to `infantry`. The token is generated once into `<stateDir>/owner.token`; it is apart from the access token (`INFANTRY_TOKEN`, which every agent is handed) and never handed to a spawned agent. A daemon refuses to start when both are the same. Caveat: an agent runs as the same OS user, so it can still read `owner.token` (and the keystore key) from disk; run agents as another OS user to close that.
 - **Run secrets (H1).** A run gets its SAVED command's secrets only: a `run_start` carrying `secrets` (the 1.135.0 override) is refused, never merged. A built-in secret (the update token) never reaches a run, even when a saved command names it. Adding secrets to a command goes through `command_save`, which needs the owner credential.
 - **Run input.** `run_input` carries at most `limits.run.inputMaxFrameBytes` (16 KiB) decoded bytes, at most `limits.run.inputBytesPerSecond` (64 KiB/s, 0 = unlimited) per run, and is written to the pty by the run's own thread from a queue of at most `limits.run.inputQueueBytes` (256 KiB); over any of them the input is refused, not queued. `run_start` / `run_resize` sizes are clamped to 1..`limits.run.maxCols` / `limits.run.maxRows` (1000 each).
 
@@ -2453,6 +2466,7 @@ apart from the 1.3.0, 1.4.0, 1.5.0, 1.6.0 and 1.28.0 additions marked in the tab
 | `secret_field_set` | `{name, field, value}`: seal `value` as field `field` of the user secret `name`, creating it (since 1.135.0); `name` is lowercase `[a-z0-9._-]`, `field` an environment-variable name `[A-Za-z_][A-Za-z0-9_]*`; a built-in name, a bad name or the demo lock is an `error` that never echoes the value; answered by `secret_state`, pushed to every client | client → daemon |
 | `secret_field_delete` | `{name, field}`: remove one field; the secret goes with its last field (since 1.135.0); answered by `secret_state`, pushed to every client | client → daemon |
 | `secret_delete` | `{name}`: remove a user secret and all its fields (since 1.135.0); answered by `secret_state`, pushed to every client | client → daemon |
+| `secret_move` | `{name, from?, to?}`: move a user secret between the app scope (null) and a project's scope (since 1.152.0); no value travels; answered by `secret_state`, pushed to every client | client → daemon |
 | `plugin_secret_get` | `{module, field}`: one field of the secret `plugin.<module lowercased>`, for that module's endpoint credential (since 1.138.0); owner connection only, refused under the demo lock, `INFANTRY_*` fields refused; answered by `plugin_secret` | client → daemon |
 | `plugin_secret` | `{module, field, value}` (`value` null = not set), the direct answer to `plugin_secret_get`; never pushed (since 1.138.0) | daemon → client |
 | `secret_state` | `{protection: external-key\|os\|key-file, secrets:[{name, label, set, tail, importable, overriddenByEnv}], entries:[{name, fields:[{name, tail}]}], locked}` (`entries`, `locked` since 1.135.0): the answer to every `secret_*` request, and pushed to every client after a change; never carries a stored value (`tail` is `••••` plus the last 4 characters of a 16+ character value, else `••••`) (since 1.102.0) | daemon → client |

@@ -94,6 +94,8 @@ class RunManager(
      * the values go only into the child's environment and are masked in everything it prints.
      */
     private val secrets: (String) -> Map<String, String>? = { null },
+    /** SECRETS-2b: the same lookup for a run of a project (project scope first, then app); default: [secrets]. */
+    private val projectSecrets: (String, String?) -> Map<String, String>? = { name, _ -> secrets(name) },
 ) {
     /** A fixed set of commands (the tests, and any caller with no store behind it). */
     constructor(registry: CommandRegistry, runs: Runs, emit: (Envelope) -> Unit, now: () -> Long = System::currentTimeMillis) :
@@ -175,7 +177,7 @@ class RunManager(
                 )
             }
             if (inFlight != null) return refuse("run_start refused: a run is already in flight")
-            val env = secretEnv(command.secrets.distinct()).getOrElse { return refuse("run_start refused: ${it.message}") }
+            val env = secretEnv(command.secrets.distinct(), command.projectId).getOrElse { return refuse("run_start refused: ${it.message}") }
             run = Run(UUID.randomUUID().toString(), command, now(), interactive, cols, rows, env)
             inFlight = run
             history.addLast(run)
@@ -285,7 +287,7 @@ class RunManager(
      * The environment [names] give a run: every field of each secret, under its field name (a later secret's field of the
      * same name wins). A refusal names the secret or the field, never a value.
      */
-    private fun secretEnv(names: List<String>): Result<Map<String, String>> {
+    private fun secretEnv(names: List<String>, projectId: String?): Result<Map<String, String>> {
         fun no(why: String) = Result.failure<Map<String, String>>(IllegalArgumentException(why))
         if (names.isEmpty()) return Result.success(emptyMap())
         if (names.size > maxRunSecrets) return no("a run takes at most $maxRunSecrets secrets")
@@ -294,8 +296,8 @@ class RunManager(
         for (name in names) {
             if (!CommandRegistry.isSecretName(name)) return no("invalid secret name")
             // SEC-FIX-1 H1(b): the lookup refuses a built-in (the update token) with its own reason, kept here.
-            val fields = try { secrets(name) } catch (e: IllegalArgumentException) { return no(e.message ?: "secret '$name' is refused") } catch (e: Exception) { null }
-                ?: return no("secret '$name' is not in the keystore")
+            val fields = try { projectSecrets(name, projectId) } catch (e: IllegalArgumentException) { return no(e.message ?: "secret '$name' is refused") } catch (e: Exception) { null }
+                ?: return no("secret '$name' is not in the keystore" + (projectId?.let { " (project '$it' or app)" } ?: ""))
             for ((field, value) in fields) {
                 if (field.uppercase().startsWith("INFANTRY_")) return no("secret '$name' field '$field' would override a daemon setting")
                 env[field] = value
