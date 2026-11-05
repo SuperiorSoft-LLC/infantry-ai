@@ -48,16 +48,37 @@ jobs:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
       - uses: gradle/actions/setup-gradle@v4
+      # UPDATER-1: CI memory (the wasm production compile outgrew the 3 GB Kotlin daemon) and the official-plugin signing key:
+      # the Infantry key from secrets INFANTRY_PLUGIN_KEYSTORE_BASE64 / INFANTRY_PLUGIN_KEY_ALIAS / IHQ_STOREPASS, else a
+      # throwaway dev key with a warning (a test release only, like the debug APK fallback). $IHQ_SIGN goes on every gradlew.
+      - name: CI Gradle memory and plugin signing
+        shell: bash
+        env:
+          PLUGIN_KS_B64: ${{ secrets.INFANTRY_PLUGIN_KEYSTORE_BASE64 }}
+          PLUGIN_KS_ALIAS: ${{ secrets.INFANTRY_PLUGIN_KEY_ALIAS }}
+          IHQ_STOREPASS: ${{ secrets.IHQ_STOREPASS }}
+        run: |
+          set -euo pipefail
+          gu="${GRADLE_USER_HOME:-$HOME/.gradle}"; mkdir -p "$gu"
+          printf 'org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -XX:+UseParallelGC\nkotlin.daemon.jvmargs=-Xmx4g\n' >> "$gu/gradle.properties"
+          if [ -n "${PLUGIN_KS_B64:-}" ] && [ -n "${PLUGIN_KS_ALIAS:-}" ] && [ -n "${IHQ_STOREPASS:-}" ]; then
+            printf '%s' "$PLUGIN_KS_B64" | base64 -d > "$RUNNER_TEMP/infantry-plugins.p12"
+            echo "IHQ_SIGN=-Pihq.keystore=$RUNNER_TEMP/infantry-plugins.p12 -Pihq.alias=$PLUGIN_KS_ALIAS" >> "$GITHUB_ENV"
+            echo "IHQ_STOREPASS=$IHQ_STOREPASS" >> "$GITHUB_ENV"
+          else
+            echo "::warning::No plugin signing secrets; official plugins are signed with a THROWAWAY dev key (test release only)."
+            echo "IHQ_SIGN=-Pihq.devSign=true" >> "$GITHUB_ENV"
+          fi
       - name: Build MSI and app-image
         shell: bash
         run: |
           set -euo pipefail
           V='${{ needs.version.outputs.version }}'
-          ./gradlew --no-daemon :superiorSoftLibrary:infantryUi:createDistributable -PinfantryVersion="$V"
+          ./gradlew --no-daemon :superiorSoftLibrary:infantryUi:createDistributable -PinfantryVersion="$V" $IHQ_SIGN
           mkdir -p out
           app="$(ls -d superiorSoftLibrary/infantryUi/build/compose/binaries/main/app/InfantryAI)"
           (cd "$(dirname "$app")" && 7z a -tzip "$GITHUB_WORKSPACE/out/InfantryAI-$V-windows.zip" InfantryAI >/dev/null)
-          if ./gradlew --no-daemon :superiorSoftLibrary:infantryUi:releaseAssets -PinfantryVersion="$V"; then
+          if ./gradlew --no-daemon :superiorSoftLibrary:infantryUi:releaseAssets -PinfantryVersion="$V" $IHQ_SIGN; then
             cp "superiorSoftLibrary/infantryUi/build/release/$V/InfantryAI-$V.msi" out/
           else
             echo "::warning::MSI packaging failed unsigned on this runner; publishing the app-image zip only (the in-app updater needs the MSI)"
@@ -90,6 +111,27 @@ jobs:
         shell: bash
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
       - uses: gradle/actions/setup-gradle@v4
+      # UPDATER-1: CI memory (the wasm production compile outgrew the 3 GB Kotlin daemon) and the official-plugin signing key:
+      # the Infantry key from secrets INFANTRY_PLUGIN_KEYSTORE_BASE64 / INFANTRY_PLUGIN_KEY_ALIAS / IHQ_STOREPASS, else a
+      # throwaway dev key with a warning (a test release only, like the debug APK fallback). $IHQ_SIGN goes on every gradlew.
+      - name: CI Gradle memory and plugin signing
+        shell: bash
+        env:
+          PLUGIN_KS_B64: ${{ secrets.INFANTRY_PLUGIN_KEYSTORE_BASE64 }}
+          PLUGIN_KS_ALIAS: ${{ secrets.INFANTRY_PLUGIN_KEY_ALIAS }}
+          IHQ_STOREPASS: ${{ secrets.IHQ_STOREPASS }}
+        run: |
+          set -euo pipefail
+          gu="${GRADLE_USER_HOME:-$HOME/.gradle}"; mkdir -p "$gu"
+          printf 'org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -XX:+UseParallelGC\nkotlin.daemon.jvmargs=-Xmx4g\n' >> "$gu/gradle.properties"
+          if [ -n "${PLUGIN_KS_B64:-}" ] && [ -n "${PLUGIN_KS_ALIAS:-}" ] && [ -n "${IHQ_STOREPASS:-}" ]; then
+            printf '%s' "$PLUGIN_KS_B64" | base64 -d > "$RUNNER_TEMP/infantry-plugins.p12"
+            echo "IHQ_SIGN=-Pihq.keystore=$RUNNER_TEMP/infantry-plugins.p12 -Pihq.alias=$PLUGIN_KS_ALIAS" >> "$GITHUB_ENV"
+            echo "IHQ_STOREPASS=$IHQ_STOREPASS" >> "$GITHUB_ENV"
+          else
+            echo "::warning::No plugin signing secrets; official plugins are signed with a THROWAWAY dev key (test release only)."
+            echo "IHQ_SIGN=-Pihq.devSign=true" >> "$GITHUB_ENV"
+          fi
       - name: Build APK (signed if the keystore secrets exist, else debug)
         shell: bash
         run: |
@@ -100,13 +142,13 @@ jobs:
              && [ -n "${INFANTRY_ANDROID_RELEASE_KEY_ALIAS:-}" ] && [ -n "${INFANTRY_ANDROID_RELEASE_KEY_PASSWORD:-}" ]; then
             printf '%s' "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.keystore"
             export INFANTRY_ANDROID_RELEASE_STORE_FILE="$RUNNER_TEMP/release.keystore"
-            ./gradlew --no-daemon :superiorSoftLibrary:infantryAndroid:assembleRelease -PinfantryVersion="$V"
+            ./gradlew --no-daemon :superiorSoftLibrary:infantryAndroid:assembleRelease -PinfantryVersion="$V" $IHQ_SIGN
             apk="$(ls superiorSoftLibrary/infantryAndroid/build/outputs/apk/release/*.apk | head -n1)"
             case "$apk" in *unsigned*) echo "release APK came out unsigned"; exit 1;; esac
             cp "$apk" "out/InfantryAI-$V.apk"
           else
             echo "::warning::No release keystore secrets; building a DEBUG-signed APK. Updates over an installed build need a stable key."
-            ./gradlew --no-daemon :superiorSoftLibrary:infantryAndroid:assembleDebug -PinfantryVersion="$V"
+            ./gradlew --no-daemon :superiorSoftLibrary:infantryAndroid:assembleDebug -PinfantryVersion="$V" $IHQ_SIGN
             apk="$(ls superiorSoftLibrary/infantryAndroid/build/outputs/apk/debug/*.apk | head -n1)"
             cp "$apk" "out/InfantryAI-$V-debug.apk"
           fi
@@ -133,12 +175,33 @@ jobs:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
       - uses: gradle/actions/setup-gradle@v4
+      # UPDATER-1: CI memory (the wasm production compile outgrew the 3 GB Kotlin daemon) and the official-plugin signing key:
+      # the Infantry key from secrets INFANTRY_PLUGIN_KEYSTORE_BASE64 / INFANTRY_PLUGIN_KEY_ALIAS / IHQ_STOREPASS, else a
+      # throwaway dev key with a warning (a test release only, like the debug APK fallback). $IHQ_SIGN goes on every gradlew.
+      - name: CI Gradle memory and plugin signing
+        shell: bash
+        env:
+          PLUGIN_KS_B64: ${{ secrets.INFANTRY_PLUGIN_KEYSTORE_BASE64 }}
+          PLUGIN_KS_ALIAS: ${{ secrets.INFANTRY_PLUGIN_KEY_ALIAS }}
+          IHQ_STOREPASS: ${{ secrets.IHQ_STOREPASS }}
+        run: |
+          set -euo pipefail
+          gu="${GRADLE_USER_HOME:-$HOME/.gradle}"; mkdir -p "$gu"
+          printf 'org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -XX:+UseParallelGC\nkotlin.daemon.jvmargs=-Xmx4g\n' >> "$gu/gradle.properties"
+          if [ -n "${PLUGIN_KS_B64:-}" ] && [ -n "${PLUGIN_KS_ALIAS:-}" ] && [ -n "${IHQ_STOREPASS:-}" ]; then
+            printf '%s' "$PLUGIN_KS_B64" | base64 -d > "$RUNNER_TEMP/infantry-plugins.p12"
+            echo "IHQ_SIGN=-Pihq.keystore=$RUNNER_TEMP/infantry-plugins.p12 -Pihq.alias=$PLUGIN_KS_ALIAS" >> "$GITHUB_ENV"
+            echo "IHQ_STOREPASS=$IHQ_STOREPASS" >> "$GITHUB_ENV"
+          else
+            echo "::warning::No plugin signing secrets; official plugins are signed with a THROWAWAY dev key (test release only)."
+            echo "IHQ_SIGN=-Pihq.devSign=true" >> "$GITHUB_ENV"
+          fi
       - name: Build the headless server archive
         shell: bash
         run: |
           set -euo pipefail
           V='${{ needs.version.outputs.version }}'
-          ./gradlew --no-daemon :superiorSoftLibrary:infantry:headlessDist -PinfantryVersion="$V"
+          ./gradlew --no-daemon :superiorSoftLibrary:infantry:headlessDist -PinfantryVersion="$V" $IHQ_SIGN
           mkdir -p out
           cp superiorSoftLibrary/infantry/build/distributions/InfantryAI-server-"$V"-* out/
       - uses: actions/upload-artifact@v4
@@ -210,8 +273,29 @@ jobs:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
       - uses: gradle/actions/setup-gradle@v4
+      # UPDATER-1: CI memory (the wasm production compile outgrew the 3 GB Kotlin daemon) and the official-plugin signing key:
+      # the Infantry key from secrets INFANTRY_PLUGIN_KEYSTORE_BASE64 / INFANTRY_PLUGIN_KEY_ALIAS / IHQ_STOREPASS, else a
+      # throwaway dev key with a warning (a test release only, like the debug APK fallback). $IHQ_SIGN goes on every gradlew.
+      - name: CI Gradle memory and plugin signing
+        shell: bash
+        env:
+          PLUGIN_KS_B64: ${{ secrets.INFANTRY_PLUGIN_KEYSTORE_BASE64 }}
+          PLUGIN_KS_ALIAS: ${{ secrets.INFANTRY_PLUGIN_KEY_ALIAS }}
+          IHQ_STOREPASS: ${{ secrets.IHQ_STOREPASS }}
+        run: |
+          set -euo pipefail
+          gu="${GRADLE_USER_HOME:-$HOME/.gradle}"; mkdir -p "$gu"
+          printf 'org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -XX:+UseParallelGC\nkotlin.daemon.jvmargs=-Xmx4g\n' >> "$gu/gradle.properties"
+          if [ -n "${PLUGIN_KS_B64:-}" ] && [ -n "${PLUGIN_KS_ALIAS:-}" ] && [ -n "${IHQ_STOREPASS:-}" ]; then
+            printf '%s' "$PLUGIN_KS_B64" | base64 -d > "$RUNNER_TEMP/infantry-plugins.p12"
+            echo "IHQ_SIGN=-Pihq.keystore=$RUNNER_TEMP/infantry-plugins.p12 -Pihq.alias=$PLUGIN_KS_ALIAS" >> "$GITHUB_ENV"
+            echo "IHQ_STOREPASS=$IHQ_STOREPASS" >> "$GITHUB_ENV"
+          else
+            echo "::warning::No plugin signing secrets; official plugins are signed with a THROWAWAY dev key (test release only)."
+            echo "IHQ_SIGN=-Pihq.devSign=true" >> "$GITHUB_ENV"
+          fi
       - name: Build the Docker context
-        run: ./gradlew --no-daemon :superiorSoftLibrary:infantry:dockerContext -PinfantryVersion='${{ needs.version.outputs.version }}'
+        run: ./gradlew --no-daemon :superiorSoftLibrary:infantry:dockerContext -PinfantryVersion='${{ needs.version.outputs.version }}' $IHQ_SIGN
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
