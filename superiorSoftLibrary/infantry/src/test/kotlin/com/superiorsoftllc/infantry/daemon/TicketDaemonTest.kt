@@ -97,6 +97,10 @@ class TicketDaemonTest {
                 "contextLimit", "effectiveContextLimit",
                 // EFFORT-1 (contract 1.148.0): the worker's reasoning effort, and the effective one {value, source, support, how}.
                 "effort", "effectiveEffort",
+                // AGENT-TASKS-3: the agent queue that holds a todo ticket, its place, and the agent's name (null when none).
+                "queuedAgent", "queueRank", "queuedAgentName",
+                // AGENT-TASKS-2: the derived has-work view (null when the ticket has no work ahead of its base).
+                "hasWork",
             ),
             json.parseToJsonElement(frame.data).jsonObject.keys,
         )

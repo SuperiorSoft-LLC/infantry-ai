@@ -65,14 +65,15 @@ class ProviderSpawnDaemonTest {
         // The literal bytes a UI parses: every field present, nulls included. AGENT-UX-10 adds `models`
         // (null here: the stub has no model catalogue) and `modelsStale`; CLIPATH-1 (1.73.0) adds `available`
         // and `unavailableReason` (the stub providers need no CLI, so both are available); CONTEXT-LIMIT-1 (1.146.0) adds
-        // `contextLimit` / `contextLimitHow` (a provider that declares no mapping says so); EFFORT-1 (1.148.0) adds `effort` / `effortHow`.
+        // `contextLimit` / `contextLimitHow` (a provider that declares no mapping says so); EFFORT-1 (1.148.0) adds `effort` / `effortHow`;
+        // CHAT-QUEUE-1 (1.150.0) adds `midTurnInput` (null: the stub harness declares no mid-turn input).
         assertEquals(
             """[{"id":"stub","default":true,"defaultModel":null,"models":null,"modelsStale":false,""" +
                 """"available":true,"unavailableReason":null,"contextLimit":"unsupported","contextLimitHow":"this harness declares no context limit mapping",""" +
-                """"effort":"supported","effortHow":"the stub echoes the level"},""" +
+                """"effort":"supported","effortHow":"the stub echoes the level","midTurnInput":null},""" +
                 """{"id":"second","default":false,"defaultModel":"second-default","models":null,"modelsStale":false,""" +
                 """"available":true,"unavailableReason":null,"contextLimit":"unsupported","contextLimitHow":"this harness declares no context limit mapping",""" +
-                """"effort":"supported","effortHow":"the stub echoes the level"}]""",
+                """"effort":"supported","effortHow":"the stub echoes the level","midTurnInput":null}]""",
             answer.data,
         )
     }

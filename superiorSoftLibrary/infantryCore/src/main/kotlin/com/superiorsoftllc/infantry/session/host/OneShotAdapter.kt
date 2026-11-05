@@ -62,6 +62,7 @@ class OneShotAdapter(private val provider: AgentProvider) : HarnessSessionAdapte
 
         override val pid: Long? get() = child?.takeIf { it.isAlive }?.pid
         override val isAlive: Boolean get() = !closed || child?.isAlive == true
+        override val startsProcessPerTurn: Boolean get() = true
 
         /** No OS process of its own, so it never reports an exit: a child's exit is a turn's end, not a crash. */
         override fun onExit(handler: (exitCode: Int) -> Unit) = Unit

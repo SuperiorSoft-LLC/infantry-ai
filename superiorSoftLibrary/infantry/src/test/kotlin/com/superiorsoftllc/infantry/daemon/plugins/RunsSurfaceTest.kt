@@ -31,7 +31,10 @@ class RunsSurfaceTest {
             assertFailsWith<IllegalArgumentException>(bad) { runs.start(RunSpec(echo, cwd = bad, projectId = "p1"), noop) }
         }
         assertFailsWith<IllegalArgumentException> { runs.start(RunSpec(echo, cwd = "missing", projectId = "p1"), noop) }
-        assertFailsWith<IllegalArgumentException> { runs.start(RunSpec(echo, projectId = "nope"), noop) }
+        // RUN-CMD-REPO-1 (f0e72ca0): a project with no registered directory falls back to the work root, so only with no work root
+        // either is it refused.
+        val rootless = LocalRuns(null, File(root, "cfg"), { if (it == "p1") root.path else null }, PipedProcessRunner(), null, { null })
+        assertFailsWith<IllegalArgumentException> { rootless.start(RunSpec(echo, projectId = "nope"), noop) }
         assertFailsWith<IllegalArgumentException> { runs.start(RunSpec(emptyList()), noop) }
     }
 

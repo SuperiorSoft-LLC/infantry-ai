@@ -81,12 +81,13 @@ class ScriptHooksTest {
     private fun hooksJson(vararg hooks: String) = """{"version":1,"hooks":[${hooks.joinToString(",")}]}"""
     private val doneHook = """{"id":"done-hook","on":"lane enter done","script":"on-done","args":{"mode":"merge"},"ownerSession":"pm-1","ownerRole":"pm"}"""
 
-    private fun build(engine: FakeEngine, guard: HookGuardConfig = HookGuardConfig(), tip: (String, String) -> String? = { _, _ -> "abc123tip" }, runLog: ScriptRunLog = ScriptRunLog(), automation: (String, com.superiorsoftllc.infantry.daemon.api.AutomationMark?) -> Unit = { _, _ -> }): ScriptHooks {
+    private fun build(engine: FakeEngine, guard: HookGuardConfig = HookGuardConfig(), tip: (String, String) -> String? = { _, _ -> "abc123tip" }, runLog: ScriptRunLog = ScriptRunLog(), automation: (String, com.superiorsoftllc.infantry.daemon.api.AutomationMark?) -> Unit = { _, _ -> }, mailFailures: Boolean = false): ScriptHooks {
         val engines = ScriptEngines({ mapOf(ScriptEngineWire.PREFIX + "fake" to ScriptEngineWire.asEndpoint(engine)) })
         val store = ScriptStore({ files }, { engines.extensions() })
         return ScriptHooks(
             HookStore { files }, store, engines, tools, ScriptDispatcher(tools, { mapOf("move" to "t_move") }),
             projects = { listOf("p1") }, limits = { ScriptLimits() }, guard = { guard }, tip = tip, clock = { now }, executor = { it() }, runLog = runLog, automation = automation,
+            mailFailures = { mailFailures },
         )
     }
 
@@ -358,12 +359,15 @@ class ScriptHooksTest {
         assertEquals(1, tools.named("t_move").size)
     }
 
-    @Test fun `when the comment cannot be posted, or a script is missing, the hook owner is mailed`() {
+    @Test fun `with mailFailures on, when the comment cannot be posted, or a script is missing, the hook owner is mailed`() {
         putHooks(doneHook, """{"id":"gone","on":"merge.done","script":"nope","ownerSession":"pm-1"}""")
         tools.failTool = "t_fail"
         tools.failComment = true
         val engine = FakeEngine { listOf(QueuedAction("t_fail", mapOf("ticket" to "zzzz"))) }
-        val hooks = build(engine)
+        // NOTICE-ROUTE-1 (6df1b030): scripting.hooks.mailFailures is off by default, so the failure is only logged.
+        build(engine).onEvent(moved())
+        assertTrue(tools.named("infantry_message").isEmpty(), "no mail while scripting.hooks.mailFailures is off")
+        val hooks = build(engine, mailFailures = true)
         hooks.onEvent(moved())
         val mail = tools.named("infantry_message").single()
         assertEquals("pm-1", mail.second["to"]!!.jsonPrimitive().content)

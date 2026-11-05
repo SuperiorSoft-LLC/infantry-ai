@@ -143,8 +143,8 @@ class OwnerQuestionsTest {
     @Test
     fun otherIsOnByDefaultAndAnOldFrameWithoutItStillDecodes() {
         assertTrue(QuestionAsk("q", listOf(QuestionOption("a")), "a", "r").allowOther)
-        assertTrue(QuestionAsk.decode("""{"question":"q","options":[{"label":"a"}],"recommended":"a","reason":"r"}""").allowOther)
-        assertEquals(false, QuestionAsk.decode("""{"question":"q","options":[{"label":"a"}],"recommended":"a","reason":"r","allowOther":false}""").allowOther)
+        assertTrue(QuestionJson.decodeAsk("""{"question":"q","options":[{"label":"a"}],"recommended":"a","reason":"r"}""").allowOther)
+        assertEquals(false, QuestionJson.decodeAsk("""{"question":"q","options":[{"label":"a"}],"recommended":"a","reason":"r","allowOther":false}""").allowOther)
     }
 
     @Test

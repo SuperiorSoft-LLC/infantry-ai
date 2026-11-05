@@ -300,58 +300,133 @@ class SessionManager(
      * another lock (the board's) while this one is held closes a cycle with any caller that holds that lock and asks
      * this manager for something (`TicketBoard.move -> handOut -> startNew`).
      */
-    private class Outgoing(val event: SessionEvent, @Volatile var ready: Boolean)
+    private class Outgoing(val event: SessionEvent, val key: String, val owner: Thread, @Volatile var ready: Boolean) {
+        /** Raised while its thread held the manager lock (DEADLOCK-1 deferred it); see [deliveringLockedEvent]. */
+        val raisedUnderLock = !ready
+        /** Its owner could not deliver it (an earlier event of its session was still held by another thread): the helper does. */
+        var orphan = false
+    }
 
-    /** CHAT-ORDER-1: every event in the order it was raised, whichever thread raised it. */
-    private val outbox = java.util.concurrent.ConcurrentLinkedQueue<Outgoing>()
+    /** CHAT-ORDER-1: every undelivered event in the order it was raised, whichever thread raised it. Guarded by itself. */
+    private val outbox = ArrayList<Outgoing>()
     private val heldHere = ThreadLocal.withInitial { ArrayList<Outgoing>() }
-    private val drainLock = java.util.concurrent.locks.ReentrantLock()
+    /** True while this thread is inside [eventSink]: an event a listener raises then is delivered at once, as before. */
+    private val delivering = ThreadLocal.withInitial { false }
+    private val deliveringLocked = ThreadLocal.withInitial { false }
+
+    /**
+     * QA-FIX-A: true while the CALLING thread delivers an event that was raised under the manager lock. DEADLOCK-1 delivers such an
+     * event after the lock is released, so `Thread.holdsLock` no longer tells a listener what it told it before: that the event
+     * came from inside a locked section, and that a listener which takes its own lock first (the board) must queue it, not apply
+     * it inline (`BoardSessions.holdsSessionsLock`).
+     */
+    fun deliveringLockedEvent(): Boolean = deliveringLocked.get()
+    private val helperRunning = java.util.concurrent.atomic.AtomicBoolean(false)
 
     /**
      * Hand [event] to [eventSink]. An event raised under the lock is deferred until the outermost [locked] section ends
-     * (DEADLOCK-1), and CHAT-ORDER-1: it keeps its place in the one outbox, so an event another thread raises meanwhile
-     * (the reply a live process printed for the prompt this section just sent) is delivered AFTER it, never before.
+     * (DEADLOCK-1), and CHAT-ORDER-1: it keeps its place in the outbox, so an event another thread raises meanwhile for the SAME
+     * session (the reply a live process printed for the prompt this section just sent) is delivered AFTER it, never before.
+     *
+     * QA-FIX-A: a thread delivers only events it raised itself, and never waits. The single drain of CHAT-ORDER-1 delivered other
+     * threads' events on whichever thread flushed, so a stub run's Exit reached the board on the board's own thread in the middle
+     * of a hand-out (TicketBoard.move -> handOut), before the move committed in_progress, and exitBehavior=done never fired; and
+     * one session's held event stalled every other session's (an Exit must reach the sink while another thread sits in the launch
+     * gate, DEADLOCK-1). Now the order is kept per session; an event queued behind another thread's held event of its session is
+     * left to a helper thread that holds no lock of its caller's, and delivers it once that earlier event is out.
      */
     private fun emit(event: SessionEvent) {
-        if (Thread.holdsLock(this)) {
-            val item = Outgoing(event, ready = false)
-            outbox.add(item)
-            heldHere.get().add(item)
-            return
-        }
-        if (drainLock.isHeldByCurrentThread) { // raised by a listener while this thread delivers: as before, at once
+        if (delivering.get()) {
             runCatching { eventSink?.invoke(event) }
             return
         }
-        outbox.add(Outgoing(event, ready = true))
-        drain()
+        val item = Outgoing(event, event.orderKey(), Thread.currentThread(), ready = !Thread.holdsLock(this))
+        synchronized(outbox) { outbox.add(item) }
+        if (!item.ready) {
+            heldHere.get().add(item)
+            return
+        }
+        deliverMine()
     }
 
     /** The outermost lock section ended: its deferred events are deliverable, in their original place. */
     private fun flushEvents() {
         val mine = heldHere.get()
-        mine.forEach { it.ready = true }
+        if (mine.isEmpty()) return
+        synchronized(outbox) { mine.forEach { it.ready = true } }
         mine.clear()
-        drain()
+        deliverMine()
     }
 
-    /** Deliver the ready head of the outbox, in order; one thread drains at a time, nobody waits for it. */
-    private fun drain() {
+    /** The session an event belongs to: delivery order is kept per session. */
+    private fun SessionEvent.orderKey(): String = when (this) {
+        is SessionEvent.Status -> session.id
+        is SessionEvent.Turn -> sessionId
+        is SessionEvent.Stdout -> sessionId
+        is SessionEvent.Stderr -> sessionId
+        is SessionEvent.Exit -> sessionId
+        is SessionEvent.Activity -> sessionId
+        is SessionEvent.ProcessExit -> sessionId
+    }
+
+    /** Under the outbox lock: true when no earlier undelivered event of [index]'s session is still in the outbox. */
+    private fun firstOfItsSession(index: Int): Boolean {
+        val key = outbox[index].key
+        return (0 until index).none { outbox[it].key == key }
+    }
+
+    /**
+     * Deliver this thread's ready events in order, at once. One that waits behind an earlier event of its session becomes an
+     * orphan, and so does every later event of this thread for that session (they keep their order); the helper delivers them.
+     */
+    private fun deliverMine() {
+        val me = Thread.currentThread()
         while (true) {
-            if (!drainLock.tryLock()) return
-            try {
-                while (true) {
-                    val head = outbox.peek() ?: break
-                    if (!head.ready) break
-                    outbox.poll()
-                    runCatching { eventSink?.invoke(head.event) }
-                        .onFailure { System.err.println("[infantry] session event listener failed: ${it.message}") }
+            val next = synchronized(outbox) {
+                var found: Outgoing? = null
+                val blockedKeys = HashSet<String>()
+                for (i in outbox.indices) {
+                    val item = outbox[i]
+                    if (item.owner !== me || !item.ready || item.orphan) continue
+                    if (item.key in blockedKeys || !firstOfItsSession(i)) { item.orphan = true; blockedKeys += item.key; continue }
+                    found = outbox.removeAt(i)
+                    break
                 }
-            } finally {
-                drainLock.unlock()
-            }
-            if (outbox.peek()?.ready != true) return
+                found
+            } ?: break
+            deliverOne(next)
         }
+        wakeHelper()
+    }
+
+    /** Start the helper when an orphan can go now; it stops when none can. */
+    private fun wakeHelper() {
+        val due = synchronized(outbox) { outbox.indices.any { outbox[it].orphan && firstOfItsSession(it) } }
+        if (!due || !helperRunning.compareAndSet(false, true)) return
+        Thread({
+            while (true) {
+                val next = synchronized(outbox) {
+                    val i = outbox.indices.firstOrNull { outbox[it].orphan && firstOfItsSession(it) }
+                    if (i == null) { helperRunning.set(false); null } else outbox.removeAt(i)
+                } ?: break
+                deliverOne(next)
+            }
+            wakeHelper() // an orphan that became due while this thread was stopping
+        }, "session-events").apply { isDaemon = true }.start()
+    }
+
+    private fun deliverOne(item: Outgoing) {
+        delivering.set(true)
+        deliveringLocked.set(item.raisedUnderLock)
+        try {
+            runCatching { eventSink?.invoke(item.event) }
+                .onFailure { System.err.println("[infantry] session event listener failed: ${it.message}") }
+        } finally {
+            delivering.set(false)
+            deliveringLocked.set(false)
+        }
+        // Removing it may have made an orphan of its session due.
+        wakeHelper()
     }
 
     /**
@@ -1452,7 +1527,7 @@ class SessionManager(
             ?: defaultModel?.let { "$it (provider default)" }
             ?: "default"
         // CLI-LIVE-1: "starting <cli>" is said only when a process really starts; a wake into a live process is a message, not a start.
-        val liveProcess = host.hasProcess(sessionId)
+        val liveProcess = host.hasLiveTurnProcess(sessionId)
         val bootDetails = buildList {
             if (resuming) add("Resuming session $sessionId...")
             if (!liveProcess) add("starting ${provider.id} model $shownModel in ${session.workingDir}")
