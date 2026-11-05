@@ -523,7 +523,7 @@ fun PromptBox(
     var slashIndex by remember { mutableStateOf(0) }
     LaunchedEffect(slashRows.map { it.replacement }) { slashIndex = 0 }
     val pickRow = { r: SlashSuggestion -> onValue(r.replacement) }
-    Column(Modifier.fillMaxWidth().background(Palette.Panel).dragAndDropTarget(shouldStartDragAndDrop = { true }, target = drop).padding(10.dp).testTag(COMPOSER_TAG)) {
+    Column(Modifier.fillMaxWidth().background(ComposerColors.background).dragAndDropTarget(shouldStartDragAndDrop = { true }, target = drop).padding(10.dp).testTag(COMPOSER_TAG)) {
         // PROMPT-2: the open session's prompt card, docked above the input until the daemon resolves it.
         if (!spawnMode && a != null) {
             PromptCard(
@@ -577,6 +577,9 @@ fun PromptBox(
                 colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
                     unfocusedBorderColor = Color.Transparent, focusedBorderColor = Color.Transparent,
                     disabledBorderColor = Color.Transparent, errorBorderColor = Color.Transparent,
+                    // COMPOSER-FLOAT-1: the box keeps its own fill (text contrast); the tabs share it, so box + tabs are one card.
+                    focusedContainerColor = ComposerColors.box, unfocusedContainerColor = ComposerColors.box,
+                    disabledContainerColor = ComposerColors.box, errorContainerColor = ComposerColors.box,
                 ),
                 value = shown,
                 onValueChange = { next -> field = next; if (next.text != value) onValue(next.text) },
@@ -633,7 +636,7 @@ fun PromptBox(
         // CHAT-MINIMIZE-2: tab-shaped groups hanging from the box's bottom edge, tools left, Stop/Send right.
         // CHAT-MINIMIZE-3/4: solid fill, the box's own outline continued (same colour and thickness), open top.
         // CHAT-MINIMIZE-5: each side meets the box's bottom line in a small concave fillet, so the outline turns down cleanly.
-        val tabModifier = Modifier.offset(y = (-borderDp).dp).composerTab(ringColor, borderDp, Palette.Panel)
+        val tabModifier = Modifier.offset(y = (-borderDp).dp).composerTab(ringColor, borderDp, ComposerColors.box)
         val resume = com.superiorsoftllc.infantry.ui.shell.rememberGate("chat.resume")
         val tools = buildList {
             add(ComposerAct(AhqIcons.AttachFile, ATTACH_FILE_LABEL, ATTACH_FILE_SHORTCUT, live && host.canPickAttachment, tag = CHAT_IMAGE_ATTACH_TAG, run = pick))
@@ -973,6 +976,18 @@ fun AutomationStatsPanel(item: TimelineItem) {
         color = Palette.Muted, fontFamily = Mono, fontSize = 11.sp, maxLines = 2,
         modifier = Modifier.fillMaxWidth().background(Palette.Panel).padding(horizontal = 14.dp, vertical = 4.dp).testTag(AUTOMATION_STATS_TAG),
     )
+}
+
+/**
+ * COMPOSER-FLOAT-1: the composer's colour tokens. [background] paints the region around the prompt box (status line,
+ * attachment chips, the gap between the button groups); its default is the feed's background ([Palette.Bg]), so the
+ * outlined box floats over the chat. Point it at [Palette.Panel] to bring the old band back. [box] fills the box and its tabs.
+ */
+object ComposerColors {
+    var backgroundToken: () -> Color = { Palette.Bg }
+    var boxToken: () -> Color = { Palette.Panel }
+    val background: Color get() = backgroundToken()
+    val box: Color get() = boxToken()
 }
 
 /** Test tag on the Interrupt control beside the prompt box. */

@@ -6,6 +6,7 @@ import com.superiorsoftllc.infantry.ui.*
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -62,7 +63,7 @@ internal fun ChatAttachmentChips(all: List<ChatAttachment>, busy: Boolean, error
             ) {
                 attachments.forEach { (path, a) ->
                     Row(
-                        Modifier.clip(RoundedCornerShape(6.dp)).background(Palette.Raised).testTag(CHAT_IMAGE_CHIP_TAG_PREFIX + path).padding(4.dp),
+                        Modifier.clip(Palette.PopupShape).background(Palette.Raised).border(1.dp, Palette.Border, Palette.PopupShape).testTag(CHAT_IMAGE_CHIP_TAG_PREFIX + path).padding(4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         ImageThumb(null, a.bytes, a.fileName, CHIP_DP)
