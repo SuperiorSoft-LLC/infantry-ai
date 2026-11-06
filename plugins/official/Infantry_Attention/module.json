@@ -25,7 +25,8 @@
     ],
     "routes": ["GET /attention"],
     "tools": [
-      { "name": "infantry_ask", "action": "questions.ask", "kind": "write", "description": "Ask the owner to choose between options, without waiting." }
+      { "name": "infantry_ask", "action": "questions.ask", "kind": "write", "description": "Ask the owner to choose between options, without waiting." },
+      { "name": "infantry_attention_raise", "action": "attention.raise", "kind": "write", "description": "Raise an item on the owner's attention list (kind, outcome, detail; optional ticketId / sessionId)." }
     ]
   },
   "tabs": [

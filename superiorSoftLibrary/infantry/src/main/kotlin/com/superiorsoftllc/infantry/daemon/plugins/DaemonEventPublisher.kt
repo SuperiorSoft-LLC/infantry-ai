@@ -30,10 +30,13 @@ class DaemonEventPublisher(private val publish: (name: String, payload: String) 
         publish(name, obj("ticketId" to e.ticketId, "from" to e.from, "to" to e.to, "kind" to e.kind, "seq" to e.seq))
     }
 
-    /** A session status push: [state] is the state name (`IDLE`, `BUSY`, ...). First sight of a session = started; entering IDLE = idle. */
-    fun sessionStatus(sessionId: String, state: String, role: String?, projectId: String?) {
+    /**
+     * A session status push: [state] is the state name (`IDLE`, `BUSY`, ...). First sight of a session = started; entering IDLE = idle.
+     * BRIDGE-EVENTS-1: the payload names the session's [ticketId] and [agentId] when it has them, so a `session.idle` hook knows whose turn ended.
+     */
+    fun sessionStatus(sessionId: String, state: String, role: String?, projectId: String?, ticketId: String? = null, agentId: String? = null) {
         val prev = lastState.put(sessionId, state)
-        val p = obj("sessionId" to sessionId, "state" to state, "role" to role, "projectId" to projectId)
+        val p = obj("sessionId" to sessionId, "state" to state, "role" to role, "projectId" to projectId, "ticketId" to ticketId, "agentId" to agentId, "previous" to prev)
         if (prev == null) publish("session.started", p)
         if (state == "IDLE" && prev != "IDLE") publish("session.idle", p)
         // SCRIPT-SESSION-1: a turn is the time spent BUSY.
@@ -62,6 +65,9 @@ class DaemonEventPublisher(private val publish: (name: String, payload: String) 
     fun woken(sessionId: String, reason: String, ref: String?, projectId: String? = null) {
         publish("session.woken", obj("sessionId" to sessionId, "reason" to reason, "ref" to ref, "projectId" to projectId))
     }
+
+    /** BRIDGE-EVENTS-1: `daemon.started`, once the port is bound; [payload] is [com.superiorsoftllc.infantry.session.DaemonStartedEvent.payload]. */
+    fun daemonStarted(payload: String) = publish(com.superiorsoftllc.infantry.session.DaemonStartedEvent.NAME, payload)
 
     fun mail(m: Message) {
         publish("mail.sent", obj("id" to m.id, "from" to m.from, "to" to m.to, "subject" to m.subject, "threadId" to m.threadId))

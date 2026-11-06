@@ -54,7 +54,10 @@
           { "key": "scripting.exec.maxTimeoutSec", "type": "number", "label": "Process bridge max timeout (s)", "default": 600, "min": 1, "max": 3600, "step": 1, "scope": "daemon", "order": 16 },
           { "key": "scripting.exec.tailChars", "type": "number", "label": "Process bridge output tail (chars)", "default": 8000, "min": 100, "max": 1000000, "step": 100, "scope": "daemon", "order": 17 },
           { "key": "scripting.hooks.minEverySec", "type": "number", "label": "Timer hooks (every <N>s): minimum period (s)", "default": 10, "min": 1, "max": 86400, "step": 1, "scope": "daemon", "order": 18 },
-          { "key": "scripting.exec.tickSec", "type": "number", "label": "Process bridge: seconds between exec.tick events for a background run", "default": 10, "min": 1, "max": 3600, "step": 1, "scope": "daemon", "order": 19 }
+          { "key": "scripting.exec.tickSec", "type": "number", "label": "Process bridge: seconds between exec.tick events for a background run", "default": 10, "min": 1, "max": 3600, "step": 1, "scope": "daemon", "order": 19 },
+          { "key": "scripting.builtins.off", "type": "text", "label": "Shipped hooks turned off (comma-separated ids, e.g. resume-after-restart; bind your own script to the event instead)", "default": "", "scope": "daemon", "order": 20 },
+          { "key": "scripting.restart.resume", "type": "toggle", "label": "After a daemon restart, prompt each session whose turn it cut to continue (shipped hook resume-after-restart; its starter and the owner are told either way)", "default": true, "scope": "daemon", "order": 21 },
+          { "key": "scripting.restart.prompt", "type": "text", "label": "The prompt a cut session gets after a restart (empty = the script's default)", "default": "", "scope": "daemon", "order": 22 }
         ]
       }
     ]

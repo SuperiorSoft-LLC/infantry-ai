@@ -563,4 +563,58 @@ class ScriptHooksTest {
         val mail = h.invokerOf("p1", Hook("m", HookOn.Lane("done"), "s", ownerSession = "pm-1", ownerRole = "pm", to = "pm-1"))
         assertEquals("pm-1", mail.sessionId); assertEquals("pm-1", mail.caller.activeSession); assertEquals("pm", mail.role)
     }
+
+    // BRIDGE-EVENTS-1: hooks the plugin ships run daemon-wide on their event, with their settings as args; the off setting skips them.
+    private fun builtinHooks(engine: FakeEngine, config: Map<String, String>, log: ScriptRunLog = ScriptRunLog()): ScriptHooks {
+        val engines = ScriptEngines({ mapOf(ScriptEngineWire.PREFIX + "fake" to ScriptEngineWire.asEndpoint(engine)) })
+        val store = ScriptStore({ files }, { engines.extensions() })
+        val b = BuiltinHook("resume-after-restart", HookOn.parse("daemon.started"), "resume-after-restart", "fk", "src",
+            buildJsonObject { put("fixed", "x") }, mapOf("resume" to "scripting.restart.resume", "prompt" to "scripting.restart.prompt"))
+        return ScriptHooks(
+            HookStore { files }, store, engines, tools, ScriptDispatcher(tools, { emptyMap() }),
+            projects = { listOf("p1") }, limits = { ScriptLimits() }, clock = { now }, executor = { it() }, runLog = log,
+            builtins = { listOf(b) }, builtinConfig = { config[it] },
+        )
+    }
+    private fun started() = NamedEvent("daemon.started", """{"cutTurns":[{"sessionId":"s1","ticketId":"ticket-aaaa1111"}],"orphaned":[],"orphanedIds":[]}""", "daemon", "ev-1", "ev-1", 0, 1)
+
+    @Test fun `BRIDGE-EVENTS-1 a shipped hook runs on its event with the payload and its settings as args, as the owner`() {
+        val engine = FakeEngine { listOf(QueuedAction("infantry_message", mapOf("to" to "pm-1", "body" to "b"))) }
+        val log = ScriptRunLog()
+        builtinHooks(engine, mapOf("scripting.restart.resume" to "false", "scripting.restart.prompt" to "Go on."), log).onEvent(started())
+        @Suppress("UNCHECKED_CAST") val args = engine.inputs.single()["args"] as Map<String, Any?>
+        assertEquals(false, args["resume"]); assertEquals("Go on.", args["prompt"]); assertEquals("x", args["fixed"])
+        @Suppress("UNCHECKED_CAST") val cut = args["cutTurns"] as List<Map<String, Any?>>
+        assertEquals("s1", cut.single()["sessionId"])
+        assertEquals("builtin:resume-after-restart", args["hook"])
+        val call = tools.named("infantry_message").single()
+        assertTrue(call.third.caller.owner, "a shipped hook runs as the daemon's automation identity")
+        assertEquals("script:builtin:resume-after-restart", call.third.label)
+        assertEquals(1, log.runs("builtin").size, "the run is in the run log (no projectId: the builtin scope)")
+    }
+
+    @Test fun `BRIDGE-EVENTS-1 a shipped hook named in scripting builtins off does not run, nor on another event`() {
+        val engine = FakeEngine { emptyList() }
+        builtinHooks(engine, mapOf(BuiltinHook.OFF_SETTING to " other, resume-after-restart ")).onEvent(started())
+        assertTrue(engine.inputs.isEmpty())
+        builtinHooks(engine, emptyMap()).onEvent(moved())
+        assertTrue(engine.inputs.isEmpty(), "bound to daemon.started only")
+    }
+
+    @Test fun `BRIDGE-EVENTS-1 the jar ships resume-after-restart on daemon started, and a bad index entry is skipped`() {
+        val shipped = BuiltinHook.fromJar().single { it.id == "resume-after-restart" }
+        assertEquals(HookOn.parse("daemon.started"), shipped.on)
+        assertEquals("lua", shipped.extension)
+        assertEquals(mapOf("resume" to "scripting.restart.resume", "prompt" to "scripting.restart.prompt"), shipped.configArgs)
+        assertTrue("infantry_prompt" in shipped.source)
+
+        val lines = ArrayList<String>()
+        val res = mapOf(
+            BuiltinHook.INDEX to """{"hooks":[{"id":"ok","on":"daemon.started","script":"a.lua"},{"id":"nofile","on":"daemon.started","script":"b.lua"},{"id":"path","on":"x.y","script":"../c.lua"}]}""",
+            "${BuiltinHook.DIR}/a.lua" to "-- a",
+        )
+        assertEquals(listOf("ok"), BuiltinHook.load({ res[it] }, { lines += it }).map { it.id })
+        assertEquals(2, lines.size, lines.toString())
+        assertTrue(BuiltinHook.load({ null }).isEmpty())
+    }
 }

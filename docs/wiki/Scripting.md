@@ -73,6 +73,9 @@ A hook says "when this happens, run this script with these fixed args". The `on`
 | `exec.tick` | every `scripting.exec.tickSec` seconds while a background exec runs | `id`, `script`, `session`, `elapsedMs`, `stdoutTail`, `stderrTail`, `bytesSinceLast` |
 | `every <N>s` | a timer; minimum `scripting.hooks.minEverySec` (default 10) | `tick`, `at`, `hookId` |
 | any event name | a named event: `ticket.commented`, `merge.done`, `ticket.*`, or your own via `infantry_event_emit` | the event's payload |
+| `daemon.started` | once, when the daemon's port is bound after a start | `cutTurns` and `orphaned`: lists of `{sessionId, role, agentId, ticketId, projectId, lastAction, lastOutputAt, starter}` (a key is absent when unknown; `starter` = the ticket's starter, else the spawner); `orphanedIds` |
+| `session.idle` | a session's turn ends and it is at rest | `sessionId`, `state`, `previous`, `role`, `agentId`, `ticketId`, `projectId` |
+| `session.first-turn-timeout` | reserved, not published yet: the first-turn watch lives in the harness, which has no event seam (needs a harness API bump) | none |
 
 Examples:
 
@@ -82,6 +85,20 @@ infantry script hook add "every 180s" worker-watch --payload '{"exemptRoles":["p
 ```
 
 `to` on `every <N>s` and `exec.tick` names a session the script acts for (its `progress` lands on that card).
+
+### Shipped hooks
+
+The Scripting plugin ships hooks of its own, so a default process works with no setup and is still a script. They sit in
+the plugin jar (`builtin-scripts/builtins.json` and the scripts next to it), run daemon-wide (not per project) as the
+daemon's automation identity, and go through the same loop guard and run log as a project hook.
+
+| Id | `on` | What it does | Settings (its args) |
+|---|---|---|---|
+| `resume-after-restart` | `daemon.started` | Prompts every session whose turn the stop cut to continue where it left off; comments on its ticket (or mails its starter); raises one `session_resumed` attention item with the summary. A session whose process outlived the daemon (`orphaned`) is named, never prompted. | `scripting.restart.resume` (`true`; `false` = tell only), `scripting.restart.prompt` (`""` = "The daemon restarted and your last turn was cut. Continue where you left off.") |
+
+`scripting.builtins.off` (comma-separated ids) turns a shipped hook off; bind your own script to the same event to
+replace it. The script calls `infantry_attention_raise{kind, outcome, detail, ticketId?, sessionId?}` (Infantry_Attention)
+to reach the owner.
 
 ### Intercepting mail
 

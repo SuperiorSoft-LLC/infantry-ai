@@ -67,6 +67,25 @@ class NamedEventsTest {
         assertTrue(out.map { it.first }.all { it in NamedEventBus.DAEMON_EVENTS })
     }
 
+    @Test fun `BRIDGE-EVENTS-1 session idle names its ticket and agent, daemon started carries its payload as given`() {
+        val out = CopyOnWriteArrayList<Pair<String, String>>()
+        val pub = DaemonEventPublisher { n, p -> out += n to p }
+        pub.sessionStatus("s1", "BUSY", "backend", "p", "ticket-aaaa1111", "agent-1")
+        pub.sessionStatus("s1", "IDLE", "backend", "p", "ticket-aaaa1111", "agent-1")
+        val idle = kotlinx.serialization.json.Json.parseToJsonElement(out.single { it.first == "session.idle" }.second) as JsonObject
+        assertEquals(mapOf("sessionId" to "s1", "state" to "IDLE", "role" to "backend", "projectId" to "p", "ticketId" to "ticket-aaaa1111", "agentId" to "agent-1", "previous" to "BUSY"),
+            idle.mapValues { (it.value as JsonPrimitive).content })
+        pub.sessionStatus("s2", "IDLE", null, null)
+        val bare = out.last { it.first == "session.idle" }.second
+        assertTrue("ticketId" !in bare && "previous" !in bare, "unknown fields are left out: $bare")
+
+        val payload = """{"cutTurns":[{"sessionId":"s1","ticketId":"ticket-aaaa1111"}],"orphaned":[],"orphanedIds":[]}"""
+        pub.daemonStarted(payload)
+        assertEquals("daemon.started" to payload, out.last())
+        assertTrue("daemon.started" in NamedEventBus.DAEMON_EVENTS)
+        assertTrue("session.first-turn-timeout" in NamedEventBus.RESERVED_EVENTS && "session.first-turn-timeout" !in NamedEventBus.DAEMON_EVENTS)
+    }
+
     @Test fun `the emit tool reaches a subscriber for any role and is listed with a write action`() {
         val host = DaemonPluginHost.empty()
         val latch = CountDownLatch(1); val got = CopyOnWriteArrayList<NamedEvent>()

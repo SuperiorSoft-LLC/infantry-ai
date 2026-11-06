@@ -106,8 +106,6 @@ class SettingsService(
             WATCH_NOTICES to JsonObject(watchNotices().mapValues { JsonPrimitive(it.value) }),
             WATCH_ESCALATE_TO to JsonPrimitive(watchEscalateTo()),
             WATCH_FOLLOW_REDIRECTS to JsonPrimitive(watchFollowRedirects()),
-            RESUME_AFTER_RESTART to JsonPrimitive(resumeAfterRestart()),
-            RESUME_AFTER_RESTART_PROMPT to JsonPrimitive(resumeAfterRestartPrompt()),
             RELATED_BRIEF to JsonPrimitive(relatedConfig().brief),
             RELATED_BRIEF_INSTRUCTION to JsonPrimitive(relatedConfig().instruction),
             RELATED_BRIEF_MODE to JsonPrimitive(relatedConfig().mode),
@@ -473,11 +471,6 @@ class SettingsService(
                     ?: throw IllegalArgumentException("setting '$WATCH_ESCALATE_TO' must be one of ${com.superiorsoftllc.infantry.runner.WatchNotices.ESCALATE_VALUES.joinToString { "\"$it\"" }}"),
             )
             WATCH_FOLLOW_REDIRECTS -> JsonPrimitive(requireBoolean(key, value))
-            RESUME_AFTER_RESTART -> JsonPrimitive(requireBoolean(key, value))
-            RESUME_AFTER_RESTART_PROMPT -> JsonPrimitive(
-                (value as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.length <= 2000 }
-                    ?: throw IllegalArgumentException("setting '$key' must be text, at most 2000 characters (\"\" = the default prompt)"),
-            )
             RELATED_BRIEF, RELATED_DESCRIPTION_BLOCK, RELATED_SUGGEST_NUMBER -> JsonPrimitive(requireBoolean(key, value))
             RELATED_BRIEF_INSTRUCTION -> JsonPrimitive(
                 (value as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.length <= 1000 && '\n' !in it }
@@ -713,14 +706,6 @@ class SettingsService(
     /** STALL-4: whether the runner follows a file the command line redirects its output to (default off). */
     fun watchFollowRedirects(): Boolean = runCatching { storedBoolean(WATCH_FOLLOW_REDIRECTS)?.booleanOrNull }.getOrNull() ?: false
 
-    /** RESUME-NOTIFY-1: whether a session whose turn a daemon restart cut is prompted to continue (default on). Read at start-up. */
-    fun resumeAfterRestart(): Boolean = runCatching { storedBoolean(RESUME_AFTER_RESTART)?.booleanOrNull }.getOrNull() ?: true
-
-    /** RESUME-NOTIFY-1: the prompt such a session gets; unset or "" = [com.superiorsoftllc.infantry.session.RestartResume.DEFAULT_PROMPT]. */
-    fun resumeAfterRestartPrompt(): String = store.settings.get(RESUME_AFTER_RESTART_PROMPT)?.value
-        ?.let { runCatching { (Json.parseToJsonElement(it) as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }.getOrNull() }
-        ?.takeIf { it.isNotBlank() } ?: com.superiorsoftllc.infantry.session.RestartResume.DEFAULT_PROMPT
-
     private fun requireWatchNotices(value: JsonElement): JsonElement {
         require(value is JsonObject && value.values.all { it is JsonPrimitive && it.isString }) {
             "setting '$WATCH_NOTICES' must be a JSON object of notice key -> template string"
@@ -921,10 +906,6 @@ class SettingsService(
         const val WATCH_ESCALATE_TO = com.superiorsoftllc.infantry.runner.WatchNotices.ESCALATE_SETTING
         /** STALL-4: `true` = the runner follows files a command line redirects its output to (default `false`). */
         const val WATCH_FOLLOW_REDIRECTS = "watch.followRedirects"
-        /** RESUME-NOTIFY-1: `true` (default) = a session whose turn a daemon restart cut is prompted to continue. */
-        const val RESUME_AFTER_RESTART = com.superiorsoftllc.infantry.session.RestartResume.ENABLED_SETTING
-        /** RESUME-NOTIFY-1: that prompt's text ("" = the default). */
-        const val RESUME_AFTER_RESTART_PROMPT = com.superiorsoftllc.infantry.session.RestartResume.PROMPT_SETTING
         /** KNOWLEDGE-PTR-1 (b8ca2bf7): see [relatedConfig]; all default on. */
         const val RELATED_BRIEF = "related.brief"
         const val RELATED_BRIEF_INSTRUCTION = "related.briefInstruction"

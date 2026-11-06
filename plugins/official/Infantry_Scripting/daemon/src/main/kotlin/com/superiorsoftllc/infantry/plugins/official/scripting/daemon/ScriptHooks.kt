@@ -65,6 +65,10 @@ class ScriptHooks(
     private val clock: () -> Long = System::currentTimeMillis,
     /** Where runs execute. Production: one daemon thread (events run in order); tests run inline. */
     private val executor: (() -> Unit) -> Unit = DEFAULT_EXECUTOR,
+    /** BRIDGE-EVENTS-1: the hooks this plugin ships ([BuiltinHook]); they run daemon-wide, before the projects' hooks. */
+    private val builtins: () -> List<BuiltinHook> = { emptyList() },
+    /** BRIDGE-EVENTS-1: this plugin's settings, for [BuiltinHook.configArgs] and [BuiltinHook.OFF_SETTING]. */
+    private val builtinConfig: (String) -> String? = { null },
 ) {
     private class Run(val hookKey: String, val depth: Int, val touched: MutableSet<String>, startedAt: Long = 0L) { @Volatile var endedAt: Long? = null; @Volatile var touchedAt: Long = startedAt }
 
@@ -190,6 +194,7 @@ class ScriptHooks(
 
     private fun dispatch(e: NamedEvent) {
         val payload = parse(e.payload)
+        runBuiltins(e, payload)
         val candidates = projects().flatMap { p ->
             // A project whose hooks cannot be read (no directory, bad file) is skipped with one warning; it never fails the plugin.
             val hooks = try { store.list(p) } catch (x: Exception) {
@@ -275,12 +280,57 @@ class ScriptHooks(
         } finally { inflight.remove(key) }
     }
 
+    /**
+     * BRIDGE-EVENTS-1: the shipped hooks ([builtins]) whose `on` matches, minus the ones [BuiltinHook.OFF_SETTING] turns off. Each runs as the
+     * daemon's automation identity (owner, no session) for the event's project if it names one, under the same loop guard and run log.
+     * A failure is logged and recorded, never thrown: the projects' hooks still run.
+     */
+    private fun runBuiltins(e: NamedEvent, payload: JsonObject) {
+        val list = runCatching { builtins() }.getOrDefault(emptyList())
+        if (list.isEmpty()) return
+        val off = runCatching { BuiltinHook.off(builtinConfig) }.getOrDefault(emptySet())
+        val ids = listOfNotNull(str(payload, "ticketId"), str(payload, "sessionId"))
+        val depth = maxOf(e.depth, attributedDepth(ids))
+        val project = str(payload, "projectId")
+        for (b in list) {
+            if (b.id in off || !matches(b.on, e.name, payload)) continue
+            val key = "$BUILTIN_SCOPE/${b.id}"
+            val refusal = admitKey(key, depth)
+            if (refusal != null) { log("builtin hook ${b.id} refused on ${e.name}: $refusal"); continue }
+            val run = Run(key, depth, ConcurrentHashMap.newKeySet<String>().also { it.addAll(ids) }, clock())
+            runs += run
+            val trigger = "$BUILTIN_SCOPE:${b.id} ${b.on}"
+            try {
+                val engine = engines.byExtension(b.extension)
+                if (engine == null) { log("builtin hook ${b.id}: no engine loaded for .${b.extension}, not run"); continue }
+                val args = LinkedHashMap<String, Any?>()
+                @Suppress("UNCHECKED_CAST") (ScriptEngineWire.fromJson(b.resolvedArgs(builtinConfig)) as? Map<String, Any?>)?.let { args.putAll(it) }
+                @Suppress("UNCHECKED_CAST") (ScriptEngineWire.fromJson(payload) as? Map<String, Any?>)?.let { args.putAll(it) }
+                args["event"] = mapOf("name" to e.name, "id" to e.id, "causeId" to e.causeId, "depth" to depth.toLong(), "source" to e.source)
+                args["hook"] = "$BUILTIN_SCOPE:${b.id}"
+                val invoker = ToolInvoker(Caller(owner = true), null, null, project, "script:$BUILTIN_SCOPE:${b.id}")
+                val report = dispatcher.run(engine, b.source, args, limits(), ScriptCaller("", ""), invoker, false) { planned ->
+                    run.touchedAt = clock()
+                    planned.forEach { a -> flatten(a.args).forEach { run.touched += it } }
+                }
+                runLog.record(project ?: BUILTIN_SCOPE, b.script, trigger, null, report, if (report.ok) "ok" else "failed", "ran for ${e.name}: ${report.records.size} action(s)", report.error)
+                if (report.ok) log("builtin hook ${b.id} ran ${b.script} for ${e.name}: ${report.outcome}, ${report.records.size} action(s)")
+                else log("builtin hook ${b.id} FAILED: ${reasonLine(report.render(b.script))}".take(400))
+            } catch (t: Throwable) {
+                runLog.record(project ?: BUILTIN_SCOPE, b.script, trigger, null, null, "failed", "crashed", "${t.javaClass.simpleName}: ${t.message?.take(300)}")
+                log("builtin hook ${b.id} crashed: ${t.javaClass.simpleName}: ${t.message?.take(300)}")
+            } finally { run.endedAt = clock() }
+        }
+    }
+
     /** Null to run; else why the guard refused. Counts the run against the hook's rate window when admitted. */
-    private fun admit(project: String, hook: Hook, depth: Int): String? {
+    private fun admit(project: String, hook: Hook, depth: Int): String? = admitKey("$project/${hook.id}", depth)
+
+    private fun admitKey(hookKey: String, depth: Int): String? {
         val g = guard()
         if (depth > g.maxDepth) return "loop guard: event chain depth $depth exceeds the limit ${g.maxDepth} (its own actions keep re-triggering it)"
         val now = clock()
-        val q = fires.computeIfAbsent("$project/${hook.id}") { ArrayDeque() }
+        val q = fires.computeIfAbsent(hookKey) { ArrayDeque() }
         synchronized(q) {
             while (q.isNotEmpty() && now - q.first() >= g.windowMs) q.removeFirst()
             if (q.size >= g.maxRuns) return "rate limit: ${q.size} runs in the last ${g.windowMs / 1000}s (limit ${g.maxRuns}); the hook is tripped until the window clears"
@@ -419,6 +469,8 @@ class ScriptHooks(
 
     companion object {
         const val INCOMING_EVENT = "mail.incoming"
+        /** BRIDGE-EVENTS-1: the scope name of shipped hooks (run log project when the event names none, guard keys, caller label). */
+        const val BUILTIN_SCOPE = "builtin"
         /** SCRIPT-TICK-1: the internal event an `every <N>s` hook runs for (not published on the bus). */
         const val TIMER_EVENT = "timer.tick"
         private val pool by lazy { Executors.newSingleThreadExecutor { r -> Thread(r, "script-hooks").apply { isDaemon = true } } }
