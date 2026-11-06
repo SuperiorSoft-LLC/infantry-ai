@@ -376,8 +376,22 @@ jobs:
           set -euo pipefail
           V='${{ needs.version.outputs.version }}'
           [ "$(uname -m)" = "arm64" ] || { echo "expected an arm64 runner, got $(uname -m); the asset name would lie" >&2; exit 1; }
-          ./gradlew --no-daemon :superiorSoftLibrary:infantryUi:createDistributable :superiorSoftLibrary:infantryUi:packageDmg \
-            -PinfantryVersion="$V" -PinfantryPackageVersion='${{ needs.version.outputs.package_version }}' $IHQ_SIGN
+          gw() { ./gradlew --no-daemon "$@" -PinfantryVersion="$V" -PinfantryPackageVersion='${{ needs.version.outputs.package_version }}' $IHQ_SIGN; }
+          gw :superiorSoftLibrary:infantryUi:createDistributable
+          # MACOS-DMG-1: v1.0.12 failed here with only "jpackage exit 1"; its real message sits in compose/logs, so print it.
+          # jpackage's hdiutil step is known to fail on hosted runners ("Resource busy"): detach leftovers, retry once.
+          logs=superiorSoftLibrary/infantryUi/build/compose/logs/packageDmg
+          ok=false
+          for attempt in 1 2; do
+            if gw :superiorSoftLibrary:infantryUi:packageDmg; then ok=true; break; fi
+            echo "::group::jpackage logs (packageDmg attempt $attempt)"
+            for f in "$logs"/*; do [ -f "$f" ] && { echo "== $f"; tail -n 80 "$f"; }; done
+            echo "::endgroup::"
+            # only our own image's volume (the runner mounts simulator images under other /Volumes paths)
+            { hdiutil info | sed -n 's|^/dev/\(disk[0-9]*\)[s0-9]*[[:space:]].*[[:space:]]/Volumes/InfantryAI.*|\1|p' | sort -u \
+              | while read -r d; do hdiutil detach "/dev/$d" -force || true; done; } || true
+          done
+          $ok || { echo "::error::packageDmg failed twice; jpackage logs are printed above" >&2; exit 1; }
           # Outside the checkout, like the windows job: the packaging guard wants a clean tree.
           out="$RUNNER_TEMP/out"; mkdir -p "$out"
           app="$(ls -d superiorSoftLibrary/infantryUi/build/compose/binaries/main/app/*.app | head -n1)"
