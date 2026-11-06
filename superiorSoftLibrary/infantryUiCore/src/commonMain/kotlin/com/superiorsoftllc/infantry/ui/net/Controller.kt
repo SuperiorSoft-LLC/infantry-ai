@@ -43,6 +43,7 @@ import com.superiorsoftllc.infantry.ui.model.PendingSends
 import com.superiorsoftllc.infantry.ui.model.SendState
 import com.superiorsoftllc.infantry.ui.model.withPendingSend
 import com.superiorsoftllc.infantry.ui.model.withoutPendingSend
+import com.superiorsoftllc.infantry.ui.model.lastUserSeq
 import com.superiorsoftllc.infantry.ui.model.expirePendingSend
 import com.superiorsoftllc.infantry.ui.model.pendingRefusedBusy
 import com.superiorsoftllc.infantry.ui.model.settlePendingSends
@@ -890,7 +891,7 @@ class Controller(
      */
     private suspend fun sendPending(sessionId: String, text: String): CommandResult {
         val now = Clock.System.now().toEpochMilliseconds()
-        val p = PendingSend(PendingSends.newClientId(now), sessionId, text, now)
+        val p = PendingSend(PendingSends.newClientId(now), sessionId, text, now, userSeqAtSend = _state.value.lastUserSeq(sessionId))
         _state.update { it.withPendingSend(p) }
         transmitPending(p)
         return CommandResult.Sent

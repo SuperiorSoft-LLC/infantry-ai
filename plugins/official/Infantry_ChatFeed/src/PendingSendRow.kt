@@ -24,6 +24,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.superiorsoftllc.infantry.ui.AhqIcons
+import com.superiorsoftllc.infantry.ui.ChatImageLines
 import com.superiorsoftllc.infantry.ui.Mono
 import com.superiorsoftllc.infantry.ui.Palette
 import com.superiorsoftllc.infantry.ui.model.MessageOrigin
@@ -57,8 +58,13 @@ fun PendingSendRow(p: PendingSend, onRetry: (String) -> Unit, onDiscard: (String
         Column(Modifier.testTag(PENDING_SEND_TAG)) {
             OriginLabel(origin)
             CommsCard(commsCardStyle(origin), p.at, trailing = { SendMarker(p, onRetry, onDiscard, compact) }) {
-                // The text stays readable in every state: a failed send never loses what was typed.
-                Text(p.text, color = if (p.state == SendState.FAILED) Palette.Muted else Palette.Accent, fontFamily = Mono, fontSize = 12.sp)
+                // The text stays readable in every state: a failed send never loses what was typed. CHAT-DUP-1: drawn like the
+                // turn it becomes ([UserRow]): `[image: ...]` lines show as thumbnails, never as raw paths.
+                val (said, images) = ChatImageLines.split(p.text)
+                if (said.isNotBlank() || images.isEmpty()) {
+                    Text(said, color = if (p.state == SendState.FAILED) Palette.Muted else Palette.Accent, fontFamily = Mono, fontSize = 12.sp)
+                }
+                ChatSentImages(images)
             }
         }
     }

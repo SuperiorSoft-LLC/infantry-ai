@@ -21,6 +21,8 @@ enum class SendState { SENDING, ACCEPTED, FAILED }
  * CHAT-SENDING-1: one message the human sent to [sessionId], shown at the bottom of its chat until the daemon's `turn` echo replaces
  * it. [clientId] is its client message id (the prompt's `requestId`, `send:<id>`): a retry resends the same id, so a daemon that
  * already took it answers `duplicate` and does not run it twice. [at] = when it was (re)sent; [reason] = why it failed.
+ * [userSeqAtSend] (CHAT-DUP-1): the sequence of the session's newest human turn when it was first sent (null = none yet), so the
+ * daemon's `prompt_ack` for this id can tell that the turn echo already came (the daemon may send the echo before the ack).
  */
 data class PendingSend(
     val clientId: String,
@@ -29,6 +31,7 @@ data class PendingSend(
     val at: Long,
     val state: SendState = SendState.SENDING,
     val reason: String? = null,
+    val userSeqAtSend: Long? = null,
 )
 
 object PendingSends {
@@ -80,7 +83,8 @@ fun AppState.pendingRefusedBusy(env: Envelope): PendingSend? {
 
 /**
  * CHAT-SENDING-1: settle the pending sends against frame [env], which turned [before] into [after]:
- * - `prompt_ack` with a pending client id: ACCEPTED (the `turn` echo removes it; `duplicate` = the daemon already had it).
+ * - `prompt_ack` with a pending client id: ACCEPTED (the `turn` echo removes it; `duplicate` = the daemon already had it). When
+ *   the echo came FIRST (CHAT-DUP-1: the daemon echoes the turn before it acks), the ack removes it at once ([echoArrived]).
  * - a NEW `turn` entry on a session (not a replayed one): removes that session's pending sends whose text the turn carries, and
  *   every ACCEPTED one (the daemon took it as this turn; a wrapped first turn need not match the text).
  * - an `error` with a pending client id: FAILED with the daemon's reason.
@@ -91,12 +95,16 @@ fun settlePendingSends(before: AppState, after: AppState, env: Envelope): AppSta
     var out = after
     val id = env.requestId
     when (env.type) {
-        Envelope.PROMPT_ACK -> out.pendingSends[id]?.let { out = out.withPendingSend(it.copy(state = SendState.ACCEPTED, reason = null)) }
+        Envelope.PROMPT_ACK -> out.pendingSends[id]?.let {
+            out = if (echoArrived(out, it)) out.withoutPendingSend(it.clientId)
+            else out.withPendingSend(it.copy(state = SendState.ACCEPTED, reason = null))
+        }
         Envelope.ERROR -> out.pendingSends[id]?.let { out = out.withPendingSend(it.copy(state = SendState.FAILED, reason = env.data.ifBlank { null })) }
         Envelope.TURN -> {
             val sessionId = env.sessionId
-            val grew = sessionId != null &&
-                (after.agents[sessionId]?.entries?.size ?: 0) > (before.agents[sessionId]?.entries?.size ?: 0)
+            // CHAT-DUP-1: "a new turn" is the transcript changing, not growing: a long session sits at its line cap, so a new
+            // turn leaves the size alone and its accepted send stayed beside the echo. A replayed turn changes nothing.
+            val grew = sessionId != null && after.agents[sessionId]?.entries != before.agents[sessionId]?.entries
             if (grew) {
                 val settled = out.pendingSends.values.filter {
                     it.sessionId == sessionId && (it.state == SendState.ACCEPTED || turnCarries(env.data, it.text))
@@ -107,6 +115,22 @@ fun settlePendingSends(before: AppState, after: AppState, env: Envelope): AppSta
     }
     return out
 }
+
+/**
+ * CHAT-DUP-1: the daemon took [p] (its `prompt_ack`, matched on the client id) and the session already shows a human turn newer
+ * than [PendingSend.userSeqAtSend], one per older message still pending to it: that turn is [p]'s echo, so its bubble goes. Text is
+ * not compared: a wrapped or reformatted echo settles all the same.
+ */
+fun echoArrived(s: AppState, p: PendingSend): Boolean {
+    val entries = s.agents[p.sessionId]?.entries ?: return false
+    val newer = entries.count { it.kind == LineKind.USER && it.seq != null && (p.userSeqAtSend == null || it.seq > p.userSeqAtSend) }
+    val olderPending = s.pendingSends.values.count { it.sessionId == p.sessionId && it.clientId != p.clientId && it.at < p.at }
+    return newer > olderPending
+}
+
+/** CHAT-DUP-1: the sequence of [sessionId]'s newest human turn this window holds (null = none): a new send's [PendingSend.userSeqAtSend]. */
+fun AppState.lastUserSeq(sessionId: String): Long? =
+    agents[sessionId]?.entries?.lastOrNull { it.kind == LineKind.USER && it.seq != null }?.seq
 
 /**
  * CHAT-SENDING-1: the link went from live ([before]) to not live ([after]): every SENDING message becomes "not sent - retry" at

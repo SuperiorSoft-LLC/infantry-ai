@@ -2371,8 +2371,20 @@ fun queuedTurnText(held: List<QueuedPrompt>, text: String): String = (held.map {
 /**
  * QUEUE-STUCK-2: the queue left after the agent took a turn reading [turn]. A queued message is delivered when the turn
  * is its text, or a "\n\n"-joined turn (see [queuedTurnText]) or an interrupt that carries it as one of its parts.
+ * CHAT-DUP-1: a message of several paragraphs (its text and an `[image: ...]` line are two) is carried when its paragraphs
+ * stand in the turn as one unbroken run; compared with a single paragraph it never matched, so its "sent" bubble stayed.
  */
-fun turnCarries(turn: String, text: String): Boolean = text.trim() in turn.trim().split("\n\n").map { it.trim() }
+fun turnCarries(turn: String, text: String): Boolean {
+    val want = paragraphs(text)
+    if (want.isEmpty()) return text.trim() in turn.trim().split("\n\n").map { it.trim() }
+    return paragraphs(turn).windowed(want.size).any { it == want }
+}
+
+/** CHAT-DUP-1: [s]'s paragraphs (split on blank lines, CRLF or LF), each trimmed, empty ones dropped. */
+private fun paragraphs(s: String): List<String> =
+    s.replace("\r\n", "\n").split(BLANK_LINE).map { it.trim() }.filter { it.isNotEmpty() }
+
+private val BLANK_LINE = Regex("\n[ \t]*\n")
 
 /**
  * QUEUE-STUCK-3: a send in flight ([AppState.queueSending]) can never outlive the turn it started. When an agent goes
@@ -2390,8 +2402,7 @@ fun settleQueueSends(before: AppState, after: AppState): AppState {
 
 fun queueAfterTurn(held: List<QueuedPrompt>, turn: String): List<QueuedPrompt> {
     if (held.isEmpty()) return held
-    val parts = turn.trim().split("\n\n").map { it.trim() }
-    return held.filter { q -> q.text.trim() !in parts }
+    return held.filter { q -> !turnCarries(turn, q.text) }
 }
 
 
