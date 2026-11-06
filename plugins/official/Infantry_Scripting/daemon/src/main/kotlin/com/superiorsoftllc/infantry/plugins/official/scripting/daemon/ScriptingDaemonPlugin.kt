@@ -52,6 +52,7 @@ class ScriptingDaemonPlugin : DaemonPlugin {
             { api.sessions.get(it)?.projectId }, { runCatching { api.events.broadcast(TIMELINE_ITEM, it.toString()) } }, runLog::addNote,
             { id, text -> api.sessions.resume(id, text) },
             queueWake = { id, text -> api.sessions.queueAdd(id, text) },
+            allSessionIds = { api.sessions.list().map { it.id } },
             forwardImage = { args, call ->
                 api.tools.invoke("infantry_chat_image", args, com.superiorsoftllc.infantry.daemon.api.ToolInvoker(call.caller, call.clientSessionId, call.clientRole, call.clientProjectId, "chat_note"))
             },
@@ -65,6 +66,7 @@ class ScriptingDaemonPlugin : DaemonPlugin {
             queueAdd = { id, text -> api.sessions.queueAdd(id, text) },
             queueRemove = { id, item -> api.sessions.queueRemove(id, item) },
             queueForce = { id, item -> api.sessions.queueForce(id, item) },
+            allSessionIds = { api.sessions.list().map { it.id } },
         )
         api.tools.register(sessionTools.read)
         api.tools.register(sessionTools.act)

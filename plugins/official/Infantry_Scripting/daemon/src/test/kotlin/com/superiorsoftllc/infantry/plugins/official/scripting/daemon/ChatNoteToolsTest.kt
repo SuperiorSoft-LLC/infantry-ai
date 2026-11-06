@@ -28,6 +28,18 @@ class ChatNoteToolsTest {
         override fun request(type: String, data: String, sessionId: String?, timeoutMs: Long): Frame = error("n/a")
     }
 
+    @Test fun `HARNESS-GAP G21 a unique 8-char prefix notes the session, an ambiguous one is refused`() {
+        val full = listOf("d5686f99-1111-4222-8333-944444444444", "d5686f98-aaaa-bbbb-cccc-dddddddddddd", "24511e54-0000-1111-2222-333333333333")
+        val known = full.associateWith { "p1" }
+        val t = ChatNoteTools({ known[it] }, { pushed += it }, { stored += it }, { i, x -> woken += i to x }, allSessionIds = { full })
+        val ok = t.handle(call("""{"text":"hi","sessionId":"24511e54"}"""))
+        assertTrue(!ok.isError, ok.text)
+        assertEquals("24511e54-0000-1111-2222-333333333333", stored.last()["sessionId"].toString().trim('"'))
+        val amb = t.handle(call("""{"text":"hi","sessionId":"d568"}"""))
+        assertTrue(amb.isError, amb.text); assertTrue(amb.text.contains("ambiguous"), amb.text)
+        assertTrue(t.handle(call("""{"text":"hi","sessionId":"zzzzzzzz"}""")).isError)
+    }
+
     @Test fun `a note is pushed and stored without waking`() {
         val r = tools.handle(call("""{"text":"build ok 12345678901234","level":"ok","sessionId":"s2"}"""))
         assertTrue(!r.isError, r.text)
