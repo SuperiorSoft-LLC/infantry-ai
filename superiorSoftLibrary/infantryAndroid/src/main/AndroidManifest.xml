@@ -7,6 +7,8 @@
          restored backup could not decrypt it anyway; backing it up only spreads ciphertext. -->
     <!-- UPDATER-1: Infantry_Updater installs a newer APK through the system installer (Android asks the owner to confirm). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- NOTIFY-1: Infantry_Notify posts milestone notifications (Android 13+ asks the owner once). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:allowBackup="false"

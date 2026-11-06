@@ -538,6 +538,13 @@ interface LinkContext {
      * Read-only views keep using [live].
      */
     val canWrite: Boolean @Composable get() = gate("").enabled
+    /**
+     * NOTIFY-1 (additive, generic): the `data` of every daemon frame of [type] this link receives, in order (a plugin's own
+     * push frames, e.g. one its daemon half sends with `api.events.broadcast`). Empty outside a shell.
+     */
+    fun frames(type: String): kotlinx.coroutines.flow.Flow<String> = kotlinx.coroutines.flow.emptyFlow()
+    /** NOTIFY-1 (additive, generic): sends one frame of [type] with [data] on this link (a plugin's own frame); false when not sent. */
+    suspend fun sendFrame(type: String, data: String): Boolean = false
 }
 
 /** The window's working context: the active project and the daemon's refusals. */
