@@ -128,6 +128,7 @@ Screenshots the docs link are listed in [docs/img/README.md](docs/img/README.md)
 ## Contents
 
 - [Features](#features) and [Try it free with opencode](#try-it-free-with-opencode)
+- [Downloads](#downloads) and [Help us test macOS](#help-us-test-macos)
 - [The clients](#the-clients)
 - [Quickstart](#quickstart)
 - [Headless server](#headless-server) (Docker or plain archive)
@@ -139,17 +140,40 @@ Screenshots the docs link are listed in [docs/img/README.md](docs/img/README.md)
 - [Contributing](#contributing), [Support the project](#support-the-project), [License](#license)
 - [Building from source](#building-from-source) and [reference](#reference)
 
+## Downloads
+
+Every release is on the [latest Release](../../releases/latest) page, built by the tag workflow
+(`.github/workflows/release.yml`) and listed with its SHA-256 in `SHA256SUMS` (and `latest.json`).
+
+| Platform | File | Notes |
+|---|---|---|
+| **Windows** (x64) | `InfantryAI-<version>.msi` | The full desktop app with its own daemon. Per-user install, no admin prompt. Not code-signed yet: SmartScreen warns, choose **More info > Run anyway**. Updates itself in place. `InfantryAI-<version>-windows.zip` is the same app unpacked (do not update a zip copy with the MSI). |
+| **Android** | `InfantryAI-<version>.apk` (or `-debug.apk`) | **Beta.** A phone client for a daemon on your PC or a server; sideloaded (allow "install unknown apps"). Today's APK is signed with a test or debug key: when the permanently signed APK ships, Android refuses it over this one, so you uninstall (the app's local data goes with it) and install again. |
+| **macOS** (Apple silicon) | `InfantryAI-<version>-macos-arm64-beta.dmg` | **Beta, unsigned and not notarized.** Open the .dmg and drag Infantry AI to Applications. macOS blocks the first start ("cannot be opened" or "is damaged"): right-click the app > **Open** > **Open**, or in Terminal `xattr -dr com.apple.quarantine /Applications/InfantryAI.app`. No in-app update yet: download the new .dmg. Intel Macs: use the headless server. |
+| **Web** | `InfantryAI-web-<version>.zip` | The browser client's static files. You rarely need it: every daemon (desktop app, server archive, Docker) already serves it at `http://<host>:<port>/`. To serve your own copy, unpack it and point the daemon at the folder with `INFANTRY_WEB_DIR=<folder>`. See [Web](#web). |
+| **Headless server** | `InfantryAI-server-<version>-<os>-<arch>.{zip,tar.gz}` | The daemon + CLI with a bundled Java runtime: `linux-x64`, `windows-x64`, and `macos-arm64` (beta). See [Plain archive](#plain-archive-no-docker). |
+
+### Help us test macOS
+
+The macOS build is new and no one on the team runs a Mac every day. If you have an Apple silicon Mac, please install the
+beta .dmg, start it, create a project and run one ticket, then
+[open an issue](../../issues/new) with what worked and what did not: your macOS version, the step that failed, and the
+error text you saw. Crashes, a blocked first start, a missing Dock icon, keyboard shortcuts
+that use Ctrl instead of Cmd: all of it helps. If a release has no .dmg, its macOS build failed on that tag (the other
+platforms still ship); tell us in an issue.
+
 ## The clients
 
 | Client | What it is | How to get it |
 |---|---|---|
 | **Windows desktop** | The full app: board, agents, mail, knowledge. It runs its own daemon, so it works on its own with no server. | `InfantryAI-<version>.msi` from the [latest Release](../../releases/latest) (or the `-windows.zip` app image). |
+| **macOS desktop (beta)** | The same desktop app for Apple silicon Macs, unsigned. | `InfantryAI-<version>-macos-arm64-beta.dmg` from the [latest Release](../../releases/latest). See [Downloads](#downloads) for how to open an unsigned app. |
 | **Android** | A phone client for a daemon running elsewhere (your PC or a server): watch agents, answer questions, move tickets. | `InfantryAI-<version>.apk` from the [latest Release](../../releases/latest), installed by hand (not on Google Play yet). |
 | **Web** | A browser client (Kotlin/WASM) served by the daemon itself: board, agents, transcripts, messages, ticket starts. File, QR and camera features stay in the desktop and phone apps. | Open `http://<host>:<port>/` on a daemon that has a token. See [Web](#web). |
 | **CLI** (`infantry`; `agenthq` is a deprecated alias) | Every board, ticket, mail and knowledge command, for scripts and for the agents themselves. | Ships inside the desktop app and the server archive. |
 | **Headless server** | The daemon with no UI, for a home server, a VM or a cloud box. | Docker image (build it yourself for now) or `InfantryAI-server-<version>-<os>-<arch>` archive from the Release. |
 
-macOS and Linux desktop apps are not packaged yet; on those systems use the headless server plus the Android app or the CLI.
+macOS (Apple silicon) has a beta desktop app; a Linux desktop app is not packaged yet. On Linux or an Intel Mac, use the headless server plus the web client, the Android app or the CLI.
 
 ## Quickstart
 
@@ -245,7 +269,7 @@ Run (the token is mandatory, at least 32 characters: the daemon refuses a non-lo
 
 The same daemon with its own Java runtime bundled (nothing to install), one per OS on the Release:
 `InfantryAI-server-<version>-windows-x64.zip`, `InfantryAI-server-<version>-linux-x64.tar.gz`,
-`InfantryAI-server-<version>-macos-aarch64.tar.gz`. Unpack it and start the daemon (`README.txt` inside lists every setting):
+`InfantryAI-server-<version>-macos-arm64.tar.gz` (beta). Unpack it and start the daemon (`README.txt` inside lists every setting):
 
     # Linux / macOS
     INFANTRY_TOKEN_FILE=./infantry_token INFANTRY_HOST=0.0.0.0 ./InfantryAI-server-<version>-linux-x64/bin/infantry-server.sh
@@ -329,7 +353,7 @@ More: [QUICKSTART.md troubleshooting](superiorSoftLibrary/infantry/docs/QUICKSTA
 What is **not** finished, stated plainly:
 
 - **Web client** is new: it covers the board, agents, transcripts, messages and ticket starts; file attach, QR codes, camera and voice stay in the desktop and phone apps, and some icon glyphs render as boxes (no symbol font bundled yet).
-- **No macOS or Linux desktop app** packages yet (the headless server runs there).
+- **The macOS desktop app is a beta**: unsigned, not notarized, Apple silicon only, no in-app update; there is no Linux desktop app yet (the headless server runs there).
 - **The Docker image is not published**; build it yourself (above).
 - **The Windows installer is not code-signed**, so SmartScreen warns.
 - **The Android app is sideloaded** (no Play Store listing) and some views (for example the git view) are incomplete.

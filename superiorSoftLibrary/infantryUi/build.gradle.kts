@@ -439,6 +439,9 @@ compose.desktop {
             targetFormats(
                 org.jetbrains.compose.desktop.application.dsl.TargetFormat.Msi,
                 org.jetbrains.compose.desktop.application.dsl.TargetFormat.Exe,
+                // RELEASE-PLATFORMS-1: the macOS (beta) .dmg. Compose registers a format's package task only on its own OS,
+                // so packageDmg exists on a Mac (the release workflow's macos job) and nowhere else.
+                org.jetbrains.compose.desktop.application.dsl.TargetFormat.Dmg,
             )
             packageName = "InfantryAI"
             // INSTALL-1: the version comes from -PinfantryVersion (default 1.0.0), so an upgrade build needs no file edit:
@@ -467,6 +470,12 @@ compose.desktop {
                 iconFile.set(project.file("icons/infantry.ico"))
                 // FIXED forever: changing it makes Windows treat a new version as a different product (no upgrade).
                 upgradeUuid = "6f1d3c2a-8b47-4e5a-9c1e-2a7b0d4f8e61"
+            }
+            // RELEASE-PLATFORMS-1: macOS (beta), unsigned and un-notarized (no Apple certificate yet). No .icns yet, so the
+            // Dock shows Compose's default icon. FIXED: changing bundleID makes macOS treat a new build as another app.
+            macOS {
+                bundleID = "com.superiorsoftllc.infantry"
+                dockName = "Infantry AI"
             }
         }
         buildTypes.release.proguard {
