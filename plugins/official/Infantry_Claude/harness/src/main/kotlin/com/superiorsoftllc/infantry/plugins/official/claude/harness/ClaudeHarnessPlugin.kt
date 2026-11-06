@@ -124,7 +124,7 @@ class ClaudeHarness internal constructor(
         )
     }
 
-    override fun stats(): HarnessStats = HarnessStats { psid -> ClaudeStats.read(File(home(), ".claude/projects"), psid) }
+    override fun stats(): HarnessStats = HarnessStats { psid -> ClaudeStats.read(ClaudeStats.projectsDir(home(), System.getenv("CLAUDE_CONFIG_DIR")), psid) }
 
     override fun usageSource(): HarnessUsageSource = ClaudeUsage(home)
 }
