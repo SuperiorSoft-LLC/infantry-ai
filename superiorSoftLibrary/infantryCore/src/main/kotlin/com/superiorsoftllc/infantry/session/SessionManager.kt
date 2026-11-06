@@ -39,10 +39,17 @@ data class ReconcileReport(
     val unchanged: Int,
     /** BUG-M2-11f: kept processes a previous daemon left behind, tree-killed because pid AND start instant matched. */
     val reaped: Int = 0,
+    /**
+     * RESUME-NOTIFY-1: sessions that were MID-TURN when the previous daemon stopped (a run in flight, no end recorded) and are at
+     * rest now (EXITED, or IDLE after their kept process was reaped): their turn was cut. [RestartResume] prompts them to go on.
+     */
+    val cutTurns: List<String> = emptyList(),
+    /** RESUME-NOTIFY-1: mid-turn sessions whose child outlived the daemon ([orphaned]): still running, so never re-prompted. */
+    val orphanedIds: List<String> = emptyList(),
 ) {
     val total: Int get() = exited + orphaned + unchanged
 
-    override fun toString(): String = "exited=$exited orphaned=$orphaned unchanged=$unchanged reaped=$reaped"
+    override fun toString(): String = "exited=$exited orphaned=$orphaned unchanged=$unchanged reaped=$reaped cutTurns=${cutTurns.size}"
 }
 
 /**
@@ -899,6 +906,8 @@ class SessionManager(
         var orphaned = 0
         var unchanged = 0
         var reapedCount = 0
+        val cutTurns = ArrayList<String>()
+        val orphanedIds = ArrayList<String>()
         val loaded = loadOrNoSessions()
         for (loadedRecord in loaded) {
             // BUG-M2-11f: a kept process is either reaped now or already gone; either way the record no longer has one.
@@ -927,6 +936,7 @@ class SessionManager(
                         isProcessAlive = false,
                     )
                     reapedCount++
+                    if (midRun) cutTurns += persisted.id
                 }
                 midRun && pid != null && pidProbe(pid) -> {
                     sessions[persisted.id] = persisted.copy(
@@ -935,6 +945,7 @@ class SessionManager(
                         isProcessAlive = true,
                     )
                     orphaned++
+                    orphanedIds += persisted.id
                 }
                 midRun -> {
                     sessions[persisted.id] = persisted.copy(
@@ -944,6 +955,7 @@ class SessionManager(
                         isProcessAlive = false,
                     )
                     exited++
+                    cutTurns += persisted.id
                 }
                 else -> {
                     sessions[persisted.id] = persisted.copy(
@@ -959,7 +971,7 @@ class SessionManager(
             if (record.dormant != dormant) sessions[id] = record.copy(dormant = dormant)
         }
         if (loaded.isNotEmpty()) writeAll()
-        return ReconcileReport(exited, orphaned, unchanged, reapedCount)
+        return ReconcileReport(exited, orphaned, unchanged, reapedCount, cutTurns, orphanedIds)
     } }
 
     /**

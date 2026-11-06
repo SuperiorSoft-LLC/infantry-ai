@@ -1725,7 +1725,37 @@ class InfantryDaemon(
             com.superiorsoftllc.infantry.session.SessionFeed.sink = { name, payload -> runCatching { plugins.publishEvent(name, payload) } }
             manager.addSessionEndedListener(com.superiorsoftllc.infantry.session.SessionFeed::forget)
             ticketEvents?.subscribe("core:named-events", eventPublisher::ticket)
-            println("[infantry] reconcile: ${manager.loadAndReconcile()}")
+            val reconcileReport = manager.loadAndReconcile()
+            println("[infantry] reconcile: $reconcileReport")
+            // RESUME-NOTIFY-1: a turn the restart cut is prompted to go on, and its starter (the ticket's notify list, else the watch
+            // recipient or the spawner) and the owner are told. Run once the server is bound (below), so a resumed CLI reaches the daemon.
+            val restartResume = com.superiorsoftllc.infantry.session.RestartResume(
+                get = manager::get,
+                resume = { id, text ->
+                    manager.resume(id, text, com.superiorsoftllc.infantry.protocol.MessageOrigin.System(com.superiorsoftllc.infantry.protocol.SystemKind.RESTART),
+                        wakeReason = com.superiorsoftllc.infantry.session.RestartResume.WAKE_REASON)
+                },
+                notify = { s, line ->
+                    val posted = s.ticketId?.let { tid ->
+                        pluginHost.get().serviceRegistry.find(com.superiorsoftllc.infantry.daemon.api.tickets.TicketReports::class)
+                            ?.let { runCatching { it.postDaemonIssue(tid, line) }.getOrDefault(false) }
+                    } ?: false
+                    if (!posted) {
+                        val to = watchRecipientOf(s)?.takeIf { it != com.superiorsoftllc.infantry.runner.WatchNotices.USER }
+                            ?: s.spawnerSessionId?.takeIf { it != s.id && manager.get(it) != null }
+                        if (to != null) mail.send(com.superiorsoftllc.infantry.mailbox.MailSendRequest(from = "system", to = to, subject = "[AUTOMATIC] daemon restart cut a turn", body = line))
+                    }
+                },
+                raise = { summary, ids ->
+                    attentionSvc.raise(
+                        kind = com.superiorsoftllc.infantry.session.RestartResume.ATTENTION_KIND,
+                        sessionId = ids.singleOrNull(), ticketId = ids.singleOrNull()?.let { manager.get(it)?.ticketId },
+                        outcome = "resumed_after_restart", detail = summary.take(2000),
+                    )
+                },
+                enabled = settings::resumeAfterRestart,
+                prompt = settings::resumeAfterRestartPrompt,
+            )
             // CLI-PTY-5: the kept chat of every session goes back on its replay stream, as history: no process, no turn.
             run {
                 val started = System.nanoTime()
@@ -1959,6 +1989,16 @@ class InfantryDaemon(
             // engine.start binds (after module setup), so the release-to-bind gap stays as small as it can be.
             // runCatching: it is raised with monitor.raise, so a throwing handler would abort the start.
             server.monitor.subscribe(ApplicationStarted) { runCatching { portReservation.close() } }
+            // RESUME-NOTIFY-1: once the port is bound (a resumed CLI's MCP connects back), off the start thread, once.
+            val restartResumeRan = java.util.concurrent.atomic.AtomicBoolean(false)
+            server.monitor.subscribe(io.ktor.server.application.ServerReady) {
+                if (reconcileReport.cutTurns.isNotEmpty() || reconcileReport.orphanedIds.isNotEmpty()) {
+                    if (restartResumeRan.compareAndSet(false, true)) Thread({
+                        runCatching { println("[infantry] restart resume: ${restartResume.run(reconcileReport)}") }
+                            .onFailure { System.err.println("[infantry] restart resume failed: ${it.message}") }
+                    }, "infantry-restart-resume").apply { isDaemon = true }.start()
+                }
+            }
 
             return InfantryDaemon(
                 host = host,
