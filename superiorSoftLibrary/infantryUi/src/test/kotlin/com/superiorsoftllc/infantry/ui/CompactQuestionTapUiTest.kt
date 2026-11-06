@@ -11,8 +11,13 @@ import com.superiorsoftllc.infantry.plugins.official.chatfeed.*
 import com.superiorsoftllc.infantry.plugins.official.attention.*
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.graphics.toAwtImage
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -194,5 +199,35 @@ class CompactQuestionTapUiTest {
         tap("right-tab-ATTENTION")
         tap(QUESTION_HISTORY_DISMISS_TAG_PREFIX + "q-gone")
         waitUntil(timeoutMillis = 10_000) { link.sentOf(Envelope.QUESTION_CANCEL).isNotEmpty() }
+    }
+
+    /** ATTN-TOP-1: [tag] is drawn inside the section tagged [section]. */
+    private fun ComposeUiTest.inSection(tag: String, section: String) =
+        onAllNodes(hasTestTag(tag) and hasAnyAncestor(hasTestTag(section))).fetchSemanticsNodes().isNotEmpty()
+
+    @Test
+    fun `questions waiting for a reply are grouped at the top and an answered one moves down`() = withPhone(1400) { controller, link ->
+        // q-open is the OLDER one: newest-first alone would put the answered q-done above it.
+        val open = questionJson.replace("\"id\":\"q1\"", "\"id\":\"q-open\"")
+        val done = questionJson.replace("\"id\":\"q1\"", "\"id\":\"q-done\"").replace("\"createdAt\":1", "\"createdAt\":5")
+            .replace("\"state\":\"open\"", "\"state\":\"answered\",\"answer\":\"sqlite\",\"resolvedBy\":\"owner\"")
+        link.push(Envelope(Envelope.QUESTIONS, "[$open,$done]"))
+        waitUntil(timeoutMillis = 10_000) { controller.state.value.questions.size == 2 }
+        waitForIdle()
+        tap("right-tab-ATTENTION")
+        onNodeWithText("Needs your reply (1)").assertIsDisplayed()
+        assertTrue(inSection(QUESTION_HISTORY_TAG_PREFIX + "q-open", ATTENTION_NEEDS_REPLY_TAG), "the open question is in the top section")
+        assertTrue(inSection(QUESTION_HISTORY_TAG_PREFIX + "q-done", ATTENTION_QUESTIONS_TAG), "the answered one stays in the history")
+        val top = onNodeWithTag(ATTENTION_NEEDS_REPLY_TAG).fetchSemanticsNode().boundsInRoot.top
+        val below = onNodeWithTag(ATTENTION_QUESTIONS_TAG).fetchSemanticsNode().boundsInRoot.top
+        assertTrue(top < below, "the reply section is above the history ($top vs $below)")
+        val shot = java.io.File("build/reports/attn-top-1/attention-needs-reply.png").apply { parentFile.mkdirs() }
+        javax.imageio.ImageIO.write(onRoot().captureToImage().toAwtImage(), "png", shot)
+
+        link.push(Envelope(Envelope.QUESTION, open.replace("\"state\":\"open\"", "\"state\":\"answered\",\"answer\":\"postgres\",\"resolvedBy\":\"owner\"")))
+        waitUntil(timeoutMillis = 10_000) { controller.state.value.openQuestions.isEmpty() }
+        waitForIdle()
+        onAllNodes(hasTestTag(ATTENTION_NEEDS_REPLY_TAG)).assertCountEquals(0)
+        assertTrue(inSection(QUESTION_HISTORY_TAG_PREFIX + "q-open", ATTENTION_QUESTIONS_TAG), "the answered question moved down to the history")
     }
 }
