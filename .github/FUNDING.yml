@@ -1,7 +1,3 @@
 # Funding links shown by the "Sponsor" button on the repository page.
 # Keys: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/displaying-a-sponsor-button-in-your-repository
-#
-# [PLACEHOLDER] OWNER TODO: replace SPONSORS_ACCOUNT and STRIPE_PAYMENT_LINK before the repo goes public.
-# The same two values live in docs/shared/product.md (sponsor_url, donate_url); change them there too.
-github: [SPONSORS_ACCOUNT]
-custom: ["https://buy.stripe.com/STRIPE_PAYMENT_LINK"]
+github: [SuperiorSoft-LLC]
