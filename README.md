@@ -23,7 +23,9 @@
 > **Beta.** <!-- shared:beta_line -->Infantry AI is in Beta. It works and we use it every day, but not every part is fully tested yet: you are an early tester. Please report anything that breaks on GitHub.<!-- /shared:beta_line -->  
 > [Report a problem](https://github.com/SuperiorSoft-LLC/infantry-ai/issues)
 
-<p align="center"><img src="docs/img/infantry-app-2026-11-06.png" alt="Infantry AI desktop: agent cards, the PM's chat and live plan-usage pacing" width="900"></p>
+<p align="center"><img src="docs/img/infantry-desktop-chat-2026-11-06.png" alt="Infantry AI desktop: PM agent chat with plan-usage limits" width="900"></p>
+
+<p align="center"><img src="docs/img/infantry-android-chat-2026-11-06.jpg" alt="Infantry AI on Android" width="300"></p>
 
 ---
 
@@ -50,8 +52,6 @@ on your machine or on your own server: your code, keys and agent output never pa
 
 <p align="center"><img src="assets/branding/infantry-ai-icon-512.png" alt="Infantry AI app icon" width="120"></p>
 
-![board](docs/img/board.png)
-![session](docs/img/session.png)
 
 <!-- OWNER: capture these from a real build (no mock-ups), list in docs/launch/shot-list.md, files in docs/img/README.md:
      board.png, session.png, question.png, scripts.png, plugins.png, pace.png, android.png, harness-pick.png -->
@@ -105,7 +105,6 @@ a timer or on a named event, and a script can call every tool an agent has. See 
 agent CLI harness, is a plugin with a `module.json`. Write your own in a few minutes. See
 [Plugins](docs/wiki/Plugins.md) and [Harnesses and providers](docs/wiki/Harnesses.md).
 
-![plugins](docs/img/plugins.png)
 
 ## Documentation
 
