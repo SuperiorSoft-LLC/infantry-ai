@@ -71,6 +71,7 @@ import com.superiorsoftllc.infantry.session.isInSession
 import com.superiorsoftllc.infantry.daemon.ComponentBindings
 import com.superiorsoftllc.infantry.daemon.UnknownComponentProviderException
 import com.superiorsoftllc.infantry.mailbox.Mailbox
+import com.superiorsoftllc.infantry.mailbox.MailLimits
 import com.superiorsoftllc.infantry.mailbox.Message
 import com.superiorsoftllc.infantry.mailbox.MessageState
 import com.superiorsoftllc.infantry.mailbox.ThreadSummary
@@ -1163,7 +1164,8 @@ class InfantryDaemon(
             // triggers (TRIGGER-NUDGE): a schedule's catch-up fire on boot mails through it.
             // DAEMON-CORE-2: an unknown core.<component>.provider id refuses the start (no silent fallback); only `local` ships.
             ComponentBindings({ k -> store.settings.get(k)?.value?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content } }, { null }).verifyAll()
-            val mailbox = Mailbox(mailStore)
+            // MAIL-LIMITS-1: the sender rate limit and the thread ceiling are settings (limits.mail.*), read on every send.
+            val mailbox = Mailbox(mailStore, { MailLimits.of(settings::limit) })
             // BUG-S3: mail to an agent swapped onto another harness opens a fresh session there (4.2, lazily).
             val bindFreshSession = { agentId: String ->
                 bindSessionOnSpawn(manager, agents, SpawnOptions(agentId = agentId, projectId = agents.get(agentId)?.projectId), repo)
@@ -3716,7 +3718,9 @@ private suspend fun handleConnection(
                             ),
                         )
                     } else {
-                        when (val result = mail.send(request)) {
+                        // MAIL-LIMITS-1: mail a script hook sends (the daemon's own loopback, with the owner credential) is automation:
+                        // exempt from the sender rate limit, so a burst of hook mail under one identity is never dropped.
+                        when (val result = mail.send(request, automation = isAutomationFrame(envelope, owner))) {
                             is MailResult.Sent -> {
                                 plugins.turnAccepted(envelope, caller)
                                 // Report the CURRENT state, not the QUEUED snapshot: the pump already
@@ -4305,6 +4309,14 @@ internal var testKnowledge: com.superiorsoftllc.infantry.daemon.api.knowledge.Kn
  */
 internal fun wantsDirectAck(envelope: Envelope): Boolean =
     envelope.requestId?.let { it.startsWith("plugin:") || it.startsWith("loopback:") } == true
+
+/**
+ * MAIL-LIMITS-1: a frame the daemon sent itself for a script/hook action (its [com.superiorsoftllc.infantry.daemon.plugins.LoopbackFrames]
+ * request id) on an OWNER connection. Both are needed: the request id alone is client-chosen, the owner credential is not, so an agent
+ * cannot claim to be automation. Such mail is exempt from the sender rate limit.
+ */
+internal fun isAutomationFrame(envelope: Envelope, owner: Boolean): Boolean =
+    owner && envelope.requestId?.startsWith("loopback:") == true
 
 /** AR-4b-ii-b: test seam only. A Roles provider core tests install in place of the Infantry_Roles plugin (no frames; the port only). */
 @Volatile

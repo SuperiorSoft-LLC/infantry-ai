@@ -215,7 +215,8 @@ class MailRouter(
         }.getOrNull()
     }
 
-    fun send(original: MailSendRequest): MailResult {
+    /** MAIL-LIMITS-1: [automation] = sent by a script hook (the daemon decides); exempt from the sender rate limit, see [Mailbox.send]. */
+    fun send(original: MailSendRequest, automation: Boolean = false): MailResult {
         val request = when (val a = addressByRoleAndProject(original)) {
             is RoleAt.Refused -> return MailResult.Refused(a.reason)
             is RoleAt.Resolved -> original.copy(to = a.sessionId)
@@ -223,7 +224,7 @@ class MailRouter(
         }
         if (request.to == MailAddresses.STARTER) reportCheck?.invoke(request.from, request.body)?.let { return MailResult.Refused(it) }
         crossProjectRefusal(request)?.let { return MailResult.Refused(it) }
-        val result = mailbox.send(addressStarter(request))
+        val result = mailbox.send(addressStarter(request), automation)
         if (result is MailResult.Sent) {
             runCatching { onSent?.invoke(result.message) }
             if (request.allowCrossProject) crossAllowed.add(result.message.id)
@@ -334,8 +335,8 @@ class MailRouter(
      * the per-recipient policy a one-to-one send uses). Returns the persisted batch; delivery is
      * reported through the mailbox's state, not the returned snapshot.
      */
-    fun fanOut(request: MailFanOutRequest): FanOutResult {
-        val result = mailbox.fanOut(request)
+    fun fanOut(request: MailFanOutRequest, automation: Boolean = false): FanOutResult {
+        val result = mailbox.fanOut(request, automation)
         if (result is FanOutResult.Sent) {
             // Pump by the ORIGINAL recipient address (session id or agent id), exactly like [send]:
             // the message is keyed in the mailbox by that address, and `deliver` resolves it to a

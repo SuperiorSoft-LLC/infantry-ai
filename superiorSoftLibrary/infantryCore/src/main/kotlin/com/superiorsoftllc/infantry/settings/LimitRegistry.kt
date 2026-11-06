@@ -726,6 +726,24 @@ object LimitRegistry {
         "Recommended 200. How many script run records (time, script, trigger, actions, log, outcome) are kept per project; the oldest are dropped. 0 = keep none.",
         max = 100_000, zeroIsUnlimited = false,
     )
+    /** MAIL-LIMITS-1: the mailbox sender rate limit (was hard-coded in MailLimits). Automation mail (system, trigger:, script hooks) is exempt. */
+    val MAIL_PER_SENDER_PER_WINDOW = LimitDef(
+        "limits.mail.perSenderPerWindow", 12, "messages",
+        "How many messages one sender may send in the last limits.mail.windowMinutes; a send past it is refused (not queued) with this setting named. Automation mail (from system or a trigger, or sent by a script hook) does not count and is never refused by it. 0 = no sender limit.",
+        max = 100_000, zeroMeans = "no sender limit",
+    )
+    /** MAIL-LIMITS-1: the sliding window of [MAIL_PER_SENDER_PER_WINDOW]. */
+    val MAIL_WINDOW_MINUTES = LimitDef(
+        "limits.mail.windowMinutes", 10, "minutes",
+        "The sliding window of limits.mail.perSenderPerWindow: sends older than this many minutes no longer count.",
+        min = 1, max = 1440, zeroIsUnlimited = false,
+    )
+    /** MAIL-LIMITS-1: the per-conversation message ceiling (was hard-coded in MailLimits). */
+    val MAIL_MAX_PER_THREAD = LimitDef(
+        "limits.mail.maxPerThread", 60, "messages",
+        "How many messages one conversation thread may hold; a reply past it is refused and the owner is told to step in (a new message on a full agent pair starts a fresh thread).",
+        min = 1, max = 100_000, zeroIsUnlimited = false,
+    )
     /** MAIL-TRUNC-1: per-body cap in mail.deliveryMode=truncate. */
     val MAIL_INJECT_MAX_CHARS = LimitDef(
         "limits.mail.injectMaxChars", 2000, "chars",
@@ -749,6 +767,7 @@ object LimitRegistry {
     val ALL: List<LimitDef> = listOf(
         SESSION_CONTEXT_CAP_TOKENS,
         MAIL_INJECT_MAX_CHARS, MAIL_INJECT_TOTAL_CHARS,
+        MAIL_PER_SENDER_PER_WINDOW, MAIL_WINDOW_MINUTES, MAIL_MAX_PER_THREAD,
         MCP_BODY_CHARS,
         MCP_DEFAULT_DETAIL,
         TICKET_GET_DEFAULT_DETAIL, TICKET_SUMMARY_DESCRIPTION_CHARS,
