@@ -3595,6 +3595,10 @@ private suspend fun handleConnection(
                             require(sid != null && req.jobId != null) { "ack expects a sessionId and a jobId" }
                             (manager.bgJobListener as? com.superiorsoftllc.infantry.mailbox.BgJobNotifier)?.ack(sid, req.jobId!!)
                         }
+                        "stop" -> {
+                            require(req.jobId != null) { "stop expects a jobId" }
+                            require(manager.bgJobStop(req.jobId!!) != null) { "no running bg job '${req.jobId!!.take(80)}'" }
+                        }
                         "list" -> Unit
                         else -> throw IllegalArgumentException("unknown op '${req.op.take(40)}'")
                     }

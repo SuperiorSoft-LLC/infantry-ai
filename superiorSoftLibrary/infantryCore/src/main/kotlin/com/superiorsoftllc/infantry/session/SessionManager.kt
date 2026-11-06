@@ -784,6 +784,27 @@ class SessionManager(
         return job
     }
 
+    /**
+     * HARNESS-GAP G16: end job [jobId]: every recorded member of its tree, then the wrapper's live tree. Each pid is killed
+     * only while its start instant still matches the one recorded (a recycled pid is left alone). Null = no such job.
+     */
+    fun bgJobStop(jobId: String, table: com.superiorsoftllc.infantry.session.host.ProcessTable = com.superiorsoftllc.infantry.session.host.OsProcessTable): String? {
+        val job = bgJobs(null).firstOrNull { it.id == jobId } ?: return null
+        var killed = 0
+        for (m in job.members) {
+            val start = m.startedAt ?: continue
+            if (table.startInstant(m.pid) != start || m.pid == job.pid) continue
+            if (ProcessGuard.protectedPids.contains(m.pid)) continue
+            runCatching { table.killTree(m.pid, start); killed++ }
+        }
+        // The wrapper started before it registered; a pid whose start is later than that is another process now.
+        val wrapperStart = job.pidStart ?: table.startInstant(job.pid)?.takeIf { it <= job.startedAt }
+        if (wrapperStart != null && table.startInstant(job.pid) == wrapperStart) {
+            runCatching { table.killTree(job.pid, wrapperStart); killed++ }
+        }
+        return "stopped job $jobId ($killed process tree(s) ended)"
+    }
+
     /** Jobs of [sessionId], or of every session when null. */
     fun bgJobs(sessionId: String?): List<BgJob> =
         (if (sessionId != null) listOfNotNull(sessions[sessionId]) else sessions.values.toList()).flatMap { it.bgJobs }
