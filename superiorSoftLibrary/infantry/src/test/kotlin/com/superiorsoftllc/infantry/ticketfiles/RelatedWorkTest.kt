@@ -107,6 +107,10 @@ class RelatedWorkTest {
         assertNull(FilesReadCheck.refusal("which option do you prefer?", false)) // a question is not a report
         assertEquals("a/B.kt, c/D.kt", FilesReadCheck.extract("x\n**Files read:** a/B.kt, c/D.kt"))
         assertNull(FilesReadCheck.extract("Files read:"))
+        // FIRST-RUN-1: a one-line report (Windows infantry.cmd keeps only an argument's first line) carries the label mid-line.
+        assertNull(FilesReadCheck.refusal("Done, no git repo so no commit sha; wrote hello.txt. Files read: none", true))
+        assertEquals("a/B.kt", FilesReadCheck.extract("Done (commit abc123). **Files read:** a/B.kt"))
+        assertNull(FilesReadCheck.extract("commit abc123; profiles read: x")) // a word ending in 'files' is not the label
     }
 
     @Test
