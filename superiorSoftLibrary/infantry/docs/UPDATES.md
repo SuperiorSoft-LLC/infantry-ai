@@ -32,11 +32,26 @@ workflow sets `ORG_GRADLE_PROJECT_infantryUpdateRepo` to the repository it publi
 is the update engine's per-module `UpdateDeclaration` (`{"source": {...}}`, docs/wiki/Updates.md), where a module's OWN new versions
 come from; reusing it broke every manifest parse of the Updater (QA-FIX-I).
 
-### The user setting (Configuration > About > Updater, module config `infantry.updater`)
+NIGHTLY-1: the block also declares the update channels (`ReleaseChannel`), baked as `channels=stable,nightly` plus
+`channels.<id>.<key>=<value>`:
+
+```json
+"defaultChannel": "stable",
+"channels": { "stable": { "label": "Stable", "release": "latest" },
+              "nightly": { "label": "Nightly", "release": "prerelease", "preRelease": "nightly" } }
+```
+
+`release: latest` reads `GET /releases/latest` (never a prerelease); `release: prerelease` reads `GET /releases` and takes
+the highest version that is a stable release or a prerelease whose SemVer pre-release starts with `preRelease`. A
+channel with a bad id or mode is skipped with a warning; Stable is always there. How nightlies are built and versioned:
+docs/RELEASING.md, "Nightly builds".
+
+### The user settings (Configuration > About > Updater, module config `infantry.updater`)
 
 | key | values | meaning |
 |---|---|---|
 | `updater.autoCheck` | on (default) / off | on = check at start, every `checkIntervalHours`, and when the desktop window regains focus that long after its last check; off = only "Check for updates". A check never installs |
+| `updater.releaseChannel` | `stable` (default) / `nightly` (the manifest's channel ids) | which releases are offered. Switching to a channel the running build is not on (Nightly -> Stable) offers that channel's newest even when it is OLDER, with a note before the release notes; on the phone the note says Android needs an uninstall first. The headless server's engine never downgrades (it waits for a newer stable). An unknown value is a warning and means the manifest default |
 
 ### Developer overrides (not in the UI)
 

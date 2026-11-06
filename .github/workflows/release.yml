@@ -4,16 +4,47 @@
 # RELEASE-PLATFORMS-1: macOS is a BETA and optional: the macos desktop job and the macos-14 headless leg are
 # continue-on-error, and the release publishes whatever macOS assets succeeded. Windows, Android, web and the
 # linux-x64 / windows-x64 server archives stay required (the release job checks each file).
+# NIGHTLY-1: the same jobs build the nightly. .github/workflows/nightly.yml calls this workflow (workflow_call) with a planned
+# version (scripts/nightly-version.sh); it then builds that dev-branch commit and publishes a GitHub PRERELEASE (never
+# "latest") with SHA256SUMS and nightly.json. A stable tag must pass the safety guard first (scripts/stable-guard.sh: the
+# commit was shipped as a nightly). Nightly tags never start this workflow on push (they are created by the release itself
+# with the workflow token, and excluded below anyway).
 name: release
 
 on:
   push:
-    tags: ['v*']
+    tags: ['v*', '!v*-nightly.*']
+  workflow_call:
+    inputs:
+      ref:
+        description: The commit to build (a full sha).
+        type: string
+        required: true
+      version:
+        description: The app version, a SemVer with a pre-release (1.0.8-nightly.20261107.12).
+        type: string
+        required: true
+      package_version:
+        description: The numeric MSI/DMG version, unique per build (1.0.40012).
+        type: string
+        required: true
+      tag:
+        description: The release tag to create on ref (v<version>).
+        type: string
+        required: true
+      channel:
+        description: The update channel id the release belongs to (the pre-release identifier, e.g. nightly).
+        type: string
+        required: true
+      branch:
+        description: The branch ref is the head of (the packaging guard accepts only the dev branch or a v* tag).
+        type: string
+        required: true
 
 permissions: {}
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ inputs.tag || github.ref }}
   cancel-in-progress: false
 
 env:
@@ -30,18 +61,61 @@ jobs:
       contents: read
     outputs:
       version: ${{ steps.v.outputs.version }}
+      package_version: ${{ steps.v.outputs.package_version }}
+      tag: ${{ steps.v.outputs.tag }}
+      ref: ${{ steps.v.outputs.ref }}
+      channel: ${{ steps.v.outputs.channel }}
+      branch: ${{ steps.v.outputs.branch }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0   # NIGHTLY-1: the stable guard reads the history and the nightly tags
       - id: v
-        name: Tag must equal infantryVersion in gradle.properties
+        name: Version (stable - the tag must equal infantryVersion; nightly - the caller's planned version)
         shell: bash
+        env:
+          IN_VERSION: ${{ inputs.version }}
+          IN_PACKAGE: ${{ inputs.package_version }}
+          IN_TAG: ${{ inputs.tag }}
+          IN_REF: ${{ inputs.ref }}
+          IN_CHANNEL: ${{ inputs.channel }}
+          IN_BRANCH: ${{ inputs.branch }}
         run: |
           set -euo pipefail
+          if [ -n "${IN_VERSION:-}" ]; then
+            # NIGHTLY-1: called by nightly.yml (scripts/nightly-version.sh planned these).
+            [[ "$IN_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-[0-9A-Za-z]+(\.[0-9A-Za-z]+)*$ ]] || { echo "version '$IN_VERSION' has no pre-release"; exit 1; }
+            [[ "$IN_PACKAGE" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "package_version '$IN_PACKAGE' is not MAJOR.MINOR.BUILD"; exit 1; }
+            [ "$IN_TAG" = "v$IN_VERSION" ] || { echo "tag '$IN_TAG' is not v$IN_VERSION"; exit 1; }
+            [[ "$IN_REF" =~ ^[0-9a-f]{40}$ ]] || { echo "ref '$IN_REF' is not a full commit sha"; exit 1; }
+            [[ "$IN_CHANNEL" =~ ^[a-z][a-z0-9-]*$ && "$IN_CHANNEL" != stable ]] || { echo "channel '$IN_CHANNEL' is not a prerelease channel id"; exit 1; }
+            [ -n "$IN_BRANCH" ] || { echo "no branch"; exit 1; }
+            { echo "version=$IN_VERSION"; echo "package_version=$IN_PACKAGE"; echo "tag=$IN_TAG"; echo "ref=$IN_REF"
+              echo "channel=$IN_CHANNEL"; echo "branch=$IN_BRANCH"; } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           declared="$(sed -n 's/^infantryVersion=\(.*\)$/\1/p' gradle.properties | tr -d '[:space:]')"
           tag="${GITHUB_REF_NAME#v}"
           [[ "$declared" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "gradle.properties infantryVersion='$declared' is not MAJOR.MINOR.BUILD"; exit 1; }
           [[ "$declared" == "$tag" ]] || { echo "tag $GITHUB_REF_NAME does not match infantryVersion=$declared"; exit 1; }
-          echo "version=$declared" >> "$GITHUB_OUTPUT"
+          # NIGHTLY-1: a stable BUILD stays below the nightly MSI range (the script's own check, with a stand-in date and run).
+          scripts/nightly-version.sh compute "$declared" none 20000101 1 >/dev/null
+          { echo "version=$declared"; echo "package_version=$declared"; echo "tag=$GITHUB_REF_NAME"; echo "ref="
+            echo "channel=stable"; echo "branch="; } >> "$GITHUB_OUTPUT"
+      # NIGHTLY-1 safety guard: a stable release ships only a commit that was shipped as a nightly first (or its release bump).
+      # Override: an ANNOTATED tag whose message has a line `force-stable: <reason>` (docs/RELEASING.md).
+      - name: Stable safety guard (shipped as a nightly first)
+        if: ${{ steps.v.outputs.channel == 'stable' }}
+        shell: bash
+        env:
+          TAG: ${{ steps.v.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git fetch -q --force origin "refs/tags/$TAG:refs/tags/$TAG"   # the annotated tag object, with its message
+          forced="$(git for-each-ref "refs/tags/$TAG" --format='%(contents)' | grep -m1 'force-stable:' || true)"
+          if [ -n "$forced" ]; then echo "::warning::stable safety guard OVERRIDDEN by the tag message: $forced"; exit 0; fi
+          scripts/stable-guard.sh "$GITHUB_SHA"
 
   windows:
     needs: version
@@ -50,6 +124,13 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.ref }}
+      # NIGHTLY-1: a nightly builds a dev-branch commit that has no tag yet; name the branch so the packaging guard accepts it.
+      - name: Name the dev branch (nightly)
+        if: ${{ needs.version.outputs.channel != 'stable' }}
+        shell: bash
+        run: git checkout -q -B '${{ needs.version.outputs.branch }}'
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -81,15 +162,16 @@ jobs:
         run: |
           set -euo pipefail
           V='${{ needs.version.outputs.version }}'
-          ./gradlew --no-daemon :superiorSoftLibrary:infantryUi:createDistributable -PinfantryVersion="$V" $IHQ_SIGN
+          P='${{ needs.version.outputs.package_version }}'   # NIGHTLY-1: the MSI's numeric version (= V on a stable release)
+          ./gradlew --no-daemon :superiorSoftLibrary:infantryUi:createDistributable -PinfantryVersion="$V" -PinfantryPackageVersion="$P" $IHQ_SIGN
           # UPDATER-1: outside the checkout, or the packaging guard (clean tree) refuses releaseAssets and the MSI is skipped.
           out="$RUNNER_TEMP/out"; mkdir -p "$out"
           app="$(ls -d superiorSoftLibrary/infantryUi/build/compose/binaries/main/app/InfantryAI)"
           # UPDATER-1 gate: no new package of ours split over two jars of the app (docs/RELEASING.md).
           scripts/split-packages.sh "$app/app"
           (cd "$(dirname "$app")" && 7z a -tzip "$out/InfantryAI-$V-windows.zip" InfantryAI >/dev/null)
-          if ./gradlew --no-daemon :superiorSoftLibrary:infantryUi:releaseAssets -PinfantryVersion="$V" $IHQ_SIGN; then
-            cp "superiorSoftLibrary/infantryUi/build/release/$V/InfantryAI-$V.msi" "$out/"
+          if ./gradlew --no-daemon :superiorSoftLibrary:infantryUi:releaseAssets -PinfantryVersion="$V" -PinfantryPackageVersion="$P" $IHQ_SIGN; then
+            cp "superiorSoftLibrary/infantryUi/build/release/$P/InfantryAI-$P.msi" "$out/InfantryAI-$V.msi"
           else
             echo "::warning::MSI packaging failed unsigned on this runner; publishing the app-image zip only (the in-app updater needs the MSI)"
           fi
@@ -111,6 +193,13 @@ jobs:
       INFANTRY_ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.INFANTRY_ANDROID_RELEASE_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.ref }}
+      # NIGHTLY-1: a nightly builds a dev-branch commit that has no tag yet; name the branch so the packaging guard accepts it.
+      - name: Name the dev branch (nightly)
+        if: ${{ needs.version.outputs.channel != 'stable' }}
+        shell: bash
+        run: git checkout -q -B '${{ needs.version.outputs.branch }}'
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -183,6 +272,13 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.ref }}
+      # NIGHTLY-1: a nightly builds a dev-branch commit that has no tag yet; name the branch so the packaging guard accepts it.
+      - name: Name the dev branch (nightly)
+        if: ${{ needs.version.outputs.channel != 'stable' }}
+        shell: bash
+        run: git checkout -q -B '${{ needs.version.outputs.branch }}'
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -241,6 +337,13 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.ref }}
+      # NIGHTLY-1: a nightly builds a dev-branch commit that has no tag yet; name the branch so the packaging guard accepts it.
+      - name: Name the dev branch (nightly)
+        if: ${{ needs.version.outputs.channel != 'stable' }}
+        shell: bash
+        run: git checkout -q -B '${{ needs.version.outputs.branch }}'
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -274,7 +377,7 @@ jobs:
           V='${{ needs.version.outputs.version }}'
           [ "$(uname -m)" = "arm64" ] || { echo "expected an arm64 runner, got $(uname -m); the asset name would lie" >&2; exit 1; }
           ./gradlew --no-daemon :superiorSoftLibrary:infantryUi:createDistributable :superiorSoftLibrary:infantryUi:packageDmg \
-            -PinfantryVersion="$V" $IHQ_SIGN
+            -PinfantryVersion="$V" -PinfantryPackageVersion='${{ needs.version.outputs.package_version }}' $IHQ_SIGN
           # Outside the checkout, like the windows job: the packaging guard wants a clean tree.
           out="$RUNNER_TEMP/out"; mkdir -p "$out"
           app="$(ls -d superiorSoftLibrary/infantryUi/build/compose/binaries/main/app/*.app | head -n1)"
@@ -298,6 +401,13 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.ref }}
+      # NIGHTLY-1: a nightly builds a dev-branch commit that has no tag yet; name the branch so the packaging guard accepts it.
+      - name: Name the dev branch (nightly)
+        if: ${{ needs.version.outputs.channel != 'stable' }}
+        shell: bash
+        run: git checkout -q -B '${{ needs.version.outputs.branch }}'
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -357,11 +467,15 @@ jobs:
         with:
           path: dl
           merge-multiple: true
-      - name: SHA256SUMS and latest.json
+      - name: SHA256SUMS and the channel index (latest.json, or nightly.json for a nightly)
         shell: bash
+        env:
+          TAG: ${{ needs.version.outputs.tag }}
+          CHANNEL: ${{ needs.version.outputs.channel }}
         run: |
           set -euo pipefail
           V='${{ needs.version.outputs.version }}'
+          index=latest.json; [ "$CHANNEL" = stable ] || index="$CHANNEL.json"
           cd dl
           ls -l
           sha256sum InfantryAI-* > SHA256SUMS
@@ -383,14 +497,14 @@ jobs:
             fi
             grep -qF "$f" SHA256SUMS || { echo "SHA256SUMS has no line for $f" >&2; exit 1; }
           done
-          base="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}"
+          base="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}"
           assets="$(for f in InfantryAI-*; do
             jq -n --arg n "$f" --arg s "$(sha256sum "$f" | cut -d' ' -f1)" --argjson z "$(stat -c %s "$f")" --arg u "$base/$f" \
               '{name:$n, sha256:$s, size:$z, url:$u}'
           done | jq -s .)"
-          jq -n --arg v "$V" --arg t "$GITHUB_REF_NAME" --arg d "$(date -u +%FT%TZ)" --argjson a "$assets" \
-            '{version:$v, tag:$t, published:$d, assets:$a}' > latest.json
-          cat latest.json
+          jq -n --arg v "$V" --arg t "$TAG" --arg d "$(date -u +%FT%TZ)" --argjson a "$assets" \
+            '{version:$v, tag:$t, published:$d, assets:$a}' > "$index"
+          cat "$index"
       # UPDATER-1: an ed25519 signature of SHA256SUMS (SHA256SUMS.sig, base64 of the 64 raw bytes), so a client that pins
       # the public key trusts the hashes and not only the host. The private key lives ONLY in the Actions secret
       # INFANTRY_RELEASE_SIGNING_KEY (PEM, or base64 of the PEM); it is written to the runner's temp dir, used, and deleted.
@@ -425,21 +539,32 @@ jobs:
           echo "SHA256SUMS signed; public key (base64): $derived"
       - name: Create or update the GitHub Release
         shell: bash
+        env:
+          TAG: ${{ needs.version.outputs.tag }}
+          CHANNEL: ${{ needs.version.outputs.channel }}
+          SHA: ${{ needs.version.outputs.ref }}
         run: |
           set -euo pipefail
           cd dl
+          index=latest.json; [ "$CHANNEL" = stable ] || index="$CHANNEL.json"
           extra=(); [ -f SHA256SUMS.sig ] && extra+=(SHA256SUMS.sig)
-          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" InfantryAI-* SHA256SUMS "${extra[@]}" latest.json --clobber --repo "$GITHUB_REPOSITORY"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" InfantryAI-* SHA256SUMS "${extra[@]}" "$index" --clobber --repo "$GITHUB_REPOSITORY"
+          elif [ "$CHANNEL" = stable ]; then
+            gh release create "$TAG" InfantryAI-* SHA256SUMS "${extra[@]}" "$index" --repo "$GITHUB_REPOSITORY" \
+              --title "Infantry AI ${TAG#v}" --generate-notes
           else
-            gh release create "$GITHUB_REF_NAME" InfantryAI-* SHA256SUMS "${extra[@]}" latest.json --repo "$GITHUB_REPOSITORY" \
-              --title "Infantry AI ${GITHUB_REF_NAME#v}" --generate-notes
+            # NIGHTLY-1: a PRERELEASE, never "latest" (Stable reads releases/latest). Creating it creates the tag on the built
+            # commit; that tag is what the stable safety guard looks for.
+            gh release create "$TAG" InfantryAI-* SHA256SUMS "${extra[@]}" "$index" --repo "$GITHUB_REPOSITORY" \
+              --target "$SHA" --prerelease --latest=false --title "Infantry AI ${TAG#v} ($CHANNEL)" --generate-notes
           fi
 
   # DOCKER-1: builds and pushes the headless daemon image. DISABLED until the owner adds the repo secrets
   # DOCKERHUB_USERNAME and DOCKERHUB_TOKEN and sets the repo variable DOCKER_PUBLISH=true. Nothing is pushed before then.
   docker:
-    if: ${{ vars.DOCKER_PUBLISH == 'true' }}
+    # NIGHTLY-1: stable releases only (the image is tagged :latest).
+    if: ${{ vars.DOCKER_PUBLISH == 'true' && needs.version.outputs.channel == 'stable' }}
     needs: version
     runs-on: ubuntu-24.04
     permissions:
@@ -448,6 +573,13 @@ jobs:
       IMAGE: ${{ vars.DOCKER_IMAGE || 'infantryai/infantry-ai' }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.ref }}
+      # NIGHTLY-1: a nightly builds a dev-branch commit that has no tag yet; name the branch so the packaging guard accepts it.
+      - name: Name the dev branch (nightly)
+        if: ${{ needs.version.outputs.channel != 'stable' }}
+        shell: bash
+        run: git checkout -q -B '${{ needs.version.outputs.branch }}'
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

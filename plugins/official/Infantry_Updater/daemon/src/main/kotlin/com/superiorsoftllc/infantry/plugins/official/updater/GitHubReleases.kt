@@ -3,6 +3,7 @@
 package com.superiorsoftllc.infantry.plugins.official.updater
 
 import kotlinx.serialization.SerialName
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.io.IOException
@@ -87,6 +88,22 @@ class GitHubReleases(
             is Fetched.Ok -> runCatching { Fetched.Ok(json.decodeFromString(GitHubRelease.serializer(), got.value.body())) }
                 .getOrElse { Fetched.Failed(UpdateFailure.BadResponse("the release JSON could not be read")) }
         }
+    }
+
+    /**
+     * NIGHTLY-1: the newest release of a prerelease [channel]: `GET {api}/repos/{repo}/releases?per_page=N` (GitHub lists the
+     * newest first), keeping the published ones that are stable or the channel's own pre-release, and taking the highest
+     * version. None at all = [UpdateFailure.NotFound].
+     */
+    fun newest(config: UpdateConfig, channel: ReleaseChannel, perPage: Int = RELEASES_PAGE): Fetched<GitHubRelease> {
+        val uri = URI.create("${config.apiBase}/repos/${config.repo}/releases?per_page=$perPage")
+        val notFound = UpdateFailure.NotFound(config.repo)
+        val list = when (val got = send(uri, config, "application/vnd.github+json", HttpResponse.BodyHandlers.ofString(), requestTimeout, notFound)) {
+            is Fetched.Failed -> return got
+            is Fetched.Ok -> runCatching { json.decodeFromString(ListSerializer(GitHubRelease.serializer()), got.value.body()) }
+                .getOrElse { return Fetched.Failed(UpdateFailure.BadResponse("the release list JSON could not be read")) }
+        }
+        return pickNewest(list, channel)?.let { Fetched.Ok(it) } ?: Fetched.Failed(notFound)
     }
 
     /** Open [asset]'s bytes: its API url as `application/octet-stream` (private repos), else its browser url. */
@@ -183,5 +200,19 @@ class GitHubReleases(
 
     companion object {
         const val MAX_REDIRECTS = 5
+
+        /**
+         * NIGHTLY-1: how many releases one prerelease-channel check reads (one API call; GitHub allows up to 100). Nightlies
+         * are published at most once a day, so the newest stable and the newest nightly are within the first page.
+         */
+        const val RELEASES_PAGE = 30
+
+        /** NIGHTLY-1: the highest-version release of [list] that [channel] offers (published, a version tag, stable or its own pre-release). */
+        fun pickNewest(list: List<GitHubRelease>, channel: ReleaseChannel): GitHubRelease? = list
+            .filter { !it.draft }
+            .mapNotNull { r -> SemVer.parse(r.tagName)?.let { v -> r to v } }
+            // A stable tag published as a prerelease, or a pre-release tag published as a release, is neither: skip it.
+            .filter { (r, v) -> channel.owns(v) && r.prerelease == v.preRelease.isNotEmpty() }
+            .maxByOrNull { it.second }?.first
     }
 }

@@ -25,6 +25,8 @@ class LocalDirSource(
     private val dir: File,
     private val currentVersion: SemVer,
     private val kind: AssetKind = AssetKind.WindowsInstaller,
+    /** NIGHTLY-1: only the versions this channel offers count (Stable skips a nightly file in the folder). */
+    private val channel: ReleaseChannel = ReleaseChannel.STABLE,
 ) : UpdateSource {
 
     private data class Candidate(val version: SemVer, val msi: File)
@@ -33,7 +35,7 @@ class LocalDirSource(
         if (!dir.isDirectory) return UpdateCheck.Failed(UpdateFailure.BadResponse("the releases folder $dir does not exist"))
         val best = (listOf(dir) + (dir.listFiles { f -> f.isDirectory }?.toList() ?: emptyList()))
             .flatMap { d -> d.listFiles { f -> f.isFile }?.toList() ?: emptyList() }
-            .mapNotNull { f -> kind.versionOf(f.name)?.let { Candidate(it, f) } }
+            .mapNotNull { f -> kind.versionOf(f.name)?.takeIf(channel::owns)?.let { Candidate(it, f) } }
             .maxByOrNull { it.version }
             ?: return UpdateCheck.Failed(kind.missing("in $dir"))
         if (best.version <= currentVersion) return UpdateCheck.UpToDate(currentVersion, best.version)
@@ -77,5 +79,5 @@ class LocalDirSource(
 /** UPDATE-4: picks the source for a resolved config: a local releases folder ([LocalDirSource]), else GitHub Releases ([Updater]). */
 object UpdateSources {
     fun forConfig(config: UpdateConfig, kind: AssetKind = AssetKind.WindowsInstaller): UpdateSource =
-        config.localDir?.let { LocalDirSource(it, config.currentVersion, kind) } ?: Updater(config, kind = kind)
+        config.localDir?.let { LocalDirSource(it, config.currentVersion, kind, config.channel) } ?: Updater(config, kind = kind)
 }

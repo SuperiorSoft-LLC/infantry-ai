@@ -65,7 +65,7 @@ class ClientUpdates(
         }
         return ClientUpdateOffer(
             "available", current, version = update.latest.toString(), name = apk.name, size = apk.size,
-            sha256 = sha.lowercase(), url = url, notes = update.release.body?.take(NOTES_CHARS),
+            sha256 = sha.lowercase(), url = url, notes = listOfNotNull(update.channelNote, update.release.body).joinToString("\n\n").takeIf { it.isNotEmpty() }?.take(NOTES_CHARS),
         )
     }
 

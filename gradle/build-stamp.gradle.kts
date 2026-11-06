@@ -23,7 +23,8 @@ fun formatBuildStamp(version: String, at: java.time.Instant, sha: String, dirty:
     "$version+" + java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd.HHmm").withZone(java.time.ZoneOffset.UTC).format(at) +
         ".$sha" + if (dirty) ".dirty" else ""
 
-val buildStampPattern = Regex("""^\d+\.\d+\.\d+\+\d{8}\.\d{4}\.([0-9a-f]{4,40}|unknown)(\.dirty)?$""")
+// NIGHTLY-1: the version may carry a SemVer pre-release (1.0.8-nightly.20261107.12+20261107.0600.e85b223).
+val buildStampPattern = Regex("""^\d+\.\d+\.\d+(-[0-9A-Za-z]+(\.[0-9A-Za-z]+)*)?\+\d{8}\.\d{4}\.([0-9a-f]{4,40}|unknown)(\.dirty)?$""")
 
 // Same task names the packaging guard (gradle/packaging-guard.gradle.kts) stamps; it reads this Regex from here.
 val packagingTask = Regex("""createDistributable|createReleaseDistributable|package(Release)?(Msi|Exe|Dmg|Deb)|releaseAssets|assemble(Debug|Release)?|bundle(Debug|Release)""")

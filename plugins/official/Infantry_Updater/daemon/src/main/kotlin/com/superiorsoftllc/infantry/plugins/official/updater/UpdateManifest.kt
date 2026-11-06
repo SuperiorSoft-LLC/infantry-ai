@@ -21,6 +21,12 @@ object UpdateManifest {
     const val KEY_CHANNEL = "channel"
     const val KEY_INTERVAL = "checkIntervalHours"
 
+    /** NIGHTLY-1: `channels=<id>,<id>` and `channels.<id>.{label,release,preRelease}` ([ReleaseChannel.fromManifest]). */
+    const val KEY_CHANNELS = "channels"
+
+    /** NIGHTLY-1: the channel an install follows until the user picks another (`updater.releaseChannel`). */
+    const val KEY_DEFAULT_CHANNEL = "defaultChannel"
+
     private val values: Properties by lazy {
         load(runCatching { UpdateManifest::class.java.classLoader?.getResourceAsStream(RESOURCE)?.reader()?.use { it.readText() } }.getOrNull())
     }

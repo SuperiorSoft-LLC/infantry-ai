@@ -1,0 +1,77 @@
+# NIGHTLY-1: the nightly channel. Once a night (and by hand), when the dev branch has a commit no nightly has shipped yet,
+# build it with the release jobs (.github/workflows/release.yml through workflow_call, never a copy) and publish a GitHub
+# PRERELEASE v<next>-nightly.<yyyymmdd>.<run> (never "latest") with the same assets, SHA256SUMS and nightly.json.
+# Installs on the Nightly update channel (Configuration > About > Update channel) pick it up; Stable never sees it.
+# The version arithmetic, the unique MSI version and the "new commit?" check are scripts/nightly-version.sh.
+# A schedule runs only from the default branch's copy of this file (docs/RELEASING.md, "Nightly builds").
+name: nightly
+
+on:
+  schedule:
+    - cron: '0 6 * * *'   # 06:00 UTC
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Build even when the dev branch has no commit since the last nightly
+        type: boolean
+        default: false
+      branch:
+        description: The dev branch to build
+        type: string
+        default: feature-agenthq-mvp
+
+permissions: {}
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      build: ${{ steps.p.outputs.build }}
+      sha: ${{ steps.p.outputs.sha }}
+      version: ${{ steps.p.outputs.version }}
+      package_version: ${{ steps.p.outputs.package_version }}
+      tag: ${{ steps.p.outputs.tag }}
+      branch: ${{ steps.b.outputs.branch }}
+    steps:
+      - id: b
+        name: The dev branch
+        shell: bash
+        env:
+          IN_BRANCH: ${{ inputs.branch }}
+        run: echo "branch=${IN_BRANCH:-feature-agenthq-mvp}" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.b.outputs.branch }}
+          fetch-depth: 0   # the history and every tag: the newest stable, and whether HEAD already has a nightly
+      - id: p
+        name: Plan (new commit since the last nightly? which version?)
+        shell: bash
+        env:
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+          scripts/nightly-version.sh plan HEAD "$GITHUB_RUN_NUMBER" "${FORCE:-false}" | tee -a "$GITHUB_OUTPUT"
+          if grep -q '^build=false' "$GITHUB_OUTPUT"; then
+            echo "::notice::$(sed -n 's/^reason=//p' "$GITHUB_OUTPUT" | tail -n1); no nightly tonight"
+          fi
+
+  build:
+    needs: plan
+    if: ${{ needs.plan.outputs.build == 'true' }}
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release.yml
+    with:
+      ref: ${{ needs.plan.outputs.sha }}
+      version: ${{ needs.plan.outputs.version }}
+      package_version: ${{ needs.plan.outputs.package_version }}
+      tag: ${{ needs.plan.outputs.tag }}
+      channel: nightly
+      branch: ${{ needs.plan.outputs.branch }}
+    secrets: inherit
