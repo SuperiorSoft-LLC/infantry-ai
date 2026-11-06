@@ -386,6 +386,12 @@ jobs:
           app="$(find superiorSoftLibrary/infantryUi/build/compose/binaries -type d -path '*/app/*.app' -prune | head -n1)"
           [ -n "$app" ] && [ -d "$app" ] || { echo "::error::createDistributable left no .app under superiorSoftLibrary/infantryUi/build/compose/binaries/**/app/" >&2; exit 1; }
           echo "app bundle: $app"
+          # MACOS-DMG-3: macOS allows only Contents/ at the bundle root (else codesign: "unsealed contents present in the bundle
+          # root"). Show the root as a notice, and fail early with the stray names, so a regression is plain in the annotations.
+          root="$(ls -A "$app" | paste -sd' ' -)"
+          echo "::notice title=bundle root::$(basename "$app")/: $root"
+          stray="$(ls -A "$app" | grep -vx 'Contents' | paste -sd' ' - || true)"
+          [ -z "$stray" ] || { echo "::error title=stray files in the bundle root::$(basename "$app")/ holds $stray next to Contents/ (move them under Contents/)"; exit 1; }
           # UPDATER-1 gate: no new package of ours split over two jars of the app (docs/RELEASING.md).
           scripts/split-packages.sh "$app/Contents/app"
           # Extended attributes ("resource fork, Finder information, or similar detritus not allowed") break codesign.
