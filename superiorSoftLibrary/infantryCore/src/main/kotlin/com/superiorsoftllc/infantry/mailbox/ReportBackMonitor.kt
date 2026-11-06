@@ -12,6 +12,7 @@ import com.superiorsoftllc.infantry.session.SessionManager
 import com.superiorsoftllc.infantry.session.SessionRecord
 import com.superiorsoftllc.infantry.session.SessionReport
 import com.superiorsoftllc.infantry.session.TraitSnapshot
+import com.superiorsoftllc.infantry.session.host.SessionHost
 import com.superiorsoftllc.infantry.session.isBusy
 
 /**
@@ -44,8 +45,9 @@ class ReportBackMonitor(
     fun onSessionEvent(event: SessionEvent) {
         if (event !is SessionEvent.Exit) return
         if (event.killOutcome != null) return // an operator kill is never checked (D9)
-        if (event.code != null && event.code != 0) {
-            runCatching { raiseFailure(event) }
+        val item = failureItem(event, sessions.get(event.sessionId)?.lastError)
+        if (item != null) {
+            runCatching { raiseFailure(event, item) }
                 .onFailure { System.err.println("[infantry] session-failed attention failed for ${event.sessionId}: ${it.message}") }
         }
         runCatching { check(event) }
@@ -53,14 +55,14 @@ class ReportBackMonitor(
     }
 
     /** A failed run is a thing a human should see, whether or not the session owed a report. */
-    private fun raiseFailure(event: SessionEvent.Exit) {
+    private fun raiseFailure(event: SessionEvent.Exit, item: Pair<String, String>) {
         val session = sessions.get(event.sessionId) ?: return
         attention.raise(
             kind = AttentionKinds.SESSION_FAILED,
             ticketId = session.ticketId,
             sessionId = session.id,
-            outcome = "exit_${event.code}",
-            detail = "Session ${session.id.take(8)} ended with exit code ${event.code}.",
+            outcome = item.first,
+            detail = "Session ${session.id.take(8)} " + item.second,
         )
     }
 
@@ -166,5 +168,16 @@ class ReportBackMonitor(
         /** The non-session handle the re-prompt is sent from, like the CLI's `user`. */
         const val SYSTEM = "system"
         const val REPROMPT_SUBJECT = "REPORT BACK missing"
+
+        /**
+         * The `session_failed` item (outcome to detail after "Session <id8> ") an exit raises, null for none: a non-zero exit, or
+         * FIRST-RUN-F1 a harness process that never launched (no exit code; the reason, e.g. "Claude Code is not signed in", rides along).
+         */
+        fun failureItem(event: SessionEvent.Exit, lastError: String?): Pair<String, String>? = when {
+            event.killOutcome != null -> null
+            event.code != null -> if (event.code == 0) null else "exit_${event.code}" to "ended with exit code ${event.code}."
+            !event.processExited && lastError?.contains(SessionHost.DID_NOT_START) == true -> "start_failed" to "could not start: " + lastError.substringAfter(SessionHost.DID_NOT_START + ": ")
+            else -> null
+        }
     }
 }

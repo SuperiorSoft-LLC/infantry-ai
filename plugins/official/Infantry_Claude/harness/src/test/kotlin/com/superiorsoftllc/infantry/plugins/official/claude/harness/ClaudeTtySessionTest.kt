@@ -478,6 +478,45 @@ class ClaudeTtySessionTest {
         assertTrue("did not come up" in quiet.out.ends.single().third!!)
     }
 
+    @Test fun `the first-run setup screen fails the waiting turn at once with the sign-in message, nothing pasted`() {
+        // FIRST-RUN-F1: before the fix the brief was pasted into this screen after READY_FALLBACK_MS and the turn waited forever.
+        val s = start()
+        s.c.onStdout("Welcome to Claude Code  Let's get started.  Choose the text style that looks best with your terminal\n ❯ 1. Dark mode")
+        s.c.sendTurn(request("the brief"))
+        now += ClaudeTtySession.READY_FALLBACK_MS + 1
+        s.c.tick()
+        val end = s.out.ends.single()
+        assertEquals(SessionTurnEnd.FAILED, end.first)
+        assertTrue(end.third!!.startsWith(ClaudeSignIn.NOT_SIGNED_IN), end.third)
+        assertTrue("Dark mode" in end.third!!, "the screen tail rides on the error: ${end.third}")
+        assertTrue(s.out.written.isEmpty(), "nothing is typed into the setup screen")
+    }
+
+    @Test fun `the login menu is the setup screen too, but only before the cli came up`() {
+        val s = start()
+        s.c.onStdout("Select login method:\n ❯ 1. Claude account with subscription")
+        s.c.sendTurn(request("x"))
+        s.c.tick()
+        assertTrue(s.out.ends.single().third!!.startsWith(ClaudeSignIn.NOT_SIGNED_IN))
+
+        val live = start()
+        up(live)
+        live.c.onStdout("Select login method: (quoted in a conversation)")
+        live.c.sendTurn(request("y"))
+        live.c.tick()
+        assertTrue(live.out.ends.isEmpty(), "a CLI that ran SessionStart is up")
+        assertEquals(listOf("\u001b[200~y\u001b[201~"), live.out.written)
+    }
+
+    @Test fun `a launch the sign-in check refuses fails with its message`() {
+        val refused = ClaudeTtySession(
+            executable = { "claude.exe" }, mcp = { null to emptyMap() }, stateDir = { state }, configDir = { config }, poll = false,
+            signInProblem = { ClaudeSignIn.NOT_SIGNED_IN },
+        )
+        val e = kotlin.test.assertFailsWith<IllegalStateException> { refused.launch(request(""), emptyMap()) }
+        assertEquals(ClaudeSignIn.NOT_SIGNED_IN, e.message)
+    }
+
     @Test fun `screen text drops escapes for matching`() {
         assertEquals("abc", ScreenText.strip("\u001b[31ma\u001b]0;title\u0007b\u001b(Bc"))
         assertEquals("itrustthisfolder", ScreenText.squeeze("I trust\nthis  Folder"))
