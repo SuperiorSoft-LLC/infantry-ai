@@ -19,6 +19,7 @@ import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.withKeyDown
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import com.superiorsoftllc.infantry.daemon.InfantryDaemon
 import com.superiorsoftllc.infantry.mailbox.JsonMailStore
 import com.superiorsoftllc.infantry.persistence.SqlInfantryStore
@@ -29,7 +30,9 @@ import com.superiorsoftllc.infantry.runner.ProcessSpec
 import com.superiorsoftllc.infantry.runner.StubScript
 import com.superiorsoftllc.infantry.session.JsonSessionStore
 import com.superiorsoftllc.infantry.stories.JsonStoryStore
+import com.superiorsoftllc.infantry.plugins.official.chatfeed.PENDING_SEND_TAG
 import com.superiorsoftllc.infantry.ui.model.AppState
+import com.superiorsoftllc.infantry.ui.model.isBusy
 import com.superiorsoftllc.infantry.ui.net.CommandResult
 import com.superiorsoftllc.infantry.ui.net.Controller
 import com.superiorsoftllc.infantry.ui.shell.LocalPlatformHost
@@ -188,6 +191,38 @@ class ChatImageAttachUiTest {
             waitUntil(timeoutMillis = 5_000) { chipPaths().isEmpty() }
             waitUntil(timeoutMillis = 15_000) { onAllNodes(hasTestTag(CHAT_IMAGE_SENT_TAG_PREFIX + path)).fetchSemanticsNodes().isNotEmpty() }
             assertTrue(c.state.value.connection.isLive)
+        }
+    }
+
+    /**
+     * CHAT-DUP-1: text + image sent to a RUNNING session shows ONE card: the "sent" bubble is replaced by the daemon's echo (it used to
+     * stay beside it, in red, with the raw `[image: <path>]` line), and no raw image line is ever on screen.
+     */
+    @Test fun `text and an image sent to a session show once, with no raw image line`() {
+        val prompts = CopyOnWriteArrayList<String>()
+        val png = tempFile("dup.png", pngBytes(0xFF00FF00.toInt()))
+        withApp(FakeHost(ArrayDeque(listOf(png))), prompts) { c ->
+            onNodeWithTag(PROMPT_BOX_TAG).performTextInput("first message")
+            onNodeWithContentDescription("Spawn").performClick()
+            val id = until("a session at rest", c) { s -> s.agents.values.any { !isBusy(it) && it.entries.isNotEmpty() } }
+                .agents.values.first { it.entries.isNotEmpty() }.session.id
+            waitUntil(timeoutMillis = 10_000) { onAllNodes(hasContentDescription("Send")).fetchSemanticsNodes().isNotEmpty() }
+            attachByButton(expectChips = 1)
+            val path = chipPaths().single()
+            onNodeWithTag(PROMPT_BOX_TAG).performTextInput("That didnt work")
+            onNodeWithContentDescription("Send").performClick()
+            waitUntil(timeoutMillis = 15_000) { prompts.size >= 2 }
+            // Well inside the 45s "not sent" wait: the bubble must go because the echo (and ack) came, not because it timed out.
+            until("the sent bubble replaced by the echo", c, timeoutMs = 10_000) { s ->
+                s.pendingSends.values.none { it.sessionId == id } && s.agents[id]!!.entries.count { it.text.contains("That didnt work") } == 1
+            }
+            waitForIdle()
+            assertEquals(0, onAllNodes(hasTestTag(PENDING_SEND_TAG)).fetchSemanticsNodes().size, "no second (pending) card")
+            assertEquals(1, onAllNodes(hasTestTag(CHAT_IMAGE_SENT_TAG_PREFIX + path)).fetchSemanticsNodes().size, "the image shows once")
+            val raw = onAllNodes(SemanticsMatcher("text with a raw image line") { n ->
+                n.config.getOrNull(SemanticsProperties.Text).orEmpty().any { "[image: " in it.text }
+            }).fetchSemanticsNodes()
+            assertTrue(raw.isEmpty(), "no raw [image: ...] text on screen")
         }
     }
 

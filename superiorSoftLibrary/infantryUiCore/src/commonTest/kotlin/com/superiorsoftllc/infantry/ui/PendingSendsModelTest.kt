@@ -15,12 +15,14 @@ import com.superiorsoftllc.infantry.ui.model.pendingRefusedBusy
 import com.superiorsoftllc.infantry.ui.model.pendingSendsFor
 import com.superiorsoftllc.infantry.ui.model.reduce
 import com.superiorsoftllc.infantry.ui.model.settlePendingSends
+import com.superiorsoftllc.infantry.ui.model.turnCarries
 import com.superiorsoftllc.infantry.ui.model.withPendingSend
 import com.superiorsoftllc.infantry.ui.protocol.Envelope
 import com.superiorsoftllc.infantry.ui.protocol.SessionRecord
 import com.superiorsoftllc.infantry.ui.protocol.SessionState
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -67,6 +69,52 @@ class PendingSendsModelTest {
         val once = reduce(base, Envelope(Envelope.TURN, "run the tests", "a", sequence = 1), 5).withPendingSend(sent)
         val replay = frame(once, Envelope(Envelope.TURN, "run the tests", "a", sequence = 1))
         assertEquals(SendState.SENDING, replay.pendingSends["send:1"]?.state, "an old turn with the same text is not this message")
+    }
+
+    /** CHAT-DUP-1: the owner's screenshot: text + image, the daemon's echo BEFORE its ack; the "sent" bubble stayed beside the card. */
+    @Test fun `a text and image message whose echo comes before the ack shows once`() {
+        val text = "That didnt work.\n\n[image: C:\\up\\chat\\0c24.png]"
+        val withImage = base.withPendingSend(PendingSend("send:2", "a", text, at = 10))
+        val echoed = frame(withImage, Envelope(Envelope.TURN, text, "a", sequence = 1))
+        val acked = frame(echoed, Envelope(Envelope.PROMPT_ACK, "accepted", "a", requestId = "send:2"))
+        assertTrue(acked.pendingSendsFor("a").isEmpty(), "one card: the echo replaced the bubble")
+        assertEquals(1, acked.agents["a"]!!.entries.size)
+    }
+
+    @Test fun `the ack settles a send whose echo came first even when the echo reads differently`() {
+        val echoed = frame(pending, Envelope(Envelope.TURN, "[persona]\nrun the tests, please", "a", sequence = 1))
+        assertEquals(SendState.SENDING, echoed.pendingSends["send:1"]?.state, "text alone cannot tell")
+        val acked = frame(echoed, Envelope(Envelope.PROMPT_ACK, "accepted", "a", requestId = "send:1"))
+        assertTrue(acked.pendingSendsFor("a").isEmpty(), "the client id's ack + a newer turn settle it")
+    }
+
+    @Test fun `an ack does not take an older turn, or another pending message's echo, as its own`() {
+        val old = reduce(base, Envelope(Envelope.TURN, "earlier", "a", sequence = 1), 5)
+        val first = PendingSend("send:1", "a", "one\n\ntwo", at = 10, userSeqAtSend = 1)
+        val second = PendingSend("send:2", "a", "three", at = 11, userSeqAtSend = 1)
+        val both = old.withPendingSend(first).withPendingSend(second)
+        assertEquals(SendState.ACCEPTED, frame(both, Envelope(Envelope.PROMPT_ACK, "accepted", "a", requestId = "send:1")).pendingSends["send:1"]?.state)
+        val echoedFirst = frame(both, Envelope(Envelope.TURN, "[wrapped] one\n\ntwo!", "a", sequence = 2))
+        val ackSecond = frame(echoedFirst, Envelope(Envelope.PROMPT_ACK, "accepted", "a", requestId = "send:2"))
+        assertEquals(SendState.ACCEPTED, ackSecond.pendingSends["send:2"]?.state, "the one new turn is the older message's")
+    }
+
+    /** CHAT-DUP-1: a long session's transcript is at its line cap, so a new turn does not make it longer; it is still a new turn. */
+    @Test fun `a turn on a transcript at its cap still settles the accepted send`() {
+        var full = base
+        for (i in 1..2_000L) full = reduce(full, Envelope(Envelope.TEXT_DELTA, "line $i\n", "a", sequence = i), 5)
+        val size = full.agents["a"]!!.entries.size
+        val acked = frame(full.withPendingSend(sent), Envelope(Envelope.PROMPT_ACK, "accepted", "a", requestId = "send:1"))
+        val echoed = frame(acked, Envelope(Envelope.TURN, "run the tests", "a", sequence = 2_001))
+        assertEquals(size, echoed.agents["a"]!!.entries.size, "the cap holds the size")
+        assertTrue(echoed.pendingSendsFor("a").isEmpty(), "the echo replaced the bubble")
+    }
+
+    @Test fun `a turn carries a message of several paragraphs as one unbroken run`() {
+        assertTrue(turnCarries("a\n\nb\n\n[image: x]", "b\n\n[image: x]"))
+        assertTrue(turnCarries("b\r\n\r\n[image: x]", "b\n\n[image: x]"))
+        assertFalse(turnCarries("b\n\nc\n\n[image: x]", "b\n\n[image: x]"))
+        assertTrue(turnCarries("x\n\nrun the tests", "run the tests"))
     }
 
     @Test fun `no answer in time shows not sent - retry, text kept`() {
