@@ -2,3 +2,4 @@
 *.bat text eol=crlf
 superiorSoftLibrary/infantry/headless/infantry text eol=lf
 *.cmd text eol=crlf
+scripts/git-hooks/* text eol=lf
