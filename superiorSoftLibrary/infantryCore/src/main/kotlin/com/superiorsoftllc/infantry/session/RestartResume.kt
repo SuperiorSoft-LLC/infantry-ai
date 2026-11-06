@@ -83,8 +83,8 @@ class RestartResume(
         const val PROMPT_SETTING = "session.resumeAfterRestartPrompt"
         const val DEFAULT_PROMPT = "The daemon restarted and your last turn was cut. Continue where you left off."
 
-        /** The attention kind of the summary (kinds are open, D23). */
-        const val ATTENTION_KIND = "session_resumed"
+        /** The attention kind of the summary. */
+        const val ATTENTION_KIND = com.superiorsoftllc.infantry.daemon.api.attention.AttentionKinds.SESSION_RESUMED
 
         /** The wake reason a resumed turn carries (scripts see it on `session woken`). */
         const val WAKE_REASON = "daemon-restart"

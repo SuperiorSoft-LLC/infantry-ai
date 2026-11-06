@@ -77,7 +77,7 @@ class AttentionStore(
     companion object {
         val KINDS = setOf(
             "trigger_tripped", "deadline", "stalled", "ceiling", "launch_blocked", "prerequisite_declined",
-            "queue_cleared", "unreported", "session_failed",
+            "queue_cleared", "unreported", "session_failed", "session_resumed",
         )
     }
 }

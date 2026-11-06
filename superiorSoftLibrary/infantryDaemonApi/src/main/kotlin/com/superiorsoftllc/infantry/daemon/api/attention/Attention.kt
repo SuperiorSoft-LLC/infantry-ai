@@ -64,4 +64,6 @@ object AttentionKinds {
     const val QUEUE_CLEARED = "queue_cleared"
     const val UNREPORTED = "unreported"
     const val SESSION_FAILED = "session_failed"
+    /** RESUME-NOTIFY-1: sessions whose turn a daemon restart cut (resumed or not). */
+    const val SESSION_RESUMED = "session_resumed"
 }
