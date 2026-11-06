@@ -2395,9 +2395,22 @@ fun queueAfterTurn(held: List<QueuedPrompt>, turn: String): List<QueuedPrompt> {
 /** AGENT-TASKS-7: what an agent card shows of its work: the in-progress ticket it runs (null = none) and its queue, head first. */
 data class AgentWork(val current: Ticket?, val queue: List<AgentQueueItem>)
 
-/** AGENT-TASKS-7: the work of agent profile [agentId]; its running ticket is the in-progress one assigned to it. */
-fun AppState.agentWork(agentId: String?): AgentWork {
-    if (agentId == null) return AgentWork(null, emptyList())
-    val current = tickets.firstOrNull { it.agentId == agentId && it.status == TicketColumns.IN_PROGRESS }
+/**
+ * AGENT-TASKS-7: the work of agent profile [agentId]; its running ticket is the in-progress one assigned to it.
+ * CARD-TICKET-1: [sessionTicketId] (the card's session's own ticket, the one its header shows) wins: a board or role start
+ * keeps the ticket under its role (`role:<id>`), never under the profile, so the profile match alone missed it. A session
+ * ticket that is on the board but no longer in progress falls back to the profile's; one not on the board yet shows its id.
+ */
+fun AppState.agentWork(agentId: String?, sessionTicketId: String? = null): AgentWork {
+    val own = sessionTicketId?.takeIf { it.isNotBlank() }?.let { id ->
+        val t = ticket(id)
+        when {
+            t == null -> Ticket(id = id, title = id.removePrefix("ticket-").take(8), status = TicketColumns.IN_PROGRESS)
+            t.status == TicketColumns.IN_PROGRESS -> t
+            else -> null
+        }
+    }
+    if (agentId == null) return AgentWork(own, emptyList())
+    val current = own ?: tickets.firstOrNull { it.agentId == agentId && it.status == TicketColumns.IN_PROGRESS }
     return AgentWork(current, agentQueues[agentId].orEmpty())
 }
