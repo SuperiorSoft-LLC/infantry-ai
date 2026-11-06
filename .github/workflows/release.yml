@@ -1,7 +1,7 @@
 # RELEASE-AUTO-1: pushing a tag v<MAJOR.MINOR.BUILD> builds the Windows MSI (+ app-image zip), the Android APK, the web
 # bundle zip and the headless server archives (Linux, Windows, macOS), then publishes them with SHA256SUMS and latest.json
 # to that tag's GitHub Release. See docs/RELEASING.md.
-# RELEASE-PLATFORMS-1: macOS is a BETA and optional: the macos desktop job and the macos-14 headless leg are
+# RELEASE-PLATFORMS-1: macOS is a BETA and optional: the macos desktop job and the macos-15 headless leg are
 # continue-on-error, and the release publishes whatever macOS assets succeeded. Windows, Android, web and the
 # linux-x64 / windows-x64 server archives stay required (the release job checks each file).
 # NIGHTLY-1: the same jobs build the nightly. .github/workflows/nightly.yml calls this workflow (workflow_call) with a planned
@@ -263,8 +263,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # macos-14 (arm64): standard runner, free on a public repo (a private repo's plan refused it, 2026-11-06 v1.0.4).
-        os: [ubuntu-24.04, windows-2022, macos-14]
+        # macos-15 (arm64): standard runner, free on a public repo (a private repo's plan refused it, 2026-11-06 v1.0.4).
+        os: [ubuntu-24.04, windows-2022, macos-15]
     runs-on: ${{ matrix.os }}
     # RELEASE-PLATFORMS-1: the macOS leg is beta; its failure never fails the run, the release just ships without it.
     continue-on-error: ${{ startsWith(matrix.os, 'macos') }}
@@ -326,12 +326,12 @@ jobs:
           path: out/*
           if-no-files-found: error
 
-  # RELEASE-PLATFORMS-1: the macOS (beta) desktop app, an arm64 .dmg built by jpackage on the standard macos-14 runner.
+  # RELEASE-PLATFORMS-1: the macOS (beta) desktop app, an arm64 .dmg built by jpackage on the standard macos-15 runner.
   # UNSIGNED and un-notarized (no Apple certificate yet), so the asset name says beta and users clear the quarantine flag
   # by hand (docs/RELEASING.md). Optional: continue-on-error, and the release publishes without it.
   macos:
     needs: version
-    runs-on: macos-14
+    runs-on: macos-15
     continue-on-error: true
     permissions:
       contents: read
