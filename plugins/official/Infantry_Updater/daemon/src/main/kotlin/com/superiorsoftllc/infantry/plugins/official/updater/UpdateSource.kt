@@ -10,6 +10,9 @@ interface UpdateSource {
     fun check(): UpdateCheck
     fun download(update: AvailableUpdate, into: File = Files.createTempDirectory("infantry-update-").toFile()): Fetched<VerifiedInstaller>
 
+    /** UPDATE-UX-1: [download] that reports its steps and bytes to [progress]. A source that cannot report just downloads. */
+    fun download(update: AvailableUpdate, into: File, progress: DownloadProgress): Fetched<VerifiedInstaller> = download(update, into)
+
     /** UPDATER-1: the SHA-256 the release publishes for [update]'s installer, read before any download (core's engine requires it). */
     fun expectedSha256(update: AvailableUpdate): Fetched<String>
 }
@@ -52,15 +55,20 @@ class LocalDirSource(
             ?: Fetched.Failed(UpdateFailure.BadAsset("${sums.name} has no SHA-256 for ${update.installer.name}"))
     }
 
-    override fun download(update: AvailableUpdate, into: File): Fetched<VerifiedInstaller> {
+    override fun download(update: AvailableUpdate, into: File): Fetched<VerifiedInstaller> = download(update, into, DownloadProgress.NONE)
+
+    override fun download(update: AvailableUpdate, into: File, progress: DownloadProgress): Fetched<VerifiedInstaller> {
         val src = File(update.installer.url ?: return Fetched.Failed(UpdateFailure.BadAsset("no path")))
         val sums = File(update.checksum?.url ?: return Fetched.Failed(UpdateFailure.BadAsset("no ${ReleaseAssets.SUMS_FILE}")))
         val expected = runCatching { Updater.parseChecksum(sums.readText(), src.name) }.getOrNull()
             ?: return Fetched.Failed(UpdateFailure.BadAsset("${sums.name} has no SHA-256 for ${src.name}"))
         into.mkdirs()
         val target = File(into, src.name)
+        progress.note("copying $src to $target")
+        progress.bytes(0, src.length())
         try {
             src.copyTo(target, overwrite = true)
+            progress.bytes(target.length(), src.length())
         } catch (io: java.io.IOException) {
             target.delete()
             return Fetched.Failed(UpdateFailure.BadAsset("could not copy ${src.name}: ${io.message}"))

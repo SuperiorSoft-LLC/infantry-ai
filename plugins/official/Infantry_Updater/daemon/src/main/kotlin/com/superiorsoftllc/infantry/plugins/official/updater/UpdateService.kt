@@ -9,8 +9,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.nio.file.Files
 
-/** UPDATE-1: what the window shows about updates. Every state but [Available] and [Restarting] is non-blocking. */
+/**
+ * UPDATE-1: what the window shows about updates. UPDATE-UX-1: nothing here blocks the window; the download runs in the
+ * background ([Downloading] -> [Ready] or [DownloadFailed]) and the window shows it in a bottom-right card.
+ */
 sealed interface UpdateState {
     /** Nothing to show. */
     data object Idle : UpdateState
@@ -18,7 +22,15 @@ sealed interface UpdateState {
     /** Only shown after a manual check: a startup check that finds nothing stays silent. */
     data class UpToDate(val current: SemVer) : UpdateState
     data class Available(val update: AvailableUpdate) : UpdateState
-    data class Downloading(val update: AvailableUpdate) : UpdateState
+    /** UPDATE-UX-1: the download runs in the background; [done] of [total] bytes so far (total 0 = not known yet). */
+    data class Downloading(val update: AvailableUpdate, val done: Long = 0, val total: Long = 0) : UpdateState {
+        /** 0..100, or null while the size is not known. */
+        val percent: Int? get() = if (total > 0) ((done.coerceIn(0, total) * 100) / total).toInt() else null
+    }
+    /** UPDATE-UX-1: downloaded and verified; installing waits for the user's "Restart now". */
+    data class Ready(val update: AvailableUpdate, val installer: VerifiedInstaller) : UpdateState
+    /** UPDATE-UX-1: the download or the installer start failed; [text] says why, Retry downloads again. */
+    data class DownloadFailed(val update: AvailableUpdate, val text: String) : UpdateState
     /** The installer was verified and handed to Windows; the app is about to exit. */
     data class Restarting(val update: AvailableUpdate) : UpdateState
     /** A short message (offline, 404, rate limit, bad asset, updates off). Dismissable; never blocks the app. */
@@ -31,15 +43,28 @@ data class InstallPrompt(val running: Int) {
     val message: String? get() = if (running > 0) "$running agent${if (running == 1) "" else "s"} running, update anyway?" else null
 }
 
-/** UPDATE-3: the footer button's text for each state; [version] is the running version. Null = show nothing. */
-fun UpdateState.footerLabel(version: String?): String = when (this) {
+/**
+ * UPDATE-3: the footer button's text for each state; [version] is the running version. Null = show nothing: UPDATE-UX-1
+ * a running or failed download is shown by the bottom-right card ([indicatorLabel]), not the footer; a ready one whose
+ * card was put away with "Later" keeps a footer button that brings the card back.
+ */
+fun UpdateState.footerLabel(version: String?, indicatorVisible: Boolean = true): String? = when (this) {
     is UpdateState.Idle -> "Up to date${version?.let { " ($it)" } ?: ""}"
     is UpdateState.Checking -> "Checking for updates…"
     is UpdateState.UpToDate -> "Up to date ($current)"
     is UpdateState.Available -> "Update available v${update.latest}"
-    is UpdateState.Downloading -> "Downloading v${update.latest}…"
-    is UpdateState.Restarting -> "Ready to install v${update.latest}"
+    is UpdateState.Ready -> if (indicatorVisible) null else "Ready to install v${update.latest}"
+    is UpdateState.Downloading, is UpdateState.DownloadFailed, is UpdateState.Restarting -> null
     is UpdateState.Message -> "Update error: click to retry"
+}
+
+/** UPDATE-UX-1: the bottom-right card's text for the background download states; null = no card. */
+fun UpdateState.indicatorLabel(): String? = when (this) {
+    is UpdateState.Downloading -> "Downloading ${update.latest}" + (percent?.let { " - $it%" } ?: "…")
+    is UpdateState.Ready -> "Ready to install ${update.latest}"
+    is UpdateState.DownloadFailed -> "Update ${update.latest} failed. $text"
+    is UpdateState.Restarting -> "Installing ${update.latest}; Infantry AI restarts on its own."
+    else -> null
 }
 
 /**
@@ -79,6 +104,16 @@ class UpdateService(
 
     private val _toast = MutableStateFlow(false)
     private val _dialog = MutableStateFlow(false)
+    private val _indicator = MutableStateFlow(true)
+
+    /**
+     * UPDATE-UX-1: the bottom-right download card is showing. "Later" on a ready update hides it (the update stays ready
+     * and the footer button brings it back); every new download state shows it again.
+     */
+    val indicatorVisible: StateFlow<Boolean> = _indicator.asStateFlow()
+
+    /** UPDATE-UX-1: bring the download card back (footer button, after "Later"). */
+    fun showIndicator() { _indicator.value = true }
 
     /** UPDATE-3: the bottom-right "update found" toast is showing. Set when a check finds an update. */
     val toastVisible: StateFlow<Boolean> = _toast.asStateFlow()
@@ -143,7 +178,7 @@ class UpdateService(
         val hours = config.checkIntervalHours
         if (hours <= 0 || !config.autoCheck) return null
         when (_state.value) {
-            is UpdateState.Available, is UpdateState.Downloading, is UpdateState.Restarting -> return null
+            is UpdateState.Available, is UpdateState.Downloading, is UpdateState.Ready, is UpdateState.DownloadFailed, is UpdateState.Restarting -> return null
             else -> Unit
         }
         val last = lastCheckAt
@@ -151,47 +186,107 @@ class UpdateService(
         return check(manual = false)
     }
 
-    /** "Update": download, verify, hand to the installer, exit. Any failure becomes a [UpdateState.Message]. */
+    /**
+     * "Update" (UPDATE-UX-1: also Retry after a failed download): close the prompt and download + verify in the
+     * BACKGROUND. The window stays usable; the card shows [UpdateState.Downloading] with its percentage, then
+     * [UpdateState.Ready] (Restart now / Later) or [UpdateState.DownloadFailed] (Retry). Nothing is installed here.
+     */
     fun update(): Job? {
-        val available = _state.value as? UpdateState.Available ?: return null
+        val update = when (val s = _state.value) {
+            is UpdateState.Available -> s.update
+            is UpdateState.DownloadFailed -> s.update
+            else -> return null
+        }
         val config = (settings as? UpdateSettings.Enabled)?.config ?: return null
         if (job?.isActive == true) return job
-        _state.value = UpdateState.Downloading(available.update)
+        _dialog.value = false
+        _toast.value = false
+        _indicator.value = true
+        val asset = update.installer
+        _state.value = UpdateState.Downloading(update, 0, asset.size)
+        log("download start: ${asset.name} (${asset.size} bytes) for ${update.current} -> ${update.latest}")
         return scope.launch(Dispatchers.IO) {
-            val downloaded = runCatching { updaterFor(config).download(available.update) }
-                .getOrElse { Fetched.Failed(UpdateFailure.BadAsset(it::class.simpleName ?: "error")) }
+            val progress = object : DownloadProgress {
+                private var lastPercent = -1
+                override fun note(text: String) = log("download: $text")
+                override fun bytes(done: Long, total: Long) {
+                    val now = UpdateState.Downloading(update, done, total)
+                    val pct = now.percent ?: return
+                    if (pct == lastPercent) return
+                    lastPercent = pct
+                    _state.value = now
+                    if (pct % LOG_EVERY_PERCENT == 0) log("download: $done/$total bytes ($pct%)")
+                }
+            }
+            val downloaded = runCatching { updaterFor(config).download(update, Files.createTempDirectory("infantry-update-").toFile(), progress) }
+                .getOrElse {
+                    log("download error: ${it::class.simpleName}: ${it.message}")
+                    Fetched.Failed(UpdateFailure.BadAsset(it::class.simpleName ?: "error"))
+                }
             when (downloaded) {
                 is Fetched.Failed -> {
-                    log("download refused: ${downloaded.failure}")
-                    _state.value = UpdateState.Message(downloaded.failure.message)
+                    log("download failed: ${downloaded.failure}")
+                    _indicator.value = true
+                    _state.value = UpdateState.DownloadFailed(update, downloaded.failure.message)
                 }
                 is Fetched.Ok -> {
                     val installer = downloaded.value
-                    log("verified ${installer.file} sha256=${installer.sha256} checksumAsset=${installer.checksumVerified}")
-                    runCatching { handoff(installer) }.fold(
-                        onSuccess = {
-                            _state.value = UpdateState.Restarting(available.update)
-                            log("installer started; exiting so it can replace the app")
-                            exit()
-                        },
-                        onFailure = {
-                            log("handoff failed: ${it.message}")
-                            _state.value = UpdateState.Message(UpdateFailure.InstallFailed(it.message ?: "unknown error").message)
-                        },
-                    )
+                    log("verify ok: ${installer.file} sha256=${installer.sha256} checksumAsset=${installer.checksumVerified}")
+                    _indicator.value = true
+                    _state.value = UpdateState.Ready(update, installer)
                 }
             }
         }.also { job = it }
     }
 
-    /** "Later" / dismiss a message. */
+    /** UPDATE-UX-1: "Retry" on a failed download. */
+    fun retry(): Job? = update()
+
+    /**
+     * UPDATE-UX-1: "Restart now" on a ready update: hand the verified installer to Windows and exit so it can replace
+     * the app. A failure to start it becomes [UpdateState.DownloadFailed] (Retry downloads again). The window asks
+     * [installPrompt] first.
+     */
+    fun install(): Job? {
+        val ready = _state.value as? UpdateState.Ready ?: return null
+        if (job?.isActive == true) return job
+        // Restarting at once: the card says so, and a second click finds no Ready to act on.
+        _state.value = UpdateState.Restarting(ready.update)
+        // Off the UI thread: the exit stops the daemon and ends the JVM.
+        return scope.launch(Dispatchers.IO) {
+            log("install: launching msiexec for ${ready.installer.file} (via ${MsiHandoff.SCRIPT_NAME})")
+            runCatching { handoff(ready.installer) }.fold(
+                onSuccess = {
+                    log("installer started; exiting so it can replace the app")
+                    exit()
+                },
+                onFailure = {
+                    log("handoff failed: ${it::class.simpleName}: ${it.message}")
+                    _indicator.value = true
+                    _state.value = UpdateState.DownloadFailed(ready.update, UpdateFailure.InstallFailed(it.message ?: "unknown error").message)
+                },
+            )
+        }.also { job = it }
+    }
+
+    /**
+     * "Later" / dismiss. On the prompt or the toast it keeps the update offered; on a ready download it hides the card
+     * (the download stays ready, the footer brings it back); on a failed download it goes back to "update available";
+     * a message or "up to date" clears.
+     */
     fun dismiss() {
         _dialog.value = false
         _toast.value = false
-        // "Later" on an available update keeps the footer button; only a message or "up to date" clears.
-        if (_state.value is UpdateState.Available) return
-        if (_state.value !is UpdateState.Downloading && _state.value !is UpdateState.Restarting) _state.value = UpdateState.Idle
+        when (val s = _state.value) {
+            is UpdateState.Available, is UpdateState.Downloading, is UpdateState.Restarting -> Unit
+            is UpdateState.Ready -> _indicator.value = false
+            is UpdateState.DownloadFailed -> _state.value = UpdateState.Available(s.update)
+            else -> _state.value = UpdateState.Idle
+        }
     }
 }
 
 private const val HOUR_MS = 3_600_000L
+
+/** UPDATE-UX-1: the log gets one progress line per this many percent (the card updates on every percent). */
+private const val LOG_EVERY_PERCENT = 10

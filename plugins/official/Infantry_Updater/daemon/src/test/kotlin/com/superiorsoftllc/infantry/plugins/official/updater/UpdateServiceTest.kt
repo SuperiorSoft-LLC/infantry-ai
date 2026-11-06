@@ -49,13 +49,18 @@ class UpdateServiceTest {
     }
 
     @Test
-    fun `Update downloads, verifies, hands the installer over and exits`() = runBlocking<Unit> {
+    fun `Update downloads and verifies in the background, Restart now hands the installer over and exits`() = runBlocking<Unit> {
         val bytes = "verified 1.0.4".toByteArray()
         gh.release("v1.0.4", msi = "AgentHQ-1.0.4.msi" to bytes, sha256 = sha256(bytes))
         val s = service()
         s.check(manual = false)!!.join()
         assertIs<UpdateState.Available>(s.state.value)
         s.update()!!.join()
+        // UPDATE-UX-1: the download ends ready; nothing is installed until the user says "Restart now".
+        assertIs<UpdateState.Ready>(s.state.value)
+        assertEquals(0, handedOff.size)
+        assertEquals(0, exits)
+        s.install()!!.join()
         assertIs<UpdateState.Restarting>(s.state.value)
         assertEquals(1, handedOff.size)
         assertTrue(handedOff.single().checksumVerified)
@@ -69,7 +74,7 @@ class UpdateServiceTest {
         val s = service()
         s.check(manual = false)!!.join()
         s.update()!!.join()
-        val message = assertIs<UpdateState.Message>(s.state.value)
+        val message = assertIs<UpdateState.DownloadFailed>(s.state.value)
         assertTrue("SHA-256 mismatch" in message.text, message.text)
         assertEquals(0, handedOff.size)
         assertEquals(0, exits)
