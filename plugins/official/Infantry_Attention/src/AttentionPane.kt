@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.superiorsoftllc.infantry.ui.model.AppState
 import com.superiorsoftllc.infantry.ui.model.watchFlagOf
+import com.superiorsoftllc.infantry.ui.protocol.QuestionAnswerWire
 import com.superiorsoftllc.infantry.ui.shell.AttentionContext
 import com.superiorsoftllc.infantry.ui.shell.gate
 import kotlinx.coroutines.launch
@@ -52,14 +53,21 @@ internal fun AttentionPane(state: AppState, attention: AttentionContext, showCha
     var now by remember { mutableStateOf(Clock.System.now().toEpochMilliseconds()) }
     LaunchedEffect(state.attention.size) { now = Clock.System.now().toEpochMilliseconds() }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        // ASK-1: the owner questions (open, answered, auto-picked, cancelled) come first; an auto-pick can be overridden.
-        if (state.questions.isNotEmpty()) {
+        // ASK-1: the owner questions come first; an auto-pick can be overridden.
+        // ATTN-TOP-1: the ones waiting for the owner's reply (open) are grouped at the very top, so they never sit below a
+        // scroll of answered history; an answered one drops to the history below. An empty section is not drawn.
+        val (needsReply, history) = splitNeedsReply(state.questionsNewestFirst)
+        val onOverride: (QuestionAnswerWire) -> Unit = { answer -> actionScope.launch { attention.answer(answer) } }
+        val onShow: (String) -> Unit = { id -> attention.openQuestion(id); showChat() }
+        val onDismiss: (String) -> Unit = { id -> actionScope.launch { attention.cancelQuestion(id) } }
+        if (needsReply.isNotEmpty()) {
             QuestionHistory(
-                state.questionsNewestFirst, live = canAnswer,
-                onOverride = { answer -> actionScope.launch { attention.answer(answer) } },
-                onShow = { id -> attention.openQuestion(id); showChat() },
-                onDismiss = { id -> actionScope.launch { attention.cancelQuestion(id) } },
+                needsReply, live = canAnswer, onOverride = onOverride, onShow = onShow, onDismiss = onDismiss,
+                title = "Needs your reply (${needsReply.size})", tag = ATTENTION_NEEDS_REPLY_TAG,
             )
+        }
+        if (history.isNotEmpty()) {
+            QuestionHistory(history, live = canAnswer, onOverride = onOverride, onShow = onShow, onDismiss = onDismiss, tag = ATTENTION_QUESTIONS_TAG)
         }
         WatchSection(state, now)
         if (state.attention.isEmpty()) {

@@ -22,6 +22,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.superiorsoftllc.infantry.ui.model.QUESTION_OPEN
 import com.superiorsoftllc.infantry.ui.protocol.OwnerQuestionView
 import com.superiorsoftllc.infantry.ui.protocol.QuestionAnswerWire
 
@@ -33,6 +34,17 @@ const val QUESTION_HISTORY_DISMISS_TAG_PREFIX = "question-history-dismiss-"
 const val QUESTION_HISTORY_TAG_PREFIX = "question-history-"
 /** + the question id + "-" + the option index: an override chip on an auto-picked question. */
 const val QUESTION_OVERRIDE_TAG_PREFIX = "question-override-"
+/** ATTN-TOP-1: the section at the top of the attention pane with the cards waiting for the owner's reply. */
+const val ATTENTION_NEEDS_REPLY_TAG = "attention-needs-reply"
+/** ATTN-TOP-1: the question history below it (answered, auto-picked, cancelled). */
+const val ATTENTION_QUESTIONS_TAG = "attention-questions"
+
+/**
+ * ATTN-TOP-1: splits the pane's questions, order kept, into the ones waiting for the owner's reply (state open) and the rest.
+ * An answered question leaves the first list as soon as its new state arrives.
+ */
+fun splitNeedsReply(questions: List<OwnerQuestionView>): Pair<List<OwnerQuestionView>, List<OwnerQuestionView>> =
+    questions.partition { it.state == QUESTION_OPEN }
 
 /**
  * ASK-1: the question history at the top of the attention pane (^6), newest first. An open question offers "Show" (the
@@ -49,9 +61,16 @@ fun QuestionHistory(
     onDismiss: ((questionId: String) -> Unit)? = null,
     /** GATE-PANES-1: Dismiss is a `questions.answer` write too; off with [live] (the pane passes the gate there). */
     canDismiss: Boolean = live,
+    /** ATTN-TOP-1: the section header ("Needs your reply (2)" for the top section). */
+    title: String = "Questions",
+    /** ATTN-TOP-1: the section's test tag, null = none. */
+    tag: String? = null,
 ) {
-    Column(Modifier.fillMaxWidth().padding(bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("Questions", color = Palette.Text, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+    Column(
+        Modifier.fillMaxWidth().then(if (tag != null) Modifier.testTag(tag) else Modifier).padding(bottom = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(title, color = Palette.Text, fontWeight = FontWeight.Bold, fontSize = 13.sp)
         questions.forEach { q ->
             val shape = RoundedCornerShape(6.dp)
             Column(
