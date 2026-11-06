@@ -2,6 +2,8 @@
 // Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.mailbox
 
+import com.superiorsoftllc.infantry.settings.LimitDef
+import com.superiorsoftllc.infantry.settings.LimitRegistry
 import java.util.UUID
 
 /**
@@ -23,16 +25,27 @@ import java.util.UUID
  * which is what keeps a delivery that re-enters the mailbox (a resume can emit a status event) from
  * deadlocking or recursing.
  *
- * @param limits the rate + ceiling boundaries. See [MailLimits].
+ * @param limitsOf the rate + ceiling boundaries, read on every send so a changed setting applies at once (MAIL-LIMITS-1:
+ *   the daemon reads `limits.mail.*`). See [MailLimits].
  * @param clock wall clock in epoch millis; injectable for tests.
  * @param idFactory message id factory; injectable for deterministic tests.
  */
 class Mailbox(
     private val store: MailStore,
-    private val limits: MailLimits = MailLimits(),
+    private val limitsOf: () -> MailLimits,
     private val clock: () -> Long = System::currentTimeMillis,
     private val idFactory: () -> String = { UUID.randomUUID().toString() },
 ) {
+    /** Fixed boundaries (the defaults unless given): tests and callers that do not read settings. */
+    constructor(
+        store: MailStore,
+        limits: MailLimits = MailLimits(),
+        clock: () -> Long = System::currentTimeMillis,
+        idFactory: () -> String = { UUID.randomUUID().toString() },
+    ) : this(store, { limits }, clock, idFactory)
+
+    private val limits: MailLimits get() = limitsOf()
+
     /**
      * Where mailbox events go. The daemon installs this to broadcast frames and to keep the *sender*
      * informed; a refusal or a permanent delivery failure is an event, never a silent drop.
@@ -133,13 +146,18 @@ class Mailbox(
      * message being answered (a reply goes back to its sender, in the same thread, whatever the
      * caller passed) and that message becomes [MessageState.ANSWERED].
      */
-    fun send(request: MailSendRequest): MailResult {
-        val (result, events) = synchronized(lock) { sendLocked(request) }
+    fun send(request: MailSendRequest, automation: Boolean = false): MailResult {
+        val (result, events) = synchronized(lock) { sendLocked(request, automation) }
         emit(events)
         return result
     }
 
-    private fun sendLocked(request: MailSendRequest): Pair<MailResult, List<MailEvent>> {
+    /**
+     * MAIL-LIMITS-1: [automation] (the daemon sets it for mail a script hook sends) and a `system` / `trigger:` sender
+     * ([MailFooter.isAutomation]) are exempt from the sender rate limit: they neither count against a window nor are
+     * refused by one. The per-conversation ceiling still applies.
+     */
+    private fun sendLocked(request: MailSendRequest, automation: Boolean): Pair<MailResult, List<MailEvent>> {
         val from = request.from.trim()
         val to = request.to.trim()
         if (from.isEmpty() || to.isEmpty() || from == to) {
@@ -176,30 +194,30 @@ class Mailbox(
         val threadId = explicitThread ?: openPairThread(Threads.pair(from, recipient))
         val subject = request.subject.ifBlank { original?.let { "Re: ${it.subject}" } ?: "" }
 
+        val limits = this.limits
         // Boundary 1 -- the per-conversation ceiling. Refuse visibly and tell the humans.
         val inThread = messages.values.count { it.threadId == threadId }
         if (inThread >= limits.maxPerThread) {
             val reason = "conversation ceiling reached: thread '$threadId' has $inThread messages " +
                 "(limit ${limits.maxPerThread}); stop and report to the human" +
-                if (original != null) {
-                    ". To continue, send a new message without replyTo (it starts a fresh thread)"
-                } else {
-                    ""
-                }
+                (if (original != null) ". To continue, send a new message without replyTo (it starts a fresh thread)" else "") +
+                ". " + LimitRegistry.MAIL_MAX_PER_THREAD.hint()
             events += MailEvent.CeilingReached(threadId, limits.maxPerThread)
             events += MailEvent.Refused(from, recipient, reason)
             return MailResult.Refused(reason) to events
         }
 
-        // Boundary 2 -- the sender rate limit, a sliding window.
+        // Boundary 2 -- the sender rate limit, a sliding window. Automation mail is exempt (MAIL-LIMITS-1).
         val now = clock()
-        val window = sendHistory.getOrPut(from) { ArrayDeque() }
-        while (window.isNotEmpty() && now - window.first() > limits.windowMs) window.removeFirst()
-        if (window.size >= limits.perSenderPerWindow) {
-            val reason = "rate limit: '$from' already sent ${window.size} messages in the last " +
-                "${limits.windowMs / 60_000} min (limit ${limits.perSenderPerWindow})"
-            events += MailEvent.Refused(from, recipient, reason)
-            return MailResult.Refused(reason) to events
+        val window = if (automation || MailFooter.isAutomation(from)) null else sendHistory.getOrPut(from) { ArrayDeque() }
+        if (window != null) {
+            while (window.isNotEmpty() && now - window.first() > limits.windowMs) window.removeFirst()
+            if (window.size >= limits.perSenderPerWindow) {
+                val reason = "rate limit: '$from' already sent ${window.size} messages in the last " +
+                    "${limits.windowMinutes} min (limit ${limits.perSenderPerWindow}); this message was NOT sent. " + RATE_HINT
+                events += MailEvent.Refused(from, recipient, reason)
+                return MailResult.Refused(reason) to events
+            }
         }
 
         val seq = (seqByThread[threadId] ?: 0L) + 1
@@ -219,7 +237,7 @@ class Mailbox(
             needsInput = request.needsInput,
         )
         messages[message.id] = message
-        window.addLast(now)
+        window?.addLast(now)
         if (replyTo != null) {
             // Answering proves the original was delivered AND read, so record both receipts
             // honestly rather than asserting them earlier.
@@ -248,13 +266,14 @@ class Mailbox(
      * A fan-out of N counts as N messages from the sender against both boundaries (rate limit and
      * per-thread ceiling), so a dispatch can never smuggle past a limit by batching.
      */
-    fun fanOut(request: MailFanOutRequest): FanOutResult {
-        val (result, events) = synchronized(lock) { fanOutLocked(request) }
+    fun fanOut(request: MailFanOutRequest, automation: Boolean = false): FanOutResult {
+        val (result, events) = synchronized(lock) { fanOutLocked(request, automation) }
         emit(events)
         return result
     }
 
-    private fun fanOutLocked(request: MailFanOutRequest): Pair<FanOutResult, List<MailEvent>> {
+    private fun fanOutLocked(request: MailFanOutRequest, automation: Boolean): Pair<FanOutResult, List<MailEvent>> {
+        val limits = this.limits
         val from = request.from.trim()
         val recipients = request.recipients.map { it.trim() }.distinct().filter { it.isNotEmpty() }
         if (from.isEmpty() || recipients.isEmpty()) {
@@ -274,20 +293,23 @@ class Mailbox(
         val inThread = messages.values.count { it.threadId == threadId }
         if (inThread + recipients.size > limits.maxPerThread) {
             val reason = "conversation ceiling reached: thread '$threadId' would hold " +
-                "${inThread + recipients.size} messages (limit ${limits.maxPerThread}); stop and report to the human"
+                "${inThread + recipients.size} messages (limit ${limits.maxPerThread}); stop and report to the human. " +
+                LimitRegistry.MAIL_MAX_PER_THREAD.hint()
             events += MailEvent.CeilingReached(threadId, limits.maxPerThread)
             return FanOutResult.Refused(reason) to events
         }
 
-        // Boundary 2 -- the sender rate limit; a fan-out of N is N sends from the same sender.
+        // Boundary 2 -- the sender rate limit; a fan-out of N is N sends from the same sender. Automation is exempt (MAIL-LIMITS-1).
         val now = clock()
-        val window = sendHistory.getOrPut(from) { ArrayDeque() }
-        while (window.isNotEmpty() && now - window.first() > limits.windowMs) window.removeFirst()
-        if (window.size + recipients.size > limits.perSenderPerWindow) {
-            val reason = "rate limit: fan-out of ${recipients.size} from '$from' would exceed " +
-                "${limits.perSenderPerWindow} in the last ${limits.windowMs / 60_000} min"
-            events += MailEvent.Refused(from, recipients.joinToString(","), reason)
-            return FanOutResult.Refused(reason) to events
+        val window = if (automation || MailFooter.isAutomation(from)) null else sendHistory.getOrPut(from) { ArrayDeque() }
+        if (window != null) {
+            while (window.isNotEmpty() && now - window.first() > limits.windowMs) window.removeFirst()
+            if (window.size + recipients.size > limits.perSenderPerWindow) {
+                val reason = "rate limit: fan-out of ${recipients.size} from '$from' would exceed " +
+                    "${limits.perSenderPerWindow} in the last ${limits.windowMinutes} min; nothing was sent. " + RATE_HINT
+                events += MailEvent.Refused(from, recipients.joinToString(","), reason)
+                return FanOutResult.Refused(reason) to events
+            }
         }
 
         val created = mutableListOf<Message>()
@@ -310,7 +332,7 @@ class Mailbox(
             messages[message.id] = message
             created += message
         }
-        repeat(recipients.size) { window.addLast(now) }
+        repeat(recipients.size) { window?.addLast(now) }
         persistLocked()
         created.forEach { events += MailEvent.Sent(it) }
         return FanOutResult.Sent(created) to events
@@ -487,12 +509,36 @@ class Mailbox(
  * per 10 min, and a per-conversation message ceiling). A conversation that hits the
  * ceiling does not truncate silently -- the send is refused and a [MailEvent.CeilingReached] tells
  * the humans it is time to step in.
+ *
+ * MAIL-LIMITS-1: the defaults are the settings' defaults (`limits.mail.perSenderPerWindow`, `limits.mail.windowMinutes`,
+ * `limits.mail.maxPerThread`); the daemon builds the live value with [of] on every send.
  */
 data class MailLimits(
-    val perSenderPerWindow: Int = 12,
-    val windowMs: Long = 10 * 60_000L,
-    val maxPerThread: Int = 60,
-)
+    val perSenderPerWindow: Int = LimitRegistry.MAIL_PER_SENDER_PER_WINDOW.default.toInt(),
+    val windowMs: Long = LimitRegistry.MAIL_WINDOW_MINUTES.default * MS_PER_MINUTE,
+    val maxPerThread: Int = LimitRegistry.MAIL_MAX_PER_THREAD.default.toInt(),
+) {
+    /** The window in whole minutes, as refusals print it. */
+    val windowMinutes: Long get() = windowMs / MS_PER_MINUTE
+
+    companion object {
+        private const val MS_PER_MINUTE = 60_000L
+
+        /** The limits as [limit] resolves the three settings; `limits.mail.perSenderPerWindow = 0` means no sender limit. */
+        fun of(limit: (LimitDef) -> Long): MailLimits = MailLimits(
+            perSenderPerWindow = limit(LimitRegistry.MAIL_PER_SENDER_PER_WINDOW).let { if (it <= 0L) Int.MAX_VALUE else it.coerceAtMost(Int.MAX_VALUE.toLong()).toInt() },
+            windowMs = limit(LimitRegistry.MAIL_WINDOW_MINUTES).coerceAtLeast(1L) * MS_PER_MINUTE,
+            maxPerThread = limit(LimitRegistry.MAIL_MAX_PER_THREAD).coerceIn(1L, Int.MAX_VALUE.toLong()).toInt(),
+        )
+
+        /** What every sender rate-limit refusal ends with: which setting to raise, and that automation is exempt. */
+        val RATE_HINT: String =
+            LimitRegistry.MAIL_PER_SENDER_PER_WINDOW.hint().removeSuffix(".") +
+                "; the window is the setting '${LimitRegistry.MAIL_WINDOW_MINUTES.key}'. Automation mail (system, triggers, script hooks) is exempt."
+    }
+}
+
+private val RATE_HINT: String get() = MailLimits.RATE_HINT
 
 /** The outcome of [Mailbox.send]. */
 sealed interface MailResult {

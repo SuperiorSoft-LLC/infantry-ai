@@ -2,7 +2,11 @@
 // Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.mailbox
 
+import com.superiorsoftllc.infantry.daemon.isAutomationFrame
+import com.superiorsoftllc.infantry.protocol.Envelope
+import com.superiorsoftllc.infantry.settings.LimitRegistry
 import java.io.File
+import kotlin.test.assertFalse
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -85,8 +89,10 @@ class MailboxSenderRateLimitTest {
         // The exact string, because this is the text `infantry send` prints to stderr and exits non-zero
         // on (CliMain.kt:635-636 re-emits `MailRefused.reason`): it names the shipped 12 and the
         // window in minutes, so a default that drifted changes the assertion, not just the output.
+        // MAIL-LIMITS-1: the refusal now also says the message was not sent and names the setting to raise.
         assertEquals(
-            "rate limit: '$sender' already sent 12 messages in the last 10 min (limit 12)",
+            "rate limit: '$sender' already sent 12 messages in the last 10 min (limit 12); this message was NOT sent. " +
+                MailLimits.RATE_HINT,
             refusal.reason,
         )
 
@@ -236,7 +242,7 @@ class MailboxSenderRateLimitTest {
             "a fan-out of 5 on top of 8 sends would make 13 in the window, so it must be refused",
         )
         assertEquals(
-            "rate limit: fan-out of 5 from '$sender' would exceed 12 in the last 10 min",
+            "rate limit: fan-out of 5 from '$sender' would exceed 12 in the last 10 min; nothing was sent. " + MailLimits.RATE_HINT,
             refusal.reason,
         )
         assertEquals(8, mailbox.outbox(sender).size, "a refused fan-out must store nothing")
@@ -338,7 +344,7 @@ class MailboxSenderRateLimitTest {
             assertIs<MailResult.Refused>(sendTo(mailbox, 13), "attempt $attempt at $now must be refused").reason
         }
         assertEquals(
-            setOf("rate limit: '$sender' already sent 12 messages in the last 10 min (limit 12)"),
+            setOf("rate limit: '$sender' already sent 12 messages in the last 10 min (limit 12); this message was NOT sent. " + MailLimits.RATE_HINT),
             reasons.toSet(),
             "every refusal must report the same full window; a growing count means the refused sends " +
                 "are consuming budget",
@@ -357,6 +363,116 @@ class MailboxSenderRateLimitTest {
         assertIs<MailResult.Refused>(sendTo(mailbox, 113), "and the window is full again at $now")
         assertEquals(24, mailbox.outbox(sender).size, "12 accepted before the refusals + 12 accepted after")
         assertEquals(24, JsonMailStore(file).load().size)
+    }
+
+    // ----- MAIL-LIMITS-1: the limits are settings, automation is exempt, a refusal names the setting -----
+
+    /** The shipped [MailLimits] defaults ARE the settings' defaults: nothing changed for a daemon nobody configured. */
+    @Test
+    fun the_settings_defaults_are_the_shipped_limits() {
+        assertEquals(MailLimits(), MailLimits.of { it.default })
+        assertEquals(12L, LimitRegistry.MAIL_PER_SENDER_PER_WINDOW.default)
+        assertEquals(10L, LimitRegistry.MAIL_WINDOW_MINUTES.default)
+        assertEquals(60L, LimitRegistry.MAIL_MAX_PER_THREAD.default)
+        val keys = LimitRegistry.ALL.map { it.key }
+        for (k in listOf("limits.mail.perSenderPerWindow", "limits.mail.windowMinutes", "limits.mail.maxPerThread")) {
+            assertTrue(k in keys, "$k must be declared in LimitRegistry.ALL so it shows under Settings > Limits")
+        }
+    }
+
+    /** The mailbox reads the settings on every send: a raised, lowered or zeroed limit applies to the very next send. */
+    @Test
+    fun the_settings_are_honoured_live() {
+        val values = mutableMapOf("limits.mail.perSenderPerWindow" to 3L, "limits.mail.windowMinutes" to 1L)
+        var now = AT
+        val mailbox = Mailbox(JsonMailStore(storeFile()), { MailLimits.of { d -> values[d.key] ?: d.default } }, clock = { now })
+
+        repeat(3) { assertIs<MailResult.Sent>(sendTo(mailbox, it + 1), "send ${it + 1} of 3 must be accepted") }
+        val refused = assertIs<MailResult.Refused>(sendTo(mailbox, 4), "the setting says 3, so the 4th is refused")
+        assertTrue(refused.reason.startsWith("rate limit: '$sender' already sent 3 messages in the last 1 min (limit 3)"), refused.reason)
+
+        values["limits.mail.perSenderPerWindow"] = 5L
+        repeat(2) { assertIs<MailResult.Sent>(sendTo(mailbox, 5 + it), "raised to 5: two more fit") }
+        assertIs<MailResult.Refused>(sendTo(mailbox, 7), "and the 6th is refused again")
+
+        // The window setting: 1 minute, so 60_001 ms later the window is empty again.
+        now += 60_001
+        assertIs<MailResult.Sent>(sendTo(mailbox, 8), "limits.mail.windowMinutes = 1 must slide after one minute")
+
+        // 0 = no sender limit.
+        values["limits.mail.perSenderPerWindow"] = 0L
+        repeat(20) { assertIs<MailResult.Sent>(sendTo(mailbox, 100 + it), "0 means no sender limit") }
+    }
+
+    /** limits.mail.maxPerThread is the ceiling: a reply past it is refused, and the refusal names the setting. */
+    @Test
+    fun the_thread_ceiling_setting_is_honoured_and_named() {
+        val mailbox = Mailbox(JsonMailStore(storeFile()), { MailLimits.of { d -> if (d.key == "limits.mail.maxPerThread") 2L else d.default } }, clock = { AT })
+        val first = assertIs<MailResult.Sent>(sendTo(mailbox, 1))
+        assertIs<MailResult.Sent>(mailbox.send(MailSendRequest(from = recipient, to = sender, body = "re", replyTo = first.message.id)))
+        val over = assertIs<MailResult.Refused>(
+            mailbox.send(MailSendRequest(from = sender, to = recipient, body = "re re", threadId = first.message.threadId)),
+        )
+        assertTrue(over.reason.contains("(limit 2)") && over.reason.contains("'limits.mail.maxPerThread'"), over.reason)
+    }
+
+    /**
+     * The owner's case: every hook script mails under ONE identity, so a burst of finished tickets used to pass 12 in 10 min and
+     * drop a new worker's first brief. Automation mail is never refused by the sender limit and does not spend the sender's budget.
+     */
+    @Test
+    fun automation_mail_is_exempt_from_the_sender_limit() {
+        val file = storeFile()
+        val mailbox = Mailbox(JsonMailStore(file), clock = { AT })
+
+        // A script hook's mail (the daemon passes automation = true), under the owner identity the hooks use.
+        repeat(30) { n ->
+            assertIs<MailResult.Sent>(
+                mailbox.send(MailSendRequest(from = sender, to = "worker-${n % 5}", subject = "[AUTOMATIC] brief $n", body = "go"), automation = true),
+                "automation send ${n + 1} of 30 must never be refused by the sender limit",
+            )
+        }
+        // It spent none of the sender's own budget: the same sender still has its full 12 for mail it writes itself.
+        repeat(12) { assertIs<MailResult.Sent>(sendTo(mailbox, it + 1), "own send ${it + 1} of 12: automation took no slot") }
+        assertIs<MailResult.Refused>(sendTo(mailbox, 13), "the sender's own 13th send is still refused")
+        // And automation keeps flowing while that sender's own window is full.
+        assertIs<MailResult.Sent>(mailbox.send(MailSendRequest(from = sender, to = "worker-new", body = "first brief"), automation = true))
+
+        // The daemon's own senders (system notices, triggers) are automation by their sender, with no flag.
+        repeat(30) { assertIs<MailResult.Sent>(mailbox.send(MailSendRequest(from = "system", to = "pm-$it", body = "[AUTOMATIC] n$it"))) }
+        repeat(30) { assertIs<MailResult.Sent>(mailbox.send(MailSendRequest(from = "trigger:nightly", to = "pm-$it", body = "tick $it"))) }
+        // A fan-out by automation is exempt too.
+        assertIs<FanOutResult.Sent>(mailbox.fanOut(MailFanOutRequest(from = sender, recipients = (1..20).map { "w$it" }, body = "status?"), automation = true))
+        assertEquals(30 + 12 + 1 + 60 + 20, JsonMailStore(file).load().size, "every accepted send is on disk")
+    }
+
+    /** A refusal is visible: it says the message was not sent, names the setting (key, CLI, env) and says automation is exempt. */
+    @Test
+    fun a_refusal_names_the_setting_to_raise() {
+        val mailbox = Mailbox(JsonMailStore(storeFile()), clock = { AT })
+        val events = mutableListOf<MailEvent>()
+        mailbox.eventSink = { events += it }
+        repeat(12) { sendTo(mailbox, it + 1) }
+        val reason = assertIs<MailResult.Refused>(sendTo(mailbox, 13)).reason
+        for (part in listOf(
+            "was NOT sent", "'limits.mail.perSenderPerWindow'", "Settings > Limits", "infantry settings set limits.mail.perSenderPerWindow <n>",
+            "INFANTRY_LIMIT_MAIL_PER_SENDER_PER_WINDOW", "'limits.mail.windowMinutes'", "Automation mail",
+        )) assertTrue(reason.contains(part), "the refusal must contain '$part': $reason")
+        // The same text reaches the event sink (the daemon logs it and pushes MAIL_REFUSED to clients).
+        assertEquals(reason, events.filterIsInstance<MailEvent.Refused>().single().reason)
+    }
+
+    /**
+     * How the daemon knows a `mail_send` is automation: the existing script loopback request id (LoopbackFrames) AND the owner
+     * credential. The request id alone is client-chosen, so an agent setting it must still count against its window.
+     */
+    @Test
+    fun only_an_owner_loopback_frame_is_automation() {
+        fun frame(requestId: String?) = Envelope(Envelope.MAIL_SEND, "{}", null).copy(requestId = requestId)
+        assertTrue(isAutomationFrame(frame("loopback:1234"), owner = true), "a script hook's own frame is automation")
+        assertFalse(isAutomationFrame(frame("loopback:1234"), owner = false), "an agent cannot claim automation by its request id")
+        assertFalse(isAutomationFrame(frame("plugin:1234"), owner = true), "an MCP/plugin tool call is the caller's own mail")
+        assertFalse(isAutomationFrame(frame(null), owner = true), "the owner's own CLI send is not automation")
     }
 
     private companion object {
