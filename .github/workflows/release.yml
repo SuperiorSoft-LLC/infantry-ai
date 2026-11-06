@@ -1,5 +1,9 @@
-# RELEASE-AUTO-1: pushing a tag v<MAJOR.MINOR.BUILD> builds the Windows MSI (+ app-image zip) and the Android APK,
-# and the headless server archives (Linux, Windows, macOS), then publishes them with SHA256SUMS and latest.json to that tag's GitHub Release. See docs/RELEASING.md.
+# RELEASE-AUTO-1: pushing a tag v<MAJOR.MINOR.BUILD> builds the Windows MSI (+ app-image zip), the Android APK, the web
+# bundle zip and the headless server archives (Linux, Windows, macOS), then publishes them with SHA256SUMS and latest.json
+# to that tag's GitHub Release. See docs/RELEASING.md.
+# RELEASE-PLATFORMS-1: macOS is a BETA and optional: the macos desktop job and the macos-14 headless leg are
+# continue-on-error, and the release publishes whatever macOS assets succeeded. Windows, Android, web and the
+# linux-x64 / windows-x64 server archives stay required (the release job checks each file).
 name: release
 
 on:
@@ -167,8 +171,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, windows-2022]   # macos-14 refused on this plan (2026-11-06 v1.0.4 run); re-add with the macOS beta
+        # macos-14 (arm64): standard runner, free on a public repo (a private repo's plan refused it, 2026-11-06 v1.0.4).
+        os: [ubuntu-24.04, windows-2022, macos-14]
     runs-on: ${{ matrix.os }}
+    # RELEASE-PLATFORMS-1: the macOS leg is beta; its failure never fails the run, the release just ships without it.
+    continue-on-error: ${{ startsWith(matrix.os, 'macos') }}
     permissions:
       contents: read
     steps:
@@ -220,8 +227,123 @@ jobs:
           path: out/*
           if-no-files-found: error
 
+  # RELEASE-PLATFORMS-1: the macOS (beta) desktop app, an arm64 .dmg built by jpackage on the standard macos-14 runner.
+  # UNSIGNED and un-notarized (no Apple certificate yet), so the asset name says beta and users clear the quarantine flag
+  # by hand (docs/RELEASING.md). Optional: continue-on-error, and the release publishes without it.
+  macos:
+    needs: version
+    runs-on: macos-14
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+      - uses: gradle/actions/setup-gradle@v4
+      # UPDATER-1: CI memory (the wasm production compile outgrew the 3 GB Kotlin daemon) and the official-plugin signing key:
+      # the Infantry key from secrets INFANTRY_PLUGIN_KEYSTORE_BASE64 / INFANTRY_PLUGIN_KEY_ALIAS / IHQ_STOREPASS, else a
+      # throwaway dev key with a warning (a test release only, like the debug APK fallback). $IHQ_SIGN goes on every gradlew.
+      - name: CI Gradle memory and plugin signing
+        shell: bash
+        env:
+          PLUGIN_KS_B64: ${{ secrets.INFANTRY_PLUGIN_KEYSTORE_BASE64 }}
+          PLUGIN_KS_ALIAS: ${{ secrets.INFANTRY_PLUGIN_KEY_ALIAS }}
+          IHQ_STOREPASS: ${{ secrets.IHQ_STOREPASS }}
+        run: |
+          set -euo pipefail
+          gu="${GRADLE_USER_HOME:-$HOME/.gradle}"; mkdir -p "$gu"
+          printf 'org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -XX:+UseParallelGC\nkotlin.daemon.jvmargs=-Xmx4g\n' >> "$gu/gradle.properties"
+          if [ -n "${PLUGIN_KS_B64:-}" ] && [ -n "${PLUGIN_KS_ALIAS:-}" ] && [ -n "${IHQ_STOREPASS:-}" ]; then
+            printf '%s' "$PLUGIN_KS_B64" | base64 -d > "$RUNNER_TEMP/infantry-plugins.p12"
+            echo "IHQ_SIGN=-Pihq.keystore=$RUNNER_TEMP/infantry-plugins.p12 -Pihq.alias=$PLUGIN_KS_ALIAS" >> "$GITHUB_ENV"
+            echo "IHQ_STOREPASS=$IHQ_STOREPASS" >> "$GITHUB_ENV"
+          else
+            echo "::warning::No plugin signing secrets; official plugins are signed with a THROWAWAY dev key (test release only)."
+            echo "IHQ_SIGN=-Pihq.devSign=true" >> "$GITHUB_ENV"
+          fi
+      - name: Build the unsigned .dmg (arm64)
+        shell: bash
+        run: |
+          set -euo pipefail
+          V='${{ needs.version.outputs.version }}'
+          [ "$(uname -m)" = "arm64" ] || { echo "expected an arm64 runner, got $(uname -m); the asset name would lie" >&2; exit 1; }
+          ./gradlew --no-daemon :superiorSoftLibrary:infantryUi:createDistributable :superiorSoftLibrary:infantryUi:packageDmg \
+            -PinfantryVersion="$V" $IHQ_SIGN
+          # Outside the checkout, like the windows job: the packaging guard wants a clean tree.
+          out="$RUNNER_TEMP/out"; mkdir -p "$out"
+          app="$(ls -d superiorSoftLibrary/infantryUi/build/compose/binaries/main/app/*.app | head -n1)"
+          # UPDATER-1 gate: no new package of ours split over two jars of the app (docs/RELEASING.md).
+          scripts/split-packages.sh "$app/Contents/app"
+          codesign -dv "$app" 2>&1 | head -n 4 || true   # diagnostics only: jpackage ad-hoc signs, there is no Developer ID
+          dmg="$(ls superiorSoftLibrary/infantryUi/build/compose/binaries/main/dmg/*.dmg | head -n1)"
+          cp "$dmg" "$out/InfantryAI-$V-macos-arm64-beta.dmg"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: ${{ runner.temp }}/out/*
+          if-no-files-found: error
+
+  # RELEASE-PLATFORMS-1: the browser client's production bundle (:infantryWeb:assembleWeb, WEB-1), the same files the daemon
+  # serves at / from its web/ folder. Not a packaging task, so the packaging guard does not apply.
+  web:
+    needs: version
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+      - uses: gradle/actions/setup-gradle@v4
+      # UPDATER-1: CI memory (the wasm production compile outgrew the 3 GB Kotlin daemon) and the official-plugin signing key:
+      # the Infantry key from secrets INFANTRY_PLUGIN_KEYSTORE_BASE64 / INFANTRY_PLUGIN_KEY_ALIAS / IHQ_STOREPASS, else a
+      # throwaway dev key with a warning (a test release only, like the debug APK fallback). $IHQ_SIGN goes on every gradlew.
+      - name: CI Gradle memory and plugin signing
+        shell: bash
+        env:
+          PLUGIN_KS_B64: ${{ secrets.INFANTRY_PLUGIN_KEYSTORE_BASE64 }}
+          PLUGIN_KS_ALIAS: ${{ secrets.INFANTRY_PLUGIN_KEY_ALIAS }}
+          IHQ_STOREPASS: ${{ secrets.IHQ_STOREPASS }}
+        run: |
+          set -euo pipefail
+          gu="${GRADLE_USER_HOME:-$HOME/.gradle}"; mkdir -p "$gu"
+          printf 'org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -XX:+UseParallelGC\nkotlin.daemon.jvmargs=-Xmx4g\n' >> "$gu/gradle.properties"
+          if [ -n "${PLUGIN_KS_B64:-}" ] && [ -n "${PLUGIN_KS_ALIAS:-}" ] && [ -n "${IHQ_STOREPASS:-}" ]; then
+            printf '%s' "$PLUGIN_KS_B64" | base64 -d > "$RUNNER_TEMP/infantry-plugins.p12"
+            echo "IHQ_SIGN=-Pihq.keystore=$RUNNER_TEMP/infantry-plugins.p12 -Pihq.alias=$PLUGIN_KS_ALIAS" >> "$GITHUB_ENV"
+            echo "IHQ_STOREPASS=$IHQ_STOREPASS" >> "$GITHUB_ENV"
+          else
+            echo "::warning::No plugin signing secrets; official plugins are signed with a THROWAWAY dev key (test release only)."
+            echo "IHQ_SIGN=-Pihq.devSign=true" >> "$GITHUB_ENV"
+          fi
+      - name: Build the web bundle zip
+        shell: bash
+        run: |
+          set -euo pipefail
+          V='${{ needs.version.outputs.version }}'
+          ./gradlew --no-daemon :superiorSoftLibrary:infantryWeb:assembleWeb -PinfantryVersion="$V" $IHQ_SIGN
+          out="$RUNNER_TEMP/out"; stage="$RUNNER_TEMP/web/InfantryAI-web-$V"; mkdir -p "$out" "$stage"
+          cp -R superiorSoftLibrary/infantryWeb/build/assembleWeb/. "$stage/"
+          for f in index.html infantryWeb.mjs; do [ -f "$stage/$f" ] || { echo "web bundle has no $f" >&2; exit 1; }; done
+          (cd "$RUNNER_TEMP/web" && zip -qr "$out/InfantryAI-web-$V.zip" "InfantryAI-web-$V")
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web
+          path: ${{ runner.temp }}/out/*
+          if-no-files-found: error
+
   release:
-    needs: [version, windows, android, headless]
+    # RELEASE-PLATFORMS-1: runs after every build job, even a failed optional macOS one. The required jobs are checked
+    # here, their files and the required server archives in the first step.
+    needs: [version, windows, android, headless, web, macos]
+    if: >-
+      ${{ !cancelled() && needs.version.result == 'success' && needs.windows.result == 'success'
+      && needs.android.result == 'success' && needs.web.result == 'success' }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -238,13 +360,25 @@ jobs:
           set -euo pipefail
           V='${{ needs.version.outputs.version }}'
           cd dl
+          ls -l
           sha256sum InfantryAI-* > SHA256SUMS
+          # RELEASE-PLATFORMS-1: the required assets. $1 is a glob, left unquoted on purpose.
+          need() { ls $1 >/dev/null 2>&1 || { echo "release is missing $2 ($1)" >&2; exit 1; }; }
+          need "InfantryAI-$V-windows.zip" "the Windows app image"
+          need "InfantryAI-$V*.apk" "the Android APK"
+          need "InfantryAI-web-$V.zip" "the web bundle"
+          [ -f "InfantryAI-$V.msi" ] || echo "::warning::no MSI on this release: the Windows in-app updater has nothing to install"
+          [ -f "InfantryAI-$V-macos-arm64-beta.dmg" ] || echo "::warning::the macOS (beta) .dmg did not build; publishing without it"
           # SERVER-UPDATE-5: the headless updater refuses an archive that has no SHA256SUMS line, so a release must carry
-          # every server archive AND list each one. (x64 Linux/Windows, arm64 macOS: the runners above; more arches later.)
-          for p in linux-x64 windows-x64; do   # macos-arm64 back with the macOS runner
-            f="$(ls InfantryAI-server-"$V"-"$p".* 2>/dev/null | head -n1)"
-            [ -n "$f" ] || { echo "release is missing the server archive for $p" >> /dev/stderr; exit 1; }
-            grep -qF "$f" SHA256SUMS || { echo "SHA256SUMS has no line for $f" >> /dev/stderr; exit 1; }
+          # every required server archive AND list each one. macos-arm64 is beta: listed when it built, else a warning
+          # (a macOS server then reports no archive for macos-arm64 and keeps running; no other platform looks at it).
+          for p in linux-x64 windows-x64 macos-arm64; do
+            f="$(ls InfantryAI-server-"$V"-"$p".* 2>/dev/null | head -n1 || true)"
+            if [ -z "$f" ]; then
+              if [ "$p" = macos-arm64 ]; then echo "::warning::the macOS (beta) server archive did not build; publishing without it"; continue; fi
+              echo "release is missing the server archive for $p" >&2; exit 1
+            fi
+            grep -qF "$f" SHA256SUMS || { echo "SHA256SUMS has no line for $f" >&2; exit 1; }
           done
           base="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}"
           assets="$(for f in InfantryAI-*; do
