@@ -56,7 +56,7 @@ import kotlinx.serialization.json.jsonPrimitive
 class CoreShellContext(private val shell: Shell, console: RunConsoleHost?) : ShellContext {
     private val state = shell.state
     private val ui = shell.ui
-    override val link: LinkContext = CoreLink(state) { id -> shell.actionScope.launch { shell.controller.selectPolicy(id) } }
+    override val link: LinkContext = CoreLink(state, { id -> shell.actionScope.launch { shell.controller.selectPolicy(id) } }, shell.controller)
     override val session: SessionContext = CoreSession(state)
     override val git: GitContext = CoreGit(state, shell.controller)
     override val run: RunContext = CoreRun(state, shell.controller, console)
@@ -201,7 +201,12 @@ class CoreShellContext(private val shell: Shell, console: RunConsoleHost?) : She
 }
 
 /** S2: [state]'s link, for a pane drawn outside a shell (its `(state, controller)` entry point). */
-class CoreLink(private val state: AppState, private val onSelectPolicy: ((String) -> Unit)? = null) : LinkContext {
+class CoreLink(
+    private val state: AppState,
+    private val onSelectPolicy: ((String) -> Unit)? = null,
+    /** NOTIFY-1: the link whose frames [frames] / [sendFrame] read and write; null outside a shell. */
+    private val controller: com.superiorsoftllc.infantry.ui.net.Controller? = null,
+) : LinkContext {
     override val live: Boolean get() = state.connection.isLive
     override val contract: String? get() = state.connection.contract
     override val daemonBuild: String? get() = state.connection.daemonBuild
@@ -209,6 +214,11 @@ class CoreLink(private val state: AppState, private val onSelectPolicy: ((String
     override val notices: Map<String, String> get() = state.connection.notices
     override val policy: com.superiorsoftllc.infantry.plugin.api.PolicyWire get() = state.connection.policy
     override fun selectPolicy(presetId: String) { onSelectPolicy?.invoke(presetId) }
+    override fun frames(type: String): Flow<String> =
+        controller?.client?.frames?.let { f -> kotlinx.coroutines.flow.flow { f.collect { if (it.type == type) emit(it.data) } } }
+            ?: kotlinx.coroutines.flow.emptyFlow()
+    override suspend fun sendFrame(type: String, data: String): Boolean =
+        controller?.client?.send(com.superiorsoftllc.infantry.ui.protocol.Envelope(type, data)) ?: false
 }
 
 /** RUNTIME-18: [state]'s process report and [controller]'s process-watch requests, for the official Infantry_Processes. */

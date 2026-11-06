@@ -245,6 +245,36 @@ progress bar and `exec.done` for the result comment and chat note). The pattern:
 exec and puts a plan on the builder's card; the tick hook sets the percent from the output lines; the done hook posts
 `chat_note` ok/fail and moves the ticket.
 
+**Notify on checkpoint tickets** (Infantry_Notify; hook `lane enter done`). The checkpoint list and the sound are hook
+args, so the script holds no project values:
+
+```lua
+local a = input.args
+for _, id in ipairs(a.checkpoints or {}) do
+  if id == a.ticketId then
+    ih.infantry_notify{title = "Checkpoint done: " .. tostring(a.title), body = id .. " is done.",
+      level = "milestone", sound = a.sound or "chime", ticketId = id}
+  end
+end
+```
+
+```
+infantry script hook add "lane enter done" notify-checkpoint --payload '{"checkpoints":["ticket-1234abcd"],"sound":"bell"}'
+```
+
+**Wake the owner when a background build fails** (hook `exec.done`): `urgent` rings even in quiet hours.
+
+```lua
+local a = input.args
+if a.exitCode ~= 0 then
+  ih.infantry_notify{title = "Build failed", body = tostring(a.script) .. " exited " .. tostring(a.exitCode),
+    level = "urgent", sound = "alarm"}
+end
+```
+
+Scripts keep no state between runs, so "notify after N tickets" counts in phase 2 from a tool answer (for example
+`infantry_board` with `columns = "done"`), or marks the Nth ticket with `infantry_notify_milestone` instead.
+
 More shipped scripts: `plugins/official/Infantry_Scripting/project-scripts/` (`on-ticket-done.lua`,
 `on-mail-sent.lua`) and its README.
 

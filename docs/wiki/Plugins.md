@@ -201,6 +201,44 @@ Deeper guides in the repo: `plugins/GUIDE.md`, `plugins/README.md`, `plugins/_te
 
 Screenshot: `docs/img/hello-plugin.png` in the repo.
 
+## System notifications (Infantry_Notify)
+
+`plugins/official/Infantry_Notify` (NOTIFY-1) sends system notifications for **milestones and checkpoints only**. Nothing
+notifies on its own: a notification is sent only when a script, an agent, the CLI asks, or when a ticket marked as a
+milestone enters done. It has a daemon half and a UI half; core only carries the generic frame seam
+(`LinkContext.frames` / `LinkContext.sendFrame` in `ShellContext.kt`).
+
+| Where | What it does |
+|---|---|
+| Desktop (Windows) | a tray toast (`TrayIcon.displayMessage`); clicking it brings the window to the front and opens the ticket. The tray icon appears on the first notification. WAV and mp3 play; ogg does not. |
+| Android | a notification on the "Milestones" channel (`urgent` on "Urgent", heads-up); a tap opens the app on the ticket. Android 13+ asks for POST_NOTIFICATIONS once. Shown while the app is connected, or on its next connect; background push is not built yet. |
+| Web | the browser Notification API, best effort (the permission is asked on the first notification). |
+
+**Send one.** Tool `infantry_notify` (MCP, scripts `ih.infantry_notify{...}`, CLI):
+
+```
+infantry notify --title "Release cut" --body "1.1.0 is tagged" --level milestone --sound chime
+infantry notify --title "Wake up: the nightly build failed" --level urgent --sound alarm --ticket ticket-1234abcd
+```
+
+Arguments: `title` (required), `body`, `level` (`info`, `milestone`, `urgent`), `sound`, `target` (`all`, `desktop`,
+`android`, `web`), `ticketId`, `url`. A notification sent while no client is connected waits in the daemon
+(pending.json in the plugin's state folder) and is delivered on the next connect; each client acks what it showed.
+
+**Milestone tickets.** `infantry_notify_milestone {ticketId, on, sound}` marks a ticket (the notifyOnDone flag; the mark
+is the plugin's, kept in milestones.json in the plugin's state folder, not a field of the ticket). When the marked ticket
+enters done, ONE `milestone` notification fires. CLI: `infantry notify --on-done <ticket> [--sound bell] [--off]`.
+
+**Sounds.** Built in: `chime`, `bell`, `alarm` (synthesised by the plugin, no third-party audio). Add your own `.wav`,
+`.mp3` or `.ogg` to `<state dir>/plugin-data/Infantry_Notify/sounds/` and use its file name; `none` is silent. The
+"Notification sounds" card in Settings lists them with a Play button.
+
+**Settings** (all `notify.*`, "Notifications" card): `notify.enabled` (master switch), `notify.quietHours`
+(`HH:mm-HH:mm`, empty = off; inside it only `urgent` plays a sound), `notify.defaultSound` and `notify.milestoneSound`
+(default `none`), `notify.queueMaxAgeMinutes` (1440), `notify.queueMax` (50), `notify.maxSoundBytes` (512 KB).
+
+Scripting examples: [Scripting](Scripting.md#worked-examples).
+
 ## Run tab commands as tools (Infantry_Run)
 
 **Commands are per project.** A saved command belongs to one project (stored with its `project` id in the daemon's

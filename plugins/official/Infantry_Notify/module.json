@@ -1,0 +1,58 @@
+{
+  "name": "Infantry_Notify",
+  "version": "1.0.0",
+  "apiVersion": 2,
+  "author": "Infantry AI",
+  "description": "System notifications for milestones only (Windows toast, Android notification, browser notification) with custom sounds and a script bridge.",
+  "tier": "official",
+  "sequence": [],
+  "entry": "com.superiorsoftllc.infantry.plugins.official.notify.NotifyPlugin",
+  "jar": "build/libs/Infantry_Notify.jar",
+  "buildOrder": 205,
+  "inject": [
+    { "into": "infantry.shell.windowLayer", "name": "listener", "at": "last", "order": 900 }
+  ],
+  "fieldTypes": ["notify.sounds"],
+  "config": [
+    {
+      "node": "infantry.notify.sounds", "group": "Notification sounds", "title": "Notification sounds", "tab": "Plugins", "order": 921,
+      "applies": "Applies to: the sounds a notification can play. Add your own .wav/.mp3/.ogg to <state dir>/plugin-data/Infantry_Notify/sounds/.",
+      "keywords": ["notify", "notification", "sound", "toast", "milestone"],
+      "fields": [
+        { "key": "notify.soundList", "type": "notify.sounds", "label": "Sounds", "scope": "device", "order": 1 }
+      ]
+    }
+  ],
+  "daemon": {
+    "entry": "com.superiorsoftllc.infantry.plugins.official.notify.daemon.NotifyDaemonPlugin",
+    "jar": "daemon/build/libs/Infantry_Notify-daemon.jar",
+    "apiAtLeast": "1.39.0",
+    "hooks": ["connected"],
+    "tools": [
+      { "name": "infantry_notify", "action": "notify.send", "kind": "write", "description": "Send one system notification (milestones and checkpoints only) to the owner's devices, with an optional sound." },
+      { "name": "infantry_notify_milestone", "action": "notify.milestone", "kind": "write", "description": "Mark a ticket as a milestone (notifyOnDone): one notification when it enters done." }
+    ],
+    "frames": [
+      { "type": "notify_ack", "action": "notify.read", "kind": "read" },
+      { "type": "notify_pending", "action": "notify.read", "kind": "read" },
+      { "type": "notify_sounds", "action": "notify.read", "kind": "read" },
+      { "type": "notify_sound_get", "action": "notify.read", "kind": "read" }
+    ],
+    "config": [
+      {
+        "node": "infantry.notify", "group": "Notifications", "title": "Notifications", "tab": "Plugins", "order": 920,
+        "applies": "Applies to: system notifications. Nothing notifies on its own: only a script, an agent, the CLI or a ticket marked as a milestone sends one.",
+        "keywords": ["notify", "notification", "toast", "milestone", "quiet", "sound", "wake"],
+        "fields": [
+          { "key": "notify.enabled", "type": "toggle", "label": "Notifications on", "default": true, "scope": "daemon", "order": 1, "description": "Master switch. Off = every request is dropped." },
+          { "key": "notify.quietHours", "type": "text", "label": "Quiet hours (HH:mm-HH:mm, empty = off)", "default": "", "scope": "daemon", "order": 2, "placeholder": "22:00-07:00", "description": "Inside these hours only an urgent notification plays a sound; the rest arrive silent." },
+          { "key": "notify.defaultSound", "type": "text", "label": "Default sound", "default": "none", "scope": "daemon", "order": 3, "description": "chime, bell, alarm, a file name in the sounds folder, or none." },
+          { "key": "notify.milestoneSound", "type": "text", "label": "Milestone sound", "default": "none", "scope": "daemon", "order": 4, "description": "The sound of a milestone ticket's notification when the ticket names none." },
+          { "key": "notify.queueMaxAgeMinutes", "type": "number", "label": "Keep undelivered notifications (minutes)", "default": 1440, "min": 0, "max": 525600, "step": 1, "scope": "daemon", "order": 5, "description": "A notification sent while no client is connected waits this long for one." },
+          { "key": "notify.queueMax", "type": "number", "label": "Most undelivered notifications kept", "default": 50, "min": 0, "max": 10000, "step": 1, "scope": "daemon", "order": 6 },
+          { "key": "notify.maxSoundBytes", "type": "number", "label": "Largest sound sent (bytes)", "default": 524288, "min": 0, "max": 16777216, "step": 1024, "scope": "daemon", "order": 7, "description": "A larger sound file is not sent; the notification arrives silent." }
+        ]
+      }
+    ]
+  }
+}

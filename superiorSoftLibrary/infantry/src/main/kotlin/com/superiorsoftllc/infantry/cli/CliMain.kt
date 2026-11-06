@@ -3646,6 +3646,8 @@ internal object Cli {
      * named first by the client. The daemon pushes a `spoken` frame to every client; there is no reply to wait for.
      */
     private fun notify(stream: FrameStream, parsed: ParsedArgs, out: Appendable, err: Appendable, getenv: (String) -> String?): Int = runBlocking {
+        // NOTIFY-1: a system notification (--title) or a milestone mark (--on-done) goes to the Infantry_Notify plugin's tools.
+        if (parsed.title != null || parsed.onDone != null) return@runBlocking systemNotify(stream, parsed, out, err, getenv)
         checkContract(stream, err)
         val text = parsed.say ?: parsed.args.joinToString(" ")
         val req = com.superiorsoftllc.infantry.notify.NotifyRequest(
@@ -3662,11 +3664,37 @@ internal object Cli {
         0
     }
 
+    /** NOTIFY-1: `infantry notify --title ...` calls `infantry_notify`; `--on-done <ticket> [--off]` calls `infantry_notify_milestone`. */
+    private suspend fun systemNotify(stream: FrameStream, parsed: ParsedArgs, out: Appendable, err: Appendable, getenv: (String) -> String?): Int {
+        val onDone = parsed.onDone
+        val (tool, arguments) = if (onDone != null) {
+            "infantry_notify_milestone" to buildMap<String, kotlinx.serialization.json.JsonPrimitive> {
+                put("ticketId", kotlinx.serialization.json.JsonPrimitive(onDone)); put("on", kotlinx.serialization.json.JsonPrimitive(!parsed.off)); parsed.sound?.let { put("sound", kotlinx.serialization.json.JsonPrimitive(it)) }
+            }
+        } else {
+            "infantry_notify" to buildMap<String, kotlinx.serialization.json.JsonPrimitive> {
+                put("title", kotlinx.serialization.json.JsonPrimitive(parsed.title.orEmpty()))
+                parsed.body?.let { put("body", kotlinx.serialization.json.JsonPrimitive(it)) }
+                parsed.level?.let { put("level", kotlinx.serialization.json.JsonPrimitive(it)) }
+                parsed.sound?.let { put("sound", kotlinx.serialization.json.JsonPrimitive(it)) }
+                parsed.target?.let { put("target", kotlinx.serialization.json.JsonPrimitive(it)) }
+                (parsed.ticket ?: getenv("INFANTRY_TICKET_ID")?.trim()?.takeIf { it.isNotEmpty() })?.let { put("ticketId", kotlinx.serialization.json.JsonPrimitive(it)) }
+                parsed.url?.let { put("url", kotlinx.serialization.json.JsonPrimitive(it)) }
+            }
+        }
+        val result = com.superiorsoftllc.infantry.cli.mcp.McpPluginTools(getenv).call(stream, tool, kotlinx.serialization.json.JsonObject(arguments))
+        (if (result.isError) err else out).appendLine(result.text)
+        return if (result.isError) 1 else 0
+    }
+
     private fun notifyUsageError(parsed: ParsedArgs): String? {
+        // NOTIFY-1: the system notification's arguments are checked by the plugin tool (one rule, every caller).
+        if (parsed.onDone != null) return null
+        if (parsed.title != null) return if (parsed.title.isBlank()) "usage: infantry notify --title <text> [--body <text>] [--level info|milestone|urgent] [--sound <name>|none] [--target all|desktop|android|web] [--ticket <id>] [--url <link>]" else null
         val text = parsed.say ?: parsed.args.joinToString(" ")
         val level = parsed.level
         return when {
-            text.isBlank() -> "usage: infantry notify --say \"<short text>\" [--level info|needs-owner|urgent]"
+            text.isBlank() -> "usage: infantry notify --say \"<short text>\" [--level info|needs-owner|urgent] | notify --title <text> [--body ...] [--sound <name>] | notify --on-done <ticket> [--off]"
             level != null && level !in com.superiorsoftllc.infantry.notify.NotifyLevel.ALL ->
                 "--level must be one of ${com.superiorsoftllc.infantry.notify.NotifyLevel.ALL.joinToString(", ")}"
             else -> null
@@ -4913,6 +4941,11 @@ internal object Cli {
         /** VOICE-1: `notify --say <text> [--level info|needs-owner|urgent]`. */
         val say: String? = null,
         val level: String? = null,
+        /** NOTIFY-1: `notify --title <t> [--body] [--level] [--sound <name>] [--target <client>] [--ticket] [--url]` and `notify --on-done <ticket> [--off]`. */
+        val sound: String? = null,
+        val target: String? = null,
+        val onDone: String? = null,
+        val off: Boolean = false,
         val append: Boolean = false,
         val exclusive: Boolean = false,
         val edit: Boolean = false,
@@ -5038,6 +5071,10 @@ internal object Cli {
         var scope: String? = null
         var say: String? = null
         var level: String? = null
+        var sound: String? = null
+        var target: String? = null
+        var onDone: String? = null
+        var off = false
         var append = false
         var exclusive = false
         var edit = false
@@ -5244,6 +5281,22 @@ internal object Cli {
                 }
                 "--level" -> {
                     level = flagValue(args, ++i) ?: return fail(err, "--level expects info, needs-owner or urgent")
+                    i++
+                }
+                "--sound" -> {
+                    sound = flagValue(args, ++i) ?: return fail(err, "--sound expects a sound name (or none)")
+                    i++
+                }
+                "--target" -> {
+                    target = flagValue(args, ++i) ?: return fail(err, "--target expects all, desktop, android or web")
+                    i++
+                }
+                "--on-done" -> {
+                    onDone = flagValue(args, ++i) ?: return fail(err, "--on-done expects a ticket id")
+                    i++
+                }
+                "--off" -> {
+                    off = true
                     i++
                 }
                 "--scope" -> {
@@ -5540,6 +5593,10 @@ internal object Cli {
             scope = scope,
             say = say,
             level = level,
+            sound = sound,
+            target = target,
+            onDone = onDone,
+            off = off,
             append = append,
             exclusive = exclusive,
             edit = edit,
