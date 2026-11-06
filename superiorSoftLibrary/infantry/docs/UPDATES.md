@@ -15,18 +15,36 @@ Updates are a plugin, `plugins/official/Infantry_Updater`, not core:
 Core keeps only generic seams: the plugin route table, `PlatformHost.selfUpdateKey` and the `app.selfUpdate` implementations
 registry. The Updates config sections stay in the locked trust kernel, so an update stays checkable after a bad plugin drop.
 
-### Settings (Configuration > About > Updater, module config `infantry.updater`)
+### Where updates come from: the manifest (UPDATER-DEFAULT-1)
+
+Where releases live is developer data, never a user setting: the Updater's `module.json` carries an `update` block,
+
+```json
+"update": { "type": "github", "repo": "SuperiorSoft-LLC/infantry-ai", "visibility": "public", "channel": "production", "checkIntervalHours": 24 }
+```
+
+and `daemon/build.gradle.kts` (task `updateManifest`) bakes it into the jar as `infantry-update-manifest.properties`
+(`UpdateManifest`), so the window, the daemon half and the headless `infantry update` all check it with zero setup. A build
+can override a value with `-PinfantryUpdateRepo` / `-PinfantryUpdateVisibility` / `-PinfantryUpdateChannel`; the release
+workflow sets `ORG_GRADLE_PROJECT_infantryUpdateRepo` to the repository it publishes to, so a fork's release checks the fork.
+`visibility`: `public` never sends a token, `private` sends a read token (below) to the GitHub API host only. `channel`:
+`production` = GitHub releases, `unstable` = a local releases folder. The same block shape is reserved for a plugin's own
+update source (PLUGIN-UPDATE-1); only the Updater's is read today.
+
+### The user setting (Configuration > About > Updater, module config `infantry.updater`)
 
 | key | values | meaning |
 |---|---|---|
-| `updater.source` | `public` (default) / `private` | `public` never sends a token. `private` sends a read token (below) to the GitHub API host only |
-| `updater.repo` | `owner/repo` | the GitHub repo |
-| `updater.channel` | `production` (default) / `unstable` | production = GitHub releases, unstable = the local folder `updater.dir` |
-| `updater.dir` | folder path | the local releases folder |
-| `updater.checkIntervalHours` | 0 to 720, default 24 | the daemon re-checks this often; 0 = only at start and by hand. A check never installs |
+| `updater.autoCheck` | on (default) / off | on = check at start, every `checkIntervalHours`, and when the desktop window regains focus that long after its last check; off = only "Check for updates". A check never installs |
 
-Precedence: env (`INFANTRY_UPDATE_SOURCE`, `INFANTRY_UPDATE_REPO`, `INFANTRY_UPDATE_DIR`) > `update.properties` (below; it
-also takes the `updater.*` keys) > the module config. The daemon mirrors the effective values (never a token) to
+### Developer overrides (not in the UI)
+
+`INFANTRY_UPDATE_REPO`, `INFANTRY_UPDATE_SOURCE` (public/private), `INFANTRY_UPDATE_DIR`, and `<stateDir>/update.properties`
+(below; it also takes the `updater.*` keys: `updater.source`, `updater.repo`, `updater.channel`, `updater.dir`,
+`updater.checkIntervalHours`). Precedence: env > `update.properties` > the module config > the manifest. A bad value
+(a source that is not public/private, a repo that is not owner/repo, an unknown channel, a non-numeric interval) is ignored
+with a warning in the log; it never turns updates off. Settings are re-read before each check: the window resolves them
+again, and the daemon rebuilds its service when its config or `update.properties` changes, so no restart is needed. The daemon mirrors the effective values (never a token) to
 `<state>/plugin-data/Infantry_Updater/settings.properties`, which the desktop window reads.
 
 ### The private-repo token
@@ -66,7 +84,7 @@ A file named `update.properties` in the installed app's state dir (`INFANTRY_STA
 | `channel` | `unstable` / `production` | unstable = local releases folder, production = GitHub releases. `nightly` is not built yet and is refused. |
 | `source` | `local` / `github` | wins over `channel` when both are set |
 | `dir` | folder path | the local releases folder (also `INFANTRY_UPDATE_DIR`) |
-| `repo` | `owner/repo` | the GitHub repo (also `INFANTRY_UPDATE_REPO`) |
+| `repo` | `owner/repo` | the GitHub repo (also `INFANTRY_UPDATE_REPO`); unset = the manifest's |
 
 With neither `channel` nor `source`: a `dir` means local, else a `repo` means GitHub. `source=local|github` is where
 releases come from; the `updater.source` key (`public` / `private`) is whether a token is sent. A private repo's token

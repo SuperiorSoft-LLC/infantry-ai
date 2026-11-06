@@ -96,7 +96,8 @@ fun runRealDaemonUi(
             application {
                 // RUN-CONSOLE: a pill's console windows live beside the main window.
                 val consoles = remember { DesktopRunConsoles() }
-                InfantryWindow(onCloseRequest = ::exitApplication) {
+                // UPDATER-DEFAULT-1: back at the window after updater.checkIntervalHours (default 24) = check again, silently.
+                InfantryWindow(onCloseRequest = ::exitApplication, onFocusGained = { updater?.checkIfDue() }) {
                     var shellUrl by remember { mutableStateOf(if (remote != null) "" else null) }
                     LaunchedEffect(Unit) { if (shellUrl == null) shellUrl = withContext(Dispatchers.IO) { startLocal() } }
                     androidx.compose.runtime.CompositionLocalProvider(LocalRunConsole provides consoles) {

@@ -48,13 +48,18 @@ class UpdaterDaemonPlugin : DaemonPlugin {
     /** `<state dir>`: the plugin's own folder is `<state dir>/plugin-data/<module>/`. */
     private val stateRoot: File get() = api.stateDir.parentFile?.parentFile ?: UpdaterEnv.stateDir()
 
-    private fun snapshot(): Map<String, String?> = UpdateSettings.SETTING_KEYS.associateWith { api.config(it) }
+    /**
+     * The values the service is built from: the module config, plus (UPDATER-DEFAULT-1) the stamp of the developer's
+     * `update.properties`, so editing that file applies at the next call without a daemon restart.
+     */
+    private fun snapshot(): Map<String, String?> = UpdateSettings.SETTING_KEYS.associateWith { api.config(it) } +
+        (FILE_STAMP to File(stateRoot, UpdateSettings.FILE_NAME).let { f -> if (f.isFile) "${f.lastModified()}:${f.length()}" else null })
 
     @Synchronized
     private fun service(): ServerUpdateService {
         val now = snapshot()
         built?.let { (seen, service) -> if (seen == now) return service }
-        mirror(now)
+        mirror(now - FILE_STAMP)
         val service = ServerUpdateService.fromEnvironment(
             runningAgents = { api.sessions.list().count { it.state in BUSY_STATES } },
             env = { name -> api.env(name) },
@@ -64,6 +69,7 @@ class UpdaterDaemonPlugin : DaemonPlugin {
             engine = engine,
         )
         built = now to service
+        (service.settings as? UpdateSettings.Enabled)?.warnings?.forEach { api.log("updater: settings: $it") }
         engine?.let { runCatching { api.updates.setSource(UpdateComponent.CORE_ID, ReleaseSourceType.coreSource(service.config)) }.onFailure { api.log("updater: could not set the app's update source: ${it::class.simpleName}") } }
         return service
     }
@@ -113,13 +119,17 @@ class UpdaterDaemonPlugin : DaemonPlugin {
         // A background re-check every `updater.checkIntervalHours` (default 24; 0 = only at start and by hand). The check
         // only reads the release list: applying is always the owner's call.
         service() // builds the service from the settings and writes the window's settings mirror; no network
-        val hours = api.config(UpdateSettings.KEY_INTERVAL)?.toIntOrNull()?.takeIf { it >= 0 } ?: UpdateSettings.DEFAULT_INTERVAL_HOURS
+        // UPDATER-DEFAULT-1: the interval is the manifest's (update.checkIntervalHours) unless a developer overrides it;
+        // the user's `updater.autoCheck` off skips the background check (read at each tick, so the switch applies at once).
+        val first = service().config
+        val hours = first?.checkIntervalHours ?: UpdateSettings.DEFAULT_INTERVAL_HOURS
         if (hours > 0) {
             timer = api.schedule("update-check", hours * HOUR_MS) {
-                runCatching { service().check() }.onFailure { api.log("updater: background check failed: ${it::class.simpleName}") }
+                runCatching { service().let { s -> if (s.config?.autoCheck != false) s.check() } }
+                    .onFailure { api.log("updater: background check failed: ${it::class.simpleName}") }
             }
         }
-        api.log("updater: routes up; source=${api.config(UpdateSettings.KEY_SOURCE) ?: "public"}, re-check every ${hours}h")
+        api.log("updater: routes up; repo=${first?.repo ?: "none"}, source=${first?.visibility?.wire ?: "public"}, re-check every ${hours}h, auto=${first?.autoCheck ?: true}")
     }
 
     override fun stop() {
@@ -133,6 +143,9 @@ class UpdaterDaemonPlugin : DaemonPlugin {
     companion object {
         private const val JSON = "application/json"
         private const val HOUR_MS = 3_600_000L
+
+        /** The snapshot entry for update.properties' stamp; never mirrored. */
+        private const val FILE_STAMP = "#update.properties"
 
         /** The session states that mean an agent is mid-turn (core's `isBusy`): an update waits for them or asks to confirm. */
         val BUSY_STATES = setOf("STARTING", "BUSY", "WAITING_INPUT")

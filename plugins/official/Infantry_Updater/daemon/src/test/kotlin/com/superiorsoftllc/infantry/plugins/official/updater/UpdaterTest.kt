@@ -148,7 +148,8 @@ class UpdaterTest {
     fun `a dev build never updates, and an installed one needs a repo`() {
         val dev = UpdateSettings.resolve(installed = false, version = "1.0.0", stateDir = temp, setting = { "o/r" })
         assertIs<UpdateSettings.Disabled>(dev)
-        val noRepo = UpdateSettings.resolve(installed = true, version = "1.0.0", stateDir = temp, setting = { null })
+        // UPDATER-DEFAULT-1: only a build whose manifest names no repo (and no override) has none.
+        val noRepo = UpdateSettings.resolve(installed = true, version = "1.0.0", stateDir = temp, setting = { null }, manifest = { null })
         assertIs<UpdateSettings.Disabled>(noRepo)
         File(temp, UpdateSettings.FILE_NAME).writeText("repo=superiorsoft/agenthq\ntoken=from-a-file\n")
         val fromFile = assertIs<UpdateSettings.Enabled>(
@@ -182,7 +183,7 @@ class UpdaterTest {
     }
 
     @Test
-    fun `updater source public never sends a token, private does, and an unknown source disables`() {
+    fun `updater source public never sends a token, private does, and an unknown source is ignored`() {
         fun resolve(source: String?) = UpdateSettings.resolve(
             true, "1.0.2", temp,
             setting = { if (it == UpdateSettings.REPO) "o/r" else null },
@@ -197,7 +198,11 @@ class UpdaterTest {
         val private = assertIs<UpdateSettings.Enabled>(resolve("private")).config
         assertEquals("env-token", private.token)
         assertTrue("source=private" in private.toString() && "env-token" !in private.toString())
-        assertIs<UpdateSettings.Disabled>(resolve("secret"))
+        // UPDATER-DEFAULT-1 (owner): a bad value never turns updates off; it is ignored with a warning (public, no token).
+        val bad = assertIs<UpdateSettings.Enabled>(resolve("secret"))
+        assertEquals(UpdateVisibility.PUBLIC, bad.config.visibility)
+        assertNull(bad.config.token)
+        assertTrue(bad.warnings.any { "secret" in it }, bad.warnings.toString())
     }
 
     @Test
@@ -215,7 +220,10 @@ class UpdaterTest {
         assertEquals("file/repo", cfg { if (it == UpdateSettings.KEY_REPO) "config/repo" else null }.repo)
         mirror.writeText("updater.repo=o/r\nupdater.checkIntervalHours=-1\n")
         File(temp, UpdateSettings.FILE_NAME).delete()
-        assertIs<UpdateSettings.Disabled>(UpdateSettings.resolve(true, "1.0.2", temp, setting = { null }, env = { null }, credentialStore = { null }))
+        // UPDATER-DEFAULT-1: a bad interval is ignored with a warning (the default 24 h), never "updates off".
+        val badInterval = assertIs<UpdateSettings.Enabled>(UpdateSettings.resolve(true, "1.0.2", temp, setting = { null }, env = { null }, credentialStore = { null }, manifest = { null }))
+        assertEquals(UpdateSettings.DEFAULT_INTERVAL_HOURS, badInterval.config.checkIntervalHours)
+        assertTrue(badInterval.warnings.isNotEmpty())
     }
 
     @Test

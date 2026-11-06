@@ -65,7 +65,8 @@ class UpdateUiLogicTest {
     private fun resolve(props: String, env: Map<String, String> = emptyMap()): UpdateSettings {
         val state = Files.createTempDirectory("st").toFile()
         File(state, UpdateSettings.FILE_NAME).writeText(props)
-        return UpdateSettings.resolve(true, "1.0.3", state, setting = { null }, env = { env[it] }, credentialStore = { null })
+        // The overrides alone: no build manifest (UPDATER-DEFAULT-1 has its own tests).
+        return UpdateSettings.resolve(true, "1.0.3", state, setting = { null }, env = { env[it] }, credentialStore = { null }, manifest = { null })
     }
 
     @Test
@@ -76,8 +77,9 @@ class UpdateUiLogicTest {
         assertEquals(File("C:/rel"), (resolve("source=local\ndir=C:/rel\nrepo=a/b") as UpdateSettings.Enabled).config.localDir)
         assertEquals(File("C:/rel"), (resolve("dir=C:/rel") as UpdateSettings.Enabled).config.localDir)
         assertIs<UpdateSettings.Disabled>(resolve("source=local"))
-        assertIs<UpdateSettings.Disabled>(resolve("channel=nightly\nrepo=a/b"))
-        assertIs<UpdateSettings.Disabled>(resolve("source=ftp\nrepo=a/b"))
+        // UPDATER-DEFAULT-1 (owner): an unknown channel or source is ignored with a warning, never "updates off".
+        assertEquals("a/b", assertIs<UpdateSettings.Enabled>(resolve("channel=nightly\nrepo=a/b")).config.repo)
+        assertEquals("a/b", assertIs<UpdateSettings.Enabled>(resolve("source=ftp\nrepo=a/b")).config.repo)
         assertIs<UpdateSettings.Disabled>(resolve("channel=production"))
     }
 
