@@ -64,6 +64,8 @@ class ClaudeTtySession(
     private val permissionHooks: PermissionHookServer = PermissionHookServer(),
     /** FIRST-RUN-F1: why claude cannot start here (not signed in: [ClaudeSignIn.problem]) given the session env; null = go. */
     private val signInProblem: (Map<String, String>) -> String? = { null },
+    /** FIRST-TURN-1: the first turn's deadlines ([ClaudeFirstTurn.SUBMIT_SETTING], [ClaudeFirstTurn.REPLY_SETTING]), read at every connect. */
+    private val firstTurn: () -> ClaudeFirstTurn = { ClaudeFirstTurn() },
 ) : HarnessSession {
     override val label: String = "claude"
 
@@ -149,7 +151,7 @@ class ClaudeTtySession(
 
     override fun connect(out: SessionOutput, launched: HarnessProcess): SessionConnection {
         val launch = synchronized(launches) { launches.remove(launched) } ?: error("this process was not launched by the interactive claude session")
-        return TtyConnection(out, launch, configDir(), clock, bootTimeoutMs, pidAlive, permissionHooks).also { if (poll) it.startPolling() }
+        return TtyConnection(out, launch, configDir(), clock, bootTimeoutMs, pidAlive, permissionHooks, firstTurn()).also { if (poll) it.startPolling() }
     }
 
     /** One interactive claude in its terminal. Every state change happens in [tick] (the poller thread) or under [lock]. */
@@ -161,6 +163,7 @@ class ClaudeTtySession(
         private val bootTimeoutMs: Long,
         private val pidAlive: (Long) -> Boolean = ::processAlive,
         private val hooks: PermissionHookServer? = null,
+        private val firstTurn: ClaudeFirstTurn = ClaudeFirstTurn(),
     ) : SessionConnection {
         /** [own] = CLI-PTY-4: the CLI began it by itself (nothing to paste); reported with [SessionOutput.turnStarted]. */
         private class Turn(val prompt: String, val own: Boolean = false) {
@@ -172,6 +175,17 @@ class ClaudeTtySession(
             var stopAt: Long? = null
             /** G3: why this turn was interrupted by the session itself (a permission dialog answered No); null = the host asked. */
             var abortReason: String? = null
+            /** FIRST-TURN-1: the connection's first sent turn, held to [firstTurn]'s deadlines until the model's first record. */
+            var watched = false
+            var submittedAt: Long? = null
+            var replied = false
+            /** FIRST-TURN-1: the one recovery tried (what it was), and when. */
+            var recovery: String? = null
+            var recoveredAt: Long? = null
+            /** FIRST-TURN-1: Esc sent to a stuck first request; the nudge is pasted once the CLI took it (pastedAt is null until then). */
+            var escapedAt: Long? = null
+            /** [screenTotal] at the last paste: the screen drawn after it shows whether the prompt sits in the input box. */
+            var screenMark = 0L
         }
 
         private val lock = Any()
@@ -202,6 +216,8 @@ class ClaudeTtySession(
         private var lastOutputAt = 0L
         private var interruptedSeen = false
         private var initSent = false
+        /** FIRST-TURN-1: a sent turn was pasted already (only the first is watched). */
+        private var firstTurnSent = false
         private val screen = StringBuilder()
         /** Characters appended to the screen so far (the scrollback is trimmed; this is not). */
         private var screenTotal = 0L
@@ -359,6 +375,7 @@ class ClaudeTtySession(
             val starts = ArrayList<String?>()
             synchronized(lock) {
                 val turn = active
+                turn?.takeIf { it.submitted && it.submittedAt == null }?.submittedAt = now
                 when {
                     turn == null && ownPending != null -> {
                         // CLI-PTY-4: the CLI is working on a turn of its own: track it, and paste nothing into it until it ends.
@@ -380,6 +397,9 @@ class ClaudeTtySession(
                             val next = queue.poll()
                             unclaimedStopAt = null
                             active = next
+                            next.watched = !firstTurnSent
+                            firstTurnSent = true
+                            next.screenMark = screenTotal
                             paste(next.prompt)
                             next.pastedAt = now
                         } else if (queue.isNotEmpty() && now - launchedAt > bootTimeoutMs) {
@@ -406,6 +426,20 @@ class ClaudeTtySession(
                         ends += Triple(SessionTurnEnd.COMPLETED, 0, null)
                         active = null
                     }
+                    turn.escapedAt != null && turn.pastedAt == null && (interruptedSeen || now - turn.escapedAt!! >= ABORT_GRACE_MS) -> {
+                        // FIRST-TURN-1: the stuck first request is stopped; the nudge carries the conversation on (its Enter follows below).
+                        turn.screenMark = screenTotal
+                        paste(ClaudeFirstTurn.NUDGE)
+                        turn.pastedAt = now
+                        turn.submitted = false
+                        turn.submittedAt = null
+                    }
+                    firstTurnDue(turn, now) -> firstTurnMiss(turn, now)?.let { reason ->
+                        key(ESC) // leave the CLI at its prompt for the next turn
+                        out.output(mapper.resultLine(isError = true, error = reason))
+                        ends += Triple(SessionTurnEnd.FAILED, null, reason)
+                        active = null
+                    }
                     turn.pastedAt != null && turn.enteredAt == null && now - turn.pastedAt!! >= PASTE_SETTLE_MS -> {
                         key(ENTER)
                         turn.enteredAt = now
@@ -430,7 +464,10 @@ class ClaudeTtySession(
         /** One transcript signal; returns an API error's text. */
         private fun onSignal(signal: TranscriptSignal): String? {
             when (signal) {
-                is TranscriptSignal.Line -> out.output(signal.json)
+                is TranscriptSignal.Line -> {
+                    synchronized(lock) { active?.replied = true }
+                    out.output(signal.json)
+                }
                 TranscriptSignal.PromptRecorded -> synchronized(lock) { active?.takeIf { it.stopAt == null }?.let { it.submitted = true } ?: own("a prompt typed in the terminal", specific = true) }
                 is TranscriptSignal.OwnPrompt -> synchronized(lock) { active?.takeIf { it.stopAt == null }?.let { it.submitted = true } ?: own(ownReason(signal.kind), specific = true) }
                 TranscriptSignal.Interrupted -> synchronized(lock) { interruptedSeen = true }
@@ -460,6 +497,66 @@ class ClaudeTtySession(
             mcpSeen = seen
             if (alive && wasUp != true) out.mcpState(McpState.CONNECTED, "MCP server pid $pid runs")
             else if (!alive && wasUp != false) out.mcpState(McpState.DISCONNECTED, "MCP server pid $pid exited")
+        }
+
+        /**
+         * FIRST-TURN-1: the watched first turn missed a deadline: not taken [ClaudeFirstTurn.submitMs] after its paste, or no model record
+         * [ClaudeFirstTurn.replyMs] after it was taken (counted from the recovery once one was tried). Called under [lock].
+         */
+        private fun firstTurnDue(turn: Turn, now: Long): Boolean {
+            if (!turn.watched || turn.replied || turn.abortAt != null || turn.stopAt != null) return false
+            val pasted = turn.pastedAt ?: return false
+            val since = turn.recoveredAt ?: 0L
+            return if (!turn.submitted) firstTurn.submitMs > 0 && now - maxOf(pasted, since) >= firstTurn.submitMs
+            else firstTurn.replyMs > 0 && now - maxOf(turn.submittedAt ?: now, since) >= firstTurn.replyMs
+        }
+
+        /**
+         * FIRST-TURN-1: ONE recovery, then failure. Not taken: Enter again when the prompt shows in the input box, else the prompt pasted
+         * again. Taken but no reply (a first API request that never answers): Esc, then [ClaudeFirstTurn.NUDGE]. Returns the failure reason
+         * (the screen tail included) once the recovery was tried; null when it tries it now. Called under [lock].
+         */
+        private fun firstTurnMiss(turn: Turn, now: Long): String? {
+            val waited = if (!turn.submitted) "took no prompt ${firstTurn.submitSeconds} s after the paste"
+            else "got no reply ${firstTurn.replySeconds} s after it took the prompt"
+            turn.recovery?.let { tried -> return "the interactive claude $waited, after one recovery ($tried); screen: " + screenTail() }
+            val tried = when {
+                turn.submitted -> {
+                    key(ESC)
+                    turn.escapedAt = now
+                    turn.pastedAt = null
+                    turn.enteredAt = null
+                    turn.enterRetried = false
+                    interruptedSeen = false
+                    "the stuck request stopped with Esc and a nudge sent"
+                }
+                promptOnScreen(turn) -> {
+                    key(ENTER)
+                    turn.enteredAt = now
+                    turn.enterRetried = true
+                    "Enter pressed again"
+                }
+                else -> {
+                    turn.screenMark = screenTotal
+                    paste(turn.prompt)
+                    turn.pastedAt = now
+                    turn.enteredAt = null
+                    turn.enterRetried = false
+                    "the prompt pasted again"
+                }
+            }
+            turn.recovery = tried
+            turn.recoveredAt = now
+            out.detail("interactive claude: the first turn $waited; trying once: $tried. Screen: " + screenTail())
+            return null
+        }
+
+        /** FIRST-TURN-1: the screen drawn since [turn]'s paste shows it in the input box (its first characters, or claude's pasted-text marker). */
+        private fun promptOnScreen(turn: Turn): Boolean {
+            val since = (screenTotal - turn.screenMark).coerceIn(0L, screen.length.toLong()).toInt()
+            val drawn = ScreenText.squeeze(screen.takeLast(since).toString())
+            val head = ScreenText.squeeze(turn.prompt).take(ClaudeFirstTurn.PROMPT_HEAD_CHARS)
+            return ClaudeFirstTurn.PASTED_MARKER in drawn || (head.isNotEmpty() && head in drawn)
         }
 
         /** FIRST-RUN-F1: the first-run setup on screen before the CLI came up (no SessionStart yet). Called under [lock]. */
