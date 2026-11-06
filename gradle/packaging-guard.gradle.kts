@@ -4,7 +4,7 @@
 //  1. prints the git branch and short sha at the start of the build,
 //  2. refuses a dirty working tree or a checkout that is neither feature-agenthq-mvp nor a v* tag
 //     (override: -PallowAnyBranch=true, which downgrades the refusal to a warning),
-//  3. writes BUILD-INFO.txt next to what it built and adds a copy of each msi/exe/apk under <outdir>/<sha>/, named with the
+//  3. writes BUILD-INFO.txt next to what it built (inside Contents/Resources for a macOS .app: MACOS-DMG-3) and adds a copy of each msi/exe/apk under <outdir>/<sha>/, named with the
 //     BUILD-STAMP-1 build string (gradle/build-stamp.gradle.kts): InfantryAI-1.0.1.msi -> <sha>/InfantryAI-1.0.1+20261023.1432.e85b223.msi,
 //     app-debug.apk -> <sha>/app-debug-1.0.1+20261023.1432.e85b223.apk. BUILD-INFO.txt carries the same string as build=.
 //     `verifyPackagingStamp` (wired into check) runs this stamping on dummy files and checks both.
@@ -109,7 +109,12 @@ tasks.matching { isGuarded(it) }.configureEach {
         when {
             taskName.endsWith("Distributable") -> {
                 val main = if (taskName.contains("Release")) "main-release" else "main"
-                File(b, "compose/binaries/$main/app").listFiles { f -> f.isDirectory }?.forEach { stamp(it, emptySet()) }
+                // MACOS-DMG-3: a macOS bundle (InfantryAI.app) may hold only Contents/ at its root; a BUILD-INFO.txt next to it
+                // made codesign refuse the app ("unsealed contents present in the bundle root"). The stamp goes into
+                // Contents/Resources there. A Windows/Linux app image keeps it at its root (package-dist.ps1, swap-current.ps1 read it).
+                File(b, "compose/binaries/$main/app").listFiles { f -> f.isDirectory }?.forEach { image ->
+                    stamp(if (image.name.endsWith(".app")) File(image, "Contents/Resources").apply { mkdirs() } else image, emptySet())
+                }
             }
             taskName == "releaseAssets" -> b.resolve("release").listFiles { f -> f.isDirectory && f.name != sha }
                 ?.forEach { stamp(it, setOf("msi", "exe")) }
