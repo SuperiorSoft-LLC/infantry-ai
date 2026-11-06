@@ -1,5 +1,3 @@
-DRAFT: applied, not official until the public launch. Not legal advice.
-
 Infantry AI is licensed per directory (Copyright (c) SuperiorSoft LLC). Most of the repository is Apache-2.0
 (the text below). The core modules superiorSoftLibrary/infantryProtocol, infantryCore, infantryRunner, infantry
 and plugins/core/ are MPL-2.0 and carry their own LICENSE file with the MPL text. The name, logo and emblem are

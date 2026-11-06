@@ -2,9 +2,9 @@
 
 # Licensing: the foundation and everything on top
 
-> **DRAFT: applied, not official until the public launch. Not legal advice.** The split is applied in the repo (license
-> texts in `LICENSES/`, SPDX headers, per-directory `LICENSE` files, `LicenseMapGuardTest`); the owner makes it official
-> at launch. This page explains the split. The source of truth is `docs/LICENSE-MAP.md`; where this page and the map differ,
+> The split is applied in the repo (license
+> texts in `LICENSES/`, SPDX headers, per-directory `LICENSE` files, `LicenseMapGuardTest`); it is official
+> from the public launch. This page explains the split. The source of truth is `docs/LICENSE-MAP.md`; where this page and the map differ,
 > the map wins.
 
 ## The short version

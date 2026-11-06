@@ -1,6 +1,6 @@
-# LICENSE-MAP: directory-by-directory license split (APPLIED as a DRAFT)
+# LICENSE-MAP: directory-by-directory license split (APPLIED)
 
-> **DRAFT: applied, not official until the public launch.** The owner decided on 2026-11-03 (ticket 67e0d704, LICENSE-APPLY-1;
+> The owner decided on 2026-11-03 (ticket 67e0d704, LICENSE-APPLY-1;
 > memory `license-infantryplugins-apache`) and will review once everything is live. The rule: **MPL-2.0 is the abstraction layer**
 > (the generic engine everything plugs into): `infantryProtocol`, `infantryCore`, `infantryRunner`, `infantry`, and the reserved
 > empty `plugins/core/`. **Apache-2.0 is everything concrete on top**: `infantryPlugins` (the whole module, `plugin.api` AND
@@ -209,10 +209,10 @@ and the SPDX header scheme.
 
 ## 7. Status
 
-Applied as a DRAFT by LICENSE-APPLY-1 (2026-11-03): `LICENSES/`, per-directory `LICENSE` files, SPDX headers and
+Applied by LICENSE-APPLY-1, official from the public launch (LAUNCH-PREP-1) (2026-11-03): `LICENSES/`, per-directory `LICENSE` files, SPDX headers and
 `LicenseMapGuardTest`. The root `LICENSE` carries the full Apache-2.0 text (most of the repo) under a header that points to
-this map and the MPL modules' own `LICENSE` files. The DRAFT line goes on launch day. Open follow-ups: notices from an SBOM,
-the CLA bot, replace jlayer / mp3.
+this map and the MPL modules' own `LICENSE` files. The CLA bot is enabled (`.github/workflows/cla.yml`). Open follow-ups: notices from an SBOM,
+replace jlayer / mp3.
 
 ## 8. Guard test (implemented as G2 only; G1, G3-G6 remain proposals)
 
