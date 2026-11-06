@@ -1,0 +1,11 @@
+{
+  "hooks": [
+    {
+      "id": "resume-after-restart",
+      "on": "daemon.started",
+      "script": "resume-after-restart.lua",
+      "args": {},
+      "configArgs": { "resume": "scripting.restart.resume", "prompt": "scripting.restart.prompt" }
+    }
+  ]
+}

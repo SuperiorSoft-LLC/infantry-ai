@@ -1727,35 +1727,11 @@ class InfantryDaemon(
             ticketEvents?.subscribe("core:named-events", eventPublisher::ticket)
             val reconcileReport = manager.loadAndReconcile()
             println("[infantry] reconcile: $reconcileReport")
-            // RESUME-NOTIFY-1: a turn the restart cut is prompted to go on, and its starter (the ticket's notify list, else the watch
-            // recipient or the spawner) and the owner are told. Run once the server is bound (below), so a resumed CLI reaches the daemon.
-            val restartResume = com.superiorsoftllc.infantry.session.RestartResume(
-                get = manager::get,
-                resume = { id, text ->
-                    manager.resume(id, text, com.superiorsoftllc.infantry.protocol.MessageOrigin.System(com.superiorsoftllc.infantry.protocol.SystemKind.RESTART),
-                        wakeReason = com.superiorsoftllc.infantry.session.RestartResume.WAKE_REASON)
-                },
-                notify = { s, line ->
-                    val posted = s.ticketId?.let { tid ->
-                        pluginHost.get().serviceRegistry.find(com.superiorsoftllc.infantry.daemon.api.tickets.TicketReports::class)
-                            ?.let { runCatching { it.postDaemonIssue(tid, line) }.getOrDefault(false) }
-                    } ?: false
-                    if (!posted) {
-                        val to = watchRecipientOf(s)?.takeIf { it != com.superiorsoftllc.infantry.runner.WatchNotices.USER }
-                            ?: s.spawnerSessionId?.takeIf { it != s.id && manager.get(it) != null }
-                        if (to != null) mail.send(com.superiorsoftllc.infantry.mailbox.MailSendRequest(from = "system", to = to, subject = "[AUTOMATIC] daemon restart cut a turn", body = line))
-                    }
-                },
-                raise = { summary, ids ->
-                    attentionSvc.raise(
-                        kind = com.superiorsoftllc.infantry.session.RestartResume.ATTENTION_KIND,
-                        sessionId = ids.singleOrNull(), ticketId = ids.singleOrNull()?.let { manager.get(it)?.ticketId },
-                        outcome = "resumed_after_restart", detail = summary.take(2000),
-                    )
-                },
-                enabled = settings::resumeAfterRestart,
-                prompt = settings::resumeAfterRestartPrompt,
-            )
+            // BRIDGE-EVENTS-1: who waits on a session the restart touched (its ticket's starter, else its spawner); named in `daemon.started`.
+            val restartStarter: (com.superiorsoftllc.infantry.session.SessionRecord) -> String? = { s ->
+                s.ticketId?.let { id -> runCatching { store.transaction { store.tickets.get(id) } }.getOrNull() }?.startedBy?.takeIf { it.isNotBlank() && it != s.id }
+                    ?: s.spawnerSessionId?.takeIf { it != s.id && manager.get(it) != null }
+            }
             // CLI-PTY-5: the kept chat of every session goes back on its replay stream, as history: no process, no turn.
             run {
                 val started = System.nanoTime()
@@ -1816,7 +1792,7 @@ class InfantryDaemon(
                             // `sessions` hook: a session's status push, as the session it is now.
                             if (e.type == Envelope.SESSION) e.sessionId?.let(manager::get)?.let {
                                 plugins.sessionChanged("status", com.superiorsoftllc.infantry.daemon.plugins.CoreDaemonServices.info(it))
-                                eventPublisher.sessionStatus(it.id, it.state.name, it.role, it.projectId)
+                                eventPublisher.sessionStatus(it.id, it.state.name, it.role, it.projectId, it.ticketId, it.agentId)
                                 eventPublisher.sessionMcp(it.id, it.mcp, it.mcpChangedAt, it.role, it.projectId)
                             }
                         }
@@ -1989,14 +1965,17 @@ class InfantryDaemon(
             // engine.start binds (after module setup), so the release-to-bind gap stays as small as it can be.
             // runCatching: it is raised with monitor.raise, so a throwing handler would abort the start.
             server.monitor.subscribe(ApplicationStarted) { runCatching { portReservation.close() } }
-            // RESUME-NOTIFY-1: once the port is bound (a resumed CLI's MCP connects back), off the start thread, once.
-            val restartResumeRan = java.util.concurrent.atomic.AtomicBoolean(false)
+            // BRIDGE-EVENTS-1: once the port is bound (a resumed CLI's MCP connects back), once: `daemon.started` with the turns the stop
+            // cut and the sessions still running. Core only reports; the process (resume, notify) is a script (Infantry_Scripting's
+            // shipped `resume-after-restart`, or the developer's own hook on `daemon.started`).
+            val daemonStartedSent = java.util.concurrent.atomic.AtomicBoolean(false)
             server.monitor.subscribe(io.ktor.server.application.ServerReady) {
-                if (reconcileReport.cutTurns.isNotEmpty() || reconcileReport.orphanedIds.isNotEmpty()) {
-                    if (restartResumeRan.compareAndSet(false, true)) Thread({
-                        runCatching { println("[infantry] restart resume: ${restartResume.run(reconcileReport)}") }
-                            .onFailure { System.err.println("[infantry] restart resume failed: ${it.message}") }
-                    }, "infantry-restart-resume").apply { isDaemon = true }.start()
+                if (daemonStartedSent.compareAndSet(false, true)) {
+                    runCatching {
+                        val payload = com.superiorsoftllc.infantry.session.DaemonStartedEvent.payload(reconcileReport, manager::get, restartStarter)
+                        eventPublisher.daemonStarted(payload)
+                        println("[infantry] daemon.started: cutTurns=${reconcileReport.cutTurns.size} orphaned=${reconcileReport.orphanedIds.size}")
+                    }.onFailure { System.err.println("[infantry] daemon.started failed: ${it.message}") }
                 }
             }
 

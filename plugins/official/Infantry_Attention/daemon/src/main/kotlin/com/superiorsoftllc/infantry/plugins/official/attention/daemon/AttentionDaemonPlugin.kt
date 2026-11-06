@@ -35,6 +35,8 @@ class AttentionDaemonPlugin : DaemonPlugin {
         // ATTN-2b: the attention store, service, frames and `GET /attention` live here; core only looks the service up.
         val store = AttentionStore(api.storage)
         store.eventSink = { api.events.broadcast("attention", AttentionJson.itemText(it)) }
+        // BRIDGE-EVENTS-1: scripts raise items too (the restart summary is a script now).
+        api.tools.register(AttentionRaiseTool { kind, ticketId, sessionId, outcome, detail -> store.raise(kind, null, ticketId, null, sessionId, outcome, detail).id })
         api.services.provide(Attention::class, object : Attention {
             override fun raise(kind: String, triggerId: String?, ticketId: String?, podId: String?, sessionId: String?, outcome: String, detail: String): String? =
                 store.raise(kind, triggerId, ticketId, podId, sessionId, outcome, detail).id

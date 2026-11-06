@@ -8,17 +8,25 @@ import com.superiorsoftllc.infantry.runner.ProcessListener
 import com.superiorsoftllc.infantry.runner.ProcessRunner
 import com.superiorsoftllc.infantry.runner.ProcessSpec
 import com.superiorsoftllc.infantry.runner.RunningProcess
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * RESUME-NOTIFY-1: a daemon restart cut two workers' turns and nobody was told. A session that was mid-turn when the daemon
- * stopped is resumed on the next start and its starter and the owner hear about it; a session at rest between turns is left
- * alone; the setting turns the resume off but never the notice.
+ * BRIDGE-EVENTS-1 (was RestartResumeTest, RESUME-NOTIFY-1): core only DETECTS a cut turn and publishes it as `daemon.started`.
+ * A session that was mid-turn when the daemon stopped is in cutTurns with who waits on it; a session at rest between turns is not;
+ * a process that outlived the daemon is in orphaned, never cutTurns. The process (prompt, notice, attention item) is the shipped
+ * script, tested in Infantry_Lua's ResumeAfterRestartScriptTest. A cut session can still be resumed on the same conversation,
+ * which is what the script's infantry_prompt does.
  */
-class RestartResumeTest {
+class DaemonStartedEventTest {
 
     private class FakeProvider : AgentProvider {
         override val id = "fake"
@@ -53,23 +61,13 @@ class RestartResumeTest {
     private fun restarted(file: File, runner: FakeRunner = FakeRunner(), alive: Boolean = false) =
         SessionManager(FakeProvider(), runner, JsonSessionStore(file), killGraceMs = 50, pidProbe = { _: Long -> alive })
 
-    private class Recorder {
-        val prompts = mutableListOf<Pair<String, String>>()
-        val notices = mutableListOf<Pair<String, String>>()
-        val raised = mutableListOf<Pair<String, List<String>>>()
-    }
+    private fun payload(report: ReconcileReport, manager: SessionManager, starter: (SessionRecord) -> String? = { null }): JsonObject =
+        Json.parseToJsonElement(DaemonStartedEvent.payload(report, manager::get, starter)).jsonObject
 
-    private fun resumer(manager: SessionManager, rec: Recorder, enabled: Boolean = true, prompt: String = "") = RestartResume(
-        get = manager::get,
-        resume = { id, text -> rec.prompts += id to text; manager.resume(id, text, wakeReason = RestartResume.WAKE_REASON) },
-        notify = { s, line -> rec.notices += s.id to line },
-        raise = { summary, ids -> rec.raised += summary to ids },
-        enabled = { enabled },
-        prompt = { prompt },
-    )
+    private fun ids(o: JsonObject, key: String) = o.getValue(key).jsonArray.map { it.jsonObject.getValue("sessionId").jsonPrimitive.content }
 
     @Test
-    fun midTurnAtStop_isResumedAndNotified() {
+    fun midTurnAtStop_isInCutTurns_withItsFields_andCanBeResumed() {
         val file = storeFile()
         val session = SessionManager(FakeProvider(), FakeRunner(), JsonSessionStore(file), killGraceMs = 50).startNew("long turn")
         assertEquals(SessionState.BUSY, session.state, "the turn is in flight when the daemon stops")
@@ -79,24 +77,21 @@ class RestartResumeTest {
         val report = managerB.loadAndReconcile()
         assertEquals(listOf(session.id), report.cutTurns, "the cut turn is reported")
 
-        val rec = Recorder()
-        val outcome = resumer(managerB, rec).run(report)
+        val p = payload(report, managerB) { "pm-1" }
+        assertEquals(listOf(session.id), ids(p, "cutTurns"))
+        val cut = p.getValue("cutTurns").jsonArray.single().jsonObject
+        assertEquals("pm-1", cut.getValue("starter").jsonPrimitive.content, "who waits on it")
+        assertEquals(session.id, cut.getValue("sessionId").jsonPrimitive.content)
+        assertTrue(ids(p, "orphaned").isEmpty())
+        assertEquals(JsonArray(emptyList()), p.getValue("orphanedIds"))
 
-        assertEquals(listOf(session.id), outcome.resumed)
-        assertEquals(listOf(session.id to RestartResume.DEFAULT_PROMPT), rec.prompts, "the default prompt when the setting is empty")
-        val resumed = managerB.get(session.id)!!
+        val resumed = managerB.resume(session.id, "Continue where you left off.")
         assertEquals(SessionState.BUSY, resumed.state, "the session runs again")
         assertEquals(listOf("fake", "prov-123"), runnerB.specs.last().command, "it continues the same conversation")
-        assertEquals(1, rec.notices.size, "one notice to the session's starter")
-        assertEquals(session.id, rec.notices.single().first)
-        assertTrue(rec.notices.single().second.contains("prompted to continue"), rec.notices.single().second)
-        assertEquals(1, rec.raised.size, "one attention item for the owner")
-        assertTrue(rec.raised.single().first.startsWith("1 session(s) had their turn cut by a daemon restart; 1 resumed."), rec.raised.single().first)
-        assertEquals(listOf(session.id), rec.raised.single().second)
     }
 
     @Test
-    fun sessionAtRestBetweenTurns_isNotPrompted() {
+    fun sessionAtRestBetweenTurns_isNotInThePayload() {
         val file = storeFile()
         val runnerA = FakeRunner()
         val session = SessionManager(FakeProvider(), runnerA, JsonSessionStore(file), killGraceMs = 50).startNew("short turn")
@@ -105,42 +100,13 @@ class RestartResumeTest {
         val managerB = restarted(file)
         val report = managerB.loadAndReconcile()
         assertTrue(report.cutTurns.isEmpty(), "an idle session's turn was not cut: ${report.cutTurns}")
-
-        val rec = Recorder()
-        val outcome = resumer(managerB, rec).run(report)
-        assertEquals(0, outcome.total)
-        assertTrue(rec.prompts.isEmpty() && rec.notices.isEmpty() && rec.raised.isEmpty(), "nothing is sent for a session at rest")
+        val p = payload(report, managerB)
+        assertTrue(ids(p, "cutTurns").isEmpty() && ids(p, "orphaned").isEmpty(), "nothing to do for a session at rest: $p")
         assertEquals(SessionState.IDLE, managerB.get(session.id)!!.state)
     }
 
     @Test
-    fun resumeOff_stillNotifies_butDoesNotPrompt() {
-        val file = storeFile()
-        val session = SessionManager(FakeProvider(), FakeRunner(), JsonSessionStore(file), killGraceMs = 50).startNew("long turn")
-        val managerB = restarted(file)
-        val report = managerB.loadAndReconcile()
-
-        val rec = Recorder()
-        val outcome = resumer(managerB, rec, enabled = false).run(report)
-        assertEquals(listOf(session.id), outcome.notResumed)
-        assertTrue(rec.prompts.isEmpty(), "auto-resume off: no prompt")
-        assertEquals(SessionState.EXITED, managerB.get(session.id)!!.state)
-        assertTrue(rec.notices.single().second.contains(RestartResume.ENABLED_SETTING), "the notice names the setting")
-        assertEquals(1, rec.raised.size)
-    }
-
-    @Test
-    fun customPrompt_isTheOneDelivered() {
-        val file = storeFile()
-        val session = SessionManager(FakeProvider(), FakeRunner(), JsonSessionStore(file), killGraceMs = 50).startNew("long turn")
-        val managerB = restarted(file)
-        val rec = Recorder()
-        resumer(managerB, rec, prompt = "Go on.").run(managerB.loadAndReconcile())
-        assertEquals(listOf(session.id to "Go on."), rec.prompts)
-    }
-
-    @Test
-    fun orphanStillRunning_isNamedButNotPrompted() {
+    fun orphanStillRunning_isInOrphaned_neverCutTurns() {
         val file = storeFile()
         val session = SessionManager(FakeProvider(), FakeRunner(), JsonSessionStore(file), killGraceMs = 50).startNew("long turn")
         val managerB = restarted(file, alive = true)
@@ -148,11 +114,22 @@ class RestartResumeTest {
         assertTrue(report.cutTurns.isEmpty())
         assertEquals(listOf(session.id), report.orphanedIds)
 
-        val rec = Recorder()
-        val outcome = resumer(managerB, rec).run(report)
-        assertEquals(listOf(session.id), outcome.orphaned)
-        assertTrue(rec.prompts.isEmpty(), "a process that outlived the daemon is never prompted twice")
-        assertTrue(rec.notices.single().second.contains("still alive"))
+        val p = payload(report, managerB)
+        assertTrue(ids(p, "cutTurns").isEmpty(), "a process that outlived the daemon is never prompted twice")
+        assertEquals(listOf(session.id), ids(p, "orphaned"))
+        assertEquals(listOf(session.id), p.getValue("orphanedIds").jsonArray.map { it.jsonPrimitive.content })
         assertEquals(SessionState.ORPHANED, managerB.get(session.id)!!.state)
+    }
+
+    @Test
+    fun aSessionGoneFromTheStore_isLeftOut_andAStarterEqualToItselfIsDropped() {
+        val file = storeFile()
+        val session = SessionManager(FakeProvider(), FakeRunner(), JsonSessionStore(file), killGraceMs = 50).startNew("long turn")
+        val managerB = restarted(file)
+        val report = managerB.loadAndReconcile()
+        val p = payload(report.copy(cutTurns = report.cutTurns + "gone-1", orphanedIds = listOf("gone-2")), managerB) { it.id }
+        assertEquals(listOf(session.id), ids(p, "cutTurns"))
+        assertTrue("starter" !in p.getValue("cutTurns").jsonArray.single().jsonObject, "its own id is no starter")
+        assertTrue(ids(p, "orphaned").isEmpty())
     }
 }

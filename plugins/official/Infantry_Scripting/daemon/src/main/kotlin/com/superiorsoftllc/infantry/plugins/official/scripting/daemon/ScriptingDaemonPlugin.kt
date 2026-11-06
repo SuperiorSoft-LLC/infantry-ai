@@ -75,6 +75,7 @@ class ScriptingDaemonPlugin : DaemonPlugin {
         api.tools.register(tools.api)
         // SCRIPT-5: hooks are data (hooks.json); one subscription on the named-event bus runs them.
         val hookStore = HookStore { api.files(it) }
+        val builtinHooks = BuiltinHook.fromJar { api.log(it) }
         api.tools.register(HookTools(hookStore, store, { HookSettings.minEverySec { api.config(it) } }).tool)
         SaveTools(store, hookStore, engines, api::displayStamp).let { api.tools.register(it.save); api.tools.register(it.list); api.tools.register(it.delete) }
         val hooks = ScriptHooks(
@@ -84,6 +85,9 @@ class ScriptingDaemonPlugin : DaemonPlugin {
             tip = { project, branch -> ScriptHooks.gitTip(File(api.files(project).absolutePath("x")).parentFile.parentFile, branch) },
             log = { api.log(it) }, runLog = runLog,
             automation = marks.setter,
+            // BRIDGE-EVENTS-1: the hooks this plugin ships (builtin-scripts/ in the jar), e.g. resume-after-restart on daemon.started.
+            builtins = { builtinHooks },
+            builtinConfig = { api.config(it) },
         )
         // SCRIPT-VIS-1: why each session was woken (and mails a hook handled instead), from the daemon's session.woken event.
         wakeWatch = api.events.subscribe("session.woken") { e ->
@@ -120,7 +124,7 @@ class ScriptingDaemonPlugin : DaemonPlugin {
         }, 1, 1, java.util.concurrent.TimeUnit.SECONDS)
         timer = clock
         subscription = api.events.subscribe("*") { hooks.onEvent(it) }
-        api.log("scripting ready: engines=${engines.ids()} limits=${limits.current()}")
+        api.log("scripting ready: engines=${engines.ids()} limits=${limits.current()} builtins=${builtinHooks.map { it.id }}")
     }
 }
 

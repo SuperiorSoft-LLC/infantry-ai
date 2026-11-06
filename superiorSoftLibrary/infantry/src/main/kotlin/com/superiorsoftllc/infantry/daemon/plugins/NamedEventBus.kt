@@ -58,7 +58,14 @@ class NamedEventBus(
             "ticket.created", "ticket.moved", "ticket.updated", "ticket.deleted", "ticket.commented",
             "session.started", "session.idle", "session.ended", "session.woken", "mail.sent",
             "session.turn_started", "session.turn_ended", "session.tool_call", "session.output", "session.error",
-            "session.mcp",
+            "session.mcp", "daemon.started",
         )
+
+        /**
+         * BRIDGE-EVENTS-1: names kept for events the daemon will publish but cannot yet. `session.first-turn-timeout`: a harness's first turn
+         * got no sign of life (FIRST-TURN-1 fails that turn, so today a script sees `session.error` + `session.idle`); it needs a harness API
+         * seam to name the cause, which is an API contract bump of its own.
+         */
+        val RESERVED_EVENTS = listOf("session.first-turn-timeout")
     }
 }

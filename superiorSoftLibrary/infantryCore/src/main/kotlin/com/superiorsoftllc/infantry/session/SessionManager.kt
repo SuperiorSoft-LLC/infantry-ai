@@ -41,7 +41,7 @@ data class ReconcileReport(
     val reaped: Int = 0,
     /**
      * RESUME-NOTIFY-1: sessions that were MID-TURN when the previous daemon stopped (a run in flight, no end recorded) and are at
-     * rest now (EXITED, or IDLE after their kept process was reaped): their turn was cut. [RestartResume] prompts them to go on.
+     * rest now (EXITED, or IDLE after their kept process was reaped): their turn was cut. They go out on the `daemon.started` event ([DaemonStartedEvent]); a script decides what happens.
      */
     val cutTurns: List<String> = emptyList(),
     /** RESUME-NOTIFY-1: mid-turn sessions whose child outlived the daemon ([orphaned]): still running, so never re-prompted. */
