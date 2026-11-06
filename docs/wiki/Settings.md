@@ -46,6 +46,8 @@ The default is the cheapest reasonable value. A costlier value is an opt-in. The
 | `mail.deliveryMode` | `notify` | What a wake injects: `notify`, `truncate`, `full` | `full` injects every body, re-read on every later turn |
 | `limits.session.contextCapTokens` | `100000` | Past this context size, a resting session is restarted with a short handoff when mail wakes it; `0` = off | A higher cap or `0` keeps longer context; each turn costs more |
 | `session.keepAliveMinutes` | `30` | Minutes a resting harness process is kept alive; `0` = one-shot | A longer keep-alive holds more RAM |
+| `session.resumeAfterRestart` | `true` | A session whose turn a daemon restart cut is prompted to continue at the next start; its starter (the ticket's notify list) and the owner (an attention item) are told either way | Each resumed session spends one more turn |
+| `session.resumeAfterRestartPrompt` | `""` | The prompt such a session gets; `""` = "The daemon restarted and your last turn was cut. Continue where you left off." | none |
 | `context.includeLinkedTasksContext` | `true` | Linked-tickets section in the brief | Longer brief when on |
 | `context.includeSkillsContext` | `true` | Skills section in the brief | Longer brief when on |
 | `context.includeFinishInstructions` | `true` | Report-instruction lines in the brief | Turn off when a script or role note owns the finish step |

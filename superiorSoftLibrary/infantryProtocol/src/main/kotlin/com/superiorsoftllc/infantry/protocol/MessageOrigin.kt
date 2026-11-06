@@ -55,4 +55,6 @@ object SystemKind {
     const val HANDOVER = "handover"
     const val SLASH_COMMAND = "slash_command"
     const val SCHEDULER = "scheduler"
+    /** RESUME-NOTIFY-1: the prompt a session gets when a daemon restart cut its turn. */
+    const val RESTART = "restart"
 }
