@@ -31,6 +31,8 @@ class ChatNoteTools(
     private val clock: () -> Long = System::currentTimeMillis,
     private val maxChars: Int = 400,
     private val perMinute: Int = 20,
+    /** HARNESS-GAP G21: every session id, read only when a sessionId is not a full id (a unique prefix names one session). */
+    private val allSessionIds: () -> List<String> = { emptyList() },
 ) {
     private val seq = java.util.concurrent.atomic.AtomicLong()
     private val recent = java.util.concurrent.ConcurrentHashMap<String, java.util.ArrayDeque<Long>>()
@@ -50,9 +52,12 @@ class ChatNoteTools(
         val a = call.arguments
         fun s(k: String) = (a[k] as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
         val text = s("text") ?: return refuse("needs text")
-        s("image")?.let { img -> return (forwardImage ?: return refuse("images are not available here")).invoke(buildJsonObject { a.forEach { (k, v) -> if (k != "image") put(k, v) }; put("path", img); put("caption", text) }, call) }
+        val target = when (val ref = SessionRef.of(s("sessionId") ?: call.clientSessionId ?: return refuse("needs sessionId"), { projectOf(it) != null }, allSessionIds)) {
+            is SessionRef.Found -> ref.id
+            is SessionRef.Refused -> return refuse(ref.why)
+        }
+        s("image")?.let { img -> return (forwardImage ?: return refuse("images are not available here")).invoke(buildJsonObject { a.forEach { (k, v) -> if (k != "image" && k != "sessionId") put(k, v) }; put("sessionId", target); put("path", img); put("caption", text) }, call) }
         val level = (s("level") ?: "info").lowercase().also { if (it !in LEVELS) return refuse("level must be info, ok, warn or fail (got '$it')") }
-        val target = s("sessionId") ?: call.clientSessionId ?: return refuse("needs sessionId")
         val targetProject = projectOf(target) ?: return refuse("unknown session $target")
         val callerProject = call.clientProjectId ?: call.clientSessionId?.let(projectOf) ?: return refuse("needs a project context")
         if (targetProject != callerProject) return refuse("session $target is in another project")

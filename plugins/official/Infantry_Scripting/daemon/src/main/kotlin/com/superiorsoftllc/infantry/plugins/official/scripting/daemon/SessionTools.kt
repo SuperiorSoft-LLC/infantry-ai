@@ -45,6 +45,8 @@ class SessionTools(
     private val queueAdd: (String, String) -> QueuedMessage? = { _, _ -> throw UnsupportedOperationException("this daemon holds no message queue") },
     private val queueRemove: (String, String) -> QueuedMessage = { _, _ -> throw UnsupportedOperationException("this daemon holds no message queue") },
     private val queueForce: (String, String) -> String = { _, _ -> throw UnsupportedOperationException("this daemon holds no message queue") },
+    /** HARNESS-GAP G21: every session id, read only when a sessionId is not a full id (a unique prefix names one session). */
+    private val allSessionIds: () -> List<String> = { emptyList() },
 ) {
     private val recent = java.util.concurrent.ConcurrentHashMap<String, java.util.ArrayDeque<Long>>()
 
@@ -140,7 +142,11 @@ class SessionTools(
 
     private fun guarded(call: ToolCall, requireText: Boolean, body: (String, JsonObject) -> ToolResult): ToolResult {
         val a = call.arguments
-        val target = (a["sessionId"] as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() } ?: call.clientSessionId ?: return refuse("needs sessionId")
+        val ref = (a["sessionId"] as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() } ?: call.clientSessionId ?: return refuse("needs sessionId")
+        val target = when (val r = SessionRef.of(ref, { session(it) != null }, allSessionIds)) {
+            is SessionRef.Found -> r.id
+            is SessionRef.Refused -> return refuse(r.why)
+        }
         val targetProject = session(target)?.projectId ?: return refuse("unknown session $target")
         val callerProject = call.clientProjectId ?: call.clientSessionId?.let { session(it)?.projectId } ?: return refuse("needs a project context")
         if (targetProject != callerProject) return refuse("session $target is in another project")
