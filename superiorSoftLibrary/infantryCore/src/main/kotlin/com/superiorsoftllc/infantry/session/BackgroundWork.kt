@@ -149,7 +149,15 @@ data class BgJob(
     val logPaused: String? = null,
     /** STALL-4: `watch-file` with no pid: done once [follow] has not grown for this many seconds. */
     val idleSeconds: Long? = null,
+    /** HARNESS-GAP G16: the wrapper's OS start instant (epoch ms); `bg stop` refuses a pid whose start differs (a recycled pid). */
+    val pidStart: Long? = null,
+    /** HARNESS-GAP G16: the command's tree as the wrapper last saw it (pid + start), so `bg stop` reaches a grandchild whose parent already exited. */
+    val members: List<BgMember> = emptyList(),
 )
+
+/** HARNESS-GAP G16: one process of a bg job's tree, identified by pid AND start instant (epoch ms). */
+@Serializable
+data class BgMember(val pid: Long, val startedAt: Long? = null)
 
 /**
  * BG-NOTIFY: what the daemon watches for on a `--notify` job and tells the owning session by COMMS mail (which wakes an
@@ -167,7 +175,7 @@ data class BgNotify(
 )
 
 /**
- * One `bg_job` request. [op] is `beat` (register or heartbeat: an upsert), `done`, `eof` (STALL-1: the output closed while the command still runs), `ack` (STALL-6: the session has seen the job's result; its queued notices are dropped), or `list`. On `done` the wrapper adds
+ * One `bg_job` request. [op] is `beat` (register or heartbeat: an upsert), `done`, `eof` (STALL-1: the output closed while the command still runs), `ack` (STALL-6: the session has seen the job's result; its queued notices are dropped), `stop` (HARNESS-GAP G16: the daemon ends the job's recorded tree), or `list`. On `done` the wrapper adds
  * the command's [exitCode] and its last output lines ([tail]) for a `--notify` job's notice.
  */
 @Serializable

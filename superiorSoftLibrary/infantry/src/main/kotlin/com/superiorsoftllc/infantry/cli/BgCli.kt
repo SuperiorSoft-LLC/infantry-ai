@@ -798,6 +798,8 @@ internal object BgCli {
         }.apply { isDaemon = true; name = "infantry-bg-reader"; start() }
         // Children are snapshotted while the command lives: once it has exited, its tree can no longer be asked for.
         val lastKids = java.util.concurrent.atomic.AtomicReference<List<ProcessHandle>>(emptyList())
+        // HARNESS-GAP G16: the daemon's `stop` needs the wrapper's start instant and the tree's members (pid + start).
+        job = job.copy(pidStart = ProcessHandle.current().info().startInstant().map { it.toEpochMilli() }.orElse(null))
         val beat = Thread {
             try {
                 var nextBeat = System.currentTimeMillis() + BEAT_MS
@@ -806,6 +808,11 @@ internal object BgCli {
                     // Often at first: a short-lived command may start its child and exit within a second.
                     Thread.sleep(if (System.currentTimeMillis() - started < 5_000) 200 else 1_000)
                     runCatching { child.descendants().toList().takeIf { it.isNotEmpty() || !child.isAlive }?.let(lastKids::set) }
+                    runCatching {
+                        val seen = (listOf(child.toHandle()) + lastKids.get()).filter { it.isAlive }.map { com.superiorsoftllc.infantry.session.BgMember(it.pid(), it.info().startInstant().map { s -> s.toEpochMilli() }.orElse(null)) }
+                        val merged = (job.members + seen).distinctBy { it.pid }.filter { m -> ProcessHandle.of(m.pid).map { it.isAlive }.orElse(false) }
+                        if (merged != job.members) job = job.copy(members = merged)
+                    }
                     runCatching { tree?.alive() } // the snapshot form learns members only while it can still see them
                     val now = System.currentTimeMillis()
                     if (now >= nextLine) {
@@ -1003,14 +1010,21 @@ internal object BgCli {
                 }
                 "logs" -> logsOf(File(job.logPath ?: return 1), out, err)
                 else -> {
-                    // stop: end the wrapper's process tree; the wrapper's exit deregisters the job.
-                    val handle = ProcessHandle.of(job.pid).orElse(null)
-                    if (handle == null) {
-                        out.appendLine("job ${job.id} is already gone")
-                    } else {
-                        handle.descendants().forEach { it.destroyForcibly() }
-                        handle.destroyForcibly()
+                    // HARNESS-GAP G16: the daemon owns the recorded tree and checks every pid's start time; the wrapper's exit deregisters the job.
+                    val viaDaemon = runCatching { send(stream, session, BgJobRequest("stop", jobId = job.id)) }
+                    if (viaDaemon.isSuccess) {
                         out.appendLine("stopped job ${job.id}")
+                    } else {
+                        // An older daemon without the op: end the wrapper's live tree here (still guarded by the job's start time).
+                        val handle = ProcessHandle.of(job.pid).orElse(null)
+                        val start = handle?.info()?.startInstant()?.map { it.toEpochMilli() }?.orElse(null)
+                        if (handle == null || (start != null && start > job.startedAt)) {
+                            out.appendLine("job ${job.id} is already gone")
+                        } else {
+                            handle.descendants().forEach { it.destroyForcibly() }
+                            handle.destroyForcibly()
+                            out.appendLine("stopped job ${job.id}")
+                        }
                     }
                     0
                 }
