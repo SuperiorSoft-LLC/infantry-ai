@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) SuperiorSoft LLC
+# MERGE-MARKERS-1: concluding a merge with conflict markers is refused (see merge-marker-guard.sh).
+exec sh "$(dirname "$0")/merge-marker-guard.sh" pre-commit
