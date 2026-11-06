@@ -37,6 +37,8 @@ object ClaudeStats {
         var turns = 0
         var tools = 0
         val seenMessages = HashSet<String>()
+        // The CLI writes one record per content block of a message, each carrying the usage so far; the LAST record holds the final output count.
+        val requestIndex = HashMap<String, Int>()
         val seenTools = HashSet<String>()
         val models = LinkedHashSet<String>()
         var lastContext: Long? = null
@@ -70,10 +72,14 @@ object ClaudeStats {
                             val model = message.str("model")
                             model?.let { models += it }
                             events += HarnessStatEvent.Turn(model)
-                            (message["usage"] as? JsonObject)?.let { u ->
-                                lastContext = listOf("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens").sumOf { u.long(it) }
-                                events += HarnessStatEvent.Request(at, model, u.long("input_tokens"), u.long("output_tokens"), u.long("cache_read_input_tokens"), u.long("cache_creation_input_tokens"))
-                            }
+                        }
+                        if (id != null) (message["usage"] as? JsonObject)?.let { u ->
+                            val model = message.str("model")
+                            lastContext = listOf("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens").sumOf { u.long(it) }
+                            val request = HarnessStatEvent.Request(at, model, u.long("input_tokens"), u.long("output_tokens"), u.long("cache_read_input_tokens"), u.long("cache_creation_input_tokens"))
+                            // Replace this message's earlier (partial) record in place, so the event keeps its position and the final usage wins.
+                            val idx = requestIndex[id]
+                            if (idx == null) { requestIndex[id] = events.size; events += request } else events[idx] = request
                         }
                         (message["content"] as? JsonArray)?.forEach { b ->
                             val block = b as? JsonObject ?: return@forEach
@@ -90,6 +96,10 @@ object ClaudeStats {
     }
 
     private val TIMESTAMP = Regex("\"timestamp\":\"([^\"]+)\"")
+
+    /** Where Claude Code keeps its transcripts: `$CLAUDE_CONFIG_DIR/projects`, else `<home>/.claude/projects` (same rule as [ClaudeUsage]). */
+    fun projectsDir(home: File, configDir: String?): File =
+        File(configDir?.takeIf { it.isNotBlank() }?.let(::File) ?: File(home, ".claude"), "projects")
 
     private fun textLength(content: JsonElement?): Int = when (content) {
         is JsonPrimitive -> content.content.length

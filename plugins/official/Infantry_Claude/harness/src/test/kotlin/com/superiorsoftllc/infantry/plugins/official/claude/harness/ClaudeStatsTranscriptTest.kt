@@ -30,4 +30,27 @@ class ClaudeStatsTranscriptTest {
         assertEquals(listOf("Read"), ev.filterIsInstance<HarnessStatEvent.Tool>().map { it.name })
         assertEquals(listOf(4), ev.filterIsInstance<HarnessStatEvent.ToolResult>().map { it.chars })
     }
+
+    @Test fun `a multi-block message counts its final output, not the first record's placeholder`() {
+        val dir = kotlin.io.path.createTempDirectory("claude-stats-multi").toFile()
+        File(dir, "p").mkdirs()
+        File(dir, "p/s2.jsonl").writeText(
+            """
+            {"type":"assistant","timestamp":"2026-11-02T10:00:02Z","message":{"id":"m1","model":"claude-opus-5-5","usage":{"input_tokens":10,"output_tokens":1,"cache_read_input_tokens":100,"cache_creation_input_tokens":0},"content":[{"type":"thinking","thinking":"x"}]}}
+            {"type":"assistant","timestamp":"2026-11-02T10:00:03Z","message":{"id":"m1","model":"claude-opus-5-5","usage":{"input_tokens":10,"output_tokens":42,"cache_read_input_tokens":100,"cache_creation_input_tokens":0},"content":[{"type":"text","text":"done"}]}}
+            """.trimIndent(),
+        )
+        val row = ClaudeStats.read(dir, "s2")!!
+        assertEquals(1, row.assistantTurns)
+        val reqs = row.events!!.filterIsInstance<HarnessStatEvent.Request>()
+        assertEquals(listOf(42L), reqs.map { it.output })
+        assertEquals(110L, row.lastContextTokens)
+    }
+
+    @Test fun `CLAUDE_CONFIG_DIR is honoured for the projects dir, else home dot-claude`() {
+        val home = File("home-root")
+        assertEquals(File("custom-cfg", "projects"), ClaudeStats.projectsDir(home, "custom-cfg"))
+        assertEquals(File(File(home, ".claude"), "projects"), ClaudeStats.projectsDir(home, null))
+        assertEquals(File(File(home, ".claude"), "projects"), ClaudeStats.projectsDir(home, "  "))
+    }
 }
