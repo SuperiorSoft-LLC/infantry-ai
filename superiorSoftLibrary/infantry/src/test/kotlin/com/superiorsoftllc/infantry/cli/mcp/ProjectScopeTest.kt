@@ -10,7 +10,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** SCOPE-1 (contract 1.106.0): the default scope is the caller's project; 'all' and foreign ids are for pm / owner. */
+/** SCOPE-1 (contract 1.106.0): the default scope is the caller's project; 'all' and foreign ids are for the owner (PROJECT-ISOLATION-1: pm is confined to its project). */
 class ProjectScopeTest {
     private fun session(id: String, role: String, project: String) = SessionRecord(
         id = id, provider = "claude", workingDir = ".", spawnedAt = 0, lastHeartbeat = 0,
@@ -32,18 +32,18 @@ class ProjectScopeTest {
         assertEquals("project:P1", ProjectScope.resolve(null, sessions, env("s-fe"), null).label)
     }
 
-    @Test fun `all is refused for a non pm role and allowed for pm and owner`() {
+    @Test fun `all is refused for a project role, pm included, and allowed for the owner`() {
         val refused = ProjectScope.resolve("all", sessions, env("s-fe"), null)
         assertNotNull(refused.refusal)
         assertEquals("P1", refused.projectId)
-        assertNull(ProjectScope.resolve("all", sessions, env("s-pm"), null).projectId)
+        assertNotNull(ProjectScope.resolve("all", sessions, env("s-pm"), null).refusal)
         assertEquals("all", ProjectScope.resolve("all", sessions, env("s-ow"), null).label)
     }
 
-    @Test fun `a foreign project id is refused for a non pm role only`() {
+    @Test fun `a foreign project id is refused for a project role, pm included`() {
         assertNotNull(ProjectScope.resolve("P2", sessions, env("s-fe"), null).refusal)
         assertNull(ProjectScope.resolve("P1", sessions, env("s-fe"), null).refusal)
-        assertEquals("P2", ProjectScope.resolve("P2", sessions, env("s-pm"), null).projectId)
+        assertNotNull(ProjectScope.resolve("P2", sessions, env("s-pm"), null).refusal)
     }
 
     @Test fun `role comes from the daemon record, not the environment`() {
@@ -70,12 +70,12 @@ class ProjectScopeTest {
         assertNull(ProjectScope.resolve("all", sessions, env(null), "P9").projectId)
     }
 
-    @Test fun `foreign object refusal covers non pm session callers only`() {
+    @Test fun `foreign object refusal covers every project session caller, pm included`() {
         val fe = ProjectScope.callerOf(sessions, env("s-fe"))
         assertNotNull(ProjectScope.foreignRefusal("ticket abc", "P2", fe, env("s-fe")))
         assertNull(ProjectScope.foreignRefusal("ticket abc", "P1", fe, env("s-fe")))
         val pm = ProjectScope.callerOf(sessions, env("s-pm"))
-        assertNull(ProjectScope.foreignRefusal("ticket abc", "P2", pm, env("s-pm")))
+        assertNotNull(ProjectScope.foreignRefusal("ticket abc", "P2", pm, env("s-pm")))
         assertNull(ProjectScope.foreignRefusal("ticket abc", "P2", null, env(null)))
     }
 }

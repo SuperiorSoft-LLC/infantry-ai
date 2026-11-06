@@ -18,6 +18,8 @@ class NamedEventBus(
     private val executor: Executor = Executor { it.run() },
     private val clock: () -> Long = System::currentTimeMillis,
     private val idFactory: () -> String = { UUID.randomUUID().toString() },
+    /** PROJECT-ISOLATION-1: (name, payload) -> the payload as delivered; the host adds the event's `projectId` ([ProjectIsolation.stamp]). */
+    private val stamp: (String, String) -> String = { _, p -> p },
 ) {
     private class Sub(val pattern: String, val listener: (NamedEvent) -> Unit)
 
@@ -35,8 +37,9 @@ class NamedEventBus(
     fun publish(name: String, payload: String = "{}", source: String, causeId: String? = null, depth: Int = 0): NamedEvent {
         require(NAME.matches(name)) { "event name '$name' must be dotted lower-case words (e.g. ticket.moved)" }
         require(depth >= 0) { "depth must not be negative" }
-        val text = payload.ifBlank { "{}" }
-        require(runCatching { Json.parseToJsonElement(text) is JsonObject }.getOrDefault(false)) { "payload must be a JSON object" }
+        val raw = payload.ifBlank { "{}" }
+        require(runCatching { Json.parseToJsonElement(raw) is JsonObject }.getOrDefault(false)) { "payload must be a JSON object" }
+        val text = runCatching { stamp(name, raw) }.getOrDefault(raw)
         val id = idFactory()
         val event = NamedEvent(name, text, source, id, causeId?.takeIf { it.isNotBlank() } ?: id, depth, clock())
         for (s in subs) if (matches(s.pattern, name)) executor.execute { runCatching { s.listener(event) } }

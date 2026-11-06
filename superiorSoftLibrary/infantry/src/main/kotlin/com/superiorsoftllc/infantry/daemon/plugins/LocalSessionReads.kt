@@ -46,7 +46,8 @@ class LocalSessionReads(
     data class Replay(val gap: String?, val frames: List<Envelope>)
 
     private class Who(val by: Caller, val record: SessionRecord?) {
-        val getenv: (String) -> String? = { name -> if (name == AccessPolicy.SESSION_ID_ENV) by.activeSession?.takeIf { it.isNotBlank() } else null }
+        /** PROJECT-ISOLATION-1: a confined call (Caller.project, a project hook) is seen as a non-privileged caller of that project. */
+        val getenv: (String) -> String? = ProjectScope.envOf(by)
     }
 
     private fun who(by: Caller, all: List<SessionRecord>): Pair<Who?, String?> {

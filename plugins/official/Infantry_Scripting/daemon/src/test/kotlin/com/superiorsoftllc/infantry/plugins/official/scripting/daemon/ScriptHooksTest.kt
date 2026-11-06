@@ -269,7 +269,7 @@ class ScriptHooksTest {
         putHooks("""{"id":"m","on":"merge.done","script":"on-done"}""", """{"id":"qa","on":"Lane  Enter QA","script":"on-done"}""")
         val engine = FakeEngine { emptyList() }
         val hooks = build(engine)
-        hooks.onEvent(NamedEvent("merge.done", """{"sha":"s1"}""", "cli", "e3", "e3", 0, 1))
+        hooks.onEvent(NamedEvent("merge.done", """{"sha":"s1","projectId":"p1"}""", "cli", "e3", "e3", 0, 1))
         hooks.onEvent(moved(to = "QA"))
         assertEquals(2, engine.inputs.size)
         assertEquals("s1", (engine.inputs[0]["args"] as Map<*, *>)["sha"])
@@ -372,7 +372,7 @@ class ScriptHooksTest {
         val mail = tools.named("infantry_message").single()
         assertEquals("pm-1", mail.second["to"]!!.jsonPrimitive().content)
         assertTrue("failed" in mail.second["body"]!!.jsonPrimitive().content)
-        hooks.onEvent(NamedEvent("merge.done", "{}", "cli", "e9", "e9", 0, 1))
+        hooks.onEvent(NamedEvent("merge.done", """{"projectId":"p1"}""", "cli", "e9", "e9", 0, 1))
         val second = tools.named("infantry_message").last().second["body"]!!.jsonPrimitive().content
         assertTrue("no script 'nope'" in second, second)
     }

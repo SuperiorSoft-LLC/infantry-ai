@@ -86,6 +86,21 @@ infantry script hook add "every 180s" worker-watch --payload '{"exemptRoles":["p
 
 `to` on `every <N>s` and `exec.tick` names a session the script acts for (its `progress` lands on that card).
 
+### Project isolation (PROJECT-ISOLATION-1)
+
+A hook belongs to the project whose `hooks.json` holds it, and it runs ONLY for that project's events. That covers ticket events
+(`ticket.*`, `ticket.commented`, lane enter/exit), `session.*`, `exec.*`, `mail.incoming` / `mail.sent` and events raised with
+`infantry_event_emit`. The daemon stamps each event with its `projectId`: the payload's own, else the project of its `ticketId`,
+else the project of its `sessionId` / `workerSession` (remembered, so `ticket.deleted` and `session.ended` still carry it); an
+emitted event with no project gets the emitter's. An event that still has no project reaches only hooks marked `global`:
+
+```
+infantry_script_hook {"action":"add","on":"merge.done","script":"on-merge","global":true}
+```
+
+A hook's script is confined to its project too: its tool calls (`ih.*`) refuse a ticket, session or project of another project,
+exactly as an agent's do. Only cross-project mail (`allowCrossProject: true`, below) crosses on purpose.
+
 ### Shipped hooks
 
 The Scripting plugin ships hooks of its own, so a default process works with no setup and is still a script. They sit in
@@ -118,7 +133,7 @@ ih.handled()
 
 ### Cross-project mail
 
-An agent finds another project on demand, never from its start brief: the MCP tool `infantry_projects` (CLI `infantry project find [query]`) lists each project's id, name, one-line description and the roles with a live session. The description is project data: `infantry project config set <projectId> project.description "..."`. Then `infantry_message to: "pm@<project id or name>"` with `allowCrossProject: true` reaches that project's session for the role; it is refused without the flag, and errors clearly for an unknown or ambiguous project, a role with no live session, or several agents of the role.
+An agent finds another project on demand, never from its start brief: the MCP tool `infantry_projects` (CLI `infantry project find [query]`) lists each project's id, name, one-line description and the roles with a live session. The description is project data: `infantry project config set <projectId> project.description "..."`. Then `infantry_message to: "pm@<project id or name>"` with `allowCrossProject: true` reaches that project's session for the role; it is refused without the flag (this is the one deliberate exception to project isolation), and errors clearly for an unknown or ambiguous project, a role with no live session, or several agents of the role.
 
 Mail from a session of another project reaches the recipient project's `mail.incoming` hook with two extra args, `fromProjectId` and `fromProjectName` (absent for same-project mail), so each project screens cross-project mail with its own rules:
 
@@ -256,7 +271,7 @@ Hooks live in `<project>/.infantry/scripts/hooks.json`:
 ] }
 ```
 
-Fields per hook: `id`, `on`, `script`, `args`, `enabled`, `ownerSession`, `ownerRole`, `ownerIsOwner`, `to`.
+Fields per hook: `id`, `on`, `script`, `args`, `enabled`, `ownerSession`, `ownerRole`, `ownerIsOwner`, `to`, `global` (true = also runs for events with no project; see Project isolation).
 `on` forms: `lane enter <lane>` and `lane exit <lane>` (the named event `ticket.moved`), a named event
 (`mail.incoming`, `exec.done`, `exec.tick`, ticket events), a prefix ending in `.*` or `*`, and `every <N>s` (a timer).
 Manage them with `infantry script hook list | add | remove` (see above) rather than editing the file by hand.

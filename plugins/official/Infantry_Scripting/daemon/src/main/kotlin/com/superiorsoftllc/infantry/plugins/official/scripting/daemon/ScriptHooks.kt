@@ -108,9 +108,11 @@ class ScriptHooks(
             mail.fromProjectId?.let { put("fromProjectId", it) }; mail.fromProjectName?.let { put("fromProjectName", it) }
         }
         val e = NamedEvent(INCOMING_EVENT, payload.toString(), "daemon", "mail-incoming:${mail.id}")
-        for (p in projects().filter { mail.projectId == null || it == mail.projectId }) {
+        // PROJECT-ISOLATION-1: only the recipient's project's hooks; a mail with no project reaches only global hooks.
+        for (p in projects()) {
             val hooks = runCatching { store.list(p) }.getOrDefault(emptyList())
             for (hook in hooks) {
+                if (!admitsProject(p, hook, mail.projectId)) continue
                 if (!hook.enabled || hook.on !is HookOn.Named || (hook.on as HookOn.Named).pattern != INCOMING_EVENT) continue
                 // MAIL-HOOK-1b: a mail hook is attached to exactly one session; a stored one without `to` is ignored (one log line).
                 if (hook.to == null) { if (ignoredMail.putIfAbsent("$p/${hook.id}", true) == null) log("hooks: mail.incoming hook ${hook.id} ($p) has no session (to), ignored; re-add it with to=<session id>"); continue }
@@ -206,8 +208,10 @@ class ScriptHooks(
         if (candidates.isEmpty()) return
         val ticketId = str(payload, "ticketId")
         val ticket = ticketId?.let { readTicket(it) }
+        // PROJECT-ISOLATION-1: the event's project (the host stamps it on every event it can tie to a ticket or session). Fail closed: a
+        // hook runs only for its own project's events, and an event with no project reaches only hooks marked global.
         val project = str(payload, "projectId") ?: ticket?.let { str(it, "projectId") }
-        val mine = if (project != null) candidates.filter { it.first == project } else candidates
+        val mine = candidates.filter { (p, hook) -> admitsProject(p, hook, project) }
         if (mine.isEmpty()) return
         val ids = listOfNotNull(ticketId, str(payload, "sessionId"))
         val depth = maxOf(e.depth, attributedDepth(ids))
@@ -308,7 +312,7 @@ class ScriptHooks(
                 @Suppress("UNCHECKED_CAST") (ScriptEngineWire.fromJson(payload) as? Map<String, Any?>)?.let { args.putAll(it) }
                 args["event"] = mapOf("name" to e.name, "id" to e.id, "causeId" to e.causeId, "depth" to depth.toLong(), "source" to e.source)
                 args["hook"] = "$BUILTIN_SCOPE:${b.id}"
-                val invoker = ToolInvoker(Caller(owner = true), null, null, project, "script:$BUILTIN_SCOPE:${b.id}")
+                val invoker = ToolInvoker(Caller(owner = true, project = project), null, null, project, "script:$BUILTIN_SCOPE:${b.id}")
                 val report = dispatcher.run(engine, b.source, args, limits(), ScriptCaller("", ""), invoker, false) { planned ->
                     run.touchedAt = clock()
                     planned.forEach { a -> flatten(a.args).forEach { run.touched += it } }
@@ -411,7 +415,7 @@ class ScriptHooks(
 
     /** A failure is never silent: logged, plus a comment on the triggering ticket when there is one; mail to the hook's owner only when scripting.hooks.mailFailures is on. */
     private fun report(project: String, hook: Hook, ticketId: String?, text: String) {
-        val sys = ToolInvoker(Caller(owner = true), null, null, project, "script-hooks")
+        val sys = ToolInvoker(Caller(owner = true, project = project), null, null, project, "script-hooks")
         if (ticketId != null) {
             val r = runCatching { tools.invoke("infantry_ticket_comment", buildJsonObject { put("ticketId", ticketId); put("kind", "issue"); put("body", text) }, sys) }.getOrNull()
             if (r != null && !r.isError) return
@@ -429,8 +433,8 @@ class ScriptHooks(
      * A mail hook (`to` set) is bound to its session and keeps that session's identity.
      */
     internal fun invokerOf(project: String, hook: Hook): ToolInvoker =
-        if (hook.to == null) ToolInvoker(Caller(owner = true), null, null, project, "script:${hook.script}")
-        else ToolInvoker(if (hook.ownerIsOwner || hook.ownerSession == null) Caller(owner = true) else Caller(owner = false, agent = true, activeSession = hook.ownerSession),
+        if (hook.to == null) ToolInvoker(Caller(owner = true, project = project), null, null, project, "script:${hook.script}")
+        else ToolInvoker(if (hook.ownerIsOwner || hook.ownerSession == null) Caller(owner = true, project = project) else Caller(owner = false, agent = true, activeSession = hook.ownerSession, project = project),
             hook.ownerSession, hook.ownerRole, project, "script:${hook.script}")
 
     private fun readTicket(ticketId: String): JsonObject? {
@@ -488,6 +492,13 @@ class ScriptHooks(
             }
         }
         val DEFAULT_EXECUTOR: (() -> Unit) -> Unit = { job -> pool.execute { runCatching { job() } } }
+
+        /**
+         * PROJECT-ISOLATION-1: does hook [hook] of project [hookProject] run for an event of [eventProject]? Only for its own project's
+         * events; an event that names no project only when the hook is [Hook.global]. Never for another project's event.
+         */
+        fun admitsProject(hookProject: String, hook: Hook, eventProject: String?): Boolean =
+            if (eventProject == null) hook.global else eventProject == hookProject
 
         fun matches(on: HookOn, eventName: String, payload: JsonObject): Boolean = when (on) {
             is HookOn.Lane -> eventName == HookOn.LANE_EVENT && (payload[if (on.exit) "from" else "to"] as? JsonPrimitive)?.contentOrNull.equals(on.lane, ignoreCase = true)

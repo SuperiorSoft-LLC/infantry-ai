@@ -107,6 +107,12 @@ data class ToolResult(val text: String, val isError: Boolean = false)
   (`acme_...`).
 - `ToolCall.caller` says who called: `owner`, `agent`, `remoteAddress`. `clientSessionId` and `clientRole` are the
   MCP process's own claims: use them only to narrow what a call does, never to widen it.
+- PROJECT-ISOLATION-1 (1.42.0): the host refuses, before `call` runs, a call from a project's session (or from a caller with
+  `Caller.project` set, which a project hook's script carries) that names another project in `projectId` / `project`
+  (or `'all'`), a ticket of another project in `ticketId`, or a session of another project in `sessionId` /
+  `targetSessionId`. The owner (no session) and the owner's own roles (`owner`, `assistant`) cross projects. A tool that
+  declares an `allowCrossProject` property in its input schema keeps that opt-in (cross-project mail); name your target
+  arguments with these keys and the gate scopes your tool for free.
 - `call.request("<frame>", data)` sends a frame on the caller's own connection, through every gate the caller's own
   frames pass, and returns the answer frame. Use it to read as the caller.
 - `api.tools.catalog()` lists every live tool; `api.tools.invoke(name, arguments, as)` runs one exactly as an agent's

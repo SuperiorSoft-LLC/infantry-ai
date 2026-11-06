@@ -192,7 +192,9 @@ interface DaemonApi {
         // 1.39.0 (UPDATE-ENGINE-1, additive): `updates` (daemon.api.updates.Updates): the one update engine; source types and appliers by plugins.
         // 1.40.0 (SCRIPTING-NCDFE-1, additive): `displayStamp`, a time in the daemon's display zone (a plugin cannot link core's DisplayZone).
         // 1.41.0 (SECRETS-2b, additive): Runs.secretFields(name, projectId) (project first, then app) and Runs.secretNames(projectId).
-        const val VERSION = "1.41.0"
+        // 1.42.0 (PROJECT-ISOLATION-1, additive): `Caller.project` (a call confined to one project); every agent tool call and every hook is
+        // held to its own project by the host (named events carry `projectId`).
+        const val VERSION = "1.42.0"
     }
 }
 
@@ -211,6 +213,11 @@ data class Caller(
     val forwardedFor: String? = null,
     /** The session this connection drives, if any. */
     val activeSession: String? = null,
+    /**
+     * PROJECT-ISOLATION-1 (1.42.0): a call confined to this project although it carries no session: a project hook's script runs with
+     * owner permissions but only inside the hook's own project. Null = the connection's own scope (a session's project, or the owner).
+     */
+    val project: String? = null,
 )
 
 // ---- data contract ------------------------------------------------------------------------------------------------
