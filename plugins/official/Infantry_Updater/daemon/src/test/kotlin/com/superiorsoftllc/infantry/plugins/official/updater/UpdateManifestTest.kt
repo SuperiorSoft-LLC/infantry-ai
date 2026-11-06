@@ -35,7 +35,7 @@ class UpdateManifestTest {
 
     private val official = mapOf(
         UpdateManifest.KEY_TYPE to "github", UpdateManifest.KEY_REPO to "SuperiorSoft-LLC/infantry-ai",
-        UpdateManifest.KEY_VISIBILITY to "public", UpdateManifest.KEY_CHANNEL to "production", UpdateManifest.KEY_INTERVAL to "24",
+        UpdateManifest.KEY_VISIBILITY to "public", UpdateManifest.KEY_CHANNEL to "production", UpdateManifest.KEY_INTERVAL to "1",
     )
 
     private fun resolve(
@@ -66,6 +66,8 @@ class UpdateManifestTest {
         val manifest = PluginJson.decodeFromString(ModuleManifest.serializer(), text)
         assertEquals("Infantry_Updater", manifest.name)
         assertNull(manifest.update, "the app's release source is `appUpdate`; `update` is this module's own update source")
+        // UPDATE-INTERVAL-1: pre-stable releases ship several times a day; the real manifest re-checks hourly (log: "re-check every 1h").
+        assertTrue(Regex("\"checkIntervalHours\"\\s*:\\s*1\\b").containsMatchIn(text), "module.json checkIntervalHours must be 1")
     }
 
     @Test
@@ -74,7 +76,7 @@ class UpdateManifestTest {
         assertEquals("SuperiorSoft-LLC/infantry-ai", on.config.repo)
         assertEquals(UpdateVisibility.PUBLIC, on.config.visibility)
         assertNull(on.config.localDir)
-        assertEquals(24, on.config.checkIntervalHours)
+        assertEquals(1, on.config.checkIntervalHours)
         assertTrue(on.config.autoCheck)
         assertTrue(on.warnings.isEmpty(), on.warnings.toString())
     }
@@ -123,7 +125,7 @@ class UpdateManifestTest {
         assertEquals("SuperiorSoft-LLC/infantry-ai", on.config.repo)
         assertEquals(UpdateVisibility.PUBLIC, on.config.visibility)
         assertNull(on.config.localDir)
-        assertEquals(24, on.config.checkIntervalHours)
+        assertEquals(1, on.config.checkIntervalHours)
         assertEquals(4, on.warnings.size, on.warnings.toString())
         props("source=ftp\n")
         assertIs<UpdateSettings.Enabled>(resolve())

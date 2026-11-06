@@ -6,7 +6,7 @@ import java.util.Properties
 
 /**
  * UPDATER-DEFAULT-1: where this app's releases come from, as MANIFEST data: the `appUpdate` block of the Updater's
- * module.json (`{"type":"github","repo":"owner/repo","visibility":"public","channel":"production","checkIntervalHours":24}`),
+ * module.json (`{"type":"github","repo":"owner/repo","visibility":"public","channel":"production","checkIntervalHours":1}`),
  * which daemon/build.gradle.kts bakes into the jar as [RESOURCE] (a build may override a value with
  * `-PinfantryUpdateRepo` / `-PinfantryUpdateVisibility` / `-PinfantryUpdateChannel`; the release workflow passes its own
  * repository). It is the lowest layer of [UpdateSettings.resolve]: developer overrides (env, `update.properties`, hidden
