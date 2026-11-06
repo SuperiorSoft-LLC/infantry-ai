@@ -12,7 +12,7 @@
     { "registry": "app.selfUpdate", "key": "android" }
   ],
   "appUpdate": {
-    "type": "github", "repo": "SuperiorSoft-LLC/infantry-ai", "visibility": "public", "channel": "production", "checkIntervalHours": 24,
+    "type": "github", "repo": "SuperiorSoft-LLC/infantry-ai", "visibility": "public", "channel": "production", "checkIntervalHours": 1,
     "defaultChannel": "stable",
     "channels": {
       "stable": { "label": "Stable", "release": "latest" },
