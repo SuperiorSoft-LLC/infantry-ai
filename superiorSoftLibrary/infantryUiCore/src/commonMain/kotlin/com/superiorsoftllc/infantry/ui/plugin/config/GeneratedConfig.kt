@@ -69,6 +69,9 @@ const val GENERATED_READONLY_TAG_PREFIX = "config-readonly-"
 /** One generated field; the suffix is `<node>/<key>`. A toggle is [NODE_FIELD_CHECK_TAG_PREFIX] + `<node>/<key>`, an option [NODE_FIELD_OPTION_TAG_PREFIX]. */
 const val GENERATED_FIELD_TAG_PREFIX = "config-field-"
 
+/** FORMAT-1: the space between two field groups on a generated card. */
+private val FIELD_GROUP_GAP = 12.dp
+
 /**
  * CONFIG-3 (docs/CONFIG-MANIFEST-DESIGN.md section 4): the Settings dialog's tabs that are generated from the compiled
  * manifest's declarations. Phase 1 pilots Appearance only; every other tab stays hand-written until CONFIG-5.
@@ -128,7 +131,8 @@ private fun GeneratedCard(factory: TabFactory, card: ConfigCard, highlight: Conf
         Modifier.testTag(tag).bringIntoViewRequester(requester)
             .then(if (lit) Modifier.border(2.dp, Palette.Accent, RoundedCornerShape(6.dp)).padding(8.dp) else Modifier)
             .semantics { if (lit) stateDescription = CONFIG_HIGHLIGHT_STATE },
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+        // FORMAT-1: a clear gap between one field's group and the next field's label.
+        verticalArrangement = Arrangement.spacedBy(FIELD_GROUP_GAP),
     ) {
         Text(card.title, fontWeight = FontWeight.Bold, fontSize = 13.sp)
         card.applies?.let { Text(it, color = Palette.Muted, fontSize = 11.sp) }
@@ -157,10 +161,18 @@ private fun GeneratedField(factory: TabFactory, card: ConfigCard, f: ConfigField
         if (why == null) scope.launch { factory.config.set(node, f.key, v) }
     }
     val declared = DeclaredField(node, card.module, card.declaration.group, f)
-    Column(Modifier.fillMaxWidth().testTag(GENERATED_FIELD_TAG_PREFIX + tag), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    // FORMAT-1 (ticket f759bfa2): one field is one visual group on its own raised panel: label, description, then its
+    // editor. Before, the editor sat as close to the next field's label as to its own, and the owner typed a repo into
+    // the field above the "GitHub repo" label.
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(Palette.Raised).padding(horizontal = 10.dp, vertical = 8.dp)
+            .testTag(GENERATED_FIELD_TAG_PREFIX + tag),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
         Text(f.label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
         f.description?.let { Text(it, color = Palette.Muted, fontSize = 11.sp) }
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp), itemVerticalAlignment = Alignment.CenterVertically) {
+        FlowRow(
+            Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp), itemVerticalAlignment = Alignment.CenterVertically) {
             when (f.type) {
                 ConfigFieldTypes.CHECKBOX, ConfigFieldTypes.TOGGLE -> {
                     val on = (value as? JsonPrimitive)?.booleanOrNull ?: false
