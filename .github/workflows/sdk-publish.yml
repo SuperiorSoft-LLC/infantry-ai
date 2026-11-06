@@ -1,11 +1,34 @@
-# SDK-PUB-1 (docs/PLUGIN-REPO-DESIGN.md 1.4): publish the plugin SDK. Job 1 compiles and dry-runs into build/m2; job 2 publishes to
-# GitHub Packages only after the owner approves the `sdk-release` environment (required reviewers).
+# SDK-PUB-1 / SDK-CENTRAL-1 (docs/PLUGIN-REPO-DESIGN.md 1.4): publish the plugin SDK.
+#   dry-run         compiles, dry-runs into build/m2 and builds the UNSIGNED Maven Central bundle, checking every POM has the
+#                   fields Central requires plus sources/javadoc jars (scripts/sdk-central-bundle.sh). Runs on pull requests
+#                   that touch the publishing setup too. Needs no secret.
+#   publish         GitHub Packages, after the owner approves the `sdk-release` environment (required reviewers).
+#   publish-central Maven Central (Sonatype Central Portal API), same `sdk-release` approval. Signs in memory from
+#                   MAVEN_SIGNING_KEY / MAVEN_SIGNING_PASSWORD (fails "signing secrets missing" without them, never publishes
+#                   unsigned), uploads with MAVEN_CENTRAL_USERNAME / MAVEN_CENTRAL_PASSWORD (scripts/sdk-central-upload.sh).
+# A version already on a registry is refused there (both are immutable): bump it, or run by hand with `targets` set to the
+# registry that still lacks it.
 name: sdk-publish
 
 on:
   push:
     tags: ['sdk-v*']
+  pull_request:
+    paths:
+      - 'gradle/sdk-*.gradle.kts'
+      - 'build-logic/build.gradle.kts'
+      - 'scripts/sdk-central-*.sh'
+      - 'scripts/license-paths.txt'
+      - 'superiorSoftLibrary/infantrySdkBom/**'
+      - 'superiorSoftLibrary/infantrySdkCatalog/**'
+      - '.github/workflows/sdk-publish.yml'
   workflow_dispatch:
+    inputs:
+      targets:
+        description: 'Where to publish'
+        type: choice
+        options: [both, central, github]
+        default: both
 
 jobs:
   dry-run:
@@ -21,9 +44,16 @@ jobs:
         run: ./gradlew :superiorSoftLibrary:infantryPlugins:compileKotlinJvm :superiorSoftLibrary:infantryProtocol:compileKotlin :superiorSoftLibrary:infantryDaemonApi:compileKotlin :superiorSoftLibrary:infantryHarnessApi:compileKotlin :superiorSoftLibrary:infantryUiCore:compileKotlinJvm --console=plain
       - name: Dry-run publish into build/m2
         run: ./gradlew publishAllPublicationsToDryRunRepository --console=plain
+      - name: Build and check the Maven Central bundle (unsigned)
+        run: bash scripts/sdk-central-bundle.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: central-bundle-unsigned
+          path: build/central-bundle.zip
 
   publish:
     needs: dry-run
+    if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.targets != 'central')
     runs-on: ubuntu-latest
     environment: sdk-release
     permissions:
@@ -41,3 +71,37 @@ jobs:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./gradlew publishAllPublicationsToGitHubPackagesRepository --console=plain
+
+  publish-central:
+    needs: dry-run
+    if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.targets != 'github')
+    runs-on: ubuntu-latest
+    environment: sdk-release
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Check the secrets are set
+        env:
+          SIGN_KEY: ${{ secrets.MAVEN_SIGNING_KEY }}
+          SIGN_PASSWORD: ${{ secrets.MAVEN_SIGNING_PASSWORD }}
+          CENTRAL_USER: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+        run: |
+          [ -n "$SIGN_KEY" ] && [ -n "$SIGN_PASSWORD" ] || { echo "::error::signing secrets missing (MAVEN_SIGNING_KEY / MAVEN_SIGNING_PASSWORD); nothing published"; exit 1; }
+          [ -n "$CENTRAL_USER" ] && [ -n "$CENTRAL_PASSWORD" ] || { echo "::error::Central credentials missing (MAVEN_CENTRAL_USERNAME / MAVEN_CENTRAL_PASSWORD); nothing published"; exit 1; }
+      - name: Build, sign and check the Maven Central bundle
+        env:
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.MAVEN_SIGNING_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.MAVEN_SIGNING_PASSWORD }}
+        run: bash scripts/sdk-central-bundle.sh -Pinfantry.central.sign=true
+      - name: Upload to Maven Central
+        env:
+          MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+        run: bash scripts/sdk-central-upload.sh

@@ -130,7 +130,7 @@ resets a key to its default. These keys are app-scope only. Daemon code reads th
 Not in the registry, because they are not the product's own addresses: `INFANTRY_WEB_HOSTS` (the host names the
 browser client may use), `INFANTRY_DOMAIN` (Caddy's site address in `docker/compose.yaml`'s `tls` profile) and
 `INFANTRY_IMAGE` (the image compose runs). The browser client dials the host that served it, so the web demo needs no
-daemon URL setting. Build-time links (`gradle/sdk-publish.gradle.kts`: `-Pinfantry.url`, `-Pinfantry.scm.url`) are
+daemon URL setting. Build-time links (`gradle/sdk-central.gradle.kts`: `-Pinfantry.url`, `-Pinfantry.scm.url`) are
 Gradle properties; the CI workflows use `${GITHUB_REPOSITORY}`.
 
 Plugins add their own keys through `config` cards in their `module.json` (see [Plugins](Plugins.md)). The full list

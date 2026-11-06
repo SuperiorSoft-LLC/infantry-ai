@@ -36,6 +36,28 @@ Then edit: `name`, `jar`, `entry`, `daemon.entry`, `daemon.jar`, `author`, `lice
 name; the daemon jar name in `daemon/build.gradle.kts` (`archiveFileName`). The build finds any
 `plugins/community/*/build.gradle.kts` by scanning in `settings.gradle.kts`; nothing else names your module.
 
+### In your own repository
+
+A plugin kept outside this repository starts from `templates/plugin-repo` (see its `README.md`): a standalone Gradle
+build against the published SDK. The SDK and the Infantry Gradle plugin are on **Maven Central**, so no account and no
+token are needed. The template's `settings.gradle.kts` holds the lines; in short:
+
+```
+// settings.gradle.kts
+pluginManagement { repositories { mavenCentral(); gradlePluginPortal() } }
+dependencyResolutionManagement {
+    repositories { mavenCentral() }
+    versionCatalogs { create("infantry") { from("com.superiorsoftllc.infantry:infantry-sdk-catalog:<sdk version>") } }
+}
+// build.gradle.kts
+plugins { id("com.superiorsoftllc.infantry.plugin") version "1.0.0" }
+```
+
+Without the Gradle plugin, depend on one artifact directly, `compileOnly` because the app provides it at run time:
+`compileOnly(platform("com.superiorsoftllc.infantry:infantry-sdk-bom:<sdk version>"))` and
+`compileOnly("com.superiorsoftllc.infantry:infantry-daemon-api")` (or `infantry-plugin-api`, `infantry-harness-api`).
+The owner publishes a release with `.github/workflows/sdk-publish.yml` (Maven Central and GitHub Packages).
+
 ## 3. `module.json`, every field
 
 JSON has no comments, so each field is explained here. Unknown keys are ignored. The model is

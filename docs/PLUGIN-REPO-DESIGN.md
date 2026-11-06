@@ -87,6 +87,10 @@ reverse) fails the build.
   `read:packages`. Acceptable for the first official/friendly plugins; not for an open ecosystem.
 * **Later: Maven Central** (namespace `com.superiorsoftllc`, Sonatype Central Portal, GPG-signed artifacts). Same coordinates,
   so a plugin build only changes its repository line. Do this before the registry is opened to the public.
+  **Done in SDK-CENTRAL-1 (2026-11-06):** `gradle/sdk-central.gradle.kts` (POM fields, sources/javadoc jars, in-memory GPG
+  signing, the `centralBundle` repository; also applied to `build-logic`, so the Gradle plugin is on Central too),
+  `scripts/sdk-central-bundle.sh` (builds and checks `build/central-bundle.zip`), `scripts/sdk-central-upload.sh` (Portal
+  publisher API). The template now reads `mavenCentral()`; GitHub Packages is an opt-in fallback.
 * **Release workflow** `.github/workflows/sdk-publish.yml`: triggered by a tag `sdk-v*` or by hand; steps: JDK 21, `apiCheck`,
   compile, `publishToMavenLocal` into `build/m2` as a dry run, then `publish` in a job bound to a GitHub **environment
   `sdk-release` with required reviewers** (the owner). Nothing reaches the registry without the owner's click in GitHub. The

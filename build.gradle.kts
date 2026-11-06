@@ -17,6 +17,8 @@ apply(from = rootProject.file("gradle/build-stamp.gradle.kts"))
 apply(from = rootProject.file("gradle/daemon-halves.gradle.kts"))
 // LICENSE-NOTICES-2: SBOM task (generateSbom); see the script.
 apply(from = rootProject.file("gradle/sbom.gradle.kts"))
+// SDK-CENTRAL-1: check and zip the Maven Central bundle (checkSdkCentralBundle, sdkCentralBundle); see the script.
+apply(from = rootProject.file("gradle/sdk-central-bundle.gradle.kts"))
 
 // ---------------------------------------------------------------------------------------------
 // SEC-SECRETS-1 guard. Standalone on purpose (NOT wired into `check`): run it explicitly, e.g. from
