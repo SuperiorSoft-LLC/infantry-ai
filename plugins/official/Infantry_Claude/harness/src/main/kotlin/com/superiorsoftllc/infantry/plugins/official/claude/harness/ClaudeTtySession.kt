@@ -62,6 +62,8 @@ class ClaudeTtySession(
     /** G3: [ClaudePermissionHook.TIMEOUT_SETTING], read at every launch. */
     private val approvalHookSeconds: () -> Int = { ClaudePermissionHook.DEFAULT_TIMEOUT_SEC },
     private val permissionHooks: PermissionHookServer = PermissionHookServer(),
+    /** FIRST-RUN-F1: why claude cannot start here (not signed in: [ClaudeSignIn.problem]) given the session env; null = go. */
+    private val signInProblem: (Map<String, String>) -> String? = { null },
 ) : HarnessSession {
     override val label: String = "claude"
 
@@ -112,6 +114,8 @@ class ClaudeTtySession(
             (env + ClaudeCommand.contextLimitEnv(request.contextLimit)).toSortedMap()
 
     override fun launch(request: HarnessRequest, env: Map<String, String>): HarnessProcess {
+        // FIRST-RUN-F1: a claude that never finished its first-run setup would sit on that screen; fail the launch with the fix instead.
+        signInProblem(env)?.let { error(it) }
         val stored = request.sessionId?.takeIf { it.isNotBlank() }
         // G2: an id claude never wrote a transcript for cannot be resumed: start it fresh under the same id (no new id to report).
         val recovered = stored != null && !ClaudeResume.resumable(configDir(), request.project, stored)
@@ -367,7 +371,12 @@ class ClaudeTtySession(
                         starts += why
                     }
                     turn == null -> {
-                        if (queue.isNotEmpty() && injects.isEmpty() && ready(now)) {
+                        if (queue.isNotEmpty() && setupScreen()) {
+                            // FIRST-RUN-F1 backstop: the CLI shows its first-run setup (theme / sign in); a paste there is never a turn.
+                            val reason = ClaudeSignIn.NOT_SIGNED_IN + " Screen: " + screenTail()
+                            repeat(queue.size) { ends += Triple(SessionTurnEnd.FAILED, null, reason) }
+                            queue.clear()
+                        } else if (queue.isNotEmpty() && injects.isEmpty() && ready(now)) {
                             val next = queue.poll()
                             unclaimedStopAt = null
                             active = next
@@ -453,6 +462,13 @@ class ClaudeTtySession(
             else if (!alive && wasUp != false) out.mcpState(McpState.DISCONNECTED, "MCP server pid $pid exited")
         }
 
+        /** FIRST-RUN-F1: the first-run setup on screen before the CLI came up (no SessionStart yet). Called under [lock]. */
+        private fun setupScreen(): Boolean {
+            if (startedAt != null) return false
+            val tail = ScreenText.squeeze(screen.takeLast(TRUST_WINDOW_CHARS).toString())
+            return ClaudeSignIn.SETUP_SCREEN_MARKERS.any { it in tail }
+        }
+
         /** Up = the CLI ran its SessionStart hook a moment ago; without hooks, a while after its first screen. */
         private fun ready(now: Long): Boolean {
             if (trustSeen && !trustEnterDone) return false
@@ -516,7 +532,8 @@ class ClaudeTtySession(
             key(ESC)
         }
 
-        private fun screenTail(): String = ScreenText.squeeze(screen.takeLast(SCREEN_TAIL_CHARS).toString()).ifBlank { "(blank)" }
+        /** FIRST-RUN-F1: the last screen text as a person reads it (escapes are already gone; whitespace runs become one space). */
+        private fun screenTail(): String = screen.takeLast(SCREEN_TAIL_CHARS).toString().trim().replace(WHITESPACE_RUN, " ").ifBlank { "(blank)" }
 
         private fun key(k: String) { out.write(k) }
 
@@ -561,6 +578,7 @@ class ClaudeTtySession(
         const val READY_FALLBACK_MS = 8_000L
         const val SCREEN_KEEP_CHARS = 32 * 1024
         const val SCREEN_TAIL_CHARS = 600
+        private val WHITESPACE_RUN = Regex("""\s+""")
         const val TRUST_WINDOW_CHARS = 4096
 
         /** G3: what every permission dialog of the CLI reads as once spaces are squeezed out and lower-cased (its "No" option). */

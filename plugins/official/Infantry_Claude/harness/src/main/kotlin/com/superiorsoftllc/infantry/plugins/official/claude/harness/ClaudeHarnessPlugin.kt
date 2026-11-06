@@ -108,7 +108,8 @@ class ClaudeHarness internal constructor(
     override fun session(): HarnessSession = ClaudeModeSession(
         headless = ClaudeSession(executable, ::mcp, { env -> ClaudeCommand.watchSettings(env) }, idleMinutes = ::liveIdle, stateDir = { host.stateDir }),
         interactive = ClaudeTtySession(executable, ::mcp, { env -> ClaudeCommand.watchSettings(env) }, stateDir = { host.stateDir }, idleMinutes = ::liveIdle,
-            approvalHookSeconds = { ClaudePermissionHook.timeoutSec(host.setting(ClaudePermissionHook.TIMEOUT_SETTING)) }),
+            approvalHookSeconds = { ClaudePermissionHook.timeoutSec(host.setting(ClaudePermissionHook.TIMEOUT_SETTING)) },
+            signInProblem = { env -> ClaudeSignIn.problem(System.getenv() + env, home()) }),
         mode = { host.setting(ClaudeCommand.MODE_SETTING) },
     )
 

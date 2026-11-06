@@ -136,7 +136,9 @@ class SessionHost(
             synchronized(lock) { launching.remove(sessionId) }
             val tail = sink.stderrTail().ifBlank { e.message ?: e.javaClass.simpleName }
             events.bootLine(sessionId, "the ${adapter.label} process did not start: $tail")
-            events.turnEnded(sessionId, TurnEnd.FAILED, null, false, "the ${adapter.label} process did not start")
+            // FIRST-RUN-F1: the session error says why (the innermost cause: a plugin's own message, e.g. "the claude CLI was not found").
+            val why = generateSequence<Throwable>(e) { it.cause }.last().message?.takeIf { it.isNotBlank() }
+            events.turnEnded(sessionId, TurnEnd.FAILED, null, false, "the ${adapter.label} $DID_NOT_START" + why?.let { ": $it" }.orEmpty())
             return
         }
         slot.process = process
@@ -501,9 +503,11 @@ class SessionHost(
         override fun maskStream(): (String?) -> String = events.maskStream()
     }
 
-    private companion object {
-        const val MS_PER_MINUTE = 60_000L
-        const val STDERR_TAIL_LINES = 20
-        const val STDERR_TAIL_CHARS = 1_000
+    companion object {
+        /** FIRST-RUN-F1: in the failed turn's reason (the session's lastError) when the harness process never launched. */
+        const val DID_NOT_START = "process did not start"
+        private const val MS_PER_MINUTE = 60_000L
+        private const val STDERR_TAIL_LINES = 20
+        private const val STDERR_TAIL_CHARS = 1_000
     }
 }
