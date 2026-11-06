@@ -326,8 +326,8 @@ jobs:
           path: out/*
           if-no-files-found: error
 
-  # RELEASE-PLATFORMS-1: the macOS (beta) desktop app, an arm64 .dmg built by jpackage on the standard macos-15 runner.
-  # UNSIGNED and un-notarized (no Apple certificate yet), so the asset name says beta and users clear the quarantine flag
+  # RELEASE-PLATFORMS-1: the macOS (beta) desktop app, an arm64 .dmg (MACOS-DMG-2: hdiutil, not jpackage) on macos-15.
+  # Ad-hoc signed only, un-notarized (no Apple certificate yet), so the asset name says beta and users clear the quarantine flag
   # by hand (docs/RELEASING.md). Optional: continue-on-error, and the release publishes without it.
   macos:
     needs: version
@@ -370,7 +370,12 @@ jobs:
             echo "::warning::No plugin signing secrets; official plugins are signed with a THROWAWAY dev key (test release only)."
             echo "IHQ_SIGN=-Pihq.devSign=true" >> "$GITHUB_ENV"
           fi
-      - name: Build the unsigned .dmg (arm64)
+      # MACOS-DMG-2: no jpackage packageDmg. v1.0.14 showed jpackage's own ad-hoc `codesign -s -` of the finished .app exits 1,
+      # and jpackage never prints codesign's stderr. So: createDistributable (the .app; that works), strip extended attributes,
+      # ad-hoc sign it OURSELVES with the output visible (and as ::error:: annotations, readable through the public API without
+      # auth), then build the .dmg with hdiutil. Still no Developer ID, no Apple account, no secrets: arm64 only needs an
+      # ad-hoc signature to run.
+      - name: Build the ad-hoc signed .dmg (arm64)
         shell: bash
         run: |
           set -euo pipefail
@@ -378,28 +383,58 @@ jobs:
           [ "$(uname -m)" = "arm64" ] || { echo "expected an arm64 runner, got $(uname -m); the asset name would lie" >&2; exit 1; }
           gw() { ./gradlew --no-daemon "$@" -PinfantryVersion="$V" -PinfantryPackageVersion='${{ needs.version.outputs.package_version }}' $IHQ_SIGN; }
           gw :superiorSoftLibrary:infantryUi:createDistributable
-          # MACOS-DMG-1: v1.0.12 failed here with only "jpackage exit 1"; its real message sits in compose/logs, so print it.
-          # jpackage's hdiutil step is known to fail on hosted runners ("Resource busy"): detach leftovers, retry once.
-          logs=superiorSoftLibrary/infantryUi/build/compose/logs/packageDmg
-          ok=false
-          for attempt in 1 2; do
-            if gw :superiorSoftLibrary:infantryUi:packageDmg; then ok=true; break; fi
-            echo "::group::jpackage logs (packageDmg attempt $attempt)"
-            for f in "$logs"/*; do [ -f "$f" ] && { echo "== $f"; tail -n 80 "$f"; }; done
-            echo "::endgroup::"
-            # only our own image's volume (the runner mounts simulator images under other /Volumes paths)
-            { hdiutil info | sed -n 's|^/dev/\(disk[0-9]*\)[s0-9]*[[:space:]].*[[:space:]]/Volumes/InfantryAI.*|\1|p' | sort -u \
-              | while read -r d; do hdiutil detach "/dev/$d" -force || true; done; } || true
-          done
-          $ok || { echo "::error::packageDmg failed twice; jpackage logs are printed above" >&2; exit 1; }
-          # Outside the checkout, like the windows job: the packaging guard wants a clean tree.
-          out="$RUNNER_TEMP/out"; mkdir -p "$out"
-          app="$(ls -d superiorSoftLibrary/infantryUi/build/compose/binaries/main/app/*.app | head -n1)"
+          app="$(find superiorSoftLibrary/infantryUi/build/compose/binaries -type d -path '*/app/*.app' -prune | head -n1)"
+          [ -n "$app" ] && [ -d "$app" ] || { echo "::error::createDistributable left no .app under superiorSoftLibrary/infantryUi/build/compose/binaries/**/app/" >&2; exit 1; }
+          echo "app bundle: $app"
           # UPDATER-1 gate: no new package of ours split over two jars of the app (docs/RELEASING.md).
           scripts/split-packages.sh "$app/Contents/app"
-          codesign -dv "$app" 2>&1 | head -n 4 || true   # diagnostics only: jpackage ad-hoc signs, there is no Developer ID
-          dmg="$(ls superiorSoftLibrary/infantryUi/build/compose/binaries/main/dmg/*.dmg | head -n1)"
-          cp "$dmg" "$out/InfantryAI-$V-macos-arm64-beta.dmg"
+          # Extended attributes ("resource fork, Finder information, or similar detritus not allowed") break codesign.
+          xattr -cr "$app"
+          log="$RUNNER_TEMP/codesign.log"
+          # GitHub annotations are one line each: encode %, CR and LF; keep the lines that name a problem (else the tail).
+          annotate() {
+            local title="$1" body
+            body="$(grep -iE 'error|fail|not allowed|invalid|unsealed|detritus|code object|resource' "$log" | tail -n 25 || true)"
+            [ -n "$body" ] || body="$(tail -n 25 "$log")"
+            body="${body//'%'/'%25'}"; body="${body//$'\r'/'%0D'}"; body="${body//$'\n'/'%0A'}"
+            echo "::error title=$title::$body"
+          }
+          sign_app() { codesign --force --deep -s - -vvvv "$app" >"$log" 2>&1; }
+          if ! sign_app; then
+            echo "::group::codesign output (first try)"; cat "$log"; echo "::endgroup::"
+            annotate "codesign --deep failed (first try)"
+            # Second try, inside out: ad-hoc sign every nested Mach-O (dylib, jnilib, executables) on its own, then the bundle.
+            # The failing file shows up in the output above / the annotation either way.
+            find "$app/Contents" -type f -print0 | while IFS= read -r -d '' f; do
+              if file -b "$f" | grep -q 'Mach-O'; then
+                codesign --force -s - "$f" 2>&1 | sed "s|^|nested: |" || echo "::warning::could not ad-hoc sign $f"
+              fi
+            done
+            if ! sign_app; then
+              echo "::group::codesign output (second try)"; cat "$log"; echo "::endgroup::"
+              annotate "codesign failed after signing nested code"
+              exit 1
+            fi
+          fi
+          cat "$log" | tail -n 20
+          codesign --verify --deep --strict -vv "$app" 2>&1 | tee "$log" || { annotate "codesign --verify failed"; exit 1; }
+          codesign -dv "$app" 2>&1 | head -n 6 || true
+          # The .dmg: the app plus an /Applications symlink, compressed (UDZO). ditto keeps the signature and modes intact.
+          stage="$RUNNER_TEMP/dmg-stage"; rm -rf "$stage"; mkdir -p "$stage"
+          ditto "$app" "$stage/$(basename "$app")"
+          ln -s /Applications "$stage/Applications"
+          # Outside the checkout, like the windows job: the packaging guard wants a clean tree.
+          out="$RUNNER_TEMP/out"; mkdir -p "$out"
+          dmg="$out/InfantryAI-$V-macos-arm64-beta.dmg"
+          # hdiutil is known to fail on hosted runners with "Resource busy": retry once.
+          for attempt in 1 2; do
+            if hdiutil create -volname "Infantry AI" -srcfolder "$stage" -ov -format UDZO "$dmg" >"$log" 2>&1; then cat "$log"; break; fi
+            cat "$log"
+            [ "$attempt" = 2 ] && { annotate "hdiutil create failed twice"; exit 1; }
+            sleep 10
+          done
+          hdiutil verify "$dmg"
+          ls -l "$out"
       - uses: actions/upload-artifact@v4
         with:
           name: macos

@@ -148,7 +148,7 @@ above, the time is stamped when a packaging task runs (else HEAD's commit time),
 | `InfantryAI-<v>-windows.zip` | Windows job, `createDistributable` app-image (also the fallback if MSI packaging fails on the runner; then the updater has nothing to install). Do not update a zip-extracted copy with the MSI (see Windows notes). |
 | `InfantryAI-<v>.apk` | Android job, signed `assembleRelease`, when the keystore secrets exist. |
 | `InfantryAI-<v>-debug.apk` | Android job fallback (`assembleDebug`) when they do not. **The debug key differs per build, so Android refuses to update an installed app signed with another key.** Use a stable release key for anything users keep. |
-| `InfantryAI-<v>-macos-arm64-beta.dmg` | macOS job (RELEASE-PLATFORMS-1), `packageDmg` on `macos-14`: **beta, unsigned, not notarized**. Optional: the job is `continue-on-error` and the release goes out without it (a warning says so). No updater looks for it. |
+| `InfantryAI-<v>-macos-arm64-beta.dmg` | macOS job (RELEASE-PLATFORMS-1, MACOS-DMG-2): `createDistributable`, then the workflow ad-hoc signs the `.app` itself (`codesign -s -`, its output shown and annotated) and builds the `.dmg` with `hdiutil`, on `macos-15`: **beta, ad-hoc signed only, not notarized**. Optional: the job is `continue-on-error` and the release goes out without it (a warning says so). No updater looks for it. |
 | `InfantryAI-web-<v>.zip` | Web job, `:superiorSoftLibrary:infantryWeb:assembleWeb` (production), zipped under one `InfantryAI-web-<v>/` folder. The same files every daemon serves at `/`; a daemon serves an unpacked copy with `INFANTRY_WEB_DIR=<folder>`. Required. |
 | `InfantryAI-server-<v>-<os>-<arch>.{zip\|tar.gz}` | Headless job (`headlessDist`): the daemon + CLI + a bundled Java runtime, one per OS (linux-x64, windows-x64 zip, macos-arm64). This is what `infantry update` downloads; the release job fails unless linux-x64 and windows-x64 are present, pass the smoke gate, and are listed in `SHA256SUMS`. macos-arm64 is beta: its matrix leg is `continue-on-error`, and when it fails the release ships without it (a macOS server then reports that the release has no archive for macos-arm64 and keeps running). |
 | `SHA256SUMS` | `sha256sum` of every asset above (the format the updater parses). |
@@ -177,8 +177,8 @@ next `.dmg`.
 
 ### macOS beta: what a user does (unsigned app)
 
-There is no Apple Developer ID certificate yet, so the `.dmg` is neither signed nor notarized (jpackage ad-hoc signs the
-arm64 binaries, which is enough to run). Gatekeeper blocks the first start. The user either right-clicks the app >
+There is no Apple Developer ID certificate yet, so the `.dmg` is neither signed nor notarized (the release workflow ad-hoc
+signs the app, which is enough for arm64 to run). Gatekeeper blocks the first start. The user either right-clicks the app >
 **Open** > **Open**, or clears the quarantine flag once: `xattr -dr com.apple.quarantine /Applications/InfantryAI.app`.
 Signing and notarizing need the owner's Apple Developer account (secrets for the certificate and an app-specific
 password); that is a later ticket, and nothing in this workflow creates or expects those secrets.
@@ -299,7 +299,7 @@ When the repo goes public: `updater.source=public` (the default), delete the env
 
 ## Not verified without a real Actions run
 
-Runner tooling (WiX on `windows-2022`, `7z`, Android SDK licences, jpackage `.dmg` on `macos-14`), secret decoding,
+Runner tooling (WiX on `windows-2022`, `7z`, Android SDK licences, `hdiutil` `.dmg` on `macos-15`), secret decoding,
 `gh release` permissions, and the action versions themselves (pinned to major tags, not commit SHAs). What is checked
 locally: `actionlint` on the workflow, `bash -n` on every `run:` block, and a dry run of the release job's asset gate on
 fake asset sets (all present; macOS missing; web, APK or linux server missing; MSI missing).
