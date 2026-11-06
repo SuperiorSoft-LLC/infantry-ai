@@ -30,6 +30,11 @@ class SessionReplayDaemonTest {
     fun aDisconnectedClientReplaysOnlyMissedFramesInOrder() = withDaemon(scriptWithTextChunks(10), delayMs = 40) { fixture ->
         val firstClient = fixture.client
         val sessionId = startSession(firstClient)
+        // QA-FIX-J: a second connection watches the stream to its end. The session record reads IDLE before the
+        // run's last frames (the exit's status and finished) are published, so waiting on IDLE alone let the
+        // reconnect race them: they reached the new client live, before its replay answer, and the check below
+        // read only those. The stream is over only once its last frame (the run-end status after finished) is published.
+        val observer = fixture.connectClient()
         firstClient.awaitWhere("first streamed text delta", 10_000) {
             it.type == Envelope.TEXT_DELTA && it.sessionId == sessionId
         }
@@ -38,6 +43,7 @@ class SessionReplayDaemonTest {
         fixture.await(timeoutMs = 10_000, what = "the scripted session to finish after disconnect") {
             fixture.daemon.manager.get(sessionId)?.state?.name == "IDLE"
         }
+        awaitRunEnded(observer, sessionId)
 
         val alreadySeen = streamFrames(firstClient, sessionId)
         assertTrue(alreadySeen.isNotEmpty(), "the first connection must observe part of the session stream")
@@ -95,7 +101,9 @@ class SessionReplayDaemonTest {
         scriptWithTextChunks(SessionReplayContract.SESSION_REPLAY_BUFFER_CAPACITY * 4),
     ) { fixture ->
         val sessionId = startSession(fixture.client)
-        awaitFinished(fixture.client, sessionId, timeoutMs = 20_000)
+        // QA-FIX-J: count the emitted stream at its true end (the run-end status after finished), or it is one frame short
+        // of the daemon's eviction count.
+        awaitRunEnded(fixture.client, sessionId, timeoutMs = 20_000)
 
         val emitted = streamFrames(fixture.client, sessionId)
         assertTrue(emitted.size > SessionReplayContract.SESSION_REPLAY_BUFFER_CAPACITY)
@@ -105,6 +113,7 @@ class SessionReplayDaemonTest {
         fixture.await(timeoutMs = 10_000, what = "the retained replay range to include the latest frame") {
             streamFrames(reconnected, sessionId).any { it.type == Envelope.FINISHED }
         }
+        reconnected.awaitWhere("the replayed run-end status", 10_000) { isRunEndStatus(it, sessionId) }
 
         val gap = json.decodeFromString(SessionReplayGap.serializer(), gapFrame["data"]!!.jsonPrimitive.content)
         val retained = streamFrames(reconnected, sessionId)
@@ -118,7 +127,9 @@ class SessionReplayDaemonTest {
     @Test
     fun aCursorAtTheLastSeenSequenceDoesNotReplayAnythingTwice() = withDaemon(StubScript.default()) { fixture ->
         val sessionId = startSession(fixture.client)
-        awaitFinished(fixture.client, sessionId)
+        // QA-FIX-J: the cursor is the LAST frame of the stream, which is the run-end status published after finished.
+        // Taking it at finished let that status (already numbered) come back on the replay: a cursor one frame short.
+        awaitRunEnded(fixture.client, sessionId)
         val alreadySeen = streamFrames(fixture.client, sessionId)
         val lastSeen = alreadySeen.last().sequence ?: alreadySeen.size.toLong()
 
@@ -147,6 +158,20 @@ class SessionReplayDaemonTest {
             it.type == Envelope.FINISHED && it.sessionId == sessionId
         }
     }
+
+    /**
+     * The run's last stream frame has arrived on [client]: `finished`, then the run-end `status` (its `runActivity` in state
+     * finished or error) that the daemon publishes in the same batch right after it. The stub scripts here report no usage,
+     * so no `usage` frame follows.
+     */
+    private fun awaitRunEnded(client: WsTestClient, sessionId: String, timeoutMs: Long = 10_000) {
+        awaitFinished(client, sessionId, timeoutMs)
+        client.awaitWhere("the run-end status for session $sessionId", timeoutMs) { isRunEndStatus(it, sessionId) }
+    }
+
+    private fun isRunEndStatus(frame: Envelope, sessionId: String): Boolean =
+        frame.type == Envelope.STATUS && frame.sessionId == sessionId && "\"runActivity\"" in frame.data &&
+            ("\"state\":\"finished\"" in frame.data || "\"state\":\"error\"" in frame.data)
 
     private fun requestReplay(client: WsTestClient, sessionId: String, lastSequence: Long) {
         val request = SessionReplayRequest(lastSequence)
