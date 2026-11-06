@@ -10,13 +10,15 @@ CI and a tag-release workflow. It knows only Maven coordinates of the published 
 4. Rename the tab id and the tool in `module.json` and in the code (the app refuses anything undeclared).
 
 ## Build
-Reading the SDK from GitHub Packages needs a token with `read:packages`: set `GITHUB_ACTOR` and `GITHUB_TOKEN`, or
-`gpr.user` / `gpr.key` in `~/.gradle/gradle.properties`.
+The SDK (`com.superiorsoftllc.infantry:infantry-sdk-catalog`, `-bom`, `infantry-plugin-api`, `infantry-daemon-api`,
+`infantry-harness-api`, ...) and the Gradle plugin `com.superiorsoftllc.infantry.plugin` come from Maven Central: no account
+and no token. `infantry.sdk.version` in `gradle.properties` picks the SDK release.
 
     ./gradlew build ihq
 
-To build against a local SDK repository instead, add `-Pinfantry.sdkRepo=<path>`; `infantry.sdk.version` in
-`gradle.properties` picks the SDK release.
+To build against a local SDK repository instead, add `-Pinfantry.sdkRepo=<path>`. For an SDK release that is not on Central
+yet, `-Pinfantry.sdk.githubPackages=true` also reads GitHub Packages; that needs a token with `read:packages`
+(`GITHUB_ACTOR` / `GITHUB_TOKEN`, or `gpr.user` / `gpr.key` in `~/.gradle/gradle.properties`).
 
 ## Install locally
 

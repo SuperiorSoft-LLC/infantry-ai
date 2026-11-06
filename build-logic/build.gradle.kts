@@ -29,8 +29,19 @@ dependencies {
     testImplementation(gradleTestKit())
 }
 
-// Local publication only (java-gradle-plugin adds the plugin marker); nothing is published to a remote repository.
+// Local publications (java-gradle-plugin adds the plugin marker), plus SDK-CENTRAL-1: Maven Central through the same
+// bundle as the SDK (gradle/sdk-central.gradle.kts adds the POM fields, sources/javadoc jars, signing and the
+// `centralBundle` repository), so an out-of-tree plugin resolves `com.superiorsoftllc.infantry.plugin` with no token.
+apply(from = rootDir.resolve("../gradle/sdk-central.gradle.kts"))
+
 publishing {
+    publications.withType<MavenPublication>().configureEach {
+        if (name == "pluginMaven") artifactId = "infantry-gradle-plugin"
+        pom {
+            name.set(if (this@configureEach.name == "pluginMaven") "infantry-gradle-plugin" else "com.superiorsoftllc.infantry.plugin")
+            description.set("Infantry AI Gradle plugin: validates module.json, wires the SDK and packs a plugin into a .ihq.")
+        }
+    }
     repositories {
         maven { name = "local"; url = layout.buildDirectory.dir("repo").get().asFile.toURI() }
         // TEMPLATE-REPO-1: the same dry-run repo the SDK modules publish to, so templates/plugin-repo resolves the plugin offline.

@@ -2,12 +2,15 @@
 // Copyright (c) SuperiorSoft LLC
 // SDK-PUB-1 (docs/PLUGIN-REPO-DESIGN.md section 1): shared publishing setup for the plugin SDK modules. Applied with
 // `apply(from = rootProject.file("gradle/sdk-publish.gradle.kts"))` AFTER the module's own plugins block.
-// Versions are READ from the code constants (never typed here); the licence comes from the property `infantry.license`.
+// Versions are READ from the code constants (never typed here). SDK-CENTRAL-1: the rest of the POM (url, licence from
+// scripts/license-paths.txt, developers, scm), the sources/javadoc jars, signing and the `centralBundle` repository come from
+// gradle/sdk-central.gradle.kts, applied below.
 import org.gradle.api.publish.PublishingExtension
 import org.gradle.api.publish.maven.MavenPublication
 import org.gradle.api.publish.maven.tasks.PublishToMavenRepository
 
 apply(plugin = "maven-publish")
+apply(from = rootProject.file("gradle/sdk-central.gradle.kts"))
 
 val sdkGroup = "com.superiorsoftllc.infantry"
 
@@ -66,14 +69,6 @@ extensions.configure<PublishingExtension>("publishing") {
                 if (uiCore) "Infantry AI desktop UI core: unstable surface, no compatibility promise."
                 else "Infantry AI plugin SDK: $artifactBase.",
             )
-            url.set((findProperty("infantry.url") ?: "https://github.com/SuperiorSoft-LLC/infantry-ai").toString())
-            licenses {
-                license { name.set((findProperty("infantry.license") ?: "NOASSERTION").toString()) }
-            }
-            scm {
-                url.set((findProperty("infantry.scm.url") ?: "https://github.com/SuperiorSoft-LLC/infantry-ai").toString())
-                connection.set((findProperty("infantry.scm.connection") ?: "scm:git:https://github.com/SuperiorSoft-LLC/infantry-ai.git").toString())
-            }
         }
     }
     repositories {

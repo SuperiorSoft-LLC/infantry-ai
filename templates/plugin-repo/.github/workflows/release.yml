@@ -6,13 +6,10 @@ on:
     tags: ['v*']
 permissions:
   contents: write
-  packages: read
 jobs:
   release:
     runs-on: ubuntu-latest
     env:
-      GITHUB_ACTOR: ${{ github.actor }}
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       IHQ_STOREPASS: ${{ secrets.IHQ_STOREPASS }}
       IHQ_ALIAS: ${{ secrets.IHQ_ALIAS }}
       IHQ_KEYSTORE_B64: ${{ secrets.IHQ_KEYSTORE_B64 }}
