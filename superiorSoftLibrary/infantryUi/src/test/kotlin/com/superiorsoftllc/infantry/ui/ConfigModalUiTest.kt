@@ -2,7 +2,10 @@
 // Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.ui
 
+import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.isRoot
+import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -30,7 +33,7 @@ class ConfigModalUiTest {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         try {
             // No daemon needed: the flag is local window state, so an unreachable URL renders the shell.
-            runDesktopComposeUiTest(1700, 1000) {
+            runDesktopComposeUiTest(1700, 1000) { dumpTreeOnFailure {
                 setContent { App(Controller(scope), "ws://127.0.0.1:1/ws", null) }
 
                 // The footer (and its cog) is composed by the shell after its first frames; the click waits for it instead of
@@ -66,9 +69,27 @@ class ConfigModalUiTest {
                 onNodeWithTag("agent-scope-option-PROJECT").performClick()
                 onNodeWithTag("agent-scope-field").assertTextContains("Project Scoped Agents")
                 onNodeWithText(AgentScope.PROJECT.effect).assertExists()
-            }
+            } }
         } finally {
             scope.cancel()
+        }
+    }
+
+    /**
+     * QA-FIX-K (ddf28acb): diagnostics only, no assertion changes. This test fails now and then in the full QA run with a
+     * bare "AssertionError at SemanticsNodeInteraction.kt:178" (a lookup found 0 or 2+ nodes) and never alone. On a
+     * failure the whole semantics tree (every root, unmerged) joins the original message, and goes to stderr, so the
+     * next failure names the lookup and the window state behind it.
+     */
+    private fun ComposeUiTest.dumpTreeOnFailure(body: ComposeUiTest.() -> Unit) {
+        try {
+            body()
+        } catch (e: AssertionError) {
+            val tree = runCatching { onAllNodes(isRoot(), useUnmergedTree = true).printToString(maxDepth = Int.MAX_VALUE) }
+                .getOrElse { "(tree unavailable: $it)" }
+            val message = "${e.message}\n--- semantics tree at the failure (QA-FIX-K) ---\n$tree"
+            System.err.println("ConfigModalUiTest failed: $message")
+            throw AssertionError(message, e)
         }
     }
 }
