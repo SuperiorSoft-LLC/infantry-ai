@@ -75,14 +75,26 @@ class SessionContainersTest {
         try {
             assertTrue(held != null, "the test holds a handle to the child")
             assertTrue(c.assign(key, child.pid()), "the child joins the session's job")
-            assertEquals(listOf(child.pid()), c.members(key), "a running child is a member")
+            val running = c.members(key)
+            assertTrue(child.pid() in running, "a running child is a member: ${described(running)}")
             child.destroyForcibly()
             assertTrue(child.waitFor(10, TimeUnit.SECONDS), "the child is killed")
-            assertTrue(c.members(key).isEmpty(), "a dead process is no member, even while a handle keeps it in the job's list")
+            val after = c.members(key)
+            assertFalse(child.pid() in after, "a dead process is no member, even while a handle keeps it in the job's list: ${described(after)}")
+            // QA-FIX-H: under a loaded full suite the child can start its console host only after it joined the job, so
+            // that host is a member too and exits a moment after its client. The job then drains; it must not stay full.
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+            var left = after
+            while (left.isNotEmpty() && System.nanoTime() < deadline) { Thread.sleep(50); left = c.members(key) }
+            assertTrue(left.isEmpty(), "the job drains once the killed child's own processes have exited: ${described(left)}")
         } finally {
             held?.let { k32.CloseHandle(it) }
             child.destroyForcibly()
             c.release(key)
         }
+    }
+
+    private fun described(pids: List<Long>) = pids.map { pid ->
+        pid to ProcessHandle.of(pid).flatMap { it.info().command() }.orElse("?")
     }
 }
