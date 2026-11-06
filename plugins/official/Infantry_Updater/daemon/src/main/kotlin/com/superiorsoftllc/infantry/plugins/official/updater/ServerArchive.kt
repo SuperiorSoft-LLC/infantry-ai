@@ -19,7 +19,7 @@ object ServerArchive {
     data class Parsed(val version: SemVer, val platform: Platform, val legacy: Boolean)
 
     private val NAME = Regex(
-        """^(InfantryAI|AgentHQ)-server-(\d+\.\d+\.\d+)-(windows|linux|macos)-([a-z0-9_]+)\.(zip|tar\.gz)$""",
+        """^(InfantryAI|AgentHQ)-server-(${SemVer.FILE_VERSION})-(windows|linux|macos)-([a-z0-9_]+)\.(zip|tar\.gz)$""",
         RegexOption.IGNORE_CASE,
     )
 

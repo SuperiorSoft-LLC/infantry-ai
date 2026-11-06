@@ -27,15 +27,17 @@ class UpdateConfig(
     val checkIntervalHours: Int = 0,
     /** UPDATER-DEFAULT-1 (`updater.autoCheck`, the one user setting): false = check only when the user asks. */
     val autoCheck: Boolean = true,
+    /** NIGHTLY-1 (`updater.releaseChannel`, a user setting): which releases count ([ReleaseChannel]); Stable by default. */
+    val channel: ReleaseChannel = ReleaseChannel.STABLE,
     private val tokenSource: () -> String? = { null },
 ) {
     /** The GitHub token for a private repo, or null. Never log it. */
     val token: String? by lazy { if (visibility == UpdateVisibility.PUBLIC) null else tokenSource()?.trim()?.takeIf { it.isNotEmpty() } }
 
-    override fun toString(): String = "UpdateConfig(repo=$repo, current=$currentVersion, api=$apiBase, source=${visibility.wire}, token=${if (token != null) "set" else "none"})"
+    override fun toString(): String = "UpdateConfig(repo=$repo, current=$currentVersion, api=$apiBase, source=${visibility.wire}, channel=${channel.id}, token=${if (token != null) "set" else "none"})"
 
     /** The same source asked on behalf of another install running [version] (UPDATER-1: a phone asking its daemon). */
-    fun forVersion(version: SemVer): UpdateConfig = UpdateConfig(repo, version, apiBase, localDir, visibility, checkIntervalHours, autoCheck, tokenSource)
+    fun forVersion(version: SemVer): UpdateConfig = UpdateConfig(repo, version, apiBase, localDir, visibility, checkIntervalHours, autoCheck, channel, tokenSource)
 
     companion object {
         const val DEFAULT_API = "https://api.github.com"
@@ -100,7 +102,13 @@ sealed interface UpdateSettings {
 
         /** UPDATER-DEFAULT-1: the ONE user setting (Configuration > About > Updater); the keys above are developer overrides. */
         const val KEY_AUTO = "updater.autoCheck"
-        val SETTING_KEYS = listOf(KEY_SOURCE, KEY_REPO, KEY_CHANNEL, KEY_DIR, KEY_INTERVAL, KEY_AUTO)
+
+        /**
+         * NIGHTLY-1: the second user setting, "Update channel" (Stable / Nightly). Its values are the ids of the manifest's
+         * `channels`; not to be confused with [KEY_CHANNEL], the developer switch between a local folder and GitHub.
+         */
+        const val KEY_RELEASE_CHANNEL = "updater.releaseChannel"
+        val SETTING_KEYS = listOf(KEY_SOURCE, KEY_REPO, KEY_CHANNEL, KEY_DIR, KEY_INTERVAL, KEY_AUTO, KEY_RELEASE_CHANNEL)
 
         const val MODULE_ID = "Infantry_Updater"
         const val SETTINGS_FILE = "settings.properties"
@@ -174,8 +182,13 @@ sealed interface UpdateSettings {
             val interval = pick("$KEY_INTERVAL (not a whole number of hours)", listOf(plugin(KEY_INTERVAL), manifest(UpdateManifest.KEY_INTERVAL))) { (it.toIntOrNull() ?: -1) >= 0 }
                 ?.toInt() ?: DEFAULT_INTERVAL_HOURS
             val autoCheck = plugin(KEY_AUTO)?.lowercase() != "false"
+            // NIGHTLY-1: the channels are manifest data; the user's pick wins, then the manifest's default, then Stable.
+            val channels = ReleaseChannel.fromManifest(manifest, warnings)
+            val channel = pick("$KEY_RELEASE_CHANNEL (not one of ${channels.joinToString("/") { it.id }})", listOf(plugin(KEY_RELEASE_CHANNEL), manifest(UpdateManifest.KEY_DEFAULT_CHANNEL))) { v ->
+                channels.any { it.id == v.lowercase() }
+            }?.let { v -> channels.first { it.id == v.lowercase() } } ?: channels.first { it.id == ReleaseChannel.STABLE_ID }
             // UPDATE-4: `source=local|github` wins; else `channel=unstable` (local dir) / `channel=production` (GitHub);
-            // else the older rule: a dir means local, a repo means GitHub. Nightly is not built yet. A channel that only the
+            // else the older rule: a dir means local, a repo means GitHub. (The release CHANNEL, Stable or Nightly, is a separate setting.) A channel that only the
             // manifest names is the build's default, so a developer's dir= still switches to the local folder.
             val overrideChannel = pick("update channel (not unstable or production)", listOf(file?.getProperty("channel"), plugin(KEY_CHANNEL))) { it.lowercase() in CHANNELS }?.lowercase()
             val useLocal = when {
@@ -186,18 +199,18 @@ sealed interface UpdateSettings {
             }
             if (useLocal) {
                 dir ?: return Disabled("the local update source needs dir=<releases folder> (or $DIR)")
-                return Enabled(UpdateConfig("local/releases", current, localDir = File(dir), visibility = visibility, checkIntervalHours = interval, autoCheck = autoCheck), warnings)
+                return Enabled(UpdateConfig("local/releases", current, localDir = File(dir), visibility = visibility, checkIntervalHours = interval, autoCheck = autoCheck, channel = channel), warnings)
             }
             repo ?: return Disabled("this build names no update repo (its manifest has no update.repo); a developer can set $REPO=owner/repo")
             val api = setting(API)?.trim()?.trimEnd('/')?.takeIf { it.isNotEmpty() } ?: UpdateConfig.DEFAULT_API
             // Public: no token ever leaves this machine, even when one is set somewhere (launch day: the switch is enough).
             if (visibility == UpdateVisibility.PUBLIC) {
-                return Enabled(UpdateConfig(repo, current, api, visibility = visibility, checkIntervalHours = interval, autoCheck = autoCheck), warnings)
+                return Enabled(UpdateConfig(repo, current, api, visibility = visibility, checkIntervalHours = interval, autoCheck = autoCheck, channel = channel), warnings)
             }
             // The OS credential store holds the owner's own GitHub login: only ever offer it to GitHub itself, never to an
             // API override (a fake server, a mirror). An explicit INFANTRY_UPDATE_TOKEN goes wherever the owner points it.
             val stored: () -> String? = if (api == UpdateConfig.DEFAULT_API) credentialStore else { { null } }
-            return Enabled(UpdateConfig(repo, current, api, visibility = visibility, checkIntervalHours = interval, autoCheck = autoCheck) {
+            return Enabled(UpdateConfig(repo, current, api, visibility = visibility, checkIntervalHours = interval, autoCheck = autoCheck, channel = channel) {
                 env(TOKEN_ENV)?.takeIf { it.isNotBlank() } ?: runCatching(keystore).getOrNull()?.takeIf { it.isNotBlank() } ?: stored()
             }, warnings)
         }

@@ -51,7 +51,9 @@ val infantryVersionName: String =
 val infantryVersionCode: Int =
     providers.gradleProperty("infantryVersionCode").orNull?.trim()?.toIntOrNull()
         // RELEASE-AUTO-1: monotonic code derived from MAJOR.MINOR.BUILD, so a bumped version always upgrades.
-        ?: infantryVersionName.split(".").map { it.toIntOrNull() ?: 0 }.let { p -> p.getOrElse(0) { 0 } * 1_000_000 + p.getOrElse(1) { 0 } * 10_000 + p.getOrElse(2) { 0 } }
+        // NIGHTLY-1: a pre-release (1.0.8-nightly.20261107.12) is dropped, so a nightly has the code of the stable it leads
+        // up to: the next nightly and that stable install over it; an OLDER stable needs an uninstall (docs/RELEASING.md).
+        ?: infantryVersionName.substringBefore('-').split(".").map { it.toIntOrNull() ?: 0 }.let { p -> p.getOrElse(0) { 0 } * 1_000_000 + p.getOrElse(1) { 0 } * 10_000 + p.getOrElse(2) { 0 } }
 
 configure<com.android.build.api.dsl.ApplicationExtension> {
     namespace = "com.superiorsoftllc.infantry.android"

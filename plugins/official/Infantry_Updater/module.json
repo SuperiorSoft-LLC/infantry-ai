@@ -11,8 +11,15 @@
   "implementations": [
     { "registry": "app.selfUpdate", "key": "android" }
   ],
-  "appUpdate": { "type": "github", "repo": "SuperiorSoft-LLC/infantry-ai", "visibility": "public", "channel": "production", "checkIntervalHours": 24 },
-  "description": "Updates: checks the release source (GitHub Releases, public or private, or a local releases folder), downloads and verifies the new build, and installs it: the desktop MSI, the headless server archive, and the Android APK. Where releases come from is the manifest's appUpdate block (developer data, baked into the build; never a user setting): type github, repo owner/repo, visibility public (never sends a token) or private (a read token from env INFANTRY_UPDATE_TOKEN, else keystore update-token, else the OS credential store), channel, checkIntervalHours. The user setting is only updater.autoCheck.",
+  "appUpdate": {
+    "type": "github", "repo": "SuperiorSoft-LLC/infantry-ai", "visibility": "public", "channel": "production", "checkIntervalHours": 24,
+    "defaultChannel": "stable",
+    "channels": {
+      "stable": { "label": "Stable", "release": "latest" },
+      "nightly": { "label": "Nightly", "release": "prerelease", "preRelease": "nightly" }
+    }
+  },
+  "description": "Updates: checks the release source (GitHub Releases, public or private, or a local releases folder), downloads and verifies the new build, and installs it: the desktop MSI, the headless server archive, and the Android APK. Where releases come from is the manifest's appUpdate block (developer data, baked into the build; never a user setting): type github, repo owner/repo, visibility public (never sends a token) or private (a read token from env INFANTRY_UPDATE_TOKEN, else keystore update-token, else the OS credential store), channel, checkIntervalHours, and (NIGHTLY-1) the release channels: stable = GitHub's latest release, nightly = the newest prerelease tagged <next>-nightly.<date>.<run> (or a newer stable). The user settings are only updater.autoCheck and updater.releaseChannel (Update channel: Stable / Nightly).",
   "daemon": {
     "entry": "com.superiorsoftllc.infantry.plugins.official.updater.daemon.UpdaterDaemonPlugin",
     "jar": "daemon/build/libs/Infantry_Updater-daemon.jar",
@@ -30,9 +37,10 @@
       {
         "node": "infantry.updater", "group": "Updates", "title": "Updater", "tab": "About", "order": 905,
         "applies": "Applies to: where this install (desktop, server and the phone through this daemon) looks for new versions.",
-        "keywords": ["update", "updater", "release", "automatic", "check"],
+        "keywords": ["update", "updater", "release", "automatic", "check", "channel", "nightly", "stable"],
         "fields": [
-          { "key": "updater.autoCheck", "type": "toggle", "label": "Check for updates automatically", "default": true, "scope": "daemon", "order": 1, "description": "At start, once a day, and when you come back to the window. Off = only when you press Check for updates. Installing is always your call." }
+          { "key": "updater.autoCheck", "type": "toggle", "label": "Check for updates automatically", "default": true, "scope": "daemon", "order": 1, "description": "At start, once a day, and when you come back to the window. Off = only when you press Check for updates. Installing is always your call." },
+          { "key": "updater.releaseChannel", "type": "select", "label": "Update channel", "default": "stable", "scope": "daemon", "order": 2, "options": ["stable", "nightly"], "optionLabels": { "stable": "Stable", "nightly": "Nightly" }, "description": "Stable: tested releases only. Nightly: a build of the newest development work, published once a night when there is new work; tested less, so expect rough edges. Switching from Nightly back to Stable offers the newest stable release even when it is older than the nightly you run (the update says so). Android cannot go back to an older version without uninstalling." }
         ]
       }
     ]

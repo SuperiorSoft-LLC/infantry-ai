@@ -49,10 +49,17 @@ val updateManifest = tasks.register("updateManifest") {
         val block = ((groovy.json.JsonSlurper().parse(manifest.asFile) as Map<String, Any?>)["appUpdate"] as? Map<String, Any?>).orEmpty()
         val values = linkedMapOf<String, String>()
         block.forEach { (k, v) -> if (v != null && v !is Map<*, *> && v !is List<*>) values[k] = v.toString().trim() }
+        // NIGHTLY-1: the `channels` map, flattened: channels=<id>,<id> and channels.<id>.<key>=<value> (ReleaseChannel.fromManifest).
+        (block["channels"] as? Map<*, *>)?.let { channels ->
+            values["channels"] = channels.keys.joinToString(",") { it.toString().trim() }
+            channels.forEach { (id, spec) ->
+                (spec as? Map<*, *>)?.forEach { (k, v) -> if (v != null && v !is Map<*, *> && v !is List<*>) values["channels.$id.$k"] = v.toString().trim() }
+            }
+        }
         overrides.forEach { (k, v) -> v.get().takeIf { it.isNotEmpty() }?.let { values[k] = it } }
         val repo = values["repo"].orEmpty()
         require(repo.isEmpty() || Regex("^[A-Za-z0-9-]{1,39}/[A-Za-z0-9._-]{1,100}$").matches(repo)) { "update repo '$repo' is not owner/repo" }
-        val unsafe = values.entries.firstOrNull { (k, v) -> !Regex("^[A-Za-z0-9]+$").matches(k) || !Regex("^[A-Za-z0-9._/-]*$").matches(v) }
+        val unsafe = values.entries.firstOrNull { (k, v) -> !Regex("^[A-Za-z0-9]+(\\.[A-Za-z0-9-]+)*$").matches(k) || !Regex("^[A-Za-z0-9._/,-]*$").matches(v) }
         require(unsafe == null) { "module.json appUpdate.${unsafe?.key} '${unsafe?.value}' has characters a manifest value never needs" }
         val file = out.get().file("infantry-update-manifest.properties").asFile
         file.parentFile.mkdirs()

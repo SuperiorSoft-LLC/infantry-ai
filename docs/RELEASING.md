@@ -51,8 +51,81 @@ The launch-day switch, in this order. Do not skip ahead: each step assumes the o
 1. Edit `infantryVersion=` in the root `gradle.properties` (the single version source: the MSI/app-image, the APK
    `versionName`, and the workflow all read it). MAJOR 1..255, MINOR 0..255, BUILD 0..65535; it must be higher than
    the last release or installed copies will not upgrade. The APK `versionCode` is derived (`MAJOR*1000000 + MINOR*10000 + BUILD`).
+   A stable BUILD stays below 40000: that range belongs to the nightly MSIs (see "Nightly builds"); the workflow refuses it.
 2. Commit and push the bump to the default branch.
 3. `git tag v1.0.1 && git push origin v1.0.1` (tag = `v` + the exact `infantryVersion`; the workflow's first job fails otherwise).
+4. The tagged commit must pass the stable safety guard (below): it, or its parent with only this version bump, shipped as
+   a nightly. The project's `release-cut` script does steps 1-3 and runs the guard before it pushes anything.
+
+## Nightly builds (NIGHTLY-1)
+
+`.github/workflows/nightly.yml` runs at 06:00 UTC and by hand (Actions > nightly > Run workflow; inputs `force` and
+`branch`). Its `plan` job runs `scripts/nightly-version.sh plan`: when the head of the dev branch (`feature-agenthq-mvp`)
+already carries a nightly tag there is no new commit since the last nightly and nothing is built (`force` overrides).
+Otherwise it calls `release.yml` through `workflow_call` (the very jobs of a stable release, never a copy) with:
+
+| Input | Value (example: last stable 1.0.7, run 12, 2026-11-07) |
+|---|---|
+| `version` | `<next>-nightly.<yyyymmdd>.<run>` = `1.0.8-nightly.20261107.12`. `next` is `infantryVersion` when it is above the newest stable tag, else that tag's BUILD + 1. |
+| `package_version` | `<next MAJOR>.<next MINOR>.<40000 + run>` = `1.0.40012` |
+| `tag` | `v1.0.8-nightly.20261107.12` |
+| `ref`, `branch`, `channel` | the planned commit, the dev branch, `nightly` |
+
+The release is a GitHub **prerelease** (never "latest"; `gh release create --prerelease --latest=false --target <sha>`,
+which creates the tag on the built commit) with the same assets, `SHA256SUMS` (signed when the key exists) and
+`nightly.json` (the `latest.json` shape) instead of `latest.json`. The Docker job is skipped. `release.yml` ignores pushed
+`v*-nightly.*` tags. A schedule and the Run button work only from the copy of `nightly.yml` on the default branch
+(`main`), which the next release cut brings there; until then nothing runs at night.
+
+**Versions and ordering.** SemVer orders `1.0.7 < 1.0.8-nightly.20261107.12 < 1.0.8-nightly.20261108.13 < 1.0.8`: the
+date comes first, so a later night always wins. The asset names carry the full version (`InfantryAI-1.0.8-nightly.20261107.12.msi`,
+`.apk`, `-debug.apk`, `InfantryAI-server-1.0.8-nightly.20261107.12-linux-x64.tar.gz`). The app reports it as
+`-Dinfantry.version` / the APK `versionName`, and the build stamp adds `+<date>.<time>.<sha>` after it.
+
+**MSI (Windows).** An MSI version must be numeric MAJOR.MINOR.BUILD, so the nightly MSI gets `package_version`
+(`-PinfantryPackageVersion`; the app's own version stays the SemVer). jpackage (JDK 21) derives the MSI ProductCode from
+the version and allows both upgrades and downgrades (`JpAllowUpgrades`, `JpAllowDowngrades` in its `main.wxs`), but it
+excludes the SAME version from its upgrade table: two different MSIs with one version would collide. So every nightly
+gets a unique BUILD, `40000 + run number`, and stable BUILDs stay below 40000. Order does not matter to Windows: nightly
+`1.0.40012` over stable `1.0.7` upgrades, and stable `1.0.8` over nightly `1.0.40012` is a downgrade that the MSI allows,
+replacing the nightly. The range ends at BUILD 65535 (run 25535); then `nightly-version.sh` fails and says so (bump MINOR,
+or lower `NIGHTLY_MSI_BUILD_BASE`). The macOS `.dmg` uses the same package version.
+
+**APK (Android).** `versionCode` comes from the numeric core only (`1.0.8-nightly...` -> the code of `1.0.8`), so the
+next nightly and the stable it leads up to install over it (Android allows an equal code). An OLDER stable (Nightly ->
+Stable while the stable is behind) has a lower code, which Android refuses: the updater tells the phone user to
+uninstall first (the app's data on the phone is lost; the daemon's is not).
+
+**Channels in the updater.** The channels are manifest data, the `appUpdate.channels` map of
+`plugins/official/Infantry_Updater/module.json`: `stable` reads `releases/latest`, `nightly` reads the release list
+and takes the highest version that is a stable release or a `nightly` prerelease (so a nightly install also moves on to
+a newer stable). The one user setting is **Update channel: Stable / Nightly** (`updater.releaseChannel`, Configuration >
+About, default Stable). Switching Nightly -> Stable offers the newest stable even though it is older than the running
+nightly, with a note above the release notes that says so (and, on the phone, that Android needs an uninstall). A
+Stable install never downgrades otherwise.
+
+**Known limit: a headless server does not downgrade.** The core update engine (`infantry update`, Configuration >
+Server) installs only a NEWER version, so a server on a nightly that switches to Stable stays on the nightly until a
+stable release newer than it ships. The desktop app and the phone do downgrade.
+
+Retention: nightlies are never deleted by the workflow (the stable guard needs their tags). Delete old ones by hand if
+the list grows, keeping the nightly of every commit that may still be cut as a stable.
+
+## The stable safety guard (NIGHTLY-1)
+
+A stable release ships only a commit that QA passed AND that was shipped as a nightly first: `scripts/stable-guard.sh
+<commit>` passes when the commit carries a `v*-nightly.*` tag, or its first parent does and the commit changes nothing but
+the `infantryVersion=` line of `gradle.properties` and the `version:` line of `docs/shared/product.md` (the release bump).
+It runs twice:
+
+- in the project's `release-cut` script, before it commits or pushes anything (override: arg `"force": "<reason>"`);
+- in `release.yml`'s `version` job on every stable tag, with the full history and tags (override: an ANNOTATED tag whose
+  message has a line `force-stable: <reason>`, e.g. `git tag -a v1.0.8 -m "force-stable: hotfix for ..."`). An override
+  is a warning in the run log.
+
+QA is the release-cut script's rule (run the `qa` script first); the nightly is the part the guard enforces. The first
+stable cut after NIGHTLY-1 lands has no nightly yet (the schedule needs `nightly.yml` on `main`): it is cut with the
+override, which also brings `nightly.yml` to `main`.
 
 ## Build stamp (BUILD-STAMP-1)
 
@@ -230,3 +303,9 @@ Runner tooling (WiX on `windows-2022`, `7z`, Android SDK licences, jpackage `.dm
 `gh release` permissions, and the action versions themselves (pinned to major tags, not commit SHAs). What is checked
 locally: `actionlint` on the workflow, `bash -n` on every `run:` block, and a dry run of the release job's asset gate on
 fake asset sets (all present; macOS missing; web, APK or linux server missing; MSI missing).
+NIGHTLY-1 (no actionlint on that machine): both workflows parsed as YAML, every `needs.*.outputs.*`, `steps.*.outputs.*`
+and `inputs.*` checked against what is declared, the `workflow_call` inputs checked against what `nightly.yml` passes,
+`bash -n` on every `run:` block; `nightly-version.sh` and `stable-guard.sh` run against a scratch git repository
+(built / not built / forced; guard on the nightly commit, on a pure bump, refused on a bump with another change and on a
+commit without a nightly). The `gh release create --prerelease --latest=false --target` call and a real scheduled run
+are not verified.

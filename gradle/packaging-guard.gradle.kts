@@ -60,7 +60,10 @@ gradle.taskGraph.whenReady {
 }
 
 /** BUILD-STAMP-1: the copy's name: the version suffix (if any) gives way to the whole build string, which already holds it. */
-fun stampedName(f: File): String = "${f.nameWithoutExtension.removeSuffix("-$buildVersion")}-$buildStamp.${f.extension}"
+// NIGHTLY-1: a nightly MSI is named with its numeric package version (-PinfantryPackageVersion), not the SemVer; strip either.
+val packageVersion: String? = providers.gradleProperty("infantryPackageVersion").orNull?.trim()?.takeIf { it.isNotEmpty() }
+fun stampedName(f: File): String =
+    "${f.nameWithoutExtension.removeSuffix("-$buildVersion").let { n -> packageVersion?.let { n.removeSuffix("-$it") } ?: n }}-$buildStamp.${f.extension}"
 
 fun stamp(dir: File, exts: Set<String>) {
     if (!dir.isDirectory) return

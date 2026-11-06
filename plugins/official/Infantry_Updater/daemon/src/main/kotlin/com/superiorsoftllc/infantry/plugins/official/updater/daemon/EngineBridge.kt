@@ -91,7 +91,7 @@ class ReleaseSourceType(
         val dir = if (location.isNotEmpty() && File(location).isAbsolute) File(location) else b.localDir
         val repo = if (dir == null && location.isNotEmpty()) location else b.repo
         val engineToken = request.credential
-        return UpdateConfig(repo, current, b.apiBase, dir, b.visibility, b.checkIntervalHours, tokenSource = { engineToken?.reveal() ?: b.token })
+        return UpdateConfig(repo, current, b.apiBase, dir, b.visibility, b.checkIntervalHours, channel = b.channel, tokenSource = { engineToken?.reveal() ?: b.token })
     }
 
     companion object {

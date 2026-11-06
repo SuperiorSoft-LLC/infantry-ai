@@ -416,10 +416,19 @@ tasks.register<Test>("ownerSmoke") {
 // in-process, so the install never touches the dev daemon (8787), the dev preview (8788) or ~/.infantry. The daemon ships on the same classpath (:infantry is an
 // `implementation` dependency above), so there is no second launcher to keep in sync.
 // Build: ./gradlew :superiorSoftLibrary:infantryUi:packageReleaseMsi   (or packageMsi / packageExe / packageReleaseExe)
-val infantryPackageVersion: String = providers.gradleProperty("infantryVersion").orNull?.trim()?.takeIf { it.isNotEmpty() } ?: "1.0.0"
+// NIGHTLY-1: two versions. infantryAppVersion is the app's SemVer (-PinfantryVersion; a nightly carries a pre-release,
+// 1.0.8-nightly.20261107.12): what the app reports and the updater compares. infantryPackageVersion is the numeric
+// MAJOR.MINOR.BUILD the MSI/DMG needs (-PinfantryPackageVersion; default: infantryVersion without its pre-release). The
+// nightly workflow gives each nightly a unique package version (docs/RELEASING.md, "Nightly builds").
+val infantryAppVersion: String = providers.gradleProperty("infantryVersion").orNull?.trim()?.takeIf { it.isNotEmpty() } ?: "1.0.0"
+require(Regex("""\d+\.\d+\.\d+(-[0-9A-Za-z]+(\.[0-9A-Za-z]+)*)?""").matches(infantryAppVersion)) {
+    "NIGHTLY-1: -PinfantryVersion=$infantryAppVersion is not MAJOR.MINOR.BUILD[-pre.release]"
+}
+val infantryPackageVersion: String = providers.gradleProperty("infantryPackageVersion").orNull?.trim()?.takeIf { it.isNotEmpty() }
+    ?: infantryAppVersion.substringBefore('-')
 require(Regex("""(\d+)\.(\d+)\.(\d+)""").matchEntire(infantryPackageVersion)?.groupValues?.let { (_, major, minor, build) ->
     (major.toIntOrNull() ?: 0) in 1..255 && (minor.toIntOrNull() ?: 256) <= 255 && (build.toIntOrNull() ?: 65536) <= 65535
-} == true) { "INSTALL-1: -PinfantryVersion=$infantryPackageVersion is not an MSI version (MAJOR.MINOR.BUILD, 1..255 . 0..255 . 0..65535)" }
+} == true) { "INSTALL-1: package version $infantryPackageVersion is not an MSI version (MAJOR.MINOR.BUILD, 1..255 . 0..255 . 0..65535)" }
 
 // CORE-CLEAN-1: the exported section's own jars; handed to the running app as -Dinfantry.freshShell.exclude so core names none.
 val freshShellExcluded = listOf("infantryAppUi", "Infantry_Board")
@@ -427,7 +436,7 @@ compose.desktop {
     application {
         mainClass = "com.superiorsoftllc.infantry.ui.AppMainKt"
         // UPDATE-1: the running version, compared with the latest GitHub release's tag (UpdateSettings.VERSION_PROPERTY).
-        jvmArgs += listOf("-Dinfantry.version=$infantryPackageVersion")
+        jvmArgs += listOf("-Dinfantry.version=$infantryAppVersion")
         // BUILD-STAMP-1: what Configuration > About and the footer show, and what the in-process daemon sends as `ready` build=.
         jvmArgs += listOf("-Dinfantry.build=$infantryBuildStamp")
         // PERF-2: heap caps (GC stays G1) for the packaged launcher (jpackage java-options) and `run`; the installed app runs
@@ -987,7 +996,7 @@ tasks.register<Exec>("packageShellMsi") {
         project.copy { from(File(app, "app.json")); into(input.get().dir("shell-app")) }
         dest.get().asFile.deleteRecursively()
         val runtime = tasks.withType<org.jetbrains.compose.desktop.application.tasks.AbstractJLinkTask>().getByName("createRuntimeImage").destinationDir.get().asFile
-        val javaOptions = infantryJvmCaps + listOf("-Dinfantry.version=$infantryPackageVersion", "-Dinfantry.build=$infantryBuildStamp", "-Dinfantry.app.dir=\$APPDIR/shell-app")
+        val javaOptions = infantryJvmCaps + listOf("-Dinfantry.version=$infantryAppVersion", "-Dinfantry.build=$infantryBuildStamp", "-Dinfantry.app.dir=\$APPDIR/shell-app")
         commandLine(
             listOf(
                 jpackage.get().path, "--type", "msi", "--name", name, "--app-version", infantryPackageVersion, "--vendor", "SuperiorSoft LLC",

@@ -17,7 +17,7 @@ interface AssetKind {
     fun missing(where: String): UpdateFailure
 
     object WindowsInstaller : AssetKind {
-        private val NAME = Regex("""^(?:InfantryAI|AgentHQ)-(\d+\.\d+\.\d+)\.msi$""", RegexOption.IGNORE_CASE)
+        private val NAME = Regex("""^(?:InfantryAI|AgentHQ)-(${SemVer.FILE_VERSION})\.msi$""", RegexOption.IGNORE_CASE)
         override fun pick(assets: List<ReleaseAsset>, latest: SemVer) = Updater.installerAsset(assets, latest)
         override fun versionOf(fileName: String) = NAME.matchEntire(fileName)?.let { SemVer.parse(it.groupValues[1]) }
         override fun missing(where: String): UpdateFailure = UpdateFailure.NoWindowsAsset(where)
@@ -25,7 +25,7 @@ interface AssetKind {
 
     /** UPDATER-1: the Android app, `InfantryAI-<version>.apk` (a debug-signed CI build: `InfantryAI-<version>-debug.apk`; releases before the rename use `AgentHQ-`). */
     object AndroidApk : AssetKind {
-        private val NAME = Regex("""^(?:InfantryAI|AgentHQ)-(\d+\.\d+\.\d+)(?:-debug)?\.apk$""", RegexOption.IGNORE_CASE)
+        private val NAME = Regex("""^(?:InfantryAI|AgentHQ)-(${SemVer.FILE_VERSION})(?:-debug)?\.apk$""", RegexOption.IGNORE_CASE)
         override fun pick(assets: List<ReleaseAsset>, latest: SemVer): ReleaseAsset? {
             val apks = assets.filter { NAME.matches(it.name) }
             // A release-signed APK wins over a debug one of the same version: the two cannot replace each other.

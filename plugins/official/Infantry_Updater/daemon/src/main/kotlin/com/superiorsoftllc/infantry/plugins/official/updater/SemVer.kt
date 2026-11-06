@@ -30,6 +30,13 @@ data class SemVer(val major: Int, val minor: Int, val patch: Int, val preRelease
     override fun toString(): String = "$major.$minor.$patch" + if (preRelease.isEmpty()) "" else "-" + preRelease.joinToString(".")
 
     companion object {
+        /**
+         * NIGHTLY-1: the version part of a release FILE name (`InfantryAI-<v>.msi`, `InfantryAI-server-<v>-linux-x64.tar.gz`):
+         * MAJOR.MINOR.PATCH and an optional dot-separated pre-release (`1.0.8-nightly.20261107.12`). A pre-release identifier
+         * never holds a hyphen here, and `debug` is never one (`InfantryAI-1.0.8-debug.apk` is the debug APK of 1.0.8).
+         */
+        const val FILE_VERSION = """\d+\.\d+\.\d+(?:-(?!debug(?:\.|$))[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?"""
+
         private val PATTERN = Regex("""^[vV]?(\d{1,9})\.(\d{1,9})\.(\d{1,9})(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$""")
 
         /** The version in [text], or null when it is not `[v]MAJOR.MINOR.PATCH[-pre][+build]`. */

@@ -14,9 +14,17 @@ data class AvailableUpdate(
     val release: GitHubRelease,
     val installer: ReleaseAsset,
     val checksum: ReleaseAsset?,
+    /**
+     * NIGHTLY-1: set when the offer is OLDER than the running build: the user switched channel (a nightly install now on
+     * Stable), so the channel's newest is offered anyway. Shown before the notes; null for an ordinary upgrade.
+     */
+    val channelNote: String? = null,
 ) {
-    /** The release notes as written on GitHub (Markdown, shown as plain text), or a placeholder. */
-    val notes: String get() = release.body?.trim()?.takeIf { it.isNotEmpty() } ?: "(no release notes)"
+    /** The release notes as written on GitHub (Markdown, shown as plain text), or a placeholder; the [channelNote] first. */
+    val notes: String get() = listOfNotNull(channelNote, release.body?.trim()?.takeIf { it.isNotEmpty() } ?: "(no release notes)").joinToString("\n\n")
+
+    /** NIGHTLY-1: true when installing this goes back to a lower version (a channel switch). */
+    val older: Boolean get() = latest < current
 }
 
 /** UPDATE-1: the answer to "is there a newer release?". */
@@ -43,15 +51,24 @@ class Updater(
 ) : UpdateSource {
 
     override fun check(): UpdateCheck {
-        val release = when (val got = releases.latest(config)) {
+        val channel = config.channel
+        // NIGHTLY-1: Stable asks GitHub's "latest" (never a prerelease); a prerelease channel scans the release list.
+        val got = if (channel.mode == ReleaseChannel.Mode.LATEST) releases.latest(config) else releases.newest(config, channel)
+        val release = when (got) {
             is Fetched.Failed -> return UpdateCheck.Failed(got.failure)
             is Fetched.Ok -> got.value
         }
         val latest = SemVer.parse(release.tagName)
             ?: return UpdateCheck.Failed(UpdateFailure.BadResponse("the latest tag '${release.tagName}' is not a version"))
-        if (release.draft || release.prerelease || latest <= config.currentVersion) return UpdateCheck.UpToDate(config.currentVersion, latest)
+        val current = config.currentVersion
+        if (release.draft || !channel.owns(latest) || (release.prerelease && channel.mode == ReleaseChannel.Mode.LATEST)) return UpdateCheck.UpToDate(current, latest)
+        if (latest == current) return UpdateCheck.UpToDate(current, latest)
+        // An older release is offered only when the running build belongs to another channel (Nightly -> Stable).
+        val switched = !channel.owns(current)
+        if (latest < current && !switched) return UpdateCheck.UpToDate(current, latest)
         val installer = kind.pick(release.assets, latest) ?: return UpdateCheck.Failed(kind.missing(release.tagName))
-        return UpdateCheck.Available(AvailableUpdate(config.currentVersion, latest, release, installer, checksumAsset(release.assets, installer)))
+        val note = if (latest < current) switchNote(channel, current, latest, kind) else null
+        return UpdateCheck.Available(AvailableUpdate(current, latest, release, installer, checksumAsset(release.assets, installer), note))
     }
 
     override fun download(update: AvailableUpdate, into: File): Fetched<VerifiedInstaller> = download(update, into, DownloadProgress.NONE)
@@ -155,8 +172,18 @@ class Updater(
     }
 
     companion object {
+        /**
+         * NIGHTLY-1: the plain message shown when a channel switch offers an OLDER build. Android cannot install a lower
+         * version over a higher one, so the phone is told what it must do instead.
+         */
+        fun switchNote(channel: ReleaseChannel, current: SemVer, latest: SemVer, kind: AssetKind): String = buildString {
+            append("You switched to the ${channel.label} channel. Its newest release, v$latest, is OLDER than the build you run (v$current). ")
+            append("Installing it moves this copy back to the ${channel.label} line. A newer build may have changed data an older one cannot read: back up your state folder first if you are unsure.")
+            if (kind == AssetKind.AndroidApk) append(" Android refuses to install an older version over a newer one: uninstall the app first (its local data is lost), then install v$latest, or stay on this build until a newer ${channel.label} release comes out.")
+        }
+
         /** INSTALL-1's artifact name: `InfantryAI-<MAJOR.MINOR.BUILD>.msi` (releases before the rename: `Infantry-...`). */
-        private val INSTALLER = Regex("""^(?:InfantryAI|AgentHQ)-(\d+\.\d+\.\d+)\.msi$""", RegexOption.IGNORE_CASE)
+        private val INSTALLER = Regex("""^(?:InfantryAI|AgentHQ)-(${SemVer.FILE_VERSION})\.msi$""", RegexOption.IGNORE_CASE)
         private val SHA256 = Regex("""\b([0-9a-fA-F]{64})\b""")
         private val SUMS_FILES = setOf("sha256sums", "sha256sums.txt", "checksums.txt")
         const val MAX_INSTALLER_BYTES = 2L * 1024 * 1024 * 1024
