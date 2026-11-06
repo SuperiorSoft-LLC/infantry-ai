@@ -204,7 +204,7 @@ Windows code signing is still HELD: the MSI is unsigned (SmartScreen will warn).
 
 The updater is the official plugin `plugins/official/Infantry_Updater` (UPDATER-1); see
 `superiorSoftLibrary/infantry/docs/UPDATES.md`. It resolves "latest" with `GET /repos/{repo}/releases/latest` on the repo
-of its manifest: the `update` block of `plugins/official/Infantry_Updater/module.json`, baked into the jar at build time
+of its manifest: the `appUpdate` block of `plugins/official/Infantry_Updater/module.json`, baked into the jar at build time
 (UPDATER-DEFAULT-1), so an install needs no setup. `.github/workflows/release.yml` sets `ORG_GRADLE_PROJECT_infantryUpdateRepo`
 to the repository it publishes to (a fork's release checks the fork); `INFANTRY_UPDATE_REPO` or `repo=` in
 `<stateDir>/update.properties` are developer overrides. With no newer release it reports up to date; offline, rate-limited or a missing release it

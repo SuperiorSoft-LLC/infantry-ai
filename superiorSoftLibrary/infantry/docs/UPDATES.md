@@ -17,10 +17,10 @@ registry. The Updates config sections stay in the locked trust kernel, so an upd
 
 ### Where updates come from: the manifest (UPDATER-DEFAULT-1)
 
-Where releases live is developer data, never a user setting: the Updater's `module.json` carries an `update` block,
+Where releases live is developer data, never a user setting: the Updater's `module.json` carries an `appUpdate` block,
 
 ```json
-"update": { "type": "github", "repo": "SuperiorSoft-LLC/infantry-ai", "visibility": "public", "channel": "production", "checkIntervalHours": 24 }
+"appUpdate": { "type": "github", "repo": "SuperiorSoft-LLC/infantry-ai", "visibility": "public", "channel": "production", "checkIntervalHours": 24 }
 ```
 
 and `daemon/build.gradle.kts` (task `updateManifest`) bakes it into the jar as `infantry-update-manifest.properties`
@@ -28,8 +28,9 @@ and `daemon/build.gradle.kts` (task `updateManifest`) bakes it into the jar as `
 can override a value with `-PinfantryUpdateRepo` / `-PinfantryUpdateVisibility` / `-PinfantryUpdateChannel`; the release
 workflow sets `ORG_GRADLE_PROJECT_infantryUpdateRepo` to the repository it publishes to, so a fork's release checks the fork.
 `visibility`: `public` never sends a token, `private` sends a read token (below) to the GitHub API host only. `channel`:
-`production` = GitHub releases, `unstable` = a local releases folder. The same block shape is reserved for a plugin's own
-update source (PLUGIN-UPDATE-1); only the Updater's is read today.
+`production` = GitHub releases, `unstable` = a local releases folder. It is NOT the module.json `update` key: that one
+is the update engine's per-module `UpdateDeclaration` (`{"source": {...}}`, docs/wiki/Updates.md), where a module's OWN new versions
+come from; reusing it broke every manifest parse of the Updater (QA-FIX-I).
 
 ### The user setting (Configuration > About > Updater, module config `infantry.updater`)
 

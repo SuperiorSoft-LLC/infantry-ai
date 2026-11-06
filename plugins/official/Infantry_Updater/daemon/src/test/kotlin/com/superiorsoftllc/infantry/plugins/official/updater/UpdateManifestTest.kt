@@ -2,6 +2,8 @@
 // Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.plugins.official.updater
 
+import com.superiorsoftllc.infantry.plugin.api.ModuleManifest
+import com.superiorsoftllc.infantry.plugin.host.PluginJson
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -18,7 +20,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * UPDATER-DEFAULT-1: the update source is manifest data (module.json `update`, baked by the build) and the lowest layer of
+ * UPDATER-DEFAULT-1: the update source is manifest data (module.json `appUpdate`, baked by the build) and the lowest layer of
  * [UpdateSettings.resolve]; bad overrides are ignored, never "updates off"; the window re-reads settings and checks on focus.
  */
 class UpdateManifestTest {
@@ -48,12 +50,22 @@ class UpdateManifestTest {
     private fun props(text: String) = File(temp, UpdateSettings.FILE_NAME).writeText(text)
 
     @Test
-    fun `the baked resource is this plugin's module json update block`() {
+    fun `the baked resource is this plugin's module json appUpdate block`() {
         // The test class path carries the jar's resource as daemon/build.gradle.kts wrote it from ../module.json.
         assertEquals("SuperiorSoft-LLC/infantry-ai", UpdateManifest.get(UpdateManifest.KEY_REPO))
         assertEquals("public", UpdateManifest.get(UpdateManifest.KEY_VISIBILITY))
         assertEquals("o/r", UpdateManifest.load("# c\nrepo=o/r\n").getProperty("repo"))
         assertNull(UpdateManifest.load(null).getProperty("repo"))
+    }
+
+    @Test
+    fun `this plugin's module json still parses as a module manifest`() {
+        // QA-FIX-I: the app's release block once sat under `update`, the engine's per-module UpdateDeclaration key; every
+        // ModuleManifest parse of this file then threw MissingFieldException (source), so the host dropped the plugin.
+        val text = File("../module.json").readText()
+        val manifest = PluginJson.decodeFromString(ModuleManifest.serializer(), text)
+        assertEquals("Infantry_Updater", manifest.name)
+        assertNull(manifest.update, "the app's release source is `appUpdate`; `update` is this module's own update source")
     }
 
     @Test

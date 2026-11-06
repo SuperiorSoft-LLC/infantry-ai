@@ -11,8 +11,8 @@
   "implementations": [
     { "registry": "app.selfUpdate", "key": "android" }
   ],
-  "update": { "type": "github", "repo": "SuperiorSoft-LLC/infantry-ai", "visibility": "public", "channel": "production", "checkIntervalHours": 24 },
-  "description": "Updates: checks the release source (GitHub Releases, public or private, or a local releases folder), downloads and verifies the new build, and installs it: the desktop MSI, the headless server archive, and the Android APK. Where releases come from is the manifest's update block (developer data, baked into the build; never a user setting): type github, repo owner/repo, visibility public (never sends a token) or private (a read token from env INFANTRY_UPDATE_TOKEN, else keystore update-token, else the OS credential store), channel, checkIntervalHours. The user setting is only updater.autoCheck.",
+  "appUpdate": { "type": "github", "repo": "SuperiorSoft-LLC/infantry-ai", "visibility": "public", "channel": "production", "checkIntervalHours": 24 },
+  "description": "Updates: checks the release source (GitHub Releases, public or private, or a local releases folder), downloads and verifies the new build, and installs it: the desktop MSI, the headless server archive, and the Android APK. Where releases come from is the manifest's appUpdate block (developer data, baked into the build; never a user setting): type github, repo owner/repo, visibility public (never sends a token) or private (a read token from env INFANTRY_UPDATE_TOKEN, else keystore update-token, else the OS credential store), channel, checkIntervalHours. The user setting is only updater.autoCheck.",
   "daemon": {
     "entry": "com.superiorsoftllc.infantry.plugins.official.updater.daemon.UpdaterDaemonPlugin",
     "jar": "daemon/build/libs/Infantry_Updater-daemon.jar",

@@ -5,7 +5,7 @@ package com.superiorsoftllc.infantry.plugins.official.updater
 import java.util.Properties
 
 /**
- * UPDATER-DEFAULT-1: where this app's releases come from, as MANIFEST data: the `update` block of the Updater's
+ * UPDATER-DEFAULT-1: where this app's releases come from, as MANIFEST data: the `appUpdate` block of the Updater's
  * module.json (`{"type":"github","repo":"owner/repo","visibility":"public","channel":"production","checkIntervalHours":24}`),
  * which daemon/build.gradle.kts bakes into the jar as [RESOURCE] (a build may override a value with
  * `-PinfantryUpdateRepo` / `-PinfantryUpdateVisibility` / `-PinfantryUpdateChannel`; the release workflow passes its own
