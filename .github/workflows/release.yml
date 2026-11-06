@@ -19,6 +19,9 @@ concurrency:
 env:
   GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx3g
   JAVA_VERSION: '21'
+  # UPDATER-DEFAULT-1: every gradlew of this workflow bakes this repository into the Updater's manifest (Gradle property
+  # infantryUpdateRepo over module.json update.repo), so an installed release checks the releases it came from, fork or not.
+  ORG_GRADLE_PROJECT_infantryUpdateRepo: ${{ github.repository }}
 
 jobs:
   version:

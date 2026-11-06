@@ -21,8 +21,12 @@ object InstalledUpdates {
     fun version(getProperty: (String) -> String? = System::getProperty): String? = getProperty(UpdateSettings.VERSION_PROPERTY)
 
     fun service(installed: Boolean, stateDir: File?, exit: () -> Unit, runningAgents: () -> Int = { 0 }): UpdateService {
-        val settings = UpdateSettings.resolve(installed, version(), stateDir, setting = { infantrySetting(it) },
-            keystore = { stateDir?.let { Keystore(it).get(Keystore.UPDATE_TOKEN) } })
+        // UPDATER-DEFAULT-1: resolved again before each check, so a changed setting applies without a restart.
+        val resolve = {
+            UpdateSettings.resolve(installed, version(), stateDir, setting = { infantrySetting(it) },
+                keystore = { stateDir?.let { Keystore(it).get(Keystore.UPDATE_TOKEN) } })
+        }
+        val settings = resolve()
         val installDir = InstallProfile.installDir()
         val launcher = System.getProperty(LaunchProfile.APP_PATH_PROPERTY)?.takeIf { it.isNotBlank() }?.let(::File)
         return UpdateService(
@@ -31,6 +35,7 @@ object InstalledUpdates {
             handoff = { MsiHandoff.start(it, installDir, launcher) },
             exit = exit,
             runningAgents = runningAgents,
+            reload = resolve,
         )
     }
 }

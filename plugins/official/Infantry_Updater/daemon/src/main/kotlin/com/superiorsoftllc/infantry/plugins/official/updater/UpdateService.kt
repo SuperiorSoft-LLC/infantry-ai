@@ -50,7 +50,7 @@ fun UpdateState.footerLabel(version: String?): String = when (this) {
  * process so the installer can replace the files.
  */
 class UpdateService(
-    private val settings: UpdateSettings,
+    settings: UpdateSettings,
     private val scope: CoroutineScope,
     private val updaterFor: (UpdateConfig) -> UpdateSource = UpdateSources::forConfig,
     /** Starts the installer; throws when it cannot. */
@@ -59,11 +59,23 @@ class UpdateService(
     /** UPDATE-3: how many agents are working right now (sessions that are [isBusy], background work included). */
     private val runningAgents: () -> Int = { 0 },
     private val log: (String) -> Unit = { System.err.println("[infantry-update] $it") },
+    /** UPDATER-DEFAULT-1: the wall clock [checkIfDue] measures `updater.checkIntervalHours` with. */
+    private val clock: () -> Long = System::currentTimeMillis,
+    /**
+     * UPDATER-DEFAULT-1: re-reads the settings before each check, so a fix (update.properties, the auto-check switch, the
+     * daemon's mirror) applies without a restart. Null = the [settings] given stay.
+     */
+    private val reload: (() -> UpdateSettings)? = null,
 ) {
+    @Volatile private var settings: UpdateSettings = settings
+
     private val _state = MutableStateFlow<UpdateState>(UpdateState.Idle)
     val state: StateFlow<UpdateState> = _state.asStateFlow()
 
     private var job: Job? = null
+
+    /** When the last check started (start-up, by hand or [checkIfDue]); null = never. */
+    @Volatile private var lastCheckAt: Long? = null
 
     private val _toast = MutableStateFlow(false)
     private val _dialog = MutableStateFlow(false)
@@ -87,13 +99,20 @@ class UpdateService(
     /** Ask GitHub. [manual] = the owner clicked "Check for updates": then "up to date" and "updates are off" are shown too. */
     fun check(manual: Boolean): Job? {
         if (job?.isActive == true) return job
-        val config = when (settings) {
+        reload?.let { r -> runCatching(r).onSuccess { settings = it }.onFailure { log("could not re-read the update settings: ${it::class.simpleName}") } }
+        val config = when (val s = settings) {
             is UpdateSettings.Disabled -> {
-                if (manual) _state.value = UpdateState.Message("Updates are off: ${settings.reason}.") else log("updates off: ${settings.reason}")
+                if (manual) _state.value = UpdateState.Message("Updates are off: ${s.reason}.") else log("updates off: ${s.reason}")
                 return null
             }
-            is UpdateSettings.Enabled -> settings.config
+            is UpdateSettings.Enabled -> {
+                s.warnings.forEach { log("settings: $it") }
+                s.config
+            }
         }
+        // UPDATER-DEFAULT-1: `updater.autoCheck` off = only the user's own "Check for updates".
+        if (!manual && !config.autoCheck) return null
+        lastCheckAt = clock()
         _state.value = UpdateState.Checking(manual)
         return scope.launch(Dispatchers.IO) {
             val result = runCatching { updaterFor(config).check() }.getOrElse { UpdateCheck.Failed(UpdateFailure.BadResponse(it::class.simpleName ?: "error")) }
@@ -112,6 +131,24 @@ class UpdateService(
                 }
             }
         }.also { job = it }
+    }
+
+    /**
+     * UPDATER-DEFAULT-1: the window gained focus. Checks again (silently, like the start-up check) when the last check is at
+     * least `updater.checkIntervalHours` old; 0 hours = only at start and by hand. Never while an update is offered,
+     * downloading or installing, and never more than one check at a time.
+     */
+    fun checkIfDue(): Job? {
+        val config = (settings as? UpdateSettings.Enabled)?.config ?: return null
+        val hours = config.checkIntervalHours
+        if (hours <= 0 || !config.autoCheck) return null
+        when (_state.value) {
+            is UpdateState.Available, is UpdateState.Downloading, is UpdateState.Restarting -> return null
+            else -> Unit
+        }
+        val last = lastCheckAt
+        if (last != null && clock() - last < hours * HOUR_MS) return null
+        return check(manual = false)
     }
 
     /** "Update": download, verify, hand to the installer, exit. Any failure becomes a [UpdateState.Message]. */
@@ -156,3 +193,5 @@ class UpdateService(
         if (_state.value !is UpdateState.Downloading && _state.value !is UpdateState.Restarting) _state.value = UpdateState.Idle
     }
 }
+
+private const val HOUR_MS = 3_600_000L

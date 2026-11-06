@@ -11,7 +11,8 @@
   "implementations": [
     { "registry": "app.selfUpdate", "key": "android" }
   ],
-  "description": "Updates: checks the release source (GitHub Releases, public or private, or a local releases folder), downloads and verifies the new build, and installs it: the desktop MSI, the headless server archive, and the Android APK. Setting updater.source: public (default, never sends a token) or private (a read token from env INFANTRY_UPDATE_TOKEN, else keystore update-token, else the OS credential store).",
+  "update": { "type": "github", "repo": "SuperiorSoft-LLC/infantry-ai", "visibility": "public", "channel": "production", "checkIntervalHours": 24 },
+  "description": "Updates: checks the release source (GitHub Releases, public or private, or a local releases folder), downloads and verifies the new build, and installs it: the desktop MSI, the headless server archive, and the Android APK. Where releases come from is the manifest's update block (developer data, baked into the build; never a user setting): type github, repo owner/repo, visibility public (never sends a token) or private (a read token from env INFANTRY_UPDATE_TOKEN, else keystore update-token, else the OS credential store), channel, checkIntervalHours. The user setting is only updater.autoCheck.",
   "daemon": {
     "entry": "com.superiorsoftllc.infantry.plugins.official.updater.daemon.UpdaterDaemonPlugin",
     "jar": "daemon/build/libs/Infantry_Updater-daemon.jar",
@@ -29,13 +30,9 @@
       {
         "node": "infantry.updater", "group": "Updates", "title": "Updater", "tab": "About", "order": 905,
         "applies": "Applies to: where this install (desktop, server and the phone through this daemon) looks for new versions.",
-        "keywords": ["update", "updater", "release", "private", "public", "token", "repo", "channel"],
+        "keywords": ["update", "updater", "release", "automatic", "check"],
         "fields": [
-          { "key": "updater.source", "type": "text", "label": "Source (public or private)", "default": "public", "scope": "daemon", "order": 1, "description": "public never sends a token. private reads a read-only token from env INFANTRY_UPDATE_TOKEN, else the keystore secret update-token, else the OS credential store." },
-          { "key": "updater.repo", "type": "text", "label": "GitHub repo (owner/repo)", "default": "", "scope": "daemon", "order": 2 },
-          { "key": "updater.channel", "type": "text", "label": "Channel (production or unstable)", "default": "production", "scope": "daemon", "order": 3, "description": "production = GitHub releases; unstable = the local releases folder below." },
-          { "key": "updater.dir", "type": "text", "label": "Local releases folder (unstable channel)", "default": "", "scope": "daemon", "order": 4 },
-          { "key": "updater.checkIntervalHours", "type": "number", "label": "Check again every (hours, 0 = only at start)", "default": 24, "min": 0, "max": 720, "step": 1, "scope": "daemon", "order": 5 }
+          { "key": "updater.autoCheck", "type": "toggle", "label": "Check for updates automatically", "default": true, "scope": "daemon", "order": 1, "description": "At start, once a day, and when you come back to the window. Off = only when you press Check for updates. Installing is always your call." }
         ]
       }
     ]

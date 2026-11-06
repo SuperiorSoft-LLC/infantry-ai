@@ -88,7 +88,7 @@ sealed interface EngineAnswer {
  * `infantry update` command, tests) they use [sourceFor] directly.
  */
 class ServerUpdateService(
-    private val settings: UpdateSettings,
+    val settings: UpdateSettings,
     val distribution: Distribution,
     val version: String,
     val install: ServerInstall?,

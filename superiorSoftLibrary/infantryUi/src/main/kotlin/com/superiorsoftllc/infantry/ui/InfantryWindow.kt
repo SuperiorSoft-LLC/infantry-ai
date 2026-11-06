@@ -46,9 +46,10 @@ internal val MIN_SIZE = Dimension(900, 560)
  * title bar. It gets the window actions through [LocalWindowChrome], moves the window when its empty area is
  * dragged, and the window is resized from its edges by [ResizeHandles] (an undecorated AWT frame has no native
  * resize border on Windows, so `resizable = true` alone would leave it fixed-size).
+ * [onFocusGained] runs on the UI thread each time the window becomes the focused window (UPDATER-DEFAULT-1: the due update check).
  */
 @Composable
-fun ApplicationScope.InfantryWindow(onCloseRequest: () -> Unit, content: @Composable () -> Unit) {
+fun ApplicationScope.InfantryWindow(onCloseRequest: () -> Unit, onFocusGained: () -> Unit = {}, content: @Composable () -> Unit) {
     val state = rememberWindowState(size = DpSize(1400.dp, 860.dp))
     // APP-ICON-1: the Infantry AI "A" mark on the title bar's taskbar entry and Alt-Tab, not the runtime default.
     val icon = remember { AppIcon.painter() }
@@ -60,6 +61,14 @@ fun ApplicationScope.InfantryWindow(onCloseRequest: () -> Unit, content: @Compos
         DisposableEffect(frame) {
             WindowActivation.register { WindowActivation.bringToFront(frame) { state.isMinimized = false } }
             onDispose { WindowActivation.register(null) }
+        }
+        val focusGained = androidx.compose.runtime.rememberUpdatedState(onFocusGained)
+        DisposableEffect(frame) {
+            val listener = object : java.awt.event.WindowAdapter() {
+                override fun windowGainedFocus(e: java.awt.event.WindowEvent?) { runCatching { focusGained.value() } }
+            }
+            frame.addWindowFocusListener(listener)
+            onDispose { frame.removeWindowFocusListener(listener) }
         }
         val chrome = remember(frame, state) {
             DesktopWindowChrome(
