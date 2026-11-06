@@ -67,6 +67,11 @@ data class Hook(
     val ownerIsOwner: Boolean = false,
     /** MAIL-HOOK-1b: a `mail.incoming` hook names exactly one session (the recipient it runs for); null for every other hook. */
     val to: String? = null,
+    /**
+     * PROJECT-ISOLATION-1: true = the hook also runs for events that name NO project (daemon.started, a project-less emit). A hook
+     * never runs for another project's events, global or not.
+     */
+    val global: Boolean = false,
 ) {
     fun toJson(): JsonObject = buildJsonObject {
         put("id", id); put("on", on.toString()); put("script", script)
@@ -76,9 +81,10 @@ data class Hook(
         ownerRole?.let { put("ownerRole", it) }
         if (ownerIsOwner) put("ownerIsOwner", true)
         to?.let { put("to", it) }
+        if (global) put("global", true)
     }
 
-    fun line(): String = "$id  on $on${to?.let { " to $it" } ?: ""} -> $script${ownerSession?.let { " (edited by $it${ownerRole?.let { r -> "/$r" } ?: ""})" } ?: ""}${if (args.isEmpty()) "" else " $args"}${if (enabled) "" else "  [disabled]"}"
+    fun line(): String = "$id  on $on${to?.let { " to $it" } ?: ""} -> $script${ownerSession?.let { " (edited by $it${ownerRole?.let { r -> "/$r" } ?: ""})" } ?: ""}${if (args.isEmpty()) "" else " $args"}${if (global) "  [global]" else ""}${if (enabled) "" else "  [disabled]"}"
 }
 
 /**
@@ -163,6 +169,7 @@ class HookStore(private val files: (String) -> ProjectFiles) {
                 Hook(
                     id, HookOn.parse(s("on").orEmpty()), script, (o["args"] as? JsonObject) ?: JsonObject(emptyMap()),
                     (o["enabled"] as? JsonPrimitive)?.booleanOrNull ?: true, s("ownerSession"), s("ownerRole"), (o["ownerIsOwner"] as? JsonPrimitive)?.booleanOrNull == true, s("to"),
+                    (o["global"] as? JsonPrimitive)?.booleanOrNull == true,
                 )
             }
         }

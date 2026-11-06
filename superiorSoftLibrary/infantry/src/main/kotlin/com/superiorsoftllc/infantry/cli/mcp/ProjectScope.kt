@@ -12,8 +12,9 @@ import kotlinx.serialization.json.Json
 /**
  * Contract 1.106.0: the project a board / ticket / session tool call is scoped to.
  *
- * The default is the CALLER'S OWN project; `projectId='all'` (no filter) is for pm / owner callers; any other explicit id
- * is allowed only when it is the caller's own. WHO the caller is comes from the daemon's session record for
+ * The default is the CALLER'S OWN project. PROJECT-ISOLATION-1: no agent reaches another project, the pm included: `projectId='all'`
+ * (no filter) and another project's id are only for the owner (no session) and the owner's own agent roles ([CROSS_PROJECT_ROLES]).
+ * A pm keeps its pm powers ([isPrivileged]: kill / spawn rules) inside its own project. WHO the caller is comes from the daemon's session record for
  * `INFANTRY_SESSION_ID` (its role and project) -- never from a request argument. A call with no session id is the owner / CLI
  * path and is unchanged: the request's id, else the server default, else every project.
  */
@@ -28,7 +29,12 @@ internal class ProjectScope(
 
     companion object {
         const val ALL = "all"
+        /** Roles with pm powers inside their own project (kill and spawn rules). Never a pass to another project. */
         private val PRIVILEGED_ROLES = setOf("pm", "owner", "assistant")
+        /** PROJECT-ISOLATION-1: the owner's own agent roles, the only sessions that may reach another project. */
+        val CROSS_PROJECT_ROLES = setOf("owner", "assistant")
+        /** The session id a confined call ([Caller.project], no session) is seen with: never a real session, never privileged. */
+        const val CONFINED_PREFIX = "project:"
 
         private val json = Json { ignoreUnknownKeys = true }
 
@@ -44,6 +50,38 @@ internal class ProjectScope(
         /** No session id = the owner / CLI; a session id the daemon does not know is NOT privileged. */
         fun isPrivileged(caller: SessionRecord?, hasSession: Boolean = caller != null): Boolean =
             if (caller == null) !hasSession else caller.role?.lowercase() in PRIVILEGED_ROLES
+
+        /** PROJECT-ISOLATION-1: may [caller] reach another project? Only the owner (no session) and [CROSS_PROJECT_ROLES]. */
+        fun crossesProjects(caller: SessionRecord?, hasSession: Boolean = caller != null): Boolean =
+            if (caller == null) !hasSession else crossesProjects(caller.role)
+
+        /** The same rule by role, for a caller known only by its role (the host's tool gate). */
+        fun crossesProjects(role: String?): Boolean = role?.lowercase() in CROSS_PROJECT_ROLES
+
+        /**
+         * PROJECT-ISOLATION-1: the env view a daemon-side scope check reads for [by]: its session, or for a call confined to a project
+         * with no session ([Caller.project], a project hook) a synthetic session id and that project, so the rules above apply unchanged.
+         */
+        fun envOf(by: com.superiorsoftllc.infantry.daemon.api.Caller): (String) -> String? {
+            val session = by.activeSession?.trim()?.takeIf { it.isNotEmpty() }
+            val confined = by.project?.trim()?.takeIf { it.isNotEmpty() }
+            return { name ->
+                when (name) {
+                    AccessPolicy.SESSION_ID_ENV -> session ?: confined?.let { CONFINED_PREFIX + it }
+                    AccessPolicy.PROJECT_ID_ENV -> confined
+                    else -> null
+                }
+            }
+        }
+
+        /**
+         * The one refusal text for an object of [objectProject] reached by a caller of project [own] that may not cross projects, or
+         * null when it may ([objectProject] null = a global object, open to all).
+         */
+        fun foreignText(what: String, objectProject: String?, own: String?): String? {
+            if (objectProject == null || own == null || objectProject == own) return null
+            return "$what belongs to project '$objectProject', another project: this caller is confined to project '$own' and only the owner reaches another project"
+        }
 
         /** The caller's own project: the daemon's record first, then the env the daemon exports into the session. */
         private fun ownProject(caller: SessionRecord?, getenv: (String) -> String?): String? =
@@ -63,10 +101,10 @@ internal class ProjectScope(
             val own = ownProject(caller, getenv) ?: defaultProjectId?.trim()?.takeIf { it.isNotEmpty() }
             return when {
                 ask == ALL ->
-                    if (isPrivileged(caller, true)) ProjectScope(null)
-                    else ProjectScope(own, "projectId='all' is for pm / owner callers; this session's role is '${caller?.role ?: "unknown"}'")
-                ask != null && ask != own && !isPrivileged(caller, true) ->
-                    ProjectScope(own, "project '$ask' is not this session's project ('${own ?: "unknown"}'); only pm / owner callers may look at another project")
+                    if (crossesProjects(caller, true)) ProjectScope(null)
+                    else ProjectScope(own, "projectId='all' is for the owner; this session (role '${caller?.role ?: "unknown"}') is confined to project '${own ?: "unknown"}'")
+                ask != null && ask != own && !crossesProjects(caller, true) ->
+                    ProjectScope(own, "project '$ask' is not this session's project ('${own ?: "unknown"}'); only the owner may look at another project")
                 ask != null -> ProjectScope(ask)
                 else -> ProjectScope(own)
             }
@@ -74,10 +112,8 @@ internal class ProjectScope(
 
         /** Why [caller] may not touch an object of [objectProject], or null when it may. Writes use this too. */
         fun foreignRefusal(what: String, objectProject: String?, caller: SessionRecord?, getenv: (String) -> String?): String? {
-            if (getenv(AccessPolicy.SESSION_ID_ENV).isNullOrBlank() || isPrivileged(caller, true)) return null
-            val own = ownProject(caller, getenv) ?: return null
-            if (objectProject == null || objectProject == own) return null
-            return "$what belongs to project '$objectProject', not this session's project '$own'; only pm / owner callers may reach another project"
+            if (getenv(AccessPolicy.SESSION_ID_ENV).isNullOrBlank() || crossesProjects(caller, true)) return null
+            return foreignText(what, objectProject, ownProject(caller, getenv))
         }
     }
 }

@@ -156,8 +156,16 @@ class DaemonPluginHost private constructor(
     private val presetHooks = CopyOnWriteArrayList<Registered<PresetProviderHook>>()
     private val eventListeners = CopyOnWriteArrayList<Triple<Loaded, String, (Frame) -> Unit>>()
     private val seatClaimants = CopyOnWriteArrayList<Loaded>()
+    /**
+     * PROJECT-ISOLATION-1: the one project-scope layer: every plugin tool call of a scoped caller is held to its project, and every named
+     * event names its project (so a hook armed in project X runs only for X's events).
+     */
+    val isolation = ProjectIsolation(
+        ticketProject = { ref -> (services.tickets.get(ref, Caller(owner = true)) as? com.superiorsoftllc.infantry.daemon.api.board.BoardResult.Ok)?.value?.projectId },
+        session = { id -> services.sessions.get(id)?.let { ProjectIsolation.Who(it.projectId, it.role) } },
+    )
     /** SCRIPT-3: the generic named-event bus (plugins publish / subscribe through `api.events`; core and agents publish through [publishEvent]). */
-    val namedEvents = NamedEventBus(executor = { r -> observerQueue.execute(r) })
+    val namedEvents = NamedEventBus(executor = { r -> observerQueue.execute(r) }, stamp = isolation::stamp)
     /** Observers run off the caller's thread, in order, so a slow observer never holds a frame or a session event. */
     private val observerQueue = Executors.newSingleThreadExecutor { r -> Thread(r, "daemon-plugin-observers").apply { isDaemon = true } }
 
@@ -337,12 +345,21 @@ class DaemonPluginHost private constructor(
      * SCRIPT-3: `infantry_event_emit`, the one built-in tool: any role publishes a named event (name, optional JSON payload, optional
      * causeId / depth). The source is `session:<id>` of the calling MCP process, else `cli`.
      */
-    private fun emitTool(arguments: JsonObject, client: JsonObject): ToolResult {
+    private fun emitTool(arguments: JsonObject, client: JsonObject, caller: Caller = Caller(owner = true)): ToolResult {
         val name = (arguments["name"] as? JsonPrimitive)?.contentOrNull?.trim().orEmpty()
-        val payload = arguments["payload"]?.let { if (it is JsonPrimitive && it.isString) it.content else it.toString() } ?: "{}"
+        var payload = arguments["payload"]?.let { if (it is JsonPrimitive && it.isString) it.content else it.toString() } ?: "{}"
         val causeId = (arguments["causeId"] as? JsonPrimitive)?.contentOrNull
         val depth = (arguments["depth"] as? JsonPrimitive)?.intOrNull ?: 0
         val sid = (client["sessionId"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.isNotBlank() }
+        // PROJECT-ISOLATION-1: a session's event belongs to its own project: one naming another project's ticket, session or id is
+        // refused, and one naming none is stamped with the emitter's project (so only that project's hooks hear it).
+        val body = runCatching { kotlinx.serialization.json.Json.parseToJsonElement(payload) as? JsonObject }.getOrNull()
+        if (body != null) {
+            val clientProject = (client["projectId"] as? JsonPrimitive)?.takeIf { it.isString }?.content
+            isolation.toolRefusal(EVENT_EMIT_TOOL, body, caller, sid, clientProject, false)?.let { return ToolResult(it, isError = true) }
+            val own = (sid ?: caller.activeSession)?.let { isolation.projectOfSession(it) } ?: caller.project ?: clientProject?.takeIf { sid != null }
+            if (own != null && isolation.eventProject(body) == null) payload = JsonObject(body + ("projectId" to JsonPrimitive(own))).toString()
+        }
         return try {
             val e = publishEvent(name, payload, sid?.let { "session:$it" } ?: "cli", causeId, depth)
             ToolResult("emitted ${e.name} id=${e.id} cause=${e.causeId} depth=${e.depth}")
@@ -458,10 +475,15 @@ class DaemonPluginHost private constructor(
 
     /** BOARD-STALL-2: [callTool] for the daemon's request path: suspends while the plugin works, holding no Dispatchers.IO thread. */
     suspend fun callToolSuspending(name: String, arguments: JsonObject, caller: Caller, client: JsonObject = JsonObject(emptyMap()), request: (Envelope, Long) -> Envelope): ToolResult {
-        if (com.superiorsoftllc.infantry.cli.mcp.LegacyToolNames.canonical(name) == EVENT_EMIT_TOOL) return emitTool(arguments, client)
+        if (com.superiorsoftllc.infantry.cli.mcp.LegacyToolNames.canonical(name) == EVENT_EMIT_TOOL) return emitTool(arguments, client, caller)
         if (com.superiorsoftllc.infantry.cli.mcp.LegacyToolNames.canonical(name) == TESTS_TOOL) return testsTool(arguments, client)
         val entry = (toolEntries[name] ?: toolEntries[com.superiorsoftllc.infantry.cli.mcp.LegacyToolNames.canonical(name)]) ?: return ToolResult("Unknown tool: $name", isError = true)
         if (entry.owner.guard.disabled) return ToolResult("$name is unavailable: plugin ${entry.owner.id} is disabled", isError = true)
+        // PROJECT-ISOLATION-1: a session (or a project-confined hook) never reaches another project's ticket, session or data.
+        val clientSession = (client["sessionId"] as? JsonPrimitive)?.takeIf { it.isString }?.content
+        val clientProject = (client["projectId"] as? JsonPrimitive)?.takeIf { it.isString }?.content
+        isolation.toolRefusal(name, arguments, caller, clientSession, clientProject, ProjectIsolation.declaresCrossProject(entry.tool.inputSchema))
+            ?.let { return ToolResult(it, isError = true) }
         val call = object : ToolCall {
             override val arguments = arguments
             override val caller = caller

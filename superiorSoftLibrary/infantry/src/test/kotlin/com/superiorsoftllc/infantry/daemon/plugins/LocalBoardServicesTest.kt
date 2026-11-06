@@ -236,7 +236,7 @@ class LocalBoardServicesTest {
         assertEquals(mine.id, svc.tickets.get(mine.id, a).ok().id)
         assertTrue(svc.tickets.get(theirs.id, a).refusedText().contains("belongs to project 'B'"))
         assertEquals(listOf(mine.id), svc.tickets.list(a).ok().items.map { it.id })
-        assertTrue(svc.tickets.list(a, TicketQuery(projectId = "all")).refusedText().contains("pm / owner"))
+        assertTrue(svc.tickets.list(a, TicketQuery(projectId = "all")).refusedText().contains("is for the owner"))
         assertTrue(svc.tickets.list(a, TicketQuery(projectId = "B")).refusedText().contains("not this session's project"))
         assertIs<BoardResult.Refused>(svc.tickets.move(theirs.id, "done", null, a))
         assertIs<BoardResult.Refused>(svc.tickets.update(theirs.id, TicketPatch(title = "x"), a))
@@ -249,9 +249,11 @@ class LocalBoardServicesTest {
         assertEquals("theirs", board.get(theirs.id).title)
         assertEquals("todo", board.get(theirs.id).status)
         assertEquals("A", svc.tickets.create(TicketDraft(title = "dflt"), a).ok().projectId)
-        // a pm caller may reach every project
-        assertEquals(theirs.id, svc.tickets.get(theirs.id, asSession("s-pm")).ok().id)
-        assertTrue(svc.tickets.list(asSession("s-pm"), TicketQuery(projectId = "all")).ok().items.any { it.projectId == "B" })
+        // PROJECT-ISOLATION-1: a pm is confined to its project too; only the owner reaches every project
+        assertTrue(svc.tickets.get(theirs.id, asSession("s-pm")).refusedText().contains("belongs to project 'B'"))
+        assertTrue(svc.tickets.list(asSession("s-pm"), TicketQuery(projectId = "all")).refusedText().contains("is for the owner"))
+        assertEquals(theirs.id, svc.tickets.get(theirs.id, Caller(owner = true)).ok().id)
+        assertTrue(svc.tickets.list(Caller(owner = true), TicketQuery(projectId = "all")).ok().items.any { it.projectId == "B" })
     }
 
     @Test fun `an unknown session or an agent connection with no session is refused, never widened`() {

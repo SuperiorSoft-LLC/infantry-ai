@@ -23,7 +23,7 @@ class HookTools(private val store: HookStore, private val scripts: ScriptStore, 
             "on a named event (on='ticket.commented', 'merge.done', 'ticket.*') or when a ticket enters or leaves a lane (on='lane enter done', 'lane exit in_progress'). The script gets the hook's args " +
             "plus the event payload (ticketId, from, to, branch, tipSha, workerSession, projectId...) as input.args, and runs as you. A loop guard (depth + rate, plugin settings) stops runaway chains; failures are commented on the ticket or mailed to you. Open to every role."
         override val inputSchema: JsonObject = Json.parseToJsonElement(
-            """{"type":"object","properties":{"action":{"type":"string","description":"list | add | remove"},"on":{"type":"string","description":"add: 'every <N>s' (timer, floor from setting scripting.hooks.minEverySec; input.args gets tick, at, hookId), 'exec.tick' (each live background exec run: id, script, session, elapsedMs, stdoutTail, stderrTail, bytesSinceLast), 'lane enter <lane>' or 'lane exit <lane>' (todo, in_progress, pending, done, a user lane) or a named event like ticket.commented"},"script":{"type":"string","description":"add: stored script name (see infantry_script_run)"},"args":{"type":"string","description":"add: JSON object of fixed args merged under the event payload (default {})"},"id":{"type":"string","description":"add: hook id (default from script + on); remove: the id"},"to":{"type":"string","description":"add: on=mail.incoming: the ONE session id whose incoming mail the hook handles (default: your own session). on='every <N>s' or 'exec.tick': optional session the script acts for (infantry_progress from the script lands on its card); the hook goes with that session"},"disabled":{"type":"boolean","description":"add: store it switched off"},"project":{"type":"string","description":"Project id (default: yours)"}},"required":["action"]}""",
+            """{"type":"object","properties":{"action":{"type":"string","description":"list | add | remove"},"on":{"type":"string","description":"add: 'every <N>s' (timer, floor from setting scripting.hooks.minEverySec; input.args gets tick, at, hookId), 'exec.tick' (each live background exec run: id, script, session, elapsedMs, stdoutTail, stderrTail, bytesSinceLast), 'lane enter <lane>' or 'lane exit <lane>' (todo, in_progress, pending, done, a user lane) or a named event like ticket.commented"},"script":{"type":"string","description":"add: stored script name (see infantry_script_run)"},"args":{"type":"string","description":"add: JSON object of fixed args merged under the event payload (default {})"},"id":{"type":"string","description":"add: hook id (default from script + on); remove: the id"},"to":{"type":"string","description":"add: on=mail.incoming: the ONE session id whose incoming mail the hook handles (default: your own session). on='every <N>s' or 'exec.tick': optional session the script acts for (infantry_progress from the script lands on its card); the hook goes with that session"},"disabled":{"type":"boolean","description":"add: store it switched off"},"global":{"type":"boolean","description":"add: also run for events that name no project (daemon.started, a project-less emit). A hook never runs for another project's events"},"project":{"type":"string","description":"Project id (default: yours)"}},"required":["action"]}""",
         ).jsonObject
         override fun call(call: ToolCall): ToolResult = handle(call)
     }
@@ -35,7 +35,7 @@ class HookTools(private val store: HookStore, private val scripts: ScriptStore, 
         return try {
             when (val action = s("action")?.lowercase()) {
                 "list" -> list(project)
-                "add" -> add(call, project, s("on"), s("script"), s("id"), s("to"), a["args"], (a["disabled"] as? JsonPrimitive)?.booleanOrNull == true)
+                "add" -> add(call, project, s("on"), s("script"), s("id"), s("to"), a["args"], (a["disabled"] as? JsonPrimitive)?.booleanOrNull == true, (a["global"] as? JsonPrimitive)?.booleanOrNull == true)
                 "remove" -> remove(project, s("id") ?: return refuse("remove needs id"))
                 else -> refuse("action must be list, add or remove (got '${action.orEmpty()}')")
             }
@@ -56,7 +56,7 @@ class HookTools(private val store: HookStore, private val scripts: ScriptStore, 
         return ToolResult(text)
     }
 
-    private fun add(call: ToolCall, project: String, on: String?, script: String?, id: String?, to: String?, rawArgs: Any?, disabled: Boolean): ToolResult {
+    private fun add(call: ToolCall, project: String, on: String?, script: String?, id: String?, to: String?, rawArgs: Any?, disabled: Boolean, global: Boolean = false): ToolResult {
         val parsedOn = HookOn.parse(on ?: return refuse("add needs on (e.g. 'lane enter done' or 'ticket.commented')"))
         val name = script ?: return refuse("add needs script")
         scripts.read(project, name) ?: return refuse("no script '$name' in project $project (looked in .infantry/scripts/); have: ${runCatching { scripts.names(project) }.getOrDefault(emptyList()).joinToString().ifBlank { "none" }}")
@@ -76,8 +76,8 @@ class HookTools(private val store: HookStore, private val scripts: ScriptStore, 
         val hookId = id ?: defaultId(name, parsedOn).let { if (target != null) "$it-${target.take(12)}".take(64).trim('-', '.', '_') else it }
         require(HookStore.validId(hookId)) { "bad hook id '$hookId' (letters, digits, '_', '-', '.'; at most 64)" }
         val byOwner = call.caller.owner && call.clientSessionId == null
-        store.add(project, Hook(hookId, parsedOn, name, args, !disabled, call.clientSessionId, call.clientRole, byOwner, target))
-        return ToolResult("added hook $hookId: on $parsedOn -> $name${if (disabled) " [disabled]" else ""}")
+        store.add(project, Hook(hookId, parsedOn, name, args, !disabled, call.clientSessionId, call.clientRole, byOwner, target, global))
+        return ToolResult("added hook $hookId: on $parsedOn -> $name${if (global) " [global]" else ""}${if (disabled) " [disabled]" else ""}")
     }
 
     private fun remove(project: String, id: String): ToolResult =

@@ -52,16 +52,18 @@ class LocalSessionReadsTest {
         val worker = session("s-a1")
         assertEquals(listOf("s-a1", "s-pm"), ok(reads.list(worker, "A")).map { it.id })
         assertTrue("not this session's project" in refused(reads.list(worker, "B")))
-        assertTrue("for pm / owner callers" in refused(reads.list(worker, null)), "every project = all, refused for a worker")
+        assertTrue("is for the owner" in refused(reads.list(worker, null)), "every project = all, refused for a worker")
         assertTrue("belongs to project 'B'" in refused(reads.find("s-b1", worker)))
         assertTrue("belongs to project 'B'" in refused(reads.transcript("s-b1", worker)), "no transcript of a foreign session")
         assertEquals("A", ok(reads.scope(worker, null)).projectId)
-        assertTrue(ok(reads.scope(worker, "all")).refusal!!.contains("pm / owner"))
+        assertTrue(ok(reads.scope(worker, "all")).refusal!!.contains("is for the owner"))
     }
 
-    @Test fun `pm and owner reach every project`() {
-        assertEquals(3, ok(reads.list(session("s-pm"), "all")).size)
-        assertEquals(listOf("s-b1"), ok(reads.list(session("s-pm"), "B")).map { it.id })
+    @Test fun `only the owner reaches every project, a pm is confined to its own (PROJECT-ISOLATION-1)`() {
+        assertTrue("is for the owner" in refused(reads.list(session("s-pm"), "all")))
+        assertTrue("not this session's project" in refused(reads.list(session("s-pm"), "B")))
+        assertEquals(3, ok(reads.list(owner, "all")).size)
+        assertEquals(listOf("s-b1"), ok(reads.list(owner, "B")).map { it.id })
         assertEquals(3, ok(reads.list(owner, null)).size)
         assertEquals(null, ok(reads.caller(owner)))
         assertEquals("p9", ok(reads.scope(owner, null, "p9")).projectId, "an owner's default project is the client's")
