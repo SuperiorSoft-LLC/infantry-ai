@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) SuperiorSoft LLC
 # HARNESS-AUDIT-1 probe: the CLI pinned to the test daemon (INFANTRY_URL beats INFANTRY_PORT).
 DIST="$(cygpath -m "$1")"; shift
 for v in $(env | sed -n 's/^\(INFANTRY_[A-Z_]*\|AGENTHQ_[A-Z_]*\)=.*/\1/p'); do unset "$v"; done

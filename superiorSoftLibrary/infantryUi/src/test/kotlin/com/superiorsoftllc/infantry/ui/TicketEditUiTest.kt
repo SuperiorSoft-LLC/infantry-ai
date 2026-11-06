@@ -18,6 +18,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.runDesktopComposeUiTest
@@ -145,7 +146,7 @@ class TicketEditUiTest {
                 onNodeWithTag(TICKET_EDIT_TITLE_TAG).performTextInput("pay with card or wallet")
                 onNodeWithTag(TICKET_EDIT_EPIC_PICKER_TAG).performClick()
                 onNodeWithTag(TICKET_EDIT_EPIC_OPTION_TAG_PREFIX + epicA).performClick()
-                onNodeWithTag(TICKET_EDIT_SAVE_TAG).performClick()
+                onNodeWithTag(TICKET_EDIT_SAVE_TAG).performScrollTo().performClick() // the open form can reach below the lane's fold: scroll first, as a user would
                 awaitStoredEpic(controller, id, epicA, "the edit's ticket_save stored epic A")
                 assertEquals("pay with card or wallet", controller.state.value.tickets.first { it.id == id }.title)
                 waitUntil(timeoutMillis = 10_000) { onAllNodes(hasTestTag(TICKET_EDIT_SAVE_TAG)).fetchSemanticsNodes().isEmpty() }
@@ -159,7 +160,7 @@ class TicketEditUiTest {
                 onNodeWithTag(TICKET_CARD_TAG_PREFIX + id).performClick()
                 onNodeWithTag(TICKET_EDIT_EPIC_PICKER_TAG).performClick()
                 onNodeWithTag(TICKET_EDIT_EPIC_OPTION_TAG_PREFIX + "none").performClick()
-                onNodeWithTag(TICKET_EDIT_SAVE_TAG).performClick()
+                onNodeWithTag(TICKET_EDIT_SAVE_TAG).performScrollTo().performClick()
                 awaitStoredEpic(controller, id, null, "None cleared the stored epic")
                 waitUntil(timeoutMillis = 10_000) { onAllNodes(hasTestTag(TICKET_EDIT_SAVE_TAG)).fetchSemanticsNodes().isEmpty() }
                 onNode(chip, useUnmergedTree = true).assertDoesNotExist()

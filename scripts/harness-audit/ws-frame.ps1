@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) SuperiorSoft LLC
 # HARNESS-AUDIT-1 probe: send ONE owner frame to the test daemon and print the replies for a few seconds.
 # usage: pwsh ws-frame.ps1 -State <state dir> -Type <frame type> -Data '<json payload>' [-Port 8812] [-Seconds 3]
 param([string]$State, [string]$Type, [string]$Data = '{}', [int]$Port = 8812, [int]$Seconds = 3)

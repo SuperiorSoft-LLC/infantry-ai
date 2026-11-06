@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) SuperiorSoft LLC
 # HARNESS-AUDIT-1 probe: a scrubbed test daemon on port 8812 with a temp state dir, never the owner's.
 # usage: test-daemon.sh <dist build dir> <state dir>   (then: cli.sh <state dir> <args...>)
 set -eu
