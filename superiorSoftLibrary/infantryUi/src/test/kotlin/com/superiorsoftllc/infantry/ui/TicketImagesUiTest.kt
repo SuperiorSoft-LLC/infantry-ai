@@ -198,7 +198,9 @@ class TicketImagesUiTest {
             // 3. Reopen: the thumbnail renders (decoded from the project directory), and opens full size.
             openCard()
             waitUntil(timeoutMillis = daemonWaitMs) { onAllNodes(hasTestTag(TICKET_IMAGE_LOADED_TAG_PREFIX + relPath)).fetchSemanticsNodes().isNotEmpty() }
-            onNodeWithTag(TICKET_IMAGE_LOADED_TAG_PREFIX + relPath).performClick()
+            // The thumbnail sits below the window's fold (the open form is taller than 1000px; the board chrome grew on 2026-11-05),
+            // and its nearest scroller is the thumbnail row, so scrolling cannot bring it up: fire the click action, as save() does.
+            onNodeWithTag(TICKET_IMAGE_LOADED_TAG_PREFIX + relPath).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
             onNodeWithTag(TICKET_IMAGE_VIEWER_TAG).assertExists()
             // IMG-VIEW-1: a click on the image toggles its size; a click beside it (the backdrop's corner) closes.
             onNodeWithTag(IMAGE_VIEWER_IMAGE_TAG).performClick()
@@ -207,7 +209,7 @@ class TicketImagesUiTest {
             onNodeWithTag(TICKET_IMAGE_VIEWER_TAG).assertDoesNotExist()
 
             // 2. Remove and Save: the board's images are empty.
-            onNodeWithTag(TICKET_IMAGE_REMOVE_TAG_PREFIX + relPath).performClick()
+            onNodeWithTag(TICKET_IMAGE_REMOVE_TAG_PREFIX + relPath).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) // below the fold, as above
             onNodeWithTag(TICKET_IMAGE_THUMB_TAG_PREFIX + relPath).assertDoesNotExist()
             save()
             waitUntil(timeoutMillis = daemonWaitMs) { daemon.boardPorts.ops()!!.get(id).images.isEmpty() }

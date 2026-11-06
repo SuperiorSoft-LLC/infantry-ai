@@ -198,7 +198,7 @@ class CoreShellTreeTest {
         val stats = "infantry.shell.stats"
         val expectedStats = listOf(stats, "  $stats.body")
         val expectedGit = listOf(git) + listOf("base", "directory", "tree", "diff", "branches", "pipeline", "history").map { "  $git.$it" }
-        val expectedRun = listOf(run) + listOf("empty", "toolbar", "pills", "confirm", "editor", "notices", "output").map { "  $run.$it" }
+        val expectedRun = listOf(run) + listOf("folder", "empty", "toolbar", "pills", "confirm", "unassigned", "editor", "notices", "output").map { "  $run.$it" }
         val notes = "infantry.shell.notes"
         val expectedNotes = listOf(
             notes,

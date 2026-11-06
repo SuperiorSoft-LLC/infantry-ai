@@ -77,9 +77,11 @@ object ClaudeStats {
                             val model = message.str("model")
                             lastContext = listOf("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens").sumOf { u.long(it) }
                             val request = HarnessStatEvent.Request(at, model, u.long("input_tokens"), u.long("output_tokens"), u.long("cache_read_input_tokens"), u.long("cache_creation_input_tokens"))
-                            // Replace this message's earlier (partial) record in place, so the event keeps its position and the final usage wins.
+                            // Replace this message's earlier (partial) record in place, so the event keeps its position and its first
+                            // timestamp (when the turn started) while the final usage wins.
                             val idx = requestIndex[id]
-                            if (idx == null) { requestIndex[id] = events.size; events += request } else events[idx] = request
+                            if (idx == null) { requestIndex[id] = events.size; events += request }
+                            else events[idx] = request.copy(at = (events[idx] as HarnessStatEvent.Request).at ?: at)
                         }
                         (message["content"] as? JsonArray)?.forEach { b ->
                             val block = b as? JsonObject ?: return@forEach
