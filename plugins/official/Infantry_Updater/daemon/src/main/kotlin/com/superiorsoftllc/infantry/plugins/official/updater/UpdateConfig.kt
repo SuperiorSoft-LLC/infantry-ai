@@ -121,7 +121,7 @@ sealed interface UpdateSettings {
          * Resolve the settings of this launch.
          *
          * - [installed] false (a dev build) is ALWAYS disabled: a dev build never updates itself.
-         * - Where releases come from is MANIFEST data ([manifest], UPDATER-DEFAULT-1: the module.json `update` block the build
+         * - Where releases come from is MANIFEST data ([manifest], UPDATER-DEFAULT-1: the module.json `appUpdate` block the build
          *   baked in), so an official install needs no setup. Developer overrides, first match wins: [setting] / [env] (the
          *   `INFANTRY_UPDATE_*` variables), then `<stateDir>/update.properties` (hand-written: the old keys `channel`, `source`,
          *   `dir`, `repo`, and the `updater.*` keys), then the module config ([config], else the mirror file the daemon half
