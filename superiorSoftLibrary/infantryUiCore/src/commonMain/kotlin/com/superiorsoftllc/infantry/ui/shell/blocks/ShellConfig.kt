@@ -118,6 +118,7 @@ class ConfigBlock(children: List<Block>, place: Place = Place()) : Block(CONFIG,
             onTheme = { next -> Palette.theme = next; host.saveUiPref(THEME_PREF_KEY, next.encode()) },
             about = AboutEntry(
                 host.appBuild, state.connection.daemonBuild, state.connection.isLive,
+                website = state.siteUrl,
                 links = com.superiorsoftllc.infantry.ui.model.SourceLinks.of(
                     state.sourceRepo,
                     com.superiorsoftllc.infantry.ui.model.ReportFacts(host.appBuild, state.connection.daemonBuild, com.superiorsoftllc.infantry.ui.platformName(), state.connection.daemonProvider),

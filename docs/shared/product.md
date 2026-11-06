@@ -12,6 +12,7 @@ downloads_assets: Windows MSI, Android APK (beta, debug-signed), web zip, server
 status: Beta
 beta_line: Infantry AI is in Beta. It works and we use it every day, but not every part is fully tested yet: you are an early tester. Please report anything that breaks on GitHub.
 issues_url: https://github.com/SuperiorSoft-LLC/infantry-ai/issues
+website: https://infantryai.superiorsoftllc.tech/
 repo: https://github.com/SuperiorSoft-LLC/infantry-ai
 wiki: https://github.com/SuperiorSoft-LLC/infantry-ai/blob/main/docs/wiki/index.md
 plugins_page: https://github.com/SuperiorSoft-LLC/infantry-ai/blob/main/docs/wiki/make-a-plugin.md
