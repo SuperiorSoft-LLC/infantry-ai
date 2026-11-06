@@ -109,7 +109,8 @@ class ClaudeHarness internal constructor(
         headless = ClaudeSession(executable, ::mcp, { env -> ClaudeCommand.watchSettings(env) }, idleMinutes = ::liveIdle, stateDir = { host.stateDir }),
         interactive = ClaudeTtySession(executable, ::mcp, { env -> ClaudeCommand.watchSettings(env) }, stateDir = { host.stateDir }, idleMinutes = ::liveIdle,
             approvalHookSeconds = { ClaudePermissionHook.timeoutSec(host.setting(ClaudePermissionHook.TIMEOUT_SETTING)) },
-            signInProblem = { env -> ClaudeSignIn.problem(System.getenv() + env, home()) }),
+            signInProblem = { env -> ClaudeSignIn.problem(System.getenv() + env, home()) },
+            firstTurn = { ClaudeFirstTurn.of(host.setting(ClaudeFirstTurn.SUBMIT_SETTING), host.setting(ClaudeFirstTurn.REPLY_SETTING)) }),
         mode = { host.setting(ClaudeCommand.MODE_SETTING) },
     )
 
