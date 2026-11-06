@@ -3,9 +3,14 @@
 package com.superiorsoftllc.infantry.plugins.official.run.daemon
 
 import com.superiorsoftllc.infantry.daemon.api.Caller
+import com.superiorsoftllc.infantry.daemon.api.DaemonTool
 import com.superiorsoftllc.infantry.daemon.api.ToolCall
 import com.superiorsoftllc.infantry.daemon.api.ToolResult
 import com.superiorsoftllc.infantry.protocol.Envelope
+import com.superiorsoftllc.infantry.runner.ProcessListener
+import com.superiorsoftllc.infantry.runner.ProcessRunner
+import com.superiorsoftllc.infantry.runner.ProcessSpec
+import com.superiorsoftllc.infantry.runner.RunningProcess
 import com.superiorsoftllc.infantry.runner.ScriptedRunner
 import com.superiorsoftllc.infantry.runner.StubScript
 import kotlinx.serialization.json.JsonArray
@@ -14,6 +19,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import java.io.File
 import java.nio.file.Files
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -28,11 +34,11 @@ class RunCommandToolsTest {
     private var broadcasts = 0
     private val tools = RunCommandTools(store, manager, { broadcasts++ }, { frames += it }).all().associateBy { it.name }
 
-    private fun call(name: String, project: String? = "p1", vararg args: Pair<String, Any>): ToolResult {
+    private fun call(name: String, project: String? = "p1", vararg args: Pair<String, Any>, toolMap: Map<String, DaemonTool> = tools): ToolResult {
         val a = JsonObject(args.associate { (k, v) ->
             k to when (v) { is Boolean -> JsonPrimitive(v); is List<*> -> JsonArray(v.map { JsonPrimitive(it.toString()) }); else -> JsonPrimitive(v.toString()) }
         })
-        return tools.getValue(name).call(object : ToolCall {
+        return toolMap.getValue(name).call(object : ToolCall {
             override val arguments = a
             override val caller: Caller get() = error("unused")
             override val clientProjectId = project
@@ -90,6 +96,35 @@ class RunCommandToolsTest {
         assertTrue(runId.isNotEmpty() && runId != "?", started.text)
         assertFalse(call("infantry_run_stop", "p1", "runId" to runId, "force" to true).isError)
         assertTrue(call("infantry_run_stop", "p1", "runId" to "nope").isError)
+    }
+
+    /** A child that runs until it is terminated or killed (HARNESS-GAP G17: the run must still be in flight when stopped). */
+    private class HangingRunner : ProcessRunner {
+        override val id = "hanging"
+        override fun start(spec: ProcessSpec, listener: ProcessListener): RunningProcess = object : RunningProcess {
+            private val done = CountDownLatch(1)
+            @Volatile private var alive = true
+            override val isAlive get() = alive
+            override fun writeInput(text: String) {}
+            override fun closeInput() {}
+            override fun terminate() { end() }
+            override fun killTree() { end() }
+            private fun end() { if (alive) { alive = false; Thread { listener.onExit(143); done.countDown() }.start() } }
+            override fun awaitExit(): Int { done.await(); return 143 }
+        }
+    }
+
+    @Test fun `stop refuses another project's run and still stops your own`() {
+        val hangingTools = RunCommandTools(store, RunManager({ store.registry }, HangingRunner(), { frames += it }), { broadcasts++ }, { frames += it })
+            .all().associateBy { it.name }
+        assertFalse(call("infantry_run_command_save", "p1", "id" to "hang", "argv" to listOf("x")).isError)
+        val started = call("infantry_run_start", "p1", "id" to "hang", toolMap = hangingTools)
+        assertFalse(started.isError, started.text)
+        val runId = started.text.removePrefix("started run ").trim()
+        val foreign = call("infantry_run_stop", "p2", "runId" to runId, toolMap = hangingTools)
+        assertTrue(foreign.isError, foreign.text)
+        assertTrue(foreign.text.contains("allowCrossProject"), foreign.text)
+        assertFalse(call("infantry_run_stop", "p1", "runId" to runId, toolMap = hangingTools).isError)
     }
 
     @Test fun `another project is refused without the explicit flag`() {

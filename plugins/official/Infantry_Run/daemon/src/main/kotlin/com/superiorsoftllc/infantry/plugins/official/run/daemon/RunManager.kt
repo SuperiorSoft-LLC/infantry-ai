@@ -262,6 +262,9 @@ class RunManager(
      * The answer to a stop is the run's single `run_finished` (KILLED_GRACEFUL or KILLED_FORCED), sent from
      * a background thread so the socket handler never waits out the grace window.
      */
+    /** HARNESS-GAP G17: the project of the run in flight with [runId]; null when there is none or its command is unassigned. */
+    fun projectOfRun(runId: String): String? = synchronized(lock) { inFlight }?.takeIf { it.runId == runId }?.command?.projectId
+
     fun stop(data: String): Envelope? {
         val parts = data.trim().split(Regex("[ \t]+"))
         if (parts.isEmpty() || parts[0].isEmpty() || parts.size > 2 || (parts.size == 2 && parts[1] != "force"))

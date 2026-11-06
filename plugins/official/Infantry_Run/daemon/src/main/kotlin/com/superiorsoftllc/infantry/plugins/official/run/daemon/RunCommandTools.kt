@@ -114,12 +114,17 @@ class RunCommandTools(
     private fun stop(c: ToolCall): ToolResult {
         val runId = str(c.arguments, "runId") ?: return err("runId is required")
         val force = (c.arguments["force"] as? JsonPrimitive)?.booleanOrNull == true
+        // HARNESS-GAP G17: a run belongs to its command's project; another project's run is refused like any other tool's.
+        foreignRefusal(manager.projectOfRun(runId), c)?.let { return err("$it (run $runId)") }
         val reply = manager.stop(if (force) "$runId force" else runId)
         return if (reply != null && reply.type == Envelope.ERROR) err(reply.data) else ToolResult("stop requested for run $runId")
     }
 
-    private fun crossProjectRefusal(c: ToolCall): String? {
-        val wanted = str(c.arguments, "project") ?: return null
+    private fun crossProjectRefusal(c: ToolCall): String? = foreignRefusal(str(c.arguments, "project"), c)
+
+    /** A refusal when [wanted] (a project id) is not the caller's own and the call does not set allowCrossProject; null otherwise. */
+    private fun foreignRefusal(wanted: String?, c: ToolCall): String? {
+        wanted ?: return null
         val own = c.clientProjectId ?: return null
         if (wanted == own) return null
         if ((c.arguments["allowCrossProject"] as? JsonPrimitive)?.booleanOrNull == true) return null
