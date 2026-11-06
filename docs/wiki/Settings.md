@@ -119,7 +119,7 @@ resets a key to its default. These keys are app-scope only. Daemon code reads th
 
 | Env var | Setting | Default | What reads it |
 |---|---|---|---|
-| `INFANTRY_SITE_URL` | `urls.site` | `https://github.com/SuperiorSoft-LLC/infantry-ai` | The product home page clients link to (About, help menus) |
+| `INFANTRY_SITE_URL` | `urls.site` | `https://infantryai.superiorsoftllc.tech` | The product website: About shows it as a clickable Website line |
 | `INFANTRY_DOCS_URL` | `urls.docs` | `https://github.com/SuperiorSoft-LLC/infantry-ai/tree/main/docs/wiki` | The documentation root clients link to (Help, wiki links) |
 | `INFANTRY_DOWNLOAD_URL` | `urls.downloads` | `https://github.com/SuperiorSoft-LLC/infantry-ai/releases` | The page installers are downloaded from by hand |
 | `INFANTRY_SOURCE_URL` | `urls.sourceRepo` | `https://github.com/SuperiorSoft-LLC/infantry-ai` | The source repository page: About > Contribute (its `CONTRIBUTING.md`), Report a problem (its new-issue form), View on GitHub |

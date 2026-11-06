@@ -27,6 +27,7 @@ const val FOOTER_BUILD_TAG = "footer-build"
 const val ABOUT_CONTRIBUTE_TAG = "about-contribute"
 const val ABOUT_REPORT_PROBLEM_TAG = "about-report-problem"
 const val ABOUT_VIEW_REPO_TAG = "about-view-repo"
+const val ABOUT_WEBSITE_TAG = "about-website"
 
 /** BUILD-STAMP-1: Configuration > About. Which build this app is, which build the connected daemon is, and whether they differ. */
 class AboutEntry(
@@ -35,6 +36,8 @@ class AboutEntry(
     val daemonConnected: Boolean,
     /** CONTRIB-1: the source-repository links; null hides them (no `urls.sourceRepo`). */
     val links: com.superiorsoftllc.infantry.ui.model.SourceLinks? = null,
+    /** ABOUT-SITE-1: the product website (daemon `urls.site`); null hides the line. */
+    val website: String? = null,
 ) {
     companion object {
         const val TITLE = "About"
@@ -58,8 +61,21 @@ fun AboutSection(about: AboutEntry) {
         BuildCheck.mismatch(about.appBuild, about.daemonBuild)?.let {
             Text(it, color = Palette.Danger, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.testTag(ABOUT_BUILD_MISMATCH_TAG))
         }
+        about.website?.let { WebsiteLine(it) }
         about.links?.let { SourceLinkButtons(it) }
     }
+}
+
+/** ABOUT-SITE-1: "Website: <url>", clickable; the platform's UriHandler opens it. */
+@Composable
+private fun WebsiteLine(url: String) {
+    val uri = androidx.compose.ui.platform.LocalUriHandler.current
+    Text(
+        "Website: $url", color = Palette.Info, fontSize = 12.sp, fontWeight = FontWeight.Medium,
+        modifier = Modifier.testTag(ABOUT_WEBSITE_TAG)
+            .semantics { contentDescription = "Website $url (opens in the browser)" }
+            .clickable { runCatching { uri.openUri(url) } },
+    )
 }
 
 /** CONTRIB-1: Contribute / Report a problem / View on GitHub. The platform's UriHandler opens them (desktop browser, Android intent, web new tab). */

@@ -14,6 +14,14 @@ import kotlinx.serialization.json.JsonPrimitive
 data class SourceLinks(val contribute: String, val reportProblem: String, val repo: String) {
     companion object {
         const val KEY = "urls.sourceRepo"
+        const val SITE_KEY = "urls.site"
+
+        /** ABOUT-SITE-1: the product website (`urls.site`) from a `settings` frame; null when absent, blank or not http(s). */
+        fun siteFromSettingsFrame(data: String): String? {
+            val obj = runCatching { Json.parseToJsonElement(data) as? JsonObject }.getOrNull() ?: return null
+            val v = (obj[SITE_KEY] as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim() ?: return null
+            return v.takeIf { it.startsWith("https://") || it.startsWith("http://") }
+        }
 
         /** The repo's `urls.sourceRepo` from a `settings` frame; null when the frame does not carry it. */
         fun repoFromSettingsFrame(data: String): String? {

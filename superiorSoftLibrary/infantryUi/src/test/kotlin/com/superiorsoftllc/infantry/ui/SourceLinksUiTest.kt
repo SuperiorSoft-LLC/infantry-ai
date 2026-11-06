@@ -70,4 +70,23 @@ class SourceLinksUiTest {
             assertEquals(0, onAllNodesWithTag(t).fetchSemanticsNodes().size)
         }
     }
+
+    @Test fun `ABOUT-SITE-1 website line opens the site and hides without it`() = runDesktopComposeUiTest(900, 900) {
+        assertEquals("https://x.example/", SourceLinks.siteFromSettingsFrame("""{"urls.site":"https://x.example/"}"""))
+        assertNull(SourceLinks.siteFromSettingsFrame("""{"urls.site":"javascript:1"}"""))
+        assertNull(SourceLinks.siteFromSettingsFrame("""{"x":1}"""))
+        val opened = mutableListOf<String>()
+        val site = androidx.compose.runtime.mutableStateOf<String?>("https://x.example/")
+        setContent {
+            CompositionLocalProvider(LocalUriHandler provides object : UriHandler { override fun openUri(uri: String) { opened += uri } }) {
+                AboutSection(AboutEntry("a", "a", daemonConnected = true, website = site.value))
+            }
+        }
+        onNodeWithTag(ABOUT_WEBSITE_TAG).performClick()
+        waitForIdle()
+        assertEquals(listOf("https://x.example/"), opened)
+        site.value = null
+        waitForIdle()
+        assertEquals(0, onAllNodesWithTag(ABOUT_WEBSITE_TAG).fetchSemanticsNodes().size)
+    }
 }

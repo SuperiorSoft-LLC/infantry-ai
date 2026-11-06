@@ -52,7 +52,7 @@ object EndpointRegistry {
     /** The product's home page (About, footer links). */
     val SITE = EndpointDef(
         "urls.site", "INFANTRY_SITE_URL", EndpointKind.URL,
-        "https://github.com/SuperiorSoft-LLC/infantry-ai",
+        "https://infantryai.superiorsoftllc.tech",
         "The product home page clients link to (About, help menus).",
     )
 

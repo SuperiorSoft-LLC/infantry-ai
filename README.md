@@ -4,6 +4,7 @@
 
 <p align="center">
   <b><!-- shared:tagline -->Run a whole team of coding agents from one ticket board.<!-- /shared:tagline --></b><br>
+  <a href="https://infantryai.superiorsoftllc.tech/">Website</a> · <a href="https://github.com/SuperiorSoft-LLC/infantry-ai/releases/latest">Downloads</a><br>
   Windows · Android · Headless server (Docker or plain archive)
 </p>
 

@@ -42,7 +42,7 @@ default):
 
 | Variable | Setting | Default |
 |---|---|---|
-| `INFANTRY_SITE_URL` | `urls.site` | `https://github.com/SuperiorSoft-LLC/infantry-ai` |
+| `INFANTRY_SITE_URL` | `urls.site` | `https://infantryai.superiorsoftllc.tech` |
 | `INFANTRY_DOCS_URL` | `urls.docs` | `https://github.com/SuperiorSoft-LLC/infantry-ai/tree/main/docs/wiki` |
 | `INFANTRY_DOWNLOAD_URL` | `urls.downloads` | `https://github.com/SuperiorSoft-LLC/infantry-ai/releases` |
 | `INFANTRY_UPDATE_REPO` | `urls.releasesRepo` | none (updates not configured) |
