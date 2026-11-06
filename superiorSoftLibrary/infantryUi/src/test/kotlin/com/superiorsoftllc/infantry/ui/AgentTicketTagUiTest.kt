@@ -54,6 +54,27 @@ class AgentTicketTagUiTest {
         }
     }
 
+    /**
+     * CARD-TICKET-1: a board/role start stores the ticket under its role (`role:backend`), not under the agent profile, so the
+     * card body read "no ticket - drop one here" while the header showed the session's ticket. The session's ticket wins.
+     */
+    @Test
+    fun sessionWithATicketShowsItInTheCardBodyEvenWhenTheTicketIsHeldByARole() {
+        val worker = AgentView(
+            session = SessionRecord(id = "cccc11112222", provider = "stub", workingDir = "/w", spawnedAt = 1, lastHeartbeat = 1, state = SessionState.BUSY, providerSessionId = "p", agentId = "agent-4c8549bf", ticketId = "ticket-5ccc0b8c"),
+            role = "backend",
+        )
+        val s = AppState(
+            agents = mapOf(worker.id to worker),
+            tickets = listOf(Ticket(id = "ticket-5ccc0b8c", title = "HARNESS-GAP: native background-tool end", status = "in_progress", agentId = "role:backend")),
+        )
+        runDesktopComposeUiTest(900, 400) {
+            setContent { AgentRow(worker, s, selected = false, onClick = {}, onRemove = {}) }
+            onNodeWithTag("agent-row-current-${worker.id}", useUnmergedTree = true).assertIsDisplayed()
+            onNodeWithTag("agent-row-idle-${worker.id}", useUnmergedTree = true).assertDoesNotExist()
+        }
+    }
+
     @Test
     fun clickingTheTagSelectsTheAgentAndDoesNotOpenTheBoard() {
         // The sidebar tag is display-only: AgentRow has no ticket callback, so a click on the tag is the row's click.

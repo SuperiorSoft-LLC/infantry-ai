@@ -350,7 +350,7 @@ fun AgentRow(a: AgentView, state: AppState, selected: Boolean, onClick: () -> Un
                     softWrap = false, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false).testTag("agent-row-snippet-${a.id}"),
                 )
             }
-            if (profile != null) AgentWorkBlock(a.id, state.agentWork(profile), work, profile)
+            if (profile != null) AgentWorkBlock(a.id, state.agentWork(profile, a.session.ticketId), work, profile)
         }
         Spacer(Modifier.width(6.dp))
         Column(horizontalAlignment = Alignment.End) {
@@ -444,7 +444,7 @@ private fun AgentRowMenu(a: AgentView, state: AppState, revealed: Boolean, onOpe
             val profile = a.session.agentId
             if (profile != null) {
                 HorizontalDivider(color = Palette.Border)
-                AgentMenuTicketItems(a.id, state.agentWork(profile).current, onChange = { menuOpen = false; picking = true }, onUnassign = { id -> menuOpen = false; work.unassign(id) })
+                AgentMenuTicketItems(a.id, state.agentWork(profile, a.session.ticketId).current, onChange = { menuOpen = false; picking = true }, onUnassign = { id -> menuOpen = false; work.unassign(id) })
             }
             HorizontalDivider(color = Palette.Border)
             // DEMO-MERGE-1: the delete is a write; Remove is dimmed and says why while writes are refused.
