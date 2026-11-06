@@ -26,9 +26,123 @@ class UpdateUiLogicTest {
         assertEquals("Up to date (1.0.3)", UpdateState.Idle.footerLabel("1.0.3"))
         assertEquals("Checking for updates…", UpdateState.Checking(false).footerLabel(null))
         assertEquals("Update available v1.0.4", UpdateState.Available(update("1.0.4")).footerLabel(null))
-        assertEquals("Downloading v1.0.4…", UpdateState.Downloading(update("1.0.4")).footerLabel(null))
-        assertEquals("Ready to install v1.0.4", UpdateState.Restarting(update("1.0.4")).footerLabel(null))
-        assertTrue(UpdateState.Message("offline").footerLabel(null).startsWith("Update error"))
+        // UPDATE-UX-1: a download in the background is the bottom-right card's, not the footer's ("Downloading v1.0.7…" is gone).
+        assertNull(UpdateState.Downloading(update("1.0.4")).footerLabel(null))
+        assertNull(UpdateState.Restarting(update("1.0.4")).footerLabel(null))
+        assertNull(UpdateState.DownloadFailed(update("1.0.4"), "x").footerLabel(null))
+        val ready = UpdateState.Ready(update("1.0.4"), VerifiedInstaller(update("1.0.4"), File("x.msi"), "s", true))
+        assertNull(ready.footerLabel(null, indicatorVisible = true))
+        assertEquals("Ready to install v1.0.4", ready.footerLabel(null, indicatorVisible = false))
+        assertTrue(UpdateState.Message("offline").footerLabel(null)!!.startsWith("Update error"))
+    }
+
+    @Test
+    fun `the bottom-right card says what the download is doing`() {
+        val u = update("1.0.7")
+        assertEquals("Downloading 1.0.7 - 45%", UpdateState.Downloading(u, 45, 100).indicatorLabel())
+        assertEquals("Downloading 1.0.7…", UpdateState.Downloading(u, 0, 0).indicatorLabel())
+        assertEquals(100, UpdateState.Downloading(u, 150, 100).percent)
+        assertEquals("Ready to install 1.0.7", UpdateState.Ready(u, VerifiedInstaller(u, File("x.msi"), "s", true)).indicatorLabel())
+        assertEquals("Update 1.0.7 failed. offline", UpdateState.DownloadFailed(u, "offline").indicatorLabel())
+        assertNull(UpdateState.Available(u).indicatorLabel())
+        assertNull(UpdateState.Idle.indicatorLabel())
+    }
+
+    /** A releases folder holding AgentHQ-1.0.4.msi ([body]) and a SHA256SUMS that names [sumOf]'s hash. */
+    private fun releases(body: String = "m", sumOf: String = body): File {
+        val dir = Files.createTempDirectory("rel").toFile()
+        File(dir, "AgentHQ-1.0.4.msi").writeText(body)
+        val sha = java.security.MessageDigest.getInstance("SHA-256").digest(sumOf.toByteArray()).joinToString("") { "%02x".format(it) }
+        File(dir, "SHA256SUMS").writeText("$sha  AgentHQ-1.0.4.msi\n")
+        return dir
+    }
+
+    @Test
+    fun `Update closes the prompt, downloads in the background, then Ready waits for Restart now`() = runBlocking<Unit> {
+        val dir = releases()
+        val scope = CoroutineScope(SupervisorJob())
+        val handed = mutableListOf<VerifiedInstaller>()
+        var exits = 0
+        val logged = mutableListOf<String>()
+        val s = UpdateService(UpdateSettings.Enabled(UpdateConfig("local/releases", v, localDir = dir)), scope,
+            handoff = { handed += it }, exit = { exits++ }, log = { logged += it })
+        s.check(manual = false)!!.join()
+        s.openDialog()
+        assertTrue(s.dialogOpen.value)
+        val job = s.update()!!
+        // The window is never held: the prompt closes at once and the card shows the download.
+        assertFalse(s.dialogOpen.value)
+        assertFalse(s.toastVisible.value)
+        assertTrue(s.indicatorVisible.value)
+        job.join()
+        val ready = assertIs<UpdateState.Ready>(s.state.value)
+        assertTrue(ready.installer.checksumVerified)
+        assertEquals(0, handed.size, "nothing installs before Restart now")
+        assertTrue(logged.any { it.startsWith("download start") } && logged.any { it.startsWith("verify ok") }, logged.joinToString(" | "))
+        // Later hides the card, the update stays ready, the footer brings the card back; no new check while ready.
+        s.dismiss()
+        assertFalse(s.indicatorVisible.value)
+        assertIs<UpdateState.Ready>(s.state.value)
+        assertEquals("Ready to install v1.0.4", s.state.value.footerLabel(null, s.indicatorVisible.value))
+        assertNull(s.checkIfDue())
+        s.showIndicator()
+        assertTrue(s.indicatorVisible.value)
+        s.install()!!.join()
+        assertIs<UpdateState.Restarting>(s.state.value)
+        assertEquals(1, handed.size)
+        assertEquals(1, exits)
+        assertTrue(logged.any { it.startsWith("install: launching msiexec") })
+        scope.cancel()
+        dir.deleteRecursively()
+    }
+
+    @Test
+    fun `a failed download shows the reason with Retry, and Retry downloads again`() = runBlocking<Unit> {
+        val dir = releases(body = "tampered", sumOf = "good")
+        val scope = CoroutineScope(SupervisorJob())
+        val s = UpdateService(UpdateSettings.Enabled(UpdateConfig("local/releases", v, localDir = dir)), scope, handoff = {}, exit = {}, log = {})
+        s.check(manual = false)!!.join()
+        s.update()!!.join()
+        val failed = assertIs<UpdateState.DownloadFailed>(s.state.value)
+        assertTrue("SHA-256 mismatch" in failed.text, failed.text)
+        assertTrue(s.indicatorVisible.value)
+        // The release is fixed; Retry gets it.
+        File(dir, "AgentHQ-1.0.4.msi").writeText("good")
+        s.retry()!!.join()
+        assertIs<UpdateState.Ready>(s.state.value)
+        scope.cancel()
+        dir.deleteRecursively()
+    }
+
+    @Test
+    fun `Dismiss on a failed download goes back to update available`() = runBlocking<Unit> {
+        val dir = releases(body = "tampered", sumOf = "good")
+        val scope = CoroutineScope(SupervisorJob())
+        val s = UpdateService(UpdateSettings.Enabled(UpdateConfig("local/releases", v, localDir = dir)), scope, handoff = {}, exit = {}, log = {})
+        s.check(manual = false)!!.join()
+        s.update()!!.join()
+        assertIs<UpdateState.DownloadFailed>(s.state.value)
+        s.dismiss()
+        assertIs<UpdateState.Available>(s.state.value)
+        scope.cancel()
+        dir.deleteRecursively()
+    }
+
+    @Test
+    fun `an installer that cannot start is a failure with Retry, and the app does not exit`() = runBlocking<Unit> {
+        val dir = releases()
+        val scope = CoroutineScope(SupervisorJob())
+        var exits = 0
+        val s = UpdateService(UpdateSettings.Enabled(UpdateConfig("local/releases", v, localDir = dir)), scope,
+            handoff = { error("msiexec missing") }, exit = { exits++ }, log = {})
+        s.check(manual = false)!!.join()
+        s.update()!!.join()
+        s.install()!!.join()
+        val failed = assertIs<UpdateState.DownloadFailed>(s.state.value)
+        assertTrue("msiexec missing" in failed.text, failed.text)
+        assertEquals(0, exits)
+        scope.cancel()
+        dir.deleteRecursively()
     }
 
     @Test

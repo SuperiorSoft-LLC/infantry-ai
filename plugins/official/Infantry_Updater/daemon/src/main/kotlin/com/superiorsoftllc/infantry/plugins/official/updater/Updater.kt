@@ -5,6 +5,7 @@ package com.superiorsoftllc.infantry.plugins.official.updater
 import java.io.File
 import java.nio.file.Files
 import java.security.MessageDigest
+import java.time.Duration
 
 /** UPDATE-1: a newer release, with the Windows installer to download and the checksum asset when the release has one. */
 data class AvailableUpdate(
@@ -37,6 +38,8 @@ class Updater(
     private val config: UpdateConfig,
     private val releases: GitHubReleases = GitHubReleases(),
     private val kind: AssetKind = AssetKind.WindowsInstaller,
+    /** UPDATE-UX-1: how long the download may receive nothing before it is aborted (also the wait for the asset's headers). */
+    private val stallTimeout: Duration = DEFAULT_STALL_TIMEOUT,
 ) : UpdateSource {
 
     override fun check(): UpdateCheck {
@@ -51,46 +54,71 @@ class Updater(
         return UpdateCheck.Available(AvailableUpdate(config.currentVersion, latest, release, installer, checksumAsset(release.assets, installer)))
     }
 
+    override fun download(update: AvailableUpdate, into: File): Fetched<VerifiedInstaller> = download(update, into, DownloadProgress.NONE)
+
     /**
-     * Download [update]'s installer into a fresh temp dir and verify it: the byte count must equal the asset's
-     * size, and its SHA-256 must equal the checksum asset's when the release publishes one. Anything else deletes the
-     * file and is refused ([UpdateFailure.BadAsset]).
+     * Download [update]'s installer into [into] and verify it: the byte count must equal the asset's size, and its
+     * SHA-256 must equal the checksum asset's when the release publishes one. Anything else deletes the file and is
+     * refused ([UpdateFailure.BadAsset]).
+     *
+     * UPDATE-UX-1: [progress] hears every step and the byte count as it grows. A read that gets no byte for
+     * [stallTimeout] is aborted ([UpdateFailure.Offline] "download stalled"), so a dead connection never leaves the
+     * download hanging forever.
      */
-    override fun download(update: AvailableUpdate, into: File): Fetched<VerifiedInstaller> {
+    override fun download(update: AvailableUpdate, into: File, progress: DownloadProgress): Fetched<VerifiedInstaller> {
         val asset = update.installer
         if (asset.size !in 1..MAX_INSTALLER_BYTES) return Fetched.Failed(UpdateFailure.BadAsset("${asset.name} reports ${asset.size} bytes"))
         val expected = update.checksum?.let { sum ->
+            progress.note("reading ${sum.name}")
             when (val text = readChecksum(sum)) {
                 is Fetched.Failed -> return text
                 is Fetched.Ok -> parseChecksum(text.value, asset.name)
                     ?: return Fetched.Failed(UpdateFailure.BadAsset("${sum.name} has no SHA-256 for ${asset.name}"))
             }
         }
+        progress.note(if (expected != null) "${update.checksum?.name} says ${asset.name} has SHA-256 $expected" else "the release publishes no SHA-256; checking the size only")
         into.mkdirs()
         val target = File(into, File(asset.name).name)
-        val response = when (val got = releases.openAsset(asset, config)) {
+        progress.note("requesting ${asset.name} (${asset.size} bytes) from ${asset.url ?: asset.browserDownloadUrl}")
+        val response = when (val got = releases.openAsset(asset, config, stallTimeout)) {
             is Fetched.Failed -> return got
             is Fetched.Ok -> got.value
         }
+        progress.note("HTTP ${response.statusCode()} from ${response.uri().host}; writing $target")
         val digest = MessageDigest.getInstance("SHA-256")
         var written = 0L
-        try {
+        progress.bytes(0, asset.size)
+        val stalled = try {
             response.body().use { input ->
-                target.outputStream().use { out ->
-                    val buffer = ByteArray(64 * 1024)
-                    while (true) {
-                        val n = input.read(buffer)
-                        if (n < 0) break
-                        written += n
-                        if (written > asset.size) break
-                        digest.update(buffer, 0, n)
-                        out.write(buffer, 0, n)
+                StallWatch(stallTimeout.toMillis(), onStall = { runCatching { input.close() } }).use { watch ->
+                    try {
+                        target.outputStream().use { out ->
+                            val buffer = ByteArray(64 * 1024)
+                            while (true) {
+                                val n = input.read(buffer)
+                                if (n < 0) break
+                                watch.alive()
+                                written += n
+                                if (written > asset.size) break
+                                digest.update(buffer, 0, n)
+                                out.write(buffer, 0, n)
+                                progress.bytes(written, asset.size)
+                            }
+                        }
+                        false
+                    } catch (io: java.io.IOException) {
+                        if (!watch.fired) throw io
+                        true
                     }
                 }
             }
         } catch (io: java.io.IOException) {
             target.delete()
-            return Fetched.Failed(UpdateFailure.Offline("download interrupted"))
+            return Fetched.Failed(UpdateFailure.Offline("download interrupted after $written of ${asset.size} bytes: ${io.message ?: io::class.simpleName}"))
+        }
+        if (stalled) {
+            target.delete()
+            return Fetched.Failed(UpdateFailure.Offline("download stalled: no data for ${stallTimeout.seconds} s after $written of ${asset.size} bytes"))
         }
         val actual = digest.digest().joinToString("") { "%02x".format(it) }
         val refusal = when {
@@ -133,6 +161,8 @@ class Updater(
         private val SUMS_FILES = setOf("sha256sums", "sha256sums.txt", "checksums.txt")
         const val MAX_INSTALLER_BYTES = 2L * 1024 * 1024 * 1024
         const val MAX_CHECKSUM_BYTES = 64L * 1024
+        /** UPDATE-UX-1: the default for [stallTimeout]: a minute with no byte at all is a dead connection, not a slow one. */
+        val DEFAULT_STALL_TIMEOUT: Duration = Duration.ofSeconds(60)
 
         /** The release's Windows installer: `AgentHQ-<latest>.msi`, else the only `AgentHQ-<x.y.z>.msi` it carries. */
         fun installerAsset(assets: List<ReleaseAsset>, latest: SemVer): ReleaseAsset? {
