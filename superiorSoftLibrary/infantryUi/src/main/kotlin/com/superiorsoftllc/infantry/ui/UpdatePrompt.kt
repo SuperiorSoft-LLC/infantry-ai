@@ -94,7 +94,7 @@ fun UpdatePrompt(service: UpdateService) {
                 dismissButton = { TextButton(onClick = { confirming = null; service.install() }, modifier = Modifier.testTag(UPDATE_ANYWAY_TAG)) { Text("Update anyway") } },
             )
         }
-        val restartNow = {
+        val restartNow: () -> Unit = {
             val prompt = service.installPrompt()
             if (prompt.message != null) confirming = prompt else service.install()
         }
@@ -113,7 +113,7 @@ fun UpdatePrompt(service: UpdateService) {
                     actions = listOf("Restart now" to restartNow, "Later" to { service.dismiss() }), actionTags = listOf(UPDATE_RESTART_TAG, UPDATE_LATER_CARD_TAG))
             }
             is UpdateState.DownloadFailed -> UpdateCard(s.indicatorLabel() ?: "", ToastKind.ERROR, tag = UPDATE_PROGRESS_TAG,
-                actions = listOf("Retry" to { service.retry() }, "Dismiss" to { service.dismiss() }), actionTags = listOf(UPDATE_RETRY_TAG, ""))
+                actions = listOf<Pair<String, () -> Unit>>("Retry" to { service.retry() }, "Dismiss" to { service.dismiss() }), actionTags = listOf(UPDATE_RETRY_TAG, ""))
             is UpdateState.Restarting -> UpdateCard(s.indicatorLabel() ?: "", ToastKind.SUCCESS, progress = UpdateProgress.Indeterminate, tag = UPDATE_PROGRESS_TAG)
             UpdateState.Idle -> Unit
         }

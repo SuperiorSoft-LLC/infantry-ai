@@ -95,7 +95,7 @@ class UpdatePromptUiTest {
             onNodeWithText("View").performClick()
             onNodeWithTag(UPDATE_DIALOG_TAG).assertExists()
             onNodeWithTag(UPDATE_NOW_TAG).performClick()
-            waitUntil(5_000) { (s.state.value as? UpdateState.Downloading)?.percent == 45 }
+            waitUntil(timeoutMillis = 5_000) { (s.state.value as? UpdateState.Downloading)?.percent == 45 }
             waitForIdle()
             // Not modal: the dialog is gone while the download runs; the card carries the progress.
             onNodeWithTag(UPDATE_DIALOG_TAG).assertDoesNotExist()
@@ -103,7 +103,7 @@ class UpdatePromptUiTest {
             onNodeWithTag(UPDATE_FOOTER_TAG).assertDoesNotExist()
             shot("2-downloading")
             gate.countDown()
-            waitUntil(5_000) { s.state.value is UpdateState.Ready }
+            waitUntil(timeoutMillis = 5_000) { s.state.value is UpdateState.Ready }
             waitForIdle()
             onNodeWithText("Ready to install 1.0.7").assertExists()
             onNodeWithTag(UPDATE_RESTART_TAG).assertExists()
