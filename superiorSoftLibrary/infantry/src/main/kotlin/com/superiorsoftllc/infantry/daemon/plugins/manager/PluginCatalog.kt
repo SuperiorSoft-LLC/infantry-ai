@@ -89,7 +89,11 @@ data class CatalogSource(
 }
 
 @Serializable
-data class SourcesFile(val sources: List<CatalogSource> = emptyList())
+data class SourcesFile(
+    val sources: List<CatalogSource> = emptyList(),
+    /** PLUGIN-SOURCES-1: bundled default ids the user removed on purpose (not merged back in); null = a file saved before this field existed. */
+    val removedDefaults: List<String>? = null,
+)
 
 /** `<plugins root>/installed.json`: what the manager installed, from where, and what was consented. */
 @Serializable

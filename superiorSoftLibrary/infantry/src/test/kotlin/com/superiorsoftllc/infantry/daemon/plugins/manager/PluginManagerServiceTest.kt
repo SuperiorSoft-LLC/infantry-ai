@@ -94,6 +94,27 @@ class PluginManagerServiceTest {
         assertEquals(listOf("infantry-official"), manager().sources().map { it.id })
     }
 
+    @Test fun `PLUGIN-SOURCES-1 a legacy saved list gets the defaults, a removed default stays removed, a user URL is kept`() {
+        java.io.File(root, "sources.json").writeText("""{"sources":[{"id":"infantry-official","class":"official","url":"https://mine.example/o.json"},{"id":"mine","class":"community","url":"https://x.example/c.json"}]}""")
+        val m = manager()
+        assertEquals(listOf("infantry-official", "mine", "infantry-community"), m.sources().map { it.id })
+        assertEquals("https://mine.example/o.json", m.sources()[0].url)
+        m.removeSource("infantry-community")
+        assertEquals(listOf("infantry-official", "mine"), manager().sources().map { it.id })
+    }
+
+    @Test fun `PLUGIN-SOURCES-1 refreshIfStale fetches a missing or old cache and skips a fresh one`() {
+        var fetches = 0
+        val f = pack(); val c = catalog(entry(f, "Acme_Echo", "1.0.0", emptyList()))
+        val fetcher = Fetcher { _, dest, max -> fetches++; DefaultFetcher.fetch(File(repo, "catalog.json").path, dest, max) }
+        val m = manager(fetcher); m.setSources(emptyList())
+        m.addSource(CatalogSource("web", "community", url = "https://example.invalid/idx/catalog.json"))
+        assertEquals(1, m.refreshIfStale().size); assertEquals(1, fetches)
+        assertTrue(m.refreshIfStale().isEmpty()); assertEquals(1, fetches)
+        assertEquals(1, m.refreshIfStale(maxAgeMs = 1_000, now = System.currentTimeMillis() + 5_000).size); assertEquals(2, fetches)
+        assertEquals(c.plugins.size, m.search("Acme").size)
+    }
+
     @Test fun `community install needs consent and writes exactly the consented grants`() {
         val f = pack(extra = daemonBlock)
         catalog(entry(f, "Acme_Echo", "1.0.0", listOf("daemon.code", "daemon.tool")))
