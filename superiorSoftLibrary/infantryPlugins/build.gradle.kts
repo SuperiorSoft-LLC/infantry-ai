@@ -28,7 +28,8 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            implementation(libs.kotlinx.coroutines.core)
+            // PLUGIN-HOTSWAP-1: api, PluginScope hands out a CoroutineScope.
+            api(libs.kotlinx.coroutines.core)
             api(libs.kotlinx.serialization.json)
         }
         commonTest.dependencies {

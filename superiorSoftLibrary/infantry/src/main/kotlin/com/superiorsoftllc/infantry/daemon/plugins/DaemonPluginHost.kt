@@ -103,6 +103,8 @@ class DaemonPluginHost private constructor(
         val routeRate: Int = declared.limits.routeRequestsPerMinute ?: services.limit(LimitRegistry.PLUGIN_ROUTE_RATE).toInt()
         val hookKinds = mutableSetOf<String>()
         val closeables = CopyOnWriteArrayList<AutoCloseable>()
+        /** PLUGIN-HOTSWAP-1: [DaemonApi.scope]; closed right after the plugin's stop. */
+        val scope = com.superiorsoftllc.infantry.plugin.api.OwnedPluginScope(id)
         @Volatile var routeWindowStart = 0L
         @Volatile var routeCount = 0
 
@@ -193,6 +195,9 @@ class DaemonPluginHost private constructor(
     private val observerQueue = Executors.newSingleThreadExecutor { r -> Thread(r, "daemon-plugin-observers").apply { isDaemon = true } }
 
     // ---- what core asks ---------------------------------------------------------------------------------------------
+
+    /** PLUGIN-HOTSWAP-1 (tests): a loaded half's class loader, so a test can hold it from outside the way a leak does. */
+    internal fun loaderOf(module: String): ClassLoader? = loaded.firstOrNull { it.id == module }?.loader
 
     /** `module id -> loaded | refused: why | failed: why`, for `GET /plugins`. */
     fun status(module: String): String? = statuses[module]?.let { s -> loaded.firstOrNull { it.id == module }?.guard?.disabledReason?.let { "failed: $it" } ?: s }
@@ -743,8 +748,27 @@ class DaemonPluginHost private constructor(
 
     /** Starts the daemon half of [id], resolving it against the loaded set as boot does. Dependencies must already be loaded. */
     override fun load(id: String): HotOutcome = withSource { load(id, it) }
-    override fun unload(id: String): HotOutcome = synchronized(lifecycle) { unloadLocked(id) }
-    override fun reload(id: String): HotOutcome = withSource { reload(id, it) }
+    override fun unload(id: String): HotOutcome = leakChecked(synchronized(lifecycle) { unloadLocked(id) })
+    override fun reload(id: String): HotOutcome = leakChecked(withSource { reload(id, it) })
+
+    /** PLUGIN-HOTSWAP-1: the class loaders [retire] closed and nobody has checked yet: module id -> weak reference. */
+    private val released = CopyOnWriteArrayList<Pair<String, java.lang.ref.WeakReference<ClassLoader>>>()
+
+    /**
+     * PLUGIN-HOTSWAP-1 (docs/wiki/Plugin-lifecycle.md): after an unload, waits up to `limits.plugins.unloadCheckMs` for each
+     * closed class loader to be collected ([LeakWatch]); one still reachable adds a note that the plugin did not unload
+     * cleanly. The daemon never restarts for it (agents keep running): its old version stays in memory until the next start.
+     * Runs outside the lifecycle lock, so a slow check never holds up another load.
+     */
+    internal fun leakChecked(out: HotOutcome): HotOutcome {
+        val gone = released.toList().also { released.removeAll(it) }
+        val timeout = services.limit(LimitRegistry.PLUGIN_UNLOAD_CHECK_MS)
+        if (gone.isEmpty() || timeout <= 0) return out
+        val leaked = gone.filter { !com.superiorsoftllc.infantry.plugin.host.LeakWatch.collected(it.second, timeout) }.map { it.first }.distinct()
+        if (leaked.isEmpty()) return out
+        leaked.forEach { log("[plugins] $it did not unload cleanly: the old daemon half's class loader is still reachable after $timeout ms (it stays in memory until the next daemon start)") }
+        return out.copy(notes = out.notes + leaked.map { "$it did not unload cleanly: its old daemon half stays in memory until the next daemon start" })
+    }
 
     fun load(id: String, source: HotSource): HotOutcome = synchronized(lifecycle) { loadLocked(id, source) }
 
@@ -834,8 +858,10 @@ class DaemonPluginHost private constructor(
         if (!p.guard.disabled && p.plugin != null) {
             p.call("stop", stopMs) { p.plugin?.stop() }.onFailure { log("[plugins] ${p.id}: stop failed while unloading: ${it.message}") }
         }
+        p.scope.close().forEach { log("[plugins] $it") }
         p.guard.retire(stopMs)
         runCatching { p.loader.close() }.onFailure { log("[plugins] ${p.id}: could not close its class loader: ${it.message}") }
+        released += p.id to java.lang.ref.WeakReference<ClassLoader>(p.loader)
     }
 
     /** EVERYTHING [p] registered, public routes and gates included (a planned unload, unlike a failure, removes its gates). */
@@ -869,6 +895,7 @@ class DaemonPluginHost private constructor(
         for (p in loaded.reversed()) {
             p.closeables.forEach { runCatching { it.close() } }
             if (!p.guard.disabled) p.call("stop", services.limit(LimitRegistry.PLUGIN_STOP_TIMEOUT_MS)) { p.plugin?.stop() }
+            p.scope.close()
             p.guard.shutdown()
             runCatching { p.loader.close() }
         }
@@ -940,6 +967,8 @@ class DaemonPluginHost private constructor(
         routeEntries.entries.removeIf { it.value.owner === p && !it.value.public }
         // Gates stay registered: a disabled gate is fail closed. Observers and providers are skipped while disabled.
         p.closeables.forEach { runCatching { it.close() } }
+        // PLUGIN-HOTSWAP-1: a failed plugin's own work (its scope) stops too.
+        p.scope.close().forEach { log("[plugins] $it") }
     }
 
     private fun load(status: ModuleStatus, config: ModulesConfig, trust: Trust) {
@@ -1045,6 +1074,7 @@ class DaemonPluginHost private constructor(
         override val stateDir: File by lazy { File(this@DaemonPluginHost.stateDir, "plugin-data/${p.id}").apply { mkdirs() } }
 
         override fun log(line: String) = this@DaemonPluginHost.log("[plugin ${p.id}] $line")
+        override val scope: com.superiorsoftllc.infantry.plugin.api.PluginScope get() = p.scope
         override fun config(key: String): String? = hostServices.config(p.id, key)
         override fun env(name: String): String? = if (name in d.env) hostServices.env(name) else { log("env $name is not declared in daemon.env: refused"); null }
         override fun secret(name: String): String? = if (name in d.secrets) hostServices.secret(name) else { log("secret $name is not declared in daemon.secrets: refused"); null }

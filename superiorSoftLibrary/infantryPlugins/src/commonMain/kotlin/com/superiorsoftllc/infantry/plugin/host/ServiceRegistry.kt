@@ -96,17 +96,31 @@ object RouteGate {
 
 /** A plain in-process event bus. Observers run on the publisher's thread; one that throws is skipped, not fatal. */
 class SimpleEventBus(private val log: (String) -> Unit = {}) : EventBus {
-    private val observers = mutableListOf<Pair<String, (PluginEvent) -> Unit>>()
+    /** PLUGIN-HOTSWAP-1: each observer with the module that subscribed it (null = the host). */
+    private class Entry(val owner: String?, val name: String, val observer: (PluginEvent) -> Unit)
+    private val observers = mutableListOf<Entry>()
 
     override fun publish(event: PluginEvent) {
-        val now = observers.filter { it.first == event.name }
-        for ((_, o) in now) runCatching { o(event) }.onFailure { log("[plugins] observer of ${event.name} failed: ${it.message}") }
+        val now = observers.filter { it.name == event.name }
+        for (e in now) runCatching { e.observer(event) }.onFailure { log("[plugins] observer of ${event.name} failed: ${it.message}") }
     }
 
-    override fun subscribe(name: String, observer: (PluginEvent) -> Unit): () -> Unit {
-        val entry = name to observer
-        observers += entry
+    override fun subscribe(name: String, observer: (PluginEvent) -> Unit): () -> Unit = subscribe(null, name, observer)
+
+    /**
+     * PLUGIN-HOTSWAP-1: [observer] of [name] on behalf of module [owner], so [dropOwner] can take it out when that one module
+     * unloads. The same observer object on the same event is subscribed once (a live swap binds the other modules again).
+     */
+    fun subscribe(owner: String?, name: String, observer: (PluginEvent) -> Unit): () -> Unit {
+        val entry = observers.firstOrNull { it.name == name && it.observer === observer } ?: Entry(owner, name, observer).also { observers += it }
         return { observers.remove(entry) }
+    }
+
+    /** PLUGIN-HOTSWAP-1: drops every observer module [owner] subscribed (it unloads); answers how many. */
+    fun dropOwner(owner: String): Int {
+        val before = observers.size
+        observers.removeAll { it.owner == owner }
+        return before - observers.size
     }
 
     /** S7: every observer is dropped (the module set that subscribed them is unloaded). Later publishes reach nobody. */
@@ -124,7 +138,7 @@ class GatedEventBus(private val bus: EventBus, private val module: String, priva
             log("[plugins] $module: observe $name refused: not declared")
             return {}
         }
-        return bus.subscribe(name, observer)
+        return if (bus is SimpleEventBus) bus.subscribe(module, name, observer) else bus.subscribe(name, observer)
     }
 }
 

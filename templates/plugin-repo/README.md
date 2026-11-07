@@ -30,6 +30,13 @@ token with `read:packages` and put `gpr.user=<you>` and `gpr.key=<token>` in `~/
 
     infantry plugin install build/ihq/<Name>.ihq --grant-all-requested
 
+## Unload cleanly (live swap)
+Infantry swaps one plugin live (install, update, enable, disable, remove) without restarting the app or the agents. Start
+coroutines, timers, sockets and listeners through `registrar.scope` (UI half) or `api.scope` (daemon half): they end by
+themselves on unload. Do not keep your objects in a host or JVM-wide singleton, and undo any global listener in
+`scope.onUnload`. A plugin that stays in memory after unload is reported in Settings > Plugins and the app falls back to
+a soft reload. The full do and don't list: the "Plugin lifecycle" page of the Infantry wiki (docs/wiki/Plugin-lifecycle.md).
+
 ## Halves
 * Daemon-only plugin: delete `src/` and the Compose lines in `build.gradle.kts`.
 * UI-only plugin: delete `daemon/` and the `daemon` block in `module.json`.

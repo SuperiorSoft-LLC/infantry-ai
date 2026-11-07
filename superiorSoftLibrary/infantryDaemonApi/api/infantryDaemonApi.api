@@ -103,6 +103,7 @@ public abstract interface class com/superiorsoftllc/infantry/daemon/api/DaemonAp
 	public abstract fun getRoutes ()Lcom/superiorsoftllc/infantry/daemon/api/Routes;
 	public fun getRunnerLinks ()Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinks;
 	public fun getRuns ()Lcom/superiorsoftllc/infantry/daemon/api/runs/Runs;
+	public fun getScope ()Lcom/superiorsoftllc/infantry/plugin/api/PluginScope;
 	public fun getServices ()Lcom/superiorsoftllc/infantry/daemon/api/ServicesApi;
 	public fun getSessionNotifier ()Lcom/superiorsoftllc/infantry/daemon/api/sessions/SessionNotifier;
 	public fun getSessionReads ()Lcom/superiorsoftllc/infantry/daemon/api/sessions/SessionReads;
@@ -140,6 +141,7 @@ public final class com/superiorsoftllc/infantry/daemon/api/DaemonApi$DefaultImpl
 	public static fun getProcesses (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;)Lcom/superiorsoftllc/infantry/daemon/api/processes/Processes;
 	public static fun getRunnerLinks (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;)Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinks;
 	public static fun getRuns (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;)Lcom/superiorsoftllc/infantry/daemon/api/runs/Runs;
+	public static fun getScope (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;)Lcom/superiorsoftllc/infantry/plugin/api/PluginScope;
 	public static fun getServices (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;)Lcom/superiorsoftllc/infantry/daemon/api/ServicesApi;
 	public static fun getSessionNotifier (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;)Lcom/superiorsoftllc/infantry/daemon/api/sessions/SessionNotifier;
 	public static fun getSessionReads (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;)Lcom/superiorsoftllc/infantry/daemon/api/sessions/SessionReads;

@@ -154,7 +154,9 @@ in `<module>/native/<os>-<arch>/` and load with `System.loadLibrary`.
 "modules": { "Acme_Hello": { "enabled": true, "allow": ["events", "storage", "daemon", "notifications"] } }
 ```
 
-3. Restart. A row that did not load says why in one line, and so does the log (`[plugins] Acme_Hello (community): refused - ...`).
+3. Apply it in Settings > Plugins: on the desktop only that plugin is swapped in live, agents and other plugins keep
+   running ([Plugin lifecycle](Plugin-lifecycle.md)); otherwise the shell reloads. A row that did not load says why in
+   one line, and so does the log (`[plugins] Acme_Hello (community): refused - ...`).
 
 `modules.json` also holds `folders` (the folders to scan and their tier) and per-module `allow`, `deny`, and
 `allowOverride`.

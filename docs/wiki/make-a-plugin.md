@@ -265,8 +265,15 @@ Android a plugin must be an official or core module compiled into the build.
 { "modules": { "Acme_Notes": { "enabled": true, "allow": ["notifications", "daemon.code", "daemon.tool"] } } }
 ```
 
-3. Restart. A module that did not load shows a one-line reason in Settings > Plugins and in the log
-   (`[plugins] Acme_Notes (community): refused - ...`).
+3. Apply it in Settings > Plugins. On the desktop the change is swapped in live: only this plugin (and the plugins that
+   depend on it) loads; agents, the board and the other plugins keep running ([Plugin lifecycle](Plugin-lifecycle.md)).
+   Where a live swap cannot apply the change, the shell reloads (the soft restart). A module that did not load shows a
+   one-line reason in Settings > Plugins and in the log (`[plugins] Acme_Notes (community): refused - ...`).
+
+So that your plugin unloads cleanly, start coroutines, timers, sockets and listeners through `registrar.scope` (UI half)
+or `api.scope` (daemon half), never keep a plugin object in a host or JVM-wide singleton, and undo any global listener in
+`scope.onUnload`. A plugin that leaks is detected and falls back to the soft restart; the full do and don't list is in
+[Plugin lifecycle](Plugin-lifecycle.md).
 
 Disable it with `"enabled": false` or in Settings. A module that another enabled module depends on cannot be turned
 off first. A `.ihq` package installs the same way through the Plugins tab (`IhqInstaller`).

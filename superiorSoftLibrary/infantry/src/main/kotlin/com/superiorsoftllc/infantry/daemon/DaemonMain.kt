@@ -483,6 +483,8 @@ class InfantryDaemon(
         watchdogIntervalMs = LimitRegistry.HEALTH_WATCHDOG_INTERVAL_SECONDS.default * 1000L,
         watchdogTimeoutMs = LimitRegistry.HEALTH_WATCHDOG_TIMEOUT_SECONDS.default * 1000L,
     ),
+    /** PLUGIN-HOTSWAP-1 (tests): the running plugin host, so a test can swap one daemon half while sessions run. */
+    internal val pluginHost: () -> com.superiorsoftllc.infantry.daemon.plugins.DaemonPluginHost = { com.superiorsoftllc.infantry.daemon.plugins.DaemonPluginHost.empty() },
 ) {
     @Volatile private var recordedPort: Int? = null
     /** ASK-1: the `defaultAfterMin` sweep, started by [start], stopped by [close]. */
@@ -2206,6 +2208,7 @@ class InfantryDaemon(
                 afterSessions = listOf(plugins),
                 healthSettings = healthSettings,
                 deploymentMode = deploymentMode,
+                pluginHost = { pluginHost.get() },
             )
         }
 
