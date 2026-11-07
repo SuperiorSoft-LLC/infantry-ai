@@ -179,7 +179,10 @@ Never: file contents, diffs, credentials, keystore material. Transcripts cross o
 (setting `runners.transcripts = on-demand`, the cheapest; `stream` is opt-in).
 
 * **Channel:** one WebSocket per runner, carrying the existing `Envelope` (`infantryProtocol`) with a new frame family for
-  the link operations. It reuses the daemon's server, auth hook and codec; the binding plugin owns it.
+  the link operations. It reuses the daemon's server, auth hook and codec; the binding plugin owns it. Since RUNNER-POOL-6a
+  the transport (WebSocket client, wss listener, TLS certificate and pin) lives in the `Infantry_RemoteRunner` plugin
+  (`plugins/official/Infantry_RemoteRunner/daemon`) behind `RunnerLinkTransport` (`hooks.runnerLinkTransport`, DaemonApi
+  1.44.0); core keeps the frames, pairing, credentials, rekey, detach, audit and allow-lists in `runners/`.
 * **Who dials:** in step 1 the **orchestrator dials the runner** (a server is reachable; the PC usually is not). A
   reverse mode (runner dials out to the orchestrator, nothing listens on the runner) is the same link with the dial
   flipped; it is needed for option B / hosted orchestration and for runners behind NAT. After the handshake both modes
@@ -279,6 +282,7 @@ Rate limits on pairing attempts (`runners.pairAttemptsPerHour`, default 5).
 | 2 | RUNNER-POOL-3 | placement data: `runner` on tickets and `RoutingRule`, `runners.*` settings declared, pure `Placement.pick` | none (only `local` resolvable; unknown name refused) |
 | 3 | RUNNER-POOL-4 | session frame carries `runner`; badge on worker card, hidden with one runner | none visible |
 | 4 | RUNNER-POOL-5 | pairing, runner-scoped credential, wss with pinned fingerprint, runner audit log (section 7) | only when paired |
+| 4a | RUNNER-POOL-6a | move the link transport (WebSocket client, wss listener, TLS) out of core into `Infantry_RemoteRunner` behind `RunnerLinkTransport`; `infantry runner pair/add/rotate/detach <name>` go through the daemon as the owner-only `runner_admin` frame | none with the plugin on; without it no link is served and those commands say they need it |
 | 5 | RUNNER-POOL-6 | `Infantry_RemoteRunner` binding: hello/health/start/stop/events over the link; remote clone + push; a ticket pinned `runner: <name>` starts on the server (**the first slice**) | only for pinned tickets |
 | 6 | RUNNER-POOL-7 | frame `side` tag + runner-side forwarding of agent frames (section 2.3), so a remote worker can read its ticket, comment and report | only remote workers |
 | 7 | RUNNER-POOL-8 | event outbox + replay, runner-lost handling, `onLost`, `pushOnCommit` | only remote |

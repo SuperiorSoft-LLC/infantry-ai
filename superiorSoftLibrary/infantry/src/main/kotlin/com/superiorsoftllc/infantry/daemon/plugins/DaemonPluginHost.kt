@@ -143,6 +143,7 @@ class DaemonPluginHost private constructor(
     private val frameGates = CopyOnWriteArrayList<Registered<FrameGateHook>>()
     private val orchestratorBindings = CopyOnWriteArrayList<Registered<Pair<String, com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorBinding>>>()
     private val runnerBindings = CopyOnWriteArrayList<Registered<Pair<String, com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerBinding>>>()
+    private val runnerLinkTransports = CopyOnWriteArrayList<Registered<Pair<String, com.superiorsoftllc.infantry.daemon.api.runners.RunnerLinkTransport>>>()
     private val approvalRuleHooks = CopyOnWriteArrayList<Registered<com.superiorsoftllc.infantry.daemon.api.ApprovalRulesHook>>()
     private val httpGates = CopyOnWriteArrayList<Registered<HttpGateHook>>()
     private val admissions = CopyOnWriteArrayList<Registered<AdmissionHook>>()
@@ -214,6 +215,9 @@ class DaemonPluginHost private constructor(
 
     /** RUNNER-POOL-2: the runner bindings plugins offered (`hooks.runnerBinding`), kept on the runner pool at daemon start. */
     fun runnerBindings(): List<Pair<String, com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerBinding>> = runnerBindings.map { it.value }
+
+    /** RUNNER-POOL-6a: the runner link transport a plugin offers now (`hooks.runnerLinkTransport`; the first one), or null. Read live, so a hot load or unload is seen. */
+    fun runnerLinkTransport(): com.superiorsoftllc.infantry.daemon.api.runners.RunnerLinkTransport? = runnerLinkTransports.firstOrNull()?.value?.second
 
     /** DP-10b: the approval-rule store a plugin offered (the first one), else a port with no rules. Fail open. */
     val approvalRules: com.superiorsoftllc.infantry.daemon.api.ApprovalRulesHook = object : com.superiorsoftllc.infantry.daemon.api.ApprovalRulesHook {
@@ -717,6 +721,7 @@ class DaemonPluginHost private constructor(
         presetHooks.removeIf { it.owner === p }
         orchestratorBindings.removeIf { it.owner === p }
         runnerBindings.removeIf { it.owner === p }
+        runnerLinkTransports.removeIf { it.owner === p }
         eventListeners.removeIf { it.first === p }
         seatClaimants.remove(p)
     }
@@ -1110,6 +1115,7 @@ class DaemonPluginHost private constructor(
             override fun sessions(hook: SessionHook) { declare("sessions"); sessionHooks += Registered(p, hook) }
             override fun orchestratorBinding(providerId: String, binding: com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorBinding) { declare("orchestratorBinding"); orchestratorBindings += Registered(p, providerId to binding) }
             override fun runnerBinding(bindingId: String, binding: com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerBinding) { declare("runnerBinding"); runnerBindings += Registered(p, bindingId to binding) }
+            override fun runnerLinkTransport(transportId: String, transport: com.superiorsoftllc.infantry.daemon.api.runners.RunnerLinkTransport) { declare("runnerLinkTransport"); check(!p.community) { "the runner link transport is official / core only" }; runnerLinkTransports += Registered(p, transportId to transport) }
             override fun policyProvider(hook: PresetProviderHook) { declare("policyProvider"); presetHooks += Registered(p, hook) }
         }
 
@@ -1150,7 +1156,7 @@ class DaemonPluginHost private constructor(
             }
             return params
         }
-        val HOOK_KINDS = setOf("frameGate", "connected", "httpGate", "admission", "mailGate", "incomingMail", "spawnGate", "ready", "turns", "sessions", "policyProvider", "orchestratorBinding", "runnerBinding", "seats", "approvalRules", "status")
+        val HOOK_KINDS = setOf("frameGate", "connected", "httpGate", "admission", "mailGate", "incomingMail", "spawnGate", "ready", "turns", "sessions", "policyProvider", "orchestratorBinding", "runnerBinding", "runnerLinkTransport", "seats", "approvalRules", "status")
         private val METHODS = setOf("GET", "POST", "PUT", "DELETE", "PATCH")
         private val TOOL_NAME = Regex("^[a-z][a-z0-9_]{2,63}$")
         private val READY_KEY = Regex("^[a-zA-Z][a-zA-Z0-9_]{0,31}$")

@@ -1,6 +1,6 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
-package com.superiorsoftllc.infantry.runners
+package com.superiorsoftllc.infantry.plugins.official.remoterunner.daemon
 
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -25,13 +25,13 @@ import javax.net.ssl.SSLEngine
 import javax.net.ssl.X509ExtendedTrustManager
 
 /**
- * RUNNER-POOL-5 (docs/RUNNER-POOL.md section 7): the runner link's TLS. A runner generates ONE self-signed certificate (EC P-256,
+ * RUNNER-POOL-5 (moved to Infantry_RemoteRunner by RUNNER-POOL-6a) (docs/RUNNER-POOL.md section 7): the runner link's TLS. A runner generates ONE self-signed certificate (EC P-256,
  * SHA256withECDSA) on its first pairing, kept as a PKCS12 file in the link folder, its password in the link keystore. The
  * orchestrator never trusts a CA: it pins the certificate's SHA-256 [fingerprint], which `runner pair` prints on the runner's own
  * console and the owner passes to `runner add --fingerprint`. Built with the JDK only (the DER is encoded here), so no TLS library
  * ships in the daemon.
  */
-object RunnerLinkTls {
+object LinkTls {
     const val FILE = "tls.p12"
     private const val ALIAS = "runner-link"
     private const val VALID_YEARS = 20L

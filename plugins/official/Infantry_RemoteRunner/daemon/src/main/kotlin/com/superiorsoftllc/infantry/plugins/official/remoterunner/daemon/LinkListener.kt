@@ -1,8 +1,8 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
-package com.superiorsoftllc.infantry.runners
+package com.superiorsoftllc.infantry.plugins.official.remoterunner.daemon
 
-import com.superiorsoftllc.infantry.protocol.Envelope
+import com.superiorsoftllc.infantry.daemon.api.runners.LinkHandler
 import io.ktor.server.application.install
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.EmbeddedServer
@@ -25,19 +25,18 @@ import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLServerSocket
 import javax.net.ssl.SSLSocket
 import kotlin.concurrent.thread
-import com.superiorsoftllc.infantry.runners.RunnerLinkFrames as F
 
 /**
- * RUNNER-POOL-5: the runner link listener. With [tls] (the default; `runners.allowPlainTailnet` off) it serves **wss**: a JDK
+ * RUNNER-POOL-5 (moved to Infantry_RemoteRunner by RUNNER-POOL-6a): the runner link listener. With [tls] (the default; `runners.allowPlainTailnet` off) it serves **wss**: a JDK
  * [SSLServerSocket] on [host]:[port] terminates TLS with the runner's self-signed certificate and pipes each connection to a
  * WebSocket endpoint bound to loopback only (the daemon's CIO engine has no TLS of its own). With [tls] null it serves plain ws on
  * [host]:[port] directly; only `runners.allowPlainTailnet` asks for that.
  *
- * Every text frame is an [Envelope] request handed to [server]; the connection's [F.CREDENTIAL_HEADER] / [F.ORCHESTRATOR_HEADER]
+ * Every text frame is a [LinkWire.Envelope] request handed to [server]; the connection's [LinkWire.CREDENTIAL_HEADER] / [LinkWire.ORCHESTRATOR_HEADER]
  * say who calls. Nothing else is served: no `/ws`, no routes, no bundle.
  */
-class RunnerLinkListener(
-    private val server: RunnerLinkServer,
+class LinkListener(
+    private val server: LinkHandler,
     private val tls: SSLContext?,
     private val host: String,
     private val port: Int,
@@ -57,19 +56,19 @@ class RunnerLinkListener(
         val e = embeddedServer(CIO, port = innerPort, host = innerHost) {
             install(WebSockets)
             routing {
-                webSocket(F.PATH) {
-                    val credential = call.request.headers[F.CREDENTIAL_HEADER]
-                    val orchestrator = call.request.headers[F.ORCHESTRATOR_HEADER]
+                webSocket(LinkWire.PATH) {
+                    val credential = call.request.headers[LinkWire.CREDENTIAL_HEADER]
+                    val orchestrator = call.request.headers[LinkWire.ORCHESTRATOR_HEADER]
                     val from = if (tls != null) peers[call.request.origin.remotePort] else call.request.origin.remoteAddress
                     for (frame in incoming) {
                         if (frame !is Frame.Text) continue
-                        val request = runCatching { json.decodeFromString(Envelope.serializer(), frame.readText()) }.getOrNull()
+                        val request = runCatching { json.decodeFromString(LinkWire.Envelope.serializer(), frame.readText()) }.getOrNull()
                         val answer = if (request == null) {
-                            RunnerLinkServer.Answer(F.ERROR, "malformed frame")
+                            server.malformed()
                         } else {
                             server.handle(request.type, request.data, orchestrator, credential, from)
                         }
-                        send(Frame.Text(json.encodeToString(Envelope.serializer(), Envelope(answer.type, answer.data, requestId = request?.requestId))))
+                        send(Frame.Text(json.encodeToString(LinkWire.Envelope.serializer(), LinkWire.Envelope(answer.type, answer.data, requestId = request?.requestId))))
                     }
                 }
             }

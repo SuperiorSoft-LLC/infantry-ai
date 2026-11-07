@@ -2,6 +2,7 @@
 // Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.runners
 
+import com.superiorsoftllc.infantry.daemon.api.runners.LinkFailure
 import com.superiorsoftllc.infantry.runners.RunnerLinkFrames as F
 
 /** One orchestrator -> runner link call: (url, pinned fingerprint, orchestrator id, credential, frame type, data) -> answer. */
@@ -12,7 +13,7 @@ fun interface LinkCall {
 /**
  * RUNNER-POOL-5 (docs/RUNNER-POOL.md sections 6 and 7): the ORCHESTRATOR side of pairing: [add] (`infantry runner add`), [rotate]
  * and [rotateDue] (in-band rekey every `limits.runners.credentialRotateDays`), [detach] (`infantry runner detach <name>`).
- * A failure throws [RunnerLinkClient.Failure] or [IllegalArgumentException] with the reason; nothing is stored then.
+ * A failure throws [LinkFailure] or [IllegalArgumentException] with the reason; nothing is stored then.
  */
 class RunnerPeers(
     private val store: RunnerLinkStore,
@@ -31,7 +32,7 @@ class RunnerPeers(
         require(store.runner(name) == null) { "runner '$name' is already paired; `infantry runner detach $name` first" }
         val request = F.PairRequest(code = code, orchestratorId = store.selfId(), orchestratorName = orchestratorName)
         val answer = link.call(url, fingerprint, null, null, F.PAIR, F.json.encodeToString(F.PairRequest.serializer(), request))
-        if (!answer.ok) throw RunnerLinkClient.Failure(answer.data)
+        if (!answer.ok) throw LinkFailure(answer.data)
         val paired = F.json.decodeFromString(F.PairAnswer.serializer(), answer.data)
         val record = PairedRunner(name, url, fingerprint.orEmpty(), paired.credential, clock(), paired.runnerId)
         store.saveRunner(record)
@@ -42,7 +43,7 @@ class RunnerPeers(
     fun rotate(name: String): PairedRunner {
         val r = store.runner(name) ?: throw IllegalArgumentException("no paired runner '$name'")
         val answer = link.call(r.url, r.fingerprint.ifBlank { null }, store.selfId(), r.credential, F.REKEY, "{}")
-        if (!answer.ok) throw RunnerLinkClient.Failure("rekey of '$name' refused: ${answer.data}")
+        if (!answer.ok) throw LinkFailure("rekey of '$name' refused: ${answer.data}")
         val fresh = F.json.decodeFromString(F.RekeyAnswer.serializer(), answer.data)
         val record = r.copy(credential = fresh.credential, issuedAt = fresh.issuedAt)
         store.saveRunner(record)

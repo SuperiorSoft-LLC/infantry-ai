@@ -1793,8 +1793,11 @@ class InfantryDaemon(
             plugins.runnerBindings().forEach { (id, binding) -> runCatching { runnerPool.register(id, binding) }.onFailure { println("[infantry] runner binding '$id' refused: ${it.message}") } }
             // RUNNER-POOL-5 (docs/RUNNER-POOL.md 7): once `infantry runner pair` paired this machine, it serves the runner link (wss,
             // pinned self-signed certificate) to its one orchestrator; on the orchestrator side it rekeys paired runners when due.
-            // A daemon never paired opens nothing.
-            val runnerLinkService = com.superiorsoftllc.infantry.runners.RunnerLinkService(stateDir(), settings::limit, settings::runnerLink, localRunnerLink)
+            // A daemon never paired opens nothing. RUNNER-POOL-6a: the transport is a plugin's (hooks.runnerLinkTransport); with
+            // none loaded nothing is served and the `runner_admin` ops that need one say so.
+            val runnerLinkService = com.superiorsoftllc.infantry.runners.RunnerLinkService(
+                stateDir(), settings::limit, settings::runnerLink, localRunnerLink, transport = { plugins.runnerLinkTransport() },
+            )
             runCatching { runnerLinkService.tick() }
             scheduledTicker(settings.limit(LimitRegistry.RUNNERS_LINK_CHECK_SECONDS) * 1000L) { runCatching { runnerLinkService.tick() } }
             orchestratorHub.select(pluginEnv("INFANTRY_ORCHESTRATOR_PROVIDER")?.trim().orEmpty())?.let { System.err.println(it) }
@@ -1981,6 +1984,7 @@ class InfantryDaemon(
                             processHost = localProcesses,
                             ownerCredential = ownerCredential,
                             plugins = plugins,
+                            runnerLink = runnerLinkService,
                             daemonConfig = daemonConfig,
                             tier = call.attributes.getOrNull(ACCESS_TIER) ?: AccessTier.OWNER,
                             policies = policies,
@@ -2580,6 +2584,8 @@ private suspend fun handleConnection(
     ownerCredential: OwnerCredential? = null,
     /** DAEMON-PLUGINS-1: the daemon plugins: their gates, frames and tools (docs/DAEMON-PLUGINS.md); none by default. */
     plugins: com.superiorsoftllc.infantry.daemon.plugins.DaemonPluginHost = com.superiorsoftllc.infantry.daemon.plugins.DaemonPluginHost.empty(),
+    /** RUNNER-POOL-6a: answers the owner-only `runner_admin` frame (`infantry runner`); null = this daemon serves none. */
+    runnerLink: com.superiorsoftllc.infantry.runners.RunnerLinkService? = null,
     /** CONFIG-8 (1.142.0): the daemon's declared config (`config_*` frames); the default declares nothing. */
     daemonConfig: DaemonConfig,
     /** SANDBOX-1: what this connection was admitted as; an AGENT (the scoped token) may send only [AgentFrames.ALLOWED]. */
@@ -2602,6 +2608,18 @@ private suspend fun handleConnection(
     ) == true
     val outgoing = Channel<Envelope>(Channel.UNLIMITED)
     clients.add(outgoing)
+    // RUNNER-POOL-6a: `infantry runner pair|add|rotate|detach <name>` (FrameGate.OWNER_ONLY); the link calls block, so off the loop.
+    runnerLink?.let { link ->
+        frames.register(com.superiorsoftllc.infantry.runners.RunnerLinkService.ADMIN) { env, _ ->
+            val request = runCatching { json.parseToJsonElement(env.data) as kotlinx.serialization.json.JsonObject }.getOrNull()
+                ?: return@register Envelope(Envelope.ERROR, "runner_admin: the data must be a JSON object", requestId = env.requestId)
+            session.launch(kotlinx.coroutines.Dispatchers.IO) {
+                val answer = link.admin(request)
+                outgoing.trySend(Envelope(com.superiorsoftllc.infantry.runners.RunnerLinkService.ADMIN, answer.toString(), requestId = env.requestId))
+            }
+            null
+        }
+    }
     // DAEMON-PLUGINS-1: a plugin tool's own requests on this connection (requestId `plugin:<uuid>`, fed to [inbound]) are
     // answered to the waiting tool, never sent to the client.
     val pluginWaiters = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.CompletableDeferred<Envelope>>()

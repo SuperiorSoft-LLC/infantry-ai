@@ -196,7 +196,9 @@ interface DaemonApi {
         // held to its own project by the host (named events carry `projectId`).
         // 1.43.0 (RUNNER-POOL-2, additive): RunnerLink command contract 1.0.0 (hello/startSession/stopSession/deliverMail/health),
         // LocalRunnerLink, RunnerPool / RunnerHub, `hooks.runnerBinding`.
-        const val VERSION = "1.43.0"
+        // 1.44.0 (RUNNER-POOL-6a, additive): daemon.api.runners.RunnerLinkTransport (LinkAnswer, LinkFailure, LinkTlsMaterial,
+        // LinkHandler, LinkServing) and `hooks.runnerLinkTransport`: the runner link transport is a plugin's.
+        const val VERSION = "1.44.0"
     }
 }
 
@@ -635,4 +637,10 @@ interface Hooks {
      * keeps it on the runner pool at start. Placement onto it arrives with RUNNER-POOL-3; until then it changes nothing. Default: ignored.
      */
     fun runnerBinding(bindingId: String, binding: com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerBinding) {}
+
+    /**
+     * RUNNER-POOL-6a (1.44.0, additive): offer the runner link's transport under [transportId] (declare `runnerLinkTransport` in
+     * `daemon.hooks`); the daemon serves and calls the link through the first one offered. Default: ignored.
+     */
+    fun runnerLinkTransport(transportId: String, transport: com.superiorsoftllc.infantry.daemon.api.runners.RunnerLinkTransport) {}
 }

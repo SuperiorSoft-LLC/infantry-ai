@@ -56,6 +56,7 @@ that is renamed or deleted must leave the table. Lines in PLUGIN_NOW/PLUGIN_LATE
 | `notify` | the spoken-push frame helper of the protocol |
 | `provider` | AgentProvider abstraction used by SessionManager; the concrete providers in it follow `claude` and `opencode` |
 | `orchestration` | the pod/node DAG scheduler (orchestrator side, section 6) and `OrchestratorLink`, the seam |
+| `runners` | the runner link's meaning (RUNNER-POOL-5): frames, pairing, credentials, rekey, detach, audit, allow-lists; since RUNNER-POOL-6a its transport is the `Infantry_RemoteRunner` plugin's (`hooks.runnerLinkTransport`) |
 
 **PLUGIN NOW** (mechanism exists, only the move is left): `memory` (a Knowledge
 plugin); `images` (Infantry_Chat).

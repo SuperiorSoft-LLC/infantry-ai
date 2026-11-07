@@ -8,18 +8,16 @@ import kotlinx.serialization.json.Json
 
 /**
  * RUNNER-POOL-5: the runner link frame family (`runner_link_*`, [FrameGate.RUNNER_LINK_PREFIX]). Each request is one
- * `Envelope(type, data = JSON, requestId)` over the link WebSocket; the answer is [REPLY] (data = the answer JSON) or [ERROR]
- * (data = the reason), echoing the request id. The credential travels in the connection's [CREDENTIAL_HEADER] and the caller's id
- * in [ORCHESTRATOR_HEADER], never in a frame body; [PAIR] is the only frame accepted without them.
+ * `(type, data = JSON)` frame over the link connection; the answer is [REPLY] (data = the answer JSON) or [ERROR] (data = the
+ * reason). The credential and the caller's id travel beside the frame (the transport carries them, never in a frame body);
+ * [PAIR] is the only frame accepted without them. RUNNER-POOL-6a: the transport itself (path, headers, TLS) is a plugin's
+ * ([com.superiorsoftllc.infantry.daemon.api.runners.RunnerLinkTransport], Infantry_RemoteRunner).
  *
  * Wire contract between machines on different app versions: [CONTRACT] is exchanged by [HELLO]; a later step adds operations as
  * minor bumps (docs/RUNNER-POOL.md section 10).
  */
 object RunnerLinkFrames {
     const val CONTRACT = "1.0.0"
-    const val PATH = "/runner-link"
-    const val CREDENTIAL_HEADER = "X-Infantry-Runner-Credential"
-    const val ORCHESTRATOR_HEADER = "X-Infantry-Orchestrator"
 
     const val PAIR = "runner_link_pair"
     const val HELLO = "runner_link_hello"

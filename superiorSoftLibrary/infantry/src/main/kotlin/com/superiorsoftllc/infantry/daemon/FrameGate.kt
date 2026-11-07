@@ -24,6 +24,8 @@ object FrameGate {
         Envelope.SECRET_FIELD_SET, Envelope.SECRET_FIELD_DELETE, Envelope.SECRET_DELETE, Envelope.SECRET_MOVE,
         // PLUGIN-ENDPOINTS-2 (1.138.0): the one frame that hands a stored value back.
         Envelope.PLUGIN_SECRET_GET,
+        // RUNNER-POOL-6a: `infantry runner pair|add|rotate|detach <name>` through the daemon (pairing, credentials).
+        com.superiorsoftllc.infantry.runners.RunnerLinkService.ADMIN,
     )
 
     /** Why a frame of [type] is refused on this connection, or null when it may be dispatched. */

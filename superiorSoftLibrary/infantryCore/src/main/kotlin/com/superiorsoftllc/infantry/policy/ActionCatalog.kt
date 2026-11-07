@@ -24,6 +24,8 @@ object ActionCatalog {
     const val POLICY_GET = "policy_get"
     const val POLICY_SET = "policy_set"
     const val PLUGIN_TOOLS = "plugin_tools"
+    /** RUNNER-POOL-6a: `infantry runner pair|add|rotate|detach <name>` through the daemon (owner-only; not a `runner_link_` frame). */
+    const val RUNNER_ADMIN = "runner_admin"
 
     private fun a(id: String, kind: String, vararg frames: String, scope: Scope = Scope.GLOBAL) = Action(id, kind, frames.toList(), scope)
 
@@ -143,11 +145,12 @@ object ActionCatalog {
         a("harness.install", WRITE, E.HARNESS_INSTALL),
         a("policy.set", WRITE, POLICY_SET),
 
-        // Owner-only (FrameGate.OWNER_ONLY): saved commands, runs, secrets.
+        // Owner-only (FrameGate.OWNER_ONLY): saved commands, runs, secrets, the runner link's pairing (RUNNER-POOL-6a).
         a("commands.save", WRITE, E.COMMAND_SAVE, E.COMMAND_DELETE),
         a("runs.start", SPAWN, E.RUN_START, E.RUN_ATTACH, E.RUN_RESIZE, E.RUN_INPUT),
         a("runs.stop", DESTRUCTIVE, E.RUN_STOP),
         a("secrets.save", WRITE, E.SECRET_SET, E.SECRET_CLEAR, E.SECRET_IMPORT, E.SECRET_FIELD_SET, E.SECRET_FIELD_DELETE, E.SECRET_DELETE),
+        a("runners.admin", WRITE, RUNNER_ADMIN),
     )
 
     private val byFrame: Map<String, Action> = buildMap {
