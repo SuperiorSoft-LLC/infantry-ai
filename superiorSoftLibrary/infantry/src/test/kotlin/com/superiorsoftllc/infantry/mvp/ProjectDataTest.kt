@@ -92,3 +92,39 @@ class ProjectDataTest {
         }
     }
 }
+
+/** RUNNER-POOL-3: a routing rule's `runner` survives the project store, and old JSON without it still loads. */
+class RoutingRuleRunnerRoundTripTest {
+    @Test
+    fun runnerRoundTripsAndAbsentStaysNull() {
+        val state = Files.createTempDirectory("infantry-rp3-").toFile()
+        try {
+            val dbPath = File(state, "infantry.db").absolutePath
+            val first = InfantryDatabaseFactory.open(dbPath)
+            val id = ProjectStore(persistence = SqlProjectPersistence(first.database), idFactory = { "p1" }).let {
+                val pid = it.save(ProjectSave(name = "P")).id
+                it.setRoutingRules(pid, listOf(
+                    com.superiorsoftllc.infantry.protocol.RoutingRule("heavy", weights = listOf(5), provider = "x", model = "m", runner = "server-1"),
+                    com.superiorsoftllc.infantry.protocol.RoutingRule("default", provider = "x", model = "m"),
+                )) { it }
+                pid
+            }
+            first.close()
+            val second = InfantryDatabaseFactory.open(dbPath)
+            try {
+                val rules = ProjectStore(persistence = SqlProjectPersistence(second.database)).get(id).routingRules
+                assertEquals("server-1", rules[0].runner)
+                assertNull(rules[1].runner)
+            } finally {
+                second.close()
+            }
+        } finally {
+            runCatching { state.deleteRecursively() }
+        }
+        // An old stored rule (no `runner` key) decodes with runner = null.
+        val old = kotlinx.serialization.json.Json.decodeFromString(
+            com.superiorsoftllc.infantry.protocol.RoutingRule.serializer(), """{"name":"d","provider":"x","model":"m"}""",
+        )
+        assertNull(old.runner)
+    }
+}

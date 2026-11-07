@@ -54,6 +54,8 @@ data class TicketRow(
     /** AGENT-TASKS-3: the agent profile whose persistent queue holds this ticket, and its place there. */
     val queuedAgent: String? = null,
     val queueRank: Int? = null,
+    /** RUNNER-POOL-3: the runner pin `local` | <name> | `any`; null = no pin. */
+    val runner: String? = null,
 ) {
     init {
         require(position >= 0) { "position must be >= 0, was $position" }

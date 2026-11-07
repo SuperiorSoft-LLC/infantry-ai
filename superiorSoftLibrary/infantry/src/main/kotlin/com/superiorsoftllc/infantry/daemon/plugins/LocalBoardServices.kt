@@ -150,7 +150,7 @@ class LocalBoardServices(
             val save = TicketSave(
                 title = draft.title, description = draft.description, projectId = projectId, epicId = draft.epicId, ticketType = draft.ticketType,
                 agentId = draft.agentId, provider = draft.provider, model = draft.model, weight = draft.weight, images = draft.images, status = draft.status,
-                contextLimit = draft.contextLimit, effort = draft.effort,
+                contextLimit = draft.contextLimit, effort = draft.effort, runner = draft.runner,
             )
             val created = b.save(save)
             key?.let { createKeys[it] = created.id }
@@ -161,7 +161,7 @@ class LocalBoardServices(
             val save = TicketSave(
                 id = t.id, title = patch.title, description = patch.description, ticketType = patch.ticketType, epicId = patch.epicId,
                 agentId = patch.agentId, provider = patch.provider, model = patch.model, weight = patch.weight, images = patch.images,
-                contextLimit = patch.contextLimit, effort = patch.effort,
+                contextLimit = patch.contextLimit, effort = patch.effort, runner = patch.runner,
             )
             BoardResult.Ok(info(b.save(save)))
         }
@@ -355,7 +355,7 @@ class LocalBoardServices(
             contextLimit = t.contextLimit, effectiveContextLimit = t.effectiveContextLimit?.value,
             effectiveContextLimitSource = t.effectiveContextLimit?.source, contextLimitSupport = t.effectiveContextLimit?.support,
             effort = t.effort, effectiveEffort = t.effectiveEffort?.value, effectiveEffortSource = t.effectiveEffort?.source,
-            effortSupport = t.effectiveEffort?.support,
+            effortSupport = t.effectiveEffort?.support, runner = t.runner,
         )
 
         fun info(e: Epic) = EpicInfo(e.id, e.projectId, e.name, e.goal, e.storyIds, e.baseBranch)

@@ -57,7 +57,9 @@ CREATE TABLE IF NOT EXISTS tickets (
     effort TEXT,
     -- AGENT-TASKS-3 (57.sqm): the agent profile whose persistent queue holds this todo ticket, and its place (lowest first); NULL = in no queue.
     queued_agent TEXT,
-    queue_rank INTEGER
+    queue_rank INTEGER,
+    -- RUNNER-POOL-3 (59.sqm): the runner pin `local` | <name> | `any`; NULL = no pin.
+    runner TEXT
 );
 
 CREATE INDEX IF NOT EXISTS index_tickets_on_status ON tickets(status, position);
@@ -84,12 +86,12 @@ insertTicket:
 INSERT INTO tickets(
     id, title, description, ticket_type, status, position, wont_fix, agent_id, provider, model, use_worktree,
     worktree_branch, include_linked_tasks_context, queued_for, queued_at, session_id, created_at, updated_at, project_id, epic_id,
-    branch_name, base_commit, skill_ids, skills_mode, include_skills_context, started_by, images, weight, context_limit, effort, queued_agent, queue_rank
+    branch_name, base_commit, skill_ids, skills_mode, include_skills_context, started_by, images, weight, context_limit, effort, queued_agent, queue_rank, runner
 )
 VALUES (
     :id, :title, :description, :ticket_type, :status, :position, :wont_fix, :agent_id, :provider, :model,
     :use_worktree, :worktree_branch, :include_linked_tasks_context, :queued_for, :queued_at, :session_id,
-    :created_at, :updated_at, :project_id, :epic_id, :branch_name, :base_commit, :skill_ids, :skills_mode, :include_skills_context, :started_by, :images, :weight, :context_limit, :effort, :queued_agent, :queue_rank
+    :created_at, :updated_at, :project_id, :epic_id, :branch_name, :base_commit, :skill_ids, :skills_mode, :include_skills_context, :started_by, :images, :weight, :context_limit, :effort, :queued_agent, :queue_rank, :runner
 );
 
 -- Overwrites everything but id and created_at.
@@ -124,7 +126,8 @@ UPDATE tickets SET
     context_limit = :context_limit,
     effort = :effort,
     queued_agent = :queued_agent,
-    queue_rank = :queue_rank
+    queue_rank = :queue_rank,
+    runner = :runner
 WHERE id = :id;
 
 getTicketById:

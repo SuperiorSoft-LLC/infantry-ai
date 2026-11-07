@@ -93,6 +93,7 @@ internal object WireTickets {
             effectiveContextLimitSource = str(limit, "source"),
             contextLimitSupport = str(limit, "support"),
             effort = str(o, "effort"),
+            runner = str(o, "runner"),
             effectiveEffort = str(effort, "value"),
             effectiveEffortSource = str(effort, "source"),
             effortSupport = str(effort, "support"),

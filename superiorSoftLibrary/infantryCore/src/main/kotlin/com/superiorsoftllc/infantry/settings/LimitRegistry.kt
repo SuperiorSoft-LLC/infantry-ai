@@ -195,6 +195,27 @@ object LimitRegistry {
         zeroMeans = "no agent queue: adding is refused",
     )
 
+    /** RUNNER-POOL-3 (docs/RUNNER-POOL.md section 8): how often a remote runner is expected to report its health. */
+    val RUNNERS_HEARTBEAT_SEC = LimitDef(
+        "limits.runners.heartbeatSec", 30, "seconds",
+        "How often a registered runner must report in; a runner silent for longer is degraded. Longer = cheaper.",
+        min = 1, zeroIsUnlimited = false,
+    )
+
+    /** RUNNER-POOL-3: how long a runner may stay silent before it counts as down and takes no new starts. */
+    val RUNNERS_LOST_AFTER_SEC = LimitDef(
+        "limits.runners.lostAfterSec", 120, "seconds",
+        "How long a registered runner may be silent before it is down: only up runners receive new ticket starts.",
+        min = 1, zeroIsUnlimited = false,
+    )
+
+    /** RUNNER-POOL-3: the default of `runners.<name>.maxWorkers`, workers one runner runs at once. */
+    val RUNNER_MAX_WORKERS = LimitDef(
+        "limits.runners.maxWorkers", 1, "workers",
+        "How many ticket workers one runner runs at once unless runners.<name>.maxWorkers says otherwise.",
+        min = 1, zeroIsUnlimited = false,
+    )
+
     /** CHAT-QUEUE-1: how many messages one session holds while its turn runs. */
     val CHAT_QUEUE_MAX = LimitDef(
         "limits.chat.queueMax", 20, "messages",
@@ -778,7 +799,7 @@ object LimitRegistry {
         USAGE_STALE_MAX_HOURS, USAGE_BACKOFF_MAX_MINUTES, USAGE_MANUAL_REFRESH_FLOOR_SECONDS,
         BUILD_MAX_WORKERS, BUILD_MAX_PARALLEL_FORKS, CPU_ALERT_PERCENT, CPU_ALERT_MINUTES,
         TICKET_DEADLINE_MINUTES, UNATTENDED_DEADLINE_MINUTES, STALL_MINUTES, KILL_RETRY_MINUTES, SILENT_MINUTES, PROGRESS_STALE_MINUTES, IDLE_NUDGE_MINUTES, MAIL_WAKE_MAX_SECONDS, IDLE_NOTICE_MINUTES, IDLE_COMMENT, UNBRIEFED_GRACE_MINUTES,
-        UNASSIGN_WAIT_SECONDS, HANDOFF_COMMITS, HANDOFF_CHARS, AGENT_QUEUE_MAX, CHAT_QUEUE_MAX, CHAT_SEND_ACK_SECONDS, CHAT_SENT_IDS_KEPT, CHAT_HISTORY_FRAMES,
+        UNASSIGN_WAIT_SECONDS, HANDOFF_COMMITS, HANDOFF_CHARS, AGENT_QUEUE_MAX, RUNNERS_HEARTBEAT_SEC, RUNNERS_LOST_AFTER_SEC, RUNNER_MAX_WORKERS, CHAT_QUEUE_MAX, CHAT_SEND_ACK_SECONDS, CHAT_SENT_IDS_KEPT, CHAT_HISTORY_FRAMES,
         AUTO_DONE_MIN_OUTPUTS, PROCESS_WATCH_INTERVAL_SECONDS, PROCESS_STOP_GRACE_SECONDS, PROCESS_STUCK_MINUTES, RUN_SCROLLBACK_BYTES, RUN_HISTORY,
         RUN_INPUT_BYTES_PER_SECOND, RUN_INPUT_MAX_FRAME_BYTES, RUN_INPUT_QUEUE_BYTES, RUN_MAX_COLS, RUN_MAX_ROWS,
         QUESTION_TTL_MINUTES, BG_NOTIFY_TAIL_LINES, BG_NOTIFY_TIMEOUT_MINUTES, BG_NOTIFY_PATTERN_GRACE_SECONDS,

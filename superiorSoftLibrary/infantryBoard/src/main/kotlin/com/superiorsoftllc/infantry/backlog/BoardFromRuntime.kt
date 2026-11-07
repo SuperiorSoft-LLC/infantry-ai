@@ -80,6 +80,10 @@ object BoardFromRuntime {
                 runCatching { WeightContext.parse(json.parseToJsonElement(stored)) }.getOrDefault(WeightContext.DEFAULT)
             },
             laneCap = runtime::laneCap,
+            runnersDefault = {
+                runtime.setting("runners.default")?.let { runCatching { (json.parseToJsonElement(it) as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }.getOrNull() }
+                    ?.takeIf { it.isNotBlank() } ?: "local"
+            },
             routingRules = { projectId ->
                 runCatching { json.decodeFromString(ListSerializer(RoutingRule.serializer()), runtime.routingRules(projectId)) }.getOrDefault(emptyList())
             },

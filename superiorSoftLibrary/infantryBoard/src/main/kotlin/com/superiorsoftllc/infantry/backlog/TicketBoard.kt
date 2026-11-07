@@ -143,6 +143,10 @@ class TicketBoard(
     private val weightContext: () -> com.superiorsoftllc.infantry.settings.WeightContext = { com.superiorsoftllc.infantry.settings.WeightContext.DEFAULT },
     /** LANE-CAPS: the most agents of a role that may run at once in a project (1 = one per role, today's behaviour). */
     private val laneCap: (projectId: String?, role: String) -> Int = { _, _ -> 1 },
+    /** RUNNER-POOL-3: `runners.default`, read at every start (`local` unless set). */
+    private val runnersDefault: () -> String = { com.superiorsoftllc.infantry.settings.Placement.LOCAL },
+    /** RUNNER-POOL-3: the registered runners (RUNNER-POOL-2's pool fills this); today only `local`. */
+    private val runnerEntries: () -> List<com.superiorsoftllc.infantry.settings.RunnerEntry> = { listOf(com.superiorsoftllc.infantry.settings.RunnerEntry(com.superiorsoftllc.infantry.settings.Placement.LOCAL)) },
     /** ROUTING-1 (contract 1.128.0): a project's routing rules, in order (empty = none), read at every start and view. */
     private val routingRules: (projectId: String?) -> List<com.superiorsoftllc.infantry.protocol.RoutingRule> = { emptyList() },
     /**
@@ -928,6 +932,11 @@ class TicketBoard(
             com.superiorsoftllc.infantry.protocol.TicketContextLimit.CLEAR -> null
             else -> request.contextLimit.also { v -> com.superiorsoftllc.infantry.daemon.api.board.ContextLimits.problem(v)?.let { throw IllegalArgumentException(it) } }
         }
+        // RUNNER-POOL-3: absent or null keeps the pin, "" / none clears it, local | any | a runner name sets it.
+        val runner = request.runner?.trim()?.lowercase()?.let { v ->
+            if (v.isEmpty() || v == com.superiorsoftllc.infantry.protocol.TicketRunner.CLEAR) null
+            else v.also { com.superiorsoftllc.infantry.protocol.TicketRunner.problem(it)?.let { m -> throw IllegalArgumentException(m) } }
+        } ?: if (request.runner == null) existing?.runner else null
         // EFFORT-1: absent or null keeps the effort, "" / off / default clears it, a level sets it; an unknown level refuses the save.
         val effort = if (request.effort == null) existing?.effort else {
             val parsed = com.superiorsoftllc.infantry.session.EffortLevels.parse(request.effort)
@@ -969,6 +978,7 @@ class TicketBoard(
                         weight = weight,
                         contextLimit = contextLimit,
                         effort = effort,
+                        runner = runner,
                     ),
                 )
             } else {
@@ -992,6 +1002,7 @@ class TicketBoard(
                     weight = weight,
                     contextLimit = contextLimit,
                     effort = effort,
+                    runner = runner,
                     queuedFor = if (agentId != row.agentId) null else row.queuedFor,
                     queuedAt = if (agentId != row.agentId) null else row.queuedAt,
                 )
@@ -1239,6 +1250,12 @@ class TicketBoard(
                 return refusedStart(initialTicket, detail)
             }
         }
+        // RUNNER-POOL-3: pin > rule > runners.default. With only `local` registered every start resolves to local;
+        // a named runner that is unknown, down or full refuses the start (no silent fallback).
+        val placed = com.superiorsoftllc.infantry.settings.Placement.pick(
+            row.runner, ruleRunnerOf(row), runnersDefault(), runnerEntries(), row.projectId, providerId,
+        )
+        if (placed is com.superiorsoftllc.infantry.settings.PlacementResult.Refused) return refusedStart(initialTicket, placed.reason)
         host.sessions.checkSpawn(providerId, model)?.let { return refusedStart(initialTicket, it) }
         // Story 9.7b: a drained queue is an UNATTENDED launch (startNew refuses it over a spent budget or an
         // exhausted provider); a human move or start-next is only warned, and still starts.
@@ -2238,6 +2255,7 @@ class TicketBoard(
                 queuedAt = row.queuedAt,
                 queuedAgent = row.queuedAgent,
                 queueRank = row.queueRank,
+                runner = row.runner,
                 queuedAgentName = row.queuedAgent?.let { runCatching { host.agents.get(it)?.name }.getOrNull() },
                 sessionId = row.sessionId,
                 hasWork = hasWork(row),
@@ -2307,6 +2325,14 @@ class TicketBoard(
         if (rules.isEmpty()) return null
         val role = row.agentId?.let { a -> if (a.startsWith("role:")) a.removePrefix("role:") else ticketProfile(a)?.role }
         return RoutingRules.match(rules, row.weight, row.ticketType, role)
+    }
+
+    /** RUNNER-POOL-3: the matching routing rule's `runner`, whether or not the ticket pins its own executor. */
+    private fun ruleRunnerOf(row: TicketRow): String? {
+        val rules = routingRules(row.projectId)
+        if (rules.isEmpty()) return null
+        val role = row.agentId?.let { a -> if (a.startsWith("role:")) a.removePrefix("role:") else ticketProfile(a)?.role }
+        return RoutingRules.match(rules, row.weight, row.ticketType, role)?.runner
     }
 
     private fun effectiveExecutor(row: TicketRow): EffectiveExecutor? {

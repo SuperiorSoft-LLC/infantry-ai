@@ -75,6 +75,8 @@ data class StoredTicket(
     /** AGENT-TASKS-3: the agent profile whose persistent queue holds this todo ticket, and its place there (lowest first). */
     val queuedAgent: String? = null,
     val queueRank: Int? = null,
+    /** RUNNER-POOL-3: the runner pin `local` | <name> | `any`; null = no pin. */
+    val runner: String? = null,
 )
 
 /** One stored link, read "[ticketId] [type] [relatedId]". */

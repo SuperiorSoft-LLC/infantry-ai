@@ -104,6 +104,8 @@ data class RoutingRule(
     val effort: String? = null,
     /** The role a ticket with no role is started as; null = none (such a ticket is then refused as today). */
     val setRole: String? = null,
+    /** RUNNER-POOL-3: where a ticket matching this rule starts: `local`, a registered runner name or `any`; null = the rule has no say (`runners.default` applies). */
+    val runner: String? = null,
 )
 
 /**
