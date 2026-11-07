@@ -2,6 +2,7 @@
 // Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.daemon
 
+import com.superiorsoftllc.infantry.settings.LimitRegistry
 import com.superiorsoftllc.infantry.mailbox.JsonMailStore
 import com.superiorsoftllc.infantry.context.TicketContext
 import com.superiorsoftllc.infantry.persistence.InfantryStore
@@ -305,6 +306,11 @@ class DaemonFixture private constructor(
                 com.superiorsoftllc.infantry.worktree.TicketBaseRef.fixed(com.superiorsoftllc.infantry.worktree.TicketBaseRef.HEAD),
             /** BUG-FLAKE-1: runs between build() and start(), while the port is chosen but the server has not bound it. */
             beforeStart: (InfantryDaemon) -> Unit = {},
+            /**
+             * USAGE-REGRESS-1: production holds mail for a resting session `limits.mail.wakeDebounceSeconds` (20) so it rides
+             * in one turn. A test asserts the state right after a send, so the fixture wakes at once (0) unless it says otherwise.
+             */
+            mailWakeDebounceSeconds: Long = 0,
             /** BUG-PORT-0: the mail base override; null = the daemon's own default (`http://<host>:<port>`). */
             mailBaseUrl: String? = "http://127.0.0.1:1",
             /**
@@ -382,6 +388,15 @@ class DaemonFixture private constructor(
                 mode = mode,
                 daemonStateDir = stateDir,
                 policies = policies?.invoke(stateDir) ?: com.superiorsoftllc.infantry.policy.PolicyRuntime(emptyList(), { null }, null, stateDir),
+            )
+            daemon.store.settings.put(
+                com.superiorsoftllc.infantry.persistence.SettingRow(
+                    LimitRegistry.MAIL_WAKE_DEBOUNCE_SECONDS.key, mailWakeDebounceSeconds.toString(), System.currentTimeMillis(),
+                ),
+            )
+            // MAIL-TRUNC-1: production injects a "NEW MAIL" notice (no body) into a wake turn; the fixture injects whole mail.
+            daemon.store.settings.put(
+                com.superiorsoftllc.infantry.persistence.SettingRow("mail.deliveryMode", "\"full\"", System.currentTimeMillis()),
             )
             beforeStart(daemon)
             // PORT-1: the production start path: bind, then record the bound port (resolves the ephemeral 0).

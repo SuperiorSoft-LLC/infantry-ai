@@ -106,7 +106,19 @@ class McpMailToolsE2eTest {
 
     private fun JsonObject.str(key: String): String = this[key]!!.jsonPrimitive.content
 
-    private fun messages(answer: JsonObject) = answer["messages"]!!.jsonArray.map { it.jsonObject }
+    /**
+     * The inbox tool answers {unread, total, shown, items:["<id> | <from> | <subject> | <state>"], hint} (token-lean listing);
+     * each item line is turned back into an object so the assertions name its columns.
+     */
+    private fun messages(answer: JsonObject) = answer["items"]!!.jsonArray.map { item ->
+        val (id, from, subject, state) = item.jsonPrimitive.content.split(" | ")
+        kotlinx.serialization.json.buildJsonObject {
+            put("id", kotlinx.serialization.json.JsonPrimitive(id))
+            put("from", kotlinx.serialization.json.JsonPrimitive(from))
+            put("subject", kotlinx.serialization.json.JsonPrimitive(subject))
+            put("read", kotlinx.serialization.json.JsonPrimitive((state == "READ").toString()))
+        }
+    }
 
     @Test
     fun aWorkerMailsItsPmAndThePmReadsItThroughMcp() {
@@ -137,16 +149,17 @@ class McpMailToolsE2eTest {
 
         // The worker mails its PM through its own MCP.
         val workerServer = serve(fixture, project, sessionId = worker)
-        val sent = payload(workerServer.callTool("infantry_message", """{"to":"$pm","subject":"$SUBJECT","body":"$BODY"}"""))
-        val messageId = sent.str("messageId")
-        assertEquals(worker, sent.str("from"), "the worker mails as its own session")
+        // A write answers the ack line `ok <id8> <STATE>` (limits.mcp.defaultDetail 0); the sender is checked on the PM's inbox row.
+        val ack = text(workerServer.callTool("infantry_message", """{"to":"$pm","subject":"$SUBJECT","body":"$BODY"}""")).split(" ")
+        assertEquals("ok", ack[0], "the send was acknowledged: $ack")
+        val idPrefix = ack[1]
+        val messageId = messages(payload(pmServer.callTool(INBOX))).single { it.str("id").startsWith(idPrefix) }.str("id")
         fixture.await(what = "the mail to reach the PM's console") { manager.get(pm)!!.runCount >= 1 && !manager.get(pm)!!.live }
 
         // The PM's inbox lists it, unread.
         val unread = messages(payload(pmServer.callTool(INBOX, """{"unreadOnly":true}""")))
         val row = unread.singleOrNull { it.str("id") == messageId } ?: error("the worker's mail is not in the PM's unread inbox: $unread")
         assertEquals(worker, row.str("from"))
-        assertEquals(pm, row.str("to"))
         assertEquals(SUBJECT, row.str("subject"))
         assertEquals("false", row.str("read"), "listed before it is read: $row")
 
