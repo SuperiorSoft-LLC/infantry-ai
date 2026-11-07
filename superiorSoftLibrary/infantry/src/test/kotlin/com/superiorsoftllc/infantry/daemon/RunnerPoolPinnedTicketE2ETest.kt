@@ -51,6 +51,12 @@ class RunnerPoolPinnedTicketE2ETest {
 
     private fun freePort(): Int = ServerSocket(0).use { it.localPort }
 
+    /** RUNNER-POOL-13: the runner also loads Scripting+Lua, whose shipped `resume-after-restart` script is the local resume path. */
+    private fun runnerPlugins() = TestDaemonPlugins.boardRoot(
+        "official/Infantry_Attention", "official/Infantry_Roles", "official/Infantry_Agents", "official/Infantry_RemoteRunner",
+        "official/Infantry_Scripting", "official/Infantry_Lua",
+    )
+
     private fun plugins() = TestDaemonPlugins.boardRoot(
         "official/Infantry_Attention", "official/Infantry_Roles", "official/Infantry_Agents", "official/Infantry_RemoteRunner",
     )
@@ -73,7 +79,7 @@ class RunnerPoolPinnedTicketE2ETest {
 
     private fun launchRunner(world: World, runnerProc: ScriptedRunner): DaemonFixture =
         DaemonFixture.launch(
-            mode = DeploymentMode.RUNNER, pluginsRoot = plugins(), stateDir = world.runnerState, defaultProvider = FakeAgentProvider(),
+            mode = DeploymentMode.RUNNER, pluginsRoot = runnerPlugins(), stateDir = world.runnerState, defaultProvider = FakeAgentProvider(),
             runner = runnerProc, repo = world.checkout,
         ).also { fixtures += it }
 
@@ -199,5 +205,47 @@ class RunnerPoolPinnedTicketE2ETest {
         orch.client.saveTicket("""{"title":"Any work","projectId":"p1","agentId":"${worker("Third").id}","runner":"any"}""")
         val capped = orch.client.answerTo(Envelope.TICKET_START_NEXT)
         assertTrue(capped.type == Envelope.ERROR && capped.data.contains("usage pacing"), capped.toString())
+    }
+
+    @Test
+    fun `a runner daemon stopped mid ticket resumes its session on restart with the branch intact and no duplicate`() {
+        val orchProc = ScriptedRunner(autoExit = false, emitSessionId = true)
+        val runnerProc = ScriptedRunner(autoExit = false, emitSessionId = true)
+        val (world, orch, runner) = world(orchProc, runnerProc)
+        orch.await(what = "r2 is up") { orch.rows()["r2"]?.text("health") == "up" }
+        val worker = orch.client.saveProfile("""{"name":"Remote","role":"backend","provider":"${FakeAgentProvider().id}"}""")
+        val pinned = orch.client.saveTicket("""{"title":"Remote work","projectId":"p1","agentId":"${worker.id}","runner":"r2"}""")
+        assertEquals("started", orch.client.moveTicket(pinned.id, "in_progress").start?.reason)
+        runner.await(what = "the worker on the runner") { runnerProc.processes.isNotEmpty() }
+        val outbox = File(world.runnerState, "runner-outbox.json")
+        runner.await(what = "the session in the outbox file") {
+            outbox.isFile && ((Json.parseToJsonElement(outbox.readText()) as JsonObject)["sessions"] as JsonObject).isNotEmpty()
+        }
+        val sessionId = ((Json.parseToJsonElement(outbox.readText()) as JsonObject)["sessions"] as JsonObject).keys.first()
+        val wt = ((Json.parseToJsonElement(outbox.readText()) as JsonObject)["sessions"] as JsonObject).values.first() as JsonObject
+        val path = File(wt["path"]!!.jsonPrimitive.content)
+        File(path, "work.txt").writeText("done before the stop\n")
+        git(path, "add", "work.txt")
+        git(path, "commit", "-m", "work before the stop")
+        val head = git(path, "rev-parse", "HEAD")
+        // A kill leaves the state dir as it was mid-turn (session BUSY); a graceful stop would end the turn first. Keep that image.
+        val crashImage = File(dir, "runner-state-crash").also { world.runnerState.copyRecursively(it, overwrite = true) }
+        runner.stop()
+
+        val resumedProc = ScriptedRunner(autoExit = false, emitSessionId = true)
+        val again = launchRunner(World(world.origin, world.checkout, world.linkPort, crashImage), resumedProc)
+        again.await(what = "the restarted runner resumes the cut session through the local resume path") {
+            resumedProc.specs.any { it.command.contains("prov-123") }
+        }
+        assertEquals(1, resumedProc.processes.size, "one resumed process, no duplicate session")
+        assertEquals(listOf(sessionId), again.daemon.manager.list().map { it.id }, "the same session, not a new one")
+        assertEquals(head, git(path, "rev-parse", "HEAD"), "the work on the ticket branch is intact")
+        orch.await(what = "r2 is up again") { orch.rows()["r2"]?.text("health") == "up" }
+        // The orchestrator still shows the ticket in progress with the same worker session (its r2 row is not asserted: the crash image
+        // predates the link credential the orchestrator holds, so the runner-pull is refused until a re-pair).
+        val row = orch.client.board().single { it.id == pinned.id }
+        assertEquals(com.superiorsoftllc.infantry.protocol.TicketStatus.IN_PROGRESS, row.status)
+        assertEquals(sessionId, row.sessionId, "the same worker session, not a new one")
+        assertEquals(com.superiorsoftllc.infantry.protocol.TicketStatus.IN_PROGRESS, row.status)
     }
 }
