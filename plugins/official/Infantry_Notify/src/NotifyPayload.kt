@@ -24,7 +24,11 @@ object NotifyFrames {
     const val SOUND_GET = "notify_sound_get"
     const val SOUND = "notify_sound"
 
-    fun ack(id: String): String = buildJsonObject { put("id", id) }.toString()
+    /** NOTIFY-PUSH-1: [device] (`desktop`, `android`, `web`) makes the ack this device's own; the daemon keeps the notification for the others. */
+    fun ack(id: String, device: String? = null): String = buildJsonObject { put("id", id); device?.let { put("device", it) } }.toString()
+
+    /** NOTIFY-PUSH-1: the queue request names its device, so the daemon sends only what this device has not shown. */
+    fun pending(device: String): String = buildJsonObject { put("device", device) }.toString()
     fun soundGet(name: String): String = buildJsonObject { put("name", name) }.toString()
 }
 

@@ -10,6 +10,10 @@
     <!-- NOTIFY-1: Infantry_Notify posts milestone notifications (Android 13+ asks the owner once). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- NOTIFY-PUSH-1: the opt-in background connection (a foreground service) so a milestone reaches the phone with the app closed. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
     <application
         android:allowBackup="false"
         android:label="Infantry AI"
@@ -26,5 +30,13 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <service
+            android:name="com.superiorsoftllc.infantry.plugins.official.notify.NotifyBackgroundService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Holds the daemon connection to show milestone notifications while the app is closed." />
+        </service>
     </application>
 </manifest>

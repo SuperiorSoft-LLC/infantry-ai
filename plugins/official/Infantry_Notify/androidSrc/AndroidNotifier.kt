@@ -19,6 +19,8 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.util.Consumer
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -39,6 +41,16 @@ internal actual fun rememberNotifier(): Notifier {
         activity?.addOnNewIntentListener(listener)
         onDispose { activity?.removeOnNewIntentListener(listener) }
     }
+    // NOTIFY-PUSH-1: while the activity is started its own listener shows notifications; the background service stays quiet.
+    DisposableEffect(context) {
+        val lifecycle = (context as? ComponentActivity)?.lifecycle
+        val observer = LifecycleEventObserver { _, e ->
+            if (e == Lifecycle.Event.ON_START) NotifyProcess.uiVisible = true else if (e == Lifecycle.Event.ON_STOP) NotifyProcess.uiVisible = false
+        }
+        lifecycle?.addObserver(observer)
+        NotifyProcess.sync(context)
+        onDispose { lifecycle?.removeObserver(observer); NotifyProcess.uiVisible = false }
+    }
     return notifier
 }
 
@@ -46,10 +58,15 @@ internal actual fun rememberNotifier(): Notifier {
  * Android's system notification. Two channels: "Milestones" (info and milestone, default importance) and "Urgent" (high,
  * heads-up). Both channels are silent: the notification's own sound plays through MediaPlayer, so every notification can
  * carry a different sound. On Android 13+ the POST_NOTIFICATIONS permission is asked once, on the first notification.
- * Delivery needs the app connected (shown on the next connect otherwise); background push is a follow-up.
+ * With the app closed, [NotifyBackgroundService] (opt-in setting) keeps the connection; without it a notification is shown on the next connect.
  */
 internal class AndroidNotifier(private val context: Context) : Notifier {
     override val platform = "android"
+    override val backgroundPush: BackgroundPush = object : BackgroundPush {
+        override var enabled: Boolean
+            get() = NotifyProcess.enabled(context)
+            set(value) = NotifyProcess.setEnabled(context, value)
+    }
     private val clicks = MutableSharedFlow<String>(replay = 1, extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     override val opened: Flow<String> = clicks
     private val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager

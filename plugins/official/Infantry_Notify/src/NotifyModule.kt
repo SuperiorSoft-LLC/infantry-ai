@@ -5,6 +5,7 @@ package com.superiorsoftllc.infantry.plugins.official.notify
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -42,6 +43,9 @@ import kotlinx.serialization.json.JsonElement
 /** The field type of the settings card's sound list (module.json `fieldTypes`). */
 const val NOTIFY_SOUNDS_FIELD = "notify.sounds"
 
+/** NOTIFY-PUSH-1: the field type of the Android-only "Background notifications" switch (stored on the device, not in a setting). */
+const val NOTIFY_BACKGROUND_FIELD = "notify.background"
+
 /** How long the Play button and the sound list wait for the daemon's answer. */
 const val NOTIFY_ANSWER_TIMEOUT_MS = 5_000L
 
@@ -49,13 +53,15 @@ private val notifyManifest = ModuleManifest(
     name = "Infantry_Notify", version = "1.0.0", author = "Infantry AI",
     description = "System notifications for milestones only (Windows toast, Android notification, browser notification) with custom sounds and a script bridge.",
     inject = listOf(InjectDeclaration(into = "infantry.shell.windowLayer", name = "listener", at = "last", order = 900)),
-    fieldTypes = listOf(NOTIFY_SOUNDS_FIELD),
+    fieldTypes = listOf(NOTIFY_SOUNDS_FIELD, NOTIFY_BACKGROUND_FIELD),
     config = listOf(
         ConfigDeclaration(
             node = "infantry.notify.sounds", group = "Notification sounds", title = "Notification sounds", tab = "Plugins", order = 921,
             applies = "Applies to: the sounds a notification can play. Add your own .wav/.mp3/.ogg to <state dir>/plugin-data/Infantry_Notify/sounds/.",
             keywords = listOf("notify", "notification", "sound", "toast", "milestone"),
-            fields = listOf(ConfigFieldDeclaration(key = "notify.soundList", type = NOTIFY_SOUNDS_FIELD, label = "Sounds", scope = "device", order = 1)),
+            fields = listOf(ConfigFieldDeclaration(key = "notify.soundList", type = NOTIFY_SOUNDS_FIELD, label = "Sounds", scope = "device", order = 1),
+                ConfigFieldDeclaration(key = "notify.background", type = NOTIFY_BACKGROUND_FIELD, label = "Background notifications (Android)", scope = "device", order = 2),
+            ),
         ),
     ),
 )
@@ -66,7 +72,7 @@ private val listenerInjection = BlockInjection { NotifyListener() }
 val InfantryNotify = InfantryModule(
     notifyManifest,
     inject = mapOf("listener" to listenerInjection),
-    fieldTypes = mapOf(NOTIFY_SOUNDS_FIELD to SoundsField),
+    fieldTypes = mapOf(NOTIFY_SOUNDS_FIELD to SoundsField, NOTIFY_BACKGROUND_FIELD to BackgroundField),
 )
 
 /** The entry of Infantry_Notify (module.json `entry`): desktop loads it from its signed jar; web and Android compile it in. */
@@ -74,6 +80,7 @@ class NotifyPlugin : UiPlugin, ModuleSource {
     override fun register(registrar: UiRegistrar) {
         registrar.inject("listener", listenerInjection)
         registrar.fieldType(NOTIFY_SOUNDS_FIELD, SoundsField)
+        registrar.fieldType(NOTIFY_BACKGROUND_FIELD, BackgroundField)
     }
 
     override fun modules(): List<InfantryModule> = listOf(InfantryNotify)
@@ -93,7 +100,7 @@ fun NotifyListener() {
     val handle: suspend (NotifyPayload) -> Unit = { p -> deliver(p, notifier, dedupe, link) }
     LaunchedEffect(link) { link.frames(NotifyFrames.PUSH).collect { NotifyPayload.parse(it)?.let { p -> handle(p) } } }
     LaunchedEffect(link) { link.frames(NotifyFrames.PENDING_LIST).collect { NotifyPayload.parseList(it).forEach { p -> handle(p) } } }
-    LaunchedEffect(link.live) { if (link.live) link.sendFrame(NotifyFrames.PENDING, "{}") }
+    LaunchedEffect(link.live, notifier) { if (link.live) link.sendFrame(NotifyFrames.PENDING, NotifyFrames.pending(notifier.platform)) }
     LaunchedEffect(notifier) { notifier.opened.collect { ctx.board.openTicket(it) } }
 }
 
@@ -104,8 +111,28 @@ internal suspend fun deliver(p: NotifyPayload, notifier: Notifier, dedupe: Notif
     val shown = runCatching { notifier.show(p) }.getOrDefault(false)
     val data = p.soundData
     if (data != null) decodeSound(data)?.let { runCatching { notifier.play(p.soundType ?: "audio/wav", it) } }
-    if (shown) link.sendFrame(NotifyFrames.ACK, NotifyFrames.ack(p.id))
+    if (shown) link.sendFrame(NotifyFrames.ACK, NotifyFrames.ack(p.id, notifier.platform))
     return shown
+}
+
+/**
+ * NOTIFY-PUSH-1: the switch that keeps the connection alive in the background so a notification arrives with the app closed.
+ * Only a platform with a background mechanism (Android's foreground service) shows it; it explains its cost.
+ */
+object BackgroundField : FieldType {
+    @Composable
+    override fun Editor(field: ConfigFieldDeclaration, value: JsonElement?, enabled: Boolean, onChange: (JsonElement?) -> Unit) {
+        val push = rememberNotifier().backgroundPush ?: return
+        var on by remember { mutableStateOf(push.enabled) }
+        Column(Modifier.padding(vertical = 4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Background notifications", fontSize = 12.sp, modifier = Modifier.weight(1f))
+                Switch(checked = on, onCheckedChange = { on = it; push.enabled = it }, enabled = enabled)
+            }
+            Text("Keeps a connection to the daemon while the app is closed, so a milestone reaches this phone within seconds. Costs a persistent low-priority notification and some battery. Off by default.",
+                color = Palette.Muted, fontSize = 10.sp)
+        }
+    }
 }
 
 /** The settings card's list of sounds (built-ins and the owner's files), each with a Play button. It stores no value. */

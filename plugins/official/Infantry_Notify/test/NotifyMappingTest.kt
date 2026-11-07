@@ -58,7 +58,7 @@ class NotifyMappingTest {
         assertFalse(deliver(p.copy(id = "n2", target = "android"), notifier, dedupe, link), "another platform's notification shown")
         assertEquals(listOf("n1"), shown)
         assertEquals(listOf("audio/wav"), played)
-        assertEquals(listOf(NotifyFrames.ACK to """{"id":"n1"}"""), sent)
+        assertEquals(listOf(NotifyFrames.ACK to """{"id":"n1","device":"desktop"}"""), sent)
     }
 
     @Test fun `sound list and sound answers parse`() {

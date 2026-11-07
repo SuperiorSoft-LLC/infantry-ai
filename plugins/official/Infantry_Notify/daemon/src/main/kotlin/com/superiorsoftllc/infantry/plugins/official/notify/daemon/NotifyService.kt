@@ -38,9 +38,14 @@ class NotifyService(
     val sounds = NotifySounds(File(stateDir, "sounds").apply { mkdirs() })
     private val queueFile = File(stateDir, "pending.json")
     private val milestoneFile = File(stateDir, "milestones.json")
+    private val deliveredFile = File(stateDir, "delivered.json")
     private val json = Json { ignoreUnknownKeys = true }
     private val lock = Any()
     private val queue = ArrayList<NotifyMessage>(load(queueFile) { a -> (a as? JsonArray)?.mapNotNull(NotifyMessage::fromJson) }.orEmpty())
+    /** NOTIFY-PUSH-1: notification id -> the devices (`desktop`, `android`, `web`) that acked it; one device's ack never hides it from another. */
+    private val delivered = HashMap<String, MutableSet<String>>().apply {
+        load(deliveredFile) { o -> (o as? JsonObject)?.mapValues { (_, v) -> (v as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }?.toMutableSet() ?: mutableSetOf() } }?.let { putAll(it) }
+    }
     private val milestones = LinkedHashMap<String, Milestone>().apply {
         load(milestoneFile) { o -> (o as? JsonObject)?.mapNotNull { (id, v) -> milestoneOf(id, v as? JsonObject) } }?.forEach { put(it.ticketId, it) }
     }
@@ -73,16 +78,35 @@ class NotifyService(
             queue += msg
             while (queue.size > maxOf(0, s.queueMax)) queue.removeAt(0)
             saveQueue()
+            trimDelivered()
         }
         runCatching { push(msg) }.onFailure { log("push failed: ${it.message}") }
         return Outcome.Sent(msg, silentReason)
     }
 
-    /** A client showed [id]: it leaves the queue. Returns false when it was not queued. */
-    fun ack(id: String): Boolean = synchronized(lock) { queue.removeAll { it.id == id }.also { if (it) saveQueue() } }
+    /**
+     * A client showed [id]. With a [device] only that device's copy is done (the queue keeps it for the others until it ages out);
+     * without one (a client from before NOTIFY-PUSH-1) the notification leaves the queue for everyone. Returns false when it was not queued.
+     */
+    fun ack(id: String, device: String? = null): Boolean = synchronized(lock) {
+        if (queue.none { it.id == id }) return@synchronized false
+        if (device.isNullOrBlank()) { queue.removeAll { it.id == id }; delivered.remove(id); saveQueue() }
+        else { delivered.getOrPut(id) { mutableSetOf() } += device.lowercase(); saveDelivered() }
+        true
+    }
 
-    /** What a connecting client receives: every queued notification younger than the max age, oldest first. */
-    fun pending(): List<NotifyMessage> = synchronized(lock) { prune(); queue.toList() }
+    /**
+     * What a connecting client receives: every queued notification younger than the max age, oldest first. With a [device] the
+     * ones that device already acked, and the ones aimed at another device, are left out.
+     */
+    fun pending(device: String? = null): List<NotifyMessage> = synchronized(lock) {
+        prune()
+        val d = device?.lowercase()?.takeIf { it.isNotBlank() }
+        queue.filter { m -> d == null || (d !in delivered[m.id].orEmpty() && (m.target == "all" || m.target.equals(d, true))) }
+    }
+
+    /** The connect replay (the hook does not know the device): only what no device acked yet; a device asks for the rest with `notify_pending`. */
+    fun unacked(): List<NotifyMessage> = synchronized(lock) { prune(); queue.filter { delivered[it.id].isNullOrEmpty() } }
 
     fun setMilestone(ticketId: String, on: Boolean, sound: String?): Milestone? = synchronized(lock) {
         if (sound != null) sounds.resolve(sound)
@@ -122,7 +146,15 @@ class NotifyService(
         val maxAgeMs = settings().queueMaxAgeMinutes * 60_000
         val cutoff = now() - maxAgeMs
         if (queue.removeAll { it.at < cutoff }) saveQueue()
+        trimDelivered()
     }
+
+    private fun trimDelivered() {
+        val live = queue.mapTo(HashSet()) { it.id }
+        if (delivered.keys.retainAll(live)) saveDelivered()
+    }
+
+    private fun saveDelivered() = write(deliveredFile, JsonObject(delivered.mapValues { (_, d) -> JsonArray(d.map { JsonPrimitive(it) }) }).toString())
 
     private fun saveQueue() = write(queueFile, JsonArray(queue.map { it.toJson() }).toString())
 
