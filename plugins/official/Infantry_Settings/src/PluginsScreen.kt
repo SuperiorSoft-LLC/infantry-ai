@@ -66,6 +66,7 @@ import com.superiorsoftllc.infantry.plugin.api.HitView
 import com.superiorsoftllc.infantry.plugin.api.InspectOutcome
 import com.superiorsoftllc.infantry.plugin.api.InspectView
 import com.superiorsoftllc.infantry.plugin.api.PluginManagerPort
+import com.superiorsoftllc.infantry.ui.shell.LocalSoftRestart
 import com.superiorsoftllc.infantry.plugin.api.PluginView
 import com.superiorsoftllc.infantry.plugin.api.RefreshView
 import com.superiorsoftllc.infantry.plugin.api.SourceView
@@ -154,6 +155,14 @@ fun PluginsScreen(port: PluginManagerPort) {
         }
     }
 
+    /**
+     * PLUGIN-CONFIG-1: a change to an installed plugin reaches the daemon half live, but the UI half (tabs, panels, config
+     * cards) is only read when the module set is built. A successful change therefore soft-restarts the shell
+     * ([LocalSoftRestart], as a drop-in install does), so the new or updated plugin's config appears at once.
+     */
+    val softRestart = LocalSoftRestart.current
+    val actUi: Act = { call, then -> act(call) { r -> then(r); if (r.ok) softRestart?.invoke() } }
+
     /** Checks [ref], then opens the consent dialog whose Install applies [apply] with the ticked grants. */
     fun askConsent(ref: String, title: String, apply: (Set<String>, String) -> ActionResult) {
         busy = true; note = null
@@ -172,7 +181,7 @@ fun PluginsScreen(port: PluginManagerPort) {
         note?.let { Text(it, color = Palette.Muted, fontSize = 12.sp, modifier = Modifier.testTag(PLUGINS_NOTE_TAG)) }
         val body = Modifier.weight(1f).fillMaxWidth()
         when (section) {
-            "Installed" -> Installed(port, version, busy, pending, act, body) { id, on ->
+            "Installed" -> Installed(port, version, busy, pending, actUi, body) { id, on ->
                 pending[id] = on; note = null
                 scope.launch {
                     val r = withContext(Dispatchers.Default) { runCatching { port.setEnabled(id, on) }.getOrElse { ActionResult(false, "failed: ${it.message}") } }
@@ -181,6 +190,7 @@ fun PluginsScreen(port: PluginManagerPort) {
                     // On success the switch stays pending until the reloaded list shows the new state (no flicker back).
                     if (!r.ok) pending.remove(id)
                     version++
+                    if (r.ok) softRestart?.invoke()
                 }
             }
             "Browse" -> Browse(port, version, busy, body) { hit ->
@@ -196,7 +206,7 @@ fun PluginsScreen(port: PluginManagerPort) {
         PluginConsentDialog(c.title, c.view, consentError, busy,
             onConfirm = { granted ->
                 consentError = null
-                act({ c.run(granted) }) { r -> if (r.ok) consent = null else consentError = r.message }
+                actUi({ c.run(granted) }) { r -> if (r.ok) consent = null else consentError = r.message }
             },
             onCancel = { consent = null })
     }
