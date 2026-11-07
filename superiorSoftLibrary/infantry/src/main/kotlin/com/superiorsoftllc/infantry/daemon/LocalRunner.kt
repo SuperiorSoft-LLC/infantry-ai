@@ -119,14 +119,16 @@ object LocalRunner {
         agentRunner: String? = null,
         /** RUNNER-AGENT-1: the routing rule / `runners.default` tail of the precedence (Placement.pick). */
         defaultRunner: String = RunnerPool.LOCAL,
+        /** The placement view of the pool (paused, per-runner caps); null = health and free slots straight from the pool. */
+        entries: (() -> List<com.superiorsoftllc.infantry.settings.RunnerEntry>)? = null,
     ): StartedSession? {
         val wanted = options?.runner?.trim().orEmpty().ifEmpty { agentRunner?.trim().orEmpty() }.ifEmpty { defaultRunner.trim() }
         var runner = RunnerPool.LOCAL
         if (wanted.isNotEmpty() && wanted != RunnerPool.LOCAL) {
-            val entries = pool.runners().map {
+            val view = entries?.invoke() ?: pool.runners().map {
                 com.superiorsoftllc.infantry.settings.RunnerEntry(it.name, it.state, it.health?.freeSlots?.takeIf { s -> s >= 0 } ?: Int.MAX_VALUE)
             }
-            when (val placed = com.superiorsoftllc.infantry.settings.Placement.pick(null, null, defaultRunner, entries, options?.projectId, options?.provider, options?.runner, agentRunner)) {
+            when (val placed = com.superiorsoftllc.infantry.settings.Placement.pick(null, null, defaultRunner, view, options?.projectId, options?.provider, options?.runner, agentRunner)) {
                 is com.superiorsoftllc.infantry.settings.PlacementResult.Refused -> throw IllegalArgumentException("runner refused: ${placed.reason}")
                 is com.superiorsoftllc.infantry.settings.PlacementResult.Placed -> runner = placed.runner
             }
@@ -166,6 +168,19 @@ object LocalRunner {
                 )
             }
         }
+    }
+
+    /** RUNNER-AGENT-1: the placement view a non-ticket start uses (paused runners, per-runner caps), the same as the board's. */
+    fun placementEntries(pool: RunnerPool, settings: com.superiorsoftllc.infantry.settings.SettingsService): List<com.superiorsoftllc.infantry.settings.RunnerEntry> = pool.runners().map { e ->
+        com.superiorsoftllc.infantry.settings.RunnerEntry(
+            e.name, if (settings.runnerPaused(e.name)) "paused" else e.state,
+            minOf(
+                e.health?.freeSlots?.let { if (it < 0) Int.MAX_VALUE else it } ?: 1,
+                (if (e.name == RunnerPool.LOCAL) settings.runnerMaxWorkersExplicit(e.name) ?: Int.MAX_VALUE else settings.runnerMaxWorkers(e.name))
+                    .let { cap -> if (cap == Int.MAX_VALUE) cap else (cap - (e.health?.running ?: 0)).coerceAtLeast(0) },
+            ),
+            e.info?.projects.orEmpty().toSet(), e.info?.harnesses.orEmpty().filter { it.loggedIn }.map { it.id }.toSet(),
+        )
     }
 
     /** MailRouter's resume edge through the session's runner; an unreachable runner keeps the mail queued (it is persisted). */
