@@ -2,6 +2,7 @@
 // Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.plugins.official.board
 
+import kotlinx.coroutines.sync.withLock
 import androidx.compose.runtime.mutableStateMapOf
 import com.superiorsoftllc.infantry.ui.shell.TicketsContext
 import kotlinx.serialization.json.JsonArray
@@ -42,6 +43,16 @@ interface TicketCommentsApi {
 /** The open-comment count of each ticket the board has asked about, so a card's badge and the modal agree. */
 object TicketCommentCounts {
     val open = mutableStateMapOf<String, Int>()
+
+    /**
+     * BOARD-BREAKER-1: the card badges' reads, one at a time. Every card reads its count on its own; a board of N tickets opened
+     * at once fired N `infantry_ticket_get` calls together, flooded the board plugin's pool and tripped its breaker on the
+     * owner's daemon. A badge can wait; a modal's read ([TicketCommentsApi.meta] called directly) does not take this lock.
+     */
+    val cardReads = kotlinx.coroutines.sync.Mutex()
+
+    /** A card's badge read through [cardReads]. */
+    suspend fun cardRead(api: TicketCommentsApi, ticketId: String) = cardReads.withLock { api.meta(ticketId) }
 }
 
 class DaemonTicketCommentsApi(private val tickets: TicketsContext) : TicketCommentsApi {

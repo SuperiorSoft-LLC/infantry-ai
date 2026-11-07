@@ -324,6 +324,10 @@ What the guard does, from `PluginGuard.kt`:
 - A call that reaches the hang ceiling counts a strike. After `strikes` consecutive strikes the breaker **trips**:
   calls refuse fast ("cooling down, retry in Ns") until the cooldown passes. A single successful call resets the
   strike count.
+- A call's clock starts when one of the plugin's workers picks it up, not when it is queued (BOARD-BREAKER-1). A burst
+  of calls larger than the pool waits in the queue, and that wait never counts toward a strike. A call still queued at
+  the hang ceiling fails alone with "plugin X is busy ..." and gives no strike. Before this change, a board of ~150
+  cards that each read their ticket at once tripped the breaker on fast calls.
 - A call refused by the guard comes back to the caller as a failure with the reason text. How each hook kind treats that failure is its fail-open or fail-closed rule in the table in section 4 (the host code that applies it was not traced for this page).
 
 Practical rules: keep hook, frame and route handlers well under two seconds; put slow work in a tool (give it

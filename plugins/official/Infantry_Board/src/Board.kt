@@ -768,10 +768,10 @@ fun TicketCardBadgesSection(card: BoardCardHost, modifier: Modifier = Modifier) 
         ReportFlagChip(deps.reportFlag(t), Modifier.testTag("ticket-report-${t.id}"))
         // KNOWLEDGE-PTR-2: how many tickets this one relates to (relates_to links + series members).
         RelatedView.count(t).takeIf { it > 0 }?.let { Chip("$it related", Palette.Muted, Modifier.testTag("ticket-related-count-${t.id}")) }
-        // TICKET-COMMENTS-3: open comments, read once per ticket revision and cached in TicketCommentCounts.
+        // TICKET-COMMENTS-3: open comments, read once per ticket revision and cached in TicketCommentCounts (BOARD-BREAKER-1: one card read at a time).
         val shell = com.superiorsoftllc.infantry.ui.shell.LocalShellContext.current
         androidx.compose.runtime.LaunchedEffect(t.id, t.updatedAt) {
-            shell?.let { DaemonTicketCommentsApi(it.tickets).meta(t.id) }
+            shell?.let { TicketCommentCounts.cardRead(DaemonTicketCommentsApi(it.tickets), t.id) }
         }
         TicketCommentCounts.open[t.id]?.takeIf { it > 0 }?.let { Chip("$it open", Palette.Accent, Modifier.testTag("ticket-comments-count-${t.id}")) }
     }

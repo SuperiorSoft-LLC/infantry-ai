@@ -107,6 +107,11 @@ class PluginGuard(
             // BOARD-STALL-3: the caller gave up (its own timeout/cancel): drop the job so a queued one never runs later.
             future.cancel(true)
             throw e
+        } catch (e: QueuedTooLongException) {
+            // BOARD-BREAKER-1: the call never started (every worker busy with other calls): a backlog, not a hang. No strike.
+            future.cancel(true)
+            log("[plugins] daemon plugin $moduleId: ${e.message} (busy, no strike)")
+            Result.failure(IllegalStateException("plugin $moduleId is busy: ${e.message}; $what refused"))
         } catch (e: RunawayException) {
             future.cancel(true)
             disable(e.message ?: "$what ran away")
@@ -135,15 +140,25 @@ class PluginGuard(
      * than [cpuMsPerCall] of CPU is a runaway and disables the plugin at once, wherever the wall clock stands.
      */
     private suspend fun <T> await(future: java.util.concurrent.Future<T>, worker: java.util.concurrent.atomic.AtomicReference<Thread?>, what: String, timeoutMs: Long): T {
-        val began = System.nanoTime()
+        val queuedAt = System.nanoTime()
         val ceilingMs = maxOf(hangCeilingMs, timeoutMs)
         var warned = false
         var base = -1L
+        // BOARD-BREAKER-1: the clock starts when a worker picks the call up. Time spent queued behind other calls (a burst of
+        // reads larger than the pool) is the PLUGIN being busy, not THIS call hanging: it must never count as a strike, or a
+        // burst of fast calls trips the breaker. A call still queued at the ceiling fails alone as busy.
+        var began = -1L
         while (true) {
             if (future.isDone) return future.get()
             delay(pollMs)
-            val elapsedMs = (System.nanoTime() - began) / 1_000_000
             val t = worker.get()
+            if (t == null) {
+                val queuedMs = (System.nanoTime() - queuedAt) / 1_000_000
+                if (queuedMs >= ceilingMs) throw QueuedTooLongException("$what waited $queuedMs ms in the queue without starting (pool $poolSize)")
+                continue
+            }
+            if (began < 0) began = System.nanoTime()
+            val elapsedMs = (System.nanoTime() - began) / 1_000_000
             if (t != null && cpu.isThreadCpuTimeSupported) {
                 val c = runCatching { cpu.getThreadCpuTime(t.id) }.getOrDefault(-1L)
                 if (c >= 0) {
@@ -211,3 +226,5 @@ class PluginGuard(
 class PluginLimitException(message: String) : RuntimeException(message)
 
 private class RunawayException(message: String) : RuntimeException(message)
+
+private class QueuedTooLongException(message: String) : RuntimeException(message)
