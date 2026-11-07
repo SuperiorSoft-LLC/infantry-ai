@@ -484,6 +484,13 @@ internal object Cli {
                 "ask" -> ask(stream, parsed, out, err, getenv)
                 "usage" -> runBlocking { UsageCli.run(stream, parsed.args, out, err) }
                 "settings" -> runBlocking { checkContract(stream, err); SettingsCli.run(stream, parsed.args, out, err) }
+                // RUNNER-POOL-5: `infantry runner pair --name <n>` and the rest of the runner link (docs/RUNNER-POOL.md 7).
+                "runner" -> runBlocking {
+                    RunnerCli.run(
+                        stream, RunnerCli.Args(parsed.args, parsed.name, parsed.code, parsed.fingerprint, parsed.limit), out, err,
+                        com.superiorsoftllc.infantry.session.stateDir { getenv(it) ?: com.superiorsoftllc.infantry.session.infantrySetting(it) },
+                    )
+                }
                 else -> {
                     // Unreachable: [run] rejects an unknown command before it connects.
                     err.appendLine("error: unknown command '$command'")
@@ -4723,6 +4730,12 @@ internal object Cli {
                                   files); --suggest rebuilds it first. ticket create/update --related-to <id|prefix> (repeatable) links one
               remote on|off|status  Let the daemon accept outside (Tailscale) connections; prints the ws address
                                   and token. Takes effect on the next daemon restart.
+              runner pair --name <n>  On a RUNNER machine: print a one-time pair code (single use, expires after
+                                  limits.runners.pairCodeMin) and the wss certificate fingerprint; serve the link until paired
+              runner add <name> <wss-url> --code <c> --fingerprint <fp>  On the ORCHESTRATOR: pin the fingerprint, trade
+                                  the code for a per-pair runner credential (not the owner, remote or agent token)
+              runner list | rotate <name> | detach [<name>] | audit [--limit N]  Paired runners; in-band rekey; revoke
+                                  (a name: from the orchestrator; none: on the runner); the runner's log of remote operations
               bg run [--name L] [--keep] -- CMD  Run CMD as a registered background job (session reads Running; --keep: survives the session closing); bg list|status|logs|stop ID
               bg run --notify [--notify-on RE]... [--notify-tail N] [--notify-timeout MIN] [--no-default-patterns] -- CMD
                                      Start CMD detached; the daemon MAILS this session on exit, a pattern match or the timeout: end your turn, never sleep/poll
@@ -4993,6 +5006,9 @@ internal object Cli {
         val outcome: String? = null,
         // `trait save` / `role traits` (TRAITS-T7).
         val name: String? = null,
+        // RUNNER-POOL-5: `runner add <name> <wss-url> --code <c> --fingerprint <fp>`.
+        val code: String? = null,
+        val fingerprint: String? = null,
         val body: String? = null,
         val reportTo: String? = null,
         val reportFields: String? = null,
@@ -5115,6 +5131,8 @@ internal object Cli {
         var file: String? = null
         var stdin = false
         var name: String? = null
+        var code: String? = null
+        var fingerprint: String? = null
         var body: String? = null
         var reportTo: String? = null
         var reportFields: String? = null
@@ -5257,6 +5275,14 @@ internal object Cli {
                 }
                 "--name" -> {
                     name = args.getOrNull(++i) ?: return fail(err, "--name expects a value")
+                    i++
+                }
+                "--code" -> {
+                    code = flagValue(args, ++i) ?: return fail(err, "--code expects the one-time code `infantry runner pair` printed")
+                    i++
+                }
+                "--fingerprint" -> {
+                    fingerprint = flagValue(args, ++i) ?: return fail(err, "--fingerprint expects the certificate fingerprint `infantry runner pair` printed")
                     i++
                 }
                 "--report-to" -> {
@@ -5645,6 +5671,8 @@ internal object Cli {
             file = file,
             stdin = stdin,
             name = name,
+            code = code,
+            fingerprint = fingerprint,
             body = body,
             reportTo = reportTo,
             reportFields = reportFields,
@@ -5792,6 +5820,7 @@ internal object Cli {
         "ask" -> askUsageError(parsed, getenv)
         "usage" -> UsageCli.usageError(parsed.args)
         "settings" -> SettingsCli.usageError(parsed.args)
+        "runner" -> RunnerCli.usageError(RunnerCli.Args(parsed.args, parsed.name, parsed.code, parsed.fingerprint, parsed.limit))
         else -> null
     }
 
@@ -5991,7 +6020,7 @@ internal object Cli {
         "submit", "watch", "pods", "runs", "logs", "cancel", "tickets", "board", "ticket", "agents", "send", "inbox",
         "read", "threads", "thread", "waiting", "epics", "stories", "epic", "project", "mcp", "knowledge", "memory", "decision", "pipeline", "notify", "issue",
         "trait", "skill", "role", "ask", "harnesses", "harness-status", "archive", "harness-install", "image", "session", "remote", "bg", "kill", "usage",
-        "processes", "settings", "agent", "agent-def", "run-cmd", "event", "tests", "tool", "script",
+        "processes", "settings", "agent", "agent-def", "run-cmd", "event", "tests", "tool", "script", "runner",
     )
 
     /** `infantry remote on|off|status`: edits `<stateDir>/network.properties`; takes effect on the next daemon restart. */

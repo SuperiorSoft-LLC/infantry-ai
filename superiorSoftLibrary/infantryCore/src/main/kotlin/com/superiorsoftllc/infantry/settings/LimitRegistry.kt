@@ -785,6 +785,55 @@ object LimitRegistry {
         max = 10_000_000, zeroMeans = "off",
     )
 
+    /** RUNNER-POOL-5 (docs/RUNNER-POOL.md section 7): how long a `runner pair` code stays valid. */
+    val RUNNERS_PAIR_CODE_MIN = LimitDef(
+        "limits.runners.pairCodeMin", 10, "minutes",
+        "How long the one-time code `infantry runner pair` prints stays valid; it is single use either way. Shorter = safer.",
+        min = 1, max = 1440, zeroIsUnlimited = false,
+    )
+
+    /** RUNNER-POOL-5: pairing attempts (right or wrong code) a runner accepts per rolling hour; past it the live code is burned. */
+    val RUNNERS_PAIR_ATTEMPTS_PER_HOUR = LimitDef(
+        "limits.runners.pairAttemptsPerHour", 5, "attempts",
+        "How many pairing attempts a runner accepts in one rolling hour; past it every attempt is refused and the live code is burned.",
+        min = 1, zeroIsUnlimited = false,
+    )
+
+    /** RUNNER-POOL-5: age after which the orchestrator rekeys a runner's pair credential in-band. */
+    val RUNNERS_CREDENTIAL_ROTATE_DAYS = LimitDef(
+        "limits.runners.credentialRotateDays", 30, "days",
+        "Age after which the orchestrator rekeys a paired runner's credential over the link (runners.credentialRotateDays); the old one stops working at once.",
+        min = 1, max = 3650, zeroIsUnlimited = false,
+    )
+
+    /** RUNNER-POOL-5: the TCP port a runner's link listener (wss) binds; 0 = any free port. */
+    val RUNNERS_LINK_PORT = LimitDef(
+        "limits.runners.linkPort", 8790, "port",
+        "The port a runner serves its orchestrator link on (wss, or plain ws only with runners.allowPlainTailnet); 0 = any free port.",
+        min = 0, max = 65535, zeroIsUnlimited = false,
+    )
+
+    /** RUNNER-POOL-5: how many audit lines `infantry runner audit` prints without `--limit`. */
+    val RUNNERS_AUDIT_SHOWN = LimitDef(
+        "limits.runners.auditShown", 50, "lines",
+        "How many of the newest runner audit lines `infantry runner audit` prints when no --limit is given.",
+        min = 1, zeroIsUnlimited = false,
+    )
+
+    /** RUNNER-POOL-5: how often the daemon looks after the runner link (listener up when paired, down after a detach, due rekeys). */
+    val RUNNERS_LINK_CHECK_SECONDS = LimitDef(
+        "limits.runners.linkCheckSeconds", 60, "seconds",
+        "How often the daemon looks after the runner link: serves it once this runner is paired, stops after a detach, rekeys due credentials.",
+        min = 1, zeroIsUnlimited = false,
+    )
+
+    /** RUNNER-POOL-5: how long one orchestrator -> runner link call (pair, rekey, detach) waits for its answer. */
+    val RUNNERS_LINK_CALL_SECONDS = LimitDef(
+        "limits.runners.linkCallSeconds", 20, "seconds",
+        "How long one orchestrator-to-runner link call (pair, rekey, detach) waits for the runner's answer before it fails.",
+        min = 1, zeroIsUnlimited = false,
+    )
+
     val ALL: List<LimitDef> = listOf(
         SESSION_CONTEXT_CAP_TOKENS,
         MAIL_INJECT_MAX_CHARS, MAIL_INJECT_TOTAL_CHARS,
@@ -813,6 +862,7 @@ object LimitRegistry {
         SANDBOX_MODE, USAGE_QUOTA_HIT_HOLD_MINUTES,
         HEALTH_DB_TIMEOUT_SECONDS, HEALTH_WATCHDOG_FAILURES, HEALTH_WATCHDOG_INTERVAL_SECONDS, HEALTH_WATCHDOG_TIMEOUT_SECONDS,
         MAIL_WAKE_DEBOUNCE_SECONDS, MAIL_COALESCE_MAX, WATCH_STALL_NUDGES, SCRIPT_RUN_LOG_MAX,
+        RUNNERS_PAIR_CODE_MIN, RUNNERS_PAIR_ATTEMPTS_PER_HOUR, RUNNERS_CREDENTIAL_ROTATE_DAYS, RUNNERS_LINK_PORT, RUNNERS_AUDIT_SHOWN, RUNNERS_LINK_CALL_SECONDS, RUNNERS_LINK_CHECK_SECONDS,
     )
 
     /** A minutes limit as milliseconds; 0 on an unlimited-capable one = [Long.MAX_VALUE] (never reached). */

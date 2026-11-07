@@ -227,6 +227,30 @@ is not good enough for a runner link and the runner link must not reuse that tok
 
 Rate limits on pairing attempts (`runners.pairAttemptsPerHour`, default 5).
 
+**As built (RUNNER-POOL-5, 2026-11-07).** Code: `superiorSoftLibrary/infantry/src/main/kotlin/com/superiorsoftllc/infantry/runners/`.
+
+- `infantry runner pair --name <n>` (runner console) makes the link certificate on first use (EC P-256, self-signed,
+  `<stateDir>/runner-link/tls.p12`), prints its SHA-256 fingerprint and a one-time code, and serves the link until the code
+  is used or expires. The code is single use, expires after `limits.runners.pairCodeMin`, and every try counts against
+  `limits.runners.pairAttemptsPerHour` (kept on disk, so a new `pair` does not reset it; past the limit the live code is burned).
+- `infantry runner add <name> <wss-url> --code <c> --fingerprint <fp>` (orchestrator) checks the pin in the TLS handshake
+  (no CA, no host name), then trades the code for a 32-byte per-pair credential. The orchestrator keeps it in its link
+  keystore (`<stateDir>/runner-link`, separate from the owner keystore); the runner keeps only its SHA-256. With no
+  `--fingerprint` the call stops after the handshake and prints the fingerprint the runner presented, to compare.
+- Caller seat `orchestrator:<id>`: `FrameGate.refusal(type, seat)` lets that seat call only `runner_link_*` frames, and no
+  other seat may call them. The runner accepts one orchestrator id; a second pair is refused until `infantry runner detach`.
+- A remote start passes `runner.projects` and `runner.harnesses` (empty = none, `*` = any; harness = the start's provider),
+  then reaches the runner's local link with no repository path from the wire.
+- Rotation: the daemon rekeys each paired runner whose credential is `limits.runners.credentialRotateDays` old
+  (`runner_link_rekey`; the old credential fails at once); `infantry runner rotate <name>` does it by hand.
+  `infantry runner detach <name>` (orchestrator) or `infantry runner detach` (runner) revokes.
+- The daemon serves the link (wss on `limits.runners.linkPort`) only once paired, checked every `limits.runners.linkCheckSeconds`;
+  a machine never paired opens no port and no link keystore. `runners.allowPlainTailnet` switches to plain ws.
+- Audit: `<stateDir>/runner-link/audit.jsonl`, one line per remote operation (refused ones too): time, seat, operation,
+  ticket, result, peer address; `infantry runner audit [--limit N]` (default `limits.runners.auditShown`).
+- Not built yet: the per-frame nonce and timestamp window of the replay row (start idempotency is `startId`), and
+  orchestrator-side placement on a paired runner (later steps).
+
 ## 8. Settings (every trade-off named, cheapest default = local only)
 
 | setting | default | meaning |

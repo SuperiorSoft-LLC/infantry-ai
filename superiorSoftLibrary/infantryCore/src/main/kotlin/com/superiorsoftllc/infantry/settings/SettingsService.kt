@@ -118,7 +118,7 @@ class SettingsService(
             MAIL_AUTOMATION_FOOTER to JsonPrimitive(automationFooter("system") ?: ""),
             MAIL_WAKE_MODE to JsonPrimitive(wakeMode(null, null)),
             MAIL_DELIVERY_MODE to JsonPrimitive(deliveryMode(null, null)),
-        ) + LimitRegistry.ALL.associate { it.key to JsonPrimitive(limit(it)) } + EndpointRegistry.ALL.associate { it.key to JsonPrimitive(endpoint(it)) } + (userPortrait()?.let { mapOf(USER_PORTRAIT to JsonPrimitive(it)) } ?: emptyMap()),
+        ) + RunnerLinkSettings.json(::storedRaw) + LimitRegistry.ALL.associate { it.key to JsonPrimitive(limit(it)) } + EndpointRegistry.ALL.associate { it.key to JsonPrimitive(endpoint(it)) } + (userPortrait()?.let { mapOf(USER_PORTRAIT to JsonPrimitive(it)) } ?: emptyMap()),
     )
 
     /** USER-PORTRAIT (1.107.0): the stored base64 portrait, or null while unset (clients then show their bundled default). */
@@ -458,6 +458,7 @@ class SettingsService(
             TICKET_EXIT_BEHAVIOR -> JsonPrimitive(requireExitBehavior(value))
             TICKET_HANDOFF_NOTE -> JsonPrimitive(requireHandoffNote(value))
             TICKET_CLOSE_DONE_WORKER_WHEN_QUEUED -> JsonPrimitive(requireBoolean(key, value))
+            in RunnerLinkSettings.KEYS -> RunnerLinkSettings.validated(key, value)
             TICKET_WEIGHT_EXECUTORS -> try {
                 WeightExecutors.parse(value).toJson()
             } catch (e: IllegalArgumentException) {
@@ -901,6 +902,11 @@ class SettingsService(
         requireKnownSkills(store, ids, "setting '$SKILL_IDS'")
         return ids
     }
+
+    /** RUNNER-POOL-5: the runner link's non-numeric settings ([RunnerLinkSettings]), read at every use. */
+    fun runnerLink(): RunnerLinkSettings.Values = RunnerLinkSettings.values(::storedRaw)
+
+    private fun storedRaw(key: String): String? = store.settings.get(key)?.value
 
     private fun storedBoolean(key: String): JsonPrimitive? {
         val stored = store.settings.get(key)?.value ?: return null

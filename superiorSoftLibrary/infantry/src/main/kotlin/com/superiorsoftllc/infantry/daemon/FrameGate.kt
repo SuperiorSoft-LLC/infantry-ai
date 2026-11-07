@@ -32,6 +32,37 @@ object FrameGate {
         else -> null
     }
 
+    /**
+     * RUNNER-POOL-5 (docs/RUNNER-POOL.md section 7): the caller seat of a frame that arrived over the runner link, presented with
+     * a runner-scoped pair credential: `orchestrator:<id>`. It is never the owner and never an agent.
+     */
+    const val ORCHESTRATOR_SEAT_PREFIX = "orchestrator:"
+
+    /** RUNNER-POOL-5: the runner link frame family; the ONLY frames a runner-scoped credential may call. */
+    const val RUNNER_LINK_PREFIX = "runner_link_"
+
+    fun orchestratorSeat(orchestratorId: String): String = ORCHESTRATOR_SEAT_PREFIX + orchestratorId
+
+    /**
+     * RUNNER-POOL-5: why a frame of [type] is refused for the caller [seat]. An `orchestrator:<id>` seat (a runner credential)
+     * may call only the [RUNNER_LINK_PREFIX] family: every other frame, owner frames (settings, plugins, keystore, updater,
+     * remote) included, is refused. A link frame from any other seat is refused too: the family is reached only over the link.
+     * Other seats fall through to [refusal] as a non-owner.
+     */
+    fun refusal(type: String, seat: String, pluginOwnerOnly: Boolean = false): String? {
+        val link = type.startsWith(RUNNER_LINK_PREFIX)
+        return when {
+            seat.startsWith(ORCHESTRATOR_SEAT_PREFIX) && !link ->
+                "${shown(type)} refused: a runner credential (seat ${shown(seat)}) may call only the runner link frames"
+            !seat.startsWith(ORCHESTRATOR_SEAT_PREFIX) && link ->
+                "${shown(type)} refused: runner link frames are accepted only over the runner link from the paired orchestrator"
+            link -> null
+            else -> refusal(type, owner = seat == OWNER_SEAT, pluginOwnerOnly = pluginOwnerOnly)
+        }
+    }
+
+    const val OWNER_SEAT = "owner"
+
     /** A client-chosen type is echoed printable and at most [SHOWN_TYPE_CHARS] characters long. */
     private fun shown(type: String): String = type.filter { it in ' '..'~' }.take(SHOWN_TYPE_CHARS)
 
