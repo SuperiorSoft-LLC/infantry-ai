@@ -967,6 +967,7 @@ class InfantryDaemon(
             val remoteStarts = com.superiorsoftllc.infantry.runners.RemoteStarts(
                 cloneRoot = { settings.runnerLink().cloneRoot.takeIf { it.isNotBlank() }?.let(::File) ?: File(daemonStateDir, com.superiorsoftllc.infantry.runners.RemoteStarts.DEFAULT_FOLDER) },
                 outboxMax = { settings.limit(LimitRegistry.RUNNERS_OUTBOX_MAX).toInt() },
+                persistTo = File(daemonStateDir, "runner-outbox.json"),
             )
             val runnerLinksRef = java.util.concurrent.atomic.AtomicReference<com.superiorsoftllc.infantry.daemon.api.runners.RunnerLinks>(com.superiorsoftllc.infantry.daemon.api.runners.NoRunnerLinks)
             val localRunnerLink = com.superiorsoftllc.infantry.daemon.api.orchestrator.LocalRunnerLink(
