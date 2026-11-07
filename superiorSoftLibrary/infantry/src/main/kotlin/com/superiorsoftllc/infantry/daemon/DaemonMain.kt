@@ -1247,7 +1247,7 @@ class InfantryDaemon(
             val mailbox = Mailbox(mailStore, { MailLimits.of(settings::limit) })
             // BUG-S3: mail to an agent swapped onto another harness opens a fresh session there (4.2, lazily).
             val bindFreshSession = { agentId: String ->
-                LocalRunner.start(runnerPool, manager, SpawnOptions(agentId = agentId, projectId = agents.get(agentId)?.projectId), repo, agentRunner = agents.get(agentId)?.runner, defaultRunner = settings.runnersDefault())
+                LocalRunner.start(runnerPool, manager, SpawnOptions(agentId = agentId, projectId = agents.get(agentId)?.projectId), repo, agentRunner = agents.get(agentId)?.runner, defaultRunner = settings.runnersDefault())?.let { s -> when (s) { is StartedSession.Local -> com.superiorsoftllc.infantry.mailbox.FreshSession.Local(s.record); is StartedSession.Remote -> com.superiorsoftllc.infantry.mailbox.FreshSession.Remote(s.id) } }
             }
             val mail = MailRouter(
                 manager, mailbox, agents, mailBase,
@@ -1771,9 +1771,19 @@ class InfantryDaemon(
                                     repo, agentRunner = request.agentId?.let { agents.get(it)?.runner }, defaultRunner = settings.runnersDefault(),
                                 ) ?: throw IllegalArgumentException("the daemon could not bind a session for this spawn")
                             },
-                            firstTask = { record, task ->
-                                val turn = if (record.neverRun) pluginFirstTurn(record, task) else task
-                                manager.resume(record.id, turn)
+                            firstTask = { started, task ->
+                                when (started) {
+                                    is StartedSession.Local -> {
+                                        val record = started.record
+                                        val turn = if (record.neverRun) pluginFirstTurn(record, task) else task
+                                        manager.resume(record.id, turn)
+                                    }
+                                    // RUNNER-AGENT-1: the first task of a remote spawn is mail to its runner.
+                                    is StartedSession.Remote -> {
+                                        val r = LocalRunner.deliverVia(runnerPool)(started.id, task, com.superiorsoftllc.infantry.protocol.MessageOrigin.Owner, "spawn", emptyList())
+                                        if (r.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.MailResult.FAILED) throw IllegalStateException(r.reason.ifBlank { null } ?: "the runner refused the first task")
+                                    }
+                                }
                             },
                             setSpawner = manager::setSpawner,
                             gate = { type ->
@@ -3302,7 +3312,7 @@ private suspend fun handleConnection(
                             // BIND AT CREATION: a console opened as a profile is addressable at once.
                             spawnGuard.admit(origin) { placement ->
                                 LocalRunner.start(runnerPool, manager, options, repo, agentRunner = options.agentId?.let { agents.get(it)?.runner }, defaultRunner = (settings as? SettingsService)?.runnersDefault() ?: "local")
-                                    ?.also { if (placement != null) spawnGuard.record(it.id, origin); manager.setSpawner(it.id, origin) }
+                                    ?.also { if (placement != null) spawnGuard.record(it.id, origin); (it as? StartedSession.Local)?.let { l -> manager.setSpawner(l.id, origin) } }
                             }?.let { active = it.id }
                             null
                         } catch (e: IllegalArgumentException) {

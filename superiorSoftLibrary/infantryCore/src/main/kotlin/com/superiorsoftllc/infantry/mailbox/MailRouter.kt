@@ -70,7 +70,7 @@ class MailRouter(
      * executor (the daemon wires `bindSessionOnSpawn`). Used when mail addressed to an agent (by id or role) would
      * otherwise resume a session on a harness the agent was swapped away from. Null = never cut one (resume as before).
      */
-    private val bindFreshSession: ((agentId: String) -> SessionRecord?)? = null,
+    private val bindFreshSession: ((agentId: String) -> FreshSession?)? = null,
     /** TRIGGER-FOOTER-1: the footer template for mail from a trigger / `system` sender (null = the normal answer block). */
     private val automationFooter: (sender: String) -> String? = { MailFooter.DEFAULT },
     /** P10-K9: a never-run recipient's knowledge section, read AT DELIVERY for its own project. */
@@ -426,7 +426,12 @@ class MailRouter(
         // answers `none`) is left in history; the message opens a fresh session on the new harness instead.
         val session = if (resolved.viaAgent && !latest.isBusy()) {
             try {
-                freshSessionIfHarnessMoved(latest) ?: latest
+                when (val fresh = freshSessionIfHarnessMoved(latest)) {
+                    null -> latest
+                    is FreshSession.Local -> fresh.record
+                    // RUNNER-AGENT-1: the agent's profile moved it to a remote runner; the mail goes there.
+                    is FreshSession.Remote -> return deliverRemote(fresh.sessionId, message, rest)
+                }
             } catch (e: Exception) {
                 return DeliveryOutcome.Failed("a new session for agent '${latest.agentId}' could not be started: ${e.message}")
             }
@@ -696,7 +701,7 @@ class MailRouter(
      * A fresh session for [session]'s agent when [session] runs on a harness other than the agent's stored executor
      * provider; null when it is on the right harness, has no agent, or no binder is wired.
      */
-    private fun freshSessionIfHarnessMoved(session: SessionRecord): SessionRecord? {
+    private fun freshSessionIfHarnessMoved(session: SessionRecord): FreshSession? {
         val bind = bindFreshSession ?: return null
         val agentId = session.agentId ?: return null
         // BASICS-KILL-1: a ticket worker runs on its TICKET's provider/model, which may differ from the profile's on
@@ -717,4 +722,10 @@ class MailRouter(
         val session = manager.get(w.session) ?: return@filter false
         !session.isBusy()
     }
+}
+
+/** RUNNER-AGENT-1: the fresh session [MailRouter] opens when an agent's harness moved: a local record, or a session on a remote runner (no record here). */
+sealed interface FreshSession {
+    data class Local(val record: SessionRecord) : FreshSession
+    data class Remote(val sessionId: String) : FreshSession
 }

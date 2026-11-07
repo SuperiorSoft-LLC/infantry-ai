@@ -76,8 +76,8 @@ class LocalSpawnsTest {
         guard = guard,
         limit = { def: LimitDef -> limits[def.key] ?: def.default.toInt() },
         tickets = { tickets },
-        create = { request -> session("s-new${++counter}", role = request.role ?: "backend", project = request.projectId).also { records += it } },
-        firstTask = { record, task -> tasks += record.id to task },
+        create = { request -> session("s-new${++counter}", role = request.role ?: "backend", project = request.projectId).also { records += it }.let(com.superiorsoftllc.infantry.daemon.StartedSession::Local) },
+        firstTask = { started, task -> tasks += started.id to task },
         setSpawner = { id, spawner -> records.replaceAll { if (it.id == id) it.copy(spawnerSessionId = spawner) else it } },
         gate = { gate },
     )
