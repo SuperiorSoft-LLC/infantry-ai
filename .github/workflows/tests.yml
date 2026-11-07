@@ -33,7 +33,7 @@ jobs:
         run: >
           xvfb-run -a ./gradlew --no-daemon --continue --console=plain
           :superiorSoftLibrary:infantry:test :superiorSoftLibrary:infantryUiCore:jvmTest
-          :superiorSoftLibrary:infantryUi:test :superiorSoftLibrary:infantryUi:ownerSmoke
+          :superiorSoftLibrary:infantryUi:test
           2>&1 | tail -n 200
       - name: Summary (known failures are reported, only new ones fail)
         if: always()

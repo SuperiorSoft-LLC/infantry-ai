@@ -2334,6 +2334,13 @@ apart from the 1.3.0, 1.4.0, 1.5.0, 1.6.0 and 1.28.0 additions marked in the tab
 | `ticket_move` | one `TicketMove` (JSON): `id`, optional `status`, `position`, `wontFix` (1.5.0); moving to `in_progress` starts a ticket session (1.6.0) | client → daemon |
 | `ticket_link`, `ticket_unlink` | `{"ticketId", "relatedId", "type"}` (JSON) (1.5.0) | client → daemon |
 | `ticket_reorder` | `{"status"?, "ids": [...]}` (JSON): the listed tickets go to the top of their column, in order (1.5.0) | client → daemon |
+| `agent_queue` | a queue request for one agent (JSON), answered with the agent's queued tickets | client → daemon |
+| `agent_switch` | switch an agent to another ticket or role (JSON) | client → daemon |
+| `layer_skill_list`, `layer_skills` | request the layered skills of a layer; answered with the list (JSON) | client → daemon, daemon → client |
+| `layer_skill_save`, `layer_skill_delete` | save or delete a skill on a layer (JSON) | client → daemon |
+| `ticket_assign`, `ticket_unassign` | assign a ticket to an agent, or take it off (JSON) | client → daemon |
+| `timeline_list`, `timeline_items`, `timeline_item` | request a session's timeline, answered with its items and then item updates (JSON) | client → daemon, daemon → client |
+| `send:` | the `requestId` prefix a client puts on a chat `prompt` (`send:<id>`); answered with `prompt_ack` (1.151.0) | client → daemon |
 | `ticket_delete` | a ticket id (1.5.0) | client → daemon |
 | `ticket` | one `Ticket` (JSON), answering `ticket_save` / `ticket_get` / `ticket_move` / `ticket_link` / `ticket_unlink` / `ticket_start_next`; also pushed to every client for each ticket a change touched (1.5.0 / 1.6.0); the `Ticket` carries `branch` and `base` (1.32.0) | daemon → client |
 | `tickets` | list of `Ticket` (JSON) in board order, answering `ticket_list` / `ticket_reorder` / `ticket_delete`; also pushed to every client after a reorder or a delete (1.5.0) | daemon → client |

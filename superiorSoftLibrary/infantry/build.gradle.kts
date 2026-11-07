@@ -547,3 +547,6 @@ tasks.named<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>("compileTestKotlin"
     dependsOn(coreJar)
     compilerOptions.freeCompilerArgs.add(coreJar.flatMap { it.archiveFile }.map { "-Xfriend-paths=" + it.asFile.absolutePath })
 }
+
+// CI-TESTS-2: skip machine-only test classes when INFANTRY_CI=1 (gradle/ci-machine-only.txt).
+apply(from = rootProject.file("gradle/ci-skip.gradle.kts"))

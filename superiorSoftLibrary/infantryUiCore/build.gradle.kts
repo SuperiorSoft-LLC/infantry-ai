@@ -165,3 +165,6 @@ tasks.named<Test>("jvmTest") {
 
 // SDK-SURFACE-1: the UI core dump is a record only; keep the check out of `check`.
 tasks.matching { it.name == "checkLegacyAbi" }.configureEach { enabled = false }
+
+// CI-TESTS-2: skip machine-only test classes when INFANTRY_CI=1 (gradle/ci-machine-only.txt).
+apply(from = rootProject.file("gradle/ci-skip.gradle.kts"))

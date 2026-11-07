@@ -1,0 +1,14 @@
+# CI-TESTS-2: test classes that need the owner's machine (an installed infantry CLI, a logged-in harness, a desktop,
+# Windows paths, real thread timing). They are skipped when INFANTRY_CI=1 (tests.yml) and still run locally and in the
+# gate. One class pattern per line (Gradle excludeTestsMatching syntax); text after " # " is the reason.
+# Read by gradle/ci-skip.gradle.kts for :infantry, :infantryUi and :infantryUiCore. Never delete a test, list it here.
+com.superiorsoftllc.infantry.ui.owner.* # OwnerSmokeTest S1-S5: drives the real app on a desktop
+com.superiorsoftllc.infantry.cli.mcp.McpOrchestrationE2eTest # needs an installed infantry CLI and a logged-in harness
+com.superiorsoftllc.infantry.cli.mcp.McpTicketAnswerRaceE2eTest # needs an installed infantry CLI
+com.superiorsoftllc.infantry.cli.mcp.McpTicketToolsTest # needs an installed infantry CLI
+com.superiorsoftllc.infantry.cli.mcp.BacklogLaneE2eTest # needs an installed infantry CLI
+com.superiorsoftllc.infantry.daemon.InterruptDaemonTest # real harness process timing
+com.superiorsoftllc.infantry.cli.SessionKillScopeTest # MCP server restart needs the installed CLI
+com.superiorsoftllc.infantry.daemon.FrameGateDaemonTest # real harness process timing
+com.superiorsoftllc.infantry.daemon.DaemonThreadLeakTest # thread counts are timing-bound on 4-core runners
+com.superiorsoftllc.infantry.session.JsonSessionStoreUnreadableTest # Class B: unreadable-store semantics rely on Windows file locks; a Linux runner (root) can read it
