@@ -163,6 +163,18 @@ class MailRouter(
     @Volatile
     var reportCheck: ((from: String, body: String) -> String?)? = null
 
+    /**
+     * BUG MAIL-QUEUED-LOST-1: a report to the starter while mail is still QUEUED for the reporter (it arrived mid-run and the
+     * session has not rested yet) is refused ONCE with that mail's text, so the worker sees it before it ends the ticket.
+     */
+    private fun unreadMailRefusal(from: String): String? {
+        if (from.isBlank()) return null
+        val claimed = mailbox.claimQueued(setOfNotNull(from, manager.get(from)?.agentId))
+        if (claimed.isEmpty()) return null
+        return "Not sent: mail reached you while you worked. Read it, act on it, then report again.\n\n" +
+            claimed.joinToString(MAIL_FOLD_SEPARATOR) { "From ${it.from} (${it.subject}):\n${it.body}" }
+    }
+
     /** Sessions currently being pumped; the re-entrancy guard. */
     private val pumping = ConcurrentHashMap.newKeySet<String>()
 
@@ -233,6 +245,7 @@ class MailRouter(
             RoleAt.NotRoleAt -> original
         }
         if (request.to == MailAddresses.STARTER) reportCheck?.invoke(request.from, request.body)?.let { return MailResult.Refused(it) }
+        if (request.to == MailAddresses.STARTER) unreadMailRefusal(request.from)?.let { return MailResult.Refused(it) }
         crossProjectRefusal(request)?.let { return MailResult.Refused(it) }
         val result = mailbox.send(addressStarter(request), automation)
         if (result is MailResult.Sent) {

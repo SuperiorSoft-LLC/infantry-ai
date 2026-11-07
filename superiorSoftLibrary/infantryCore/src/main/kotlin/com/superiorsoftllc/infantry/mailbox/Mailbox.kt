@@ -438,6 +438,22 @@ class Mailbox(
         return events.size
     }
 
+    /**
+     * BUG MAIL-QUEUED-LOST-1: hand the still-QUEUED mail of [recipients] (not from system, not held) over inline: they become
+     * DELIVERED and are returned oldest first, so a caller can show them to the recipient before it ends its run.
+     */
+    fun claimQueued(recipients: Set<String>): List<Message> {
+        val (events, claimed) = synchronized(lock) {
+            val list = messages.values.filter {
+                it.to in recipients && it.state == MessageState.QUEUED && it.id !in held && !it.from.equals("system", ignoreCase = true)
+            }.sortedWith(compareBy({ it.sentAt }, { it.seq }))
+            val ev = list.flatMap { markDeliveredLocked(it.id) }
+            ev to list.mapNotNull { messages[it.id] }
+        }
+        emit(events)
+        return claimed
+    }
+
     private fun markDeliveredLocked(messageId: String): List<MailEvent> {
         val current = messages[messageId] ?: return emptyList()
         if (current.state != MessageState.QUEUED) return emptyList()
