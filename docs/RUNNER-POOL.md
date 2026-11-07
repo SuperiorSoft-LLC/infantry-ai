@@ -1,0 +1,289 @@
+# Runner pool: one orchestrator, N peer runners (RUNNER-POOL-1, 2026-11-07)
+
+Design record (dated). Ticket 8ebf769c. Builds on [DAEMON-CORE.md](DAEMON-CORE.md) section 6 (6.1 to 6.7, ORCH-1) and
+does not repeat it. No product code ships with this record; the baby steps in section 9 are backlog tickets.
+
+Owner (2026-11-07): "connect to multiple daemons or servers ... offload workers between local and remote, some workers
+on the server and some locally". Owner rule (2026-10-29): location transparency. Callers never know local vs remote; it
+is a binding chosen by config, never an if/else.
+
+Questions only the owner can answer are marked **[Q: owner]** and collected in section 11.
+
+## 1. Topology
+
+* **One orchestrator** per project set: the board, tickets, comments, mail routing, knowledge, policy authoring, usage
+  pacing and the client-facing session index. Clients (desktop, web, Android, CLI) connect to the orchestrator only.
+* **N runners.** A runner is a daemon that runs sessions, harnesses, worktrees, builds and the watch runner (the
+  "runner" rows of DAEMON-CORE 6.1). Runners are peers: the local PC is a runner named `local`, a server is a runner
+  named by the owner (e.g. `hetzner-1`). There is no primary runner; `local` is only the default placement.
+* **Default: the orchestrator is the local daemon** (the PC is both orchestrator and runner `local`). Reasons: nothing
+  changes for a user who never adds a server; the board's SQLite stays where it is; no state migration.
+* **Later: the orchestrator may live on a server** (always on, so tickets keep moving while the PC sleeps; also the paid
+  hosted path of DAEMON-CORE 6). The interfaces below are the same in both cases; only which daemon holds the board
+  changes. Moving the board is a data migration (expensive to reverse, section 10), so it is a later step, not step 1.
+  [Q: owner] is the always-on server orchestrator wanted soon, or is "PC orchestrates, server works" enough for launch?
+
+```
+            clients (UI, CLI, phone)
+                     |  ws (existing)
+            +--------v---------+
+            |  ORCHESTRATOR    |  board, mail, knowledge, pacing, session index
+            |  (local daemon)  |
+            |  RunnerPool -----+------------------------+
+            +---+--------------+                        |
+                | RunnerLink (in-process)               | RunnerLink (remote binding, wss, paired)
+          +-----v-----+                           +-----v------+
+          | runner    |                           | runner     |
+          | "local"   |                           | "server-1" |
+          +-----------+                           +------------+
+```
+
+### Options considered
+
+| option | for | against | verdict |
+|---|---|---|---|
+| A. Orchestrator = local daemon, servers are runners | zero migration, local-only unchanged, smallest first slice | board stops when the PC sleeps | **default, step 1** |
+| B. Orchestrator on the server, PC is a runner | always on; same shape as the hosted product | moves the DB; PC must reach the server for everything; larger blast radius | later (step 9), same interfaces |
+| C. Federation: every daemon keeps its own board, they sync | no single point | two writers per ticket, conflict rules, much more code | rejected: complexity does not earn its place |
+
+## 2. The interfaces (contract first)
+
+Both directions already have a type in `infantryDaemonApi` (`daemon/api/orchestrator/OrchestratorLink.kt`):
+`OrchestratorLink` (runner -> orchestrator, contract 1.1.0) and `RunnerLink` (orchestrator -> runner, today only
+`ticketIdOf`). The pool design **extends those two**; it adds no parallel channel.
+
+### 2.1 `RunnerLink` grows into the runner command contract
+
+Plain data in and out, `OrchestratorReply` error model, idempotent on a natural key, exactly as 6.5 states for the other
+direction. New operations (each a minor bump of a new `RunnerLink.CONTRACT_VERSION`, starting `1.0.0`):
+
+| operation | natural key | carries | fail mode on `Unavailable` |
+|---|---|---|---|
+| `hello()` -> `RunnerInfo(name, contract, harnesses[{id, models, loggedIn}], projects, capacity, os)` | none (read) | what the runner can run | runner marked `down` |
+| `startSession(StartSpec)` -> `SessionRef(sessionId)` | `StartSpec.startId` (ticket id + attempt) | role, provider, model, effort, project id, ticket id, branch, brief text, parent, env names (never values) | ticket stays in todo, start reported failed |
+| `stopSession(sessionId, reason)` | session id | kill / stop | retried by the binding; card shows "stop pending" |
+| `deliverMail(sessionId, MailItem)` -> `delivered/queued/failed` | (session id, message id) | the `MailDelivery` edge of DAEMON-CORE 6.3 | mail stays persisted in the orchestrator's mailbox, redelivered |
+| `events(sinceSeq)` -> `List<SessionEvent(session, seq, kind, payload)>` | (session, seq) | status, finished, usage, progress, denied | replayed from `sinceSeq` on reconnect |
+| `readTranscript(sessionId, fromLine, maxLines)` | read | on-demand transcript for the UI | UI shows "runner offline" |
+| `health()` -> `RunnerHealth(state, running, freeSlots, load)` | read | heartbeat | after `runners.lostAfterSec`, `down` |
+| `forwardFrame(agentIdentity, Envelope)` (runner -> orchestrator, see 2.3) | frame id | an agent's board/mail/knowledge call from a remote worker | the agent's tool call returns unavailable |
+
+`ticketIdOf` stays. `LocalRunnerLink` wraps `SessionManager`, `MailDelivery` and the worktree code unchanged, the same way
+`LocalOrchestratorLink` wraps the board: local behaviour is the same functions called the same way.
+
+### 2.2 `RunnerPool` (orchestrator side)
+
+```
+interface RunnerPool {
+    fun runners(): List<RunnerEntry>            // name, binding id, health, info; "local" always present
+    fun link(name: String): RunnerLink?         // null = unknown runner
+    fun runnerOf(sessionId: String): String     // the session index; "local" for every session today
+}
+```
+
+A remote runner is a **binding** registered by a plugin (`api.hooks.runnerBinding(id, binding)`, declared in
+`daemon.hooks`), the same mechanism as `orchestratorBinding`. Core holds the pool, the registry and `local`; the remote
+transport lives in a plugin (`Infantry_RemoteRunner`), so the transport guard of DAEMON-CORE 6.5 extends to `RunnerLink`
+unchanged. Every orchestrator-side call that today names `SessionManager` for spawn/kill/resume goes through
+`pool.link(pool.runnerOf(id))` (the 6.6 list: `bindSessionOnSpawn`, `sessionStartedSink`, MailRouter resume).
+
+### 2.3 Agent tool calls from a remote worker
+
+A worker's MCP server and CLI talk to **their own daemon** (`INFANTRY_URL`). On a remote runner that daemon has no board.
+Two options:
+
+| option | for | against |
+|---|---|---|
+| a. Worker points at the orchestrator (`INFANTRY_URL` = orchestrator, agent token minted by it) | no proxy code | the server must reach the PC (reverse reachability), a second credential per worker, breaks location transparency |
+| b. **The runner forwards** orchestrator-side frames over its existing link (`forwardFrame`) | one channel, one credential, the worker sees no difference | each frame needs a side tag (runner/orchestrator) in the frame table |
+
+**Chosen: b.** The frame table gets a generic `side` attribute (a core seam, no feature); a runner daemon with a remote
+orchestrator forwards `side = orchestrator` frames with the caller's agent identity, and the orchestrator re-checks them
+through `FrameGate` as that agent. In local mode the attribute is never consulted (one runner, one orchestrator, same
+process).
+
+## 3. Placement: how a ticket start picks a runner
+
+All data, never code-only.
+
+* **Ticket field** `runner: local | <name> | any` (absent = no pin).
+* **Routing rule field** `runner` on `protocol.RoutingRule` (`Projects.kt`), same values, default absent.
+* **Setting** `runners.default` = `local`.
+* Resolution order (one pure function, `Placement.pick`, unit-tested): explicit ticket pin > first matching routing rule's
+  `runner` > `runners.default`. This mirrors how provider/model resolve today (pin > rule > weight mapping).
+* `any` = among runners that are `up`, have the ticket's project, have the pinned harness logged in, and have a free
+  slot: the one with most free slots; ties go to `local`. None eligible = the start waits in todo with a reason on the
+  card (same as a full lane today), never silently goes elsewhere.
+* `<name>` that is down or full: the start is refused with the reason (`runner server-1 is down`); no fallback to local
+  unless the rule says `any`. Predictable beats clever.
+* **Caps:** `runners.<name>.maxWorkers` (default 1) per runner, under the global worker cap that exists today. The usage
+  governor (the two-worker hook) keeps its global `maxWorkers`; it paces **per provider account**, not per runner,
+  because a Claude login shared by the PC and the server is one usage meter. [Q: owner] is one Claude subscription
+  logged in on two machines acceptable, or does the server get its own account / API key?
+* **Health:** `up` (heartbeat within `runners.heartbeatSec`), `degraded` (late, or `hello` reports a harness logged out),
+  `down` (silent for `runners.lostAfterSec`). Only `up` runners receive new starts.
+
+### 3.1 A runner goes away mid-ticket
+
+The session lives on the runner; its process may still be running there. The orchestrator cannot know, so it does not
+guess:
+
+1. Card shows the worker as `runner offline` (from `health`); the ticket stays in_progress. Nothing is reaped
+   (`DoneWorkerReaper` treats an unknown runner session as "not finished", like `ticketOf` -> Unavailable today).
+2. Mail to that session stays queued in the orchestrator's mailbox (already persisted before delivery).
+3. On reconnect: `events(sinceSeq)` replays what happened; the board catches up. Nothing is lost that the runner kept.
+4. After `runners.lostAfterMin` the owner gets an attention item. Setting `runners.onLost`:
+   `attention` (default) | `restart-elsewhere` (opt-in: start the ticket again on placement, from the last pushed
+   branch; unpushed work on the dead runner is lost, the attention line says so).
+
+Unpushed commits are the real risk. Setting `runners.pushOnCommit` (default `false`, cheapest): `true` makes a remote
+runner push the ticket branch after each worker commit so a restart elsewhere loses at most uncommitted edits.
+
+## 4. Code and git on a remote runner
+
+* **Source of truth is the project's git remote.** A project with no remote URL cannot be placed on a remote runner
+  (placement refuses with the reason). The runner never receives files from the orchestrator.
+* **Clone:** a remote runner keeps one cache clone per project under its state dir (`runners.cloneRoot`, default
+  `<stateDir>/clones`), fetches before each start, cuts the ticket worktree from it with the existing `worktree` code.
+* **Push:** the runner pushes the ticket branch to the remote when the worker finishes (and per commit if
+  `runners.pushOnCommit`). Git credentials: a per-repo **deploy key** (or fine-scoped token) on the server, never the
+  owner's personal key. [Q: owner] may the server push only `ticket/*` branches (recommended), or also the dev branch?
+* **VC merges on the orchestrator's runner by default** (`local` today): VC is a ticket with a role like any other, so its
+  placement is a routing rule (`role: vc, runner: local`). The local runner fetches the ticket branch from the remote,
+  merges, pushes. This keeps the merge where the owner's main checkout and the build folder are. A server-side VC is a
+  routing-rule change, not code.
+* **Ticket files and paths:** ticket rows already carry relative paths (DAEMON-CORE 6.3 "paths are runner-local"); a
+  remote runner resolves them in its own clone. `ticket files --related` is computed from git, so it works from any
+  clone of the same remote.
+* **Secrets and logins are per runner and never travel.** The owner logs in `claude` (and any other CLI) on the server
+  themselves, over SSH. `hello` reports which harnesses are installed and logged in (a yes/no, not the credential). API
+  keys, run secrets (`infantry_run_secrets`) and the keystore master key stay in each runner's own keystore. `StartSpec`
+  carries env variable **names** a session needs, the runner fills values from its own store or refuses.
+* **Build caches** are per runner and local (Gradle cache, node_modules). No sharing in this design; the first build on
+  a fresh server is slow, later ones are warm. Shared caches are an opt-in later idea, not a step here.
+* **Builds and releases** (the automation role) stay on `local` by routing rule unless the owner moves them: the dist
+  folder and signing keys live on the PC.
+
+## 5. Wire
+
+What crosses between orchestrator and runner, and nothing more:
+
+| orchestrator -> runner | runner -> orchestrator |
+|---|---|
+| start/stop session (`StartSpec`: ids, role/provider/model, brief text, branch) | `hello`, `health` |
+| mail text for a session | session events `(session, seq)`: status, finished, usage numbers, progress, denied |
+| transcript read requests (UI on demand) | transcript lines (on demand only) |
+| | forwarded agent frames (board, comments, mail, knowledge calls of its workers) |
+
+Never: file contents, diffs, credentials, keystore material. Transcripts cross only when a client asks to read one
+(setting `runners.transcripts = on-demand`, the cheapest; `stream` is opt-in).
+
+* **Channel:** one WebSocket per runner, carrying the existing `Envelope` (`infantryProtocol`) with a new frame family for
+  the link operations. It reuses the daemon's server, auth hook and codec; the binding plugin owns it.
+* **Who dials:** in step 1 the **orchestrator dials the runner** (a server is reachable; the PC usually is not). A
+  reverse mode (runner dials out to the orchestrator, nothing listens on the runner) is the same link with the dial
+  flipped; it is needed for option B / hosted orchestration and for runners behind NAT. After the handshake both modes
+  are identical.
+* **Versioning:** `hello` exchanges `OrchestratorLink.CONTRACT_VERSION` and `RunnerLink.CONTRACT_VERSION`; a major
+  mismatch marks the runner `degraded("version")`; a missing minor operation answers `Unavailable("version")`. Callers
+  never branch on the version (6.5 rule).
+* **Ordering and replay:** the runner keeps an outbox of events with a per-session monotonic `seq`, kept until the
+  orchestrator acknowledges it (bounded by `runners.outboxMax`). The orchestrator dedupes by `(session, seq)`.
+* **Idempotency:** `startSession` keyed by `startId`; a retried start after a timeout returns the same session.
+
+## 6. UI
+
+* **One board, one sidebar.** Clients still talk to the orchestrator only. The session list frame gains `runner`
+  (default `"local"`), filled from `RunnerPool.runnerOf`. Transcript reads are forwarded by the orchestrator.
+* **Runner badge** on each worker card and sidebar row: shown only when more than one runner is configured, so the
+  single-machine UI is pixel-identical. Badge colour by health (`up` / `degraded` / `offline`).
+* **"Add a server" flow** (a settings card in a new plugin, `Infantry_Runners`; CLI equivalents first):
+  1. On the server: `infantry runner pair --name server-1` prints a one-time pairing code (expires in
+     `runners.pairCodeMin`, default 10) and the server's TLS certificate fingerprint.
+  2. On the PC: Settings > Runners > Add, or `infantry runner add server-1 wss://host:port --code <code>`; the UI shows
+     the fingerprint for the owner to compare; on confirm the two daemons exchange a long-lived pair credential.
+  3. The card lists runners with health, harnesses logged in, projects allowed, running/max workers, and actions:
+     pause (no new starts), detach (revoke), rotate credential.
+  The QR pairing link (`ui/pair/PairingLink.kt`) can carry the same code later; step 1 is CLI + card.
+
+## 7. Security review (before any code)
+
+A link that makes another machine start agent CLIs with tool permissions **is a remote-code-execution channel**. Today's
+remote access (`infantry remote on`) is cleartext `ws://` over Tailscale with one shared token (`CliMain.remote`); that
+is not good enough for a runner link and the runner link must not reuse that token.
+
+| threat | control |
+|---|---|
+| Anyone who reaches the port starts processes | Runner link refused unless paired. Pairing = one-time code shown on the runner's own console (owner present on both ends), single use, short expiry. |
+| Token theft from the wire | **TLS required** (`wss://`) for every non-loopback runner link; self-signed is fine, the certificate fingerprint is pinned at pairing. `runners.allowPlainTailnet` (default `false`) is an explicit opt-in to plain ws over a tailnet, with its risk stated in the setting text. |
+| A stolen pair credential is valid for ever | Per-pair credential (not the owner token, not an agent token), stored in each side's keystore; rotated in-band every `runners.credentialRotateDays` (default 30); revocable from either side (`runner detach`). |
+| Wrong orchestrator drives the runner | **Scoping:** a runner accepts link frames from exactly one paired orchestrator id. The runner credential can call only the link operations; it cannot call owner frames (settings, plugins, keystore, updater, remote on/off). |
+| Orchestrator asks for anything | **Runner keeps the final say.** Every remote-originated start/stop passes the runner's `FrameGate` and active policy as a non-owner caller seat `orchestrator:<id>`. Runner-local allow-lists: `runner.projects` (which projects it will clone), `runner.harnesses`, its own worker cap, and a local kill switch `infantry runner detach`. A remote policy can tighten, never loosen (DAEMON-CORE 6.4). |
+| Replay of a captured start | `startId` idempotency + per-frame nonce and timestamp window inside TLS. |
+| Secrets in transit | None beyond the brief and mail text. Env values, API keys, harness logins never cross (section 4). |
+| Forwarded agent frames escalate | The orchestrator re-gates every forwarded frame as the named agent; a runner cannot claim the owner identity (the credential is runner-scoped, the identity field is checked against the sessions that runner owns). |
+| Compromised orchestrator = code on the server | Inherent. Mitigate by running the server runner as a dedicated unprivileged user or in the shipped docker image (`docker-smoke.yml` already builds it); documented in the add-a-server card. |
+| Audit | The runner appends every remote operation (who, what, ticket, result) to its own audit log; `infantry runner audit`. |
+
+Rate limits on pairing attempts (`runners.pairAttemptsPerHour`, default 5).
+
+## 8. Settings (every trade-off named, cheapest default = local only)
+
+| setting | default | meaning |
+|---|---|---|
+| `runners.enabled` | `false` | off: pool is `local` only, no runner link listener, no new UI. Nothing changes for a user who never adds a server. |
+| `runners.default` | `local` | placement when no pin and no rule |
+| `runners.<name>.url`, `.maxWorkers` | -, `1` | per runner |
+| `runners.heartbeatSec` / `runners.lostAfterSec` | `30` / `120` | health; longer = cheaper |
+| `runners.lostAfterMin` | `30` | when an offline runner raises attention |
+| `runners.onLost` | `attention` | or `restart-elsewhere` |
+| `runners.pushOnCommit` | `false` | push ticket branch per commit (safer restart, more pushes) |
+| `runners.transcripts` | `on-demand` | or `stream` |
+| `runners.cloneRoot` | `<stateDir>/clones` | remote runner clone cache |
+| `runners.outboxMax` | named limit | event outbox bound |
+| `runners.pairCodeMin`, `runners.pairAttemptsPerHour` | `10`, `5` | pairing |
+| `runners.credentialRotateDays` | `30` | rotation |
+| `runners.allowPlainTailnet` | `false` | opt-in plain ws over a tailnet |
+| `runner.projects`, `runner.harnesses` (runner side) | empty = none | what this runner agrees to run |
+| `orchestrator.provider` (exists, env today) | `local` | unchanged; becomes a declared setting (ORCH-1 left item 3) |
+
+## 9. Baby steps (each a backlog ticket with grep-able acceptance)
+
+| step | ticket | what | behaviour change |
+|---|---|---|---|
+| 1 | RUNNER-POOL-2 | `RunnerLink` command contract + `LocalRunnerLink` + `RunnerPool` with only `local`; spawn/stop/resume call sites of 6.6 go through it | none |
+| 2 | RUNNER-POOL-3 | placement data: `runner` on tickets and `RoutingRule`, `runners.*` settings declared, pure `Placement.pick` | none (only `local` resolvable; unknown name refused) |
+| 3 | RUNNER-POOL-4 | session frame carries `runner`; badge on worker card, hidden with one runner | none visible |
+| 4 | RUNNER-POOL-5 | pairing, runner-scoped credential, wss with pinned fingerprint, runner audit log (section 7) | only when paired |
+| 5 | RUNNER-POOL-6 | `Infantry_RemoteRunner` binding: hello/health/start/stop/events over the link; remote clone + push; a ticket pinned `runner: <name>` starts on the server (**the first slice**) | only for pinned tickets |
+| 6 | RUNNER-POOL-7 | frame `side` tag + runner-side forwarding of agent frames (section 2.3), so a remote worker can read its ticket, comment and report | only remote workers |
+| 7 | RUNNER-POOL-8 | event outbox + replay, runner-lost handling, `onLost`, `pushOnCommit` | only remote |
+| 8 | RUNNER-POOL-9 | `any` placement, per-runner caps, governor per provider account; Runners settings card (add-a-server UI) | only when `runners.enabled` |
+| 9 | (later, not filed) | reverse dial + orchestrator on a server (option B / hosted) | migration |
+
+Steps 5 and 6 together are the owner's "some workers on the server" demo; 1 to 4 are safe groundwork that change
+nothing locally.
+
+## 10. Decisions that are expensive to reverse
+
+* **The board lives in one place (single orchestrator).** Choosing federation later would rewrite ticket state rules. We
+  choose single-writer now because it is the simplest correct model.
+* **Git remote is the only code path to a runner.** Once runners depend on clone/push, "send files over the link" would
+  be a security and size regression; we never add it.
+* **Agent frames are forwarded by the runner (2.3 b).** Workers then never hold an orchestrator credential; switching to
+  direct connection later means minting and rotating per-worker credentials across machines.
+* **Moving the orchestrator to a server** (step 9) migrates the board DB; going back means migrating it again.
+* **The pair credential format and the link frame family** become a wire contract between machines on different app
+  versions; version them from day one (`hello`).
+
+## 11. Open questions [Q: owner]
+
+1. [Q: owner] Default orchestrator stays on the PC for now (recommended), or is an always-on server orchestrator wanted
+   soon (board keeps moving while the PC sleeps)?
+2. [Q: owner] One Claude subscription logged in on both PC and server (one usage meter, the governor paces per account),
+   or a separate account / API key for the server?
+3. [Q: owner] Server git rights: push `ticket/*` branches only with a deploy key (recommended), or also merge/push the dev
+   branch (VC on the server)?
+4. [Q: owner] Runner lost mid-ticket: raise attention and wait (recommended default), or restart elsewhere automatically?
+5. [Q: owner] Transport for step 1: wss with a pinned self-signed certificate (recommended), or accept plain ws inside
+   Tailscale as the first slice?
