@@ -35,7 +35,7 @@ class ActionCatalogCoverageTest {
     @Test fun `the parser sees the dispatch`() {
         val d = dispatched()
         assertTrue(d.size > 80, "only ${d.size} labels parsed")
-        assertTrue(Envelope.TICKET_SAVE in d && Envelope.PROJECT_GIT_CHECKOUT in d && Envelope.PROJECT_CONFIG in d, d.toString())
+        assertTrue(Envelope.PROJECT_GIT_CHECKOUT in d && Envelope.SECRET_FIELD_SET in d, d.toString())
     }
 
     @Test fun `every dispatched frame is mapped to an action`() {

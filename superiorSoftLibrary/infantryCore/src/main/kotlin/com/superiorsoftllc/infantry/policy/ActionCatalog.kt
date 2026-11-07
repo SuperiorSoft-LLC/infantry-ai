@@ -60,6 +60,8 @@ object ActionCatalog {
         a("host.processes.read", READ, E.PROCESSES),
         a("host.processes.reap", DESTRUCTIVE, E.PROCESSES_REAP),
         a("secrets.read", READ, E.SECRET_STATUS),
+        // PACE-TREND-1 (b4e46daf): Infantry_Pace answers this frame from its daemon half, so it has no Envelope constant.
+        a("pace.read", READ, "pace_get"),
         a("secrets.plugin.read", READ, E.PLUGIN_SECRET_GET),
         a("stories.read", READ, E.STORY_GET, E.STORY_LIST),
         a("knowledge.read", READ, E.DECISION_LIST, E.DECISION_GET, E.ISSUE_LIST, E.ISSUE_GET, E.ISSUE_PRECHECK),
@@ -149,7 +151,7 @@ object ActionCatalog {
         a("commands.save", WRITE, E.COMMAND_SAVE, E.COMMAND_DELETE),
         a("runs.start", SPAWN, E.RUN_START, E.RUN_ATTACH, E.RUN_RESIZE, E.RUN_INPUT),
         a("runs.stop", DESTRUCTIVE, E.RUN_STOP),
-        a("secrets.save", WRITE, E.SECRET_SET, E.SECRET_CLEAR, E.SECRET_IMPORT, E.SECRET_FIELD_SET, E.SECRET_FIELD_DELETE, E.SECRET_DELETE),
+        a("secrets.save", WRITE, E.SECRET_SET, E.SECRET_CLEAR, E.SECRET_IMPORT, E.SECRET_FIELD_SET, E.SECRET_FIELD_DELETE, E.SECRET_DELETE, E.SECRET_MOVE),
         a("runners.admin", WRITE, RUNNER_ADMIN),
     )
 
