@@ -10,13 +10,13 @@
   "capabilities": [
     {
       "id": "http.fetch",
-      "description": "HTTP GET/POST to an allow-listed host; capped text body, parsed json. Off until scripting.fetch.enabled.",
+      "description": "HTTP GET/POST/PUT/PATCH/DELETE/HEAD to an allow-listed host; capped text body, parsed json. Off until scripting.fetch.enabled.",
       "runs": "daemon",
       "action": "script.fetch",
       "kind": "write",
       "grant": "net.out",
       "timeoutMs": 120000,
-      "params": { "type": "object", "properties": { "url": { "type": "string" }, "method": { "type": "string", "enum": ["GET", "POST"] }, "headers": { "type": "object" }, "body": {}, "timeoutSec": { "type": "integer" }, "secretHeaders": { "type": "object", "description": "{HeaderName: secret name}; the value comes from the secrets store and is never echoed." } }, "required": ["url"] },
+      "params": { "type": "object", "properties": { "url": { "type": "string" }, "method": { "type": "string", "enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"] }, "query": { "type": "object", "description": "{name: string or list of strings}; URL-encoded and appended to the url." }, "headers": { "type": "object" }, "body": {}, "timeoutSec": { "type": "integer" }, "secretHeaders": { "type": "object", "description": "{HeaderName: secret name}; the value comes from the secrets store and is never echoed." } }, "required": ["url"] },
       "result": { "type": "object", "properties": { "status": { "type": "integer" }, "headers": { "type": "object" }, "body": { "type": "string" }, "truncated": { "type": "boolean" }, "json": {} } }
     }
   ],

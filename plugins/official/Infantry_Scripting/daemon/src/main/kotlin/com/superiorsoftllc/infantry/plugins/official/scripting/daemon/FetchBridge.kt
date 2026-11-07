@@ -49,10 +49,10 @@ class FetchBridge(
         val s = FetchSettings.read(config)
         if (!s.enabled) throw IllegalStateException("http.fetch is off. Enable it with the setting scripting.fetch.enabled = true and list hosts in scripting.fetch.allow")
         val url = str(args["url"]) ?: throw IllegalArgumentException("url is required")
-        val uri = runCatching { URI(url) }.getOrNull()?.takeIf { it.scheme.equals("http", true) || it.scheme.equals("https", true) } ?: throw IllegalArgumentException("url must be an http(s) URL")
+        val uri = runCatching { URI(withQuery(url, args["query"])) }.getOrNull()?.takeIf { it.scheme.equals("http", true) || it.scheme.equals("https", true) } ?: throw IllegalArgumentException("url must be an http(s) URL")
         if (!allowed(s.allow, uri)) throw IllegalStateException("${uri.host} is not in the allow-list scripting.fetch.allow")
         val method = (str(args["method"]) ?: "GET").uppercase()
-        if (method != "GET" && method != "POST") throw IllegalArgumentException("method must be GET or POST")
+        if (method !in METHODS) throw IllegalArgumentException("method must be one of ${METHODS.joinToString(", ")}")
         val timeout = ((args["timeoutSec"] as? JsonPrimitive)?.doubleOrNull?.toLong() ?: s.defaultTimeoutSec).coerceIn(1L, s.maxTimeoutSec)
         val secretValues = ArrayList<String>()
         val rb = HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(timeout))
@@ -65,7 +65,7 @@ class FetchBridge(
             rb.header(header, value)
         }
         val body = (args["body"] as? JsonPrimitive)?.contentOrNull ?: args["body"]?.takeIf { it !is JsonNull }?.toString()
-        rb.method(method, if (method == "POST") HttpRequest.BodyPublishers.ofString(body.orEmpty()) else HttpRequest.BodyPublishers.noBody())
+        rb.method(method, if (method in BODY_METHODS) HttpRequest.BodyPublishers.ofString(body.orEmpty()) else HttpRequest.BodyPublishers.noBody())
         val started = System.nanoTime()
         val resp = client.send(rb.build(), HttpResponse.BodyHandlers.ofInputStream())
         val (text, truncated) = resp.body().use { readCapped(it, s.maxBytes) }
@@ -94,10 +94,28 @@ class FetchBridge(
         return String(bytes, Charsets.UTF_8) to truncated
     }
 
+    /** Appends [query] (name -> string, number, boolean or a list of them) URL-encoded to [url], keeping any query already in it. */
+    private fun withQuery(url: String, query: JsonElement?): String {
+        val obj = query as? JsonObject ?: return url
+        val pairs = ArrayList<String>()
+        fun enc(v: String) = java.net.URLEncoder.encode(v, Charsets.UTF_8)
+        obj.forEach { (k, v) ->
+            val values = if (v is kotlinx.serialization.json.JsonArray) v.toList() else listOf(v)
+            values.forEach { x -> (x as? JsonPrimitive)?.takeIf { x !is JsonNull }?.let { pairs += "${enc(k)}=${enc(it.content)}" } }
+        }
+        if (pairs.isEmpty()) return url
+        val hash = url.indexOf('#')
+        val base = if (hash >= 0) url.substring(0, hash) else url
+        val frag = if (hash >= 0) url.substring(hash) else ""
+        return base + (if (base.contains('?')) (if (base.endsWith("?") || base.endsWith("&")) "" else "&") else "?") + pairs.joinToString("&") + frag
+    }
+
     private fun str(e: JsonElement?): String? = (e as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
 
     companion object {
         const val ID = "http.fetch"
+        val METHODS = listOf("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD")
+        private val BODY_METHODS = setOf("POST", "PUT", "PATCH", "DELETE")
 
         /** An entry with `://` is a URL prefix; `*.host` matches subdomains; otherwise the host must equal it. An empty list allows nothing. */
         fun allowed(allow: List<String>, uri: URI): Boolean {

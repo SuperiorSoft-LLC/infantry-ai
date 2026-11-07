@@ -161,12 +161,16 @@ new plugin, because it shares the plugin's `config` node and the allow-list help
 prefixes (`https://api.example.com/v1/`); an empty list allows nothing. Also `scripting.fetch.maxBytes`,
 `defaultTimeoutSec`, `maxTimeoutSec`. Community callers need the grant `net.out`. Redirects are not followed.
 
-Args: `url`, `method` (GET or POST), `headers`, `body`, `timeoutSec`, `secretHeaders = {HeaderName = "<secret name>"}`
+Args: `url`, `method` (GET, POST, PUT, PATCH, DELETE or HEAD; a body is sent on all but GET and HEAD, and HEAD returns an empty body), `query = {name = "v" | {"v1","v2"}}` (URL-encoded and appended to the url, SCRIPT-FETCH-2), `headers`, `body`, `timeoutSec`, `secretHeaders = {HeaderName = "<secret name>"}`
 (the value comes from the secrets store and is masked in the result and never logged). Result: `{status, headers, body,
 truncated, json}` (`json` only when the body is a JSON object or array).
 
 ```lua
 local r = ih.call("http.fetch", {url = "https://api.example.com/v1/status", secretHeaders = {Authorization = "example-token"}})
+-- PATCH with a JSON body, a query and a secret header
+local p = ih.call("http.fetch", {url = "https://api.example.com/v1/items/7", method = "PATCH",
+  query = {dry_run = "1"}, headers = {["Content-Type"] = "application/json"}, body = '{"done":true}',
+  secretHeaders = {Authorization = "example-token"}})
 ```
 
 Agents use `infantry_capability_call {capability = "http.fetch", args = {...}}`.
