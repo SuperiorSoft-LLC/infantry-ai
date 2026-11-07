@@ -114,7 +114,7 @@ class DependencyGraph(nodes: List<ModuleNode>) {
         /** The graph of what is installed, enabled as modules.json (and each tier's default) says. */
         fun of(candidates: List<ModuleCandidate>, config: ModulesConfig): DependencyGraph = DependencyGraph(
             candidates.mapNotNull { c ->
-                c.manifest?.let { m -> ModuleNode(m.name, c.tier, m, config.setting(m.name).enabled ?: (c.tier != Tier.COMMUNITY)) }
+                c.manifest?.let { m -> ModuleNode(m.name, c.tier, m, config.setting(m.name).enabled ?: (c.tier != Tier.COMMUNITY && m.defaultEnabled)) }
             },
         )
 

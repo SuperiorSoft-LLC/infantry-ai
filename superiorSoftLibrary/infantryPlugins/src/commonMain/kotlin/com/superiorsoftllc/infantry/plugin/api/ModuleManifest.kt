@@ -37,6 +37,8 @@ data class ModuleManifest(
     /** Required for a community module (the loader refuses one without it); the value is the module's own. */
     val license: String? = null,
     val description: String = "",
+    /** JOBFEED-1: false = an optional module: off until the owner enables it (Settings > Plugins), whatever its tier. Default true (core and official are on). */
+    val defaultEnabled: Boolean = true,
     /** A tier claimed in the file. Never trusted: the folder decides the tier; a mismatch is logged and ignored. */
     val tier: String? = null,
     /**

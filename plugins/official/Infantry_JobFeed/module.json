@@ -1,0 +1,36 @@
+{
+  "name": "Infantry_JobFeed",
+  "version": "1.0.0",
+  "apiVersion": 2,
+  "author": "Infantry AI",
+  "description": "Optional: a live box in the session view that shows the output of a watched command (gradle, tests, builds) while it runs. Off until you enable it; costs nothing while off or closed.",
+  "tier": "official",
+  "defaultEnabled": false,
+  "sequence": [],
+  "config": [
+    {
+      "node": "infantry.jobfeed.daemon",
+      "tab": "Plugins",
+      "group": "Job feed (daemon)",
+      "order": 930,
+      "title": "Job feed: daemon limits",
+      "applies": "Applies to: how the daemon answers the Job feed box. The box asks for new lines; the daemon never pushes.",
+      "keywords": ["job", "feed", "output", "live", "log", "gradle", "build"],
+      "fields": [
+        { "key": "jobfeed.minIntervalMs", "type": "number", "label": "Least milliseconds between two reads of one job (0 = no cap)", "default": 200, "min": 0, "max": 60000, "step": 50, "scope": "daemon", "order": 1 },
+        { "key": "jobfeed.maxLineChars", "type": "number", "label": "Cut a line after this many characters (0 = never)", "default": 300, "min": 0, "max": 100000, "step": 50, "scope": "daemon", "order": 2 },
+        { "key": "jobfeed.stripAnsi", "type": "checkbox", "label": "Strip terminal colour codes", "default": true, "scope": "daemon", "order": 3 },
+        { "key": "jobfeed.maxTracked", "type": "number", "label": "Jobs the rate cap remembers", "default": 200, "min": 1, "max": 100000, "step": 10, "scope": "daemon", "order": 4 }
+      ]
+    }
+  ],
+  "daemon": {
+    "entry": "com.superiorsoftllc.infantry.plugins.official.jobfeed.daemon.JobFeedDaemonPlugin",
+    "jar": "daemon/build/libs/Infantry_JobFeed-daemon.jar",
+    "apiAtLeast": "1.49.0",
+    "frames": [
+      { "type": "jobfeed_jobs", "action": "jobfeed.read", "kind": "read" },
+      { "type": "jobfeed_read", "action": "jobfeed.read", "kind": "read" }
+    ]
+  }
+}

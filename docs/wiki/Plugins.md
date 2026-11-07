@@ -47,6 +47,7 @@ Fields that exist today. Unknown keys are ignored. Real manifests: `plugins/comm
 | `apiVersion` | Plugin API revision (currently `2`). A different value refuses the module. |
 | `author`, `license` | Required for community (license is an SPDX id or `NOASSERTION`). |
 | `description` | One line. |
+| `defaultEnabled` | `false` = an optional module: off until Settings > Plugins (or `modules.json`) enables it, whatever its tier. Default `true`. |
 | `dependencies` | `[{ "id": "Infantry_Git", "version": ">=1.0 <2" }]`. Missing, disabled or out-of-range refuses the module. Ranges: `>= > <= < =`, `1.2`, `^1.2.3`, `~1.2.3`, `*`, `||`. A core module may depend on core modules only. |
 | `sequence` | Load order only. |
 | `entry`, `jar` | UI class (a `UiPlugin` with a no-arg constructor) and the built jar, relative to the folder. |

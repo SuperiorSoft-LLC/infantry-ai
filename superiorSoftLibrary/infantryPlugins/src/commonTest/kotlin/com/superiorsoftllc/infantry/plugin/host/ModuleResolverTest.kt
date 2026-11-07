@@ -36,6 +36,13 @@ class ModuleResolverTest {
     private fun Resolution.reason(name: String) = status(name)?.reason.orEmpty()
 
     @Test
+    fun `an official module with defaultEnabled false is off until the owner enables it`() {
+        val opt = ModuleCandidate("Infantry_Opt", Tier.OFFICIAL, "/p/official/Infantry_Opt", ModuleManifest("Infantry_Opt", "1.0.0", author = "Infantry AI", defaultEnabled = false))
+        assertEquals(ModuleState.DISABLED, ModuleResolver.resolve(listOf(opt), ModulesConfig(), platform = "desktop").state("Infantry_Opt"))
+        assertEquals(ModuleState.LOADED, ModuleResolver.resolve(listOf(opt), enabled("Infantry_Opt"), platform = "desktop").state("Infantry_Opt"))
+    }
+
+    @Test
     fun `a module that does not list the current platform is skipped as not available`() {
         val web = ModuleCandidate("Acme_Web", Tier.COMMUNITY, "/p/community/Acme_Web", ModuleManifest("Acme_Web", "1.0.0", author = "Acme", license = "MIT", platforms = listOf("web")))
         val any = community("Acme_Any")

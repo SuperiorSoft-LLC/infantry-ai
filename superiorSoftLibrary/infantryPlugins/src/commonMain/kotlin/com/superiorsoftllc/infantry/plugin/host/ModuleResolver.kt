@@ -130,7 +130,7 @@ object ModuleResolver {
                         }
                     }
                     val setting = config.setting(m.name)
-                    val on = setting.enabled ?: (c.tier != Tier.COMMUNITY)
+                    val on = setting.enabled ?: (c.tier != Tier.COMMUNITY && m.defaultEnabled)
                     when {
                         !on -> final[m.name] = ModuleStatus(
                             m.name, c.tier, ModuleState.DISABLED,
