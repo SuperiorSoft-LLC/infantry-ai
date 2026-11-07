@@ -4,6 +4,7 @@ package com.superiorsoftllc.infantry.ui.plugin
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
@@ -60,6 +61,36 @@ fun ChildSlot(
         else CompositionLocalProvider(LocalSlotArgs provides args) { sections.forEach { PanelSection(factory, it, ctx) } }
     }
 }
+
+/**
+ * CHAT-VOICE-SEAMS-1: [ChildSlot] laid out as a ROW (a slot of small inline blocks: buttons beside a composer, actions on a
+ * message). Each section takes its own width, left to right in `order`; `fill` is ignored. With no section loaded it
+ * draws NOTHING (no empty state, no box), so a host that offers the slot looks exactly as it did without it.
+ */
+@Composable
+fun ChildSlotRow(
+    name: String,
+    state: AppState,
+    controller: Controller,
+    modifier: Modifier = Modifier,
+    args: Map<String, Any?> = emptyMap(),
+    context: TabContext? = null,
+) {
+    val factory = LocalTabFactory.current
+    val sections = factory.panels(name)
+    if (sections.isEmpty()) return
+    val ctx = context ?: TabContext(
+        state, controller, open = {}, showChat = {}, insertIntoChat = {}, diffTarget = null, onOpenDiff = {}, transcript = {},
+        config = { factory.resolvedConfig.values(it) },
+    )
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        CompositionLocalProvider(LocalSlotArgs provides args) { sections.forEach { PanelSectionBody(factory, it, ctx, Modifier.testTag(it.testTag)) } }
+    }
+}
+
+/** Whether any loaded module adds a section to slot [name] (a host skips its slot's wrapper when none does). */
+@Composable
+fun slotFilled(name: String): Boolean = LocalTabFactory.current.panels(name).isNotEmpty()
 
 /** The generic empty state of a slot nothing fills. */
 @Composable

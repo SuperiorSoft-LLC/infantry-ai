@@ -25,11 +25,31 @@
       { "name": "infantry_chat_image", "action": "chat.image", "kind": "write", "description": "Show an image inline in a session's chat (a file inside the project, or an uploaded image id)." }
     ]
   },
-  "slots": ["chat.feed"],
+  "slots": ["chat.feed", "chat.composer.actions", "chat.message.actions"],
+  "events": ["chat.composer.insert"],
   "fills": [
     "infantry.shell.center"
   ],
   "config": [
+    {
+      "node": "infantry.shell.center",
+      "tab": "Chat",
+      "group": "Plugins in the composer",
+      "order": 30,
+      "title": "Plugins in the composer",
+      "applies": "Applies to: text a plugin puts into the chat box (for example dictation).",
+      "keywords": ["plugin", "send", "voice", "dictation", "composer"],
+      "fields": [
+        {
+          "key": "chat.allowPluginSend",
+          "type": "checkbox",
+          "label": "Let plugins send what they put into the chat box (off: you review it and press Send)",
+          "default": false,
+          "order": 1,
+          "scope": "device"
+        }
+      ]
+    },
     {
       "node": "infantry.shell.config.markdownEngine",
       "group": "Markdown engine",

@@ -393,7 +393,9 @@ fun AgentChat(agent: AgentView, nowProvider: () -> Long = { Clock.System.now().t
                     val abs = start + i
                     // M2-2: the agent's portrait opens each run of agent-side lines, like a chat. KINDS-1: the row is drawn by the renderer of its kind.
                     Box(if (abs == currentHit) Modifier.background(Palette.Accent.copy(alpha = 0.16f)).testTag(CHAT_SEARCH_HIT_TAG) else Modifier) {
-                        FeedRow(RowItem(rows[abs], agent.id, name, agent.role, roleColor), startsAgentRun(rows, abs, agentSide))
+                        val row = RowItem(rows[abs], agent.id, name, agent.role, roleColor)
+                        // CHAT-VOICE-SEAMS-1: a message row carries Chat's `chat.message.actions` slot (nothing when unfilled).
+                        MessageWithActions(row, abs) { FeedRow(row, startsAgentRun(rows, abs, agentSide)) }
                     }
                 }
                 // CHAT-SENDING-1: the human's just-sent messages, after the transcript, until the daemon's echo replaces each.
