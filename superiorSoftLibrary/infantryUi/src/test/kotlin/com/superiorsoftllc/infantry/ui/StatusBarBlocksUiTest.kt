@@ -49,7 +49,7 @@ class StatusBarBlocksUiTest {
 
     @Test fun `the bar's items sit in one order and the hint shows when wide`() = withWindow(1400) {
         waitForIdle()
-        val status = onNode(hasText("daemon stub", substring = true)).getUnclippedBoundsInRoot()
+        val status = onNode(hasText("connected · stub", substring = true)).getUnclippedBoundsInRoot()
         val badge = onNodeWithTag(PROCESSES_BADGE_TAG).getUnclippedBoundsInRoot()
         val hint = onNode(hasText("^K search", substring = true)).getUnclippedBoundsInRoot()
         val stamp = onNodeWithTag(FOOTER_BUILD_TAG).getUnclippedBoundsInRoot()
