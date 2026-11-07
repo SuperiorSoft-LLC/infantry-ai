@@ -77,6 +77,9 @@ interface AdapterSink {
     /** CLI-PTY-3: the harness saw the session's MCP server become [state] (CONNECTED / DISCONNECTED / RECONNECTING). Recorded only. */
     fun mcpState(state: String, reason: String?) {}
 
+    /** DENIED-LABEL-1: the harness refused one [tool] call; [prompted] = the owner was asked and did not approve. Default: dropped. */
+    fun denied(tool: String, prompted: Boolean) {}
+
     /** PROMPT-3: the daemon session this sink serves; what a prompt is filed under. Blank = not a daemon session. */
     val sessionId: String get() = ""
 
@@ -171,6 +174,9 @@ interface HostEvents {
 
     /** CLI-PTY-3: [AdapterSink.mcpState] for [sessionId]. */
     fun mcpState(sessionId: String, state: String, reason: String?) {}
+
+    /** DENIED-LABEL-1: a tool call the harness refused; recorded as the session's last action and a chat notice. */
+    fun denied(sessionId: String, tool: String, prompted: Boolean) {}
 
     /** HARNESS-GAP G18: [AdapterSink.mask]. Default: unchanged. */
     fun mask(text: String): String = text

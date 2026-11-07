@@ -2214,6 +2214,13 @@ class SessionManager(
             }
         }
 
+        // DENIED-LABEL-1: the card's last action and the chat notice for a tool the harness refused (the same text a Denial record gets).
+        override fun denied(sessionId: String, tool: String, prompted: Boolean) {
+            val mode = toolApprovalFor(sessionId).mode
+            SessionActivityLog.event(sessionId, ToolApprovalNotice.blockedAction(tool, mode, prompted))
+            stderr(sessionId, "[infantry] " + ToolApprovalNotice.text("claude", tool, mode, prompted))
+        }
+
         override fun mcpState(sessionId: String, state: String, reason: String?) {
             val s = state.trim().lowercase()
             if (sessions[sessionId]?.mcp == s) return

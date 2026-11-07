@@ -51,6 +51,8 @@ class ClaudeTtySessionTest {
         override fun turnStarted(reason: String?) { starts += reason }
         var approvalReply = ApprovalReply.DENY
         val asked = mutableListOf<Pair<String, String>>()
+        val denials = mutableListOf<Pair<String, Boolean>>()
+        override fun denied(tool: String, prompted: Boolean) { denials += tool to prompted }
         override fun requestApproval(tool: String, input: String): ApprovalReply { asked += tool to input; return approvalReply }
     }
 
@@ -790,5 +792,13 @@ class ClaudeTtySessionTest {
         s.c.tick()
         assertFalse(ClaudeTtySession.ESC in s.out.written, "the owner answered: no Esc")
         assertTrue(s.out.ends.isEmpty())
+    }
+
+    @Test fun `a denied approval is reported to the host as a denial`() {
+        val s = start(approval = ToolApproval.ASK)
+        up(s)
+        s.out.approvalReply = ApprovalReply.DENY
+        assertEquals("deny", behavior(s.c.answerPermission(bashCall)))
+        assertEquals(listOf("Bash" to true), s.out.denials)
     }
 }

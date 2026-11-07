@@ -486,6 +486,8 @@ class SessionHost(
 
         override fun mcpState(state: String, reason: String?) = events.mcpState(slot.sessionId, state, reason)
 
+        override fun denied(tool: String, prompted: Boolean) = events.denied(slot.sessionId, tool, prompted)
+
         override fun turnEnded(end: TurnEnd, exitCode: Int?, reason: String?) {
             if (absorbOwnEnd(slot)) return
             endTurn(slot, slot.turn, end, exitCode, reason, processExited = false)

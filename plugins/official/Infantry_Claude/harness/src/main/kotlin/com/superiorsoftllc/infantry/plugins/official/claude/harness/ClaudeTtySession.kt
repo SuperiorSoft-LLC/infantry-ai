@@ -244,6 +244,7 @@ class ClaudeTtySession(
             try {
                 return ClaudePermissionHook.decide(launch.approval, body, { tool, input -> out.requestApproval(tool, input) }) { tool ->
                     out.detail("interactive claude: denied $tool (tool approval ${launch.approval.name.lowercase()})")
+                    out.denied(tool, prompted = launch.approval == ToolApproval.ASK)
                 }
             } finally {
                 synchronized(lock) {

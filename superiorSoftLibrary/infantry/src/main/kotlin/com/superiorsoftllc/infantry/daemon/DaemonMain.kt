@@ -2080,7 +2080,10 @@ private fun broadcast(
             // FIRSTRUN-FAIL-1: a failed session's last action names why it failed, so the board's "doing" is not just "state failed".
             val stateAction = event.session.lastError?.takeIf { event.session.state == SessionState.FAILED && it.isNotBlank() }
                 ?.let { "failed: $it" } ?: "state ${event.session.state.name.lowercase()}"
-            com.superiorsoftllc.infantry.session.SessionActivityLog.event(event.session.id, stateAction)
+            // DENIED-LABEL-1: a turn that ended on a refused tool keeps its "blocked:" label when the session goes idle.
+            val keepBlocked = event.session.state == SessionState.IDLE &&
+                com.superiorsoftllc.infantry.session.SessionActivityLog.lastAction(event.session.id)?.startsWith("blocked:") == true
+            if (!keepBlocked) com.superiorsoftllc.infantry.session.SessionActivityLog.event(event.session.id, stateAction)
             listOf(
                 Envelope(
                     Envelope.SESSION,
@@ -4075,7 +4078,7 @@ internal fun denialEnvelope(
 
 /** FIRSTRUN-PERM-1: the card's last action for a denied tool, e.g. "blocked: Write denied (Tool approval = deny)". */
 internal fun deniedAction(denial: EventNormalizer.Line.Denial, mode: com.superiorsoftllc.infantry.harness.ToolApproval): String =
-    "blocked: ${denial.tool} denied (Tool approval = ${mode.wire}" + (if (denial.prompted) ", not approved" else "") + ")"
+    com.superiorsoftllc.infantry.session.ToolApprovalNotice.blockedAction(denial.tool, mode, denial.prompted)
 
 private fun cliLocationsEnvelope(tools: List<com.superiorsoftllc.infantry.protocol.CliLocation>): Envelope = Envelope(
     Envelope.CLI_LOCATIONS,
