@@ -30,7 +30,7 @@ class CoreShellTreeTest {
      * RUNTIME-14/15: the compiled-in modules plus the official Infantry_Roles and Infantry_Board (their jars on desktop),
      * which fill infantry.shell.roles and infantry.shell.board.
      */
-    private val withRoles by lazy { TabFactory(CoreModules.all + InfantryRoles + InfantryBoard + com.superiorsoftllc.infantry.plugins.official.header.InfantryHeader + com.superiorsoftllc.infantry.plugins.official.chat.InfantryChat + com.superiorsoftllc.infantry.plugins.official.chatfeed.InfantryChatFeed + com.superiorsoftllc.infantry.plugins.official.approvals.InfantryApprovals + com.superiorsoftllc.infantry.plugins.official.assistant.InfantryAssistant + com.superiorsoftllc.infantry.plugins.official.changes.InfantryChanges + InfantryAttention + InfantryUsage + com.superiorsoftllc.infantry.plugins.official.alerts.InfantryAlerts + com.superiorsoftllc.infantry.plugins.official.appearance.InfantryAppearance + com.superiorsoftllc.infantry.plugins.official.processes.InfantryProcesses) }
+    private val withRoles by lazy { TabFactory(CoreModules.all + InfantryRoles + InfantryBoard + com.superiorsoftllc.infantry.plugins.official.header.InfantryHeader + com.superiorsoftllc.infantry.plugins.official.chat.InfantryChat + com.superiorsoftllc.infantry.plugins.official.chatfeed.InfantryChatFeed + com.superiorsoftllc.infantry.plugins.official.approvals.InfantryApprovals + com.superiorsoftllc.infantry.plugins.official.assistant.InfantryAssistant + com.superiorsoftllc.infantry.plugins.official.changes.InfantryChanges + InfantryAttention + InfantryUsage + com.superiorsoftllc.infantry.plugins.official.alerts.InfantryAlerts + com.superiorsoftllc.infantry.plugins.official.appearance.InfantryAppearance + com.superiorsoftllc.infantry.plugins.official.processes.InfantryProcesses + com.superiorsoftllc.infantry.plugins.official.runners.InfantryRunners) }
 
     private fun Block.walk(depth: Int = 0): List<String> = listOf("  ".repeat(depth) + id) + children.flatMap { it.walk(depth + 1) }
 
@@ -40,7 +40,7 @@ class CoreShellTreeTest {
         "cliLocations", "toolApproval",
     )
     /** RUNTIME-19: the sections official plugins own, one slot each beside `.settings`. */
-    private val configOwned = listOf("limits", "roles", "voice", "incomingSound", "questions")
+    private val configOwned = listOf("limits", "roles", "voice", "incomingSound", "questions", "runners")
     private val configTrust = listOf("policy", "plugins", "modules", "registry", "secrets", "pair", "about", "updates", "serverUpdate", "logs")
 
     @Test fun `the core tree keeps every node id, in order, each unique`() {
@@ -160,7 +160,7 @@ class CoreShellTreeTest {
             "infantry.shell.assistant", "infantry.shell.board", "infantry.shell.diff",
             "infantry.shell.sound", "infantry.shell.voice", "infantry.shell.questions", "infantry.shell.theme",
             "infantry.shell.config.limits", "infantry.shell.config.roles", "infantry.shell.config.voice",
-            "infantry.shell.config.incomingSound", "infantry.shell.config.questions", "infantry.shell.roles", "infantry.shell.settings",
+            "infantry.shell.config.incomingSound", "infantry.shell.config.questions", "infantry.shell.config.runners", "infantry.shell.roles", "infantry.shell.settings",
         )
         assertEquals(slots, CoreShell.slots)
         // CONFIG-10b: in tree order the settings slot sits right after the theme block (slots lists it last).

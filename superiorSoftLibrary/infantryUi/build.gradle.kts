@@ -47,6 +47,8 @@ dependencies {
     testImplementation(project(":plugins:official:Infantry_Run"))
     // RUNTIME-8: and Infantry_Notes and Infantry_Changes, the Notes and Changes tabs and their trees.
     testImplementation(project(":plugins:official:Infantry_Notes"))
+    // RUNNER-POOL-11: and Infantry_Runners, the Runners card rows (RunnersCardUiTest draws them).
+    testImplementation(project(":plugins:official:Infantry_Runners"))
     testImplementation(project(":plugins:official:Infantry_Changes"))
     // RUNTIME-9: and Infantry_Prompts and Infantry_Skills, the right-hand Prompts and Skills tabs.
     testImplementation(project(":plugins:official:Infantry_Prompts"))
