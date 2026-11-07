@@ -50,7 +50,7 @@ fun main(args: Array<String>) {
             Thread {
                 val policies = InstalledCli.executionPolicies()
                 val ps1 = InstalledCli.syncPowerShellLauncher(File(bin), InstalledCli.scriptsCanRun(policies))
-                println("[infantry-install] PowerShell execution policy $policies; infantry.ps1 ${if (ps1) "installed" else "not installed (infantry.cmd is used)"}")
+                println("[infantry-install] PowerShell execution policy ${InstalledCli.describePolicies(policies)}; infantry.ps1 ${if (ps1) "installed" else "not installed (infantry.cmd is used)"}")
             }.apply { isDaemon = true; name = "infantry-ps1-sync" }.start()
         }
         // UPDATE-1: only the installed profile gets an updater (a dev build never updates itself).

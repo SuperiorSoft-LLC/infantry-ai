@@ -65,6 +65,9 @@ object InstalledCli {
     fun executionPolicies(run: (List<String>) -> String? = ::runQuietly): List<String> =
         POWERSHELLS.mapNotNull { shell -> run(listOf(shell, "-NoProfile", "-NonInteractive", "-Command", "Get-ExecutionPolicy")) }
 
+    /** FIRSTRUN-LOG-1: the policies as one log line: a policy name, or "unrecognised answer" for an error dump (never its text). */
+    fun describePolicies(policies: List<String>): String = policies.joinToString(", ", "[", "]") { policyName(it) ?: "unrecognised answer" }
+
     /** [answer] as one of [KNOWN_POLICIES] (PowerShell is case-insensitive), or null when it is not a policy name. */
     fun policyName(answer: String): String? = answer.trim().let { a -> KNOWN_POLICIES.firstOrNull { it.equals(a, ignoreCase = true) } }
 

@@ -117,6 +117,8 @@ object DesktopPlugins {
         val refused = HashSet<String>()
         for (s in resolution.loaded) {
             val m = s.manifest!!
+            // FIRSTRUN-LOG-1: a module with no UI half (daemon/harness only) is normal, not a refusal.
+            if (!hasUiHalf(m) && withBundles.none { it.manifest.name == s.name && s.tier == Tier.CORE }) continue
             val needs = m.dependencies.map { it.id }.firstOrNull { it in refused }
             val result = if (needs != null) Result.failure(IllegalStateException("dependency $needs is refused")) else
                 withBundles.firstOrNull { it.manifest.name == s.name && s.tier == Tier.CORE }?.let { Result.success(it) }
@@ -240,6 +242,10 @@ object DesktopPlugins {
 
     /** A module's private data area: `<stateDir>/plugin-data/<Vendor_Module>`. */
     fun dataDir(stateDir: File, module: String) = File(File(stateDir, "plugin-data"), module)
+
+    /** A UI half is a UI entry class, a UI jar, or a composition (layout fills / config). */
+    internal fun hasUiHalf(m: com.superiorsoftllc.infantry.plugin.api.ModuleManifest): Boolean =
+        !m.entry.isNullOrBlank() || !m.jar.isNullOrBlank() || m.fills.any { it.layout != null } || m.config.isNotEmpty()
 
     private fun loadJar(s: ModuleStatus, services: com.superiorsoftllc.infantry.plugin.api.PluginServices, loaders: MutableList<PluginClassLoader>): InfantryModule {
         val m = s.manifest!!
