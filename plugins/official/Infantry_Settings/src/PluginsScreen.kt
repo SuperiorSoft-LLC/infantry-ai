@@ -2,6 +2,7 @@
 // Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.plugins.official
 
+import kotlin.time.TimeSource
 import androidx.compose.material3.LocalTextStyle
 import com.superiorsoftllc.infantry.ui.PathField
 import com.superiorsoftllc.infantry.ui.PathKind
@@ -170,7 +171,7 @@ fun PluginsScreen(port: PluginManagerPort) {
     /** Runs [call] off the UI thread; a restart answer sets the one banner. */
     fun runAct(call: () -> ActionResult, then: (ActionResult) -> Unit) {
         busy = true; failed = null; retry = null; note = null
-        progress = PluginProgress("", "Starting"); startedAt = System.currentTimeMillis()
+        progress = PluginProgress("", "Starting"); startedAt = pluginClockMs()
         scope.launch {
             val r = withContext(Dispatchers.Default) { runCatching(call).getOrElse { ActionResult(false, "failed: ${it.message}") } }
             busy = false
@@ -257,8 +258,8 @@ fun PluginsScreen(port: PluginManagerPort) {
 /** PLUGIN-PROGRESS-1: "Downloading 40% - 12s": determinate while the size is known, else indeterminate; the seconds tick so a long step never looks stuck. */
 @Composable
 private fun ProgressStrip(p: PluginProgress, startedAt: Long) {
-    var now by remember { mutableStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(startedAt) { while (true) { delay(1000); now = System.currentTimeMillis() } }
+    var now by remember { mutableStateOf(pluginClockMs()) }
+    LaunchedEffect(startedAt) { while (true) { delay(1000); now = pluginClockMs() } }
     val secs = ((now - startedAt) / 1000).coerceAtLeast(0)
     val frac = if (p.total > 0 && p.done >= 0) (p.done.toFloat() / p.total).coerceIn(0f, 1f) else null
     val who = if (p.id.isEmpty()) "" else " ${displayName(p.id)}"
@@ -662,3 +663,7 @@ private fun SourceRow(s: SourceView, state: RefreshView?, remove: () -> Unit) {
         }
     }
 }
+
+/** PLUGIN-PROGRESS-1 fix: a multiplatform elapsed clock (System.currentTimeMillis does not exist on wasm, which broke every nightly build). */
+private val pluginClockOrigin = TimeSource.Monotonic.markNow()
+private fun pluginClockMs(): Long = pluginClockOrigin.elapsedNow().inWholeMilliseconds
