@@ -105,6 +105,10 @@ object ToolApprovalNotice {
             (if (mode == ToolApproval.ASK) " $CANNOT_PROMPT" else "") +
             ". Change it in Settings > Tool approval."
 
+    /** FIRSTRUN-PERM-1 / DENIED-LABEL-1: the card's last action for a denied tool, e.g. "blocked: Write denied (Tool approval = ask, not approved)". */
+    fun blockedAction(tool: String, mode: ToolApproval, prompted: Boolean): String =
+        "blocked: $tool denied (Tool approval = ${mode.wire}" + (if (prompted) ", not approved" else "") + ")"
+
     /** PROMPT-1: added when the mode is `ask` but the harness that denied the call has no prompt relay. */
     const val CANNOT_PROMPT = "(this harness can't prompt)"
 

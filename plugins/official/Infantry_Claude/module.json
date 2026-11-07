@@ -23,7 +23,7 @@
   },
   "harness": {
     "jar": "harness/build/libs/Infantry_Claude-harness.jar",
-    "contract": "2.16.0",
+    "contract": "2.17.0",
     "ids": ["claude"],
     "cli": { "id": "claude", "command": "claude", "label": "Claude Code" },
     "settings": ["harness.claude.liveIdleMinutes", "harness.claude.mode", "harness.claude.approvalHookSeconds", "harness.claude.firstTurnSubmitSeconds", "harness.claude.firstTurnReplySeconds"],

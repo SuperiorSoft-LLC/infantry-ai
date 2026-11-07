@@ -38,6 +38,8 @@ object SessionActivityLog {
     }
 
     /** Tool calls the daemon counted for a session (0 when none), for the stats and the tests. */
+    fun lastAction(sessionId: String): String? = entries[sessionId]?.action
+
     fun toolCalls(sessionId: String): Int = entries[sessionId]?.toolCalls ?: 0
 
     fun forget(sessionId: String) {

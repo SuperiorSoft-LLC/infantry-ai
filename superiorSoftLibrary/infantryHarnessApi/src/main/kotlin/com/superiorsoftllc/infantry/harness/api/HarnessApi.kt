@@ -85,8 +85,11 @@ import java.io.File
  * 2.16.0 (CHAT-QUEUE-1, additive): input INTO a running turn. [HarnessCapability.MID_TURN_INPUT] declares it and
  * [SessionConnection.injectInput] delivers it (a user message the agent takes in at its next step, the turn is not stopped). A 2.8 - 2.15
  * plugin keeps the default: false, so the daemon keeps the message queued for the next turn.
+ *
+ * 2.17.0 (DENIED-LABEL-1, additive): [SessionOutput.denied], a tool call the harness refused (the owner pressed Deny, or Tool approval said no) without
+ * printing a denial record the translator could read. The host shows it on the card as "blocked: <tool> denied (...)". A 2.8 - 2.16 plugin keeps the default: nothing reported.
  */
-const val HARNESS_API_VERSION: String = "2.16.0"
+const val HARNESS_API_VERSION: String = "2.17.0"
 
 /** What a harness jar ships: registers its harnesses, given the [HarnessHost] scoped to its module. */
 interface HarnessPlugin {
@@ -291,6 +294,12 @@ interface SessionOutput {
      * session and tells scripts; it never reconnects anything by itself. Default: dropped.
      */
     fun mcpState(state: McpState, reason: String? = null) {}
+
+    /**
+     * 2.17.0: the harness refused one [tool] call ([prompted] = the owner was asked and did not approve, else Tool approval said no). The host
+     * records "blocked: <tool> denied (Tool approval = ...)" as the session's last action and adds the chat notice. Default: dropped.
+     */
+    fun denied(tool: String, prompted: Boolean = false) {}
 }
 
 /** 2.14.0: the session's MCP server link, as the harness sees it. */
