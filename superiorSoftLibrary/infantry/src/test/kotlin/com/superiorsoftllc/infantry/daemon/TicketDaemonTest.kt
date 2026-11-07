@@ -101,6 +101,8 @@ class TicketDaemonTest {
                 "queuedAgent", "queueRank", "queuedAgentName",
                 // AGENT-TASKS-2: the derived has-work view (null when the ticket has no work ahead of its base).
                 "hasWork",
+                // RUNNER-POOL-3 (de415ebd): the runner a ticket is pinned to (null = the pool picks).
+                "runner",
             ),
             json.parseToJsonElement(frame.data).jsonObject.keys,
         )
