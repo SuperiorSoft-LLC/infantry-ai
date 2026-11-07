@@ -6,7 +6,7 @@ plugins {
     alias(infantry.plugins.kotlin.jvm)
     alias(infantry.plugins.compose.compiler)
     alias(infantry.plugins.compose.multiplatform)
-    id("com.superiorsoftllc.infantry.plugin") version "1.0.0"
+    id("tech.superiorsoftllc.infantry.plugin") version "1.0.0"
 }
 
 kotlin { jvmToolchain(21) }

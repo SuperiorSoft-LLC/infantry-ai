@@ -33,7 +33,7 @@ class InfantryPluginFunctionalTest {
         write("superiorSoftLibrary/build.gradle.kts", "")
         write("official/Acme_Mod/module.json", manifest)
         write("official/Acme_Mod/build.gradle.kts", """
-            plugins { java; id("com.superiorsoftllc.infantry.plugin") }
+            plugins { java; id("tech.superiorsoftllc.infantry.plugin") }
             tasks.jar { archiveFileName.set("Acme_Mod.jar") }
         """.trimIndent())
         write("official/Acme_Mod/src/main/java/a/A.java", "package a; public class A {}")

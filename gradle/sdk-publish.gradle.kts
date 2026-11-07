@@ -12,7 +12,7 @@ import org.gradle.api.publish.maven.tasks.PublishToMavenRepository
 apply(plugin = "maven-publish")
 apply(from = rootProject.file("gradle/sdk-central.gradle.kts"))
 
-val sdkGroup = "com.superiorsoftllc.infantry"
+val sdkGroup = "tech.superiorsoftllc.infantry"
 
 fun constant(path: String, regex: String): String {
     val text = rootProject.file(path).readText()

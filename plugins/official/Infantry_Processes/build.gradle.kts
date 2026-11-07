@@ -12,7 +12,7 @@ plugins {
     alias(libs.plugins.androidKotlinMultiplatformLibrary)
     alias(libs.plugins.composeCompiler)
     alias(libs.plugins.composeMultiplatform)
-    id("com.superiorsoftllc.infantry.plugin")
+    id("tech.superiorsoftllc.infantry.plugin")
 }
 
 kotlin {

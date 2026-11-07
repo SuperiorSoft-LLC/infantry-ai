@@ -42,7 +42,7 @@ unsigned into community):
   with "Needs: Infantry_Git" (05). The consent dialog did not check dependencies before installing.
 
 What is missing for "the root plugin installs a first plugin" (not built here):
-1. **No official plugin is installable as a `.ihq`.** Only `plugins/_template` applies the `com.superiorsoftllc.infantry.plugin`
+1. **No official plugin is installable as a `.ihq`.** Only `plugins/_template` applies the `tech.superiorsoftllc.infantry.plugin`
    Gradle plugin (the `ihq` task). Official plugins build plain jars that the install bundles under `modules/official`.
    Owner: build-logic (`InfantryPluginPlugin`, Apache) applied to each official plugin, plus signing.
 2. **No catalog browse in the shell.** The plugin manager screen with catalogs (`PluginsScreen`) lives in

@@ -51,7 +51,7 @@ dependencyResolutionManagement {
         google()
     }
     versionCatalogs {
-        create("infantry") { from("com.superiorsoftllc.infantry:infantry-sdk-catalog:$sdkVersion") }
+        create("infantry") { from("tech.superiorsoftllc.infantry:infantry-sdk-catalog:$sdkVersion") }
     }
 }
 

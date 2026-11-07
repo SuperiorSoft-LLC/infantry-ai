@@ -47,16 +47,17 @@ token are needed. The template's `settings.gradle.kts` holds the lines; in short
 pluginManagement { repositories { mavenCentral(); gradlePluginPortal() } }
 dependencyResolutionManagement {
     repositories { mavenCentral() }
-    versionCatalogs { create("infantry") { from("com.superiorsoftllc.infantry:infantry-sdk-catalog:<sdk version>") } }
+    versionCatalogs { create("infantry") { from("tech.superiorsoftllc.infantry:infantry-sdk-catalog:<sdk version>") } }
 }
 // build.gradle.kts
-plugins { id("com.superiorsoftllc.infantry.plugin") version "1.0.0" }
+plugins { id("tech.superiorsoftllc.infantry.plugin") version "1.0.0" }
 ```
 
 Without the Gradle plugin, depend on one artifact directly, `compileOnly` because the app provides it at run time:
-`compileOnly(platform("com.superiorsoftllc.infantry:infantry-sdk-bom:<sdk version>"))` and
-`compileOnly("com.superiorsoftllc.infantry:infantry-daemon-api")` (or `infantry-plugin-api`, `infantry-harness-api`).
+`compileOnly(platform("tech.superiorsoftllc.infantry:infantry-sdk-bom:<sdk version>"))` and
+`compileOnly("tech.superiorsoftllc.infantry:infantry-daemon-api")` (or `infantry-plugin-api`, `infantry-harness-api`).
 The owner publishes a release with `.github/workflows/sdk-publish.yml` (Maven Central and GitHub Packages).
+**Deprecated coordinates:** SDK 1.1.0 on GitHub Packages was published under the old group `com.superiorsoftllc.infantry` (and Gradle plugin id `com.superiorsoftllc.infantry.plugin`). Those coordinates are deprecated: use group `tech.superiorsoftllc.infantry` (Maven Central could not verify the `com` namespace). Kotlin package names are unchanged.
 
 ## 3. `module.json`, every field
 
