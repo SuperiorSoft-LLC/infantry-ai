@@ -20,6 +20,15 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.withFrameNanos
+
+/** PLUGIN-HOTSWAP-1: how long the shell waits for the window to draw the swapped set before the leak check (frames may not tick off screen). */
+private const val SWAP_SETTLE_MS = 1_000L
 
 /**
  * The portable shell: resolves the launch connection from the platform host, owns the controller's
@@ -40,13 +49,41 @@ fun InfantryShell(host: PlatformHost, controller: Controller? = null) {
     // S6: the module set, owned here: a drop-in install reloads it (the soft restart), and the window is composed again
     // with it (key), in the same process and with the same controller and connection.
     var tabs by remember(host) { mutableStateOf(host.tabFactory) }
+    // PLUGIN-HOTSWAP-1: the window is composed again only on a soft restart; a live swap changes [tabs] alone, and only
+    // the swapped plugins' composition is disposed (ModuleScope keys it by the module's load generation).
+    var restarts by remember(host) { mutableStateOf(0) }
+    val softRestart: () -> Unit = { tabs = host.reloadTabs(); restarts++ }
+    val lifecycleScope = rememberCoroutineScope()
+    val warnings = remember(host) { mutableStateMapOf<String, String>() }
+    val lifecycle = remember(host, warnings) {
+        PluginLifecycle(warnings) {
+            val swap = runCatching { host.swapPlugins() }.getOrNull()
+            if (swap == null) {
+                softRestart()
+                "Applied: the shell was reloaded."
+            } else {
+                tabs = swap.factory
+                swap.factory.statuses.forEach { warnings.remove(it.name) }
+                lifecycleScope.launch {
+                    // Let the window draw the new set (the old composition is disposed), then check the old loaders left memory.
+                    withTimeoutOrNull(SWAP_SETTLE_MS) { repeat(2) { withFrameNanos { } } }
+                    val leaked = withContext(Dispatchers.Default) { runCatching { swap.leaked() }.getOrDefault(emptyList()) }
+                    if (leaked.isNotEmpty()) {
+                        leaked.forEach { warnings[it] = "$it did not unload cleanly (its old version is still in memory); the shell was reloaded to finish the change" }
+                        softRestart()
+                    }
+                }
+                swap.message
+            }
+        }
+    }
     // PATH-PICKER-1: every path field's Browse uses the host's chooser, unless an outer composition already supplied one.
     val pathPicker = com.superiorsoftllc.infantry.ui.LocalPathPicker.current ?: host.pathPicker
     CompositionLocalProvider(
-        LocalPlatformHost provides host, LocalSoftRestart provides { tabs = host.reloadTabs() },
+        LocalPlatformHost provides host, LocalSoftRestart provides softRestart, LocalPluginLifecycle provides lifecycle,
         com.superiorsoftllc.infantry.ui.LocalPathPicker provides pathPicker,
     ) {
-        key(tabs) {
+        key(restarts) {
             App(
                 active, config.url, config.token,
                 pickFile = if (host.canPickFiles) host::pickFile else null,

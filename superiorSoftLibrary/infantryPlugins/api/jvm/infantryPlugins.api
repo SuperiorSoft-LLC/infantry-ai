@@ -2118,6 +2118,17 @@ public final class com/superiorsoftllc/infantry/plugin/api/ObserverDeclaration$C
 	public final fun serializer ()Lkotlinx/serialization/KSerializer;
 }
 
+public final class com/superiorsoftllc/infantry/plugin/api/OwnedPluginScope : com/superiorsoftllc/infantry/plugin/api/PluginScope {
+	public fun <init> (Ljava/lang/String;Lkotlinx/coroutines/CoroutineDispatcher;)V
+	public synthetic fun <init> (Ljava/lang/String;Lkotlinx/coroutines/CoroutineDispatcher;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun close ()Ljava/util/List;
+	public fun getActive ()Z
+	public fun getCoroutines ()Lkotlinx/coroutines/CoroutineScope;
+	public final fun getModule ()Ljava/lang/String;
+	public fun onUnload (Lkotlin/jvm/functions/Function0;)V
+	public fun own (Ljava/lang/AutoCloseable;)Ljava/lang/AutoCloseable;
+}
+
 public final class com/superiorsoftllc/infantry/plugin/api/PanelDeclaration {
 	public static final field Companion Lcom/superiorsoftllc/infantry/plugin/api/PanelDeclaration$Companion;
 	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
@@ -2214,6 +2225,7 @@ public abstract interface class com/superiorsoftllc/infantry/plugin/api/PluginMa
 	public abstract fun install (Ljava/lang/String;Ljava/util/Set;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/plugin/api/ActionResult;
 	public abstract fun list ()Ljava/util/List;
 	public abstract fun refresh ()Ljava/util/List;
+	public fun refreshIfStale ()Ljava/util/List;
 	public abstract fun remove (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/plugin/api/ActionResult;
 	public abstract fun removeSource (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/plugin/api/ActionResult;
 	public abstract fun rollback (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/plugin/api/ActionResult;
@@ -2226,6 +2238,18 @@ public abstract interface class com/superiorsoftllc/infantry/plugin/api/PluginMa
 
 public final class com/superiorsoftllc/infantry/plugin/api/PluginManagerPort$DefaultImpls {
 	public static fun importList (Lcom/superiorsoftllc/infantry/plugin/api/PluginManagerPort;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/plugin/api/ActionResult;
+	public static fun refreshIfStale (Lcom/superiorsoftllc/infantry/plugin/api/PluginManagerPort;)Ljava/util/List;
+}
+
+public abstract interface class com/superiorsoftllc/infantry/plugin/api/PluginScope {
+	public abstract fun getActive ()Z
+	public abstract fun getCoroutines ()Lkotlinx/coroutines/CoroutineScope;
+	public abstract fun onUnload (Lkotlin/jvm/functions/Function0;)V
+	public abstract fun own (Ljava/lang/AutoCloseable;)Ljava/lang/AutoCloseable;
+}
+
+public final class com/superiorsoftllc/infantry/plugin/api/PluginScopeKt {
+	public static final fun every (Lcom/superiorsoftllc/infantry/plugin/api/PluginScope;JLkotlin/jvm/functions/Function1;)Lkotlinx/coroutines/Job;
 }
 
 public abstract interface class com/superiorsoftllc/infantry/plugin/api/PluginServices {
@@ -3015,6 +3039,14 @@ public final class com/superiorsoftllc/infantry/plugin/host/InstallSettings$Comp
 	public final fun serializer ()Lkotlinx/serialization/KSerializer;
 }
 
+public final class com/superiorsoftllc/infantry/plugin/host/LeakWatch {
+	public static final field INSTANCE Lcom/superiorsoftllc/infantry/plugin/host/LeakWatch;
+	public static final field POLL_MS J
+	public final fun collected (Ljava/lang/ref/WeakReference;JLkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function1;)Z
+	public static synthetic fun collected$default (Lcom/superiorsoftllc/infantry/plugin/host/LeakWatch;Ljava/lang/ref/WeakReference;JLkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function1;ILjava/lang/Object;)Z
+	public final fun heapDump (Ljava/io/File;)Ljava/io/File;
+}
+
 public final class com/superiorsoftllc/infantry/plugin/host/ModuleCandidate {
 	public fun <init> (Ljava/lang/String;Lcom/superiorsoftllc/infantry/plugin/api/Tier;Ljava/lang/String;Lcom/superiorsoftllc/infantry/plugin/api/ModuleManifest;Ljava/lang/String;Ljava/lang/String;)V
 	public synthetic fun <init> (Ljava/lang/String;Lcom/superiorsoftllc/infantry/plugin/api/Tier;Ljava/lang/String;Lcom/superiorsoftllc/infantry/plugin/api/ModuleManifest;Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
@@ -3290,7 +3322,9 @@ public final class com/superiorsoftllc/infantry/plugin/host/SimpleEventBus : com
 	public fun <init> (Lkotlin/jvm/functions/Function1;)V
 	public synthetic fun <init> (Lkotlin/jvm/functions/Function1;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun clear ()V
+	public final fun dropOwner (Ljava/lang/String;)I
 	public fun publish (Lcom/superiorsoftllc/infantry/plugin/api/PluginEvent;)V
+	public final fun subscribe (Ljava/lang/String;Ljava/lang/String;Lkotlin/jvm/functions/Function1;)Lkotlin/jvm/functions/Function0;
 	public fun subscribe (Ljava/lang/String;Lkotlin/jvm/functions/Function1;)Lkotlin/jvm/functions/Function0;
 }
 

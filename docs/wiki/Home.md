@@ -13,6 +13,7 @@ wins, and the page says so.
 - [Architecture](Architecture.md): the three layers, the daemon, the protocol, a request from click to daemon and back, slots, scripting.
 - [Recipes](recipes/README.md): worked how-to-add-X guides (UI plugin, child plugin, daemon tool, setting, Lua hook, harness, provider).
 - [Plugins](Plugins.md): `module.json`, the UI and daemon halves, block types, panels and slots, config fields, building, installing, signing, and a hello plugin step by step.
+- [Plugin lifecycle](Plugin-lifecycle.md): live swap of one plugin (install, update, enable, disable, remove), `PluginScope`, the leak check, and the do and don't for authors.
 - [Make a plugin](make-a-plugin.md): step by step from the template to a built UI + daemon example, every `module.json` field, slots and child plugins.
 - [UI plugin API](plugin-api.md): every public type and function of the UI plugin API, with examples.
 - [Daemon plugin API](daemon-plugin-api.md): tools, routes, hooks, events, services, storage, lifecycle, the guard.

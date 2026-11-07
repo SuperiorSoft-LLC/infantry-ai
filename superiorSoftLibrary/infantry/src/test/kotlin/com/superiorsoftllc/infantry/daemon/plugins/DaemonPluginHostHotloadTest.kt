@@ -126,6 +126,41 @@ class DaemonPluginHostHotloadTest {
         assertFalse(h.call("acme_policy_check").isError)
     }
 
+    /** PLUGIN-HOTSWAP-1: the unload check waits briefly here, so the leak case does not cost the default 5 s. */
+    private fun quickHost(root: File): DaemonPluginHost {
+        val src = source(root)()
+        val services = object : DaemonServices by DaemonServices.NONE {
+            override fun limit(def: com.superiorsoftllc.infantry.settings.LimitDef): Long =
+                if (def == com.superiorsoftllc.infantry.settings.LimitRegistry.PLUGIN_UNLOAD_CHECK_MS) 500 else def.default
+        }
+        val h = DaemonPluginHost.load(src.resolution, src.config, src.trust, services, File(root, "state"), {})
+        h.hotSource = source(root)
+        return h.also { hosts += it }
+    }
+
+    @Test fun `a clean unload and reload carry no leak note`() {
+        val root = newRoot(hello, policy)
+        val h = quickHost(root)
+        val out = h.reload(hello)
+        assertTrue(out.ok, out.message)
+        assertTrue(out.notes.none { "did not unload cleanly" in it }, out.notes.toString())
+        val off = h.unload(hello)
+        assertTrue(off.notes.none { "did not unload cleanly" in it }, off.notes.toString())
+    }
+
+    @Test fun `a half whose old class loader stays reachable is reported, and the daemon keeps serving`() {
+        val root = newRoot(hello, policy)
+        val h = quickHost(root)
+        val held = h.loaderOf(hello) // the leak: a reference from outside the plugin
+        assertTrue(held != null)
+        val out = h.reload(hello)
+        assertTrue(out.ok, out.message)
+        assertTrue(out.notes.any { "$hello did not unload cleanly" in it }, out.notes.toString())
+        assertFalse(h.call("acme_hello").isError, "the new version serves")
+        assertEquals("loaded", h.status(policy), "the other plugin is untouched")
+        assertTrue(held !== h.loaderOf(hello))
+    }
+
     @Test fun `a host with no plugin source refuses a live load and says so`() {
         val h = DaemonPluginHost.empty()
         val out = h.load(hello)

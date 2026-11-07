@@ -317,6 +317,11 @@ class InfantryModule(
     val sessionBadges: List<SessionBadgeProvider> = emptyList(),
     /** PLUGIN-BRIDGES-1: the handlers of its declared `runs: client` capabilities, by id (`UiRegistrar.capability`). */
     val capabilities: Map<String, ClientCapabilityHandler> = emptyMap(),
+    /**
+     * PLUGIN-HOTSWAP-1: the scope [UiRegistrar.scope] handed out, closed by [onStop] after the plugin's own `stop()`; null for
+     * a module that never registered through a [UiPlugin] (compiled-in values, compositions).
+     */
+    val scope: com.superiorsoftllc.infantry.plugin.api.OwnedPluginScope? = null,
 )
 
 /**
@@ -327,8 +332,9 @@ interface UiPlugin {
     fun register(registrar: UiRegistrar)
 
     /**
-     * S7: the host is unloading this module (soft restart, install, remove). Release what [register] or the module's tabs
-     * started (threads, timers, sockets). Its event observers are unsubscribed by the host, not here. Default: nothing.
+     * S7: the host is unloading this module (soft restart, install, remove, live swap). Release what [register] or the
+     * module's tabs started (threads, timers, sockets) that is NOT in [UiRegistrar.scope] (the host closes the scope right
+     * after this). Its event observers are unsubscribed by the host, not here. Default: nothing.
      */
     fun stop() {}
 }
@@ -336,6 +342,12 @@ interface UiPlugin {
 interface UiRegistrar {
     /** The module's services (permission-gated). */
     val services: PluginServices
+    /**
+     * PLUGIN-HOTSWAP-1 (docs/wiki/Plugin-lifecycle.md): this module's lifetime. Start coroutines, timers and listeners here
+     * and the host stops them when it unloads the module, so it can be swapped live. The default (a host that does not
+     * manage lifetimes, a test) is a scope nothing closes.
+     */
+    val scope: com.superiorsoftllc.infantry.plugin.api.PluginScope get() = com.superiorsoftllc.infantry.plugin.api.OwnedPluginScope(services.module)
     fun tab(provider: TabProvider)
     /** PLUGINS-3: a side panel section; declare it under `panels` in module.json. */
     fun panel(provider: PanelProvider) {}
@@ -385,8 +397,10 @@ fun registerModule(manifest: ModuleManifest, tier: Tier, services: PluginService
     val capabilities = LinkedHashMap<String, ClientCapabilityHandler>()
     val declaredClient = manifest.capabilities.filter { it.runs == com.superiorsoftllc.infantry.plugin.api.CapabilityRuns.CLIENT }.map { it.id }.toSet()
     val events = ClientCapabilityHost.eventsOf(manifest.name, manifest.emits.map { it.event }.toSet())
+    val scope = com.superiorsoftllc.infantry.plugin.api.OwnedPluginScope(manifest.name)
     plugin.register(object : UiRegistrar {
         override val services = services
+        override val scope = scope
         override fun tab(provider: TabProvider) { tabs += provider }
         override fun panel(provider: PanelProvider) { panels += provider }
         override fun interceptor(name: String, interceptor: TabInterceptor) { interceptors[name] = interceptor }
@@ -403,7 +417,10 @@ fun registerModule(manifest: ModuleManifest, tier: Tier, services: PluginService
         override fun capability(id: String, handler: ClientCapabilityHandler) { if (id in declaredClient) capabilities[id] = handler }
         override val capabilityEvents: CapabilityEvents = events
     })
-    return InfantryModule(manifest, tabs, interceptors, blocks, observers, tier, panels, shell, inject, fills, tabTrees, implementations, blockTypes, fieldTypes = fieldTypes, onStop = plugin::stop, sessionBadges = sessionBadges, capabilities = capabilities)
+    return InfantryModule(manifest, tabs, interceptors, blocks, observers, tier, panels, shell, inject, fills, tabTrees, implementations, blockTypes, fieldTypes = fieldTypes,
+        // PLUGIN-HOTSWAP-1: the plugin's own stop first (it may still use its scope), then everything it started in the scope.
+        onStop = { try { plugin.stop() } finally { scope.close().forEach { println("[plugins] $it") } } },
+        sessionBadges = sessionBadges, capabilities = capabilities, scope = scope)
 }
 
 /**
@@ -449,6 +466,12 @@ class TabFactory(
     private val configApi: NodeConfigApi = DaemonNodeConfigApi,
     /** CONFIG-FIELDS-4 (G8): the owner's modules.json; `configReadGate` and the `config.read` grant decide what a community module reads. */
     private val modulesConfig: com.superiorsoftllc.infantry.plugin.api.ModulesConfig = com.superiorsoftllc.infantry.plugin.api.ModulesConfig(),
+    /**
+     * PLUGIN-HOTSWAP-1: the load generation of each module. A live swap gives the swapped modules a new one and keeps every
+     * other module's, so [ModuleScope] throws away only the swapped modules' composition (their remembered state belongs to
+     * the old class loader) and every other plugin's UI keeps its state.
+     */
+    val generation: (module: String) -> Int = { 0 },
 ) {
     val modules: List<InfantryModule> = modules.toList()
     /** TOAST-1: where a module's `Notifications.notify` lands in the window; the window sets it to its controller's. */

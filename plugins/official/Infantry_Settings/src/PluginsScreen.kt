@@ -67,6 +67,7 @@ import com.superiorsoftllc.infantry.plugin.api.InspectOutcome
 import com.superiorsoftllc.infantry.plugin.api.InspectView
 import com.superiorsoftllc.infantry.plugin.api.PluginManagerPort
 import com.superiorsoftllc.infantry.ui.shell.LocalSoftRestart
+import com.superiorsoftllc.infantry.ui.shell.LocalPluginLifecycle
 import com.superiorsoftllc.infantry.plugin.api.PluginView
 import com.superiorsoftllc.infantry.plugin.api.RefreshView
 import com.superiorsoftllc.infantry.plugin.api.SourceView
@@ -166,7 +167,16 @@ fun PluginsScreen(port: PluginManagerPort) {
      * ([LocalSoftRestart], as a drop-in install does), so the new or updated plugin's config appears at once.
      */
     val softRestart = LocalSoftRestart.current
-    val actUi: Act = { call, then -> act(call) { r -> then(r); if (r.ok) softRestart?.invoke() } }
+    /**
+     * PLUGIN-HOTSWAP-1: where the shell can, the change is swapped in live ([LocalPluginLifecycle]): only the changed plugin
+     * reloads and every other tab keeps its state. The soft restart stays the fallback (no live swap here, or a leak).
+     */
+    val lifecycle = LocalPluginLifecycle.current
+    val applyUi: (String?) -> Unit = { said ->
+        val line = lifecycle?.apply?.invoke() ?: run { softRestart?.invoke(); null }
+        if (line != null) note = listOfNotNull(said, line).joinToString(" - ")
+    }
+    val actUi: Act = { call, then -> act(call) { r -> then(r); if (r.ok) applyUi(r.message) } }
 
     /** Checks [ref], then opens the consent dialog whose Install applies [apply] with the ticked grants. */
     fun askConsent(ref: String, title: String, apply: (Set<String>, String) -> ActionResult) {
@@ -184,6 +194,8 @@ fun PluginsScreen(port: PluginManagerPort) {
         banner?.let { Text("Restart needed: $it", color = Palette.Warn, fontSize = 13.sp, modifier = Modifier.testTag(PLUGINS_BANNER_TAG)) }
         SectionTabs(section) { section = it }
         note?.let { Text(it, color = Palette.Muted, fontSize = 12.sp, modifier = Modifier.testTag(PLUGINS_NOTE_TAG)) }
+        // PLUGIN-HOTSWAP-1: a plugin whose old version stayed in memory after a live swap (the shell was reloaded instead).
+        lifecycle?.warnings?.values?.forEach { Text(it, color = Palette.Warn, fontSize = 12.sp) }
         val body = Modifier.weight(1f).fillMaxWidth()
         when (section) {
             "Installed" -> Installed(port, version, busy, pending, actUi, body) { id, on ->
@@ -195,7 +207,7 @@ fun PluginsScreen(port: PluginManagerPort) {
                     // On success the switch stays pending until the reloaded list shows the new state (no flicker back).
                     if (!r.ok) pending.remove(id)
                     version++
-                    if (r.ok) softRestart?.invoke()
+                    if (r.ok) applyUi(r.message)
                 }
             }
             "Browse" -> Browse(port, version, busy, body) { hit ->

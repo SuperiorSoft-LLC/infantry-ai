@@ -66,6 +66,12 @@ interface PlatformHost {
     /** S6: the module set loaded again (after a drop-in install), for the soft restart; a host that cannot load modules returns [tabFactory]. */
     fun reloadTabs(): com.superiorsoftllc.infantry.ui.plugin.TabFactory = tabFactory
 
+    /**
+     * PLUGIN-HOTSWAP-1: applies what changed in the plugins root to only the plugins it touches, live (no soft restart);
+     * null = this host cannot (web, Android, or a change only a full reload can apply): the shell then soft-restarts.
+     */
+    fun swapPlugins(): PluginSwap? = null
+
     /** S6: installing a plugin by dropping a .ihq on the empty shell; null where modules cannot be loaded at run time (web, Android). */
     val dropIn: PluginDropIn? get() = null
 
