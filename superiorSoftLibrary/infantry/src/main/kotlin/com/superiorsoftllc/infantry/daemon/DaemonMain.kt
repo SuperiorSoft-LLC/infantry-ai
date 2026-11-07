@@ -1825,6 +1825,17 @@ class InfantryDaemon(
                 harnessModulesRef.set(harnessModules)
             }
             val plugins = pluginHost.get()
+            // DEMO-USAGE-HIDE-1: plugin-offered plan-limit readings replace the provider sources (`hooks.usageReading`).
+            limits.replacement = {
+                val at = System.currentTimeMillis()
+                plugins.usageReadings().mapNotNull { (provider, windows) ->
+                    val fixed = windows(at) ?: return@mapNotNull null
+                    object : com.superiorsoftllc.infantry.usage.LimitSource {
+                        override val provider = provider
+                        override fun read(now: Long) = com.superiorsoftllc.infantry.usage.ProviderLimits(provider, "ok", fixed, null, now)
+                    }
+                }
+            }
             // SCRIPT-3: the daemon's own happenings as named events (api.events.subscribe / infantry_event_emit share this bus).
             val eventPublisher = com.superiorsoftllc.infantry.daemon.plugins.DaemonEventPublisher { name, payload -> runCatching { plugins.publishEvent(name, payload) } }
             mail.onSent = eventPublisher::mail

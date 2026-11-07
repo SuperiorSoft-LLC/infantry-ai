@@ -12,10 +12,10 @@
     "entry": "com.superiorsoftllc.infantry.plugins.demo.lock.daemon.DemoLockPlugin",
     "jar": "daemon/build/libs/Demo_Lock-daemon.jar",
     "apiAtLeast": "1.39.0",
-    "hooks": ["seats", "frameGate", "httpGate", "admission", "mailGate", "spawnGate", "ready", "turns"],
+    "hooks": ["seats", "frameGate", "httpGate", "admission", "mailGate", "usageReading", "spawnGate", "ready", "turns"],
     "routes": ["GET /demo/visitor-token"],
     "publicRoutes": ["GET /demo/visitor-token"],
-    "env": ["INFANTRY_DEMO_NOTICE", "INFANTRY_DEMO_DIR", "INFANTRY_DEMO_SEATS", "INFANTRY_DEMO_PUBLIC_TOKEN", "INFANTRY_DEMO_PUBLIC_TOKEN_FILE", "INFANTRY_DEMO_TURNS_PER_IP", "INFANTRY_DEMO_TURN_WINDOW_HOURS", "INFANTRY_DEMO_TRUSTED_PROXIES"]
+    "env": ["INFANTRY_DEMO_NOTICE", "INFANTRY_DEMO_DIR", "INFANTRY_DEMO_SEATS", "INFANTRY_DEMO_PUBLIC_TOKEN", "INFANTRY_DEMO_PUBLIC_TOKEN_FILE", "INFANTRY_DEMO_TURNS_PER_IP", "INFANTRY_DEMO_TURN_WINDOW_HOURS", "INFANTRY_DEMO_TRUSTED_PROXIES", "INFANTRY_DEMO_USAGE_SESSION_PERCENT", "INFANTRY_DEMO_USAGE_WEEK_PERCENT"]
   },
   "shell": [
     { "node": "infantry.shell.frame", "name": "lock", "mode": "wrap" }

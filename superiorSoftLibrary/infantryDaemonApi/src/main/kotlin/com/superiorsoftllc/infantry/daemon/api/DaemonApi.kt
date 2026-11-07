@@ -188,6 +188,7 @@ interface DaemonApi {
         // 1.16.0 (AR-5, additive): `services` (ServicesApi).
         // 1.15.0 (DAEMON-STORAGE-1, additive): `storage` (daemon.api.storage.PluginStorage).
         // 1.13.0 (DP-5h-3a2, additive): BoardRuntime.ticketEvents / stories / epics / relatedDescription / unknownSkills.
+        // 1.51.0 (DEMO-USAGE-HIDE-1, additive): `usageReading` (declare `usageReading` in `daemon.hooks`): a plugin supplies the plan-limit reading.
         // 1.20.0 (USAGE-FIT, additive): `Meters.requests(sinceMs)` and `MeterRequest`, the recorded model requests (read-only).
         // 1.12.0 (DP-5h-3a, additive): `boardRuntime` (BoardRuntime): what a board plugin builds its board from.
         // 1.11.0 (DP-5h-2, additive): `spawns.charge` (SpawnCharge) and `frames.table` (FrameBinding: typed frames with the direct flag).
@@ -231,7 +232,7 @@ interface DaemonApi {
         // bridge for scripts, agents and plugins to call what an installed plugin (daemon or UI half) offers.
         // 1.49.0 (PLUGIN-HOTSWAP-1, additive): `scope` (plugin.api.PluginScope), the host-owned lifetime of the daemon half.
         // 1.50.0 (JOBFEED-1, additive): `Sessions.jobs` / `Sessions.jobLog` (bounded job-log tail read).
-        const val VERSION = "1.50.0"
+        const val VERSION = "1.51.0"
     }
 }
 
@@ -690,4 +691,11 @@ interface Hooks {
      * `daemon.hooks`); the daemon serves and calls the link through the first one offered. Default: ignored.
      */
     fun runnerLinkTransport(transportId: String, transport: com.superiorsoftllc.infantry.daemon.api.runners.RunnerLinkTransport) {}
+
+    /**
+     * DEMO-USAGE-HIDE-1 (1.51.0, additive): supply the plan-limit reading of [provider] (declare `usageReading` in `daemon.hooks`).
+     * While any plugin has offered one, the daemon reads ONLY the offered ones, in place of the provider endpoints, so every path
+     * (usage, limits, the pushed limits frame) carries them. [windows] is called with the epoch millis of the read; null = this reading is off right now (the provider sources are read). Default: ignored.
+     */
+    fun usageReading(provider: String, windows: (now: Long) -> List<com.superiorsoftllc.infantry.daemon.api.usage.LimitWindow>?) {}
 }

@@ -323,7 +323,11 @@ class LimitService(
 
     private val loggedDuplicates = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
 
+    /** DEMO-USAGE-HIDE-1: sources a daemon plugin offered; non-empty = they are read INSTEAD of every other source, live or not. */
+    @Volatile var replacement: () -> List<LimitSource> = { emptyList() }
+
     private fun allSources(): List<LimitSource> {
+        runCatching(replacement).getOrDefault(emptyList()).takeIf { it.isNotEmpty() }?.let { return it }
         val all = sources + runCatching(extraSources).getOrDefault(emptyList())
         val kept = all.distinctBy { it.provider }
         if (kept.size != all.size) {
@@ -349,7 +353,7 @@ class LimitService(
     @Synchronized
     fun snapshot(force: Boolean = false): List<ProviderLimits> {
         val now = clock()
-        if (!liveEnabled()) return allSources().map { ProviderLimits.unknown(it.provider, now, LimitReason.LIVE_SOURCES_OFF) }
+        if (!liveEnabled() && runCatching(replacement).getOrDefault(emptyList()).isEmpty()) return allSources().map { ProviderLimits.unknown(it.provider, now, LimitReason.LIVE_SOURCES_OFF) }
         val t = tuning()
         cached?.let { last ->
             val age = now - cachedAt

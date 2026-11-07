@@ -38,6 +38,8 @@ class DemoLockPlugin : DaemonPlugin {
         api.hooks.httpGate { method, path, webAsset -> lock.httpRefusal(method, path, webAsset) }
         api.hooks.admission { listOfNotNull(lock.takeIf { it.enabled }?.publicToken) }
         api.hooks.mailGate { from, to, allowCrossProject -> lock.mailRefusal(from, to, allowCrossProject) }
+        // DEMO-USAGE-HIDE-1: a visitor sees FIXED plan meters, never the real ones (usage, limits and the pushed limits frame).
+        api.hooks.usageReading(DemoLock.USAGE_PROVIDER) { now -> lock.takeIf { it.enabled }?.usageWindows(now, api::env) }
         api.hooks.spawnGate { _, _ -> if (lock.enabled && !seeding) DemoLock.SPAWN_REFUSAL else null }
         api.hooks.ready(object : ReadyHook {
             override fun notice(): String? = lock.takeIf { it.enabled }?.notice?.takeIf { it.isNotBlank() }

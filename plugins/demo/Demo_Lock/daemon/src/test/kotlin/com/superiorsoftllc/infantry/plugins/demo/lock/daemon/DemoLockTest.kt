@@ -33,7 +33,7 @@ class DemoLockTest {
     /** The frozen read lists of the pre-POLICY-1 lock, the parity baseline (core's DemoPresetFixture holds the same). */
     private val readFrames = setOf(
         Envelope.SESSIONS, Envelope.PROJECT_LIST, Envelope.PROJECT_GET, Envelope.WORKSPACE_LIST,
-        Envelope.SETTINGS_GET, Envelope.LIMIT_CATALOG,
+        Envelope.SETTINGS_GET, Envelope.LIMIT_CATALOG, Envelope.LIMITS, Envelope.USAGE_GET,
         Envelope.TICKET_LIST, Envelope.TRIGGER_LIST, Envelope.COMMAND_LIST, Envelope.ROLE_LIST,
         Envelope.PROVIDERS, Envelope.MODELS, Envelope.SESSION_STATS_GET, Envelope.QUESTION_LIST,
         Envelope.MAIL_INBOX, Envelope.MAIL_OUTBOX, Envelope.MAIL_THREAD, Envelope.MAIL_THREADS,
@@ -85,15 +85,6 @@ class DemoLockTest {
         val fields = runtime.readyFields()
         assertTrue(fields.startsWith(" demo=lock access=restricted notices=demo_limit notice="), fields)
         assertEquals("This is a demo.", String(java.util.Base64.getUrlDecoder().decode(fields.substringAfter("notice="))))
-    }
-
-    @Test
-    fun `the owner plan meters are hidden from a visitor, usage_get and limits`() {
-        val lock = locked()
-        for (t in listOf(Envelope.USAGE_GET, Envelope.LIMITS)) {
-            assertEquals(refusal(t), lock.gate(t, "", a), t)
-            assertEquals(refusal(t), lock.gate(t), t)
-        }
     }
 
     @Test
@@ -180,5 +171,14 @@ class DemoLockTest {
             "POST" to "/hooks/abc", "GET" to "/mail/send", "POST" to "/window/activate", "GET" to "/plugins")) {
             assertEquals("demo: $m $p is disabled in this demo", lock.httpRefusal(m, p, false), "$m $p")
         }
+    }
+
+    @Test
+    fun `a visitor sees fixed plan meters, env overridable, bad values ignored`() {
+        val w = locked().usageWindows(1_000L, { null })
+        assertEquals(listOf(10.0, 25.0), w.map { it.percent })
+        assertEquals(setOf("opencode-go"), w.map { it.provider }.toSet())
+        val set = locked().usageWindows(1_000L, { if (it == DemoLock.USAGE_WEEK_ENV) "40" else "999" })
+        assertEquals(listOf(10.0, 40.0), set.map { it.percent })
     }
 }
