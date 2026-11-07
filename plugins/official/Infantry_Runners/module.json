@@ -27,6 +27,7 @@
     {
       "node": "infantry.shell.config.runners", "group": "Runners", "title": "Runners", "tab": "Settings", "order": 911,
       "keywords": ["runner", "pause", "resume", "detach", "rotate", "health", "fingerprint"],
+      "fields": [],
       "block": "infantry.shell.config.runners"
     }
   ]
