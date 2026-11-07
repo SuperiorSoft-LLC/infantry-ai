@@ -20,8 +20,15 @@ class DemoPresetParityTest {
             ActionPolicyMatcher.allows(preset.disable, preset.allow, a.id, a.kind)
         }.toSet()
         assertEquals(emptySet(), DemoPresetFixture.ALLOWED_TYPES - allowed, "the old lock allowed these, the preset refuses them")
-        // DEMO-FIX-1 deliberately added one read: listing the plugins' tools (a call is still gated by the tool's own action).
-        assertEquals(setOf("plugin_tools"), allowed - DemoPresetFixture.ALLOWED_TYPES, "the preset allows these, the old lock refused them")
+        // Deliberate widenings since the pre-POLICY-1 lock, each a read or the visitor's own chat:
+        //  plugin_tools     DEMO-FIX-1 e11ec0d3: lists the plugins' tools (a call is still gated by the tool's own action).
+        //  timeline_list    DEMO-CHECK-1 91495a9f: demo.json allows timeline.read (read only) so the landing page stops showing a red error.
+        //  layer_skill_list CATALOG: skills.read lists layer skills, a read like skill_list (already allowed).
+        //  queue_add/remove/force  CHAT-QUEUE-1 3e83a4bd: catalogued under chat.prompt (scope SESSION); they queue, drop or
+        //                   send the visitor's own pending chat messages, the same power as the already-allowed prompt frame.
+        // No write tool (ticket/settings/file/git writes, skill_save, ...) is in this set; adding one must fail here.
+        val widened = setOf("plugin_tools", "timeline_list", "layer_skill_list", "queue_add", "queue_remove", "queue_force")
+        assertEquals(widened, allowed - DemoPresetFixture.ALLOWED_TYPES, "the preset allows these, the old lock refused them")
     }
 
     @Test fun `the old per-project reads are the catalog's PROJECT scope`() {
