@@ -241,6 +241,7 @@ class RunnerPoolPinnedTicketE2ETest {
         assertEquals(listOf(sessionId), again.daemon.manager.list().map { it.id }, "the same session, not a new one")
         assertEquals(head, git(path, "rev-parse", "HEAD"), "the work on the ticket branch is intact")
         orch.await(what = "r2 is up again") { orch.rows()["r2"]?.text("health") == "up" }
+        orch.await(what = "the Runners card counts the resumed worker on r2 (pull accepted, no re-pair)") { orch.rows()["r2"]?.text("workers") == "1" }
         // The orchestrator still shows the ticket in progress with the same worker session (its r2 row is not asserted: the crash image
         // predates the link credential the orchestrator holds, so the runner-pull is refused until a re-pair).
         val row = orch.client.board().single { it.id == pinned.id }
