@@ -52,9 +52,8 @@ fun chatBlockType(block: ChatBlock): String = when (block) {
 fun parseChatMarkdownSafely(engine: ChatMarkdownEngine, text: String, streaming: Boolean = false): List<ChatBlock> =
     try {
         engine.parse(text, streaming)
-    } catch (e: OutOfMemoryError) {
-        throw e
     } catch (e: Throwable) {
+        if (isUnrecoverableError(e)) throw e
         BuiltInChatMarkdownEngine.parse(text, streaming)
     }
 
