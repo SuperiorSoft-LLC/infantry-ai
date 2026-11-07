@@ -16,6 +16,7 @@ Every page of this wiki is listed here, one line each. The pages are written fro
 
 - [Plugins](Plugins.md): `module.json`, the UI and daemon halves, config fields, building, installing, signing, a hello plugin.
 - [Make a plugin](make-a-plugin.md): step by step from the template to a built UI + daemon example.
+- [Publish a plugin](publish-a-plugin.md): package a plugin from its own repo as an `.ihq` and list it in the community registry.
 - [Run a remote environment](run-a-remote-environment.md): start a runner-only daemon (`--mode runner`, Docker) and pair it.
 - [UI plugin API](plugin-api.md): every public type and function of the UI plugin API.
 - [Daemon plugin API](daemon-plugin-api.md): tools, routes, hooks, events, services, storage, lifecycle.
