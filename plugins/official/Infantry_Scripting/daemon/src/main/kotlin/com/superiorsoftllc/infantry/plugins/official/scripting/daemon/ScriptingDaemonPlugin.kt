@@ -32,7 +32,7 @@ class ScriptingDaemonPlugin : DaemonPlugin {
         val engines = ScriptEngines({ api.services.endpoints(ScriptEngineWire.PREFIX) }, { api.config("scripting.defaultEngine")?.takeIf { it.isNotBlank() } ?: "lua" })
         val limits = ScriptingLimits { api.config(it) }
         val store = ScriptStore({ api.files(it) }, { engines.extensions() })
-        val aliases = { ScriptAliases.parse(api.config("scripting.aliases")) }
+        val aliases = { ScriptAliases.effective(api.config("scripting.aliases")) }
         val maxPhases = { api.config("scripting.maxPhases")?.trim()?.toIntOrNull() ?: 3 }
         // SCRIPT-VIS-1b: the run log is stored in the plugin's own tables (a daemon without storage keeps it in memory only).
         val runLog = ScriptRunLog({ api.settings.limit("limits.scripting.runLogMax")?.toInt() ?: 200 }, store = runCatching { StorageRunStore(api.storage) }.getOrNull())
@@ -159,6 +159,22 @@ class ScriptingLimits(private val config: (String) -> String?) {
 
 /** The alias table (short name -> registry tool name) is data: the JSON object in the `scripting.aliases` setting. A bad value is an empty table. */
 object ScriptAliases {
+    /**
+     * LAUNCH-VERIFY-2: the shipped table, used while the setting is unset ([DaemonApi.config] is null for an unset key, so a fresh install
+     * had NO aliases and `ih.move{}` / `ih.board{}` failed with "unknown tool or alias"). Equal to the default module.json declares for
+     * `scripting.aliases` (ScriptAliasesTest keeps the two the same).
+     */
+    val DEFAULTS: Map<String, String> = linkedMapOf(
+        "move" to "infantry_ticket_move", "comment" to "infantry_ticket_comment", "message" to "infantry_message",
+        "start" to "infantry_ticket_start", "close_session" to "infantry_session_remove", "kill" to "infantry_kill",
+        "prompt" to "infantry_prompt", "ask" to "infantry_ask", "ticket_get" to "infantry_ticket_get",
+        "ticket_update" to "infantry_ticket_update", "ticket_create" to "infantry_ticket_create", "board" to "infantry_board",
+        "emit" to "infantry_event_emit",
+    )
+
+    /** The table a run uses: the stored setting when one is set (a stored `{}` means none), else [DEFAULTS]. */
+    fun effective(text: String?): Map<String, String> = if (text.isNullOrBlank()) DEFAULTS else parse(text)
+
     fun parse(text: String?): Map<String, String> = runCatching {
         kotlinx.serialization.json.Json.parseToJsonElement(text.orEmpty().ifBlank { "{}" }).jsonObject
             .mapNotNull { (k, v) -> (v as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }?.let { k to it } }.toMap()
