@@ -173,6 +173,7 @@ Register with `api.hooks.<kind>(...)`; list the kinds in `daemon.hooks`; a commu
 | `approvalRules` | `ApprovalRulesHook.match/remember` | fail open | official/core only; stored "allow always" rules |
 | `orchestratorBinding(providerId, binding)` | `OrchestratorBinding` | | selected when the setting `orchestrator.provider` names it |
 | `runnerBinding(bindingId, binding)` | `RunnerBinding` | | kept on the runner pool at daemon start; placement onto it arrives with RUNNER-POOL-3 (docs/RUNNER-POOL.md) |
+| `runnerLinkTransport(transportId, transport)` | `RunnerLinkTransport` | | official/core only (1.44.0); the runner link's transport: core keeps pairing, credentials, rekey, detach, audit and allow-lists. None loaded = no link served and `infantry runner pair/add/rotate/detach` say so (RUNNER-POOL-6a, docs/RUNNER-POOL.md 5) |
 
 Fail closed means a throwing or slow hook refuses the request. Fail open means it reads as "no opinion" and the
 request goes ahead. A mail is never dropped by a hook.
@@ -482,6 +483,18 @@ RUNNER-POOL-2 (docs/RUNNER-POOL.md 2.1, 2.2): the plain data of the runner comma
 - `RunnerPool`: The orchestrator-side view of every runner: `runners()`, `link(name)`, `runnerOf(sessionId)`; `local` is always present.
 - `RunnerBinding`: A plugin's runner binding, offered with `hooks.runnerBinding`.
 - `RunnerHub`: The pool core holds: the `local` runner and the registry of runner bindings plugins offer.
+
+### `runners/RunnerLinkTransport.kt`
+
+RUNNER-POOL-6a (DaemonApi 1.44.0, additive), package `com.superiorsoftllc.infantry.daemon.api.runners`; the official
+`Infantry_RemoteRunner` plugin offers the wss implementation.
+
+- `RunnerLinkTransport`: The runner link's transport, offered with `hooks.runnerLinkTransport`: `call` (one orchestrator -> runner frame and its answer, the runner's certificate checked against the pinned fingerprint), `serve` (the runner's end, every request to a `LinkHandler`) and `fingerprint` (the certificate's SHA-256 pin).
+- `LinkAnswer`: One link answer: a reply or error frame type and its data.
+- `LinkFailure`: A link call that got no answer; `presentedFingerprint` is set when the pin refused the runner's certificate.
+- `LinkTlsMaterial`: Where the runner certificate lives (the link folder) and the keystore password core keeps; the transport makes and loads the certificate there.
+- `LinkHandler`: Core's runner-side handler the transport calls: one request (type, data, orchestrator id, credential, peer address) in, one answer out; `malformed()` for an unreadable frame.
+- `LinkServing`: A served link: its `port`; closing it stops serving.
 
 ### `OwnerAsks.kt`
 

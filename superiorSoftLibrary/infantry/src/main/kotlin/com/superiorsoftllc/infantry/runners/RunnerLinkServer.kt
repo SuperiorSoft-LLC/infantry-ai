@@ -12,7 +12,8 @@ import com.superiorsoftllc.infantry.runners.RunnerLinkFrames as F
 
 /**
  * RUNNER-POOL-5 (docs/RUNNER-POOL.md section 7): the RUNNER side of the link, with no transport: one request in, one answer out.
- * The listener ([RunnerLinkListener]) feeds it; tests call it directly.
+ * The transport's served link ([com.superiorsoftllc.infantry.daemon.api.runners.RunnerLinkTransport.serve]) feeds it; tests call
+ * it directly.
  *
  * * Without a credential only [F.PAIR] is accepted, and only with the live one-time code ([codes]); a runner already paired with
  *   another orchestrator refuses (`infantry runner detach` on the runner first). It accepts link frames from exactly ONE

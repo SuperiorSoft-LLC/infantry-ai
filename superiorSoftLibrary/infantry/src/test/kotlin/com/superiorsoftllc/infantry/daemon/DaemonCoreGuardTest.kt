@@ -108,6 +108,23 @@ class DaemonCoreGuardTest {
         assertTrue(hits.isEmpty(), "transport named next to the orchestrator link (it belongs in an orchestration/binding/ class):\n${hits.joinToString("\n")}")
     }
 
+    /**
+     * RUNNER-POOL-6a: the runner link's transport (WebSocket client, wss listener, TLS) is the Infantry_RemoteRunner plugin's
+     * (hooks.runnerLinkTransport). Core code that names `RunnerLink` names no transport library. URL schemes are not counted
+     * here: a runner's `wss://` address is data the owner types and core stores and prints.
+     */
+    @Test fun `core code that names the runner link names no transport`() {
+        val transport = Regex("""java\.net\.http|HttpClient|HttpURLConnection|WebSocket|okhttp|ktor\.client|ktor\.server\.websocket|SSLContext|javax\.net\.ssl""")
+        val users = sources().filter { f -> "RunnerLink" in f.readText() }
+        assertTrue(users.any { it.name == "RunnerLinkService.kt" } && users.any { it.name == "DaemonMain.kt" }, "the runner link service and its caller were not found")
+        val hits = users.flatMap { f ->
+            // DaemonMain serves its own WebSocket; only the lines about the runner link count there.
+            code(f).filter { (_, l) -> transport.containsMatchIn(l) && (f.name != "DaemonMain.kt" || "unnerLink" in l) }
+                .map { (i, l) -> "${f.name}:${i + 1}: ${l.trim().take(110)}" }
+        }
+        assertTrue(hits.isEmpty(), "transport named next to the runner link (it belongs in the Infantry_RemoteRunner plugin):\n${hits.joinToString("\n")}")
+    }
+
     companion object {
         /** CORE-SPLIT-1/2: leaf Gradle modules and the top-level packages each owns (package names unchanged). */
         val LEAF_MODULES = mapOf(
@@ -153,6 +170,7 @@ class DaemonCoreGuardTest {
             "update" to "self-update of the daemon install; DaemonMain wires it directly",
             "notify" to "the spoken-push frame helper of the protocol",
             "provider" to "AgentProvider abstraction used by SessionManager; no harness provider is built in any more (claude and opencode are modules; H8b-3), only the stub and the zero-harness provider",
+            "runners" to "RUNNER-POOL-5/6a: the runner link's meaning (frames, pairing, credentials, rekey, detach, audit, allow-lists); its transport is the Infantry_RemoteRunner plugin's behind hooks.runnerLinkTransport",
             "orchestration" to "the pod/node DAG scheduler; the scheduler is orchestrator side (the orchestrator seam, OrchestratorLink, lives in infantryDaemonApi since ORCH-1)",
         )
 

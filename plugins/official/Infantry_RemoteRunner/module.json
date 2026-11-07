@@ -1,0 +1,15 @@
+{
+  "name": "Infantry_RemoteRunner",
+  "version": "1.0.0",
+  "apiVersion": 2,
+  "author": "Infantry AI",
+  "description": "Remote runners: the runner link's transport (wss with a pinned self-signed certificate, the runner's listener and the orchestrator's client). Core keeps pairing, credentials, rekey, detach, audit and the allow-lists; this plugin only carries the frames. Off = this machine serves no runner link and `infantry runner add/pair/rotate/detach` say so. Daemon half only.",
+  "tier": "official",
+  "sequence": [],
+  "daemon": {
+    "entry": "com.superiorsoftllc.infantry.plugins.official.remoterunner.daemon.RemoteRunnerDaemonPlugin",
+    "jar": "daemon/build/libs/Infantry_RemoteRunner-daemon.jar",
+    "apiAtLeast": "1.44.0",
+    "hooks": ["runnerLinkTransport"]
+  }
+}

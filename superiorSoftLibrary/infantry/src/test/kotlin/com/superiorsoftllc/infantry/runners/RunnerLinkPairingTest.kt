@@ -7,8 +7,16 @@ import com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorReply
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerLink
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.SessionRef
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.StartSpec
+import com.superiorsoftllc.infantry.daemon.api.runners.LinkAnswer
+import com.superiorsoftllc.infantry.daemon.api.runners.LinkFailure
+import com.superiorsoftllc.infantry.daemon.api.runners.LinkHandler
+import com.superiorsoftllc.infantry.daemon.api.runners.LinkServing
+import com.superiorsoftllc.infantry.daemon.api.runners.LinkTlsMaterial
+import com.superiorsoftllc.infantry.daemon.api.runners.RunnerLinkTransport
 import com.superiorsoftllc.infantry.protocol.Envelope
 import com.superiorsoftllc.infantry.settings.RunnerLinkSettings
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.Test
@@ -57,7 +65,7 @@ class RunnerLinkPairingTest {
         assertEquals("box", runnerStore.orchestrator()?.runnerName)
 
         runnerStore.unpair()
-        val again = assertFailsWith<RunnerLinkClient.Failure> { orchestrator().second.add("box", "wss://h:1", code, "AA", "orch") }
+        val again = assertFailsWith<LinkFailure> { orchestrator().second.add("box", "wss://h:1", code, "AA", "orch") }
         assertTrue(again.message!!.contains("refused"), again.message)
         assertNull(runnerStore.orchestrator())
     }
@@ -66,7 +74,7 @@ class RunnerLinkPairingTest {
     fun `an expired code is refused`() {
         val code = codes.issue("box", now)
         now += 10 * 60_000L + 1
-        val e = assertFailsWith<RunnerLinkClient.Failure> { orchestrator().second.add("box", "wss://h:1", code, "AA", "orch") }
+        val e = assertFailsWith<LinkFailure> { orchestrator().second.add("box", "wss://h:1", code, "AA", "orch") }
         assertTrue(e.message!!.contains("expired"), e.message)
         assertNull(runnerStore.orchestrator())
     }
@@ -163,46 +171,88 @@ class RunnerLinkPairingTest {
         assertTrue(log.all { it.from == PEER }, log.toString())
     }
 
-    @Test
-    fun `end to end over wss the pinned fingerprint pairs and a wrong one is refused`() {
-        val tlsDir = File(dir, "tls")
-        val keys = RunnerLinkTls.ensure(tlsDir, "pw")
-        val fp = RunnerLinkTls.fingerprint(RunnerLinkTls.certificate(keys))
-        assertEquals(fp, RunnerLinkTls.fingerprint(RunnerLinkTls.certificate(RunnerLinkTls.ensure(tlsDir, "pw"))), "the certificate is made once")
-        val listener = RunnerLinkListener(server, RunnerLinkTls.serverContext(keys, "pw"), RunnerLinkListener.LOOPBACK, 0, 10_000)
-        val port = listener.start()
-        try {
-            val url = "wss://127.0.0.1:$port"
-            val wire = LinkCall { u, f, id, c, t, d -> RunnerLinkClient.call(u, f, false, id, c, t, d, 10) }
-            val store = RunnerLinkStore(LinkVault.InMemory())
-            val peers = RunnerPeers(store, wire) { now }
-            val code = codes.issue("box", now)
+    // RUNNER-POOL-6a: the wss end-to-end and plain-ws tests moved with the transport to Infantry_RemoteRunner
+    // (WssLinkTransportTest). Core is tested through the seam with an in-process transport.
 
-            val wrong = assertFailsWith<RunnerLinkClient.Failure> { peers.add("box", url, code, "00:11:22", "orch") }
-            assertTrue(wrong.message!!.contains("mismatch"), wrong.message)
-            assertEquals(RunnerLinkTls.normalized(fp), RunnerLinkTls.normalized(wrong.presentedFingerprint!!))
-            assertNull(runnerStore.orchestrator(), "the code never left the orchestrator")
-
-            val missing = assertFailsWith<RunnerLinkClient.Failure> { peers.add("box", url, code, null, "orch") }
-            assertNotNull(missing.presentedFingerprint)
-
-            val paired = peers.add("box", url, code, fp, "orch")
-            assertEquals(runnerStore.selfId(), paired.runnerId)
-            assertTrue(wire.call(url, fp, store.selfId(), paired.credential, F.HELLO, "{}").ok)
-            assertFalse(wire.call(url, fp, store.selfId(), paired.credential, Envelope.SETTINGS_SET, "{}").ok)
-        } finally {
-            listener.close()
+    /** An in-process [RunnerLinkTransport]: [call] reaches the handler [serve] was given, no socket. */
+    private class FakeTransport : RunnerLinkTransport {
+        var handler: LinkHandler? = null
+        override fun call(url: String, fingerprint: String?, allowPlain: Boolean, orchestratorId: String?, credential: String?, type: String, data: String, timeoutSeconds: Long): LinkAnswer {
+            if (fingerprint != FP) throw LinkFailure("fingerprint mismatch", presentedFingerprint = FP)
+            return (handler ?: throw LinkFailure("nothing serves $url")).handle(type, data, orchestratorId, credential, PEER)
         }
+        override fun serve(handler: LinkHandler, host: String, port: Int, tls: LinkTlsMaterial?, callTimeoutMs: Int): LinkServing {
+            this.handler = handler
+            val owner = this
+            return object : LinkServing {
+                override val port: Int = 1
+                override fun close() { if (owner.handler === handler) owner.handler = null }
+            }
+        }
+        override fun fingerprint(tls: LinkTlsMaterial): String = FP
+    }
+
+    private fun service(stateDir: File, transport: () -> RunnerLinkTransport?) =
+        RunnerLinkService(stateDir, { it.default }, { settings }, null, transport, host = "127.0.0.1", log = {})
+
+    private fun req(vararg fields: Pair<String, String>) = JsonObject(fields.associate { (k, v) -> k to JsonPrimitive(v) })
+
+    @Test
+    fun `with no transport the link commands say they need the plugin`() {
+        val svc = service(File(dir, "none")) { null }
+        for (op in listOf("pair", "add", "rotate", "detach")) {
+            val answer = svc.admin(req("op" to op, "name" to "box", "url" to "wss://h:1", "code" to "C"))
+            assertEquals("false", RunnerLinkService.field(answer, "ok"), op)
+            assertEquals(RunnerLinkService.NO_TRANSPORT, RunnerLinkService.field(answer, "error"), op)
+        }
+        assertTrue(RunnerLinkService.NO_TRANSPORT.startsWith("the runner link needs the Infantry_RemoteRunner plugin"))
+        svc.tick()
+        assertEquals("expired", RunnerLinkService.field(svc.admin(req("op" to "pair_status")), "state"))
     }
 
     @Test
-    fun `plain ws is refused unless runners allowPlainTailnet`() {
-        assertFailsWith<RunnerLinkClient.Failure> { RunnerLinkClient.endpoint("ws://h:1", allowPlain = false) }
-        assertEquals("ws://h:1${F.PATH}", RunnerLinkClient.endpoint("ws://h:1", allowPlain = true).toString())
-        assertEquals("wss://h:1${F.PATH}", RunnerLinkClient.endpoint("wss://h:1", allowPlain = false).toString())
+    fun `runner_admin pairs rotates and detaches through the transport seam`() {
+        val transport = FakeTransport()
+        val runner = service(File(dir, "runner")) { transport }
+        val orch = service(File(dir, "orch")) { transport }
+        val pair = runner.admin(req("op" to "pair", "name" to "box"))
+        assertEquals("true", RunnerLinkService.field(pair, "ok"), pair.toString())
+        assertEquals(FP, RunnerLinkService.field(pair, "fingerprint"))
+        assertEquals("false", RunnerLinkService.field(pair, "plain"))
+        val code = RunnerLinkService.field(pair, "code")!!
+        assertEquals("waiting", RunnerLinkService.field(runner.admin(req("op" to "pair_status")), "state"))
+
+        val wrong = orch.admin(req("op" to "add", "name" to "box", "url" to "wss://h:1", "code" to code, "fingerprint" to "00"))
+        assertEquals("false", RunnerLinkService.field(wrong, "ok"))
+        assertEquals(FP, RunnerLinkService.field(wrong, "presentedFingerprint"))
+
+        val added = orch.admin(req("op" to "add", "name" to "box", "url" to "wss://h:1", "code" to code, "fingerprint" to FP, "orchestratorName" to "orch"))
+        assertEquals("true", RunnerLinkService.field(added, "ok"), added.toString())
+        val status = runner.admin(req("op" to "pair_status"))
+        assertEquals("paired", RunnerLinkService.field(status, "state"))
+        assertEquals("orch", RunnerLinkService.field(status, "orchestratorName"))
+        assertNull(transport.handler, "the pairing listener closes once paired")
+
+        runner.tick() // paired: the daemon now serves the link
+        assertNotNull(transport.handler)
+        assertEquals("box", RunnerLinkService.field(orch.admin(req("op" to "rotate", "name" to "box")), "name"))
+        val detached = orch.admin(req("op" to "detach", "name" to "box"))
+        assertEquals("the runner revoked it too", RunnerLinkService.field(detached, "remote"), detached.toString())
+        runner.tick() // detached: no longer served
+        assertNull(transport.handler)
+        runner.close(); orch.close()
+    }
+
+    @Test
+    fun `runner_admin is an owner-only frame and not a link frame`() {
+        assertTrue(RunnerLinkService.ADMIN in FrameGate.OWNER_ONLY)
+        assertFalse(RunnerLinkService.ADMIN.startsWith(FrameGate.RUNNER_LINK_PREFIX))
+        assertNotNull(FrameGate.refusal(RunnerLinkService.ADMIN, owner = false))
+        assertNull(FrameGate.refusal(RunnerLinkService.ADMIN, owner = true))
     }
 
     private companion object {
         const val PEER = "100.64.0.9"
+        const val FP = "AA:BB:CC"
     }
 }

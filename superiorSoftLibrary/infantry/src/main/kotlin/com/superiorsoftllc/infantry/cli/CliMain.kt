@@ -373,7 +373,14 @@ internal object Cli {
         // Where to connect and with what token are configuration: a bad value is a usage error, and
         // nothing is contacted. A token is read from its file here, and never echoed anywhere.
         val target = try {
-            resolveTarget(parsed, getenv)
+            resolveTarget(parsed, getenv).let { t ->
+                // RUNNER-POOL-6a: `infantry runner` sends the owner-only `runner_admin` frame, so it presents this machine's owner
+                // token (`<stateDir>/owner.token`, readable only to the local user; the trust RUNNER-POOL-5's local CLI had).
+                if (command != "runner") t
+                else Target(t.url, t.token, t.tokenSource, t.answerTimeoutMs, com.superiorsoftllc.infantry.daemon.OwnerCredential.stored(
+                    com.superiorsoftllc.infantry.session.stateDir { getenv(it) ?: com.superiorsoftllc.infantry.session.infantrySetting(it) },
+                ))
+            }
         } catch (e: UsageFailure) {
             err.appendLine("error: ${e.message}")
             return 2
@@ -6139,6 +6146,8 @@ internal class Target(
     val token: String?,
     val tokenSource: String,
     val answerTimeoutMs: Long = ANSWER_TIMEOUT_MS,
+    /** RUNNER-POOL-6a: the owner token, sent as [com.superiorsoftllc.infantry.daemon.OwnerCredential.HEADER]; null = not the owner. */
+    val ownerToken: String? = null,
 )
 
 /** The daemon refused this client's credential (HTTP 401 or 403). Never retried. */
@@ -6575,6 +6584,7 @@ private fun openLinkOnce(target: Target): Link {
     val recorder = FrameRecorder()
     val builder = HttpClient.newBuilder().connectTimeout(java.time.Duration.ofSeconds(10)).build().newWebSocketBuilder()
     target.token?.let { builder.header("Authorization", "Bearer $it") }
+    target.ownerToken?.let { builder.header(com.superiorsoftllc.infantry.daemon.OwnerCredential.HEADER, it) }
     val socket = try {
         builder.buildAsync(URI.create(target.url), recorder).get(15, java.util.concurrent.TimeUnit.SECONDS)
     } catch (e: java.util.concurrent.ExecutionException) {
