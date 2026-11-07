@@ -135,6 +135,18 @@ Your code reads values live with `context.config("<node>")`. Web and Android com
 copy of the declarations and a test that fails when it differs from `module.json` (`AcmeHelloConfigTest`).
 More field types: `docs/CONFIG-FIELDS.md`.
 
+## The plugin tree and effective state
+
+A module's parents are derived from its manifest: the `parents` it declares, the owner of each slot its `panels` fill,
+and the owner of each node its `inject` entries target (the owner is the module whose name prefixes the node id as
+`<Module>.`, or the one that declares the id in `tabs`, `fills`, `nodes` or `slots`; `infantry.shell` nodes are core and
+make no edge). Edges to modules that are not installed, and self edges, are ignored; a cycle loses the edge that closes it
+(logged as `plugin parent cycle: A -> B -> A, edge B -> A ignored`). The state is derived on every load, never stored:
+a module is effective when its own `enabled` flag is on and it has no installed parent or at least one parent is loading.
+A parent that is off, refused, locked or on another platform counts as off. A shared child stays on while any parent is
+on; when the last goes off it shows `Disabled: all its parents are off: A, B` (`ModuleStatus.heldOffBy`) and comes back
+when one returns. The child's own switch is always allowed and is never overwritten by this rule.
+
 ## Building
 
 ```

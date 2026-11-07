@@ -2233,6 +2233,7 @@ public abstract interface class com/superiorsoftllc/infantry/plugin/api/PluginMa
 	public abstract fun rollback (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/plugin/api/ActionResult;
 	public abstract fun search (Ljava/lang/String;)Ljava/util/List;
 	public abstract fun setEnabled (Ljava/lang/String;Z)Lcom/superiorsoftllc/infantry/plugin/api/ActionResult;
+	public fun setProgressListener (Lkotlin/jvm/functions/Function1;)V
 	public abstract fun sources ()Ljava/util/List;
 	public abstract fun update (Ljava/lang/String;Ljava/util/Set;)Lcom/superiorsoftllc/infantry/plugin/api/ActionResult;
 	public abstract fun updates ()Ljava/util/List;
@@ -2241,6 +2242,25 @@ public abstract interface class com/superiorsoftllc/infantry/plugin/api/PluginMa
 public final class com/superiorsoftllc/infantry/plugin/api/PluginManagerPort$DefaultImpls {
 	public static fun importList (Lcom/superiorsoftllc/infantry/plugin/api/PluginManagerPort;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/plugin/api/ActionResult;
 	public static fun refreshIfStale (Lcom/superiorsoftllc/infantry/plugin/api/PluginManagerPort;)Ljava/util/List;
+	public static fun setProgressListener (Lcom/superiorsoftllc/infantry/plugin/api/PluginManagerPort;Lkotlin/jvm/functions/Function1;)V
+}
+
+public final class com/superiorsoftllc/infantry/plugin/api/PluginProgress {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;JJ)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;JJILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()J
+	public final fun component4 ()J
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;JJ)Lcom/superiorsoftllc/infantry/plugin/api/PluginProgress;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/plugin/api/PluginProgress;Ljava/lang/String;Ljava/lang/String;JJILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/api/PluginProgress;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDone ()J
+	public final fun getId ()Ljava/lang/String;
+	public final fun getStep ()Ljava/lang/String;
+	public final fun getTotal ()J
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
 }
 
 public abstract interface class com/superiorsoftllc/infantry/plugin/api/PluginScope {
@@ -3147,18 +3167,20 @@ public final class com/superiorsoftllc/infantry/plugin/host/ModuleState : java/l
 }
 
 public final class com/superiorsoftllc/infantry/plugin/host/ModuleStatus {
-	public fun <init> (Ljava/lang/String;Lcom/superiorsoftllc/infantry/plugin/api/Tier;Lcom/superiorsoftllc/infantry/plugin/host/ModuleState;Ljava/lang/String;Lcom/superiorsoftllc/infantry/plugin/api/ModuleManifest;Ljava/lang/String;)V
-	public synthetic fun <init> (Ljava/lang/String;Lcom/superiorsoftllc/infantry/plugin/api/Tier;Lcom/superiorsoftllc/infantry/plugin/host/ModuleState;Ljava/lang/String;Lcom/superiorsoftllc/infantry/plugin/api/ModuleManifest;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Ljava/lang/String;Lcom/superiorsoftllc/infantry/plugin/api/Tier;Lcom/superiorsoftllc/infantry/plugin/host/ModuleState;Ljava/lang/String;Lcom/superiorsoftllc/infantry/plugin/api/ModuleManifest;Ljava/lang/String;Ljava/util/List;)V
+	public synthetic fun <init> (Ljava/lang/String;Lcom/superiorsoftllc/infantry/plugin/api/Tier;Lcom/superiorsoftllc/infantry/plugin/host/ModuleState;Ljava/lang/String;Lcom/superiorsoftllc/infantry/plugin/api/ModuleManifest;Ljava/lang/String;Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Ljava/lang/String;
 	public final fun component2 ()Lcom/superiorsoftllc/infantry/plugin/api/Tier;
 	public final fun component3 ()Lcom/superiorsoftllc/infantry/plugin/host/ModuleState;
 	public final fun component4 ()Ljava/lang/String;
 	public final fun component5 ()Lcom/superiorsoftllc/infantry/plugin/api/ModuleManifest;
 	public final fun component6 ()Ljava/lang/String;
-	public final fun copy (Ljava/lang/String;Lcom/superiorsoftllc/infantry/plugin/api/Tier;Lcom/superiorsoftllc/infantry/plugin/host/ModuleState;Ljava/lang/String;Lcom/superiorsoftllc/infantry/plugin/api/ModuleManifest;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/plugin/host/ModuleStatus;
-	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/plugin/host/ModuleStatus;Ljava/lang/String;Lcom/superiorsoftllc/infantry/plugin/api/Tier;Lcom/superiorsoftllc/infantry/plugin/host/ModuleState;Ljava/lang/String;Lcom/superiorsoftllc/infantry/plugin/api/ModuleManifest;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/host/ModuleStatus;
+	public final fun component7 ()Ljava/util/List;
+	public final fun copy (Ljava/lang/String;Lcom/superiorsoftllc/infantry/plugin/api/Tier;Lcom/superiorsoftllc/infantry/plugin/host/ModuleState;Ljava/lang/String;Lcom/superiorsoftllc/infantry/plugin/api/ModuleManifest;Ljava/lang/String;Ljava/util/List;)Lcom/superiorsoftllc/infantry/plugin/host/ModuleStatus;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/plugin/host/ModuleStatus;Ljava/lang/String;Lcom/superiorsoftllc/infantry/plugin/api/Tier;Lcom/superiorsoftllc/infantry/plugin/host/ModuleState;Ljava/lang/String;Lcom/superiorsoftllc/infantry/plugin/api/ModuleManifest;Ljava/lang/String;Ljava/util/List;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/host/ModuleStatus;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getDir ()Ljava/lang/String;
+	public final fun getHeldOffBy ()Ljava/util/List;
 	public final fun getLogLine ()Ljava/lang/String;
 	public final fun getManifest ()Lcom/superiorsoftllc/infantry/plugin/api/ModuleManifest;
 	public final fun getName ()Ljava/lang/String;
@@ -3241,7 +3263,7 @@ public final class com/superiorsoftllc/infantry/plugin/host/PluginFolders {
 public final class com/superiorsoftllc/infantry/plugin/host/PluginTree {
 	public fun <init> (Ljava/util/List;)V
 	public final fun childrenOf (Ljava/lang/String;)Ljava/util/List;
-	public final fun disableRefusal (Ljava/lang/String;Lkotlin/jvm/functions/Function1;)Ljava/lang/String;
+	public final fun getProblems ()Ljava/util/List;
 	public final fun parentsOf (Ljava/lang/String;)Ljava/util/List;
 	public final fun roots ()Ljava/util/List;
 }
