@@ -25,4 +25,11 @@ class TicketCreateAsyncLinkTest {
         TicketSave.background("boom", { error("locked") }) { seen += it.message.orEmpty() }.join(5_000)
         assertEquals(listOf("locked"), seen)
     }
+
+    @Test fun linkFailurePostsAnIssueCommentBody() {
+        val posted = ArrayList<String>()
+        TicketSave.reportLinkFailure(TicketSave.Refusal(TicketSave.refused("no ticket 'x'"))) { posted += it }
+        assertEquals(listOf("relatedTo not fully linked: no ticket 'x'"), posted)
+        TicketSave.reportLinkFailure(IllegalStateException("db locked")) { error("post failed too") }
+    }
 }

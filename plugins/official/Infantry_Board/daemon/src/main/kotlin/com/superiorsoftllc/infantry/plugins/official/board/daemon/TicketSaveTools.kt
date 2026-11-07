@@ -220,9 +220,14 @@ internal object TicketSave {
     fun linkRelatedAsync(api: DaemonApi, call: ToolCall, ticket: TicketInfo, ids: List<String>, tool: String, comments: TicketComments?) {
         val author = comments?.let { CommentsWiring.author(api, call) }
         background("ticket-related-${WireTickets.shortId(ticket.id)}", { linkRelated(api, call, ticket, ids, tool) }) { t ->
-            val text = (t as? Refusal)?.result?.text ?: t.message ?: t.javaClass.simpleName
-            runCatching { if (comments != null && author != null) comments.add(ticket.id, ticket.projectId, ticket.title, author, "issue", "open", "relatedTo not fully linked: $text") }
+            reportLinkFailure(t) { body -> if (comments != null && author != null) comments.add(ticket.id, ticket.projectId, ticket.title, author, "issue", "open", body) }
         }
+    }
+
+    /** TICKET-CREATE-HANG-1: the background link failed; [post] gets the comment body for the ticket (a failing post is swallowed). */
+    fun reportLinkFailure(t: Throwable, post: (String) -> Unit) {
+        val text = (t as? Refusal)?.result?.text ?: t.message ?: t.javaClass.simpleName
+        runCatching { post("relatedTo not fully linked: $text") }
     }
 
     /** Runs [work] on a daemon thread and returns at once; a throw goes to [onFailure]. */
