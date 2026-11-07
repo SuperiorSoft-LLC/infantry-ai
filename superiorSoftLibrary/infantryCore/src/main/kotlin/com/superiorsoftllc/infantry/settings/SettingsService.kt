@@ -334,6 +334,14 @@ class SettingsService(
         store.settings.get("runners.$name.maxWorkers")?.value?.let { runCatching { (Json.parseToJsonElement(it) as JsonPrimitive).content.toInt() }.getOrNull() }
             ?.takeIf { it >= 1 } ?: limit(LimitRegistry.RUNNER_MAX_WORKERS).toInt()
 
+    /** RUNNER-POOL-10: the stored `daemon.mode` (both / runner / orchestrator), null when unset. */
+    fun daemonMode(): String? =
+        store.settings.get(DAEMON_MODE)?.value?.let { runCatching { (Json.parseToJsonElement(it) as JsonPrimitive).content }.getOrNull() }?.takeIf { it.isNotBlank() }
+
+    /** RUNNER-POOL-10: `runners.<name>.paused` (default false): the runner takes no new starts; running workers go on. */
+    fun runnerPaused(name: String): Boolean =
+        store.settings.get("runners.$name.paused")?.value?.let { runCatching { (Json.parseToJsonElement(it) as JsonPrimitive).content.toBoolean() }.getOrNull() } ?: false
+
     private fun requireRunnerName(key: String, value: JsonElement): String {
         val v = (value as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim()?.lowercase().orEmpty()
         com.superiorsoftllc.infantry.protocol.TicketRunner.problem(v)?.let { throw IllegalArgumentException("setting '$key': $it") }
@@ -474,6 +482,7 @@ class SettingsService(
             USAGE_MANUAL -> UsagePacing.manualJson(usageSetting(key) { UsagePacing.parseManual(value) })
             USAGE_OVERRIDES -> UsagePacing.overridesJson(usageSetting(key) { UsagePacing.parseOverrides(value, pacingCeiling()) })
             RUNNERS_ENABLED -> JsonPrimitive(requireBoolean(key, value))
+            DAEMON_MODE -> JsonPrimitive(requireOneOf(key, value, listOf("both", "runner", "orchestrator")))
             RUNNERS_DEFAULT -> JsonPrimitive(requireRunnerName(key, value))
             USAGE_REFRESH_MINUTES -> JsonPrimitive(requireIntIn(key, value, USAGE_REFRESH_RANGE))
             DISPLAY_TIME_ZONE -> JsonPrimitive(((value as? JsonPrimitive)?.content ?: "").trim().also { com.superiorsoftllc.infantry.DisplayZone.set(it) })
@@ -504,7 +513,9 @@ class SettingsService(
             MAIL_AUTOMATION_FOOTER -> JsonPrimitive(requireFooterText(key, value))
             MAIL_WAKE_MODE -> JsonPrimitive(requireWakeMode(key, value))
             MAIL_DELIVERY_MODE -> JsonPrimitive(requireDeliveryMode(key, value))
-            else -> if (key.startsWith("runners.") && key.endsWith(".maxWorkers") && key.length > "runners..maxWorkers".length) {
+            else -> if (key.startsWith("runners.") && key.endsWith(".paused") && key.length > "runners..paused".length) {
+                JsonPrimitive(requireBoolean(key, value))
+            } else if (key.startsWith("runners.") && key.endsWith(".maxWorkers") && key.length > "runners..maxWorkers".length) {
                 JsonPrimitive(requireIntIn(key, value, 1..1024))
             } else if (key.startsWith("$MAIL_DELIVERY_MODE.") && key.length > MAIL_DELIVERY_MODE.length + 1) {
                 JsonPrimitive(requireDeliveryMode(key, value))
@@ -906,6 +917,9 @@ class SettingsService(
     /** RUNNER-POOL-5: the runner link's non-numeric settings ([RunnerLinkSettings]), read at every use. */
     fun runnerLink(): RunnerLinkSettings.Values = RunnerLinkSettings.values(::storedRaw)
 
+    /** RUNNER-POOL-10: `runners.enabled` (default false). */
+    fun runnersEnabled(): Boolean = runCatching { storedBoolean(RUNNERS_ENABLED)?.booleanOrNull }.getOrNull() ?: false
+
     private fun storedRaw(key: String): String? = store.settings.get(key)?.value
 
     private fun storedBoolean(key: String): JsonPrimitive? {
@@ -965,6 +979,8 @@ class SettingsService(
         const val DEFAULT_QUESTIONS_MAX_PER_HOUR = 6
         /** RUNNER-POOL-3 (docs/RUNNER-POOL.md section 8): off = the pool is `local` only. */
         const val RUNNERS_ENABLED = "runners.enabled"
+        /** RUNNER-POOL-10: what this daemon is at start-up (read once; `--mode` and INFANTRY_MODE win over it). */
+        const val DAEMON_MODE = "daemon.mode"
         const val RUNNERS_DEFAULT = "runners.default"
         const val DEFAULT_RUNNERS_DEFAULT = "local"
         /** What a clean worker exit does to its ticket: `leave` it in_progress (default) or move it to `done`. */

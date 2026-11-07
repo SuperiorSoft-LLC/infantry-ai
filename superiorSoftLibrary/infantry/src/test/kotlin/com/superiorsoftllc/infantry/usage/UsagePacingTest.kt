@@ -183,4 +183,23 @@ class UsagePacingTest {
     @Test fun `the API ceiling default is the registry default`() {
         kotlin.test.assertEquals(com.superiorsoftllc.infantry.settings.LimitRegistry.PACING_CEILING.default.toInt(), PacingRule.PACING_CEILING_DEFAULT)
     }
+
+    /**
+     * RUNNER-POOL-10: the allowance is per provider account. One worker on runner `local` and one on a remote runner (the daemon's
+     * `workerMeters` lists both, see DaemonMain) fill an allowance of 2, so a third start on ANY runner is refused; the same two
+     * workers on different accounts leave each account its own room.
+     */
+    @Test
+    fun workersOnTwoRunnersShareOneAccountAllowance() {
+        settings.applyUsage(UsageSet(rule = UsageText.parseRule("60:3,80:2,1")), now)
+        val limits = listOf(live("claude", 85.0))
+        val onLocal = listOf("claude")
+        val onRemote = listOf("claude")
+        val oneRunner = pacing(limits, onLocal).check("claude")
+        assertIs<PacingVerdict.Over>(oneRunner, "allowance 1 at 85%: one local worker already fills it")
+        val relaxed = listOf(live("claude", 70.0))
+        assertIs<PacingVerdict.Allow>(pacing(relaxed, onLocal).check("claude"), "allowance 2, one worker: room for one more")
+        assertIs<PacingVerdict.Over>(pacing(relaxed, onLocal + onRemote).check("claude"), "allowance 2, one local + one remote: full")
+        assertIs<PacingVerdict.Allow>(pacing(relaxed + live("opencode-go", 10.0), onLocal + listOf("opencode-go")).check("opencode-go"), "another account is not charged")
+    }
 }

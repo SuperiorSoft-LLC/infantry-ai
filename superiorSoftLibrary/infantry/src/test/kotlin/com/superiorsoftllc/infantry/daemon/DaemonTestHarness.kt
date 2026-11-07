@@ -325,6 +325,8 @@ class DaemonFixture private constructor(
             pluginTrust: com.superiorsoftllc.infantry.daemon.plugins.DaemonPluginHost.Trust? = null,
             pluginEnv: (String) -> String? = { null },
             orchestratorBindings: List<Pair<String, com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorBinding>> = emptyList(),
+            /** RUNNER-POOL-10: what the daemon is; null = both. */
+            mode: DeploymentMode? = DeploymentMode.BOTH,
             /**
              * POLICY-1: the policy presets and the switch. Default: production only, over the fixture's OWN state dir (never
              * the process's, gap 9), so the operator's INFANTRY_POLICY / policy.preset never leaks in.
@@ -377,6 +379,7 @@ class DaemonFixture private constructor(
                 // AR-4b-ii-b: custom roles live in the fixture's OWN state dir, never in ~/.infantry/roles.
                 pluginEnv = { name -> if (name == "INFANTRY_ROLES_DIR") File(stateDir, "roles").path else pluginEnv(name) },
                 orchestratorBindings = orchestratorBindings,
+                mode = mode,
                 policies = policies?.invoke(stateDir) ?: com.superiorsoftllc.infantry.policy.PolicyRuntime(emptyList(), { null }, null, stateDir),
             )
             beforeStart(daemon)

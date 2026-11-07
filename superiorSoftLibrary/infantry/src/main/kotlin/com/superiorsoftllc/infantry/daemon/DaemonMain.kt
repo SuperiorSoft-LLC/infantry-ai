@@ -334,7 +334,9 @@ private val TERMINAL = setOf(SessionState.EXITED, SessionState.FAILED, SessionSt
  * by the session event sink, and the `pod_submit` / `pod_query` / `pod_cancel` frames (contract
  * 1.1.0) that submit a pod and read its state back.
  */
-fun main() {
+fun main(args: Array<String> = emptyArray()) {
+    // RUNNER-POOL-10: `--mode both|runner|orchestrator` (the launcher passes it on); INFANTRY_MODE and daemon.mode are the other sources.
+    DeploymentMode.fromArgs(args)?.let { System.setProperty(DeploymentMode.PROPERTY, it) }
     com.superiorsoftllc.infantry.session.InfantryEnv.installProcessMirror()
     // DAEMON-PLUGINS-1: an install (installDist, docker, headless) ships its daemon plugins in `<install>/modules`; it is the
     // bundled root unless INFANTRY_BUNDLED_MODULES or the property already names one (bundled = trusted, owner decision).
@@ -358,6 +360,10 @@ fun main() {
         // Refused before anything was opened: the message names the setting to change.
         System.err.println("[infantry] refusing to start: ${refused.message}")
         exitProcess(2)
+    } catch (refused: IllegalArgumentException) {
+        // RUNNER-POOL-10: an unknown --mode / INFANTRY_MODE / daemon.mode.
+        System.err.println("[infantry] refusing to start: ${refused.message}")
+        exitProcess(2)
     } catch (refused: UnknownComponentProviderException) {
         System.err.println("[infantry] refusing to start: ${refused.message}")
         exitProcess(2)
@@ -367,6 +373,7 @@ fun main() {
         exitProcess(2)
     }
     println("[infantry] access: ${daemon.policy.describe()}")
+    println("[infantry] mode: ${daemon.deploymentMode.id}")
     println("[infantry] web: ${daemon.webBundle.describe()}")
     println(
         InfantryBin.resolve()?.let { "[infantry] sessions get the infantry CLI on PATH from $it" }
@@ -463,6 +470,8 @@ class InfantryDaemon(
      */
     private val background: List<AutoCloseable> = emptyList(),
     /** Ticket 55d60a5e: the health limits [build] resolved at start-up; [main] starts the watchdog from them. */
+    /** RUNNER-POOL-10: what this daemon is; a runner refuses the board frames. */
+    val deploymentMode: DeploymentMode = DeploymentMode.BOTH,
     val healthSettings: HealthSettings = HealthSettings(
         dbTimeoutMs = LimitRegistry.HEALTH_DB_TIMEOUT_SECONDS.default * 1000L,
         watchdogFailures = LimitRegistry.HEALTH_WATCHDOG_FAILURES.default.toInt(),
@@ -600,6 +609,8 @@ class InfantryDaemon(
             pluginEnv: (String) -> String? = { com.superiorsoftllc.infantry.session.InfantryEnv.get(it) },
             /** ORCH-1: orchestrator bindings offered besides the plugins' (selected by `INFANTRY_ORCHESTRATOR_PROVIDER` through [pluginEnv]); a test passes its fake remote. */
             orchestratorBindings: List<Pair<String, com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorBinding>> = emptyList(),
+            /** RUNNER-POOL-10: what this daemon is (null = `--mode` / `INFANTRY_MODE`, else the setting `daemon.mode`, else both). */
+            mode: DeploymentMode? = null,
             /**
              * Contract 1.3.0: the providers a spawn may name besides [provider], from `INFANTRY_PROVIDERS`.
              * Empty (the default when the variable is unset) = this daemon serves [provider] only.
@@ -745,6 +756,8 @@ class InfantryDaemon(
             }
             // BUG-M2-11b-2: `session.keepAliveMinutes` decides, per launch, whether a session's process is kept (plan section 8).
             val settings = SettingsService(store)
+            // RUNNER-POOL-10: a value that is no mode refuses the start, here, before anything else is wired.
+            val deploymentMode = mode ?: DeploymentMode.resolve(infantrySetting(DeploymentMode.ENV) ?: System.getProperty(DeploymentMode.PROPERTY), null, settings.daemonMode())
             // STALL-3: the hooks and the process watch read the tool profiles in force from here on (refreshed per launch).
             com.superiorsoftllc.infantry.runner.ToolProfiles.active = settings.toolProfiles()
             // STACK-NEUTRAL-1: the watch tooling is opt-in; an install that existed before keeps it on (migrated once).
@@ -1165,12 +1178,22 @@ class InfantryDaemon(
                 rule = settings::usagePacing,
                 manual = settings::usageManual,
                 overrides = settings::usageOverrides,
+                // RUNNER-POOL-10: the allowance is per provider ACCOUNT, so a worker on a remote runner counts too (it has no
+                // session record here: its meter comes from the ticket's pinned provider / model, else the first provider).
                 workerMeters = {
-                    store.tickets.all()
+                    val inProgress = store.tickets.all()
                         .filter { it.status == com.superiorsoftllc.infantry.protocol.TicketStatus.IN_PROGRESS }
+                    val local = inProgress
                         .mapNotNull { row -> row.sessionId?.takeIf { it.isNotBlank() }?.let(manager::get) }
                         .filter { it.state !in DEAD_SESSION_STATES }
                         .map { r -> UsageMeters.meterFor(r.provider, r.model ?: manager.providerFor(r.provider)?.defaultModel()) }
+                    val remote = inProgress
+                        .filter { row -> row.sessionId?.takeIf { it.isNotBlank() }?.let { runnerPool.runnerOf(it) != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL } == true }
+                        .map { row ->
+                            val pid = row.provider ?: manager.providers.firstOrNull()?.id ?: UsageMeters.CLAUDE
+                            UsageMeters.meterFor(pid, row.model ?: manager.providerFor(pid)?.defaultModel())
+                        }
+                    local + remote
                 },
             )
             // USAGE-CARD-1: the stale limit, backoff and manual floor of the plan meters, read from the settings at every read.
@@ -1662,7 +1685,8 @@ class InfantryDaemon(
                                 runnersOf = {
                                     runnerPool.runners().map { e ->
                                         com.superiorsoftllc.infantry.daemon.api.board.BoardRunner(
-                                            e.name, e.state,
+                                            // RUNNER-POOL-10: a paused runner takes no new starts (placement refuses it as "paused").
+                                            e.name, if (e.name == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL && !deploymentMode.runsSessions) "orchestrator-only" else if (settings.runnerPaused(e.name)) "paused" else e.state,
                                             // RUNNER-POOL-9: the runner's own free slots, further limited by runners.<name>.maxWorkers.
                                             freeSlots = minOf(
                                                 e.health?.freeSlots?.let { if (it < 0) Int.MAX_VALUE else it } ?: 1,
@@ -1878,6 +1902,16 @@ class InfantryDaemon(
             )
             runnerLinksRef.set(runnerLinkService.links)
             plugins.runnerLinks = runnerLinkService.links
+            // RUNNER-POOL-10: the rows of the Runners card (`runner_admin` op `list`): health, workers / cap, paused.
+            runnerLinkService.enabledNow = settings::runnersEnabled
+            runnerLinkService.rowStatus = { name ->
+                val e = runnerPool.runners().firstOrNull { it.name == name }
+                val running = e?.health?.running ?: 0
+                mapOf(
+                    "health" to (e?.state ?: "down"), "workers" to running.toString(), "cap" to settings.runnerMaxWorkers(name).toString(),
+                    "paused" to settings.runnerPaused(name).toString(),
+                )
+            }
             manager.addSessionEndedListener(remoteStarts::forget)
             // RUNNER-POOL-6: a heartbeat round over the paired runners every limits.runners.heartbeatSec sets up / degraded / down.
             // RUNNER-POOL-8 (docs/RUNNER-POOL.md 3.1): after each round the watch replays the runners' outboxes (deduped by session +
@@ -1914,7 +1948,11 @@ class InfantryDaemon(
             // A guest token present at start is checked now, so a bad one still stops the daemon starting.
             plugins.guestTokens().forEach { policy.guestDigestOf(it) }
             // AGENT-REGISTRY-1: a disabled agent starts no new session (no override = nothing refused), then the plugins' gates.
-            manager.spawnGate = { role, projectId, _ -> agentRegistry.spawnRefusal(role) ?: plugins.spawnRefusal(role, projectId) }
+            manager.spawnGate = { role, projectId, _ ->
+                // RUNNER-POOL-10: an orchestrator-only daemon runs no session of its own.
+                (if (deploymentMode.runsSessions) null else "this daemon runs in orchestrator mode (--mode orchestrator): local sessions are refused; place the work on a runner")
+                    ?: agentRegistry.spawnRefusal(role) ?: plugins.spawnRefusal(role, projectId)
+            }
             policies.attach(object : com.superiorsoftllc.infantry.policy.PolicyRuntime.Extensions {
                 override fun presets() = plugins.presets()
                 override fun seatsClaimed() = plugins.seatsClaimed
@@ -2096,6 +2134,7 @@ class InfantryDaemon(
                             plugins = plugins,
                             runnerLink = runnerLinkService,
                             forwarder = frameForwarder,
+                            deploymentMode = deploymentMode,
                             daemonConfig = daemonConfig,
                             tier = call.attributes.getOrNull(ACCESS_TIER) ?: AccessTier.OWNER,
                             policies = policies,
@@ -2153,6 +2192,7 @@ class InfantryDaemon(
                 processHost = localProcesses,
                 background = listOf(AutoCloseable { usageRefresher.stop() }, workerSweepCloser, AutoCloseable { agentWatchdog.close() }, AutoCloseable { finishNotice.close() }, AutoCloseable { stallDetector.close() }, healthGate, plugins, AutoCloseable { harnessModulesRef.get()?.close() }),
                 healthSettings = healthSettings,
+                deploymentMode = deploymentMode,
             )
         }
 
@@ -2706,6 +2746,8 @@ private suspend fun handleConnection(
     runnerLink: com.superiorsoftllc.infantry.runners.RunnerLinkService? = null,
     /** RUNNER-POOL-7: holds the orchestrator-side frames of sessions a remote orchestrator started here; null = forwards nothing. */
     forwarder: com.superiorsoftllc.infantry.runners.FrameForwarder? = null,
+    /** RUNNER-POOL-10: a runner-mode daemon refuses the board frames of a client. */
+    deploymentMode: DeploymentMode = DeploymentMode.BOTH,
     /** CONFIG-8 (1.142.0): the daemon's declared config (`config_*` frames); the default declares nothing. */
     daemonConfig: DaemonConfig,
     /** SANDBOX-1: what this connection was admitted as; an AGENT (the scoped token) may send only [AgentFrames.ALLOWED]. */
@@ -3020,6 +3062,11 @@ private suspend fun handleConnection(
                             outgoing.trySend(Envelope(Envelope.ERROR, "${envelope.type} unavailable: ${reply.reason}", requestId = envelope.requestId))
                     }
                 }
+                continue
+            }
+            // RUNNER-POOL-10: a runner-mode daemon has no board; what a link-started session asks was forwarded above.
+            deploymentMode.refusal(envelope.type, frameSide(frames, plugins, envelope))?.let { why ->
+                outgoing.trySend(Envelope(Envelope.ERROR, why, requestId = envelope.requestId))
                 continue
             }
             if (envelope.type == SESSION_REPLAY_REQUEST_TYPE) {
