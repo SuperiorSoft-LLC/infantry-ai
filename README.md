@@ -189,6 +189,11 @@ There is no Linux desktop app yet. The macOS desktop app is beta (Apple silicon,
    agent works on its own branch in its own worktree; you watch its session live and read its report when it is done.
    If a start is refused with "no base branch configured", pick one in the **Git** tab under
    "Base branch for new tasks".
+6. Approve the agent's tools. A new install runs agents with **Tool approval = Ask**: the first time the agent wants to
+   write a file or run a command, an approval card appears in its chat; press **Allow** and it carries on. Change the
+   mode in **Settings > Agents > Tool approval** (`allowEdits` lets it edit files without asking, `allowAll` lets it
+   run anything, `deny` refuses every tool that is not pre-allowed). A tool that was refused shows on the ticket's card
+   as "blocked: <tool> denied".
 
 Your data lives in `%LOCALAPPDATA%\SuperiorSoft\InfantryAI`, apart from the program, so upgrades and uninstalls keep it.
 Details: [docs/INFANTRY-INSTALL.md](docs/INFANTRY-INSTALL.md).

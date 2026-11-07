@@ -2,6 +2,7 @@
 // Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.session
 
+import com.superiorsoftllc.infantry.daemon.deniedAction
 import com.superiorsoftllc.infantry.daemon.denialEnvelope
 import com.superiorsoftllc.infantry.harness.ToolApproval
 import com.superiorsoftllc.infantry.protocol.Envelope
@@ -55,9 +56,18 @@ class ToolApprovalTest {
     }
 
     @Test
-    fun nothingSetMeansDenyAndAnUnknownEnvValueIsIgnored() {
-        assertEquals(ToolApprovals.Resolution(ToolApproval.DENY, "default"), ToolApprovals.resolve(null, null, none, none))
-        assertEquals(ToolApprovals.Resolution(ToolApproval.DENY, "default"), ToolApprovals.resolve(null, null, none, only(ToolApprovals.ENV, "yolo")))
+    fun nothingSetMeansAskAndAnUnknownEnvValueIsIgnored() {
+        // FIRSTRUN-PERM-1 (owner answer c9e3d493): a fresh install asks; before, it denied and a stranger's first ticket wrote nothing.
+        assertEquals(ToolApproval.ASK, ToolApprovals.DEFAULT)
+        assertEquals(ToolApprovals.Resolution(ToolApproval.ASK, "default"), ToolApprovals.resolve(null, null, none, none))
+        assertEquals(ToolApprovals.Resolution(ToolApproval.ASK, "default"), ToolApprovals.resolve(null, null, none, only(ToolApprovals.ENV, "yolo")))
+    }
+
+    @Test
+    fun aStoredValueOrTheEnvIsTheOffSwitchForTheFreshInstallDefault() {
+        // FIRSTRUN-PERM-1: an install that stored a mode keeps it; deny (stored or env) restores the old behaviour.
+        assertEquals(ToolApprovals.Resolution(ToolApproval.DENY, "setting"), ToolApprovals.resolve(null, ToolApproval.DENY, none, none))
+        assertEquals(ToolApprovals.Resolution(ToolApproval.DENY, "env"), ToolApprovals.resolve(null, null, none, only(ToolApprovals.ENV, "deny")))
     }
 
     @Test
@@ -78,6 +88,9 @@ class ToolApprovalTest {
 
         val denials = EventNormalizer.normalise(result).filterIsInstance<EventNormalizer.Line.Denial>()
         assertEquals(listOf(EventNormalizer.Line.Denial("claude", "Bash"), EventNormalizer.Line.Denial("claude", "Write")), denials)
+
+        // FIRSTRUN-PERM-1: the card's last action names the block, so a blocked turn is not only "succeeded".
+        assertEquals("blocked: Write denied (Tool approval = deny)", deniedAction(denials[1], ToolApproval.DENY))
 
         val frame = denialEnvelope("s1", denials.first(), ToolApproval.DENY)
         assertEquals(Envelope.STDERR, frame.type)

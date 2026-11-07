@@ -14,7 +14,12 @@ import kotlinx.serialization.json.JsonPrimitive
  *  1. the session's own override, chosen at spawn (`new` `{toolApproval}`);
  *  2. the global Settings value (Settings > "Tool approval"; the daemon's `settings` table, [KEY]);
  *  3. [ENV] through [infantrySetting] (JVM system property, then the environment variable);
- *  4. [ToolApproval.DENY].
+ *  4. [DEFAULT] (FIRSTRUN-PERM-1: [ToolApproval.ASK], owner answer c9e3d493).
+ *
+ * FIRSTRUN-PERM-1: [DEFAULT] is only what an install with NOTHING set gets (no stored Setting, no [ENV]); a stored
+ * value always wins, so an install that chose a mode keeps it. The off switch is the Setting itself (or [ENV]):
+ * `deny` restores the old fresh-install behaviour. `ask` relays each call the CLI would ask about to the owner as an
+ * approval card; a harness that cannot prompt runs it as `deny` ([ToolApproval.withoutPrompt]).
  *
  * A harness-specific legacy variable (Claude's `INFANTRY_CLAUDE_PERMISSION_MODE`) is applied by that harness's own
  * mapping, after this resolution, and only for that harness.
@@ -22,6 +27,9 @@ import kotlinx.serialization.json.JsonPrimitive
 object ToolApprovals {
     const val ENV = "INFANTRY_TOOL_APPROVAL"
     const val KEY = "toolApproval.mode"
+
+    /** FIRSTRUN-PERM-1: the mode of a run when no session override, Setting or [ENV] decides (source `default`). */
+    val DEFAULT: ToolApproval = ToolApproval.ASK
 
     /** The resolved [mode] and where it came from: `session` | `setting` | `env` | `default`. */
     data class Resolution(val mode: ToolApproval, val source: String)
@@ -51,7 +59,7 @@ object ToolApprovals {
         sessionOverride?.let { return Resolution(it, "session") }
         setting?.let { return Resolution(it, "setting") }
         ToolApproval.parse(infantrySetting(ENV, getProperty, getenv))?.let { return Resolution(it, "env") }
-        return Resolution(ToolApproval.DENY, "default")
+        return Resolution(DEFAULT, "default")
     }
 }
 

@@ -216,10 +216,10 @@ class PendingPromptsTest {
     }
 
     @Test
-    fun askIsAnAdditiveModeThatIsNotTheDefaultAndDeniesWhereAHarnessCannotPrompt() {
+    fun askIsTheFreshInstallDefaultAndDeniesWhereAHarnessCannotPrompt() {
         assertEquals(ToolApproval.ASK, ToolApproval.parse("ask"))
         assertEquals(listOf("deny", "allowEdits", "allowAll", "ask"), ToolApproval.WIRE)
-        assertEquals(ToolApproval.DENY, ToolApprovals.resolve(null, null, { null }, { null }).mode, "ask is not the default")
+        assertEquals(ToolApproval.ASK, ToolApprovals.resolve(null, null, { null }, { null }).mode, "FIRSTRUN-PERM-1: ask is the fresh-install default")
         assertEquals("setting", ToolApprovals.resolve(null, ToolApproval.ASK, { null }, { null }).source)
         assertEquals(ToolApproval.ASK, ToolApprovals.resolve(null, null, { null }, { if (it == ToolApprovals.ENV) "ask" else null }).mode)
         assertEquals(ToolApproval.DENY, ToolApproval.ASK.withoutPrompt())
