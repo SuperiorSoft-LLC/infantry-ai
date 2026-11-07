@@ -27,6 +27,7 @@ Every page of this wiki is listed here, one line each. The pages are written fro
 ## Automate
 
 - [Scripting](Scripting.md): the Lua API, hooks, the process bridge, chat notes, progress, the session bridge.
+- [Script Arsenal](script-arsenal.md): the app-wide global scripts every project can run and refine, with a bundled starter set.
 - [Add a Lua hook](recipes/add-lua-hook.md): run a script on a lane change, mail, a timer or a named event.
 
 ## Configure

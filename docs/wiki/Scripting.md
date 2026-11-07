@@ -65,6 +65,10 @@ MCP tools (preferred) and CLI:
 | `infantry_script_hook {action: list\|add\|remove, on, script, args, id, to}` | `infantry script hook list \| add <on> <script> [--payload <json>\|-] \| remove <id>` |
 | `infantry_script_stats` (turns saved, wakes by reason, latest runs) | (MCP) |
 
+## Global scripts (the Script Arsenal)
+
+Besides a project's own scripts there is an app-wide scope, the **Script Arsenal**: `infantry_script_save` / `infantry_script_delete` take `scope = project` (default) or `global`, `infantry_script_list` shows both scopes, and `infantry_script_run` and hooks fall back to a global script when the project has none of that name. A project script of the same name wins, so a project refines by saving its own copy. A global script runs as the calling project (same fence, same permissions). The app seeds a starter set; who may write the global scope is the setting `scripting.global.writeRoles`. Full page: [Script Arsenal](script-arsenal.md).
+
 ## Hooks
 
 A hook says "when this happens, run this script with these fixed args". The `on` values:
