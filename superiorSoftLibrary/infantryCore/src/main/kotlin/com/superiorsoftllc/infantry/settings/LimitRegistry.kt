@@ -827,10 +827,27 @@ object LimitRegistry {
         min = 1, zeroIsUnlimited = false,
     )
 
-    /** RUNNER-POOL-6: how many session events of link-started sessions a runner keeps for its orchestrator to read. */
-    val RUNNERS_EVENTS_KEPT = LimitDef(
-        "limits.runners.eventsKept", 500, "events",
-        "How many session events (status, finished) of orchestrator-started sessions a runner keeps until its orchestrator reads them; the oldest go first. Fewer = less memory.",
+    /**
+     * RUNNER-POOL-8 (was RUNNER-POOL-6's `limits.runners.eventsKept`): the runner's event outbox bound. An event is kept until the
+     * orchestrator acknowledges it; past the bound the oldest goes (the orchestrator logs the gap).
+     */
+    val RUNNERS_OUTBOX_MAX = LimitDef(
+        "limits.runners.outboxMax", 500, "events",
+        "How many session events (status, finished) of orchestrator-started sessions a runner keeps until its orchestrator acknowledges them; past it the oldest go first (a gap the orchestrator logs). Fewer = less memory.",
+        min = 1, zeroIsUnlimited = false,
+    )
+
+    /** RUNNER-POOL-8: how long a runner with sessions on it may stay silent before the owner gets an attention item (`runners.onLost`). */
+    val RUNNERS_LOST_AFTER_MIN = LimitDef(
+        "limits.runners.lostAfterMin", 30, "minutes",
+        "How long a runner that runs this orchestrator's workers may stay silent before it counts as lost: an attention item is raised, and with runners.onLost = restart-elsewhere its tickets start again on another runner.",
+        min = 1, zeroIsUnlimited = false,
+    )
+
+    /** RUNNER-POOL-8: how often a runner looks for new worker commits to push (only sessions started with `runners.pushOnCommit`). */
+    val RUNNERS_COMMIT_CHECK_SEC = LimitDef(
+        "limits.runners.commitCheckSec", 30, "seconds",
+        "How often a runner checks its orchestrator-started worktrees for new commits to push when runners.pushOnCommit is on. Longer = cheaper.",
         min = 1, zeroIsUnlimited = false,
     )
 
@@ -891,7 +908,7 @@ object LimitRegistry {
         HEALTH_DB_TIMEOUT_SECONDS, HEALTH_WATCHDOG_FAILURES, HEALTH_WATCHDOG_INTERVAL_SECONDS, HEALTH_WATCHDOG_TIMEOUT_SECONDS,
         MAIL_WAKE_DEBOUNCE_SECONDS, MAIL_COALESCE_MAX, WATCH_STALL_NUDGES, SCRIPT_RUN_LOG_MAX,
         RUNNERS_PAIR_CODE_MIN, RUNNERS_PAIR_ATTEMPTS_PER_HOUR, RUNNERS_CREDENTIAL_ROTATE_DAYS, RUNNERS_LINK_PORT, RUNNERS_AUDIT_SHOWN, RUNNERS_LINK_CALL_SECONDS, RUNNERS_LINK_CHECK_SECONDS,
-        RUNNERS_EVENTS_KEPT, RUNNERS_FORWARD_WAIT_SEC, RUNNERS_FORWARD_TIMEOUT_SEC, RUNNERS_FORWARD_PENDING_MAX,
+        RUNNERS_OUTBOX_MAX, RUNNERS_LOST_AFTER_MIN, RUNNERS_COMMIT_CHECK_SEC, RUNNERS_FORWARD_WAIT_SEC, RUNNERS_FORWARD_TIMEOUT_SEC, RUNNERS_FORWARD_PENDING_MAX,
     )
 
     /** A minutes limit as milliseconds; 0 on an unlimited-capable one = [Long.MAX_VALUE] (never reached). */

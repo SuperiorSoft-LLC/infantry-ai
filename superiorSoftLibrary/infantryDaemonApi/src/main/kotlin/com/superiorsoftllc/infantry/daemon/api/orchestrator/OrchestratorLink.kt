@@ -161,12 +161,28 @@ interface RunnerLink {
      */
     fun events(sinceSeq: Long): OrchestratorReply<List<RunnerEvent>> = unoffered("events")
 
+    /**
+     * RUNNER-POOL-8 (1.2.0, docs/RUNNER-POOL.md 3.1 and 5): acknowledge and read the outbox in one call. [acked] maps a session to
+     * the highest seq the orchestrator applied for it; the runner drops those events (an outbox keeps an event until it is
+     * acknowledged, bounded by `limits.runners.outboxMax`) and answers every event still kept, in order, seq per session. Natural key:
+     * (session, seq); the caller dedupes, so a retried call after a lost answer replays, never skips. Fail mode on Unavailable: the
+     * runner is offline; asked again with the same [acked] on the next round. The default (an older binding) reads [events] (0) and
+     * filters it, so it never acknowledges.
+     */
+    fun events(acked: Map<String, Long>): OrchestratorReply<List<RunnerEvent>> = when (val all = events(0L)) {
+        is OrchestratorReply.Ok -> OrchestratorReply.Ok(all.value.filter { it.seq > (acked[it.sessionId] ?: 0L) })
+        is OrchestratorReply.Unavailable -> all
+    }
+
     /** RUNNER-POOL-6 (1.1.0): up to [maxLines] (0 = the runner's own bound) transcript lines of a session from [fromLine]; read on demand. */
     fun readTranscript(sessionId: String, fromLine: Int = 0, maxLines: Int = 0): OrchestratorReply<List<String>> = unoffered("readTranscript")
 
     companion object {
-        /** 1.1.0 (RUNNER-POOL-6): events, readTranscript; StartSpec may name a git remote, SessionRef carries the ticket branch. */
-        const val CONTRACT_VERSION = "1.1.0"
+        /**
+         * 1.1.0 (RUNNER-POOL-6): events, readTranscript; StartSpec may name a git remote, SessionRef carries the ticket branch.
+         * 1.2.0 (RUNNER-POOL-8): events(acked), a per-session seq kept until acknowledged; StartSpec.pushOnCommit.
+         */
+        const val CONTRACT_VERSION = "1.2.0"
 
         private fun unoffered(op: String): OrchestratorReply<Nothing> = OrchestratorReply.Unavailable("this runner binding does not offer '$op'")
     }

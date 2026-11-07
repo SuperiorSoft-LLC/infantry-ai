@@ -5,7 +5,11 @@ package com.superiorsoftllc.infantry.daemon
 import com.superiorsoftllc.infantry.daemon.api.board.BoardCoreAccess
 import com.superiorsoftllc.infantry.protocol.Ticket
 import com.superiorsoftllc.infantry.protocol.TicketMove
+import com.superiorsoftllc.infantry.protocol.TicketStatus
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * DP-5h-3e-b: the core's [BoardPorts] over the [BoardCoreAccess] the board plugin attached (no board class in core). The moves are wire JSON;
@@ -28,6 +32,16 @@ class PluginBoardPorts(private val access: BoardCoreAccess, private val ticketFi
     override fun saveFilesRead(ticketId: String, line: String) { ticketFiles()?.saveFilesRead(ticketId, line) }
     override fun clearQueueMarks() { access.clearQueueMarks() }
     override fun sweepWorkers(graceMs: Long, flag: (String, String?, String) -> Unit) = access.sweepWorkers(graceMs, flag)
+    override fun restartElsewhere(ticketId: String, lostRunner: String, problem: String): String? {
+        val payload = JsonArray(listOf(ticketId, lostRunner, problem).map(::JsonPrimitive)).toString()
+        val answer = runCatching { access.invoke("restartElsewhere", payload, null) }.getOrElse { return it.message ?: "restart refused" }
+        return if (answer.startsWith("S:")) null else answer.removePrefix("R:").ifBlank { "restart refused" }
+    }
+    override fun ticketOfWorker(sessionId: String): String? {
+        if (sessionId !in access.titlesBySession()) return null
+        val tickets = json.decodeFromString(ListSerializer(Ticket.serializer()), access.invoke("list", "{}", null))
+        return tickets.firstOrNull { it.sessionId == sessionId && it.status == TicketStatus.IN_PROGRESS }?.id
+    }
     override fun epicBaseBranchOf(epicId: String) = access.epicBaseBranchOf(epicId)
     override fun ticketIdsByEpic() = access.ticketIdsByEpic()
     override fun epicJson(epicId: String) = access.epicJson(epicId)

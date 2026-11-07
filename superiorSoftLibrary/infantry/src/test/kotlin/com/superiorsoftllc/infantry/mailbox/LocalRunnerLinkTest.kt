@@ -118,6 +118,45 @@ class LocalRunnerLinkTest {
         assertFailsWith<IllegalArgumentException> { pool.register(RunnerPool.LOCAL) { _, l -> l } }
         pool.register("remote") { _, l -> l }
         assertEquals(listOf("remote"), pool.bindingIds())
-        assertEquals("1.1.0", link.contractVersion)
+        assertEquals("1.2.0", link.contractVersion)
+    }
+
+    /** RUNNER-POOL-8: mail to a session on a remote runner stays queued while that runner is offline, and is delivered once it is back. */
+    @Test
+    fun mailToASessionOnAnOfflineRunnerIsQueuedThenDeliveredOnReconnect() {
+        class Remote : RunnerLink {
+            var up = false
+            val delivered = mutableListOf<MailItem>()
+            override fun ticketIdOf(sessionId: String): String? = null
+            override fun deliverMail(sessionId: String, mail: MailItem): OrchestratorReply<MailResult> {
+                if (!up) return OrchestratorReply.Unavailable("link down")
+                delivered += mail
+                return OrchestratorReply.Ok(MailResult.Delivered)
+            }
+        }
+        val remote = Remote()
+        val manager = SessionManager(FakeAgentProvider(), ScriptedRunner(autoExit = true), tempSessionStore(), killGraceMs = 50)
+        val agents = AgentProfiles(Repo(), manager)
+        val local = LocalRunnerLink(LocalRunner.services(manager, agents, info = { com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerInfo("local", RunnerLink.CONTRACT_VERSION) }, capacity = { 4 }))
+        val pool = RunnerHub(local, remotes = { listOf("r2") }).also { it.register("remote") { _, _ -> remote } }
+        val mailbox = Mailbox(MemMailStore(), MailLimits())
+        val router = MailRouter(
+            manager, mailbox, agents,
+            resumeTurn = LocalRunner.deliverVia(pool),
+            remoteSession = { pool.runnerOf(it) != RunnerPool.LOCAL },
+        )
+        val sender = manager.startNew("hello")
+        pool.placed("remote-s1", "r2")
+
+        router.send(MailSendRequest(from = sender.id, to = "remote-s1", body = "while you were away"))
+        router.pump("remote-s1")
+        assertTrue(remote.delivered.isEmpty(), "an offline runner delivers nothing")
+
+        remote.up = true
+        router.pump("remote-s1") // what the runner watch does when the runner is back
+        assertEquals(1, remote.delivered.size, remote.delivered.toString())
+        assertTrue(remote.delivered.single().text.contains("while you were away"), remote.delivered.single().text)
+        router.pump("remote-s1")
+        assertEquals(1, remote.delivered.size, "delivered once, then no longer queued")
     }
 }

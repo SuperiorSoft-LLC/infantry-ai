@@ -29,6 +29,10 @@ interface BoardPorts {
     fun clearQueueMarks()
     /** The in-progress worker sweep; the ids it flagged. */
     fun sweepWorkers(graceMs: Long, flag: (ticketId: String, sessionId: String?, detail: String) -> Unit = { _, _, _ -> }): List<String>
+    /** RUNNER-POOL-8: start in-progress ticket [ticketId] again, not on runner [lostRunner]; null = started, else the refusal. */
+    fun restartElsewhere(ticketId: String, lostRunner: String, problem: String): String? = "this daemon has no board"
+    /** RUNNER-POOL-8: the in-progress ticket worker session [sessionId] works on; null = none. */
+    fun ticketOfWorker(sessionId: String): String? = null
     /** DP-5h-3e-b: the base branch of an epic (blank / unknown = null). */
     fun epicBaseBranchOf(epicId: String): String? = null
     /** DP-5h-3e-b: epic id to its ticket ids, in board order. */
@@ -62,6 +66,9 @@ class BoardPortRef : BoardPorts {
     override fun saveFilesRead(ticketId: String, line: String) { ref.get()?.saveFilesRead(ticketId, line) }
     override fun clearQueueMarks() { ref.get()?.clearQueueMarks() }
     override fun sweepWorkers(graceMs: Long, flag: (String, String?, String) -> Unit) = ref.get()?.sweepWorkers(graceMs, flag).orEmpty()
+    override fun restartElsewhere(ticketId: String, lostRunner: String, problem: String) =
+        ref.get()?.restartElsewhere(ticketId, lostRunner, problem) ?: "this daemon has no board"
+    override fun ticketOfWorker(sessionId: String) = ref.get()?.ticketOfWorker(sessionId)
     override fun epicBaseBranchOf(epicId: String) = ref.get()?.epicBaseBranchOf(epicId)
     override fun ticketIdsByEpic() = ref.get()?.ticketIdsByEpic().orEmpty()
     override fun epicJson(epicId: String) = ref.get()?.epicJson(epicId)

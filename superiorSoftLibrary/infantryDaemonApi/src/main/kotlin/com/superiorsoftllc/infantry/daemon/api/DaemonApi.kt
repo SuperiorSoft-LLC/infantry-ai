@@ -210,7 +210,10 @@ interface DaemonApi {
         // 1.46.0 (RUNNER-POOL-7, additive): OrchestratorLink.forwardFrame (contract 1.2.0), FrameSide, AgentIdentity, ForwardedFrame,
         // LocalOrchestratorServices.forwardFrame, RunnerHub.hasSessionsOn, RunnerLinkWire 1.2.0 (forward pull / answer); module.json
         // `daemon.side` and a frame's or tool's `side`.
-        const val VERSION = "1.46.0"
+        // 1.47.0 (RUNNER-POOL-8, additive): RunnerLink.events(acked) (contract 1.2.0; seq per session, kept until acknowledged),
+        // StartSpec.pushOnCommit, LocalRunnerServices.eventsAcked, RunnerHub.sessionsOn / forget / silentSince, RunnerLinkWire 1.3.0
+        // (EventsRequest.acked, StartRequest.pushOnCommit), AttentionKinds.RUNNER_LOST, board core op `restartElsewhere`.
+        const val VERSION = "1.47.0"
     }
 }
 

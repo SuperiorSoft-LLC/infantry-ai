@@ -88,7 +88,7 @@ interface BoardCoreAccess {
      * The board operations core's `Tickets` API applies its host policy over, as wire JSON: `list` (TicketListQuery -> [Ticket]), `get` (id -> Ticket),
      * `save` (TicketSave -> Ticket), `move` (TicketMove -> Ticket, [startedBy] recorded), `delete` (id -> ""), `link` / `unlink` (TicketLinkRequest -> Ticket),
      * `reorder` (TicketReorder -> ""), `epicGet` (id -> Epic or ""), `epicList` (projectId -> [Epic]), `epicSave` ([projectId, name, goal] -> Epic), `epicSetBase` ([id, branch or null] -> Epic; the checks are the plugin's), `startNext` (agent filter or "" -> Ticket or ""), `startPrompt` (JSON array [agentId, prompt, projectId or null] ->
-     * "S:<sessionId>" or "R:<detail>"). A board refusal is thrown as [IllegalArgumentException] with the board's own text.
+     * "S:<sessionId>" or "R:<detail>"), `restartElsewhere` (RUNNER-POOL-8: JSON array [ticketId, lostRunner, problem] -> "S:<sessionId>" or "R:<detail>"). A board refusal is thrown as [IllegalArgumentException] with the board's own text.
      */
     fun invoke(op: String, payload: String, startedBy: String?): String
 

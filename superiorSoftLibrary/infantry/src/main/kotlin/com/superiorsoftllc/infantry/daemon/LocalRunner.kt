@@ -42,6 +42,8 @@ object LocalRunner {
         info: () -> RunnerInfo,
         capacity: () -> Int,
         events: (sinceSeq: Long) -> List<RunnerEvent> = { emptyList() },
+        /** RUNNER-POOL-8: acknowledge and read the outbox; null = filter [events] (no ack). */
+        eventsAcked: ((acked: Map<String, Long>) -> List<RunnerEvent>)? = null,
         transcript: (sessionId: String, fromLine: Int, maxLines: Int) -> List<String> = { _, _, _ -> emptyList() },
     ) = LocalRunnerServices(
         ticketIdOf = { sessionId -> manager.get(sessionId)?.ticketId },
@@ -78,6 +80,7 @@ object LocalRunner {
             RunnerHealth(RunnerHealth.UP, running, if (cap <= 0) -1 else maxOf(0, cap - running))
         },
         events = events,
+        eventsAcked = eventsAcked,
         transcript = transcript,
     )
 

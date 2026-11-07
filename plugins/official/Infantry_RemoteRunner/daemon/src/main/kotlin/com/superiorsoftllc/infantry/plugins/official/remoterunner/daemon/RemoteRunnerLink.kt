@@ -58,6 +58,7 @@ class RemoteRunnerLink(private val name: String, private val links: RunnerLinks)
             base = spec.base,
             branch = spec.branch,
             envNames = spec.envNames,
+            pushOnCommit = spec.pushOnCommit,
         )
         val answer = try {
             links.call(name, F.START, F.json.encodeToString(F.StartRequest.serializer(), request))
@@ -83,6 +84,11 @@ class RemoteRunnerLink(private val name: String, private val links: RunnerLinks)
 
     override fun events(sinceSeq: Long): OrchestratorReply<List<RunnerEvent>> =
         call(F.EVENTS, F.json.encodeToString(F.EventsRequest.serializer(), F.EventsRequest(sinceSeq)), F.EventsAnswer.serializer())
+            .map { a -> a.events.map { RunnerEvent(it.sessionId, it.seq, it.kind, it.payload) } }
+
+    /** RUNNER-POOL-8: acknowledge [acked] and read what the runner's outbox still keeps. */
+    override fun events(acked: Map<String, Long>): OrchestratorReply<List<RunnerEvent>> =
+        call(F.EVENTS, F.json.encodeToString(F.EventsRequest.serializer(), F.EventsRequest(acked = acked)), F.EventsAnswer.serializer())
             .map { a -> a.events.map { RunnerEvent(it.sessionId, it.seq, it.kind, it.payload) } }
 
     override fun readTranscript(sessionId: String, fromLine: Int, maxLines: Int): OrchestratorReply<List<String>> =

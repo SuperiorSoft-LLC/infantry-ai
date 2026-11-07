@@ -55,6 +55,11 @@ data class StartSpec(
      * the wire. The session runs in it and none is provisioned.
      */
     val worktree: StartWorktree? = null,
+    /**
+     * RUNNER-POOL-8: push the ticket branch after each worker commit, not only after each turn (`runners.pushOnCommit`, orchestrator
+     * side), so a restart elsewhere loses at most uncommitted edits. Default false (fewer pushes).
+     */
+    val pushOnCommit: Boolean = false,
 )
 
 /** RUNNER-POOL-6: a ticket worktree on the runner: [path], [branch], [base] (a commit), [repoRoot]. */
@@ -67,7 +72,10 @@ data class StartWorktree(val path: String, val branch: String, val base: String,
  */
 data class SessionRef(val sessionId: String? = null, val refusal: String? = null, val branch: String? = null, val base: String? = null)
 
-/** RUNNER-POOL-6: one event of a session a runner runs for its orchestrator: [kind] [STATUS] (payload = state) or [FINISHED] (payload = exit code). */
+/**
+ * RUNNER-POOL-6: one event of a session a runner runs for its orchestrator: [kind] [STATUS] (payload = state) or [FINISHED] (payload =
+ * exit code). RUNNER-POOL-8: [seq] is monotonic PER SESSION (1, 2, 3 ...), so (session, seq) is the event's natural key.
+ */
 data class RunnerEvent(val sessionId: String, val seq: Long, val kind: String, val payload: String = "") {
     companion object {
         const val STATUS = "status"
@@ -118,6 +126,8 @@ class LocalRunnerServices(
     val health: () -> RunnerHealth,
     /** RUNNER-POOL-6: the events of link-started sessions after a seq; default none. */
     val events: (sinceSeq: Long) -> List<RunnerEvent> = { emptyList() },
+    /** RUNNER-POOL-8: acknowledge (session -> highest applied seq) and read what is still kept; null = filter [events] (0), no ack. */
+    val eventsAcked: ((acked: Map<String, Long>) -> List<RunnerEvent>)? = null,
     /** RUNNER-POOL-6: (session, fromLine, maxLines) -> transcript lines; default none. */
     val transcript: (sessionId: String, fromLine: Int, maxLines: Int) -> List<String> = { _, _, _ -> emptyList() },
 )
@@ -140,6 +150,8 @@ class LocalRunnerLink(private val services: LocalRunnerServices) : RunnerLink {
     override fun deliverMail(sessionId: String, mail: MailItem): OrchestratorReply<MailResult> = OrchestratorReply.Ok(services.deliver(sessionId, mail))
     override fun health(): OrchestratorReply<RunnerHealth> = OrchestratorReply.Ok(services.health())
     override fun events(sinceSeq: Long): OrchestratorReply<List<RunnerEvent>> = OrchestratorReply.Ok(services.events(sinceSeq))
+    override fun events(acked: Map<String, Long>): OrchestratorReply<List<RunnerEvent>> =
+        services.eventsAcked?.let { OrchestratorReply.Ok(it(acked)) } ?: super.events(acked)
     override fun readTranscript(sessionId: String, fromLine: Int, maxLines: Int): OrchestratorReply<List<String>> =
         OrchestratorReply.Ok(services.transcript(sessionId, fromLine, maxLines))
 }
@@ -198,8 +210,11 @@ class RunnerHub(
     private val beats = java.util.concurrent.ConcurrentHashMap<String, Beat>()
     private val sessions = java.util.concurrent.ConcurrentHashMap<String, String>()
 
-    /** The last heartbeat of one remote: when it last answered, what it said, and the pool's [state]. */
-    private data class Beat(val okAt: Long?, val health: RunnerHealth?, val info: RunnerInfo?, val state: String)
+    /**
+     * The last heartbeat of one remote: when it last answered, what it said, and the pool's [state]. RUNNER-POOL-8: [silentSince] is
+     * when it stopped answering (null = the last round answered).
+     */
+    private data class Beat(val okAt: Long?, val health: RunnerHealth?, val info: RunnerInfo?, val state: String, val silentSince: Long? = null)
 
     override fun runners(): List<RunnerEntry> {
         val binding = bindingFor()?.first
@@ -222,6 +237,20 @@ class RunnerHub(
 
     /** RUNNER-POOL-7: whether any session placed by this orchestrator lives on runner [runner] (its forwarded frames are pulled only then). */
     fun hasSessionsOn(runner: String): Boolean = runner != RunnerPool.LOCAL && sessions.containsValue(runner)
+
+    /** RUNNER-POOL-8: the sessions this orchestrator placed on runner [runner], sorted. */
+    fun sessionsOn(runner: String): List<String> = sessions.entries.filter { it.value == runner }.map { it.key }.sorted()
+
+    /** RUNNER-POOL-8: session [sessionId] is no longer tracked on any runner (it was restarted elsewhere or ended). */
+    fun forget(sessionId: String) {
+        sessions.remove(sessionId)
+    }
+
+    /**
+     * RUNNER-POOL-8: since when runner [name] has not answered a heartbeat; null = its last heartbeat answered, or it was never
+     * heartbeat-checked yet. A runner never heard since this daemon started counts from its first silent round.
+     */
+    fun silentSince(name: String): Long? = beats[name]?.silentSince
 
     /** RUNNER-POOL-6: session [sessionId] was started on runner [runner]; [runnerOf] answers it from now on. */
     fun placed(sessionId: String, runner: String) {
@@ -256,7 +285,10 @@ class RunnerHub(
                 Beat(now, health, info, if (health.state == RunnerHealth.UP && signedIn) RunnerHealth.UP else RunnerHealth.DEGRADED)
             } else {
                 val okAt = before?.okAt
-                Beat(okAt, before?.health, info, if (okAt != null && now - okAt < lostAfterMs) RunnerHealth.DEGRADED else RunnerHealth.DOWN)
+                Beat(
+                    okAt, before?.health, info, if (okAt != null && now - okAt < lostAfterMs) RunnerHealth.DEGRADED else RunnerHealth.DOWN,
+                    silentSince = before?.silentSince ?: now,
+                )
             }
             beats[name] = beat
             if (before?.state != beat.state) "runner '$name' is ${beat.state}" else null

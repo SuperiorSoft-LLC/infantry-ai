@@ -66,4 +66,6 @@ object AttentionKinds {
     const val SESSION_FAILED = "session_failed"
     /** RESUME-NOTIFY-1: sessions whose turn a daemon restart cut (resumed or not). */
     const val SESSION_RESUMED = "session_resumed"
+    /** RUNNER-POOL-8: a runner with worker sessions on it stayed silent past `limits.runners.lostAfterMin`. */
+    const val RUNNER_LOST = "runner_lost"
 }

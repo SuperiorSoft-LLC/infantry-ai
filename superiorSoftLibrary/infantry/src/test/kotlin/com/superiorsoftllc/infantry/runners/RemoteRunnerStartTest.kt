@@ -122,7 +122,7 @@ class RemoteRunnerStartTest {
         val r2Runner = ScriptedRunner(autoExit = false, emitSessionId = true)
         val r2Manager = manager(r2Runner, r2Dir)
         val r2Agents = AgentProfiles(r2Store.agents, r2Manager)
-        val r2Starts = RemoteStarts(cloneRoot = { File(r2Dir, RemoteStarts.DEFAULT_FOLDER) }, eventsKept = { 100 }, log = {})
+        val r2Starts = RemoteStarts(cloneRoot = { File(r2Dir, RemoteStarts.DEFAULT_FOLDER) }, outboxMax = { 100 }, log = {})
         r2Manager.eventSink = { event ->
             if (event is SessionEvent.Exit && r2Starts.isRemote(event.sessionId)) r2Starts.onTurnEnd(event.sessionId, event.code)
         }
@@ -212,6 +212,26 @@ class RemoteRunnerStartTest {
         val localSession = assertNotNull(board.get(unpinned).sessionId)
         assertEquals(Placement.LOCAL, hub.runnerOf(localSession))
         assertNotNull(oManager.get(localSession), "the unpinned ticket's session runs on the orchestrator")
+
+        // RUNNER-POOL-8: the orchestrator reads r2's event outbox over the link, deduped by (session, seq): a second read applies nothing.
+        val applied = mutableListOf<com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent>()
+        val watch = RunnerWatch(hub, lostAfterMs = { 30 * 60_000L }, restartElsewhere = { false }, apply = { _, e -> applied += e }, log = {})
+        watch.tick()
+        watch.tick()
+        val seqs = applied.filter { it.sessionId == sessionId }.map { it.seq }
+        assertEquals((1L..seqs.size).toList(), seqs, applied.toString())
+        assertTrue(applied.any { it.sessionId == sessionId && it.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.FINISHED }, applied.toString())
+
+        // RUNNER-POOL-8: r2 is lost; restart-elsewhere starts the pinned ticket again via placement, not on r2 (local here), from its
+        // pushed branch: the orchestrator's checkout never had that branch, so it is fetched from the project's remote.
+        val restarted = board.restartElsewhere(pinned, "r2", "runner r2 lost").ticket
+        assertEquals("started", restarted.start?.reason, restarted.start.toString())
+        val newSession = assertNotNull(board.get(pinned).sessionId)
+        assertTrue(newSession != sessionId, "a new session")
+        assertEquals(Placement.LOCAL, hub.runnerOf(newSession))
+        assertEquals(branch, board.get(pinned).branch, "the same ticket branch")
+        val newWorktree = File(assertNotNull(oManager.get(newSession)?.worktreePath, "the restart runs on the orchestrator"))
+        assertEquals("done", File(newWorktree, "work.txt").readText().trim(),"the new worker starts from the pushed commit")
     }
 
     @Test

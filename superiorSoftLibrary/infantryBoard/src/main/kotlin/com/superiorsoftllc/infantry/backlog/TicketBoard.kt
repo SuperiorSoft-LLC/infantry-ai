@@ -1252,10 +1252,16 @@ class TicketBoard(
         }
         // RUNNER-POOL-3: pin > rule > runners.default. With only `local` registered every start resolves to local;
         // a named runner that is unknown, down or full refuses the start (no silent fallback).
+        // RUNNER-POOL-8: a restart elsewhere skips the lost runner's pin or rule (placement falls through to the next source) and
+        // is refused when placement still lands on it.
+        val avoided = avoidRunners[id]
         val placed = com.superiorsoftllc.infantry.settings.Placement.pick(
-            row.runner, ruleRunnerOf(row), runnersDefault(), runnerEntries(), row.projectId, providerId,
+            row.runner?.takeIf { it != avoided }, ruleRunnerOf(row)?.takeIf { it != avoided }, runnersDefault(), runnerEntries(), row.projectId, providerId,
         )
         if (placed is com.superiorsoftllc.infantry.settings.PlacementResult.Refused) return refusedStart(initialTicket, placed.reason)
+        if (avoided != null && (placed as com.superiorsoftllc.infantry.settings.PlacementResult.Placed).runner == avoided) {
+            return refusedStart(initialTicket, "placement picks runner $avoided again, and it is lost: pin the ticket or a rule to another runner")
+        }
         // RUNNER-POOL-6: a start placed on a remote runner cuts no branch here: the runner clones the project's git remote and
         // cuts (or reuses) the ticket branch itself; the board records the branch the runner answers.
         val remoteRunner = (placed as com.superiorsoftllc.infantry.settings.PlacementResult.Placed).runner
@@ -1430,6 +1436,27 @@ class TicketBoard(
         if (!start.ok) return answer
         val detail = TicketStart.RESTARTED + problem + (start.detail?.let { "; $it" } ?: "")
         return answer.copy(ticket = answer.ticket.copy(start = start.copy(detail = detail)))
+    }
+
+    /** RUNNER-POOL-8: ticket id -> the lost runner its restart must not be placed on (set only while [restartElsewhere] runs). */
+    private val avoidRunners = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    /**
+     * RUNNER-POOL-8 (`runners.onLost = restart-elsewhere`, docs/RUNNER-POOL.md 3.1): start in-progress ticket [id] again because
+     * runner [lostRunner] went silent. Placement runs as for any start, minus the lost runner's pin or rule; the ticket keeps its
+     * branch, so the new worker starts from what was last pushed. The old worker is not killed (its runner cannot be reached).
+     * Refused (the answer's start says why) for a ticket not in progress.
+     */
+    @Synchronized
+    fun restartElsewhere(id: String, lostRunner: String, problem: String): TicketAnswer {
+        val current = store.transaction { load() }.require(checkId(id))
+        if (current.status != TicketStatus.IN_PROGRESS) return refusedStart(answerTicket(id), "ticket is ${current.status}, not in progress")
+        avoidRunners[current.id] = lostRunner
+        try {
+            return restart(current.id, current, problem, HandOutOrigin.REPAIR, null)
+        } finally {
+            avoidRunners.remove(current.id)
+        }
     }
 
     /** GAP-006b: tickets the sweep already restarted once in this daemon's life; a second phantom is surfaced, not restarted. */

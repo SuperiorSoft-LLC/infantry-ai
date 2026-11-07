@@ -109,7 +109,9 @@ class RunnerLinkServer(
             }
             F.EVENTS -> {
                 val e = decode(F.EventsRequest.serializer(), data) ?: return refuse(seat, type, null, from, "$type refused: malformed request")
-                val events = starts?.events(e.sinceSeq).orEmpty().map { F.EventWire(it.sessionId, it.seq, it.kind, it.payload) }
+                // RUNNER-POOL-8: acknowledge, then answer what is still kept (an older orchestrator sends no acks: a plain read).
+                val kept = if (e.acked.isNotEmpty()) starts?.events(e.acked) else starts?.events(e.sinceSeq)
+                val events = kept.orEmpty().map { F.EventWire(it.sessionId, it.seq, it.kind, it.payload) }
                 Answer(F.REPLY, F.json.encodeToString(F.EventsAnswer.serializer(), F.EventsAnswer(events)))
             }
             F.TRANSCRIPT -> {
@@ -188,7 +190,7 @@ class RunnerLinkServer(
                 val result = reply.value.refusal?.let { "refused: $it" } ?: "ok ${reply.value.sessionId.orEmpty()}".trim()
                 audit.record(seat, F.START, result, r.ticketId, from)
                 val sessionId = reply.value.sessionId
-                if (sessionId != null && worktree != null) starts?.started(sessionId, worktree)
+                if (sessionId != null && worktree != null) starts?.started(sessionId, worktree, r.pushOnCommit)
                 if (sessionId != null) starts?.linked(sessionId)
                 Answer(
                     F.REPLY,

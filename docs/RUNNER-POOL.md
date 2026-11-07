@@ -159,6 +159,23 @@ guess:
 Unpushed commits are the real risk. Setting `runners.pushOnCommit` (default `false`, cheapest): `true` makes a remote
 runner push the ticket branch after each worker commit so a restart elsewhere loses at most uncommitted edits.
 
+Built as RUNNER-POOL-8 (`runners/RunnerWatch.kt`, run after each heartbeat round):
+
+* The runner's outbox (`RemoteStarts`) numbers events per session and keeps them until an `events(acked)` call
+  acknowledges them (`limits.runners.outboxMax`, oldest dropped first and logged). The acknowledgement rides on the next
+  read, so a lost answer is answered again; the watch applies each `(session, seq)` once and logs a gap the bound left.
+* A remote session has no record on the orchestrator, so `DoneWorkerReaper` reaps nothing of it. Mail to it goes
+  through the pool (`MailRouter` `remoteSession`); an offline runner answers QUEUED, the mail stays queued, and the
+  watch pumps it when the session comes to rest (`finished` / idle status) or the runner is back.
+* After `limits.runners.lostAfterMin` one `runner_lost` attention item per outage. With `restart-elsewhere` the board's
+  `restartElsewhere` op starts each ticket again via placement minus the lost runner (its pin or rule is skipped; a
+  placement that still picks it is refused). A local restart fetches the ticket branch from `origin` when the checkout
+  lacks it.
+* `runners.pushOnCommit`: the runner checks each such session's HEAD every `limits.runners.commitCheckSec` and pushes
+  the ticket branch when it moved.
+* Not yet: a remote session is not in the orchestrator's session list, so the card's `runner offline` badge
+  (RUNNER-POOL-4) does not show for it; the watch's offline state is logged, and the attention item says it.
+
 ## 4. Code and git on a remote runner
 
 * **Source of truth is the project's git remote.** A project with no remote URL cannot be placed on a remote runner
@@ -184,10 +201,10 @@ runner push the ticket branch after each worker commit so a restart elsewhere lo
   is refused when its checkout has no git repository or no `origin` remote. Otherwise the orchestrator sends the remote URL, the base and the
   recorded branch, never a path. The runner clones it into `runners.cloneRoot` (blank = `<stateDir>/clones`, one clone per
   project), or fetches it again, cuts the ticket worktree with `TicketBranches`, starts the harness in it, and pushes the
-  ticket branch to `origin` after each turn. Only `ticket/*` is pushed (owner decision): a start naming another branch is refused, and no other ref is ever pushed. Then it queues a `finished` event (`limits.runners.eventsKept` bound). The
+  ticket branch to `origin` after each turn. Only `ticket/*` is pushed (owner decision): a start naming another branch is refused, and no other ref is ever pushed. Then it queues a `finished` event (`limits.runners.outboxMax` bound). The
   board records the branch the runner answers. `hello` reports the harnesses, whether each is signed in (today:
   registered and not refused by its provider), `runner.projects` and capacity. The pool heartbeat (`limits.runners.heartbeatSec`)
-  sets up / degraded / down. Not yet: the orchestrator does not poll runner events into the ticket's run record, and
+  sets up / degraded / down. The orchestrator reads the runner events after each round (RUNNER-POOL-8, section 3.1). Not yet:
   `envNames` are carried but not yet filled on the runner.
 * **Build caches** are per runner and local (Gradle cache, node_modules). No sharing in this design; the first build on
   a fresh server is slow, later ones are warm. Shared caches are an opt-in later idea, not a step here.
@@ -221,7 +238,7 @@ Never: file contents, diffs, credentials, keystore material. Transcripts cross o
   mismatch marks the runner `degraded("version")`; a missing minor operation answers `Unavailable("version")`. Callers
   never branch on the version (6.5 rule).
 * **Ordering and replay:** the runner keeps an outbox of events with a per-session monotonic `seq`, kept until the
-  orchestrator acknowledges it (bounded by `runners.outboxMax`). The orchestrator dedupes by `(session, seq)`.
+  orchestrator acknowledges it (bounded by `limits.runners.outboxMax`). The orchestrator dedupes by `(session, seq)`.
 * **Idempotency:** `startSession` keyed by `startId`; a retried start after a timeout returns the same session.
 
 ## 6. UI
@@ -292,12 +309,13 @@ Rate limits on pairing attempts (`runners.pairAttemptsPerHour`, default 5).
 | `runners.default` | `local` | placement when no pin and no rule |
 | `runners.<name>.url`, `.maxWorkers` | -, `1` | per runner |
 | `runners.heartbeatSec` / `runners.lostAfterSec` | `30` / `120` | health; longer = cheaper |
-| `runners.lostAfterMin` | `30` | when an offline runner raises attention |
+| `limits.runners.lostAfterMin` | `30` | when an offline runner raises attention |
 | `runners.onLost` | `attention` | or `restart-elsewhere` |
 | `runners.pushOnCommit` | `false` | push ticket branch per commit (safer restart, more pushes) |
 | `runners.transcripts` | `on-demand` | or `stream` |
 | `runners.cloneRoot` | `<stateDir>/clones` | remote runner clone cache (blank = the default) |
-| `limits.runners.eventsKept` | `500` | event outbox bound (built as this limit) |
+| `limits.runners.outboxMax` | `500` | event outbox bound, kept until acknowledged (RUNNER-POOL-8; was `eventsKept`) |
+| `limits.runners.commitCheckSec` | `30` | how often a runner checks `pushOnCommit` sessions for a new commit |
 | `limits.runners.forwardWaitSec` | `10` | how long one forward pull waits on the runner (also the pump's retry pause; capped at half the link call timeout) |
 | `limits.runners.forwardTimeoutSec` | `300` | how long a remote worker's orchestrator-side frame waits for its answer |
 | `limits.runners.forwardPendingMax` | `64` | orchestrator-side frames one runner holds at once |
