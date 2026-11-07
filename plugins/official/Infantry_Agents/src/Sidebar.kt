@@ -170,11 +170,17 @@ fun Sidebar(
         HorizontalDivider(color = Palette.Border, modifier = Modifier.padding(top = 6.dp))
         if (visible.isEmpty()) {
             Column(Modifier.padding(14.dp)) {
+                // FIRSTRUN-UX-2: with no project yet, point at the project flow (project -> Board -> ticket), not an off-board spawn.
+                val noProject = state.activeProjectId == null
                 Text(
-                    if (state.agents.isEmpty()) "No agents yet." else "No agent matches the filter.",
+                    when {
+                        state.agents.isEmpty() && noProject -> "No agents yet. Create a project with + (top left), then open the Board."
+                        state.agents.isEmpty() -> "No agents yet."
+                        else -> "No agent matches the filter."
+                    },
                     color = Palette.Muted, fontSize = 12.sp,
                 )
-                if (state.agents.isEmpty() && state.connection.gate("agents.spawn", com.superiorsoftllc.infantry.plugin.api.ActionKind.SPAWN).enabled) {
+                if (state.agents.isEmpty() && !noProject && state.connection.gate("agents.spawn", com.superiorsoftllc.infantry.plugin.api.ActionKind.SPAWN).enabled) {
                     TextButton(onClick = onNew) { Text("Spawn one (Ctrl+N)") }
                 }
             }
