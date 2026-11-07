@@ -312,7 +312,7 @@ are not verified.
 
 ## Tests on GitHub Actions (CI-TESTS-1)
 
-`.github/workflows/tests.yml` (push to `feature-agenthq-mvp`, pull requests, manual) runs the suites on free runners
+`.github/workflows/tests.yml` (stable tags and manual runs only; nightly tags are skipped) runs the suites on free runners
 with `INFANTRY_CI=1`; it uses no secrets and an older run of the same ref is cancelled.
 
 | Job | Runner | What |
