@@ -1023,3 +1023,6 @@ tasks.withType<Test>().matching { it.name in setOf("test", "testFast", "testSlow
     environment("INFANTRY_PLUGINS_ROOT", repoPluginsRoot.absolutePath)
     systemProperty("infantry.plugins.devTrust", "true")
 }
+
+// CI-TESTS-2: skip machine-only test classes when INFANTRY_CI=1 (gradle/ci-machine-only.txt).
+apply(from = rootProject.file("gradle/ci-skip.gradle.kts"))

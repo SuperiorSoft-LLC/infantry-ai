@@ -2218,7 +2218,7 @@ class SessionManager(
         override fun denied(sessionId: String, tool: String, prompted: Boolean) {
             val mode = toolApprovalFor(sessionId).mode
             SessionActivityLog.event(sessionId, ToolApprovalNotice.blockedAction(tool, mode, prompted))
-            stderr(sessionId, "[infantry] " + ToolApprovalNotice.text("claude", tool, mode, prompted))
+            stderr(sessionId, "[infantry] " + ToolApprovalNotice.text(get(sessionId)?.provider ?: "harness", tool, mode, prompted))
         }
 
         override fun mcpState(sessionId: String, state: String, reason: String?) {

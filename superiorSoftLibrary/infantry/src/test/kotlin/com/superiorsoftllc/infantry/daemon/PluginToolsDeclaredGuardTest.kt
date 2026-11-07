@@ -27,6 +27,11 @@ class PluginToolsDeclaredGuardTest {
             "infantry_chat_image" to "script alias target", "infantry_message" to "script alias target",
             "infantry_progress" to "script alias target", "infantry_ticket_comment" to "script alias target",
             "infantry_ticket_get" to "script alias target",
+            "infantry_ask" to "script alias target (c1cc4b4f)", "infantry_board" to "script alias target (c1cc4b4f)",
+            "infantry_event_emit" to "script alias target (c1cc4b4f)", "infantry_kill" to "script alias target (c1cc4b4f)",
+            "infantry_prompt" to "script alias target (c1cc4b4f)", "infantry_session_remove" to "script alias target (c1cc4b4f)",
+            "infantry_ticket_create" to "script alias target (c1cc4b4f)", "infantry_ticket_move" to "script alias target (c1cc4b4f)",
+            "infantry_ticket_start" to "script alias target (c1cc4b4f)", "infantry_ticket_update" to "script alias target (c1cc4b4f)",
         ),
     )
 

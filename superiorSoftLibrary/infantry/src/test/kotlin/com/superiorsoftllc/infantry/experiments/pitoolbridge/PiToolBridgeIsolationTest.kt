@@ -30,6 +30,8 @@ class PiToolBridgeIsolationTest {
                 .flatMap { f -> f.readLines().withIndex().filter { needle.containsMatchIn(it.value) }.map { f.name to it.value.trim() } }
                 .toList()
         }.filterNot { (file, line) -> file == "DaemonMain.kt" && "PiToolBridgeRegistration.register(" in line }
+            // CI-TESTS-2: HarnessCoreGuardTest's allow-list names the registration file as DATA (a file-name key), not a code reference.
+            .filterNot { (file, _) -> file == "HarnessCoreGuardTest.kt" }
         assertEquals(emptyList(), offenders, "references outside the package")
     }
 }
