@@ -34,27 +34,27 @@ Failing at 5f5b974e but not in the base list (so NOT a known failure; treat as n
 | infantry | `agents.SharedKnowledgeTest` | yes | `knowledge is shipped and names every progress mechanism`: AssertionError at SharedKnowledgeTest.kt:24 | |
 | infantry | `agents.registry.AgentRegistryLayerGuardTest` | yes | `the agent layer names no orchestration code`: AssertionError at AgentRegistryLayerGuardTest.kt:47 | |
 | infantry | `cli.AgentTicketStartE2eTest` | yes | `MCP - an agent pins role, provider and model on a ticket, then ticket_start runs the worker exactly so`: AssertionError at AgentTicketStartE2eTest.kt:257 | |
-| infantry | `cli.CliAcceptanceTest` | yes | `watchStreamsOutputAndExitsCleanlyWhenThePodConverges`: AssertionError at CliAcceptanceTest.kt:228 | |
+| infantry | `cli.CliAcceptanceTest` | yes | `watchStreamsOutputAndExitsCleanlyWhenThePodConverges`: AssertionError at CliAcceptanceTest.kt:228. CI-FIX-LATER (7 tests): mail/inbox state: inbox lists 2 unread after read, `threads` LAST column is local-zone not UTC, an at-rest pm is queued not woken, undeliverable role send exits 0, a profile-only role resolves to a session. Cluster: mail | |
 | infantry | `cli.CliDecisionTest` | yes | `refusalsPrintTheCodeAndExitOne`: AssertionError at CliDecisionTest.kt:91 | |
 | infantry | `cli.CliIssueTest` | yes | `refusalsPrintTheCodeAndExitOne`: AssertionError at CliIssueTest.kt:154 | |
 | infantry | `cli.CliSkillTest` | yes | `usageSlipsExit2BeforeConnecting`: AssertionError at CliSkillTest.kt:120 | |
 | infantry | `cli.SessionKillScopeTest` | yes | `aPmRemovesAStaleBusySessionWithoutForceOverTheCli`: IllegalStateException at SessionKillScopeTest.kt:57 | |
 | infantry | `cli.SessionRemoveTest` | yes | `theMcpToolRemovesAnEndedSessionOfAnyOriginAndRefusesALiveOne`: IllegalStateException at SessionRemoveTest.kt:80 | |
 | infantry | `cli.mcp.BacklogLaneE2eTest` | yes | `backlogHasParityAcrossCliAndMcpAndRefusesEveryStart`: ComparisonFailure at BacklogLaneE2eTest.kt:115 | |
-| infantry | `cli.mcp.McpMailToolsE2eTest` | yes | `aWorkerMailsItsPmAndThePmReadsItThroughMcp`: ComparisonFailure at McpMailToolsE2eTest.kt:98 | |
+| infantry | `cli.mcp.McpMailToolsE2eTest` | yes | `aWorkerMailsItsPmAndThePmReadsItThroughMcp`: ComparisonFailure at McpMailToolsE2eTest.kt:98. CI-FIX-LATER: NullPointerException in the test body (no frame in the report), mail cluster | |
 | infantry | `cli.mcp.McpOrchestrationE2eTest` | yes | `anAgentOrchestratesAnotherThroughMcpServe`: ComparisonFailure at McpOrchestrationE2eTest.kt:109 | |
 | infantry | `cli.mcp.McpServeConfigTest` | yes | `spawnWithoutAProjectIdUsesTheConfiguredDefault`: ComparisonFailure at McpServeConfigTest.kt:174 | |
 | infantry | `cli.mcp.McpServeTest` | yes | `rolesToolsComeFromInfantryRolesUnchanged`: AssertionError at McpServeTest.kt:730 | |
 | infantry | `cli.mcp.McpTicketAnswerRaceE2eTest` | yes | `ticketCreateAndUpdateAnswerWithTheirOwnTicketWhileAStartedTicketIsBeingPushed`: ComparisonFailure at McpTicketAnswerRaceE2eTest.kt:116 | |
-| infantry | `cli.mcp.McpTicketImagesE2eTest` | yes | `ticketsCarryImagesThroughMcpAndTheWorkerBriefListsThem`: AssertionError at McpTicketImagesE2eTest.kt:152 | |
+| infantry | `cli.mcp.McpTicketImagesE2eTest` | yes | `ticketsCarryImagesThroughMcpAndTheWorkerBriefListsThem`: AssertionError at McpTicketImagesE2eTest.kt:152. CI-FIX-LATER: ticket_get answer has no `images` field (the images feature is not wired in the test daemon / not returned by the MCP answer) | |
 | infantry | `cli.mcp.McpTicketToolsTest` | yes | `update changes only the fields given, description verbatim`: AssertionError at McpTicketToolsTest.kt:155 | |
 | infantry | `cli.mcp.McpWriteToolsTest` | yes | `aKilledSessionRevivedToIdleDoesNotHoldASlotAgain`: ComparisonFailure at McpWriteToolsTest.kt:96 | |
 | infantry | `daemon.AgentProfileDaemonTest` | yes | `theProfileIsReadWhenNewArrivesBecauseTheSessionIsBoundThen`: ComparisonFailure at AgentProfileDaemonTest.kt:200 | |
-| infantry | `daemon.AgentSwapDaemonTest` | yes | `mailAfterACrossHarnessSwapMidRunStartsAFreshSessionOnTheNewHarness`: AssertionError at AgentSwapDaemonTest.kt:295 | |
+| infantry | `daemon.AgentSwapDaemonTest` | yes | `mailAfterACrossHarnessSwapMidRunStartsAFreshSessionOnTheNewHarness`: AssertionError at AgentSwapDaemonTest.kt:295. CI-FIX-LATER: the fresh session after a cross-harness swap gets the persona/knowledge prompt but the awaited mail text is not found; mail cluster | |
 | infantry | `daemon.BuiltinToolsListGuardTest` | yes | `roles ask and project config tools are not wired in core and their modules declare them`: AssertionError at BuiltinToolsListGuardTest.kt:74 | |
-| infantry | `daemon.DaemonPluginMechanismTest` | yes | `a community plugin without its grants is refused`: AssertionError at DaemonPluginMechanismTest.kt:127 | |
+| infantry | `daemon.DaemonPluginMechanismTest` | yes | `a community plugin without its grants is refused`: AssertionError at DaemonPluginMechanismTest.kt:127. CI-FIX-LATER (6 tests): the community plugin is not loaded in the test daemon (grant refusal reads null, ready hook key null, settings frame never arrives): plugin jars are not loaded in the test daemon. Cluster: plugin load | |
 | infantry | `daemon.DaemonPortFallbackTest` | yes | `strictDaemonProcessExitsWithTheReadableLine`: AssertionError at DaemonPortFallbackTest.kt:165 | |
-| infantry | `daemon.DaemonShutdownTest` | yes | `stopWaitsForTheTicketOutcomeItsOwnKillQueued`: AssertionError at DaemonShutdownTest.kt:77 | |
+| infantry | `daemon.DaemonShutdownTest` | yes | `stopWaitsForTheTicketOutcomeItsOwnKillQueued`: AssertionError at DaemonShutdownTest.kt:77. CI-FIX-LATER: shutdown queues no `ticket_runs` write, so the test proves nothing; plugin-load cluster | |
 | infantry | `daemon.DaemonThreadLeakTest` | yes | `twentyDaemonsStartedAndStoppedLeaveNoDaemonThreadsBehind`: AssertionError at DaemonThreadLeakTest.kt:36 | |
 | infantry | `daemon.DescriptorHarnessDaemonTest` | yes | `theDescriptorShowsInTheProvidersFrameAndAPromptRunsThroughIt`: AssertionError at DescriptorHarnessDaemonTest.kt:47 | |
 | infantry | `daemon.FrameGateDaemonTest` | yes | `an owner connection passes the owner gate, an agent connection on the same daemon does not`: IllegalStateException at FrameGateDaemonTest.kt:161 | |
@@ -63,9 +63,9 @@ Failing at 5f5b974e but not in the base list (so NOT a known failure; treat as n
 | infantry | `daemon.KnowledgeFirstTurnTest` | yes | `aNeverRunSessionRendersTheCountsOfItsDeliveryNotOfItsSpawn`: AssertionError at KnowledgeFirstTurnTest.kt:105 | |
 | infantry | `daemon.MailFrameDocTest` | yes | `theDocumentedAnswerFramesAreTheOnesTheDaemonSends`: AssertionError at MailFrameDocTest.kt:126 | |
 | infantry | `daemon.NewsAgentPluginTest` | yes | `the news agent is listed, fetches its feed, carries the headlines and can be disabled`: AssertionError at NewsAgentPluginTest.kt:100 | |
-| infantry | `daemon.ReportBackDaemonTest` | yes | `aReportToAnotherRoleIsNotAReport`: IllegalStateException at ReportBackDaemonTest.kt:137 | |
+| infantry | `daemon.ReportBackDaemonTest` | yes | `aReportToAnotherRoleIsNotAReport`: IllegalStateException at ReportBackDaemonTest.kt:137 CI-FIX-LATER: run 2 never starts within 60 s (4 tests); plugin-load cluster | |
 | infantry | `daemon.RoleInstanceSpawnTest` | yes | `aDeliveredFirstTurnUsesTheFrozenInstanceAfterAProfileEdit`: AssertionError at RoleInstanceSpawnTest.kt:180 | |
-| infantry | `daemon.RoleSpawnIdentityTest` | yes | `aRoleOnlySessionIsRegisteredAtNewAndMailToItsSessionIdCarriesItsRole`: AssertionError at RoleSpawnIdentityTest.kt:138 | |
+| infantry | `daemon.RoleSpawnIdentityTest` | yes | `aRoleOnlySessionIsRegisteredAtNewAndMailToItsSessionIdCarriesItsRole`: AssertionError at RoleSpawnIdentityTest.kt:138 CI-FIX-LATER: role-only session mail assertion fails; mail cluster | |
 | infantry | `daemon.SkillsFirstTurnTest` | yes | `aNeverRunSessionNamedByIdRendersItsSkills`: ComparisonFailure at SkillsFirstTurnTest.kt:87 | |
 | infantry | `daemon.StateDirLockTest` | yes | `aSecondDaemonOnTheSameStateDirExitsTwoNamingTheFirst`: AssertionError at StateDirLockTest.kt:100 | |
 | infantry | `daemon.StubDaemonContractTest` | yes | `readyFrameReportsContract132`: ComparisonFailure at StubDaemonContractTest.kt:52 | |
@@ -92,11 +92,11 @@ Failing at 5f5b974e but not in the base list (so NOT a known failure; treat as n
 | infantryUi | `ui.TicketCommentsPanelUiTest` | yes | `threadPostResolveAndNotifyPicker`: AssertionError at Assertions.kt:264 | |
 | infantryUi | `ui.TicketModalUiTest` | yes | `Open shows the ticket modal over the board, Back and Esc close it, the inline editor still works`: AssertionError at SemanticsNodeInteraction.kt:178 | |
 | infantry | `daemon.InfantryBinShellTest` | no | not failing in the 5f5b974e run (base entry kept) | |
-| infantry | `cli.mcp.McpTicketImagesE2eTest` | yes | CI-TESTS-5: answer carries no `images` field after plugins wired | e9b33f6b |
-| infantry | `cli.mcp.McpMailToolsE2eTest` | yes | CI-TESTS-5: NullPointerException after plugins wired | e9b33f6b |
+| infantry | `cli.mcp.McpTicketImagesE2eTest` | yes | CI-TESTS-5: answer carries no `images` field after plugins wired. CI-FIX-LATER: ticket_get answer has no `images` field (the images feature is not wired in the test daemon / not returned by the MCP answer) | e9b33f6b |
+| infantry | `cli.mcp.McpMailToolsE2eTest` | yes | CI-TESTS-5: NullPointerException after plugins wired. CI-FIX-LATER: NullPointerException in the test body (no frame in the report), mail cluster | e9b33f6b |
 | infantry | `daemon.ReportBackDaemonTest` | yes | CI-TESTS-5: "run 2 to start" times out at 60 s (4 tests) | e9b33f6b |
-| infantry | `cli.CliAcceptanceTest` | yes | CI-TESTS-5: 7 tests (inbox/threads/report handoff) fail after plugins wired | e9b33f6b |
+| infantry | `cli.CliAcceptanceTest` | yes | CI-TESTS-5: 7 tests (inbox/threads/report handoff) fail after plugins wired. CI-FIX-LATER (7 tests): mail/inbox state: inbox lists 2 unread after read, `threads` LAST column is local-zone not UTC, an at-rest pm is queued not woken, undeliverable role send exits 0, a profile-only role resolves to a session. Cluster: mail | e9b33f6b |
 | infantry | `daemon.RoleSpawnIdentityTest` | yes | CI-TESTS-5: mail to a role-only session assertion fails | e9b33f6b |
-| infantry | `daemon.AgentSwapDaemonTest` | yes | CI-TESTS-5: mail after a cross-harness swap assertion fails | e9b33f6b |
-| infantry | `daemon.DaemonShutdownTest` | yes | CI-TESTS-5: shutdown queued no ticket_runs write | e9b33f6b |
-| infantry | `daemon.DaemonPluginMechanismTest` | yes | CI-TESTS-5: 6 tests fail after Settings wired and built-in tools filtered | e9b33f6b |
+| infantry | `daemon.AgentSwapDaemonTest` | yes | CI-TESTS-5: mail after a cross-harness swap assertion fails. CI-FIX-LATER: the fresh session after a cross-harness swap gets the persona/knowledge prompt but the awaited mail text is not found; mail cluster | e9b33f6b |
+| infantry | `daemon.DaemonShutdownTest` | yes | CI-TESTS-5: shutdown queued no ticket_runs write. CI-FIX-LATER: shutdown queues no `ticket_runs` write, so the test proves nothing; plugin-load cluster | e9b33f6b |
+| infantry | `daemon.DaemonPluginMechanismTest` | yes | CI-TESTS-5: 6 tests fail after Settings wired and built-in tools filtered. CI-FIX-LATER (6 tests): the community plugin is not loaded in the test daemon (grant refusal reads null, ready hook key null, settings frame never arrives): plugin jars are not loaded in the test daemon. Cluster: plugin load | e9b33f6b |
