@@ -163,6 +163,18 @@ internal class InProcessDaemon(
         return LocalEndpoint(url, RemoteAccess.clientToken())
     }
 
+    /**
+     * PLUGIN-HOTSWAP-2: the hot hook over the running in-process daemon's plugin host; until the daemon starts it answers a
+     * not-applied outcome, so the manager reports "restart needed" for that change.
+     */
+    fun pluginHotApply(): com.superiorsoftllc.infantry.daemon.plugins.manager.PluginHotApply = object : com.superiorsoftllc.infantry.daemon.plugins.manager.PluginHotApply {
+        private fun d() = daemon?.pluginHotApply()
+        private fun none() = com.superiorsoftllc.infantry.daemon.plugins.manager.HotOutcome(true, "")
+        override fun load(id: String) = d()?.load(id) ?: none()
+        override fun unload(id: String) = d()?.unload(id) ?: none()
+        override fun reload(id: String) = d()?.reload(id) ?: none()
+    }
+
     fun runningAgents(): Int = daemon?.manager?.list()?.count { it.isBusy() } ?: 0
 
     @Synchronized
@@ -260,6 +272,8 @@ internal class PinnedDaemonHost(
                 com.superiorsoftllc.infantry.daemon.plugins.manager.PluginManager(
                     com.superiorsoftllc.infantry.plugin.host.PluginFolders.root(dir, { System.getenv(it) }), dir,
                     com.superiorsoftllc.infantry.plugin.host.PluginFolders.bundledRoot({ System.getenv(it) }),
+                    // PLUGIN-HOTSWAP-2: a daemon-half change made here reaches the running daemon's host (same path as the daemon's own manager).
+                    hot = (local as? InProcessDaemon)?.pluginHotApply(),
                 ),
             )
         }.getOrNull()
