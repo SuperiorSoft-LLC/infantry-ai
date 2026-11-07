@@ -312,14 +312,13 @@ are not verified.
 
 ## Tests on GitHub Actions (CI-TESTS-1)
 
-`.github/workflows/tests.yml` (push to `feature-agenthq-mvp`, pull requests, manual) runs the suites on free runners
+`.github/workflows/tests.yml` (stable tags and manual runs only; nightly tags are skipped) runs the suites on free runners
 with `INFANTRY_CI=1`; it uses no secrets and an older run of the same ref is cancelled.
 
 | Job | Runner | What |
 |---|---|---|
 | `jvm` | ubuntu | `infantry:test`, `infantryUiCore:jvmTest`, `infantryUi:test`, `ownerSmoke` (the gate's tasks) under `xvfb-run` |
 | `windows` | windows | the PowerShell `scripts/*.tests.ps1` |
-| `compile` | ubuntu | `infantryWeb:assembleWeb` and `infantryAndroid:assembleDebug`, the tasks release.yml uses |
 
 `scripts/ci-test-summary.sh` writes the job summary (counts, failed classes). A failing class on
 [KNOWN-FAILURES.md](KNOWN-FAILURES.md) is reported as known and does not fail the job. Reports are kept 7 days as
