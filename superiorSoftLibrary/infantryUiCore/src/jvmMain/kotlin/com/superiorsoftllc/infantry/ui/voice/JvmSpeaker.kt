@@ -53,6 +53,11 @@ class JvmSpeaker(private val osName: String = System.getProperty("os.name").orEm
         }.getOrDefault(false)
     }
 
+    @Synchronized
+    override fun stop() {
+        current?.takeIf { it.isAlive }?.destroy()
+    }
+
     override fun beep() {
         runCatching { java.awt.Toolkit.getDefaultToolkit().beep() }
     }

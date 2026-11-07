@@ -2,6 +2,10 @@
 // Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.plugin.host
 
+import com.superiorsoftllc.infantry.plugin.api.AudioCapture
+import com.superiorsoftllc.infantry.plugin.api.CaptureEnd
+import com.superiorsoftllc.infantry.plugin.api.CaptureHandle
+import com.superiorsoftllc.infantry.plugin.api.CaptureOptions
 import com.superiorsoftllc.infantry.plugin.api.Events
 import com.superiorsoftllc.infantry.plugin.api.ModuleManifest
 import com.superiorsoftllc.infantry.plugin.api.ModuleSetting
@@ -9,12 +13,19 @@ import com.superiorsoftllc.infantry.plugin.api.ModulesConfig
 import com.superiorsoftllc.infantry.plugin.api.Notifications
 import com.superiorsoftllc.infantry.plugin.api.PluginEvent
 import com.superiorsoftllc.infantry.plugin.api.Services
+import com.superiorsoftllc.infantry.plugin.api.SpeakOptions
+import com.superiorsoftllc.infantry.plugin.api.SpeechOutput
 import com.superiorsoftllc.infantry.plugin.api.Tier
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+
+private object NoMic : AudioCapture {
+    override fun start(options: CaptureOptions, onChunk: (ByteArray) -> Unit, onEnd: (CaptureEnd) -> Unit): CaptureHandle = error("unused")
+}
 
 /** PLUGINS-1: services, routes and events are each gated by the module's declarations and the owner's say. */
 class ServiceGateTest {
@@ -45,6 +56,38 @@ class ServiceGateTest {
         assertNotNull(services.get(Services.NOTIFICATIONS))
         assertNull(services.get(Services.EVENTS))
         assertTrue(log.any { "service events refused" in it })
+    }
+
+    @Test
+    fun `the microphone needs the declaration and the owner's grant for every tier but core`() {
+        val mic = manifest.copy(services = manifest.services + Services.AUDIO_IN.id + Services.SPEECH_OUT.id)
+        val none = ModulesConfig()
+        val granted = ModulesConfig(modules = mapOf("Acme_Hello" to ModuleSetting(allow = listOf(Services.AUDIO_IN.id))))
+        assertEquals("not declared in module.json", ServiceGate.refusal(Services.AUDIO_IN.id, manifest, Tier.OFFICIAL, granted))
+        assertEquals("a sensitive service needs the owner's grant (allow in modules.json)", ServiceGate.refusal(Services.AUDIO_IN.id, mic, Tier.OFFICIAL, none))
+        assertNull(ServiceGate.refusal(Services.AUDIO_IN.id, mic, Tier.OFFICIAL, granted))
+        assertNull(ServiceGate.refusal(Services.AUDIO_IN.id, mic, Tier.COMMUNITY, granted))
+        assertNull(ServiceGate.refusal(Services.AUDIO_IN.id, mic, Tier.CORE, none), "compiled-in core modules are the app itself")
+        assertNull(ServiceGate.refusal(Services.SPEECH_OUT.id, mic, Tier.OFFICIAL, none), "speech out is not sensitive")
+        assertTrue(ServiceGate.sensitive("audio.in"))
+        assertFalse(ServiceGate.sensitive("speech.out"))
+
+        val registry = ServiceRegistry(none)
+        registry.provide(Services.AUDIO_IN) { NoMic }
+        registry.provide(Services.SPEECH_OUT) { object : SpeechOutput {
+            override fun speak(text: String, options: SpeakOptions) = true
+            override fun stop() {}
+            override fun voices() = emptyList<String>()
+        } }
+        val official = registry.forModule(ModuleStatus(mic.name, Tier.OFFICIAL, ModuleState.LOADED, manifest = mic))
+        assertNull(official.get(Services.AUDIO_IN), "ungranted")
+        assertNotNull(official.get(Services.SPEECH_OUT))
+        val undeclared = ServiceRegistry(granted).also { it.provide(Services.AUDIO_IN) { error("never built") } }
+            .forModule(ModuleStatus(manifest.name, Tier.OFFICIAL, ModuleState.LOADED, manifest = manifest))
+        assertNull(undeclared.get(Services.AUDIO_IN), "undeclared")
+        val grantedServices = ServiceRegistry(granted).also { r -> r.provide(Services.AUDIO_IN) { NoMic } }
+            .forModule(ModuleStatus(mic.name, Tier.OFFICIAL, ModuleState.LOADED, manifest = mic))
+        assertNotNull(grantedServices.get(Services.AUDIO_IN))
     }
 
     @Test

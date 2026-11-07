@@ -18,6 +18,22 @@ object Services {
     val SETTINGS = ServiceKey<PluginSettings>("settings")
     val DAEMON = ServiceKey<DaemonAccess>("daemon")
     val ENDPOINTS = ServiceKey<EndpointAccess>("endpoints")
+
+    /** VOICE-SEAM-1 (@since plugin API 2.1.0, revision 3): read text aloud with the host's voice. Null where the platform has none. */
+    val SPEECH_OUT = ServiceKey<SpeechOutput>("speech.out")
+
+    /**
+     * VOICE-SEAM-1 (@since plugin API 2.1.0, revision 3): capture the microphone. A SENSITIVE service: besides the
+     * declaration, the owner must grant it (`allow` in modules.json, written when the owner accepts it at install) for
+     * every tier but core. Null where the platform has no capture.
+     */
+    val AUDIO_IN = ServiceKey<AudioCapture>("audio.in")
+
+    /**
+     * VOICE-SEAM-1 (@since plugin API 2.1.0): the service ids that need the owner's explicit grant whatever the module's
+     * tier (core excepted): the install asks for them even for an official plugin.
+     */
+    val SENSITIVE: Set<String> = setOf(AUDIO_IN.id)
 }
 
 /** The services one module may use. [get] is null when the service is not declared, denied, or not on this platform. */
@@ -84,4 +100,83 @@ sealed interface EndpointReply {
     data class Ok(val status: Int, val body: String, val headers: Map<String, String> = emptyMap()) : EndpointReply
     data class Refused(val reason: String) : EndpointReply
     data class Failed(val reason: String) : EndpointReply
+}
+
+/**
+ * VOICE-SEAM-1 (@since plugin API 2.1.0): how one text is spoken. A data class so later fields (rate, pitch, ...) are
+ * added without breaking callers.
+ */
+data class SpeakOptions(
+    /** 0..100; the host clamps it. */
+    val volumePercent: Int = 100,
+    /** A name from [SpeechOutput.voices]; null = the host's default voice. */
+    val voice: String? = null,
+    /** Cut off whatever is being said (and drop what is queued) before this text. */
+    val interrupt: Boolean = false,
+)
+
+/**
+ * VOICE-SEAM-1 (@since plugin API 2.1.0): the host's text-to-speech ([Services.SPEECH_OUT]). The host speaks with an
+ * installed voice engine when the owner enabled one, else with the OS voice. Calls return at once; speech runs in the background.
+ */
+interface SpeechOutput {
+    /** Queues [text]; false = nothing will be spoken (no voice available, or blank text). */
+    fun speak(text: String, options: SpeakOptions = SpeakOptions()): Boolean
+
+    /** Stops what is being said and drops what is queued. */
+    fun stop()
+
+    /** Voice names [SpeakOptions.voice] accepts; empty = only the default. */
+    fun voices(): List<String>
+}
+
+/** VOICE-SEAM-1 (@since plugin API 2.1.0): a raw PCM format. The default is what speech recognisers want: 16 kHz mono signed 16-bit little-endian. */
+data class PcmFormat(val sampleRateHz: Int = 16_000, val channels: Int = 1, val bitsPerSample: Int = 16)
+
+/** VOICE-SEAM-1 (@since plugin API 2.1.0): one capture request. A data class so later fields are added without breaking callers. */
+data class CaptureOptions(
+    val format: PcmFormat = PcmFormat(),
+    /** Ends the capture after this many seconds; null = the host's limit. The host's limit always caps it. */
+    val maxSeconds: Int? = null,
+)
+
+/**
+ * VOICE-SEAM-1 (@since plugin API 2.1.0): why a capture ended. [reason] is one of the constants below; a later host may
+ * add more, so treat an unknown one like [FAILED].
+ */
+data class CaptureEnd(val reason: String, val detail: String? = null) {
+    companion object {
+        /** [CaptureHandle.stop] was called (by the plugin or by the owner from the host's listening indicator). */
+        const val STOPPED = "stopped"
+        /** The time limit was reached. */
+        const val LIMIT = "limit"
+        /** Another capture is running on this host (one at a time). */
+        const val BUSY = "busy"
+        /** No microphone, or the format is not supported. */
+        const val UNAVAILABLE = "unavailable"
+        /** The device failed while capturing. */
+        const val FAILED = "failed"
+    }
+}
+
+/** VOICE-SEAM-1 (@since plugin API 2.1.0): a running capture. */
+interface CaptureHandle {
+    /** True until the capture has ended. */
+    val active: Boolean
+
+    /** Ends the capture; onEnd follows with [CaptureEnd.STOPPED]. Safe to call twice. */
+    fun stop()
+}
+
+/**
+ * VOICE-SEAM-1 (@since plugin API 2.1.0): the microphone ([Services.AUDIO_IN]). One capture at a time per host, and the
+ * host shows its own listening indicator while one runs (the owner can stop it there).
+ */
+interface AudioCapture {
+    /**
+     * Starts capturing. [onChunk] gets raw PCM in [CaptureOptions.format] on a host thread, in order; [onEnd] is called
+     * exactly once, after the last chunk. When the capture cannot start, [onEnd] is called before this returns (with
+     * [CaptureEnd.BUSY] or [CaptureEnd.UNAVAILABLE]) and the handle is already inactive.
+     */
+    fun start(options: CaptureOptions = CaptureOptions(), onChunk: (ByteArray) -> Unit, onEnd: (CaptureEnd) -> Unit): CaptureHandle
 }

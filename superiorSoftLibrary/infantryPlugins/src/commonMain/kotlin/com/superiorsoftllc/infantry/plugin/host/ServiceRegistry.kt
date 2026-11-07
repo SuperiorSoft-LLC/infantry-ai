@@ -45,14 +45,20 @@ class ServiceRegistry(private val config: ModulesConfig = ModulesConfig(), priva
     }
 }
 
-/** The service rules: declared in module.json, not denied by the owner, and for a community module, allowed. */
+/**
+ * The service rules: declared in module.json, not denied by the owner, and for a community module, allowed.
+ * VOICE-SEAM-1: a [Services.SENSITIVE] service (the microphone) needs the owner's grant (`allow`) for every tier but core.
+ */
 object ServiceGate {
+    fun sensitive(id: String): Boolean = id in Services.SENSITIVE
+
     fun refusal(id: String, manifest: ModuleManifest, tier: Tier, config: ModulesConfig): String? {
         val setting = config.setting(manifest.name)
         return when {
             id !in manifest.services -> "not declared in module.json"
             id in setting.deny -> "denied in modules.json"
             tier == Tier.COMMUNITY && id !in setting.allow -> "a community module needs it allowed in modules.json"
+            tier != Tier.CORE && sensitive(id) && id !in setting.allow -> "a sensitive service needs the owner's grant (allow in modules.json)"
             else -> null
         }
     }

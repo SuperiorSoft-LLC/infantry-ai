@@ -2,6 +2,7 @@
 // Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.daemon.plugins.manager
 
+import com.superiorsoftllc.infantry.plugin.host.ServiceGate
 import com.superiorsoftllc.infantry.daemon.api.DaemonApi
 import com.superiorsoftllc.infantry.plugin.api.ModuleManifest
 import com.superiorsoftllc.infantry.plugin.api.PLUGIN_API_VERSION
@@ -564,13 +565,16 @@ class PluginManager(
             if (insp.installed) return ManagerResult.refused("ALREADY_INSTALLED", "${insp.id} is installed; use update")
             if (token != null && token != insp.token) return ManagerResult.refused("CHANGED", "${insp.id} changed since it was checked; inspect it again")
             val needsConsent = insp.tier == Tier.COMMUNITY
+            // VOICE-SEAM-1: a sensitive service (the mic) is asked for whatever the tier; an official plugin asks only for those.
+            val sensitive = insp.grants.filter(ServiceGate::sensitive)
             if (needsConsent) consentProblem(insp.grants, consent)?.let { return it }
+            else if (sensitive.isNotEmpty()) consentProblem(sensitive, consent?.filter { it in sensitive }?.toSet())?.let { return it }
             val settings = InstallSettings.load(root).copy(allowUnsigned = insp.cls != PluginClass.OFFICIAL)
             return when (val r = IhqInstaller.install(insp.file, root, config(), settings, trustedTier = Tier.OFFICIAL)) {
                 is IhqResult.Refused -> ManagerResult.refused(r.reason.name, r.message)
                 is IhqResult.Installed -> {
-                    val granted = if (needsConsent) consent.orEmpty() else insp.grants.toSet()
-                    if (needsConsent) writeGrants(r.name, granted)
+                    val granted = if (needsConsent) consent.orEmpty() else insp.grants.toSet() - (sensitive.toSet() - consent.orEmpty())
+                    if (needsConsent) writeGrants(r.name, granted) else if (sensitive.isNotEmpty()) ModulesFile.update(root, r.name, allow = granted.filter(ServiceGate::sensitive))
                     ModulesFile.update(root, r.name, enabled = enable)
                     val l = ledger()
                     val row = LedgerRow(r.version, insp.cls.label, r.tier.name.lowercase(), insp.source, insp.sha256, insp.signer, granted.sorted(), emptyList(), insp.license)
@@ -629,7 +633,7 @@ class PluginManager(
             val next = semver(insp.version) ?: return ManagerResult.refused("BAD_MANIFEST", "bad version ${insp.version}")
             if (next <= cur) return ManagerResult.refused("NOT_NEWER", "$id ${insp.version} is not newer than $cur")
             val previouslyGranted = row?.granted.orEmpty().toSet()
-            val newAsks = if (tier == Tier.COMMUNITY) insp.grants.filter { it !in previouslyGranted } else emptyList()
+            val newAsks = (if (tier == Tier.COMMUNITY) insp.grants else insp.grants.filter(ServiceGate::sensitive)).filter { it !in previouslyGranted }
             if (newAsks.isNotEmpty() && !(consent != null && consent.containsAll(newAsks))) {
                 return ManagerResult.refused("GRANTS_RAISED", "$id ${insp.version} asks for new grant(s): ${newAsks.joinToString()}; consent is needed, it is never applied automatically", newAsks)
             }
@@ -649,6 +653,7 @@ class PluginManager(
             }
             val granted = (previouslyGranted.filter { it in insp.grants } + consent.orEmpty()).toSet()
             if (r.tier == Tier.COMMUNITY) writeGrants(id, granted)
+            else if (insp.grants.any(ServiceGate::sensitive)) ModulesFile.update(root, id, allow = granted.filter(ServiceGate::sensitive))
             val history = pruneHistory(id, (row?.history.orEmpty() + cur.toString()).distinct())
             val updated = LedgerRow(r.version, row?.cls ?: insp.cls.label, r.tier.name.lowercase(), if (ref != null) insp.source else row!!.source, insp.sha256, insp.signer, granted.sorted(), history, insp.license)
             saveLedger(Ledger(ledger().installed + (id to updated)))

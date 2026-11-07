@@ -107,6 +107,29 @@ class PluginManagerServiceTest {
         assertEquals("ALREADY_INSTALLED", m.install("Acme_Echo", emptySet()).code)
     }
 
+    @Test fun `an official plugin is asked only for the microphone, and only a consented mic is granted`() {
+        val ks = key("infantry"); trust("infantry", ks)
+        val services = """"services":["speech.out","audio.in"]"""
+        val ask = pack("Acme_Ears", extra = services).also { sign(it, ks, "infantry") }
+        val decline = pack("Acme_Deaf", extra = services).also { sign(it, ks, "infantry") }
+        val grants = listOf("audio.in", "speech.out")
+        catalog(entry(ask, "Acme_Ears", "1.0.0", grants), entry(decline, "Acme_Deaf", "1.0.0", grants), cls = "official")
+        val m = manager(); source(m, "official")
+
+        val none = m.install("Acme_Ears", null)
+        assertEquals("CONSENT_REQUIRED", none.code)
+        assertEquals(listOf("audio.in"), none.requested, "speech out is not sensitive; an official plugin is not asked for it")
+        assertNull(m.status("Acme_Ears"))
+
+        assertTrue(m.install("Acme_Ears", null, grantAll = true).ok)
+        assertEquals(listOf("audio.in"), PluginFolders.config(root).modules.getValue("Acme_Ears").allow)
+        assertEquals(grants, assertNotNull(m.status("Acme_Ears")).granted)
+
+        installOk(m, "Acme_Deaf", emptySet())
+        assertTrue(PluginFolders.config(root).setting("Acme_Deaf").allow.isEmpty(), "the owner declined the mic")
+        assertEquals(listOf("speech.out"), assertNotNull(m.status("Acme_Deaf")).granted)
+    }
+
     @Test fun `a grant the plugin does not ask for is refused`() {
         val f = pack(); catalog(entry(f, "Acme_Echo", "1.0.0", emptyList()))
         val m = manager(); source(m)
