@@ -37,9 +37,9 @@
       { "name": "infantry_session_act", "action": "script.session_act", "kind": "write", "description": "Interrupt or end the turn of a session in flight." },
       { "name": "infantry_notice_suppress", "action": "script.notice_suppress", "kind": "write", "description": "Mark a built-in daemon notice as suppressed for a while so a hook can replace it." },
       { "name": "infantry_script_hook", "action": "script.hook", "kind": "write", "description": "List, add or remove the project's script hooks (lane enter / named event -> stored script)." },
-      { "name": "infantry_script_save", "action": "script.save", "kind": "write", "description": "Save a project script (parse-checked) so infantry_script_run and infantry_script_hook can use it at once." },
-      { "name": "infantry_script_list", "action": "script.list", "kind": "read", "description": "The project's stored scripts: engine, size, modified time, who saved them, hooks using them." },
-      { "name": "infantry_script_delete", "action": "script.delete", "kind": "write", "description": "Delete a stored script; refused while a hook uses it." },
+      { "name": "infantry_script_save", "action": "script.save", "kind": "write", "description": "Save a script (parse-checked): a project script, or with scope=global one in the Script Arsenal (global scripts every project can run). infantry_script_run and infantry_script_hook use it at once." },
+      { "name": "infantry_script_list", "action": "script.list", "kind": "read", "description": "The project's stored scripts plus the global scripts from the Script Arsenal: scope, engine, size, modified time, who saved them, hooks using them, and which copy shadows which." },
+      { "name": "infantry_script_delete", "action": "script.delete", "kind": "write", "description": "Delete a stored script (scope=global: from the Script Arsenal); refused while a hook uses it." },
       { "name": "infantry_exec", "action": "script.exec", "kind": "write", "description": "Run a command line as the caller (no shell); exit code and output tails back. Off until scripting.exec.enabled." },
       { "name": "infantry_exec_status", "action": "script.exec.status", "kind": "read", "description": "State and result of a background infantry_exec run." },
       { "name": "infantry_script_stats", "action": "script.stats", "kind": "read", "description": "Script automation, read-only: turns saved, wakes by reason and the latest script runs." }
@@ -76,6 +76,7 @@
           { "key": "scripting.exec.tickSec", "type": "number", "label": "Process bridge: seconds between exec.tick events for a background run", "default": 10, "min": 1, "max": 3600, "step": 1, "scope": "daemon", "order": 19 },
           { "key": "scripting.builtins.off", "type": "text", "label": "Shipped hooks turned off (comma-separated ids, e.g. resume-after-restart; bind your own script to the event instead)", "default": "", "scope": "daemon", "order": 20 },
           { "key": "scripting.restart.resume", "type": "toggle", "label": "After a daemon restart, prompt each session whose turn it cut to continue (shipped hook resume-after-restart; its starter and the owner are told either way)", "default": true, "scope": "daemon", "order": 21 },
+          { "key": "scripting.global.writeRoles", "type": "text", "label": "Script Arsenal: roles that may save or delete app-wide scripts (comma-separated; empty = any role; the owner always may)", "default": "pm,owner", "scope": "daemon", "order": 23 },
           { "key": "scripting.restart.prompt", "type": "text", "label": "The prompt a cut session gets after a restart (empty = the script's default)", "default": "", "scope": "daemon", "order": 22 }
         ]
       }

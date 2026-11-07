@@ -8,25 +8,31 @@ import com.superiorsoftllc.infantry.daemon.api.files.ProjectFiles
  * SCRIPT-4: named scripts, per project, read as data from `<project dir>/.infantry/scripts/<name>.<ext>` through the project file
  * surface (`api.files`), the extension picking the engine. A name is one plain segment; nothing outside that folder is reachable.
  */
-class ScriptStore(private val files: (String) -> ProjectFiles, private val extensions: () -> List<String>) {
-    data class Script(val name: String, val extension: String, val source: String)
+class ScriptStore(private val files: (String) -> ProjectFiles, private val extensions: () -> List<String>, val global: GlobalScripts? = null) {
+    /** [scope] is [PROJECT] or [GLOBAL] (SCRIPT-ARSENAL-1). */
+    data class Script(val name: String, val extension: String, val source: String, val scope: String = PROJECT)
 
     fun read(projectId: String, name: String): Script? {
         require(VALID.matches(name)) { "bad script name '$name' (letters, digits, '_', '-', '.'; at most 64)" }
         val f = files(projectId)
         for (ext in extensions()) f.get("$DIR/$name.$ext")?.let { return Script(name, ext, it.toString(Charsets.UTF_8)) }
-        return null
+        // SCRIPT-ARSENAL-1: a project script of the same name always wins; only then the app-wide one.
+        return global?.read(name)
     }
+
+    /** True when the project itself stores a script of this name (it shadows a global one). */
+    fun hasProjectCopy(projectId: String, name: String): Boolean = extensions().any { files(projectId).stat("$DIR/$name.$it") != null }
 
     fun names(projectId: String): List<String> {
         val exts = extensions().toSet()
-        return files(projectId).list(DIR).map { it.name }.filter { n -> exts.any { n.endsWith(".$it") } }.map { it.substringBeforeLast('.') }.sorted()
+        val own = files(projectId).list(DIR).map { it.name }.filter { n -> exts.any { n.endsWith(".$it") } }.map { it.substringBeforeLast('.') }
+        return (own + (global?.names() ?: emptyList())).distinct().sorted()
     }
 
     /** SCRIPT-SAVE-1: one stored script; [savedBy] is from the sidecar `<name>.<ext>.meta.json`. */
-    data class Entry(val name: String, val extension: String, val size: Long, val modifiedMillis: Long, val savedBy: String?)
+    data class Entry(val name: String, val extension: String, val size: Long, val modifiedMillis: Long, val savedBy: String?, val scope: String = PROJECT)
 
-    fun checkName(name: String) = require(VALID.matches(name)) { "bad script name '$name' (letters, digits, '_', '-', '.'; at most 64)" }
+    fun checkName(name: String) = Companion.checkName(name)
 
     /** Writes the script and its sidecar; true when it replaced a script of that name (any extension). */
     fun write(projectId: String, name: String, ext: String, source: String, savedBy: String): Boolean {
@@ -61,6 +67,10 @@ class ScriptStore(private val files: (String) -> ProjectFiles, private val exten
 
     companion object {
         const val DIR = "scripts"
+        const val PROJECT = "project"
+        const val GLOBAL = "global"
         private val VALID = Regex("[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")
+
+        fun checkName(name: String) = require(VALID.matches(name)) { "bad script name '$name' (letters, digits, '_', '-', '.'; at most 64)" }
     }
 }

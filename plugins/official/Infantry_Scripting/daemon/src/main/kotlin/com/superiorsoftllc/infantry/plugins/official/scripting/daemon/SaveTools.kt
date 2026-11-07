@@ -18,7 +18,23 @@ class SaveTools(
     private val engines: ScriptEngines,
     /** SCRIPTING-NCDFE-1: a time as people read it ([com.superiorsoftllc.infantry.daemon.api.DaemonApi.displayStamp]); core's DisplayZone is not on a plugin's class path. */
     private val stamp: (Long) -> String,
+    /** SCRIPT-ARSENAL-1: who may write the global scope: comma-separated roles (setting `scripting.global.writeRoles`; empty = any role). The owner always may. */
+    private val globalWriteRoles: () -> String = { DEFAULT_GLOBAL_WRITERS },
+    /** SCRIPT-ARSENAL-1: every project id, to find the hooks that use a global script before it is deleted. */
+    private val projects: () -> List<String> = { emptyList() },
 ) {
+    private fun scopeOf(c: ToolCall): String? = (arg(c, "scope")?.trim()?.lowercase()?.takeIf { it.isNotEmpty() } ?: ScriptStore.PROJECT).takeIf { it == ScriptStore.PROJECT || it == ScriptStore.GLOBAL }
+
+    /** The refusal when the caller may not write the global scope, else null. A setting, not code: no role is special except the owner. */
+    private fun globalDenied(c: ToolCall, tool: String): ToolResult? {
+        if (store.global == null) return refuse(tool, "this daemon has no global script scope")
+        if (c.caller.owner) return null
+        val roles = globalWriteRoles().split(',').map { it.trim().lowercase() }.filter { it.isNotEmpty() }
+        val role = c.clientRole?.lowercase()
+        return if (roles.isEmpty() || (role != null && role in roles)) null
+        else refuse(tool, "writing the global scope is limited to roles ${roles.joinToString()} (setting scripting.global.writeRoles); save a project copy instead")
+    }
+
     private fun schema(s: String): JsonObject = Json.parseToJsonElement(s).jsonObject
     private fun proj(c: ToolCall) = (c.arguments["project"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() } ?: c.clientProjectId
     private fun arg(c: ToolCall, k: String) = (c.arguments[k] as? JsonPrimitive)?.contentOrNull
@@ -26,11 +42,14 @@ class SaveTools(
 
     val save: DaemonTool = object : DaemonTool {
         override val name = SAVE
-        override val description = "Save a script of this project (<project>/.infantry/scripts/<name>.<ext>, overwrite allowed). The source is parse-checked first and refused with the parse error if it does not load. " +
+        override val description = "Save a script of this project (<project>/.infantry/scripts/<name>.<ext>, overwrite allowed), or with scope=global one in the Script Arsenal (global scripts every project can run). The source is parse-checked first and refused with the parse error if it does not load. " +
             "Usable at once by infantry_script_run and infantry_script_hook. Records who saved it. Open to every role."
-        override val inputSchema = schema("""{"type":"object","properties":{"name":{"type":"string","description":"Script name (letters, digits, _ - .; at most 64)"},"source":{"type":"string","description":"The script source"},"engine":{"type":"string","description":"Engine id (default lua)"},"project":{"type":"string","description":"Project id (default: yours)"}},"required":["name","source"]}""")
+        override val inputSchema = schema("""{"type":"object","properties":{"name":{"type":"string","description":"Script name (letters, digits, _ - .; at most 64)"},"source":{"type":"string","description":"The script source"},"engine":{"type":"string","description":"Engine id (default lua)"},"scope":{"type":"string","enum":["project","global"],"description":"project (default) or global (the app-wide arsenal every project can run; writers are a setting)"},"project":{"type":"string","description":"Project id (default: yours)"}},"required":["name","source"]}""")
         override fun call(call: ToolCall): ToolResult {
-            val project = proj(call) ?: return refuse(SAVE, "needs a project (pass project, or run it from a project session)")
+            val scope = scopeOf(call) ?: return refuse(SAVE, "scope must be project or global")
+            val project = proj(call)
+            if (scope == ScriptStore.PROJECT && project == null) return refuse(SAVE, "needs a project (pass project, or run it from a project session)")
+            if (scope == ScriptStore.GLOBAL) globalDenied(call, SAVE)?.let { return it }
             val name = arg(call, "name")?.trim().orEmpty()
             val source = arg(call, "source") ?: return refuse(SAVE, "needs source")
             return try {
@@ -40,8 +59,10 @@ class SaveTools(
                     ?: return refuse(SAVE, "no script engine is loaded")
                 engine.check(source)?.let { return refuse(SAVE, "'$name' does not parse: $it") }
                 val ext = engine.extensions.first()
-                val updated = store.write(project, name, ext, source, "${call.clientSessionId ?: "owner"} (${call.clientRole ?: "-"})")
-                ToolResult("${if (updated) "updated" else "created"} script $name.$ext (${source.toByteArray(Charsets.UTF_8).size} bytes) in project $project")
+                val by = "${call.clientSessionId ?: "owner"} (${call.clientRole ?: "-"})"
+                val global = scope == ScriptStore.GLOBAL
+                val updated = if (global) store.global!!.write(name, ext, source, by) else store.write(project!!, name, ext, source, by)
+                ToolResult("${if (updated) "updated" else "created"} script $name.$ext (${source.toByteArray(Charsets.UTF_8).size} bytes) in ${if (global) "the global scope" else "project $project"}")
             } catch (e: IllegalArgumentException) {
                 refuse(SAVE, e.message.orEmpty())
             } catch (e: IllegalStateException) {
@@ -52,18 +73,27 @@ class SaveTools(
 
     val list: DaemonTool = object : DaemonTool {
         override val name = LIST
-        override val description = "List this project's stored scripts: name, engine, size, modified time, who saved it, and the hooks that use it. Open to every role."
+        override val description = "List this project's stored scripts and the global scripts from the Script Arsenal: scope, name, engine, size, modified time, who saved it, and the hooks that use it. Open to every role."
         override val inputSchema = schema("""{"type":"object","properties":{"project":{"type":"string","description":"Project id (default: yours)"}}}""")
         override val annotations: JsonObject = schema("""{"readOnlyHint":true}""")
         override fun call(call: ToolCall): ToolResult {
             val project = proj(call) ?: return refuse(LIST, "needs a project")
             return try {
                 val used = hooks.list(project).groupBy { it.script }
-                val rows = store.entries(project)
+                val own = store.entries(project)
+                val ownNames = own.map { it.name }.toSet()
+                val globals = store.global?.entries().orEmpty()
+                val globalNames = globals.map { it.name }.toSet()
+                val rows = own + globals
                 ToolResult(
                     if (rows.isEmpty()) "no scripts in project $project"
-                    else "${rows.size} script(s) in project $project:\n" + rows.joinToString("\n") { e ->
-                        "  ${e.name}  engine=${engines.byExtension(e.extension)?.id ?: e.extension}  ${e.size} bytes  modified ${stamp(e.modifiedMillis)}  saved by ${e.savedBy ?: "(unknown)"}  hooks: ${used[e.name]?.joinToString { it.id } ?: "none"}"
+                    else "${own.size} project script(s) in project $project, ${globals.size} global:\n" + rows.joinToString("\n") { e ->
+                        val shadow = when {
+                            e.scope == ScriptStore.GLOBAL && e.name in ownNames -> "  SHADOWED by the project copy"
+                            e.scope == ScriptStore.PROJECT && e.name in globalNames -> "  shadows the global"
+                            else -> ""
+                        }
+                        "  ${e.name}  scope=${e.scope}  engine=${engines.byExtension(e.extension)?.id ?: e.extension}  ${e.size} bytes  modified ${stamp(e.modifiedMillis)}  saved by ${e.savedBy ?: "(unknown)"}  hooks: ${used[e.name]?.joinToString { it.id } ?: "none"}$shadow"
                     },
                 )
             } catch (e: IllegalStateException) {
@@ -74,11 +104,21 @@ class SaveTools(
 
     val delete: DaemonTool = object : DaemonTool {
         override val name = DELETE
-        override val description = "Delete a stored script of this project; refused while a hook uses it (the answer names the hooks). Open to every role."
-        override val inputSchema = schema("""{"type":"object","properties":{"name":{"type":"string"},"project":{"type":"string","description":"Project id (default: yours)"}},"required":["name"]}""")
+        override val description = "Delete a stored script of this project (scope=global: from the Script Arsenal); refused while a hook uses it (the answer names the hooks). Open to every role."
+        override val inputSchema = schema("""{"type":"object","properties":{"name":{"type":"string"},"scope":{"type":"string","enum":["project","global"],"description":"project (default) or global"},"project":{"type":"string","description":"Project id (default: yours)"}},"required":["name"]}""")
         override fun call(call: ToolCall): ToolResult {
-            val project = proj(call) ?: return refuse(DELETE, "needs a project")
+            val scope = scopeOf(call) ?: return refuse(DELETE, "scope must be project or global")
             val name = arg(call, "name")?.trim().orEmpty()
+            if (scope == ScriptStore.GLOBAL) {
+                globalDenied(call, DELETE)?.let { return it }
+                return try {
+                    store.checkName(name)
+                    val users = projects().flatMap { p -> runCatching { hooks.list(p) }.getOrDefault(emptyList()).filter { it.script == name && !store.hasProjectCopy(p, name) }.map { "$p:${it.id}" } }
+                    if (users.isNotEmpty()) refuse(DELETE, "global script '$name' is used by hook(s) ${users.joinToString()}; remove them first")
+                    else if (store.global!!.delete(name)) ToolResult("deleted global script $name") else refuse(DELETE, "no global script '$name'")
+                } catch (e: IllegalArgumentException) { refuse(DELETE, e.message.orEmpty()) }
+            }
+            val project = proj(call) ?: return refuse(DELETE, "needs a project")
             return try {
                 store.checkName(name)
                 val using = hooks.list(project).filter { it.script == name }
@@ -96,5 +136,7 @@ class SaveTools(
         const val SAVE = "infantry_script_save"
         const val LIST = "infantry_script_list"
         const val DELETE = "infantry_script_delete"
+        /** SCRIPT-ARSENAL-1: default of the `scripting.global.writeRoles` setting. */
+        const val DEFAULT_GLOBAL_WRITERS = "pm,owner"
     }
 }

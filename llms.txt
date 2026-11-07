@@ -22,6 +22,7 @@ Read AGENTS.md first. Facts in these docs come from the code; where an older des
 ## Automate and configure
 
 - [Scripting](docs/wiki/Scripting.md): the Lua API, hooks, the process bridge, settings that govern scripts.
+- [Script Arsenal](docs/wiki/script-arsenal.md): the app-wide global scripts, resolution order, refine-by-copy, the bundled set.
 - [Board and epics](docs/wiki/Board.md): epics, and moving tickets between epics.
 - [Settings](docs/wiki/Settings.md): scopes (app, project, role, session) and cost-saving defaults.
 

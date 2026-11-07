@@ -31,7 +31,12 @@ class ScriptingDaemonPlugin : DaemonPlugin {
     override fun start(api: DaemonApi) {
         val engines = ScriptEngines({ api.services.endpoints(ScriptEngineWire.PREFIX) }, { api.config("scripting.defaultEngine")?.takeIf { it.isNotBlank() } ?: "lua" })
         val limits = ScriptingLimits { api.config(it) }
-        val store = ScriptStore({ api.files(it) }, { engines.extensions() })
+        // SCRIPT-ARSENAL-1: the app-wide scope lives in this plugin's state dir; the starter set is seeded from the jar (never over an edit).
+        val globalScripts = GlobalScripts(File(api.stateDir, "global-scripts"), { engines.extensions() })
+        runCatching { BundledScripts.seed(globalScripts, File(api.stateDir, "global-scripts-state"), BundledScripts.fromJar { api.log(it) }) { api.log(it) } }
+            .onSuccess { if (it.isNotEmpty()) api.log("global scripts seeded: ${it.joinToString()}") }
+            .onFailure { api.log("global scripts not seeded: ${it.message}") }
+        val store = ScriptStore({ api.files(it) }, { engines.extensions() }, globalScripts)
         val aliases = { ScriptAliases.effective(api.config("scripting.aliases")) }
         val maxPhases = { api.config("scripting.maxPhases")?.trim()?.toIntOrNull() ?: 3 }
         // SCRIPT-VIS-1b: the run log is stored in the plugin's own tables (a daemon without storage keeps it in memory only).
@@ -77,7 +82,7 @@ class ScriptingDaemonPlugin : DaemonPlugin {
         val hookStore = HookStore { api.files(it) }
         val builtinHooks = BuiltinHook.fromJar { api.log(it) }
         api.tools.register(HookTools(hookStore, store, { HookSettings.minEverySec { api.config(it) } }).tool)
-        SaveTools(store, hookStore, engines, api::displayStamp).let { api.tools.register(it.save); api.tools.register(it.list); api.tools.register(it.delete) }
+        SaveTools(store, hookStore, engines, api::displayStamp, { api.config("scripting.global.writeRoles") ?: SaveTools.DEFAULT_GLOBAL_WRITERS }, { api.projects.list().map { it.id } }).let { api.tools.register(it.save); api.tools.register(it.list); api.tools.register(it.delete) }
         val hooks = ScriptHooks(
             hookStore, store, engines, api.tools, ScriptDispatcher(api.tools, aliases, maxPhases, sessionProject = { api.sessions.get(it)?.projectId }),
             projects = { api.projects.list().map { it.id } }, limits = { limits.current() },
