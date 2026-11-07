@@ -1484,7 +1484,11 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
             skillError = if (skillRefusal) env.data else s.skillError,
             skillsLoading = if (skillRefusal) false else s.skillsLoading,
             harnessInstallBusy = if (env.data.startsWith("harness_install")) false else s.harnessInstallBusy,
-        ).withNotice(now, sessionSwitchRefusal ?: env.data, null, if (sessionSwitchRefusal != null) NoticeKind.ERROR else daemonErrorKind(env.data))
+        ).let { next ->
+            // The Run tab shows a command refusal in its own notices section: no second, global banner for it.
+            if (commandRefusal) next
+            else next.withNotice(now, sessionSwitchRefusal ?: env.data, null, if (sessionSwitchRefusal != null) NoticeKind.ERROR else daemonErrorKind(env.data))
+        }
     } else {
         s.stream(env) { a, inOrder ->
             val withLine = a.withEntry(TranscriptEntry(env.sequence, LineKind.ERROR, env.data, now))
