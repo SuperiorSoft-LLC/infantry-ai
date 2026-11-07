@@ -944,9 +944,28 @@ class InfantryDaemon(
             // ORCH-1: the runner reaches the orchestration side only through this hub's link (docs/DAEMON-CORE.md 6.5). The local
             // binding answers from the functions below; the board and the ticket files exist later, so they are filled in then.
             val boardPorts = BoardPortRef()
+            // RUNNER-POOL-2 (docs/RUNNER-POOL.md 2.1-2.2): the orchestrator side reaches sessions through the runner pool. It holds one
+            // runner, `local`, whose link wraps the session manager unchanged; spawns and mail resumes below go through it.
+            val runnerProjects = java.util.concurrent.atomic.AtomicReference<() -> List<String>> { emptyList() }
+            val localRunnerLink = com.superiorsoftllc.infantry.daemon.api.orchestrator.LocalRunnerLink(
+                LocalRunner.services(
+                    manager, agents,
+                    info = {
+                        com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerInfo(
+                            name = com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL,
+                            contract = com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerLink.CONTRACT_VERSION,
+                            projects = runnerProjects.get()(),
+                            capacity = settings.limitCap(LimitRegistry.MAX_SESSIONS),
+                            os = System.getProperty("os.name").orEmpty(),
+                        )
+                    },
+                    capacity = { settings.limitCap(LimitRegistry.MAX_SESSIONS) },
+                ),
+            )
+            val runnerPool = com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerHub(localRunnerLink)
             val orchestratorHub = com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorHub(
                 local = com.superiorsoftllc.infantry.daemon.api.orchestrator.LocalOrchestratorLink(
-                    runner = object : com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerLink { override fun ticketIdOf(sessionId: String): String? = manager.get(sessionId)?.ticketId },
+                    runner = localRunnerLink,
                     services = com.superiorsoftllc.infantry.daemon.api.orchestrator.LocalOrchestratorServices(
                         reviewReport = { ticketId, _, body ->
                             ticketId?.let { tid ->
@@ -968,7 +987,7 @@ class InfantryDaemon(
                         },
                     ),
                 ),
-                runner = object : com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerLink { override fun ticketIdOf(sessionId: String): String? = manager.get(sessionId)?.ticketId },
+                runner = localRunnerLink,
             )
             val orchestratorLink: com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorLink = orchestratorHub.link
             manager.launchGate = { providerId, origin, binding ->
@@ -1016,6 +1035,7 @@ class InfantryDaemon(
             // order used to also append onto `Project.storyIds` here; it now lives entirely on
             // `Epic.storyIds`, appended below when the create named an epic).
             val projectStore = ProjectStore(persistence = SqlProjectPersistence((store as SqlInfantryStore).database))
+            runnerProjects.set { projectStore.list().map { it.id } }
             projectStore.laneDefault = { settings.limitCap(LimitRegistry.LANE_DEFAULT) }
             // SPAWN-HARNESS-1: a spawn naming no provider is routed like a ticket start: the project's routing rule for the role first.
             agents.spawnRoute = { pid, role ->
@@ -1168,7 +1188,7 @@ class InfantryDaemon(
             val mailbox = Mailbox(mailStore, { MailLimits.of(settings::limit) })
             // BUG-S3: mail to an agent swapped onto another harness opens a fresh session there (4.2, lazily).
             val bindFreshSession = { agentId: String ->
-                bindSessionOnSpawn(manager, agents, SpawnOptions(agentId = agentId, projectId = agents.get(agentId)?.projectId), repo)
+                LocalRunner.start(runnerPool, manager, SpawnOptions(agentId = agentId, projectId = agents.get(agentId)?.projectId), repo)
             }
             val mail = MailRouter(
                 manager, mailbox, agents, mailBase,
@@ -1185,6 +1205,7 @@ class InfantryDaemon(
                 contextTokens = { r -> sessionStats.read(r.id, r.provider, r.providerSessionId, r.state.name.lowercase()).lastContextTokens },
                 knowledge = knowledge, skills = skillsSource, starterOf = { sid -> orchestratorLink.starterOf(sid).valueOr(null) },
                 projectRefs = { projectStore.list().map { MailRouter.ProjectRef(it.id, it.name) } },
+                resumeTurn = LocalRunner.deliverVia(runnerPool),
             )
             // Story 9.5: triggers -- stored, coalesced, tripped on any non-success, their starts unattended.
             // TRIGGER-NUDGE (contract 1.105.0): a `prompt` action is mail to the target in the trigger's project.
@@ -1663,8 +1684,8 @@ class InfantryDaemon(
                             limit = { def -> if (def == LimitRegistry.MAX_DEPTH && podSpawnDepth != null) podSpawnDepth else settings.limitCap(def) }, // a test pins the depth through podSpawnDepth
                             tickets = { pluginBoardServices!!.tickets },
                             create = { request ->
-                                bindSessionOnSpawn(
-                                    manager, agents,
+                                LocalRunner.start(
+                                    runnerPool, manager,
                                     SpawnOptions(agentId = request.agentId, role = request.role, projectId = request.projectId, contextLimit = request.contextLimit, effort = request.effort),
                                     repo,
                                 ) ?: throw IllegalArgumentException("the daemon could not bind a session for this spawn")
@@ -1767,6 +1788,8 @@ class InfantryDaemon(
             // ORCH-1: `INFANTRY_ORCHESTRATOR_PROVIDER` (default local) picks the binding callers' link answers from; a plugin offers
             // bindings through hooks.orchestratorBinding. An unknown or failing provider keeps the local binding and is logged.
             (orchestratorBindings + plugins.orchestratorBindings()).forEach { (id, binding) -> runCatching { orchestratorHub.register(id, binding) } }
+            // RUNNER-POOL-2: runner bindings plugins offer (hooks.runnerBinding) are kept on the pool; none is placed on yet.
+            plugins.runnerBindings().forEach { (id, binding) -> runCatching { runnerPool.register(id, binding) }.onFailure { println("[infantry] runner binding '$id' refused: ${it.message}") } }
             orchestratorHub.select(pluginEnv("INFANTRY_ORCHESTRATOR_PROVIDER")?.trim().orEmpty())?.let { System.err.println(it) }
             // A guest token present at start is checked now, so a bad one still stops the daemon starting.
             plugins.guestTokens().forEach { policy.guestDigestOf(it) }
@@ -1929,6 +1952,7 @@ class InfantryDaemon(
                             skillsSource,
                             com.superiorsoftllc.infantry.agents.LayeredSkillStore(store),
                             spawnGuard,
+                            runnerPool = runnerPool,
                             limits = limits,
                             usagePacing = usagePacing,
                             ticketFiles = ticketFilesText?.let { text ->
@@ -2521,6 +2545,8 @@ private suspend fun handleConnection(
     layerSkills: com.superiorsoftllc.infantry.agents.LayeredSkillStore? = null,
     /** BUG-G2d: bounds the spawns a frame naming its session (`pod_submit` / `new`) may make. */
     spawnGuard: SpawnGuard = SpawnGuard(manager::get),
+    /** RUNNER-POOL-2: the runner pool a `new` console start goes through (default: the local runner over [manager]). */
+    runnerPool: com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool = LocalRunner.pool(manager, agents),
     /** U1: the plan-limit meters a `limits` request reads. */
     limits: LimitService = LimitService.NONE,
     /** USAGE-PACE (1.119.0): the meters and allowances a `usage_get` request reads. */
@@ -3017,7 +3043,7 @@ private suspend fun handleConnection(
                             spawnOrigin = origin
                             // BIND AT CREATION: a console opened as a profile is addressable at once.
                             spawnGuard.admit(origin) { placement ->
-                                bindSessionOnSpawn(manager, agents, options, repo)
+                                LocalRunner.start(runnerPool, manager, options, repo)
                                     ?.also { if (placement != null) spawnGuard.record(it.id, origin); manager.setSpawner(it.id, origin) }
                             }?.let { active = it.id }
                             null

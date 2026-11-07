@@ -85,10 +85,50 @@ fun OrchestratorReply<String?>.refusalOrNull(): String? = valueOr(null)
 /**
  * The ORCHESTRATOR -> RUNNER interface: the only way orchestrator-side code reaches sessions. The local orchestrator uses it too,
  * so neither side names the other's classes.
+ *
+ * RUNNER-POOL-2 (docs/RUNNER-POOL.md 2.1): the runner COMMAND contract, version [CONTRACT_VERSION] (minor bump per added
+ * operation, major when a meaning changes). The same rules as [OrchestratorLink]: plain data in and out, every command returns an
+ * [OrchestratorReply] (a refusal is a value, [OrchestratorReply.Unavailable] = no answer), each is a read or idempotent on the
+ * natural key it names. A binding that does not offer an operation answers [OrchestratorReply.Unavailable] (the defaults below), so
+ * an older binding keeps compiling and each caller's documented fail mode applies. Callers reach a runner through
+ * [RunnerPool.link], never a concrete binding. [LocalRunnerLink] answers in this process.
  */
 interface RunnerLink {
+    /** The contract this binding speaks. A caller may log it; it never branches on it. */
+    val contractVersion: String get() = CONTRACT_VERSION
+
     /** The ticket a session works on, null for none. */
     fun ticketIdOf(sessionId: String): String?
+
+    /** What the runner can run. A read. Fail mode on Unavailable: the runner is marked `down`. */
+    fun hello(): OrchestratorReply<RunnerInfo> = unoffered("hello")
+
+    /**
+     * Start (bind) a session as [spec] describes. Natural key: [StartSpec.startId]. Ok carries the new session, or a refusal (a bad
+     * spec, an unknown agent or role) as [SessionRef.refusal]. Fail mode on Unavailable: nothing started; the caller reports the start failed.
+     */
+    fun startSession(spec: StartSpec): OrchestratorReply<SessionRef> = unoffered("startSession")
+
+    /**
+     * Stop a session (end its run and close it). Natural key: the session id; stopping a stopped or unknown session answers Ok(false).
+     * Fail mode on Unavailable: the binding retries; the caller shows "stop pending".
+     */
+    fun stopSession(sessionId: String, reason: String? = null, force: Boolean = false): OrchestratorReply<Boolean> = unoffered("stopSession")
+
+    /**
+     * Hand one composed mail turn to a resting session (the `MailDelivery` edge, docs/DAEMON-CORE.md 6.3). Natural key: (session id,
+     * [MailItem.messageIds]). Fail mode on Unavailable: the mail stays persisted in the orchestrator's mailbox and is redelivered.
+     */
+    fun deliverMail(sessionId: String, mail: MailItem): OrchestratorReply<MailResult> = unoffered("deliverMail")
+
+    /** The runner's heartbeat. A read. Fail mode on Unavailable: after `runners.lostAfterSec` the runner is `down`. */
+    fun health(): OrchestratorReply<RunnerHealth> = unoffered("health")
+
+    companion object {
+        const val CONTRACT_VERSION = "1.0.0"
+
+        private fun unoffered(op: String): OrchestratorReply<Nothing> = OrchestratorReply.Unavailable("this runner binding does not offer '$op'")
+    }
 }
 
 /**

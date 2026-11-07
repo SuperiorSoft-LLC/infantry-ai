@@ -106,6 +106,11 @@ class MailRouter(
     private val contextTokens: (SessionRecord) -> Long? = { null },
     /** XPROJ-1: the projects (id, name) a `role@project` address and the sender-project origin field resolve against. */
     private val projectRefs: () -> List<ProjectRef> = { emptyList() },
+    /**
+     * RUNNER-POOL-2: hands the composed turn to the recipient's runner (the daemon wires `RunnerLink.deliverMail` through the
+     * runner pool). Null = resume through [manager] directly, as before. QUEUED keeps the mail queued, FAILED records it.
+     */
+    private val resumeTurn: ((sessionId: String, turn: String, origin: com.superiorsoftllc.infantry.protocol.MessageOrigin, wakeReason: String, messageIds: List<String>) -> com.superiorsoftllc.infantry.daemon.api.orchestrator.MailResult)? = null,
 ) : MailDelivery {
 
     /** XPROJ-1: a project as mail addressing sees it. */
@@ -462,7 +467,19 @@ class MailRouter(
             } else {
                 text
             }
-            manager.resume(session.id, turn, source.origin, if (replaced != null) "mail-hook-delivered" else "mail", group.joinToString(",") { it.id })
+            val wakeReason = if (replaced != null) "mail-hook-delivered" else "mail"
+            val routed = resumeTurn
+            if (routed == null) {
+                manager.resume(session.id, turn, source.origin, wakeReason, group.joinToString(",") { it.id })
+            } else {
+                val result = routed(session.id, turn, source.origin, wakeReason, group.map { it.id })
+                when (result.kind) {
+                    com.superiorsoftllc.infantry.daemon.api.orchestrator.MailResult.QUEUED ->
+                        return DeliveryOutcome.Retry(result.reason.ifBlank { "recipient '${session.id}' has a run in flight" })
+                    com.superiorsoftllc.infantry.daemon.api.orchestrator.MailResult.FAILED ->
+                        return DeliveryOutcome.Failed("resume of '${session.id}' failed: ${result.reason}")
+                }
+            }
             DeliveryOutcome.Delivered("resumed ${session.id}", folded.map { it.id })
         } catch (e: com.superiorsoftllc.infantry.session.RunInFlightException) {
             // CHAT-QUEUE-1: another run (the daemon's queue drain, typically) started between the busy check above and this resume:

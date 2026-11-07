@@ -172,6 +172,7 @@ Register with `api.hooks.<kind>(...)`; list the kinds in `daemon.hooks`; a commu
 | `status` | `StatusHook.fields()` | fail open | official/core only; extra fields in the health answer |
 | `approvalRules` | `ApprovalRulesHook.match/remember` | fail open | official/core only; stored "allow always" rules |
 | `orchestratorBinding(providerId, binding)` | `OrchestratorBinding` | | selected when the setting `orchestrator.provider` names it |
+| `runnerBinding(bindingId, binding)` | `RunnerBinding` | | kept on the runner pool at daemon start; placement onto it arrives with RUNNER-POOL-3 (docs/RUNNER-POOL.md) |
 
 Fail closed means a throwing or slow hook refuses the request. Fail open means it reads as "no opinion" and the
 request goes ahead. A mail is never dropped by a hook.
@@ -461,8 +462,26 @@ Generated for the `infantryDaemonApi` guard `SdkTypesDocumentedGuardTest`: every
 - `OrchestratorHub`: The binding registry plus the link every caller holds.
 - `OrchestratorLink`: ORCH-1 (docs/DAEMON-CORE.md section 6): the ONE seam between the runner side of the daemon (sessions, harnesses, working copies, the watch runner, CLI process handling) and the orchestration side (boa
 - `OrchestratorReply`: The error model: an answer, or "the orchestrator could not be reached / did not understand", never an exception.
-- `RunnerLink`: The ORCHESTRATOR -> RUNNER interface: the only way orchestrator-side code reaches sessions.
+- `RunnerLink`: The ORCHESTRATOR -> RUNNER interface: the only way orchestrator-side code reaches sessions. RUNNER-POOL-2: the runner command contract (`CONTRACT_VERSION` 1.0.0): `hello`, `startSession`, `stopSession`, `deliverMail`, `health`, each an `OrchestratorReply`; an operation a binding does not offer answers `Unavailable`.
 - `TicketRef`: The session and project a ticket is bound to.
+
+### `RunnerPool.kt`
+
+RUNNER-POOL-2 (docs/RUNNER-POOL.md 2.1, 2.2): the plain data of the runner command contract, the local binding and the pool.
+
+- `RunnerInfo`: What a runner can run, answered by `RunnerLink.hello`.
+- `RunnerHarness`: One harness a runner offers: its id, its models, whether its CLI is signed in.
+- `StartSpec`: A session start; `startId` is the natural key, a null field is the runner's default.
+- `SessionRef`: The answer to `RunnerLink.startSession`: the session started, a refusal, or neither (the spec names no agent and no role).
+- `MailItem`: One composed mail turn for `RunnerLink.deliverMail` (the sender as `MessageOrigin` JSON, the folded message ids).
+- `MailResult`: `delivered`, `queued` (a run is in flight: keep it queued) or `failed`.
+- `RunnerHealth`: A runner's heartbeat: state, running sessions, free slots, load.
+- `LocalRunnerServices`: The runner-side functions the local binding answers from (the daemon builds one over its session manager).
+- `LocalRunnerLink`: The binding for the runner in this process (`local`).
+- `RunnerEntry`: A runner the pool knows: name, binding id, last health and info.
+- `RunnerPool`: The orchestrator-side view of every runner: `runners()`, `link(name)`, `runnerOf(sessionId)`; `local` is always present.
+- `RunnerBinding`: A plugin's runner binding, offered with `hooks.runnerBinding`.
+- `RunnerHub`: The pool core holds: the `local` runner and the registry of runner bindings plugins offer.
 
 ### `OwnerAsks.kt`
 
