@@ -65,6 +65,9 @@ class FailedTurnNoExitCodeTest {
         val exit = synchronized(events) { events.filterIsInstance<SessionEvent.Exit>().singleOrNull() }
         assertNotNull(exit, "a failed turn with no exit code emits an Exit; events=$events")
         assertEquals(null, exit.code)
+        // FIRSTRUN-FAIL-1: the reason travels with the Exit (the daemon's `finished` detail) and is a transcript line.
+        assertEquals("API error: overloaded", exit.reason)
+        assertTrue(synchronized(events) { events.filterIsInstance<SessionEvent.Stderr>().any { "turn failed: API error: overloaded" in it.line } }, "events=$events")
 
         val notice = synchronized(sent) { sent.singleOrNull() }
         assertNotNull(notice, "the starter gets the failure notice")

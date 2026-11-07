@@ -2077,7 +2077,10 @@ private fun broadcast(
     val frames: List<Envelope> = when (event) {
         is SessionEvent.Status -> {
             println("[infantry] session ${event.session.id.take(8)} -> ${event.session.state}")
-            com.superiorsoftllc.infantry.session.SessionActivityLog.event(event.session.id, "state ${event.session.state.name.lowercase()}")
+            // FIRSTRUN-FAIL-1: a failed session's last action names why it failed, so the board's "doing" is not just "state failed".
+            val stateAction = event.session.lastError?.takeIf { event.session.state == SessionState.FAILED && it.isNotBlank() }
+                ?.let { "failed: $it" } ?: "state ${event.session.state.name.lowercase()}"
+            com.superiorsoftllc.infantry.session.SessionActivityLog.event(event.session.id, stateAction)
             listOf(
                 Envelope(
                     Envelope.SESSION,
@@ -2170,7 +2173,7 @@ private fun broadcast(
             streamedReasoning.flush(event.sessionId)?.let { add(Envelope(Envelope.REASONING, it.text, event.sessionId)) }
             // Contract 1.64.0 (BUG-M2-11b-1): `exit` reports a hosted process that ended unasked; a turn's end is `finished`.
             if (event.processExited) event.code?.let { add(Envelope(Envelope.EXIT, it.toString(), event.sessionId)) }
-            add(finishedEnvelope(event.sessionId, event.code, event.killOutcome))
+            add(finishedEnvelope(event.sessionId, event.code, event.killOutcome, event.reason))
             // 1.95.0: a kill is a stop the owner asked for, not a failure of the run.
             runActivity.turnEnded(event.sessionId, failed = event.killOutcome == null && event.code != 0)
                 .forEach { add(runActivityEnvelope(event.sessionId, it)) }
@@ -2332,14 +2335,17 @@ private data class ReplayBatch(
  * ([killOutcome]) and only then from the code. The session record already carries the outcome, so
  * this reads it rather than inferring it a second time.
  */
-private fun finishedEnvelope(sessionId: String, exitCode: Int?, kill: KillOutcome? = null): Envelope {
+private fun finishedEnvelope(sessionId: String, exitCode: Int?, kill: KillOutcome? = null, reason: String? = null): Envelope {
     val outcome = when {
         kill == KillOutcome.GRACEFUL -> FinishedPayload.Outcome.KILLED_GRACEFUL
         kill == KillOutcome.FORCED -> FinishedPayload.Outcome.KILLED_FORCED
         exitCode == 0 -> FinishedPayload.Outcome.SUCCEEDED
         else -> FinishedPayload.Outcome.FAILED
     }
-    val payload = FinishedPayload(exitCode = exitCode, outcome = outcome)
+    // FIRSTRUN-FAIL-1: a FAILED outcome always carries its reason (the harness's, or the exit code).
+    val detail = if (outcome != FinishedPayload.Outcome.FAILED) "" else reason?.takeIf { it.isNotBlank() }
+        ?: exitCode?.let { "the process exited with code $it" } ?: "the turn failed with no exit code and no reason"
+    val payload = FinishedPayload(exitCode = exitCode, outcome = outcome, detail = detail)
     return Envelope(
         Envelope.FINISHED,
         json.encodeToString(FinishedPayload.serializer(), payload),

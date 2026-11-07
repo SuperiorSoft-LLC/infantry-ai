@@ -576,7 +576,8 @@ class ClaudeTtySession(
         /**
          * The folder trust question: a two-row menu ("No, exit" preselected) where Down wraps, so a key is never sent blind
          * (HARNESS-GAP f0b7173f: a retried Down plus a late redraw put the pointer back on "No, exit" and Enter quit the CLI).
-         * The selected row is read from the screen: whichever pointer line was drawn last. Down is pressed only while "No, exit"
+         * The selected row is read from the screen ([trustOnYes]): the pointer line drawn last, then one move per bare pointer drawn
+         * after it (FIRSTRUN-FAIL-1: with no colour the terminal repaints only the pointer cell). Down is pressed only while "No, exit"
          * is selected: once, then again only after [TRUST_RETRY_MS] with no Down taken (no redraw). Enter only while the accept
          * row is selected and the screen has settled: [KEY_GAP_MS] after the one Down, or, once Down was sent more than once
          * (a slow redraw of an earlier key may still come), [TRUST_RETRY_MS] with no new output.
@@ -588,7 +589,7 @@ class ClaudeTtySession(
                 if (!tail.contains(TRUST_OPTION)) return@synchronized
                 trustSeen = true
             }
-            val onYes = tail.lastIndexOf(TRUST_SELECTED) > tail.lastIndexOf(TRUST_DECLINE_SELECTED)
+            val onYes = trustOnYes(tail)
             val quiet = now - lastOutputAt
             val down = trustDownAt
             if (onYes) {
@@ -659,6 +660,25 @@ class ClaudeTtySession(
 
         /** The decline option with the menu pointer on it, spaces squeezed out. */
         const val TRUST_DECLINE_SELECTED = "❯no,exit"
+
+        /** The menu pointer glyph. */
+        const val TRUST_POINTER = '❯'
+
+        /**
+         * Whether the trust menu's accept row is selected, from the squeezed screen [tail]. The anchor is the pointer row drawn last in
+         * full; every bare pointer after it is one Down the menu took and redrew as the pointer cell alone (FIRSTRUN-FAIL-1: with no
+         * colour, ConPTY sends only the changed cell, so a Down shows as a lone `❯`, never the row's text). A two-row menu that wraps,
+         * so each such repaint flips the selection. False when no pointer row was drawn yet.
+         */
+        fun trustOnYes(tail: String): Boolean {
+            val yes = tail.lastIndexOf(TRUST_SELECTED)
+            val no = tail.lastIndexOf(TRUST_DECLINE_SELECTED)
+            if (yes < 0 && no < 0) return false
+            val anchorYes = yes > no
+            val after = if (anchorYes) yes + TRUST_SELECTED.length else no + TRUST_DECLINE_SELECTED.length
+            val moves = tail.substring(after).count { it == TRUST_POINTER }
+            return anchorYes != (moves % 2 == 1)
+        }
 
         const val TICK_MS = 150L
         /** How often the MCP server's pid is checked (CLI-PTY-3). */

@@ -353,6 +353,8 @@ sealed interface SessionEvent {
          * daemon then sends no `exit` frame, because "process exited with code 0" would be false.
          */
         val processExited: Boolean = true,
+        /** FIRSTRUN-FAIL-1: why a failed turn failed (the harness's reason, or the exit code); null when it did not fail. */
+        val reason: String? = null,
     ) : SessionEvent
 
     /**
