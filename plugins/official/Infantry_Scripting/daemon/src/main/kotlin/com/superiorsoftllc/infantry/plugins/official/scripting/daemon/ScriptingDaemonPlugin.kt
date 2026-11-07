@@ -110,6 +110,9 @@ class ScriptingDaemonPlugin : DaemonPlugin {
             { name, payload -> api.events.publish(name, payload) }, { api.log(it) }, marks,
             { session, project, args -> api.tools.invoke("infantry_progress", args, com.superiorsoftllc.infantry.daemon.api.ToolInvoker(com.superiorsoftllc.infantry.daemon.api.Caller(owner = true, agent = true, activeSession = session), session, null, project, "exec-progress")) },
         )
+        // SCRIPT-FETCH-1: capability http.fetch (module.json `capabilities`), off until scripting.fetch.enabled.
+        val fetch = FetchBridge({ api.config(it) }, { name, project -> api.runs.secretFields(name, project) }, { api.log(it) })
+        api.capabilities.handle(FetchBridge.ID) { call -> fetch.fetch(call.args, call.caller.project) }
         api.tools.register(exec.exec)
         api.tools.register(exec.status)
         // SCRIPT-TICK-1: one 1 s clock drives `every <N>s` hooks and exec.tick (each at its own period). A throw never stops it.
