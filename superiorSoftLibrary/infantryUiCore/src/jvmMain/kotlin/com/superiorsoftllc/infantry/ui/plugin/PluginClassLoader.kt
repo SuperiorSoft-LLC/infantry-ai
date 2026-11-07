@@ -3,9 +3,9 @@
 package com.superiorsoftllc.infantry.ui.plugin
 
 import com.superiorsoftllc.infantry.plugin.api.Tier
+import com.superiorsoftllc.infantry.plugin.host.PluginJarShadow
+import com.superiorsoftllc.infantry.plugin.host.ShadowJarClassLoader
 import java.io.File
-import java.net.URL
-import java.net.URLClassLoader
 
 /**
  * PLUGIN-PLATFORMS-1: the class loader of ONE module (never shared between modules, closed when the module set unloads).
@@ -23,16 +23,21 @@ import java.net.URLClassLoader
  * DaemonLink's HTTP client) and `ui.shell` stay hidden. Any other host class is a ClassNotFoundException. HONEST LIMIT: code in this JVM
  * can still use reflection, files and the environment (owner.token, INFANTRY_TOKEN); this closes the easy paths, not a determined
  * attacker. The trust boundary stays consent (off until enabled), safe mode and the demo lock.
+ *
+ * PLUGIN-UPDATE-LOCK-1: it reads a copy of those jars ([PluginJarShadow]), never the module folder itself, and a native
+ * library is loaded from a copy too: the folder stays free, so the plugin manager can update, roll back or remove the module
+ * while it runs (Windows refuses to move a jar a class loader holds open). [close] deletes the copy.
  */
 class PluginClassLoader(private val dir: File, jar: File, parent: ClassLoader, filtered: Boolean = false, official: Boolean = false) :
-    URLClassLoader(urls(dir, jar), if (filtered) FilteringParent(parent, official) else parent) {
+    ShadowJarClassLoader(null, PluginJarShadow.of(dir, jars(dir, jar), dir.name), if (filtered) FilteringParent(parent, official) else parent) {
     constructor(dir: File, jar: File, parent: ClassLoader, tier: Tier) : this(dir, jar, parent, tier != Tier.CORE, tier == Tier.OFFICIAL)
 
     override fun findLibrary(libname: String): String? {
         val file = System.mapLibraryName(libname)
         val os = System.getProperty("os.name").lowercase().let { if ("win" in it) "windows" else if ("mac" in it) "macos" else "linux" }
         val arch = System.getProperty("os.arch").lowercase()
-        return listOf(File(dir, "native/$os-$arch"), File(dir, "native"), dir).map { File(it, file) }.firstOrNull { it.isFile }?.absolutePath
+        return listOf(File(dir, "native/$os-$arch"), File(dir, "native"), dir).map { File(it, file) }.firstOrNull { it.isFile }
+            ?.let { shadow.native(it).absolutePath }
             ?: super.findLibrary(libname)
     }
 
@@ -64,7 +69,7 @@ class PluginClassLoader(private val dir: File, jar: File, parent: ClassLoader, f
         val ALLOWED = listOf("java.", "javax.", "kotlin.", "kotlinx.", "androidx.compose", "org.jetbrains.compose", "org.jetbrains.skiko", "com.superiorsoftllc.infantry.plugin.api.", "com.superiorsoftllc.infantry.ui.plugin.",
             "com.superiorsoftllc.infantry.ui.model.", "com.superiorsoftllc.infantry.ui.protocol.", "com.superiorsoftllc.infantry.ui.block.")
         val HIDDEN = listOf("com.superiorsoftllc.infantry.ui.plugin.DaemonLink", "com.superiorsoftllc.infantry.ui.plugin.PluginClassLoader", "com.superiorsoftllc.infantry.ui.plugin.config.DaemonNodeConfigApi", "com.superiorsoftllc.infantry.ui.plugin.JvmEndpointAccess")
-        fun urls(dir: File, jar: File): Array<URL> =
-            (listOf(jar) + File(dir, "lib").listFiles { f -> f.isFile && f.name.endsWith(".jar") }.orEmpty().sortedBy { it.name }).map { it.toURI().toURL() }.toTypedArray()
+        fun jars(dir: File, jar: File): List<File> =
+            listOf(jar) + File(dir, "lib").listFiles { f -> f.isFile && f.name.endsWith(".jar") }.orEmpty().sortedBy { it.name }
     }
 }

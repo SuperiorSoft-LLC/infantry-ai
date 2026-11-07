@@ -40,7 +40,8 @@ class JarHarnessPluginSource(
         val label = "jar:${jar.name}"
         if (!jar.isFile) return listOf(failing(label, IllegalStateException("${jar.path} is not a file")))
         return try {
-            val loader = URLClassLoader("harness-${jar.name}", arrayOf(jar.toURI().toURL()), parent).also { loaders += it }
+            // PLUGIN-UPDATE-LOCK-1: a copy of the jar is read, so the module folder can be updated while the harness runs.
+            val loader = com.superiorsoftllc.infantry.plugin.host.ShadowJarClassLoader("harness-${jar.name}", jar.parentFile, listOf(jar), parent).also { loaders += it }
             val found = ServiceLoader.load(HarnessPlugin::class.java, loader).stream()
                 .filter { it.type().classLoader === loader }
                 .map { provider -> PluginCandidate("$label:${provider.type().name}") { provider.get() } }

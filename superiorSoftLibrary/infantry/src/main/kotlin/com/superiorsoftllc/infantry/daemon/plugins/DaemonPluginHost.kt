@@ -988,7 +988,8 @@ class DaemonPluginHost private constructor(
         if (status.tier == Tier.OFFICIAL && !trust.trusts(dir)) {
             OfficialTrust.refusal(ModuleCandidate(dir.name, status.tier, dir.absolutePath, m), jarPath, trust.keys)?.let { return refuse("official daemon jar refused: $it") }
         }
-        val loader = URLClassLoader("plugin-$id", arrayOf(jar.toURI().toURL()), DaemonApiClassLoader(DaemonPluginHost::class.java.classLoader))
+        // PLUGIN-UPDATE-LOCK-1: the loader reads a copy of the jar, so the module folder stays free for an update while it runs.
+        val loader = com.superiorsoftllc.infantry.plugin.host.ShadowJarClassLoader("plugin-$id", dir, listOf(jar), DaemonApiClassLoader(DaemonPluginHost::class.java.classLoader))
         start(id, status.tier, d, setting, loader, m.dependencies.map { it.id }) {
             loader.loadClass(entry).getDeclaredConstructor().newInstance() as? DaemonPlugin ?: throw IllegalStateException("$entry does not implement DaemonPlugin")
         }

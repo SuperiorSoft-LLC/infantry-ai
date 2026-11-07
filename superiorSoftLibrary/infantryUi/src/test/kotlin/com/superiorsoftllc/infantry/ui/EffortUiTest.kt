@@ -81,7 +81,7 @@ class EffortUiTest {
 
     @Test fun `the New agent dialog names each harness's support and hands over the level only when it is on`() = runDesktopComposeUiTest(1200, 900) {
         var got: String? = "unset-marker"
-        setContent { NewAgentDialog(state, { _, _, _, _, effort -> got = effort; null }, {}) }
+        setContent { NewAgentDialog(state, { _, _, _, _, effort, _ -> got = effort; null }, {}) }
         onNodeWithTag(NEW_AGENT_ROLE_TAG_PREFIX + "qa").performClick()
 
         onNodeWithTag(NEW_AGENT_HARNESS_TAG_PREFIX + "pi").performClick()

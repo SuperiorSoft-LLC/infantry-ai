@@ -605,6 +605,11 @@ Generated for the `infantryPlugins` guard `SdkTypesDocumentedGuardTest`: every p
 
 - `OfficialTrust`: RUNTIME-2 (EMPTY-SHELL-DESIGN 3b): an official module loads only when its jar proves it was made by Infantry.
 
+### `PluginJarShadow.kt`
+
+- `PluginJarShadow`: PLUGIN-UPDATE-LOCK-1: the per-process copy of a plugin's jars (and, on demand, its native libraries) that its class loader reads, so nothing holds the install folder and the manager can update, roll back or remove a running plugin on Windows; deleted when the loader closes, a dead process's copies by the next process ([Plugin lifecycle](Plugin-lifecycle.md)).
+- `ShadowJarClassLoader`: the `URLClassLoader` over a `PluginJarShadow`: every plugin half (UI `PluginClassLoader`, daemon half, harness jar) loads through one; `close` also deletes the copy.
+
 ### `PluginFolders.kt`
 
 - `FilePluginSettings`: A module's settings, one JSON object in its data area.

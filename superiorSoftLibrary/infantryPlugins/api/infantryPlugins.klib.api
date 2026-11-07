@@ -323,7 +323,7 @@ final class com.superiorsoftllc.infantry.plugin.api/ActionResult { // com.superi
 }
 
 final class com.superiorsoftllc.infantry.plugin.api/AgentDefinition { // com.superiorsoftllc.infantry.plugin.api/AgentDefinition|null[0]
-    constructor <init>(kotlin/String, kotlin/String = ..., kotlin/String = ..., kotlin/String = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/Long? = ..., kotlin/String? = ..., kotlin.collections/List<kotlin/String> = ..., com.superiorsoftllc.infantry.plugin.api/AgentSchedule? = ..., com.superiorsoftllc.infantry.plugin.api/AgentUiHints? = ...) // com.superiorsoftllc.infantry.plugin.api/AgentDefinition.<init>|<init>(kotlin.String;kotlin.String;kotlin.String;kotlin.String;kotlin.String?;kotlin.String?;kotlin.String?;kotlin.String?;kotlin.Long?;kotlin.String?;kotlin.collections.List<kotlin.String>;com.superiorsoftllc.infantry.plugin.api.AgentSchedule?;com.superiorsoftllc.infantry.plugin.api.AgentUiHints?){}[0]
+    constructor <init>(kotlin/String, kotlin/String = ..., kotlin/String = ..., kotlin/String = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/Long? = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin.collections/List<kotlin/String> = ..., com.superiorsoftllc.infantry.plugin.api/AgentSchedule? = ..., com.superiorsoftllc.infantry.plugin.api/AgentUiHints? = ...) // com.superiorsoftllc.infantry.plugin.api/AgentDefinition.<init>|<init>(kotlin.String;kotlin.String;kotlin.String;kotlin.String;kotlin.String?;kotlin.String?;kotlin.String?;kotlin.String?;kotlin.Long?;kotlin.String?;kotlin.String?;kotlin.collections.List<kotlin.String>;com.superiorsoftllc.infantry.plugin.api.AgentSchedule?;com.superiorsoftllc.infantry.plugin.api.AgentUiHints?){}[0]
 
     final val contextLimit // com.superiorsoftllc.infantry.plugin.api/AgentDefinition.contextLimit|{}contextLimit[0]
         final fun <get-contextLimit>(): kotlin/Long? // com.superiorsoftllc.infantry.plugin.api/AgentDefinition.contextLimit.<get-contextLimit>|<get-contextLimit>(){}[0]
@@ -345,6 +345,8 @@ final class com.superiorsoftllc.infantry.plugin.api/AgentDefinition { // com.sup
         final fun <get-profile>(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/AgentDefinition.profile.<get-profile>|<get-profile>(){}[0]
     final val role // com.superiorsoftllc.infantry.plugin.api/AgentDefinition.role|{}role[0]
         final fun <get-role>(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/AgentDefinition.role.<get-role>|<get-role>(){}[0]
+    final val runner // com.superiorsoftllc.infantry.plugin.api/AgentDefinition.runner|{}runner[0]
+        final fun <get-runner>(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/AgentDefinition.runner.<get-runner>|<get-runner>(){}[0]
     final val schedule // com.superiorsoftllc.infantry.plugin.api/AgentDefinition.schedule|{}schedule[0]
         final fun <get-schedule>(): com.superiorsoftllc.infantry.plugin.api/AgentSchedule? // com.superiorsoftllc.infantry.plugin.api/AgentDefinition.schedule.<get-schedule>|<get-schedule>(){}[0]
     final val tools // com.superiorsoftllc.infantry.plugin.api/AgentDefinition.tools|{}tools[0]
@@ -354,9 +356,10 @@ final class com.superiorsoftllc.infantry.plugin.api/AgentDefinition { // com.sup
 
     final fun component1(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/AgentDefinition.component1|component1(){}[0]
     final fun component10(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/AgentDefinition.component10|component10(){}[0]
-    final fun component11(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/AgentDefinition.component11|component11(){}[0]
-    final fun component12(): com.superiorsoftllc.infantry.plugin.api/AgentSchedule? // com.superiorsoftllc.infantry.plugin.api/AgentDefinition.component12|component12(){}[0]
-    final fun component13(): com.superiorsoftllc.infantry.plugin.api/AgentUiHints? // com.superiorsoftllc.infantry.plugin.api/AgentDefinition.component13|component13(){}[0]
+    final fun component11(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/AgentDefinition.component11|component11(){}[0]
+    final fun component12(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/AgentDefinition.component12|component12(){}[0]
+    final fun component13(): com.superiorsoftllc.infantry.plugin.api/AgentSchedule? // com.superiorsoftllc.infantry.plugin.api/AgentDefinition.component13|component13(){}[0]
+    final fun component14(): com.superiorsoftllc.infantry.plugin.api/AgentUiHints? // com.superiorsoftllc.infantry.plugin.api/AgentDefinition.component14|component14(){}[0]
     final fun component2(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/AgentDefinition.component2|component2(){}[0]
     final fun component3(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/AgentDefinition.component3|component3(){}[0]
     final fun component4(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/AgentDefinition.component4|component4(){}[0]
@@ -365,7 +368,7 @@ final class com.superiorsoftllc.infantry.plugin.api/AgentDefinition { // com.sup
     final fun component7(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/AgentDefinition.component7|component7(){}[0]
     final fun component8(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/AgentDefinition.component8|component8(){}[0]
     final fun component9(): kotlin/Long? // com.superiorsoftllc.infantry.plugin.api/AgentDefinition.component9|component9(){}[0]
-    final fun copy(kotlin/String = ..., kotlin/String = ..., kotlin/String = ..., kotlin/String = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/Long? = ..., kotlin/String? = ..., kotlin.collections/List<kotlin/String> = ..., com.superiorsoftllc.infantry.plugin.api/AgentSchedule? = ..., com.superiorsoftllc.infantry.plugin.api/AgentUiHints? = ...): com.superiorsoftllc.infantry.plugin.api/AgentDefinition // com.superiorsoftllc.infantry.plugin.api/AgentDefinition.copy|copy(kotlin.String;kotlin.String;kotlin.String;kotlin.String;kotlin.String?;kotlin.String?;kotlin.String?;kotlin.String?;kotlin.Long?;kotlin.String?;kotlin.collections.List<kotlin.String>;com.superiorsoftllc.infantry.plugin.api.AgentSchedule?;com.superiorsoftllc.infantry.plugin.api.AgentUiHints?){}[0]
+    final fun copy(kotlin/String = ..., kotlin/String = ..., kotlin/String = ..., kotlin/String = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/Long? = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin.collections/List<kotlin/String> = ..., com.superiorsoftllc.infantry.plugin.api/AgentSchedule? = ..., com.superiorsoftllc.infantry.plugin.api/AgentUiHints? = ...): com.superiorsoftllc.infantry.plugin.api/AgentDefinition // com.superiorsoftllc.infantry.plugin.api/AgentDefinition.copy|copy(kotlin.String;kotlin.String;kotlin.String;kotlin.String;kotlin.String?;kotlin.String?;kotlin.String?;kotlin.String?;kotlin.Long?;kotlin.String?;kotlin.String?;kotlin.collections.List<kotlin.String>;com.superiorsoftllc.infantry.plugin.api.AgentSchedule?;com.superiorsoftllc.infantry.plugin.api.AgentUiHints?){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/AgentDefinition.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/AgentDefinition.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/AgentDefinition.toString|toString(){}[0]
@@ -3322,6 +3325,8 @@ final object com.superiorsoftllc.infantry.plugin.api/AgentDefinitions { // com.s
         final fun <get-ID>(): kotlin.text/Regex // com.superiorsoftllc.infantry.plugin.api/AgentDefinitions.ID.<get-ID>|<get-ID>(){}[0]
     final val PROFILE_ID // com.superiorsoftllc.infantry.plugin.api/AgentDefinitions.PROFILE_ID|{}PROFILE_ID[0]
         final fun <get-PROFILE_ID>(): kotlin.text/Regex // com.superiorsoftllc.infantry.plugin.api/AgentDefinitions.PROFILE_ID.<get-PROFILE_ID>|<get-PROFILE_ID>(){}[0]
+    final val RUNNER // com.superiorsoftllc.infantry.plugin.api/AgentDefinitions.RUNNER|{}RUNNER[0]
+        final fun <get-RUNNER>(): kotlin.text/Regex // com.superiorsoftllc.infantry.plugin.api/AgentDefinitions.RUNNER.<get-RUNNER>|<get-RUNNER>(){}[0]
 
     final fun refusal(com.superiorsoftllc.infantry.plugin.api/AgentDefinition, kotlin/String, kotlin/Boolean): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/AgentDefinitions.refusal|refusal(com.superiorsoftllc.infantry.plugin.api.AgentDefinition;kotlin.String;kotlin.Boolean){}[0]
     final fun withProfile(com.superiorsoftllc.infantry.plugin.api/AgentDefinition, com.superiorsoftllc.infantry.plugin.api/AgentDefinition?): com.superiorsoftllc.infantry.plugin.api/AgentDefinition // com.superiorsoftllc.infantry.plugin.api/AgentDefinitions.withProfile|withProfile(com.superiorsoftllc.infantry.plugin.api.AgentDefinition;com.superiorsoftllc.infantry.plugin.api.AgentDefinition?){}[0]
