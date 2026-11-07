@@ -11,7 +11,7 @@ See CONTRIBUTING.md. Start a plugin from https://github.com/SuperiorSoft-LLC/inf
 
 ## Trust and signing
 
-There is no plugin signing key yet. Every version is pinned by the sha256 of its `.ihq` in the catalog, and each
+There is no plugin signing key yet. Both plugins are listed in the community catalog until a plugin signing key exists (the installer refuses unsigned official entries). Every version is pinned by the sha256 of its `.ihq` in the catalog, and each
 `.ihq` is a release asset of this repo (tag `<id>-v<version>`). The installer checks the sha256 and shows the plugin
 as unsigned.
 
