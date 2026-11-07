@@ -3,6 +3,8 @@
 package com.superiorsoftllc.infantry.plugins.official.chat
 
 import com.superiorsoftllc.infantry.plugin.api.ConfigDeclaration
+import com.superiorsoftllc.infantry.plugin.api.ConfigFieldDeclaration
+import kotlinx.serialization.json.JsonPrimitive
 import com.superiorsoftllc.infantry.plugin.api.FillDeclaration
 import com.superiorsoftllc.infantry.plugin.api.ModuleManifest
 import com.superiorsoftllc.infantry.ui.plugin.InfantryModule
@@ -17,9 +19,19 @@ val InfantryChat = InfantryModule(
     ModuleManifest(
         name = "Infantry_Chat", version = "1.0.0", author = "Infantry AI",
         description = "The centre column: the agent chat, the centre tab strip and the New agent dialog.",
-        slots = listOf("chat.feed"),
+        slots = listOf("chat.feed", ChatSlots.COMPOSER_ACTIONS, ChatSlots.MESSAGE_ACTIONS),
+        events = listOf(ChatSlots.COMPOSER_INSERT_EVENT),
         fills = listOf(FillDeclaration(CHAT_FILL_ID)),
         config = listOf(
+            // CHAT-VOICE-SEAMS-1: a plugin's `chat.composer.insert` with send=true sends only while this is on.
+            ConfigDeclaration(
+                node = ChatSlots.CONFIG_NODE, group = "Plugins in the composer", tab = "Chat", order = 30, title = "Plugins in the composer",
+                applies = "Applies to: text a plugin puts into the chat box (for example dictation).",
+                keywords = listOf("plugin", "send", "voice", "dictation", "composer"),
+                fields = listOf(
+                    ConfigFieldDeclaration(ChatSlots.ALLOW_PLUGIN_SEND_KEY, "checkbox", "Let plugins send what they put into the chat box (off: you review it and press Send)", JsonPrimitive(false), order = 1, scope = "device"),
+                ),
+            ),
             ConfigDeclaration(node = "infantry.shell.config.markdownEngine", group = "Markdown engine", tab = "Appearance", order = 40, title = "Markdown engine", keywords = listOf("markdown", "table", "chat", "format", "renderer"), block = "infantry.shell.config.markdownEngine"),
             ConfigDeclaration(node = "infantry.shell.config.reasoning", group = "Agent reasoning", tab = "Appearance", order = 50, title = "Agent reasoning", keywords = listOf("reasoning", "thinking", "thought", "panel", "inline"), block = "infantry.shell.config.reasoning"),
         ),

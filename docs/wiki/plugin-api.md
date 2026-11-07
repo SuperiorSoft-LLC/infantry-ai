@@ -191,6 +191,34 @@ Real example: `Infantry_Chat` declares `"slots": ["chat.feed"]` and calls `Child
 (`plugins/official/Infantry_ChatFeed/module.json`: `"panels": [{ "id": "infantry.chatfeed", "panel": "chat.feed" }]`)
 and is therefore a child of `Infantry_Chat`.
 
+`ChildSlotRow(name, state, controller, modifier, args, context)` (same file) draws a slot as a ROW of small inline
+blocks, each section at its own width, and draws nothing at all when no section fills it (no empty state, no layout
+shift). Use it for a row of buttons inside a host's own layout.
+
+#### The slots and event Infantry_Chat offers
+
+The contract is Chat's (`plugins/official/Infantry_Chat/src/ChatSlots.kt`, declared in its `module.json`); a plugin
+fills a slot with a `panels` entry and reads its arguments from `LocalSlotArgs.current`.
+
+| Name | Kind | What a filler gets |
+|---|---|---|
+| `chat.composer.actions` | slot (row, beside attach) | `sessionId` (null in New agent mode), `draft` (the box's text), `sending` (a send is in flight) |
+| `chat.message.actions` | slot (row over a message: hover on desktop/web, long-press on Android) | `sessionId`, `messageId` (the row's index in its session's transcript), `author` (`owner`, `agent`, `external`, `system`), `authorRole`, `authorAgent`, `text` (plain, markdown stripped) |
+| `chat.composer.insert` | event (declare it in your `events`, use the `events` service) | payload `sessionId?`, `text`, `mode` (`append` or `replace`), `send` (`true`/`false`) |
+
+`chat.composer.insert` goes to the composer showing `sessionId`; with none, to the focused composer, else the one
+showing the selected session. Append adds the text on a new line. `send: true` sends the draft only while the Chat
+setting `chat.allowPluginSend` (Settings > Chat > Plugins in the composer) is on; it is off by default, so dictated
+text is always reviewed first. `ComposerInsert(sessionId, text, replace, send).toEvent()` builds the event.
+
+```kotlin
+registrar.panel(PanelProvider(id = "acme.voice.mic", panel = "chat.composer.actions", order = 10, testTag = "acme-mic") {
+    val draft = LocalSlotArgs.current["draft"] as? String
+    MicButton(draft)
+})
+registrar.services.get(Services.EVENTS)?.publish(PluginEvent("chat.composer.insert", mapOf("text" to heard, "mode" to "append")))
+```
+
 `PanelSlot(panel)` (a `ColumnScope` function, same file area) is the other way to draw a slot, from inside a section
 that a `PanelSections` call is drawing.
 

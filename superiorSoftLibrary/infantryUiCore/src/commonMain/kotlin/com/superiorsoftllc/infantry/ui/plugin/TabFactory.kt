@@ -997,9 +997,15 @@ fun ColumnScope.PanelSlot(panel: String) {
 
 @Composable
 internal fun ColumnScope.PanelSection(factory: TabFactory, section: PanelProvider, context: TabContext) {
+    PanelSectionBody(factory, section, context, Modifier.fillMaxWidth().testTag(section.testTag).let { if (section.fill) it.weight(1f) else it })
+}
+
+/** CHAT-VOICE-SEAMS-1: one section drawn as its module draws it (tier, badge, services), in a box with [modifier]; any scope. */
+@Composable
+internal fun PanelSectionBody(factory: TabFactory, section: PanelProvider, context: TabContext, modifier: Modifier) {
     val module = factory.panelModuleOf(section.id)
     val own = context.forModule(factory.servicesOf(section.module))
-    Box(Modifier.fillMaxWidth().testTag(section.testTag).let { if (section.fill) it.weight(1f) else it }) {
+    Box(modifier) {
         if (module?.tier == Tier.COMMUNITY) {
             Column {
                 CommunityBadge(module.manifest)

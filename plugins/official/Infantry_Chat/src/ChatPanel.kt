@@ -3,6 +3,8 @@
 package com.superiorsoftllc.infantry.plugins.official.chat
 
 import com.superiorsoftllc.infantry.ui.plugin.ChildSlot
+import com.superiorsoftllc.infantry.ui.plugin.ChildSlotRow
+import androidx.compose.ui.focus.onFocusChanged
 import com.superiorsoftllc.infantry.ui.*
 
 import com.superiorsoftllc.infantry.ui.model.SessionPaneAction
@@ -257,6 +259,8 @@ class ChatPanelHost internal constructor(
     internal val header: @Composable (agent: AgentView?, openSwitch: (() -> Unit)?) -> Unit,
     internal val content: @Composable (transcript: @Composable () -> Unit) -> Unit,
     internal val transcriptTag: String,
+    /** CHAT-VOICE-SEAMS-1: whether this panel's composer holds the focus (a session-less `chat.composer.insert` goes there). */
+    internal val composerFocused: androidx.compose.runtime.MutableState<Boolean> = mutableStateOf(false),
 )
 
 /** Reads the session [sessionId] from [controller] and runs the panel's effects (the Switch agent ask, the catalog refresh). */
@@ -288,7 +292,48 @@ fun chatPanelHost(
     LaunchedEffect(chat.spawnMode || chat.switchAsk != null, state.connection.isLive) {
         if ((chat.spawnMode || chat.switchAsk != null) && state.connection.isLive) controller.refreshModelCatalog()
     }
-    return ChatPanelHost(controller, chat, allowSpawn, state, agent, scope, header, content, transcriptTag)
+    val composerFocused = remember { mutableStateOf(false) }
+    ComposerInsertEffect(sessionId, controller, chat, scope, composerFocused)
+    return ChatPanelHost(controller, chat, allowSpawn, state, agent, scope, header, content, transcriptTag, composerFocused)
+}
+
+/**
+ * CHAT-VOICE-SEAMS-1: this panel takes the `chat.composer.insert` events routed to it ([ComposerInsertRouter]): the text
+ * goes into the draft (append or replace) and the box is focused. `send` sends it too, but only while the Chat setting
+ * `chat.allowPluginSend` is on (default off: dictated text is reviewed first) and `chat.prompt` is allowed.
+ */
+@Composable
+private fun ComposerInsertEffect(
+    sessionId: String?,
+    controller: Controller,
+    chat: ChatPanelState,
+    scope: CoroutineScope,
+    composerFocused: androidx.compose.runtime.MutableState<Boolean>,
+) {
+    val bus = com.superiorsoftllc.infantry.ui.LocalTabFactory.current.events
+    val allowSend = com.superiorsoftllc.infantry.ui.shell.LocalShellContext.current?.config
+        ?.values(ChatSlots.CONFIG_NODE)?.boolean(ChatSlots.ALLOW_PLUGIN_SEND_KEY) ?: false
+    val promptAllowed = com.superiorsoftllc.infantry.ui.shell.rememberGate("chat.prompt").allowed
+    val canSend by rememberUpdatedState(allowSend && promptAllowed)
+    val shown by rememberUpdatedState(sessionId)
+    DisposableEffect(bus, chat) {
+        val off = ComposerInsertRouter.of(bus).add(
+            ComposerInsertRouter.Target(
+                sessionId = { if (chat.spawnMode) null else shown },
+                focused = { composerFocused.value },
+                selected = { controller.state.value.selectedId },
+                apply = { insert ->
+                    chat.edit(insert.applyTo(chat.draft))
+                    if (insert.send && canSend && chat.draft.isNotBlank()) {
+                        chat.submit(controller, scope, shown?.let { controller.state.value.agents[it] })
+                    } else {
+                        runCatching { chat.focus.requestFocus() }
+                    }
+                },
+            ),
+        )
+        onDispose { off() }
+    }
 }
 
 @Composable
@@ -379,6 +424,9 @@ internal fun ChatPanelHost.SwitchPicker() {
 internal fun ChatPanelHost.Composer() {
     // CHAT-MINIMIZE-1: minimized = not composed at all; the restore button floats over the transcript (Transcript()).
     if (chat.composerMinimized) return
+    // CHAT-VOICE-SEAMS-1: the composer-actions slot draws inline in the tools row (PromptBox's `extras`); nothing when unfilled.
+    val sending = agent?.let { a -> state.pendingSends.values.any { it.sessionId == a.id && it.state == com.superiorsoftllc.infantry.ui.model.SendState.SENDING } } ?: false
+    Box(Modifier.onFocusChanged { composerFocused.value = it.hasFocus }) {
     PromptBox(
         chat.draft, chat::edit, { chat.submit(controller, scope, agent) }, chat.focus, chat.spawnMode, agent, controller,
         onSpawnToggle = { if (allowSpawn) chat.spawnMode = !chat.spawnMode },
@@ -388,5 +436,16 @@ internal fun ChatPanelHost.Composer() {
         onRemoveAttachment = chat::removeAttachment,
         wire = chat::wire,
         expanded = chat.composerExpanded,
+        extras = {
+            ChildSlotRow(
+                ChatSlots.COMPOSER_ACTIONS, state, controller,
+                args = mapOf(
+                    ComposerArgs.SESSION_ID to (if (chat.spawnMode) null else agent?.id),
+                    ComposerArgs.DRAFT to chat.draft,
+                    ComposerArgs.SENDING to sending,
+                ),
+            )
+        },
     )
+    }
 }

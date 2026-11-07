@@ -48,7 +48,7 @@ internal fun FeedSection(ctx: TabContext) {
     val onLater = args[FeedArgs.ON_LATER] as? (() -> Unit) ?: {}
     val floaters = (args[FeedArgs.FLOATERS] as? FloatingChips)?.content ?: {}
     val scope = rememberCoroutineScope()
-    CompositionLocalProvider(LocalUserPortrait provides state.userPortrait) {
+    CompositionLocalProvider(LocalUserPortrait provides state.userPortrait, LocalMessageActionsHost provides MessageActionsHost(state, controller)) {
         OutputPane(
             agent, args[FeedArgs.SPAWN_MODE] as? Boolean ?: false, roleColor = state.role(agent?.role)?.color,
             contributions = agent?.let { state.timeline[it.id] }.orEmpty(),
