@@ -167,6 +167,8 @@ data class SessionRecord(
      * for every session that has a provider conversation to resume.
      */
     val dormant: Boolean = false,
+    /** RUNNER-POOL-4: the runner this session lives on; the wire frame fills it from `RunnerPool.runnerOf` (see [SessionRecordSerializer.runnerOf]). */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val runner: String = "local",
     /**
      * BUG-M2-11f: the OS process the session host keeps for this session between turns (pid + start instant), set at
      * launch and cleared when it ends. Persisted so the next daemon start can reap a process that outlived a hard-killed
@@ -283,6 +285,9 @@ data class SessionRecord(
  */
 object SessionRecordSerializer : KSerializer<SessionRecord> {
 
+    /** RUNNER-POOL-4: the daemon sets this to `RunnerPool::runnerOf`; until then every session is on `local`. */
+    @Volatile var runnerOf: (sessionId: String) -> String = { "local" }
+
     private val generated = SessionRecord.serializer()
 
     override val descriptor: SerialDescriptor = generated.descriptor
@@ -295,6 +300,8 @@ object SessionRecordSerializer : KSerializer<SessionRecord> {
         val baseObj = base as? JsonObject ?: error("Expected JsonObject for SessionRecord, got $base")
         val extended = baseObj.toMutableMap().apply {
             put("live", JsonPrimitive(value.live))
+            // RUNNER-POOL-4: `local` stays off the wire (older clients decode the default).
+            runnerOf(value.id).takeIf { it != "local" }?.let { put("runner", JsonPrimitive(it)) }
             // Contract 1.112.0: whether a TURN is in flight, before the display-only BUSY rewrite below.
             put("turnActive", JsonPrimitive(value.isBusy()))
             if (value.state == SessionState.BUSY) RunPhaseOverlay.phaseOf(value.id)?.let { put("runPhase", JsonPrimitive(it)) }
