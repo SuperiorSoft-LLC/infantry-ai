@@ -135,10 +135,13 @@ public final class com/superiorsoftllc/infantry/harness/api/HarnessAnswer$Compan
 
 public final class com/superiorsoftllc/infantry/harness/api/HarnessApiKt {
 	public static final field HARNESS_API_VERSION Ljava/lang/String;
+	public static final field MCP_PID_FILE_ENV Ljava/lang/String;
 }
 
 public final class com/superiorsoftllc/infantry/harness/api/HarnessCapability : java/lang/Enum {
 	public static final field EFFORT_SELECTION Lcom/superiorsoftllc/infantry/harness/api/HarnessCapability;
+	public static final field LIVE_SESSION Lcom/superiorsoftllc/infantry/harness/api/HarnessCapability;
+	public static final field MID_TURN_INPUT Lcom/superiorsoftllc/infantry/harness/api/HarnessCapability;
 	public static final field MODEL_SELECTION Lcom/superiorsoftllc/infantry/harness/api/HarnessCapability;
 	public static final field REASONING Lcom/superiorsoftllc/infantry/harness/api/HarnessCapability;
 	public static final field SESSION_RESUME Lcom/superiorsoftllc/infantry/harness/api/HarnessCapability;
@@ -440,12 +443,16 @@ public abstract interface class com/superiorsoftllc/infantry/harness/api/Harness
 	public abstract fun fingerprint (Lcom/superiorsoftllc/infantry/harness/api/HarnessRequest;Ljava/util/Map;)Ljava/lang/String;
 	public fun getBootTimeoutMs ()J
 	public abstract fun getLabel ()Ljava/lang/String;
+	public fun idleMinutes ()Ljava/lang/Integer;
 	public abstract fun launch (Lcom/superiorsoftllc/infantry/harness/api/HarnessRequest;Ljava/util/Map;)Lcom/superiorsoftllc/infantry/harness/api/HarnessProcess;
+	public fun terminal (Lcom/superiorsoftllc/infantry/harness/api/HarnessProcess;)Z
 }
 
 public final class com/superiorsoftllc/infantry/harness/api/HarnessSession$DefaultImpls {
 	public static fun connect (Lcom/superiorsoftllc/infantry/harness/api/HarnessSession;Lcom/superiorsoftllc/infantry/harness/api/SessionOutput;Lcom/superiorsoftllc/infantry/harness/api/HarnessProcess;)Lcom/superiorsoftllc/infantry/harness/api/SessionConnection;
 	public static fun getBootTimeoutMs (Lcom/superiorsoftllc/infantry/harness/api/HarnessSession;)J
+	public static fun idleMinutes (Lcom/superiorsoftllc/infantry/harness/api/HarnessSession;)Ljava/lang/Integer;
+	public static fun terminal (Lcom/superiorsoftllc/infantry/harness/api/HarnessSession;Lcom/superiorsoftllc/infantry/harness/api/HarnessProcess;)Z
 }
 
 public abstract interface class com/superiorsoftllc/infantry/harness/api/HarnessStatEvent {
@@ -617,6 +624,15 @@ public final class com/superiorsoftllc/infantry/harness/api/HarnessUsageWindow {
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class com/superiorsoftllc/infantry/harness/api/McpState : java/lang/Enum {
+	public static final field CONNECTED Lcom/superiorsoftllc/infantry/harness/api/McpState;
+	public static final field DISCONNECTED Lcom/superiorsoftllc/infantry/harness/api/McpState;
+	public static final field RECONNECTING Lcom/superiorsoftllc/infantry/harness/api/McpState;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/harness/api/McpState;
+	public static fun values ()[Lcom/superiorsoftllc/infantry/harness/api/McpState;
+}
+
 public final class com/superiorsoftllc/infantry/harness/api/SandboxContribution {
 	public fun <init> ()V
 	public fun <init> (Ljava/util/List;Ljava/util/List;Ljava/util/Set;)V
@@ -650,33 +666,51 @@ public final class com/superiorsoftllc/infantry/harness/api/SandboxRoots {
 public abstract interface class com/superiorsoftllc/infantry/harness/api/SessionConnection {
 	public abstract fun abortTurn ()Z
 	public fun close ()Z
+	public fun injectInput (Ljava/lang/String;)Z
+	public fun onExit (I)V
 	public fun onStderr (Ljava/lang/String;)V
 	public abstract fun onStdout (Ljava/lang/String;)V
+	public fun reconnectMcp ()Z
 	public abstract fun sendTurn (Lcom/superiorsoftllc/infantry/harness/api/HarnessRequest;)V
 }
 
 public final class com/superiorsoftllc/infantry/harness/api/SessionConnection$DefaultImpls {
 	public static fun close (Lcom/superiorsoftllc/infantry/harness/api/SessionConnection;)Z
+	public static fun injectInput (Lcom/superiorsoftllc/infantry/harness/api/SessionConnection;Ljava/lang/String;)Z
+	public static fun onExit (Lcom/superiorsoftllc/infantry/harness/api/SessionConnection;I)V
 	public static fun onStderr (Lcom/superiorsoftllc/infantry/harness/api/SessionConnection;Ljava/lang/String;)V
+	public static fun reconnectMcp (Lcom/superiorsoftllc/infantry/harness/api/SessionConnection;)Z
 }
 
 public abstract interface class com/superiorsoftllc/infantry/harness/api/SessionOutput {
 	public abstract fun closeInput ()V
+	public fun denied (Ljava/lang/String;Z)V
+	public static synthetic fun denied$default (Lcom/superiorsoftllc/infantry/harness/api/SessionOutput;Ljava/lang/String;ZILjava/lang/Object;)V
 	public abstract fun detail (Ljava/lang/String;)V
 	public fun diagnostic (Ljava/lang/String;)V
+	public fun mcpState (Lcom/superiorsoftllc/infantry/harness/api/McpState;Ljava/lang/String;)V
+	public static synthetic fun mcpState$default (Lcom/superiorsoftllc/infantry/harness/api/SessionOutput;Lcom/superiorsoftllc/infantry/harness/api/McpState;Ljava/lang/String;ILjava/lang/Object;)V
 	public fun output (Ljava/lang/String;)V
 	public abstract fun providerSession (Ljava/lang/String;)V
 	public fun requestApproval (Ljava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/harness/api/ApprovalReply;
 	public abstract fun turnEnded (Lcom/superiorsoftllc/infantry/harness/api/SessionTurnEnd;Ljava/lang/Integer;Ljava/lang/String;)V
 	public static synthetic fun turnEnded$default (Lcom/superiorsoftllc/infantry/harness/api/SessionOutput;Lcom/superiorsoftllc/infantry/harness/api/SessionTurnEnd;Ljava/lang/Integer;Ljava/lang/String;ILjava/lang/Object;)V
+	public fun turnStarted (Ljava/lang/String;)V
+	public static synthetic fun turnStarted$default (Lcom/superiorsoftllc/infantry/harness/api/SessionOutput;Ljava/lang/String;ILjava/lang/Object;)V
 	public abstract fun write (Ljava/lang/String;)Z
 }
 
 public final class com/superiorsoftllc/infantry/harness/api/SessionOutput$DefaultImpls {
+	public static fun denied (Lcom/superiorsoftllc/infantry/harness/api/SessionOutput;Ljava/lang/String;Z)V
+	public static synthetic fun denied$default (Lcom/superiorsoftllc/infantry/harness/api/SessionOutput;Ljava/lang/String;ZILjava/lang/Object;)V
 	public static fun diagnostic (Lcom/superiorsoftllc/infantry/harness/api/SessionOutput;Ljava/lang/String;)V
+	public static fun mcpState (Lcom/superiorsoftllc/infantry/harness/api/SessionOutput;Lcom/superiorsoftllc/infantry/harness/api/McpState;Ljava/lang/String;)V
+	public static synthetic fun mcpState$default (Lcom/superiorsoftllc/infantry/harness/api/SessionOutput;Lcom/superiorsoftllc/infantry/harness/api/McpState;Ljava/lang/String;ILjava/lang/Object;)V
 	public static fun output (Lcom/superiorsoftllc/infantry/harness/api/SessionOutput;Ljava/lang/String;)V
 	public static fun requestApproval (Lcom/superiorsoftllc/infantry/harness/api/SessionOutput;Ljava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/harness/api/ApprovalReply;
 	public static synthetic fun turnEnded$default (Lcom/superiorsoftllc/infantry/harness/api/SessionOutput;Lcom/superiorsoftllc/infantry/harness/api/SessionTurnEnd;Ljava/lang/Integer;Ljava/lang/String;ILjava/lang/Object;)V
+	public static fun turnStarted (Lcom/superiorsoftllc/infantry/harness/api/SessionOutput;Ljava/lang/String;)V
+	public static synthetic fun turnStarted$default (Lcom/superiorsoftllc/infantry/harness/api/SessionOutput;Ljava/lang/String;ILjava/lang/Object;)V
 }
 
 public final class com/superiorsoftllc/infantry/harness/api/SessionTurnEnd : java/lang/Enum {
