@@ -1,0 +1,18 @@
+{
+  "id": "Infantry_ReadAloud",
+  "description": "Read chat messages aloud with the host's local voice.",
+  "tags": ["voice","speech","chat"],
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/SuperiorSoft-LLC/infantry-plugins",
+  "repo": "SuperiorSoft-LLC/infantry-plugins",
+  "versions": [
+    {
+      "version": "1.1.0",
+      "api": { "plugin": ">=2" },
+      "grants": ["speech.out"],
+      "url": "https://github.com/SuperiorSoft-LLC/infantry-plugins/releases/download/Infantry_ReadAloud-v1.1.0/Infantry_ReadAloud.ihq",
+      "size": 26974,
+      "sha256": "bbed489c5334fa6d5be5acb465d4f173f1e47573a2e2d53e634ec253901c0646"
+    }
+  ]
+}

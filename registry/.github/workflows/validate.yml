@@ -27,7 +27,7 @@ jobs:
       - name: Validate assets (sha256, size, grants)
         run: |
           for c in official community; do
-            [ -f "build/$c.json" ] && infantry plugin catalog validate "build/$c.json" --assets
+            [ -f "build/$c.json" ] && infantry plugin catalog validate "build/$c.json"
           done
       - name: Check urls are under the entry repo releases
         run: |

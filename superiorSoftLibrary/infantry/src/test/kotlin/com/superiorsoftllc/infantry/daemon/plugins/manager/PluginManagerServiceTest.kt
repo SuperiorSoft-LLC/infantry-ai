@@ -85,6 +85,15 @@ class PluginManagerServiceTest {
     private fun installOk(m: PluginManager, ref: String, grants: Set<String>? = emptySet()) =
         m.install(ref, grants).also { assertTrue(it.ok, "${it.code}: ${it.message}") }
 
+    @Test fun `a fresh state starts with the official and community default sources, a saved list replaces them`() {
+        val m = manager()
+        assertEquals(listOf("infantry-official", "infantry-community"), m.sources().map { it.id })
+        assertEquals("https://superiorsoft-llc.github.io/infantry-plugins/official.json", m.sources()[0].url)
+        assertEquals("https://superiorsoft-llc.github.io/infantry-plugins/community.json", m.sources()[1].url)
+        m.removeSource("infantry-community")
+        assertEquals(listOf("infantry-official"), manager().sources().map { it.id })
+    }
+
     @Test fun `community install needs consent and writes exactly the consented grants`() {
         val f = pack(extra = daemonBlock)
         catalog(entry(f, "Acme_Echo", "1.0.0", listOf("daemon.code", "daemon.tool")))
@@ -327,7 +336,7 @@ class PluginManagerServiceTest {
             if (!online) throw IOException("offline")
             DefaultFetcher.fetch(if (url.endsWith("catalog.json")) File(repo, "catalog.json").path else File(repo, url.substringAfterLast('/')).path, dest, max)
         }
-        val m = manager(fetcher)
+        val m = manager(fetcher); m.setSources(emptyList()) // a fresh state now starts with the default sources (REGISTRY-2)
         assertTrue(m.addSource(CatalogSource("web", "community", url = "https://example.invalid/idx/catalog.json")).ok)
         assertTrue(m.refresh().single().ok)
         online = false

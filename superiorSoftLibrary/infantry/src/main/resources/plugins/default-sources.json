@@ -1,0 +1,6 @@
+{
+  "sources": [
+    { "id": "infantry-official", "class": "official", "url": "https://superiorsoft-llc.github.io/infantry-plugins/official.json", "enabled": true },
+    { "id": "infantry-community", "class": "community", "url": "https://superiorsoft-llc.github.io/infantry-plugins/community.json", "enabled": true }
+  ]
+}

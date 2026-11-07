@@ -1,0 +1,18 @@
+{
+  "id": "Infantry_VoiceInput",
+  "description": "Dictate into the chat composer with the microphone.",
+  "tags": ["voice","speech","chat"],
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/SuperiorSoft-LLC/infantry-plugins",
+  "repo": "SuperiorSoft-LLC/infantry-plugins",
+  "versions": [
+    {
+      "version": "1.0.0",
+      "api": { "plugin": ">=2" },
+      "grants": ["audio.in","events"],
+      "url": "https://github.com/SuperiorSoft-LLC/infantry-plugins/releases/download/Infantry_VoiceInput-v1.0.0/Infantry_VoiceInput.ihq",
+      "size": 102981,
+      "sha256": "66b54a8d3c1a9571d31ef84895a872863b31ff6fed8dda16b880ba94aa02127b"
+    }
+  ]
+}
