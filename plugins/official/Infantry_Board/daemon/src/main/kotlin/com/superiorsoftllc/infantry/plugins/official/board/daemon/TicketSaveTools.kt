@@ -216,6 +216,19 @@ internal object TicketSave {
         return current
     }
 
+    /** TICKET-CREATE-HANG-1: links [ids] on a daemon thread; a failure is commented on [ticket] (kind issue). */
+    fun linkRelatedAsync(api: DaemonApi, call: ToolCall, ticket: TicketInfo, ids: List<String>, tool: String, comments: TicketComments?) {
+        val author = comments?.let { CommentsWiring.author(api, call) }
+        background("ticket-related-${WireTickets.shortId(ticket.id)}", { linkRelated(api, call, ticket, ids, tool) }) { t ->
+            val text = (t as? Refusal)?.result?.text ?: t.message ?: t.javaClass.simpleName
+            runCatching { if (comments != null && author != null) comments.add(ticket.id, ticket.projectId, ticket.title, author, "issue", "open", "relatedTo not fully linked: $text") }
+        }
+    }
+
+    /** Runs [work] on a daemon thread and returns at once; a throw goes to [onFailure]. */
+    fun background(name: String, work: () -> Unit, onFailure: (Throwable) -> Unit): Thread =
+        Thread({ try { work() } catch (t: Throwable) { onFailure(t) } }, name).apply { isDaemon = true; start() }
+
     fun JsonObjectBuilder.relatedToProp() = put("relatedTo", pathsProp(
         "Ticket ids (full or 8-char) this ticket relates to: stored as relates_to links, listed first in the RELATED (auto) " +
             "block the daemon writes atop the description and in the worker's start brief. On update, [] links nothing and " +
@@ -322,12 +335,15 @@ class TicketCreateTool(private val api: DaemonApi, private val comments: TicketC
         val relatedTo = TicketSave.relatedTo(args, tool)
         val created = TicketSave.result(api.tickets.create(draft, by), tool)
         comments?.onCreated(created.id, created.projectId, CommentsWiring.author(api, call), notify)
-        val ticket = relatedTo?.let { TicketSave.linkRelated(api, call, created, it, tool) } ?: created
-        TicketSave.saved(ticket, TicketSave.Fields(
+        // TICKET-CREATE-HANG-1: each link rebuilds the RELATED block under the board lock; that slow follow-up runs after the answer.
+        if (!relatedTo.isNullOrEmpty()) TicketSave.linkRelatedAsync(api, call, created, relatedTo, tool, comments)
+        val reply = TicketSave.saved(created, TicketSave.Fields(
             title = true, description = draft.description != null, agentId = draft.agentId != null, provider = draft.provider != null,
             model = draft.model != null, weight = draft.weight != null, contextLimit = draft.contextLimit != null, images = draft.images != null,
-            related = relatedTo != null, effort = draft.effort != null,
+            related = false, effort = draft.effort != null,
         ), created = true, verbose = ToolArgs.flag(args, "verbose"))
+        if (relatedTo.isNullOrEmpty() || reply.isError) reply
+        else ToolResult(reply.text + " | relatedTo: ${relatedTo.size} link(s) being added in the background (a failure is commented on the ticket)")
     }
 }
 
