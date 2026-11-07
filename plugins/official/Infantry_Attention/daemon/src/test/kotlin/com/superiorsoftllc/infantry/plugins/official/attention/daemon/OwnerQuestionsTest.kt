@@ -29,7 +29,7 @@ class OwnerQuestionsTest {
         ttlMinutes: Long = 0,
     ) = OwnerQuestions(
         repository = repository,
-        notify = { to, subject, body -> sent += Mail(to, subject, body); true },
+        notify = { to, subject, body, _ -> sent += Mail(to, subject, body); true },
         clock = { now },
         newId = { "q${++ids}" },
         maxOpen = { maxOpen },

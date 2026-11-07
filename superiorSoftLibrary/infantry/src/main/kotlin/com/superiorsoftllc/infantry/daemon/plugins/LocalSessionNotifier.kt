@@ -13,10 +13,19 @@ import com.superiorsoftllc.infantry.session.isInSession
 class LocalSessionNotifier(
     private val live: () -> List<SessionRecord>,
     private val send: (to: String, subject: String, body: String) -> Unit,
+    /** Sends on a named thread; null = [send] on the default thread. */
+    private val sendOnThread: ((to: String, subject: String, body: String, threadId: String) -> Unit)? = null,
 ) : SessionNotifier {
     override fun notifySession(sessionId: String, subject: String, body: String): Boolean {
         if (live().none { it.id == sessionId && it.isInSession() }) return false
         return runCatching { send(sessionId, subject, body) }.isSuccess
+    }
+
+    override fun notifySession(sessionId: String, subject: String, body: String, threadId: String?): Boolean {
+        val threaded = sendOnThread
+        if (threadId == null || threaded == null) return notifySession(sessionId, subject, body)
+        if (live().none { it.id == sessionId && it.isInSession() }) return false
+        return runCatching { threaded(sessionId, subject, body, threadId) }.isSuccess
     }
 
     override fun notifyRole(projectId: String, role: String, subject: String, body: String): Int {

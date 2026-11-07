@@ -1657,7 +1657,7 @@ class InfantryDaemon(
                         // PACE-TREND-1: api.meters, the current reading of every provider window (the cached live read).
                         meters = com.superiorsoftllc.infantry.usage.PacingMeters(usagePacing, requestSource = { since -> usageMeter?.requestsSince(since).orEmpty() }),
                         // DP-7e: api.sessionNotifier, over the mail router.
-                        notifier = com.superiorsoftllc.infantry.daemon.plugins.LocalSessionNotifier({ manager.list() }, { to, subject, body -> mail.send(MailSendRequest(from = "owner", to = to, subject = subject, body = body)) }),
+                        notifier = com.superiorsoftllc.infantry.daemon.plugins.LocalSessionNotifier({ manager.list() }, { to, subject, body -> mail.send(MailSendRequest(from = "owner", to = to, subject = subject, body = body)) }, { to, subject, body, thread -> mail.send(MailSendRequest(from = "owner", to = to, subject = subject, body = body, threadId = thread)) }),
                         // DAEMON-STORAGE-1: api.storage, over the store's own handle (null for a non-SQL store).
                         storageHandle = (store as? SqlInfantryStore)?.handle,
                         // DP-4a: tickets / epics / board for plugins, over the board built above (host-applied policy and scope).

@@ -37,7 +37,6 @@ Failing at 5f5b974e but not in the base list (so NOT a known failure; treat as n
 | infantry | `cli.CliAcceptanceTest` | yes | `watchStreamsOutputAndExitsCleanlyWhenThePodConverges`: AssertionError at CliAcceptanceTest.kt:228 | |
 | infantry | `cli.CliDecisionTest` | yes | `refusalsPrintTheCodeAndExitOne`: AssertionError at CliDecisionTest.kt:91 | |
 | infantry | `cli.CliIssueTest` | yes | `refusalsPrintTheCodeAndExitOne`: AssertionError at CliIssueTest.kt:154 | |
-| infantry | `cli.CliOwnerQuestionTest` | yes | `askReturnsAtOnceTheOwnerPicksAndThePickIsMailedToTheAsker`: AssertionError at CliOwnerQuestionTest.kt:101 | |
 | infantry | `cli.CliSkillTest` | yes | `usageSlipsExit2BeforeConnecting`: AssertionError at CliSkillTest.kt:120 | |
 | infantry | `cli.SessionKillScopeTest` | yes | `aPmRemovesAStaleBusySessionWithoutForceOverTheCli`: IllegalStateException at SessionKillScopeTest.kt:57 | |
 | infantry | `cli.SessionRemoveTest` | yes | `theMcpToolRemovesAnEndedSessionOfAnyOriginAndRefusesALiveOne`: IllegalStateException at SessionRemoveTest.kt:80 | |
@@ -93,7 +92,6 @@ Failing at 5f5b974e but not in the base list (so NOT a known failure; treat as n
 | infantryUi | `ui.TicketCommentsPanelUiTest` | yes | `threadPostResolveAndNotifyPicker`: AssertionError at Assertions.kt:264 | |
 | infantryUi | `ui.TicketModalUiTest` | yes | `Open shows the ticket modal over the board, Back and Esc close it, the inline editor still works`: AssertionError at SemanticsNodeInteraction.kt:178 | |
 | infantry | `daemon.InfantryBinShellTest` | no | not failing in the 5f5b974e run (base entry kept) | |
-| infantry | `cli.CliOwnerQuestionTest` | yes | CI-TESTS-5 (e9b33f6b): answer mail carries no threadId; open question orphaned across restart (not jar wiring) | e9b33f6b |
 | infantry | `cli.mcp.McpTicketImagesE2eTest` | yes | CI-TESTS-5: answer carries no `images` field after plugins wired | e9b33f6b |
 | infantry | `cli.mcp.McpMailToolsE2eTest` | yes | CI-TESTS-5: NullPointerException after plugins wired | e9b33f6b |
 | infantry | `daemon.ReportBackDaemonTest` | yes | CI-TESTS-5: "run 2 to start" times out at 60 s (4 tests) | e9b33f6b |

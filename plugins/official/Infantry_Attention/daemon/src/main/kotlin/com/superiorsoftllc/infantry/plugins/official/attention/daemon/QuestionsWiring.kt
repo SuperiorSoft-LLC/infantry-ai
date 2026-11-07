@@ -36,7 +36,7 @@ internal object QuestionsWiring {
 
         val questions = OwnerQuestions(
             repository = StorageOwnerQuestionRepository(api.storage),
-            notify = api.sessionNotifier::notifySession,
+            notify = { id, subject, body, thread -> api.sessionNotifier.notifySession(id, subject, body, thread) },
             maxOpen = { limit(MAX_OPEN_KEY, OwnerQuestions.DEFAULT_MAX_OPEN) },
             maxPerHour = { limit(MAX_PER_HOUR_KEY, OwnerQuestions.DEFAULT_MAX_PER_HOUR) },
             sessionExists = { session(it) != null },
@@ -82,8 +82,8 @@ internal object QuestionsWiring {
         api.processes.onSessionClosed { c ->
             if (c.reason in ORPHANING_CLOSE_REASONS) questions.orphanSession(c.sessionId, c.at)
         }
-        // Auto-picks are minute-grained; a 15 s sweep (and one at once, for questions due across a restart).
-        runCatching { questions.sweep() }
+        // Auto-picks are minute-grained; a 15 s sweep.
+        // Not at plugin start: the restored sessions are not visible yet, so every question would read as orphaned (CliOwnerQuestionTest).
         api.schedule("question-sweep", SWEEP_MS) { questions.sweep() }
 
         api.frames.handle("question_ask") { frame, _ -> refuse("question_ask") { ask(api, questions, frame, ::session) } }
