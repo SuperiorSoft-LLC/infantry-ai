@@ -436,11 +436,13 @@ class TicketUpdateTool(private val api: DaemonApi, private val comments: TicketC
             patch.weight == null && patch.contextLimit == null && patch.effort == null && patch.runner == null && patch.images == null
         val updated = if ((notifyEdit != null || epicTarget != null) && noFields) epicMoved else TicketSave.result(api.tickets.update(existing.id, patch, WireTickets.by(call)), tool)
         notifyEdit?.let { (set, add, rem) -> comments?.editNotify(existing.id, set, add, rem) }
-        val ticket = relatedTo?.let { TicketSave.linkRelated(api, call, updated, it, tool) } ?: updated
-        TicketSave.saved(ticket, TicketSave.Fields(
+        if (!relatedTo.isNullOrEmpty()) TicketSave.linkRelatedAsync(api, call, updated, relatedTo, tool, comments)
+        val reply = TicketSave.saved(updated, TicketSave.Fields(
             title = ToolArgs.string(args, "title") != null, description = patch.description != null, agentId = patch.agentId != null, provider = patch.provider != null,
             model = patch.model != null, weight = patch.weight != null, contextLimit = patch.contextLimit != null, images = patch.images != null,
-            related = relatedTo != null, effort = patch.effort != null, epic = epicTarget != null,
+            related = relatedTo != null && relatedTo.isEmpty(), effort = patch.effort != null, epic = epicTarget != null,
         ), created = false, verbose = ToolArgs.flag(args, "verbose"))
+        if (relatedTo.isNullOrEmpty() || reply.isError) reply
+        else ToolResult(reply.text + " | relatedTo: ${relatedTo.size} link(s) being added in the background (a failure is commented on the ticket)")
     }
 }
