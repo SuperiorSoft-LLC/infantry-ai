@@ -112,6 +112,18 @@ class AgentProfilesTest {
     )
 
     // --- saving ----------------------------------------------------------------------------------
+    /** RUNNER-AGENT-1: the runner persists, an absent one keeps it, a blank one clears it, a malformed one is refused. */
+    @Test
+    fun aProfilesRunnerIsStoredKeptClearedAndValidated() {
+        val profiles = profiles()
+        val saved = profiles.save(AgentProfile(name = "R", role = "qa", runner = " r2 "))
+        assertEquals("r2", saved.runner)
+        val id = saved.id!!
+        assertEquals("r2", profiles.save(AgentProfile(id = id, name = "R", role = "qa")).runner, "absent keeps")
+        assertNull(profiles.save(AgentProfile(id = id, name = "R", role = "qa", runner = " ")).runner, "blank clears")
+        assertFailsWith<IllegalArgumentException> { profiles.save(AgentProfile(id = id, name = "R", role = "qa", runner = "bad name!")) }
+    }
+
 
     @Test
     fun aProfileWithNoIdIsCreatedUnderAGeneratedIdAndNormalised() {

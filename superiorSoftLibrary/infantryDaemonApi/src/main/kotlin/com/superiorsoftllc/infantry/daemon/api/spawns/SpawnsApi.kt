@@ -98,6 +98,8 @@ data class SpawnRequest(
     val effort: String? = null,
     /** A first prompt, run as the session's first turn (persona, identity and notes around it); null = none. */
     val task: String? = null,
+    /** RUNNER-AGENT-1: where the session runs (`local` | a runner name | `any`), over the agent profile's runner; null = unset. */
+    val runner: String? = null,
 )
 
 /** The session [spawn] created, at [depth], and the caller's open spawns counting it. */

@@ -60,6 +60,11 @@ internal object SpawnTools {
             "shows contextLimit per harness (supported / best_effort / unsupported; unsupported = recorded, not applied)."
 
     /** EFFORT-1: the one description of an effort argument. */
+    /** RUNNER-AGENT-1: the one description of a runner argument. */
+    const val RUNNER_HELP =
+        "Where the session runs: local, a paired runner name, or any. Over the agent profile's runner, under a ticket pin; " +
+            "an unknown, down, paused or full runner refuses the spawn (no silent local fallback)."
+
     const val EFFORT_HELP =
         "Reasoning effort for the session: low, medium, high, xhigh or max (off = the harness default, the default). " +
             "How it is honoured depends on the harness: infantry_list_harnesses shows effort per harness " +
@@ -144,6 +149,7 @@ internal object SpawnTools {
             put("task", prop("string", "Optional first prompt for the new session."))
             put("contextLimit", prop("string", CONTEXT_LIMIT_HELP))
             put("effort", prop("string", EFFORT_HELP))
+            put("runner", prop("string", RUNNER_HELP))
             put(
                 "ticketId",
                 prop(
@@ -170,7 +176,7 @@ internal object SpawnTools {
             contextLimit.error?.let { return refused("$SPAWN: $it") }
             val effort = EffortLevels.parse(string(args, "effort"))
             effort.error?.let { return refused("$SPAWN: $it") }
-            val request = SpawnRequest(role, agentId, string(args, "projectId") ?: call.clientProjectId, contextLimit.value, effort.value, task)
+            val request = SpawnRequest(role, agentId, string(args, "projectId") ?: call.clientProjectId, contextLimit.value, effort.value, task, string(args, "runner"))
             val spawned = when (val r = api.spawns.spawn(request, by(call), narrowing(call))) {
                 is SessionsResult.Ok -> r.value
                 else -> return failed(SPAWN, r)

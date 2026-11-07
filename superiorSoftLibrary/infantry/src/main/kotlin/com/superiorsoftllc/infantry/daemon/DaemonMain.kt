@@ -1247,7 +1247,7 @@ class InfantryDaemon(
             val mailbox = Mailbox(mailStore, { MailLimits.of(settings::limit) })
             // BUG-S3: mail to an agent swapped onto another harness opens a fresh session there (4.2, lazily).
             val bindFreshSession = { agentId: String ->
-                LocalRunner.start(runnerPool, manager, SpawnOptions(agentId = agentId, projectId = agents.get(agentId)?.projectId), repo)
+                LocalRunner.start(runnerPool, manager, SpawnOptions(agentId = agentId, projectId = agents.get(agentId)?.projectId), repo, agentRunner = agents.get(agentId)?.runner, defaultRunner = settings.runnersDefault())
             }
             val mail = MailRouter(
                 manager, mailbox, agents, mailBase,
@@ -1767,8 +1767,8 @@ class InfantryDaemon(
                             create = { request ->
                                 LocalRunner.start(
                                     runnerPool, manager,
-                                    SpawnOptions(agentId = request.agentId, role = request.role, projectId = request.projectId, contextLimit = request.contextLimit, effort = request.effort),
-                                    repo,
+                                    SpawnOptions(agentId = request.agentId, role = request.role, projectId = request.projectId, contextLimit = request.contextLimit, effort = request.effort, runner = request.runner),
+                                    repo, agentRunner = request.agentId?.let { agents.get(it)?.runner }, defaultRunner = settings.runnersDefault(),
                                 ) ?: throw IllegalArgumentException("the daemon could not bind a session for this spawn")
                             },
                             firstTask = { record, task ->
@@ -3301,7 +3301,7 @@ private suspend fun handleConnection(
                             spawnOrigin = origin
                             // BIND AT CREATION: a console opened as a profile is addressable at once.
                             spawnGuard.admit(origin) { placement ->
-                                LocalRunner.start(runnerPool, manager, options, repo)
+                                LocalRunner.start(runnerPool, manager, options, repo, agentRunner = options.agentId?.let { agents.get(it)?.runner }, defaultRunner = (settings as? SettingsService)?.runnersDefault() ?: "local")
                                     ?.also { if (placement != null) spawnGuard.record(it.id, origin); manager.setSpawner(it.id, origin) }
                             }?.let { active = it.id }
                             null

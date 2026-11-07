@@ -2,7 +2,7 @@
 -- runner = `local` | a registered runner name | `any`; NULL = no pin (the routing rule / `runners.default` decides).
 -- Nullable: every existing ticket is unpinned. The columns are exactly tickets.sq's and archive.sq's.
 --
--- NEXT MIGRATION: 60.sqm
+-- NEXT MIGRATION: 61.sqm
 
 ALTER TABLE tickets ADD COLUMN runner TEXT;
 ALTER TABLE archived_tickets ADD COLUMN runner TEXT;

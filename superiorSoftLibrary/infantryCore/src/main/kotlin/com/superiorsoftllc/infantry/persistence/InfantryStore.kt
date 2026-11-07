@@ -561,6 +561,7 @@ class SqlInfantryStore(val handle: InfantryDatabaseHandle) : InfantryStore {
                 effort = profile.effort,
                 traitIds = profile.traitIds?.let { kotlinx.serialization.json.Json.encodeToString(TRAIT_IDS_JSON, it) },
                 skillIds = profile.skillIds?.let { kotlinx.serialization.json.Json.encodeToString(TRAIT_IDS_JSON, it) },
+                runner = profile.runner.orEmpty(), // AgentProfiles already resolved keep-vs-clear; blank stores NULL
             )
         }
 
@@ -984,6 +985,7 @@ private fun Agents.toProfile() = AgentProfile(
     effort = effort,
     traitIds = kotlinx.serialization.json.Json.decodeFromString(TRAIT_IDS_JSON, trait_ids),
     skillIds = kotlinx.serialization.json.Json.decodeFromString(TRAIT_IDS_JSON, skill_ids),
+    runner = runner,
 )
 
 internal val TRAIT_IDS_JSON = kotlinx.serialization.builtins.ListSerializer(kotlinx.serialization.serializer<String>())

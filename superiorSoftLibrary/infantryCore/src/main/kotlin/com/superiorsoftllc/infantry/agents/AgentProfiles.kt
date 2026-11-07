@@ -133,7 +133,10 @@ class AgentProfiles(
         // P10-K12 (K-D9): the same rule for the agent's attached skills -- absent/null keeps, [] clears, unknown refused.
         val skillIds = profile.skillIds?.map { it.trim() }?.also(requireKnownSkills) ?: existing?.skillIds.orEmpty()
 
-        val stored = AgentProfile(id, name, role, provider, model, instructions, projectId, effort, traitIds, skillIds)
+        // RUNNER-AGENT-1: absent/null keeps the stored runner, blank clears it, anything else must be local / any / a runner name.
+        val runner = profile.runner?.trim()?.also { require(it.isEmpty() || RUNNER_REF.matches(it)) { "runner '${it.take(40)}' must be local, any or a runner name ([A-Za-z0-9._-], up to 64 characters)" } }
+            ?: existing?.runner
+        val stored = AgentProfile(id, name, role, provider, model, instructions, projectId, effort, traitIds, skillIds, runner?.takeIf { it.isNotEmpty() })
         repository.save(stored, clock())
         return repository.get(id) ?: error("profile $id was saved but cannot be read back")
     }
@@ -327,6 +330,8 @@ class AgentProfiles(
     }
 
     companion object {
+        /** RUNNER-AGENT-1: `local`, `any` or a runner name. */
+        private val RUNNER_REF = Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
         const val MAX_NAME_LENGTH = 100
         const val MAX_INSTRUCTIONS_LENGTH = 20_000
         /** TRAITS-T3: the most trait ids an agent may add to its role's list. */

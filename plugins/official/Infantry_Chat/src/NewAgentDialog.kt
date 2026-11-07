@@ -94,7 +94,7 @@ private const val ROLE_GRID_VISIBLE_ROWS = 3
 fun NewAgentDialog(
     state: AppState,
     /** Runs the spawn; returns null on success (the modal closes) or the refusal text (shown inside the modal, nothing closes). */
-    onAdd: suspend (roleId: String, picked: PickedModel?, task: String, contextLimit: Int?, effort: String?) -> String?,
+    onAdd: suspend (roleId: String, picked: PickedModel?, task: String, contextLimit: Int?, effort: String?, runner: String?) -> String?,
     onDismiss: () -> Unit,
 ) {
     NewAgentDialogFrame(state, onAdd, onDismiss) { draft ->
@@ -142,7 +142,7 @@ class NewAgentTargets {
 @Composable
 fun NewAgentDialogFrame(
     state: AppState,
-    onAdd: suspend (roleId: String, picked: PickedModel?, task: String, contextLimit: Int?, effort: String?) -> String?,
+    onAdd: suspend (roleId: String, picked: PickedModel?, task: String, contextLimit: Int?, effort: String?, runner: String?) -> String?,
     onDismiss: () -> Unit,
     content: @Composable ColumnScope.(NewAgentDraft) -> Unit,
 ) {
@@ -189,7 +189,7 @@ fun NewAgentDialogFrame(
                     onClick = {
                         cur.roleId?.let { role ->
                             adding = true; error = null
-                            scope.launch { error = onAdd(role, cur.executor.picked, cur.task.trim(), cur.contextLimit, cur.effort); adding = false }
+                            scope.launch { error = onAdd(role, cur.executor.picked, cur.task.trim(), cur.contextLimit, cur.effort, cur.runner); adding = false }
                         }
                     },
                     enabled = cur.canAdd && !adding, modifier = Modifier.testTag(NEW_AGENT_ADD_TAG),
@@ -333,6 +333,7 @@ private fun ExecutorStep(m: NewAgentModalModel, update: (NewAgentModalModel) -> 
         ExecutorPicker(m.executor, { update(m.withExecutor(it)) }, tags = NEW_AGENT_EXECUTOR_TAGS, textColor = AlertDialogDefaults.textContentColor)
         NewAgentContextLimit(m, update)
         NewAgentEffort(m, update)
+        NewAgentRunner(m, update)
     }
 }
 
@@ -358,5 +359,15 @@ private fun NewAgentContextLimit(m: NewAgentModalModel, update: (NewAgentModalMo
         m.contextLimitOn, m.contextLimitText, m.contextLimitNote, m.missingField == NewAgentField.CONTEXT_LIMIT,
         ContextLimitTags(NEW_AGENT_CONTEXT_LIMIT_SWITCH_TAG, NEW_AGENT_CONTEXT_LIMIT_TAG, NEW_AGENT_CONTEXT_LIMIT_NOTE_TAG),
         onOn = { update(m.withContextLimitOn(it)) }, onText = { update(m.withContextLimitText(it)) },
+    )
+}
+
+/** RUNNER-AGENT-1: where the new session runs; blank = the agent's runner, then the default (`local` unless `runners.default` says otherwise). */
+@Composable
+private fun NewAgentRunner(m: NewAgentModalModel, update: (NewAgentModalModel) -> Unit) {
+    OutlinedTextField(
+        m.runnerText, { update(m.withRunnerText(it)) }, singleLine = true,
+        label = { Text("Runner (optional: local, a runner name or any)") },
+        modifier = Modifier.fillMaxWidth().testTag("new-agent-runner"), colors = visibleBorderFieldColors(),
     )
 }

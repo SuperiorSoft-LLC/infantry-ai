@@ -120,7 +120,7 @@ object LocalRunner {
         /** RUNNER-AGENT-1: the routing rule / `runners.default` tail of the precedence (Placement.pick). */
         defaultRunner: String = RunnerPool.LOCAL,
     ): SessionRecord? {
-        val wanted = options?.runner?.trim().orEmpty().ifEmpty { agentRunner?.trim().orEmpty() }
+        val wanted = options?.runner?.trim().orEmpty().ifEmpty { agentRunner?.trim().orEmpty() }.ifEmpty { defaultRunner.trim() }
         if (wanted.isNotEmpty() && wanted != RunnerPool.LOCAL) {
             val entries = pool.runners().map {
                 com.superiorsoftllc.infantry.settings.RunnerEntry(it.name, it.state, it.health?.freeSlots?.takeIf { s -> s >= 0 } ?: Int.MAX_VALUE)

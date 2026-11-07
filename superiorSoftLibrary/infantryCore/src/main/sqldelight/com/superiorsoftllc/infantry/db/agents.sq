@@ -28,7 +28,9 @@ CREATE TABLE IF NOT EXISTS agents (
     -- TRAITS-T3: the trait ids this agent ADDS to its role's list, a JSON array (declared LAST: an ADD COLUMN, see 28.sqm).
     trait_ids TEXT NOT NULL DEFAULT '[]',
     -- P10-K12: the skill ids this agent attaches, a JSON array in attach order (declared LAST: an ADD COLUMN, see 34.sqm).
-    skill_ids TEXT NOT NULL DEFAULT '[]'
+    skill_ids TEXT NOT NULL DEFAULT '[]',
+    -- RUNNER-AGENT-1: the agent's default runner; null = none (declared LAST: an ADD COLUMN, see 60.sqm).
+    runner TEXT
 );
 
 CREATE INDEX IF NOT EXISTS index_agents_on_role ON agents(role);
@@ -37,8 +39,8 @@ CREATE INDEX IF NOT EXISTS index_agents_on_role ON agents(role);
 -- the INSERT is ignored for an existing id, and the UPDATE never touches created_at.
 -- TRAITS-T3: a NULL :traitIds keeps the stored list (a new row gets '[]'); '[]' clears it. P10-K12: :skillIds likewise.
 saveAgent {
-    INSERT OR IGNORE INTO agents(id, name, role, provider, model, instructions, created_at, updated_at, project_id, effort, trait_ids, skill_ids)
-    VALUES (:id, :name, :role, :provider, :model, :instructions, :at, :at, :projectId, :effort, COALESCE(:traitIds, '[]'), COALESCE(:skillIds, '[]'));
+    INSERT OR IGNORE INTO agents(id, name, role, provider, model, instructions, created_at, updated_at, project_id, effort, trait_ids, skill_ids, runner)
+    VALUES (:id, :name, :role, :provider, :model, :instructions, :at, :at, :projectId, :effort, COALESCE(:traitIds, '[]'), COALESCE(:skillIds, '[]'), NULLIF(:runner, ''));
     UPDATE agents SET
         name = :name,
         role = :role,
@@ -49,6 +51,7 @@ saveAgent {
         effort = :effort,
         trait_ids = COALESCE(:traitIds, trait_ids),
         skill_ids = COALESCE(:skillIds, skill_ids),
+        runner = CASE WHEN :runner IS NULL THEN runner ELSE NULLIF(:runner, '') END,
         updated_at = :at
     WHERE id = :id;
 }

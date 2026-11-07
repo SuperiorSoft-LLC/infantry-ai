@@ -29,6 +29,8 @@ data class NewAgentModalModel(
     val effortOn: Boolean = false,
     /** EFFORT-1: the chosen level id while the switch is on. */
     val effortLevel: String = EffortLevels.ALL.first { it.id == "medium" }.id,
+    /** RUNNER-AGENT-1: the runner the session starts on as typed (`local`, a runner name or `any`); blank = unset (the agent's runner, then the default). */
+    val runnerText: String = "",
 ) {
     /** The role grid, narrowed by what was typed (id and name), best match first. */
     val roleOptions: List<Role>
@@ -87,6 +89,11 @@ data class NewAgentModalModel(
 
     fun withEffortLevel(id: String): NewAgentModalModel = copy(effortLevel = id)
 
+    fun withRunnerText(text: String): NewAgentModalModel = copy(runnerText = text)
+
+    /** The runner Add sends, or null when the field is blank. */
+    val runner: String? get() = runnerText.trim().ifEmpty { null }
+
     /** The level Add sends: the picked one while the switch is on, else null (the role binding's effort / the harness default apply). */
     val effort: String? get() = if (effortOn) effortLevel else null
 
@@ -111,7 +118,7 @@ data class NewAgentModalModel(
     val contextLimitNote: String get() = contextLimitNoteFor(harnesses, executor.harness)
 
     /** The `new` frame's data for Add: the picked harness+model (null = daemon defaults), the role, the role binding's effort, the context limit. */
-    fun spawnData(): String = spawnOptionsData(executor.picked, effort ?: roleId?.let { bindings[it]?.effort }, roleId, contextLimit = contextLimit)
+    fun spawnData(): String = spawnOptionsData(executor.picked, effort ?: roleId?.let { bindings[it]?.effort }, roleId, contextLimit = contextLimit, runner = runner)
 }
 
 /** The New agent modal's fields Add checks, in screen order. CONTEXT_LIMIT is optional: only a switched-on, unreadable value blocks. */

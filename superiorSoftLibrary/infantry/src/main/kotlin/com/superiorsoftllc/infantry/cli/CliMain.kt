@@ -457,7 +457,7 @@ internal object Cli {
                 "archive" -> runBlocking { archiveCommand(stream, parsed, out, err, getenv) }
                 "harnesses" -> harnesses(stream, out, err)
                 "harness-status" -> harnessStatus(stream, parsed, out, err)
-                "agent" -> runBlocking { if (parsed.args.firstOrNull() == "switch") agentSwitch(stream, parsed, out, err, getenv) else agentQueue(stream, parsed, out, err) }
+                "agent" -> runBlocking { when (parsed.args.firstOrNull()) { "switch" -> agentSwitch(stream, parsed, out, err, getenv); "runner" -> agentRunner(stream, parsed, out, err); else -> agentQueue(stream, parsed, out, err) } }
                 "agent-def" -> AgentDefCli.run(stream, parsed.args, out, err, getenv)
                 "run-cmd" -> RunCmdCli.run(stream, parsed.args, parsed.name, parsed.project, parsed.crossProject, parsed.force, out, err, getenv)
                 "harness-install" -> harnessInstall(stream, parsed, out, err)
@@ -1366,8 +1366,31 @@ internal object Cli {
         return 0
     }
 
+    /** RUNNER-AGENT-1: `agent runner <agent> [<local|name|any|none>]`: shows or sets the profile's default runner (`none` clears it). */
+    private suspend fun agentRunner(stream: FrameStream, parsed: ParsedArgs, out: Appendable, err: Appendable): Int {
+        checkContract(stream, err)
+        agentQueueUsage(parsed.args)?.let { err.appendLine(it); return 1 }
+        val agent = parsed.args[1].trim()
+        val answer = stream.request(Envelope(Envelope.AGENT_LIST, ""), answerType = Envelope.AGENTS, what = "agent_list", idempotent = true)
+        val profiles = try { json.decodeFromString(ListSerializer(AgentProfile.serializer()), answer.data) } catch (e: Exception) {
+            err.appendLine("error: malformed agents answer from the daemon: ${e.message}"); return 1
+        }
+        val profile = profiles.firstOrNull { it.id == agent || it.id?.startsWith(agent) == true || it.name == agent }
+            ?: run { err.appendLine("error: no agent profile '$agent' (infantry agents --profiles lists them)"); return 1 }
+        val want = parsed.args.getOrNull(2)?.trim()
+        if (want == null) { out.appendLine("${profile.id} runner ${profile.runner ?: "-"}"); return 0 }
+        val saved = stream.request(
+            Envelope(Envelope.AGENT_SAVE, json.encodeToString(AgentProfile.serializer(), profile.copy(runner = if (want == "none") "" else want))),
+            answerType = Envelope.AGENT, what = "agent_save", idempotent = false,
+        )
+        val after = try { json.decodeFromString(AgentProfile.serializer(), saved.data) } catch (e: Exception) { profile }
+        out.appendLine("${after.id} runner ${after.runner ?: "-"}")
+        return 0
+    }
+
     private fun agentQueueUsage(args: List<String>): String? {
         if (args.firstOrNull() == "switch") return if (args.size < 3) "usage: infantry agent switch <agent> <ticketId> [--now]" else null
+        if (args.firstOrNull() == "runner") return if (args.size !in 2..3) "usage: infantry agent runner <agent> [<local|name|any|none>]" else null
         if (args.firstOrNull() != "queue") return "usage: infantry agent queue <agent> [add <id> [--at n] | rm <id> | mv <id> <n> | clear]"
         val rest = args.drop(2)
         return when (rest.firstOrNull()) {

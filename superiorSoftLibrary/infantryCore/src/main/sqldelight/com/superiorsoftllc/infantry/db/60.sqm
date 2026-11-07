@@ -1,0 +1,6 @@
+-- RUNNER-AGENT-1 (ticket c9d07b5d) -- migration v60 -> v61: `agents.runner`, the agent profile's default runner
+-- (`local` | a registered runner name | `any`). NULL = none (a routing rule / `runners.default` decides). Existing rows keep NULL.
+--
+-- NEXT MIGRATION: 61.sqm
+
+ALTER TABLE agents ADD COLUMN runner TEXT;
