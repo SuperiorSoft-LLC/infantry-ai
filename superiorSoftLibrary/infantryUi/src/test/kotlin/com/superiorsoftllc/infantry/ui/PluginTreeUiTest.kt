@@ -5,6 +5,7 @@ package com.superiorsoftllc.infantry.ui
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import com.superiorsoftllc.infantry.plugin.api.ModuleManifest
 import com.superiorsoftllc.infantry.plugin.api.PanelDeclaration
@@ -70,5 +71,40 @@ class PluginTreeUiTest {
         onNodeWithTag(MODULE_CRUMB_TAG_PREFIX + "root").performClick()
         onNodeWithTag(MODULE_ROW_TAG_PREFIX + "Infantry_Chat").assertExists()
         onNodeWithTag(MODULE_ROW_TAG_PREFIX + "Infantry_ChatFeed").assertDoesNotExist()
+    }
+
+    // PLUGIN-TREE-2b: a child shared by two parents.
+    private val pa = ModuleManifest("Test_A", "1.0.0")
+    private val pb = ModuleManifest("Test_B", "1.0.0")
+    private val shared = ModuleManifest("Test_Shared", "1.0.0", parents = listOf("Test_A", "Test_B"))
+
+    @Test fun sharedChildShowsInUseByAndAsksBeforeSwitchingOff() = runDesktopComposeUiTest(900, 700) {
+        val asked = mutableListOf<com.superiorsoftllc.infantry.ui.plugin.ModuleRequest>()
+        val changes = com.superiorsoftllc.infantry.ui.plugin.ModuleChanges { r ->
+            asked += r; com.superiorsoftllc.infantry.plugin.host.ModuleChange.Applied(com.superiorsoftllc.infantry.plugin.api.ModulesConfig(), listOf(r.module), "ok")
+        }
+        setContent { ModulesSection(TabFactory(emptyList(), statuses = listOf(pa, pb, shared).map(::s), changes = changes)) }
+        onNodeWithTag(MODULE_EDIT_TAG_PREFIX + "Test_A").performClick()
+        onNodeWithTag(com.superiorsoftllc.infantry.ui.plugin.MODULE_IN_USE_BY_TAG_PREFIX + "Test_Shared").assertExists()
+        onNodeWithTag(com.superiorsoftllc.infantry.ui.plugin.MODULE_TOGGLE_TAG_PREFIX + "Test_Shared").performClick()
+        // A confirm, not a refusal; nothing written yet.
+        onNodeWithTag(com.superiorsoftllc.infantry.ui.plugin.MODULE_SHARED_CONFIRM_TAG_PREFIX + "Test_Shared").assertExists()
+        kotlin.test.assertTrue(asked.isEmpty())
+        onNodeWithTag(com.superiorsoftllc.infantry.ui.plugin.MODULE_SHARED_NO_TAG_PREFIX + "Test_Shared").performClick()
+        kotlin.test.assertTrue(asked.isEmpty())
+        onNodeWithTag(com.superiorsoftllc.infantry.ui.plugin.MODULE_TOGGLE_TAG_PREFIX + "Test_Shared").performClick()
+        onNodeWithTag(com.superiorsoftllc.infantry.ui.plugin.MODULE_SHARED_YES_TAG_PREFIX + "Test_Shared").performClick()
+        kotlin.test.assertEquals(listOf("Test_Shared" to false), asked.map { it.module to it.enable })
+    }
+
+    @Test fun heldOffChildShowsTheChipAndKeepsItsOwnSwitchOn() = runDesktopComposeUiTest(900, 700) {
+        val held = ModuleStatus("Test_Shared", Tier.CORE, ModuleState.DISABLED, "all its parents are off", shared, heldOffBy = listOf("Test_A", "Test_B"))
+        val off = listOf(pa, pb).map { ModuleStatus(it.name, Tier.CORE, ModuleState.DISABLED, manifest = it) }
+        val changes = com.superiorsoftllc.infantry.ui.plugin.ModuleChanges { com.superiorsoftllc.infantry.plugin.host.ModuleChange.Applied(com.superiorsoftllc.infantry.plugin.api.ModulesConfig(), emptyList(), "ok") }
+        setContent { ModulesSection(TabFactory(emptyList(), statuses = off + held, changes = changes)) }
+        onNodeWithTag(MODULE_EDIT_TAG_PREFIX + "Test_A").performClick()
+        onNodeWithTag(com.superiorsoftllc.infantry.ui.plugin.MODULE_HELD_OFF_TAG_PREFIX + "Test_Shared").assertExists()
+        // Own flag on: the button offers Disable, not Enable.
+        onNodeWithTag(com.superiorsoftllc.infantry.ui.plugin.MODULE_TOGGLE_TAG_PREFIX + "Test_Shared").assertTextEquals("Disable").assertExists()
     }
 }

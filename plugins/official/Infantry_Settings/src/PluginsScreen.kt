@@ -332,7 +332,7 @@ internal fun matches(p: PluginView, filter: String, query: String): Boolean {
 internal fun pluginOrder(rows: List<PluginView>) = rows.sortedWith(compareBy<PluginView>({ it.cls != "official" }, { it.id.lowercase() }))
 
 /** PLUGINS-UI-1: turning [p] off asks first when the app ships it as an official plugin, or an enabled plugin needs it. */
-internal fun needsDisableConfirm(p: PluginView) = p.enabled && ((p.cls == "official" && p.bundled) || p.requiredBy.isNotEmpty())
+internal fun needsDisableConfirm(p: PluginView) = p.enabled && ((p.cls == "official" && p.bundled) || p.requiredBy.isNotEmpty() || p.parents.size >= 2)
 
 @Composable
 private fun Installed(
@@ -358,11 +358,22 @@ private fun Installed(
                 Text("${shown.size} of ${rows.size} plugins · ${rows.count { it.enabled }} on", color = Palette.Muted, fontSize = 12.sp)
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (shown.isEmpty()) Text("No plugin matches.", color = Palette.Muted, fontSize = 13.sp, modifier = Modifier.padding(vertical = 8.dp).testTag(PLUGINS_EMPTY_TAG))
-                    for (p in shown) InstalledRow(
-                        port, p, offers[p.id], busy, pending[p.id], p.id in expanded, act,
-                        onExpand = { expanded = if (p.id in expanded) expanded - p.id else expanded + p.id },
-                        onToggle = { on -> if (!on && needsDisableConfirm(p)) confirm = p else toggle(p.id, on) },
-                    )
+                    val byId = rows.associateBy { it.id }
+                    val shownIds = shown.map { it.id }.toSet()
+                    // PLUGIN-TREE-2b: children nest under their parent row; a child with 2+ parents appears under each, in the same state.
+                    @Composable fun TreeRow(p: PluginView, depth: Int) {
+                        Column(Modifier.padding(start = (depth * 20).dp)) {
+                            InstalledRow(
+                                port, p, offers[p.id], busy, pending[p.id], p.id in expanded, act,
+                                onExpand = { expanded = if (p.id in expanded) expanded - p.id else expanded + p.id },
+                                onToggle = { on -> if (!on && needsDisableConfirm(p)) confirm = p else toggle(p.id, on) },
+                                parentsOn = p.parents.filter { byId[it]?.let { q -> q.enabled && q.heldOffBy.isEmpty() } == true },
+                            )
+                        }
+                        if (depth < 4) for (c in p.children.mapNotNull { byId[it] }.filter { it.id in shownIds }.sortedBy { it.id }) TreeRow(c, depth + 1)
+                    }
+                    // Top level: plugins with no shown parent (a filter that hides the parents lifts the children up).
+                    for (p in shown.filter { q -> q.parents.none { it in shownIds } }) TreeRow(p, 0)
                 }
             }
         }
@@ -445,7 +456,7 @@ private fun Detail(label: String, value: String, color: Color = Palette.Text) {
 @Composable
 private fun InstalledRow(
     port: PluginManagerPort, p: PluginView, offer: UpdateView?, busy: Boolean, pendingTo: Boolean?, open: Boolean, act: Act,
-    onExpand: () -> Unit, onToggle: (Boolean) -> Unit,
+    onExpand: () -> Unit, onToggle: (Boolean) -> Unit, parentsOn: List<String> = emptyList(),
 ) {
     val badges = buildList {
         if (p.cls == "official") add("Official" to Palette.Info) else add(p.cls.replaceFirstChar { it.uppercase() } to Palette.Muted)
@@ -453,6 +464,8 @@ private fun InstalledRow(
         if (!p.bundled && p.signer == null) add("Unsigned" to Palette.Warn)
         if (offer != null) add("Update ${offer.to}" to Palette.Ok)
         if (p.yanked != null) add("Withdrawn" to Palette.Danger)
+        if (p.heldOffBy.isNotEmpty()) add(("Off: its parents are off (" + p.heldOffBy.joinToString(", ") { displayName(it) } + ")") to Palette.Warn)
+        else if (parentsOn.size >= 2) add(("In use by " + parentsOn.map { displayName(it) }.let { n -> n.dropLast(1).joinToString(", ") + " and " + n.last() }) to Palette.Muted)
     }
     val on = pendingTo ?: p.enabled
     RowCard(Modifier.testTag(PLUGIN_ROW_PREFIX + p.id)) {

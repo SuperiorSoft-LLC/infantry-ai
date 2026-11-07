@@ -18,7 +18,7 @@ class PluginManagerPortAdapter(private val manager: PluginManager) : PluginManag
 
     override fun list() = manager.list().map {
         PluginView(it.id, it.version, it.cls.label, it.bundled, it.enabled, it.license, it.signer, it.requested, it.granted, it.history.isNotEmpty(), it.yanked,
-            it.description, it.contributes, it.requiredBy)
+            it.description, it.contributes, it.requiredBy, it.parents, it.children, it.heldOffBy)
     }
 
     override fun updates() = manager.checkUpdates().map { UpdateView(it.id, it.from, it.to, it.newGrants) }

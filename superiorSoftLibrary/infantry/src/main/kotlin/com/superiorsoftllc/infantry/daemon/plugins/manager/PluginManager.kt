@@ -13,6 +13,7 @@ import com.superiorsoftllc.infantry.plugin.host.IhqResult
 import com.superiorsoftllc.infantry.plugin.host.InstallSettings
 import com.superiorsoftllc.infantry.plugin.host.ModulesFile
 import com.superiorsoftllc.infantry.plugin.host.PluginFolders
+import com.superiorsoftllc.infantry.plugin.host.PluginTree
 import com.superiorsoftllc.infantry.plugin.host.SemVer
 import com.superiorsoftllc.infantry.plugin.host.VersionRange
 import com.superiorsoftllc.infantry.update.ReleaseAssets
@@ -116,6 +117,10 @@ data class PluginRow(
     val contributes: List<String> = emptyList(),
     /** PLUGINS-UI-1: the enabled modules that list this one in their `dependencies`. */
     val requiredBy: List<String> = emptyList(),
+    /** PLUGIN-TREE-2b: the plugin tree: direct parents, direct children, and the parents that are all off when that holds this one off. */
+    val parents: List<String> = emptyList(),
+    val children: List<String> = emptyList(),
+    val heldOffBy: List<String> = emptyList(),
 )
 
 /** [listName] = the catalog's (plugin list's) display name; [latest] is null for a repo entry, which resolves its release at install. */
@@ -390,6 +395,9 @@ class PluginManager(
         val dependents = scanned.filter { c -> c.manifest != null && (cfg.modules[c.folderName]?.enabled ?: (c.tier != Tier.COMMUNITY && c.manifest!!.defaultEnabled)) }
             .flatMap { c -> c.manifest!!.dependencies.map { it.id to c.folderName } }
             .groupBy({ it.first }, { it.second })
+        val tree = PluginTree(scanned.mapNotNull { it.manifest })
+        fun ownOn(c: com.superiorsoftllc.infantry.plugin.host.ModuleCandidate) = cfg.modules[c.folderName]?.enabled ?: (c.tier != Tier.COMMUNITY && c.manifest!!.defaultEnabled)
+        val ownOnIds = scanned.filter { it.manifest != null && ownOn(it) }.map { it.folderName }.toSet()
         return scanned.mapNotNull { c ->
             val m = c.manifest ?: return@mapNotNull null
             val bundled = bundledRoot != null && c.dir != null && File(c.dir!!).canonicalPath.startsWith(bundledRoot.canonicalPath + File.separator)
@@ -407,6 +415,8 @@ class PluginManager(
                 description = m.description,
                 contributes = m.tabs.map { "tab ${it.id}" } + m.panels.map { "panel ${it.panel}: ${it.id}" } + m.blocks.map { "block ${it.slot}: ${it.name}" },
                 requiredBy = dependents[c.folderName].orEmpty().sorted(),
+                parents = tree.parentsOf(c.folderName), children = tree.childrenOf(c.folderName),
+                heldOffBy = tree.parentsOf(c.folderName).takeIf { c.folderName in ownOnIds && it.isNotEmpty() && it.none { p -> p in ownOnIds } }.orEmpty(),
             )
         }.sortedBy { it.id }
     }
