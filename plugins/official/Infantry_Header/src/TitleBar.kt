@@ -444,9 +444,17 @@ private fun ConnChip(state: AppState, onClick: () -> Unit, showUrl: Boolean = tr
         ConnState.FAILED -> "failed" to Palette.Danger
         ConnState.IDLE -> "not connected" to Palette.Muted
     }
-    Row(modifier.clickable(onClick = onClick).testTag(TITLE_BAR_CONNECTION_CHIP_TAG).padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
+    // Compact bar: a connected link is just the dot (the word was clipped to "conne" at ~411dp); the state still reads to a screen reader.
+    val dotOnly = !showUrl && c.state == ConnState.CONNECTED
+    Row(
+        modifier.clickable(onClick = onClick).testTag(TITLE_BAR_CONNECTION_CHIP_TAG).padding(4.dp)
+            .semantics { contentDescription = "Connection: $label" },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Box(Modifier.size(8.dp).clip(CircleShape).background(color))
-        Spacer(Modifier.width(6.dp))
-        Text(if (showUrl) "$label  ${c.url}" else label, color = color, fontSize = 11.sp, maxLines = 1)
+        if (!dotOnly) {
+            Spacer(Modifier.width(6.dp))
+            Text(if (showUrl) "$label  ${c.url}" else label, color = color, fontSize = 11.sp, maxLines = 1)
+        }
     }
 }
