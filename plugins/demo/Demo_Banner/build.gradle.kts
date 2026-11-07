@@ -22,6 +22,8 @@ kotlin {
 
     sourceSets {
         commonMain { kotlin.srcDir("src") }
+        jvmTest { kotlin.srcDir("test") }
+        jvmTest.dependencies { implementation(kotlin("test")) }
         commonMain.dependencies {
             api(project(":superiorSoftLibrary:infantryUiCore"))
             // DEMO-MERGE-1: the notice comes from Demo_Lock, which wraps the frame this banner sits in.

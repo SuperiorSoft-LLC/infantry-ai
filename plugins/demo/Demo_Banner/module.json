@@ -3,12 +3,12 @@
   "version": "1.0.0",
   "apiVersion": 2,
   "author": "Infantry AI",
-  "description": "Demo build only: a strip above the app body saying this is the demo (OVERRIDE-1 example of a demo override).",
+  "description": "Demo build only: a notice card in the top bar saying this is the demo (OVERRIDE-1 example of a demo override).",
   "tier": "official",
   "sequence": [],
   "entry": "com.superiorsoftllc.infantry.plugins.demo.banner.DemoBannerPlugin",
   "buildOrder": 900,
   "shell": [
-    { "node": "infantry.shell.frame/infantry.shell.body", "name": "banner", "mode": "before", "priority": 10 }
+    { "node": "infantry.shell.header.lead", "name": "banner", "mode": "after", "priority": 10 }
   ]
 }
