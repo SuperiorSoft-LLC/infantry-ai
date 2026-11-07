@@ -37,7 +37,7 @@ jobs:
           2>&1 | tail -n 200
       - name: Summary (known failures are reported, only new ones fail)
         if: always()
-        run: scripts/ci-test-summary.sh "Linux JVM tests" superiorSoftLibrary/*/build/test-results
+        run: bash scripts/ci-test-summary.sh "Linux JVM tests" superiorSoftLibrary/*/build/test-results
       - uses: actions/upload-artifact@v4
         if: always()
         with:
