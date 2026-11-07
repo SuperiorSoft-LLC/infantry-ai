@@ -90,6 +90,7 @@ class RunModelTest {
         val refused = feed(Envelope(Envelope.ERROR, "command_save refused: command ('x') has an empty argv"))
         assertEquals("command_save refused: command ('x') has an empty argv", refused.runs.commandError)
         assertEquals(1, refused.runs.commandsRevision, "a refusal answers the save too")
+        assertEquals(emptyList(), refused.notices, "the Run tab shows it; no second global banner")
         val cleared = reduce(refused, Envelope(Envelope.COMMANDS, "[]"), 101)
         assertNull(cleared.runs.commandError)
         assertNull(feed(Envelope(Envelope.ERROR, "ticket_save refused: nope")).runs.commandError, "other refusals are not the editor's")
