@@ -79,6 +79,7 @@ internal object SessionReadTools {
         session.lastAction?.let { put("lastAction", it) }
         session.lastOutputAt?.let { put("lastOutputAt", it) }
         session.lastEventAt?.let { put("lastEventAt", it) }
+        session.lastTurnAt?.let { put("lastTurnAt", it) }
         session.backgroundWork?.let { put("backgroundWork", it) }
         // Contract 1.117.0: the agent's own progress report, raw (for a monitor) and as one readable line.
         session.progress?.let { p ->

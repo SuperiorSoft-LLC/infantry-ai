@@ -299,7 +299,7 @@ interface Sessions {
 data class QueuedMessage(val id: String, val text: String, val at: Long)
 
 /** SCRIPT-SESSION-1: [state] is the state name; [lastAction] a short text; the times are epoch millis (null = none yet). */
-data class SessionStatus(val id: String, val state: String, val lastAction: String?, val lastOutputAt: Long?, val lastEventAt: Long?)
+data class SessionStatus(val id: String, val state: String, val lastAction: String?, val lastOutputAt: Long?, val lastEventAt: Long?, val lastTurnAt: Long? = null)
 
 /** SCRIPT-VIS-1b: which script is running for a session ([hookId] names the hook, [since] is epoch millis). */
 data class AutomationMark(val script: String, val hookId: String, val since: Long)

@@ -25,8 +25,11 @@ data class SessionView(
     /** A run is in flight (or its process is still alive). */
     val live: Boolean = false,
     val lastAction: String? = null,
+    /** Epoch millis of the session's last output line (moves mid-turn too), or null. */
     val lastOutputAt: Long? = null,
     val lastEventAt: Long? = null,
+    /** LAST-TURN-1: epoch millis of the session's last finished turn (any harness, any outcome), or null until one ended. */
+    val lastTurnAt: Long? = null,
     /** The label of the background process the session is waiting on, or null. */
     val backgroundWork: String? = null,
     /** The agent's own progress report (contract 1.117.0), or null. */
