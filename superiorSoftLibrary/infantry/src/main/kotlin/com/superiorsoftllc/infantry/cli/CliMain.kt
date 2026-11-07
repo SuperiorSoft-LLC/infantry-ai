@@ -23,6 +23,7 @@ import com.superiorsoftllc.infantry.protocol.PromptAnswer
 import com.superiorsoftllc.infantry.protocol.REQUEST_ID_CONTRACT
 import com.superiorsoftllc.infantry.protocol.PromptAsk
 import com.superiorsoftllc.infantry.protocol.QuestionAsk
+import com.superiorsoftllc.infantry.protocol.QuestionAsked
 import com.superiorsoftllc.infantry.protocol.PromptOption
 import com.superiorsoftllc.infantry.prompts.QuestionSpec
 import com.superiorsoftllc.infantry.epics.Epic
@@ -629,7 +630,9 @@ internal object Cli {
                 err.appendLine("error: $message")
                 return@runBlocking if (message.startsWith("question_ask refused")) 2 else 1
             }
-            out.appendLine(answer.data)
+            // The daemon leaves the default note out of the frame (encodeDefaults off); the CLI contract prints it.
+            val asked = runCatching { json.decodeFromString(QuestionAsked.serializer(), answer.data) }.getOrNull()
+            out.appendLine(if (asked == null) answer.data else kotlinx.serialization.json.Json { encodeDefaults = true }.encodeToString(QuestionAsked.serializer(), asked))
             0
         }
 

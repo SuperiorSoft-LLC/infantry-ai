@@ -73,6 +73,7 @@ class CliAcceptanceTest {
             runner,
             Files.createTempDirectory("infantry-cli-test").toFile(),
             repo = repo,
+            pluginsRoot = com.superiorsoftllc.infantry.daemon.TestDaemonPlugins.fullRoot(),
         ).also { fixtures += it }
 
     @AfterTest

@@ -43,7 +43,7 @@ class DaemonPluginMechanismTest {
     }
 
     private fun root(modulesJson: String = granted): File =
-        TestDaemonPlugins.root("examples/Acme_DaemonHello", folder = "community", tier = "community", modulesJson = modulesJson).also { roots += it }
+        TestDaemonPlugins.root("examples/Acme_DaemonHello", folder = "community", tier = "community", modulesJson = modulesJson, officialToo = listOf("official/Infantry_Settings")).also { roots += it }
 
     private fun launch(
         root: File,
@@ -61,6 +61,8 @@ class DaemonPluginMechanismTest {
         send(Envelope(DaemonPluginHost.PLUGIN_TOOLS, "", requestId = "tools-${System.nanoTime()}"))
         return json.parseToJsonElement(client.await(DaemonPluginHost.PLUGIN_TOOLS, occurrence = toolLists.merge(this, 1, Int::plus)!! - 1).data).jsonArray
             .map { it.jsonObject["name"]!!.jsonPrimitive.content }
+            // The host lists its own built-in tools (infantry_*) beside the plugins' tools; this test is about the plugin's.
+            .filterNot { it.startsWith("infantry_") }
     }
     private val toolLists = HashMap<DaemonFixture, Int>()
 

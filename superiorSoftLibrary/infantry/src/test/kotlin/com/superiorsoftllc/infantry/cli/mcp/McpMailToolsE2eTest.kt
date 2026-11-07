@@ -117,7 +117,7 @@ class McpMailToolsE2eTest {
                 """{"type":"step_finish"}""",
             ),
         )
-        val fixture = DaemonFixture.launch(script, ScriptedRunner(script), tempDir("infantry-mail-mcp-daemon"), pluginsRoot = com.superiorsoftllc.infantry.daemon.TestDaemonPlugins.boardRoot("official/Infantry_Agents", "official/Infantry_Chat"))
+        val fixture = DaemonFixture.launch(script, ScriptedRunner(script), tempDir("infantry-mail-mcp-daemon"), pluginsRoot = com.superiorsoftllc.infantry.daemon.TestDaemonPlugins.fullRoot())
             .also { fixtures += it; it.client.await(Envelope.READY) }
         val manager = fixture.daemon.manager
         val project = tempDir("infantry-mail-mcp-project")

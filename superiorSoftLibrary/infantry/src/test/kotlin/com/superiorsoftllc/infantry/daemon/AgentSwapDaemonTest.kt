@@ -81,7 +81,7 @@ class AgentSwapDaemonTest {
         val secondScripted = ScriptedRunner(StubScript.default(), 0)
         val stub = HeldRunner(stubScripted)
         val second = HeldRunner(secondScripted)
-        val f = DaemonFixture.launch(runner = stub, additionalProviders = listOf(Second(second)))
+        val f = DaemonFixture.launch(runner = stub, pluginsRoot = TestDaemonPlugins.fullRoot(), additionalProviders = listOf(Second(second)))
         try {
             f.client.await(Envelope.READY)
             block(Rig(f, stub, second, stubScripted, secondScripted))
