@@ -7,6 +7,19 @@
   "tier": "official",
   "sequence": [],
   "buildOrder": 210,
+  "capabilities": [
+    {
+      "id": "http.fetch",
+      "description": "HTTP GET/POST to an allow-listed host; capped text body, parsed json. Off until scripting.fetch.enabled.",
+      "runs": "daemon",
+      "action": "script.fetch",
+      "kind": "write",
+      "grant": "net.out",
+      "timeoutMs": 120000,
+      "params": { "type": "object", "properties": { "url": { "type": "string" }, "method": { "type": "string", "enum": ["GET", "POST"] }, "headers": { "type": "object" }, "body": {}, "timeoutSec": { "type": "integer" }, "secretHeaders": { "type": "object", "description": "{HeaderName: secret name}; the value comes from the secrets store and is never echoed." } }, "required": ["url"] },
+      "result": { "type": "object", "properties": { "status": { "type": "integer" }, "headers": { "type": "object" }, "body": { "type": "string" }, "truncated": { "type": "boolean" }, "json": {} } }
+    }
+  ],
   "daemon": {
     "entry": "com.superiorsoftllc.infantry.plugins.official.scripting.daemon.ScriptingDaemonPlugin",
     "jar": "daemon/build/libs/Infantry_Scripting-daemon.jar",
@@ -54,6 +67,11 @@
           { "key": "scripting.exec.defaultTimeoutSec", "type": "number", "label": "Process bridge default timeout (s)", "default": 60, "min": 1, "max": 3600, "step": 1, "scope": "daemon", "order": 15 },
           { "key": "scripting.exec.maxTimeoutSec", "type": "number", "label": "Process bridge max timeout (s)", "default": 600, "min": 1, "max": 3600, "step": 1, "scope": "daemon", "order": 16 },
           { "key": "scripting.exec.tailChars", "type": "number", "label": "Process bridge output tail (chars)", "default": 8000, "min": 100, "max": 1000000, "step": 100, "scope": "daemon", "order": 17 },
+          { "key": "scripting.fetch.enabled", "type": "toggle", "label": "HTTP bridge: let scripts and agents fetch URLs (capability http.fetch)", "default": false, "scope": "daemon", "order": 30 },
+          { "key": "scripting.fetch.allow", "type": "text", "label": "HTTP bridge allow-list (JSON array or one per line; host, *.host or URL prefix; empty = nothing)", "default": "", "scope": "daemon", "order": 31 },
+          { "key": "scripting.fetch.maxBytes", "type": "number", "label": "HTTP bridge max response size (bytes)", "default": 1000000, "min": 1024, "max": 50000000, "step": 1024, "scope": "daemon", "order": 32 },
+          { "key": "scripting.fetch.defaultTimeoutSec", "type": "number", "label": "HTTP bridge default timeout (s)", "default": 15, "min": 1, "max": 600, "step": 1, "scope": "daemon", "order": 33 },
+          { "key": "scripting.fetch.maxTimeoutSec", "type": "number", "label": "HTTP bridge max timeout (s)", "default": 60, "min": 1, "max": 600, "step": 1, "scope": "daemon", "order": 34 },
           { "key": "scripting.hooks.minEverySec", "type": "number", "label": "Timer hooks (every <N>s): minimum period (s)", "default": 10, "min": 1, "max": 86400, "step": 1, "scope": "daemon", "order": 18 },
           { "key": "scripting.exec.tickSec", "type": "number", "label": "Process bridge: seconds between exec.tick events for a background run", "default": 10, "min": 1, "max": 3600, "step": 1, "scope": "daemon", "order": 19 },
           { "key": "scripting.builtins.off", "type": "text", "label": "Shipped hooks turned off (comma-separated ids, e.g. resume-after-restart; bind your own script to the event instead)", "default": "", "scope": "daemon", "order": 20 },

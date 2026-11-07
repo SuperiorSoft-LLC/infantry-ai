@@ -153,6 +153,24 @@ Hooks can trigger events that trigger hooks. Guards (settings): `scripting.hooks
 `scripting.hooks.maxRuns` per hook per `scripting.hooks.windowMs` (10 per 60 s), and `scripting.hooks.attributionMs`
 (5 s, follow-up events attributed to the hook that caused them). Turn all hooks off with `scripting.hooks.enabled`.
 
+## fetch: HTTP from a script (capability `http.fetch`)
+
+SCRIPT-FETCH-1. The Scripting plugin declares the capability `http.fetch` (see [Bridges](Bridges.md)); it lives there, not in a
+new plugin, because it shares the plugin's `config` node and the allow-list helper of `exec`. **Off by default**:
+`scripting.fetch.enabled`; `scripting.fetch.allow` lists hosts (`example.com`), subdomains (`*.example.com`) or URL
+prefixes (`https://api.example.com/v1/`); an empty list allows nothing. Also `scripting.fetch.maxBytes`,
+`defaultTimeoutSec`, `maxTimeoutSec`. Community callers need the grant `net.out`. Redirects are not followed.
+
+Args: `url`, `method` (GET or POST), `headers`, `body`, `timeoutSec`, `secretHeaders = {HeaderName = "<secret name>"}`
+(the value comes from the secrets store and is masked in the result and never logged). Result: `{status, headers, body,
+truncated, json}` (`json` only when the body is a JSON object or array).
+
+```lua
+local r = ih.call("http.fetch", {url = "https://api.example.com/v1/status", secretHeaders = {Authorization = "example-token"}})
+```
+
+Agents use `infantry_capability_call {capability = "http.fetch", args = {...}}`.
+
 ## exec: running a process
 
 A script is sandboxed and runs nothing itself; it queues `ih.exec{...}` (same as `ih.cli`; MCP tool `infantry_exec`)
