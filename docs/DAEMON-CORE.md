@@ -305,6 +305,16 @@ tickets and routing rules, `runners.default = local`). Code reaches a runner onl
 secrets and logins never travel. The link is paired, TLS, runner-scoped and rotated (security review in RUNNER-POOL.md
 section 7). `runners.enabled = false` by default, so local-only behaviour is unchanged.
 
+**Shipped (RUNNER-POOL-2, step 1).** `RunnerLink` (contract 1.0.0) carries `hello`, `startSession(StartSpec)`, `stopSession`,
+`deliverMail(MailItem)` and `health` beside `ticketIdOf` (an operation a binding does not offer answers `Unavailable`).
+`LocalRunnerLink` answers from `LocalRunnerServices`, which the daemon builds in `daemon/LocalRunner.kt` over the same functions
+as before (`bindSessionOnSpawn`, `SessionManager.kill`, `SessionManager.resume`). `RunnerHub` (core's `RunnerPool`) holds only
+`local`; `runnerOf` answers `local` for every session; `api.hooks.runnerBinding(id, binding)` offers a binding that is kept and
+not yet placed on. Routed through `runnerPool` in `DaemonMain`: every `bindSessionOnSpawn` site (BUG-S3 fresh session, the
+plugin spawn service, the `new` frame) and `MailRouter`'s resume (`resumeTurn`). Left: the pod scheduler's own
+`SessionManager.startNew` (`orchestration/Orchestrator.startAttempt`, which `sessionStartedSink` reports) still calls the session
+manager directly: it starts a run with a prompt, working dir and base ref, which `StartSpec` does not carry yet.
+
 ## 7. Plugin storage (DAEMON-STORAGE-1, DaemonApi 1.15.0)
 
 `api.storage: PluginStorage` (default `NoPluginStorage`, every call refuses) gives a module its own tables in the daemon's one SQLite file; there is no raw core handle (DAEMON-PLUGIN-PLAN decision 5, conservative option).

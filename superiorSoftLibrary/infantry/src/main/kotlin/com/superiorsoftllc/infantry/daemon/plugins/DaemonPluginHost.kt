@@ -142,6 +142,7 @@ class DaemonPluginHost private constructor(
     private val routeEntries = ConcurrentHashMap<String, RouteEntry>()
     private val frameGates = CopyOnWriteArrayList<Registered<FrameGateHook>>()
     private val orchestratorBindings = CopyOnWriteArrayList<Registered<Pair<String, com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorBinding>>>()
+    private val runnerBindings = CopyOnWriteArrayList<Registered<Pair<String, com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerBinding>>>()
     private val approvalRuleHooks = CopyOnWriteArrayList<Registered<com.superiorsoftllc.infantry.daemon.api.ApprovalRulesHook>>()
     private val httpGates = CopyOnWriteArrayList<Registered<HttpGateHook>>()
     private val admissions = CopyOnWriteArrayList<Registered<AdmissionHook>>()
@@ -210,6 +211,9 @@ class DaemonPluginHost private constructor(
     /** The guest bearer tokens admitted now (official/core admission hooks only); fail open (none). */
     /** ORCH-1: the orchestrator bindings plugins offered, for the daemon to register on its hub. */
     fun orchestratorBindings(): List<Pair<String, com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorBinding>> = orchestratorBindings.map { it.value }
+
+    /** RUNNER-POOL-2: the runner bindings plugins offered (`hooks.runnerBinding`), kept on the runner pool at daemon start. */
+    fun runnerBindings(): List<Pair<String, com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerBinding>> = runnerBindings.map { it.value }
 
     /** DP-10b: the approval-rule store a plugin offered (the first one), else a port with no rules. Fail open. */
     val approvalRules: com.superiorsoftllc.infantry.daemon.api.ApprovalRulesHook = object : com.superiorsoftllc.infantry.daemon.api.ApprovalRulesHook {
@@ -643,6 +647,7 @@ class DaemonPluginHost private constructor(
             }
         }
         if (daemon != null && "orchestratorBinding" in daemon.hooks) notes += "an orchestrator binding of $id is offered to the hub at daemon start only"
+        if (daemon != null && "runnerBinding" in daemon.hooks) notes += "a runner binding of $id is offered to the runner pool at daemon start only"
         runCatching { load(s, src.config, src.trust) }
             .onFailure { statuses[id] = "refused: ${it.message}"; log("[plugins] daemon half of $id refused: ${it.message}") }
         // A start that failed leaves a disabled plugin behind: free its class loader at once (the status keeps the reason).
@@ -662,7 +667,8 @@ class DaemonPluginHost private constructor(
             for (p in loaded) if (p.id !in gone && p.dependencies.any { it in gone }) { gone += p.id; grew = true }
         }
         val leaving = loaded.reversed().filter { it.id in gone && it !== target } + target
-        val notes = leaving.filter { o -> orchestratorBindings.any { it.owner === o } }.map { "the orchestrator binding of ${it.id} stays on the hub until the next daemon start" }
+        val notes = leaving.filter { o -> orchestratorBindings.any { it.owner === o } }.map { "the orchestrator binding of ${it.id} stays on the hub until the next daemon start" } +
+            leaving.filter { o -> runnerBindings.any { it.owner === o } }.map { "the runner binding of ${it.id} stays on the runner pool until the next daemon start" }
         for (p in leaving) {
             retire(p)
             loaded.remove(p)
@@ -710,6 +716,7 @@ class DaemonPluginHost private constructor(
         sessionHooks.removeIf { it.owner === p }
         presetHooks.removeIf { it.owner === p }
         orchestratorBindings.removeIf { it.owner === p }
+        runnerBindings.removeIf { it.owner === p }
         eventListeners.removeIf { it.first === p }
         seatClaimants.remove(p)
     }
@@ -1102,6 +1109,7 @@ class DaemonPluginHost private constructor(
             override fun turns(hook: TurnHook) { declare("turns"); turnHooks += Registered(p, hook) }
             override fun sessions(hook: SessionHook) { declare("sessions"); sessionHooks += Registered(p, hook) }
             override fun orchestratorBinding(providerId: String, binding: com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorBinding) { declare("orchestratorBinding"); orchestratorBindings += Registered(p, providerId to binding) }
+            override fun runnerBinding(bindingId: String, binding: com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerBinding) { declare("runnerBinding"); runnerBindings += Registered(p, bindingId to binding) }
             override fun policyProvider(hook: PresetProviderHook) { declare("policyProvider"); presetHooks += Registered(p, hook) }
         }
 
@@ -1142,7 +1150,7 @@ class DaemonPluginHost private constructor(
             }
             return params
         }
-        val HOOK_KINDS = setOf("frameGate", "connected", "httpGate", "admission", "mailGate", "incomingMail", "spawnGate", "ready", "turns", "sessions", "policyProvider", "orchestratorBinding", "seats", "approvalRules", "status")
+        val HOOK_KINDS = setOf("frameGate", "connected", "httpGate", "admission", "mailGate", "incomingMail", "spawnGate", "ready", "turns", "sessions", "policyProvider", "orchestratorBinding", "runnerBinding", "seats", "approvalRules", "status")
         private val METHODS = setOf("GET", "POST", "PUT", "DELETE", "PATCH")
         private val TOOL_NAME = Regex("^[a-z][a-z0-9_]{2,63}$")
         private val READY_KEY = Regex("^[a-zA-Z][a-zA-Z0-9_]{0,31}$")

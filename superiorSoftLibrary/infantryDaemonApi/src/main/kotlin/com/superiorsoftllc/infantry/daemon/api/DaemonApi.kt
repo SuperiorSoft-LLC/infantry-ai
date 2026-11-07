@@ -194,7 +194,9 @@ interface DaemonApi {
         // 1.41.0 (SECRETS-2b, additive): Runs.secretFields(name, projectId) (project first, then app) and Runs.secretNames(projectId).
         // 1.42.0 (PROJECT-ISOLATION-1, additive): `Caller.project` (a call confined to one project); every agent tool call and every hook is
         // held to its own project by the host (named events carry `projectId`).
-        const val VERSION = "1.42.0"
+        // 1.43.0 (RUNNER-POOL-2, additive): RunnerLink command contract 1.0.0 (hello/startSession/stopSession/deliverMail/health),
+        // LocalRunnerLink, RunnerPool / RunnerHub, `hooks.runnerBinding`.
+        const val VERSION = "1.43.0"
     }
 }
 
@@ -627,4 +629,10 @@ interface Hooks {
 
     /** ORCH-1: offer a binding for `orchestrator.provider = <providerId>`; the daemon selects it at start when that setting names it. */
     fun orchestratorBinding(providerId: String, binding: com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorBinding)
+
+    /**
+     * RUNNER-POOL-2 (1.43.0, additive): offer a runner binding under [bindingId] (declare `runnerBinding` in `daemon.hooks`); the daemon
+     * keeps it on the runner pool at start. Placement onto it arrives with RUNNER-POOL-3; until then it changes nothing. Default: ignored.
+     */
+    fun runnerBinding(bindingId: String, binding: com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerBinding) {}
 }
