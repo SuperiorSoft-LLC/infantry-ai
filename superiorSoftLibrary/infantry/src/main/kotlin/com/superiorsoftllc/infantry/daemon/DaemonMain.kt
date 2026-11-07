@@ -1791,6 +1791,12 @@ class InfantryDaemon(
             (orchestratorBindings + plugins.orchestratorBindings()).forEach { (id, binding) -> runCatching { orchestratorHub.register(id, binding) } }
             // RUNNER-POOL-2: runner bindings plugins offer (hooks.runnerBinding) are kept on the pool; none is placed on yet.
             plugins.runnerBindings().forEach { (id, binding) -> runCatching { runnerPool.register(id, binding) }.onFailure { println("[infantry] runner binding '$id' refused: ${it.message}") } }
+            // RUNNER-POOL-5 (docs/RUNNER-POOL.md 7): once `infantry runner pair` paired this machine, it serves the runner link (wss,
+            // pinned self-signed certificate) to its one orchestrator; on the orchestrator side it rekeys paired runners when due.
+            // A daemon never paired opens nothing.
+            val runnerLinkService = com.superiorsoftllc.infantry.runners.RunnerLinkService(stateDir(), settings::limit, settings::runnerLink, localRunnerLink)
+            runCatching { runnerLinkService.tick() }
+            scheduledTicker(settings.limit(LimitRegistry.RUNNERS_LINK_CHECK_SECONDS) * 1000L) { runCatching { runnerLinkService.tick() } }
             orchestratorHub.select(pluginEnv("INFANTRY_ORCHESTRATOR_PROVIDER")?.trim().orEmpty())?.let { System.err.println(it) }
             // A guest token present at start is checked now, so a bad one still stops the daemon starting.
             plugins.guestTokens().forEach { policy.guestDigestOf(it) }

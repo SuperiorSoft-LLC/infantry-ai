@@ -392,6 +392,18 @@ Details: `docs/MCP.md`, "Ticket images".
 
 ---
 *Generated from code greps: SessionStore.kt, Protocol.kt, MailHttp.kt, DaemonMain.kt, CliMain.kt.*
+## 11. Pair a runner machine (RUNNER-POOL-5)
+
+```
+infantry runner pair --name box                     # on the RUNNER: one-time code + wss certificate fingerprint
+infantry runner add box wss://100.x.y.z:8790 --code ABCD-EFGH-JKLM-NPQR --fingerprint AB:CD:...   # on the ORCHESTRATOR
+infantry runner list | rotate box | detach [box] | audit [--limit 20]
+```
+
+The credential is per pair (not the owner, `remote` or agent token) and may call only `runner_link_*` frames. A runner
+starts only projects and harnesses in its own `runner.projects` / `runner.harnesses` settings (empty = none). Details:
+`docs/RUNNER-POOL.md` section 7.
+
 ## Slim answers (TOKEN-1)
 `infantry_ticket_create|update|move` answer ONE line (id, status, title, branch, session); pass `verbose: true` for the full ticket, or call `infantry_ticket_get`. `infantry_get_session` returns the last 5 transcript lines (`lines` for more, `brief:true` for none); `infantry_list_sessions` takes `limit`; `infantry_usage` takes `json:true` for the JSON report. Defaults live in settings `limits.tools.*`.
 
