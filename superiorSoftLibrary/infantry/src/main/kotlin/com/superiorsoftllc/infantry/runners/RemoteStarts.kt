@@ -9,6 +9,7 @@ import com.superiorsoftllc.infantry.worktree.SystemGitCli
 import com.superiorsoftllc.infantry.worktree.TicketBranchOutcome
 import com.superiorsoftllc.infantry.worktree.TicketBranchRequest
 import com.superiorsoftllc.infantry.worktree.TicketBranches
+import kotlinx.serialization.json.put
 import java.io.File
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
@@ -35,6 +36,8 @@ class RemoteStarts(
     private val outboxMax: () -> Int,
     private val git: GitCli = SystemGitCli(),
     private val log: (String) -> Unit = { System.err.println(it) },
+    /** RUNNER-POOL-12: where the outbox, the per-session seq counters and the started sessions survive a daemon restart; null = memory only. */
+    private val persistTo: File? = null,
 ) {
     private val branches = TicketBranches(git)
     private val sessions = ConcurrentHashMap<String, StartWorktree>()
@@ -44,6 +47,45 @@ class RemoteStarts(
     private val seqs = HashMap<String, Long>()
     /** RUNNER-POOL-8: sessions started with push-on-commit -> the HEAD last pushed (blank = not known yet). */
     private val pushOnCommit = ConcurrentHashMap<String, String>()
+
+    init {
+        persistTo?.takeIf { it.isFile }?.let { f ->
+            runCatching {
+                val o = kotlinx.serialization.json.Json.parseToJsonElement(f.readText()) as kotlinx.serialization.json.JsonObject
+                fun str(e: kotlinx.serialization.json.JsonElement?) = (e as kotlinx.serialization.json.JsonPrimitive).content
+                (o["seqs"] as kotlinx.serialization.json.JsonObject).forEach { (k, v) -> seqs[k] = str(v).toLong() }
+                (o["events"] as kotlinx.serialization.json.JsonArray).forEach { e ->
+                    val m = e as kotlinx.serialization.json.JsonObject
+                    outbox.addLast(RunnerEvent(str(m["s"]), str(m["q"]).toLong(), str(m["k"]), str(m["p"])))
+                }
+                (o["sessions"] as kotlinx.serialization.json.JsonObject).forEach { (k, v) ->
+                    val m = v as kotlinx.serialization.json.JsonObject
+                    sessions[k] = StartWorktree(str(m["path"]), str(m["branch"]), str(m["base"]), str(m["repoRoot"]))
+                }
+            }.onFailure { log("[infantry] runner: could not read the event outbox ${f.name}: ${it.message}") }
+        }
+    }
+
+    /** Write the outbox, seq counters and started sessions next to the runner's state; best effort (a failure is logged). */
+    @Synchronized
+    private fun save() {
+        val f = persistTo ?: return
+        runCatching {
+            val j = kotlinx.serialization.json.buildJsonObject {
+                put("seqs", kotlinx.serialization.json.JsonObject(seqs.mapValues { kotlinx.serialization.json.JsonPrimitive(it.value) }))
+                put("events", kotlinx.serialization.json.JsonArray(outbox.map { e ->
+                    kotlinx.serialization.json.buildJsonObject { put("s", e.sessionId); put("q", e.seq); put("k", e.kind); put("p", e.payload) }
+                }))
+                put("sessions", kotlinx.serialization.json.JsonObject(sessions.mapValues { (_, w) ->
+                    kotlinx.serialization.json.buildJsonObject { put("path", w.path); put("branch", w.branch); put("base", w.base); put("repoRoot", w.repoRoot) }
+                }))
+            }
+            f.parentFile?.mkdirs()
+            val tmp = File(f.parentFile, f.name + ".tmp")
+            tmp.writeText(j.toString())
+            java.nio.file.Files.move(tmp.toPath(), f.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+        }.onFailure { log("[infantry] runner: could not write the event outbox ${f.name}: ${it.message}") }
+    }
 
     /** The clone, fetch and cut for one remote start; a refusal throws [IllegalArgumentException] with the reason. */
     fun checkout(
@@ -88,6 +130,7 @@ class RemoteStarts(
     /** Session [sessionId] runs in [worktree], cut by [checkout] for its orchestrator. */
     fun started(sessionId: String, worktree: StartWorktree, pushOnCommit: Boolean = false) {
         sessions[sessionId] = worktree
+        save()
         if (pushOnCommit) this.pushOnCommit[sessionId] = head(worktree).orEmpty()
     }
 
@@ -160,7 +203,7 @@ class RemoteStarts(
      */
     @Synchronized
     fun events(acked: Map<String, Long>): List<RunnerEvent> {
-        if (acked.isNotEmpty()) outbox.removeAll { it.seq <= (acked[it.sessionId] ?: 0L) }
+        if (acked.isNotEmpty() && outbox.removeAll { it.seq <= (acked[it.sessionId] ?: 0L) }) save()
         return outbox.toList()
     }
 
@@ -174,6 +217,7 @@ class RemoteStarts(
             val dropped = outbox.removeFirst()
             log("[infantry] runner: event outbox full (limits.runners.outboxMax = $keep): dropped ${dropped.kind} #${dropped.seq} of session ${dropped.sessionId}")
         }
+        save()
     }
 
     companion object {
