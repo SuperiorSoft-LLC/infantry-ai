@@ -19,11 +19,20 @@ Choose it, first source wins: `infantry daemon --mode runner` (or `--mode=runner
 
 ## Steps
 
-1. **Start the runner.** From the image: `docker run -d --name infantry-runner -e INFANTRY_MODE=runner -v infantry-data:/data <image>`
-   (the entrypoint passes its arguments on, so `... <image> --mode runner` works too). From an install: `infantry daemon --mode runner`.
-2. **Log the agent CLI in on the server** (for example `claude`) over SSH or `docker exec`. Logins and secrets never travel from your PC.
+1. **Start the runner.** From the image on GitHub Container Registry (tags `:<version>`, `:latest` = newest stable, `:nightly`):
+   ```
+   docker pull ghcr.io/superiorsoft-llc/infantry-ai:latest
+   docker run -d --name infantry-runner --restart unless-stopped \
+     -e INFANTRY_MODE=runner -v infantry-data:/data -v infantry-work:/work \
+     -p 8790:8790 ghcr.io/superiorsoft-llc/infantry-ai:latest
+   ```
+   `/data` holds the state (token, link keystore, agent logins), `/work` the repositories and worktrees. Port 8790 is the runner
+   link (`limits.runners.linkPort`, TLS). The daemon's own port 8787 stays closed. The image bakes in `opencode` and `pi`; build
+   with `--build-arg INSTALL_CLAUDE=true` to add `claude`. From an install instead: `infantry daemon --mode runner`.
+2. **Log the agent CLI in on the server**, for example `docker exec -it infantry-runner claude login` (the login lands in `/data`).
+   Logins and secrets never travel from your PC.
 3. **Allow what it may run** on the runner: the settings `runner.projects` and `runner.harnesses` (empty means none, `*` means any).
-4. **Pair.** On the server: `infantry runner pair --name server-1` prints a one-time code and the certificate fingerprint.
+4. **Pair.** On the server (`docker exec -it infantry-runner infantry runner pair --name server-1`) it prints a one-time code and the certificate fingerprint.
    On your PC: `infantry runner add server-1 wss://<host>:<port> --code <code> --fingerprint <fingerprint>` (compare the fingerprint first).
 5. **Use it.** Turn on `runners.enabled`, then pin a ticket to `runner: server-1`, or set `runners.default` to `server-1` or `any`.
    Caps: `runners.<name>.maxWorkers`. Pause a runner with `runners.<name>.paused` = true (running workers go on, no new start).
@@ -33,3 +42,19 @@ The usage allowance (`usage.pacing`) counts running workers across every runner 
 one meter.
 
 Docker-only test setup: use ports of your own, never the owner's daemon ports, and remove the container when done.
+
+## Deploying the runner image (for the website team)
+
+The image is one container; nothing else is needed.
+
+| item | value |
+|---|---|
+| image | `ghcr.io/superiorsoft-llc/infantry-ai:latest`, or a pinned `:<version>` |
+| port to open | **8790/tcp**, the runner link (TLS); restrict it to the orchestrator's address when you can |
+| volume to back up | `/data` (state, link keystore, agent logins). `/work` holds clones that can be rebuilt |
+| healthcheck | built in: `GET http://127.0.0.1:8787/health` every 30 s; the daemon exits after 3 failed self-checks, so `--restart unless-stopped` brings it back |
+| update | `docker pull <image>`, then recreate the container with the same volumes; `/data` survives |
+| user | non-root (uid 10001); the volumes must be writable by it |
+
+Verification: `docker/runner-compare.sh` runs the same pinned ticket against a container runner and a native runner and prints the
+differences; the `docker-image` workflow runs it in CI and publishes the image.
