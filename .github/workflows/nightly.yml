@@ -66,6 +66,7 @@ jobs:
     if: ${{ needs.plan.outputs.build == 'true' }}
     permissions:
       contents: write
+      packages: write   # DOCKER-IMAGE-1: the docker job pushes :nightly to GHCR with GITHUB_TOKEN
     uses: ./.github/workflows/release.yml
     with:
       ref: ${{ needs.plan.outputs.sha }}
