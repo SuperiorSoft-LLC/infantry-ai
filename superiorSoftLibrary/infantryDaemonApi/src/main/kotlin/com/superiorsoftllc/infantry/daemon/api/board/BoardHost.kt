@@ -244,6 +244,17 @@ data class SessionStart(
     val instance: BoardRoleInstance? = null,
     /** `human` or `unattended`: which launch gate applies. */
     val origin: String = "human",
+    /**
+     * RUNNER-POOL-6 (1.45.0): the runner placement chose (null or `local` = this daemon). For a remote runner the board cuts no
+     * worktree: the runner clones the project's git remote and cuts the ticket branch itself from [baseBranch], or reuses
+     * [recordedBranch] at [recordedBase]; [title] is the ticket title (the branch slug). [workingDir] is then the ORCHESTRATOR's
+     * checkout the host reads the git remote from (no remote = refused), never a path the runner uses.
+     */
+    val runner: String? = null,
+    val title: String? = null,
+    val baseBranch: String? = null,
+    val recordedBranch: String? = null,
+    val recordedBase: String? = null,
 )
 
 /** One source of a first turn's context and its size, as the session record keeps it. */
@@ -253,7 +264,8 @@ data class ContextSourceInfo(val source: String, val chars: Int)
 data class LaunchVerdict(val refusal: String? = null, val warning: String? = null, val disposition: String = "refused_launch_gate")
 
 sealed interface SessionStartResult {
-    data class Started(val session: SessionView) : SessionStartResult
+    /** RUNNER-POOL-6: [branch] / [base] are the ticket branch a remote runner cut or reused (null for a local start). */
+    data class Started(val session: SessionView, val branch: String? = null, val base: String? = null) : SessionStartResult
 
     /** The host refused (spawn gate, model allowlist, caps, launch gate); [reason] is the text the board shows. */
     data class Refused(val reason: String) : SessionStartResult

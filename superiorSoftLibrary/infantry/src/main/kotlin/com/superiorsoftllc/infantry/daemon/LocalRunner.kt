@@ -7,6 +7,7 @@ import com.superiorsoftllc.infantry.daemon.api.orchestrator.LocalRunnerServices
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.MailItem
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.MailResult
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorReply
+import com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerHealth
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerInfo
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerLink
@@ -18,6 +19,8 @@ import com.superiorsoftllc.infantry.session.RunInFlightException
 import com.superiorsoftllc.infantry.session.SessionManager
 import com.superiorsoftllc.infantry.session.SessionRecord
 import com.superiorsoftllc.infantry.session.isBusy
+import com.superiorsoftllc.infantry.usage.LaunchOrigin
+import com.superiorsoftllc.infantry.worktree.WorktreeRecord
 import kotlinx.serialization.json.Json
 import java.io.File
 import java.util.UUID
@@ -26,6 +29,9 @@ import java.util.UUID
  * RUNNER-POOL-2 (docs/RUNNER-POOL.md 2.1): the runner-side functions the local [com.superiorsoftllc.infantry.daemon.api.orchestrator.LocalRunnerLink]
  * answers from. Each wraps what the daemon called before, unchanged: a start is [bindSessionOnSpawn], a stop is
  * [SessionManager.kill], a mail turn is [SessionManager.resume].
+ *
+ * RUNNER-POOL-6: a spec that carries a worktree the runner cut (a start its orchestrator sent with a git remote) starts the
+ * session in it with the composed first turn, as a ticket start does ([SessionManager.startNew] with `preWorktree`), unattended.
  */
 object LocalRunner {
     private val originJson = Json { ignoreUnknownKeys = true }
@@ -35,10 +41,26 @@ object LocalRunner {
         agents: AgentProfiles,
         info: () -> RunnerInfo,
         capacity: () -> Int,
+        events: (sinceSeq: Long) -> List<RunnerEvent> = { emptyList() },
+        transcript: (sessionId: String, fromLine: Int, maxLines: Int) -> List<String> = { _, _, _ -> emptyList() },
     ) = LocalRunnerServices(
         ticketIdOf = { sessionId -> manager.get(sessionId)?.ticketId },
         info = info,
-        start = { spec -> bindSessionOnSpawn(manager, agents, spawnOptions(spec), spec.repo?.let(::File))?.id },
+        start = { spec ->
+            val wt = spec.worktree
+            if (wt == null) {
+                bindSessionOnSpawn(manager, agents, spawnOptions(spec), spec.repo?.let(::File))?.id
+            } else {
+                manager.startNew(
+                    prompt = spec.prompt.orEmpty(),
+                    providerId = spec.provider, model = spec.model, effort = spec.effort,
+                    agentId = spec.agentId, role = spec.role, ticketId = spec.ticketId, projectId = spec.projectId,
+                    contextLimit = spec.contextLimit,
+                    unattended = true, launchOrigin = LaunchOrigin.UNATTENDED,
+                    preWorktree = WorktreeRecord(sessionId = "", repoRoot = wt.repoRoot, path = wt.path, branch = wt.branch, baseRef = wt.base, createdAt = System.currentTimeMillis()),
+                ).id
+            }
+        },
         stop = { sessionId, reason, force -> if (manager.get(sessionId) == null) false else { manager.kill(sessionId, force = force, reason = reason); true } },
         deliver = { sessionId, mail ->
             try {
@@ -55,6 +77,8 @@ object LocalRunner {
             val cap = capacity()
             RunnerHealth(RunnerHealth.UP, running, if (cap <= 0) -1 else maxOf(0, cap - running))
         },
+        events = events,
+        transcript = transcript,
     )
 
     /** A pool with only the local runner over [manager] (a connection handler's default when the daemon passes none). */

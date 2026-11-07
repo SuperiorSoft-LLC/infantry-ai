@@ -118,6 +118,6 @@ class LocalRunnerLinkTest {
         assertFailsWith<IllegalArgumentException> { pool.register(RunnerPool.LOCAL) { _, l -> l } }
         pool.register("remote") { _, l -> l }
         assertEquals(listOf("remote"), pool.bindingIds())
-        assertEquals("1.0.0", link.contractVersion)
+        assertEquals("1.1.0", link.contractVersion)
     }
 }

@@ -3,7 +3,7 @@
 package com.superiorsoftllc.infantry.runners
 
 import com.superiorsoftllc.infantry.daemon.api.runners.LinkFailure
-import com.superiorsoftllc.infantry.runners.RunnerLinkFrames as F
+import com.superiorsoftllc.infantry.daemon.api.runners.RunnerLinkWire as F
 
 /** One orchestrator -> runner link call: (url, pinned fingerprint, orchestrator id, credential, frame type, data) -> answer. */
 fun interface LinkCall {

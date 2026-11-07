@@ -176,11 +176,14 @@ class TicketBranches(
         /** How much of a commit id a note shows. */
         private const val SHORT_SHA = 8
 
+        /** The namespace every ticket branch lives in; a remote runner pushes only refs under it (RUNNER-POOL-6). */
+        const val BRANCH_PREFIX = "ticket/"
+
         /** `ticket/<short-id>-<slug>`, where the slug is the title in lowercase words, never empty. */
         fun branchFor(ticketId: String, title: String): String {
             val shortId = ticketId.removePrefix("ticket-").lowercase()
                 .filter { it.isLetterOrDigit() }.take(8).ifEmpty { "ticket" }
-            return "ticket/$shortId-${slug(title)}"
+            return "$BRANCH_PREFIX$shortId-${slug(title)}"
         }
 
         internal fun slug(title: String): String {

@@ -947,6 +947,13 @@ class InfantryDaemon(
             // RUNNER-POOL-2 (docs/RUNNER-POOL.md 2.1-2.2): the orchestrator side reaches sessions through the runner pool. It holds one
             // runner, `local`, whose link wraps the session manager unchanged; spawns and mail resumes below go through it.
             val runnerProjects = java.util.concurrent.atomic.AtomicReference<() -> List<String>> { emptyList() }
+            // RUNNER-POOL-6: the runner side of starts an orchestrator sends with a git remote (clone into runners.cloneRoot, cut,
+            // push on each turn end), and the orchestrator side's paired runners (set once the runner link service exists).
+            val remoteStarts = com.superiorsoftllc.infantry.runners.RemoteStarts(
+                cloneRoot = { settings.runnerLink().cloneRoot.takeIf { it.isNotBlank() }?.let(::File) ?: File(stateDir(), com.superiorsoftllc.infantry.runners.RemoteStarts.DEFAULT_FOLDER) },
+                eventsKept = { settings.limit(LimitRegistry.RUNNERS_EVENTS_KEPT).toInt() },
+            )
+            val runnerLinksRef = java.util.concurrent.atomic.AtomicReference<com.superiorsoftllc.infantry.daemon.api.runners.RunnerLinks>(com.superiorsoftllc.infantry.daemon.api.runners.NoRunnerLinks)
             val localRunnerLink = com.superiorsoftllc.infantry.daemon.api.orchestrator.LocalRunnerLink(
                 LocalRunner.services(
                     manager, agents,
@@ -955,14 +962,22 @@ class InfantryDaemon(
                             name = com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL,
                             contract = com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerLink.CONTRACT_VERSION,
                             projects = runnerProjects.get()(),
+                            // Installed = registered here; signed in = not refused by its provider (no quota or stall seen).
+                            harnesses = manager.providers.map { p ->
+                                com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerHarness(
+                                    p.id, p.knownModels().orEmpty(),
+                                    loggedIn = providerStates.state(p.id).status == com.superiorsoftllc.infantry.usage.ProviderStatus.UNKNOWN,
+                                )
+                            },
                             capacity = settings.limitCap(LimitRegistry.MAX_SESSIONS),
                             os = System.getProperty("os.name").orEmpty(),
                         )
                     },
                     capacity = { settings.limitCap(LimitRegistry.MAX_SESSIONS) },
+                    events = remoteStarts::events,
                 ),
             )
-            val runnerPool = com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerHub(localRunnerLink)
+            val runnerPool = com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerHub(localRunnerLink, remotes = { runnerLinksRef.get().paired() })
             SessionRecordSerializer.runnerOf = runnerPool::runnerOf
             val orchestratorHub = com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorHub(
                 local = com.superiorsoftllc.infantry.daemon.api.orchestrator.LocalOrchestratorLink(
@@ -1273,7 +1288,7 @@ class InfantryDaemon(
                 ),
                 // NOGIT-1: a project's own directory decides where its start runs / cuts.
                 projectDirectory = { id -> id?.let { runCatching { projectStore.get(it).directory }.getOrNull() } },
-                repo = repo, agents = agents, knowledge = knowledge, skills = skillsSource,
+                repo = repo, agents = agents, knowledge = knowledge, skills = skillsSource, runners = runnerPool,
                 // IMG-3: a ticket's images live under its project's directory (.infantry/uploads/ticket/).
                 ticketImages = com.superiorsoftllc.infantry.backlog.TicketImages { projectId ->
                     runCatching { projectStore.get(projectId) }.getOrNull()?.directory?.takeIf { it.isNotBlank() }?.let(::File)?.takeIf { it.isDirectory }
@@ -1473,6 +1488,12 @@ class InfantryDaemon(
                 }, { id, items -> manager.setTodoProgress(id, items) }) { id -> manager.toolApprovalFor(id).mode }
                 // PROMPT-1: a turn's end or a terminal session resolves its open prompts (deny / no answer).
                 pendingPrompts.onSessionEvent(event)
+                // RUNNER-POOL-6: a session its orchestrator started here pushes its ticket branch after each turn.
+                when (event) {
+                    is com.superiorsoftllc.infantry.session.SessionEvent.Status -> remoteStarts.onStatus(event.session.id, event.session.state.name)
+                    is com.superiorsoftllc.infantry.session.SessionEvent.Exit -> if (remoteStarts.isRemote(event.sessionId)) Thread({ remoteStarts.onTurnEnd(event.sessionId, event.code) }, "runner-push").start()
+                    else -> Unit
+                }
                 mail.onSessionEvent(event)
                 // THIRD ARM, and its position is load-bearing. The orchestrator schedules against the
                 // session state it believes, so it must observe the same events that were broadcast
@@ -1631,6 +1652,16 @@ class InfantryDaemon(
                                 roleNotesOf = { project, role -> pluginHost.get().serviceRegistry.find(com.superiorsoftllc.infantry.daemon.api.knowledge.Knowledge::class)?.roleNotes(project, role).orEmpty() },
                                 relatedBlockOf = { id, desc -> relatedRef.get().block(id, desc) },
                                 fixedFirstTurnOf = { fixedFirstTurn?.invoke() },
+                                runnersOf = {
+                                    runnerPool.runners().map { e ->
+                                        com.superiorsoftllc.infantry.daemon.api.board.BoardRunner(
+                                            e.name, e.state,
+                                            freeSlots = e.health?.freeSlots?.let { if (it < 0) Int.MAX_VALUE else it } ?: 1,
+                                            projects = e.info?.projects.orEmpty(),
+                                            loggedInHarnesses = e.info?.harnesses.orEmpty().filter { it.loggedIn }.map { it.id },
+                                        )
+                                    }
+                                },
                                 // DP-5h-3a2 (1.13.0): the typed events, story / epic inputs, RELATED block and skill check.
                                 ticketEvents = ticketEvents ?: com.superiorsoftllc.infantry.daemon.api.board.NoTicketEvents,
                                 stories = object : com.superiorsoftllc.infantry.daemon.api.board.BoardStoryInputs {
@@ -1797,7 +1828,15 @@ class InfantryDaemon(
             // none loaded nothing is served and the `runner_admin` ops that need one say so.
             val runnerLinkService = com.superiorsoftllc.infantry.runners.RunnerLinkService(
                 stateDir(), settings::limit, settings::runnerLink, localRunnerLink, transport = { plugins.runnerLinkTransport() },
+                starts = remoteStarts,
             )
+            runnerLinksRef.set(runnerLinkService.links)
+            plugins.runnerLinks = runnerLinkService.links
+            manager.addSessionEndedListener(remoteStarts::forget)
+            // RUNNER-POOL-6: a heartbeat round over the paired runners every limits.runners.heartbeatSec sets up / degraded / down.
+            scheduledTicker(settings.limit(LimitRegistry.RUNNERS_HEARTBEAT_SEC) * 1000L) {
+                runCatching { runnerPool.heartbeat(settings.limit(LimitRegistry.RUNNERS_LOST_AFTER_SEC) * 1000L).forEach { println("[infantry] $it") } }
+            }
             runCatching { runnerLinkService.tick() }
             scheduledTicker(settings.limit(LimitRegistry.RUNNERS_LINK_CHECK_SECONDS) * 1000L) { runCatching { runnerLinkService.tick() } }
             orchestratorHub.select(pluginEnv("INFANTRY_ORCHESTRATOR_PROVIDER")?.trim().orEmpty())?.let { System.err.println(it) }

@@ -215,3 +215,4 @@ com/superiorsoftllc/infantry/testrun/ProcessSuite.kt:MAX_OUT | added since 65cc7
 com/superiorsoftllc/infantry/runner/SessionContainers.kt:JOB_OBJECT_BASIC_LIMIT_INFORMATION | Win32 JOBOBJECTINFOCLASS value (API constant, not a limit) (PROC-LEAK-1)
 com/superiorsoftllc/infantry/runner/SessionContainers.kt:JOB_OBJECT_LIMIT_BREAKAWAY_OK | Win32 job LimitFlags bit (API constant, not a limit) (PROC-LEAK-1)
 com/superiorsoftllc/infantry/runner/SessionContainers.kt:NAME_PART_MAX | layout: the length of one part of a kernel object name (Job Object names stay well under MAX_PATH) (PROC-LEAK-1)
+com/superiorsoftllc/infantry/runners/RemoteStarts.kt:HASH_CHARS | layout: hex characters of the remote-url hash in a clone folder name (RUNNER-POOL-6), not a cost or capacity

@@ -37,6 +37,9 @@ interface BoardRuntime {
     /** ROUTING-1: a rule-driven start was refused (the daemon raises an attention item). */
     fun routingRefused(ticketId: String, projectId: String?, detail: String) {}
 
+    /** RUNNER-POOL-6 (1.45.0, additive): the runners placement may pick (the pool's view); empty = only `local`. */
+    fun runners(): List<BoardRunner> = emptyList()
+
     /**
      * True while the daemon itself still builds the board (DP-5h-3b moves that to the plugin): a board plugin then registers its
      * tools only and leaves the board, its frames and its consumers to core.
@@ -89,3 +92,15 @@ data class BoardPacing(val over: String? = null, val warning: String? = null)
 object NoBoardRuntime : BoardRuntime {
     override val host: BoardHost = NoBoardHost
 }
+
+/**
+ * RUNNER-POOL-6 (1.45.0): one runner as placement sees it: [state] `up` | `degraded` | `down` (only `up` takes starts), [freeSlots],
+ * the [projects] it agrees to run and the harnesses signed in on it ([loggedInHarnesses]).
+ */
+data class BoardRunner(
+    val name: String,
+    val state: String,
+    val freeSlots: Int = 1,
+    val projects: List<String> = emptyList(),
+    val loggedInHarnesses: List<String> = emptyList(),
+)

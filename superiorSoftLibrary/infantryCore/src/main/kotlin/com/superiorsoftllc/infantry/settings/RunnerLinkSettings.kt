@@ -22,6 +22,8 @@ object RunnerLinkSettings {
     const val PROJECTS = "runner.projects"
     const val HARNESSES = "runner.harnesses"
     const val ANY = "*"
+    /** RUNNER-POOL-6: where this runner clones the projects an orchestrator starts here; blank = `<state dir>/runner-clones`. */
+    const val CLONE_ROOT = "runners.cloneRoot"
 
     /** The setting text of [ALLOW_PLAIN_TAILNET]; it states the risk. */
     const val ALLOW_PLAIN_TAILNET_TEXT =
@@ -29,10 +31,15 @@ object RunnerLinkSettings {
             "text cross the network unencrypted; anyone on the path can read them and replay the credential to start agents with " +
             "tool permissions on this machine. Only for a private tailnet (Tailscale/WireGuard) you fully control. Default false."
 
-    val KEYS: Set<String> = setOf(ALLOW_PLAIN_TAILNET, PROJECTS, HARNESSES)
+    val KEYS: Set<String> = setOf(ALLOW_PLAIN_TAILNET, PROJECTS, HARNESSES, CLONE_ROOT)
 
     /** What the runner link reads; [stored] is the raw stored JSON of a key (null = unset). */
-    data class Values(val allowPlainTailnet: Boolean = false, val projects: List<String> = emptyList(), val harnesses: List<String> = emptyList()) {
+    data class Values(
+        val allowPlainTailnet: Boolean = false,
+        val projects: List<String> = emptyList(),
+        val harnesses: List<String> = emptyList(),
+        val cloneRoot: String = "",
+    ) {
         fun allowsProject(id: String?): Boolean = allows(projects, id)
         fun allowsHarness(id: String?): Boolean = allows(harnesses, id)
         private fun allows(list: List<String>, id: String?) = !id.isNullOrBlank() && (ANY in list || id in list)
@@ -42,6 +49,7 @@ object RunnerLinkSettings {
         allowPlainTailnet = runCatching { (Json.parseToJsonElement(stored(ALLOW_PLAIN_TAILNET) ?: "false") as JsonPrimitive).booleanOrNull }.getOrNull() ?: false,
         projects = list(stored(PROJECTS)),
         harnesses = list(stored(HARNESSES)),
+        cloneRoot = runCatching { (Json.parseToJsonElement(stored(CLONE_ROOT) ?: "\"\"") as JsonPrimitive).takeIf { it.isString }?.content }.getOrNull().orEmpty(),
     )
 
     /** The keys for the settings `all()` map. */
@@ -50,6 +58,7 @@ object RunnerLinkSettings {
             ALLOW_PLAIN_TAILNET to JsonPrimitive(v.allowPlainTailnet),
             PROJECTS to JsonArray(v.projects.map(::JsonPrimitive)),
             HARNESSES to JsonArray(v.harnesses.map(::JsonPrimitive)),
+            CLONE_ROOT to JsonPrimitive(v.cloneRoot),
         )
     }
 
@@ -65,6 +74,10 @@ object RunnerLinkSettings {
                     (e as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim()?.takeIf { ID.matches(it) }
                         ?: throw IllegalArgumentException("setting '$key' must be a JSON array of ids (\"*\" = every one, [] = none)")
                 }.distinct().map(::JsonPrimitive),
+        )
+        CLONE_ROOT -> JsonPrimitive(
+            (value as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim()
+                ?: throw IllegalArgumentException("setting '$key' must be a JSON string: a folder path (\"\" = <state dir>/runner-clones)"),
         )
         else -> throw IllegalArgumentException("unknown runner link setting '$key'")
     }

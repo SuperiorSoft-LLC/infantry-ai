@@ -111,6 +111,8 @@ dependencies {
 
     // AR-4b-ii-b: the role catalog classes (Role, RoleService, RoleCatalog) live in the Infantry_Roles daemon half; tests read them.
     testImplementation(project(":daemon-plugin-official-Infantry_Roles"))
+    // RUNNER-POOL-6: RemoteRunnerStartTest joins two in-process daemons over the Infantry_RemoteRunner transport and binding.
+    testImplementation(project(":daemon-plugin-official-Infantry_RemoteRunner"))
     // HARNESS H7b-3: the daemon tests load the Infantry_Claude plugin (the claude harness now lives only there).
     testImplementation(project(":harness-plugin-official-Infantry_Claude"))
     // HARNESS H8b-3: the daemon tests load the Infantry_OpenCode plugin (the opencode harness now lives only there).

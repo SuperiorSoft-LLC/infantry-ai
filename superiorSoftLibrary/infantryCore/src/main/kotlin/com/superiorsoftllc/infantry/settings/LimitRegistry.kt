@@ -827,6 +827,13 @@ object LimitRegistry {
         min = 1, zeroIsUnlimited = false,
     )
 
+    /** RUNNER-POOL-6: how many session events of link-started sessions a runner keeps for its orchestrator to read. */
+    val RUNNERS_EVENTS_KEPT = LimitDef(
+        "limits.runners.eventsKept", 500, "events",
+        "How many session events (status, finished) of orchestrator-started sessions a runner keeps until its orchestrator reads them; the oldest go first. Fewer = less memory.",
+        min = 1, zeroIsUnlimited = false,
+    )
+
     /** RUNNER-POOL-5: how long one orchestrator -> runner link call (pair, rekey, detach) waits for its answer. */
     val RUNNERS_LINK_CALL_SECONDS = LimitDef(
         "limits.runners.linkCallSeconds", 20, "seconds",
@@ -863,6 +870,7 @@ object LimitRegistry {
         HEALTH_DB_TIMEOUT_SECONDS, HEALTH_WATCHDOG_FAILURES, HEALTH_WATCHDOG_INTERVAL_SECONDS, HEALTH_WATCHDOG_TIMEOUT_SECONDS,
         MAIL_WAKE_DEBOUNCE_SECONDS, MAIL_COALESCE_MAX, WATCH_STALL_NUDGES, SCRIPT_RUN_LOG_MAX,
         RUNNERS_PAIR_CODE_MIN, RUNNERS_PAIR_ATTEMPTS_PER_HOUR, RUNNERS_CREDENTIAL_ROTATE_DAYS, RUNNERS_LINK_PORT, RUNNERS_AUDIT_SHOWN, RUNNERS_LINK_CALL_SECONDS, RUNNERS_LINK_CHECK_SECONDS,
+        RUNNERS_EVENTS_KEPT,
     )
 
     /** A minutes limit as milliseconds; 0 on an unlimited-capable one = [Long.MAX_VALUE] (never reached). */

@@ -26,7 +26,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-import com.superiorsoftllc.infantry.runners.RunnerLinkFrames as F
+import com.superiorsoftllc.infantry.daemon.api.runners.RunnerLinkWire as F
 
 /** RUNNER-POOL-5 (docs/RUNNER-POOL.md section 7): pairing, the runner-scoped credential, the pin, rotation, detach, audit. */
 class RunnerLinkPairingTest {

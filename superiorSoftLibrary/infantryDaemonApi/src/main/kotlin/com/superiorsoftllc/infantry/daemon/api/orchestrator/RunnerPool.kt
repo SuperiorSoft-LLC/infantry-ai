@@ -4,8 +4,8 @@ package com.superiorsoftllc.infantry.daemon.api.orchestrator
 
 /**
  * RUNNER-POOL-2 (docs/RUNNER-POOL.md 2.1, 2.2): the plain data of the [RunnerLink] command contract, the local binding and the
- * pool the orchestrator side reaches runners through. Today the pool holds exactly one runner, [RunnerPool.LOCAL]; remote runners
- * are bindings a plugin registers (`api.hooks.runnerBinding`) and arrive in a later step. Nothing here names a transport.
+ * pool the orchestrator side reaches runners through. The pool always holds [RunnerPool.LOCAL]; RUNNER-POOL-6 adds the paired
+ * remote runners, whose links a plugin's binding builds (`api.hooks.runnerBinding`). Nothing here names a transport.
  */
 
 /** What a runner can run, answered by [RunnerLink.hello]. */
@@ -40,13 +40,40 @@ data class StartSpec(
     val parentSessionId: String? = null,
     /** The repository path ON THE RUNNER the session's working copy is cut from; null = none (the runner's default directory). */
     val repo: String? = null,
+    /** RUNNER-POOL-6: the composed first turn; null = an empty bind (a spawn). */
+    val prompt: String? = null,
+    /** RUNNER-POOL-6: the ticket's title (its branch slug), the base ref a fresh cut takes, and the branch the ticket already holds. */
+    val title: String? = null,
+    val base: String? = null,
+    val branch: String? = null,
+    /** RUNNER-POOL-6: the project's git remote a remote runner clones from (docs/RUNNER-POOL.md 4); null = a local start. */
+    val gitRemote: String? = null,
+    /** RUNNER-POOL-6: environment variable NAMES the session needs; the runner fills the values from its own store. */
+    val envNames: List<String> = emptyList(),
+    /**
+     * RUNNER-POOL-6: a worktree the RUNNER already cut for this start (all paths runner-local); set only on the runner, never from
+     * the wire. The session runs in it and none is provisioned.
+     */
+    val worktree: StartWorktree? = null,
 )
+
+/** RUNNER-POOL-6: a ticket worktree on the runner: [path], [branch], [base] (a commit), [repoRoot]. */
+data class StartWorktree(val path: String, val branch: String, val base: String, val repoRoot: String)
 
 /**
  * The answer to [RunnerLink.startSession]: the session started ([sessionId]), a refusal ([refusal], the spec named an unknown agent
  * or role, a project it does not belong to, ...), or neither when the spec names no agent and no role (nothing to bind yet).
+ * RUNNER-POOL-6: [branch] / [base] are the ticket branch a remote runner cut or reused (null for a start with no git remote).
  */
-data class SessionRef(val sessionId: String? = null, val refusal: String? = null)
+data class SessionRef(val sessionId: String? = null, val refusal: String? = null, val branch: String? = null, val base: String? = null)
+
+/** RUNNER-POOL-6: one event of a session a runner runs for its orchestrator: [kind] [STATUS] (payload = state) or [FINISHED] (payload = exit code). */
+data class RunnerEvent(val sessionId: String, val seq: Long, val kind: String, val payload: String = "") {
+    companion object {
+        const val STATUS = "status"
+        const val FINISHED = "finished"
+    }
+}
 
 /**
  * One composed mail turn for [RunnerLink.deliverMail]. [origin] is the sender as the wire's `MessageOrigin` JSON (so the contract
@@ -65,10 +92,12 @@ data class MailResult(val kind: String, val reason: String = "") {
     }
 }
 
-/** A runner's heartbeat: [state] `up` | `draining` | `down`, sessions [running], [freeSlots] (-1 = no cap), [load] (0..1, null = unknown). */
+/** A runner's heartbeat: [state] `up` | `degraded` | `draining` | `down`, sessions [running], [freeSlots] (-1 = no cap), [load] (0..1, null = unknown). */
 data class RunnerHealth(val state: String, val running: Int = 0, val freeSlots: Int = -1, val load: Double? = null) {
     companion object {
         const val UP = "up"
+        /** RUNNER-POOL-6: a late heartbeat, or no harness signed in; takes no new starts. */
+        const val DEGRADED = "degraded"
         const val DRAINING = "draining"
         const val DOWN = "down"
     }
@@ -87,6 +116,10 @@ class LocalRunnerServices(
     val stop: (sessionId: String, reason: String?, force: Boolean) -> Boolean,
     val deliver: (sessionId: String, mail: MailItem) -> MailResult,
     val health: () -> RunnerHealth,
+    /** RUNNER-POOL-6: the events of link-started sessions after a seq; default none. */
+    val events: (sinceSeq: Long) -> List<RunnerEvent> = { emptyList() },
+    /** RUNNER-POOL-6: (session, fromLine, maxLines) -> transcript lines; default none. */
+    val transcript: (sessionId: String, fromLine: Int, maxLines: Int) -> List<String> = { _, _, _ -> emptyList() },
 )
 
 /** The binding for the runner in this process ([RunnerPool.LOCAL]). */
@@ -96,7 +129,7 @@ class LocalRunnerLink(private val services: LocalRunnerServices) : RunnerLink {
 
     override fun startSession(spec: StartSpec): OrchestratorReply<SessionRef> =
         try {
-            OrchestratorReply.Ok(SessionRef(sessionId = services.start(spec)))
+            OrchestratorReply.Ok(SessionRef(sessionId = services.start(spec), branch = spec.worktree?.branch, base = spec.worktree?.base))
         } catch (e: IllegalArgumentException) {
             OrchestratorReply.Ok(SessionRef(refusal = e.message ?: "start refused"))
         }
@@ -106,10 +139,22 @@ class LocalRunnerLink(private val services: LocalRunnerServices) : RunnerLink {
 
     override fun deliverMail(sessionId: String, mail: MailItem): OrchestratorReply<MailResult> = OrchestratorReply.Ok(services.deliver(sessionId, mail))
     override fun health(): OrchestratorReply<RunnerHealth> = OrchestratorReply.Ok(services.health())
+    override fun events(sinceSeq: Long): OrchestratorReply<List<RunnerEvent>> = OrchestratorReply.Ok(services.events(sinceSeq))
+    override fun readTranscript(sessionId: String, fromLine: Int, maxLines: Int): OrchestratorReply<List<String>> =
+        OrchestratorReply.Ok(services.transcript(sessionId, fromLine, maxLines))
 }
 
-/** A runner the pool knows: its [name], the [binding] id that serves it (`local` for this process), its last [health] and [info]. */
-data class RunnerEntry(val name: String, val binding: String, val health: RunnerHealth? = null, val info: RunnerInfo? = null)
+/**
+ * A runner the pool knows: its [name], the [binding] id that serves it (`local` for this process), its last [health] and [info],
+ * and (RUNNER-POOL-6) the pool's verdict [state] from the heartbeat: `up` | `degraded` | `down`. Only `up` takes new starts.
+ */
+data class RunnerEntry(
+    val name: String,
+    val binding: String,
+    val health: RunnerHealth? = null,
+    val info: RunnerInfo? = null,
+    val state: String = health?.state ?: RunnerHealth.UP,
+)
 
 /** The orchestrator-side view of every runner (docs/RUNNER-POOL.md 2.2). [LOCAL] is always present. */
 interface RunnerPool {
@@ -119,7 +164,7 @@ interface RunnerPool {
     /** The link to runner [name]; null = unknown runner. */
     fun link(name: String): RunnerLink?
 
-    /** The runner a session lives on (the session index); [LOCAL] for every session today. */
+    /** The runner a session lives on (the session index); [LOCAL] unless a remote start placed it elsewhere. */
     fun runnerOf(sessionId: String): String
 
     companion object {
@@ -133,27 +178,97 @@ fun interface RunnerBinding {
 }
 
 /**
- * The pool core holds: the [LOCAL][RunnerPool.LOCAL] runner and the registry of runner bindings plugins offer. In this step no
- * remote runner is configured, so [runners] lists only `local` and every session lives there; a registered binding is kept for the
- * placement step (RUNNER-POOL-3 and later) and changes nothing yet.
+ * The pool core holds: the [LOCAL][RunnerPool.LOCAL] runner, the registry of runner bindings plugins offer, and (RUNNER-POOL-6) the
+ * paired remote runners. [remotes] lists the paired runner names (core's link store); each one's link is built once by the binding
+ * a plugin offered ([REMOTE_BINDING] when offered, else the only one). With no binding a paired runner is listed `down`, so
+ * placement refuses it with that reason instead of failing later.
+ *
+ * Health is the pool's verdict, refreshed by [heartbeat] (the daemon calls it every `limits.runners.heartbeatSec`): `up` when the
+ * last heartbeat answered and a harness is signed in; `degraded` when it answered with none signed in, or failed less than
+ * `lostAfterMs` after the last good one; `down` when silent longer, or never heard. [runnerOf] answers from the session index
+ * [placed] fills; every other session lives on `local`.
  */
-class RunnerHub(private val local: RunnerLink) : RunnerPool {
+class RunnerHub(
+    private val local: RunnerLink,
+    private val remotes: () -> List<String> = { emptyList() },
+    private val clock: () -> Long = System::currentTimeMillis,
+) : RunnerPool {
     private val bindings = java.util.concurrent.ConcurrentHashMap<String, RunnerBinding>()
+    private val links = java.util.concurrent.ConcurrentHashMap<String, Pair<String, RunnerLink>>()
+    private val beats = java.util.concurrent.ConcurrentHashMap<String, Beat>()
+    private val sessions = java.util.concurrent.ConcurrentHashMap<String, String>()
 
-    override fun runners(): List<RunnerEntry> =
-        listOf(RunnerEntry(RunnerPool.LOCAL, RunnerPool.LOCAL, local.health().valueOr(null), local.hello().valueOr(null)))
+    /** The last heartbeat of one remote: when it last answered, what it said, and the pool's [state]. */
+    private data class Beat(val okAt: Long?, val health: RunnerHealth?, val info: RunnerInfo?, val state: String)
 
-    override fun link(name: String): RunnerLink? = if (name == RunnerPool.LOCAL) local else null
-    override fun runnerOf(sessionId: String): String = RunnerPool.LOCAL
+    override fun runners(): List<RunnerEntry> {
+        val binding = bindingFor()?.first
+        return listOf(RunnerEntry(RunnerPool.LOCAL, RunnerPool.LOCAL, local.health().valueOr(null), local.hello().valueOr(null), RunnerHealth.UP)) +
+            remoteNames().map { name ->
+                val beat = beats[name]
+                RunnerEntry(name, binding.orEmpty(), beat?.health, beat?.info, if (binding == null) RunnerHealth.DOWN else beat?.state ?: RunnerHealth.DOWN)
+            }
+    }
+
+    override fun link(name: String): RunnerLink? {
+        if (name == RunnerPool.LOCAL) return local
+        if (name !in remoteNames()) return null
+        val (id, binding) = bindingFor() ?: return null
+        links[name]?.takeIf { it.first == id }?.let { return it.second }
+        return binding.create(name, local).also { links[name] = id to it }
+    }
+
+    override fun runnerOf(sessionId: String): String = sessions[sessionId] ?: RunnerPool.LOCAL
+
+    /** RUNNER-POOL-6: session [sessionId] was started on runner [runner]; [runnerOf] answers it from now on. */
+    fun placed(sessionId: String, runner: String) {
+        if (runner == RunnerPool.LOCAL) sessions.remove(sessionId) else sessions[sessionId] = runner
+    }
 
     /** Offer a binding under [bindingId]; `local` is the built-in one. */
     fun register(bindingId: String, binding: RunnerBinding) {
         require(bindingId != RunnerPool.LOCAL) { "'${RunnerPool.LOCAL}' is the built-in runner binding" }
         bindings[bindingId] = binding
+        links.clear()
     }
 
     /** The binding ids plugins offered, sorted. */
     fun bindingIds(): List<String> = bindings.keys.sorted()
+
+    /**
+     * RUNNER-POOL-6: one heartbeat round over every paired runner (`health`, then `hello`), then the verdict described on the class.
+     * Returns one line per runner whose state changed, for the log.
+     */
+    fun heartbeat(lostAfterMs: Long): List<String> {
+        val now = clock()
+        val names = remoteNames()
+        beats.keys.retainAll(names.toSet())
+        return names.mapNotNull { name ->
+            val before = beats[name]
+            val link = link(name)
+            val health = link?.health()?.valueOr(null)
+            val info = health?.let { link.hello().valueOr(null) } ?: before?.info
+            val beat = if (health != null) {
+                val signedIn = info?.harnesses?.any { it.loggedIn } ?: false
+                Beat(now, health, info, if (health.state == RunnerHealth.UP && signedIn) RunnerHealth.UP else RunnerHealth.DEGRADED)
+            } else {
+                val okAt = before?.okAt
+                Beat(okAt, before?.health, info, if (okAt != null && now - okAt < lostAfterMs) RunnerHealth.DEGRADED else RunnerHealth.DOWN)
+            }
+            beats[name] = beat
+            if (before?.state != beat.state) "runner '$name' is ${beat.state}" else null
+        }
+    }
+
+    private fun remoteNames(): List<String> = runCatching(remotes).getOrDefault(emptyList()).filter { it != RunnerPool.LOCAL }
+
+    private fun bindingFor(): Pair<String, RunnerBinding>? =
+        bindings[REMOTE_BINDING]?.let { REMOTE_BINDING to it } ?: bindings.entries.singleOrNull()?.let { it.key to it.value }
+
+    companion object {
+        /** The binding id Infantry_RemoteRunner offers its paired-runner link under. */
+        const val REMOTE_BINDING = "remote"
+    }
 }
 
 /** The link to the runner [sessionId] lives on: the one way an orchestrator-side caller addresses a session's runner. */
