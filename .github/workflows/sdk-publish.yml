@@ -40,8 +40,8 @@ jobs:
           distribution: temurin
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v4
-      - name: API surface unchanged (apiCheck)
-        run: ./gradlew apiCheck --console=plain
+      - name: API surface unchanged (checkLegacyAbi)
+        run: ./gradlew checkLegacyAbi --continue --console=plain
       - name: Compile the SDK modules
         run: ./gradlew :superiorSoftLibrary:infantryPlugins:compileKotlinJvm :superiorSoftLibrary:infantryProtocol:compileKotlin :superiorSoftLibrary:infantryDaemonApi:compileKotlin :superiorSoftLibrary:infantryHarnessApi:compileKotlin :superiorSoftLibrary:infantryUiCore:compileKotlinJvm --console=plain
       - name: Dry-run publish into build/m2

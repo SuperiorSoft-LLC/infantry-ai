@@ -799,6 +799,7 @@ public final class com/superiorsoftllc/infantry/daemon/api/attention/AttentionKi
 	public static final field LAUNCH_BLOCKED Ljava/lang/String;
 	public static final field PREREQUISITE_DECLINED Ljava/lang/String;
 	public static final field QUEUE_CLEARED Ljava/lang/String;
+	public static final field RUNNER_LOST Ljava/lang/String;
 	public static final field SESSION_FAILED Ljava/lang/String;
 	public static final field SESSION_RESUMED Ljava/lang/String;
 	public static final field STALLED Ljava/lang/String;
@@ -3107,6 +3108,7 @@ public final class com/superiorsoftllc/infantry/daemon/api/orchestrator/LocalRun
 	public fun <init> (Lcom/superiorsoftllc/infantry/daemon/api/orchestrator/LocalRunnerServices;)V
 	public fun deliverMail (Ljava/lang/String;Lcom/superiorsoftllc/infantry/daemon/api/orchestrator/MailItem;)Lcom/superiorsoftllc/infantry/daemon/api/orchestrator/OrchestratorReply;
 	public fun events (J)Lcom/superiorsoftllc/infantry/daemon/api/orchestrator/OrchestratorReply;
+	public fun events (Ljava/util/Map;)Lcom/superiorsoftllc/infantry/daemon/api/orchestrator/OrchestratorReply;
 	public fun getContractVersion ()Ljava/lang/String;
 	public fun health ()Lcom/superiorsoftllc/infantry/daemon/api/orchestrator/OrchestratorReply;
 	public fun hello ()Lcom/superiorsoftllc/infantry/daemon/api/orchestrator/OrchestratorReply;
@@ -3117,10 +3119,11 @@ public final class com/superiorsoftllc/infantry/daemon/api/orchestrator/LocalRun
 }
 
 public final class com/superiorsoftllc/infantry/daemon/api/orchestrator/LocalRunnerServices {
-	public fun <init> (Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function3;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function3;)V
-	public synthetic fun <init> (Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function3;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function3;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function3;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function3;)V
+	public synthetic fun <init> (Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function3;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function3;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun getDeliver ()Lkotlin/jvm/functions/Function2;
 	public final fun getEvents ()Lkotlin/jvm/functions/Function1;
+	public final fun getEventsAcked ()Lkotlin/jvm/functions/Function1;
 	public final fun getHealth ()Lkotlin/jvm/functions/Function0;
 	public final fun getInfo ()Lkotlin/jvm/functions/Function0;
 	public final fun getStart ()Lkotlin/jvm/functions/Function1;
@@ -3331,6 +3334,7 @@ public final class com/superiorsoftllc/infantry/daemon/api/orchestrator/RunnerHu
 	public fun <init> (Lcom/superiorsoftllc/infantry/daemon/api/orchestrator/RunnerLink;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;)V
 	public synthetic fun <init> (Lcom/superiorsoftllc/infantry/daemon/api/orchestrator/RunnerLink;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun bindingIds ()Ljava/util/List;
+	public final fun forget (Ljava/lang/String;)V
 	public final fun hasSessionsOn (Ljava/lang/String;)Z
 	public final fun heartbeat (J)Ljava/util/List;
 	public fun link (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/daemon/api/orchestrator/RunnerLink;
@@ -3338,6 +3342,8 @@ public final class com/superiorsoftllc/infantry/daemon/api/orchestrator/RunnerHu
 	public final fun register (Ljava/lang/String;Lcom/superiorsoftllc/infantry/daemon/api/orchestrator/RunnerBinding;)V
 	public fun runnerOf (Ljava/lang/String;)Ljava/lang/String;
 	public fun runners ()Ljava/util/List;
+	public final fun sessionsOn (Ljava/lang/String;)Ljava/util/List;
+	public final fun silentSince (Ljava/lang/String;)Ljava/lang/Long;
 }
 
 public final class com/superiorsoftllc/infantry/daemon/api/orchestrator/RunnerHub$Companion {
@@ -3370,6 +3376,7 @@ public abstract interface class com/superiorsoftllc/infantry/daemon/api/orchestr
 	public static final field Companion Lcom/superiorsoftllc/infantry/daemon/api/orchestrator/RunnerLink$Companion;
 	public fun deliverMail (Ljava/lang/String;Lcom/superiorsoftllc/infantry/daemon/api/orchestrator/MailItem;)Lcom/superiorsoftllc/infantry/daemon/api/orchestrator/OrchestratorReply;
 	public fun events (J)Lcom/superiorsoftllc/infantry/daemon/api/orchestrator/OrchestratorReply;
+	public fun events (Ljava/util/Map;)Lcom/superiorsoftllc/infantry/daemon/api/orchestrator/OrchestratorReply;
 	public fun getContractVersion ()Ljava/lang/String;
 	public fun health ()Lcom/superiorsoftllc/infantry/daemon/api/orchestrator/OrchestratorReply;
 	public fun hello ()Lcom/superiorsoftllc/infantry/daemon/api/orchestrator/OrchestratorReply;
@@ -3388,6 +3395,7 @@ public final class com/superiorsoftllc/infantry/daemon/api/orchestrator/RunnerLi
 public final class com/superiorsoftllc/infantry/daemon/api/orchestrator/RunnerLink$DefaultImpls {
 	public static fun deliverMail (Lcom/superiorsoftllc/infantry/daemon/api/orchestrator/RunnerLink;Ljava/lang/String;Lcom/superiorsoftllc/infantry/daemon/api/orchestrator/MailItem;)Lcom/superiorsoftllc/infantry/daemon/api/orchestrator/OrchestratorReply;
 	public static fun events (Lcom/superiorsoftllc/infantry/daemon/api/orchestrator/RunnerLink;J)Lcom/superiorsoftllc/infantry/daemon/api/orchestrator/OrchestratorReply;
+	public static fun events (Lcom/superiorsoftllc/infantry/daemon/api/orchestrator/RunnerLink;Ljava/util/Map;)Lcom/superiorsoftllc/infantry/daemon/api/orchestrator/OrchestratorReply;
 	public static fun getContractVersion (Lcom/superiorsoftllc/infantry/daemon/api/orchestrator/RunnerLink;)Ljava/lang/String;
 	public static fun health (Lcom/superiorsoftllc/infantry/daemon/api/orchestrator/RunnerLink;)Lcom/superiorsoftllc/infantry/daemon/api/orchestrator/OrchestratorReply;
 	public static fun hello (Lcom/superiorsoftllc/infantry/daemon/api/orchestrator/RunnerLink;)Lcom/superiorsoftllc/infantry/daemon/api/orchestrator/OrchestratorReply;
@@ -3434,8 +3442,8 @@ public final class com/superiorsoftllc/infantry/daemon/api/orchestrator/SessionR
 }
 
 public final class com/superiorsoftllc/infantry/daemon/api/orchestrator/StartSpec {
-	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Lcom/superiorsoftllc/infantry/daemon/api/orchestrator/StartWorktree;)V
-	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Lcom/superiorsoftllc/infantry/daemon/api/orchestrator/StartWorktree;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Lcom/superiorsoftllc/infantry/daemon/api/orchestrator/StartWorktree;Z)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Lcom/superiorsoftllc/infantry/daemon/api/orchestrator/StartWorktree;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Ljava/lang/String;
 	public final fun component10 ()Ljava/lang/String;
 	public final fun component11 ()Ljava/lang/String;
@@ -3446,6 +3454,7 @@ public final class com/superiorsoftllc/infantry/daemon/api/orchestrator/StartSpe
 	public final fun component16 ()Ljava/lang/String;
 	public final fun component17 ()Ljava/util/List;
 	public final fun component18 ()Lcom/superiorsoftllc/infantry/daemon/api/orchestrator/StartWorktree;
+	public final fun component19 ()Z
 	public final fun component2 ()Ljava/lang/String;
 	public final fun component3 ()Ljava/lang/String;
 	public final fun component4 ()Ljava/lang/String;
@@ -3454,8 +3463,8 @@ public final class com/superiorsoftllc/infantry/daemon/api/orchestrator/StartSpe
 	public final fun component7 ()Ljava/lang/String;
 	public final fun component8 ()Ljava/lang/Integer;
 	public final fun component9 ()Ljava/lang/String;
-	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Lcom/superiorsoftllc/infantry/daemon/api/orchestrator/StartWorktree;)Lcom/superiorsoftllc/infantry/daemon/api/orchestrator/StartSpec;
-	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/daemon/api/orchestrator/StartSpec;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Lcom/superiorsoftllc/infantry/daemon/api/orchestrator/StartWorktree;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/daemon/api/orchestrator/StartSpec;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Lcom/superiorsoftllc/infantry/daemon/api/orchestrator/StartWorktree;Z)Lcom/superiorsoftllc/infantry/daemon/api/orchestrator/StartSpec;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/daemon/api/orchestrator/StartSpec;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Lcom/superiorsoftllc/infantry/daemon/api/orchestrator/StartWorktree;ZILjava/lang/Object;)Lcom/superiorsoftllc/infantry/daemon/api/orchestrator/StartSpec;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getAgentId ()Ljava/lang/String;
 	public final fun getBase ()Ljava/lang/String;
@@ -3469,6 +3478,7 @@ public final class com/superiorsoftllc/infantry/daemon/api/orchestrator/StartSpe
 	public final fun getProjectId ()Ljava/lang/String;
 	public final fun getPrompt ()Ljava/lang/String;
 	public final fun getProvider ()Ljava/lang/String;
+	public final fun getPushOnCommit ()Z
 	public final fun getRepo ()Ljava/lang/String;
 	public final fun getRole ()Ljava/lang/String;
 	public final fun getStartId ()Ljava/lang/String;
@@ -4820,12 +4830,14 @@ public final class com/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWir
 public final class com/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$EventsRequest {
 	public static final field Companion Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$EventsRequest$Companion;
 	public fun <init> ()V
-	public fun <init> (J)V
-	public synthetic fun <init> (JILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (JLjava/util/Map;)V
+	public synthetic fun <init> (JLjava/util/Map;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()J
-	public final fun copy (J)Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$EventsRequest;
-	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$EventsRequest;JILjava/lang/Object;)Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$EventsRequest;
+	public final fun component2 ()Ljava/util/Map;
+	public final fun copy (JLjava/util/Map;)Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$EventsRequest;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$EventsRequest;JLjava/util/Map;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$EventsRequest;
 	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAcked ()Ljava/util/Map;
 	public final fun getSinceSeq ()J
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
@@ -5245,8 +5257,8 @@ public final class com/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWir
 
 public final class com/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$StartRequest {
 	public static final field Companion Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$StartRequest$Companion;
-	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;)V
-	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Z)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Ljava/lang/String;
 	public final fun component10 ()Ljava/lang/String;
 	public final fun component11 ()Ljava/lang/String;
@@ -5254,6 +5266,7 @@ public final class com/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWir
 	public final fun component13 ()Ljava/lang/String;
 	public final fun component14 ()Ljava/lang/String;
 	public final fun component15 ()Ljava/util/List;
+	public final fun component16 ()Z
 	public final fun component2 ()Ljava/lang/String;
 	public final fun component3 ()Ljava/lang/String;
 	public final fun component4 ()Ljava/lang/String;
@@ -5262,8 +5275,8 @@ public final class com/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWir
 	public final fun component7 ()Ljava/lang/String;
 	public final fun component8 ()Ljava/lang/String;
 	public final fun component9 ()Ljava/lang/Integer;
-	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;)Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$StartRequest;
-	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$StartRequest;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$StartRequest;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Z)Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$StartRequest;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$StartRequest;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;ZILjava/lang/Object;)Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$StartRequest;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getAgentId ()Ljava/lang/String;
 	public final fun getBase ()Ljava/lang/String;
@@ -5276,6 +5289,7 @@ public final class com/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWir
 	public final fun getProjectId ()Ljava/lang/String;
 	public final fun getPrompt ()Ljava/lang/String;
 	public final fun getProvider ()Ljava/lang/String;
+	public final fun getPushOnCommit ()Z
 	public final fun getRole ()Ljava/lang/String;
 	public final fun getStartId ()Ljava/lang/String;
 	public final fun getTicketId ()Ljava/lang/String;
