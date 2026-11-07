@@ -619,7 +619,7 @@ Generated for the `infantryPlugins` guard `SdkTypesDocumentedGuardTest`: every p
 - `InspectOutcome`: Exactly one of [view] and [error] is set.
 - `InspectView`: What the consent dialog shows.
 - `PluginManagerPort`: PLUGIN-UI-1 (docs/PLUGIN-MANAGER.md section 4.3): the plugin manager as a UI plugin sees it.
-- `PluginView`: One installed or bundled plugin.
+- `PluginView`: One installed or bundled plugin. `enabled` is the OWN flag; PLUGIN-TREE-2b adds `parents`, `children` (direct, from `PluginTree`) and `heldOffBy` (the parents that are all off, when that holds the plugin off). `PluginManagerPort.openConfig(id)` is the step-in hook (default no-op; 2c wires it).
 - `RefreshView`
 - `PluginProgress`: PLUGIN-PROGRESS-1: one live step (Downloading / Verifying / Installing / Reloading, bytes when known) a host reports through `PluginManagerPort.setProgressListener`.
 - `SourceView`

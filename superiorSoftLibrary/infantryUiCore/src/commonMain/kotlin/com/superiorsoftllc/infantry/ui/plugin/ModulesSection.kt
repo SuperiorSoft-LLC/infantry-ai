@@ -90,6 +90,16 @@ const val MODULE_MESSAGE_TAG_PREFIX = "plugin-module-message-"
 const val MODULE_REMOVE_TAG_PREFIX = "plugin-module-remove-"
 const val MODULE_EDIT_TAG_PREFIX = "plugin-module-edit-"
 const val MODULE_USED_BY_TAG_PREFIX = "plugin-module-used-by-"
+/** PLUGIN-TREE-2b: `In use by A and B` (2+ effective parents), the held-off chip, and the shared-child switch-off confirm. */
+const val MODULE_IN_USE_BY_TAG_PREFIX = "plugin-module-in-use-by-"
+const val MODULE_HELD_OFF_TAG_PREFIX = "plugin-module-held-off-"
+const val MODULE_SHARED_CONFIRM_TAG_PREFIX = "plugin-module-shared-confirm-"
+const val MODULE_SHARED_YES_TAG_PREFIX = "plugin-module-shared-yes-"
+const val MODULE_SHARED_NO_TAG_PREFIX = "plugin-module-shared-no-"
+
+/** "A", "A and B", "A, B and C". */
+internal fun joinNames(names: List<String>): String =
+    if (names.size <= 1) names.joinToString() else names.dropLast(1).joinToString(", ") + " and " + names.last()
 const val MODULE_CRUMBS_TAG = "plugin-crumbs"
 const val MODULE_CRUMB_TAG_PREFIX = "plugin-crumb-"
 const val MODULE_BACK_TAG = "plugin-crumb-back"
@@ -179,7 +189,9 @@ fun ModulesSection(
                         for (s in row) {
                             ModuleCard(
                                 s, graph,
-                                enabled = enabledNow[s.name] ?: (s.state != ModuleState.DISABLED),
+                                // The switch shows the OWN flag: a module held off by its parents has its flag on while its state is Disabled.
+                                enabled = enabledNow[s.name] ?: (s.state != ModuleState.DISABLED || s.heldOffBy.isNotEmpty()),
+                                effectiveParents = tree.parentsOf(s.name).filter { p -> factory.statuses.any { it.name == p && it.state == ModuleState.LOADED } },
                                 message = messages[s.name],
                                 removeNote = removeNotes[s.name],
                                 harnessStatus = harnessStatus?.get(s.name),
@@ -229,7 +241,7 @@ internal fun moduleByline(m: ModuleManifest): String? =
         .takeIf { it.isNotEmpty() }?.joinToString(" · ")
 
 @Composable
-private fun ModuleCard(s: ModuleStatus, graph: DependencyGraph, enabled: Boolean, message: ModuleChange?, removeNote: String?, onRemove: (() -> Unit)?, onToggle: ((Boolean) -> Unit)?, modifier: Modifier, harnessStatus: String? = null, parents: List<String> = emptyList(), children: List<String> = emptyList(), onOpenChild: (String) -> Unit = {}, onEdit: () -> Unit = {}) {
+private fun ModuleCard(s: ModuleStatus, graph: DependencyGraph, enabled: Boolean, message: ModuleChange?, removeNote: String?, onRemove: (() -> Unit)?, onToggle: ((Boolean) -> Unit)?, modifier: Modifier, harnessStatus: String? = null, effectiveParents: List<String> = emptyList(), parents: List<String> = emptyList(), children: List<String> = emptyList(), onOpenChild: (String) -> Unit = {}, onEdit: () -> Unit = {}) {
     Column(
         modifier.clip(RoundedCornerShape(6.dp)).background(Palette.Raised).padding(10.dp).testTag(MODULE_ROW_TAG_PREFIX + s.name),
         verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -266,6 +278,9 @@ private fun ModuleCard(s: ModuleStatus, graph: DependencyGraph, enabled: Boolean
         if (parents.isNotEmpty()) {
             Text("Used by: " + parents.joinToString(", "), Modifier.testTag(MODULE_USED_BY_TAG_PREFIX + s.name), color = Palette.Muted, fontSize = 11.sp)
         }
+        if (effectiveParents.size >= 2) {
+            Text("In use by " + joinNames(effectiveParents), Modifier.testTag(MODULE_IN_USE_BY_TAG_PREFIX + s.name), color = Palette.Muted, fontSize = 11.sp)
+        }
         if (children.isNotEmpty()) {
             Row(Modifier.testTag(MODULE_CHILDREN_TAG_PREFIX + s.name), verticalAlignment = Alignment.CenterVertically) {
                 Text("Children: ", color = Palette.Muted, fontSize = 11.sp)
@@ -291,10 +306,18 @@ private fun ModuleCard(s: ModuleStatus, graph: DependencyGraph, enabled: Boolean
             )
         }
         removeNote?.let { Text(it, color = Palette.Danger, fontSize = 11.sp) }
+        // PLUGIN-TREE-2b: switching a shared child off is allowed after a confirm, never refused.
+        var confirmOff by remember { mutableStateOf(false) }
+        if (confirmOff) Row(Modifier.testTag(MODULE_SHARED_CONFIRM_TAG_PREFIX + s.name), verticalAlignment = Alignment.CenterVertically) {
+            Text("Used by " + joinNames(effectiveParents) + "; they lose this part.", color = Palette.Warn, fontSize = 11.sp, modifier = Modifier.weight(1f))
+            TextButton({ confirmOff = false; onToggle?.invoke(false) }, Modifier.testTag(MODULE_SHARED_YES_TAG_PREFIX + s.name)) { Text("Yes", fontSize = 12.sp) }
+            TextButton({ confirmOff = false }, Modifier.testTag(MODULE_SHARED_NO_TAG_PREFIX + s.name)) { Text("No", fontSize = 12.sp) }
+        }
         // The state and its control sit at the foot of the card, level across a row of cards.
         Spacer(Modifier.weight(1f))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Chip(stateLabel(s.state), if (s.state == ModuleState.LOADED) Palette.Accent else Palette.Muted, textModifier = Modifier.testTag(MODULE_STATE_TAG_PREFIX + s.name))
+            if (s.heldOffBy.isNotEmpty()) Chip("Off: its parents are off (" + s.heldOffBy.joinToString(", ") + ")", Palette.Muted, textModifier = Modifier.testTag(MODULE_HELD_OFF_TAG_PREFIX + s.name))
+            else Chip(stateLabel(s.state), if (s.state == ModuleState.LOADED) Palette.Accent else Palette.Muted, textModifier = Modifier.testTag(MODULE_STATE_TAG_PREFIX + s.name))
             Spacer(Modifier.weight(1f))
             if (s.manifest != null && (children.isNotEmpty() || s.manifest?.config?.isNotEmpty() == true || parents.isNotEmpty())) TextButton(
                 onClick = onEdit,
@@ -308,7 +331,7 @@ private fun ModuleCard(s: ModuleStatus, graph: DependencyGraph, enabled: Boolean
             ) { Text("Remove", fontSize = 12.sp) }
             if (onToggle != null && s.manifest != null) {
                 TextButton(
-                    onClick = { onToggle(!enabled) },
+                    onClick = { if (enabled && effectiveParents.size >= 2) confirmOff = true else onToggle(!enabled) },
                     modifier = Modifier.height(28.dp).testTag(MODULE_TOGGLE_TAG_PREFIX + s.name),
                     contentPadding = PaddingValues(horizontal = 8.dp),
                 ) { Text(if (enabled) "Disable" else "Enable", fontSize = 12.sp) }

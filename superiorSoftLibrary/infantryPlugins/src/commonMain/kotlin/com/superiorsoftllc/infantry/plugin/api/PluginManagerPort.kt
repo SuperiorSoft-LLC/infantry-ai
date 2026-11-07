@@ -30,6 +30,8 @@ interface PluginManagerPort {
     fun importList(location: String): ActionResult = ActionResult(false, "importing a plugin list is not supported on this host")
     /** PLUGIN-PROGRESS-1: the screen listens here for the steps of the running install / update / rollback / remove; null stops it. A host that reports none does nothing. */
     fun setProgressListener(listener: ((PluginProgress) -> Unit)?) {}
+    /** PLUGIN-TREE-2b: steps into [id]'s configuration view (the hook 2c wires); a host without one does nothing. */
+    fun openConfig(id: String) {}
 }
 
 /**
@@ -41,13 +43,15 @@ data class PluginProgress(val id: String, val step: String, val done: Long = -1,
 /**
  * One installed or bundled plugin. [cls] = official / community / custom. PLUGINS-UI-1: [description] is module.json's
  * (empty = none), [contributes] what it adds to the window (`tab <id>`, `panel <side>: <id>`, `block <slot>: <name>`),
- * [requiredBy] the enabled plugins that declare it a dependency (turning it off stops them).
+ * [requiredBy] the enabled plugins that declare it a dependency (turning it off stops them). PLUGIN-TREE-2b: [enabled] is the OWN flag.
  */
 data class PluginView(
     val id: String, val version: String, val cls: String, val bundled: Boolean, val enabled: Boolean,
     val license: String?, val signer: String?, val requested: List<String>, val granted: List<String>,
     val canRollback: Boolean, val yanked: String?,
     val description: String = "", val contributes: List<String> = emptyList(), val requiredBy: List<String> = emptyList(),
+    /** PLUGIN-TREE-2b: the plugin tree. [parents] / [children] are direct; [heldOffBy] = the parents that are all off, when that holds this one off (its own [enabled] flag stays as set). */
+    val parents: List<String> = emptyList(), val children: List<String> = emptyList(), val heldOffBy: List<String> = emptyList(),
 )
 
 /** A newer version offered for an installed plugin; [newGrants] non-empty = "asks for new permissions". */
