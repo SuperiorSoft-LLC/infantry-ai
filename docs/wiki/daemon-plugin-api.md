@@ -201,6 +201,13 @@ A `NamedEvent` has `name` (dotted, lower case), `payload` (JSON text), `source` 
 publishing thread, in publish order. The core carries `causeId` and `depth` but enforces no loop policy: a loop guard
 is the plugin's job (the scripting plugin has one, see [Scripting](Scripting.md)).
 
+### Job logs (JOBFEED-1, DaemonApi 1.49.0)
+
+`Sessions.jobs(id)` lists the watched jobs (`infantry bg run`) of a session as `JobInfo` (running ones and the last few that ended, with
+their exit code). `Sessions.jobLog(id, jobId, fromOffset, maxBytes)` is a bounded read of a job's log and answers a `JobLogChunk`: whole
+lines only, `nextOffset` to pass to the next read, `reset` true when the log was cut or replaced. `limits.jobfeed.maxReadBytes` caps one read;
+`limits.jobfeed.remembered` is how many ended jobs stay readable. Nothing runs between reads: a plugin pulls, the daemon keeps no stream.
+
 ### Capabilities (PLUGIN-BRIDGES-1, DaemonApi 1.48.0)
 
 `api.capabilities` (`Capabilities`) answers this module's `runs: daemon` capabilities and calls any installed one through the

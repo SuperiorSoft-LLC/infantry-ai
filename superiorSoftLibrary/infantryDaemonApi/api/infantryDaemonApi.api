@@ -352,6 +352,45 @@ public final class com/superiorsoftllc/infantry/daemon/api/IncomingMailHook$Defa
 	public static fun lost (Lcom/superiorsoftllc/infantry/daemon/api/IncomingMailHook;Ljava/lang/String;Ljava/lang/String;)V
 }
 
+public final class com/superiorsoftllc/infantry/daemon/api/JobInfo {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;JZLjava/lang/Integer;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;JZLjava/lang/Integer;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()J
+	public final fun component4 ()Z
+	public final fun component5 ()Ljava/lang/Integer;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;JZLjava/lang/Integer;)Lcom/superiorsoftllc/infantry/daemon/api/JobInfo;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/daemon/api/JobInfo;Ljava/lang/String;Ljava/lang/String;JZLjava/lang/Integer;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/daemon/api/JobInfo;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getExitCode ()Ljava/lang/Integer;
+	public final fun getId ()Ljava/lang/String;
+	public final fun getLabel ()Ljava/lang/String;
+	public final fun getRunning ()Z
+	public final fun getStartedAt ()J
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/daemon/api/JobLogChunk {
+	public fun <init> (Ljava/lang/String;JJZLcom/superiorsoftllc/infantry/daemon/api/JobInfo;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()J
+	public final fun component3 ()J
+	public final fun component4 ()Z
+	public final fun component5 ()Lcom/superiorsoftllc/infantry/daemon/api/JobInfo;
+	public final fun copy (Ljava/lang/String;JJZLcom/superiorsoftllc/infantry/daemon/api/JobInfo;)Lcom/superiorsoftllc/infantry/daemon/api/JobLogChunk;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/daemon/api/JobLogChunk;Ljava/lang/String;JJZLcom/superiorsoftllc/infantry/daemon/api/JobInfo;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/daemon/api/JobLogChunk;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getJob ()Lcom/superiorsoftllc/infantry/daemon/api/JobInfo;
+	public final fun getNextOffset ()J
+	public final fun getReset ()Z
+	public final fun getSize ()J
+	public final fun getText ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class com/superiorsoftllc/infantry/daemon/api/LocalFile {
 	public fun <init> (Ljava/lang/String;Ljava/lang/Long;[B)V
 	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Long;[BILkotlin/jvm/internal/DefaultConstructorMarker;)V
@@ -576,6 +615,8 @@ public final class com/superiorsoftllc/infantry/daemon/api/SessionStatus {
 public abstract interface class com/superiorsoftllc/infantry/daemon/api/Sessions {
 	public abstract fun get (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/daemon/api/SessionInfo;
 	public fun interrupt (Ljava/lang/String;)Z
+	public fun jobLog (Ljava/lang/String;Ljava/lang/String;JI)Lcom/superiorsoftllc/infantry/daemon/api/JobLogChunk;
+	public fun jobs (Ljava/lang/String;)Ljava/util/List;
 	public abstract fun list ()Ljava/util/List;
 	public fun queueAdd (Ljava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/daemon/api/QueuedMessage;
 	public fun queueForce (Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
@@ -594,6 +635,8 @@ public abstract interface class com/superiorsoftllc/infantry/daemon/api/Sessions
 
 public final class com/superiorsoftllc/infantry/daemon/api/Sessions$DefaultImpls {
 	public static fun interrupt (Lcom/superiorsoftllc/infantry/daemon/api/Sessions;Ljava/lang/String;)Z
+	public static fun jobLog (Lcom/superiorsoftllc/infantry/daemon/api/Sessions;Ljava/lang/String;Ljava/lang/String;JI)Lcom/superiorsoftllc/infantry/daemon/api/JobLogChunk;
+	public static fun jobs (Lcom/superiorsoftllc/infantry/daemon/api/Sessions;Ljava/lang/String;)Ljava/util/List;
 	public static fun queueAdd (Lcom/superiorsoftllc/infantry/daemon/api/Sessions;Ljava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/daemon/api/QueuedMessage;
 	public static fun queueForce (Lcom/superiorsoftllc/infantry/daemon/api/Sessions;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
 	public static fun queueRemove (Lcom/superiorsoftllc/infantry/daemon/api/Sessions;Ljava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/daemon/api/QueuedMessage;
