@@ -675,20 +675,17 @@ jobs:
           VERSION: ${{ needs.version.outputs.version }}
         run: |
           set -euo pipefail
-          t="$GHCR_IMAGE:$VERSION"
-          if [ "$CHANNEL" = stable ]; then t="$t"$'
-'"$GHCR_IMAGE:latest"; else t="$t"$'
-'"$GHCR_IMAGE:$CHANNEL"; fi
+          tags=("$GHCR_IMAGE:$VERSION")
+          if [ "$CHANNEL" = stable ]; then tags+=("$GHCR_IMAGE:latest"); else tags+=("$GHCR_IMAGE:$CHANNEL"); fi
           if [ -n "${HUB_USER:-}" ] && [ -n "${HUB_TOKEN:-}" ]; then
             echo "hub=true" >> "$GITHUB_OUTPUT"
-            t="$t"$'
-'"$HUB_IMAGE:$VERSION"
-            if [ "$CHANNEL" = stable ]; then t="$t"$'
-'"$HUB_IMAGE:latest"; fi
+            tags+=("$HUB_IMAGE:$VERSION")
+            if [ "$CHANNEL" = stable ]; then tags+=("$HUB_IMAGE:latest"); fi
           else
             echo "hub=false" >> "$GITHUB_OUTPUT"
             echo "::notice::No Docker Hub secrets; pushing to GHCR only."
           fi
+          t=$(printf '%s\n' "${tags[@]}")
           { echo 'list<<EOF'; echo "$t"; echo EOF; } >> "$GITHUB_OUTPUT"
       - uses: docker/login-action@v3
         with:
