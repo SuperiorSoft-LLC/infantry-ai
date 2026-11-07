@@ -99,6 +99,9 @@ class UpdateService(
 
     private var job: Job? = null
 
+    /** UPDATER-NET-MSG-1: an Offline failure was already shown and no check has succeeded since (one message per outage). */
+    @Volatile private var outageShown = false
+
     /** When the last check started (start-up, by hand or [checkIfDue]); null = never. */
     @Volatile private var lastCheckAt: Long? = null
 
@@ -153,16 +156,21 @@ class UpdateService(
             val result = runCatching { updaterFor(config).check() }.getOrElse { UpdateCheck.Failed(UpdateFailure.BadResponse(it::class.simpleName ?: "error")) }
             _state.value = when (result) {
                 is UpdateCheck.Available -> UpdateState.Available(result.update).also {
+                    outageShown = false
                     log("update available: ${it.update.current} -> ${it.update.latest}")
                     _toast.value = true
                 }
                 is UpdateCheck.UpToDate -> {
+                    outageShown = false
                     log("up to date: running ${result.current}, latest ${result.latest}")
                     if (manual) UpdateState.UpToDate(result.current) else UpdateState.Idle
                 }
                 is UpdateCheck.Failed -> {
                     log("check failed: ${result.failure}")
-                    UpdateState.Message(result.failure.message)
+                    // One toast per outage: a silent re-check that fails again stays quiet; a manual check always answers.
+                    val repeat = result.failure is UpdateFailure.Offline && outageShown && !manual
+                    if (result.failure is UpdateFailure.Offline) outageShown = true
+                    if (repeat) UpdateState.Idle else UpdateState.Message(result.failure.message)
                 }
             }
         }.also { job = it }

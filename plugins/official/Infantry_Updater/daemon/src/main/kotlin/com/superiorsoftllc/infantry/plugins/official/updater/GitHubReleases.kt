@@ -58,6 +58,27 @@ sealed class UpdateFailure(val message: String) {
     override fun toString(): String = "${this::class.simpleName}($message)"
 }
 
+/**
+ * UPDATER-NET-MSG-1: the real cause of a network failure: a short kind (timeout, DNS, connection reset, TLS, connection
+ * refused) plus the exception's message, so the toast says more than a class name.
+ */
+fun describeNetworkError(io: Throwable): String {
+    val root = generateSequence(io) { it.cause?.takeIf { c -> c !== it } }.last()
+    val kind = when {
+        io is HttpTimeoutException || root is java.net.SocketTimeoutException || root is java.net.http.HttpConnectTimeoutException -> "timeout"
+        root is java.net.UnknownHostException -> "DNS lookup failed"
+        root is javax.net.ssl.SSLException -> "TLS error"
+        root is java.net.ConnectException -> "connection refused"
+        root is java.net.SocketException && root.message?.contains("reset", ignoreCase = true) == true -> "connection reset"
+        else -> io::class.simpleName ?: "network error"
+    }
+    val detail = (root.message ?: io.message)?.trim()?.takeIf { it.isNotEmpty() && !kind.contains(it) }?.take(MAX_CAUSE_CHARS)
+    return if (detail == null) kind else "$kind: $detail"
+}
+
+/** UPDATER-NET-MSG-1: the longest exception message kept in the shown cause. */
+private const val MAX_CAUSE_CHARS = 120
+
 /** UPDATE-1: the outcome of an HTTP call made by the updater. */
 sealed interface Fetched<out T> {
     data class Ok<T>(val value: T) : Fetched<T>
@@ -76,6 +97,8 @@ class GitHubReleases(
         .followRedirects(HttpClient.Redirect.NEVER)
         .build(),
     private val requestTimeout: Duration = Duration.ofSeconds(20),
+    /** UPDATER-NET-MSG-1: waits between network retries; tests pass a no-op. */
+    private val pause: (Long) -> Unit = { Thread.sleep(it) },
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -130,13 +153,8 @@ class GitHubReleases(
             .header("X-GitHub-Api-Version", "2022-11-28")
             .header("Authorization", "Bearer ${config.token}")
             .build()
-        val response = try {
-            http.send(request, HttpResponse.BodyHandlers.discarding())
-        } catch (timedOut: HttpTimeoutException) {
-            return Fetched.Failed(UpdateFailure.Offline("timed out"))
-        } catch (io: IOException) {
-            return Fetched.Failed(UpdateFailure.Offline(io::class.simpleName ?: "network error"))
-        }
+        val (got, failure) = sendWithRetry(request, HttpResponse.BodyHandlers.discarding(), config)
+        val response = got ?: return Fetched.Failed(failure!!)
         val code = response.statusCode()
         return when {
             code in 300..399 -> response.headers().firstValue("Location").orElse(null)
@@ -145,6 +163,28 @@ class GitHubReleases(
             code == 404 -> Fetched.Failed(UpdateFailure.BadAsset("${asset.name} is gone from the release (HTTP 404)"))
             code in 200..299 -> Fetched.Failed(UpdateFailure.BadResponse("the private asset was served without a signed redirect"))
             else -> Fetched.Failed(classify(code, response.headers()))
+        }
+    }
+
+    /**
+     * UPDATER-NET-MSG-1: one HTTP call, retried after a network drop (not after an HTTP answer) up to
+     * [UpdateConfig.networkRetries] times with a doubling backoff. The last cause is described in the failure.
+     */
+    private fun <T> sendWithRetry(request: HttpRequest, body: HttpResponse.BodyHandler<T>, config: UpdateConfig): Pair<HttpResponse<T>?, UpdateFailure?> {
+        var wait = config.networkBackoffMs
+        var attempt = 0
+        while (true) {
+            try {
+                return http.send(request, body) to null
+            } catch (io: IOException) {
+                if (attempt >= config.networkRetries) return null to UpdateFailure.Offline(describeNetworkError(io))
+            } catch (interrupted: InterruptedException) {
+                Thread.currentThread().interrupt()
+                return null to UpdateFailure.Offline("interrupted")
+            }
+            attempt++
+            pause(wait)
+            wait *= 2
         }
     }
 
@@ -159,13 +199,8 @@ class GitHubReleases(
                 .header("X-GitHub-Api-Version", "2022-11-28")
                 .apply { if (sameHost) config.token?.let { header("Authorization", "Bearer $it") } }
                 .build()
-            val response = try {
-                http.send(request, body)
-            } catch (timedOut: HttpTimeoutException) {
-                return Fetched.Failed(UpdateFailure.Offline("timed out"))
-            } catch (io: IOException) {
-                return Fetched.Failed(UpdateFailure.Offline(io::class.simpleName ?: "network error"))
-            }
+            val (got, failure) = sendWithRetry(request, body, config)
+            val response = got ?: return Fetched.Failed(failure!!)
             val code = response.statusCode()
             when {
                 code in 200..299 -> return Fetched.Ok(response)

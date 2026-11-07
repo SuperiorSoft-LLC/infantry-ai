@@ -97,7 +97,7 @@ class UpdaterTest {
     @Test
     fun `offline is a short message`() {
         val closedPort = ServerSocket(0).use { it.localPort }
-        val config = UpdateConfig("o/r", SemVer(1, 0, 0), "http://127.0.0.1:$closedPort")
+        val config = UpdateConfig("o/r", SemVer(1, 0, 0), "http://127.0.0.1:$closedPort", networkRetries = 1, networkBackoffMs = 0)
         val failed = assertIs<UpdateCheck.Failed>(Updater(config).check())
         assertIs<UpdateFailure.Offline>(failed.failure)
     }
