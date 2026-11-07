@@ -48,6 +48,10 @@ class RunnerLinkService(
     private val log: (String) -> Unit = { System.err.println(it) },
     private val clock: () -> Long = System::currentTimeMillis,
     private val starts: RemoteStarts? = null,
+    /** RUNNER-POOL-7 (runner side): the agent frames this runner forwards to its orchestrator. */
+    private val forwarder: FrameForwarder? = null,
+    /** RUNNER-POOL-7 (orchestrator side): pulls and answers the frames the paired runners forward; [tick] keeps it on every paired runner. */
+    private val pump: ForwardPump? = null,
 ) : AutoCloseable {
     private var serving: LinkServing? = null
     private var pairing: Pairing? = null
@@ -61,7 +65,10 @@ class RunnerLinkService(
     @Synchronized
     fun tick() {
         pairing?.let { p -> if (RunnerLinkStore.open(stateDir).orchestrator() != null || p.codes.liveName(clock()) == null) closePairing() }
-        if (!RunnerLinkStore.exists(stateDir)) return
+        if (!RunnerLinkStore.exists(stateDir)) {
+            pump?.sync(emptyList())
+            return
+        }
         val store = RunnerLinkStore.open(stateDir)
         val paired = store.orchestrator() != null
         val t = transport()
@@ -81,13 +88,17 @@ class RunnerLinkService(
             closeServing()
             log("[infantry] runner link: detached; the link listener is stopped")
         }
+        pump?.sync(store.runners().map { it.name })
         if (store.runners().isNotEmpty()) {
             peers(store).rotateDue(limit(LimitRegistry.RUNNERS_CREDENTIAL_ROTATE_DAYS)).forEach { log("[infantry] $it") }
         }
     }
 
     private fun serve(store: RunnerLinkStore, t: RunnerLinkTransport) {
-        val server = RunnerLinkServer(store, RunnerAudit(File(dir, RunnerAudit.FILE)), codes = null, settings = settings, runner = { runner }, starts = starts)
+        val server = RunnerLinkServer(
+            store, RunnerAudit(File(dir, RunnerAudit.FILE)), codes = null, settings = settings, runner = { runner }, starts = starts,
+            forwarder = forwarder, forwardWaitCapMs = ::forwardWaitMs,
+        )
         val plain = settings().allowPlainTailnet
         val s = t.serve(handler(server), host, linkPort(), if (plain) null else tls(store), callTimeoutMs())
         serving = s
@@ -191,6 +202,10 @@ class RunnerLinkService(
         }
     }
 
+    /** RUNNER-POOL-7: how long one forward pull waits on the runner: `limits.runners.forwardWaitSec`, kept below the link call timeout. */
+    fun forwardWaitMs(): Long =
+        minOf(limit(LimitRegistry.RUNNERS_FORWARD_WAIT_SEC), limit(LimitRegistry.RUNNERS_LINK_CALL_SECONDS) / 2).coerceAtLeast(1) * MS_PER_SECOND
+
     private fun tls(store: RunnerLinkStore) = LinkTlsMaterial(dir.also { it.mkdirs() }, store.tlsPassword())
     private fun linkPort() = limit(LimitRegistry.RUNNERS_LINK_PORT).toInt()
     private fun callTimeoutMs() = (limit(LimitRegistry.RUNNERS_LINK_CALL_SECONDS) * MS_PER_SECOND).toInt()
@@ -207,6 +222,7 @@ class RunnerLinkService(
 
     @Synchronized
     override fun close() {
+        pump?.close()
         closePairing()
         closeServing()
     }

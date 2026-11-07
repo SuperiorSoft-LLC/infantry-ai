@@ -13,6 +13,7 @@
     "entry": "com.superiorsoftllc.infantry.plugins.official.roles.daemon.RolesDaemonPlugin",
     "jar": "daemon/build/libs/Infantry_Roles-daemon.jar",
     "apiAtLeast": "1.34.0",
+    "side": "orchestrator",
     "env": ["INFANTRY_ROLES_DIR"],
     "storage": { "adopt": ["role_bindings", "role_traits"] },
     "frames": [

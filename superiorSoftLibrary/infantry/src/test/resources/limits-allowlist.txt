@@ -216,3 +216,5 @@ com/superiorsoftllc/infantry/runner/SessionContainers.kt:JOB_OBJECT_BASIC_LIMIT_
 com/superiorsoftllc/infantry/runner/SessionContainers.kt:JOB_OBJECT_LIMIT_BREAKAWAY_OK | Win32 job LimitFlags bit (API constant, not a limit) (PROC-LEAK-1)
 com/superiorsoftllc/infantry/runner/SessionContainers.kt:NAME_PART_MAX | layout: the length of one part of a kernel object name (Job Object names stay well under MAX_PATH) (PROC-LEAK-1)
 com/superiorsoftllc/infantry/runners/RemoteStarts.kt:HASH_CHARS | layout: hex characters of the remote-url hash in a clone folder name (RUNNER-POOL-6), not a cost or capacity
+com/superiorsoftllc/infantry/runners/ForwardedFrames.kt:SHOWN_CHARS|format: how much of a runner-chosen frame type or session id a forwarded-frame refusal echoes (output sanitising, not a capacity)
+com/superiorsoftllc/infantry/runners/ForwardedFrames.kt:LOGGED_CHARS|format: how much of a refused forward pull's answer the log line shows (output sanitising, not a capacity)

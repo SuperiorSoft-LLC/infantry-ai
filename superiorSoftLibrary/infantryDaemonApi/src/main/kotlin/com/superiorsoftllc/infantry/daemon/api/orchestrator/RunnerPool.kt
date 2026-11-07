@@ -220,6 +220,9 @@ class RunnerHub(
 
     override fun runnerOf(sessionId: String): String = sessions[sessionId] ?: RunnerPool.LOCAL
 
+    /** RUNNER-POOL-7: whether any session placed by this orchestrator lives on runner [runner] (its forwarded frames are pulled only then). */
+    fun hasSessionsOn(runner: String): Boolean = runner != RunnerPool.LOCAL && sessions.containsValue(runner)
+
     /** RUNNER-POOL-6: session [sessionId] was started on runner [runner]; [runnerOf] answers it from now on. */
     fun placed(sessionId: String, runner: String) {
         if (runner == RunnerPool.LOCAL) sessions.remove(sessionId) else sessions[sessionId] = runner

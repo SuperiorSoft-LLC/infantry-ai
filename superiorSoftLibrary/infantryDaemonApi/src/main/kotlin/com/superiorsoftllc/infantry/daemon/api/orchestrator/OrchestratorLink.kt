@@ -50,10 +50,41 @@ interface OrchestratorLink {
      */
     fun launchDecision(provider: String, unattended: Boolean, ticketId: String?): OrchestratorReply<LaunchVerdict>
 
+    /**
+     * RUNNER-POOL-7 (1.2.0; docs/RUNNER-POOL.md 2.3 b): one agent frame a worker on runner [AgentIdentity.runner] sent to its own
+     * daemon, whose frame table tags it [FrameSide.ORCHESTRATOR] (board, comments, mail, knowledge, scripts). The orchestrator
+     * re-gates it as that agent (never as the owner) and refuses an identity that is not a session that runner owns. Ok carries the
+     * answer frame (null = the frame has no answer); a refusal is an `error` answer, a VALUE. Natural key: the frame's request id.
+     * Fail mode on Unavailable: the agent's call returns an error saying the orchestrator could not be reached.
+     */
+    fun forwardFrame(agent: AgentIdentity, frame: ForwardedFrame): OrchestratorReply<ForwardedFrame?> =
+        OrchestratorReply.Unavailable("this orchestrator binding does not offer 'forwardFrame'")
+
     companion object {
-        const val CONTRACT_VERSION = "1.1.0"
+        /** 1.2.0 (RUNNER-POOL-7): forwardFrame. */
+        const val CONTRACT_VERSION = "1.2.0"
     }
 }
+
+/**
+ * RUNNER-POOL-7: the generic `side` attribute of a frame table entry (core frames, a plugin's `daemon.frames` / `daemon.tools`
+ * declaration, or its whole daemon half via `daemon.side`). [RUNNER] (the default) = answered by the daemon the caller talks to;
+ * [ORCHESTRATOR] = it reads or writes orchestrator state, so a runner whose session was started by a remote orchestrator forwards
+ * it there ([OrchestratorLink.forwardFrame]). A daemon that is its own orchestrator never consults it.
+ */
+object FrameSide {
+    const val RUNNER = "runner"
+    const val ORCHESTRATOR = "orchestrator"
+
+    /** [side] as one of the two values; anything else (blank, unknown) is [RUNNER]. */
+    fun of(side: String?): String = if (side?.trim()?.lowercase() == ORCHESTRATOR) ORCHESTRATOR else RUNNER
+}
+
+/** RUNNER-POOL-7: who sent a forwarded frame: the [runner] it came over (the link's, never the frame's) and the agent [sessionId]. */
+data class AgentIdentity(val runner: String, val sessionId: String)
+
+/** RUNNER-POOL-7: a daemon frame as plain data ([type], [data] JSON text, [sessionId], [requestId]); no protocol class crosses. */
+data class ForwardedFrame(val type: String, val data: String = "", val sessionId: String? = null, val requestId: String? = null)
 
 /** The error model: an answer, or "the orchestrator could not be reached / did not understand", never an exception. */
 sealed interface OrchestratorReply<out T> {
@@ -150,6 +181,8 @@ class LocalOrchestratorServices(
     val ticketOf: (ticketId: String) -> TicketRef?,
     val starterOf: (workerSessionId: String) -> String?,
     val launchDecision: (provider: String, unattended: Boolean, ticketId: String?) -> LaunchVerdict,
+    /** RUNNER-POOL-7: re-gate and answer one forwarded agent frame; null = this daemon answers none (the binding is Unavailable). */
+    val forwardFrame: ((agent: AgentIdentity, frame: ForwardedFrame) -> ForwardedFrame?)? = null,
 )
 
 /** The binding for `orchestrator.provider = local`: answers in this process. */
@@ -164,6 +197,9 @@ class LocalOrchestratorLink(
     override fun starterOf(workerSessionId: String): OrchestratorReply<String?> = OrchestratorReply.Ok(services.starterOf(workerSessionId))
     override fun launchDecision(provider: String, unattended: Boolean, ticketId: String?): OrchestratorReply<LaunchVerdict> =
         OrchestratorReply.Ok(services.launchDecision(provider, unattended, ticketId))
+
+    override fun forwardFrame(agent: AgentIdentity, frame: ForwardedFrame): OrchestratorReply<ForwardedFrame?> =
+        services.forwardFrame?.let { OrchestratorReply.Ok(it(agent, frame)) } ?: super.forwardFrame(agent, frame)
 }
 
 /** A plugin's binding: builds the link for its provider id from the runner and the local link (its fallback). */
@@ -191,6 +227,7 @@ class OrchestratorHub(private val local: OrchestratorLink, private val runner: R
         override fun ticketOf(ticketId: String) = target.ticketOf(ticketId)
         override fun starterOf(workerSessionId: String) = target.starterOf(workerSessionId)
         override fun launchDecision(provider: String, unattended: Boolean, ticketId: String?) = target.launchDecision(provider, unattended, ticketId)
+        override fun forwardFrame(agent: AgentIdentity, frame: ForwardedFrame) = target.forwardFrame(agent, frame)
     }
 
     fun register(providerId: String, binding: OrchestratorBinding) {

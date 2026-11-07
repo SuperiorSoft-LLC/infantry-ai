@@ -11,6 +11,7 @@
     "entry": "com.superiorsoftllc.infantry.plugins.official.scripting.daemon.ScriptingDaemonPlugin",
     "jar": "daemon/build/libs/Infantry_Scripting-daemon.jar",
     "apiAtLeast": "1.30.0",
+    "side": "orchestrator",
     "hooks": ["incomingMail"],
     "frames": [
       { "type": "timeline_list", "action": "timeline.read", "kind": "read" }

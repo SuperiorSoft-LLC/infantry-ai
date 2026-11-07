@@ -13,6 +13,7 @@
     "entry": "com.superiorsoftllc.infantry.plugins.official.notes.daemon.NotesDaemonPlugin",
     "jar": "daemon/build/libs/Infantry_Notes-daemon.jar",
     "apiAtLeast": "1.19.0",
+    "side": "orchestrator",
     "storage": { "adopt": ["decisions", "issues", "issue_events", "memory_notes"] },
     "frames": [
       { "type": "decision_list", "action": "knowledge.read", "kind": "read" },

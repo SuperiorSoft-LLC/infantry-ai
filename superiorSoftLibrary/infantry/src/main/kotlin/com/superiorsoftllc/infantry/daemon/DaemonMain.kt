@@ -978,11 +978,14 @@ class InfantryDaemon(
                 ),
             )
             val runnerPool = com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerHub(localRunnerLink, remotes = { runnerLinksRef.get().paired() })
+            val forwardGateRef = java.util.concurrent.atomic.AtomicReference<com.superiorsoftllc.infantry.runners.ForwardedFrameGate?>(null)
             SessionRecordSerializer.runnerOf = runnerPool::runnerOf
             val orchestratorHub = com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorHub(
                 local = com.superiorsoftllc.infantry.daemon.api.orchestrator.LocalOrchestratorLink(
                     runner = localRunnerLink,
                     services = com.superiorsoftllc.infantry.daemon.api.orchestrator.LocalOrchestratorServices(
+                        // RUNNER-POOL-7: a frame a remote runner forwards for one of its agents, re-gated (set below, with the pump).
+                        forwardFrame = { agent, frame -> forwardGateRef.get()?.answer(agent, frame) },
                         reviewReport = { ticketId, _, body ->
                             ticketId?.let { tid ->
                                 val row = store.tickets.get(tid)
@@ -1826,9 +1829,44 @@ class InfantryDaemon(
             // pinned self-signed certificate) to its one orchestrator; on the orchestrator side it rekeys paired runners when due.
             // A daemon never paired opens nothing. RUNNER-POOL-6a: the transport is a plugin's (hooks.runnerLinkTransport); with
             // none loaded nothing is served and the `runner_admin` ops that need one say so.
+            // RUNNER-POOL-7 (docs/RUNNER-POOL.md 2.3 b): the runner side holds an orchestrator-side frame of a session its remote
+            // orchestrator started until the orchestrator pulls it; the orchestrator side re-gates each pulled frame as the named
+            // agent and runs it on its own /ws as a non-owner (so every gate runs as for a local agent). A daemon that is its own
+            // orchestrator forwards nothing: [frameForwarder] owns only link-started sessions.
+            val frameForwarder = com.superiorsoftllc.infantry.runners.FrameForwarder(
+                owns = remoteStarts::isLinked,
+                timeoutMs = { settings.limit(LimitRegistry.RUNNERS_FORWARD_TIMEOUT_SEC) * 1000L },
+                pendingMax = { settings.limit(LimitRegistry.RUNNERS_FORWARD_PENDING_MAX).toInt() },
+            )
+            val forwardSides = FrameTable().also { com.superiorsoftllc.infantry.backlog.registerCoreProjectFrames(it, projects, WorkspaceHandler(workspaces)) }
+            val loopbackUrl = "ws://$loopbackHost:$boundPort/ws"
+            val loopbackFrames = LoopbackFrames(
+                loopbackUrl,
+                token = { if (sandboxConfig().enabled) agentToken else token },
+                timeoutMs = { settings.limit(LimitRegistry.RUNNERS_FORWARD_TIMEOUT_SEC) * 1000L },
+            )
+            val forwardGate = com.superiorsoftllc.infantry.runners.ForwardedFrameGate(
+                runnerOf = runnerPool::runnerOf,
+                sideOf = { f -> frameSide(forwardSides, plugins, Envelope(f.type, f.data, f.sessionId)) },
+                pluginOwnerOnly = plugins::ownerOnly,
+                dispatch = { f ->
+                    loopbackFrames.call(Envelope(f.type, f.data, f.sessionId, requestId = f.requestId))
+                        ?.let { com.superiorsoftllc.infantry.daemon.api.orchestrator.ForwardedFrame(it.type, it.data, it.sessionId, it.requestId) }
+                },
+            )
+            forwardGateRef.set(forwardGate)
+            val forwardPump = com.superiorsoftllc.infantry.runners.ForwardPump(
+                links = { runnerLinksRef.get() },
+                active = runnerPool::hasSessionsOn,
+                execute = forwardGate::answer,
+                waitMs = { settings.limit(LimitRegistry.RUNNERS_FORWARD_WAIT_SEC) * 1000L },
+                idleMs = { settings.limit(LimitRegistry.RUNNERS_FORWARD_WAIT_SEC) * 1000L },
+            )
             val runnerLinkService = com.superiorsoftllc.infantry.runners.RunnerLinkService(
                 stateDir(), settings::limit, settings::runnerLink, localRunnerLink, transport = { plugins.runnerLinkTransport() },
                 starts = remoteStarts,
+                forwarder = frameForwarder,
+                pump = forwardPump,
             )
             runnerLinksRef.set(runnerLinkService.links)
             plugins.runnerLinks = runnerLinkService.links
@@ -2024,6 +2062,7 @@ class InfantryDaemon(
                             ownerCredential = ownerCredential,
                             plugins = plugins,
                             runnerLink = runnerLinkService,
+                            forwarder = frameForwarder,
                             daemonConfig = daemonConfig,
                             tier = call.attributes.getOrNull(ACCESS_TIER) ?: AccessTier.OWNER,
                             policies = policies,
@@ -2563,6 +2602,13 @@ private fun broadcastEpic(clients: List<Channel<Envelope>>, epic: Epic) {
     for (client in clients) client.trySend(envelope)
 }
 
+/**
+ * RUNNER-POOL-7: the side attribute of [envelope]'s frame: this connection's frame table entry, else the plugin frame or tool's
+ * declared side, else the core inline frames' ([CoreFrameSides]). Null = not known here.
+ */
+internal fun frameSide(frames: FrameTable, plugins: com.superiorsoftllc.infantry.daemon.plugins.DaemonPluginHost, envelope: Envelope): String? =
+    frames.side(envelope.type) ?: plugins.sideOf(envelope) ?: CoreFrameSides.side(envelope.type)
+
 private suspend fun handleConnection(
     session: DefaultWebSocketServerSession,
     manager: SessionManager,
@@ -2625,6 +2671,8 @@ private suspend fun handleConnection(
     plugins: com.superiorsoftllc.infantry.daemon.plugins.DaemonPluginHost = com.superiorsoftllc.infantry.daemon.plugins.DaemonPluginHost.empty(),
     /** RUNNER-POOL-6a: answers the owner-only `runner_admin` frame (`infantry runner`); null = this daemon serves none. */
     runnerLink: com.superiorsoftllc.infantry.runners.RunnerLinkService? = null,
+    /** RUNNER-POOL-7: holds the orchestrator-side frames of sessions a remote orchestrator started here; null = forwards nothing. */
+    forwarder: com.superiorsoftllc.infantry.runners.FrameForwarder? = null,
     /** CONFIG-8 (1.142.0): the daemon's declared config (`config_*` frames); the default declares nothing. */
     daemonConfig: DaemonConfig,
     /** SANDBOX-1: what this connection was admitted as; an AGENT (the scoped token) may send only [AgentFrames.ALLOWED]. */
@@ -2917,6 +2965,28 @@ private suspend fun handleConnection(
             // DAEMON-PLUGINS-1 (`frameGate`, fail closed): the plugins' own gates (a seated lockdown scopes frames here).
             plugins.frameRefusal(envelope, caller)?.let { reason ->
                 outgoing.trySend(Envelope(Envelope.ERROR, reason).copy(requestId = envelope.requestId))
+                continue
+            }
+            // RUNNER-POOL-7 (docs/RUNNER-POOL.md 2.3 b): a session a REMOTE orchestrator started here asks for orchestrator state (the
+            // board, knowledge, mail, scripts): the frame goes over the link and the orchestrator's answer comes back to this caller.
+            // Asked first whether the session is link-started, so a daemon that is its own orchestrator never reads the side tag.
+            val forwardedFor = envelope.sessionId?.takeIf { it.isNotBlank() } ?: active
+            if (forwarder != null && forwardedFor != null && forwarder.forwards(forwardedFor) &&
+                frameSide(frames, plugins, envelope) == com.superiorsoftllc.infantry.daemon.api.orchestrator.FrameSide.ORCHESTRATOR
+            ) {
+                session.launch(kotlinx.coroutines.Dispatchers.IO) {
+                    val reply = forwarder.forwardFrame(
+                        forwardedFor,
+                        com.superiorsoftllc.infantry.daemon.api.orchestrator.ForwardedFrame(envelope.type, envelope.data, envelope.sessionId, envelope.requestId),
+                    )
+                    when (reply) {
+                        is com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorReply.Ok -> reply.value?.let { a ->
+                            outgoing.trySend(Envelope(a.type, a.data, a.sessionId, requestId = envelope.requestId))
+                        }
+                        is com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorReply.Unavailable ->
+                            outgoing.trySend(Envelope(Envelope.ERROR, "${envelope.type} unavailable: ${reply.reason}", requestId = envelope.requestId))
+                    }
+                }
                 continue
             }
             if (envelope.type == SESSION_REPLAY_REQUEST_TYPE) {

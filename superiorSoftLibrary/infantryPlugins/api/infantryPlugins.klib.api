@@ -5,7 +5,7 @@
 // - Show manifest properties: true
 // - Show declarations: true
 
-// Library unique name: <com.superiorsoftllc.infantry:infantryPlugins>
+// Library unique name: <tech.superiorsoftllc.infantry:infantryPlugins>
 final enum class com.superiorsoftllc.infantry.plugin.api/Tier : kotlin/Enum<com.superiorsoftllc.infantry.plugin.api/Tier> { // com.superiorsoftllc.infantry.plugin.api/Tier|null[0]
     enum entry COMMUNITY // com.superiorsoftllc.infantry.plugin.api/Tier.COMMUNITY|null[0]
     enum entry CORE // com.superiorsoftllc.infantry.plugin.api/Tier.CORE|null[0]
@@ -44,6 +44,17 @@ abstract fun interface com.superiorsoftllc.infantry.plugin.api/Notifications { /
     abstract fun notify(kotlin/String, kotlin/String) // com.superiorsoftllc.infantry.plugin.api/Notifications.notify|notify(kotlin.String;kotlin.String){}[0]
 }
 
+abstract interface com.superiorsoftllc.infantry.plugin.api/AudioCapture { // com.superiorsoftllc.infantry.plugin.api/AudioCapture|null[0]
+    abstract fun start(com.superiorsoftllc.infantry.plugin.api/CaptureOptions = ..., kotlin/Function1<kotlin/ByteArray, kotlin/Unit>, kotlin/Function1<com.superiorsoftllc.infantry.plugin.api/CaptureEnd, kotlin/Unit>): com.superiorsoftllc.infantry.plugin.api/CaptureHandle // com.superiorsoftllc.infantry.plugin.api/AudioCapture.start|start(com.superiorsoftllc.infantry.plugin.api.CaptureOptions;kotlin.Function1<kotlin.ByteArray,kotlin.Unit>;kotlin.Function1<com.superiorsoftllc.infantry.plugin.api.CaptureEnd,kotlin.Unit>){}[0]
+}
+
+abstract interface com.superiorsoftllc.infantry.plugin.api/CaptureHandle { // com.superiorsoftllc.infantry.plugin.api/CaptureHandle|null[0]
+    abstract val active // com.superiorsoftllc.infantry.plugin.api/CaptureHandle.active|{}active[0]
+        abstract fun <get-active>(): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/CaptureHandle.active.<get-active>|<get-active>(){}[0]
+
+    abstract fun stop() // com.superiorsoftllc.infantry.plugin.api/CaptureHandle.stop|stop(){}[0]
+}
+
 abstract interface com.superiorsoftllc.infantry.plugin.api/EndpointAccess { // com.superiorsoftllc.infantry.plugin.api/EndpointAccess|null[0]
     abstract suspend fun call(kotlin/String, kotlin/String, kotlin/String, kotlin/String? = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ...): com.superiorsoftllc.infantry.plugin.api/EndpointReply // com.superiorsoftllc.infantry.plugin.api/EndpointAccess.call|call(kotlin.String;kotlin.String;kotlin.String;kotlin.String?;kotlin.collections.Map<kotlin.String,kotlin.String>){}[0]
 }
@@ -51,6 +62,23 @@ abstract interface com.superiorsoftllc.infantry.plugin.api/EndpointAccess { // c
 abstract interface com.superiorsoftllc.infantry.plugin.api/EventBus { // com.superiorsoftllc.infantry.plugin.api/EventBus|null[0]
     abstract fun publish(com.superiorsoftllc.infantry.plugin.api/PluginEvent) // com.superiorsoftllc.infantry.plugin.api/EventBus.publish|publish(com.superiorsoftllc.infantry.plugin.api.PluginEvent){}[0]
     abstract fun subscribe(kotlin/String, kotlin/Function1<com.superiorsoftllc.infantry.plugin.api/PluginEvent, kotlin/Unit>): kotlin/Function0<kotlin/Unit> // com.superiorsoftllc.infantry.plugin.api/EventBus.subscribe|subscribe(kotlin.String;kotlin.Function1<com.superiorsoftllc.infantry.plugin.api.PluginEvent,kotlin.Unit>){}[0]
+}
+
+abstract interface com.superiorsoftllc.infantry.plugin.api/PluginManagerPort { // com.superiorsoftllc.infantry.plugin.api/PluginManagerPort|null[0]
+    abstract fun addSource(kotlin/String, kotlin/String, kotlin/String): com.superiorsoftllc.infantry.plugin.api/ActionResult // com.superiorsoftllc.infantry.plugin.api/PluginManagerPort.addSource|addSource(kotlin.String;kotlin.String;kotlin.String){}[0]
+    abstract fun inspect(kotlin/String): com.superiorsoftllc.infantry.plugin.api/InspectOutcome // com.superiorsoftllc.infantry.plugin.api/PluginManagerPort.inspect|inspect(kotlin.String){}[0]
+    abstract fun install(kotlin/String, kotlin.collections/Set<kotlin/String>, kotlin/String?): com.superiorsoftllc.infantry.plugin.api/ActionResult // com.superiorsoftllc.infantry.plugin.api/PluginManagerPort.install|install(kotlin.String;kotlin.collections.Set<kotlin.String>;kotlin.String?){}[0]
+    abstract fun list(): kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/PluginView> // com.superiorsoftllc.infantry.plugin.api/PluginManagerPort.list|list(){}[0]
+    abstract fun refresh(): kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/RefreshView> // com.superiorsoftllc.infantry.plugin.api/PluginManagerPort.refresh|refresh(){}[0]
+    abstract fun remove(kotlin/String): com.superiorsoftllc.infantry.plugin.api/ActionResult // com.superiorsoftllc.infantry.plugin.api/PluginManagerPort.remove|remove(kotlin.String){}[0]
+    abstract fun removeSource(kotlin/String): com.superiorsoftllc.infantry.plugin.api/ActionResult // com.superiorsoftllc.infantry.plugin.api/PluginManagerPort.removeSource|removeSource(kotlin.String){}[0]
+    abstract fun rollback(kotlin/String): com.superiorsoftllc.infantry.plugin.api/ActionResult // com.superiorsoftllc.infantry.plugin.api/PluginManagerPort.rollback|rollback(kotlin.String){}[0]
+    abstract fun search(kotlin/String): kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/HitView> // com.superiorsoftllc.infantry.plugin.api/PluginManagerPort.search|search(kotlin.String){}[0]
+    abstract fun setEnabled(kotlin/String, kotlin/Boolean): com.superiorsoftllc.infantry.plugin.api/ActionResult // com.superiorsoftllc.infantry.plugin.api/PluginManagerPort.setEnabled|setEnabled(kotlin.String;kotlin.Boolean){}[0]
+    abstract fun sources(): kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/SourceView> // com.superiorsoftllc.infantry.plugin.api/PluginManagerPort.sources|sources(){}[0]
+    abstract fun update(kotlin/String, kotlin.collections/Set<kotlin/String>?): com.superiorsoftllc.infantry.plugin.api/ActionResult // com.superiorsoftllc.infantry.plugin.api/PluginManagerPort.update|update(kotlin.String;kotlin.collections.Set<kotlin.String>?){}[0]
+    abstract fun updates(): kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/UpdateView> // com.superiorsoftllc.infantry.plugin.api/PluginManagerPort.updates|updates(){}[0]
+    open fun importList(kotlin/String): com.superiorsoftllc.infantry.plugin.api/ActionResult // com.superiorsoftllc.infantry.plugin.api/PluginManagerPort.importList|importList(kotlin.String){}[0]
 }
 
 abstract interface com.superiorsoftllc.infantry.plugin.api/PluginServices { // com.superiorsoftllc.infantry.plugin.api/PluginServices|null[0]
@@ -69,6 +97,12 @@ abstract interface com.superiorsoftllc.infantry.plugin.api/PluginStorage { // co
     abstract fun list(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/PluginStorage.list|list(){}[0]
     abstract fun read(kotlin/String): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/PluginStorage.read|read(kotlin.String){}[0]
     abstract fun write(kotlin/String, kotlin/String) // com.superiorsoftllc.infantry.plugin.api/PluginStorage.write|write(kotlin.String;kotlin.String){}[0]
+}
+
+abstract interface com.superiorsoftllc.infantry.plugin.api/SpeechOutput { // com.superiorsoftllc.infantry.plugin.api/SpeechOutput|null[0]
+    abstract fun speak(kotlin/String, com.superiorsoftllc.infantry.plugin.api/SpeakOptions = ...): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/SpeechOutput.speak|speak(kotlin.String;com.superiorsoftllc.infantry.plugin.api.SpeakOptions){}[0]
+    abstract fun stop() // com.superiorsoftllc.infantry.plugin.api/SpeechOutput.stop|stop(){}[0]
+    abstract fun voices(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/SpeechOutput.voices|voices(){}[0]
 }
 
 sealed interface com.superiorsoftllc.infantry.plugin.api/DaemonReply { // com.superiorsoftllc.infantry.plugin.api/DaemonReply|null[0]
@@ -252,6 +286,28 @@ final class com.superiorsoftllc.infantry.plugin.api/ActionDeclaration { // com.s
 
         final fun serializer(): kotlinx.serialization/KSerializer<com.superiorsoftllc.infantry.plugin.api/ActionDeclaration> // com.superiorsoftllc.infantry.plugin.api/ActionDeclaration.Companion.serializer|serializer(){}[0]
     }
+}
+
+final class com.superiorsoftllc.infantry.plugin.api/ActionResult { // com.superiorsoftllc.infantry.plugin.api/ActionResult|null[0]
+    constructor <init>(kotlin/Boolean, kotlin/String, kotlin/Boolean = ..., kotlin.collections/List<kotlin/String> = ...) // com.superiorsoftllc.infantry.plugin.api/ActionResult.<init>|<init>(kotlin.Boolean;kotlin.String;kotlin.Boolean;kotlin.collections.List<kotlin.String>){}[0]
+
+    final val message // com.superiorsoftllc.infantry.plugin.api/ActionResult.message|{}message[0]
+        final fun <get-message>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/ActionResult.message.<get-message>|<get-message>(){}[0]
+    final val ok // com.superiorsoftllc.infantry.plugin.api/ActionResult.ok|{}ok[0]
+        final fun <get-ok>(): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/ActionResult.ok.<get-ok>|<get-ok>(){}[0]
+    final val requested // com.superiorsoftllc.infantry.plugin.api/ActionResult.requested|{}requested[0]
+        final fun <get-requested>(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/ActionResult.requested.<get-requested>|<get-requested>(){}[0]
+    final val restartNeeded // com.superiorsoftllc.infantry.plugin.api/ActionResult.restartNeeded|{}restartNeeded[0]
+        final fun <get-restartNeeded>(): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/ActionResult.restartNeeded.<get-restartNeeded>|<get-restartNeeded>(){}[0]
+
+    final fun component1(): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/ActionResult.component1|component1(){}[0]
+    final fun component2(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/ActionResult.component2|component2(){}[0]
+    final fun component3(): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/ActionResult.component3|component3(){}[0]
+    final fun component4(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/ActionResult.component4|component4(){}[0]
+    final fun copy(kotlin/Boolean = ..., kotlin/String = ..., kotlin/Boolean = ..., kotlin.collections/List<kotlin/String> = ...): com.superiorsoftllc.infantry.plugin.api/ActionResult // com.superiorsoftllc.infantry.plugin.api/ActionResult.copy|copy(kotlin.Boolean;kotlin.String;kotlin.Boolean;kotlin.collections.List<kotlin.String>){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/ActionResult.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/ActionResult.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/ActionResult.toString|toString(){}[0]
 }
 
 final class com.superiorsoftllc.infantry.plugin.api/AgentDefinition { // com.superiorsoftllc.infantry.plugin.api/AgentDefinition|null[0]
@@ -457,6 +513,51 @@ final class com.superiorsoftllc.infantry.plugin.api/BlockTypeDeclaration { // co
     }
 }
 
+final class com.superiorsoftllc.infantry.plugin.api/CaptureEnd { // com.superiorsoftllc.infantry.plugin.api/CaptureEnd|null[0]
+    constructor <init>(kotlin/String, kotlin/String? = ...) // com.superiorsoftllc.infantry.plugin.api/CaptureEnd.<init>|<init>(kotlin.String;kotlin.String?){}[0]
+
+    final val detail // com.superiorsoftllc.infantry.plugin.api/CaptureEnd.detail|{}detail[0]
+        final fun <get-detail>(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/CaptureEnd.detail.<get-detail>|<get-detail>(){}[0]
+    final val reason // com.superiorsoftllc.infantry.plugin.api/CaptureEnd.reason|{}reason[0]
+        final fun <get-reason>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/CaptureEnd.reason.<get-reason>|<get-reason>(){}[0]
+
+    final fun component1(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/CaptureEnd.component1|component1(){}[0]
+    final fun component2(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/CaptureEnd.component2|component2(){}[0]
+    final fun copy(kotlin/String = ..., kotlin/String? = ...): com.superiorsoftllc.infantry.plugin.api/CaptureEnd // com.superiorsoftllc.infantry.plugin.api/CaptureEnd.copy|copy(kotlin.String;kotlin.String?){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/CaptureEnd.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/CaptureEnd.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/CaptureEnd.toString|toString(){}[0]
+
+    final object Companion { // com.superiorsoftllc.infantry.plugin.api/CaptureEnd.Companion|null[0]
+        final const val BUSY // com.superiorsoftllc.infantry.plugin.api/CaptureEnd.Companion.BUSY|{}BUSY[0]
+            final fun <get-BUSY>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/CaptureEnd.Companion.BUSY.<get-BUSY>|<get-BUSY>(){}[0]
+        final const val FAILED // com.superiorsoftllc.infantry.plugin.api/CaptureEnd.Companion.FAILED|{}FAILED[0]
+            final fun <get-FAILED>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/CaptureEnd.Companion.FAILED.<get-FAILED>|<get-FAILED>(){}[0]
+        final const val LIMIT // com.superiorsoftllc.infantry.plugin.api/CaptureEnd.Companion.LIMIT|{}LIMIT[0]
+            final fun <get-LIMIT>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/CaptureEnd.Companion.LIMIT.<get-LIMIT>|<get-LIMIT>(){}[0]
+        final const val STOPPED // com.superiorsoftllc.infantry.plugin.api/CaptureEnd.Companion.STOPPED|{}STOPPED[0]
+            final fun <get-STOPPED>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/CaptureEnd.Companion.STOPPED.<get-STOPPED>|<get-STOPPED>(){}[0]
+        final const val UNAVAILABLE // com.superiorsoftllc.infantry.plugin.api/CaptureEnd.Companion.UNAVAILABLE|{}UNAVAILABLE[0]
+            final fun <get-UNAVAILABLE>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/CaptureEnd.Companion.UNAVAILABLE.<get-UNAVAILABLE>|<get-UNAVAILABLE>(){}[0]
+    }
+}
+
+final class com.superiorsoftllc.infantry.plugin.api/CaptureOptions { // com.superiorsoftllc.infantry.plugin.api/CaptureOptions|null[0]
+    constructor <init>(com.superiorsoftllc.infantry.plugin.api/PcmFormat = ..., kotlin/Int? = ...) // com.superiorsoftllc.infantry.plugin.api/CaptureOptions.<init>|<init>(com.superiorsoftllc.infantry.plugin.api.PcmFormat;kotlin.Int?){}[0]
+
+    final val format // com.superiorsoftllc.infantry.plugin.api/CaptureOptions.format|{}format[0]
+        final fun <get-format>(): com.superiorsoftllc.infantry.plugin.api/PcmFormat // com.superiorsoftllc.infantry.plugin.api/CaptureOptions.format.<get-format>|<get-format>(){}[0]
+    final val maxSeconds // com.superiorsoftllc.infantry.plugin.api/CaptureOptions.maxSeconds|{}maxSeconds[0]
+        final fun <get-maxSeconds>(): kotlin/Int? // com.superiorsoftllc.infantry.plugin.api/CaptureOptions.maxSeconds.<get-maxSeconds>|<get-maxSeconds>(){}[0]
+
+    final fun component1(): com.superiorsoftllc.infantry.plugin.api/PcmFormat // com.superiorsoftllc.infantry.plugin.api/CaptureOptions.component1|component1(){}[0]
+    final fun component2(): kotlin/Int? // com.superiorsoftllc.infantry.plugin.api/CaptureOptions.component2|component2(){}[0]
+    final fun copy(com.superiorsoftllc.infantry.plugin.api/PcmFormat = ..., kotlin/Int? = ...): com.superiorsoftllc.infantry.plugin.api/CaptureOptions // com.superiorsoftllc.infantry.plugin.api/CaptureOptions.copy|copy(com.superiorsoftllc.infantry.plugin.api.PcmFormat;kotlin.Int?){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/CaptureOptions.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/CaptureOptions.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/CaptureOptions.toString|toString(){}[0]
+}
+
 final class com.superiorsoftllc.infantry.plugin.api/ConfigChangedFrame { // com.superiorsoftllc.infantry.plugin.api/ConfigChangedFrame|null[0]
     constructor <init>(kotlin/String, kotlin/String, kotlinx.serialization.json/JsonElement? = ..., kotlin/String = ..., kotlin/Long = ...) // com.superiorsoftllc.infantry.plugin.api/ConfigChangedFrame.<init>|<init>(kotlin.String;kotlin.String;kotlinx.serialization.json.JsonElement?;kotlin.String;kotlin.Long){}[0]
 
@@ -588,7 +689,7 @@ final class com.superiorsoftllc.infantry.plugin.api/ConfigDeclaration { // com.s
 }
 
 final class com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration { // com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration|null[0]
-    constructor <init>(kotlin/String, kotlin/String, kotlin/String = ..., kotlinx.serialization.json/JsonElement? = ..., kotlin.collections/List<kotlin/String> = ..., kotlin/Double? = ..., kotlin/Double? = ..., kotlin/Double? = ..., kotlin/String? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ..., kotlin/String? = ..., kotlin/Int = ..., kotlin/String? = ..., kotlin.collections/List<kotlin/String>? = ..., kotlin.collections/Map<kotlin/String, com.superiorsoftllc.infantry.plugin.api/ConfigClassSlot> = ..., com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration? = ..., kotlin/Boolean = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/Int? = ..., kotlin/Int? = ..., com.superiorsoftllc.infantry.plugin.api/ConfigVisibleWhen? = ..., kotlin/String? = ..., kotlin.collections/List<kotlin/String> = ..., kotlin/String? = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration> = ...) // com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration.<init>|<init>(kotlin.String;kotlin.String;kotlin.String;kotlinx.serialization.json.JsonElement?;kotlin.collections.List<kotlin.String>;kotlin.Double?;kotlin.Double?;kotlin.Double?;kotlin.String?;kotlin.Boolean;kotlin.Boolean;kotlin.collections.Map<kotlin.String,kotlin.String>;kotlin.String?;kotlin.Int;kotlin.String?;kotlin.collections.List<kotlin.String>?;kotlin.collections.Map<kotlin.String,com.superiorsoftllc.infantry.plugin.api.ConfigClassSlot>;com.superiorsoftllc.infantry.plugin.api.ConfigFieldDeclaration?;kotlin.Boolean;kotlin.String?;kotlin.String?;kotlin.Int?;kotlin.Int?;com.superiorsoftllc.infantry.plugin.api.ConfigVisibleWhen?;kotlin.String?;kotlin.collections.List<kotlin.String>;kotlin.String?;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.ConfigFieldDeclaration>){}[0]
+    constructor <init>(kotlin/String, kotlin/String, kotlin/String = ..., kotlinx.serialization.json/JsonElement? = ..., kotlin.collections/List<kotlin/String> = ..., kotlin/Double? = ..., kotlin/Double? = ..., kotlin/Double? = ..., kotlin/String? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ..., kotlin/String? = ..., kotlin/Int = ..., kotlin/String? = ..., kotlin.collections/List<kotlin/String>? = ..., kotlin.collections/Map<kotlin/String, com.superiorsoftllc.infantry.plugin.api/ConfigClassSlot> = ..., com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration? = ..., kotlin/Boolean = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/Int? = ..., kotlin/Int? = ..., com.superiorsoftllc.infantry.plugin.api/ConfigVisibleWhen? = ..., kotlin/String? = ..., kotlin.collections/List<kotlin/String> = ..., kotlin/String? = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration> = ..., kotlin.collections/List<kotlin/String> = ...) // com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration.<init>|<init>(kotlin.String;kotlin.String;kotlin.String;kotlinx.serialization.json.JsonElement?;kotlin.collections.List<kotlin.String>;kotlin.Double?;kotlin.Double?;kotlin.Double?;kotlin.String?;kotlin.Boolean;kotlin.Boolean;kotlin.collections.Map<kotlin.String,kotlin.String>;kotlin.String?;kotlin.Int;kotlin.String?;kotlin.collections.List<kotlin.String>?;kotlin.collections.Map<kotlin.String,com.superiorsoftllc.infantry.plugin.api.ConfigClassSlot>;com.superiorsoftllc.infantry.plugin.api.ConfigFieldDeclaration?;kotlin.Boolean;kotlin.String?;kotlin.String?;kotlin.Int?;kotlin.Int?;com.superiorsoftllc.infantry.plugin.api.ConfigVisibleWhen?;kotlin.String?;kotlin.collections.List<kotlin.String>;kotlin.String?;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.ConfigFieldDeclaration>;kotlin.collections.List<kotlin.String>){}[0]
 
     final val autoSelectNew // com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration.autoSelectNew|{}autoSelectNew[0]
         final fun <get-autoSelectNew>(): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration.autoSelectNew.<get-autoSelectNew>|<get-autoSelectNew>(){}[0]
@@ -600,6 +701,8 @@ final class com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration { // 
         final fun <get-display>(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration.display.<get-display>|<get-display>(){}[0]
     final val exposed // com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration.exposed|{}exposed[0]
         final fun <get-exposed>(): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration.exposed.<get-exposed>|<get-exposed>(){}[0]
+    final val extensions // com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration.extensions|{}extensions[0]
+        final fun <get-extensions>(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration.extensions.<get-extensions>|<get-extensions>(){}[0]
     final val fields // com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration.fields|{}fields[0]
         final fun <get-fields>(): kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration> // com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration.fields.<get-fields>|<get-fields>(){}[0]
     final val item // com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration.item|{}item[0]
@@ -668,6 +771,7 @@ final class com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration { // 
     final fun component26(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration.component26|component26(){}[0]
     final fun component27(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration.component27|component27(){}[0]
     final fun component28(): kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration> // com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration.component28|component28(){}[0]
+    final fun component29(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration.component29|component29(){}[0]
     final fun component3(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration.component3|component3(){}[0]
     final fun component4(): kotlinx.serialization.json/JsonElement? // com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration.component4|component4(){}[0]
     final fun component5(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration.component5|component5(){}[0]
@@ -675,7 +779,7 @@ final class com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration { // 
     final fun component7(): kotlin/Double? // com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration.component7|component7(){}[0]
     final fun component8(): kotlin/Double? // com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration.component8|component8(){}[0]
     final fun component9(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration.component9|component9(){}[0]
-    final fun copy(kotlin/String = ..., kotlin/String = ..., kotlin/String = ..., kotlinx.serialization.json/JsonElement? = ..., kotlin.collections/List<kotlin/String> = ..., kotlin/Double? = ..., kotlin/Double? = ..., kotlin/Double? = ..., kotlin/String? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ..., kotlin/String? = ..., kotlin/Int = ..., kotlin/String? = ..., kotlin.collections/List<kotlin/String>? = ..., kotlin.collections/Map<kotlin/String, com.superiorsoftllc.infantry.plugin.api/ConfigClassSlot> = ..., com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration? = ..., kotlin/Boolean = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/Int? = ..., kotlin/Int? = ..., com.superiorsoftllc.infantry.plugin.api/ConfigVisibleWhen? = ..., kotlin/String? = ..., kotlin.collections/List<kotlin/String> = ..., kotlin/String? = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration> = ...): com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration // com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration.copy|copy(kotlin.String;kotlin.String;kotlin.String;kotlinx.serialization.json.JsonElement?;kotlin.collections.List<kotlin.String>;kotlin.Double?;kotlin.Double?;kotlin.Double?;kotlin.String?;kotlin.Boolean;kotlin.Boolean;kotlin.collections.Map<kotlin.String,kotlin.String>;kotlin.String?;kotlin.Int;kotlin.String?;kotlin.collections.List<kotlin.String>?;kotlin.collections.Map<kotlin.String,com.superiorsoftllc.infantry.plugin.api.ConfigClassSlot>;com.superiorsoftllc.infantry.plugin.api.ConfigFieldDeclaration?;kotlin.Boolean;kotlin.String?;kotlin.String?;kotlin.Int?;kotlin.Int?;com.superiorsoftllc.infantry.plugin.api.ConfigVisibleWhen?;kotlin.String?;kotlin.collections.List<kotlin.String>;kotlin.String?;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.ConfigFieldDeclaration>){}[0]
+    final fun copy(kotlin/String = ..., kotlin/String = ..., kotlin/String = ..., kotlinx.serialization.json/JsonElement? = ..., kotlin.collections/List<kotlin/String> = ..., kotlin/Double? = ..., kotlin/Double? = ..., kotlin/Double? = ..., kotlin/String? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ..., kotlin/String? = ..., kotlin/Int = ..., kotlin/String? = ..., kotlin.collections/List<kotlin/String>? = ..., kotlin.collections/Map<kotlin/String, com.superiorsoftllc.infantry.plugin.api/ConfigClassSlot> = ..., com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration? = ..., kotlin/Boolean = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/Int? = ..., kotlin/Int? = ..., com.superiorsoftllc.infantry.plugin.api/ConfigVisibleWhen? = ..., kotlin/String? = ..., kotlin.collections/List<kotlin/String> = ..., kotlin/String? = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration> = ..., kotlin.collections/List<kotlin/String> = ...): com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration // com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration.copy|copy(kotlin.String;kotlin.String;kotlin.String;kotlinx.serialization.json.JsonElement?;kotlin.collections.List<kotlin.String>;kotlin.Double?;kotlin.Double?;kotlin.Double?;kotlin.String?;kotlin.Boolean;kotlin.Boolean;kotlin.collections.Map<kotlin.String,kotlin.String>;kotlin.String?;kotlin.Int;kotlin.String?;kotlin.collections.List<kotlin.String>?;kotlin.collections.Map<kotlin.String,com.superiorsoftllc.infantry.plugin.api.ConfigClassSlot>;com.superiorsoftllc.infantry.plugin.api.ConfigFieldDeclaration?;kotlin.Boolean;kotlin.String?;kotlin.String?;kotlin.Int?;kotlin.Int?;com.superiorsoftllc.infantry.plugin.api.ConfigVisibleWhen?;kotlin.String?;kotlin.collections.List<kotlin.String>;kotlin.String?;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.ConfigFieldDeclaration>;kotlin.collections.List<kotlin.String>){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration.toString|toString(){}[0]
@@ -895,7 +999,7 @@ final class com.superiorsoftllc.infantry.plugin.api/ConfigVisibleWhen { // com.s
 }
 
 final class com.superiorsoftllc.infantry.plugin.api/DaemonCapabilities { // com.superiorsoftllc.infantry.plugin.api/DaemonCapabilities|null[0]
-    constructor <init>(kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/ConfigDeclaration> = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/DaemonToolDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/DaemonFrameDeclaration> = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<kotlin/String> = ..., com.superiorsoftllc.infantry.plugin.api/DaemonPluginLimits = ..., com.superiorsoftllc.infantry.plugin.api/DaemonStorageDeclaration = ...) // com.superiorsoftllc.infantry.plugin.api/DaemonCapabilities.<init>|<init>(kotlin.collections.List<kotlin.String>;kotlin.collections.List<kotlin.String>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.ConfigDeclaration>;kotlin.String?;kotlin.String?;kotlin.String?;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.DaemonToolDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.DaemonFrameDeclaration>;kotlin.collections.List<kotlin.String>;kotlin.collections.List<kotlin.String>;kotlin.collections.List<kotlin.String>;kotlin.collections.List<kotlin.String>;kotlin.collections.List<kotlin.String>;com.superiorsoftllc.infantry.plugin.api.DaemonPluginLimits;com.superiorsoftllc.infantry.plugin.api.DaemonStorageDeclaration){}[0]
+    constructor <init>(kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/ConfigDeclaration> = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/DaemonToolDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/DaemonFrameDeclaration> = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<kotlin/String> = ..., com.superiorsoftllc.infantry.plugin.api/DaemonPluginLimits = ..., com.superiorsoftllc.infantry.plugin.api/DaemonStorageDeclaration = ..., kotlin.collections/List<kotlin/String> = ..., kotlin/String? = ...) // com.superiorsoftllc.infantry.plugin.api/DaemonCapabilities.<init>|<init>(kotlin.collections.List<kotlin.String>;kotlin.collections.List<kotlin.String>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.ConfigDeclaration>;kotlin.String?;kotlin.String?;kotlin.String?;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.DaemonToolDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.DaemonFrameDeclaration>;kotlin.collections.List<kotlin.String>;kotlin.collections.List<kotlin.String>;kotlin.collections.List<kotlin.String>;kotlin.collections.List<kotlin.String>;kotlin.collections.List<kotlin.String>;com.superiorsoftllc.infantry.plugin.api.DaemonPluginLimits;com.superiorsoftllc.infantry.plugin.api.DaemonStorageDeclaration;kotlin.collections.List<kotlin.String>;kotlin.String?){}[0]
 
     final val apiAtLeast // com.superiorsoftllc.infantry.plugin.api/DaemonCapabilities.apiAtLeast|{}apiAtLeast[0]
         final fun <get-apiAtLeast>(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/DaemonCapabilities.apiAtLeast.<get-apiAtLeast>|<get-apiAtLeast>(){}[0]
@@ -921,10 +1025,14 @@ final class com.superiorsoftllc.infantry.plugin.api/DaemonCapabilities { // com.
         final fun <get-routes>(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/DaemonCapabilities.routes.<get-routes>|<get-routes>(){}[0]
     final val secrets // com.superiorsoftllc.infantry.plugin.api/DaemonCapabilities.secrets|{}secrets[0]
         final fun <get-secrets>(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/DaemonCapabilities.secrets.<get-secrets>|<get-secrets>(){}[0]
+    final val side // com.superiorsoftllc.infantry.plugin.api/DaemonCapabilities.side|{}side[0]
+        final fun <get-side>(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/DaemonCapabilities.side.<get-side>|<get-side>(){}[0]
     final val storage // com.superiorsoftllc.infantry.plugin.api/DaemonCapabilities.storage|{}storage[0]
         final fun <get-storage>(): com.superiorsoftllc.infantry.plugin.api/DaemonStorageDeclaration // com.superiorsoftllc.infantry.plugin.api/DaemonCapabilities.storage.<get-storage>|<get-storage>(){}[0]
     final val tools // com.superiorsoftllc.infantry.plugin.api/DaemonCapabilities.tools|{}tools[0]
         final fun <get-tools>(): kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/DaemonToolDeclaration> // com.superiorsoftllc.infantry.plugin.api/DaemonCapabilities.tools.<get-tools>|<get-tools>(){}[0]
+    final val updateSources // com.superiorsoftllc.infantry.plugin.api/DaemonCapabilities.updateSources|{}updateSources[0]
+        final fun <get-updateSources>(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/DaemonCapabilities.updateSources.<get-updateSources>|<get-updateSources>(){}[0]
     final val wants // com.superiorsoftllc.infantry.plugin.api/DaemonCapabilities.wants|{}wants[0]
         final fun <get-wants>(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/DaemonCapabilities.wants.<get-wants>|<get-wants>(){}[0]
 
@@ -935,6 +1043,8 @@ final class com.superiorsoftllc.infantry.plugin.api/DaemonCapabilities { // com.
     final fun component13(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/DaemonCapabilities.component13|component13(){}[0]
     final fun component14(): com.superiorsoftllc.infantry.plugin.api/DaemonPluginLimits // com.superiorsoftllc.infantry.plugin.api/DaemonCapabilities.component14|component14(){}[0]
     final fun component15(): com.superiorsoftllc.infantry.plugin.api/DaemonStorageDeclaration // com.superiorsoftllc.infantry.plugin.api/DaemonCapabilities.component15|component15(){}[0]
+    final fun component16(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/DaemonCapabilities.component16|component16(){}[0]
+    final fun component17(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/DaemonCapabilities.component17|component17(){}[0]
     final fun component2(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/DaemonCapabilities.component2|component2(){}[0]
     final fun component3(): kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/ConfigDeclaration> // com.superiorsoftllc.infantry.plugin.api/DaemonCapabilities.component3|component3(){}[0]
     final fun component4(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/DaemonCapabilities.component4|component4(){}[0]
@@ -943,7 +1053,7 @@ final class com.superiorsoftllc.infantry.plugin.api/DaemonCapabilities { // com.
     final fun component7(): kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/DaemonToolDeclaration> // com.superiorsoftllc.infantry.plugin.api/DaemonCapabilities.component7|component7(){}[0]
     final fun component8(): kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/DaemonFrameDeclaration> // com.superiorsoftllc.infantry.plugin.api/DaemonCapabilities.component8|component8(){}[0]
     final fun component9(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/DaemonCapabilities.component9|component9(){}[0]
-    final fun copy(kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/ConfigDeclaration> = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/DaemonToolDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/DaemonFrameDeclaration> = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<kotlin/String> = ..., com.superiorsoftllc.infantry.plugin.api/DaemonPluginLimits = ..., com.superiorsoftllc.infantry.plugin.api/DaemonStorageDeclaration = ...): com.superiorsoftllc.infantry.plugin.api/DaemonCapabilities // com.superiorsoftllc.infantry.plugin.api/DaemonCapabilities.copy|copy(kotlin.collections.List<kotlin.String>;kotlin.collections.List<kotlin.String>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.ConfigDeclaration>;kotlin.String?;kotlin.String?;kotlin.String?;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.DaemonToolDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.DaemonFrameDeclaration>;kotlin.collections.List<kotlin.String>;kotlin.collections.List<kotlin.String>;kotlin.collections.List<kotlin.String>;kotlin.collections.List<kotlin.String>;kotlin.collections.List<kotlin.String>;com.superiorsoftllc.infantry.plugin.api.DaemonPluginLimits;com.superiorsoftllc.infantry.plugin.api.DaemonStorageDeclaration){}[0]
+    final fun copy(kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/ConfigDeclaration> = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/DaemonToolDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/DaemonFrameDeclaration> = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<kotlin/String> = ..., com.superiorsoftllc.infantry.plugin.api/DaemonPluginLimits = ..., com.superiorsoftllc.infantry.plugin.api/DaemonStorageDeclaration = ..., kotlin.collections/List<kotlin/String> = ..., kotlin/String? = ...): com.superiorsoftllc.infantry.plugin.api/DaemonCapabilities // com.superiorsoftllc.infantry.plugin.api/DaemonCapabilities.copy|copy(kotlin.collections.List<kotlin.String>;kotlin.collections.List<kotlin.String>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.ConfigDeclaration>;kotlin.String?;kotlin.String?;kotlin.String?;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.DaemonToolDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.DaemonFrameDeclaration>;kotlin.collections.List<kotlin.String>;kotlin.collections.List<kotlin.String>;kotlin.collections.List<kotlin.String>;kotlin.collections.List<kotlin.String>;kotlin.collections.List<kotlin.String>;com.superiorsoftllc.infantry.plugin.api.DaemonPluginLimits;com.superiorsoftllc.infantry.plugin.api.DaemonStorageDeclaration;kotlin.collections.List<kotlin.String>;kotlin.String?){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/DaemonCapabilities.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/DaemonCapabilities.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/DaemonCapabilities.toString|toString(){}[0]
@@ -965,7 +1075,7 @@ final class com.superiorsoftllc.infantry.plugin.api/DaemonCapabilities { // com.
 }
 
 final class com.superiorsoftllc.infantry.plugin.api/DaemonFrameDeclaration { // com.superiorsoftllc.infantry.plugin.api/DaemonFrameDeclaration|null[0]
-    constructor <init>(kotlin/String, kotlin/String, kotlin/String = ..., kotlin/Boolean = ...) // com.superiorsoftllc.infantry.plugin.api/DaemonFrameDeclaration.<init>|<init>(kotlin.String;kotlin.String;kotlin.String;kotlin.Boolean){}[0]
+    constructor <init>(kotlin/String, kotlin/String, kotlin/String = ..., kotlin/Boolean = ..., kotlin/String? = ...) // com.superiorsoftllc.infantry.plugin.api/DaemonFrameDeclaration.<init>|<init>(kotlin.String;kotlin.String;kotlin.String;kotlin.Boolean;kotlin.String?){}[0]
 
     final val action // com.superiorsoftllc.infantry.plugin.api/DaemonFrameDeclaration.action|{}action[0]
         final fun <get-action>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/DaemonFrameDeclaration.action.<get-action>|<get-action>(){}[0]
@@ -973,6 +1083,8 @@ final class com.superiorsoftllc.infantry.plugin.api/DaemonFrameDeclaration { // 
         final fun <get-kind>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/DaemonFrameDeclaration.kind.<get-kind>|<get-kind>(){}[0]
     final val ownerOnly // com.superiorsoftllc.infantry.plugin.api/DaemonFrameDeclaration.ownerOnly|{}ownerOnly[0]
         final fun <get-ownerOnly>(): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/DaemonFrameDeclaration.ownerOnly.<get-ownerOnly>|<get-ownerOnly>(){}[0]
+    final val side // com.superiorsoftllc.infantry.plugin.api/DaemonFrameDeclaration.side|{}side[0]
+        final fun <get-side>(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/DaemonFrameDeclaration.side.<get-side>|<get-side>(){}[0]
     final val type // com.superiorsoftllc.infantry.plugin.api/DaemonFrameDeclaration.type|{}type[0]
         final fun <get-type>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/DaemonFrameDeclaration.type.<get-type>|<get-type>(){}[0]
 
@@ -980,7 +1092,8 @@ final class com.superiorsoftllc.infantry.plugin.api/DaemonFrameDeclaration { // 
     final fun component2(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/DaemonFrameDeclaration.component2|component2(){}[0]
     final fun component3(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/DaemonFrameDeclaration.component3|component3(){}[0]
     final fun component4(): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/DaemonFrameDeclaration.component4|component4(){}[0]
-    final fun copy(kotlin/String = ..., kotlin/String = ..., kotlin/String = ..., kotlin/Boolean = ...): com.superiorsoftllc.infantry.plugin.api/DaemonFrameDeclaration // com.superiorsoftllc.infantry.plugin.api/DaemonFrameDeclaration.copy|copy(kotlin.String;kotlin.String;kotlin.String;kotlin.Boolean){}[0]
+    final fun component5(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/DaemonFrameDeclaration.component5|component5(){}[0]
+    final fun copy(kotlin/String = ..., kotlin/String = ..., kotlin/String = ..., kotlin/Boolean = ..., kotlin/String? = ...): com.superiorsoftllc.infantry.plugin.api/DaemonFrameDeclaration // com.superiorsoftllc.infantry.plugin.api/DaemonFrameDeclaration.copy|copy(kotlin.String;kotlin.String;kotlin.String;kotlin.Boolean;kotlin.String?){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/DaemonFrameDeclaration.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/DaemonFrameDeclaration.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/DaemonFrameDeclaration.toString|toString(){}[0]
@@ -1066,7 +1179,7 @@ final class com.superiorsoftllc.infantry.plugin.api/DaemonStorageDeclaration { /
 }
 
 final class com.superiorsoftllc.infantry.plugin.api/DaemonToolDeclaration { // com.superiorsoftllc.infantry.plugin.api/DaemonToolDeclaration|null[0]
-    constructor <init>(kotlin/String, kotlin/String, kotlin/String = ..., kotlin/String = ...) // com.superiorsoftllc.infantry.plugin.api/DaemonToolDeclaration.<init>|<init>(kotlin.String;kotlin.String;kotlin.String;kotlin.String){}[0]
+    constructor <init>(kotlin/String, kotlin/String, kotlin/String = ..., kotlin/String = ..., kotlin/String? = ...) // com.superiorsoftllc.infantry.plugin.api/DaemonToolDeclaration.<init>|<init>(kotlin.String;kotlin.String;kotlin.String;kotlin.String;kotlin.String?){}[0]
 
     final val action // com.superiorsoftllc.infantry.plugin.api/DaemonToolDeclaration.action|{}action[0]
         final fun <get-action>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/DaemonToolDeclaration.action.<get-action>|<get-action>(){}[0]
@@ -1076,12 +1189,15 @@ final class com.superiorsoftllc.infantry.plugin.api/DaemonToolDeclaration { // c
         final fun <get-kind>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/DaemonToolDeclaration.kind.<get-kind>|<get-kind>(){}[0]
     final val name // com.superiorsoftllc.infantry.plugin.api/DaemonToolDeclaration.name|{}name[0]
         final fun <get-name>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/DaemonToolDeclaration.name.<get-name>|<get-name>(){}[0]
+    final val side // com.superiorsoftllc.infantry.plugin.api/DaemonToolDeclaration.side|{}side[0]
+        final fun <get-side>(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/DaemonToolDeclaration.side.<get-side>|<get-side>(){}[0]
 
     final fun component1(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/DaemonToolDeclaration.component1|component1(){}[0]
     final fun component2(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/DaemonToolDeclaration.component2|component2(){}[0]
     final fun component3(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/DaemonToolDeclaration.component3|component3(){}[0]
     final fun component4(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/DaemonToolDeclaration.component4|component4(){}[0]
-    final fun copy(kotlin/String = ..., kotlin/String = ..., kotlin/String = ..., kotlin/String = ...): com.superiorsoftllc.infantry.plugin.api/DaemonToolDeclaration // com.superiorsoftllc.infantry.plugin.api/DaemonToolDeclaration.copy|copy(kotlin.String;kotlin.String;kotlin.String;kotlin.String){}[0]
+    final fun component5(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/DaemonToolDeclaration.component5|component5(){}[0]
+    final fun copy(kotlin/String = ..., kotlin/String = ..., kotlin/String = ..., kotlin/String = ..., kotlin/String? = ...): com.superiorsoftllc.infantry.plugin.api/DaemonToolDeclaration // com.superiorsoftllc.infantry.plugin.api/DaemonToolDeclaration.copy|copy(kotlin.String;kotlin.String;kotlin.String;kotlin.String;kotlin.String?){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/DaemonToolDeclaration.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/DaemonToolDeclaration.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/DaemonToolDeclaration.toString|toString(){}[0]
@@ -1429,6 +1545,52 @@ final class com.superiorsoftllc.infantry.plugin.api/HarnessDeclaration { // com.
     }
 }
 
+final class com.superiorsoftllc.infantry.plugin.api/HitView { // com.superiorsoftllc.infantry.plugin.api/HitView|null[0]
+    constructor <init>(kotlin/String, kotlin/String, kotlin/String, kotlin/String?, kotlin/String, kotlin/String?, kotlin/Boolean, kotlin/String? = ..., kotlin.collections/List<kotlin/String> = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/Boolean = ...) // com.superiorsoftllc.infantry.plugin.api/HitView.<init>|<init>(kotlin.String;kotlin.String;kotlin.String;kotlin.String?;kotlin.String;kotlin.String?;kotlin.Boolean;kotlin.String?;kotlin.collections.List<kotlin.String>;kotlin.String?;kotlin.String?;kotlin.Boolean){}[0]
+
+    final val cls // com.superiorsoftllc.infantry.plugin.api/HitView.cls|{}cls[0]
+        final fun <get-cls>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/HitView.cls.<get-cls>|<get-cls>(){}[0]
+    final val description // com.superiorsoftllc.infantry.plugin.api/HitView.description|{}description[0]
+        final fun <get-description>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/HitView.description.<get-description>|<get-description>(){}[0]
+    final val fromRepo // com.superiorsoftllc.infantry.plugin.api/HitView.fromRepo|{}fromRepo[0]
+        final fun <get-fromRepo>(): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/HitView.fromRepo.<get-fromRepo>|<get-fromRepo>(){}[0]
+    final val id // com.superiorsoftllc.infantry.plugin.api/HitView.id|{}id[0]
+        final fun <get-id>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/HitView.id.<get-id>|<get-id>(){}[0]
+    final val installed // com.superiorsoftllc.infantry.plugin.api/HitView.installed|{}installed[0]
+        final fun <get-installed>(): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/HitView.installed.<get-installed>|<get-installed>(){}[0]
+    final val license // com.superiorsoftllc.infantry.plugin.api/HitView.license|{}license[0]
+        final fun <get-license>(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/HitView.license.<get-license>|<get-license>(){}[0]
+    final val listName // com.superiorsoftllc.infantry.plugin.api/HitView.listName|{}listName[0]
+        final fun <get-listName>(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/HitView.listName.<get-listName>|<get-listName>(){}[0]
+    final val name // com.superiorsoftllc.infantry.plugin.api/HitView.name|{}name[0]
+        final fun <get-name>(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/HitView.name.<get-name>|<get-name>(){}[0]
+    final val repo // com.superiorsoftllc.infantry.plugin.api/HitView.repo|{}repo[0]
+        final fun <get-repo>(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/HitView.repo.<get-repo>|<get-repo>(){}[0]
+    final val source // com.superiorsoftllc.infantry.plugin.api/HitView.source|{}source[0]
+        final fun <get-source>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/HitView.source.<get-source>|<get-source>(){}[0]
+    final val tags // com.superiorsoftllc.infantry.plugin.api/HitView.tags|{}tags[0]
+        final fun <get-tags>(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/HitView.tags.<get-tags>|<get-tags>(){}[0]
+    final val version // com.superiorsoftllc.infantry.plugin.api/HitView.version|{}version[0]
+        final fun <get-version>(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/HitView.version.<get-version>|<get-version>(){}[0]
+
+    final fun component1(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/HitView.component1|component1(){}[0]
+    final fun component10(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/HitView.component10|component10(){}[0]
+    final fun component11(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/HitView.component11|component11(){}[0]
+    final fun component12(): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/HitView.component12|component12(){}[0]
+    final fun component2(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/HitView.component2|component2(){}[0]
+    final fun component3(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/HitView.component3|component3(){}[0]
+    final fun component4(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/HitView.component4|component4(){}[0]
+    final fun component5(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/HitView.component5|component5(){}[0]
+    final fun component6(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/HitView.component6|component6(){}[0]
+    final fun component7(): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/HitView.component7|component7(){}[0]
+    final fun component8(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/HitView.component8|component8(){}[0]
+    final fun component9(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/HitView.component9|component9(){}[0]
+    final fun copy(kotlin/String = ..., kotlin/String = ..., kotlin/String = ..., kotlin/String? = ..., kotlin/String = ..., kotlin/String? = ..., kotlin/Boolean = ..., kotlin/String? = ..., kotlin.collections/List<kotlin/String> = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/Boolean = ...): com.superiorsoftllc.infantry.plugin.api/HitView // com.superiorsoftllc.infantry.plugin.api/HitView.copy|copy(kotlin.String;kotlin.String;kotlin.String;kotlin.String?;kotlin.String;kotlin.String?;kotlin.Boolean;kotlin.String?;kotlin.collections.List<kotlin.String>;kotlin.String?;kotlin.String?;kotlin.Boolean){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/HitView.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/HitView.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/HitView.toString|toString(){}[0]
+}
+
 final class com.superiorsoftllc.infantry.plugin.api/ImplementationDeclaration { // com.superiorsoftllc.infantry.plugin.api/ImplementationDeclaration|null[0]
     constructor <init>(kotlin/String, kotlin/String) // com.superiorsoftllc.infantry.plugin.api/ImplementationDeclaration.<init>|<init>(kotlin.String;kotlin.String){}[0]
 
@@ -1495,6 +1657,56 @@ final class com.superiorsoftllc.infantry.plugin.api/InjectDeclaration { // com.s
     }
 }
 
+final class com.superiorsoftllc.infantry.plugin.api/InspectOutcome { // com.superiorsoftllc.infantry.plugin.api/InspectOutcome|null[0]
+    constructor <init>(com.superiorsoftllc.infantry.plugin.api/InspectView? = ..., kotlin/String? = ...) // com.superiorsoftllc.infantry.plugin.api/InspectOutcome.<init>|<init>(com.superiorsoftllc.infantry.plugin.api.InspectView?;kotlin.String?){}[0]
+
+    final val error // com.superiorsoftllc.infantry.plugin.api/InspectOutcome.error|{}error[0]
+        final fun <get-error>(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/InspectOutcome.error.<get-error>|<get-error>(){}[0]
+    final val view // com.superiorsoftllc.infantry.plugin.api/InspectOutcome.view|{}view[0]
+        final fun <get-view>(): com.superiorsoftllc.infantry.plugin.api/InspectView? // com.superiorsoftllc.infantry.plugin.api/InspectOutcome.view.<get-view>|<get-view>(){}[0]
+
+    final fun component1(): com.superiorsoftllc.infantry.plugin.api/InspectView? // com.superiorsoftllc.infantry.plugin.api/InspectOutcome.component1|component1(){}[0]
+    final fun component2(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/InspectOutcome.component2|component2(){}[0]
+    final fun copy(com.superiorsoftllc.infantry.plugin.api/InspectView? = ..., kotlin/String? = ...): com.superiorsoftllc.infantry.plugin.api/InspectOutcome // com.superiorsoftllc.infantry.plugin.api/InspectOutcome.copy|copy(com.superiorsoftllc.infantry.plugin.api.InspectView?;kotlin.String?){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/InspectOutcome.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/InspectOutcome.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/InspectOutcome.toString|toString(){}[0]
+}
+
+final class com.superiorsoftllc.infantry.plugin.api/InspectView { // com.superiorsoftllc.infantry.plugin.api/InspectView|null[0]
+    constructor <init>(kotlin/String, kotlin/String, kotlin/String, kotlin/String?, kotlin/String?, kotlin.collections/List<kotlin/String>, kotlin.collections/List<kotlin/String>, kotlin/String) // com.superiorsoftllc.infantry.plugin.api/InspectView.<init>|<init>(kotlin.String;kotlin.String;kotlin.String;kotlin.String?;kotlin.String?;kotlin.collections.List<kotlin.String>;kotlin.collections.List<kotlin.String>;kotlin.String){}[0]
+
+    final val cls // com.superiorsoftllc.infantry.plugin.api/InspectView.cls|{}cls[0]
+        final fun <get-cls>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/InspectView.cls.<get-cls>|<get-cls>(){}[0]
+    final val grants // com.superiorsoftllc.infantry.plugin.api/InspectView.grants|{}grants[0]
+        final fun <get-grants>(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/InspectView.grants.<get-grants>|<get-grants>(){}[0]
+    final val id // com.superiorsoftllc.infantry.plugin.api/InspectView.id|{}id[0]
+        final fun <get-id>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/InspectView.id.<get-id>|<get-id>(){}[0]
+    final val license // com.superiorsoftllc.infantry.plugin.api/InspectView.license|{}license[0]
+        final fun <get-license>(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/InspectView.license.<get-license>|<get-license>(){}[0]
+    final val signer // com.superiorsoftllc.infantry.plugin.api/InspectView.signer|{}signer[0]
+        final fun <get-signer>(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/InspectView.signer.<get-signer>|<get-signer>(){}[0]
+    final val token // com.superiorsoftllc.infantry.plugin.api/InspectView.token|{}token[0]
+        final fun <get-token>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/InspectView.token.<get-token>|<get-token>(){}[0]
+    final val version // com.superiorsoftllc.infantry.plugin.api/InspectView.version|{}version[0]
+        final fun <get-version>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/InspectView.version.<get-version>|<get-version>(){}[0]
+    final val warnings // com.superiorsoftllc.infantry.plugin.api/InspectView.warnings|{}warnings[0]
+        final fun <get-warnings>(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/InspectView.warnings.<get-warnings>|<get-warnings>(){}[0]
+
+    final fun component1(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/InspectView.component1|component1(){}[0]
+    final fun component2(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/InspectView.component2|component2(){}[0]
+    final fun component3(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/InspectView.component3|component3(){}[0]
+    final fun component4(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/InspectView.component4|component4(){}[0]
+    final fun component5(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/InspectView.component5|component5(){}[0]
+    final fun component6(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/InspectView.component6|component6(){}[0]
+    final fun component7(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/InspectView.component7|component7(){}[0]
+    final fun component8(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/InspectView.component8|component8(){}[0]
+    final fun copy(kotlin/String = ..., kotlin/String = ..., kotlin/String = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<kotlin/String> = ..., kotlin/String = ...): com.superiorsoftllc.infantry.plugin.api/InspectView // com.superiorsoftllc.infantry.plugin.api/InspectView.copy|copy(kotlin.String;kotlin.String;kotlin.String;kotlin.String?;kotlin.String?;kotlin.collections.List<kotlin.String>;kotlin.collections.List<kotlin.String>;kotlin.String){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/InspectView.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/InspectView.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/InspectView.toString|toString(){}[0]
+}
+
 final class com.superiorsoftllc.infantry.plugin.api/InterceptorDeclaration { // com.superiorsoftllc.infantry.plugin.api/InterceptorDeclaration|null[0]
     constructor <init>(kotlin/String, kotlin/String, kotlin/String = ...) // com.superiorsoftllc.infantry.plugin.api/InterceptorDeclaration.<init>|<init>(kotlin.String;kotlin.String;kotlin.String){}[0]
 
@@ -1528,7 +1740,7 @@ final class com.superiorsoftllc.infantry.plugin.api/InterceptorDeclaration { // 
 }
 
 final class com.superiorsoftllc.infantry.plugin.api/ModuleManifest { // com.superiorsoftllc.infantry.plugin.api/ModuleManifest|null[0]
-    constructor <init>(kotlin/String, kotlin/String, kotlin/Int = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/String = ..., kotlin/String? = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/DependencyDeclaration> = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin.collections/List<kotlin/String>? = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/EndpointDeclaration> = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/TabDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/PanelDeclaration> = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/PreferenceDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/InterceptorDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/ObserverDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/BlockDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/ShellOverrideDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/InjectDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/FillDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/ConfigDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/ImplementationDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/BlockTypeDeclaration> = ..., kotlin.collections/List<kotlin/String> = ..., com.superiorsoftllc.infantry.plugin.api/DaemonCapabilities? = ..., com.superiorsoftllc.infantry.plugin.api/HarnessDeclaration? = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/AgentDefinition> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/ActionDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/NodeDeclaration> = ...) // com.superiorsoftllc.infantry.plugin.api/ModuleManifest.<init>|<init>(kotlin.String;kotlin.String;kotlin.Int;kotlin.String?;kotlin.String?;kotlin.String;kotlin.String?;kotlin.collections.List<kotlin.String>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.DependencyDeclaration>;kotlin.String?;kotlin.String?;kotlin.collections.List<kotlin.String>?;kotlin.collections.List<kotlin.String>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.EndpointDeclaration>;kotlin.collections.List<kotlin.String>;kotlin.collections.List<kotlin.String>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.TabDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.PanelDeclaration>;kotlin.collections.List<kotlin.String>;kotlin.collections.List<kotlin.String>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.PreferenceDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.InterceptorDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.ObserverDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.BlockDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.ShellOverrideDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.InjectDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.FillDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.ConfigDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.ImplementationDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.BlockTypeDeclaration>;kotlin.collections.List<kotlin.String>;com.superiorsoftllc.infantry.plugin.api.DaemonCapabilities?;com.superiorsoftllc.infantry.plugin.api.HarnessDeclaration?;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.AgentDefinition>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.ActionDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.NodeDeclaration>){}[0]
+    constructor <init>(kotlin/String, kotlin/String, kotlin/Int = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/String = ..., kotlin/String? = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/DependencyDeclaration> = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin.collections/List<kotlin/String>? = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/EndpointDeclaration> = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/TabDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/PanelDeclaration> = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/PreferenceDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/InterceptorDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/ObserverDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/BlockDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/ShellOverrideDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/InjectDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/FillDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/ConfigDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/ImplementationDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/BlockTypeDeclaration> = ..., kotlin.collections/List<kotlin/String> = ..., com.superiorsoftllc.infantry.plugin.api/DaemonCapabilities? = ..., com.superiorsoftllc.infantry.plugin.api/HarnessDeclaration? = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/AgentDefinition> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/ActionDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/NodeDeclaration> = ..., com.superiorsoftllc.infantry.plugin.api/UpdateDeclaration? = ...) // com.superiorsoftllc.infantry.plugin.api/ModuleManifest.<init>|<init>(kotlin.String;kotlin.String;kotlin.Int;kotlin.String?;kotlin.String?;kotlin.String;kotlin.String?;kotlin.collections.List<kotlin.String>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.DependencyDeclaration>;kotlin.String?;kotlin.String?;kotlin.collections.List<kotlin.String>?;kotlin.collections.List<kotlin.String>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.EndpointDeclaration>;kotlin.collections.List<kotlin.String>;kotlin.collections.List<kotlin.String>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.TabDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.PanelDeclaration>;kotlin.collections.List<kotlin.String>;kotlin.collections.List<kotlin.String>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.PreferenceDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.InterceptorDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.ObserverDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.BlockDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.ShellOverrideDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.InjectDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.FillDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.ConfigDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.ImplementationDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.BlockTypeDeclaration>;kotlin.collections.List<kotlin.String>;com.superiorsoftllc.infantry.plugin.api.DaemonCapabilities?;com.superiorsoftllc.infantry.plugin.api.HarnessDeclaration?;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.AgentDefinition>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.ActionDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.NodeDeclaration>;com.superiorsoftllc.infantry.plugin.api.UpdateDeclaration?){}[0]
 
     final val actions // com.superiorsoftllc.infantry.plugin.api/ModuleManifest.actions|{}actions[0]
         final fun <get-actions>(): kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/ActionDeclaration> // com.superiorsoftllc.infantry.plugin.api/ModuleManifest.actions.<get-actions>|<get-actions>(){}[0]
@@ -1602,6 +1814,8 @@ final class com.superiorsoftllc.infantry.plugin.api/ModuleManifest { // com.supe
         final fun <get-tabs>(): kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/TabDeclaration> // com.superiorsoftllc.infantry.plugin.api/ModuleManifest.tabs.<get-tabs>|<get-tabs>(){}[0]
     final val tier // com.superiorsoftllc.infantry.plugin.api/ModuleManifest.tier|{}tier[0]
         final fun <get-tier>(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/ModuleManifest.tier.<get-tier>|<get-tier>(){}[0]
+    final val update // com.superiorsoftllc.infantry.plugin.api/ModuleManifest.update|{}update[0]
+        final fun <get-update>(): com.superiorsoftllc.infantry.plugin.api/UpdateDeclaration? // com.superiorsoftllc.infantry.plugin.api/ModuleManifest.update.<get-update>|<get-update>(){}[0]
     final val version // com.superiorsoftllc.infantry.plugin.api/ModuleManifest.version|{}version[0]
         final fun <get-version>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/ModuleManifest.version.<get-version>|<get-version>(){}[0]
 
@@ -1635,13 +1849,14 @@ final class com.superiorsoftllc.infantry.plugin.api/ModuleManifest { // com.supe
     final fun component34(): kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/AgentDefinition> // com.superiorsoftllc.infantry.plugin.api/ModuleManifest.component34|component34(){}[0]
     final fun component35(): kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/ActionDeclaration> // com.superiorsoftllc.infantry.plugin.api/ModuleManifest.component35|component35(){}[0]
     final fun component36(): kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/NodeDeclaration> // com.superiorsoftllc.infantry.plugin.api/ModuleManifest.component36|component36(){}[0]
+    final fun component37(): com.superiorsoftllc.infantry.plugin.api/UpdateDeclaration? // com.superiorsoftllc.infantry.plugin.api/ModuleManifest.component37|component37(){}[0]
     final fun component4(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/ModuleManifest.component4|component4(){}[0]
     final fun component5(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/ModuleManifest.component5|component5(){}[0]
     final fun component6(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/ModuleManifest.component6|component6(){}[0]
     final fun component7(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/ModuleManifest.component7|component7(){}[0]
     final fun component8(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/ModuleManifest.component8|component8(){}[0]
     final fun component9(): kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/DependencyDeclaration> // com.superiorsoftllc.infantry.plugin.api/ModuleManifest.component9|component9(){}[0]
-    final fun copy(kotlin/String = ..., kotlin/String = ..., kotlin/Int = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/String = ..., kotlin/String? = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/DependencyDeclaration> = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin.collections/List<kotlin/String>? = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/EndpointDeclaration> = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/TabDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/PanelDeclaration> = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/PreferenceDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/InterceptorDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/ObserverDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/BlockDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/ShellOverrideDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/InjectDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/FillDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/ConfigDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/ImplementationDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/BlockTypeDeclaration> = ..., kotlin.collections/List<kotlin/String> = ..., com.superiorsoftllc.infantry.plugin.api/DaemonCapabilities? = ..., com.superiorsoftllc.infantry.plugin.api/HarnessDeclaration? = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/AgentDefinition> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/ActionDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/NodeDeclaration> = ...): com.superiorsoftllc.infantry.plugin.api/ModuleManifest // com.superiorsoftllc.infantry.plugin.api/ModuleManifest.copy|copy(kotlin.String;kotlin.String;kotlin.Int;kotlin.String?;kotlin.String?;kotlin.String;kotlin.String?;kotlin.collections.List<kotlin.String>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.DependencyDeclaration>;kotlin.String?;kotlin.String?;kotlin.collections.List<kotlin.String>?;kotlin.collections.List<kotlin.String>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.EndpointDeclaration>;kotlin.collections.List<kotlin.String>;kotlin.collections.List<kotlin.String>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.TabDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.PanelDeclaration>;kotlin.collections.List<kotlin.String>;kotlin.collections.List<kotlin.String>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.PreferenceDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.InterceptorDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.ObserverDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.BlockDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.ShellOverrideDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.InjectDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.FillDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.ConfigDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.ImplementationDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.BlockTypeDeclaration>;kotlin.collections.List<kotlin.String>;com.superiorsoftllc.infantry.plugin.api.DaemonCapabilities?;com.superiorsoftllc.infantry.plugin.api.HarnessDeclaration?;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.AgentDefinition>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.ActionDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.NodeDeclaration>){}[0]
+    final fun copy(kotlin/String = ..., kotlin/String = ..., kotlin/Int = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/String = ..., kotlin/String? = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/DependencyDeclaration> = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin.collections/List<kotlin/String>? = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/EndpointDeclaration> = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/TabDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/PanelDeclaration> = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/PreferenceDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/InterceptorDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/ObserverDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/BlockDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/ShellOverrideDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/InjectDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/FillDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/ConfigDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/ImplementationDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/BlockTypeDeclaration> = ..., kotlin.collections/List<kotlin/String> = ..., com.superiorsoftllc.infantry.plugin.api/DaemonCapabilities? = ..., com.superiorsoftllc.infantry.plugin.api/HarnessDeclaration? = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/AgentDefinition> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/ActionDeclaration> = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/NodeDeclaration> = ..., com.superiorsoftllc.infantry.plugin.api/UpdateDeclaration? = ...): com.superiorsoftllc.infantry.plugin.api/ModuleManifest // com.superiorsoftllc.infantry.plugin.api/ModuleManifest.copy|copy(kotlin.String;kotlin.String;kotlin.Int;kotlin.String?;kotlin.String?;kotlin.String;kotlin.String?;kotlin.collections.List<kotlin.String>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.DependencyDeclaration>;kotlin.String?;kotlin.String?;kotlin.collections.List<kotlin.String>?;kotlin.collections.List<kotlin.String>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.EndpointDeclaration>;kotlin.collections.List<kotlin.String>;kotlin.collections.List<kotlin.String>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.TabDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.PanelDeclaration>;kotlin.collections.List<kotlin.String>;kotlin.collections.List<kotlin.String>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.PreferenceDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.InterceptorDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.ObserverDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.BlockDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.ShellOverrideDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.InjectDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.FillDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.ConfigDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.ImplementationDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.BlockTypeDeclaration>;kotlin.collections.List<kotlin.String>;com.superiorsoftllc.infantry.plugin.api.DaemonCapabilities?;com.superiorsoftllc.infantry.plugin.api.HarnessDeclaration?;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.AgentDefinition>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.ActionDeclaration>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.NodeDeclaration>;com.superiorsoftllc.infantry.plugin.api.UpdateDeclaration?){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/ModuleManifest.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/ModuleManifest.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/ModuleManifest.toString|toString(){}[0]
@@ -1870,6 +2085,25 @@ final class com.superiorsoftllc.infantry.plugin.api/PanelDeclaration { // com.su
     }
 }
 
+final class com.superiorsoftllc.infantry.plugin.api/PcmFormat { // com.superiorsoftllc.infantry.plugin.api/PcmFormat|null[0]
+    constructor <init>(kotlin/Int = ..., kotlin/Int = ..., kotlin/Int = ...) // com.superiorsoftllc.infantry.plugin.api/PcmFormat.<init>|<init>(kotlin.Int;kotlin.Int;kotlin.Int){}[0]
+
+    final val bitsPerSample // com.superiorsoftllc.infantry.plugin.api/PcmFormat.bitsPerSample|{}bitsPerSample[0]
+        final fun <get-bitsPerSample>(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/PcmFormat.bitsPerSample.<get-bitsPerSample>|<get-bitsPerSample>(){}[0]
+    final val channels // com.superiorsoftllc.infantry.plugin.api/PcmFormat.channels|{}channels[0]
+        final fun <get-channels>(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/PcmFormat.channels.<get-channels>|<get-channels>(){}[0]
+    final val sampleRateHz // com.superiorsoftllc.infantry.plugin.api/PcmFormat.sampleRateHz|{}sampleRateHz[0]
+        final fun <get-sampleRateHz>(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/PcmFormat.sampleRateHz.<get-sampleRateHz>|<get-sampleRateHz>(){}[0]
+
+    final fun component1(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/PcmFormat.component1|component1(){}[0]
+    final fun component2(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/PcmFormat.component2|component2(){}[0]
+    final fun component3(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/PcmFormat.component3|component3(){}[0]
+    final fun copy(kotlin/Int = ..., kotlin/Int = ..., kotlin/Int = ...): com.superiorsoftllc.infantry.plugin.api/PcmFormat // com.superiorsoftllc.infantry.plugin.api/PcmFormat.copy|copy(kotlin.Int;kotlin.Int;kotlin.Int){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/PcmFormat.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/PcmFormat.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/PcmFormat.toString|toString(){}[0]
+}
+
 final class com.superiorsoftllc.infantry.plugin.api/PluginEvent { // com.superiorsoftllc.infantry.plugin.api/PluginEvent|null[0]
     constructor <init>(kotlin/String, kotlin.collections/Map<kotlin/String, kotlin/String> = ...) // com.superiorsoftllc.infantry.plugin.api/PluginEvent.<init>|<init>(kotlin.String;kotlin.collections.Map<kotlin.String,kotlin.String>){}[0]
 
@@ -1915,6 +2149,58 @@ final class com.superiorsoftllc.infantry.plugin.api/PluginFolder { // com.superi
 
         final fun serializer(): kotlinx.serialization/KSerializer<com.superiorsoftllc.infantry.plugin.api/PluginFolder> // com.superiorsoftllc.infantry.plugin.api/PluginFolder.Companion.serializer|serializer(){}[0]
     }
+}
+
+final class com.superiorsoftllc.infantry.plugin.api/PluginView { // com.superiorsoftllc.infantry.plugin.api/PluginView|null[0]
+    constructor <init>(kotlin/String, kotlin/String, kotlin/String, kotlin/Boolean, kotlin/Boolean, kotlin/String?, kotlin/String?, kotlin.collections/List<kotlin/String>, kotlin.collections/List<kotlin/String>, kotlin/Boolean, kotlin/String?, kotlin/String = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<kotlin/String> = ...) // com.superiorsoftllc.infantry.plugin.api/PluginView.<init>|<init>(kotlin.String;kotlin.String;kotlin.String;kotlin.Boolean;kotlin.Boolean;kotlin.String?;kotlin.String?;kotlin.collections.List<kotlin.String>;kotlin.collections.List<kotlin.String>;kotlin.Boolean;kotlin.String?;kotlin.String;kotlin.collections.List<kotlin.String>;kotlin.collections.List<kotlin.String>){}[0]
+
+    final val bundled // com.superiorsoftllc.infantry.plugin.api/PluginView.bundled|{}bundled[0]
+        final fun <get-bundled>(): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/PluginView.bundled.<get-bundled>|<get-bundled>(){}[0]
+    final val canRollback // com.superiorsoftllc.infantry.plugin.api/PluginView.canRollback|{}canRollback[0]
+        final fun <get-canRollback>(): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/PluginView.canRollback.<get-canRollback>|<get-canRollback>(){}[0]
+    final val cls // com.superiorsoftllc.infantry.plugin.api/PluginView.cls|{}cls[0]
+        final fun <get-cls>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/PluginView.cls.<get-cls>|<get-cls>(){}[0]
+    final val contributes // com.superiorsoftllc.infantry.plugin.api/PluginView.contributes|{}contributes[0]
+        final fun <get-contributes>(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/PluginView.contributes.<get-contributes>|<get-contributes>(){}[0]
+    final val description // com.superiorsoftllc.infantry.plugin.api/PluginView.description|{}description[0]
+        final fun <get-description>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/PluginView.description.<get-description>|<get-description>(){}[0]
+    final val enabled // com.superiorsoftllc.infantry.plugin.api/PluginView.enabled|{}enabled[0]
+        final fun <get-enabled>(): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/PluginView.enabled.<get-enabled>|<get-enabled>(){}[0]
+    final val granted // com.superiorsoftllc.infantry.plugin.api/PluginView.granted|{}granted[0]
+        final fun <get-granted>(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/PluginView.granted.<get-granted>|<get-granted>(){}[0]
+    final val id // com.superiorsoftllc.infantry.plugin.api/PluginView.id|{}id[0]
+        final fun <get-id>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/PluginView.id.<get-id>|<get-id>(){}[0]
+    final val license // com.superiorsoftllc.infantry.plugin.api/PluginView.license|{}license[0]
+        final fun <get-license>(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/PluginView.license.<get-license>|<get-license>(){}[0]
+    final val requested // com.superiorsoftllc.infantry.plugin.api/PluginView.requested|{}requested[0]
+        final fun <get-requested>(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/PluginView.requested.<get-requested>|<get-requested>(){}[0]
+    final val requiredBy // com.superiorsoftllc.infantry.plugin.api/PluginView.requiredBy|{}requiredBy[0]
+        final fun <get-requiredBy>(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/PluginView.requiredBy.<get-requiredBy>|<get-requiredBy>(){}[0]
+    final val signer // com.superiorsoftllc.infantry.plugin.api/PluginView.signer|{}signer[0]
+        final fun <get-signer>(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/PluginView.signer.<get-signer>|<get-signer>(){}[0]
+    final val version // com.superiorsoftllc.infantry.plugin.api/PluginView.version|{}version[0]
+        final fun <get-version>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/PluginView.version.<get-version>|<get-version>(){}[0]
+    final val yanked // com.superiorsoftllc.infantry.plugin.api/PluginView.yanked|{}yanked[0]
+        final fun <get-yanked>(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/PluginView.yanked.<get-yanked>|<get-yanked>(){}[0]
+
+    final fun component1(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/PluginView.component1|component1(){}[0]
+    final fun component10(): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/PluginView.component10|component10(){}[0]
+    final fun component11(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/PluginView.component11|component11(){}[0]
+    final fun component12(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/PluginView.component12|component12(){}[0]
+    final fun component13(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/PluginView.component13|component13(){}[0]
+    final fun component14(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/PluginView.component14|component14(){}[0]
+    final fun component2(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/PluginView.component2|component2(){}[0]
+    final fun component3(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/PluginView.component3|component3(){}[0]
+    final fun component4(): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/PluginView.component4|component4(){}[0]
+    final fun component5(): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/PluginView.component5|component5(){}[0]
+    final fun component6(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/PluginView.component6|component6(){}[0]
+    final fun component7(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/PluginView.component7|component7(){}[0]
+    final fun component8(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/PluginView.component8|component8(){}[0]
+    final fun component9(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/PluginView.component9|component9(){}[0]
+    final fun copy(kotlin/String = ..., kotlin/String = ..., kotlin/String = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<kotlin/String> = ..., kotlin/Boolean = ..., kotlin/String? = ..., kotlin/String = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<kotlin/String> = ...): com.superiorsoftllc.infantry.plugin.api/PluginView // com.superiorsoftllc.infantry.plugin.api/PluginView.copy|copy(kotlin.String;kotlin.String;kotlin.String;kotlin.Boolean;kotlin.Boolean;kotlin.String?;kotlin.String?;kotlin.collections.List<kotlin.String>;kotlin.collections.List<kotlin.String>;kotlin.Boolean;kotlin.String?;kotlin.String;kotlin.collections.List<kotlin.String>;kotlin.collections.List<kotlin.String>){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/PluginView.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/PluginView.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/PluginView.toString|toString(){}[0]
 }
 
 final class com.superiorsoftllc.infantry.plugin.api/PolicyChoice { // com.superiorsoftllc.infantry.plugin.api/PolicyChoice|null[0]
@@ -2142,6 +2428,31 @@ final class com.superiorsoftllc.infantry.plugin.api/PreferenceDeclaration { // c
     }
 }
 
+final class com.superiorsoftllc.infantry.plugin.api/RefreshView { // com.superiorsoftllc.infantry.plugin.api/RefreshView|null[0]
+    constructor <init>(kotlin/String, kotlin/Boolean, kotlin/Boolean, kotlin/Int, kotlin/String) // com.superiorsoftllc.infantry.plugin.api/RefreshView.<init>|<init>(kotlin.String;kotlin.Boolean;kotlin.Boolean;kotlin.Int;kotlin.String){}[0]
+
+    final val message // com.superiorsoftllc.infantry.plugin.api/RefreshView.message|{}message[0]
+        final fun <get-message>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/RefreshView.message.<get-message>|<get-message>(){}[0]
+    final val ok // com.superiorsoftllc.infantry.plugin.api/RefreshView.ok|{}ok[0]
+        final fun <get-ok>(): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/RefreshView.ok.<get-ok>|<get-ok>(){}[0]
+    final val plugins // com.superiorsoftllc.infantry.plugin.api/RefreshView.plugins|{}plugins[0]
+        final fun <get-plugins>(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/RefreshView.plugins.<get-plugins>|<get-plugins>(){}[0]
+    final val source // com.superiorsoftllc.infantry.plugin.api/RefreshView.source|{}source[0]
+        final fun <get-source>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/RefreshView.source.<get-source>|<get-source>(){}[0]
+    final val stale // com.superiorsoftllc.infantry.plugin.api/RefreshView.stale|{}stale[0]
+        final fun <get-stale>(): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/RefreshView.stale.<get-stale>|<get-stale>(){}[0]
+
+    final fun component1(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/RefreshView.component1|component1(){}[0]
+    final fun component2(): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/RefreshView.component2|component2(){}[0]
+    final fun component3(): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/RefreshView.component3|component3(){}[0]
+    final fun component4(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/RefreshView.component4|component4(){}[0]
+    final fun component5(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/RefreshView.component5|component5(){}[0]
+    final fun copy(kotlin/String = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Int = ..., kotlin/String = ...): com.superiorsoftllc.infantry.plugin.api/RefreshView // com.superiorsoftllc.infantry.plugin.api/RefreshView.copy|copy(kotlin.String;kotlin.Boolean;kotlin.Boolean;kotlin.Int;kotlin.String){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/RefreshView.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/RefreshView.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/RefreshView.toString|toString(){}[0]
+}
+
 final class com.superiorsoftllc.infantry.plugin.api/SeatsSpec { // com.superiorsoftllc.infantry.plugin.api/SeatsSpec|null[0]
     constructor <init>(kotlin/String = ..., kotlin/String = ..., kotlin/String = ..., kotlin.collections/List<kotlin/String> = ..., kotlin/String? = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/String = ..., kotlin/String = ...) // com.superiorsoftllc.infantry.plugin.api/SeatsSpec.<init>|<init>(kotlin.String;kotlin.String;kotlin.String;kotlin.collections.List<kotlin.String>;kotlin.String?;kotlin.Int;kotlin.Int;kotlin.String?;kotlin.String?;kotlin.String;kotlin.String){}[0]
 
@@ -2237,6 +2548,47 @@ final class com.superiorsoftllc.infantry.plugin.api/ShellOverrideDeclaration { /
     }
 }
 
+final class com.superiorsoftllc.infantry.plugin.api/SourceView { // com.superiorsoftllc.infantry.plugin.api/SourceView|null[0]
+    constructor <init>(kotlin/String, kotlin/String, kotlin/String, kotlin/Boolean) // com.superiorsoftllc.infantry.plugin.api/SourceView.<init>|<init>(kotlin.String;kotlin.String;kotlin.String;kotlin.Boolean){}[0]
+
+    final val cls // com.superiorsoftllc.infantry.plugin.api/SourceView.cls|{}cls[0]
+        final fun <get-cls>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/SourceView.cls.<get-cls>|<get-cls>(){}[0]
+    final val enabled // com.superiorsoftllc.infantry.plugin.api/SourceView.enabled|{}enabled[0]
+        final fun <get-enabled>(): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/SourceView.enabled.<get-enabled>|<get-enabled>(){}[0]
+    final val id // com.superiorsoftllc.infantry.plugin.api/SourceView.id|{}id[0]
+        final fun <get-id>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/SourceView.id.<get-id>|<get-id>(){}[0]
+    final val location // com.superiorsoftllc.infantry.plugin.api/SourceView.location|{}location[0]
+        final fun <get-location>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/SourceView.location.<get-location>|<get-location>(){}[0]
+
+    final fun component1(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/SourceView.component1|component1(){}[0]
+    final fun component2(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/SourceView.component2|component2(){}[0]
+    final fun component3(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/SourceView.component3|component3(){}[0]
+    final fun component4(): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/SourceView.component4|component4(){}[0]
+    final fun copy(kotlin/String = ..., kotlin/String = ..., kotlin/String = ..., kotlin/Boolean = ...): com.superiorsoftllc.infantry.plugin.api/SourceView // com.superiorsoftllc.infantry.plugin.api/SourceView.copy|copy(kotlin.String;kotlin.String;kotlin.String;kotlin.Boolean){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/SourceView.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/SourceView.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/SourceView.toString|toString(){}[0]
+}
+
+final class com.superiorsoftllc.infantry.plugin.api/SpeakOptions { // com.superiorsoftllc.infantry.plugin.api/SpeakOptions|null[0]
+    constructor <init>(kotlin/Int = ..., kotlin/String? = ..., kotlin/Boolean = ...) // com.superiorsoftllc.infantry.plugin.api/SpeakOptions.<init>|<init>(kotlin.Int;kotlin.String?;kotlin.Boolean){}[0]
+
+    final val interrupt // com.superiorsoftllc.infantry.plugin.api/SpeakOptions.interrupt|{}interrupt[0]
+        final fun <get-interrupt>(): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/SpeakOptions.interrupt.<get-interrupt>|<get-interrupt>(){}[0]
+    final val voice // com.superiorsoftllc.infantry.plugin.api/SpeakOptions.voice|{}voice[0]
+        final fun <get-voice>(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/SpeakOptions.voice.<get-voice>|<get-voice>(){}[0]
+    final val volumePercent // com.superiorsoftllc.infantry.plugin.api/SpeakOptions.volumePercent|{}volumePercent[0]
+        final fun <get-volumePercent>(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/SpeakOptions.volumePercent.<get-volumePercent>|<get-volumePercent>(){}[0]
+
+    final fun component1(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/SpeakOptions.component1|component1(){}[0]
+    final fun component2(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/SpeakOptions.component2|component2(){}[0]
+    final fun component3(): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/SpeakOptions.component3|component3(){}[0]
+    final fun copy(kotlin/Int = ..., kotlin/String? = ..., kotlin/Boolean = ...): com.superiorsoftllc.infantry.plugin.api/SpeakOptions // com.superiorsoftllc.infantry.plugin.api/SpeakOptions.copy|copy(kotlin.Int;kotlin.String?;kotlin.Boolean){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/SpeakOptions.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/SpeakOptions.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/SpeakOptions.toString|toString(){}[0]
+}
+
 final class com.superiorsoftllc.infantry.plugin.api/TabDeclaration { // com.superiorsoftllc.infantry.plugin.api/TabDeclaration|null[0]
     constructor <init>(kotlin/String, kotlin/String) // com.superiorsoftllc.infantry.plugin.api/TabDeclaration.<init>|<init>(kotlin.String;kotlin.String){}[0]
 
@@ -2264,6 +2616,120 @@ final class com.superiorsoftllc.infantry.plugin.api/TabDeclaration { // com.supe
     final object Companion { // com.superiorsoftllc.infantry.plugin.api/TabDeclaration.Companion|null[0]
         final fun serializer(): kotlinx.serialization/KSerializer<com.superiorsoftllc.infantry.plugin.api/TabDeclaration> // com.superiorsoftllc.infantry.plugin.api/TabDeclaration.Companion.serializer|serializer(){}[0]
     }
+}
+
+final class com.superiorsoftllc.infantry.plugin.api/UpdateCredentialRef { // com.superiorsoftllc.infantry.plugin.api/UpdateCredentialRef|null[0]
+    constructor <init>(kotlin/String? = ..., kotlin/String? = ...) // com.superiorsoftllc.infantry.plugin.api/UpdateCredentialRef.<init>|<init>(kotlin.String?;kotlin.String?){}[0]
+
+    final val env // com.superiorsoftllc.infantry.plugin.api/UpdateCredentialRef.env|{}env[0]
+        final fun <get-env>(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/UpdateCredentialRef.env.<get-env>|<get-env>(){}[0]
+    final val isEmpty // com.superiorsoftllc.infantry.plugin.api/UpdateCredentialRef.isEmpty|{}isEmpty[0]
+        final fun <get-isEmpty>(): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/UpdateCredentialRef.isEmpty.<get-isEmpty>|<get-isEmpty>(){}[0]
+    final val secret // com.superiorsoftllc.infantry.plugin.api/UpdateCredentialRef.secret|{}secret[0]
+        final fun <get-secret>(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/UpdateCredentialRef.secret.<get-secret>|<get-secret>(){}[0]
+
+    final fun component1(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/UpdateCredentialRef.component1|component1(){}[0]
+    final fun component2(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/UpdateCredentialRef.component2|component2(){}[0]
+    final fun copy(kotlin/String? = ..., kotlin/String? = ...): com.superiorsoftllc.infantry.plugin.api/UpdateCredentialRef // com.superiorsoftllc.infantry.plugin.api/UpdateCredentialRef.copy|copy(kotlin.String?;kotlin.String?){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/UpdateCredentialRef.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/UpdateCredentialRef.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/UpdateCredentialRef.toString|toString(){}[0]
+
+    final object $serializer : kotlinx.serialization.internal/GeneratedSerializer<com.superiorsoftllc.infantry.plugin.api/UpdateCredentialRef> { // com.superiorsoftllc.infantry.plugin.api/UpdateCredentialRef.$serializer|null[0]
+        final val descriptor // com.superiorsoftllc.infantry.plugin.api/UpdateCredentialRef.$serializer.descriptor|{}descriptor[0]
+            final fun <get-descriptor>(): kotlinx.serialization.descriptors/SerialDescriptor // com.superiorsoftllc.infantry.plugin.api/UpdateCredentialRef.$serializer.descriptor.<get-descriptor>|<get-descriptor>(){}[0]
+
+        final fun childSerializers(): kotlin/Array<kotlinx.serialization/KSerializer<*>> // com.superiorsoftllc.infantry.plugin.api/UpdateCredentialRef.$serializer.childSerializers|childSerializers(){}[0]
+        final fun deserialize(kotlinx.serialization.encoding/Decoder): com.superiorsoftllc.infantry.plugin.api/UpdateCredentialRef // com.superiorsoftllc.infantry.plugin.api/UpdateCredentialRef.$serializer.deserialize|deserialize(kotlinx.serialization.encoding.Decoder){}[0]
+        final fun serialize(kotlinx.serialization.encoding/Encoder, com.superiorsoftllc.infantry.plugin.api/UpdateCredentialRef) // com.superiorsoftllc.infantry.plugin.api/UpdateCredentialRef.$serializer.serialize|serialize(kotlinx.serialization.encoding.Encoder;com.superiorsoftllc.infantry.plugin.api.UpdateCredentialRef){}[0]
+    }
+
+    final object Companion { // com.superiorsoftllc.infantry.plugin.api/UpdateCredentialRef.Companion|null[0]
+        final fun serializer(): kotlinx.serialization/KSerializer<com.superiorsoftllc.infantry.plugin.api/UpdateCredentialRef> // com.superiorsoftllc.infantry.plugin.api/UpdateCredentialRef.Companion.serializer|serializer(){}[0]
+    }
+}
+
+final class com.superiorsoftllc.infantry.plugin.api/UpdateDeclaration { // com.superiorsoftllc.infantry.plugin.api/UpdateDeclaration|null[0]
+    constructor <init>(com.superiorsoftllc.infantry.plugin.api/UpdateSourceRef) // com.superiorsoftllc.infantry.plugin.api/UpdateDeclaration.<init>|<init>(com.superiorsoftllc.infantry.plugin.api.UpdateSourceRef){}[0]
+
+    final val source // com.superiorsoftllc.infantry.plugin.api/UpdateDeclaration.source|{}source[0]
+        final fun <get-source>(): com.superiorsoftllc.infantry.plugin.api/UpdateSourceRef // com.superiorsoftllc.infantry.plugin.api/UpdateDeclaration.source.<get-source>|<get-source>(){}[0]
+
+    final fun component1(): com.superiorsoftllc.infantry.plugin.api/UpdateSourceRef // com.superiorsoftllc.infantry.plugin.api/UpdateDeclaration.component1|component1(){}[0]
+    final fun copy(com.superiorsoftllc.infantry.plugin.api/UpdateSourceRef = ...): com.superiorsoftllc.infantry.plugin.api/UpdateDeclaration // com.superiorsoftllc.infantry.plugin.api/UpdateDeclaration.copy|copy(com.superiorsoftllc.infantry.plugin.api.UpdateSourceRef){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/UpdateDeclaration.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/UpdateDeclaration.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/UpdateDeclaration.toString|toString(){}[0]
+
+    final object $serializer : kotlinx.serialization.internal/GeneratedSerializer<com.superiorsoftllc.infantry.plugin.api/UpdateDeclaration> { // com.superiorsoftllc.infantry.plugin.api/UpdateDeclaration.$serializer|null[0]
+        final val descriptor // com.superiorsoftllc.infantry.plugin.api/UpdateDeclaration.$serializer.descriptor|{}descriptor[0]
+            final fun <get-descriptor>(): kotlinx.serialization.descriptors/SerialDescriptor // com.superiorsoftllc.infantry.plugin.api/UpdateDeclaration.$serializer.descriptor.<get-descriptor>|<get-descriptor>(){}[0]
+
+        final fun childSerializers(): kotlin/Array<kotlinx.serialization/KSerializer<*>> // com.superiorsoftllc.infantry.plugin.api/UpdateDeclaration.$serializer.childSerializers|childSerializers(){}[0]
+        final fun deserialize(kotlinx.serialization.encoding/Decoder): com.superiorsoftllc.infantry.plugin.api/UpdateDeclaration // com.superiorsoftllc.infantry.plugin.api/UpdateDeclaration.$serializer.deserialize|deserialize(kotlinx.serialization.encoding.Decoder){}[0]
+        final fun serialize(kotlinx.serialization.encoding/Encoder, com.superiorsoftllc.infantry.plugin.api/UpdateDeclaration) // com.superiorsoftllc.infantry.plugin.api/UpdateDeclaration.$serializer.serialize|serialize(kotlinx.serialization.encoding.Encoder;com.superiorsoftllc.infantry.plugin.api.UpdateDeclaration){}[0]
+    }
+
+    final object Companion { // com.superiorsoftllc.infantry.plugin.api/UpdateDeclaration.Companion|null[0]
+        final fun serializer(): kotlinx.serialization/KSerializer<com.superiorsoftllc.infantry.plugin.api/UpdateDeclaration> // com.superiorsoftllc.infantry.plugin.api/UpdateDeclaration.Companion.serializer|serializer(){}[0]
+    }
+}
+
+final class com.superiorsoftllc.infantry.plugin.api/UpdateSourceRef { // com.superiorsoftllc.infantry.plugin.api/UpdateSourceRef|null[0]
+    constructor <init>(kotlin/String, kotlin/String = ..., kotlin/String? = ..., com.superiorsoftllc.infantry.plugin.api/UpdateCredentialRef? = ...) // com.superiorsoftllc.infantry.plugin.api/UpdateSourceRef.<init>|<init>(kotlin.String;kotlin.String;kotlin.String?;com.superiorsoftllc.infantry.plugin.api.UpdateCredentialRef?){}[0]
+
+    final val channel // com.superiorsoftllc.infantry.plugin.api/UpdateSourceRef.channel|{}channel[0]
+        final fun <get-channel>(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/UpdateSourceRef.channel.<get-channel>|<get-channel>(){}[0]
+    final val credential // com.superiorsoftllc.infantry.plugin.api/UpdateSourceRef.credential|{}credential[0]
+        final fun <get-credential>(): com.superiorsoftllc.infantry.plugin.api/UpdateCredentialRef? // com.superiorsoftllc.infantry.plugin.api/UpdateSourceRef.credential.<get-credential>|<get-credential>(){}[0]
+    final val location // com.superiorsoftllc.infantry.plugin.api/UpdateSourceRef.location|{}location[0]
+        final fun <get-location>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/UpdateSourceRef.location.<get-location>|<get-location>(){}[0]
+    final val type // com.superiorsoftllc.infantry.plugin.api/UpdateSourceRef.type|{}type[0]
+        final fun <get-type>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/UpdateSourceRef.type.<get-type>|<get-type>(){}[0]
+
+    final fun component1(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/UpdateSourceRef.component1|component1(){}[0]
+    final fun component2(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/UpdateSourceRef.component2|component2(){}[0]
+    final fun component3(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/UpdateSourceRef.component3|component3(){}[0]
+    final fun component4(): com.superiorsoftllc.infantry.plugin.api/UpdateCredentialRef? // com.superiorsoftllc.infantry.plugin.api/UpdateSourceRef.component4|component4(){}[0]
+    final fun copy(kotlin/String = ..., kotlin/String = ..., kotlin/String? = ..., com.superiorsoftllc.infantry.plugin.api/UpdateCredentialRef? = ...): com.superiorsoftllc.infantry.plugin.api/UpdateSourceRef // com.superiorsoftllc.infantry.plugin.api/UpdateSourceRef.copy|copy(kotlin.String;kotlin.String;kotlin.String?;com.superiorsoftllc.infantry.plugin.api.UpdateCredentialRef?){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/UpdateSourceRef.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/UpdateSourceRef.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/UpdateSourceRef.toString|toString(){}[0]
+
+    final object $serializer : kotlinx.serialization.internal/GeneratedSerializer<com.superiorsoftllc.infantry.plugin.api/UpdateSourceRef> { // com.superiorsoftllc.infantry.plugin.api/UpdateSourceRef.$serializer|null[0]
+        final val descriptor // com.superiorsoftllc.infantry.plugin.api/UpdateSourceRef.$serializer.descriptor|{}descriptor[0]
+            final fun <get-descriptor>(): kotlinx.serialization.descriptors/SerialDescriptor // com.superiorsoftllc.infantry.plugin.api/UpdateSourceRef.$serializer.descriptor.<get-descriptor>|<get-descriptor>(){}[0]
+
+        final fun childSerializers(): kotlin/Array<kotlinx.serialization/KSerializer<*>> // com.superiorsoftllc.infantry.plugin.api/UpdateSourceRef.$serializer.childSerializers|childSerializers(){}[0]
+        final fun deserialize(kotlinx.serialization.encoding/Decoder): com.superiorsoftllc.infantry.plugin.api/UpdateSourceRef // com.superiorsoftllc.infantry.plugin.api/UpdateSourceRef.$serializer.deserialize|deserialize(kotlinx.serialization.encoding.Decoder){}[0]
+        final fun serialize(kotlinx.serialization.encoding/Encoder, com.superiorsoftllc.infantry.plugin.api/UpdateSourceRef) // com.superiorsoftllc.infantry.plugin.api/UpdateSourceRef.$serializer.serialize|serialize(kotlinx.serialization.encoding.Encoder;com.superiorsoftllc.infantry.plugin.api.UpdateSourceRef){}[0]
+    }
+
+    final object Companion { // com.superiorsoftllc.infantry.plugin.api/UpdateSourceRef.Companion|null[0]
+        final fun serializer(): kotlinx.serialization/KSerializer<com.superiorsoftllc.infantry.plugin.api/UpdateSourceRef> // com.superiorsoftllc.infantry.plugin.api/UpdateSourceRef.Companion.serializer|serializer(){}[0]
+    }
+}
+
+final class com.superiorsoftllc.infantry.plugin.api/UpdateView { // com.superiorsoftllc.infantry.plugin.api/UpdateView|null[0]
+    constructor <init>(kotlin/String, kotlin/String, kotlin/String, kotlin.collections/List<kotlin/String>) // com.superiorsoftllc.infantry.plugin.api/UpdateView.<init>|<init>(kotlin.String;kotlin.String;kotlin.String;kotlin.collections.List<kotlin.String>){}[0]
+
+    final val from // com.superiorsoftllc.infantry.plugin.api/UpdateView.from|{}from[0]
+        final fun <get-from>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/UpdateView.from.<get-from>|<get-from>(){}[0]
+    final val id // com.superiorsoftllc.infantry.plugin.api/UpdateView.id|{}id[0]
+        final fun <get-id>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/UpdateView.id.<get-id>|<get-id>(){}[0]
+    final val newGrants // com.superiorsoftllc.infantry.plugin.api/UpdateView.newGrants|{}newGrants[0]
+        final fun <get-newGrants>(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/UpdateView.newGrants.<get-newGrants>|<get-newGrants>(){}[0]
+    final val to // com.superiorsoftllc.infantry.plugin.api/UpdateView.to|{}to[0]
+        final fun <get-to>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/UpdateView.to.<get-to>|<get-to>(){}[0]
+
+    final fun component1(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/UpdateView.component1|component1(){}[0]
+    final fun component2(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/UpdateView.component2|component2(){}[0]
+    final fun component3(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/UpdateView.component3|component3(){}[0]
+    final fun component4(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/UpdateView.component4|component4(){}[0]
+    final fun copy(kotlin/String = ..., kotlin/String = ..., kotlin/String = ..., kotlin.collections/List<kotlin/String> = ...): com.superiorsoftllc.infantry.plugin.api/UpdateView // com.superiorsoftllc.infantry.plugin.api/UpdateView.copy|copy(kotlin.String;kotlin.String;kotlin.String;kotlin.collections.List<kotlin.String>){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/UpdateView.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/UpdateView.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/UpdateView.toString|toString(){}[0]
 }
 
 final class com.superiorsoftllc.infantry.plugin.host/AcceptedPreference { // com.superiorsoftllc.infantry.plugin.host/AcceptedPreference|null[0]
@@ -2566,6 +3032,8 @@ final object com.superiorsoftllc.infantry.plugin.api/ConfigFieldTypes { // com.s
         final fun <get-CLASSES>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/ConfigFieldTypes.CLASSES.<get-CLASSES>|<get-CLASSES>(){}[0]
     final const val COLOR // com.superiorsoftllc.infantry.plugin.api/ConfigFieldTypes.COLOR|{}COLOR[0]
         final fun <get-COLOR>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/ConfigFieldTypes.COLOR.<get-COLOR>|<get-COLOR>(){}[0]
+    final const val FILE // com.superiorsoftllc.infantry.plugin.api/ConfigFieldTypes.FILE|{}FILE[0]
+        final fun <get-FILE>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/ConfigFieldTypes.FILE.<get-FILE>|<get-FILE>(){}[0]
     final const val GROUP // com.superiorsoftllc.infantry.plugin.api/ConfigFieldTypes.GROUP|{}GROUP[0]
         final fun <get-GROUP>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/ConfigFieldTypes.GROUP.<get-GROUP>|<get-GROUP>(){}[0]
     final const val IMPLEMENTATION // com.superiorsoftllc.infantry.plugin.api/ConfigFieldTypes.IMPLEMENTATION|{}IMPLEMENTATION[0]
@@ -2576,6 +3044,8 @@ final object com.superiorsoftllc.infantry.plugin.api/ConfigFieldTypes { // com.s
         final fun <get-MULTI_SELECT>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/ConfigFieldTypes.MULTI_SELECT.<get-MULTI_SELECT>|<get-MULTI_SELECT>(){}[0]
     final const val NUMBER // com.superiorsoftllc.infantry.plugin.api/ConfigFieldTypes.NUMBER|{}NUMBER[0]
         final fun <get-NUMBER>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/ConfigFieldTypes.NUMBER.<get-NUMBER>|<get-NUMBER>(){}[0]
+    final const val PATH // com.superiorsoftllc.infantry.plugin.api/ConfigFieldTypes.PATH|{}PATH[0]
+        final fun <get-PATH>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/ConfigFieldTypes.PATH.<get-PATH>|<get-PATH>(){}[0]
     final const val RADIO // com.superiorsoftllc.infantry.plugin.api/ConfigFieldTypes.RADIO|{}RADIO[0]
         final fun <get-RADIO>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/ConfigFieldTypes.RADIO.<get-RADIO>|<get-RADIO>(){}[0]
     final const val SELECT // com.superiorsoftllc.infantry.plugin.api/ConfigFieldTypes.SELECT|{}SELECT[0]
@@ -2634,6 +3104,8 @@ final object com.superiorsoftllc.infantry.plugin.api/PolicyRefusal { // com.supe
 }
 
 final object com.superiorsoftllc.infantry.plugin.api/Services { // com.superiorsoftllc.infantry.plugin.api/Services|null[0]
+    final val AUDIO_IN // com.superiorsoftllc.infantry.plugin.api/Services.AUDIO_IN|{}AUDIO_IN[0]
+        final fun <get-AUDIO_IN>(): com.superiorsoftllc.infantry.plugin.api/ServiceKey<com.superiorsoftllc.infantry.plugin.api/AudioCapture> // com.superiorsoftllc.infantry.plugin.api/Services.AUDIO_IN.<get-AUDIO_IN>|<get-AUDIO_IN>(){}[0]
     final val DAEMON // com.superiorsoftllc.infantry.plugin.api/Services.DAEMON|{}DAEMON[0]
         final fun <get-DAEMON>(): com.superiorsoftllc.infantry.plugin.api/ServiceKey<com.superiorsoftllc.infantry.plugin.api/DaemonAccess> // com.superiorsoftllc.infantry.plugin.api/Services.DAEMON.<get-DAEMON>|<get-DAEMON>(){}[0]
     final val ENDPOINTS // com.superiorsoftllc.infantry.plugin.api/Services.ENDPOINTS|{}ENDPOINTS[0]
@@ -2642,8 +3114,12 @@ final object com.superiorsoftllc.infantry.plugin.api/Services { // com.superiors
         final fun <get-EVENTS>(): com.superiorsoftllc.infantry.plugin.api/ServiceKey<com.superiorsoftllc.infantry.plugin.api/EventBus> // com.superiorsoftllc.infantry.plugin.api/Services.EVENTS.<get-EVENTS>|<get-EVENTS>(){}[0]
     final val NOTIFICATIONS // com.superiorsoftllc.infantry.plugin.api/Services.NOTIFICATIONS|{}NOTIFICATIONS[0]
         final fun <get-NOTIFICATIONS>(): com.superiorsoftllc.infantry.plugin.api/ServiceKey<com.superiorsoftllc.infantry.plugin.api/Notifications> // com.superiorsoftllc.infantry.plugin.api/Services.NOTIFICATIONS.<get-NOTIFICATIONS>|<get-NOTIFICATIONS>(){}[0]
+    final val SENSITIVE // com.superiorsoftllc.infantry.plugin.api/Services.SENSITIVE|{}SENSITIVE[0]
+        final fun <get-SENSITIVE>(): kotlin.collections/Set<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/Services.SENSITIVE.<get-SENSITIVE>|<get-SENSITIVE>(){}[0]
     final val SETTINGS // com.superiorsoftllc.infantry.plugin.api/Services.SETTINGS|{}SETTINGS[0]
         final fun <get-SETTINGS>(): com.superiorsoftllc.infantry.plugin.api/ServiceKey<com.superiorsoftllc.infantry.plugin.api/PluginSettings> // com.superiorsoftllc.infantry.plugin.api/Services.SETTINGS.<get-SETTINGS>|<get-SETTINGS>(){}[0]
+    final val SPEECH_OUT // com.superiorsoftllc.infantry.plugin.api/Services.SPEECH_OUT|{}SPEECH_OUT[0]
+        final fun <get-SPEECH_OUT>(): com.superiorsoftllc.infantry.plugin.api/ServiceKey<com.superiorsoftllc.infantry.plugin.api/SpeechOutput> // com.superiorsoftllc.infantry.plugin.api/Services.SPEECH_OUT.<get-SPEECH_OUT>|<get-SPEECH_OUT>(){}[0]
     final val STORAGE // com.superiorsoftllc.infantry.plugin.api/Services.STORAGE|{}STORAGE[0]
         final fun <get-STORAGE>(): com.superiorsoftllc.infantry.plugin.api/ServiceKey<com.superiorsoftllc.infantry.plugin.api/PluginStorage> // com.superiorsoftllc.infantry.plugin.api/Services.STORAGE.<get-STORAGE>|<get-STORAGE>(){}[0]
 }
@@ -2674,6 +3150,7 @@ final object com.superiorsoftllc.infantry.plugin.host/RouteGate { // com.superio
 
 final object com.superiorsoftllc.infantry.plugin.host/ServiceGate { // com.superiorsoftllc.infantry.plugin.host/ServiceGate|null[0]
     final fun refusal(kotlin/String, com.superiorsoftllc.infantry.plugin.api/ModuleManifest, com.superiorsoftllc.infantry.plugin.api/Tier, com.superiorsoftllc.infantry.plugin.api/ModulesConfig): kotlin/String? // com.superiorsoftllc.infantry.plugin.host/ServiceGate.refusal|refusal(kotlin.String;com.superiorsoftllc.infantry.plugin.api.ModuleManifest;com.superiorsoftllc.infantry.plugin.api.Tier;com.superiorsoftllc.infantry.plugin.api.ModulesConfig){}[0]
+    final fun sensitive(kotlin/String): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.host/ServiceGate.sensitive|sensitive(kotlin.String){}[0]
 }
 
 final const val com.superiorsoftllc.infantry.plugin.api/PLUGIN_API_REVISION // com.superiorsoftllc.infantry.plugin.api/PLUGIN_API_REVISION|{}PLUGIN_API_REVISION[0]

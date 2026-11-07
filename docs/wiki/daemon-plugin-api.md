@@ -153,6 +153,12 @@ Declare `{ "type": "my_frame", "action": "my.read", "kind": "read" }` in `daemon
 answer. `ownerOnly` frames are refused to a community module. `api.frames.table` registers a typed family (used by
 `Infantry_Board`).
 
+RUNNER-POOL-7 (1.46.0): `side` is `runner` (the default) or `orchestrator`. Set it on one tool or frame declaration, or
+once for the whole daemon half as `daemon.side` (`"side": "orchestrator"` next to `apiAtLeast`). An `orchestrator` frame
+or tool reads or writes orchestrator state (the board, knowledge, roles, scripts): when a worker runs on a remote runner
+(docs/RUNNER-POOL.md 2.3), that runner forwards it over the link and the orchestrator answers it as that agent. A daemon
+that is its own orchestrator never reads the tag.
+
 ### Hooks
 
 Register with `api.hooks.<kind>(...)`; list the kinds in `daemon.hooks`; a community module needs `daemon.hook.<kind>`.
@@ -467,6 +473,9 @@ Generated for the `infantryDaemonApi` guard `SdkTypesDocumentedGuardTest`: every
 - `OrchestratorReply`: The error model: an answer, or "the orchestrator could not be reached / did not understand", never an exception.
 - `RunnerLink`: The ORCHESTRATOR -> RUNNER interface: the only way orchestrator-side code reaches sessions. RUNNER-POOL-2: the runner command contract (`CONTRACT_VERSION` 1.0.0): `hello`, `startSession`, `stopSession`, `deliverMail`, `health`, each an `OrchestratorReply`; an operation a binding does not offer answers `Unavailable`.
 - `TicketRef`: The session and project a ticket is bound to.
+- `FrameSide`: RUNNER-POOL-7 (1.46.0): the frame table's generic side attribute, `runner` (default) or `orchestrator`; `of(side)` reads anything else as `runner`.
+- `AgentIdentity`: RUNNER-POOL-7: the agent a forwarded frame speaks for: the runner (named by the link, never the frame) and its session id.
+- `ForwardedFrame`: RUNNER-POOL-7: one frame a remote runner forwards for its agent, and the orchestrator's answer (`OrchestratorLink.forwardFrame`, `LocalOrchestratorServices.forwardFrame`; link contract 1.2.0).
 
 ### `RunnerPool.kt`
 
@@ -504,7 +513,7 @@ RUNNER-POOL-6a (DaemonApi 1.44.0, additive), package `com.superiorsoftllc.infant
 
 RUNNER-POOL-6 (DaemonApi 1.45.0, additive), package `com.superiorsoftllc.infantry.daemon.api.runners`.
 
-- `RunnerLinkWire`: The link frames (contract 1.1.0) and their JSON bodies: hello (harnesses and sign-in yes/no, accepted projects, capacity), health, start, stop, deliver, events, transcript. A runner binding encodes them; core's runner side answers them.
+- `RunnerLinkWire`: The link frames (contract 1.2.0) and their JSON bodies: hello (harnesses and sign-in yes/no, accepted projects, capacity), health, start, stop, deliver, events, transcript; RUNNER-POOL-7 (1.46.0): `forward_pull` / `forward_answer`, the orchestrator taking the frames a runner holds for it and answering them. A runner binding encodes them; core's runner side answers them.
 - `RunnerLinks`: The orchestrator side's paired runners, offered as `api.runnerLinks`: `paired()` and `call(runner, type, data)` (a `LinkFailure` when the runner cannot be reached).
 - `NoRunnerLinks`: No paired runner (a community plugin, or a daemon without the link service).
 

@@ -841,6 +841,27 @@ object LimitRegistry {
         min = 1, zeroIsUnlimited = false,
     )
 
+    /** RUNNER-POOL-7: how long one forward pull of the orchestrator waits on the runner for frames its workers sent. */
+    val RUNNERS_FORWARD_WAIT_SEC = LimitDef(
+        "limits.runners.forwardWaitSec", 10, "seconds",
+        "How long the orchestrator's pull of a runner's forwarded agent frames (board, mail, knowledge calls of remote workers) waits for one; capped below limits.runners.linkCallSeconds. Pulls run only while the runner has a session of this orchestrator. Longer = fewer link calls when idle.",
+        min = 1, zeroIsUnlimited = false,
+    )
+
+    /** RUNNER-POOL-7: how long a remote worker's forwarded frame waits for its orchestrator's answer. */
+    val RUNNERS_FORWARD_TIMEOUT_SEC = LimitDef(
+        "limits.runners.forwardTimeoutSec", 300, "seconds",
+        "How long a runner holds an agent frame it forwards to its orchestrator (a remote worker's ticket, comment, mail or script call) before the call fails as unavailable.",
+        min = 1, zeroIsUnlimited = false,
+    )
+
+    /** RUNNER-POOL-7: how many forwarded frames a runner keeps waiting at once. */
+    val RUNNERS_FORWARD_PENDING_MAX = LimitDef(
+        "limits.runners.forwardPendingMax", 64, "frames",
+        "How many agent frames a runner holds for its orchestrator at once; one more is refused at once. Fewer = less memory.",
+        min = 1, zeroIsUnlimited = false,
+    )
+
     val ALL: List<LimitDef> = listOf(
         SESSION_CONTEXT_CAP_TOKENS,
         MAIL_INJECT_MAX_CHARS, MAIL_INJECT_TOTAL_CHARS,
@@ -870,7 +891,7 @@ object LimitRegistry {
         HEALTH_DB_TIMEOUT_SECONDS, HEALTH_WATCHDOG_FAILURES, HEALTH_WATCHDOG_INTERVAL_SECONDS, HEALTH_WATCHDOG_TIMEOUT_SECONDS,
         MAIL_WAKE_DEBOUNCE_SECONDS, MAIL_COALESCE_MAX, WATCH_STALL_NUDGES, SCRIPT_RUN_LOG_MAX,
         RUNNERS_PAIR_CODE_MIN, RUNNERS_PAIR_ATTEMPTS_PER_HOUR, RUNNERS_CREDENTIAL_ROTATE_DAYS, RUNNERS_LINK_PORT, RUNNERS_AUDIT_SHOWN, RUNNERS_LINK_CALL_SECONDS, RUNNERS_LINK_CHECK_SECONDS,
-        RUNNERS_EVENTS_KEPT,
+        RUNNERS_EVENTS_KEPT, RUNNERS_FORWARD_WAIT_SEC, RUNNERS_FORWARD_TIMEOUT_SEC, RUNNERS_FORWARD_PENDING_MAX,
     )
 
     /** A minutes limit as milliseconds; 0 on an unlimited-capable one = [Long.MAX_VALUE] (never reached). */
