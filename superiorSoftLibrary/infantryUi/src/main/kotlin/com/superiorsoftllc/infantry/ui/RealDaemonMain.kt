@@ -99,9 +99,18 @@ fun runRealDaemonUi(
                 // UPDATER-DEFAULT-1: back at the window after updater.checkIntervalHours (default 24) = check again, silently.
                 InfantryWindow(onCloseRequest = ::exitApplication, onFocusGained = { updater?.checkIfDue() }) {
                     var shellUrl by remember { mutableStateOf(if (remote != null) "" else null) }
-                    LaunchedEffect(Unit) { if (shellUrl == null) shellUrl = withContext(Dispatchers.IO) { startLocal() } }
+                    var refusal by remember { mutableStateOf<String?>(null) }
+                    // FIRSTRUN-ERR-1: a refused start shows its reason in the window instead of ending the app silently.
+                    LaunchedEffect(Unit) {
+                        if (shellUrl == null) {
+                            val url = withContext(Dispatchers.IO) { local?.start()?.url }
+                            if (url != null) shellUrl = url
+                            else refusal = (local as? InProcessDaemon)?.refusal ?: "This build has no daemon and no server is configured."
+                        }
+                    }
                     androidx.compose.runtime.CompositionLocalProvider(LocalRunConsole provides consoles) {
-                        SplashHost {
+                        if (refusal != null) DaemonRefusalCard(refusal!!, logsDir?.path, ::exitApplication)
+                        else SplashHost {
                             shellUrl?.let { url ->
                                 InfantryShell(PinnedDaemonHost(defaultPlatformHost(), url, logsDir, updater, servers = servers, remote = remote, local = local, activeFile = activeServer, pluginsDir = File(stateDir(), "plugins")))
                             }
@@ -126,6 +135,10 @@ internal class InProcessDaemon(
     private var daemon: InfantryDaemon? = null
     private var wsUrl: String? = null
 
+    /** FIRSTRUN-ERR-1: why the last [start] was refused (short token, port in use), for the window to show. */
+    @Volatile var refusal: String? = null
+        private set
+
     @Synchronized
     override fun start(): LocalEndpoint? {
         wsUrl?.let { return LocalEndpoint(it, RemoteAccess.clientToken()) }
@@ -135,9 +148,11 @@ internal class InProcessDaemon(
             if (stateLock != null) InfantryDaemon.fromEnv(WindowActivation.route) else InfantryDaemon.fromEnv()
         } catch (refused: AccessConfigurationException) {
             System.err.println("[infantry-ui] refusing to start the daemon: ${refused.message}")
+            refusal = refused.message
             return null
         } catch (refused: PortInUseException) {
             System.err.println("[infantry-ui] refusing to start the daemon: ${refused.message}")
+            refusal = refused.message
             return null
         }
         val url = RealDaemonLaunch.start(started)
