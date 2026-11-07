@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.text.selection.DisableSelection
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -37,6 +38,9 @@ const val SLOT_EMPTY_TAG = "slot-empty"
  * height. With none loaded, [empty] draws (a generic notice by default). A host wraps an existing section by moving its
  * drawing into a module that contributes it as the slot's default section.
  *
+ * READALOUD-HIERARCHY-1: plugin sections draw inside [DisableSelection], so a plugin's Text never registers with the host's
+ * SelectionContainer (a registered selectable in another hierarchy made selection start throw "layouts are not part of the same hierarchy").
+ *
  * [state] and [controller] are the window's; [args] reach the sections through [LocalSlotArgs]; [context] is the host's own
  * [TabContext] when it has one.
  */
@@ -58,7 +62,7 @@ fun ChildSlot(
     )
     Column(modifier) {
         if (sections.isEmpty()) empty()
-        else CompositionLocalProvider(LocalSlotArgs provides args) { sections.forEach { PanelSection(factory, it, ctx) } }
+        else CompositionLocalProvider(LocalSlotArgs provides args) { DisableSelection { sections.forEach { PanelSection(factory, it, ctx) } } }
     }
 }
 
@@ -84,7 +88,7 @@ fun ChildSlotRow(
         config = { factory.resolvedConfig.values(it) },
     )
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        CompositionLocalProvider(LocalSlotArgs provides args) { sections.forEach { PanelSectionBody(factory, it, ctx, Modifier.testTag(it.testTag), badge = false) } }
+        CompositionLocalProvider(LocalSlotArgs provides args) { DisableSelection { sections.forEach { PanelSectionBody(factory, it, ctx, Modifier.testTag(it.testTag), badge = false) } } }
     }
 }
 
