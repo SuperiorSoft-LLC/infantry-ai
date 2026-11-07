@@ -25,7 +25,7 @@ class FetchBridgeTest {
         createContext("/echo") { ex ->
             val auth = ex.requestHeaders.getFirst("Authorization").orEmpty()
             val body = ex.requestBody.readBytes().decodeToString()
-            reply(ex, "auth=$auth method=${ex.requestMethod} body=$body")
+            reply(ex, "auth=$auth method=${ex.requestMethod} body=$body q=${ex.requestURI.rawQuery.orEmpty()}")
         }
         start()
     }
@@ -87,11 +87,26 @@ class FetchBridgeTest {
     @Test fun secretHeaderIsSentButNeverReturnedOrLogged() {
         val r = run("""{"url":"$base/echo","method":"POST","body":"hi","secretHeaders":{"Authorization":"tok"}}""")
         val body = r["body"]!!.jsonPrimitive.content
-        assertEquals("auth=*** method=POST body=hi", body)
+        assertEquals("auth=*** method=POST body=hi q=", body)
         assertTrue(logs.none { it.contains("s3cr3t") })
     }
 
     @Test fun unknownSecretFails() {
         assertFailsWith<IllegalArgumentException> { run("""{"url":"$base/echo","secretHeaders":{"X":"nope"}}""") }
+    }
+
+    @Test fun everyMethodIsSent() {
+        for (m in listOf("PUT", "PATCH", "DELETE")) {
+            val b = run("""{"url":"$base/echo","method":"$m","body":"x"}""")["body"]!!.jsonPrimitive.content
+            assertEquals("auth= method=$m body=x q=", b)
+        }
+        assertEquals("", run("""{"url":"$base/echo","method":"HEAD"}""")["body"]!!.jsonPrimitive.content)
+        assertEquals(200, run("""{"url":"$base/echo","method":"head"}""")["status"]!!.jsonPrimitive.content.toInt())
+        assertTrue(assertFailsWith<IllegalArgumentException> { run("""{"url":"$base/echo","method":"TRACE"}""") }.message!!.contains("PATCH"))
+    }
+
+    @Test fun queryIsEncodedAndAppended() {
+        val b = run("""{"url":"$base/echo?a=1","query":{"q":"a b&c","t":["x","y"],"n":2}}""")["body"]!!.jsonPrimitive.content
+        assertTrue(b.endsWith("q=a=1&q=a+b%26c&t=x&t=y&n=2"), b)
     }
 }
