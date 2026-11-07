@@ -6,8 +6,105 @@
   "description": "Optional: a live box in the session view that shows the output of a watched command (gradle, tests, builds) while it runs. Off until you enable it; costs nothing while off or closed.",
   "tier": "official",
   "defaultEnabled": false,
+  "routes": [
+    "POST /plugins/Infantry_JobFeed/jobs",
+    "POST /plugins/Infantry_JobFeed/read"
+  ],
   "sequence": [],
+  "entry": "com.superiorsoftllc.infantry.plugins.official.jobfeed.JobFeedPlugin",
+  "jar": "build/libs/Infantry_JobFeed.jar",
+  "buildOrder": 215,
+  "panels": [
+    {
+      "id": "infantry.jobfeed",
+      "panel": "chat.jobfeed"
+    }
+  ],
   "config": [
+    {
+      "node": "infantry.jobfeed",
+      "tab": "Plugins",
+      "group": "Job feed",
+      "order": 931,
+      "title": "Job feed",
+      "applies": "Applies to: the box under the chat that shows a watched command's live output. Defaults suit a weak PC.",
+      "keywords": [
+        "job",
+        "feed",
+        "output",
+        "live",
+        "log",
+        "power",
+        "low"
+      ],
+      "fields": [
+        {
+          "key": "jobfeed.maxUpdatesPerSecond",
+          "type": "number",
+          "label": "Updates per second while the box is open",
+          "default": 4,
+          "min": 1,
+          "max": 20,
+          "step": 1,
+          "scope": "device",
+          "order": 1
+        },
+        {
+          "key": "jobfeed.maxLines",
+          "type": "number",
+          "label": "Lines kept in the box",
+          "default": 300,
+          "min": 10,
+          "max": 5000,
+          "step": 10,
+          "scope": "device",
+          "order": 2
+        },
+        {
+          "key": "jobfeed.lowPower",
+          "type": "checkbox",
+          "label": "Low power (1 update a second, 100 lines)",
+          "default": false,
+          "scope": "device",
+          "order": 3
+        },
+        {
+          "key": "jobfeed.autoCollapseUnfocused",
+          "type": "checkbox",
+          "label": "Stop reading while the window is not focused",
+          "default": true,
+          "scope": "device",
+          "order": 4
+        },
+        {
+          "key": "jobfeed.openByDefault",
+          "type": "checkbox",
+          "label": "Open the box when a job starts",
+          "default": false,
+          "scope": "device",
+          "order": 5
+        },
+        {
+          "key": "jobfeed.failureMarkers",
+          "type": "text",
+          "label": "Highlight lines containing (separate with |)",
+          "default": "FAILED|error:|Exception|BUILD FAILED|FAILURE",
+          "scope": "device",
+          "order": 6
+        },
+        {
+          "key": "jobfeed.quietNoticeSeconds",
+          "type": "number",
+          "label": "Quiet notice after this many seconds without output (0 = off)",
+          "default": 300,
+          "min": 0,
+          "max": 86400,
+          "step": 30,
+          "scope": "device",
+          "order": 7
+        }
+      ]
+    },
     {
       "node": "infantry.jobfeed.daemon",
       "tab": "Plugins",
@@ -15,22 +112,63 @@
       "order": 930,
       "title": "Job feed: daemon limits",
       "applies": "Applies to: how the daemon answers the Job feed box. The box asks for new lines; the daemon never pushes.",
-      "keywords": ["job", "feed", "output", "live", "log", "gradle", "build"],
+      "keywords": [
+        "job",
+        "feed",
+        "output",
+        "live",
+        "log",
+        "gradle",
+        "build"
+      ],
       "fields": [
-        { "key": "jobfeed.minIntervalMs", "type": "number", "label": "Least milliseconds between two reads of one job (0 = no cap)", "default": 200, "min": 0, "max": 60000, "step": 50, "scope": "daemon", "order": 1 },
-        { "key": "jobfeed.maxLineChars", "type": "number", "label": "Cut a line after this many characters (0 = never)", "default": 300, "min": 0, "max": 100000, "step": 50, "scope": "daemon", "order": 2 },
-        { "key": "jobfeed.stripAnsi", "type": "checkbox", "label": "Strip terminal colour codes", "default": true, "scope": "daemon", "order": 3 },
-        { "key": "jobfeed.maxTracked", "type": "number", "label": "Jobs the rate cap remembers", "default": 200, "min": 1, "max": 100000, "step": 10, "scope": "daemon", "order": 4 }
+        {
+          "key": "jobfeed.minIntervalMs",
+          "type": "number",
+          "label": "Least milliseconds between two reads of one job (0 = no cap)",
+          "default": 200,
+          "min": 0,
+          "max": 60000,
+          "step": 50,
+          "scope": "daemon",
+          "order": 1
+        },
+        {
+          "key": "jobfeed.maxLineChars",
+          "type": "number",
+          "label": "Cut a line after this many characters (0 = never)",
+          "default": 300,
+          "min": 0,
+          "max": 100000,
+          "step": 50,
+          "scope": "daemon",
+          "order": 2
+        },
+        {
+          "key": "jobfeed.stripAnsi",
+          "type": "checkbox",
+          "label": "Strip terminal colour codes",
+          "default": true,
+          "scope": "daemon",
+          "order": 3
+        },
+        {
+          "key": "jobfeed.maxTracked",
+          "type": "number",
+          "label": "Jobs the rate cap remembers",
+          "default": 200,
+          "min": 1,
+          "max": 100000,
+          "step": 10,
+          "scope": "daemon",
+          "order": 4
+        }
       ]
     }
   ],
   "daemon": {
     "entry": "com.superiorsoftllc.infantry.plugins.official.jobfeed.daemon.JobFeedDaemonPlugin",
     "jar": "daemon/build/libs/Infantry_JobFeed-daemon.jar",
-    "apiAtLeast": "1.49.0",
-    "frames": [
-      { "type": "jobfeed_jobs", "action": "jobfeed.read", "kind": "read" },
-      { "type": "jobfeed_read", "action": "jobfeed.read", "kind": "read" }
-    ]
+    "apiAtLeast": "1.49.0"
   }
 }

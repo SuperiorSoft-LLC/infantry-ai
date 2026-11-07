@@ -205,8 +205,8 @@ is the plugin's job (the scripting plugin has one, see [Scripting](Scripting.md)
 
 `Sessions.jobs(id)` lists the watched jobs (`infantry bg run`) of a session as `JobInfo` (running ones and the last few that ended, with
 their exit code). `Sessions.jobLog(id, jobId, fromOffset, maxBytes)` is a bounded read of a job's log and answers a `JobLogChunk`: whole
-lines only, `nextOffset` to pass to the next read, `reset` true when the log was cut or replaced. `limits.jobfeed.maxReadBytes` caps one read;
-`limits.jobfeed.remembered` is how many ended jobs stay readable. Nothing runs between reads: a plugin pulls, the daemon keeps no stream.
+lines only, `nextOffset` to pass to the next read, `reset` true when the log was cut or replaced. `limits.jobs.maxReadBytes` caps one read;
+`limits.jobs.remembered` is how many ended jobs stay readable. Nothing runs between reads: a plugin pulls, the daemon keeps no stream.
 
 ### Capabilities (PLUGIN-BRIDGES-1, DaemonApi 1.48.0)
 

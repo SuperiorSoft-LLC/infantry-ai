@@ -4,7 +4,8 @@ package com.superiorsoftllc.infantry.plugins.official.jobfeed.daemon
 
 import com.superiorsoftllc.infantry.daemon.api.DaemonApi
 import com.superiorsoftllc.infantry.daemon.api.DaemonPlugin
-import com.superiorsoftllc.infantry.daemon.api.Frame
+import com.superiorsoftllc.infantry.daemon.api.HttpCall
+import com.superiorsoftllc.infantry.daemon.api.HttpReply
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.Json
@@ -14,15 +15,13 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 
-/** JOBFEED-1: wire types of the Job Feed frames (the UI half mirrors them; nothing else knows them). */
+/** JOBFEED-1: the two POST routes of the Job Feed box (the UI half mirrors them; nothing else knows them). */
 object JobFeedWire {
-    const val JOBS = "jobfeed_jobs"
-    const val JOBS_LIST = "jobfeed_jobs_list"
-    const val READ = "jobfeed_read"
-    const val CHUNK = "jobfeed_chunk"
+    const val JOBS = "jobs"
+    const val READ = "read"
 }
 
-/** JOBFEED-1: answers the Job Feed box's two read frames from [JobFeedService]. Starts nothing: no timer, no thread. */
+/** JOBFEED-1: answers the Job Feed box's two read routes from [JobFeedService]. Starts nothing: no timer, no thread. */
 class JobFeedDaemonPlugin : DaemonPlugin {
     override fun start(api: DaemonApi) {
         val service = JobFeedService(
@@ -32,8 +31,8 @@ class JobFeedDaemonPlugin : DaemonPlugin {
             stripAnsi = { api.config("jobfeed.stripAnsi")?.let { it != "false" } ?: true },
             maxTracked = { api.config("jobfeed.maxTracked")?.toIntOrNull() ?: DEFAULT_MAX_TRACKED },
         )
-        api.frames.handle(JobFeedWire.JOBS) { f: Frame, _ ->
-            val sid = field(f, "sessionId") ?: f.sessionId
+        api.routes.handle("POST", JobFeedWire.JOBS) { f: HttpCall ->
+            val sid = field(f, "sessionId")
             val body = buildJsonObject {
                 put("sessionId", sid.orEmpty())
                 put("jobs", buildJsonArray {
@@ -45,10 +44,10 @@ class JobFeedDaemonPlugin : DaemonPlugin {
                     }
                 })
             }
-            Frame(JobFeedWire.JOBS_LIST, body.toString(), f.sessionId, f.requestId)
+            HttpReply(200, body.toString(), "application/json")
         }
-        api.frames.handle(JobFeedWire.READ) { f: Frame, _ ->
-            val sid = field(f, "sessionId") ?: f.sessionId
+        api.routes.handle("POST", JobFeedWire.READ) { f: HttpCall ->
+            val sid = field(f, "sessionId")
             val job = field(f, "jobId")
             val from = obj(f)?.get("from")?.let { (it as? JsonPrimitive)?.longOrNull } ?: -1L
             val max = obj(f)?.get("maxBytes")?.let { (it as? JsonPrimitive)?.longOrNull }?.toInt() ?: DEFAULT_READ_BYTES
@@ -65,12 +64,12 @@ class JobFeedDaemonPlugin : DaemonPlugin {
                     c.job.exitCode?.let { put("exitCode", it) }
                 } else put("next", from)
             }
-            Frame(JobFeedWire.CHUNK, body.toString(), f.sessionId, f.requestId)
+            HttpReply(200, body.toString(), "application/json")
         }
     }
 
-    private fun obj(f: Frame): JsonObject? = runCatching { Json.parseToJsonElement(f.data) as? JsonObject }.getOrNull()
-    private fun field(f: Frame, k: String): String? = (obj(f)?.get(k) as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
+    private fun obj(f: HttpCall): JsonObject? = runCatching { Json.parseToJsonElement(f.body) as? JsonObject }.getOrNull()
+    private fun field(f: HttpCall, k: String): String? = (obj(f)?.get(k) as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
 
     companion object {
         /** The defaults the module.json fields carry too; here only so a missing config value still behaves. */

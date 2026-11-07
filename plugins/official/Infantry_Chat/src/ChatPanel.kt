@@ -372,6 +372,8 @@ internal fun ChatPanelHost.Transcript(modifier: Modifier) {
                     // CHAT-MINIMIZE-5: Expand and Minimize (or Restore, minimized) float in the feed's bottom-right row, beside its Activity chip.
                     ) + ("floaters" to composerFloaters),
                 )
+                // JOBFEED-1: the slot under the feed; it draws nothing unless a plugin fills it.
+                if (agent != null && !chat.spawnMode) ChildSlotRow(ChatSlots.JOB_FEED, state, controller, Modifier.fillMaxWidth(), args = mapOf("sessionId" to agent.id))
             }
         }
         if (agent != null && !chat.spawnMode) {

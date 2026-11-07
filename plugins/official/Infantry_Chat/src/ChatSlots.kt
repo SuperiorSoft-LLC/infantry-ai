@@ -22,6 +22,8 @@ object ChatSlots {
     const val COMPOSER_ACTIONS = "chat.composer.actions"
     const val MESSAGE_ACTIONS = "chat.message.actions"
     const val MESSAGE_HEADER = "chat.message.header"
+    /** JOBFEED-1: a box under the feed (a whole-width section; draws nothing when no plugin fills it). Argument: `sessionId`. */
+    const val JOB_FEED = "chat.jobfeed"
     const val COMPOSER_INSERT_EVENT = "chat.composer.insert"
     /** The config node Chat's own settings sit on (the centre column it fills). */
     const val CONFIG_NODE = CHAT_FILL_ID
