@@ -58,6 +58,7 @@ class DaemonShutdownTest {
             store = store,
             runner = GatedRunner(),
             context = FakeTicketContext("HANG"),
+            pluginsRoot = TestDaemonPlugins.fullRoot(),
         )
         val stopFailure = AtomicReference<Throwable?>()
         var ticketId = ""

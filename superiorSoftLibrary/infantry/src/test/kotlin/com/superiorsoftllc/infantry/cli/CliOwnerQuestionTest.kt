@@ -37,7 +37,7 @@ class CliOwnerQuestionTest {
     private val dirs = mutableListOf<File>()
 
     private fun launch(stateDir: File = Files.createTempDirectory("infantry-question-cli-test").toFile().also { dirs += it }): DaemonFixture =
-        DaemonFixture.launch(stateDir = stateDir).also {
+        DaemonFixture.launch(stateDir = stateDir, pluginsRoot = com.superiorsoftllc.infantry.daemon.TestDaemonPlugins.root("official/Infantry_Roles", "official/Infantry_Attention", "official/Infantry_Agents", "official/Infantry_Chat")).also {
             fixtures += it
             it.client.await(Envelope.READY)
         }

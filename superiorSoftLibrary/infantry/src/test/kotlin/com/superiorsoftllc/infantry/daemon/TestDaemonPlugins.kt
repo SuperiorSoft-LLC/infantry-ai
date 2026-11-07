@@ -44,12 +44,18 @@ object TestDaemonPlugins {
      * A temp plugins root holding [modules] (repo paths under `plugins/`, e.g. `demo/Demo_Lock`) under [folder] (tier
      * [tier]): each module.json, its `policies/` and its built daemon jar. [modulesJson] is the root's `modules` map.
      */
-    fun root(vararg modules: String, folder: String = "official", tier: String = "official", modulesJson: String = "{}"): File {
+    fun root(vararg modules: String, folder: String = "official", tier: String = "official", modulesJson: String = "{}", officialToo: List<String> = emptyList()): File {
         val root = Files.createTempDirectory("daemon-plugins-root").toFile()
-        File(root, "modules.json").writeText("""{"folders":[{"path":"$folder","tier":"$tier"}],"modules":$modulesJson}""")
+        // CI-TESTS-5: [officialToo] = official modules loaded beside [modules] when those sit in another tier's folder.
+        val extra = if (officialToo.isNotEmpty() && folder != "official") ""","{"path":"official","tier":"official"}""" else ""
+        File(root, "modules.json").writeText("""{"folders":[{"path":"$folder","tier":"$tier"}$extra],"modules":$modulesJson}""")
         for (m in modules) copy(File(repo, "plugins/$m"), File(root, "$folder/${File(m).name}"))
+        for (m in officialToo) copy(File(repo, "plugins/$m"), File(root, "official/${File(m).name}"))
         return root
     }
+
+    /** CI-TESTS-5: the official daemon plugins a daemon test that spawns, mails and reports needs (board, roles, agents, chat, attention, notes). */
+    fun fullRoot(): File = root("official/Infantry_Board", "official/Infantry_Roles", "official/Infantry_Agents", "official/Infantry_Chat", "official/Infantry_Attention", "official/Infantry_Notes").also { boardRoots += it }
 
     /** Copies module [src] to [dst]: module.json, `policies/`, and the jars its `daemon.jar` / `harness.jar` name (which must be built). */
     fun copy(src: File, dst: File) {

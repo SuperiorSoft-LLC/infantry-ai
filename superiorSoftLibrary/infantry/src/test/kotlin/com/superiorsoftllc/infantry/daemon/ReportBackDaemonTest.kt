@@ -264,7 +264,7 @@ class ReportBackDaemonTest {
 
     private fun withDaemon(exitCodes: List<Int> = emptyList(), block: (DaemonFixture, HeldRunner) -> Unit) {
         val runner = HeldRunner(exitCodes)
-        val fixture = DaemonFixture.launch(StubScript.default(), runner = runner)
+        val fixture = DaemonFixture.launch(StubScript.default(), runner = runner, pluginsRoot = TestDaemonPlugins.fullRoot())
         try {
             block(fixture, runner)
         } finally {

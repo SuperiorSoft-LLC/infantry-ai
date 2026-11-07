@@ -21,7 +21,7 @@ class CliDecisionTest {
     private val fixtures = mutableListOf<DaemonFixture>()
 
     private fun launch(): DaemonFixture =
-        DaemonFixture.launch(stateDir = Files.createTempDirectory("infantry-decision-cli-test").toFile())
+        DaemonFixture.launch(stateDir = Files.createTempDirectory("infantry-decision-cli-test").toFile(), pluginsRoot = com.superiorsoftllc.infantry.daemon.TestDaemonPlugins.root("official/Infantry_Roles", "official/Infantry_Notes"))
             .also {
                 fixtures += it
                 it.client.await(Envelope.READY)
