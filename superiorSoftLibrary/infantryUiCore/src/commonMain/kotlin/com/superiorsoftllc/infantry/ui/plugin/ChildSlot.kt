@@ -84,7 +84,7 @@ fun ChildSlotRow(
         config = { factory.resolvedConfig.values(it) },
     )
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        CompositionLocalProvider(LocalSlotArgs provides args) { sections.forEach { PanelSectionBody(factory, it, ctx, Modifier.testTag(it.testTag)) } }
+        CompositionLocalProvider(LocalSlotArgs provides args) { sections.forEach { PanelSectionBody(factory, it, ctx, Modifier.testTag(it.testTag), badge = false) } }
     }
 }
 

@@ -14,11 +14,14 @@ import com.superiorsoftllc.infantry.ui.model.insertIntoPrompt
  *    `LocalSlotArgs`.
  *  - [MESSAGE_ACTIONS]: per-message actions (shown on hover on desktop/web, on long-press on Android). A section reads
  *    [MessageArgs] from `LocalSlotArgs`. The feed (the `chat.feed` child) draws it on each message row.
+ *  - [MESSAGE_HEADER]: small icons in each chat card's header row, left of the timestamp, on every card kind. A section reads
+ *    [MessageArgs] (plus `kind`) from `LocalSlotArgs`; each icon should carry a tooltip.
  *  - [COMPOSER_INSERT_EVENT]: a plugin publishes it to put text into a draft ([ComposerInsert]).
  */
 object ChatSlots {
     const val COMPOSER_ACTIONS = "chat.composer.actions"
     const val MESSAGE_ACTIONS = "chat.message.actions"
+    const val MESSAGE_HEADER = "chat.message.header"
     const val COMPOSER_INSERT_EVENT = "chat.composer.insert"
     /** The config node Chat's own settings sit on (the centre column it fills). */
     const val CONFIG_NODE = CHAT_FILL_ID

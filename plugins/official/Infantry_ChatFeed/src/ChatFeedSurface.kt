@@ -735,6 +735,7 @@ fun CommsCard(style: CommsCardStyle, at: Long, trailing: (@Composable () -> Unit
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f).testTag(CARD_TITLE_TAG),
             )
+            CardHeaderSlot()
             // CHAT-SENDING-1: [trailing] (a pending send's state marker) takes the time's place.
             if (trailing != null) trailing()
             else if (style.showTime) {
@@ -777,6 +778,7 @@ fun ContributionRow(item: TimelineItem) {
             Text(if (level == NOTE_LEVEL_WARN) "⚠" else "⚙", color = tint, fontSize = 13.sp, modifier = Modifier.testTag(CONTRIBUTION_MARK_TAG))
             Spacer(Modifier.width(8.dp))
             Text(item.text.ifBlank { item.label }, color = tint, fontFamily = Mono, fontSize = 12.sp, modifier = Modifier.weight(1f))
+            CardHeaderSlot()
             // SCRIPT-LINE-TS-1: the run's time, top right, same formatter/font as the message cards.
             if (item.at > 0) Text(
                 activityTimestamp(item.at) + (item.meta["durationMs"]?.toLongOrNull()?.let { " · ${it / 1000}.${(it % 1000) / 100} s" } ?: ""),

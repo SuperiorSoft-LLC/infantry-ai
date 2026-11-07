@@ -19,7 +19,7 @@ val InfantryChat = InfantryModule(
     ModuleManifest(
         name = "Infantry_Chat", version = "1.0.0", author = "Infantry AI",
         description = "The centre column: the agent chat, the centre tab strip and the New agent dialog.",
-        slots = listOf("chat.feed", ChatSlots.COMPOSER_ACTIONS, ChatSlots.MESSAGE_ACTIONS),
+        slots = listOf("chat.feed", ChatSlots.COMPOSER_ACTIONS, ChatSlots.MESSAGE_ACTIONS, ChatSlots.MESSAGE_HEADER),
         events = listOf(ChatSlots.COMPOSER_INSERT_EVENT),
         fills = listOf(FillDeclaration(CHAT_FILL_ID)),
         config = listOf(

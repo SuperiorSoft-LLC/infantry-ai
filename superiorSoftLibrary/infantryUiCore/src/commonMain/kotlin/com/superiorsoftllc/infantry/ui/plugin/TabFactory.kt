@@ -1000,13 +1000,13 @@ internal fun ColumnScope.PanelSection(factory: TabFactory, section: PanelProvide
     PanelSectionBody(factory, section, context, Modifier.fillMaxWidth().testTag(section.testTag).let { if (section.fill) it.weight(1f) else it })
 }
 
-/** CHAT-VOICE-SEAMS-1: one section drawn as its module draws it (tier, badge, services), in a box with [modifier]; any scope. */
+/** CHAT-VOICE-SEAMS-1: one section drawn as its module draws it (tier, badge, services), in a box with [modifier]; any scope. PLUGIN-SLOT-UX-1: [badge] false for inline slot fills (no credit tag). */
 @Composable
-internal fun PanelSectionBody(factory: TabFactory, section: PanelProvider, context: TabContext, modifier: Modifier) {
+internal fun PanelSectionBody(factory: TabFactory, section: PanelProvider, context: TabContext, modifier: Modifier, badge: Boolean = true) {
     val module = factory.panelModuleOf(section.id)
     val own = context.forModule(factory.servicesOf(section.module))
     Box(modifier) {
-        if (module?.tier == Tier.COMMUNITY) {
+        if (badge && module?.tier == Tier.COMMUNITY) {
             Column {
                 CommunityBadge(module.manifest)
                 CompositionLocalProvider(LocalContentColor provides Palette.Text) { ModuleTier(false) { ModuleScope(section.module) { section.content(own) } } }

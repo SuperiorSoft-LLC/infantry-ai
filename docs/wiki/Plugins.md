@@ -108,8 +108,8 @@ A host makes part of a screen replaceable by declaring a slot and drawing it wit
 it with a `panels` entry whose `panel` is the slot name. Another plugin can add a section before or after (lower or
 higher `order`) or replace it with `preferences`.
 
-Infantry_Chat offers three extension points for plugins such as voice input or read-aloud: the slots
-`chat.composer.actions` (buttons beside attach) and `chat.message.actions` (actions on each message), and the event
+Infantry_Chat offers four extension points for plugins such as voice input or read-aloud: the slots
+`chat.composer.actions` (buttons beside attach) and `chat.message.actions` (actions on each message), `chat.message.header` (small icons in each card's header, left of the time) and the event
 `chat.composer.insert` (put text into a draft; sending it needs the Chat setting `chat.allowPluginSend`, off by
 default). Their arguments and payload are listed in [UI plugin API](plugin-api.md#the-slots-and-event-infantry_chat-offers).
 
