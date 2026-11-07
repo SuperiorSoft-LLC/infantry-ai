@@ -699,6 +699,10 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       - id: push
         uses: docker/build-push-action@v6
+        env:
+          # The action uploads a *.dockerbuild build-record artifact by default; the release job's download-artifact
+          # (all artifacts, merge-multiple) cannot extract it and failed the nightly (run 42399768422, twice).
+          DOCKER_BUILD_RECORD_UPLOAD: false
         with:
           context: superiorSoftLibrary/infantry/build/docker
           push: true
