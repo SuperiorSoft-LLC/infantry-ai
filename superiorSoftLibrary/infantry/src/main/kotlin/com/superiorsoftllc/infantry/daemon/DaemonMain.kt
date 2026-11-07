@@ -963,6 +963,7 @@ class InfantryDaemon(
                 ),
             )
             val runnerPool = com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerHub(localRunnerLink)
+            SessionRecordSerializer.runnerOf = runnerPool::runnerOf
             val orchestratorHub = com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorHub(
                 local = com.superiorsoftllc.infantry.daemon.api.orchestrator.LocalOrchestratorLink(
                     runner = localRunnerLink,

@@ -1183,6 +1183,8 @@ data class SessionRecord(
     val watchLabel: String? = null,
     /** CHAT-QUEUE-1 (1.150.0): the messages the daemon holds for this session's next turn, oldest first; empty from an older daemon. */
     val queued: List<QueuedTurnView> = emptyList(),
+    /** RUNNER-POOL-4: the runner this session lives on (docs/RUNNER-POOL.md 6); `local` from an older daemon. */
+    val runner: String = "local",
 ) {
     val resumable: Boolean
         get() = providerSessionId != null &&
