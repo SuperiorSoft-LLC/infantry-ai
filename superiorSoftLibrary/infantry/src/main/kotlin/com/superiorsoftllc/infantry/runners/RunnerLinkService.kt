@@ -56,6 +56,7 @@ class RunnerLinkService(
     private var serving: LinkServing? = null
     private var pairing: Pairing? = null
     private var toldNoTransport = false
+    private var closed = false
 
     /** A `runner pair` in progress: its listener and its one-time code. */
     private class Pairing(val serving: LinkServing, val codes: PairCodes, val name: String)
@@ -64,6 +65,8 @@ class RunnerLinkService(
 
     @Synchronized
     fun tick() {
+        // A closed service never re-opens the link listener: its ticker may fire once more while the daemon shuts down, and the port must be free for the restart.
+        if (closed) return
         pairing?.let { p -> if (RunnerLinkStore.open(stateDir).orchestrator() != null || p.codes.liveName(clock()) == null) closePairing() }
         if (!RunnerLinkStore.exists(stateDir)) {
             pump?.sync(emptyList())
@@ -249,6 +252,7 @@ class RunnerLinkService(
 
     @Synchronized
     override fun close() {
+        closed = true
         pump?.close()
         closePairing()
         closeServing()

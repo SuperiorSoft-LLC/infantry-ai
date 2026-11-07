@@ -2195,7 +2195,7 @@ class InfantryDaemon(
                 portReservation = portReservation,
                 handover = handover,
                 processHost = localProcesses,
-                background = listOf(AutoCloseable { usageRefresher.stop() }, workerSweepCloser, AutoCloseable { agentWatchdog.close() }, AutoCloseable { finishNotice.close() }, AutoCloseable { stallDetector.close() }, healthGate, plugins, AutoCloseable { harnessModulesRef.get()?.close() }),
+                background = listOf(AutoCloseable { usageRefresher.stop() }, runnerLinkService, workerSweepCloser, AutoCloseable { agentWatchdog.close() }, AutoCloseable { finishNotice.close() }, AutoCloseable { stallDetector.close() }, healthGate, plugins, AutoCloseable { harnessModulesRef.get()?.close() }),
                 healthSettings = healthSettings,
                 deploymentMode = deploymentMode,
             )
