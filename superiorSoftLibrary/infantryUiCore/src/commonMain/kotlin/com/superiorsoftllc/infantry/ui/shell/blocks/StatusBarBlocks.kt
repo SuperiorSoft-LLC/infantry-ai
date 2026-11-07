@@ -83,7 +83,11 @@ object StatusConnStatus : Block("connStatus", "$FOOTER_NODE.connStatus", Place(w
         Text(
             when {
                 compact -> if (c.isLive) "●" else "● ${c.state.name.lowercase()}"
-                c.isLive -> "● daemon ${c.daemonProvider ?: "?"}  contract ${c.contract ?: "?"}"
+                // FIRSTRUN-UX-2: "daemon none" read as "no daemon" on a fresh install; a live connection says "connected", the provider only when one is set.
+                c.isLive -> {
+                    val provider = c.daemonProvider?.takeIf { it.isNotBlank() && it != "none" }
+                    if (provider == null) "● connected" else "● connected · $provider"
+                }
                 else -> "● ${c.state.name.lowercase()}: ${c.detail}"
             },
             color = color, fontSize = 11.sp, maxLines = 1, softWrap = false, modifier = scope.modifier,

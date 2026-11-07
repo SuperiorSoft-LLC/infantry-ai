@@ -907,9 +907,12 @@ data class ComposerOutline(val color: Color, val dp: Int)
 fun composerOutline(focused: Boolean, hovered: Boolean): ComposerOutline =
     if (focused || hovered) ComposerOutline(Palette.Accent, COMPOSER_BORDER_DP) else ComposerOutline(Palette.Border, 1)
 
-/** CHAT-MINIMIZE-2: the one status line above the box: permission mode, agent count, session state (unknown parts left out). */
+/**
+ * CHAT-MINIMIZE-2: the one status line above the box: permission mode, agent count, session state (unknown parts left out).
+ * FIRSTRUN-UX-2: with no agent yet the permission mode means nothing, so it is left out.
+ */
 fun composerStatusLine(mode: String?, agents: Int, state: String?): String =
-    listOfNotNull(mode?.let { "permissions: $it" }, "$agents agent${if (agents == 1) "" else "s"}", state).joinToString(" · ")
+    listOfNotNull(mode?.takeIf { agents > 0 }?.let { "permissions: $it" }, "$agents agent${if (agents == 1) "" else "s"}", state).joinToString(" · ")
 
 
 /** The one-line strip that shows the latest notice: a refused `/command`, or what a `/command` did. */
