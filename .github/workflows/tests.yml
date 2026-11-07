@@ -1,0 +1,81 @@
+# CI-TESTS-1: the test suites on free GitHub runners, so they stop loading the owner's PC. Same Gradle tasks as
+# scripts/infantry-gate.sh. Tests that need the owner's machine honour INFANTRY_CI=1 (skipped there, still run locally).
+# Failing classes listed in docs/KNOWN-FAILURES.md are reported, not failing. No secrets. Never touches release/nightly.
+name: tests
+
+on:
+  push:
+    branches: [feature-agenthq-mvp]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx3g
+  INFANTRY_CI: '1'
+
+jobs:
+  jvm:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '21' }
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Unit tests (every JVM module, Compose UI tests under xvfb)
+        run: >
+          xvfb-run -a ./gradlew --no-daemon --continue --console=plain
+          :superiorSoftLibrary:infantry:test :superiorSoftLibrary:infantryUiCore:jvmTest
+          :superiorSoftLibrary:infantryUi:test :superiorSoftLibrary:infantryUi:ownerSmoke
+          2>&1 | tail -n 200
+      - name: Summary (known failures are reported, only new ones fail)
+        if: always()
+        run: scripts/ci-test-summary.sh "Linux JVM tests" superiorSoftLibrary/*/build/test-results
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-reports-linux
+          path: superiorSoftLibrary/*/build/reports/tests
+          retention-days: 7
+
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: PowerShell script tests (exit 0 = pass)
+        shell: pwsh
+        run: |
+          $fail = @()
+          $all = Get-ChildItem scripts -Filter *.tests.ps1
+          foreach ($f in $all) {
+            & pwsh -NoProfile -File $f.FullName
+            if ($LASTEXITCODE -ne 0) { $fail += $f.Name }
+          }
+          "### Windows script tests: $($all.Count) scripts, $($fail.Count) failed" | Out-File $env:GITHUB_STEP_SUMMARY -Append
+          $fail | ForEach-Object { "- ``$_``" | Out-File $env:GITHUB_STEP_SUMMARY -Append }
+          if ($fail.Count) { exit 1 }
+
+  compile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '21' }
+      - name: Accept Android SDK licenses
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Compile checks (wasm web bundle, Android debug), the tasks release.yml uses
+        shell: bash
+        run: >
+          ./gradlew --no-daemon --console=plain
+          :superiorSoftLibrary:infantryWeb:assembleWeb :superiorSoftLibrary:infantryAndroid:assembleDebug
+          2>&1 | tail -n 30

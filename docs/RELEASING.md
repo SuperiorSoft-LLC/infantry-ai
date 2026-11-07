@@ -309,3 +309,18 @@ and `inputs.*` checked against what is declared, the `workflow_call` inputs chec
 (built / not built / forced; guard on the nightly commit, on a pure bump, refused on a bump with another change and on a
 commit without a nightly). The `gh release create --prerelease --latest=false --target` call and a real scheduled run
 are not verified.
+
+## Tests on GitHub Actions (CI-TESTS-1)
+
+`.github/workflows/tests.yml` (push to `feature-agenthq-mvp`, pull requests, manual) runs the suites on free runners
+with `INFANTRY_CI=1`; it uses no secrets and an older run of the same ref is cancelled.
+
+| Job | Runner | What |
+|---|---|---|
+| `jvm` | ubuntu | `infantry:test`, `infantryUiCore:jvmTest`, `infantryUi:test`, `ownerSmoke` (the gate's tasks) under `xvfb-run` |
+| `windows` | windows | the PowerShell `scripts/*.tests.ps1` |
+| `compile` | ubuntu | `infantryWeb:assembleWeb` and `infantryAndroid:assembleDebug`, the tasks release.yml uses |
+
+`scripts/ci-test-summary.sh` writes the job summary (counts, failed classes). A failing class on
+[KNOWN-FAILURES.md](KNOWN-FAILURES.md) is reported as known and does not fail the job. Reports are kept 7 days as
+artifacts. Tests that need the owner's machine (live daemon, logged-in CLI, real desktop) skip when `INFANTRY_CI=1`.
