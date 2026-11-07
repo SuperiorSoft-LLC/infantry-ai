@@ -1413,6 +1413,7 @@ class CliAcceptanceTest {
             .filter { it.isNotBlank() }
             .filter { it != "ID | FROM | WHEN | READ | FIRST LINE" }
             .filter { it != "No messages." && it != "No unread messages." }
+            .filter { !it.startsWith("inbox: ") } // the count/paging summary line `inbox` prints above the table
             .map { row -> row.split(" | ").first() }
             .toList()
 
@@ -1845,8 +1846,9 @@ class CliAcceptanceTest {
      * merely "recent" is a column nobody can trust.
      */
     private fun isoOf(epochMillis: Long): String =
-        DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'")
-            .withZone(ZoneOffset.UTC)
+        // LOCAL-TIME-1: the CLI shows the local zone with its offset, minute precision.
+        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm xxx")
+            .withZone(java.time.ZoneId.systemDefault())
             .format(Instant.ofEpochMilli(epochMillis))
 
     /** A three-message conversation between two at-rest agents, plus an agent who is in no thread. */
