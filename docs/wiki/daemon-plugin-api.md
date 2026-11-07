@@ -201,6 +201,27 @@ A `NamedEvent` has `name` (dotted, lower case), `payload` (JSON text), `source` 
 publishing thread, in publish order. The core carries `causeId` and `depth` but enforces no loop policy: a loop guard
 is the plugin's job (the scripting plugin has one, see [Scripting](Scripting.md)).
 
+### Capabilities (PLUGIN-BRIDGES-1, DaemonApi 1.48.0)
+
+`api.capabilities` (`Capabilities`) answers this module's `runs: daemon` capabilities and calls any installed one through the
+host's gates. The full story, with the client side and the Lua form, is on [Bridges](Bridges.md).
+
+```kotlin
+val handle = api.capabilities.handle("acme.lookup") { call: CapabilityCall -> lookup(call.args) }   // AutoCloseable
+val r: CapabilityResult = api.capabilities.call("readaloud.speak", buildJsonObject { put("text", "hi") }, target = CapabilityTarget.ALL)
+val all: List<CapabilityInfo> = api.capabilities.list()
+```
+
+- `Capabilities`: `handle(id, CapabilityHandler)`, `call(id, args, target)`, `list()`. `handle` throws for an id the module
+  does not declare with `runs: daemon`. `call` never throws for a refusal.
+- `CapabilityHandler`: the fun interface `call(CapabilityCall): JsonElement`; throw to fail the call.
+- `CapabilityCall`: `capability`, `args`, `caller` (a `Caller`), `source` (`plugin:<module>`, `session:<id>` or `cli`).
+- `CapabilityResult`: `Ok(value, host)` (host `daemon:<module>`, a client host id, or `all`) or `Failed(error)`.
+- `CapabilityInfo`: one installed capability as `infantry_capability_list` shows it, with its `hosts` (`CapabilityHostInfo`:
+  id, platform, label, lastActiveAt) and `available`.
+- `CapabilityTarget`: `DEFAULT` (the most recently active desktop, else any host) and `ALL`; any other target is a host id.
+- `NoCapabilities`: the default of the interface property, for a daemon without the bridge: nothing listed, every call fails.
+
 ## 6. Services between plugins
 
 Each plugin has its own class loader, so plugins cannot share classes. Two mechanisms exist (source: `Services.kt`):

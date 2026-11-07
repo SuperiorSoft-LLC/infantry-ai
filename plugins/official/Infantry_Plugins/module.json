@@ -1,6 +1,6 @@
 {
   "name": "Infantry_Plugins",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "apiVersion": 2,
   "author": "Infantry AI",
   "description": "Agent tools over the plugin manager: list, search, show and status are read-only; request asks the owner to install a plugin with the grants shown. Daemon half only.",
@@ -9,7 +9,7 @@
   "daemon": {
     "entry": "com.superiorsoftllc.infantry.plugins.official.plugins.daemon.PluginsDaemonPlugin",
     "jar": "daemon/build/libs/Infantry_Plugins-daemon.jar",
-    "apiAtLeast": "1.36.0",
+    "apiAtLeast": "1.48.0",
     "tools": [
       { "name": "infantry_plugin_list", "action": "plugins.read", "kind": "read", "description": "Every plugin on this host: version, class, tier, enabled, grants, licence, update offer." },
       { "name": "infantry_plugin_search", "action": "plugins.read", "kind": "read", "description": "Search the plugin catalogs by text and tag." },
@@ -18,5 +18,16 @@
       { "name": "infantry_plugin_list_import", "action": "plugins.request", "kind": "write", "description": "Import a plugin list (file path or URL) as a community catalog source. Installs nothing." },
       { "name": "infantry_plugin_request", "action": "plugins.request", "kind": "write", "description": "Ask the owner to install a plugin with the grants it requests. Nothing is installed until the owner answers yes." }
     ]
-  }
+  },
+  "capabilities": [
+    {
+      "id": "plugins.status",
+      "description": "One installed plugin's state: installed, version, enabled, grants, update offer.",
+      "runs": "daemon",
+      "action": "plugins.read",
+      "kind": "read",
+      "params": { "type": "object", "properties": { "id": { "type": "string", "description": "The plugin id (Vendor_Module)." } }, "required": ["id"] },
+      "result": { "type": "object", "properties": { "id": { "type": "string" }, "installed": { "type": "boolean" }, "version": { "type": "string" }, "enabled": { "type": "boolean" } } }
+    }
+  ]
 }

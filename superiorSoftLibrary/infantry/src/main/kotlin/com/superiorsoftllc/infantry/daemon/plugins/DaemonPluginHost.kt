@@ -39,6 +39,7 @@ import com.superiorsoftllc.infantry.daemon.api.Tools
 import com.superiorsoftllc.infantry.daemon.api.TurnHook
 import com.superiorsoftllc.infantry.plugin.api.DaemonCapabilities
 import com.superiorsoftllc.infantry.plugin.api.ModuleSetting
+import com.superiorsoftllc.infantry.plugin.api.ModuleManifest
 import com.superiorsoftllc.infantry.plugin.api.ModulesConfig
 import com.superiorsoftllc.infantry.plugin.api.PolicyPreset
 import com.superiorsoftllc.infantry.plugin.api.Tier
@@ -141,7 +142,19 @@ class DaemonPluginHost private constructor(
 
     private fun remember(resolution: Resolution, config: ModulesConfig) {
         resolvedModules = resolution.loaded.mapNotNull { s -> s.manifest?.let { HostUpdates.Module(s.name, s.tier, it, config.setting(s.name).allow.toSet()) } }
+        // PLUGIN-BRIDGES-1: the capability declarations are compiled from the same resolved set (daemon half or not).
+        capabilities.install(resolution.loaded.mapNotNull { s -> s.manifest?.let { s.name to it } })
     }
+
+    /**
+     * PLUGIN-BRIDGES-1 (docs/wiki/Bridges.md): the one capability registry: declarations from the installed modules, the daemon
+     * halves' handlers, the client hosts. Core and the connection loop reach it here, plugins through [DaemonApi.capabilities].
+     */
+    val capabilities = CapabilityRegistry(
+        defaultTimeoutMs = { services.limit(LimitRegistry.PLUGIN_CAPABILITY_TIMEOUT_MS) },
+        maxTimeoutMs = { services.limit(LimitRegistry.PLUGIN_TOOL_MAX_TIMEOUT_MS) },
+        log = log,
+    )
     /** AR-5: the typed service registry; core callers query it here, plugins through [DaemonApi.services]. */
     val serviceRegistry = ServiceRegistry()
     private val statuses = ConcurrentHashMap<String, String>()
@@ -329,7 +342,11 @@ class DaemonPluginHost private constructor(
 
     /** The action of a plugin-defined frame, or of `plugin_tool_call` naming a plugin tool; null = not a plugin's. */
     fun actionFor(envelope: Envelope): ActionCatalog.Action? = when (envelope.type) {
-        PLUGIN_TOOL_CALL -> toolName(envelope.data)?.let { if (it == EVENT_EMIT_TOOL) EVENT_EMIT_ACTION else if (it == TESTS_TOOL) TESTS_ACTION else toolEntries[it]?.action }
+        PLUGIN_TOOL_CALL -> toolName(envelope.data)?.let {
+            if (it == EVENT_EMIT_TOOL) EVENT_EMIT_ACTION else if (it == TESTS_TOOL) TESTS_ACTION
+            else if (it == CAPABILITY_LIST_TOOL) CAPABILITY_LIST_ACTION else if (it == CAPABILITY_CALL_TOOL) capabilityAction(envelope.data)
+            else toolEntries[it]?.action
+        }
         else -> frameHandlers[envelope.type]?.action
     }
 
@@ -475,7 +492,7 @@ class DaemonPluginHost private constructor(
     ))
 
     /** `plugin_tools`: every healthy plugin tool, as MCP `tools/list` entries. */
-    fun toolDescriptors(): JsonArray = JsonArray(listOf(emitDescriptor, testsDescriptor) +
+    fun toolDescriptors(): JsonArray = JsonArray(listOf(emitDescriptor, testsDescriptor, capabilityListDescriptor, capabilityCallDescriptor) +
         toolEntries.values.filter { !it.owner.guard.disabled }.sortedBy { it.tool.name }.map { e ->
             JsonObject(buildMap {
                 put("name", JsonPrimitive(e.tool.name))
@@ -502,6 +519,10 @@ class DaemonPluginHost private constructor(
     suspend fun callToolSuspending(name: String, arguments: JsonObject, caller: Caller, client: JsonObject = JsonObject(emptyMap()), request: (Envelope, Long) -> Envelope): ToolResult {
         if (com.superiorsoftllc.infantry.cli.mcp.LegacyToolNames.canonical(name) == EVENT_EMIT_TOOL) return emitTool(arguments, client, caller)
         if (com.superiorsoftllc.infantry.cli.mcp.LegacyToolNames.canonical(name) == TESTS_TOOL) return testsTool(arguments, client)
+        if (com.superiorsoftllc.infantry.cli.mcp.LegacyToolNames.canonical(name) == CAPABILITY_LIST_TOOL) return capabilityListTool()
+        if (com.superiorsoftllc.infantry.cli.mcp.LegacyToolNames.canonical(name) == CAPABILITY_CALL_TOOL) {
+            return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { capabilityCallTool(arguments, caller, client) }
+        }
         val entry = (toolEntries[name] ?: toolEntries[com.superiorsoftllc.infantry.cli.mcp.LegacyToolNames.canonical(name)]) ?: return ToolResult("Unknown tool: $name", isError = true)
         if (entry.owner.guard.disabled) return ToolResult("$name is unavailable: plugin ${entry.owner.id} is disabled", isError = true)
         // PROJECT-ISOLATION-1: a session (or a project-confined hook) never reaches another project's ticket, session or data.
@@ -545,6 +566,103 @@ class DaemonPluginHost private constructor(
             lb.request(r, by.caller.owner, timeoutMs)
         }
     }
+
+    // ---- PLUGIN-BRIDGES-1: capabilities ------------------------------------------------------------------------------
+
+    /** The policy action a call of the capability named in a `plugin_tool_call` payload is gated by (its declared one). */
+    private fun capabilityAction(data: String): ActionCatalog.Action {
+        val id = runCatching {
+            ((Json.parseToJsonElement(data) as JsonObject)["arguments"] as? JsonObject)?.get("capability")?.let { (it as JsonPrimitive).content }
+        }.getOrNull()
+        val d = id?.let { capabilities.declaration(it) }?.decl ?: return CAPABILITY_CALL_ACTION
+        return ActionCatalog.Action(d.actionId, d.kind, listOf(PLUGIN_TOOL_CALL))
+    }
+
+    /**
+     * One capability call through the gates every caller shares. Agents' and scripts' calls arrive here already gated by the tool's
+     * action (the capability's declared one, [capabilityAction]); a plugin's call ([from]) is gated here: a COMMUNITY caller must hold
+     * the capability's declared `grant`, and every plugin caller passes the active policy preset's refusal of that action.
+     */
+    fun callCapability(
+        id: String,
+        args: JsonObject,
+        target: String?,
+        caller: Caller,
+        source: String,
+        from: Loaded? = null,
+    ): com.superiorsoftllc.infantry.daemon.api.capabilities.CapabilityResult {
+        val d = capabilities.declaration(id)
+            ?: return com.superiorsoftllc.infantry.daemon.api.capabilities.CapabilityResult.Failed("unknown capability '$id' ($CAPABILITY_LIST_TOOL lists the installed ones)")
+        if (from != null) {
+            val grant = d.decl.grant
+            if (from.community && grant != null && grant !in from.setting.allow) {
+                return com.superiorsoftllc.infantry.daemon.api.capabilities.CapabilityResult.Failed("refused: ${from.id} lacks the grant '$grant' that capability '$id' requires (modules.json allow)")
+            }
+            val envelope = Envelope(PLUGIN_TOOL_CALL, capabilityCallPayload(id))
+            services.policy().refusal(envelope.toFrame())?.let { return com.superiorsoftllc.infantry.daemon.api.capabilities.CapabilityResult.Failed(it) }
+        }
+        return capabilities.call(id, args, target, caller, source)
+    }
+
+    private fun capabilityListTool(): ToolResult = ToolResult(JsonArray(capabilities.list().map { c ->
+        JsonObject(buildMap {
+            put("id", JsonPrimitive(c.id))
+            put("module", JsonPrimitive(c.module))
+            put("description", JsonPrimitive(c.description))
+            put("runs", JsonPrimitive(c.runs))
+            c.params?.let { put("params", it) }
+            c.result?.let { put("result", it) }
+            put("action", JsonPrimitive(c.action))
+            c.grant?.let { put("grant", JsonPrimitive(it)) }
+            put("available", JsonPrimitive(c.available))
+            if (c.runs == com.superiorsoftllc.infantry.plugin.api.CapabilityRuns.CLIENT) put("hosts", JsonArray(c.hosts.map { h ->
+                JsonObject(mapOf("id" to JsonPrimitive(h.id), "platform" to JsonPrimitive(h.platform), "label" to JsonPrimitive(h.label), "lastActiveAt" to JsonPrimitive(h.lastActiveAt)))
+            }))
+        })
+    }).toString())
+
+    private fun capabilityCallTool(arguments: JsonObject, caller: Caller, client: JsonObject): ToolResult {
+        val id = (arguments["capability"] as? JsonPrimitive)?.contentOrNull?.trim().orEmpty()
+        if (id.isEmpty()) return ToolResult("$CAPABILITY_CALL_TOOL refused: name the capability ($CAPABILITY_LIST_TOOL lists them)", isError = true)
+        val args: JsonObject = when (val a = arguments["args"]) {
+            null -> JsonObject(emptyMap())
+            is JsonObject -> a
+            is JsonPrimitive -> (if (a.isString) runCatching { Json.parseToJsonElement(a.content) as? JsonObject }.getOrNull() else null)
+                ?: return ToolResult("$CAPABILITY_CALL_TOOL refused: args must be a JSON object", isError = true)
+            else -> return ToolResult("$CAPABILITY_CALL_TOOL refused: args must be a JSON object", isError = true)
+        }
+        val target = (arguments["target"] as? JsonPrimitive)?.contentOrNull
+        val sid = (client["sessionId"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.isNotBlank() }
+        return when (val r = callCapability(id, args, target, caller, sid?.let { "session:$it" } ?: "cli")) {
+            is com.superiorsoftllc.infantry.daemon.api.capabilities.CapabilityResult.Ok ->
+                ToolResult(JsonObject(mapOf("ok" to JsonPrimitive(true), "host" to JsonPrimitive(r.host), "result" to r.value)).toString())
+            is com.superiorsoftllc.infantry.daemon.api.capabilities.CapabilityResult.Failed -> ToolResult("$CAPABILITY_CALL_TOOL: ${r.error}", isError = true)
+        }
+    }
+
+    private val capabilityListDescriptor = JsonObject(mapOf(
+        "name" to JsonPrimitive(CAPABILITY_LIST_TOOL),
+        "description" to JsonPrimitive("List every capability the installed plugins offer (daemon side and client side): id, module, params schema, where it runs, and the connected client hosts of a client-side one. Call one with $CAPABILITY_CALL_TOOL."),
+        "inputSchema" to Json.parseToJsonElement("""{"type":"object","properties":{}}"""),
+        "annotations" to Json.parseToJsonElement("""{"readOnlyHint":true}"""),
+        "module" to JsonPrimitive("core"),
+        "action" to JsonPrimitive(CAPABILITY_LIST_ACTION.id),
+        "timeoutMs" to JsonPrimitive(10_000),
+    ))
+
+    /** The payload of a `plugin_tool_call` of [CAPABILITY_CALL_TOOL] naming capability [id] (what the policy gate reads). */
+    private fun capabilityCallPayload(id: String): String =
+        JsonObject(mapOf("name" to JsonPrimitive(CAPABILITY_CALL_TOOL), "arguments" to JsonObject(mapOf("capability" to JsonPrimitive(id))))).toString()
+
+    // A getter: the wait cap is the live max-tool-timeout setting (a client host answers within the capability's own timeout).
+    private val capabilityCallDescriptor get() = JsonObject(mapOf(
+        "name" to JsonPrimitive(CAPABILITY_CALL_TOOL),
+        "description" to JsonPrimitive("Call one installed plugin capability by id (e.g. readaloud.speak) with its args. A client-side capability runs on a connected client that loaded the plugin: target 'default' (the most recently active desktop, else any), 'all', or a host id from $CAPABILITY_LIST_TOOL. No host = an error at once; a silent host = an error at the capability's timeout."),
+        "inputSchema" to Json.parseToJsonElement("""{"type":"object","properties":{"capability":{"type":"string","description":"Capability id, e.g. readaloud.speak"},"args":{"type":"object","description":"Arguments, per the capability's params schema"},"target":{"type":"string","description":"Client-side only: default | all | <host id>"}},"required":["capability"]}"""),
+        "module" to JsonPrimitive("core"),
+        "action" to JsonPrimitive(CAPABILITY_CALL_ACTION.id),
+        "timeoutMs" to JsonPrimitive(services.limit(LimitRegistry.PLUGIN_TOOL_MAX_TIMEOUT_MS)),
+    ))
 
     // ---- routes -----------------------------------------------------------------------------------------------------
 
@@ -679,6 +797,8 @@ class DaemonPluginHost private constructor(
     }
 
     private fun unloadLocked(id: String): HotOutcome {
+        // PLUGIN-BRIDGES-1: an unloaded (disabled, removed) module offers nothing any more; a load or reload declares it again.
+        capabilities.dropModule(id)
         val target = loaded.firstOrNull { it.id == id } ?: return HotOutcome(true, "$id has no loaded daemon half")
         // A dependent cannot run without it: they leave first (reverse load order), and are reported.
         val gone = mutableSetOf(id)
@@ -840,15 +960,34 @@ class DaemonPluginHost private constructor(
             OfficialTrust.refusal(ModuleCandidate(dir.name, status.tier, dir.absolutePath, m), jarPath, trust.keys)?.let { return refuse("official daemon jar refused: $it") }
         }
         val loader = URLClassLoader("plugin-$id", arrayOf(jar.toURI().toURL()), DaemonApiClassLoader(DaemonPluginHost::class.java.classLoader))
+        start(id, status.tier, d, setting, loader, m.dependencies.map { it.id }) {
+            loader.loadClass(entry).getDeclaredConstructor().newInstance() as? DaemonPlugin ?: throw IllegalStateException("$entry does not implement DaemonPlugin")
+        }
+    }
+
+    /**
+     * PLUGIN-BRIDGES-1: starts [plugin] in-process as module [manifest] (tests): the same declarations, grants, guard and [Api] a jar's
+     * daemon half gets, and its module.json `capabilities` join the installed ones. Returns the module's status.
+     */
+    internal fun startInProcess(manifest: ModuleManifest, tier: Tier, setting: ModuleSetting, plugin: DaemonPlugin): String? = synchronized(lifecycle) {
+        val d = manifest.daemon ?: DaemonCapabilities()
+        val id = manifest.name
+        refusal(tier, d, setting, id)?.let { statuses[id] = "refused: $it"; return statuses[id] }
+        resolvedModules = resolvedModules.filter { it.name != id } + HostUpdates.Module(id, tier, manifest, setting.allow.toSet())
+        capabilities.install(resolvedModules.map { it.name to it.manifest })
+        start(id, tier, d, setting, URLClassLoader("plugin-$id", emptyArray(), DaemonPluginHost::class.java.classLoader), manifest.dependencies.map { it.id }) { plugin }
+        statuses[id]
+    }
+
+    private fun start(id: String, tier: Tier, d: DaemonCapabilities, setting: ModuleSetting, loader: URLClassLoader, dependencies: List<String>, newPlugin: () -> DaemonPlugin) {
         val cpu = d.limits.cpuMsPerCall ?: maxOf(d.limits.callTimeoutMs ?: services.limit(LimitRegistry.PLUGIN_CALL_TIMEOUT_MS), d.limits.toolTimeoutMs ?: services.limit(LimitRegistry.PLUGIN_TOOL_TIMEOUT_MS))
         lateinit var p: Loaded
         val guard = PluginGuard(id, loader, cpu, log, hangCeilingMs = services.limit(LimitRegistry.PLUGIN_HANG_CEILING_MS), poolSize = services.limit(LimitRegistry.PLUGIN_POOL_SIZE).toInt(), queueLimit = services.limit(LimitRegistry.PLUGIN_QUEUE_LIMIT).toInt(), timeoutStrikes = services.limit(LimitRegistry.PLUGIN_GUARD_STRIKES).toInt(), cooldownMs = services.limit(LimitRegistry.PLUGIN_GUARD_COOLDOWN_MS), onTripped = { why -> announceTrip(id, why) }, onRecovered = { announceRecovered(id) }, onDisabled = { why -> if (!p.unloading) { val atRunTime = statuses[id] == "loaded"; unregister(p); announceFailure(id, why, if (atRunTime) scheduleAutoReload(id) else "It did not start; it stays down until the daemon restarts or the plugin is reloaded.") } })
-        p = Loaded(id, status.tier, d, setting, guard, loader, m.dependencies.map { it.id })
+        p = Loaded(id, tier, d, setting, guard, loader, dependencies)
         loaded += p
         val api = Api(p)
         val started = p.call("start", services.limit(LimitRegistry.PLUGIN_START_TIMEOUT_MS)) {
-            val plugin = loader.loadClass(entry).getDeclaredConstructor().newInstance() as? DaemonPlugin
-                ?: throw IllegalStateException("$entry does not implement DaemonPlugin")
+            val plugin = newPlugin()
             p.plugin = plugin
             plugin.start(api)
         }
@@ -857,7 +996,7 @@ class DaemonPluginHost private constructor(
             return
         }
         statuses[id] = "loaded"
-        log("[plugins] daemon half of $id (${status.tier.name.lowercase()}) loaded: ${toolsOf(id).size} tool(s), hooks ${p.hookKinds.sorted()}")
+        log("[plugins] daemon half of $id (${tier.name.lowercase()}) loaded: ${toolsOf(id).size} tool(s), hooks ${p.hookKinds.sorted()}")
     }
 
     /** Why the declarations of [id] may not load for [tier] and its grants; null = they may. */
@@ -1124,6 +1263,14 @@ class DaemonPluginHost private constructor(
                 return (registry ?: error("this daemon has no agent registry")).setEnabled(id, enabled)
             }
         }
+        // PLUGIN-BRIDGES-1: answer this module's daemon-side capabilities, call any capability through the host's gates.
+        override val capabilities: com.superiorsoftllc.infantry.daemon.api.capabilities.Capabilities = object : com.superiorsoftllc.infantry.daemon.api.capabilities.Capabilities {
+            override fun handle(id: String, handler: com.superiorsoftllc.infantry.daemon.api.capabilities.CapabilityHandler): AutoCloseable =
+                this@DaemonPluginHost.capabilities.handle(p.id, id) { call, ms -> p.call("capability($id)", ms) { handler.call(call) } }.also { p.closeables += it }
+            override fun call(id: String, args: JsonObject, target: String?) =
+                callCapability(id, args, target, Caller(owner = !p.community), "plugin:${p.id}", p)
+            override fun list() = this@DaemonPluginHost.capabilities.list()
+        }
         override val hooks: Hooks = object : Hooks {
             override fun frameGate(hook: FrameGateHook) { declare("frameGate"); frameGates += Registered(p, hook) }
             override fun approvalRules(hook: com.superiorsoftllc.infantry.daemon.api.ApprovalRulesHook) { declare("approvalRules"); check(!p.community) { "community modules may not own approval rules" }; approvalRuleHooks += Registered(p, hook) }
@@ -1159,6 +1306,11 @@ class DaemonPluginHost private constructor(
         val TESTS_ACTION = ActionCatalog.Action("tests.run", "write", listOf("plugin_tool_call"))
 
         const val PLUGIN_TOOL_CALL = "plugin_tool_call"
+        /** PLUGIN-BRIDGES-1: the built-in capability tools. A call is gated by the capability's own declared action (else [CAPABILITY_CALL_ACTION]). */
+        const val CAPABILITY_LIST_TOOL = "infantry_capability_list"
+        const val CAPABILITY_CALL_TOOL = "infantry_capability_call"
+        val CAPABILITY_LIST_ACTION = ActionCatalog.Action("capabilities.list", "read", listOf("plugin_tool_call"))
+        val CAPABILITY_CALL_ACTION = ActionCatalog.Action("capabilities.call", "write", listOf("plugin_tool_call"))
 
         /** RUNTIME-LOAD-7: the client's `maxDepth` / `maxSpawns` / `depth` (whole numbers >= 0) and `clientKey`; null when it sent none. */
         internal fun narrowingOf(client: JsonObject): com.superiorsoftllc.infantry.daemon.api.spawns.SpawnNarrowing? {

@@ -281,6 +281,29 @@ registrar.sessionBadge(SessionBadgeProvider(id = "acme.badge", order = 0) { stat
 `SessionBadge(label, tone, tooltip, testTag)`; `BadgeTone` is `INFO, MUTED, ACCENT, OK, WARN, DANGER`. The provider
 returns one badge per session row or null. It reads live state.
 
+### Capabilities and declared events (PLUGIN-BRIDGES-1)
+
+A UI half answers its `runs: client` capabilities with `UiRegistrar.capability(id, ClientCapabilityHandler)`. The handler is
+a suspend fun interface `call(args: JsonObject): JsonElement`; throw to fail the call. An id that module.json does not declare
+with `runs: client` is ignored. `UiRegistrar.capabilityEvents` (a `CapabilityEvents`) publishes an event that module.json
+`emits` declares on the daemon's event bus. The window side, `ClientCapabilityHost`, announces what the loaded modules host on
+every live link and answers the daemon's calls. The handlers end up in `InfantryModule.capabilities`. Callers, targets, gates
+and an example are on [Bridges](Bridges.md).
+
+The manifest types (`ModuleManifest.kt`):
+
+- `CapabilityDeclaration`: one `capabilities` entry: `id`, `description`, `params`, `result`, `runs`, `action`, `kind`,
+  `grant`, `timeoutMs`. `actionId` is the declared action, else `capability.<id>`.
+- `CapabilityRuns`: `DAEMON`, `CLIENT`, `ALL`, and `ID` (the id pattern).
+- `EmitDeclaration`: one `emits` entry: `event`, `description`, `payload`.
+
+The wire types (`CapabilityWire.kt`), shared by the daemon and every client:
+
+- `CapabilityWire`: the frame names (`HOST`, `CALL`, `RESULT`, `EVENT`) and the encode/decode helpers.
+- `CapabilityHosting`: what one client hosts (`platform`, `label`, `modules`).
+- `HostedModule`: one module's hosted client capabilities and its declared events.
+- `CapabilityCallFrame`, `CapabilityResultFrame`, `CapabilityEventFrame`: a call, its answer, and a client's event.
+
 ## 5. Config values and the config tree
 
 A module declares config in `module.json` `config` (see [Make a plugin](make-a-plugin.md)). Your code reads values:
@@ -444,9 +467,9 @@ You rarely use these in a plugin; they explain the status you see in Settings > 
 - `ModulesConfig` (`plugin/api/ModulesConfig.kt`): `<plugins root>/modules.json`: `folders`, `modules` (per module:
   `enabled`, `allow`, `deny`, `allowOverride`, `allowInject`, `endpoints`), `demoLock`, `configReadGate`.
 - `ModuleState` is `LOADED`, `DISABLED`, `LOCKED`, `REFUSED`; `ModuleStatus` carries the state and the reason.
-- `PLUGIN_API_VERSION = 2`. A module whose `apiVersion` differs is refused. `PLUGIN_API_REVISION = 3` is the additive
-  revision (1 added the `official` tier, 2 added sub-tabs, 3 added the `speech.out` and `audio.in` services). The
-  published `infantry-plugin-api` artifact is `<PLUGIN_API_VERSION>.<infantryPluginApiMinorPatch>` (gradle.properties; 2.1.0).
+- `PLUGIN_API_VERSION = 2`. A module whose `apiVersion` differs is refused. `PLUGIN_API_REVISION = 4` is the additive
+  revision (1 added the `official` tier, 2 added sub-tabs, 3 added the `speech.out` and `audio.in` services, 4 added `capabilities` and `emits`). The
+  published `infantry-plugin-api` artifact is `<PLUGIN_API_VERSION>.<infantryPluginApiMinorPatch>` (gradle.properties; 2.2.0).
 - `registerModule(manifest, tier, services, plugin): InfantryModule` runs a plugin's `register` into a module value.
   Tests use it (the template's `StarterPluginTest.kt`).
 - `TabFactory(modules)` binds modules, rejects what is not declared and lists problems in `factory.problems`. Tests

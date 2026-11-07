@@ -18,8 +18,9 @@ const val PLUGIN_API_VERSION = 2
  * RUNTIME-2: additive revisions (carried into API 2 by RUNTIME-26, so the revision stays 2) under [PLUGIN_API_VERSION] (additions only; a module never has to name it, and an older
  * module still loads). 1 = `Tier.OFFICIAL` and the `official` plugins folder. 2 = a host tab's sub-tabs through
  * `TabContext.SubTabs` / `subTab` / `pickSubTab` (RUNTIME-5). 3 = the `speech.out` and `audio.in` services (VOICE-SEAM-1).
+ * 4 = module.json `capabilities` and `emits` (PLUGIN-BRIDGES-1, plugin API 2.2.0).
  */
-const val PLUGIN_API_REVISION = 3
+const val PLUGIN_API_REVISION = 4
 
 /**
  * A module's module.json: who it is, what it needs loaded first, and everything it contributes or uses. Unknown keys
@@ -119,6 +120,17 @@ data class ModuleManifest(
     val agents: List<AgentDefinition> = emptyList(),
     /** POLICY-1 (docs/POLICY.md section 1): the named actions the module's controls perform; a policy may turn each off. */
     val actions: List<ActionDeclaration> = emptyList(),
+    /**
+     * PLUGIN-BRIDGES-1 (docs/wiki/Bridges.md): the named functions this module offers to scripts, agents and other plugins, each run
+     * by its daemon half (`runs: daemon`, `DaemonApi.capabilities.handle`) or by the client that loaded its UI half (`runs: client`,
+     * `UiRegistrar.capability`). Called through the host only (`infantry_capability_call`); an undeclared handler is refused.
+     */
+    val capabilities: List<CapabilityDeclaration> = emptyList(),
+    /**
+     * PLUGIN-BRIDGES-1: the named events this module emits (published on the daemon's event bus, so a script hook can subscribe with
+     * `on = "<name>"`). A client-side emit of a name not listed here is refused.
+     */
+    val emits: List<EmitDeclaration> = emptyList(),
     /**
      * GAP-AUDIT-1 (b): per-node flags the module declares on node ids it draws. `{"id": "<node id>", "overridable": false}`
      * locks the node like the shell's own locked set: no module may replace, wrap,
@@ -374,3 +386,39 @@ data class EndpointDeclaration(val id: String, val url: String, val methods: Lis
 /** [kind] is `none | bearer | header | basic`; [name] is the header name for `header`; [field] the keystore field (D3, later). */
 @Serializable
 data class EndpointAuth(val kind: String = "none", val field: String? = null, val name: String? = null)
+
+/**
+ * PLUGIN-BRIDGES-1: one capability (docs/wiki/Bridges.md). [id] is dotted lower case and unique among installed modules
+ * (`readaloud.speak`); [params] and [result] are JSON Schema objects (documentation and the listing; the handler validates).
+ * [runs] is [CapabilityRuns.DAEMON] or [CapabilityRuns.CLIENT]. [action] / [kind] gate a call through the active policy
+ * preset like a tool's (null action = `capability.<id>`); [grant], when set, is a grant a COMMUNITY plugin must hold to call
+ * it (agents and scripts are held by the policy action). [timeoutMs] null = the host default.
+ */
+@Serializable
+data class CapabilityDeclaration(
+    val id: String,
+    val description: String = "",
+    val params: JsonObject? = null,
+    val result: JsonObject? = null,
+    val runs: String = CapabilityRuns.DAEMON,
+    val action: String? = null,
+    val kind: String = "write",
+    val grant: String? = null,
+    val timeoutMs: Long? = null,
+) {
+    /** The policy action id a call is gated by. */
+    val actionId: String get() = action?.takeIf { it.isNotBlank() } ?: "capability.$id"
+}
+
+/** PLUGIN-BRIDGES-1: where a capability runs. */
+object CapabilityRuns {
+    const val DAEMON = "daemon"
+    const val CLIENT = "client"
+    val ALL = setOf(DAEMON, CLIENT)
+    /** Dotted lower-case ids, two segments at least (`vendor.name`), each `[a-z][a-z0-9_-]*`. */
+    val ID = Regex("""^[a-z][a-z0-9_-]*(\.[a-z][a-z0-9_-]*)+$""")
+}
+
+/** PLUGIN-BRIDGES-1: one event a module emits: its dotted [event] name, what it means and the payload it carries (JSON Schema). */
+@Serializable
+data class EmitDeclaration(val event: String, val description: String = "", val payload: JsonObject? = null)

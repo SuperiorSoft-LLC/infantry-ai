@@ -282,6 +282,208 @@ public final class com/superiorsoftllc/infantry/plugin/api/BlockTypeDeclaration$
 	public final fun serializer ()Lkotlinx/serialization/KSerializer;
 }
 
+public final class com/superiorsoftllc/infantry/plugin/api/CapabilityCallFrame {
+	public static final field Companion Lcom/superiorsoftllc/infantry/plugin/api/CapabilityCallFrame$Companion;
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Lkotlinx/serialization/json/JsonObject;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Lkotlinx/serialization/json/JsonObject;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Lkotlinx/serialization/json/JsonObject;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Lkotlinx/serialization/json/JsonObject;)Lcom/superiorsoftllc/infantry/plugin/api/CapabilityCallFrame;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/plugin/api/CapabilityCallFrame;Ljava/lang/String;Ljava/lang/String;Lkotlinx/serialization/json/JsonObject;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/api/CapabilityCallFrame;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getArgs ()Lkotlinx/serialization/json/JsonObject;
+	public final fun getCallId ()Ljava/lang/String;
+	public final fun getCapability ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final synthetic class com/superiorsoftllc/infantry/plugin/api/CapabilityCallFrame$$serializer : kotlinx/serialization/internal/GeneratedSerializer {
+	public static final field INSTANCE Lcom/superiorsoftllc/infantry/plugin/api/CapabilityCallFrame$$serializer;
+	public final fun childSerializers ()[Lkotlinx/serialization/KSerializer;
+	public final fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Lcom/superiorsoftllc/infantry/plugin/api/CapabilityCallFrame;
+	public synthetic fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;
+	public final fun getDescriptor ()Lkotlinx/serialization/descriptors/SerialDescriptor;
+	public final fun serialize (Lkotlinx/serialization/encoding/Encoder;Lcom/superiorsoftllc/infantry/plugin/api/CapabilityCallFrame;)V
+	public synthetic fun serialize (Lkotlinx/serialization/encoding/Encoder;Ljava/lang/Object;)V
+	public fun typeParametersSerializers ()[Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/superiorsoftllc/infantry/plugin/api/CapabilityCallFrame$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/superiorsoftllc/infantry/plugin/api/CapabilityDeclaration {
+	public static final field Companion Lcom/superiorsoftllc/infantry/plugin/api/CapabilityDeclaration$Companion;
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Lkotlinx/serialization/json/JsonObject;Lkotlinx/serialization/json/JsonObject;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Long;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Lkotlinx/serialization/json/JsonObject;Lkotlinx/serialization/json/JsonObject;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Long;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Lkotlinx/serialization/json/JsonObject;
+	public final fun component4 ()Lkotlinx/serialization/json/JsonObject;
+	public final fun component5 ()Ljava/lang/String;
+	public final fun component6 ()Ljava/lang/String;
+	public final fun component7 ()Ljava/lang/String;
+	public final fun component8 ()Ljava/lang/String;
+	public final fun component9 ()Ljava/lang/Long;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Lkotlinx/serialization/json/JsonObject;Lkotlinx/serialization/json/JsonObject;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Long;)Lcom/superiorsoftllc/infantry/plugin/api/CapabilityDeclaration;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/plugin/api/CapabilityDeclaration;Ljava/lang/String;Ljava/lang/String;Lkotlinx/serialization/json/JsonObject;Lkotlinx/serialization/json/JsonObject;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Long;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/api/CapabilityDeclaration;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAction ()Ljava/lang/String;
+	public final fun getActionId ()Ljava/lang/String;
+	public final fun getDescription ()Ljava/lang/String;
+	public final fun getGrant ()Ljava/lang/String;
+	public final fun getId ()Ljava/lang/String;
+	public final fun getKind ()Ljava/lang/String;
+	public final fun getParams ()Lkotlinx/serialization/json/JsonObject;
+	public final fun getResult ()Lkotlinx/serialization/json/JsonObject;
+	public final fun getRuns ()Ljava/lang/String;
+	public final fun getTimeoutMs ()Ljava/lang/Long;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final synthetic class com/superiorsoftllc/infantry/plugin/api/CapabilityDeclaration$$serializer : kotlinx/serialization/internal/GeneratedSerializer {
+	public static final field INSTANCE Lcom/superiorsoftllc/infantry/plugin/api/CapabilityDeclaration$$serializer;
+	public final fun childSerializers ()[Lkotlinx/serialization/KSerializer;
+	public final fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Lcom/superiorsoftllc/infantry/plugin/api/CapabilityDeclaration;
+	public synthetic fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;
+	public final fun getDescriptor ()Lkotlinx/serialization/descriptors/SerialDescriptor;
+	public final fun serialize (Lkotlinx/serialization/encoding/Encoder;Lcom/superiorsoftllc/infantry/plugin/api/CapabilityDeclaration;)V
+	public synthetic fun serialize (Lkotlinx/serialization/encoding/Encoder;Ljava/lang/Object;)V
+	public fun typeParametersSerializers ()[Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/superiorsoftllc/infantry/plugin/api/CapabilityDeclaration$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/superiorsoftllc/infantry/plugin/api/CapabilityEventFrame {
+	public static final field Companion Lcom/superiorsoftllc/infantry/plugin/api/CapabilityEventFrame$Companion;
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Lkotlinx/serialization/json/JsonObject;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Lkotlinx/serialization/json/JsonObject;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Lkotlinx/serialization/json/JsonObject;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Lkotlinx/serialization/json/JsonObject;)Lcom/superiorsoftllc/infantry/plugin/api/CapabilityEventFrame;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/plugin/api/CapabilityEventFrame;Ljava/lang/String;Ljava/lang/String;Lkotlinx/serialization/json/JsonObject;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/api/CapabilityEventFrame;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getEvent ()Ljava/lang/String;
+	public final fun getModule ()Ljava/lang/String;
+	public final fun getPayload ()Lkotlinx/serialization/json/JsonObject;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final synthetic class com/superiorsoftllc/infantry/plugin/api/CapabilityEventFrame$$serializer : kotlinx/serialization/internal/GeneratedSerializer {
+	public static final field INSTANCE Lcom/superiorsoftllc/infantry/plugin/api/CapabilityEventFrame$$serializer;
+	public final fun childSerializers ()[Lkotlinx/serialization/KSerializer;
+	public final fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Lcom/superiorsoftllc/infantry/plugin/api/CapabilityEventFrame;
+	public synthetic fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;
+	public final fun getDescriptor ()Lkotlinx/serialization/descriptors/SerialDescriptor;
+	public final fun serialize (Lkotlinx/serialization/encoding/Encoder;Lcom/superiorsoftllc/infantry/plugin/api/CapabilityEventFrame;)V
+	public synthetic fun serialize (Lkotlinx/serialization/encoding/Encoder;Ljava/lang/Object;)V
+	public fun typeParametersSerializers ()[Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/superiorsoftllc/infantry/plugin/api/CapabilityEventFrame$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/superiorsoftllc/infantry/plugin/api/CapabilityHosting {
+	public static final field Companion Lcom/superiorsoftllc/infantry/plugin/api/CapabilityHosting$Companion;
+	public fun <init> ()V
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/util/List;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;)Lcom/superiorsoftllc/infantry/plugin/api/CapabilityHosting;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/plugin/api/CapabilityHosting;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/api/CapabilityHosting;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getLabel ()Ljava/lang/String;
+	public final fun getModules ()Ljava/util/List;
+	public final fun getPlatform ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final synthetic class com/superiorsoftllc/infantry/plugin/api/CapabilityHosting$$serializer : kotlinx/serialization/internal/GeneratedSerializer {
+	public static final field INSTANCE Lcom/superiorsoftllc/infantry/plugin/api/CapabilityHosting$$serializer;
+	public final fun childSerializers ()[Lkotlinx/serialization/KSerializer;
+	public final fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Lcom/superiorsoftllc/infantry/plugin/api/CapabilityHosting;
+	public synthetic fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;
+	public final fun getDescriptor ()Lkotlinx/serialization/descriptors/SerialDescriptor;
+	public final fun serialize (Lkotlinx/serialization/encoding/Encoder;Lcom/superiorsoftllc/infantry/plugin/api/CapabilityHosting;)V
+	public synthetic fun serialize (Lkotlinx/serialization/encoding/Encoder;Ljava/lang/Object;)V
+	public fun typeParametersSerializers ()[Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/superiorsoftllc/infantry/plugin/api/CapabilityHosting$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/superiorsoftllc/infantry/plugin/api/CapabilityResultFrame {
+	public static final field Companion Lcom/superiorsoftllc/infantry/plugin/api/CapabilityResultFrame$Companion;
+	public fun <init> (Ljava/lang/String;ZLkotlinx/serialization/json/JsonElement;Ljava/lang/String;)V
+	public synthetic fun <init> (Ljava/lang/String;ZLkotlinx/serialization/json/JsonElement;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Z
+	public final fun component3 ()Lkotlinx/serialization/json/JsonElement;
+	public final fun component4 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;ZLkotlinx/serialization/json/JsonElement;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/plugin/api/CapabilityResultFrame;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/plugin/api/CapabilityResultFrame;Ljava/lang/String;ZLkotlinx/serialization/json/JsonElement;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/api/CapabilityResultFrame;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCallId ()Ljava/lang/String;
+	public final fun getError ()Ljava/lang/String;
+	public final fun getOk ()Z
+	public final fun getResult ()Lkotlinx/serialization/json/JsonElement;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final synthetic class com/superiorsoftllc/infantry/plugin/api/CapabilityResultFrame$$serializer : kotlinx/serialization/internal/GeneratedSerializer {
+	public static final field INSTANCE Lcom/superiorsoftllc/infantry/plugin/api/CapabilityResultFrame$$serializer;
+	public final fun childSerializers ()[Lkotlinx/serialization/KSerializer;
+	public final fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Lcom/superiorsoftllc/infantry/plugin/api/CapabilityResultFrame;
+	public synthetic fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;
+	public final fun getDescriptor ()Lkotlinx/serialization/descriptors/SerialDescriptor;
+	public final fun serialize (Lkotlinx/serialization/encoding/Encoder;Lcom/superiorsoftllc/infantry/plugin/api/CapabilityResultFrame;)V
+	public synthetic fun serialize (Lkotlinx/serialization/encoding/Encoder;Ljava/lang/Object;)V
+	public fun typeParametersSerializers ()[Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/superiorsoftllc/infantry/plugin/api/CapabilityResultFrame$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/superiorsoftllc/infantry/plugin/api/CapabilityRuns {
+	public static final field CLIENT Ljava/lang/String;
+	public static final field DAEMON Ljava/lang/String;
+	public static final field INSTANCE Lcom/superiorsoftllc/infantry/plugin/api/CapabilityRuns;
+	public final fun getALL ()Ljava/util/Set;
+	public final fun getID ()Lkotlin/text/Regex;
+}
+
+public final class com/superiorsoftllc/infantry/plugin/api/CapabilityWire {
+	public static final field CALL Ljava/lang/String;
+	public static final field EVENT Ljava/lang/String;
+	public static final field HOST Ljava/lang/String;
+	public static final field INSTANCE Lcom/superiorsoftllc/infantry/plugin/api/CapabilityWire;
+	public static final field RESULT Ljava/lang/String;
+	public final fun call (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/plugin/api/CapabilityCallFrame;
+	public final fun encode (Lcom/superiorsoftllc/infantry/plugin/api/CapabilityCallFrame;)Ljava/lang/String;
+	public final fun encode (Lcom/superiorsoftllc/infantry/plugin/api/CapabilityEventFrame;)Ljava/lang/String;
+	public final fun encode (Lcom/superiorsoftllc/infantry/plugin/api/CapabilityHosting;)Ljava/lang/String;
+	public final fun encode (Lcom/superiorsoftllc/infantry/plugin/api/CapabilityResultFrame;)Ljava/lang/String;
+	public final fun event (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/plugin/api/CapabilityEventFrame;
+	public final fun getCLIENT_FRAMES ()Ljava/util/Set;
+	public final fun getJson ()Lkotlinx/serialization/json/Json;
+	public final fun hosting (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/plugin/api/CapabilityHosting;
+	public final fun result (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/plugin/api/CapabilityResultFrame;
+}
+
 public final class com/superiorsoftllc/infantry/plugin/api/CaptureEnd {
 	public static final field BUSY Ljava/lang/String;
 	public static final field Companion Lcom/superiorsoftllc/infantry/plugin/api/CaptureEnd$Companion;
@@ -1058,6 +1260,38 @@ public final class com/superiorsoftllc/infantry/plugin/api/DependencyDeclaration
 	public final fun serializer ()Lkotlinx/serialization/KSerializer;
 }
 
+public final class com/superiorsoftllc/infantry/plugin/api/EmitDeclaration {
+	public static final field Companion Lcom/superiorsoftllc/infantry/plugin/api/EmitDeclaration$Companion;
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Lkotlinx/serialization/json/JsonObject;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Lkotlinx/serialization/json/JsonObject;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Lkotlinx/serialization/json/JsonObject;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Lkotlinx/serialization/json/JsonObject;)Lcom/superiorsoftllc/infantry/plugin/api/EmitDeclaration;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/plugin/api/EmitDeclaration;Ljava/lang/String;Ljava/lang/String;Lkotlinx/serialization/json/JsonObject;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/api/EmitDeclaration;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDescription ()Ljava/lang/String;
+	public final fun getEvent ()Ljava/lang/String;
+	public final fun getPayload ()Lkotlinx/serialization/json/JsonObject;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final synthetic class com/superiorsoftllc/infantry/plugin/api/EmitDeclaration$$serializer : kotlinx/serialization/internal/GeneratedSerializer {
+	public static final field INSTANCE Lcom/superiorsoftllc/infantry/plugin/api/EmitDeclaration$$serializer;
+	public final fun childSerializers ()[Lkotlinx/serialization/KSerializer;
+	public final fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Lcom/superiorsoftllc/infantry/plugin/api/EmitDeclaration;
+	public synthetic fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;
+	public final fun getDescriptor ()Lkotlinx/serialization/descriptors/SerialDescriptor;
+	public final fun serialize (Lkotlinx/serialization/encoding/Encoder;Lcom/superiorsoftllc/infantry/plugin/api/EmitDeclaration;)V
+	public synthetic fun serialize (Lkotlinx/serialization/encoding/Encoder;Ljava/lang/Object;)V
+	public fun typeParametersSerializers ()[Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/superiorsoftllc/infantry/plugin/api/EmitDeclaration$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
 public abstract interface class com/superiorsoftllc/infantry/plugin/api/EndpointAccess {
 	public abstract fun call (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun call$default (Lcom/superiorsoftllc/infantry/plugin/api/EndpointAccess;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
@@ -1430,6 +1664,38 @@ public final class com/superiorsoftllc/infantry/plugin/api/HitView {
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class com/superiorsoftllc/infantry/plugin/api/HostedModule {
+	public static final field Companion Lcom/superiorsoftllc/infantry/plugin/api/HostedModule$Companion;
+	public fun <init> (Ljava/lang/String;Ljava/util/List;Ljava/util/List;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/util/List;Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/util/List;
+	public final fun component3 ()Ljava/util/List;
+	public final fun copy (Ljava/lang/String;Ljava/util/List;Ljava/util/List;)Lcom/superiorsoftllc/infantry/plugin/api/HostedModule;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/plugin/api/HostedModule;Ljava/lang/String;Ljava/util/List;Ljava/util/List;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/api/HostedModule;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCapabilities ()Ljava/util/List;
+	public final fun getEmits ()Ljava/util/List;
+	public final fun getModule ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final synthetic class com/superiorsoftllc/infantry/plugin/api/HostedModule$$serializer : kotlinx/serialization/internal/GeneratedSerializer {
+	public static final field INSTANCE Lcom/superiorsoftllc/infantry/plugin/api/HostedModule$$serializer;
+	public final fun childSerializers ()[Lkotlinx/serialization/KSerializer;
+	public final fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Lcom/superiorsoftllc/infantry/plugin/api/HostedModule;
+	public synthetic fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;
+	public final fun getDescriptor ()Lkotlinx/serialization/descriptors/SerialDescriptor;
+	public final fun serialize (Lkotlinx/serialization/encoding/Encoder;Lcom/superiorsoftllc/infantry/plugin/api/HostedModule;)V
+	public synthetic fun serialize (Lkotlinx/serialization/encoding/Encoder;Ljava/lang/Object;)V
+	public fun typeParametersSerializers ()[Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/superiorsoftllc/infantry/plugin/api/HostedModule$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
 public final class com/superiorsoftllc/infantry/plugin/api/ImplementationDeclaration {
 	public static final field Companion Lcom/superiorsoftllc/infantry/plugin/api/ImplementationDeclaration$Companion;
 	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
@@ -1568,8 +1834,8 @@ public final class com/superiorsoftllc/infantry/plugin/api/InterceptorDeclaratio
 
 public final class com/superiorsoftllc/infantry/plugin/api/ModuleManifest {
 	public static final field Companion Lcom/superiorsoftllc/infantry/plugin/api/ModuleManifest$Companion;
-	public fun <init> (Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/DaemonCapabilities;Lcom/superiorsoftllc/infantry/plugin/api/HarnessDeclaration;Ljava/util/List;Ljava/util/List;Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/UpdateDeclaration;)V
-	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/DaemonCapabilities;Lcom/superiorsoftllc/infantry/plugin/api/HarnessDeclaration;Ljava/util/List;Ljava/util/List;Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/UpdateDeclaration;IILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/DaemonCapabilities;Lcom/superiorsoftllc/infantry/plugin/api/HarnessDeclaration;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/UpdateDeclaration;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/DaemonCapabilities;Lcom/superiorsoftllc/infantry/plugin/api/HarnessDeclaration;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/UpdateDeclaration;IILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Ljava/lang/String;
 	public final fun component10 ()Ljava/lang/String;
 	public final fun component11 ()Ljava/lang/String;
@@ -1600,15 +1866,17 @@ public final class com/superiorsoftllc/infantry/plugin/api/ModuleManifest {
 	public final fun component34 ()Ljava/util/List;
 	public final fun component35 ()Ljava/util/List;
 	public final fun component36 ()Ljava/util/List;
-	public final fun component37 ()Lcom/superiorsoftllc/infantry/plugin/api/UpdateDeclaration;
+	public final fun component37 ()Ljava/util/List;
+	public final fun component38 ()Ljava/util/List;
+	public final fun component39 ()Lcom/superiorsoftllc/infantry/plugin/api/UpdateDeclaration;
 	public final fun component4 ()Ljava/lang/String;
 	public final fun component5 ()Ljava/lang/String;
 	public final fun component6 ()Ljava/lang/String;
 	public final fun component7 ()Ljava/lang/String;
 	public final fun component8 ()Ljava/util/List;
 	public final fun component9 ()Ljava/util/List;
-	public final fun copy (Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/DaemonCapabilities;Lcom/superiorsoftllc/infantry/plugin/api/HarnessDeclaration;Ljava/util/List;Ljava/util/List;Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/UpdateDeclaration;)Lcom/superiorsoftllc/infantry/plugin/api/ModuleManifest;
-	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/plugin/api/ModuleManifest;Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/DaemonCapabilities;Lcom/superiorsoftllc/infantry/plugin/api/HarnessDeclaration;Ljava/util/List;Ljava/util/List;Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/UpdateDeclaration;IILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/api/ModuleManifest;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/DaemonCapabilities;Lcom/superiorsoftllc/infantry/plugin/api/HarnessDeclaration;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/UpdateDeclaration;)Lcom/superiorsoftllc/infantry/plugin/api/ModuleManifest;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/plugin/api/ModuleManifest;Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/DaemonCapabilities;Lcom/superiorsoftllc/infantry/plugin/api/HarnessDeclaration;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/UpdateDeclaration;IILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/api/ModuleManifest;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getActions ()Ljava/util/List;
 	public final fun getAgents ()Ljava/util/List;
@@ -1616,10 +1884,12 @@ public final class com/superiorsoftllc/infantry/plugin/api/ModuleManifest {
 	public final fun getAuthor ()Ljava/lang/String;
 	public final fun getBlockTypes ()Ljava/util/List;
 	public final fun getBlocks ()Ljava/util/List;
+	public final fun getCapabilities ()Ljava/util/List;
 	public final fun getConfig ()Ljava/util/List;
 	public final fun getDaemon ()Lcom/superiorsoftllc/infantry/plugin/api/DaemonCapabilities;
 	public final fun getDependencies ()Ljava/util/List;
 	public final fun getDescription ()Ljava/lang/String;
+	public final fun getEmits ()Ljava/util/List;
 	public final fun getEndpoints ()Ljava/util/List;
 	public final fun getEntry ()Ljava/lang/String;
 	public final fun getEvents ()Ljava/util/List;

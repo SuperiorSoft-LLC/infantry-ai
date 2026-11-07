@@ -25,9 +25,21 @@ import kotlinx.serialization.json.put
 class PluginsDaemonPlugin : DaemonPlugin {
     override fun start(api: DaemonApi) {
         for (tool in tools { api.plugins }) api.tools.register(tool)
+        // PLUGIN-BRIDGES-1: the daemon-side capability proof. `plugins.status` (module.json `capabilities`) answers a script's
+        // `ih.call("plugins.status", {id=...})`, an agent's infantry_capability_call and another plugin's capabilities.call alike.
+        api.capabilities.handle(STATUS_CAPABILITY) { call -> status({ api.plugins }, call.args) }
     }
 
     companion object {
+        const val STATUS_CAPABILITY = "plugins.status"
+
+        /** One installed plugin's state for [STATUS_CAPABILITY]: `{installed:false}` when it is not on this host. */
+        fun status(reader: () -> PluginCatalogReader, args: JsonObject): JsonObject {
+            val id = args.str("id")?.takeIf { it.isNotBlank() } ?: throw IllegalArgumentException("id is required")
+            val s = reader().status(id) ?: return buildJsonObject { put("id", id); put("installed", false) }
+            return JsonObject(summary(s) + ("installed" to JsonPrimitive(true)))
+        }
+
         fun tools(reader: () -> PluginCatalogReader): List<DaemonTool> = listOf(
             PluginTool("infantry_plugin_list", "Every plugin on this host: version, class, tier, enabled, grants, licence, update offer.", emptyMap(), emptyList(), true) { _, _ ->
                 JsonArray(reader().list().map(::summary)).toString()

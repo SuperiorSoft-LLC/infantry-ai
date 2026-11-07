@@ -3,10 +3,13 @@ public final class com/superiorsoftllc/infantry/ui/AboutEntry {
 	public static final field APPLIES_TO Ljava/lang/String;
 	public static final field Companion Lcom/superiorsoftllc/infantry/ui/AboutEntry$Companion;
 	public static final field TITLE Ljava/lang/String;
-	public fun <init> (Ljava/lang/String;Ljava/lang/String;Z)V
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;ZLcom/superiorsoftllc/infantry/ui/model/SourceLinks;Ljava/lang/String;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;ZLcom/superiorsoftllc/infantry/ui/model/SourceLinks;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun getAppBuild ()Ljava/lang/String;
 	public final fun getDaemonBuild ()Ljava/lang/String;
 	public final fun getDaemonConnected ()Z
+	public final fun getLinks ()Lcom/superiorsoftllc/infantry/ui/model/SourceLinks;
+	public final fun getWebsite ()Ljava/lang/String;
 }
 
 public final class com/superiorsoftllc/infantry/ui/AboutEntry$Companion {
@@ -15,7 +18,11 @@ public final class com/superiorsoftllc/infantry/ui/AboutEntry$Companion {
 public final class com/superiorsoftllc/infantry/ui/AboutSectionKt {
 	public static final field ABOUT_APP_BUILD_TAG Ljava/lang/String;
 	public static final field ABOUT_BUILD_MISMATCH_TAG Ljava/lang/String;
+	public static final field ABOUT_CONTRIBUTE_TAG Ljava/lang/String;
 	public static final field ABOUT_DAEMON_BUILD_TAG Ljava/lang/String;
+	public static final field ABOUT_REPORT_PROBLEM_TAG Ljava/lang/String;
+	public static final field ABOUT_VIEW_REPO_TAG Ljava/lang/String;
+	public static final field ABOUT_WEBSITE_TAG Ljava/lang/String;
 	public static final field FOOTER_BUILD_TAG Ljava/lang/String;
 	public static final fun AboutSection (Lcom/superiorsoftllc/infantry/ui/AboutEntry;Landroidx/compose/runtime/Composer;I)V
 	public static final fun FooterBuild (Ljava/lang/String;Ljava/lang/String;Landroidx/compose/ui/Modifier;Landroidx/compose/runtime/Composer;II)V
@@ -88,6 +95,7 @@ public final class com/superiorsoftllc/infantry/ui/AhqHarnessIconsKt {
 public final class com/superiorsoftllc/infantry/ui/AhqIcons {
 	public static final field $stable I
 	public static final field INSTANCE Lcom/superiorsoftllc/infantry/ui/AhqIcons;
+	public final fun getActivity ()Landroidx/compose/ui/graphics/vector/ImageVector;
 	public final fun getAdd ()Landroidx/compose/ui/graphics/vector/ImageVector;
 	public final fun getArrowBack ()Landroidx/compose/ui/graphics/vector/ImageVector;
 	public final fun getAttachFile ()Landroidx/compose/ui/graphics/vector/ImageVector;
@@ -99,17 +107,22 @@ public final class com/superiorsoftllc/infantry/ui/AhqIcons {
 	public final fun getChevronLeft ()Landroidx/compose/ui/graphics/vector/ImageVector;
 	public final fun getChevronRight ()Landroidx/compose/ui/graphics/vector/ImageVector;
 	public final fun getClose ()Landroidx/compose/ui/graphics/vector/ImageVector;
+	public final fun getCloseFullscreen ()Landroidx/compose/ui/graphics/vector/ImageVector;
 	public final fun getCog ()Landroidx/compose/ui/graphics/vector/ImageVector;
 	public final fun getContentPaste ()Landroidx/compose/ui/graphics/vector/ImageVector;
 	public final fun getDeleteForever ()Landroidx/compose/ui/graphics/vector/ImageVector;
+	public final fun getMinimize ()Landroidx/compose/ui/graphics/vector/ImageVector;
 	public final fun getMoreHoriz ()Landroidx/compose/ui/graphics/vector/ImageVector;
 	public final fun getMoreVert ()Landroidx/compose/ui/graphics/vector/ImageVector;
+	public final fun getOpenInFull ()Landroidx/compose/ui/graphics/vector/ImageVector;
 	public final fun getPanelLeft ()Landroidx/compose/ui/graphics/vector/ImageVector;
 	public final fun getPanelRight ()Landroidx/compose/ui/graphics/vector/ImageVector;
 	public final fun getPersonAdd ()Landroidx/compose/ui/graphics/vector/ImageVector;
 	public final fun getPlayArrow ()Landroidx/compose/ui/graphics/vector/ImageVector;
 	public final fun getRadio ()Landroidx/compose/ui/graphics/vector/ImageVector;
 	public final fun getRefresh ()Landroidx/compose/ui/graphics/vector/ImageVector;
+	public final fun getRestore ()Landroidx/compose/ui/graphics/vector/ImageVector;
+	public final fun getSearch ()Landroidx/compose/ui/graphics/vector/ImageVector;
 	public final fun getSend ()Landroidx/compose/ui/graphics/vector/ImageVector;
 	public final fun getStop ()Landroidx/compose/ui/graphics/vector/ImageVector;
 	public final fun getSwapHoriz ()Landroidx/compose/ui/graphics/vector/ImageVector;
@@ -243,6 +256,7 @@ public final class com/superiorsoftllc/infantry/ui/ChatAttachmentsKt {
 	public static final field CHAT_IMAGE_ERROR_TAG Ljava/lang/String;
 	public static final field CHAT_IMAGE_EXPIRED_TAG_PREFIX Ljava/lang/String;
 	public static final field CHAT_IMAGE_REMOVE_TAG_PREFIX Ljava/lang/String;
+	public static final field CHAT_IMAGE_RETRY_TAG_PREFIX Ljava/lang/String;
 	public static final field CHAT_IMAGE_SENT_TAG_PREFIX Ljava/lang/String;
 }
 
@@ -294,6 +308,8 @@ public final class com/superiorsoftllc/infantry/ui/ChatPanelState {
 	public final fun getAttachBusy ()Z
 	public final fun getAttachError ()Ljava/lang/String;
 	public final fun getAttachments ()Ljava/util/List;
+	public final fun getComposerExpanded ()Z
+	public final fun getComposerMinimized ()Z
 	public final fun getDraft ()Ljava/lang/String;
 	public final fun getFocus ()Landroidx/compose/ui/focus/FocusRequester;
 	public final fun getSpawnMode ()Z
@@ -304,6 +320,8 @@ public final class com/superiorsoftllc/infantry/ui/ChatPanelState {
 	public final fun removeAttachment (Ljava/lang/String;)V
 	public final fun resume (Lcom/superiorsoftllc/infantry/ui/net/Controller;Lkotlinx/coroutines/CoroutineScope;Lcom/superiorsoftllc/infantry/ui/model/AgentView;)V
 	public final fun setAttachError (Ljava/lang/String;)V
+	public final fun setComposerExpanded (Z)V
+	public final fun setComposerMinimized (Z)V
 	public final fun setDraft (Ljava/lang/String;)V
 	public final fun setSpawnMode (Z)V
 	public final fun setSwitchAsk (Lcom/superiorsoftllc/infantry/ui/SwitchAgentAsk;)V
@@ -373,37 +391,27 @@ public final class com/superiorsoftllc/infantry/ui/ComposableSingletons$AppKt {
 public final class com/superiorsoftllc/infantry/ui/ComposableSingletons$ConfigDialogKt {
 	public static final field INSTANCE Lcom/superiorsoftllc/infantry/ui/ComposableSingletons$ConfigDialogKt;
 	public fun <init> ()V
-	public final fun getLambda$-1066052721$infantryUiCore ()Lkotlin/jvm/functions/Function2;
-	public final fun getLambda$-1085125590$infantryUiCore ()Lkotlin/jvm/functions/Function3;
-	public final fun getLambda$-1122592892$infantryUiCore ()Lkotlin/jvm/functions/Function3;
-	public final fun getLambda$-1171977681$infantryUiCore ()Lkotlin/jvm/functions/Function3;
+	public final fun getLambda$-1050957054$infantryUiCore ()Lkotlin/jvm/functions/Function3;
+	public final fun getLambda$-1147541473$infantryUiCore ()Lkotlin/jvm/functions/Function3;
 	public final fun getLambda$-1656706889$infantryUiCore ()Lkotlin/jvm/functions/Function2;
 	public final fun getLambda$-1734861227$infantryUiCore ()Lkotlin/jvm/functions/Function2;
-	public final fun getLambda$-1770117372$infantryUiCore ()Lkotlin/jvm/functions/Function3;
+	public final fun getLambda$-1856591027$infantryUiCore ()Lkotlin/jvm/functions/Function3;
 	public final fun getLambda$-196655847$infantryUiCore ()Lkotlin/jvm/functions/Function2;
-	public final fun getLambda$-2029990248$infantryUiCore ()Lkotlin/jvm/functions/Function3;
-	public final fun getLambda$-2032909862$infantryUiCore ()Lkotlin/jvm/functions/Function3;
-	public final fun getLambda$-26962121$infantryUiCore ()Lkotlin/jvm/functions/Function3;
-	public final fun getLambda$-275484389$infantryUiCore ()Lkotlin/jvm/functions/Function3;
-	public final fun getLambda$-32042578$infantryUiCore ()Lkotlin/jvm/functions/Function3;
-	public final fun getLambda$-344529749$infantryUiCore ()Lkotlin/jvm/functions/Function2;
-	public final fun getLambda$-360937277$infantryUiCore ()Lkotlin/jvm/functions/Function3;
-	public final fun getLambda$-928431201$infantryUiCore ()Lkotlin/jvm/functions/Function3;
-	public final fun getLambda$1002393298$infantryUiCore ()Lkotlin/jvm/functions/Function3;
-	public final fun getLambda$1049601957$infantryUiCore ()Lkotlin/jvm/functions/Function3;
-	public final fun getLambda$1220992330$infantryUiCore ()Lkotlin/jvm/functions/Function2;
-	public final fun getLambda$1340426406$infantryUiCore ()Lkotlin/jvm/functions/Function3;
-	public final fun getLambda$1484516153$infantryUiCore ()Lkotlin/jvm/functions/Function3;
+	public final fun getLambda$-2104821727$infantryUiCore ()Lkotlin/jvm/functions/Function3;
+	public final fun getLambda$-2146640554$infantryUiCore ()Lkotlin/jvm/functions/Function3;
+	public final fun getLambda$-371507230$infantryUiCore ()Lkotlin/jvm/functions/Function3;
+	public final fun getLambda$-471944172$infantryUiCore ()Lkotlin/jvm/functions/Function3;
+	public final fun getLambda$-917001274$infantryUiCore ()Lkotlin/jvm/functions/Function3;
+	public final fun getLambda$1004291124$infantryUiCore ()Lkotlin/jvm/functions/Function3;
+	public final fun getLambda$1547790397$infantryUiCore ()Lkotlin/jvm/functions/Function3;
 	public final fun getLambda$1774638338$infantryUiCore ()Lkotlin/jvm/functions/Function4;
+	public final fun getLambda$1848014609$infantryUiCore ()Lkotlin/jvm/functions/Function3;
+	public final fun getLambda$1928886811$infantryUiCore ()Lkotlin/jvm/functions/Function3;
 	public final fun getLambda$195534759$infantryUiCore ()Lkotlin/jvm/functions/Function2;
-	public final fun getLambda$2099917942$infantryUiCore ()Lkotlin/jvm/functions/Function3;
-	public final fun getLambda$2100960304$infantryUiCore ()Lkotlin/jvm/functions/Function3;
-	public final fun getLambda$45521722$infantryUiCore ()Lkotlin/jvm/functions/Function3;
-	public final fun getLambda$478854399$infantryUiCore ()Lkotlin/jvm/functions/Function3;
-	public final fun getLambda$688544687$infantryUiCore ()Lkotlin/jvm/functions/Function3;
-	public final fun getLambda$744434506$infantryUiCore ()Lkotlin/jvm/functions/Function3;
-	public final fun getLambda$770435791$infantryUiCore ()Lkotlin/jvm/functions/Function3;
-	public final fun getLambda$789012885$infantryUiCore ()Lkotlin/jvm/functions/Function3;
+	public final fun getLambda$2013017407$infantryUiCore ()Lkotlin/jvm/functions/Function3;
+	public final fun getLambda$2138013606$infantryUiCore ()Lkotlin/jvm/functions/Function3;
+	public final fun getLambda$276720227$infantryUiCore ()Lkotlin/jvm/functions/Function3;
+	public final fun getLambda$444466664$infantryUiCore ()Lkotlin/jvm/functions/Function3;
 }
 
 public final class com/superiorsoftllc/infantry/ui/ComposableSingletons$ContextLimitViewsKt {
@@ -442,6 +450,12 @@ public final class com/superiorsoftllc/infantry/ui/ComposableSingletons$LimitsSe
 	public final fun getLambda$-450339977$infantryUiCore ()Lkotlin/jvm/functions/Function3;
 }
 
+public final class com/superiorsoftllc/infantry/ui/ComposableSingletons$PathFieldKt {
+	public static final field INSTANCE Lcom/superiorsoftllc/infantry/ui/ComposableSingletons$PathFieldKt;
+	public fun <init> ()V
+	public final fun getLambda$606643078$infantryUiCore ()Lkotlin/jvm/functions/Function3;
+}
+
 public final class com/superiorsoftllc/infantry/ui/ComposableSingletons$ReasoningPanelUiKt {
 	public static final field INSTANCE Lcom/superiorsoftllc/infantry/ui/ComposableSingletons$ReasoningPanelUiKt;
 	public fun <init> ()V
@@ -457,10 +471,16 @@ public final class com/superiorsoftllc/infantry/ui/ComposableSingletons$RestartS
 	public final fun getLambda$-696350745$infantryUiCore ()Lkotlin/jvm/functions/Function3;
 }
 
+public final class com/superiorsoftllc/infantry/ui/ComposableSingletons$ResumeSessionKt {
+	public static final field INSTANCE Lcom/superiorsoftllc/infantry/ui/ComposableSingletons$ResumeSessionKt;
+	public fun <init> ()V
+	public final fun getLambda$-1803243396$infantryUiCore ()Lkotlin/jvm/functions/Function3;
+}
+
 public final class com/superiorsoftllc/infantry/ui/ComposableSingletons$ServerSwitcherUiKt {
 	public static final field INSTANCE Lcom/superiorsoftllc/infantry/ui/ComposableSingletons$ServerSwitcherUiKt;
 	public fun <init> ()V
-	public final fun getLambda$-1143943455$infantryUiCore ()Lkotlin/jvm/functions/Function2;
+	public final fun getLambda$-1398155512$infantryUiCore ()Lkotlin/jvm/functions/Function2;
 	public final fun getLambda$-1603699779$infantryUiCore ()Lkotlin/jvm/functions/Function3;
 	public final fun getLambda$-1814350198$infantryUiCore ()Lkotlin/jvm/functions/Function3;
 	public final fun getLambda$-2143288025$infantryUiCore ()Lkotlin/jvm/functions/Function2;
@@ -482,8 +502,8 @@ public final class com/superiorsoftllc/infantry/ui/ComposableSingletons$ServerUp
 public final class com/superiorsoftllc/infantry/ui/ComposableSingletons$SwitchAgentPickerKt {
 	public static final field INSTANCE Lcom/superiorsoftllc/infantry/ui/ComposableSingletons$SwitchAgentPickerKt;
 	public fun <init> ()V
-	public final fun getLambda$-323104960$infantryUiCore ()Lkotlin/jvm/functions/Function3;
-	public final fun getLambda$-609677359$infantryUiCore ()Lkotlin/jvm/functions/Function3;
+	public final fun getLambda$-844006416$infantryUiCore ()Lkotlin/jvm/functions/Function3;
+	public final fun getLambda$1345324191$infantryUiCore ()Lkotlin/jvm/functions/Function3;
 }
 
 public final class com/superiorsoftllc/infantry/ui/ComposableSingletons$TodoBoxKt {
@@ -589,6 +609,7 @@ public final class com/superiorsoftllc/infantry/ui/ConfigDialogKt {
 	public static final field SECRET_ADD_FIELD_TAG Ljava/lang/String;
 	public static final field SECRET_ADD_FIELD_VALUE_TAG Ljava/lang/String;
 	public static final field SECRET_DELETE_TAG Ljava/lang/String;
+	public static final field SECRET_EMPTY_TAG Ljava/lang/String;
 	public static final field SECRET_ENTRIES_TAG Ljava/lang/String;
 	public static final field SECRET_ENTRY_DELETE_CONFIRM_TAG Ljava/lang/String;
 	public static final field SECRET_ENTRY_DELETE_TAG Ljava/lang/String;
@@ -601,12 +622,16 @@ public final class com/superiorsoftllc/infantry/ui/ConfigDialogKt {
 	public static final field SECRET_IMPORT_TAG Ljava/lang/String;
 	public static final field SECRET_INPUT_TAG Ljava/lang/String;
 	public static final field SECRET_LOCKED_TAG Ljava/lang/String;
+	public static final field SECRET_MOVE_TAG Ljava/lang/String;
 	public static final field SECRET_NEW_FIELD_TAG Ljava/lang/String;
 	public static final field SECRET_NEW_NAME_TAG Ljava/lang/String;
 	public static final field SECRET_NEW_SAVE_TAG Ljava/lang/String;
 	public static final field SECRET_NEW_TAG Ljava/lang/String;
 	public static final field SECRET_NEW_VALUE_TAG Ljava/lang/String;
+	public static final field SECRET_NOTE_TAG Ljava/lang/String;
+	public static final field SECRET_PROJECTS_NOTE_TAG Ljava/lang/String;
 	public static final field SECRET_SAVE_TAG Ljava/lang/String;
+	public static final field SECRET_SCOPE_TAG Ljava/lang/String;
 	public static final field SECRET_STATUS_TAG Ljava/lang/String;
 	public static final field THEME_ACCENT_TAG_PREFIX Ljava/lang/String;
 	public static final field THEME_DARK_SWITCH_TAG Ljava/lang/String;
@@ -643,6 +668,7 @@ public final class com/superiorsoftllc/infantry/ui/ConfigDialogKt {
 	public static final fun ConfigUserPortraitSection (Lcom/superiorsoftllc/infantry/ui/ConfigDialogHost;Landroidx/compose/ui/Modifier;Landroidx/compose/runtime/Composer;II)V
 	public static final fun ConfigVoiceSection (Lcom/superiorsoftllc/infantry/ui/ConfigDialogHost;Landroidx/compose/ui/Modifier;Landroidx/compose/runtime/Composer;II)V
 	public static final fun PromptTimerControl (Lcom/superiorsoftllc/infantry/ui/model/PromptTimerSetting$Value;Lkotlin/jvm/functions/Function2;Landroidx/compose/runtime/Composer;I)V
+	public static final fun SecretsScopeEditor (Ljava/util/List;ZLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/SecretScopeActions;Landroidx/compose/ui/Modifier;ZLkotlin/jvm/functions/Function1;Landroidx/compose/runtime/Composer;II)V
 	public static final fun secretStatusText (Lcom/superiorsoftllc/infantry/ui/protocol/SecretRow;)Ljava/lang/String;
 }
 
@@ -779,6 +805,44 @@ public final class com/superiorsoftllc/infantry/ui/CopyValueButtonKt {
 	public static final fun CopyValueButton (Ljava/lang/String;Landroidx/compose/ui/Modifier;Landroidx/compose/runtime/Composer;II)V
 }
 
+public abstract interface class com/superiorsoftllc/infantry/ui/DaemonImage {
+}
+
+public final class com/superiorsoftllc/infantry/ui/DaemonImage$Bytes : com/superiorsoftllc/infantry/ui/DaemonImage {
+	public static final field $stable I
+	public fun <init> ([B)V
+	public final fun getBytes ()[B
+}
+
+public final class com/superiorsoftllc/infantry/ui/DaemonImage$Failed : com/superiorsoftllc/infantry/ui/DaemonImage {
+	public static final field $stable I
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/DaemonImage$Failed;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/ui/DaemonImage$Failed;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/ui/DaemonImage$Failed;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getReason ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/ui/DaemonImage$Missing : com/superiorsoftllc/infantry/ui/DaemonImage {
+	public static final field $stable I
+	public static final field INSTANCE Lcom/superiorsoftllc/infantry/ui/DaemonImage$Missing;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class com/superiorsoftllc/infantry/ui/DaemonImageSource {
+	public abstract fun fetch (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/superiorsoftllc/infantry/ui/DaemonImagesKt {
+	public static final fun getLocalDaemonImages ()Landroidx/compose/runtime/ProvidableCompositionLocal;
+	public static final fun rememberDaemonImage (Ljava/lang/String;[BILandroidx/compose/runtime/Composer;II)Lcom/superiorsoftllc/infantry/ui/ImageLoad;
+}
+
 public final class com/superiorsoftllc/infantry/ui/DefaultChatBlockRenderer : com/superiorsoftllc/infantry/ui/ChatBlockRenderer {
 	public static final field $stable I
 	public static final field INSTANCE Lcom/superiorsoftllc/infantry/ui/DefaultChatBlockRenderer;
@@ -900,6 +964,19 @@ public final class com/superiorsoftllc/infantry/ui/ExecutorPickerTags {
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class com/superiorsoftllc/infantry/ui/FloatingChipKt {
+	public static final field FLOATING_CHIP_DP I
+	public static final field FLOATING_CHIP_ICON_DP I
+	public static final field FLOATING_CHIP_TOUCH_DP I
+	public static final fun FloatingChip (Landroidx/compose/ui/graphics/vector/ImageVector;Ljava/lang/String;Lkotlin/jvm/functions/Function0;Landroidx/compose/ui/Modifier;Ljava/lang/String;Landroidx/compose/runtime/Composer;II)V
+}
+
+public final class com/superiorsoftllc/infantry/ui/FloatingChips {
+	public static final field $stable I
+	public fun <init> (Lkotlin/jvm/functions/Function3;)V
+	public final fun getContent ()Lkotlin/jvm/functions/Function3;
+}
+
 public final class com/superiorsoftllc/infantry/ui/IconActionKt {
 	public static final field ICON_ACTION_TOOLTIP_TAG Ljava/lang/String;
 	public static final fun IconAction-ahMh9zI (Landroidx/compose/ui/graphics/vector/ImageVector;Ljava/lang/String;Lkotlin/jvm/functions/Function0;Landroidx/compose/ui/Modifier;Ljava/lang/String;ZLcom/superiorsoftllc/infantry/ui/IconActionStyle;Landroidx/compose/material3/ButtonColors;Ljava/lang/String;JJZLandroidx/compose/runtime/Composer;III)V
@@ -919,6 +996,47 @@ public final class com/superiorsoftllc/infantry/ui/IconActionStyle : java/lang/E
 	public static fun getEntries ()Lkotlin/enums/EnumEntries;
 	public static fun valueOf (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/IconActionStyle;
 	public static fun values ()[Lcom/superiorsoftllc/infantry/ui/IconActionStyle;
+}
+
+public abstract interface class com/superiorsoftllc/infantry/ui/ImageLoad {
+}
+
+public final class com/superiorsoftllc/infantry/ui/ImageLoad$Expired : com/superiorsoftllc/infantry/ui/ImageLoad {
+	public static final field $stable I
+	public static final field INSTANCE Lcom/superiorsoftllc/infantry/ui/ImageLoad$Expired;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/ui/ImageLoad$Failed : com/superiorsoftllc/infantry/ui/ImageLoad {
+	public static final field $stable I
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/ImageLoad$Failed;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/ui/ImageLoad$Failed;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/ui/ImageLoad$Failed;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getReason ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/ui/ImageLoad$Loading : com/superiorsoftllc/infantry/ui/ImageLoad {
+	public static final field $stable I
+	public static final field INSTANCE Lcom/superiorsoftllc/infantry/ui/ImageLoad$Loading;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/ui/ImageLoad$Shown : com/superiorsoftllc/infantry/ui/ImageLoad {
+	public static final field $stable I
+	public fun <init> (Landroidx/compose/ui/graphics/ImageBitmap;)V
+	public final fun getBitmap ()Landroidx/compose/ui/graphics/ImageBitmap;
+}
+
+public final class com/superiorsoftllc/infantry/ui/InfantryDropdownMenuKt {
+	public static final fun InfantryDropdownMenu-IBZr-mw (ZLkotlin/jvm/functions/Function0;Landroidx/compose/ui/Modifier;JLkotlin/jvm/functions/Function3;Landroidx/compose/runtime/Composer;II)V
 }
 
 public final class com/superiorsoftllc/infantry/ui/LayerSkillsPanelKt {
@@ -1015,11 +1133,54 @@ public final class com/superiorsoftllc/infantry/ui/Palette {
 	public final fun getOk-0d7_KjU ()J
 	public final fun getOnAccent-0d7_KjU ()J
 	public final fun getPanel-0d7_KjU ()J
+	public final fun getPopupShape ()Landroidx/compose/ui/graphics/Shape;
 	public final fun getRaised-0d7_KjU ()J
 	public final fun getText-0d7_KjU ()J
 	public final fun getTheme ()Lcom/superiorsoftllc/infantry/ui/model/ThemeSettings;
 	public final fun getWarn-0d7_KjU ()J
 	public final fun setTheme (Lcom/superiorsoftllc/infantry/ui/model/ThemeSettings;)V
+}
+
+public final class com/superiorsoftllc/infantry/ui/PathFieldKt {
+	public static final field PATH_FIELD_BROWSE_TAG_SUFFIX Ljava/lang/String;
+	public static final fun PathField (Ljava/lang/String;Lkotlin/jvm/functions/Function1;Lcom/superiorsoftllc/infantry/ui/PathKind;Ljava/lang/String;Landroidx/compose/ui/Modifier;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;ZLandroidx/compose/ui/text/TextStyle;Ljava/lang/String;ZLjava/lang/String;Lkotlin/jvm/functions/Function1;Ljava/lang/String;Landroidx/compose/runtime/Composer;III)V
+	public static final fun currentPathPicker (Lcom/superiorsoftllc/infantry/ui/PathKind;Landroidx/compose/runtime/Composer;I)Lcom/superiorsoftllc/infantry/ui/PathPicker;
+	public static final fun getLocalPathPicker ()Landroidx/compose/runtime/ProvidableCompositionLocal;
+}
+
+public final class com/superiorsoftllc/infantry/ui/PathKind : java/lang/Enum {
+	public static final field FILE Lcom/superiorsoftllc/infantry/ui/PathKind;
+	public static final field FOLDER Lcom/superiorsoftllc/infantry/ui/PathKind;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/PathKind;
+	public static fun values ()[Lcom/superiorsoftllc/infantry/ui/PathKind;
+}
+
+public abstract interface class com/superiorsoftllc/infantry/ui/PathPicker {
+	public abstract fun pick (Lcom/superiorsoftllc/infantry/ui/PathRequest;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/superiorsoftllc/infantry/ui/PathRequest {
+	public static final field $stable I
+	public fun <init> (Lcom/superiorsoftllc/infantry/ui/PathKind;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;)V
+	public synthetic fun <init> (Lcom/superiorsoftllc/infantry/ui/PathKind;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Lcom/superiorsoftllc/infantry/ui/PathKind;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()Ljava/util/List;
+	public final fun copy (Lcom/superiorsoftllc/infantry/ui/PathKind;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;)Lcom/superiorsoftllc/infantry/ui/PathRequest;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/ui/PathRequest;Lcom/superiorsoftllc/infantry/ui/PathKind;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/ui/PathRequest;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getExtensions ()Ljava/util/List;
+	public final fun getInitial ()Ljava/lang/String;
+	public final fun getKind ()Lcom/superiorsoftllc/infantry/ui/PathKind;
+	public final fun getTitle ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/ui/PlatformName_jvmKt {
+	public static final fun platformName ()Ljava/lang/String;
 }
 
 public final class com/superiorsoftllc/infantry/ui/ProfileExecutorFieldKt {
@@ -1095,6 +1256,16 @@ public final class com/superiorsoftllc/infantry/ui/RestartSessionKt {
 	public static final fun restartPlan (Lcom/superiorsoftllc/infantry/ui/model/AgentView;)Lcom/superiorsoftllc/infantry/ui/RestartPlan;
 }
 
+public final class com/superiorsoftllc/infantry/ui/ResumeSessionKt {
+	public static final field RESUME_SESSION_BAR_TAG Ljava/lang/String;
+	public static final field RESUME_SESSION_BUTTON_TAG Ljava/lang/String;
+	public static final field RESUME_SESSION_HINT Ljava/lang/String;
+	public static final field RESUME_SESSION_LABEL Ljava/lang/String;
+	public static final field RESUME_SESSION_MENU_TAG_PREFIX Ljava/lang/String;
+	public static final fun ResumeSessionBar (ZLkotlin/jvm/functions/Function0;Landroidx/compose/ui/Modifier;Landroidx/compose/runtime/Composer;II)V
+	public static final fun showsResumeSession (Lcom/superiorsoftllc/infantry/ui/protocol/SessionRecord;)Z
+}
+
 public final class com/superiorsoftllc/infantry/ui/RoleIconKt {
 	public static final field ROLE_ICON_TAG_PREFIX Ljava/lang/String;
 	public static final fun RoleIcon-FHprtrg (Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/model/AppState;Ljava/lang/String;IJLandroidx/compose/ui/Modifier;Landroidx/compose/runtime/Composer;II)V
@@ -1143,12 +1314,14 @@ public final class com/superiorsoftllc/infantry/ui/SearchableSelectKt {
 
 public final class com/superiorsoftllc/infantry/ui/SecretActions {
 	public static final field $stable I
-	public fun <init> (Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function3;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function1;)V
-	public synthetic fun <init> (Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function3;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function1;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function3;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function3;Lcom/superiorsoftllc/infantry/ui/SecretProjectRef;)V
+	public synthetic fun <init> (Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function3;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function3;Lcom/superiorsoftllc/infantry/ui/SecretProjectRef;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun getClear ()Lkotlin/jvm/functions/Function1;
+	public final fun getCurrentProject ()Lcom/superiorsoftllc/infantry/ui/SecretProjectRef;
 	public final fun getDelete ()Lkotlin/jvm/functions/Function1;
 	public final fun getDeleteField ()Lkotlin/jvm/functions/Function2;
 	public final fun getImport ()Lkotlin/jvm/functions/Function1;
+	public final fun getMove ()Lkotlin/jvm/functions/Function3;
 	public final fun getSet ()Lkotlin/jvm/functions/Function2;
 	public final fun getSetField ()Lkotlin/jvm/functions/Function3;
 }
@@ -1156,13 +1329,45 @@ public final class com/superiorsoftllc/infantry/ui/SecretActions {
 public final class com/superiorsoftllc/infantry/ui/SecretForm {
 	public static final field $stable I
 	public static final field APPLIES_TO Ljava/lang/String;
+	public static final field BUILT_IN_APPLIES_TO Ljava/lang/String;
+	public static final field BUILT_IN_TITLE Ljava/lang/String;
+	public static final field EMPTY Ljava/lang/String;
 	public static final field FIELD_HINT Ljava/lang/String;
 	public static final field INSTANCE Lcom/superiorsoftllc/infantry/ui/SecretForm;
 	public static final field LOCKED Ljava/lang/String;
 	public static final field NAME_HINT Ljava/lang/String;
+	public static final field PROJECT_APPLIES_TO Ljava/lang/String;
+	public static final field SCOPE_APP Ljava/lang/String;
+	public static final field SCOPE_PROJECT Ljava/lang/String;
 	public static final field TITLE Ljava/lang/String;
 	public final fun fieldOk (Ljava/lang/String;)Z
 	public final fun nameOk (Ljava/lang/String;)Z
+	public final fun projectsNote (I)Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/ui/SecretProjectRef {
+	public static final field $stable I
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/SecretProjectRef;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/ui/SecretProjectRef;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/ui/SecretProjectRef;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getId ()Ljava/lang/String;
+	public final fun getName ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/ui/SecretScopeActions {
+	public static final field $stable I
+	public fun <init> (Lkotlin/jvm/functions/Function3;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Ljava/lang/String;)V
+	public synthetic fun <init> (Lkotlin/jvm/functions/Function3;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getDelete ()Lkotlin/jvm/functions/Function1;
+	public final fun getDeleteField ()Lkotlin/jvm/functions/Function2;
+	public final fun getMove ()Lkotlin/jvm/functions/Function1;
+	public final fun getMoveLabel ()Ljava/lang/String;
+	public final fun getSetField ()Lkotlin/jvm/functions/Function3;
 }
 
 public final class com/superiorsoftllc/infantry/ui/SeededExecutorPickerKt {
@@ -1454,6 +1659,12 @@ public final class com/superiorsoftllc/infantry/ui/UpdatesEntry {
 }
 
 public final class com/superiorsoftllc/infantry/ui/UpdatesEntry$Companion {
+}
+
+public final class com/superiorsoftllc/infantry/ui/UploadIds {
+	public static final field $stable I
+	public static final field INSTANCE Lcom/superiorsoftllc/infantry/ui/UploadIds;
+	public final fun of (Ljava/lang/String;)Ljava/lang/String;
 }
 
 public final class com/superiorsoftllc/infantry/ui/UserAvatarKt {
@@ -2144,8 +2355,8 @@ public final class com/superiorsoftllc/infantry/ui/model/AllowedRoles {
 public final class com/superiorsoftllc/infantry/ui/model/AppState {
 	public static final field $stable I
 	public fun <init> ()V
-	public fun <init> (Lcom/superiorsoftllc/infantry/ui/model/ConnectionInfo;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/List;Ljava/lang/String;Ljava/util/List;Lcom/superiorsoftllc/infantry/ui/model/Notice;Ljava/util/List;Ljava/util/Set;Ljava/util/Set;Ljava/util/Map;Ljava/util/Map;Ljava/util/List;Ljava/util/Map;Ljava/lang/String;Ljava/util/List;Ljava/util/Map;Ljava/lang/String;Ljava/util/Map;Ljava/util/Map;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/model/HarnessPickerAsk;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Lcom/superiorsoftllc/infantry/ui/model/SlashAnswer;Lcom/superiorsoftllc/infantry/ui/model/PickedModel;Ljava/lang/String;Ljava/util/List;Ljava/util/Map;Ljava/util/Map;Ljava/util/List;Lcom/superiorsoftllc/infantry/ui/protocol/UsageReport;Ljava/util/Map;Lcom/superiorsoftllc/infantry/plugin/api/ConfigSchemaFrame;Lcom/superiorsoftllc/infantry/plugin/api/ConfigValuesFrame;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/protocol/UsageMeterReport;Ljava/lang/String;Ljava/lang/Integer;Ljava/util/List;Ljava/util/List;JLcom/superiorsoftllc/infantry/ui/protocol/ProcessReport;Ljava/lang/Boolean;Ljava/lang/String;Ljava/util/List;Lcom/superiorsoftllc/infantry/ui/protocol/HarnessInstallReport;ZLjava/util/List;Lcom/superiorsoftllc/infantry/ui/protocol/ToolApprovalInfo;Lcom/superiorsoftllc/infantry/ui/model/PromptTimerSetting$Value;Lcom/superiorsoftllc/infantry/ui/protocol/SecretState;Ljava/util/List;Ljava/util/Set;Ljava/util/List;Ljava/util/Set;Lcom/superiorsoftllc/infantry/ui/model/PanelLayout;Ljava/util/List;Ljava/util/Map;Ljava/util/List;Ljava/util/Map;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/Map;Lcom/superiorsoftllc/infantry/ui/model/RunsState;Ljava/util/Map;Ljava/util/Map;Ljava/util/List;Lcom/superiorsoftllc/infantry/ui/model/MemorySearchView;Ljava/util/List;ZLjava/lang/String;Ljava/util/Map;Ljava/util/List;ZLjava/lang/String;Ljava/util/List;Ljava/util/Map;ZLjava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/util/Map;Ljava/lang/String;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Lcom/superiorsoftllc/infantry/ui/model/ChangesBranchPick;Ljava/util/Map;Ljava/util/Map;Lcom/superiorsoftllc/infantry/ui/model/ChangesWorktreePick;Lcom/superiorsoftllc/infantry/ui/model/ChangesViewPick;Ljava/lang/String;)V
-	public synthetic fun <init> (Lcom/superiorsoftllc/infantry/ui/model/ConnectionInfo;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/List;Ljava/lang/String;Ljava/util/List;Lcom/superiorsoftllc/infantry/ui/model/Notice;Ljava/util/List;Ljava/util/Set;Ljava/util/Set;Ljava/util/Map;Ljava/util/Map;Ljava/util/List;Ljava/util/Map;Ljava/lang/String;Ljava/util/List;Ljava/util/Map;Ljava/lang/String;Ljava/util/Map;Ljava/util/Map;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/model/HarnessPickerAsk;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Lcom/superiorsoftllc/infantry/ui/model/SlashAnswer;Lcom/superiorsoftllc/infantry/ui/model/PickedModel;Ljava/lang/String;Ljava/util/List;Ljava/util/Map;Ljava/util/Map;Ljava/util/List;Lcom/superiorsoftllc/infantry/ui/protocol/UsageReport;Ljava/util/Map;Lcom/superiorsoftllc/infantry/plugin/api/ConfigSchemaFrame;Lcom/superiorsoftllc/infantry/plugin/api/ConfigValuesFrame;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/protocol/UsageMeterReport;Ljava/lang/String;Ljava/lang/Integer;Ljava/util/List;Ljava/util/List;JLcom/superiorsoftllc/infantry/ui/protocol/ProcessReport;Ljava/lang/Boolean;Ljava/lang/String;Ljava/util/List;Lcom/superiorsoftllc/infantry/ui/protocol/HarnessInstallReport;ZLjava/util/List;Lcom/superiorsoftllc/infantry/ui/protocol/ToolApprovalInfo;Lcom/superiorsoftllc/infantry/ui/model/PromptTimerSetting$Value;Lcom/superiorsoftllc/infantry/ui/protocol/SecretState;Ljava/util/List;Ljava/util/Set;Ljava/util/List;Ljava/util/Set;Lcom/superiorsoftllc/infantry/ui/model/PanelLayout;Ljava/util/List;Ljava/util/Map;Ljava/util/List;Ljava/util/Map;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/Map;Lcom/superiorsoftllc/infantry/ui/model/RunsState;Ljava/util/Map;Ljava/util/Map;Ljava/util/List;Lcom/superiorsoftllc/infantry/ui/model/MemorySearchView;Ljava/util/List;ZLjava/lang/String;Ljava/util/Map;Ljava/util/List;ZLjava/lang/String;Ljava/util/List;Ljava/util/Map;ZLjava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/util/Map;Ljava/lang/String;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Lcom/superiorsoftllc/infantry/ui/model/ChangesBranchPick;Ljava/util/Map;Ljava/util/Map;Lcom/superiorsoftllc/infantry/ui/model/ChangesWorktreePick;Lcom/superiorsoftllc/infantry/ui/model/ChangesViewPick;Ljava/lang/String;IIIILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Lcom/superiorsoftllc/infantry/ui/model/ConnectionInfo;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/List;Ljava/lang/String;Ljava/util/List;Lcom/superiorsoftllc/infantry/ui/model/Notice;Ljava/util/List;Ljava/util/Set;Ljava/util/Set;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;JLjava/util/List;Ljava/util/Map;Ljava/lang/String;Ljava/util/List;Ljava/util/Map;Ljava/lang/String;Ljava/util/Map;Ljava/util/Map;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/model/HarnessPickerAsk;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Lcom/superiorsoftllc/infantry/ui/model/SlashAnswer;Lcom/superiorsoftllc/infantry/ui/model/PickedModel;Ljava/lang/String;Ljava/util/List;Ljava/util/Map;Ljava/util/Map;Ljava/util/List;Lcom/superiorsoftllc/infantry/ui/protocol/UsageReport;Ljava/util/Map;Lcom/superiorsoftllc/infantry/plugin/api/ConfigSchemaFrame;Lcom/superiorsoftllc/infantry/plugin/api/ConfigValuesFrame;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/protocol/UsageMeterReport;Ljava/lang/String;Ljava/lang/Integer;Ljava/util/List;Ljava/util/List;JLcom/superiorsoftllc/infantry/ui/protocol/ProcessReport;Ljava/lang/Boolean;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Lcom/superiorsoftllc/infantry/ui/protocol/HarnessInstallReport;ZLjava/util/List;Lcom/superiorsoftllc/infantry/ui/protocol/ToolApprovalInfo;Lcom/superiorsoftllc/infantry/ui/model/PromptTimerSetting$Value;Lcom/superiorsoftllc/infantry/ui/protocol/SecretState;Ljava/util/List;Ljava/util/Set;Ljava/util/List;Ljava/util/Set;Lcom/superiorsoftllc/infantry/ui/model/PanelLayout;Ljava/util/List;Ljava/util/Map;Ljava/util/List;Ljava/util/Map;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/Map;Lcom/superiorsoftllc/infantry/ui/model/RunsState;Ljava/util/Map;Ljava/util/Map;Ljava/util/List;Lcom/superiorsoftllc/infantry/ui/model/MemorySearchView;Ljava/util/List;ZLjava/lang/String;Ljava/util/Map;Ljava/util/List;ZLjava/lang/String;Ljava/util/List;Ljava/util/Map;ZLjava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/util/Map;Ljava/lang/String;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Lcom/superiorsoftllc/infantry/ui/model/ChangesBranchPick;Ljava/util/Map;Ljava/util/Map;Lcom/superiorsoftllc/infantry/ui/model/ChangesWorktreePick;Lcom/superiorsoftllc/infantry/ui/model/ChangesViewPick;Ljava/lang/String;)V
+	public synthetic fun <init> (Lcom/superiorsoftllc/infantry/ui/model/ConnectionInfo;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/List;Ljava/lang/String;Ljava/util/List;Lcom/superiorsoftllc/infantry/ui/model/Notice;Ljava/util/List;Ljava/util/Set;Ljava/util/Set;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;JLjava/util/List;Ljava/util/Map;Ljava/lang/String;Ljava/util/List;Ljava/util/Map;Ljava/lang/String;Ljava/util/Map;Ljava/util/Map;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/model/HarnessPickerAsk;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Lcom/superiorsoftllc/infantry/ui/model/SlashAnswer;Lcom/superiorsoftllc/infantry/ui/model/PickedModel;Ljava/lang/String;Ljava/util/List;Ljava/util/Map;Ljava/util/Map;Ljava/util/List;Lcom/superiorsoftllc/infantry/ui/protocol/UsageReport;Ljava/util/Map;Lcom/superiorsoftllc/infantry/plugin/api/ConfigSchemaFrame;Lcom/superiorsoftllc/infantry/plugin/api/ConfigValuesFrame;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/protocol/UsageMeterReport;Ljava/lang/String;Ljava/lang/Integer;Ljava/util/List;Ljava/util/List;JLcom/superiorsoftllc/infantry/ui/protocol/ProcessReport;Ljava/lang/Boolean;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Lcom/superiorsoftllc/infantry/ui/protocol/HarnessInstallReport;ZLjava/util/List;Lcom/superiorsoftllc/infantry/ui/protocol/ToolApprovalInfo;Lcom/superiorsoftllc/infantry/ui/model/PromptTimerSetting$Value;Lcom/superiorsoftllc/infantry/ui/protocol/SecretState;Ljava/util/List;Ljava/util/Set;Ljava/util/List;Ljava/util/Set;Lcom/superiorsoftllc/infantry/ui/model/PanelLayout;Ljava/util/List;Ljava/util/Map;Ljava/util/List;Ljava/util/Map;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/Map;Lcom/superiorsoftllc/infantry/ui/model/RunsState;Ljava/util/Map;Ljava/util/Map;Ljava/util/List;Lcom/superiorsoftllc/infantry/ui/model/MemorySearchView;Ljava/util/List;ZLjava/lang/String;Ljava/util/Map;Ljava/util/List;ZLjava/lang/String;Ljava/util/List;Ljava/util/Map;ZLjava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/util/Map;Ljava/lang/String;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Lcom/superiorsoftllc/infantry/ui/model/ChangesBranchPick;Ljava/util/Map;Ljava/util/Map;Lcom/superiorsoftllc/infantry/ui/model/ChangesWorktreePick;Lcom/superiorsoftllc/infantry/ui/model/ChangesViewPick;Ljava/lang/String;IIIILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun agentGroup (Lcom/superiorsoftllc/infantry/ui/model/AgentView;Ljava/util/Set;)Lcom/superiorsoftllc/infantry/ui/model/AgentGroup;
 	public static synthetic fun agentGroup$default (Lcom/superiorsoftllc/infantry/ui/model/AppState;Lcom/superiorsoftllc/infantry/ui/model/AgentView;Ljava/util/Set;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/ui/model/AgentGroup;
 	public final fun agentSecondaryId (Lcom/superiorsoftllc/infantry/ui/model/AgentView;)Ljava/lang/String;
@@ -2153,107 +2364,111 @@ public final class com/superiorsoftllc/infantry/ui/model/AppState {
 	public final fun column (Ljava/lang/String;)Ljava/util/List;
 	public final fun component1 ()Lcom/superiorsoftllc/infantry/ui/model/ConnectionInfo;
 	public final fun component10 ()Ljava/util/Set;
-	public final fun component100 ()Ljava/lang/String;
+	public final fun component100 ()Ljava/util/Map;
+	public final fun component101 ()Ljava/util/Map;
+	public final fun component102 ()Lcom/superiorsoftllc/infantry/ui/model/ChangesWorktreePick;
+	public final fun component103 ()Lcom/superiorsoftllc/infantry/ui/model/ChangesViewPick;
+	public final fun component104 ()Ljava/lang/String;
 	public final fun component11 ()Ljava/util/Set;
 	public final fun component12 ()Ljava/util/Map;
 	public final fun component13 ()Ljava/util/Map;
-	public final fun component14 ()Ljava/util/List;
-	public final fun component15 ()Ljava/util/Map;
-	public final fun component16 ()Ljava/lang/String;
-	public final fun component17 ()Ljava/util/List;
-	public final fun component18 ()Ljava/util/Map;
-	public final fun component19 ()Ljava/lang/String;
+	public final fun component14 ()Ljava/util/Map;
+	public final fun component15 ()J
+	public final fun component16 ()Ljava/util/List;
+	public final fun component17 ()Ljava/util/Map;
+	public final fun component18 ()Ljava/lang/String;
+	public final fun component19 ()Ljava/util/List;
 	public final fun component2 ()Ljava/util/Map;
 	public final fun component20 ()Ljava/util/Map;
-	public final fun component21 ()Ljava/util/Map;
-	public final fun component22 ()Ljava/lang/String;
-	public final fun component23 ()Lcom/superiorsoftllc/infantry/ui/model/HarnessPickerAsk;
+	public final fun component21 ()Ljava/lang/String;
+	public final fun component22 ()Ljava/util/Map;
+	public final fun component23 ()Ljava/util/Map;
 	public final fun component24 ()Ljava/lang/String;
-	public final fun component25 ()Ljava/lang/String;
-	public final fun component26 ()Ljava/util/List;
-	public final fun component27 ()Ljava/util/List;
-	public final fun component28 ()Lcom/superiorsoftllc/infantry/ui/model/SlashAnswer;
-	public final fun component29 ()Lcom/superiorsoftllc/infantry/ui/model/PickedModel;
+	public final fun component25 ()Lcom/superiorsoftllc/infantry/ui/model/HarnessPickerAsk;
+	public final fun component26 ()Ljava/lang/String;
+	public final fun component27 ()Ljava/lang/String;
+	public final fun component28 ()Ljava/util/List;
+	public final fun component29 ()Ljava/util/List;
 	public final fun component3 ()Ljava/util/Map;
-	public final fun component30 ()Ljava/lang/String;
-	public final fun component31 ()Ljava/util/List;
-	public final fun component32 ()Ljava/util/Map;
-	public final fun component33 ()Ljava/util/Map;
-	public final fun component34 ()Ljava/util/List;
-	public final fun component35 ()Lcom/superiorsoftllc/infantry/ui/protocol/UsageReport;
-	public final fun component36 ()Ljava/util/Map;
-	public final fun component37 ()Lcom/superiorsoftllc/infantry/plugin/api/ConfigSchemaFrame;
-	public final fun component38 ()Lcom/superiorsoftllc/infantry/plugin/api/ConfigValuesFrame;
-	public final fun component39 ()Ljava/lang/String;
+	public final fun component30 ()Lcom/superiorsoftllc/infantry/ui/model/SlashAnswer;
+	public final fun component31 ()Lcom/superiorsoftllc/infantry/ui/model/PickedModel;
+	public final fun component32 ()Ljava/lang/String;
+	public final fun component33 ()Ljava/util/List;
+	public final fun component34 ()Ljava/util/Map;
+	public final fun component35 ()Ljava/util/Map;
+	public final fun component36 ()Ljava/util/List;
+	public final fun component37 ()Lcom/superiorsoftllc/infantry/ui/protocol/UsageReport;
+	public final fun component38 ()Ljava/util/Map;
+	public final fun component39 ()Lcom/superiorsoftllc/infantry/plugin/api/ConfigSchemaFrame;
 	public final fun component4 ()Ljava/util/Map;
-	public final fun component40 ()Lcom/superiorsoftllc/infantry/ui/protocol/UsageMeterReport;
+	public final fun component40 ()Lcom/superiorsoftllc/infantry/plugin/api/ConfigValuesFrame;
 	public final fun component41 ()Ljava/lang/String;
-	public final fun component42 ()Ljava/lang/Integer;
-	public final fun component43 ()Ljava/util/List;
-	public final fun component44 ()Ljava/util/List;
-	public final fun component45 ()J
-	public final fun component46 ()Lcom/superiorsoftllc/infantry/ui/protocol/ProcessReport;
-	public final fun component47 ()Ljava/lang/Boolean;
-	public final fun component48 ()Ljava/lang/String;
-	public final fun component49 ()Ljava/util/List;
+	public final fun component42 ()Lcom/superiorsoftllc/infantry/ui/protocol/UsageMeterReport;
+	public final fun component43 ()Ljava/lang/String;
+	public final fun component44 ()Ljava/lang/Integer;
+	public final fun component45 ()Ljava/util/List;
+	public final fun component46 ()Ljava/util/List;
+	public final fun component47 ()J
+	public final fun component48 ()Lcom/superiorsoftllc/infantry/ui/protocol/ProcessReport;
+	public final fun component49 ()Ljava/lang/Boolean;
 	public final fun component5 ()Ljava/util/List;
-	public final fun component50 ()Lcom/superiorsoftllc/infantry/ui/protocol/HarnessInstallReport;
-	public final fun component51 ()Z
-	public final fun component52 ()Ljava/util/List;
-	public final fun component53 ()Lcom/superiorsoftllc/infantry/ui/protocol/ToolApprovalInfo;
-	public final fun component54 ()Lcom/superiorsoftllc/infantry/ui/model/PromptTimerSetting$Value;
-	public final fun component55 ()Lcom/superiorsoftllc/infantry/ui/protocol/SecretState;
+	public final fun component50 ()Ljava/lang/String;
+	public final fun component51 ()Ljava/lang/String;
+	public final fun component52 ()Ljava/lang/String;
+	public final fun component53 ()Ljava/util/List;
+	public final fun component54 ()Lcom/superiorsoftllc/infantry/ui/protocol/HarnessInstallReport;
+	public final fun component55 ()Z
 	public final fun component56 ()Ljava/util/List;
-	public final fun component57 ()Ljava/util/Set;
-	public final fun component58 ()Ljava/util/List;
-	public final fun component59 ()Ljava/util/Set;
+	public final fun component57 ()Lcom/superiorsoftllc/infantry/ui/protocol/ToolApprovalInfo;
+	public final fun component58 ()Lcom/superiorsoftllc/infantry/ui/model/PromptTimerSetting$Value;
+	public final fun component59 ()Lcom/superiorsoftllc/infantry/ui/protocol/SecretState;
 	public final fun component6 ()Ljava/lang/String;
-	public final fun component60 ()Lcom/superiorsoftllc/infantry/ui/model/PanelLayout;
-	public final fun component61 ()Ljava/util/List;
-	public final fun component62 ()Ljava/util/Map;
-	public final fun component63 ()Ljava/util/List;
-	public final fun component64 ()Ljava/util/Map;
+	public final fun component60 ()Ljava/util/List;
+	public final fun component61 ()Ljava/util/Set;
+	public final fun component62 ()Ljava/util/List;
+	public final fun component63 ()Ljava/util/Set;
+	public final fun component64 ()Lcom/superiorsoftllc/infantry/ui/model/PanelLayout;
 	public final fun component65 ()Ljava/util/List;
-	public final fun component66 ()Ljava/util/List;
+	public final fun component66 ()Ljava/util/Map;
 	public final fun component67 ()Ljava/util/List;
 	public final fun component68 ()Ljava/util/Map;
-	public final fun component69 ()Lcom/superiorsoftllc/infantry/ui/model/RunsState;
+	public final fun component69 ()Ljava/util/List;
 	public final fun component7 ()Ljava/util/List;
-	public final fun component70 ()Ljava/util/Map;
-	public final fun component71 ()Ljava/util/Map;
-	public final fun component72 ()Ljava/util/List;
-	public final fun component73 ()Lcom/superiorsoftllc/infantry/ui/model/MemorySearchView;
-	public final fun component74 ()Ljava/util/List;
-	public final fun component75 ()Z
-	public final fun component76 ()Ljava/lang/String;
-	public final fun component77 ()Ljava/util/Map;
+	public final fun component70 ()Ljava/util/List;
+	public final fun component71 ()Ljava/util/List;
+	public final fun component72 ()Ljava/util/Map;
+	public final fun component73 ()Lcom/superiorsoftllc/infantry/ui/model/RunsState;
+	public final fun component74 ()Ljava/util/Map;
+	public final fun component75 ()Ljava/util/Map;
+	public final fun component76 ()Ljava/util/List;
+	public final fun component77 ()Lcom/superiorsoftllc/infantry/ui/model/MemorySearchView;
 	public final fun component78 ()Ljava/util/List;
 	public final fun component79 ()Z
 	public final fun component8 ()Lcom/superiorsoftllc/infantry/ui/model/Notice;
 	public final fun component80 ()Ljava/lang/String;
-	public final fun component81 ()Ljava/util/List;
-	public final fun component82 ()Ljava/util/Map;
+	public final fun component81 ()Ljava/util/Map;
+	public final fun component82 ()Ljava/util/List;
 	public final fun component83 ()Z
 	public final fun component84 ()Ljava/lang/String;
 	public final fun component85 ()Ljava/util/List;
-	public final fun component86 ()Ljava/util/List;
-	public final fun component87 ()Ljava/util/Map;
+	public final fun component86 ()Ljava/util/Map;
+	public final fun component87 ()Z
 	public final fun component88 ()Ljava/lang/String;
-	public final fun component89 ()Ljava/util/Map;
+	public final fun component89 ()Ljava/util/List;
 	public final fun component9 ()Ljava/util/List;
-	public final fun component90 ()Ljava/util/Map;
+	public final fun component90 ()Ljava/util/List;
 	public final fun component91 ()Ljava/util/Map;
-	public final fun component92 ()Ljava/util/Map;
+	public final fun component92 ()Ljava/lang/String;
 	public final fun component93 ()Ljava/util/Map;
 	public final fun component94 ()Ljava/util/Map;
-	public final fun component95 ()Lcom/superiorsoftllc/infantry/ui/model/ChangesBranchPick;
+	public final fun component95 ()Ljava/util/Map;
 	public final fun component96 ()Ljava/util/Map;
 	public final fun component97 ()Ljava/util/Map;
-	public final fun component98 ()Lcom/superiorsoftllc/infantry/ui/model/ChangesWorktreePick;
-	public final fun component99 ()Lcom/superiorsoftllc/infantry/ui/model/ChangesViewPick;
+	public final fun component98 ()Ljava/util/Map;
+	public final fun component99 ()Lcom/superiorsoftllc/infantry/ui/model/ChangesBranchPick;
 	public final fun contextLimitChip (Lcom/superiorsoftllc/infantry/ui/model/AgentView;)Lcom/superiorsoftllc/infantry/ui/model/ContextLimitChip;
-	public final fun copy (Lcom/superiorsoftllc/infantry/ui/model/ConnectionInfo;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/List;Ljava/lang/String;Ljava/util/List;Lcom/superiorsoftllc/infantry/ui/model/Notice;Ljava/util/List;Ljava/util/Set;Ljava/util/Set;Ljava/util/Map;Ljava/util/Map;Ljava/util/List;Ljava/util/Map;Ljava/lang/String;Ljava/util/List;Ljava/util/Map;Ljava/lang/String;Ljava/util/Map;Ljava/util/Map;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/model/HarnessPickerAsk;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Lcom/superiorsoftllc/infantry/ui/model/SlashAnswer;Lcom/superiorsoftllc/infantry/ui/model/PickedModel;Ljava/lang/String;Ljava/util/List;Ljava/util/Map;Ljava/util/Map;Ljava/util/List;Lcom/superiorsoftllc/infantry/ui/protocol/UsageReport;Ljava/util/Map;Lcom/superiorsoftllc/infantry/plugin/api/ConfigSchemaFrame;Lcom/superiorsoftllc/infantry/plugin/api/ConfigValuesFrame;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/protocol/UsageMeterReport;Ljava/lang/String;Ljava/lang/Integer;Ljava/util/List;Ljava/util/List;JLcom/superiorsoftllc/infantry/ui/protocol/ProcessReport;Ljava/lang/Boolean;Ljava/lang/String;Ljava/util/List;Lcom/superiorsoftllc/infantry/ui/protocol/HarnessInstallReport;ZLjava/util/List;Lcom/superiorsoftllc/infantry/ui/protocol/ToolApprovalInfo;Lcom/superiorsoftllc/infantry/ui/model/PromptTimerSetting$Value;Lcom/superiorsoftllc/infantry/ui/protocol/SecretState;Ljava/util/List;Ljava/util/Set;Ljava/util/List;Ljava/util/Set;Lcom/superiorsoftllc/infantry/ui/model/PanelLayout;Ljava/util/List;Ljava/util/Map;Ljava/util/List;Ljava/util/Map;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/Map;Lcom/superiorsoftllc/infantry/ui/model/RunsState;Ljava/util/Map;Ljava/util/Map;Ljava/util/List;Lcom/superiorsoftllc/infantry/ui/model/MemorySearchView;Ljava/util/List;ZLjava/lang/String;Ljava/util/Map;Ljava/util/List;ZLjava/lang/String;Ljava/util/List;Ljava/util/Map;ZLjava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/util/Map;Ljava/lang/String;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Lcom/superiorsoftllc/infantry/ui/model/ChangesBranchPick;Ljava/util/Map;Ljava/util/Map;Lcom/superiorsoftllc/infantry/ui/model/ChangesWorktreePick;Lcom/superiorsoftllc/infantry/ui/model/ChangesViewPick;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/model/AppState;
-	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/ui/model/AppState;Lcom/superiorsoftllc/infantry/ui/model/ConnectionInfo;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/List;Ljava/lang/String;Ljava/util/List;Lcom/superiorsoftllc/infantry/ui/model/Notice;Ljava/util/List;Ljava/util/Set;Ljava/util/Set;Ljava/util/Map;Ljava/util/Map;Ljava/util/List;Ljava/util/Map;Ljava/lang/String;Ljava/util/List;Ljava/util/Map;Ljava/lang/String;Ljava/util/Map;Ljava/util/Map;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/model/HarnessPickerAsk;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Lcom/superiorsoftllc/infantry/ui/model/SlashAnswer;Lcom/superiorsoftllc/infantry/ui/model/PickedModel;Ljava/lang/String;Ljava/util/List;Ljava/util/Map;Ljava/util/Map;Ljava/util/List;Lcom/superiorsoftllc/infantry/ui/protocol/UsageReport;Ljava/util/Map;Lcom/superiorsoftllc/infantry/plugin/api/ConfigSchemaFrame;Lcom/superiorsoftllc/infantry/plugin/api/ConfigValuesFrame;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/protocol/UsageMeterReport;Ljava/lang/String;Ljava/lang/Integer;Ljava/util/List;Ljava/util/List;JLcom/superiorsoftllc/infantry/ui/protocol/ProcessReport;Ljava/lang/Boolean;Ljava/lang/String;Ljava/util/List;Lcom/superiorsoftllc/infantry/ui/protocol/HarnessInstallReport;ZLjava/util/List;Lcom/superiorsoftllc/infantry/ui/protocol/ToolApprovalInfo;Lcom/superiorsoftllc/infantry/ui/model/PromptTimerSetting$Value;Lcom/superiorsoftllc/infantry/ui/protocol/SecretState;Ljava/util/List;Ljava/util/Set;Ljava/util/List;Ljava/util/Set;Lcom/superiorsoftllc/infantry/ui/model/PanelLayout;Ljava/util/List;Ljava/util/Map;Ljava/util/List;Ljava/util/Map;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/Map;Lcom/superiorsoftllc/infantry/ui/model/RunsState;Ljava/util/Map;Ljava/util/Map;Ljava/util/List;Lcom/superiorsoftllc/infantry/ui/model/MemorySearchView;Ljava/util/List;ZLjava/lang/String;Ljava/util/Map;Ljava/util/List;ZLjava/lang/String;Ljava/util/List;Ljava/util/Map;ZLjava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/util/Map;Ljava/lang/String;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Lcom/superiorsoftllc/infantry/ui/model/ChangesBranchPick;Ljava/util/Map;Ljava/util/Map;Lcom/superiorsoftllc/infantry/ui/model/ChangesWorktreePick;Lcom/superiorsoftllc/infantry/ui/model/ChangesViewPick;Ljava/lang/String;IIIILjava/lang/Object;)Lcom/superiorsoftllc/infantry/ui/model/AppState;
+	public final fun copy (Lcom/superiorsoftllc/infantry/ui/model/ConnectionInfo;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/List;Ljava/lang/String;Ljava/util/List;Lcom/superiorsoftllc/infantry/ui/model/Notice;Ljava/util/List;Ljava/util/Set;Ljava/util/Set;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;JLjava/util/List;Ljava/util/Map;Ljava/lang/String;Ljava/util/List;Ljava/util/Map;Ljava/lang/String;Ljava/util/Map;Ljava/util/Map;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/model/HarnessPickerAsk;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Lcom/superiorsoftllc/infantry/ui/model/SlashAnswer;Lcom/superiorsoftllc/infantry/ui/model/PickedModel;Ljava/lang/String;Ljava/util/List;Ljava/util/Map;Ljava/util/Map;Ljava/util/List;Lcom/superiorsoftllc/infantry/ui/protocol/UsageReport;Ljava/util/Map;Lcom/superiorsoftllc/infantry/plugin/api/ConfigSchemaFrame;Lcom/superiorsoftllc/infantry/plugin/api/ConfigValuesFrame;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/protocol/UsageMeterReport;Ljava/lang/String;Ljava/lang/Integer;Ljava/util/List;Ljava/util/List;JLcom/superiorsoftllc/infantry/ui/protocol/ProcessReport;Ljava/lang/Boolean;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Lcom/superiorsoftllc/infantry/ui/protocol/HarnessInstallReport;ZLjava/util/List;Lcom/superiorsoftllc/infantry/ui/protocol/ToolApprovalInfo;Lcom/superiorsoftllc/infantry/ui/model/PromptTimerSetting$Value;Lcom/superiorsoftllc/infantry/ui/protocol/SecretState;Ljava/util/List;Ljava/util/Set;Ljava/util/List;Ljava/util/Set;Lcom/superiorsoftllc/infantry/ui/model/PanelLayout;Ljava/util/List;Ljava/util/Map;Ljava/util/List;Ljava/util/Map;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/Map;Lcom/superiorsoftllc/infantry/ui/model/RunsState;Ljava/util/Map;Ljava/util/Map;Ljava/util/List;Lcom/superiorsoftllc/infantry/ui/model/MemorySearchView;Ljava/util/List;ZLjava/lang/String;Ljava/util/Map;Ljava/util/List;ZLjava/lang/String;Ljava/util/List;Ljava/util/Map;ZLjava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/util/Map;Ljava/lang/String;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Lcom/superiorsoftllc/infantry/ui/model/ChangesBranchPick;Ljava/util/Map;Ljava/util/Map;Lcom/superiorsoftllc/infantry/ui/model/ChangesWorktreePick;Lcom/superiorsoftllc/infantry/ui/model/ChangesViewPick;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/model/AppState;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/ui/model/AppState;Lcom/superiorsoftllc/infantry/ui/model/ConnectionInfo;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/List;Ljava/lang/String;Ljava/util/List;Lcom/superiorsoftllc/infantry/ui/model/Notice;Ljava/util/List;Ljava/util/Set;Ljava/util/Set;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;JLjava/util/List;Ljava/util/Map;Ljava/lang/String;Ljava/util/List;Ljava/util/Map;Ljava/lang/String;Ljava/util/Map;Ljava/util/Map;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/model/HarnessPickerAsk;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Lcom/superiorsoftllc/infantry/ui/model/SlashAnswer;Lcom/superiorsoftllc/infantry/ui/model/PickedModel;Ljava/lang/String;Ljava/util/List;Ljava/util/Map;Ljava/util/Map;Ljava/util/List;Lcom/superiorsoftllc/infantry/ui/protocol/UsageReport;Ljava/util/Map;Lcom/superiorsoftllc/infantry/plugin/api/ConfigSchemaFrame;Lcom/superiorsoftllc/infantry/plugin/api/ConfigValuesFrame;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/protocol/UsageMeterReport;Ljava/lang/String;Ljava/lang/Integer;Ljava/util/List;Ljava/util/List;JLcom/superiorsoftllc/infantry/ui/protocol/ProcessReport;Ljava/lang/Boolean;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Lcom/superiorsoftllc/infantry/ui/protocol/HarnessInstallReport;ZLjava/util/List;Lcom/superiorsoftllc/infantry/ui/protocol/ToolApprovalInfo;Lcom/superiorsoftllc/infantry/ui/model/PromptTimerSetting$Value;Lcom/superiorsoftllc/infantry/ui/protocol/SecretState;Ljava/util/List;Ljava/util/Set;Ljava/util/List;Ljava/util/Set;Lcom/superiorsoftllc/infantry/ui/model/PanelLayout;Ljava/util/List;Ljava/util/Map;Ljava/util/List;Ljava/util/Map;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/Map;Lcom/superiorsoftllc/infantry/ui/model/RunsState;Ljava/util/Map;Ljava/util/Map;Ljava/util/List;Lcom/superiorsoftllc/infantry/ui/model/MemorySearchView;Ljava/util/List;ZLjava/lang/String;Ljava/util/Map;Ljava/util/List;ZLjava/lang/String;Ljava/util/List;Ljava/util/Map;ZLjava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/util/Map;Ljava/lang/String;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Lcom/superiorsoftllc/infantry/ui/model/ChangesBranchPick;Ljava/util/Map;Ljava/util/Map;Lcom/superiorsoftllc/infantry/ui/model/ChangesWorktreePick;Lcom/superiorsoftllc/infantry/ui/model/ChangesViewPick;Ljava/lang/String;IIIILjava/lang/Object;)Lcom/superiorsoftllc/infantry/ui/model/AppState;
 	public final fun effortChip (Lcom/superiorsoftllc/infantry/ui/model/AgentView;)Lcom/superiorsoftllc/infantry/ui/model/EffortChip;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getActiveProject ()Lcom/superiorsoftllc/infantry/ui/model/ProjectView;
@@ -2303,6 +2518,7 @@ public final class com/superiorsoftllc/infantry/ui/model/AppState {
 	public final fun getPaceReport ()Ljava/lang/String;
 	public final fun getPanels ()Lcom/superiorsoftllc/infantry/ui/model/PanelLayout;
 	public final fun getPendingHarnessSwitch ()Ljava/util/Map;
+	public final fun getPendingSends ()Ljava/util/Map;
 	public final fun getPendingSpawn ()Ljava/util/Set;
 	public final fun getPickedEffort ()Ljava/lang/String;
 	public final fun getPickedModel ()Lcom/superiorsoftllc/infantry/ui/model/PickedModel;
@@ -2340,14 +2556,17 @@ public final class com/superiorsoftllc/infantry/ui/model/AppState {
 	public final fun getSecrets ()Lcom/superiorsoftllc/infantry/ui/protocol/SecretState;
 	public final fun getSelected ()Lcom/superiorsoftllc/infantry/ui/model/AgentView;
 	public final fun getSelectedId ()Ljava/lang/String;
+	public final fun getSendAckSeconds ()J
 	public final fun getSessionStats ()Ljava/util/Map;
 	public final fun getSessionSwaps ()Ljava/util/Map;
 	public final fun getSessionSwitchError ()Ljava/lang/String;
 	public final fun getShownQuestions ()Ljava/util/List;
+	public final fun getSiteUrl ()Ljava/lang/String;
 	public final fun getSkillError ()Ljava/lang/String;
 	public final fun getSkills ()Ljava/util/List;
 	public final fun getSkillsLoading ()Z
 	public final fun getSlash ()Lcom/superiorsoftllc/infantry/ui/model/SlashAnswer;
+	public final fun getSourceRepo ()Ljava/lang/String;
 	public final fun getSpawnRole ()Ljava/lang/String;
 	public final fun getStories ()Ljava/util/Map;
 	public final fun getTicketError ()Ljava/lang/String;
@@ -3164,22 +3383,26 @@ public final class com/superiorsoftllc/infantry/ui/model/ColumnAlign : java/lang
 public final class com/superiorsoftllc/infantry/ui/model/CommandSpecView {
 	public static final field $stable I
 	public static final field Companion Lcom/superiorsoftllc/infantry/ui/model/CommandSpecView$Companion;
-	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/Long;Ljava/util/List;)V
-	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/Long;Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/Long;Ljava/util/List;Ljava/lang/String;Z)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/Long;Ljava/util/List;Ljava/lang/String;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Ljava/lang/String;
 	public final fun component2 ()Ljava/lang/String;
 	public final fun component3 ()Ljava/lang/String;
 	public final fun component4 ()Ljava/util/List;
 	public final fun component5 ()Ljava/lang/Long;
 	public final fun component6 ()Ljava/util/List;
-	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/Long;Ljava/util/List;)Lcom/superiorsoftllc/infantry/ui/model/CommandSpecView;
-	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/ui/model/CommandSpecView;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/Long;Ljava/util/List;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/ui/model/CommandSpecView;
+	public final fun component7 ()Ljava/lang/String;
+	public final fun component8 ()Z
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/Long;Ljava/util/List;Ljava/lang/String;Z)Lcom/superiorsoftllc/infantry/ui/model/CommandSpecView;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/ui/model/CommandSpecView;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/Long;Ljava/util/List;Ljava/lang/String;ZILjava/lang/Object;)Lcom/superiorsoftllc/infantry/ui/model/CommandSpecView;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getArgv ()Ljava/util/List;
 	public final fun getCwd ()Ljava/lang/String;
 	public final fun getGraceMillis ()Ljava/lang/Long;
 	public final fun getId ()Ljava/lang/String;
 	public final fun getName ()Ljava/lang/String;
+	public final fun getProject ()Ljava/lang/String;
+	public final fun getRooted ()Z
 	public final fun getSecrets ()Ljava/util/List;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
@@ -3258,6 +3481,7 @@ public final class com/superiorsoftllc/infantry/ui/model/ConnectionInfo {
 	public final fun getInstance ()Ljava/lang/String;
 	public final fun getLastFrameAt ()Ljava/lang/Long;
 	public final fun getNotices ()Ljava/util/Map;
+	public final fun getOwnerReadsClosed ()Z
 	public final fun getPolicy ()Lcom/superiorsoftllc/infantry/plugin/api/PolicyWire;
 	public final fun getReadyFields ()Ljava/util/Map;
 	public final fun getRestricted ()Z
@@ -3266,6 +3490,7 @@ public final class com/superiorsoftllc/infantry/ui/model/ConnectionInfo {
 	public final fun getSendsRoleEdit ()Z
 	public final fun getSendsRoleIcon ()Z
 	public final fun getServesConfigSchema ()Z
+	public final fun getServesQueue ()Z
 	public final fun getState ()Lcom/superiorsoftllc/infantry/ui/model/ConnState;
 	public final fun getSwapsAgents ()Z
 	public final fun getSwapsRoles ()Z
@@ -3823,6 +4048,7 @@ public final class com/superiorsoftllc/infantry/ui/model/LimitsView {
 	public static final field $stable I
 	public static final field INSTANCE Lcom/superiorsoftllc/infantry/ui/model/LimitsView;
 	public static final field SEGMENTS I
+	public final fun ageText (J)Ljava/lang/String;
 	public final fun ahead (Lcom/superiorsoftllc/infantry/ui/protocol/LimitWindow;)Z
 	public final fun barDescription (Lcom/superiorsoftllc/infantry/ui/protocol/LimitWindow;)Ljava/lang/String;
 	public final fun filledSegments (D)I
@@ -3833,6 +4059,8 @@ public final class com/superiorsoftllc/infantry/ui/model/LimitsView {
 	public final fun reasonText (Ljava/lang/String;)Ljava/lang/String;
 	public final fun resetText (Ljava/lang/Long;Lkotlinx/datetime/TimeZone;)Ljava/lang/String;
 	public static synthetic fun resetText$default (Lcom/superiorsoftllc/infantry/ui/model/LimitsView;Ljava/lang/Long;Lkotlinx/datetime/TimeZone;ILjava/lang/Object;)Ljava/lang/String;
+	public final fun staleText (Lcom/superiorsoftllc/infantry/ui/protocol/ProviderLimits;JLkotlinx/datetime/TimeZone;)Ljava/lang/String;
+	public static synthetic fun staleText$default (Lcom/superiorsoftllc/infantry/ui/model/LimitsView;Lcom/superiorsoftllc/infantry/ui/protocol/ProviderLimits;JLkotlinx/datetime/TimeZone;ILjava/lang/Object;)Ljava/lang/String;
 }
 
 public final class com/superiorsoftllc/infantry/ui/model/LineKind : java/lang/Enum {
@@ -4087,6 +4315,10 @@ public final class com/superiorsoftllc/infantry/ui/model/ModelGroupChoices {
 public final class com/superiorsoftllc/infantry/ui/model/ModelKt {
 	public static final field AUTOMATION_STATS_SOURCE Ljava/lang/String;
 	public static final field COMPACTING_LABEL Ljava/lang/String;
+	public static final field NOTE_LEVEL_FAIL Ljava/lang/String;
+	public static final field NOTE_LEVEL_INFO Ljava/lang/String;
+	public static final field NOTE_LEVEL_OK Ljava/lang/String;
+	public static final field NOTE_LEVEL_WARN Ljava/lang/String;
 	public static final field QUESTION_AUTO Ljava/lang/String;
 	public static final field QUESTION_OPEN Ljava/lang/String;
 	public static final field STALE_AFTER_MS J
@@ -4094,7 +4326,8 @@ public final class com/superiorsoftllc/infantry/ui/model/ModelKt {
 	public static final field TIMELINE_MAX_PER_SESSION I
 	public static final fun activityTimestamp (JLkotlinx/datetime/TimeZone;)Ljava/lang/String;
 	public static synthetic fun activityTimestamp$default (JLkotlinx/datetime/TimeZone;ILjava/lang/Object;)Ljava/lang/String;
-	public static final fun agentWork (Lcom/superiorsoftllc/infantry/ui/model/AppState;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/model/AgentWork;
+	public static final fun agentWork (Lcom/superiorsoftllc/infantry/ui/model/AppState;Ljava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/model/AgentWork;
+	public static synthetic fun agentWork$default (Lcom/superiorsoftllc/infantry/ui/model/AppState;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/ui/model/AgentWork;
 	public static final fun automationStats (Lcom/superiorsoftllc/infantry/ui/model/AppState;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/model/TimelineItem;
 	public static final fun bgJobsText (Lcom/superiorsoftllc/infantry/ui/protocol/SessionRecord;)Ljava/lang/String;
 	public static final fun branchLine (Lcom/superiorsoftllc/infantry/ui/protocol/Ticket;)Ljava/lang/String;
@@ -4108,12 +4341,15 @@ public final class com/superiorsoftllc/infantry/ui/model/ModelKt {
 	public static final fun epicTicketColumns (Lcom/superiorsoftllc/infantry/ui/model/AppState;Ljava/lang/String;)Ljava/util/Map;
 	public static final fun filterPrompts (Ljava/util/List;Ljava/lang/String;)Ljava/util/List;
 	public static final fun filterSkills (Ljava/util/List;Ljava/lang/String;)Ljava/util/List;
+	public static final fun forcesMidTurn (Lcom/superiorsoftllc/infantry/ui/model/AppState;Ljava/lang/String;)Z
+	public static final fun getNOTE_LEVELS ()Ljava/util/Set;
 	public static final fun historyRequest (Lcom/superiorsoftllc/infantry/ui/model/AppState;Ljava/util/Set;)Lcom/superiorsoftllc/infantry/ui/model/HistoryRequest;
 	public static final fun insertIntoPrompt (Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
 	public static final fun interruptBlocker (Lcom/superiorsoftllc/infantry/ui/model/AgentView;)Ljava/lang/String;
 	public static final fun isBusy (Lcom/superiorsoftllc/infantry/ui/model/AgentView;)Z
 	public static final fun isRunning (Lcom/superiorsoftllc/infantry/ui/protocol/SessionState;)Z
 	public static final fun localNotices (Lcom/superiorsoftllc/infantry/ui/model/AppState;)Ljava/util/List;
+	public static final fun localQueue (Lcom/superiorsoftllc/infantry/ui/model/AppState;Ljava/lang/String;)Ljava/util/List;
 	public static final fun needsInput (Lcom/superiorsoftllc/infantry/ui/model/AgentView;Ljava/util/List;Ljava/util/List;Ljava/util/Set;)Z
 	public static synthetic fun needsInput$default (Lcom/superiorsoftllc/infantry/ui/model/AgentView;Ljava/util/List;Ljava/util/List;Ljava/util/Set;ILjava/lang/Object;)Z
 	public static final fun noteKey (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
@@ -4129,6 +4365,7 @@ public final class com/superiorsoftllc/infantry/ui/model/ModelKt {
 	public static final fun reviewQueueOf (Ljava/util/Map;Ljava/util/Map;)Ljava/util/List;
 	public static final fun roleHue (Ljava/lang/String;)F
 	public static final fun selectProject (Lcom/superiorsoftllc/infantry/ui/model/AppState;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/model/AppState;
+	public static final fun settlePendingQueue (Lcom/superiorsoftllc/infantry/ui/model/AppState;Lcom/superiorsoftllc/infantry/ui/protocol/Envelope;)Lcom/superiorsoftllc/infantry/ui/model/AppState;
 	public static final fun settleQueueSends (Lcom/superiorsoftllc/infantry/ui/model/AppState;Lcom/superiorsoftllc/infantry/ui/model/AppState;)Lcom/superiorsoftllc/infantry/ui/model/AppState;
 	public static final fun stateLabel (Lcom/superiorsoftllc/infantry/ui/protocol/SessionState;)Ljava/lang/String;
 	public static final fun ticketBranchFor (Lcom/superiorsoftllc/infantry/ui/model/AppState;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/protocol/Ticket;
@@ -4474,6 +4711,54 @@ public final class com/superiorsoftllc/infantry/ui/model/PathExtensionKt {
 	public static final fun splitExtension (Ljava/lang/String;)Lkotlin/Pair;
 }
 
+public final class com/superiorsoftllc/infantry/ui/model/PendingSend {
+	public static final field $stable I
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JLcom/superiorsoftllc/infantry/ui/model/SendState;Ljava/lang/String;Ljava/lang/Long;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JLcom/superiorsoftllc/infantry/ui/model/SendState;Ljava/lang/String;Ljava/lang/Long;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()J
+	public final fun component5 ()Lcom/superiorsoftllc/infantry/ui/model/SendState;
+	public final fun component6 ()Ljava/lang/String;
+	public final fun component7 ()Ljava/lang/Long;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JLcom/superiorsoftllc/infantry/ui/model/SendState;Ljava/lang/String;Ljava/lang/Long;)Lcom/superiorsoftllc/infantry/ui/model/PendingSend;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/ui/model/PendingSend;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JLcom/superiorsoftllc/infantry/ui/model/SendState;Ljava/lang/String;Ljava/lang/Long;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/ui/model/PendingSend;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAt ()J
+	public final fun getClientId ()Ljava/lang/String;
+	public final fun getReason ()Ljava/lang/String;
+	public final fun getSessionId ()Ljava/lang/String;
+	public final fun getState ()Lcom/superiorsoftllc/infantry/ui/model/SendState;
+	public final fun getText ()Ljava/lang/String;
+	public final fun getUserSeqAtSend ()Ljava/lang/Long;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/ui/model/PendingSends {
+	public static final field $stable I
+	public static final field ACK_SECONDS_KEY Ljava/lang/String;
+	public static final field DEFAULT_ACK_SECONDS J
+	public static final field INSTANCE Lcom/superiorsoftllc/infantry/ui/model/PendingSends;
+	public final fun ackSecondsFromSettingsFrame (Ljava/lang/String;)Ljava/lang/Long;
+	public final fun label (Lcom/superiorsoftllc/infantry/ui/model/PendingSend;)Ljava/lang/String;
+	public final fun newClientId (JLkotlin/random/Random;)Ljava/lang/String;
+	public static synthetic fun newClientId$default (Lcom/superiorsoftllc/infantry/ui/model/PendingSends;JLkotlin/random/Random;ILjava/lang/Object;)Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/ui/model/PendingSendsKt {
+	public static final fun echoArrived (Lcom/superiorsoftllc/infantry/ui/model/AppState;Lcom/superiorsoftllc/infantry/ui/model/PendingSend;)Z
+	public static final fun expirePendingSend (Lcom/superiorsoftllc/infantry/ui/model/AppState;Ljava/lang/String;J)Lcom/superiorsoftllc/infantry/ui/model/AppState;
+	public static final fun failSendsOnDrop (Lcom/superiorsoftllc/infantry/ui/model/AppState;Lcom/superiorsoftllc/infantry/ui/model/AppState;)Lcom/superiorsoftllc/infantry/ui/model/AppState;
+	public static final fun lastUserSeq (Lcom/superiorsoftllc/infantry/ui/model/AppState;Ljava/lang/String;)Ljava/lang/Long;
+	public static final fun pendingRefusedBusy (Lcom/superiorsoftllc/infantry/ui/model/AppState;Lcom/superiorsoftllc/infantry/ui/protocol/Envelope;)Lcom/superiorsoftllc/infantry/ui/model/PendingSend;
+	public static final fun pendingSendsFor (Lcom/superiorsoftllc/infantry/ui/model/AppState;Ljava/lang/String;)Ljava/util/List;
+	public static final fun settlePendingSends (Lcom/superiorsoftllc/infantry/ui/model/AppState;Lcom/superiorsoftllc/infantry/ui/model/AppState;Lcom/superiorsoftllc/infantry/ui/protocol/Envelope;)Lcom/superiorsoftllc/infantry/ui/model/AppState;
+	public static final fun withPendingSend (Lcom/superiorsoftllc/infantry/ui/model/AppState;Lcom/superiorsoftllc/infantry/ui/model/PendingSend;)Lcom/superiorsoftllc/infantry/ui/model/AppState;
+	public static final fun withoutPendingSend (Lcom/superiorsoftllc/infantry/ui/model/AppState;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/model/AppState;
+}
+
 public final class com/superiorsoftllc/infantry/ui/model/PickedModel {
 	public static final field $stable I
 	public static final field Companion Lcom/superiorsoftllc/infantry/ui/model/PickedModel$Companion;
@@ -4619,6 +4904,20 @@ public final class com/superiorsoftllc/infantry/ui/model/ProgressTone : java/lan
 	public static fun values ()[Lcom/superiorsoftllc/infantry/ui/model/ProgressTone;
 }
 
+public final class com/superiorsoftllc/infantry/ui/model/ProjectCommands {
+	public static final field $stable I
+	public fun <init> (Ljava/util/List;Ljava/util/List;)V
+	public final fun component1 ()Ljava/util/List;
+	public final fun component2 ()Ljava/util/List;
+	public final fun copy (Ljava/util/List;Ljava/util/List;)Lcom/superiorsoftllc/infantry/ui/model/ProjectCommands;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/ui/model/ProjectCommands;Ljava/util/List;Ljava/util/List;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/ui/model/ProjectCommands;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getOwn ()Ljava/util/List;
+	public final fun getUnassigned ()Ljava/util/List;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class com/superiorsoftllc/infantry/ui/model/ProjectGitViewKt {
 	public static final fun aheadHint (Lcom/superiorsoftllc/infantry/ui/protocol/ProjectGitWorktreeStatus;)Ljava/lang/String;
 	public static final fun branchChangesView (Lcom/superiorsoftllc/infantry/ui/protocol/ProjectGitBranchDiffstat;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/model/BranchChangesView;
@@ -4632,7 +4931,8 @@ public final class com/superiorsoftllc/infantry/ui/model/ProjectGitViewKt {
 	public static final fun projectHistoryView (Lcom/superiorsoftllc/infantry/ui/protocol/ProjectGitHistory;)Lcom/superiorsoftllc/infantry/ui/model/HistoryView;
 	public static final fun projectPatchView (Lcom/superiorsoftllc/infantry/ui/protocol/ProjectGitPatch;Ljava/lang/String;ZLjava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/model/PatchView;
 	public static synthetic fun projectPatchView$default (Lcom/superiorsoftllc/infantry/ui/protocol/ProjectGitPatch;Ljava/lang/String;ZLjava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/ui/model/PatchView;
-	public static final fun whenText (Lcom/superiorsoftllc/infantry/ui/protocol/GitCommit;)Ljava/lang/String;
+	public static final fun whenText (Lcom/superiorsoftllc/infantry/ui/protocol/GitCommit;Lkotlinx/datetime/TimeZone;)Ljava/lang/String;
+	public static synthetic fun whenText$default (Lcom/superiorsoftllc/infantry/ui/protocol/GitCommit;Lkotlinx/datetime/TimeZone;ILjava/lang/Object;)Ljava/lang/String;
 	public static final fun withChangesBranch (Lcom/superiorsoftllc/infantry/ui/model/AppState;Ljava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/model/AppState;
 	public static final fun withChangesView (Lcom/superiorsoftllc/infantry/ui/model/AppState;Ljava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/model/AppState;
 }
@@ -4643,6 +4943,7 @@ public final class com/superiorsoftllc/infantry/ui/model/ProjectSettingsRegistry
 	public static final field INSTANCE Lcom/superiorsoftllc/infantry/ui/model/ProjectSettingsRegistry;
 	public static final field LANES Ljava/lang/String;
 	public static final field PIPELINE Ljava/lang/String;
+	public static final field SECRETS Ljava/lang/String;
 	public static final field SKILLS Ljava/lang/String;
 	public static final field WATCHDOG_KEY Ljava/lang/String;
 	public final fun getSections ()Ljava/util/List;
@@ -4781,13 +5082,18 @@ public final class com/superiorsoftllc/infantry/ui/model/QueueSend {
 
 public final class com/superiorsoftllc/infantry/ui/model/QueuedPrompt {
 	public static final field $stable I
-	public fun <init> (Ljava/lang/String;J)V
+	public fun <init> (Ljava/lang/String;JLjava/lang/String;Ljava/lang/String;)V
+	public synthetic fun <init> (Ljava/lang/String;JLjava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Ljava/lang/String;
 	public final fun component2 ()J
-	public final fun copy (Ljava/lang/String;J)Lcom/superiorsoftllc/infantry/ui/model/QueuedPrompt;
-	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/ui/model/QueuedPrompt;Ljava/lang/String;JILjava/lang/Object;)Lcom/superiorsoftllc/infantry/ui/model/QueuedPrompt;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;JLjava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/model/QueuedPrompt;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/ui/model/QueuedPrompt;Ljava/lang/String;JLjava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/ui/model/QueuedPrompt;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getAt ()J
+	public final fun getId ()Ljava/lang/String;
+	public final fun getRequestId ()Ljava/lang/String;
 	public final fun getText ()Ljava/lang/String;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
@@ -4815,6 +5121,25 @@ public final class com/superiorsoftllc/infantry/ui/model/ReasoningPlacement : ja
 
 public final class com/superiorsoftllc/infantry/ui/model/ReasoningPlacement$Companion {
 	public final fun fromId (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/model/ReasoningPlacement;
+}
+
+public final class com/superiorsoftllc/infantry/ui/model/ReportFacts {
+	public static final field $stable I
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/model/ReportFacts;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/ui/model/ReportFacts;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/ui/model/ReportFacts;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAppBuild ()Ljava/lang/String;
+	public final fun getDaemonBuild ()Ljava/lang/String;
+	public final fun getHarnessMode ()Ljava/lang/String;
+	public final fun getOs ()Ljava/lang/String;
+	public fun hashCode ()I
+	public final fun issueBody ()Ljava/lang/String;
+	public fun toString ()Ljava/lang/String;
 }
 
 public final class com/superiorsoftllc/infantry/ui/model/ReportFlag : java/lang/Enum {
@@ -5042,6 +5367,7 @@ public final class com/superiorsoftllc/infantry/ui/model/RunLine {
 
 public final class com/superiorsoftllc/infantry/ui/model/RunModelKt {
 	public static final field MAX_RUN_LINES I
+	public static final fun projectCommands (Ljava/util/List;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/model/ProjectCommands;
 	public static final fun reduceRuns (Lcom/superiorsoftllc/infantry/ui/model/RunsState;Lcom/superiorsoftllc/infantry/ui/protocol/Envelope;Lkotlinx/serialization/json/Json;)Lcom/superiorsoftllc/infantry/ui/model/RunsState;
 	public static final fun runElapsed (J)Ljava/lang/String;
 	public static final fun runPill (Lcom/superiorsoftllc/infantry/ui/model/RunState;Ljava/util/List;J)Lcom/superiorsoftllc/infantry/ui/model/RunPill;
@@ -5286,6 +5612,15 @@ public final class com/superiorsoftllc/infantry/ui/model/SearchText {
 	public final fun getLabel ()Ljava/lang/String;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/ui/model/SendState : java/lang/Enum {
+	public static final field ACCEPTED Lcom/superiorsoftllc/infantry/ui/model/SendState;
+	public static final field FAILED Lcom/superiorsoftllc/infantry/ui/model/SendState;
+	public static final field SENDING Lcom/superiorsoftllc/infantry/ui/model/SendState;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/model/SendState;
+	public static fun values ()[Lcom/superiorsoftllc/infantry/ui/model/SendState;
 }
 
 public abstract interface class com/superiorsoftllc/infantry/ui/model/ServerUpdateApi {
@@ -5617,6 +5952,32 @@ public final class com/superiorsoftllc/infantry/ui/model/SlashSuggestion {
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class com/superiorsoftllc/infantry/ui/model/SourceLinks {
+	public static final field $stable I
+	public static final field Companion Lcom/superiorsoftllc/infantry/ui/model/SourceLinks$Companion;
+	public static final field KEY Ljava/lang/String;
+	public static final field SITE_KEY Ljava/lang/String;
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/model/SourceLinks;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/ui/model/SourceLinks;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/ui/model/SourceLinks;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getContribute ()Ljava/lang/String;
+	public final fun getRepo ()Ljava/lang/String;
+	public final fun getReportProblem ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/ui/model/SourceLinks$Companion {
+	public final fun encode (Ljava/lang/String;)Ljava/lang/String;
+	public final fun of (Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/model/ReportFacts;)Lcom/superiorsoftllc/infantry/ui/model/SourceLinks;
+	public final fun repoFromSettingsFrame (Ljava/lang/String;)Ljava/lang/String;
+	public final fun siteFromSettingsFrame (Ljava/lang/String;)Ljava/lang/String;
+}
+
 public abstract interface class com/superiorsoftllc/infantry/ui/model/SpawnSlash {
 }
 
@@ -5849,6 +6210,11 @@ public final class com/superiorsoftllc/infantry/ui/model/TimeFormat {
 	public final fun clock12 (III)Ljava/lang/String;
 }
 
+public final class com/superiorsoftllc/infantry/ui/model/TimeFormatKt {
+	public static final fun formatLocal (JLkotlinx/datetime/TimeZone;)Ljava/lang/String;
+	public static synthetic fun formatLocal$default (JLkotlinx/datetime/TimeZone;ILjava/lang/Object;)Ljava/lang/String;
+}
+
 public final class com/superiorsoftllc/infantry/ui/model/TimelineItem {
 	public static final field $stable I
 	public static final field Companion Lcom/superiorsoftllc/infantry/ui/model/TimelineItem$Companion;
@@ -5873,6 +6239,7 @@ public final class com/superiorsoftllc/infantry/ui/model/TimelineItem {
 	public final fun getKind ()Ljava/lang/String;
 	public final fun getLabel ()Ljava/lang/String;
 	public final fun getMeta ()Ljava/util/Map;
+	public final fun getNoteLevel ()Ljava/lang/String;
 	public final fun getOk ()Z
 	public final fun getSessionId ()Ljava/lang/String;
 	public final fun getSource ()Ljava/lang/String;
@@ -6364,6 +6731,10 @@ public final class com/superiorsoftllc/infantry/ui/net/CommandResult$Sent : com/
 public final class com/superiorsoftllc/infantry/ui/net/Controller {
 	public static final field $stable I
 	public static final field Companion Lcom/superiorsoftllc/infantry/ui/net/Controller$Companion;
+	public static final field IMAGE_BYTES Ljava/lang/String;
+	public static final field IMAGE_CACHE_BYTES J
+	public static final field IMAGE_FETCH Ljava/lang/String;
+	public static final field IMAGE_FETCH_TIMEOUT_MS J
 	public static final field IMAGE_UPLOAD_TIMEOUT_MS J
 	public static final field PLUGIN_SECRET_TIMEOUT_MS J
 	public static final field PLUGIN_TOOL_TIMEOUT_MS J
@@ -6406,14 +6777,17 @@ public final class com/superiorsoftllc/infantry/ui/net/Controller {
 	public final fun deleteProfile (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun deletePrompt (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun deleteRole (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public final fun deleteSecret (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public final fun deleteSecretField (Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun deleteSecret (Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun deleteSecret$default (Lcom/superiorsoftllc/infantry/ui/net/Controller;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun deleteSecretField (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun deleteSecretField$default (Lcom/superiorsoftllc/infantry/ui/net/Controller;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun deleteSession (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun deleteSkill (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun deleteTicket (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun deleteTrait (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun deleteTrigger (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun disableTrigger (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun discardSend (Ljava/lang/String;)V
 	public final fun disconnect ()V
 	public final fun dismissProjectRefusal ()V
 	public final fun dismissPrompt (Ljava/lang/String;)V
@@ -6422,9 +6796,12 @@ public final class com/superiorsoftllc/infantry/ui/net/Controller {
 	public final fun editTicket (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/Integer;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun editTicket$default (Lcom/superiorsoftllc/infantry/ui/net/Controller;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/Integer;Ljava/lang/String;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun endSession (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun fetchUploadedImage (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun fireTrigger (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun forceQueued (Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/model/QueuedPrompt;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun getActiveProjectId ()Ljava/lang/String;
 	public final fun getClient ()Lcom/superiorsoftllc/infantry/ui/net/DaemonClient;
+	public final fun getImages ()Lcom/superiorsoftllc/infantry/ui/DaemonImageSource;
 	public final fun getMemory (Ljava/lang/String;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/model/NoteScope;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun getMemory$default (Lcom/superiorsoftllc/infantry/ui/net/Controller;Ljava/lang/String;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/model/NoteScope;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun getRunBytes ()Lkotlinx/coroutines/flow/SharedFlow;
@@ -6455,6 +6832,7 @@ public final class com/superiorsoftllc/infantry/ui/net/Controller {
 	public final fun loadTraits (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun loadTriggerEvents (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun loadWorktreeStatus (Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun moveSecret (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun moveTicket (Ljava/lang/String;Ljava/lang/String;Ljava/lang/Boolean;Ljava/lang/Integer;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun moveTicket$default (Lcom/superiorsoftllc/infantry/ui/net/Controller;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Boolean;Ljava/lang/Integer;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun openAssistant (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -6469,7 +6847,7 @@ public final class com/superiorsoftllc/infantry/ui/net/Controller {
 	public static synthetic fun postToast$default (Lcom/superiorsoftllc/infantry/ui/net/Controller;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/model/ToastKind;Ljava/lang/String;ILjava/lang/Object;)Ljava/lang/String;
 	public final fun prompt (Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun queryPod (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public final fun queueMessage (Ljava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/net/CommandResult;
+	public final fun queueMessage (Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun reapProcesses (Ljava/lang/Long;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun reconnectNow ()V
 	public final fun refreshLimits (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -6478,6 +6856,7 @@ public final class com/superiorsoftllc/infantry/ui/net/Controller {
 	public final fun refreshUsage (ZLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun refreshUsage$default (Lcom/superiorsoftllc/infantry/ui/net/Controller;ZLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun refreshWorktree (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun removeQueued (Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/model/QueuedPrompt;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun removeSession (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun renameProject (Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun reorderTicket (Ljava/lang/String;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -6491,10 +6870,12 @@ public final class com/superiorsoftllc/infantry/ui/net/Controller {
 	public final fun restartSession (Ljava/lang/String;ZLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun restartSession$default (Lcom/superiorsoftllc/infantry/ui/net/Controller;Ljava/lang/String;ZLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun resume (Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun resumeSession (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun retrySend (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun revealPanel (Lcom/superiorsoftllc/infantry/ui/model/PanelSide;)V
 	public final fun saveAgent (Lcom/superiorsoftllc/infantry/ui/protocol/AgentProfile;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public final fun saveCommand (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;JLjava/util/List;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public static synthetic fun saveCommand$default (Lcom/superiorsoftllc/infantry/ui/net/Controller;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;JLjava/util/List;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun saveCommand (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;JLjava/util/List;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun saveCommand$default (Lcom/superiorsoftllc/infantry/ui/net/Controller;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;JLjava/util/List;Ljava/lang/String;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun saveEpic (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun saveEpic$default (Lcom/superiorsoftllc/infantry/ui/net/Controller;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun saveLayerSkill (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -6536,7 +6917,8 @@ public final class com/superiorsoftllc/infantry/ui/net/Controller {
 	public static synthetic fun setPromptTimer$default (Lcom/superiorsoftllc/infantry/ui/net/Controller;Ljava/lang/Integer;Ljava/lang/String;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun setRoleTraits (Ljava/lang/String;Ljava/util/List;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun setSecret (Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public final fun setSecretField (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun setSecretField (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun setSecretField$default (Lcom/superiorsoftllc/infantry/ui/net/Controller;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun setSkillInlineMax (ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun setToolApproval (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun setUserPortrait ([BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -6547,8 +6929,8 @@ public final class com/superiorsoftllc/infantry/ui/net/Controller {
 	public final fun spawnAs (Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun startNextTicket (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun startRun (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public final fun startRun (Ljava/lang/String;ZLjava/lang/Integer;Ljava/lang/Integer;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public static synthetic fun startRun$default (Lcom/superiorsoftllc/infantry/ui/net/Controller;Ljava/lang/String;ZLjava/lang/Integer;Ljava/lang/Integer;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun startRun (Ljava/lang/String;ZLjava/lang/Integer;Ljava/lang/Integer;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun startRun$default (Lcom/superiorsoftllc/infantry/ui/net/Controller;Ljava/lang/String;ZLjava/lang/Integer;Ljava/lang/Integer;Ljava/lang/String;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun startSession (Lcom/superiorsoftllc/infantry/ui/model/StartPlan;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun startSession$default (Lcom/superiorsoftllc/infantry/ui/net/Controller;Lcom/superiorsoftllc/infantry/ui/model/StartPlan;Ljava/lang/String;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun stopBackgroundProcesses (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -6563,6 +6945,7 @@ public final class com/superiorsoftllc/infantry/ui/net/Controller {
 	public final fun supportsPipeline ()Z
 	public final fun supportsProjectBase ()Z
 	public final fun supportsProjectGit ()Z
+	public final fun supportsProjectSecrets ()Z
 	public final fun supportsRunConsole ()Z
 	public final fun supportsWorktreeView ()Z
 	public final fun swapAgent (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/protocol/SwapSessionMode;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -6570,6 +6953,7 @@ public final class com/superiorsoftllc/infantry/ui/net/Controller {
 	public final fun switchAgent (Ljava/lang/String;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/model/PickedModel;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun switchHarness (Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun togglePanel (Lcom/superiorsoftllc/infantry/ui/model/PanelSide;)V
+	public final fun unassignTicket (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun uploadChatFile (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun uploadChatImage (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun uploadTicketImage (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -6899,11 +7283,17 @@ public final class com/superiorsoftllc/infantry/ui/plugin/BadgeTone : java/lang/
 	public static fun values ()[Lcom/superiorsoftllc/infantry/ui/plugin/BadgeTone;
 }
 
+public abstract interface class com/superiorsoftllc/infantry/ui/plugin/CapabilityEvents {
+	public abstract fun emit (Ljava/lang/String;Lkotlinx/serialization/json/JsonObject;)V
+}
+
 public final class com/superiorsoftllc/infantry/ui/plugin/ChildSlotKt {
 	public static final field SLOT_EMPTY_TAG Ljava/lang/String;
 	public static final fun ChildSlot (Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/model/AppState;Lcom/superiorsoftllc/infantry/ui/net/Controller;Landroidx/compose/ui/Modifier;Ljava/util/Map;Lcom/superiorsoftllc/infantry/ui/plugin/TabContext;Lkotlin/jvm/functions/Function2;Landroidx/compose/runtime/Composer;II)V
+	public static final fun ChildSlotRow (Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/model/AppState;Lcom/superiorsoftllc/infantry/ui/net/Controller;Landroidx/compose/ui/Modifier;Ljava/util/Map;Lcom/superiorsoftllc/infantry/ui/plugin/TabContext;Landroidx/compose/runtime/Composer;II)V
 	public static final fun SlotEmpty (Ljava/lang/String;Landroidx/compose/runtime/Composer;I)V
 	public static final fun getLocalSlotArgs ()Landroidx/compose/runtime/ProvidableCompositionLocal;
+	public static final fun slotFilled (Ljava/lang/String;Landroidx/compose/runtime/Composer;I)Z
 }
 
 public final class com/superiorsoftllc/infantry/ui/plugin/ChildSource : java/lang/Enum {
@@ -6918,6 +7308,19 @@ public final class com/superiorsoftllc/infantry/ui/plugin/ChildSource : java/lan
 	public final fun getLabel ()Ljava/lang/String;
 	public static fun valueOf (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/plugin/ChildSource;
 	public static fun values ()[Lcom/superiorsoftllc/infantry/ui/plugin/ChildSource;
+}
+
+public abstract interface class com/superiorsoftllc/infantry/ui/plugin/ClientCapabilityHandler {
+	public abstract fun call (Lkotlinx/serialization/json/JsonObject;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/superiorsoftllc/infantry/ui/plugin/ClientCapabilityHost {
+	public static final field $stable I
+	public static final field INSTANCE Lcom/superiorsoftllc/infantry/ui/plugin/ClientCapabilityHost;
+	public final fun answer (Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/CapabilityCallFrame;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun hosting (Ljava/util/List;Ljava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/plugin/api/CapabilityHosting;
+	public final fun platformOf (Ljava/lang/String;)Ljava/lang/String;
+	public final fun run (Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Lkotlinx/coroutines/flow/Flow;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
 public final class com/superiorsoftllc/infantry/ui/plugin/CommunityBadgeKt {
@@ -6938,6 +7341,7 @@ public final class com/superiorsoftllc/infantry/ui/plugin/ComposableSingletons$C
 	public static final field INSTANCE Lcom/superiorsoftllc/infantry/ui/plugin/ComposableSingletons$ChildSlotKt;
 	public fun <init> ()V
 	public final fun getLambda$-1650619548$infantryUiCore ()Lkotlin/jvm/functions/Function2;
+	public final fun getLambda$1696661331$infantryUiCore ()Lkotlin/jvm/functions/Function2;
 }
 
 public final class com/superiorsoftllc/infantry/ui/plugin/ComposableSingletons$ModulesSectionKt {
@@ -7027,8 +7431,8 @@ public final class com/superiorsoftllc/infantry/ui/plugin/DesktopPlugins {
 	public static synthetic fun change$default (Lcom/superiorsoftllc/infantry/ui/plugin/DesktopPlugins;Ljava/io/File;Ljava/util/List;ZLcom/superiorsoftllc/infantry/ui/plugin/ModuleRequest;Ljava/io/File;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/host/ModuleChange;
 	public final fun composition (Lcom/superiorsoftllc/infantry/plugin/api/ModuleManifest;Lcom/superiorsoftllc/infantry/plugin/api/Tier;Ljava/io/File;)Lcom/superiorsoftllc/infantry/ui/plugin/InfantryModule;
 	public final fun dataDir (Ljava/io/File;Ljava/lang/String;)Ljava/io/File;
-	public final fun load (Ljava/io/File;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Ljava/util/List;Lkotlin/jvm/functions/Function1;Ljava/util/Set;)Lcom/superiorsoftllc/infantry/ui/plugin/DesktopPlugins$Loaded;
-	public static synthetic fun load$default (Lcom/superiorsoftllc/infantry/ui/plugin/DesktopPlugins;Ljava/io/File;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Ljava/util/List;Lkotlin/jvm/functions/Function1;Ljava/util/Set;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/ui/plugin/DesktopPlugins$Loaded;
+	public final fun load (Ljava/io/File;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Ljava/util/List;Lkotlin/jvm/functions/Function1;Ljava/util/Set;Lcom/superiorsoftllc/infantry/ui/voice/Speaker;Lcom/superiorsoftllc/infantry/ui/voice/CaptureMonitor;Lkotlin/jvm/functions/Function1;Lcom/superiorsoftllc/infantry/ui/voice/CaptureLines;)Lcom/superiorsoftllc/infantry/ui/plugin/DesktopPlugins$Loaded;
+	public static synthetic fun load$default (Lcom/superiorsoftllc/infantry/ui/plugin/DesktopPlugins;Ljava/io/File;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Ljava/util/List;Lkotlin/jvm/functions/Function1;Ljava/util/Set;Lcom/superiorsoftllc/infantry/ui/voice/Speaker;Lcom/superiorsoftllc/infantry/ui/voice/CaptureMonitor;Lkotlin/jvm/functions/Function1;Lcom/superiorsoftllc/infantry/ui/voice/CaptureLines;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/ui/plugin/DesktopPlugins$Loaded;
 }
 
 public final class com/superiorsoftllc/infantry/ui/plugin/DesktopPlugins$Loaded : java/lang/AutoCloseable {
@@ -7114,10 +7518,11 @@ public final class com/superiorsoftllc/infantry/ui/plugin/HostNode {
 
 public final class com/superiorsoftllc/infantry/ui/plugin/InfantryModule {
 	public static final field $stable I
-	public fun <init> (Lcom/superiorsoftllc/infantry/plugin/api/ModuleManifest;Ljava/util/List;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Lcom/superiorsoftllc/infantry/plugin/api/Tier;Ljava/util/List;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Lkotlin/jvm/functions/Function0;Ljava/util/List;)V
-	public synthetic fun <init> (Lcom/superiorsoftllc/infantry/plugin/api/ModuleManifest;Ljava/util/List;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Lcom/superiorsoftllc/infantry/plugin/api/Tier;Ljava/util/List;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Lkotlin/jvm/functions/Function0;Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Lcom/superiorsoftllc/infantry/plugin/api/ModuleManifest;Ljava/util/List;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Lcom/superiorsoftllc/infantry/plugin/api/Tier;Ljava/util/List;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Lkotlin/jvm/functions/Function0;Ljava/util/List;Ljava/util/Map;)V
+	public synthetic fun <init> (Lcom/superiorsoftllc/infantry/plugin/api/ModuleManifest;Ljava/util/List;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Lcom/superiorsoftllc/infantry/plugin/api/Tier;Ljava/util/List;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;Lkotlin/jvm/functions/Function0;Ljava/util/List;Ljava/util/Map;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun getBlockTypes ()Ljava/util/Map;
 	public final fun getBlocks ()Ljava/util/Map;
+	public final fun getCapabilities ()Ljava/util/Map;
 	public final fun getFieldTypes ()Ljava/util/Map;
 	public final fun getFills ()Ljava/util/Map;
 	public final fun getImplementations ()Ljava/util/Map;
@@ -7622,8 +8027,10 @@ public final class com/superiorsoftllc/infantry/ui/plugin/UiPlugin$DefaultImpls 
 public abstract interface class com/superiorsoftllc/infantry/ui/plugin/UiRegistrar {
 	public abstract fun block (Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/plugin/SlotBlock;)V
 	public fun blockType (Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/block/layout/BlockType;)V
+	public fun capability (Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/plugin/ClientCapabilityHandler;)V
 	public fun fieldType (Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/plugin/config/FieldType;)V
 	public fun fill (Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/block/layout/Block;)V
+	public fun getCapabilityEvents ()Lcom/superiorsoftllc/infantry/ui/plugin/CapabilityEvents;
 	public abstract fun getServices ()Lcom/superiorsoftllc/infantry/plugin/api/PluginServices;
 	public fun implementation (Ljava/lang/String;Ljava/lang/String;Ljava/lang/Object;)V
 	public fun inject (Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/block/layout/BlockInjection;)V
@@ -7638,8 +8045,10 @@ public abstract interface class com/superiorsoftllc/infantry/ui/plugin/UiRegistr
 
 public final class com/superiorsoftllc/infantry/ui/plugin/UiRegistrar$DefaultImpls {
 	public static fun blockType (Lcom/superiorsoftllc/infantry/ui/plugin/UiRegistrar;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/block/layout/BlockType;)V
+	public static fun capability (Lcom/superiorsoftllc/infantry/ui/plugin/UiRegistrar;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/plugin/ClientCapabilityHandler;)V
 	public static fun fieldType (Lcom/superiorsoftllc/infantry/ui/plugin/UiRegistrar;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/plugin/config/FieldType;)V
 	public static fun fill (Lcom/superiorsoftllc/infantry/ui/plugin/UiRegistrar;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/block/layout/Block;)V
+	public static fun getCapabilityEvents (Lcom/superiorsoftllc/infantry/ui/plugin/UiRegistrar;)Lcom/superiorsoftllc/infantry/ui/plugin/CapabilityEvents;
 	public static fun implementation (Lcom/superiorsoftllc/infantry/ui/plugin/UiRegistrar;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Object;)V
 	public static fun inject (Lcom/superiorsoftllc/infantry/ui/plugin/UiRegistrar;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/block/layout/BlockInjection;)V
 	public static fun panel (Lcom/superiorsoftllc/infantry/ui/plugin/UiRegistrar;Lcom/superiorsoftllc/infantry/ui/plugin/PanelProvider;)V
@@ -8854,6 +9263,7 @@ public final class com/superiorsoftllc/infantry/ui/protocol/Envelope {
 	public static final field ATTENTION_ACK Ljava/lang/String;
 	public static final field ATTENTION_ITEMS Ljava/lang/String;
 	public static final field ATTENTION_LIST Ljava/lang/String;
+	public static final field CLIENT_SEND_PREFIX Ljava/lang/String;
 	public static final field CLI_LOCATIONS Ljava/lang/String;
 	public static final field CLI_LOCATION_SET Ljava/lang/String;
 	public static final field COMMANDS Ljava/lang/String;
@@ -8950,6 +9360,7 @@ public final class com/superiorsoftllc/infantry/ui/protocol/Envelope {
 	public static final field PROJECT_SAVE Ljava/lang/String;
 	public static final field PROMPT Ljava/lang/String;
 	public static final field PROMPTS Ljava/lang/String;
+	public static final field PROMPT_ACK Ljava/lang/String;
 	public static final field PROMPT_DELETE Ljava/lang/String;
 	public static final field PROMPT_GET Ljava/lang/String;
 	public static final field PROMPT_ITEM Ljava/lang/String;
@@ -8967,6 +9378,9 @@ public final class com/superiorsoftllc/infantry/ui/protocol/Envelope {
 	public static final field QUESTION_ASK Ljava/lang/String;
 	public static final field QUESTION_CANCEL Ljava/lang/String;
 	public static final field QUESTION_LIST Ljava/lang/String;
+	public static final field QUEUE_ADD Ljava/lang/String;
+	public static final field QUEUE_FORCE Ljava/lang/String;
+	public static final field QUEUE_REMOVE Ljava/lang/String;
 	public static final field READY Ljava/lang/String;
 	public static final field REASONING Ljava/lang/String;
 	public static final field REPLAY_GAP Ljava/lang/String;
@@ -9005,6 +9419,7 @@ public final class com/superiorsoftllc/infantry/ui/protocol/Envelope {
 	public static final field SECRET_FIELD_DELETE Ljava/lang/String;
 	public static final field SECRET_FIELD_SET Ljava/lang/String;
 	public static final field SECRET_IMPORT Ljava/lang/String;
+	public static final field SECRET_MOVE Ljava/lang/String;
 	public static final field SECRET_SET Ljava/lang/String;
 	public static final field SECRET_STATE Ljava/lang/String;
 	public static final field SECRET_STATUS Ljava/lang/String;
@@ -11896,11 +12311,12 @@ public final class com/superiorsoftllc/infantry/ui/protocol/PromptView$Companion
 public final class com/superiorsoftllc/infantry/ui/protocol/ProviderInfo {
 	public static final field $stable I
 	public static final field Companion Lcom/superiorsoftllc/infantry/ui/protocol/ProviderInfo$Companion;
-	public fun <init> (Ljava/lang/String;ZLjava/lang/String;Ljava/util/List;ZZLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
-	public synthetic fun <init> (Ljava/lang/String;ZLjava/lang/String;Ljava/util/List;ZZLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Ljava/lang/String;ZLjava/lang/String;Ljava/util/List;ZZLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Boolean;)V
+	public synthetic fun <init> (Ljava/lang/String;ZLjava/lang/String;Ljava/util/List;ZZLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Boolean;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Ljava/lang/String;
 	public final fun component10 ()Ljava/lang/String;
 	public final fun component11 ()Ljava/lang/String;
+	public final fun component12 ()Ljava/lang/Boolean;
 	public final fun component2 ()Z
 	public final fun component3 ()Ljava/lang/String;
 	public final fun component4 ()Ljava/util/List;
@@ -11909,8 +12325,8 @@ public final class com/superiorsoftllc/infantry/ui/protocol/ProviderInfo {
 	public final fun component7 ()Ljava/lang/String;
 	public final fun component8 ()Ljava/lang/String;
 	public final fun component9 ()Ljava/lang/String;
-	public final fun copy (Ljava/lang/String;ZLjava/lang/String;Ljava/util/List;ZZLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/protocol/ProviderInfo;
-	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/ui/protocol/ProviderInfo;Ljava/lang/String;ZLjava/lang/String;Ljava/util/List;ZZLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/ui/protocol/ProviderInfo;
+	public final fun copy (Ljava/lang/String;ZLjava/lang/String;Ljava/util/List;ZZLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Boolean;)Lcom/superiorsoftllc/infantry/ui/protocol/ProviderInfo;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/ui/protocol/ProviderInfo;Ljava/lang/String;ZLjava/lang/String;Ljava/util/List;ZZLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Boolean;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/ui/protocol/ProviderInfo;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getAvailable ()Z
 	public final fun getContextLimit ()Ljava/lang/String;
@@ -11920,6 +12336,7 @@ public final class com/superiorsoftllc/infantry/ui/protocol/ProviderInfo {
 	public final fun getEffort ()Ljava/lang/String;
 	public final fun getEffortHow ()Ljava/lang/String;
 	public final fun getId ()Ljava/lang/String;
+	public final fun getMidTurnInput ()Ljava/lang/Boolean;
 	public final fun getModels ()Ljava/util/List;
 	public final fun getModelsStale ()Z
 	public final fun getUnavailableReason ()Ljava/lang/String;
@@ -11946,19 +12363,23 @@ public final class com/superiorsoftllc/infantry/ui/protocol/ProviderInfo$Compani
 public final class com/superiorsoftllc/infantry/ui/protocol/ProviderLimits {
 	public static final field $stable I
 	public static final field Companion Lcom/superiorsoftllc/infantry/ui/protocol/ProviderLimits$Companion;
-	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;J)V
-	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;JILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;JZLjava/lang/Long;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;JZLjava/lang/Long;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Ljava/lang/String;
 	public final fun component2 ()Ljava/lang/String;
 	public final fun component3 ()Ljava/util/List;
 	public final fun component4 ()Ljava/lang/String;
 	public final fun component5 ()J
-	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;J)Lcom/superiorsoftllc/infantry/ui/protocol/ProviderLimits;
-	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/ui/protocol/ProviderLimits;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;JILjava/lang/Object;)Lcom/superiorsoftllc/infantry/ui/protocol/ProviderLimits;
+	public final fun component6 ()Z
+	public final fun component7 ()Ljava/lang/Long;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;JZLjava/lang/Long;)Lcom/superiorsoftllc/infantry/ui/protocol/ProviderLimits;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/ui/protocol/ProviderLimits;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;JZLjava/lang/Long;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/ui/protocol/ProviderLimits;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getObservedAt ()J
 	public final fun getProvider ()Ljava/lang/String;
 	public final fun getReason ()Ljava/lang/String;
+	public final fun getRetryAt ()Ljava/lang/Long;
+	public final fun getStale ()Z
 	public final fun getStatus ()Ljava/lang/String;
 	public final fun getWindows ()Ljava/util/List;
 	public fun hashCode ()I
@@ -12094,6 +12515,40 @@ public final synthetic class com/superiorsoftllc/infantry/ui/protocol/QuestionAn
 }
 
 public final class com/superiorsoftllc/infantry/ui/protocol/QuestionAnswerWire$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/superiorsoftllc/infantry/ui/protocol/QueuedTurnView {
+	public static final field $stable I
+	public static final field Companion Lcom/superiorsoftllc/infantry/ui/protocol/QueuedTurnView$Companion;
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;J)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;JILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()J
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;J)Lcom/superiorsoftllc/infantry/ui/protocol/QueuedTurnView;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/ui/protocol/QueuedTurnView;Ljava/lang/String;Ljava/lang/String;JILjava/lang/Object;)Lcom/superiorsoftllc/infantry/ui/protocol/QueuedTurnView;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAt ()J
+	public final fun getId ()Ljava/lang/String;
+	public final fun getText ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final synthetic class com/superiorsoftllc/infantry/ui/protocol/QueuedTurnView$$serializer : kotlinx/serialization/internal/GeneratedSerializer {
+	public static final field $stable I
+	public static final field INSTANCE Lcom/superiorsoftllc/infantry/ui/protocol/QueuedTurnView$$serializer;
+	public final fun childSerializers ()[Lkotlinx/serialization/KSerializer;
+	public final fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Lcom/superiorsoftllc/infantry/ui/protocol/QueuedTurnView;
+	public synthetic fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;
+	public final fun getDescriptor ()Lkotlinx/serialization/descriptors/SerialDescriptor;
+	public final fun serialize (Lkotlinx/serialization/encoding/Encoder;Lcom/superiorsoftllc/infantry/ui/protocol/QueuedTurnView;)V
+	public synthetic fun serialize (Lkotlinx/serialization/encoding/Encoder;Ljava/lang/Object;)V
+	public fun typeParametersSerializers ()[Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/superiorsoftllc/infantry/ui/protocol/QueuedTurnView$Companion {
 	public final fun serializer ()Lkotlinx/serialization/KSerializer;
 }
 
@@ -12621,15 +13076,17 @@ public final class com/superiorsoftllc/infantry/ui/protocol/RunUsage$Companion {
 public final class com/superiorsoftllc/infantry/ui/protocol/SecretEntryRow {
 	public static final field $stable I
 	public static final field Companion Lcom/superiorsoftllc/infantry/ui/protocol/SecretEntryRow$Companion;
-	public fun <init> (Ljava/lang/String;Ljava/util/List;)V
-	public synthetic fun <init> (Ljava/lang/String;Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Ljava/lang/String;Ljava/util/List;Ljava/lang/String;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/util/List;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Ljava/lang/String;
 	public final fun component2 ()Ljava/util/List;
-	public final fun copy (Ljava/lang/String;Ljava/util/List;)Lcom/superiorsoftllc/infantry/ui/protocol/SecretEntryRow;
-	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/ui/protocol/SecretEntryRow;Ljava/lang/String;Ljava/util/List;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/ui/protocol/SecretEntryRow;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/util/List;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/protocol/SecretEntryRow;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/ui/protocol/SecretEntryRow;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/ui/protocol/SecretEntryRow;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getFields ()Ljava/util/List;
 	public final fun getName ()Ljava/lang/String;
+	public final fun getProject ()Ljava/lang/String;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
 }
@@ -12762,8 +13219,8 @@ public final class com/superiorsoftllc/infantry/ui/protocol/SecretState$Companio
 public final class com/superiorsoftllc/infantry/ui/protocol/SessionRecord {
 	public static final field $stable I
 	public static final field Companion Lcom/superiorsoftllc/infantry/ui/protocol/SessionRecord$Companion;
-	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JJLcom/superiorsoftllc/infantry/ui/protocol/SessionState;Ljava/lang/String;Ljava/lang/Long;IILjava/lang/Integer;Lcom/superiorsoftllc/infantry/ui/protocol/KillOutcome;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZLjava/lang/Integer;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/protocol/SessionReport;Lcom/superiorsoftllc/infantry/ui/protocol/BackgroundWorkView;Ljava/util/List;Lcom/superiorsoftllc/infantry/ui/protocol/AutomationView;Ljava/lang/Boolean;Lcom/superiorsoftllc/infantry/ui/protocol/AgentWatchView;ZLcom/superiorsoftllc/infantry/ui/protocol/ProgressView;Ljava/lang/String;)V
-	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JJLcom/superiorsoftllc/infantry/ui/protocol/SessionState;Ljava/lang/String;Ljava/lang/Long;IILjava/lang/Integer;Lcom/superiorsoftllc/infantry/ui/protocol/KillOutcome;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZLjava/lang/Integer;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/protocol/SessionReport;Lcom/superiorsoftllc/infantry/ui/protocol/BackgroundWorkView;Ljava/util/List;Lcom/superiorsoftllc/infantry/ui/protocol/AutomationView;Ljava/lang/Boolean;Lcom/superiorsoftllc/infantry/ui/protocol/AgentWatchView;ZLcom/superiorsoftllc/infantry/ui/protocol/ProgressView;Ljava/lang/String;IILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JJLcom/superiorsoftllc/infantry/ui/protocol/SessionState;Ljava/lang/String;Ljava/lang/Long;IILjava/lang/Integer;Lcom/superiorsoftllc/infantry/ui/protocol/KillOutcome;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZLjava/lang/Integer;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/protocol/SessionReport;Lcom/superiorsoftllc/infantry/ui/protocol/BackgroundWorkView;Ljava/util/List;ZLcom/superiorsoftllc/infantry/ui/protocol/AutomationView;Ljava/lang/Boolean;Lcom/superiorsoftllc/infantry/ui/protocol/AgentWatchView;ZLcom/superiorsoftllc/infantry/ui/protocol/ProgressView;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JJLcom/superiorsoftllc/infantry/ui/protocol/SessionState;Ljava/lang/String;Ljava/lang/Long;IILjava/lang/Integer;Lcom/superiorsoftllc/infantry/ui/protocol/KillOutcome;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZLjava/lang/Integer;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/protocol/SessionReport;Lcom/superiorsoftllc/infantry/ui/protocol/BackgroundWorkView;Ljava/util/List;ZLcom/superiorsoftllc/infantry/ui/protocol/AutomationView;Ljava/lang/Boolean;Lcom/superiorsoftllc/infantry/ui/protocol/AgentWatchView;ZLcom/superiorsoftllc/infantry/ui/protocol/ProgressView;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;IILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Ljava/lang/String;
 	public final fun component10 ()I
 	public final fun component11 ()Ljava/lang/Integer;
@@ -12788,20 +13245,23 @@ public final class com/superiorsoftllc/infantry/ui/protocol/SessionRecord {
 	public final fun component29 ()Lcom/superiorsoftllc/infantry/ui/protocol/BackgroundWorkView;
 	public final fun component3 ()Ljava/lang/String;
 	public final fun component30 ()Ljava/util/List;
-	public final fun component31 ()Lcom/superiorsoftllc/infantry/ui/protocol/AutomationView;
-	public final fun component32 ()Ljava/lang/Boolean;
-	public final fun component33 ()Lcom/superiorsoftllc/infantry/ui/protocol/AgentWatchView;
-	public final fun component34 ()Z
-	public final fun component35 ()Lcom/superiorsoftllc/infantry/ui/protocol/ProgressView;
-	public final fun component36 ()Ljava/lang/String;
+	public final fun component31 ()Z
+	public final fun component32 ()Lcom/superiorsoftllc/infantry/ui/protocol/AutomationView;
+	public final fun component33 ()Ljava/lang/Boolean;
+	public final fun component34 ()Lcom/superiorsoftllc/infantry/ui/protocol/AgentWatchView;
+	public final fun component35 ()Z
+	public final fun component36 ()Lcom/superiorsoftllc/infantry/ui/protocol/ProgressView;
+	public final fun component37 ()Ljava/lang/String;
+	public final fun component38 ()Ljava/util/List;
+	public final fun component39 ()Ljava/lang/String;
 	public final fun component4 ()J
 	public final fun component5 ()J
 	public final fun component6 ()Lcom/superiorsoftllc/infantry/ui/protocol/SessionState;
 	public final fun component7 ()Ljava/lang/String;
 	public final fun component8 ()Ljava/lang/Long;
 	public final fun component9 ()I
-	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JJLcom/superiorsoftllc/infantry/ui/protocol/SessionState;Ljava/lang/String;Ljava/lang/Long;IILjava/lang/Integer;Lcom/superiorsoftllc/infantry/ui/protocol/KillOutcome;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZLjava/lang/Integer;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/protocol/SessionReport;Lcom/superiorsoftllc/infantry/ui/protocol/BackgroundWorkView;Ljava/util/List;Lcom/superiorsoftllc/infantry/ui/protocol/AutomationView;Ljava/lang/Boolean;Lcom/superiorsoftllc/infantry/ui/protocol/AgentWatchView;ZLcom/superiorsoftllc/infantry/ui/protocol/ProgressView;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/protocol/SessionRecord;
-	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/ui/protocol/SessionRecord;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JJLcom/superiorsoftllc/infantry/ui/protocol/SessionState;Ljava/lang/String;Ljava/lang/Long;IILjava/lang/Integer;Lcom/superiorsoftllc/infantry/ui/protocol/KillOutcome;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZLjava/lang/Integer;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/protocol/SessionReport;Lcom/superiorsoftllc/infantry/ui/protocol/BackgroundWorkView;Ljava/util/List;Lcom/superiorsoftllc/infantry/ui/protocol/AutomationView;Ljava/lang/Boolean;Lcom/superiorsoftllc/infantry/ui/protocol/AgentWatchView;ZLcom/superiorsoftllc/infantry/ui/protocol/ProgressView;Ljava/lang/String;IILjava/lang/Object;)Lcom/superiorsoftllc/infantry/ui/protocol/SessionRecord;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JJLcom/superiorsoftllc/infantry/ui/protocol/SessionState;Ljava/lang/String;Ljava/lang/Long;IILjava/lang/Integer;Lcom/superiorsoftllc/infantry/ui/protocol/KillOutcome;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZLjava/lang/Integer;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/protocol/SessionReport;Lcom/superiorsoftllc/infantry/ui/protocol/BackgroundWorkView;Ljava/util/List;ZLcom/superiorsoftllc/infantry/ui/protocol/AutomationView;Ljava/lang/Boolean;Lcom/superiorsoftllc/infantry/ui/protocol/AgentWatchView;ZLcom/superiorsoftllc/infantry/ui/protocol/ProgressView;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/protocol/SessionRecord;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/ui/protocol/SessionRecord;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JJLcom/superiorsoftllc/infantry/ui/protocol/SessionState;Ljava/lang/String;Ljava/lang/Long;IILjava/lang/Integer;Lcom/superiorsoftllc/infantry/ui/protocol/KillOutcome;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZLjava/lang/Integer;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/protocol/SessionReport;Lcom/superiorsoftllc/infantry/ui/protocol/BackgroundWorkView;Ljava/util/List;ZLcom/superiorsoftllc/infantry/ui/protocol/AutomationView;Ljava/lang/Boolean;Lcom/superiorsoftllc/infantry/ui/protocol/AgentWatchView;ZLcom/superiorsoftllc/infantry/ui/protocol/ProgressView;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;IILjava/lang/Object;)Lcom/superiorsoftllc/infantry/ui/protocol/SessionRecord;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getAgentId ()Ljava/lang/String;
 	public final fun getAutomation ()Lcom/superiorsoftllc/infantry/ui/protocol/AutomationView;
@@ -12810,6 +13270,7 @@ public final class com/superiorsoftllc/infantry/ui/protocol/SessionRecord {
 	public final fun getChildPid ()Ljava/lang/Long;
 	public final fun getContextLimit ()Ljava/lang/Integer;
 	public final fun getContextLimitSupport ()Ljava/lang/String;
+	public final fun getDormant ()Z
 	public final fun getEffort ()Ljava/lang/String;
 	public final fun getEffortSupport ()Ljava/lang/String;
 	public final fun getGlobal ()Z
@@ -12823,12 +13284,14 @@ public final class com/superiorsoftllc/infantry/ui/protocol/SessionRecord {
 	public final fun getProjectId ()Ljava/lang/String;
 	public final fun getProvider ()Ljava/lang/String;
 	public final fun getProviderSessionId ()Ljava/lang/String;
+	public final fun getQueued ()Ljava/util/List;
 	public final fun getRepoRoot ()Ljava/lang/String;
 	public final fun getReport ()Lcom/superiorsoftllc/infantry/ui/protocol/SessionReport;
 	public final fun getResumable ()Z
 	public final fun getResumeCount ()I
 	public final fun getRole ()Ljava/lang/String;
 	public final fun getRunCount ()I
+	public final fun getRunner ()Ljava/lang/String;
 	public final fun getSpawnedAt ()J
 	public final fun getState ()Lcom/superiorsoftllc/infantry/ui/protocol/SessionState;
 	public final fun getTicketId ()Ljava/lang/String;
@@ -13411,8 +13874,8 @@ public final class com/superiorsoftllc/infantry/ui/protocol/SwapSessionMode : ja
 public final class com/superiorsoftllc/infantry/ui/protocol/Ticket {
 	public static final field $stable I
 	public static final field Companion Lcom/superiorsoftllc/infantry/ui/protocol/Ticket$Companion;
-	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IZLjava/util/List;Ljava/util/List;Ljava/lang/String;JJLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Lcom/superiorsoftllc/infantry/ui/protocol/TicketHasWork;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/protocol/EffectiveExecutor;Lcom/superiorsoftllc/infantry/ui/protocol/TicketRun;Lcom/superiorsoftllc/infantry/ui/protocol/TicketStart;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Lcom/superiorsoftllc/infantry/ui/protocol/EffectiveContextLimit;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/protocol/EffectiveEffort;Ljava/util/List;)V
-	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IZLjava/util/List;Ljava/util/List;Ljava/lang/String;JJLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Lcom/superiorsoftllc/infantry/ui/protocol/TicketHasWork;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/protocol/EffectiveExecutor;Lcom/superiorsoftllc/infantry/ui/protocol/TicketRun;Lcom/superiorsoftllc/infantry/ui/protocol/TicketStart;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Lcom/superiorsoftllc/infantry/ui/protocol/EffectiveContextLimit;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/protocol/EffectiveEffort;Ljava/util/List;IILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IZLjava/util/List;Ljava/util/List;Ljava/lang/String;JJLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/Integer;Lcom/superiorsoftllc/infantry/ui/protocol/TicketHasWork;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/protocol/EffectiveExecutor;Lcom/superiorsoftllc/infantry/ui/protocol/TicketRun;Lcom/superiorsoftllc/infantry/ui/protocol/TicketStart;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Lcom/superiorsoftllc/infantry/ui/protocol/EffectiveContextLimit;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/protocol/EffectiveEffort;Ljava/util/List;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IZLjava/util/List;Ljava/util/List;Ljava/lang/String;JJLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/Integer;Lcom/superiorsoftllc/infantry/ui/protocol/TicketHasWork;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/protocol/EffectiveExecutor;Lcom/superiorsoftllc/infantry/ui/protocol/TicketRun;Lcom/superiorsoftllc/infantry/ui/protocol/TicketStart;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Lcom/superiorsoftllc/infantry/ui/protocol/EffectiveContextLimit;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/protocol/EffectiveEffort;Ljava/util/List;IILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Ljava/lang/String;
 	public final fun component10 ()Ljava/util/List;
 	public final fun component11 ()Ljava/lang/String;
@@ -13426,28 +13889,29 @@ public final class com/superiorsoftllc/infantry/ui/protocol/Ticket {
 	public final fun component19 ()Ljava/lang/String;
 	public final fun component2 ()Ljava/lang/String;
 	public final fun component20 ()Ljava/lang/Integer;
-	public final fun component21 ()Lcom/superiorsoftllc/infantry/ui/protocol/TicketHasWork;
-	public final fun component22 ()Ljava/lang/String;
-	public final fun component23 ()Lcom/superiorsoftllc/infantry/ui/protocol/EffectiveExecutor;
-	public final fun component24 ()Lcom/superiorsoftllc/infantry/ui/protocol/TicketRun;
-	public final fun component25 ()Lcom/superiorsoftllc/infantry/ui/protocol/TicketStart;
-	public final fun component26 ()Ljava/lang/String;
+	public final fun component21 ()Ljava/lang/Integer;
+	public final fun component22 ()Lcom/superiorsoftllc/infantry/ui/protocol/TicketHasWork;
+	public final fun component23 ()Ljava/lang/String;
+	public final fun component24 ()Lcom/superiorsoftllc/infantry/ui/protocol/EffectiveExecutor;
+	public final fun component25 ()Lcom/superiorsoftllc/infantry/ui/protocol/TicketRun;
+	public final fun component26 ()Lcom/superiorsoftllc/infantry/ui/protocol/TicketStart;
 	public final fun component27 ()Ljava/lang/String;
 	public final fun component28 ()Ljava/lang/String;
-	public final fun component29 ()Ljava/lang/Integer;
+	public final fun component29 ()Ljava/lang/String;
 	public final fun component3 ()Ljava/lang/String;
-	public final fun component30 ()Lcom/superiorsoftllc/infantry/ui/protocol/EffectiveContextLimit;
-	public final fun component31 ()Ljava/lang/String;
-	public final fun component32 ()Lcom/superiorsoftllc/infantry/ui/protocol/EffectiveEffort;
-	public final fun component33 ()Ljava/util/List;
+	public final fun component30 ()Ljava/lang/Integer;
+	public final fun component31 ()Lcom/superiorsoftllc/infantry/ui/protocol/EffectiveContextLimit;
+	public final fun component32 ()Ljava/lang/String;
+	public final fun component33 ()Lcom/superiorsoftllc/infantry/ui/protocol/EffectiveEffort;
+	public final fun component34 ()Ljava/util/List;
 	public final fun component4 ()Ljava/lang/String;
 	public final fun component5 ()Ljava/lang/String;
 	public final fun component6 ()Ljava/lang/String;
 	public final fun component7 ()I
 	public final fun component8 ()Z
 	public final fun component9 ()Ljava/util/List;
-	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IZLjava/util/List;Ljava/util/List;Ljava/lang/String;JJLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Lcom/superiorsoftllc/infantry/ui/protocol/TicketHasWork;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/protocol/EffectiveExecutor;Lcom/superiorsoftllc/infantry/ui/protocol/TicketRun;Lcom/superiorsoftllc/infantry/ui/protocol/TicketStart;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Lcom/superiorsoftllc/infantry/ui/protocol/EffectiveContextLimit;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/protocol/EffectiveEffort;Ljava/util/List;)Lcom/superiorsoftllc/infantry/ui/protocol/Ticket;
-	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/ui/protocol/Ticket;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IZLjava/util/List;Ljava/util/List;Ljava/lang/String;JJLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Lcom/superiorsoftllc/infantry/ui/protocol/TicketHasWork;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/protocol/EffectiveExecutor;Lcom/superiorsoftllc/infantry/ui/protocol/TicketRun;Lcom/superiorsoftllc/infantry/ui/protocol/TicketStart;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Lcom/superiorsoftllc/infantry/ui/protocol/EffectiveContextLimit;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/protocol/EffectiveEffort;Ljava/util/List;IILjava/lang/Object;)Lcom/superiorsoftllc/infantry/ui/protocol/Ticket;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IZLjava/util/List;Ljava/util/List;Ljava/lang/String;JJLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/Integer;Lcom/superiorsoftllc/infantry/ui/protocol/TicketHasWork;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/protocol/EffectiveExecutor;Lcom/superiorsoftllc/infantry/ui/protocol/TicketRun;Lcom/superiorsoftllc/infantry/ui/protocol/TicketStart;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Lcom/superiorsoftllc/infantry/ui/protocol/EffectiveContextLimit;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/protocol/EffectiveEffort;Ljava/util/List;)Lcom/superiorsoftllc/infantry/ui/protocol/Ticket;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/ui/protocol/Ticket;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IZLjava/util/List;Ljava/util/List;Ljava/lang/String;JJLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/Integer;Lcom/superiorsoftllc/infantry/ui/protocol/TicketHasWork;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/protocol/EffectiveExecutor;Lcom/superiorsoftllc/infantry/ui/protocol/TicketRun;Lcom/superiorsoftllc/infantry/ui/protocol/TicketStart;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Lcom/superiorsoftllc/infantry/ui/protocol/EffectiveContextLimit;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/protocol/EffectiveEffort;Ljava/util/List;IILjava/lang/Object;)Lcom/superiorsoftllc/infantry/ui/protocol/Ticket;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getAgentId ()Ljava/lang/String;
 	public final fun getBase ()Ljava/lang/String;
@@ -13481,6 +13945,7 @@ public final class com/superiorsoftllc/infantry/ui/protocol/Ticket {
 	public final fun getTicketType ()Ljava/lang/String;
 	public final fun getTitle ()Ljava/lang/String;
 	public final fun getUpdatedAt ()J
+	public final fun getWeight ()Ljava/lang/Integer;
 	public final fun getWontFix ()Z
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
@@ -14461,8 +14926,8 @@ public final class com/superiorsoftllc/infantry/ui/protocol/WireRequests {
 	public static synthetic fun commandCatalog$default (Lcom/superiorsoftllc/infantry/ui/protocol/WireRequests;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/ui/protocol/Envelope;
 	public final fun commandDelete (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/protocol/Envelope;
 	public final fun commandList ()Lcom/superiorsoftllc/infantry/ui/protocol/Envelope;
-	public final fun commandSave (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;JLjava/util/List;)Lcom/superiorsoftllc/infantry/ui/protocol/Envelope;
-	public static synthetic fun commandSave$default (Lcom/superiorsoftllc/infantry/ui/protocol/WireRequests;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;JLjava/util/List;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/ui/protocol/Envelope;
+	public final fun commandSave (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;JLjava/util/List;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/protocol/Envelope;
+	public static synthetic fun commandSave$default (Lcom/superiorsoftllc/infantry/ui/protocol/WireRequests;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;JLjava/util/List;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/ui/protocol/Envelope;
 	public final fun epicList (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/protocol/Envelope;
 	public final fun epicSave (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/protocol/Envelope;
 	public static synthetic fun epicSave$default (Lcom/superiorsoftllc/infantry/ui/protocol/WireRequests;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/ui/protocol/Envelope;
@@ -14529,14 +14994,19 @@ public final class com/superiorsoftllc/infantry/ui/protocol/WireRequests {
 	public final fun runList ()Lcom/superiorsoftllc/infantry/ui/protocol/Envelope;
 	public final fun runResize (Ljava/lang/String;II)Lcom/superiorsoftllc/infantry/ui/protocol/Envelope;
 	public final fun runStart (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/protocol/Envelope;
-	public final fun runStart (Ljava/lang/String;ZLjava/lang/Integer;Ljava/lang/Integer;)Lcom/superiorsoftllc/infantry/ui/protocol/Envelope;
+	public final fun runStart (Ljava/lang/String;ZLjava/lang/Integer;Ljava/lang/Integer;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/protocol/Envelope;
+	public static synthetic fun runStart$default (Lcom/superiorsoftllc/infantry/ui/protocol/WireRequests;Ljava/lang/String;ZLjava/lang/Integer;Ljava/lang/Integer;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/ui/protocol/Envelope;
 	public final fun runStop (Ljava/lang/String;Z)Lcom/superiorsoftllc/infantry/ui/protocol/Envelope;
 	public static synthetic fun runStop$default (Lcom/superiorsoftllc/infantry/ui/protocol/WireRequests;Ljava/lang/String;ZILjava/lang/Object;)Lcom/superiorsoftllc/infantry/ui/protocol/Envelope;
 	public final fun secretClear (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/protocol/Envelope;
-	public final fun secretDelete (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/protocol/Envelope;
-	public final fun secretFieldDelete (Ljava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/protocol/Envelope;
-	public final fun secretFieldSet (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/protocol/Envelope;
+	public final fun secretDelete (Ljava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/protocol/Envelope;
+	public static synthetic fun secretDelete$default (Lcom/superiorsoftllc/infantry/ui/protocol/WireRequests;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/ui/protocol/Envelope;
+	public final fun secretFieldDelete (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/protocol/Envelope;
+	public static synthetic fun secretFieldDelete$default (Lcom/superiorsoftllc/infantry/ui/protocol/WireRequests;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/ui/protocol/Envelope;
+	public final fun secretFieldSet (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/protocol/Envelope;
+	public static synthetic fun secretFieldSet$default (Lcom/superiorsoftllc/infantry/ui/protocol/WireRequests;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/ui/protocol/Envelope;
 	public final fun secretImport (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/protocol/Envelope;
+	public final fun secretMove (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/protocol/Envelope;
 	public final fun secretSet (Ljava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/protocol/Envelope;
 	public final fun secretStatus ()Lcom/superiorsoftllc/infantry/ui/protocol/Envelope;
 	public final fun sessionStatsGet (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/protocol/Envelope;
@@ -14740,9 +15210,11 @@ public abstract interface class com/superiorsoftllc/infantry/ui/shell/AgentsCont
 	public abstract fun newAgent ()V
 	public fun openTicket (Ljava/lang/String;)V
 	public abstract fun remove (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun resumeSession (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun select (Ljava/lang/String;)V
 	public abstract fun setQuery (Ljava/lang/String;)V
 	public abstract fun setRoleFilter (Ljava/lang/String;)V
+	public fun unassignTicket (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
 public final class com/superiorsoftllc/infantry/ui/shell/AgentsContext$DefaultImpls {
@@ -14750,6 +15222,8 @@ public final class com/superiorsoftllc/infantry/ui/shell/AgentsContext$DefaultIm
 	public static synthetic fun agentQueue$default (Lcom/superiorsoftllc/infantry/ui/shell/AgentsContext;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public static fun assignTicket (Lcom/superiorsoftllc/infantry/ui/shell/AgentsContext;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static fun openTicket (Lcom/superiorsoftllc/infantry/ui/shell/AgentsContext;Ljava/lang/String;)V
+	public static fun resumeSession (Lcom/superiorsoftllc/infantry/ui/shell/AgentsContext;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static fun unassignTicket (Lcom/superiorsoftllc/infantry/ui/shell/AgentsContext;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
 public abstract interface class com/superiorsoftllc/infantry/ui/shell/AlertsContext {
@@ -14925,9 +15399,10 @@ public final class com/superiorsoftllc/infantry/ui/shell/CoreGit : com/superiors
 
 public final class com/superiorsoftllc/infantry/ui/shell/CoreLink : com/superiorsoftllc/infantry/ui/shell/LinkContext {
 	public static final field $stable I
-	public fun <init> (Lcom/superiorsoftllc/infantry/ui/model/AppState;Lkotlin/jvm/functions/Function1;)V
-	public synthetic fun <init> (Lcom/superiorsoftllc/infantry/ui/model/AppState;Lkotlin/jvm/functions/Function1;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Lcom/superiorsoftllc/infantry/ui/model/AppState;Lkotlin/jvm/functions/Function1;Lcom/superiorsoftllc/infantry/ui/net/Controller;)V
+	public synthetic fun <init> (Lcom/superiorsoftllc/infantry/ui/model/AppState;Lkotlin/jvm/functions/Function1;Lcom/superiorsoftllc/infantry/ui/net/Controller;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun contractAtLeast (II)Z
+	public fun frames (Ljava/lang/String;)Lkotlinx/coroutines/flow/Flow;
 	public fun getCanWrite (Landroidx/compose/runtime/Composer;I)Z
 	public fun getContract ()Ljava/lang/String;
 	public fun getDaemonBuild ()Ljava/lang/String;
@@ -14937,6 +15412,7 @@ public final class com/superiorsoftllc/infantry/ui/shell/CoreLink : com/superior
 	public fun getReadyFields ()Ljava/util/Map;
 	public fun getRestricted ()Z
 	public fun selectPolicy (Ljava/lang/String;)V
+	public fun sendFrame (Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
 public final class com/superiorsoftllc/infantry/ui/shell/CoreNotes : com/superiorsoftllc/infantry/ui/shell/NotesContext {
@@ -15022,10 +15498,14 @@ public final class com/superiorsoftllc/infantry/ui/shell/CoreRun : com/superiors
 	public fun deleteCommand (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun getHasConsoleWindow ()Z
 	public fun getInteractiveSupported ()Z
+	public fun getProject ()Lcom/superiorsoftllc/infantry/ui/model/ProjectView;
 	public fun getRuns ()Lcom/superiorsoftllc/infantry/ui/model/RunsState;
 	public fun getSecretNames ()Ljava/util/List;
 	public fun open (Ljava/lang/String;)V
+	public fun saveCommand (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;JLjava/util/List;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun saveCommand (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;JLjava/util/List;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun setProjectFolder (Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun start (Ljava/lang/String;ZLjava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun start (Ljava/lang/String;ZLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun stop (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
@@ -15315,14 +15795,19 @@ public final class com/superiorsoftllc/infantry/ui/shell/JvmPlatformHost : com/s
 	public fun getCanPickAttachment ()Z
 	public fun getCanPickFiles ()Z
 	public fun getCanPickSound ()Z
+	public fun getCaptureMonitor ()Lcom/superiorsoftllc/infantry/ui/voice/CaptureMonitor;
 	public fun getCustomSoundStore ()Lcom/superiorsoftllc/infantry/ui/sound/CustomSoundStore;
 	public fun getDefaultDaemonUrl ()Ljava/lang/String;
 	public fun getDropIn ()Lcom/superiorsoftllc/infantry/ui/shell/PluginDropIn;
 	public fun getLocalServer ()Lcom/superiorsoftllc/infantry/ui/shell/LocalServer;
 	public fun getLogsDir ()Ljava/lang/String;
 	public fun getOnChangeConnection ()Lkotlin/jvm/functions/Function0;
+	public fun getPathPicker ()Lcom/superiorsoftllc/infantry/ui/PathPicker;
+	public fun getPathPickerNote ()Ljava/lang/String;
+	public fun getPluginManager ()Lcom/superiorsoftllc/infantry/plugin/api/PluginManagerPort;
 	public fun getQrScanner ()Lkotlin/jvm/functions/Function4;
 	public fun getSavedServers ()Lcom/superiorsoftllc/infantry/ui/pair/SavedServers;
+	public fun getSelfUpdateKey ()Ljava/lang/String;
 	public fun getSoundPlayer ()Lcom/superiorsoftllc/infantry/ui/sound/SoundPlayer;
 	public fun getSpeaker ()Lcom/superiorsoftllc/infantry/ui/voice/Speaker;
 	public fun getSupportsBlur ()Z
@@ -15332,6 +15817,7 @@ public final class com/superiorsoftllc/infantry/ui/shell/JvmPlatformHost : com/s
 	public fun localAddresses ()Ljava/util/List;
 	public fun openFolder (Ljava/lang/String;)Z
 	public fun pickAttachment (Ljava/lang/String;ZJLkotlin/jvm/functions/Function1;)V
+	public fun pickAttachments (Ljava/lang/String;ZJLkotlin/jvm/functions/Function1;)V
 	public fun pickFile (Ljava/lang/String;)Ljava/lang/String;
 	public fun pickSound (Lkotlin/jvm/functions/Function1;)V
 	public fun portraitPng ([BI)[B
@@ -15369,6 +15855,7 @@ public final class com/superiorsoftllc/infantry/ui/shell/LayoutContext$DefaultIm
 
 public abstract interface class com/superiorsoftllc/infantry/ui/shell/LinkContext {
 	public fun contractAtLeast (II)Z
+	public fun frames (Ljava/lang/String;)Lkotlinx/coroutines/flow/Flow;
 	public fun getCanWrite (Landroidx/compose/runtime/Composer;I)Z
 	public abstract fun getContract ()Ljava/lang/String;
 	public fun getDaemonBuild ()Ljava/lang/String;
@@ -15378,10 +15865,12 @@ public abstract interface class com/superiorsoftllc/infantry/ui/shell/LinkContex
 	public fun getReadyFields ()Ljava/util/Map;
 	public fun getRestricted ()Z
 	public fun selectPolicy (Ljava/lang/String;)V
+	public fun sendFrame (Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
 public final class com/superiorsoftllc/infantry/ui/shell/LinkContext$DefaultImpls {
 	public static fun contractAtLeast (Lcom/superiorsoftllc/infantry/ui/shell/LinkContext;II)Z
+	public static fun frames (Lcom/superiorsoftllc/infantry/ui/shell/LinkContext;Ljava/lang/String;)Lkotlinx/coroutines/flow/Flow;
 	public static fun getCanWrite (Lcom/superiorsoftllc/infantry/ui/shell/LinkContext;Landroidx/compose/runtime/Composer;I)Z
 	public static fun getDaemonBuild (Lcom/superiorsoftllc/infantry/ui/shell/LinkContext;)Ljava/lang/String;
 	public static fun getNotices (Lcom/superiorsoftllc/infantry/ui/shell/LinkContext;)Ljava/util/Map;
@@ -15389,6 +15878,7 @@ public final class com/superiorsoftllc/infantry/ui/shell/LinkContext$DefaultImpl
 	public static fun getReadyFields (Lcom/superiorsoftllc/infantry/ui/shell/LinkContext;)Ljava/util/Map;
 	public static fun getRestricted (Lcom/superiorsoftllc/infantry/ui/shell/LinkContext;)Z
 	public static fun selectPolicy (Lcom/superiorsoftllc/infantry/ui/shell/LinkContext;Ljava/lang/String;)V
+	public static fun sendFrame (Lcom/superiorsoftllc/infantry/ui/shell/LinkContext;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
 public final class com/superiorsoftllc/infantry/ui/shell/LocalEndpoint {
@@ -15420,9 +15910,11 @@ public final class com/superiorsoftllc/infantry/ui/shell/NoAgents : com/superior
 	public fun newAgent ()V
 	public fun openTicket (Ljava/lang/String;)V
 	public fun remove (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun resumeSession (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun select (Ljava/lang/String;)V
 	public fun setQuery (Ljava/lang/String;)V
 	public fun setRoleFilter (Ljava/lang/String;)V
+	public fun unassignTicket (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
 public final class com/superiorsoftllc/infantry/ui/shell/NoAlerts : com/superiorsoftllc/infantry/ui/shell/AlertsContext {
@@ -15783,14 +16275,19 @@ public abstract interface class com/superiorsoftllc/infantry/ui/shell/PlatformHo
 	public fun getCanPickAttachment ()Z
 	public fun getCanPickFiles ()Z
 	public fun getCanPickSound ()Z
+	public fun getCaptureMonitor ()Lcom/superiorsoftllc/infantry/ui/voice/CaptureMonitor;
 	public fun getCustomSoundStore ()Lcom/superiorsoftllc/infantry/ui/sound/CustomSoundStore;
 	public abstract fun getDefaultDaemonUrl ()Ljava/lang/String;
 	public fun getDropIn ()Lcom/superiorsoftllc/infantry/ui/shell/PluginDropIn;
 	public fun getLocalServer ()Lcom/superiorsoftllc/infantry/ui/shell/LocalServer;
 	public fun getLogsDir ()Ljava/lang/String;
 	public fun getOnChangeConnection ()Lkotlin/jvm/functions/Function0;
+	public fun getPathPicker ()Lcom/superiorsoftllc/infantry/ui/PathPicker;
+	public fun getPathPickerNote ()Ljava/lang/String;
+	public fun getPluginManager ()Lcom/superiorsoftllc/infantry/plugin/api/PluginManagerPort;
 	public fun getQrScanner ()Lkotlin/jvm/functions/Function4;
 	public fun getSavedServers ()Lcom/superiorsoftllc/infantry/ui/pair/SavedServers;
+	public fun getSelfUpdateKey ()Ljava/lang/String;
 	public fun getSoundPlayer ()Lcom/superiorsoftllc/infantry/ui/sound/SoundPlayer;
 	public fun getSpeaker ()Lcom/superiorsoftllc/infantry/ui/voice/Speaker;
 	public fun getSupportsBlur ()Z
@@ -15800,6 +16297,7 @@ public abstract interface class com/superiorsoftllc/infantry/ui/shell/PlatformHo
 	public fun localAddresses ()Ljava/util/List;
 	public fun openFolder (Ljava/lang/String;)Z
 	public fun pickAttachment (Ljava/lang/String;ZJLkotlin/jvm/functions/Function1;)V
+	public fun pickAttachments (Ljava/lang/String;ZJLkotlin/jvm/functions/Function1;)V
 	public fun pickFile (Ljava/lang/String;)Ljava/lang/String;
 	public fun pickSound (Lkotlin/jvm/functions/Function1;)V
 	public fun portraitPng ([BI)[B
@@ -15827,13 +16325,18 @@ public final class com/superiorsoftllc/infantry/ui/shell/PlatformHost$DefaultImp
 	public static fun getCanPickAttachment (Lcom/superiorsoftllc/infantry/ui/shell/PlatformHost;)Z
 	public static fun getCanPickFiles (Lcom/superiorsoftllc/infantry/ui/shell/PlatformHost;)Z
 	public static fun getCanPickSound (Lcom/superiorsoftllc/infantry/ui/shell/PlatformHost;)Z
+	public static fun getCaptureMonitor (Lcom/superiorsoftllc/infantry/ui/shell/PlatformHost;)Lcom/superiorsoftllc/infantry/ui/voice/CaptureMonitor;
 	public static fun getCustomSoundStore (Lcom/superiorsoftllc/infantry/ui/shell/PlatformHost;)Lcom/superiorsoftllc/infantry/ui/sound/CustomSoundStore;
 	public static fun getDropIn (Lcom/superiorsoftllc/infantry/ui/shell/PlatformHost;)Lcom/superiorsoftllc/infantry/ui/shell/PluginDropIn;
 	public static fun getLocalServer (Lcom/superiorsoftllc/infantry/ui/shell/PlatformHost;)Lcom/superiorsoftllc/infantry/ui/shell/LocalServer;
 	public static fun getLogsDir (Lcom/superiorsoftllc/infantry/ui/shell/PlatformHost;)Ljava/lang/String;
 	public static fun getOnChangeConnection (Lcom/superiorsoftllc/infantry/ui/shell/PlatformHost;)Lkotlin/jvm/functions/Function0;
+	public static fun getPathPicker (Lcom/superiorsoftllc/infantry/ui/shell/PlatformHost;)Lcom/superiorsoftllc/infantry/ui/PathPicker;
+	public static fun getPathPickerNote (Lcom/superiorsoftllc/infantry/ui/shell/PlatformHost;)Ljava/lang/String;
+	public static fun getPluginManager (Lcom/superiorsoftllc/infantry/ui/shell/PlatformHost;)Lcom/superiorsoftllc/infantry/plugin/api/PluginManagerPort;
 	public static fun getQrScanner (Lcom/superiorsoftllc/infantry/ui/shell/PlatformHost;)Lkotlin/jvm/functions/Function4;
 	public static fun getSavedServers (Lcom/superiorsoftllc/infantry/ui/shell/PlatformHost;)Lcom/superiorsoftllc/infantry/ui/pair/SavedServers;
+	public static fun getSelfUpdateKey (Lcom/superiorsoftllc/infantry/ui/shell/PlatformHost;)Ljava/lang/String;
 	public static fun getSoundPlayer (Lcom/superiorsoftllc/infantry/ui/shell/PlatformHost;)Lcom/superiorsoftllc/infantry/ui/sound/SoundPlayer;
 	public static fun getSpeaker (Lcom/superiorsoftllc/infantry/ui/shell/PlatformHost;)Lcom/superiorsoftllc/infantry/ui/voice/Speaker;
 	public static fun getSupportsBlur (Lcom/superiorsoftllc/infantry/ui/shell/PlatformHost;)Z
@@ -15843,6 +16346,7 @@ public final class com/superiorsoftllc/infantry/ui/shell/PlatformHost$DefaultImp
 	public static fun localAddresses (Lcom/superiorsoftllc/infantry/ui/shell/PlatformHost;)Ljava/util/List;
 	public static fun openFolder (Lcom/superiorsoftllc/infantry/ui/shell/PlatformHost;Ljava/lang/String;)Z
 	public static fun pickAttachment (Lcom/superiorsoftllc/infantry/ui/shell/PlatformHost;Ljava/lang/String;ZJLkotlin/jvm/functions/Function1;)V
+	public static fun pickAttachments (Lcom/superiorsoftllc/infantry/ui/shell/PlatformHost;Ljava/lang/String;ZJLkotlin/jvm/functions/Function1;)V
 	public static fun pickFile (Lcom/superiorsoftllc/infantry/ui/shell/PlatformHost;Ljava/lang/String;)Ljava/lang/String;
 	public static fun pickSound (Lcom/superiorsoftllc/infantry/ui/shell/PlatformHost;Lkotlin/jvm/functions/Function1;)V
 	public static fun portraitPng (Lcom/superiorsoftllc/infantry/ui/shell/PlatformHost;[BI)[B
@@ -15856,6 +16360,8 @@ public final class com/superiorsoftllc/infantry/ui/shell/PlatformHost$DefaultImp
 
 public final class com/superiorsoftllc/infantry/ui/shell/PlatformHostKt {
 	public static final field MAX_SOUND_BYTES J
+	public static final field PATH_TYPED_NOTE Ljava/lang/String;
+	public static final field SELF_UPDATE_REGISTRY Ljava/lang/String;
 	public static final fun getLocalPlatformHost ()Landroidx/compose/runtime/ProvidableCompositionLocal;
 }
 
@@ -15954,12 +16460,23 @@ public abstract interface class com/superiorsoftllc/infantry/ui/shell/RunContext
 	public abstract fun deleteCommand (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun getHasConsoleWindow ()Z
 	public abstract fun getInteractiveSupported ()Z
+	public fun getProject ()Lcom/superiorsoftllc/infantry/ui/model/ProjectView;
 	public abstract fun getRuns ()Lcom/superiorsoftllc/infantry/ui/model/RunsState;
 	public abstract fun getSecretNames ()Ljava/util/List;
 	public abstract fun open (Ljava/lang/String;)V
+	public fun saveCommand (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;JLjava/util/List;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun saveCommand (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;JLjava/util/List;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun setProjectFolder (Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun start (Ljava/lang/String;ZLjava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun start (Ljava/lang/String;ZLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun stop (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/superiorsoftllc/infantry/ui/shell/RunContext$DefaultImpls {
+	public static fun getProject (Lcom/superiorsoftllc/infantry/ui/shell/RunContext;)Lcom/superiorsoftllc/infantry/ui/model/ProjectView;
+	public static fun saveCommand (Lcom/superiorsoftllc/infantry/ui/shell/RunContext;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;JLjava/util/List;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static fun setProjectFolder (Lcom/superiorsoftllc/infantry/ui/shell/RunContext;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static fun start (Lcom/superiorsoftllc/infantry/ui/shell/RunContext;Ljava/lang/String;ZLjava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
 public final class com/superiorsoftllc/infantry/ui/shell/ScopedShellContext : com/superiorsoftllc/infantry/ui/shell/ShellContext {
@@ -15998,6 +16515,10 @@ public final class com/superiorsoftllc/infantry/ui/shell/ScopedShellContext : co
 	public fun getTriggers ()Lcom/superiorsoftllc/infantry/ui/shell/TriggersContext;
 	public fun getUsage ()Lcom/superiorsoftllc/infantry/ui/shell/UsageContext;
 	public fun getWindow ()Lcom/superiorsoftllc/infantry/ui/shell/WindowContext;
+}
+
+public abstract interface class com/superiorsoftllc/infantry/ui/shell/SelfUpdateProvider {
+	public abstract fun entry (Ljava/lang/String;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/shell/PlatformHost;)Lcom/superiorsoftllc/infantry/ui/UpdatesEntry;
 }
 
 public final class com/superiorsoftllc/infantry/ui/shell/ServerChoice {
@@ -16734,10 +17255,47 @@ public final class com/superiorsoftllc/infantry/ui/sound/SoundSource : java/lang
 	public static fun values ()[Lcom/superiorsoftllc/infantry/ui/sound/SoundSource;
 }
 
+public abstract interface class com/superiorsoftllc/infantry/ui/voice/CaptureLine {
+	public abstract fun close ()V
+	public abstract fun read ([B)I
+}
+
+public abstract interface class com/superiorsoftllc/infantry/ui/voice/CaptureLines {
+	public abstract fun open (Lcom/superiorsoftllc/infantry/plugin/api/PcmFormat;)Lcom/superiorsoftllc/infantry/ui/voice/CaptureLine;
+}
+
+public final class com/superiorsoftllc/infantry/ui/voice/CaptureMonitor {
+	public static final field $stable I
+	public fun <init> ()V
+	public final fun begin (Ljava/lang/String;Lkotlin/jvm/functions/Function0;)Lcom/superiorsoftllc/infantry/ui/voice/CaptureMonitor$Active;
+	public final fun end (Lcom/superiorsoftllc/infantry/ui/voice/CaptureMonitor$Active;)V
+	public final fun getActive ()Lkotlinx/coroutines/flow/StateFlow;
+}
+
+public final class com/superiorsoftllc/infantry/ui/voice/CaptureMonitor$Active {
+	public static final field $stable I
+	public final fun getModule ()Ljava/lang/String;
+	public final fun getStop ()Lkotlin/jvm/functions/Function0;
+}
+
 public final class com/superiorsoftllc/infantry/ui/voice/ComposableSingletons$VoiceUiKt {
 	public static final field INSTANCE Lcom/superiorsoftllc/infantry/ui/voice/ComposableSingletons$VoiceUiKt;
 	public fun <init> ()V
 	public final fun getLambda$1932735869$infantryUiCore ()Lkotlin/jvm/functions/Function2;
+}
+
+public final class com/superiorsoftllc/infantry/ui/voice/JavaSoundLines : com/superiorsoftllc/infantry/ui/voice/CaptureLines {
+	public static final field $stable I
+	public static final field INSTANCE Lcom/superiorsoftllc/infantry/ui/voice/JavaSoundLines;
+	public fun open (Lcom/superiorsoftllc/infantry/plugin/api/PcmFormat;)Lcom/superiorsoftllc/infantry/ui/voice/CaptureLine;
+}
+
+public final class com/superiorsoftllc/infantry/ui/voice/JvmAudioCapture : com/superiorsoftllc/infantry/plugin/api/AudioCapture {
+	public static final field $stable I
+	public static final field CHUNKS_PER_SECOND I
+	public fun <init> (Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/voice/CaptureMonitor;Lkotlin/jvm/functions/Function1;Lcom/superiorsoftllc/infantry/ui/voice/CaptureLines;Lkotlin/jvm/functions/Function1;)V
+	public synthetic fun <init> (Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/voice/CaptureMonitor;Lkotlin/jvm/functions/Function1;Lcom/superiorsoftllc/infantry/ui/voice/CaptureLines;Lkotlin/jvm/functions/Function1;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun start (Lcom/superiorsoftllc/infantry/plugin/api/CaptureOptions;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;)Lcom/superiorsoftllc/infantry/plugin/api/CaptureHandle;
 }
 
 public final class com/superiorsoftllc/infantry/ui/voice/JvmSpeaker : com/superiorsoftllc/infantry/ui/voice/Speaker {
@@ -16747,17 +17305,33 @@ public final class com/superiorsoftllc/infantry/ui/voice/JvmSpeaker : com/superi
 	public synthetic fun <init> (Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun beep ()V
 	public fun speak (Ljava/lang/String;ILjava/lang/String;Z)Z
+	public fun stop ()V
 	public fun voices ()Ljava/util/List;
+}
+
+public final class com/superiorsoftllc/infantry/ui/voice/ListeningIndicatorKt {
+	public static final field LISTENING_INDICATOR_TAG Ljava/lang/String;
+	public static final fun ListeningIndicator (Lcom/superiorsoftllc/infantry/ui/voice/CaptureMonitor;Landroidx/compose/ui/Modifier;Landroidx/compose/runtime/Composer;II)V
 }
 
 public abstract interface class com/superiorsoftllc/infantry/ui/voice/Speaker {
 	public abstract fun beep ()V
 	public abstract fun speak (Ljava/lang/String;ILjava/lang/String;Z)Z
+	public fun stop ()V
 	public fun voices ()Ljava/util/List;
 }
 
 public final class com/superiorsoftllc/infantry/ui/voice/Speaker$DefaultImpls {
+	public static fun stop (Lcom/superiorsoftllc/infantry/ui/voice/Speaker;)V
 	public static fun voices (Lcom/superiorsoftllc/infantry/ui/voice/Speaker;)Ljava/util/List;
+}
+
+public final class com/superiorsoftllc/infantry/ui/voice/SpeakerSpeechOutput : com/superiorsoftllc/infantry/plugin/api/SpeechOutput {
+	public static final field $stable I
+	public fun <init> (Lcom/superiorsoftllc/infantry/ui/voice/Speaker;)V
+	public fun speak (Ljava/lang/String;Lcom/superiorsoftllc/infantry/plugin/api/SpeakOptions;)Z
+	public fun stop ()V
+	public fun voices ()Ljava/util/List;
 }
 
 public final class com/superiorsoftllc/infantry/ui/voice/SpeechDecision : java/lang/Enum {
@@ -16782,6 +17356,13 @@ public final class com/superiorsoftllc/infantry/ui/voice/SpeechGate {
 	public fun <init> (IJ)V
 	public synthetic fun <init> (IJILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun decide (Lcom/superiorsoftllc/infantry/ui/voice/SpokenNotice;Lcom/superiorsoftllc/infantry/ui/voice/VoiceSettings;JIZ)Lcom/superiorsoftllc/infantry/ui/voice/SpeechDecision;
+}
+
+public final class com/superiorsoftllc/infantry/ui/voice/SpeechServicesKt {
+	public static final field AUDIO_CAPTURE_MAX_SECONDS_DEFAULT I
+	public static final field AUDIO_CAPTURE_MAX_SECONDS_ENV Ljava/lang/String;
+	public static final field AUDIO_CAPTURE_MAX_SECONDS_PREF_KEY Ljava/lang/String;
+	public static final fun captureLimitSeconds (Ljava/lang/String;Ljava/lang/Integer;)I
 }
 
 public final class com/superiorsoftllc/infantry/ui/voice/SpokenNotice {
@@ -16927,6 +17508,7 @@ public final class com/superiorsoftllc/infantry/ui/voice/plugin/PluginSpeaker : 
 	public final fun awaitIdle (J)Z
 	public fun beep ()V
 	public fun speak (Ljava/lang/String;ILjava/lang/String;Z)Z
+	public fun stop ()V
 	public fun voices ()Ljava/util/List;
 }
 
