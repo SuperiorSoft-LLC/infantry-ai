@@ -541,6 +541,10 @@ class InfantryDaemon(
      * assume: without the drain the first daemon still writes the file the second one has just opened,
      * and a contended SQLite write fails with SQLITE_BUSY once its 5 s budget runs out.
      */
+    /** PLUGIN-HOTSWAP-2: the hot hook over this daemon's plugin host, for the desktop Settings > Plugins manager. */
+    fun pluginHotApply(): com.superiorsoftllc.infantry.daemon.plugins.manager.PluginHotApply =
+        com.superiorsoftllc.infantry.daemon.plugins.manager.HostPluginHotApply(pluginHost)
+
     fun close() {
         // Triggers stop observing FIRST: the kills below must not read as trigger-run failures; a trigger
         // still running is tripped at the next boot instead ("daemon restarted mid-run").
@@ -1654,11 +1658,8 @@ class InfantryDaemon(
                                 com.superiorsoftllc.infantry.plugin.host.PluginFolders.root(daemonStateDir, { System.getenv(it) }),
                                 daemonStateDir, com.superiorsoftllc.infantry.plugin.host.PluginFolders.bundledRoot({ System.getenv(it) }),
                                 // PLUGIN-HOTLOAD-1: an install / enable / update / remove reaches the running host (no daemon restart).
-                                hot = object : com.superiorsoftllc.infantry.daemon.plugins.manager.PluginHotApply {
-                                    override fun load(id: String) = pluginHost.get().load(id)
-                                    override fun unload(id: String) = pluginHost.get().unload(id)
-                                    override fun reload(id: String) = pluginHost.get().reload(id)
-                                },
+                                hot = com.superiorsoftllc.infantry.daemon.plugins.manager.HostPluginHotApply { pluginHost.get() },
+                                catalogStaleMs = { settings.limit(LimitRegistry.PLUGIN_CATALOG_STALE_MS) },
                             ),
                             asks = { pluginHost.get().serviceRegistry.find(com.superiorsoftllc.infantry.daemon.api.attention.OwnerAsks::class) },
                             log = { System.err.println("[infantry] $it") },
