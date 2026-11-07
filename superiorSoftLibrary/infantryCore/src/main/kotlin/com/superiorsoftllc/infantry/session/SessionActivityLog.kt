@@ -11,22 +11,30 @@ import java.util.concurrent.ConcurrentHashMap
  * its record carries none of the three fields.
  */
 object SessionActivityLog {
-    private data class Entry(val action: String?, val outputAt: Long?, val eventAt: Long, val toolCalls: Int = 0, val toolAt: Long? = null)
+    private data class Entry(val action: String?, val outputAt: Long?, val eventAt: Long, val toolCalls: Int = 0, val toolAt: Long? = null, val turnAt: Long? = null)
 
     private val entries = ConcurrentHashMap<String, Entry>()
 
     /** The session produced an output line at [now]; [action] (when known) replaces the last action. */
     fun output(sessionId: String, action: String?, now: Long = System.currentTimeMillis(), tool: Boolean = false) {
         entries.merge(sessionId, Entry(action, now, now, if (tool) 1 else 0, if (tool) now else null)) { old, new ->
-            new.copy(action = new.action ?: old.action, toolCalls = old.toolCalls + new.toolCalls, toolAt = new.toolAt ?: old.toolAt)
+            new.copy(action = new.action ?: old.action, toolCalls = old.toolCalls + new.toolCalls, toolAt = new.toolAt ?: old.toolAt, turnAt = old.turnAt)
         }
     }
 
     /** Any other event (state change, turn start/end) at [now]; [action] (when given) replaces the last action. */
     fun event(sessionId: String, action: String?, now: Long = System.currentTimeMillis()) {
         entries.merge(sessionId, Entry(action, null, now)) { old, new ->
-            Entry(new.action ?: old.action, old.outputAt, new.eventAt, old.toolCalls, old.toolAt)
+            old.copy(action = new.action ?: old.action, eventAt = new.eventAt)
         }
+    }
+
+    /**
+     * LAST-TURN-1: a turn of the session ended at [now] (the daemon's `finished`, whatever the harness and outcome). This is
+     * `lastTurnAt`, the time a watcher reads to tell "has not taken a turn in N minutes"; [output] alone moves `lastOutputAt`.
+     */
+    fun turnEnded(sessionId: String, now: Long = System.currentTimeMillis()) {
+        entries.merge(sessionId, Entry(null, null, now, turnAt = now)) { old, _ -> old.copy(eventAt = now, turnAt = now) }
     }
 
     /** Tool calls the daemon counted for a session (0 when none), for the stats and the tests. */
@@ -39,7 +47,10 @@ object SessionActivityLog {
 
     fun clear() = entries.clear()
 
-    /** [record] with the three activity fields filled from what the log holds; unchanged when it holds nothing. */
+    /**
+     * [record] with the activity fields filled from what the log holds; unchanged when it holds nothing. A time the log has not
+     * seen since this daemon started keeps the record's own (the value `sessions.json` held from before the restart).
+     */
     fun overlay(record: SessionRecord): SessionRecord {
         val e = entries[record.id]
         val now = System.currentTimeMillis()
@@ -48,7 +59,8 @@ object SessionActivityLog {
             return if (p == record.progress) record else record.copy(progress = p)
         }
         return record.copy(
-            lastAction = e.action, lastOutputAt = e.outputAt, lastEventAt = e.eventAt,
+            lastAction = e.action ?: record.lastAction, lastOutputAt = e.outputAt ?: record.lastOutputAt, lastEventAt = e.eventAt,
+            lastTurnAt = e.turnAt ?: record.lastTurnAt,
             progress = AutoProgress.overlay(record, e.toolCalls, e.toolAt, e.eventAt, now),
         )
     }

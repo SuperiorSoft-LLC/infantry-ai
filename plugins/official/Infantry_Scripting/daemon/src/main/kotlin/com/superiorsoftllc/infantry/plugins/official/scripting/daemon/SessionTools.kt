@@ -53,7 +53,7 @@ class SessionTools(
     val read: DaemonTool = object : DaemonTool {
         override val name = READ
         override val annotations: JsonObject = Json.parseToJsonElement("""{"readOnlyHint":true}""").jsonObject
-        override val description = "Read a session's state and recent chat. Returns {sessionId, state, lastAction (the current tool or 'replying'), lastOutputAt, lastEventAt, lines[]} " +
+        override val description = "Read a session's state and recent chat. Returns {sessionId, state, lastAction (the current tool or 'replying'), lastOutputAt, lastEventAt, lastTurnAt (the last finished turn), lines[]} " +
             "with the last `lines` (default 30, max $maxLines) of assistant text, '[tool] ...' and '[error] ...' lines, each capped at $maxChars characters. Same project only. " +
             "Script: ih.session_read{sessionId=..., lines=30} then ih.again() to read input.results."
         override val inputSchema: JsonObject = Json.parseToJsonElement(
@@ -68,6 +68,7 @@ class SessionTools(
                 st?.lastAction?.let { put("lastAction", it.take(maxChars)) }
                 st?.lastOutputAt?.let { put("lastOutputAt", it) }
                 st?.lastEventAt?.let { put("lastEventAt", it) }
+                st?.lastTurnAt?.let { put("lastTurnAt", it) }
                 session(target)?.let { s -> s.mcp?.let { put("mcp", it) }; s.mcpChangedAt?.let { put("mcpChangedAt", it) } }
                 put("lines", buildJsonArray { lines(target, n.coerceIn(1, maxLines)).takeLast(n.coerceIn(1, maxLines)).forEach { add(JsonPrimitive(it.take(maxChars))) } })
             }.toString())

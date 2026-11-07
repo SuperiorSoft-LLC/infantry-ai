@@ -198,6 +198,11 @@ data class SessionRecord(
     @EncodeDefault(EncodeDefault.Mode.NEVER) val lastOutputAt: Long? = null,
     /** Epoch millis of the newest event of any kind the daemon saw for the session; omitted until there was one. */
     @EncodeDefault(EncodeDefault.Mode.NEVER) val lastEventAt: Long? = null,
+    /**
+     * LAST-TURN-1: epoch millis of the session's last finished turn (any harness, any outcome), stamped from [SessionActivityLog] at the
+     * daemon's `finished`. Unlike [lastOutputAt] (the last output line, which also moves mid-turn) it moves once per turn. Omitted until one ended.
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val lastTurnAt: Long? = null,
     /** PIPELINE-WATCHDOG: what the daemon derived about this agent's pending work ([AgentWatch]); derived, cleared on a daemon start. */
     @EncodeDefault(EncodeDefault.Mode.NEVER) val watch: AgentWatch? = null,
     /** STALL-1 (ticket 802c64d5): the job-watch state for the session list (`watching gate (quiet 2m)`, `idle`, `stalled`, `busy, silent 7m`, `watch OFF: <reason>`); derived, cleared on a daemon start. */

@@ -113,7 +113,7 @@ class CoreDaemonServices(
         }
         override fun restart(id: String) { manager.restart(id) }
         override fun status(id: String): com.superiorsoftllc.infantry.daemon.api.SessionStatus? = manager.get(id)?.let { com.superiorsoftllc.infantry.session.SessionActivityLog.overlay(it) }?.let {
-            com.superiorsoftllc.infantry.daemon.api.SessionStatus(it.id, it.state.name, it.lastAction, it.lastOutputAt, it.lastEventAt)
+            com.superiorsoftllc.infantry.daemon.api.SessionStatus(it.id, it.state.name, it.lastAction, it.lastOutputAt, it.lastEventAt, it.lastTurnAt)
         }
         override fun recentLines(id: String, max: Int): List<String> = com.superiorsoftllc.infantry.session.SessionFeed.recent(id, max)
         override fun interrupt(id: String): Boolean = manager.get(id)?.let { runCatching { manager.interrupt(id) }.isSuccess } ?: false

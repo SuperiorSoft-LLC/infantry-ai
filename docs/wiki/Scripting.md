@@ -205,7 +205,7 @@ that session; otherwise on the caller, or the `sessionId` you name (same project
 
 Scripts can watch and steer sessions with built-in aliases:
 
-- `session_read{sessionId}`: state, `lastAction`, `lastOutputAt`, `lastEventAt`, recent chat lines (capped).
+- `session_read{sessionId}`: state, `lastAction`, `lastOutputAt` (last output line), `lastEventAt`, `lastTurnAt` (last finished turn, any harness), recent chat lines (capped).
 - `session_act{sessionId, action = "interrupt" | "end_turn"}`: stop the turn in flight. `end_turn` is a no-op on an
   idle session.
 - `notice_suppress{name, seconds}`: suppress a built-in daemon notice (e.g. `nudge.worker_idle`, or `*`) for up to

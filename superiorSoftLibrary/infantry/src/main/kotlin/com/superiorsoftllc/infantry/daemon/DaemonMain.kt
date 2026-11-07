@@ -2175,6 +2175,8 @@ private fun broadcast(
         }
 
         is SessionEvent.Exit -> buildList {
+            // LAST-TURN-1: every harness's turn ends here (`finished`), so `lastTurnAt` is stamped once, harness-neutral.
+            com.superiorsoftllc.infantry.session.SessionActivityLog.turnEnded(event.sessionId)
             streamedReasoning.flush(event.sessionId)?.let { add(Envelope(Envelope.REASONING, it.text, event.sessionId)) }
             // Contract 1.64.0 (BUG-M2-11b-1): `exit` reports a hosted process that ended unasked; a turn's end is `finished`.
             if (event.processExited) event.code?.let { add(Envelope(Envelope.EXIT, it.toString(), event.sessionId)) }

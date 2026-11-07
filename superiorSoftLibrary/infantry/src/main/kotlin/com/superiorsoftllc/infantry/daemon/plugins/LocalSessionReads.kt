@@ -18,12 +18,18 @@ import com.superiorsoftllc.infantry.protocol.FinishedPayload
 import com.superiorsoftllc.infantry.session.SessionRecord
 import kotlinx.serialization.json.Json
 
-/** RUNTIME-LOAD-5: a daemon [SessionRecord] as the API's read-only [SessionView] (no secret, no transcript). */
+/**
+ * RUNTIME-LOAD-5: a daemon [SessionRecord] as the API's read-only [SessionView] (no secret, no transcript). LAST-TURN-1: the live
+ * activity times ([SessionActivityLog]) are laid over the record first, as the wire's session frame does; the raw record only holds
+ * what `sessions.json` stored at its last write, so without it `lastOutputAt` read hours old while the session worked.
+ */
 object SessionViews {
-    fun of(r: SessionRecord) = SessionView(
+    fun of(record: SessionRecord): SessionView = view(com.superiorsoftllc.infantry.session.SessionActivityLog.overlay(record))
+
+    private fun view(r: SessionRecord) = SessionView(
         id = r.id, agentId = r.agentId, role = r.role, provider = r.provider, model = r.model, projectId = r.projectId,
         state = r.state.name, runPhase = r.runPhase, live = r.live, lastAction = r.lastAction, lastOutputAt = r.lastOutputAt,
-        lastEventAt = r.lastEventAt, backgroundWork = r.backgroundWork?.label ?: r.bgJobs.firstOrNull()?.label, progress = r.progress, runCount = r.runCount,
+        lastEventAt = r.lastEventAt, lastTurnAt = r.lastTurnAt, backgroundWork = r.backgroundWork?.label ?: r.bgJobs.firstOrNull()?.label, progress = r.progress, runCount = r.runCount,
         lastExitCode = r.lastExitCode, lastError = r.lastError, ticketId = r.ticketId, workingDir = r.workingDir,
         worktreePath = r.worktreePath, worktreeBranch = r.worktreeBranch, repoRoot = r.repoRoot, spawnerSessionId = r.spawnerSessionId,
         contextLimit = r.contextLimit, contextLimitSupport = r.contextLimitSupport, effort = r.effort, effortSupport = r.effortSupport, killOutcome = r.killOutcome?.name,
