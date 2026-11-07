@@ -2,12 +2,12 @@
 // Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.plugin.host
 
+import com.superiorsoftllc.infantry.plugin.api.InjectDeclaration
 import com.superiorsoftllc.infantry.plugin.api.ModuleManifest
 import com.superiorsoftllc.infantry.plugin.api.PanelDeclaration
+import com.superiorsoftllc.infantry.plugin.api.TabDeclaration
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
-import kotlin.test.assertNull
 
 /** PLUGIN-TREE-UI-1: the parent relation comes from slots and `parents`, never from a table of ids. */
 class PluginTreeTest {
@@ -32,12 +32,34 @@ class PluginTreeTest {
         assertEquals(false, "Acme_Grand" in t.childrenOf("Infantry_Flat"))
     }
 
-    @Test fun aSharedChildStaysOnWhileAnyParentIsEnabled() {
-        val shared = ModuleManifest("Acme_Shared", "1.0.0", parents = listOf("Infantry_Chat", "Infantry_Flat"))
-        val t = PluginTree(listOf(chat, flat, shared))
-        assertNotNull(t.disableRefusal("Acme_Shared") { it == "Infantry_Chat" })
-        assertNull(t.disableRefusal("Acme_Shared") { false })
-        // A child with one parent is not shared: it can be switched off on its own.
-        assertNull(PluginTree(listOf(chat, feed)).disableRefusal("Infantry_ChatFeed") { true })
+    @Test fun anInjectIntoANodeOfAnotherModuleMakesAnEdge() {
+        val byPrefix = ModuleManifest("Acme_Inj", "1.0.0", inject = listOf(InjectDeclaration("Infantry_Chat.toolbar", "x")))
+        val byTab = ModuleManifest("Acme_Tab", "1.0.0", inject = listOf(InjectDeclaration("chat.main", "x")))
+        val host = ModuleManifest("Infantry_Chat", "1.0.0", tabs = listOf(TabDeclaration("chat.main", "center")))
+        val t = PluginTree(listOf(host, byPrefix, byTab))
+        assertEquals(listOf("Infantry_Chat"), t.parentsOf("Acme_Inj"))
+        assertEquals(listOf("Infantry_Chat"), t.parentsOf("Acme_Tab"))
+    }
+
+    @Test fun aShellNodeAnUninstalledParentAndASelfEdgeMakeNoEdge() {
+        val m = ModuleManifest(
+            "Acme_X", "1.0.0", parents = listOf("Acme_Gone", "Acme_X"),
+            inject = listOf(InjectDeclaration("infantry.shell.sidebar", "x"), InjectDeclaration("Acme_X.own", "y")),
+        )
+        val t = PluginTree(listOf(m))
+        assertEquals(emptyList(), t.parentsOf("Acme_X"))
+        assertEquals(listOf("Acme_X"), t.roots())
+    }
+
+    @Test fun aCycleDropsTheSameEdgeEveryRun() {
+        val a = ModuleManifest("Acme_A", "1.0.0", parents = listOf("Acme_B"))
+        val b = ModuleManifest("Acme_B", "1.0.0", parents = listOf("Acme_A"))
+        val first = PluginTree(listOf(a, b))
+        val second = PluginTree(listOf(b, a))
+        assertEquals(listOf("plugin parent cycle: Acme_A -> Acme_B -> Acme_A, edge Acme_B -> Acme_A ignored"), first.problems)
+        assertEquals(first.problems, second.problems)
+        assertEquals(listOf("Acme_B"), first.parentsOf("Acme_A"))
+        assertEquals(emptyList(), first.parentsOf("Acme_B"))
+        assertEquals(listOf("Acme_B"), first.roots())
     }
 }

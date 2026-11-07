@@ -80,6 +80,7 @@ abstract interface com.superiorsoftllc.infantry.plugin.api/PluginManagerPort { /
     abstract fun updates(): kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/UpdateView> // com.superiorsoftllc.infantry.plugin.api/PluginManagerPort.updates|updates(){}[0]
     open fun importList(kotlin/String): com.superiorsoftllc.infantry.plugin.api/ActionResult // com.superiorsoftllc.infantry.plugin.api/PluginManagerPort.importList|importList(kotlin.String){}[0]
     open fun refreshIfStale(): kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/RefreshView> // com.superiorsoftllc.infantry.plugin.api/PluginManagerPort.refreshIfStale|refreshIfStale(){}[0]
+    open fun setProgressListener(kotlin/Function1<com.superiorsoftllc.infantry.plugin.api/PluginProgress, kotlin/Unit>?) // com.superiorsoftllc.infantry.plugin.api/PluginManagerPort.setProgressListener|setProgressListener(kotlin.Function1<com.superiorsoftllc.infantry.plugin.api.PluginProgress,kotlin.Unit>?){}[0]
 }
 
 abstract interface com.superiorsoftllc.infantry.plugin.api/PluginScope { // com.superiorsoftllc.infantry.plugin.api/PluginScope|null[0]
@@ -2437,6 +2438,28 @@ final class com.superiorsoftllc.infantry.plugin.api/PluginFolder { // com.superi
     }
 }
 
+final class com.superiorsoftllc.infantry.plugin.api/PluginProgress { // com.superiorsoftllc.infantry.plugin.api/PluginProgress|null[0]
+    constructor <init>(kotlin/String, kotlin/String, kotlin/Long = ..., kotlin/Long = ...) // com.superiorsoftllc.infantry.plugin.api/PluginProgress.<init>|<init>(kotlin.String;kotlin.String;kotlin.Long;kotlin.Long){}[0]
+
+    final val done // com.superiorsoftllc.infantry.plugin.api/PluginProgress.done|{}done[0]
+        final fun <get-done>(): kotlin/Long // com.superiorsoftllc.infantry.plugin.api/PluginProgress.done.<get-done>|<get-done>(){}[0]
+    final val id // com.superiorsoftllc.infantry.plugin.api/PluginProgress.id|{}id[0]
+        final fun <get-id>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/PluginProgress.id.<get-id>|<get-id>(){}[0]
+    final val step // com.superiorsoftllc.infantry.plugin.api/PluginProgress.step|{}step[0]
+        final fun <get-step>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/PluginProgress.step.<get-step>|<get-step>(){}[0]
+    final val total // com.superiorsoftllc.infantry.plugin.api/PluginProgress.total|{}total[0]
+        final fun <get-total>(): kotlin/Long // com.superiorsoftllc.infantry.plugin.api/PluginProgress.total.<get-total>|<get-total>(){}[0]
+
+    final fun component1(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/PluginProgress.component1|component1(){}[0]
+    final fun component2(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/PluginProgress.component2|component2(){}[0]
+    final fun component3(): kotlin/Long // com.superiorsoftllc.infantry.plugin.api/PluginProgress.component3|component3(){}[0]
+    final fun component4(): kotlin/Long // com.superiorsoftllc.infantry.plugin.api/PluginProgress.component4|component4(){}[0]
+    final fun copy(kotlin/String = ..., kotlin/String = ..., kotlin/Long = ..., kotlin/Long = ...): com.superiorsoftllc.infantry.plugin.api/PluginProgress // com.superiorsoftllc.infantry.plugin.api/PluginProgress.copy|copy(kotlin.String;kotlin.String;kotlin.Long;kotlin.Long){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/PluginProgress.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/PluginProgress.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/PluginProgress.toString|toString(){}[0]
+}
+
 final class com.superiorsoftllc.infantry.plugin.api/PluginView { // com.superiorsoftllc.infantry.plugin.api/PluginView|null[0]
     constructor <init>(kotlin/String, kotlin/String, kotlin/String, kotlin/Boolean, kotlin/Boolean, kotlin/String?, kotlin/String?, kotlin.collections/List<kotlin/String>, kotlin.collections/List<kotlin/String>, kotlin/Boolean, kotlin/String?, kotlin/String = ..., kotlin.collections/List<kotlin/String> = ..., kotlin.collections/List<kotlin/String> = ...) // com.superiorsoftllc.infantry.plugin.api/PluginView.<init>|<init>(kotlin.String;kotlin.String;kotlin.String;kotlin.Boolean;kotlin.Boolean;kotlin.String?;kotlin.String?;kotlin.collections.List<kotlin.String>;kotlin.collections.List<kotlin.String>;kotlin.Boolean;kotlin.String?;kotlin.String;kotlin.collections.List<kotlin.String>;kotlin.collections.List<kotlin.String>){}[0]
 
@@ -3138,10 +3161,12 @@ final class com.superiorsoftllc.infantry.plugin.host/ModuleNode { // com.superio
 }
 
 final class com.superiorsoftllc.infantry.plugin.host/ModuleStatus { // com.superiorsoftllc.infantry.plugin.host/ModuleStatus|null[0]
-    constructor <init>(kotlin/String, com.superiorsoftllc.infantry.plugin.api/Tier, com.superiorsoftllc.infantry.plugin.host/ModuleState, kotlin/String? = ..., com.superiorsoftllc.infantry.plugin.api/ModuleManifest? = ..., kotlin/String? = ...) // com.superiorsoftllc.infantry.plugin.host/ModuleStatus.<init>|<init>(kotlin.String;com.superiorsoftllc.infantry.plugin.api.Tier;com.superiorsoftllc.infantry.plugin.host.ModuleState;kotlin.String?;com.superiorsoftllc.infantry.plugin.api.ModuleManifest?;kotlin.String?){}[0]
+    constructor <init>(kotlin/String, com.superiorsoftllc.infantry.plugin.api/Tier, com.superiorsoftllc.infantry.plugin.host/ModuleState, kotlin/String? = ..., com.superiorsoftllc.infantry.plugin.api/ModuleManifest? = ..., kotlin/String? = ..., kotlin.collections/List<kotlin/String> = ...) // com.superiorsoftllc.infantry.plugin.host/ModuleStatus.<init>|<init>(kotlin.String;com.superiorsoftllc.infantry.plugin.api.Tier;com.superiorsoftllc.infantry.plugin.host.ModuleState;kotlin.String?;com.superiorsoftllc.infantry.plugin.api.ModuleManifest?;kotlin.String?;kotlin.collections.List<kotlin.String>){}[0]
 
     final val dir // com.superiorsoftllc.infantry.plugin.host/ModuleStatus.dir|{}dir[0]
         final fun <get-dir>(): kotlin/String? // com.superiorsoftllc.infantry.plugin.host/ModuleStatus.dir.<get-dir>|<get-dir>(){}[0]
+    final val heldOffBy // com.superiorsoftllc.infantry.plugin.host/ModuleStatus.heldOffBy|{}heldOffBy[0]
+        final fun <get-heldOffBy>(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.host/ModuleStatus.heldOffBy.<get-heldOffBy>|<get-heldOffBy>(){}[0]
     final val logLine // com.superiorsoftllc.infantry.plugin.host/ModuleStatus.logLine|{}logLine[0]
         final fun <get-logLine>(): kotlin/String // com.superiorsoftllc.infantry.plugin.host/ModuleStatus.logLine.<get-logLine>|<get-logLine>(){}[0]
     final val manifest // com.superiorsoftllc.infantry.plugin.host/ModuleStatus.manifest|{}manifest[0]
@@ -3161,7 +3186,8 @@ final class com.superiorsoftllc.infantry.plugin.host/ModuleStatus { // com.super
     final fun component4(): kotlin/String? // com.superiorsoftllc.infantry.plugin.host/ModuleStatus.component4|component4(){}[0]
     final fun component5(): com.superiorsoftllc.infantry.plugin.api/ModuleManifest? // com.superiorsoftllc.infantry.plugin.host/ModuleStatus.component5|component5(){}[0]
     final fun component6(): kotlin/String? // com.superiorsoftllc.infantry.plugin.host/ModuleStatus.component6|component6(){}[0]
-    final fun copy(kotlin/String = ..., com.superiorsoftllc.infantry.plugin.api/Tier = ..., com.superiorsoftllc.infantry.plugin.host/ModuleState = ..., kotlin/String? = ..., com.superiorsoftllc.infantry.plugin.api/ModuleManifest? = ..., kotlin/String? = ...): com.superiorsoftllc.infantry.plugin.host/ModuleStatus // com.superiorsoftllc.infantry.plugin.host/ModuleStatus.copy|copy(kotlin.String;com.superiorsoftllc.infantry.plugin.api.Tier;com.superiorsoftllc.infantry.plugin.host.ModuleState;kotlin.String?;com.superiorsoftllc.infantry.plugin.api.ModuleManifest?;kotlin.String?){}[0]
+    final fun component7(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.host/ModuleStatus.component7|component7(){}[0]
+    final fun copy(kotlin/String = ..., com.superiorsoftllc.infantry.plugin.api/Tier = ..., com.superiorsoftllc.infantry.plugin.host/ModuleState = ..., kotlin/String? = ..., com.superiorsoftllc.infantry.plugin.api/ModuleManifest? = ..., kotlin/String? = ..., kotlin.collections/List<kotlin/String> = ...): com.superiorsoftllc.infantry.plugin.host/ModuleStatus // com.superiorsoftllc.infantry.plugin.host/ModuleStatus.copy|copy(kotlin.String;com.superiorsoftllc.infantry.plugin.api.Tier;com.superiorsoftllc.infantry.plugin.host.ModuleState;kotlin.String?;com.superiorsoftllc.infantry.plugin.api.ModuleManifest?;kotlin.String?;kotlin.collections.List<kotlin.String>){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.host/ModuleStatus.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // com.superiorsoftllc.infantry.plugin.host/ModuleStatus.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // com.superiorsoftllc.infantry.plugin.host/ModuleStatus.toString|toString(){}[0]
@@ -3170,8 +3196,10 @@ final class com.superiorsoftllc.infantry.plugin.host/ModuleStatus { // com.super
 final class com.superiorsoftllc.infantry.plugin.host/PluginTree { // com.superiorsoftllc.infantry.plugin.host/PluginTree|null[0]
     constructor <init>(kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/ModuleManifest>) // com.superiorsoftllc.infantry.plugin.host/PluginTree.<init>|<init>(kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.ModuleManifest>){}[0]
 
+    final val problems // com.superiorsoftllc.infantry.plugin.host/PluginTree.problems|{}problems[0]
+        final fun <get-problems>(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.host/PluginTree.problems.<get-problems>|<get-problems>(){}[0]
+
     final fun childrenOf(kotlin/String): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.host/PluginTree.childrenOf|childrenOf(kotlin.String){}[0]
-    final fun disableRefusal(kotlin/String, kotlin/Function1<kotlin/String, kotlin/Boolean>): kotlin/String? // com.superiorsoftllc.infantry.plugin.host/PluginTree.disableRefusal|disableRefusal(kotlin.String;kotlin.Function1<kotlin.String,kotlin.Boolean>){}[0]
     final fun parentsOf(kotlin/String): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.host/PluginTree.parentsOf|parentsOf(kotlin.String){}[0]
     final fun roots(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.host/PluginTree.roots|roots(){}[0]
 }

@@ -467,7 +467,7 @@ You rarely use these in a plugin; they explain the status you see in Settings > 
 - `Tier` is `CORE`, `OFFICIAL`, `COMMUNITY`, decided by the folder, never by the file.
 - `ModulesConfig` (`plugin/api/ModulesConfig.kt`): `<plugins root>/modules.json`: `folders`, `modules` (per module:
   `enabled`, `allow`, `deny`, `allowOverride`, `allowInject`, `endpoints`), `demoLock`, `configReadGate`.
-- `ModuleState` is `LOADED`, `DISABLED`, `LOCKED`, `REFUSED`; `ModuleStatus` carries the state and the reason.
+- `ModuleState` is `LOADED`, `DISABLED`, `LOCKED`, `REFUSED`; `ModuleStatus` carries the state, the reason and `heldOffBy` (the parents that are all off, when that is why the module is not loading).
 - `PLUGIN_API_VERSION = 2`. A module whose `apiVersion` differs is refused. `PLUGIN_API_REVISION = 4` is the additive
   revision (1 added the `official` tier, 2 added sub-tabs, 3 added the `speech.out` and `audio.in` services, 4 added `capabilities` and `emits`). The
   published `infantry-plugin-api` artifact is `<PLUGIN_API_VERSION>.<infantryPluginApiMinorPatch>` (gradle.properties; 2.3.0).
@@ -627,7 +627,7 @@ Generated for the `infantryPlugins` guard `SdkTypesDocumentedGuardTest`: every p
 
 ### `PluginTree.kt`
 
-- `PluginTree`: PLUGIN-TREE-UI-1: the parent/child relation between modules, from manifest data only.
+- `PluginTree`: PLUGIN-TREE-UI-1: the parent/child relation between modules, from manifest data only. PLUGIN-TREE-2a: edges also come from `inject` targets; a cycle's closing edge is dropped and listed in `problems`.
 
 ### `SemVer.kt`
 

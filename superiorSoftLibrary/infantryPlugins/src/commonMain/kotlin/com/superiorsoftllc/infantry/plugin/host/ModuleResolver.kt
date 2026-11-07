@@ -35,6 +35,8 @@ data class ModuleStatus(
     val reason: String? = null,
     val manifest: ModuleManifest? = null,
     val dir: String? = null,
+    /** PLUGIN-TREE-2a: the parents that are all off, when that is why this module is not loading; else empty. */
+    val heldOffBy: List<String> = emptyList(),
 ) {
     val logLine: String get() = "[plugins] $name (${tier.name.lowercase()}): ${state.name.lowercase()}" + (reason?.let { " - $it" } ?: "")
 }
@@ -151,11 +153,25 @@ object ModuleResolver {
         // out of its version range, or is community under a core module.
         val byName = eligible.associateBy { it.manifest!!.name }.toMutableMap()
         val installed = candidates.filter { it.manifest != null }.associateBy { it.manifest!!.name }
+        // PLUGIN-TREE-2a: effective(M) = own(M) && (no installed parent || some parent is still loading). Derived on every
+        // resolve, never stored; a parent that is off, refused, locked or on another platform counts as off. Iterated with
+        // the dependency pass: a parent dropped by a dependency drops its parent-only children.
+        val tree = PluginTree(installed.values.mapNotNull { it.manifest })
+        log += tree.problems
         var changed = true
         while (changed) {
             changed = false
             for (c in byName.values.toList()) {
                 val m = c.manifest!!
+                val parents = tree.parentsOf(m.name)
+                if (parents.isNotEmpty() && parents.none { it in byName }) {
+                    byName.remove(m.name)
+                    final[m.name] = ModuleStatus(
+                        m.name, c.tier, ModuleState.DISABLED, "all its parents are off: ${parents.joinToString(", ")}", m, c.dir, parents,
+                    )
+                    changed = true
+                    continue
+                }
                 val reason = m.dependencies.firstNotNullOfOrNull { dep ->
                     val target = byName[dep.id]
                     val known = target ?: installed[dep.id]

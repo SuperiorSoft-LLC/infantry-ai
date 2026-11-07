@@ -192,10 +192,6 @@ fun ModulesSection(
                                 onEdit = { path = path + s.name },
                                 onToggle = changes?.let { c ->
                                     { on: Boolean ->
-                                        val refusal = if (on) null else tree.disableRefusal(s.name) { p ->
-                                            enabledNow[p] ?: (factory.statuses.firstOrNull { it.name == p }?.state != ModuleState.DISABLED)
-                                        }
-                                        if (refusal != null) { messages[s.name] = ModuleChange.Refused(refusal); return@let }
                                         val answer = c.request(ModuleRequest(s.name, on, cascade))
                                         messages[s.name] = answer
                                         if (answer is ModuleChange.Applied) for (n in answer.changed) enabledNow[n] = on

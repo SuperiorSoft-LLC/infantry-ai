@@ -236,4 +236,60 @@ class ModuleResolverTest {
 
     private fun core(name: String, preferences: List<PreferenceDeclaration>) =
         ModuleCandidate(name, Tier.CORE, "/p/core/$name", ModuleManifest(name, "1.0.0", preferences = preferences))
+
+    // PLUGIN-TREE-2a: the effective state is derived from the parent graph on every resolve.
+    private fun node(name: String, parents: List<String> = emptyList(), needs: List<String> = emptyList()) =
+        ModuleCandidate(name, Tier.CORE, "/p/core/$name", ModuleManifest(name, "1.0.0", author = "Infantry AI", parents = parents, dependencies = needs.map { DependencyDeclaration(it) }))
+
+    private fun cfg(vararg off: String) = ModulesConfig(modules = off.associateWith { ModuleSetting(enabled = false) })
+
+    @Test
+    fun `a shared child stays on while one parent is on and goes off with the last`() {
+        val all = listOf(node("Infantry_A"), node("Infantry_B"), node("Infantry_Kid", parents = listOf("Infantry_A", "Infantry_B")))
+        assertEquals(ModuleState.LOADED, ModuleResolver.resolve(all, cfg("Infantry_A")).state("Infantry_Kid"))
+        val none = ModuleResolver.resolve(all, cfg("Infantry_A", "Infantry_B"))
+        assertEquals(ModuleState.DISABLED, none.state("Infantry_Kid"))
+        assertEquals(listOf("Infantry_A", "Infantry_B"), none.status("Infantry_Kid")!!.heldOffBy)
+        assertEquals("all its parents are off: Infantry_A, Infantry_B", none.reason("Infantry_Kid"))
+        // Re-enabling one parent restores the child: nothing was written for it.
+        assertEquals(ModuleState.LOADED, ModuleResolver.resolve(all, cfg("Infantry_B")).state("Infantry_Kid"))
+    }
+
+    @Test
+    fun `a child's own off stays off whatever its parents`() {
+        val all = listOf(node("Infantry_A"), node("Infantry_Kid", parents = listOf("Infantry_A")))
+        val r = ModuleResolver.resolve(all, cfg("Infantry_Kid"))
+        assertEquals(ModuleState.DISABLED, r.state("Infantry_Kid"))
+        assertEquals(emptyList(), r.status("Infantry_Kid")!!.heldOffBy)
+    }
+
+    @Test
+    fun `a grandchild follows its parent down and a required parent still refuses the child`() {
+        val all = listOf(
+            node("Infantry_A"), node("Infantry_Mid", parents = listOf("Infantry_A")), node("Infantry_Leaf", parents = listOf("Infantry_Mid")),
+            node("Infantry_Dep", parents = listOf("Infantry_A"), needs = listOf("Infantry_A")),
+        )
+        val r = ModuleResolver.resolve(all, cfg("Infantry_A"))
+        assertEquals(ModuleState.DISABLED, r.state("Infantry_Mid"))
+        assertEquals(ModuleState.DISABLED, r.state("Infantry_Leaf"))
+        assertEquals(listOf("Infantry_Mid"), r.status("Infantry_Leaf")!!.heldOffBy)
+        // The dependency pass reached it first or the tree pass did; either way it is not loading.
+        assertTrue(r.state("Infantry_Dep") != ModuleState.LOADED)
+    }
+
+    @Test
+    fun `a refused parent counts as off for its children`() {
+        val bad = ModuleCandidate("Infantry_A", Tier.CORE, "/p/core/Infantry_A", ModuleManifest("Infantry_A", "1.0.0", dependencies = listOf(DependencyDeclaration("Infantry_Missing"))))
+        val r = ModuleResolver.resolve(listOf(bad, node("Infantry_Kid", parents = listOf("Infantry_A"))))
+        assertEquals(ModuleState.REFUSED, r.state("Infantry_A"))
+        assertEquals(ModuleState.DISABLED, r.state("Infantry_Kid"))
+    }
+
+    @Test
+    fun `a parent cycle is reported in the log and nothing is lost`() {
+        val r = ModuleResolver.resolve(listOf(node("Infantry_A", parents = listOf("Infantry_B")), node("Infantry_B", parents = listOf("Infantry_A"))))
+        assertTrue(r.log.any { it.startsWith("plugin parent cycle: ") })
+        assertEquals(ModuleState.LOADED, r.state("Infantry_A"))
+        assertEquals(ModuleState.LOADED, r.state("Infantry_B"))
+    }
 }
