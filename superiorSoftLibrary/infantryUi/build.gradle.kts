@@ -82,6 +82,7 @@ testImplementation(project(":plugins:official:Infantry_Pace"))
     // RUNTIME-22: and Infantry_Chat (the centre column; its tags and sections).
     testImplementation(project(":plugins:official:Infantry_Chat"))
     testImplementation(project(":plugins:official:Infantry_ChatFeed"))
+    testImplementation(project(":plugins:official:Infantry_JobFeed"))
     // RUNTIME-23: and Infantry_Approvals (the questions pill and its tags).
     testImplementation(project(":plugins:official:Infantry_Approvals"))
     // RUNTIME-24: and Infantry_Assistant (the Assistant popup).

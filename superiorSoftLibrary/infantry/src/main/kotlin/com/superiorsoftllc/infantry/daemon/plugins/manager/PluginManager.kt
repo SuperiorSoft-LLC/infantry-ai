@@ -387,7 +387,7 @@ class PluginManager(
         val led = ledger().installed
         val cat = runCatching { loaded() }.getOrDefault(emptyList()).flatMap { it.catalog.plugins }
         val scanned = PluginFolders.scan(root, cfg, bundledRoot)
-        val dependents = scanned.filter { c -> c.manifest != null && (cfg.modules[c.folderName]?.enabled ?: (c.tier != Tier.COMMUNITY)) }
+        val dependents = scanned.filter { c -> c.manifest != null && (cfg.modules[c.folderName]?.enabled ?: (c.tier != Tier.COMMUNITY && c.manifest!!.defaultEnabled)) }
             .flatMap { c -> c.manifest!!.dependencies.map { it.id to c.folderName } }
             .groupBy({ it.first }, { it.second })
         return scanned.mapNotNull { c ->
@@ -399,7 +399,7 @@ class PluginManager(
                 c.folderName, m.version,
                 row?.let { PluginClass.of(it.cls) } ?: if (c.tier == Tier.COMMUNITY) PluginClass.CUSTOM else PluginClass.OFFICIAL,
                 c.tier, bundled,
-                setting?.enabled ?: (c.tier != Tier.COMMUNITY),
+                setting?.enabled ?: (c.tier != Tier.COMMUNITY && m.defaultEnabled),
                 row?.source ?: if (bundled) "bundled" else null, m.license, RequestedGrants.of(m), row?.granted.orEmpty(), row?.history.orEmpty(),
                 yanked = cat.filter { it.id == c.folderName }.flatMap { it.versions }.firstOrNull { it.version == m.version && it.yanked }
                     ?.let { it.yankedReason ?: "no reason given" },

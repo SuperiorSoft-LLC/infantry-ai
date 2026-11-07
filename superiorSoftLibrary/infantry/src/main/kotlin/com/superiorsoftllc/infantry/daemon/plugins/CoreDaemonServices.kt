@@ -125,6 +125,33 @@ class CoreDaemonServices(
             manager.queueAdd(id, text, limits(com.superiorsoftllc.infantry.settings.LimitRegistry.CHAT_QUEUE_MAX).toInt())
                 ?.let { QueuedMessage(it.id, it.text, it.at) }
         override fun queueRemove(id: String, itemId: String): QueuedMessage = manager.queueRemove(id, itemId).let { QueuedMessage(it.id, it.text, it.at) }
+        // JOBFEED-1: the jobs a session watches. A job that ended is remembered (bounded) so its last lines and exit code stay readable.
+        private val endedJobs = java.util.concurrent.ConcurrentHashMap<String, MutableMap<String, com.superiorsoftllc.infantry.session.BgJob>>()
+        private fun logFileOf(job: com.superiorsoftllc.infantry.session.BgJob): java.io.File? = job.logPath?.let { java.io.File(it) }
+        override fun jobs(id: String): List<com.superiorsoftllc.infantry.daemon.api.JobInfo> {
+            if (manager.get(id) == null) return emptyList()
+            val live = manager.bgJobs(id)
+            val memory = endedJobs.getOrPut(id) { java.util.Collections.synchronizedMap(LinkedHashMap()) }
+            synchronized(memory) {
+                live.forEach { memory[it.id] = it }
+                while (memory.size > limits(com.superiorsoftllc.infantry.settings.LimitRegistry.JOBS_REMEMBERED).toInt()) memory.remove(memory.keys.first())
+            }
+            val liveIds = live.map { it.id }.toSet()
+            val all = synchronized(memory) { memory.values.toList() }
+            return all.sortedByDescending { it.startedAt }.map { j ->
+                val running = j.id in liveIds
+                com.superiorsoftllc.infantry.daemon.api.JobInfo(j.id, j.label, j.startedAt, running,
+                    if (running) null else logFileOf(j)?.let { com.superiorsoftllc.infantry.runner.JobLogTail.exitCode(it) })
+            }
+        }
+        override fun jobLog(id: String, jobId: String, fromOffset: Long, maxBytes: Int): com.superiorsoftllc.infantry.daemon.api.JobLogChunk? {
+            if (manager.get(id) == null) return null
+            val info = jobs(id).firstOrNull { it.id == jobId } ?: return null
+            val job = manager.bgJobs(id).firstOrNull { it.id == jobId } ?: endedJobs[id]?.get(jobId)
+            val file = job?.let(::logFileOf) ?: return null
+            val c = com.superiorsoftllc.infantry.runner.JobLogTail.read(file, fromOffset, maxBytes.coerceAtMost(limits(com.superiorsoftllc.infantry.settings.LimitRegistry.JOB_LOG_MAX_READ_BYTES).toInt()))
+            return com.superiorsoftllc.infantry.daemon.api.JobLogChunk(c.text, c.nextOffset, c.size, c.reset, info)
+        }
         override fun queueForce(id: String, itemId: String): String = when (manager.queueForce(id, itemId)) {
             SessionManager.ForceOutcome.INJECTED -> "injected"
             SessionManager.ForceOutcome.SENT_AS_TURN -> "sent as turn"

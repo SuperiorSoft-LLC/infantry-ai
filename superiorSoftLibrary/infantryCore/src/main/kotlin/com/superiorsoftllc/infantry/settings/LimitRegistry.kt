@@ -223,6 +223,20 @@ object LimitRegistry {
         min = 1, zeroIsUnlimited = false,
     )
 
+    /** Job logs: how many ended watched jobs per session stay readable (their last lines and exit code). */
+    val JOBS_REMEMBERED = LimitDef(
+        "limits.jobs.remembered", 5, "jobs",
+        "How many ended watched jobs a session keeps readable for a viewer plugin (their last lines and exit code).",
+        min = 0, zeroIsUnlimited = false,
+    )
+
+    /** Job logs: the most bytes one job log read returns, whatever a client asks for. */
+    val JOB_LOG_MAX_READ_BYTES = LimitDef(
+        "limits.jobs.maxReadBytes", 65536, "bytes",
+        "The most bytes one job-log read (a viewer plugin) returns, whatever the client asks for. Keeps one read cheap.",
+        min = 1024, zeroIsUnlimited = false,
+    )
+
     /** CHAT-SENDING-1: how long a client shows a sent message as "sending..." before it offers "not sent - retry". */
     val CHAT_SEND_ACK_SECONDS = LimitDef(
         "limits.chat.sendAckSeconds", 45, "seconds",
@@ -910,7 +924,7 @@ object LimitRegistry {
         USAGE_STALE_MAX_HOURS, USAGE_BACKOFF_MAX_MINUTES, USAGE_MANUAL_REFRESH_FLOOR_SECONDS,
         BUILD_MAX_WORKERS, BUILD_MAX_PARALLEL_FORKS, CPU_ALERT_PERCENT, CPU_ALERT_MINUTES,
         TICKET_DEADLINE_MINUTES, UNATTENDED_DEADLINE_MINUTES, STALL_MINUTES, KILL_RETRY_MINUTES, SILENT_MINUTES, PROGRESS_STALE_MINUTES, IDLE_NUDGE_MINUTES, MAIL_WAKE_MAX_SECONDS, IDLE_NOTICE_MINUTES, IDLE_COMMENT, UNBRIEFED_GRACE_MINUTES,
-        UNASSIGN_WAIT_SECONDS, HANDOFF_COMMITS, HANDOFF_CHARS, AGENT_QUEUE_MAX, RUNNERS_HEARTBEAT_SEC, RUNNERS_LOST_AFTER_SEC, RUNNER_MAX_WORKERS, CHAT_QUEUE_MAX, CHAT_SEND_ACK_SECONDS, CHAT_SENT_IDS_KEPT, CHAT_HISTORY_FRAMES,
+        UNASSIGN_WAIT_SECONDS, HANDOFF_COMMITS, HANDOFF_CHARS, AGENT_QUEUE_MAX, RUNNERS_HEARTBEAT_SEC, RUNNERS_LOST_AFTER_SEC, RUNNER_MAX_WORKERS, CHAT_QUEUE_MAX, JOBS_REMEMBERED, JOB_LOG_MAX_READ_BYTES, CHAT_SEND_ACK_SECONDS, CHAT_SENT_IDS_KEPT, CHAT_HISTORY_FRAMES,
         AUTO_DONE_MIN_OUTPUTS, PROCESS_WATCH_INTERVAL_SECONDS, PROCESS_STOP_GRACE_SECONDS, PROCESS_STUCK_MINUTES, RUN_SCROLLBACK_BYTES, RUN_HISTORY,
         RUN_INPUT_BYTES_PER_SECOND, RUN_INPUT_MAX_FRAME_BYTES, RUN_INPUT_QUEUE_BYTES, RUN_MAX_COLS, RUN_MAX_ROWS,
         QUESTION_TTL_MINUTES, BG_NOTIFY_TAIL_LINES, BG_NOTIFY_TIMEOUT_MINUTES, BG_NOTIFY_PATTERN_GRACE_SECONDS,

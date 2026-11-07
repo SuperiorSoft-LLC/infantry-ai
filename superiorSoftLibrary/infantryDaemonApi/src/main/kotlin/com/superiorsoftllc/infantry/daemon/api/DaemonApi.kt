@@ -230,7 +230,8 @@ interface DaemonApi {
         // 1.48.0 (PLUGIN-BRIDGES-1, additive): `capabilities` (daemon.api.capabilities): module.json `capabilities` / `emits`, one
         // bridge for scripts, agents and plugins to call what an installed plugin (daemon or UI half) offers.
         // 1.49.0 (PLUGIN-HOTSWAP-1, additive): `scope` (plugin.api.PluginScope), the host-owned lifetime of the daemon half.
-        const val VERSION = "1.49.0"
+        // 1.50.0 (JOBFEED-1, additive): `Sessions.jobs` / `Sessions.jobLog` (bounded job-log tail read).
+        const val VERSION = "1.50.0"
     }
 }
 
@@ -329,7 +330,21 @@ interface Sessions {
      * (`injected`), as a turn of its own when none runs (`sent as turn`). Throws when refused; the message then stays held.
      */
     fun queueForce(id: String, itemId: String): String = throw UnsupportedOperationException("this daemon holds no message queue")
+
+    /** JOBFEED-1 (1.50.0, additive): the watched jobs (`infantry bg run`) of session [id], running ones and the few that ended last; newest first. */
+    fun jobs(id: String): List<JobInfo> = emptyList()
+    /**
+     * JOBFEED-1 (1.50.0, additive): a bounded read of the job log. [fromOffset] is the `nextOffset` of the last read, or -1 for the tail;
+     * at most [maxBytes] are read, whole lines only. Null = unknown session or job, or the job writes no log.
+     */
+    fun jobLog(id: String, jobId: String, fromOffset: Long, maxBytes: Int): JobLogChunk? = null
 }
+
+/** JOBFEED-1: one watched job: [exitCode] is null while it [running] or when the exit is not known. */
+data class JobInfo(val id: String, val label: String, val startedAt: Long, val running: Boolean, val exitCode: Int? = null)
+
+/** JOBFEED-1: what [Sessions.jobLog] read; [reset] = the offset was no longer valid (log cut or replaced) and the read started at the tail. */
+data class JobLogChunk(val text: String, val nextOffset: Long, val size: Long, val reset: Boolean, val job: JobInfo)
 
 /** CHAT-QUEUE-1: one message held for a busy session: its [id], the [text], when it was queued ([at], epoch millis). */
 data class QueuedMessage(val id: String, val text: String, val at: Long)

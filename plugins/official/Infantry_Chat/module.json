@@ -25,7 +25,7 @@
       { "name": "infantry_chat_image", "action": "chat.image", "kind": "write", "description": "Show an image inline in a session's chat (a file inside the project, or an uploaded image id)." }
     ]
   },
-  "slots": ["chat.feed", "chat.composer.actions", "chat.message.actions", "chat.message.header"],
+  "slots": ["chat.feed", "chat.composer.actions", "chat.message.actions", "chat.message.header", "chat.jobfeed"],
   "events": ["chat.composer.insert"],
   "fills": [
     "infantry.shell.center"
