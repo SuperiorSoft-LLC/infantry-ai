@@ -176,4 +176,18 @@ class ScriptDispatcherTest {
         assertTrue(st.run.call(call("""{"name":"done","args":"[1]"}""")).isError)
         assertNotNull(st.api.call(call("{}")).text)
     }
+
+    @Test fun `PLUGIN-BRIDGES-1 a dotted capability id runs infantry_capability_call with the args nested and _target as the target`() {
+        val tools = tools().apply { add("infantry_capability_call") }
+        val engine = ScriptedEngine { listOf(QueuedAction("readaloud.speak", mapOf("text" to "done", "_target" to "all"))) }
+        val r = ScriptDispatcher(tools, { aliases }).run(engine, "", emptyMap(), ScriptLimits(), caller, invoker, false)
+        assertTrue(r.ok, r.render("t"))
+        val (name, args, _) = tools.calls.single()
+        assertEquals("infantry_capability_call", name)
+        assertEquals("readaloud.speak", (args["capability"] as JsonPrimitive).content)
+        assertEquals("all", (args["target"] as JsonPrimitive).content)
+        assertEquals(JsonObject(mapOf("text" to JsonPrimitive("done"))), args["args"])
+        val noBridge = ScriptDispatcher(tools(), { aliases }).run(engine, "", emptyMap(), ScriptLimits(), caller, invoker, true)
+        assertFalse(noBridge.ok, "without the bridge tool a dotted name is an unknown tool")
+    }
 }

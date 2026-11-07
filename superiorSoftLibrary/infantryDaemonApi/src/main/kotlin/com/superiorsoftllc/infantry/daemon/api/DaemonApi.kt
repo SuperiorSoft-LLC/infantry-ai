@@ -154,6 +154,13 @@ interface DaemonApi {
      */
     val runnerLinks: com.superiorsoftllc.infantry.daemon.api.runners.RunnerLinks get() = com.superiorsoftllc.infantry.daemon.api.runners.NoRunnerLinks
 
+    /**
+     * PLUGIN-BRIDGES-1 (1.48.0, additive; docs/wiki/Bridges.md): the capability bridge: answer this module's declared daemon-side
+     * capabilities, call any installed capability (daemon or client side) through the host, list them. A daemon without it lists
+     * nothing and fails every call.
+     */
+    val capabilities: com.superiorsoftllc.infantry.daemon.api.capabilities.Capabilities get() = com.superiorsoftllc.infantry.daemon.api.capabilities.NoCapabilities
+
     companion object {
         // 1.31.0 (CMD-1, additive): `runs` (daemon.api.runs.Runs) and `PluginSettings.hint`.
         // 1.30.0 (MAIL-HOOK-1, additive): `hooks.incomingMail` (IncomingMailHook, IncomingMail, MailVerdict): a pre-delivery look at each accepted mail.
@@ -213,7 +220,9 @@ interface DaemonApi {
         // 1.47.0 (RUNNER-POOL-8, additive): RunnerLink.events(acked) (contract 1.2.0; seq per session, kept until acknowledged),
         // StartSpec.pushOnCommit, LocalRunnerServices.eventsAcked, RunnerHub.sessionsOn / forget / silentSince, RunnerLinkWire 1.3.0
         // (EventsRequest.acked, StartRequest.pushOnCommit), AttentionKinds.RUNNER_LOST, board core op `restartElsewhere`.
-        const val VERSION = "1.47.0"
+        // 1.48.0 (PLUGIN-BRIDGES-1, additive): `capabilities` (daemon.api.capabilities): module.json `capabilities` / `emits`, one
+        // bridge for scripts, agents and plugins to call what an installed plugin (daemon or UI half) offers.
+        const val VERSION = "1.48.0"
     }
 }
 

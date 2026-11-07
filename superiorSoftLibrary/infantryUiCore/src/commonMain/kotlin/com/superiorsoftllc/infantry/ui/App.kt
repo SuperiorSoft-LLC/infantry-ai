@@ -361,6 +361,19 @@ fun App(
     LaunchedEffect(state.selectedId) { state.selectedId?.let { tabs.events.publish(PluginEvent(Events.SESSION_SELECTED, mapOf("id" to it))) } }
     // HOOKS-1: modules.loaded once the factory has bound its modules; ticket.changed for each ticket a board update changes.
     LaunchedEffect(tabs) { tabs.events.publish(HostEvents.modulesLoaded(tabs)) }
+    // PLUGIN-BRIDGES-1 (docs/wiki/Bridges.md): the loaded modules' client-side capabilities, hosted on this window's live link;
+    // a reconnect announces them again. Their declared events go out on the same link.
+    val capabilityScope = androidx.compose.runtime.rememberCoroutineScope()
+    LaunchedEffect(tabs, linkLive) {
+        if (linkLive) com.superiorsoftllc.infantry.ui.plugin.ClientCapabilityHost.run(
+            tabs.modules,
+            com.superiorsoftllc.infantry.ui.plugin.ClientCapabilityHost.platformOf(platformName()),
+            platformName(),
+            controller.client.frames,
+            send = { controller.client.send(it) },
+            trySend = { e -> capabilityScope.launch { controller.client.send(e) }; true },
+        )
+    }
     val lastTickets = remember { arrayOf(state.tickets) }
     LaunchedEffect(state.tickets) {
         HostEvents.ticketChanges(lastTickets[0], state.tickets).forEach { tabs.events.publish(it) }

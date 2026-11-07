@@ -153,6 +153,10 @@ object ActionCatalog {
         a("runs.stop", DESTRUCTIVE, E.RUN_STOP),
         a("secrets.save", WRITE, E.SECRET_SET, E.SECRET_CLEAR, E.SECRET_IMPORT, E.SECRET_FIELD_SET, E.SECRET_FIELD_DELETE, E.SECRET_DELETE, E.SECRET_MOVE),
         a("runners.admin", WRITE, RUNNER_ADMIN),
+
+        // PLUGIN-BRIDGES-1: a client hosting its UI halves' capabilities (announce, answer), and their declared events.
+        a("capabilities.host", READ, com.superiorsoftllc.infantry.plugin.api.CapabilityWire.HOST, com.superiorsoftllc.infantry.plugin.api.CapabilityWire.RESULT),
+        a("capabilities.emit", WRITE, com.superiorsoftllc.infantry.plugin.api.CapabilityWire.EVENT),
     )
 
     private val byFrame: Map<String, Action> = buildMap {

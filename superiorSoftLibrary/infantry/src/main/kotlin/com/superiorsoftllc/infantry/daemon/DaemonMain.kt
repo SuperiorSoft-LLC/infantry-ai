@@ -2787,6 +2787,31 @@ private suspend fun handleConnection(
             null
         }
     }
+    // PLUGIN-BRIDGES-1 (docs/wiki/Bridges.md): this connection may host client-side capabilities (the UI halves it loaded). The
+    // registry keys the host by this connection's outgoing channel; a call reaches it as a `capability_call` frame.
+    val capabilityWire = com.superiorsoftllc.infantry.plugin.api.CapabilityWire
+    frames.register(capabilityWire.HOST) { env, _ ->
+        if (!owner) return@register Envelope(Envelope.ERROR, "${capabilityWire.HOST}: only an owner connection hosts capabilities", requestId = env.requestId)
+        val hosting = capabilityWire.hosting(env.data)
+            ?: return@register Envelope(Envelope.ERROR, "${capabilityWire.HOST}: the data must be a capability hosting object", requestId = env.requestId)
+        val id = plugins.capabilities.host(outgoing, hosting) { type, data -> outgoing.trySend(Envelope(type, data)).isSuccess }
+        Envelope(capabilityWire.HOST, kotlinx.serialization.json.buildJsonObject { put("hostId", kotlinx.serialization.json.JsonPrimitive(id)) }.toString(), requestId = env.requestId)
+    }
+    frames.register(capabilityWire.RESULT) { env, _ ->
+        capabilityWire.result(env.data)?.let { plugins.capabilities.result(outgoing, it) }
+        null
+    }
+    frames.register(capabilityWire.EVENT) { env, _ ->
+        val e = capabilityWire.event(env.data)
+            ?: return@register Envelope(Envelope.ERROR, "${capabilityWire.EVENT}: the data must be a capability event object", requestId = env.requestId)
+        plugins.capabilities.clientEvent(outgoing, e).fold(
+            onSuccess = { (module, name) ->
+                runCatching { plugins.publishEvent(name, e.payload.toString(), source = "plugin:$module") }
+                    .fold({ null }, { Envelope(Envelope.ERROR, "${capabilityWire.EVENT}: ${it.message}", requestId = env.requestId) })
+            },
+            onFailure = { Envelope(Envelope.ERROR, "${capabilityWire.EVENT}: ${it.message}", requestId = env.requestId) },
+        )
+    }
     // DAEMON-PLUGINS-1: a plugin tool's own requests on this connection (requestId `plugin:<uuid>`, fed to [inbound]) are
     // answered to the waiting tool, never sent to the client.
     val pluginWaiters = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.CompletableDeferred<Envelope>>()
@@ -3026,6 +3051,8 @@ private suspend fun handleConnection(
             try {
             val envelope = runCatching { json.decodeFromString(Envelope.serializer(), text) }.getOrNull()
                 ?: Envelope(Envelope.PROMPT, text)
+            // PLUGIN-BRIDGES-1: any frame is activity (the default capability target is the most recently active desktop).
+            plugins.capabilities.touch(outgoing)
             // DAEMON-PLUGINS-1: who sent this frame, as the plugins' gates and tools see it.
             val caller = com.superiorsoftllc.infantry.daemon.api.Caller(
                 owner = owner, agent = tier == AccessTier.AGENT,
@@ -4216,6 +4243,7 @@ private suspend fun handleConnection(
     } finally {
         println("[infantry] ws closed")
         clients.remove(outgoing)
+        plugins.capabilities.disconnected(outgoing)
         policySubscription.close()
         inboundPump.cancel()
         pluginWaiters.values.forEach { it.cancel() }

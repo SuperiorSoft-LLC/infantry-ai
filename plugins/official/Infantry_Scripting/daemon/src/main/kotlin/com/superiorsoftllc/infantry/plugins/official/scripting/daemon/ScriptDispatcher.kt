@@ -112,7 +112,20 @@ class ScriptDispatcher(
                 if (a.name == HANDLED) { handled = true; continue }
                 if (a.name == DELIVER_TEXT) { deliverText = (a.args["text"] as? String)?.takeIf { it.isNotEmpty() }; continue }
                 val tool = if (a.name in known) a.name else (table[a.name] ?: BUILTIN_ALIASES[a.name] ?: a.name).let(::legacyToolName).takeIf { it in known }
-                    ?: return RunReport("ERROR", records + planned, logs, phase, dryRun, "unknown tool or alias '${a.name}' (see script_api)", records.size + planned.size + 1)
+                if (tool == null && CAPABILITY_ID.matches(a.name) && CAPABILITY_CALL in known) {
+                    // PLUGIN-BRIDGES-1: a dotted name is a plugin capability: ih.call("readaloud.speak", {text="hi", _target="all"})
+                    // runs infantry_capability_call (gated by the capability's own action); `_target` picks the client host.
+                    val optional = a.args[OPTIONAL]
+                    val capArgs = buildMap<String, Any?> {
+                        put("capability", a.name)
+                        put("args", a.args - OPTIONAL - TARGET)
+                        a.args[TARGET]?.let { put("target", it.toString()) }
+                        if (optional != null) put(OPTIONAL, optional)
+                    }
+                    planned += ActionRecord(a.name, CAPABILITY_CALL, capArgs, phase)
+                    continue
+                }
+                tool ?: return RunReport("ERROR", records + planned, logs, phase, dryRun, "unknown tool or alias '${a.name}', nor an installed capability (see script_api, infantry_capability_list)", records.size + planned.size + 1)
                 planned += ActionRecord(a.name, tool, a.args, phase)
             }
             onPlanned(planned)
@@ -168,6 +181,10 @@ class ScriptDispatcher(
         val BUILTIN_ALIASES = mapOf("exec" to "infantry_exec", "cli" to "infantry_exec", "exec_status" to "infantry_exec_status", "progress" to "infantry_progress", "chat_note" to "infantry_chat_note", "chat_image" to "infantry_chat_image",
             "session_read" to "infantry_session_read", "session_act" to "infantry_session_act", "notice_suppress" to "infantry_notice_suppress")
         const val OPTIONAL = "_optional"
+        /** PLUGIN-BRIDGES-1: a capability call's client host (`default`, `all` or a host id); the generic call tool; a capability id. */
+        const val TARGET = "_target"
+        const val CAPABILITY_CALL = "infantry_capability_call"
+        val CAPABILITY_ID = Regex("""^[a-z][a-z0-9_-]*(\.[a-z][a-z0-9_-]*)+$""")
         const val PROGRESS = "infantry_progress"
         const val SESSION_ID = "sessionId"
         const val HARD_MAX_PHASES = 10

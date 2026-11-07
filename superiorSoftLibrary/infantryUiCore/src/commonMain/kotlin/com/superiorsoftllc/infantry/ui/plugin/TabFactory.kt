@@ -315,6 +315,8 @@ class InfantryModule(
     val onStop: () -> Unit = {},
     /** AR-7b: the session-row badges the module contributes (`UiRegistrar.sessionBadge`). */
     val sessionBadges: List<SessionBadgeProvider> = emptyList(),
+    /** PLUGIN-BRIDGES-1: the handlers of its declared `runs: client` capabilities, by id (`UiRegistrar.capability`). */
+    val capabilities: Map<String, ClientCapabilityHandler> = emptyMap(),
 )
 
 /**
@@ -356,6 +358,13 @@ interface UiRegistrar {
     fun fieldType(id: String, type: FieldType) {}
     /** AR-7b: a badge on every session row (label, tone, tooltip as data). */
     fun sessionBadge(provider: SessionBadgeProvider) {}
+    /**
+     * PLUGIN-BRIDGES-1 (docs/wiki/Bridges.md): answers capability [id], declared in module.json `capabilities` with `runs: client`;
+     * an undeclared id is ignored. Scripts, agents and other plugins call it through the daemon (`infantry_capability_call`).
+     */
+    fun capability(id: String, handler: ClientCapabilityHandler) {}
+    /** PLUGIN-BRIDGES-1: publishes this module's declared `emits` events on the daemon's event bus (hooks hear them). */
+    val capabilityEvents: CapabilityEvents get() = CapabilityEvents { _, _ -> }
 }
 
 /** Runs [plugin]'s registration into a module of [tier]. */
@@ -373,6 +382,9 @@ fun registerModule(manifest: ModuleManifest, tier: Tier, services: PluginService
     val blockTypes = LinkedHashMap<String, BlockType>()
     val fieldTypes = LinkedHashMap<String, FieldType>()
     val sessionBadges = mutableListOf<SessionBadgeProvider>()
+    val capabilities = LinkedHashMap<String, ClientCapabilityHandler>()
+    val declaredClient = manifest.capabilities.filter { it.runs == com.superiorsoftllc.infantry.plugin.api.CapabilityRuns.CLIENT }.map { it.id }.toSet()
+    val events = ClientCapabilityHost.eventsOf(manifest.name, manifest.emits.map { it.event }.toSet())
     plugin.register(object : UiRegistrar {
         override val services = services
         override fun tab(provider: TabProvider) { tabs += provider }
@@ -388,8 +400,10 @@ fun registerModule(manifest: ModuleManifest, tier: Tier, services: PluginService
         override fun blockType(type: String, blockType: BlockType) { blockTypes[type] = blockType }
         override fun fieldType(id: String, type: FieldType) { fieldTypes[id] = type }
         override fun sessionBadge(provider: SessionBadgeProvider) { sessionBadges += provider }
+        override fun capability(id: String, handler: ClientCapabilityHandler) { if (id in declaredClient) capabilities[id] = handler }
+        override val capabilityEvents: CapabilityEvents = events
     })
-    return InfantryModule(manifest, tabs, interceptors, blocks, observers, tier, panels, shell, inject, fills, tabTrees, implementations, blockTypes, fieldTypes = fieldTypes, onStop = plugin::stop, sessionBadges = sessionBadges)
+    return InfantryModule(manifest, tabs, interceptors, blocks, observers, tier, panels, shell, inject, fills, tabTrees, implementations, blockTypes, fieldTypes = fieldTypes, onStop = plugin::stop, sessionBadges = sessionBadges, capabilities = capabilities)
 }
 
 /**

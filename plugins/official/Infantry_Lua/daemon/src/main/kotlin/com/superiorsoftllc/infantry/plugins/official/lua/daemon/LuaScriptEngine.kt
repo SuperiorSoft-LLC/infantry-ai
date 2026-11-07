@@ -39,6 +39,7 @@ class LuaScriptEngine : ScriptEngine {
         Lua 5.2 (LuaJ), sandboxed: no io/require/load; os.time, os.clock, string, table, math only.
         ih.call("infantry_ticket_move", {ticket="t1", status="done"})   queue any tool by registry name
         ih.move{ticket="t1", status="done"}                            same, by an alias (ih.<alias>{...} or ih.<toolname>{...}); args are ONE table of the tool's named arguments
+        ih.call("readaloud.speak", {text="hi", _target="all"})         call a plugin capability by its dotted id (infantry_capability_list); _target = default | all | <host id>
         ih.exec{command={"prog","arg"}, cwd=".", timeoutSec=60}         run a process (needs scripting.exec.enabled); phase 2 input.results[i].json = {exitCode, durationMs, stdoutTail, stderrTail, timedOut}
         ih.cli("prog arg")  or  ih.cli{command=..., ...}                same as ih.exec (a bare string is the command line)
         ih.log("text")                                                 add to the run log

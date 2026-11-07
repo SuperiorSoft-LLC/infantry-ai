@@ -617,4 +617,13 @@ class ScriptHooksTest {
         assertEquals(2, lines.size, lines.toString())
         assertTrue(BuiltinHook.load({ null }).isEmpty())
     }
+
+    @Test fun `PLUGIN-BRIDGES-1 a plugin's declared event reaches a hook on its name with the payload as args`() {
+        putHooks("""{"id":"spoken","on":"readaloud.spoken","script":"on-done"}""")
+        val engine = FakeEngine { emptyList() }
+        val hooks = build(engine)
+        hooks.onEvent(NamedEvent("readaloud.spoken", """{"chars":12,"projectId":"p1"}""", "plugin:Infantry_ReadAloud", "e9", "e9", 0, 1))
+        assertEquals(1, engine.inputs.size)
+        assertEquals(12L, ((engine.inputs.single()["args"] as Map<*, *>)["chars"] as Number).toLong())
+    }
 }

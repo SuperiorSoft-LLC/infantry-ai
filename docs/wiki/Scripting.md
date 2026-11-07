@@ -45,6 +45,10 @@ Every tool the daemon has is callable: `ih.call("infantry_ticket_move", {ticket 
 has: `exec`, `cli`, `exec_status`, `progress`, `chat_note`, `chat_image`, `session_read`, `session_act`,
 `notice_suppress`.
 
+A dotted name is a plugin capability (PLUGIN-BRIDGES-1): `ih.call("readaloud.speak", {text = "Done", _target = "all"})` runs
+`infantry_capability_call` with the table as the capability's `args`; `_target` picks the client host (`default`, `all` or a
+host id). `infantry_capability_list` lists them. See [Bridges](Bridges.md).
+
 The live list of tools, aliases and engine notes: `infantry_script_api` (MCP tool; optional `tool` argument for one
 tool in full). It is generated from the registry on each call, so it is always current.
 
