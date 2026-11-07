@@ -125,25 +125,14 @@ internal object SessionReadTools {
         override val timeoutMs = TIMEOUT_MS
 
         override fun call(call: ToolCall): ToolResult {
-            // A SESSION caller sees its OWN project by default; explicit "all" lists every project and an explicit id lists that
-            // project (pm / owner roles only, the host's rule). Owner / user callers (no session): all projects.
-            val requested = requestedProject(call.arguments)
+            // The host's scope decides, the requested one or the default: a session's OWN project, a project hook's project
+            // (HOOK-TIMER-SCOPE-1: a hook has no session, and its default was read as "every project", then refused), the owner's
+            // every project. Explicit "all" or another project's id is the owner's (the host's rule).
             val by = by(call)
             val reads = api.sessionReads
-            val caller = when (val r = reads.caller(by)) {
-                is SessionsResult.Ok -> r.value
-                else -> return failed(LIST_SESSIONS, r)
-            }
-            if (requested != null) {
-                when (val s = reads.scope(by, requested)) {
-                    is SessionsResult.Ok -> s.value.refusal?.let { return ToolResult("$LIST_SESSIONS refused: $it", isError = true) }
-                    else -> return failed(LIST_SESSIONS, s)
-                }
-            }
-            val scope = when {
-                requested == "all" -> null
-                requested != null -> requested
-                else -> caller?.projectId
+            val scope = when (val s = reads.scope(by, requestedProject(call.arguments))) {
+                is SessionsResult.Ok -> s.value.also { v -> v.refusal?.let { return ToolResult("$LIST_SESSIONS refused: $it", isError = true) } }.projectId
+                else -> return failed(LIST_SESSIONS, s)
             }
             val sessions = when (val r = reads.list(by, scope)) {
                 is SessionsResult.Ok -> r.value

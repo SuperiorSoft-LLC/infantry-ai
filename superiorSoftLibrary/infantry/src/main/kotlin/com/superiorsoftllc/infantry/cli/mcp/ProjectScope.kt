@@ -99,12 +99,16 @@ internal class ProjectScope(
                 return if (ask == ALL) ProjectScope(null) else ProjectScope(ask ?: defaultProjectId?.trim()?.takeIf { it.isNotEmpty() })
             }
             val own = ownProject(caller, getenv) ?: defaultProjectId?.trim()?.takeIf { it.isNotEmpty() }
+            // HOOK-TIMER-SCOPE-1: a project hook (confined, no session) is named as what it is, not as a session of role 'unknown'.
+            val hook = caller == null && sessionId.startsWith(CONFINED_PREFIX)
+            val who = if (hook) "this project hook" else "this session (role '${caller?.role ?: "unknown"}')"
+            val whose = if (hook) "this project hook's project" else "this session's project"
             return when {
                 ask == ALL ->
                     if (crossesProjects(caller, true)) ProjectScope(null)
-                    else ProjectScope(own, "projectId='all' is for the owner; this session (role '${caller?.role ?: "unknown"}') is confined to project '${own ?: "unknown"}'")
+                    else ProjectScope(own, "projectId='all' is for the owner; $who is confined to project '${own ?: "unknown"}'")
                 ask != null && ask != own && !crossesProjects(caller, true) ->
-                    ProjectScope(own, "project '$ask' is not this session's project ('${own ?: "unknown"}'); only the owner may look at another project")
+                    ProjectScope(own, "project '$ask' is not $whose ('${own ?: "unknown"}'); only the owner may look at another project")
                 ask != null -> ProjectScope(ask)
                 else -> ProjectScope(own)
             }

@@ -230,6 +230,17 @@ class LocalBoardServicesTest {
 
     // ---- scope: applied by the host, to every call -----------------------------------------------------------------
 
+    @Test fun `a project hook (no session, confined to A) reads A's board by default and is refused B and all`() {
+        // HOOK-TIMER-SCOPE-1: the caller every hook kind's script runs as (ScriptHooks.invokerOf).
+        val mine = seed("mine", "A"); val theirs = seed("theirs", "B")
+        val hook = Caller(owner = true, project = "A")
+        assertEquals(listOf(mine.id), svc.tickets.list(hook).ok().items.map { it.id })
+        assertEquals(listOf(mine.id), svc.tickets.list(hook, TicketQuery(projectId = "A")).ok().items.map { it.id })
+        assertTrue(svc.tickets.list(hook, TicketQuery(projectId = "all")).refusedText().contains("this project hook is confined to project 'A'"))
+        assertTrue(svc.tickets.list(hook, TicketQuery(projectId = "B")).refusedText().contains("not this project hook's project"))
+        assertTrue(svc.tickets.get(theirs.id, hook).refusedText().contains("belongs to project 'B'"))
+    }
+
     @Test fun `a caller of project A cannot read or change project B tickets through the API`() {
         val mine = seed("mine", "A"); val theirs = seed("theirs", "B")
         val a = asSession("s-a")
