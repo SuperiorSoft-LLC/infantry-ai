@@ -45,14 +45,15 @@ class NotifyDaemonPlugin : DaemonPlugin {
         api.tools.register(NotifyTool(service))
         api.tools.register(MilestoneTool(service))
         api.frames.handle(NotifyWire.ACK) { frame: Frame, _ ->
-            val id = runCatching { (Json.parseToJsonElement(frame.data) as? JsonObject)?.get("id")?.let { (it as JsonPrimitive).contentOrNull } }.getOrNull()
-            if (id != null) service.ack(id)
+            val o = runCatching { Json.parseToJsonElement(frame.data) as? JsonObject }.getOrNull()
+            val id = runCatching { (o?.get("id") as? JsonPrimitive)?.contentOrNull }.getOrNull()
+            if (id != null) service.ack(id, (o?.get("device") as? JsonPrimitive)?.contentOrNull)
             null
         }
-        api.hooks.connected(ConnectedHook { service.pending().map { Frame(NotifyWire.PUSH, it.toJson().toString()) } })
+        api.hooks.connected(ConnectedHook { service.unacked().map { Frame(NotifyWire.PUSH, it.toJson().toString()) } })
         // A client that starts listening after its connect asks for the queue itself (the answer is a list of pushes).
         api.frames.handle(NotifyWire.PENDING) { frame: Frame, _ ->
-            Frame(NotifyWire.PENDING_LIST, JsonArray(service.pending().map { it.toJson() }).toString(), frame.sessionId, frame.requestId)
+            Frame(NotifyWire.PENDING_LIST, JsonArray(service.pending(deviceOf(frame.data)).map { it.toJson() }).toString(), frame.sessionId, frame.requestId)
         }
         api.frames.handle(NotifyWire.SOUNDS) { frame: Frame, _ ->
             Frame(NotifyWire.SOUNDS_LIST, soundsJson(service).toString(), frame.sessionId, frame.requestId)
@@ -89,6 +90,10 @@ class NotifyDaemonPlugin : DaemonPlugin {
         closers.clear()
     }
 }
+
+/** NOTIFY-PUSH-1: the `device` a client names in its `notify_pending` / `notify_ack` data (null for a client that sends none). */
+internal fun deviceOf(data: String): String? =
+    runCatching { ((Json.parseToJsonElement(data) as? JsonObject)?.get("device") as? JsonPrimitive)?.contentOrNull }.getOrNull()
 
 internal fun soundsJson(service: NotifyService): JsonArray = buildJsonArray {
     service.sounds.list().forEach { s -> add(buildJsonObject { put("name", s.name); put("builtin", s.builtin); put("bytes", s.size) }) }

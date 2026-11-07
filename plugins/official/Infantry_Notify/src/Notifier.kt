@@ -23,6 +23,14 @@ interface Notifier {
 
     /** The ticket ids of the notifications the owner clicked (the listener opens each one on the board). */
     val opened: Flow<String>
+
+    /** NOTIFY-PUSH-1: the opt-in background connection of this platform (Android's foreground service); null where there is none. */
+    val backgroundPush: BackgroundPush? get() = null
+}
+
+/** NOTIFY-PUSH-1: a switch for the platform's background notification connection. */
+interface BackgroundPush {
+    var enabled: Boolean
 }
 
 @Composable

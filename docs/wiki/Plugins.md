@@ -216,7 +216,7 @@ milestone enters done. It has a daemon half and a UI half; core only carries the
 | Where | What it does |
 |---|---|
 | Desktop (Windows) | a tray toast (`TrayIcon.displayMessage`); clicking it brings the window to the front and opens the ticket. The tray icon appears on the first notification. WAV and mp3 play; ogg does not. |
-| Android | a notification on the "Milestones" channel (`urgent` on "Urgent", heads-up); a tap opens the app on the ticket. Android 13+ asks for POST_NOTIFICATIONS once. Shown while the app is connected, or on its next connect; background push is not built yet. |
+| Android | a notification on the "Milestones" channel (`urgent` on "Urgent", heads-up); a tap opens the app on the ticket. Android 13+ asks for POST_NOTIFICATIONS once. Shown while the app is connected, or on its next connect. With the opt-in "Background notifications" switch (Notifications card, off by default) a foreground service (`NotifyBackgroundService`) keeps the connection while the app is closed, so a notification arrives within seconds; the daemon queues per device (`notify_ack` and `notify_pending` carry a `device`), so the desktop acking a notification never hides it from the phone. Off the LAN it uses the same daemon URL as the app (Tailscale/WireGuard). |
 | Web | the browser Notification API, best effort (the permission is asked on the first notification). |
 
 **Send one.** Tool `infantry_notify` (MCP, scripts `ih.infantry_notify{...}`, CLI):

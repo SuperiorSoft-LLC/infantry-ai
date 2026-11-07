@@ -12,14 +12,15 @@
   "inject": [
     { "into": "infantry.shell.windowLayer", "name": "listener", "at": "last", "order": 900 }
   ],
-  "fieldTypes": ["notify.sounds"],
+  "fieldTypes": ["notify.sounds", "notify.background"],
   "config": [
     {
       "node": "infantry.notify.sounds", "group": "Notification sounds", "title": "Notification sounds", "tab": "Plugins", "order": 921,
       "applies": "Applies to: the sounds a notification can play. Add your own .wav/.mp3/.ogg to <state dir>/plugin-data/Infantry_Notify/sounds/.",
       "keywords": ["notify", "notification", "sound", "toast", "milestone"],
       "fields": [
-        { "key": "notify.soundList", "type": "notify.sounds", "label": "Sounds", "scope": "device", "order": 1 }
+        { "key": "notify.soundList", "type": "notify.sounds", "label": "Sounds", "scope": "device", "order": 1 },
+        { "key": "notify.background", "type": "notify.background", "label": "Background notifications (Android)", "scope": "device", "order": 2 }
       ]
     }
   ],

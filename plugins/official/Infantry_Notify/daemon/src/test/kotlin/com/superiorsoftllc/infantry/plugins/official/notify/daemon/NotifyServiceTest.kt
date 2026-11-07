@@ -117,4 +117,23 @@ class NotifyServiceTest {
         assertTrue(s.inQuietHours(LocalTime.of(1, 30)))
         assertTrue(!s.inQuietHours(LocalTime.of(2, 0)))
     }
+
+    @Test fun `a device's ack never hides the notification from another device`() {
+        val s = service()
+        val id = (s.notify(NotifyRequest(title = "m")) as NotifyService.Outcome.Sent).message.id
+        assertTrue(s.ack(id, "desktop"))
+        assertTrue(s.pending("desktop").isEmpty())
+        assertEquals(listOf(id), s.pending("android").map { it.id })
+        assertTrue(s.unacked().isEmpty())
+        assertEquals(listOf(id), service().pending("android").map { it.id })
+        assertTrue(s.ack(id, "android"))
+        assertTrue(s.pending("android").isEmpty())
+    }
+
+    @Test fun `a notification aimed at one device is not pending for another`() {
+        val s = service()
+        s.notify(NotifyRequest(title = "d", target = "desktop"))
+        assertTrue(s.pending("android").isEmpty())
+        assertEquals(1, s.pending("desktop").size)
+    }
 }
