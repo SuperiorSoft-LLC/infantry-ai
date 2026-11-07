@@ -51,6 +51,7 @@ class HelloDaemon : DaemonPlugin {
 | `config(key): String?` | a value of your `daemon.config` (fields with `"scope": "daemon"`), or null when unset |
 | `env(name)` | an environment variable you listed in `daemon.env` (community: and was granted), else null |
 | `secret(name)` | a keystore secret you listed in `daemon.secrets` (community: and was granted), else null |
+| `scope: PluginScope` | (1.49.0) the half's lifetime: coroutines, resources and cleanups started through it end right after `stop()` on unload ([Plugin lifecycle](Plugin-lifecycle.md)) |
 | `schedule(name, periodMs, job): AutoCloseable` | run `job` every `periodMs` (at least 1000) under the plugin's limits; close the handle to stop |
 | `whenStarted(block)` | run `block` once the whole daemon is up (every daemon half started, every harness registered, before the server binds); `start` runs while later modules still load, so boot work that needs another plugin's service or a harness (spawning a session) goes here. A live-loaded plugin runs it at once. Since 1.39.0 |
 | `displayStamp(epochMs)` | a time as people read it (`2026-11-03 20:41 -05:00`) in the daemon's `display.timeZone`. A daemon half's class loader links only the API, so it never names core classes such as `DisplayZone` (the first call would throw NoClassDefFoundError and the host would mark the plugin failed). Since 1.40.0 |
@@ -201,7 +202,7 @@ A `NamedEvent` has `name` (dotted, lower case), `payload` (JSON text), `source` 
 publishing thread, in publish order. The core carries `causeId` and `depth` but enforces no loop policy: a loop guard
 is the plugin's job (the scripting plugin has one, see [Scripting](Scripting.md)).
 
-### Job logs (JOBFEED-1, DaemonApi 1.49.0)
+### Job logs (JOBFEED-1, DaemonApi 1.50.0)
 
 `Sessions.jobs(id)` lists the watched jobs (`infantry bg run`) of a session as `JobInfo` (running ones and the last few that ended, with
 their exit code). `Sessions.jobLog(id, jobId, fromOffset, maxBytes)` is a bounded read of a job's log and answers a `JobLogChunk`: whole
@@ -274,7 +275,10 @@ version; a version already recorded or higher is a no-op. A community module nee
 2. It calls `start(api)` (limit `limits.plugins.startTimeoutMs`, 30 000 ms). A throw or a timeout disables the plugin.
 3. The plugin serves calls. Every call goes through the guard.
 4. On daemon close, or when the plugin is disabled, `stop()` runs (limit `limits.plugins.stopTimeoutMs`, 5 000 ms).
-   Release threads and handles there.
+   Release threads and handles there. Then the half's `scope` closes (DaemonApi 1.49.0).
+5. PLUGIN-HOTSWAP-1: on a live unload or reload, the host waits up to `limits.plugins.unloadCheckMs` (5 000 ms, 0 = no
+   check) for the old class loader to be collected. One still reachable adds the note "<plugin> did not unload cleanly"
+   to the answer; the daemon does not restart. See [Plugin lifecycle](Plugin-lifecycle.md).
 
 ### Grants for a community module
 

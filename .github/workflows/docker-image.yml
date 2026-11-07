@@ -1,0 +1,70 @@
+# DOCKER-IMAGE-1 (ticket 98add1f4): build the headless/runner image, verify it (docker/smoke.sh, then docker/runner-compare.sh:
+# container runner vs native runner), and publish it to GHCR with the workflow's GITHUB_TOKEN. Run by hand; releases and
+# nightlies publish the same image from release.yml's `docker` job. Docker Hub is not touched here.
+name: docker-image
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch or commit to build
+        type: string
+        default: feature-agenthq-mvp
+      tag:
+        description: Image tag to publish (for example nightly)
+        type: string
+        default: nightly
+      push:
+        description: Push to GHCR after the checks pass
+        type: boolean
+        default: true
+
+permissions: {}
+
+env:
+  GHCR_IMAGE: ghcr.io/superiorsoft-llc/infantry-ai
+
+jobs:
+  image:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: CI Gradle memory
+        run: |
+          gu="${GRADLE_USER_HOME:-$HOME/.gradle}"; mkdir -p "$gu"
+          printf 'org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -XX:+UseParallelGC\nkotlin.daemon.jvmargs=-Xmx4g\n' >> "$gu/gradle.properties"
+      - name: Build the Docker context
+        run: ./gradlew --no-daemon :superiorSoftLibrary:infantry:dockerContext -Pihq.devSign=true
+      - name: Build the image
+        run: docker build --build-arg INFANTRY_VERSION="${{ inputs.tag }}" -t "$GHCR_IMAGE:${{ inputs.tag }}" superiorSoftLibrary/infantry/build/docker
+      - name: Image size and start time
+        run: |
+          docker image inspect "$GHCR_IMAGE:${{ inputs.tag }}" --format 'size: {{.Size}} bytes'
+          s=$(date +%s.%N); id=$(docker run -d -p 127.0.0.1:18940:8787 -e INFANTRY_MODE=runner --name infantry-test-start "$GHCR_IMAGE:${{ inputs.tag }}")
+          until curl -fsS http://127.0.0.1:18940/health >/dev/null 2>&1; do sleep 0.5; done
+          echo "start to /health: $(echo "$(date +%s.%N) - $s" | bc) s"; docker rm -f infantry-test-start >/dev/null
+      - name: Smoke test (daemon mode)
+        run: docker/smoke.sh "$GHCR_IMAGE:${{ inputs.tag }}"
+      - name: Runner compare (container vs native)
+        run: docker/runner-compare.sh "$GHCR_IMAGE:${{ inputs.tag }}" superiorSoftLibrary/infantry/build/docker | tee compare.md
+      - name: Publish the compare table
+        if: always()
+        run: test -f compare.md && cat compare.md >> "$GITHUB_STEP_SUMMARY" || true
+      - name: Push to GHCR
+        if: ${{ inputs.push }}
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker build --label org.opencontainers.image.source=https://github.com/SuperiorSoft-LLC/infantry-ai \
+            --build-arg INFANTRY_VERSION="${{ inputs.tag }}" -t "$GHCR_IMAGE:${{ inputs.tag }}" superiorSoftLibrary/infantry/build/docker
+          docker push "$GHCR_IMAGE:${{ inputs.tag }}" | tee push.log
+          echo "::notice::$(grep -o 'digest: sha256:[0-9a-f]*' push.log | head -1)"

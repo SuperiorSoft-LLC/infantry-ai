@@ -203,6 +203,29 @@ class JvmPlatformHost(
 
     override fun reloadTabs(): com.superiorsoftllc.infantry.ui.plugin.TabFactory = load().factory
 
+    /**
+     * PLUGIN-HOTSWAP-1: the live swap of the loaded set ([com.superiorsoftllc.infantry.ui.plugin.DesktopPlugins.Loaded.swap]);
+     * null (the shell soft-restarts) when nothing is loaded yet or only a full reload applies the change. The leak check
+     * waits up to setting `INFANTRY_PLUGINS_UNLOAD_CHECK_MS` (default [UNLOAD_CHECK_MS]) per swapped-out class loader; with
+     * `-Dinfantry.plugins.leakHeapDump=true` (dev) a leak also writes `<state dir>/logs/plugin-leak-<module>.hprof`.
+     */
+    override fun swapPlugins(): com.superiorsoftllc.infantry.ui.shell.PluginSwap? = synchronized(this) {
+        val current = loaded ?: return null
+        when (val r = current.swap()) {
+            is com.superiorsoftllc.infantry.ui.plugin.DesktopPlugins.Swap.Unsupported -> {
+                System.err.println("[plugins] live swap not applied: ${r.reason}; reloading the shell")
+                null
+            }
+            is com.superiorsoftllc.infantry.ui.plugin.DesktopPlugins.Swap.Applied -> {
+                loaded = r.next
+                val timeout = setting(UNLOAD_CHECK_SETTING)?.toLongOrNull() ?: UNLOAD_CHECK_MS
+                val dumpDir = File(stateDir() ?: File(".infantry"), "logs")
+                val dumps = property("infantry.plugins.leakHeapDump") == "true"
+                com.superiorsoftllc.infantry.ui.shell.PluginSwap(r.next.factory, r.message) { leakedOf(r.released, timeout, dumps, dumpDir) }
+            }
+        }
+    }
+
     /** S6: drop a .ihq on the empty shell; the plugins root, demo lock and safe mode as the loader reads them. */
     override val dropIn: com.superiorsoftllc.infantry.ui.shell.PluginDropIn by lazy {
         val root = com.superiorsoftllc.infantry.plugin.host.PluginFolders.root(stateDir() ?: File(".infantry"), env, property)
@@ -228,6 +251,21 @@ class JvmPlatformHost(
     }
 
     private companion object {
+        /** PLUGIN-HOTSWAP-1: the setting (environment) that overrides [UNLOAD_CHECK_MS]. */
+        const val UNLOAD_CHECK_SETTING = "INFANTRY_PLUGINS_UNLOAD_CHECK_MS"
+        /** PLUGIN-HOTSWAP-1: how long the leak check waits for each swapped-out class loader to be collected. */
+        const val UNLOAD_CHECK_MS = 5_000L
+
+        /** PLUGIN-HOTSWAP-1: the swapped-out modules still in memory after [timeout] ms each, logged (and dumped in dev). */
+        fun leakedOf(released: Map<String, java.lang.ref.WeakReference<ClassLoader>>, timeout: Long, dumps: Boolean, dumpDir: File): List<String> =
+            released.filter { !com.superiorsoftllc.infantry.plugin.host.LeakWatch.collected(it.value, timeout) }.keys.toList().onEach { m ->
+                System.err.println("[plugins] $m did not unload cleanly: its class loader is still reachable after $timeout ms")
+                if (dumps) {
+                    val dump = com.superiorsoftllc.infantry.plugin.host.LeakWatch.heapDump(File(dumpDir, "plugin-leak-$m.hprof"))
+                    System.err.println("[plugins] $m: heap dump ${dump?.absolutePath ?: "not written"} (find the path from the GC roots to its PluginClassLoader)")
+                }
+            }
+
         /** NATIVE-PICKER-1: what an images-only attachment dialog offers. */
         val IMAGE_EXTENSIONS = listOf("png", "jpg", "jpeg", "gif", "webp", "bmp")
         const val DEFAULT_PORT = 8787

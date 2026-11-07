@@ -25,6 +25,7 @@ import com.superiorsoftllc.infantry.plugin.host.provideEvents
 
 import com.superiorsoftllc.infantry.ui.model.ToastKind
 import java.io.File
+import java.lang.ref.WeakReference
 
 /**
  * PLUGINS-1: the desktop's module loader. Finds modules only by scanning the configured subfolders of the plugins root
@@ -35,6 +36,9 @@ import java.io.File
  * RUNTIME-2: official modules come from `official/` of the plugins root and of the install's bundled modules root
  * ([PluginFolders.bundledRoot]). Each must be signed by the Infantry key ([OfficialTrust]; `devTrust` skips that in dev)
  * and loads through the same filtered class loader as a community module: no core right.
+ *
+ * PLUGIN-HOTSWAP-1: a loaded set can swap ONE plugin live ([Loaded.swap]): only that module (and its dependents) unloads
+ * and loads again, every other module keeps its objects and its UI state (docs/wiki/Plugin-lifecycle.md).
  *
  * This is a trust label, not a sandbox: a loaded jar runs in-process with the app's full access.
  */
@@ -51,16 +55,57 @@ object DesktopPlugins {
         private val unload: () -> Unit = {},
         /** The gated services each loaded module gets (what its tabs see as [TabContext.services]). */
         val services: (module: String) -> com.superiorsoftllc.infantry.plugin.api.PluginServices,
+        /** PLUGIN-HOTSWAP-1: the live swap of this set (see [swap]); null = this set cannot swap. */
+        private val swapper: (() -> Swap)? = null,
     ) : AutoCloseable {
         private var closed = false
 
         /**
          * S7: unloads every module of this set: each module's `stop()` runs, every event observer is unsubscribed, and the
          * class loaders are closed so Windows lets go of the jars (a module can then be removed outside safe mode). Safe to
-         * call twice; one module that fails to stop does not keep the others from stopping.
+         * call twice; one module that fails to stop does not keep the others from stopping. PLUGIN-HOTSWAP-1: the set a
+         * [swap] answers shares its modules with this one; closing either unloads them all.
          */
         override fun close() { if (!closed) { closed = true; unload() } }
+
+        /**
+         * PLUGIN-HOTSWAP-1 (docs/wiki/Plugin-lifecycle.md): reads the plugins root again and applies what changed (a module
+         * installed, updated, enabled, disabled or removed) to ONLY the modules it touches and the modules that depend on
+         * them: their `stop()` runs, their [com.superiorsoftllc.infantry.plugin.api.PluginScope] closes, their observers
+         * leave the bus and their class loaders close; the new versions load into new class loaders with a new
+         * [TabFactory.generation]. Every other module keeps its objects, its class loader and its UI state. Answers
+         * [Swap.Applied] with the set the window draws from now on and weak references to the closed loaders (the leak
+         * check, [com.superiorsoftllc.infantry.plugin.host.LeakWatch]), or [Swap.Unsupported] (nothing unloaded) when only
+         * the full reload (the soft restart) can apply the change.
+         */
+        fun swap(): Swap = if (closed) Swap.Unsupported("the module set is closed") else swapper?.invoke() ?: Swap.Unsupported("this module set cannot swap a plugin live")
     }
+
+    /** PLUGIN-HOTSWAP-1: what [Loaded.swap] did. */
+    sealed interface Swap {
+        /** Applied live: [next] replaces the set it was asked of. [released]: the closed class loaders, by module, for the leak check. */
+        class Applied(
+            val next: Loaded,
+            val unloaded: List<String>,
+            val loaded: List<String>,
+            val released: Map<String, WeakReference<ClassLoader>>,
+            val message: String,
+        ) : Swap
+
+        /** Not applied, nothing unloaded: the host does the full reload (the soft restart) instead, for [reason]. */
+        class Unsupported(val reason: String) : Swap
+    }
+
+    /** PLUGIN-HOTSWAP-1: one loaded module of a set, with what it takes to swap it. */
+    private class Entry(
+        val name: String,
+        val module: InfantryModule,
+        /** Its own class loader; null = compiled in, a bundle's module, or a composition (no code). */
+        val loader: PluginClassLoader?,
+        /** What its folder looked like when it loaded ([fingerprint]); null = compiled in or bundled (never swapped alone). */
+        val fingerprint: String?,
+        val generation: Int,
+    )
 
     fun load(
         stateDir: File,
@@ -85,17 +130,21 @@ object DesktopPlugins {
         val lockdown = PluginFolders.lockdown(env)
         val safeMode = PluginFolders.safeMode(env, property)
         // S6: an app UI installed from a .ihq carries its modules in one jar; they take part as if compiled in.
-        val loaders = mutableListOf<PluginClassLoader>()
-        val withBundles = compiled + bundles(root, config, compiled, say, loaders)
+        val bundleLoaders = mutableListOf<PluginClassLoader>()
+        val withBundles = compiled + bundles(root, config, compiled, say, bundleLoaders)
         val bundled = PluginFolders.bundledRoot(env, property)
         val devTrust = PluginFolders.devTrust(property)
-        val candidates = OfficialTrust.check(candidates(root, config, withBundles, bundled), OfficialTrust.infantryKeys(root, bundled), devTrust, say, pinned)
+        fun resolve(c: ModulesConfig): Resolution {
+            val candidates = OfficialTrust.check(candidates(root, c, withBundles, bundled), OfficialTrust.infantryKeys(root, bundled), devTrust, say, pinned)
+            return ModuleResolver.resolve(candidates, c, lockdown, safeMode = safeMode, platform = "desktop")
+        }
         say("[plugins] root ${root.absolutePath}${bundled?.let { " (bundled ${it.absolutePath})" } ?: ""}${if (lockdown) " (lockdown on)" else ""}${if (safeMode) " (safe mode: community modules off)" else ""}")
-        var resolution = ModuleResolver.resolve(candidates, config, lockdown, safeMode = safeMode, platform = "desktop")
+        val resolution = resolve(config)
 
         var built: TabFactory? = null
         val bus = SimpleEventBus(say)
-        val registry = ServiceRegistry(config, say).apply {
+        // PLUGIN-HOTSWAP-1: one registry per modules.json read (a live swap reads it again); the same providers each time.
+        fun registry(c: ModulesConfig) = ServiceRegistry(c, say).apply {
             provideEvents(bus, say)
             provide(Services.NOTIFICATIONS) { s ->
                 Notifications { title, body ->
@@ -106,66 +155,205 @@ object DesktopPlugins {
             }
             provide(Services.STORAGE) { s -> FilePluginStorage(dataDir(stateDir, s.name)) }
             provide(Services.SETTINGS) { s -> FilePluginSettings(FilePluginStorage(dataDir(stateDir, s.name))) }
-            provide(Services.DAEMON) { s -> RouteGate.gated(s.manifest!!, lockdown, config, DaemonLink.window::send) }
-            provide(Services.ENDPOINTS) { s -> JvmEndpointAccess(s.manifest!!, s.tier, config, lockdown, say) }
+            provide(Services.DAEMON) { s -> RouteGate.gated(s.manifest!!, lockdown, c, DaemonLink.window::send) }
+            provide(Services.ENDPOINTS) { s -> JvmEndpointAccess(s.manifest!!, s.tier, c, lockdown, say) }
             speech?.let { sp -> provide(Services.SPEECH_OUT) { com.superiorsoftllc.infantry.ui.voice.SpeakerSpeechOutput(sp) } }
             capture?.let { slot -> provide(Services.AUDIO_IN) { s -> com.superiorsoftllc.infantry.ui.voice.JvmAudioCapture(s.name, slot, captureLimit, captureLines, say) } }
         }
-        val services = resolution.loaded.associate { it.name to registry.forModule(it) }
 
-        val modules = mutableListOf<InfantryModule>()
-        val refused = HashSet<String>()
-        for (s in resolution.loaded) {
-            val m = s.manifest!!
-            // FIRSTRUN-LOG-1: a module with no UI half (daemon/harness only) is normal, not a refusal.
-            if (!hasUiHalf(m) && withBundles.none { it.manifest.name == s.name && s.tier == Tier.CORE }) continue
-            val needs = m.dependencies.map { it.id }.firstOrNull { it in refused }
-            val result = if (needs != null) Result.failure(IllegalStateException("dependency $needs is refused")) else
-                withBundles.firstOrNull { it.manifest.name == s.name && s.tier == Tier.CORE }?.let { Result.success(it) }
-                    ?: runCatching { loadJar(s, services.getValue(s.name), loaders) }
-            result.onSuccess { modules += it }.onFailure {
-                refused += s.name
-                resolution = resolution.refuse(s.name, it.message ?: it::class.simpleName.orEmpty())
-            }
-        }
+        val set = ModuleSet(say, bus, withBundles)
+        set.load(resolution, registry(config))
         resolution.log.forEach(say)
-        val preferences = resolution.preferences.filter { it.module !in refused }
-        val shellOverrides = resolution.shellOverrides.filter { it.module !in refused }
         val changes = ModuleChanges { request -> change(root, withBundles, lockdown, request, bundled).also { c -> (c as? ModuleChange.Applied)?.log?.forEach(say); say("[plugins] ${c.message}") } }
-        val factory = TabFactory(modules, preferences, services = { services[it] ?: NoPluginServices }, events = bus, statuses = statuses(resolution), changes = changes, shellOverrides = shellOverrides,
-            allowInject = { config.setting(it).allowInject }, allowOverride = { config.setting(it).allowOverride }, modulesConfig = config)
-        built = factory
+
         // NS3: Registered > "Export section…": <stateDir>/exports/<Section>.ihq, signed with this installation's export key.
-        fun exportNode(node: String): Pair<String, CompositionExport.Outcome> {
+        fun exportNode(factory: TabFactory, node: String): Pair<String, CompositionExport.Outcome> {
             val name = node.substringAfterLast('.').replaceFirstChar { it.uppercase() }.filter { it.isLetterOrDigit() }.ifEmpty { "Section" }
             val out = File(File(stateDir, "exports"), "$name.ihq")
             val key = ExportKey.loadOrCreate(File(stateDir, "export-key"))
             return name to CompositionExport.export(factory, node, name, out, CompositionExport.packageDirs(root), key)
         }
-        factory.sectionExporter = { node ->
-            runCatching {
-                when (val r = exportNode(node).second) {
-                    is CompositionExport.Outcome.Written -> "Exported to ${r.file.absolutePath}"
-                    is CompositionExport.Outcome.Refused -> "Not exported: " + r.refusals.joinToString("; ")
-                }
-            }.getOrElse { "Not exported: ${it.message}" }
+
+        /** The window's factory over the set's modules as [r] decided: the same wiring at load and after a swap. */
+        fun factoryOf(r: Resolution, c: ModulesConfig): TabFactory {
+            val factory = set.factory(r, changes, c)
+            built = factory
+            factory.sectionExporter = { node ->
+                runCatching {
+                    when (val e = exportNode(factory, node).second) {
+                        is CompositionExport.Outcome.Written -> "Exported to ${e.file.absolutePath}"
+                        is CompositionExport.Outcome.Refused -> "Not exported: " + e.refusals.joinToString("; ")
+                    }
+                }.getOrElse { "Not exported: ${it.message}" }
+            }
+            // NS10: "Try in a fresh shell": the same export, then a real second process on the shell-only classpath (FreshShell).
+            factory.freshShellLauncher = { node ->
+                runCatching {
+                    val (name, e) = exportNode(factory, node)
+                    when (e) {
+                        is CompositionExport.Outcome.Written -> FreshShell.launch(stateDir, e.file, name)
+                        is CompositionExport.Outcome.Refused -> "Not exported: " + e.refusals.joinToString("; ")
+                    }
+                }.getOrElse { "Fresh shell not started: ${it.message}" }
+            }
+            factory.problems.forEach { say("[plugins] $it") }
+            return factory
         }
-        // NS10: "Try in a fresh shell": the same export, then a real second process on the shell-only classpath (FreshShell).
-        factory.freshShellLauncher = { node ->
-            runCatching {
-                val (name, r) = exportNode(node)
-                when (r) {
-                    is CompositionExport.Outcome.Written -> FreshShell.launch(stateDir, r.file, name)
-                    is CompositionExport.Outcome.Refused -> "Not exported: " + r.refusals.joinToString("; ")
-                }
-            }.getOrElse { "Fresh shell not started: ${it.message}" }
+
+        val unloadAll: () -> Unit = {
+            set.close()
+            bundleLoaders.forEach { runCatching { it.close() } }
         }
-        factory.problems.forEach { say("[plugins] $it") }
-        return Loaded(factory, root, config, lockdown, log, safeMode, unload = {
-            modules.forEach { m -> runCatching { m.onStop() }.onFailure { say("[plugins] ${m.manifest.name} failed to stop: ${it.message}") } }
+        lateinit var swapper: () -> Swap
+        fun loadedSet(f: TabFactory, c: ModulesConfig) = Loaded(f, root, c, lockdown, log, safeMode, unload = unloadAll, services = set::services, swapper = swapper)
+        swapper = {
+            val c = PluginFolders.config(root, say)
+            when (val out = set.swap(resolve(c), registry(c))) {
+                is ModuleSet.Outcome.Unsupported -> Swap.Unsupported(out.reason)
+                is ModuleSet.Outcome.Done -> {
+                    say("[plugins] ${out.message}")
+                    Swap.Applied(loadedSet(factoryOf(out.resolution, c), c), out.unloaded, out.loaded, out.released, out.message)
+                }
+            }
+        }
+        return loadedSet(factoryOf(set.resolution, config), config)
+    }
+
+    /**
+     * PLUGIN-HOTSWAP-1: the loaded modules of one window and what it takes to swap one of them: its own class loader, the
+     * folder fingerprint it loaded from, and its load generation. [swap] diffs a fresh [Resolution] against what is loaded.
+     */
+    private class ModuleSet(private val say: (String) -> Unit, private val bus: SimpleEventBus, private val builtIn: List<InfantryModule>) {
+        private val entries = LinkedHashMap<String, Entry>()
+        private val serviceMap = HashMap<String, com.superiorsoftllc.infantry.plugin.api.PluginServices>()
+        private val refused = HashSet<String>()
+        private var generations = 0
+        private var closed = false
+        var resolution: Resolution = Resolution(emptyList(), emptyList(), emptyList())
+            private set
+
+        sealed interface Outcome {
+            class Done(val resolution: Resolution, val unloaded: List<String>, val loaded: List<String>, val released: Map<String, WeakReference<ClassLoader>>, val message: String) : Outcome
+            class Unsupported(val reason: String) : Outcome
+        }
+
+        fun services(module: String) = serviceMap[module] ?: NoPluginServices
+
+        private fun builtInOf(s: ModuleStatus) = builtIn.firstOrNull { it.manifest.name == s.name && s.tier == Tier.CORE }
+
+        /** FIRSTRUN-LOG-1: a module with no UI half (daemon/harness only) is normal, not a refusal: it takes no part here. */
+        private fun takesPart(s: ModuleStatus) = hasUiHalf(s.manifest!!) || builtInOf(s) != null
+
+        /** Loads every module of [r] (the start), or only [only] of it (a swap), in [r]'s order; refusals go into [resolution]. */
+        fun load(r: Resolution, registry: ServiceRegistry, only: Set<String>? = null): List<String> {
+            var res = r
+            val loadedNow = mutableListOf<String>()
+            for (s in r.loaded) {
+                if (only != null && s.name !in only) continue
+                val svc = registry.forModule(s).also { serviceMap[s.name] = it }
+                if (!takesPart(s)) continue
+                val needs = s.manifest!!.dependencies.map { it.id }.firstOrNull { it in refused }
+                val builtIn = builtInOf(s)
+                val result = if (needs != null) Result.failure(IllegalStateException("dependency $needs is refused")) else
+                    builtIn?.let { Result.success(it to null) } ?: runCatching { loadJar(s, svc) }
+                result.onSuccess { (module, loader) ->
+                    entries[s.name] = Entry(s.name, module, loader, if (builtIn == null) fingerprint(s) else null, generations)
+                    loadedNow += s.name
+                }.onFailure {
+                    refused += s.name
+                    serviceMap.remove(s.name)
+                    res = res.refuse(s.name, it.message ?: it::class.simpleName.orEmpty())
+                }
+            }
+            // Keep the resolution's order (a swapped module goes back where it loads).
+            val order = res.loaded.map { it.name }.withIndex().associate { it.value to it.index }
+            val sorted = entries.values.sortedBy { order[it.name] ?: Int.MAX_VALUE }
+            entries.clear(); sorted.forEach { entries[it.name] = it }
+            resolution = res
+            return loadedNow
+        }
+
+        fun factory(r: Resolution, changes: ModuleChanges, c: ModulesConfig): TabFactory {
+            val gens = entries.mapValues { it.value.generation }
+            return TabFactory(entries.values.map { it.module }, r.preferences.filter { it.module !in refused }, services = ::services, events = bus,
+                statuses = statuses(r), changes = changes, shellOverrides = r.shellOverrides.filter { it.module !in refused },
+                allowInject = { c.setting(it).allowInject }, allowOverride = { c.setting(it).allowOverride }, modulesConfig = c,
+                generation = { gens[it] ?: 0 })
+        }
+
+        /** Unloads one module: its stop (and scope), its observers, its class loader; answers a weak reference to the loader. */
+        private fun unload(e: Entry): WeakReference<ClassLoader>? {
+            runCatching { e.module.onStop() }.onFailure { say("[plugins] ${e.name} failed to stop: ${it.message}") }
+            bus.dropOwner(e.name)
+            entries.remove(e.name)
+            serviceMap.remove(e.name)
+            return e.loader?.let { l -> runCatching { l.close() }; WeakReference<ClassLoader>(l) }
+        }
+
+        @Synchronized
+        fun swap(r: Resolution, registry: ServiceRegistry): Outcome {
+            if (closed) return Outcome.Unsupported("the module set is closed")
+            val wanted = r.loaded.filter(::takesPart).associateBy { it.name }
+            // Compiled-in and bundled modules never swap one by one: a change to one of them needs the full reload.
+            val fixed = entries.values.filter { it.fingerprint == null }.map { it.name }.toSet()
+            fixed.firstOrNull { it !in wanted }?.let { return Outcome.Unsupported("$it is compiled in or bundled and no longer loads") }
+            wanted.values.firstOrNull { it.name !in entries && builtInOf(it) != null }?.let { return Outcome.Unsupported("${it.name} is compiled in or bundled") }
+            val changed = (entries.keys + wanted.keys).filter { n ->
+                val e = entries[n]
+                val w = wanted[n]
+                n !in fixed && (e == null || w == null || e.fingerprint != fingerprint(w) || e.module.tier != w.tier)
+            }.toMutableSet()
+            // A module refused last time is tried again (its dependency may be here now).
+            changed += refused.filter { it in wanted }
+            if (changed.isEmpty()) return Outcome.Unsupported("nothing changed in the plugins root")
+            // A module that needs a changed one goes with it (it may hold the old version's objects through a service).
+            var grew = true
+            while (grew) {
+                grew = false
+                val deps = entries.values.map { it.name to it.module.manifest.dependencies } + wanted.values.map { it.name to it.manifest!!.dependencies }
+                for ((n, d) in deps) if (n !in changed && d.any { it.id in changed }) { changed += n; grew = true }
+            }
+            fixed.firstOrNull { it in changed }?.let { return Outcome.Unsupported("$it is compiled in or bundled and depends on a changed module") }
+            // Out: the old versions, dependents first (reverse load order).
+            val leaving = entries.values.filter { it.name in changed }.reversed()
+            val released = LinkedHashMap<String, WeakReference<ClassLoader>>()
+            for (e in leaving) unload(e)?.let { released[e.name] = it }
+            refused.removeAll { it in changed }
+            // In: the new versions, each with a new generation (its old composition is disposed, ModuleScope).
+            generations++
+            val loadedNow = load(r, registry, only = changed)
+            val unloaded = leaving.map { it.name }
+            val failed = changed.filter { it in refused }
+            val message = buildString {
+                append("plugins swapped live")
+                if (unloaded.isNotEmpty()) append("; unloaded ${unloaded.joinToString()}")
+                if (loadedNow.isNotEmpty()) append("; loaded ${loadedNow.joinToString()}")
+                if (failed.isNotEmpty()) append("; refused ${failed.joinToString { "$it (${resolution.status(it)?.reason})" }}")
+            }
+            return Outcome.Done(resolution, unloaded, loadedNow, released, message)
+        }
+
+        @Synchronized
+        fun close() {
+            if (closed) return
+            closed = true
+            entries.values.forEach { e -> runCatching { e.module.onStop() }.onFailure { say("[plugins] ${e.name} failed to stop: ${it.message}") } }
             bus.clear()
-            loaders.forEach { runCatching { it.close() } }
-        }) { services[it] ?: NoPluginServices }
+            entries.values.forEach { e -> e.loader?.let { runCatching { it.close() } } }
+        }
+    }
+
+    /**
+     * PLUGIN-HOTSWAP-1: what a module's folder looked like when it loaded: its module.json, its jar, its `lib/` jars and its
+     * layout files (name, size, time). A swap reloads a module whose fingerprint changed (an update, a rebuilt jar).
+     */
+    internal fun fingerprint(s: ModuleStatus): String {
+        val m = s.manifest ?: return "none"
+        val dir = s.dir?.let(::File) ?: return "${s.tier}|$m"
+        val files = listOfNotNull(File(dir, "module.json"), m.jar?.takeIf { it.isNotBlank() }?.let { File(dir, it) }) +
+            File(dir, "lib").listFiles { f -> f.isFile && f.name.endsWith(".jar") }.orEmpty().sortedBy { it.name } +
+            m.fills.mapNotNull { f -> f.layout?.let { File(dir, it) } }
+        return "${s.tier}|${dir.canonicalPath}|" + files.joinToString(";") { f -> "${f.name}:${if (f.isFile) "${f.length()}@${f.lastModified()}" else "-"}" }
     }
 
     /**
@@ -247,22 +435,33 @@ object DesktopPlugins {
     internal fun hasUiHalf(m: com.superiorsoftllc.infantry.plugin.api.ModuleManifest): Boolean =
         !m.entry.isNullOrBlank() || !m.jar.isNullOrBlank() || m.fills.any { it.layout != null } || m.config.isNotEmpty()
 
-    private fun loadJar(s: ModuleStatus, services: com.superiorsoftllc.infantry.plugin.api.PluginServices, loaders: MutableList<PluginClassLoader>): InfantryModule {
+    /** The module of [s] from its folder, and the class loader it got (null for a composition, which has no code). */
+    private fun loadJar(s: ModuleStatus, services: com.superiorsoftllc.infantry.plugin.api.PluginServices): Pair<InfantryModule, PluginClassLoader?> {
         val m = s.manifest!!
         val dir = File(s.dir ?: error("no folder"))
-        if (m.entry.isNullOrBlank() && m.jar.isNullOrBlank() && (m.fills.any { it.layout != null } || m.config.isNotEmpty())) return composition(m, s.tier, dir)
+        if (m.entry.isNullOrBlank() && m.jar.isNullOrBlank() && (m.fills.any { it.layout != null } || m.config.isNotEmpty())) return composition(m, s.tier, dir) to null
         val entry = m.entry?.takeIf { it.isNotBlank() } ?: error("module.json has no entry class")
         val jar = File(dir, m.jar?.takeIf { it.isNotBlank() } ?: error("module.json has no jar"))
         if (!jar.isFile) error("jar ${m.jar} not found (build it first)")
         if (!jar.canonicalPath.startsWith(dir.canonicalPath + File.separator)) error("jar ${m.jar} is outside the module folder")
-        val loader = PluginClassLoader(dir, jar, DesktopPlugins::class.java.classLoader, s.tier).also { loaders += it }
+        val loader = PluginClassLoader(dir, jar, DesktopPlugins::class.java.classLoader, s.tier)
         val plugin = try {
             loader.loadClass(entry).getDeclaredConstructor().newInstance() as? UiPlugin ?: error("$entry is not a UiPlugin")
         } catch (e: ReflectiveOperationException) {
+            runCatching { loader.close() }
             error("entry $entry would not load (${e::class.simpleName})")
         } catch (e: LinkageError) {
+            runCatching { loader.close() }
             error("entry $entry would not link (${e::class.simpleName}: ${e.message})")
+        } catch (e: IllegalStateException) {
+            runCatching { loader.close() }
+            throw e
         }
-        return registerModule(m, s.tier, services, plugin)
+        return try {
+            registerModule(m, s.tier, services, plugin) to loader
+        } catch (e: Throwable) {
+            runCatching { loader.close() }
+            throw e
+        }
     }
 }

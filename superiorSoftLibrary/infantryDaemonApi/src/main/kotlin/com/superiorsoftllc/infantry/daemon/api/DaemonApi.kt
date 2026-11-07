@@ -50,6 +50,13 @@ interface DaemonApi {
     fun schedule(name: String, periodMs: Long, job: () -> Unit): AutoCloseable
 
     /**
+     * PLUGIN-HOTSWAP-1 (1.49.0, additive; docs/wiki/Plugin-lifecycle.md): this daemon half's lifetime. Coroutines, resources
+     * and cleanups started through it end by themselves when the host unloads the half (disable, update, remove, live
+     * reload), right after [DaemonPlugin.stop]. The default (a host without lifetimes, a test) is a scope nothing closes.
+     */
+    val scope: com.superiorsoftllc.infantry.plugin.api.PluginScope get() = com.superiorsoftllc.infantry.plugin.api.OwnedPluginScope(moduleId)
+
+    /**
      * DEMO-CHECK-1 (1.39.0, additive): runs [block] once, under the plugin's limits, when the daemon has finished starting:
      * every module's daemon half has started and every harness module is registered, before the server binds. [start] runs
      * while later modules are still loading, so work at boot that needs another plugin's service (e.g. the Roles port) or a
@@ -222,7 +229,9 @@ interface DaemonApi {
         // (EventsRequest.acked, StartRequest.pushOnCommit), AttentionKinds.RUNNER_LOST, board core op `restartElsewhere`.
         // 1.48.0 (PLUGIN-BRIDGES-1, additive): `capabilities` (daemon.api.capabilities): module.json `capabilities` / `emits`, one
         // bridge for scripts, agents and plugins to call what an installed plugin (daemon or UI half) offers.
-        const val VERSION = "1.49.0"
+        // 1.49.0 (PLUGIN-HOTSWAP-1, additive): `scope` (plugin.api.PluginScope), the host-owned lifetime of the daemon half.
+        // 1.50.0 (JOBFEED-1, additive): `Sessions.jobs` / `Sessions.jobLog` (bounded job-log tail read).
+        const val VERSION = "1.50.0"
     }
 }
 
@@ -322,10 +331,10 @@ interface Sessions {
      */
     fun queueForce(id: String, itemId: String): String = throw UnsupportedOperationException("this daemon holds no message queue")
 
-    /** JOBFEED-1 (1.49.0, additive): the watched jobs (`infantry bg run`) of session [id], running ones and the few that ended last; newest first. */
+    /** JOBFEED-1 (1.50.0, additive): the watched jobs (`infantry bg run`) of session [id], running ones and the few that ended last; newest first. */
     fun jobs(id: String): List<JobInfo> = emptyList()
     /**
-     * JOBFEED-1 (1.49.0, additive): a bounded read of the job log. [fromOffset] is the `nextOffset` of the last read, or -1 for the tail;
+     * JOBFEED-1 (1.50.0, additive): a bounded read of the job log. [fromOffset] is the `nextOffset` of the last read, or -1 for the tail;
      * at most [maxBytes] are read, whole lines only. Null = unknown session or job, or the job writes no log.
      */
     fun jobLog(id: String, jobId: String, fromOffset: Long, maxBytes: Int): JobLogChunk? = null

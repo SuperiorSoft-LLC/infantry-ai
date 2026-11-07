@@ -42,6 +42,7 @@ support it ignores the call.
 | Member | Registers | Declare in `module.json` |
 |---|---|---|
 | `val services: PluginServices` | (read-only) the services you may use | `services` |
+| `val scope: PluginScope` | (read-only) the plugin's lifetime: coroutines, timers, resources and cleanups that end on unload ([Plugin lifecycle](Plugin-lifecycle.md)) | (none) |
 | `tab(TabProvider)` | a tab in a strip | `tabs` |
 | `panel(PanelProvider)` | a section in a side panel or a named slot | `panels` |
 | `interceptor(name, TabInterceptor)` | a hook on a tab | `interceptors` |
@@ -469,7 +470,7 @@ You rarely use these in a plugin; they explain the status you see in Settings > 
 - `ModuleState` is `LOADED`, `DISABLED`, `LOCKED`, `REFUSED`; `ModuleStatus` carries the state and the reason.
 - `PLUGIN_API_VERSION = 2`. A module whose `apiVersion` differs is refused. `PLUGIN_API_REVISION = 4` is the additive
   revision (1 added the `official` tier, 2 added sub-tabs, 3 added the `speech.out` and `audio.in` services, 4 added `capabilities` and `emits`). The
-  published `infantry-plugin-api` artifact is `<PLUGIN_API_VERSION>.<infantryPluginApiMinorPatch>` (gradle.properties; 2.2.0).
+  published `infantry-plugin-api` artifact is `<PLUGIN_API_VERSION>.<infantryPluginApiMinorPatch>` (gradle.properties; 2.3.0).
 - `registerModule(manifest, tier, services, plugin): InfantryModule` runs a plugin's `register` into a module value.
   Tests use it (the template's `StarterPluginTest.kt`).
 - `TabFactory(modules)` binds modules, rejects what is not declared and lists problems in `factory.problems`. Tests
@@ -639,7 +640,13 @@ Generated for the `infantryPlugins` guard `SdkTypesDocumentedGuardTest`: every p
 - `RouteGate`: The daemon rule: a route must be declared, and under the lockdown also allowed by the lock.
 - `ServiceGate`: The service rules: declared in module.json, not denied by the owner, and for a community module, allowed.
 - `ServiceRegistry`: PLUGINS-1: the host's service registry, the extension point for platform services.
-- `SimpleEventBus`: A plain in-process event bus.
+- `SimpleEventBus`: A plain in-process event bus. PLUGIN-HOTSWAP-1: it records each observer's owner module (`dropOwner` removes one module's observers) and binds one observer object once.
+- `LeakWatch`: PLUGIN-HOTSWAP-1: asks the GC to collect a swapped-out plugin's class loader and says whether it did within a timeout; `heapDump` for the dev leak report ([Plugin lifecycle](Plugin-lifecycle.md)).
+
+### `PluginScope.kt`
+
+- `PluginScope`: PLUGIN-HOTSWAP-1 (plugin API revision 5): a plugin half's lifetime, owned by the host: `coroutines`, `own`, `onUnload`, `active`, and the `every` timer helper. Ends by itself on unload ([Plugin lifecycle](Plugin-lifecycle.md)).
+- `OwnedPluginScope`: the host's side of a `PluginScope`: one per loaded plugin half; the host calls `close` on unload (cancel, then cleanups newest first; never throws).
 
 ### `Services.kt`
 

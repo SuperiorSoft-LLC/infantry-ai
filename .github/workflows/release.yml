@@ -615,17 +615,20 @@ jobs:
               --target "$SHA" --prerelease --latest=false --title "Infantry AI ${TAG#v} ($CHANNEL)" --generate-notes
           fi
 
-  # DOCKER-1: builds and pushes the headless daemon image. DISABLED until the owner adds the repo secrets
-  # DOCKERHUB_USERNAME and DOCKERHUB_TOKEN and sets the repo variable DOCKER_PUBLISH=true. Nothing is pushed before then.
+  # DOCKER-1 / DOCKER-IMAGE-1: builds the headless daemon image (also the runner image: INFANTRY_MODE=runner) and pushes it to
+  # GHCR with the workflow's own GITHUB_TOKEN: :<version> always, :latest on a stable release, :nightly on a nightly.
+  # Docker Hub (DOCKERHUB_USERNAME / DOCKERHUB_TOKEN secrets) is optional: with no secrets that push is skipped, never a failure.
   docker:
-    # NIGHTLY-1: stable releases only (the image is tagged :latest).
-    if: ${{ vars.DOCKER_PUBLISH == 'true' && needs.version.outputs.channel == 'stable' }}
     needs: version
     runs-on: ubuntu-24.04
     permissions:
       contents: read
+      packages: write
     env:
-      IMAGE: ${{ vars.DOCKER_IMAGE || 'infantryai/infantry-ai' }}
+      GHCR_IMAGE: ghcr.io/superiorsoft-llc/infantry-ai
+      HUB_IMAGE: ${{ vars.DOCKER_IMAGE || 'infantryai/infantry-ai' }}
+      HUB_USER: ${{ secrets.DOCKERHUB_USERNAME }}
+      HUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -664,15 +667,48 @@ jobs:
       - name: Build the Docker context
         run: ./gradlew --no-daemon :superiorSoftLibrary:infantry:dockerContext -PinfantryVersion='${{ needs.version.outputs.version }}' $IHQ_SIGN
       - uses: docker/setup-buildx-action@v3
+      - name: Image tags
+        id: tags
+        shell: bash
+        env:
+          CHANNEL: ${{ needs.version.outputs.channel }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          tags=("$GHCR_IMAGE:$VERSION")
+          if [ "$CHANNEL" = stable ]; then tags+=("$GHCR_IMAGE:latest"); else tags+=("$GHCR_IMAGE:$CHANNEL"); fi
+          if [ -n "${HUB_USER:-}" ] && [ -n "${HUB_TOKEN:-}" ]; then
+            echo "hub=true" >> "$GITHUB_OUTPUT"
+            tags+=("$HUB_IMAGE:$VERSION")
+            if [ "$CHANNEL" = stable ]; then tags+=("$HUB_IMAGE:latest"); fi
+          else
+            echo "hub=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No Docker Hub secrets; pushing to GHCR only."
+          fi
+          t=$(printf '%s\n' "${tags[@]}")
+          { echo 'list<<EOF'; echo "$t"; echo EOF; } >> "$GITHUB_OUTPUT"
       - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/login-action@v3
+        if: ${{ steps.tags.outputs.hub == 'true' }}
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - uses: docker/build-push-action@v6
+      - id: push
+        uses: docker/build-push-action@v6
+        env:
+          # The action uploads a *.dockerbuild build-record artifact by default; the release job's download-artifact
+          # (all artifacts, merge-multiple) cannot extract it and failed the nightly (run 42399768422, twice).
+          DOCKER_BUILD_RECORD_UPLOAD: false
         with:
           context: superiorSoftLibrary/infantry/build/docker
           push: true
           build-args: INFANTRY_VERSION=${{ needs.version.outputs.version }}
-          tags: |
-            ${{ env.IMAGE }}:${{ needs.version.outputs.version }}
-            ${{ env.IMAGE }}:latest
+          labels: org.opencontainers.image.source=https://github.com/SuperiorSoft-LLC/infantry-ai
+          tags: ${{ steps.tags.outputs.list }}
+      - name: Report the digest
+        shell: bash
+        run: echo "::notice::$GHCR_IMAGE@${{ steps.push.outputs.digest }}"

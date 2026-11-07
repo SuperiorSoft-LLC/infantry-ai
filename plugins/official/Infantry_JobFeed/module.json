@@ -169,6 +169,6 @@
   "daemon": {
     "entry": "com.superiorsoftllc.infantry.plugins.official.jobfeed.daemon.JobFeedDaemonPlugin",
     "jar": "daemon/build/libs/Infantry_JobFeed-daemon.jar",
-    "apiAtLeast": "1.49.0"
+    "apiAtLeast": "1.50.0"
   }
 }

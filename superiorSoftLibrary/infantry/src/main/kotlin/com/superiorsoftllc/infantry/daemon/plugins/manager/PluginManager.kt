@@ -65,6 +65,16 @@ interface PluginHotApply {
     fun reload(id: String): HotOutcome
 }
 
+/**
+ * PLUGIN-HOTSWAP-2: the one [PluginHotApply] over a daemon's plugin host, shared by the daemon's own manager and the desktop
+ * Settings > Plugins manager (no second path). [host] is read on every call; [DaemonPluginHost.empty] answers neutrally.
+ */
+class HostPluginHotApply(private val host: () -> com.superiorsoftllc.infantry.daemon.plugins.DaemonPluginHost) : PluginHotApply {
+    override fun load(id: String) = host().load(id)
+    override fun unload(id: String) = host().unload(id)
+    override fun reload(id: String) = host().reload(id)
+}
+
 /** What `inspect` found; nothing is installed. [token] binds a consent to these exact bytes and grants. */
 data class Inspection(
     val id: String,
@@ -181,6 +191,8 @@ class PluginManager(
     private val keepVersions: Int = 2,
     /** PLUGIN-HOTLOAD-1: the running daemon's plugin host; null = no daemon to apply a change to (the CLI). */
     private val hot: PluginHotApply? = null,
+    /** PLUGIN-HOTSWAP-2: age after which a cached catalog is refreshed (`limits.plugins.catalogStaleMs`). */
+    private val catalogStaleMs: () -> Long = { com.superiorsoftllc.infantry.settings.LimitRegistry.PLUGIN_CATALOG_STALE_MS.default },
     /** PLUGIN-REPO-1: the releases API a list entry's `repo` resolves against (`urls.pluginReleasesApi`; env wins). */
     private val releasesApi: () -> String = {
         com.superiorsoftllc.infantry.settings.EndpointRegistry.resolve(
@@ -275,7 +287,7 @@ class PluginManager(
      * PLUGIN-SOURCES-1: refreshes only the url sources whose cached catalog is missing or older than [maxAgeMs], so opening the
      * Plugins tab shows update offers without a fetch on every open. Never throws.
      */
-    fun refreshIfStale(maxAgeMs: Long = DEFAULT_CATALOG_STALE_MS, now: Long = System.currentTimeMillis()): List<SourceRefresh> =
+    fun refreshIfStale(maxAgeMs: Long = catalogStaleMs(), now: Long = System.currentTimeMillis()): List<SourceRefresh> =
         sources().filter { it.enabled && it.url != null }
             .filter { s -> File(catalogCache, "${s.id}.json").let { !it.isFile || now - it.lastModified() > maxAgeMs } }
             .flatMap { refresh(it.id) }
@@ -811,8 +823,6 @@ class PluginManager(
     private companion object {
         val ID = Regex("[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")
         const val MAX_CATALOG = 8L shl 20
-        /** Default age after which opening the Plugins tab refreshes a source: one hour. */
-        const val DEFAULT_CATALOG_STALE_MS = 60L * 60L * 1000L
         const val CUSTOM_WARNING = "not listed in any catalog: this is a CUSTOM plugin from a source you pointed at; only install code you trust"
     }
 }

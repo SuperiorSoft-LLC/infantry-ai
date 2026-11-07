@@ -83,3 +83,28 @@ data class DropPreview(
  * it, in the same process. Null where the window cannot (a test window drawn with a fixed module set).
  */
 val LocalSoftRestart = staticCompositionLocalOf<(() -> Unit)?> { null }
+
+/**
+ * PLUGIN-HOTSWAP-1 (docs/wiki/Plugin-lifecycle.md): what [PlatformHost.swapPlugins] applied live: the module set the window
+ * draws from now on, the line to show, and the leak check to run once the window has let go of the old versions.
+ */
+class PluginSwap(
+    val factory: com.superiorsoftllc.infantry.ui.plugin.TabFactory,
+    val message: String,
+    /** The swapped-out modules whose class loader is still reachable after the host's timeout (blocking; run off the UI thread). */
+    val leaked: () -> List<String>,
+)
+
+/**
+ * PLUGIN-HOTSWAP-1: the shell's live plugin swap, for Settings > Plugins. [apply] applies what changed in the plugins root
+ * to only the plugins it touches (no soft restart) and answers the line to show; where the host cannot swap live, or a
+ * swapped-out plugin stays in memory, it falls back to the soft restart ([LocalSoftRestart]) and [warnings] says why.
+ */
+class PluginLifecycle(
+    /** Module -> why it did not unload cleanly (the last swap that found it still in memory). */
+    val warnings: Map<String, String>,
+    val apply: () -> String,
+)
+
+/** PLUGIN-HOTSWAP-1: the shell's [PluginLifecycle]; null where the window has none (a test window). */
+val LocalPluginLifecycle = staticCompositionLocalOf<PluginLifecycle?> { null }

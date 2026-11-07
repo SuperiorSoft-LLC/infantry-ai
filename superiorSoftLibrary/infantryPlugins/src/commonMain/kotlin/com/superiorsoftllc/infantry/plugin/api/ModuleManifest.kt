@@ -18,9 +18,10 @@ const val PLUGIN_API_VERSION = 2
  * RUNTIME-2: additive revisions (carried into API 2 by RUNTIME-26, so the revision stays 2) under [PLUGIN_API_VERSION] (additions only; a module never has to name it, and an older
  * module still loads). 1 = `Tier.OFFICIAL` and the `official` plugins folder. 2 = a host tab's sub-tabs through
  * `TabContext.SubTabs` / `subTab` / `pickSubTab` (RUNTIME-5). 3 = the `speech.out` and `audio.in` services (VOICE-SEAM-1).
- * 4 = module.json `capabilities` and `emits` (PLUGIN-BRIDGES-1, plugin API 2.2.0).
+ * 4 = module.json `capabilities` and `emits` (PLUGIN-BRIDGES-1, plugin API 2.2.0). 5 = [PluginScope], the host-owned lifetime
+ * of a plugin half (`UiRegistrar.scope`, `DaemonApi.scope`) that makes a live swap clean (PLUGIN-HOTSWAP-1, plugin API 2.3.0).
  */
-const val PLUGIN_API_REVISION = 4
+const val PLUGIN_API_REVISION = 5
 
 /**
  * A module's module.json: who it is, what it needs loaded first, and everything it contributes or uses. Unknown keys

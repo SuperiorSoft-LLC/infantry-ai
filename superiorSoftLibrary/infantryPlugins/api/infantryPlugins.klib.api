@@ -82,6 +82,16 @@ abstract interface com.superiorsoftllc.infantry.plugin.api/PluginManagerPort { /
     open fun refreshIfStale(): kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/RefreshView> // com.superiorsoftllc.infantry.plugin.api/PluginManagerPort.refreshIfStale|refreshIfStale(){}[0]
 }
 
+abstract interface com.superiorsoftllc.infantry.plugin.api/PluginScope { // com.superiorsoftllc.infantry.plugin.api/PluginScope|null[0]
+    abstract val active // com.superiorsoftllc.infantry.plugin.api/PluginScope.active|{}active[0]
+        abstract fun <get-active>(): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/PluginScope.active.<get-active>|<get-active>(){}[0]
+    abstract val coroutines // com.superiorsoftllc.infantry.plugin.api/PluginScope.coroutines|{}coroutines[0]
+        abstract fun <get-coroutines>(): kotlinx.coroutines/CoroutineScope // com.superiorsoftllc.infantry.plugin.api/PluginScope.coroutines.<get-coroutines>|<get-coroutines>(){}[0]
+
+    abstract fun <#A1: kotlin/AutoCloseable> own(#A1): #A1 // com.superiorsoftllc.infantry.plugin.api/PluginScope.own|own(0:0){0§<kotlin.AutoCloseable>}[0]
+    abstract fun onUnload(kotlin/Function0<kotlin/Unit>) // com.superiorsoftllc.infantry.plugin.api/PluginScope.onUnload|onUnload(kotlin.Function0<kotlin.Unit>){}[0]
+}
+
 abstract interface com.superiorsoftllc.infantry.plugin.api/PluginServices { // com.superiorsoftllc.infantry.plugin.api/PluginServices|null[0]
     abstract val module // com.superiorsoftllc.infantry.plugin.api/PluginServices.module|{}module[0]
         abstract fun <get-module>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/PluginServices.module.<get-module>|<get-module>(){}[0]
@@ -2317,6 +2327,21 @@ final class com.superiorsoftllc.infantry.plugin.api/ObserverDeclaration { // com
     }
 }
 
+final class com.superiorsoftllc.infantry.plugin.api/OwnedPluginScope : com.superiorsoftllc.infantry.plugin.api/PluginScope { // com.superiorsoftllc.infantry.plugin.api/OwnedPluginScope|null[0]
+    constructor <init>(kotlin/String, kotlinx.coroutines/CoroutineDispatcher = ...) // com.superiorsoftllc.infantry.plugin.api/OwnedPluginScope.<init>|<init>(kotlin.String;kotlinx.coroutines.CoroutineDispatcher){}[0]
+
+    final val active // com.superiorsoftllc.infantry.plugin.api/OwnedPluginScope.active|{}active[0]
+        final fun <get-active>(): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/OwnedPluginScope.active.<get-active>|<get-active>(){}[0]
+    final val coroutines // com.superiorsoftllc.infantry.plugin.api/OwnedPluginScope.coroutines|{}coroutines[0]
+        final fun <get-coroutines>(): kotlinx.coroutines/CoroutineScope // com.superiorsoftllc.infantry.plugin.api/OwnedPluginScope.coroutines.<get-coroutines>|<get-coroutines>(){}[0]
+    final val module // com.superiorsoftllc.infantry.plugin.api/OwnedPluginScope.module|{}module[0]
+        final fun <get-module>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/OwnedPluginScope.module.<get-module>|<get-module>(){}[0]
+
+    final fun <#A1: kotlin/AutoCloseable> own(#A1): #A1 // com.superiorsoftllc.infantry.plugin.api/OwnedPluginScope.own|own(0:0){0§<kotlin.AutoCloseable>}[0]
+    final fun close(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/OwnedPluginScope.close|close(){}[0]
+    final fun onUnload(kotlin/Function0<kotlin/Unit>) // com.superiorsoftllc.infantry.plugin.api/OwnedPluginScope.onUnload|onUnload(kotlin.Function0<kotlin.Unit>){}[0]
+}
+
 final class com.superiorsoftllc.infantry.plugin.api/PanelDeclaration { // com.superiorsoftllc.infantry.plugin.api/PanelDeclaration|null[0]
     constructor <init>(kotlin/String, kotlin/String) // com.superiorsoftllc.infantry.plugin.api/PanelDeclaration.<init>|<init>(kotlin.String;kotlin.String){}[0]
 
@@ -3217,8 +3242,10 @@ final class com.superiorsoftllc.infantry.plugin.host/SimpleEventBus : com.superi
     constructor <init>(kotlin/Function1<kotlin/String, kotlin/Unit> = ...) // com.superiorsoftllc.infantry.plugin.host/SimpleEventBus.<init>|<init>(kotlin.Function1<kotlin.String,kotlin.Unit>){}[0]
 
     final fun clear() // com.superiorsoftllc.infantry.plugin.host/SimpleEventBus.clear|clear(){}[0]
+    final fun dropOwner(kotlin/String): kotlin/Int // com.superiorsoftllc.infantry.plugin.host/SimpleEventBus.dropOwner|dropOwner(kotlin.String){}[0]
     final fun publish(com.superiorsoftllc.infantry.plugin.api/PluginEvent) // com.superiorsoftllc.infantry.plugin.host/SimpleEventBus.publish|publish(com.superiorsoftllc.infantry.plugin.api.PluginEvent){}[0]
     final fun subscribe(kotlin/String, kotlin/Function1<com.superiorsoftllc.infantry.plugin.api/PluginEvent, kotlin/Unit>): kotlin/Function0<kotlin/Unit> // com.superiorsoftllc.infantry.plugin.host/SimpleEventBus.subscribe|subscribe(kotlin.String;kotlin.Function1<com.superiorsoftllc.infantry.plugin.api.PluginEvent,kotlin.Unit>){}[0]
+    final fun subscribe(kotlin/String?, kotlin/String, kotlin/Function1<com.superiorsoftllc.infantry.plugin.api/PluginEvent, kotlin/Unit>): kotlin/Function0<kotlin/Unit> // com.superiorsoftllc.infantry.plugin.host/SimpleEventBus.subscribe|subscribe(kotlin.String?;kotlin.String;kotlin.Function1<com.superiorsoftllc.infantry.plugin.api.PluginEvent,kotlin.Unit>){}[0]
 }
 
 final class com.superiorsoftllc.infantry.plugin.host/VersionRange { // com.superiorsoftllc.infantry.plugin.host/VersionRange|null[0]
@@ -3461,4 +3488,5 @@ final val com.superiorsoftllc.infantry.plugin.api/PLATFORMS // com.superiorsoftl
 final val com.superiorsoftllc.infantry.plugin.host/PluginJson // com.superiorsoftllc.infantry.plugin.host/PluginJson|{}PluginJson[0]
     final fun <get-PluginJson>(): kotlinx.serialization.json/Json // com.superiorsoftllc.infantry.plugin.host/PluginJson.<get-PluginJson>|<get-PluginJson>(){}[0]
 
+final fun (com.superiorsoftllc.infantry.plugin.api/PluginScope).com.superiorsoftllc.infantry.plugin.api/every(kotlin/Long, kotlin.coroutines/SuspendFunction0<kotlin/Unit>): kotlinx.coroutines/Job // com.superiorsoftllc.infantry.plugin.api/every|every@com.superiorsoftllc.infantry.plugin.api.PluginScope(kotlin.Long;kotlin.coroutines.SuspendFunction0<kotlin.Unit>){}[0]
 final fun (com.superiorsoftllc.infantry.plugin.host/ServiceRegistry).com.superiorsoftllc.infantry.plugin.host/provideEvents(com.superiorsoftllc.infantry.plugin.api/EventBus, kotlin/Function1<kotlin/String, kotlin/Unit> = ...) // com.superiorsoftllc.infantry.plugin.host/provideEvents|provideEvents@com.superiorsoftllc.infantry.plugin.host.ServiceRegistry(com.superiorsoftllc.infantry.plugin.api.EventBus;kotlin.Function1<kotlin.String,kotlin.Unit>){}[0]
