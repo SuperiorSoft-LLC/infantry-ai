@@ -140,6 +140,7 @@ class RunnerLinkService(
         when (op) {
             "pair" -> pair(need("name"))
             "pair_status" -> pairStatus()
+            "list" -> list()
             "pair_cancel" -> { closePairing(); ok() }
             "add" -> {
                 val r = peers(RunnerLinkStore.open(stateDir)).add(need("name"), need("url"), need("code"), str("fingerprint"), str("orchestratorName").orEmpty())
@@ -156,6 +157,23 @@ class RunnerLinkService(
         failed(e.message, e.presentedFingerprint)
     } catch (e: IllegalArgumentException) {
         failed(e.message, null)
+    }
+
+    /**
+     * RUNNER-POOL-10: what the Runners card shows. The pool fills health, workers and caps through [rowStatus] (one runner name -> its
+     * fields); this adds the paired url and pinned fingerprint. `enabled` is [enabledNow]. Read only: pause is the setting
+     * `runners.<name>.paused`, detach and rotate are the ops above.
+     */
+    @Volatile var rowStatus: (String) -> Map<String, String> = { emptyMap() }
+    @Volatile var enabledNow: () -> Boolean = { false }
+
+    private fun list(): JsonObject {
+        val paired = if (RunnerLinkStore.exists(stateDir)) RunnerLinkStore.open(stateDir).runners() else emptyList()
+        val rows = (listOf("local") + paired.map { it.name }).map { name ->
+            val peer = paired.firstOrNull { it.name == name }
+            JsonObject((rowStatus(name) + listOfNotNull("name" to name, peer?.let { "url" to it.url }, peer?.let { "fingerprint" to it.fingerprint })).mapValues { JsonPrimitive(it.value) })
+        }
+        return JsonObject(ok().plus(mapOf("enabled" to JsonPrimitive(enabledNow()), "runners" to JsonArray(rows))))
     }
 
     private fun pair(name: String): JsonObject {

@@ -366,3 +366,18 @@ nothing locally.
 4. [Q: owner] Runner lost mid-ticket: raise attention and wait (recommended default), or restart elsewhere automatically?
 5. [Q: owner] Transport for step 1: wss with a pinned self-signed certificate (recommended), or accept plain ws inside
    Tailscale as the first slice?
+
+## 12. Deployment mode (RUNNER-POOL-10, 2026-11-07)
+
+Owner (comment on 8ebf769c): one build, one image; a startup mode picks what runs. `DeploymentMode` (`daemon/DeploymentMode.kt`):
+`both` (default, unchanged), `runner` (no board: `DeploymentMode.refusal` answers every client frame whose side is `orchestrator`, or in the
+board, pipeline, knowledge, memory and role families, with "runner mode"; a session a remote orchestrator started is forwarded first, never
+refused), `orchestrator` (`manager.spawnGate` refuses every local session; the board reports `local` as `orchestrator-only`, so placement
+refuses it and `any` skips it). Sources: `--mode`, `INFANTRY_MODE`, setting `daemon.mode`. The runner-only start is documented in
+[Run a remote environment](wiki/run-a-remote-environment.md).
+
+Also built: the usage allowance counts a worker on a remote runner (`workerMeters` adds in-progress tickets whose session `runnerOf` is not
+`local`, metered by the ticket's provider / model), so the pacing refuses a start over the account's allowance whichever runner it
+would use; `runners.<name>.paused` (placement answers "runner x is paused"); `runner_admin` op `list` (name, url, pinned fingerprint,
+health, workers, cap, paused; plus `enabled`) for the Runners card rows. Not built: the Compose rows of the card (Pause / Detach / Rotate
+buttons) on `Infantry_Runners`; the CLI and settings cover them.
