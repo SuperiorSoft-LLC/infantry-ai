@@ -334,6 +334,11 @@ class SettingsService(
         store.settings.get("runners.$name.maxWorkers")?.value?.let { runCatching { (Json.parseToJsonElement(it) as JsonPrimitive).content.toInt() }.getOrNull() }
             ?.takeIf { it >= 1 } ?: limit(LimitRegistry.RUNNER_MAX_WORKERS).toInt()
 
+    /** CI-TESTS-8: the explicitly stored `runners.<name>.maxWorkers`, null when unset (the local runner is then capped only by lane caps, as before RUNNER-POOL). */
+    fun runnerMaxWorkersExplicit(name: String): Int? =
+        store.settings.get("runners.$name.maxWorkers")?.value?.let { runCatching { (Json.parseToJsonElement(it) as JsonPrimitive).content.toInt() }.getOrNull() }
+            ?.takeIf { it >= 1 }
+
     /** RUNNER-POOL-10: the stored `daemon.mode` (both / runner / orchestrator), null when unset. */
     fun daemonMode(): String? =
         store.settings.get(DAEMON_MODE)?.value?.let { runCatching { (Json.parseToJsonElement(it) as JsonPrimitive).content }.getOrNull() }?.takeIf { it.isNotBlank() }

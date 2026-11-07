@@ -1692,7 +1692,8 @@ class InfantryDaemon(
                                             // RUNNER-POOL-9: the runner's own free slots, further limited by runners.<name>.maxWorkers.
                                             freeSlots = minOf(
                                                 e.health?.freeSlots?.let { if (it < 0) Int.MAX_VALUE else it } ?: 1,
-                                                (settings.runnerMaxWorkers(e.name) - (e.health?.running ?: 0)).coerceAtLeast(0),
+                                                (if (e.name == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL) settings.runnerMaxWorkersExplicit(e.name) ?: Int.MAX_VALUE else settings.runnerMaxWorkers(e.name))
+                                                    .let { cap -> if (cap == Int.MAX_VALUE) cap else (cap - (e.health?.running ?: 0)).coerceAtLeast(0) },
                                             ),
                                             projects = e.info?.projects.orEmpty(),
                                             loggedInHarnesses = e.info?.harnesses.orEmpty().filter { it.loggedIn }.map { it.id },
