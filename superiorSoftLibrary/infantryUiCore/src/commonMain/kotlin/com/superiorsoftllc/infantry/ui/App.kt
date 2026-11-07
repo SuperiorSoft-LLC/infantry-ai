@@ -446,7 +446,7 @@ fun App(
           LocalDaemonImages provides controller.images,
           LocalProgressStaleMin provides flags.progressStaleMin,
           LocalReasoningPlacement provides flags.reasoningPlacement,
-          LocalTabFactory provides tabs,
+          LocalTabFactory provides tabs.also { f -> com.superiorsoftllc.infantry.ui.plugin.PluginFaults.generationLookup = f.generation },
           LocalChatMarkdown provides remember(flags.chatMarkdownEngine) { ChatMarkdownConfig(com.superiorsoftllc.infantry.ui.model.ChatMarkdown.engines.resolve(flags.chatMarkdownEngine), chatBlockRenderers) },
           LocalShell provides shell,
           // S2: what the blocks read instead of [shell]'s App/Controller internals.

@@ -126,6 +126,7 @@ fun RegistrySection(factory: TabFactory) {
         }
         if (host != null) HostChildren(factory, host, ready)
         // GAP-AUDIT-1 (c): who overrides what, path-resolved (read-only).
+        FaultedPluginsList(factory)
         OverrideMapList(factory)
         val node = picked
         val exporter = factory.sectionExporter
