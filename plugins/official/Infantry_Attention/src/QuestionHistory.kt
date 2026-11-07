@@ -108,14 +108,15 @@ fun QuestionHistory(
                     )
                 }
                 if (q.state == "auto" && live) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    // ASK-BUTTONS-1: options stack full width, text left-aligned and wrapping, never clipped.
+                    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Change to:", color = Palette.Muted, fontSize = 11.sp)
                         q.options.forEachIndexed { i, o ->
                             if (o.label != q.answer) {
                                 OutlinedButton(
                                     onClick = { onOverride(QuestionAnswerWire(q.id, answer = o.label)) },
-                                    modifier = Modifier.testTag("$QUESTION_OVERRIDE_TAG_PREFIX${q.id}-$i"),
-                                ) { Text(o.label, fontSize = 11.sp) }
+                                    modifier = Modifier.fillMaxWidth().testTag("$QUESTION_OVERRIDE_TAG_PREFIX${q.id}-$i"),
+                                ) { Text(o.label, fontSize = 11.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Start, modifier = Modifier.fillMaxWidth()) }
                             }
                         }
                     }

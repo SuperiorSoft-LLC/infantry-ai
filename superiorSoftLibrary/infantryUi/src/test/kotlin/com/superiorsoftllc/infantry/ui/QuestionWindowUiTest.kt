@@ -17,6 +17,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.graphics.toAwtImage
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -166,6 +170,27 @@ class QuestionWindowUiTest {
         onNodeWithTag("${QUESTION_OVERRIDE_TAG_PREFIX}q2-1").performClick()
         waitForIdle()
         assertEquals(listOf(QuestionAnswerWire("q2", answer = "no")), sent)
+    }
+
+    @Test fun `override buttons stack full width and a long option is not clipped`() = runDesktopComposeUiTest(300, 700) {
+        val long = "Leave as is and keep the current setting until the next release is cut and verified"
+        val auto = OwnerQuestionView(
+            "q3", sessionId = "s2", role = "QA", question = "Change?",
+            options = listOf(PromptOptionView("yes", "a"), PromptOptionView("Open with CLA", "b"), PromptOptionView(long, "c")),
+            recommended = "yes", state = "auto", answer = "yes", resolvedBy = "auto", defaultAfterMin = 5,
+        )
+        setContent { QuestionHistory(listOf(auto), live = true, onOverride = {}, onShow = {}) }
+        val b1 = onNodeWithTag("${QUESTION_OVERRIDE_TAG_PREFIX}q3-1").fetchSemanticsNode().boundsInRoot
+        val b2 = onNodeWithTag("${QUESTION_OVERRIDE_TAG_PREFIX}q3-2").fetchSemanticsNode().boundsInRoot
+        assertTrue(b2.top >= b1.bottom, "stacked, not side by side")
+        assertEquals(b1.width, b2.width, 1f)
+        assertTrue(b2.height > b1.height, "long text wraps onto more lines")
+        onNodeWithText(long).assertExists()
+        val shot = java.io.File("build/ask-buttons-1.png")
+        shot.parentFile.mkdirs()
+        val img = onRoot().captureToImage().toAwtImage()
+        javax.imageio.ImageIO.write(img, "png", shot)
+        println("screenshot: " + shot.absolutePath)
     }
 }
 
