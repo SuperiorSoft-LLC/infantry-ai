@@ -57,7 +57,7 @@ class AgentProfileDaemonTest {
 
     private val backendJson =
         """{"id":"backend","name":"Backend","role":"backend","provider":"second","model":"m-2",""" +
-            """"instructions":"You are the backend agent.","projectId":null,"effort":"high","traitIds":[],"skillIds":[]}"""
+            """"instructions":"You are the backend agent.","projectId":null,"effort":"high","traitIds":[],"skillIds":[],"runner":null}"""
 
     // --- managing profiles ---------------------------------------------------------------------------
 
@@ -72,7 +72,7 @@ class AgentProfileDaemonTest {
         val qaId = json.decodeFromString(AgentProfile.serializer(), qa.data).id!!
         assertTrue(qaId.startsWith("agent-"), "an id the daemon chose: $qaId")
         assertEquals(
-            """{"id":"$qaId","name":"QA","role":"qa","provider":null,"model":null,"instructions":null,"projectId":null,"effort":null,"traitIds":[],"skillIds":[]}""",
+            """{"id":"$qaId","name":"QA","role":"qa","provider":null,"model":null,"instructions":null,"projectId":null,"effort":null,"traitIds":[],"skillIds":[],"runner":null}""",
             qa.data,
             "normalised as stored, and nulls written out rather than left for a client to guess",
         )

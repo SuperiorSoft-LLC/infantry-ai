@@ -430,12 +430,12 @@ class Controller(
      * The session it creates is selected when it appears, so the reply streams where the human is looking.
      * CONTEXT-LIMIT-1: [contextLimit] (tokens) goes on the `new` frame; null = the harness's own window.
      */
-    suspend fun spawn(prompt: String, contextLimit: Int? = null, effort: String? = null): CommandResult {
+    suspend fun spawn(prompt: String, contextLimit: Int? = null, effort: String? = null, runner: String? = null): CommandResult {
         if (prompt.isBlank()) return report(CommandResult.Refused("a new agent needs a task"))
         // A leading "/" is a command, never a task prompt (CP-4(e)): it is resolved here and never spawns.
         if (isSlashCommand(prompt)) return spawnBoxCommand(prompt)
         _state.update { it.withPendingSpawn() }
-        val r = send(Envelope(Envelope.NEW, spawnOptionsData(_state.value.pickedModel, effort ?: _state.value.pickedEffort, _state.value.spawnRole, _state.value.activeProjectId, contextLimit))).let { if (it is CommandResult.Sent) send(Envelope(Envelope.PROMPT, prompt)) else it }
+        val r = send(Envelope(Envelope.NEW, spawnOptionsData(_state.value.pickedModel, effort ?: _state.value.pickedEffort, _state.value.spawnRole, _state.value.activeProjectId, contextLimit, runner))).let { if (it is CommandResult.Sent) send(Envelope(Envelope.PROMPT, prompt)) else it }
         if (r is CommandResult.Refused) _state.update { it.copy(pendingSpawn = null) }
         return report(r)
     }

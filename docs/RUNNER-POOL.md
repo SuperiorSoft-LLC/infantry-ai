@@ -131,6 +131,10 @@ All data, never code-only.
 * **Setting** `runners.default` = `local`.
 * Resolution order (one pure function, `Placement.pick`, unit-tested): explicit ticket pin > first matching routing rule's
   `runner` > `runners.default`. This mirrors how provider/model resolve today (pin > rule > weight mapping).
+  RUNNER-AGENT-1 widens it to sessions outside the board: ticket pin > spawn `runner` arg (`infantry_spawn`, the `new` frame) >
+  agent profile `runner` > routing rule > `runners.default` > local. A session with no ticket runs on the runner in its clone of the
+  project remote (no ticket branch). An unknown, down, full or paused runner is refused with its reason, never a silent local start.
+  `LocalRunner.start` returns one `StartedSession` (Local record or Remote view) to the `new` frame, `LocalSpawns` and mail.
 * `any` = among runners that are `up`, have the ticket's project, have the pinned harness logged in, and have a free
   slot: the one with most free slots; ties go to `local`. None eligible = the start waits in todo with a reason on the
   card (same as a full lane today), never silently goes elsewhere.

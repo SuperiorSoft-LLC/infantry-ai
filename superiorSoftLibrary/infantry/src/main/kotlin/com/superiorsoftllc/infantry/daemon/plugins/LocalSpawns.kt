@@ -48,9 +48,9 @@ class LocalSpawns(
     /** The host-scoped board API: the ticket is found in the caller's scope and started through the board's own (charged) start. */
     private val tickets: () -> Tickets,
     /** Create a session as the `new` frame binds one (`bindSessionOnSpawn`); throws [IllegalArgumentException] on refusal. */
-    private val create: (SpawnRequest) -> SessionRecord,
+    private val create: (SpawnRequest) -> com.superiorsoftllc.infantry.daemon.StartedSession,
     /** Run [SpawnRequest.task] as the session's first turn; throws on refusal. */
-    private val firstTask: (SessionRecord, String) -> Unit,
+    private val firstTask: (com.superiorsoftllc.infantry.daemon.StartedSession, String) -> Unit,
     private val setSpawner: (sessionId: String, spawnerId: String?) -> Unit,
     /** The active preset's refusal of a frame of this type (`new`, `kill`), or null: each operation is gated like its frame. */
     private val gate: (type: String) -> String? = { null },
@@ -100,7 +100,7 @@ class LocalSpawns(
                     create(request).also { s ->
                         if (w.id != null) {
                             if (placement != null) guard.record(s.id, w.id)
-                            setSpawner(s.id, w.id)
+                            if (s is com.superiorsoftllc.infantry.daemon.StartedSession.Local) setSpawner(s.id, w.id)
                         } else {
                             ownerSet(narrowing).add(s.id)
                         }
@@ -113,9 +113,12 @@ class LocalSpawns(
         }
         var taskRefused: String? = null
         request.task?.let { task -> runCatching { firstTask(created, task) }.onFailure { taskRefused = it.message ?: it::class.simpleName } }
-        val now = sessions().firstOrNull { it.id == created.id } ?: created
+        val view = when (created) {
+            is com.superiorsoftllc.infantry.daemon.StartedSession.Remote -> created.view
+            is com.superiorsoftllc.infantry.daemon.StartedSession.Local -> SessionViews.of(sessions().firstOrNull { it.id == created.id } ?: created.record)
+        }
         return SessionsResult.Ok(
-            Spawned(SessionViews.of(now), admitted.depth, admitted.open.size + 1, admitted.maxSpawns, request.task != null && taskRefused == null, taskRefused),
+            Spawned(view, admitted.depth, admitted.open.size + 1, admitted.maxSpawns, request.task != null && taskRefused == null, taskRefused),
         )
     }
 

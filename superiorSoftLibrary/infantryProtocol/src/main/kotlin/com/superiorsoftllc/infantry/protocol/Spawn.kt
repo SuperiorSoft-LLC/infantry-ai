@@ -54,6 +54,8 @@ data class SpawnOptions(
      * window. How it is honoured is the harness's (`providers` lists `contextLimit` per harness); out of range refuses the spawn.
      */
     val contextLimit: Int? = null,
+    /** RUNNER-AGENT-1 (ADDITIVE): where this session runs (`local` | a runner name | `any`), over the agent profile's runner; null = unset. */
+    val runner: String? = null,
 ) {
     companion object {
         /** Decode a `new` frame's JSON data, or throw [IllegalArgumentException] saying what is wrong. */

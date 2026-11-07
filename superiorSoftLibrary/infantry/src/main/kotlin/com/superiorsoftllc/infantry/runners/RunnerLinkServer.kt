@@ -169,10 +169,17 @@ class RunnerLinkServer(
         if (why != null) return refuse(seat, F.START, r.ticketId, from, "${F.START} refused: $why")
         val link = runner() ?: return refuse(seat, F.START, r.ticketId, from, "${F.START} refused: this runner has no local runner")
         // RUNNER-POOL-6: a start with a git remote runs in a ticket worktree this runner cuts in its own clone of that remote.
+        var ticketlessRepo: java.io.File? = null
         val worktree = r.gitRemote?.takeIf { it.isNotBlank() }?.let { remote ->
             val s = starts ?: return refuse(seat, F.START, r.ticketId, from, "${F.START} refused: this runner takes no start with a git remote")
-            val ticket = r.ticketId?.takeIf { it.isNotBlank() } ?: return refuse(seat, F.START, null, from, "${F.START} refused: a start with a git remote names its ticket")
-            try {
+            val ticket = r.ticketId?.takeIf { it.isNotBlank() }
+            if (ticket == null) {
+                // RUNNER-AGENT-1: a spawn start (no ticket) runs in the project clone, no ticket branch.
+                try { ticketlessRepo = s.cloneDir(remote, r.projectId) } catch (e: IllegalArgumentException) {
+                    return refuse(seat, F.START, null, from, "${F.START} refused: ${e.message}")
+                }
+                null
+            } else try {
                 s.checkout(remote, r.projectId, ticket, r.title ?: ticket, r.base, r.branch)
             } catch (e: IllegalArgumentException) {
                 return refuse(seat, F.START, ticket, from, "${F.START} refused: ${e.message}")
@@ -182,7 +189,7 @@ class RunnerLinkServer(
             startId = r.startId, agentId = r.agentId, role = r.role, projectId = r.projectId, provider = r.provider,
             model = r.model, effort = r.effort, ticketId = r.ticketId, contextLimit = r.contextLimit,
             // Never a path from the wire: the runner cuts the working copy from its own clone (or its own project directory).
-            repo = null,
+            repo = ticketlessRepo?.path,
             prompt = r.prompt, title = r.title, envNames = r.envNames, worktree = worktree,
         )
         return when (val reply = link.startSession(spec)) {

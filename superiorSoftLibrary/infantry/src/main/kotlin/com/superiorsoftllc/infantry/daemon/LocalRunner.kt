@@ -109,19 +109,78 @@ object LocalRunner {
     fun decodeOrigin(origin: String): MessageOrigin = originJson.decodeFromString(MessageOrigin.serializer(), origin)
 
     /**
-     * Start a session for [options] (working copy from [repo]) on the pool's runner and return its record, null when the options name no agent and no role.
+     * Start a session for [options] (working copy from [repo]) on the pool's runner and return it (local record or remote view), null when the options name no agent and no role.
      * A refused spec throws [IllegalArgumentException] with the runner's reason (the callers' existing refusal path); an unreachable
      * runner throws [IllegalStateException]. Placement (RUNNER-POOL-3) picks the runner later; today it is always `local`.
      */
-    fun start(pool: RunnerPool, manager: SessionManager, options: SpawnOptions?, repo: File?): SessionRecord? {
+    fun start(
+        pool: RunnerPool, manager: SessionManager, options: SpawnOptions?, repo: File?,
+        /** RUNNER-AGENT-1: the agent profile's runner, the next source after the spawn's own `runner`. */
+        agentRunner: String? = null,
+        /** RUNNER-AGENT-1: the routing rule / `runners.default` tail of the precedence (Placement.pick). */
+        defaultRunner: String = RunnerPool.LOCAL,
+        /** The placement view of the pool (paused, per-runner caps); null = health and free slots straight from the pool. */
+        entries: (() -> List<com.superiorsoftllc.infantry.settings.RunnerEntry>)? = null,
+    ): StartedSession? {
+        val wanted = options?.runner?.trim().orEmpty().ifEmpty { agentRunner?.trim().orEmpty() }.ifEmpty { defaultRunner.trim() }
+        var runner = RunnerPool.LOCAL
+        if (wanted.isNotEmpty() && wanted != RunnerPool.LOCAL) {
+            val view = entries?.invoke() ?: pool.runners().map {
+                com.superiorsoftllc.infantry.settings.RunnerEntry(it.name, it.state, it.health?.freeSlots?.takeIf { s -> s >= 0 } ?: Int.MAX_VALUE)
+            }
+            when (val placed = com.superiorsoftllc.infantry.settings.Placement.pick(null, null, defaultRunner, view, options?.projectId, options?.provider, options?.runner, agentRunner)) {
+                is com.superiorsoftllc.infantry.settings.PlacementResult.Refused -> throw IllegalArgumentException("runner refused: ${placed.reason}")
+                is com.superiorsoftllc.infantry.settings.PlacementResult.Placed -> runner = placed.runner
+            }
+        }
+        if (runner != RunnerPool.LOCAL) return startRemote(pool, runner, options, repo)
         val link = pool.link(RunnerPool.LOCAL) ?: throw IllegalStateException("no '${RunnerPool.LOCAL}' runner")
         return when (val r = link.startSession(startSpec(options, repo))) {
             is OrchestratorReply.Ok -> {
                 r.value.refusal?.let { throw IllegalArgumentException(it) }
-                r.value.sessionId?.let(manager::get)
+                r.value.sessionId?.let(manager::get)?.let(StartedSession::Local)
             }
             is OrchestratorReply.Unavailable -> throw IllegalStateException("runner unavailable: ${r.reason}")
         }
+    }
+
+    /**
+     * RUNNER-AGENT-1: a session outside the board on runner [runner]. The runner clones the project's git remote (the checkout's
+     * `origin`) and runs the session in that clone, with no ticket branch; the session is indexed on the pool so mail and kills go there.
+     */
+    private fun startRemote(pool: RunnerPool, runner: String, options: SpawnOptions?, repo: File?): StartedSession? {
+        if (options?.agentId == null && options?.role == null) return null
+        val link = pool.link(runner) ?: throw IllegalArgumentException("runner '$runner' is not registered, or no runner binding is loaded")
+        val remote = repo?.let { runCatching { com.superiorsoftllc.infantry.daemon.plugins.originUrl(it) }.getOrNull() }
+            ?: throw IllegalArgumentException("runner $runner needs the project's git remote, and ${repo?.path ?: "this project"} has no `origin` remote")
+        val spec = startSpec(options, null).copy(gitRemote = remote)
+        return when (val reply = link.startSession(spec)) {
+            is OrchestratorReply.Unavailable -> throw IllegalStateException("runner $runner unavailable: ${reply.reason}")
+            is OrchestratorReply.Ok -> {
+                val id = reply.value.sessionId ?: throw IllegalArgumentException("runner $runner refused the start: ${reply.value.refusal ?: "no session"}")
+                (pool as? com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerHub ?: throw IllegalStateException("this daemon cannot index a remote session")).placed(id, runner)
+                StartedSession.Remote(
+                    runner,
+                    com.superiorsoftllc.infantry.daemon.api.sessions.SessionView(
+                        id = id, agentId = options.agentId, role = options.role, provider = options.provider.orEmpty(), model = options.model,
+                        projectId = options.projectId, state = "STARTING", live = true, contextLimit = options.contextLimit, effort = options.effort,
+                    ),
+                )
+            }
+        }
+    }
+
+    /** RUNNER-AGENT-1: the placement view a non-ticket start uses (paused runners, per-runner caps), the same as the board's. */
+    fun placementEntries(pool: RunnerPool, settings: com.superiorsoftllc.infantry.settings.SettingsService): List<com.superiorsoftllc.infantry.settings.RunnerEntry> = pool.runners().map { e ->
+        com.superiorsoftllc.infantry.settings.RunnerEntry(
+            e.name, if (settings.runnerPaused(e.name)) "paused" else e.state,
+            minOf(
+                e.health?.freeSlots?.let { if (it < 0) Int.MAX_VALUE else it } ?: 1,
+                (if (e.name == RunnerPool.LOCAL) settings.runnerMaxWorkersExplicit(e.name) ?: Int.MAX_VALUE else settings.runnerMaxWorkers(e.name))
+                    .let { cap -> if (cap == Int.MAX_VALUE) cap else (cap - (e.health?.running ?: 0)).coerceAtLeast(0) },
+            ),
+            e.info?.projects.orEmpty().toSet(), e.info?.harnesses.orEmpty().filter { it.loggedIn }.map { it.id }.toSet(),
+        )
     }
 
     /** MailRouter's resume edge through the session's runner; an unreachable runner keeps the mail queued (it is persisted). */
@@ -133,4 +192,14 @@ object LocalRunner {
             is OrchestratorReply.Unavailable -> MailResult(MailResult.QUEUED, "runner unavailable: ${r.reason}")
         }
     }
+}
+
+/**
+ * RUNNER-AGENT-1: the one result of starting a session outside the board. [Local] holds the daemon's own record; [Remote] has none
+ * (the runner owns the process), only the view and the runner it was placed on. Every caller of [LocalRunner.start] handles both.
+ */
+sealed interface StartedSession {
+    val id: String
+    data class Local(val record: SessionRecord) : StartedSession { override val id get() = record.id }
+    data class Remote(val runner: String, val view: com.superiorsoftllc.infantry.daemon.api.sessions.SessionView) : StartedSession { override val id get() = view.id }
 }

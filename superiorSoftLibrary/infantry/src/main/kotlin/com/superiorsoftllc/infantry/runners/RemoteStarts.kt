@@ -87,6 +87,21 @@ class RemoteStarts(
         }.onFailure { log("[infantry] runner: could not write the event outbox ${f.name}: ${it.message}") }
     }
 
+    /** RUNNER-AGENT-1: clone or fetch the project remote and return the clone (a ticketless start runs in it, no ticket branch). */
+    fun cloneDir(gitRemote: String, projectId: String?): File {
+        val dir = File(cloneRoot(), folderFor(projectId, gitRemote))
+        if (!File(dir, ".git").exists()) {
+            dir.parentFile?.mkdirs()
+            val cloned = git.run(dir.parentFile ?: dir, listOf("clone", gitRemote, dir.absolutePath))
+            require(cloned.ok) { "git clone of the project's remote failed: ${cloned.err()}" }
+        } else {
+            git.run(dir, listOf("remote", "set-url", "origin", gitRemote))
+            val fetched = git.run(dir, listOf("fetch", "--prune", "origin"))
+            require(fetched.ok) { "git fetch of the project's remote failed: ${fetched.err()}" }
+        }
+        return dir
+    }
+
     /** The clone, fetch and cut for one remote start; a refusal throws [IllegalArgumentException] with the reason. */
     fun checkout(
         gitRemote: String,

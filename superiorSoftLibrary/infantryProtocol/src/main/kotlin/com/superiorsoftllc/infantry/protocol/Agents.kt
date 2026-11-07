@@ -50,6 +50,8 @@ data class AgentProfile(
      * carry the stored list (`[]` when none). A skill deleted later stays listed.
      */
     val skillIds: List<String>? = null,
+    /** RUNNER-AGENT-1: where this agent's sessions run by default (`local` | a runner name | `any`). On `agent_save`, absent or null KEEPS the stored value and blank clears it. */
+    val runner: String? = null,
 ) {
     companion object {
         /** Decode an `agent_save` frame's JSON data (strictly), or throw [IllegalArgumentException]. */

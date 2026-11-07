@@ -27,8 +27,8 @@ fun catalogSections(catalog: List<ProviderModels>): List<CatalogSection> =
     catalog.groupBy { it.provider }.map { (provider, groups) -> CatalogSection(provider, groups) }
 
 /** The `new` frame's data for the next spawn: the picked provider+model, or "" (daemon defaults) when none. */
-fun spawnOptionsData(picked: PickedModel?, effort: String? = null, role: String? = null, projectId: String? = null, contextLimit: Int? = null): String =
-    if (picked == null && effort == null && role == null && projectId == null && contextLimit == null) ""
+fun spawnOptionsData(picked: PickedModel?, effort: String? = null, role: String? = null, projectId: String? = null, contextLimit: Int? = null, runner: String? = null): String =
+    if (picked == null && effort == null && role == null && projectId == null && contextLimit == null && runner == null) ""
     else buildJsonObject {
         if (picked != null) { put("provider", picked.provider); picked.model?.let { put("model", it) } }
         if (effort != null) put("effort", effort)
@@ -37,4 +37,6 @@ fun spawnOptionsData(picked: PickedModel?, effort: String? = null, role: String?
         if (projectId != null) put("projectId", projectId)
         // CONTEXT-LIMIT-1: the session's context limit in tokens; absent = the harness's own window.
         if (contextLimit != null) put("contextLimit", contextLimit)
+        // RUNNER-AGENT-1: where the session runs (local / a runner name / any); absent = the agent profile's runner, then the default.
+        if (runner != null) put("runner", runner)
     }.toString()

@@ -888,6 +888,8 @@ data class AgentProfile(
     val projectId: String? = null,
     /** Contract 1.46.0 (role-first S2): the profile's effort level; null = inherit. Decoded only (UI is S8). */
     val effort: String? = null,
+    /** RUNNER-AGENT-1: the runner this agent's sessions run on by default; null = keep the stored one. */
+    val runner: String? = null,
 )
 
 /** Contract 1.47.0: the executor an agent resolved to before a swap (a null model / effort = the harness default). */
@@ -2022,7 +2024,7 @@ object WireRequests {
 
     fun agentSave(profile: AgentProfile, withEffort: Boolean): Envelope {
         val full = Json { encodeDefaults = true }.encodeToJsonElement(AgentProfile.serializer(), profile) as JsonObject
-        return Envelope(Envelope.AGENT_SAVE, (if (withEffort) full else JsonObject(full - "effort")).toString())
+        return Envelope(Envelope.AGENT_SAVE, (if (withEffort) full else JsonObject(full - "effort")).let { if (it["runner"] is kotlinx.serialization.json.JsonNull) JsonObject(it - "runner") else it }.toString())
     }
 
     /**

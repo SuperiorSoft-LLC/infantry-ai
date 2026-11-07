@@ -22,6 +22,19 @@ class PlacementTest {
         assertEquals("local", placed(Placement.pick(null, null, "local", all)))
     }
 
+    @Test fun spawnAndAgentRunnerPrecedence() {
+        val all = listOf(local, s1)
+        // ticket pin > spawn arg > agent > rule > default
+        assertEquals("local", placed(Placement.pick("local", "server-1", "server-1", all, spawnArg = "server-1", agentRunner = "server-1")))
+        assertEquals("local", placed(Placement.pick(null, "server-1", "server-1", all, spawnArg = "local", agentRunner = "server-1")))
+        assertEquals("server-1", placed(Placement.pick(null, "local", "local", all, agentRunner = "server-1")))
+        assertEquals("server-1", placed(Placement.pick(null, null, "local", all, spawnArg = " ", agentRunner = "server-1")))
+        assertEquals("local", placed(Placement.pick(null, null, "local", all)))
+        // a paused / down / unknown runner is refused, never a silent local fallback
+        assertEquals("runner server-1 is down", refused(Placement.pick(null, null, "local", listOf(local, s1.copy(health = "down")), agentRunner = "server-1")))
+        assertEquals("runner 'nope' is not registered", refused(Placement.pick(null, null, "local", all, spawnArg = "nope")))
+    }
+
     @Test fun onlyLocalAlwaysResolvesToLocal() {
         assertEquals("local", placed(Placement.pick(null, null, "local", listOf(local))))
         assertEquals("local", placed(Placement.pick(null, null, "local", emptyList())))

@@ -876,7 +876,7 @@ class SchemaMigrationTest {
 
         assertEquals(InfantryDatabase.Schema.version.toString(), rows(path, "PRAGMA user_version;").single().single())
         // trait_ids is 28.sqm's ADD COLUMN; P10-K12's 34.sqm appends skill_ids after it.
-        assertEquals(listOf("trait_ids", "skill_ids"), rows(path, "PRAGMA table_info(agents);").map { it[1] }.takeLast(2))
+        assertEquals(listOf("trait_ids", "skill_ids", "runner"), rows(path, "PRAGMA table_info(agents);").map { it[1] }.takeLast(3))
         assertEquals(listOf(listOf("a-v28", "Old", "high", "[]")), rows(path, "SELECT id, name, effort, trait_ids FROM agents;"))
         assertEquals(listOf(listOf("backend", "[\"report-back\"]")), rows(path, "SELECT role_id, trait_ids FROM role_traits;"))
         SqlInfantryStore.open(path).use { store ->

@@ -41,7 +41,7 @@ class TicketWorkerOneSessionTest {
         val binds = mutableListOf<String>()
         val router = MailRouter(
             manager = manager, mailbox = mailbox, agentProfiles = AgentProfiles(repo, manager),
-            bindFreshSession = { agentId -> binds += agentId; manager.startNew("", agentId = agentId) },
+            bindFreshSession = { agentId -> binds += agentId; com.superiorsoftllc.infantry.mailbox.FreshSession.Local(manager.startNew("", agentId = agentId)) },
         )
         manager.eventSink = { event -> router.onSessionEvent(event) }
         return Harness(manager, mailbox, router, runner, binds)
