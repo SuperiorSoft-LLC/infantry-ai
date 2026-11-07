@@ -29,6 +29,10 @@ class UpdateConfig(
     val autoCheck: Boolean = true,
     /** NIGHTLY-1 (`updater.releaseChannel`, a user setting): which releases count ([ReleaseChannel]); Stable by default. */
     val channel: ReleaseChannel = ReleaseChannel.STABLE,
+    /** UPDATER-NET-MSG-1 (`updater.networkRetries`): extra tries after a network drop before a check reports Offline. */
+    val networkRetries: Int = DEFAULT_NETWORK_RETRIES,
+    /** UPDATER-NET-MSG-1 (`updater.networkBackoffMs`): wait before the first retry; doubles each time. */
+    val networkBackoffMs: Long = DEFAULT_NETWORK_BACKOFF_MS,
     private val tokenSource: () -> String? = { null },
 ) {
     /** The GitHub token for a private repo, or null. Never log it. */
@@ -37,10 +41,12 @@ class UpdateConfig(
     override fun toString(): String = "UpdateConfig(repo=$repo, current=$currentVersion, api=$apiBase, source=${visibility.wire}, channel=${channel.id}, token=${if (token != null) "set" else "none"})"
 
     /** The same source asked on behalf of another install running [version] (UPDATER-1: a phone asking its daemon). */
-    fun forVersion(version: SemVer): UpdateConfig = UpdateConfig(repo, version, apiBase, localDir, visibility, checkIntervalHours, autoCheck, channel, tokenSource)
+    fun forVersion(version: SemVer): UpdateConfig = UpdateConfig(repo, version, apiBase, localDir, visibility, checkIntervalHours, autoCheck, channel, networkRetries, networkBackoffMs, tokenSource)
 
     companion object {
         const val DEFAULT_API = "https://api.github.com"
+        const val DEFAULT_NETWORK_RETRIES = 3
+        const val DEFAULT_NETWORK_BACKOFF_MS = 1500L
     }
 }
 
@@ -102,6 +108,10 @@ sealed interface UpdateSettings {
 
         /** UPDATER-DEFAULT-1: the ONE user setting (Configuration > About > Updater); the keys above are developer overrides. */
         const val KEY_AUTO = "updater.autoCheck"
+
+        /** UPDATER-NET-MSG-1: developer overrides (update.properties / module config) for the network retry counts. */
+        const val KEY_NETWORK_RETRIES = "updater.networkRetries"
+        const val KEY_NETWORK_BACKOFF_MS = "updater.networkBackoffMs"
 
         /**
          * NIGHTLY-1: the second user setting, "Update channel" (Stable / Nightly). Its values are the ids of the manifest's
@@ -182,6 +192,8 @@ sealed interface UpdateSettings {
             val interval = pick("$KEY_INTERVAL (not a whole number of hours)", listOf(plugin(KEY_INTERVAL), manifest(UpdateManifest.KEY_INTERVAL))) { (it.toIntOrNull() ?: -1) >= 0 }
                 ?.toInt() ?: DEFAULT_INTERVAL_HOURS
             val autoCheck = plugin(KEY_AUTO)?.lowercase() != "false"
+            val retries = plugin(KEY_NETWORK_RETRIES)?.toIntOrNull()?.takeIf { it >= 0 } ?: UpdateConfig.DEFAULT_NETWORK_RETRIES
+            val backoff = plugin(KEY_NETWORK_BACKOFF_MS)?.toLongOrNull()?.takeIf { it >= 0 } ?: UpdateConfig.DEFAULT_NETWORK_BACKOFF_MS
             // NIGHTLY-1: the channels are manifest data; the user's pick wins, then the manifest's default, then Stable.
             val channels = ReleaseChannel.fromManifest(manifest, warnings)
             val channel = pick("$KEY_RELEASE_CHANNEL (not one of ${channels.joinToString("/") { it.id }})", listOf(plugin(KEY_RELEASE_CHANNEL), manifest(UpdateManifest.KEY_DEFAULT_CHANNEL))) { v ->
@@ -199,18 +211,18 @@ sealed interface UpdateSettings {
             }
             if (useLocal) {
                 dir ?: return Disabled("the local update source needs dir=<releases folder> (or $DIR)")
-                return Enabled(UpdateConfig("local/releases", current, localDir = File(dir), visibility = visibility, checkIntervalHours = interval, autoCheck = autoCheck, channel = channel), warnings)
+                return Enabled(UpdateConfig("local/releases", current, localDir = File(dir), visibility = visibility, checkIntervalHours = interval, autoCheck = autoCheck, channel = channel, networkRetries = retries, networkBackoffMs = backoff), warnings)
             }
             repo ?: return Disabled("this build names no update repo (its manifest has no update.repo); a developer can set $REPO=owner/repo")
             val api = setting(API)?.trim()?.trimEnd('/')?.takeIf { it.isNotEmpty() } ?: UpdateConfig.DEFAULT_API
             // Public: no token ever leaves this machine, even when one is set somewhere (launch day: the switch is enough).
             if (visibility == UpdateVisibility.PUBLIC) {
-                return Enabled(UpdateConfig(repo, current, api, visibility = visibility, checkIntervalHours = interval, autoCheck = autoCheck, channel = channel), warnings)
+                return Enabled(UpdateConfig(repo, current, api, visibility = visibility, checkIntervalHours = interval, autoCheck = autoCheck, channel = channel, networkRetries = retries, networkBackoffMs = backoff), warnings)
             }
             // The OS credential store holds the owner's own GitHub login: only ever offer it to GitHub itself, never to an
             // API override (a fake server, a mirror). An explicit INFANTRY_UPDATE_TOKEN goes wherever the owner points it.
             val stored: () -> String? = if (api == UpdateConfig.DEFAULT_API) credentialStore else { { null } }
-            return Enabled(UpdateConfig(repo, current, api, visibility = visibility, checkIntervalHours = interval, autoCheck = autoCheck, channel = channel) {
+            return Enabled(UpdateConfig(repo, current, api, visibility = visibility, checkIntervalHours = interval, autoCheck = autoCheck, channel = channel, networkRetries = retries, networkBackoffMs = backoff) {
                 env(TOKEN_ENV)?.takeIf { it.isNotBlank() } ?: runCatching(keystore).getOrNull()?.takeIf { it.isNotBlank() } ?: stored()
             }, warnings)
         }
