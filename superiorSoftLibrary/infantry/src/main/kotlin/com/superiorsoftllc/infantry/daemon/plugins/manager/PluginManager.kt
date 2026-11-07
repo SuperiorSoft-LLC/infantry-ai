@@ -195,9 +195,15 @@ class PluginManager(
 
     // ---------------------------------------------------------------- sources and catalogs
 
+    /** The saved sources; a state dir that never saved any starts from the bundled data file `plugins/default-sources.json` (REGISTRY-2). */
     fun sources(): List<CatalogSource> =
         File(root, "sources.json").takeIf { it.isFile }
-            ?.let { runCatching { ManagerJson.decodeFromString(SourcesFile.serializer(), it.readText()).sources }.getOrNull() }.orEmpty()
+            ?.let { runCatching { ManagerJson.decodeFromString(SourcesFile.serializer(), it.readText()).sources }.getOrNull() }
+            ?: defaultSources()
+
+    private fun defaultSources(): List<CatalogSource> =
+        PluginManager::class.java.getResourceAsStream("/plugins/default-sources.json")
+            ?.use { runCatching { ManagerJson.decodeFromString(SourcesFile.serializer(), it.readBytes().decodeToString()).sources }.getOrNull() }.orEmpty()
 
     fun setSources(list: List<CatalogSource>) {
         root.mkdirs()
@@ -738,8 +744,15 @@ class PluginManager(
             if (!ID.matches(e.id)) problems += "$tag: bad id"
             if (semver(v.version) == null) problems += "$tag: version is not semver"
             listOfNotNull(v.api.plugin, v.api.daemon, v.api.harness).filter { VersionRange.parseOrNull(it) == null }.forEach { problems += "$tag: bad api range '$it'" }
-            val f = if (File(v.url).isAbsolute) File(v.url) else File(base, v.url)
-            if (!f.isFile) { problems += "$tag: asset ${v.url} not found"; continue }
+            val web = v.url.startsWith("https://", true) || v.url.startsWith("http://", true)
+            // REGISTRY-2: an https asset (a GitHub release file) is read from [base] by its file name when staged there, else downloaded.
+            val f = when {
+                web -> File(base, v.url.substringAfterLast('/')).takeIf { it.isFile }
+                    ?: File.createTempFile("catalog-asset", ".ihq").also { t -> t.deleteOnExit(); runCatching { fetchAny(v.url, t, InstallSettings.load(root).maxPackageBytes) }.onFailure { t.delete() } }
+                File(v.url).isAbsolute -> File(v.url)
+                else -> File(base, v.url)
+            }
+            if (!f.isFile || f.length() == 0L) { problems += "$tag: asset ${v.url} not found"; continue }
             if (!ReleaseAssets.sha256(f).equals(v.sha256, true)) problems += "$tag: sha256 does not match the asset"
             if (v.size != null && v.size != f.length()) problems += "$tag: size does not match the asset"
             val m = readManifest(f)
