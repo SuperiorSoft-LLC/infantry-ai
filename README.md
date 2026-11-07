@@ -37,7 +37,7 @@
 
 Infantry AI is an AI framework. It is no longer only a project-management app: it is the components to build something else. You can build a completely new application with it, or use the platform itself to build the application you want. The AI is no longer just the builder: the agents are the cells of the body, and they evolve the application into something else. The project-management board is one app built on this framework. See [docs/VISION.md](docs/VISION.md).
 
-Infantry AI (formerly Infantry) is a command post for coding agents. You file tickets on a board, give each one a role
+Infantry AI (formerly AgentHQ) is a command post for coding agents. You file tickets on a board, give each one a role
 (full-stack engineer, QA, PM, ...) and a provider (Claude Code, opencode, pi, or any CLI you describe in a JSON file),
 and Infantry AI starts the agent on its own git branch and worktree, keeps its mail, progress and shared project
 knowledge in one daemon, and lets you watch, steer and merge the work from your desktop or your phone. The daemon runs
@@ -58,9 +58,6 @@ on your machine or on your own server: your code, keys and agent output never pa
 <!-- OWNER: capture these from a real build (no mock-ups), list in docs/launch/shot-list.md, files in docs/img/README.md:
      board.png, session.png, question.png, scripts.png, plugins.png, pace.png, android.png, harness-pick.png -->
 
-Screenshots still to capture (placeholders for the owner): `question.png` (question panel with the recommended pick),
-`scripts.png` (a Lua script run), `pace.png` (usage forecast per harness), `android.png` (the phone client),
-`harness-pick.png` (provider and model on a ticket).
 
 ## Features
 
@@ -85,7 +82,7 @@ You can see the whole loop without a paid subscription by using opencode with on
 
 1. Install opencode from the app (`infantry harness-install opencode`, needs Node 20+) or by hand, and check it with
    `infantry harness-status`.
-2. Create a project pointing at a small git repository and a base branch.
+2. Create a project pointing at a small git repository (with at least one commit); its checked-out branch becomes the base.
 3. Create a ticket with a simple task (for example "add a README section"), give it a role, set its provider to **opencode**
    and choose a free model from the model list (`opencode models` shows what your install offers; availability of free
    models is decided by opencode, not by Infantry AI).
@@ -185,9 +182,13 @@ There is no Linux desktop app yet. The macOS desktop app is beta (Apple silicon,
    (`npm install -g @anthropic-ai/claude-code`, then run `claude` once to log in). The app can also install the supported
    CLIs for you (`infantry harness-install claude`, also `opencode` and `pi`; needs Node 20+).
 3. Start **Infantry AI** from the Start menu. It starts its own daemon; nothing else to run.
-4. Create a project and point it at a git repository and a base branch (for example `main`).
-5. Create a ticket, give it a role, and press **Start**. The agent works on its own branch in its own worktree; you watch
-   its session live and read its report when it is done.
+4. Create a project: the **+** button next to the project picker (top left) opens **New project**. Give it a name
+   and pick your git repository as its directory (the repository needs at least one commit). The branch checked out
+   there becomes the project's base branch for new tasks; change it in the **Git** tab.
+5. Open the **Board** (left sidebar), create a ticket, give it a role (for example Full-Stack) and press **Start**. The
+   agent works on its own branch in its own worktree; you watch its session live and read its report when it is done.
+   If a start is refused with "no base branch configured", pick one in the **Git** tab under
+   "Base branch for new tasks".
 
 Your data lives in `%LOCALAPPDATA%\SuperiorSoft\InfantryAI`, apart from the program, so upgrades and uninstalls keep it.
 Details: [docs/INFANTRY-INSTALL.md](docs/INFANTRY-INSTALL.md).
@@ -216,7 +217,8 @@ demo with fake data is on the token screen.
 ### Server (about 5 minutes with Docker)
 
 See [Headless server](#headless-server) below: build the image, create a token, `docker run`, then connect the
-Android app or the CLI.
+Android app, the web client or the CLI. From the CLI alone: `infantry project create "<name>" <repo dir>`, then
+`infantry ticket create --project <id> --title "..." --role fullstack` and `infantry ticket start <ticket id>`.
 
 ## Headless server
 
@@ -327,8 +329,9 @@ providers, billed by those providers.
 **Can several people share one server?** One daemon has one token today; anyone with it has full access. Per-user
 accounts are not built yet.
 
-**Why do some names say Infantry?** That was the project's earlier name. Folders, variables (`INFANTRY_*`, also read as
-`INFANTRY_*`) and the `infantry` command keep working so nothing breaks on upgrade.
+**Why do some names say AgentHQ?** That was the project's earlier name. The old names still work so nothing breaks on
+upgrade: `AGENTHQ_*` variables are read as fallbacks for `INFANTRY_*`, the `.agenthq` folder is read when `.infantry`
+has no copy, and `agenthq` is a deprecated alias of the `infantry` command.
 
 **Is it safe to expose to the internet?** Not directly. See the security note under [Headless server](#headless-server).
 
@@ -338,7 +341,7 @@ accounts are not built yet.
 |---|---|
 | SmartScreen blocks the installer | Expected for now: the MSI is not code-signed yet. **More info > Run anyway**. |
 | An agent provider is missing from the picker | The CLI must be installed and on the daemon's PATH (`infantry harness-status`), then restart the app. |
-| A ticket refuses to start: "no directory configured" / "no base branch configured" | Set the project's repository and base branch (Docker: `INFANTRY_REPO` and `INFANTRY_BASE_BRANCH`). A ticket also needs a role. |
+| A ticket refuses to start: "no directory configured" / "no base branch configured" | Set the project's repository and its base branch (**Git** tab > "Base branch for new tasks", or `infantry project base <projectId> <branch>`; Docker: `INFANTRY_REPO` and `INFANTRY_BASE_BRANCH`). A ticket also needs a role. |
 | Phone says it cannot connect | Same network or Tailscale? Firewall open for the daemon port? Address ends in `/ws`? A 401/403 means a wrong token. |
 | Server refuses to start: "refusing to start" | A non-loopback bind needs a token of at least 32 characters. |
 | "Check for updates" says updates are off | Set `INFANTRY_UPDATE_REPO=owner/repo` (or `repo=` in `update.properties`). |
@@ -373,8 +376,8 @@ Priorities can change; watch the [Releases](../../releases) page.
 
 ## Contributing
 
-Bug reports and feature requests are welcome now. Code contributions from outside the team are **on hold until a
-license is chosen** (see [License](#license)). How to build, branch, test and commit: [CONTRIBUTING.md](CONTRIBUTING.md).
+Bug reports and feature requests are welcome now: open an issue. Pull requests from outside the team are **not
+accepted yet**; for now, please send ideas and fixes as issues. How to build, branch, test and commit: [CONTRIBUTING.md](CONTRIBUTING.md).
 Everyone taking part follows the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Support the project
@@ -411,13 +414,13 @@ Requires JDK 21 (Gradle toolchain resolution via foojay) and, for the Android mo
 build at a time.
 
     ./gradlew :superiorSoftLibrary:infantry:compileKotlin :superiorSoftLibrary:infantryUi:compileKotlin
-    ./gradlew :superiorSoftLibrary:infantry:installDist     # build/install/infantry/bin/infantry (and infantry)
+    ./gradlew :superiorSoftLibrary:infantry:installDist     # build/install/infantry/bin/infantry (and the agenthq alias)
     ./gradlew :superiorSoftLibrary:infantryUi:packageReleaseMsi   # Windows installer
     ./gradlew :superiorSoftLibrary:infantry:headlessDist    # server archive for this OS
 
 Modules (all under `superiorSoftLibrary/`; the prefix keeps `:superiorSoftLibrary:*` paths stable):
 
-- `infantry`: daemon + `infantry` CLI (JVM; `infantry` stays as an alias)
+- `infantry`: daemon + `infantry` CLI (JVM; `agenthq` stays as a deprecated alias)
 - `infantryUiCore`: shared UI core (Compose Multiplatform)
 - `infantryUi`: desktop UI
 - `infantryAndroid`: Android shell
@@ -428,7 +431,7 @@ Secrets guard: `./gradlew verifySecretsNotTracked` fails if keys, keystores or t
 
 ## Reference
 
-- Every `INFANTRY_*` variable is also read as `INFANTRY_*` (`INFANTRY_PORT`, `INFANTRY_TOKEN`, ...). The old `INFANTRY_*`
+- Every `INFANTRY_*` variable is also read under its old name `AGENTHQ_*` (`AGENTHQ_PORT`, `AGENTHQ_TOKEN`, ...). The old
   names keep working; when both are set the `INFANTRY_*` one wins.
 - [Install and data layout (Windows)](docs/INFANTRY-INSTALL.md) · [Releasing](docs/RELEASING.md) ·
   [Owner quickstart (from source)](superiorSoftLibrary/infantry/docs/QUICKSTART.md) ·

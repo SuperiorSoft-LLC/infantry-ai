@@ -59,6 +59,7 @@ internal fun FeedSection(ctx: TabContext) {
             onApplyStart = onApplyStart,
             onResume = onResume,
             floaters = floaters,
+            emptyHint = if (state.projects.isEmpty()) FIRST_RUN_HINT else NO_SESSION_HINT,
             // CHAT-SENDING-1: this session's just-sent messages ("sending...", "not sent - retry") until the daemon's echo.
             pending = PendingSendsView(
                 agent?.let { state.pendingSendsFor(it.id) }.orEmpty(),

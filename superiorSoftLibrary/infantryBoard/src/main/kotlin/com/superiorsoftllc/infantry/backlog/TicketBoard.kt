@@ -1591,7 +1591,7 @@ class TicketBoard(
     private fun noBaseReason(projectId: String?): String {
         val set = projectId?.let { "infantry project base $it <branch>" } ?: "infantry project base <projectId> <branch>"
         return "no base branch configured for ${projectId?.let { "project $it" } ?: "this ticket"}; " +
-            "set one with `$set`, an epic base (`infantry epic base <epicId> <branch>`) or the daemon's ${TicketBaseRef.ENV} (a headless daemon also needs INFANTRY_REPO=<git repo>)"
+            "pick its \"Base branch for new tasks\" in the app's Git tab, or set one with `$set`, an epic base (`infantry epic base <epicId> <branch>`) or the daemon's ${TicketBaseRef.ENV} (a headless daemon also needs INFANTRY_REPO=<git repo>)"
     }
 
     private fun refusedStart(ticket: Ticket, detail: String) = TicketAnswer(

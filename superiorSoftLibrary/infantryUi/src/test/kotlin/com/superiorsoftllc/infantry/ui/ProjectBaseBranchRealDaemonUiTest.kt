@@ -190,11 +190,24 @@ class ProjectBaseBranchRealDaemonUiTest {
             waitUntil(timeoutMillis = 10_000) { onAllNodes(hasTestTag(GIT_BASE_SUMMARY_TAG) and hasText("develop", substring = true)).fetchSemanticsNodes().isNotEmpty() }
             assertEquals("develop", daemonBaseBranch(port, projectId), "the daemon stored the picked branch")
 
-            pickBase(c, projectId, "default", null)
+            pickBase(c, projectId, "none", null) // LAUNCH-FIRSTRUN-1: the clear row reads "None (...)" now
             waitUntil(timeoutMillis = 15_000) { c.state.value.activeProject?.baseBranch == "" }
             waitUntil(timeoutMillis = 10_000) { onAllNodes(hasTestTag(GIT_BASE_SUMMARY_TAG) and hasText("Not set", substring = true)).fetchSemanticsNodes().isNotEmpty() }
             assertEquals("", daemonBaseBranch(port, projectId), "Default cleared the daemon's setting")
         }
+    }
+
+    /** LAUNCH-FIRSTRUN-1: the New Project form (name + repository) leaves a project whose first ticket can start. */
+    @Test fun `a project created with a repository takes its checked-out branch as the base`() {
+        val (repo, _, _) = newRepo()
+        val port = boot(repo)
+        val c = Controller(scope)
+        c.connect("ws://127.0.0.1:$port/ws", null)
+        until("connected", c) { it.connection.state == ConnState.CONNECTED }
+        assertIs<CommandResult.Sent>(runBlocking { c.createProject("First project", repo.absolutePath) })
+        val id = until("project listed", c) { s -> s.projects.any { it.name == "First project" } }.projects.single { it.name == "First project" }.id
+        until("base adopted", c) { s -> s.projects.single { it.id == id }.baseBranch == "main" }
+        assertEquals("main", daemonBaseBranch(port, id), "the daemon stored the checked-out branch (main), not develop")
     }
 
     @Test fun `a ticket started from the board after picking develop in the Git tab is cut from develop`() {

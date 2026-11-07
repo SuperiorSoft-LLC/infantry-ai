@@ -200,6 +200,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
 
+/** LAUNCH-FIRSTRUN-1: the empty chat's line once a project exists. */
+const val NO_SESSION_HINT = "No live session. Start a ticket from the Board, or type a task below to start an agent."
+
+/** LAUNCH-FIRSTRUN-1: the empty chat's line on a daemon with no project yet: where a new user begins. */
+const val FIRST_RUN_HINT = "Welcome to Infantry AI. Start by creating a project: press + next to the project picker " +
+    "(top left) and choose your git repository. Then open the Board to create and start your first ticket."
+
 /** CHAT-PAD-1: the one horizontal padding of every chat's content (empty state, transcript, notes, cards). */
 val ChatSidePadding = 14.dp
 
@@ -219,6 +226,8 @@ fun OutputPane(
     floaters: @Composable RowScope.() -> Unit = {},
     /** CHAT-SENDING-1: the messages sent to this session that the transcript does not show yet, and their retry / discard. */
     pending: PendingSendsView = PendingSendsView(),
+    /** LAUNCH-FIRSTRUN-1: the line under the emblem when no session is shown (a first run says where to begin). */
+    emptyHint: String = NO_SESSION_HINT,
     questionSlot: @Composable () -> Unit = {},
 ) {
     if (a == null) {
@@ -228,7 +237,7 @@ fun OutputPane(
             Column(Modifier.fillMaxWidth().padding(horizontal = ChatSidePadding), horizontalAlignment = Alignment.CenterHorizontally) {
                 BrandEmblem(72.dp)
                 Spacer(Modifier.height(10.dp))
-                Text("No live session. Start one to see its output here.", color = Palette.Muted, fontSize = 12.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                Text(emptyHint, color = Palette.Muted, fontSize = 12.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                 Spacer(Modifier.height(10.dp))
                 if (onStartSession != null) OutlinedButton(onClick = onStartSession) { Text("Start a session") }
             }

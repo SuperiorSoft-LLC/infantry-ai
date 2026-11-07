@@ -4,13 +4,13 @@ package com.superiorsoftllc.infantry.ui.model
 
 /**
  * BASE-1b: one row of the Git tab's "Base branch for new tasks" picker. [branch] null is the "Default (checked-out
- * HEAD)" row, which clears the project's setting so a start falls back to the daemon's default.
+ * HEAD)" row, now "None": it clears the setting, and the daemon then refuses a start (BUG-BASE-087) unless INFANTRY_BASE_BRANCH is set.
  */
 data class BaseBranchChoice(val branch: String?, val checkedOut: Boolean = false) {
     val label: String get() = branch ?: BASE_BRANCH_DEFAULT_LABEL
 }
 
-const val BASE_BRANCH_DEFAULT_LABEL = "Default (checked-out HEAD)"
+const val BASE_BRANCH_DEFAULT_LABEL = "None (ticket starts are refused until one is set)"
 
 /**
  * The picker's rows for [query]: the Default row first, then the project's local [branches] in the daemon's order, each

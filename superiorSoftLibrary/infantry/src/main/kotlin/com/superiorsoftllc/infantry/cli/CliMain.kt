@@ -1918,6 +1918,7 @@ internal object Cli {
         checkContract(stream, err)
         if (parsed.args[0] == "find") return@runBlocking projectFind(stream, parsed.args.drop(1).joinToString(" ").trim().lowercase(), out, err)
         if (parsed.args[0] == "config") return@runBlocking projectConfig(stream, parsed.args, out, err)
+        if (parsed.args[0] == "create") return@runBlocking projectCreate(stream, parsed.args[1].trim(), parsed.args.getOrNull(2)?.trim().orEmpty(), out, err)
         if (parsed.args[0] == "routing") return@runBlocking projectRouting(stream, parsed.args[1].trim(), parsed.file, parsed.clear, out, err)
         val projectId = parsed.args[1].trim()
         when (parsed.args[0]) {
@@ -2070,6 +2071,31 @@ internal object Cli {
         if (shown.isEmpty()) out.appendLine("no project matches '$query'")
         for (p in shown) out.appendLine("${p.id} | ${p.name} | ${p.data["project.description"].orEmpty()}")
         if (shown.isNotEmpty()) out.appendLine("mail a role there: infantry send <role>@<project id or name> \"text\" --cross-project")
+        return 0
+    }
+
+    /**
+     * LAUNCH-FIRSTRUN-1: `project create "<name>" [<directory>]`, the same `project_save` the desktop's New Project
+     * form sends, so a headless server can be set up from the CLI alone. Not idempotent: a retry could make a twin.
+     */
+    private suspend fun projectCreate(stream: FrameStream, name: String, directory: String, out: Appendable, err: Appendable): Int {
+        val payload = json.encodeToString(
+            com.superiorsoftllc.infantry.protocol.ProjectSave.serializer(),
+            com.superiorsoftllc.infantry.protocol.ProjectSave(name = name, directory = directory.ifEmpty { null }),
+        )
+        val answer = stream.request(Envelope(Envelope.PROJECT_SAVE, payload), Envelope.PROJECT, "project_save", idempotent = false)
+        val project = try {
+            json.decodeFromString(Project.serializer(), answer.data)
+        } catch (e: Exception) {
+            err.appendLine("error: malformed project answer from the daemon: ${e.message}")
+            return 1
+        }
+        out.appendLine("created project ${project.id} | ${project.name}")
+        when {
+            directory.isEmpty() -> out.appendLine("next: give it a directory (its git repository) before a ticket can start")
+            project.baseBranch.isEmpty() -> out.appendLine("next: infantry project base ${project.id} <branch>   (the branch its tickets are cut from)")
+            else -> out.appendLine("base ${project.baseBranch}; next: infantry ticket create --project ${project.id} --title \"...\" --role fullstack, then infantry ticket start <id>")
+        }
         return 0
     }
 
@@ -4626,7 +4652,7 @@ internal object Cli {
         if (AccessPolicy.isLoopbackHost(host)) return
         err.appendLine(
             "warning: the token is sent in cleartext over ws:// to $host; use wss:// through a TLS proxy " +
-                "or a tunnel (see README, \"Remote daemon\")"
+                "or a tunnel (see README, \"Headless server\")"
         )
     }
 
@@ -4730,6 +4756,7 @@ internal object Cli {
               stories              DEPRECATED: one notice, then the tickets filed under an epic (tickets --epic)
               stories --epic <id|prefix> --project <id>   The same rows as tickets --epic
               stories --status <column>      A ticket column; the old `doing` reads as in_progress
+              project create "<name>" [<directory>]   Create a project (the directory: its git repository); prints its id
               project base <projectId> [<branch>|--clear]   The branch new ticket starts in the project cut from:
               project rename <projectId> "<name>"   Rename a project; its id, tickets, sessions and mail are untouched
                                   read it, set it (refused unless it resolves where tickets are cut), or clear it
@@ -5773,9 +5800,13 @@ internal object Cli {
     /** BASE-1a: the usage error for a `project` invocation, or null when it is valid. */
     private fun projectUsageError(parsed: ParsedArgs): String? {
         val args = parsed.args
-        val usage = "infantry project find [<query>] | base <projectId> [<branch>|--clear] | branches <projectId> | rename <projectId> \"<name>\" | config get <projectId> | config set <projectId> <role> <n> | config set <projectId> $AUTO_REMOVE_SETTING on|off | config set <projectId> <dotted.key> <value> | config unset <projectId> <dotted.key> | routing <projectId> [--file <rules.json>|--clear]"
+        val usage = "infantry project create \"<name>\" [<directory>] | find [<query>] | base <projectId> [<branch>|--clear] | branches <projectId> | rename <projectId> \"<name>\" | config get <projectId> | config set <projectId> <role> <n> | config set <projectId> $AUTO_REMOVE_SETTING on|off | config set <projectId> <dotted.key> <value> | config unset <projectId> <dotted.key> | routing <projectId> [--file <rules.json>|--clear]"
         return when {
             args.firstOrNull() == "find" -> null
+            args.firstOrNull() == "create" -> when {
+                parsed.clear || args.size !in 2..3 || args[1].isBlank() -> "project create takes one non-blank name and an optional directory: $usage"
+                else -> null
+            }
             args.firstOrNull() == "config" -> when {
                 args.getOrNull(1) == "get" && args.size == 3 && args[2].isNotBlank() -> null
                 args.getOrNull(1) == "set" && args.size == 5 && args[2].isNotBlank() && args[3].trim() == AUTO_REMOVE_SETTING ->

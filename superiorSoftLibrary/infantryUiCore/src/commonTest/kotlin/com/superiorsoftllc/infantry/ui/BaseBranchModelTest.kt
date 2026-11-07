@@ -33,7 +33,7 @@ class BaseBranchModelTest {
     @Test fun `typing keeps the case-insensitive substring matches, Default only when its label matches`() {
         val names = listOf("main", "develop", "feature/DEV-12") + (1..250).map { "topic/$it" }
         assertEquals(listOf("develop", "feature/DEV-12"), baseBranchChoices(names, "main", "dev").map { it.branch })
-        assertEquals(listOf(null), baseBranchChoices(names, "main", "DEFAULT").map { it.branch })
+        assertEquals(listOf(null), baseBranchChoices(names, "main", "NONE").map { it.branch })
         // topic/2, topic/20..29 and topic/200..250: 1 + 10 + 51 rows.
         assertEquals(62, baseBranchChoices(names, "main", "TOPIC/2").size)
         assertTrue(baseBranchChoices(emptyList(), null, "x").isEmpty())

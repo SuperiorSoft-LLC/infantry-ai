@@ -46,7 +46,7 @@ data class Refusal(val status: HttpStatusCode, val reason: String, val challenge
  * browser on `/ws` that also presents the bearer token, on an allowlisted Host. Same-origin never replaces the token.
  *
  * This is NOT transport security. The token and every frame cross the wire in cleartext, and the daemon
- * does not terminate TLS. See README, "Remote daemon".
+ * does not terminate TLS. See README, "Headless server".
  */
 class AccessPolicy private constructor(
     val bindHost: String,
@@ -381,7 +381,7 @@ class AccessPolicy private constructor(
             }
             if (token.length < MIN_TOKEN_LENGTH) {
                 throw AccessConfigurationException(
-                    "the bearer token must be at least $MIN_TOKEN_LENGTH characters; see README, \"Remote daemon\"",
+                    "the bearer token must be at least $MIN_TOKEN_LENGTH characters; see README, \"Headless server\"",
                 )
             }
             if (token.any { it.isWhitespace() || it.isISOControl() }) {

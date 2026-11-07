@@ -407,7 +407,7 @@ internal const val PROJECT_BASE_REFUSED = "project_base refused"
 /**
  * BASE-1b (contract 1.81.0): "Base branch for new tasks" -- the branch a ticket start in this project cuts its own
  * branch from. A dropdown: the button shows the setting, opening it shows a search box over the project's local
- * branches (case-insensitive substring, [baseBranchChoices]) with "Default (checked-out HEAD)" first, which clears it.
+ * branches (case-insensitive substring, [baseBranchChoices]) with the "None" row first, which clears it.
  *
  * Picking saves through `project_base`; the daemon's `project` answer carries the stored setting, which is what the
  * button then shows. A refusal (`project_base refused: ...`, e.g. the branch does not resolve where tickets are cut) is
