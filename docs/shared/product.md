@@ -6,9 +6,9 @@ pitch: Infantry AI is a command post for coding agents: a ticket board, agents o
 license_line: The core (the daemon) is the foundation: it is licensed MPL-2.0 to protect its integrity, so apps and plugins can rely on a stable base that does not break, with backward compatibility as the promise. Everything built on top (the SDKs, the UI core, the apps and every plugin) is free under Apache-2.0: build, fork, sell and extend it without copyleft.
 license_footer: The core is a community effort; the rest is yours.
 version: 1.1.0
-platforms: Windows: desktop app (MSI installer, zip) + headless server. Android: APK. Web: browser build (Kotlin/Wasm). Linux: headless server (tar.gz; Docker); no desktop app. macOS: desktop app (beta, Apple Silicon, unsigned; nightly now) + headless server. Built with Kotlin Multiplatform (Compose).
+platforms: Windows: desktop app (MSI installer, zip) + headless server. Android: APK. Web: browser build (Kotlin/Wasm). Linux: headless server (tar.gz; Docker); no desktop app. macOS: desktop app (beta, Apple Silicon, unsigned) + headless server. Built with Kotlin Multiplatform (Compose).
 downloads_url: https://github.com/SuperiorSoft-LLC/infantry-ai/releases/latest
-downloads_assets: Windows MSI, Android APK (beta, debug-signed), web zip, server archives (Windows, Linux, macOS arm64 beta).
+downloads_assets: Windows MSI, Android APK (beta, debug-signed), web zip, server archives (Windows, Linux, macOS arm64 beta), macOS .dmg (Apple Silicon, beta, unsigned).
 status: Beta
 beta_line: Infantry AI is in Beta. It works and we use it every day, but not every part is fully tested yet: you are an early tester. Please report anything that breaks on GitHub.
 issues_url: https://github.com/SuperiorSoft-LLC/infantry-ai/issues
