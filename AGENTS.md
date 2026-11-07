@@ -145,6 +145,7 @@ All under `superiorSoftLibrary/infantry/src/test/kotlin/com/superiorsoftllc/infa
 | `runner/StackNeutralGuardTest.kt` | Core main code names no build stack. |
 | `settings/LimitsGuardTest.kt` | No unnamed numeric limit in `src/main`. |
 | `daemon/TestPortGuardTest.kt` | Tests never bind 8787 or 8788. |
+| `daemon/PluginToolsDeclaredGuardTest.kt` | Every tool a repo daemon plugin names is declared in its `module.json` `daemon.tools` (the host refuses the plugin otherwise). |
 | `daemon/HarnessContractGuardTest.kt` | Every repo harness module's `harness.contract` equals `HARNESS_API_VERSION` (a lagging one is refused at load). |
 | `DocsFreshnessGuardTest.kt` | Every file path and public type named in this file and `docs/wiki/**` exists. |
 | `SdkTypesDocumentedGuardTest.kt` | Every public top-level type of `infantryPlugins`, `infantryDaemonApi` and `infantryHarnessApi` is named in its API page (`plugin-api.md`, `daemon-plugin-api.md`, `Harnesses.md`); an internal-but-public helper goes on the guard's commented allow-list. |
