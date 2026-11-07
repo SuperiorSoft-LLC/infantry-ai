@@ -93,3 +93,12 @@ Failing at 5f5b974e but not in the base list (so NOT a known failure; treat as n
 | infantryUi | `ui.TicketCommentsPanelUiTest` | yes | `threadPostResolveAndNotifyPicker`: AssertionError at Assertions.kt:264 | |
 | infantryUi | `ui.TicketModalUiTest` | yes | `Open shows the ticket modal over the board, Back and Esc close it, the inline editor still works`: AssertionError at SemanticsNodeInteraction.kt:178 | |
 | infantry | `daemon.InfantryBinShellTest` | no | not failing in the 5f5b974e run (base entry kept) | |
+| infantry | `cli.CliOwnerQuestionTest` | yes | CI-TESTS-5 (e9b33f6b): answer mail carries no threadId; open question orphaned across restart (not jar wiring) | e9b33f6b |
+| infantry | `cli.mcp.McpTicketImagesE2eTest` | yes | CI-TESTS-5: answer carries no `images` field after plugins wired | e9b33f6b |
+| infantry | `cli.mcp.McpMailToolsE2eTest` | yes | CI-TESTS-5: NullPointerException after plugins wired | e9b33f6b |
+| infantry | `daemon.ReportBackDaemonTest` | yes | CI-TESTS-5: "run 2 to start" times out at 60 s (4 tests) | e9b33f6b |
+| infantry | `cli.CliAcceptanceTest` | yes | CI-TESTS-5: 7 tests (inbox/threads/report handoff) fail after plugins wired | e9b33f6b |
+| infantry | `daemon.RoleSpawnIdentityTest` | yes | CI-TESTS-5: mail to a role-only session assertion fails | e9b33f6b |
+| infantry | `daemon.AgentSwapDaemonTest` | yes | CI-TESTS-5: mail after a cross-harness swap assertion fails | e9b33f6b |
+| infantry | `daemon.DaemonShutdownTest` | yes | CI-TESTS-5: shutdown queued no ticket_runs write | e9b33f6b |
+| infantry | `daemon.DaemonPluginMechanismTest` | yes | CI-TESTS-5: 6 tests fail after Settings wired and built-in tools filtered | e9b33f6b |
