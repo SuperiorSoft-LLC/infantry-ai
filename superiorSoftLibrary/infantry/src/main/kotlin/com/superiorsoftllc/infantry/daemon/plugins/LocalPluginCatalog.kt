@@ -48,8 +48,15 @@ class LocalPluginCatalog(
             CatalogSummary(
                 id = it.entry.id, description = it.entry.description, tags = it.entry.tags, cls = it.cls.label, source = it.source,
                 license = it.entry.license, latest = it.latest?.version, grants = it.latest?.grants.orEmpty(), signer = it.latest?.signer,
+                name = it.entry.name, repo = it.entry.repo, listName = it.listName,
             )
         }
+
+    override fun importList(location: String): String {
+        val r = manager.importList(location)
+        if (!r.ok) throw IllegalArgumentException("${r.code}: ${r.message}")
+        return r.message
+    }
 
     override fun show(ref: String): PluginShowResult {
         val (insp, refused) = manager.inspect(ref)

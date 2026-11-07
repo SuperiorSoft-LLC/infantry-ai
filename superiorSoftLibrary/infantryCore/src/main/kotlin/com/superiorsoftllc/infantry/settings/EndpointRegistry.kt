@@ -84,6 +84,13 @@ object EndpointRegistry {
         "The releases API base the updater asks for new versions; no trailing slash.",
     )
 
+    /** PLUGIN-REPO-1: the releases API a plugin list's `repo` entry is resolved against (GitHub's, or a mirror / fake server). */
+    val PLUGIN_RELEASES_API = EndpointDef(
+        "urls.pluginReleasesApi", "INFANTRY_PLUGIN_RELEASES_API", EndpointKind.URL,
+        "https://api.github.com",
+        "The releases API base the plugin manager asks for a listed plugin repo's latest release; no trailing slash.",
+    )
+
     /** The Docker image a Docker install tells the owner to pull. */
     val DOCKER_IMAGE = EndpointDef(
         "urls.dockerImage", "INFANTRY_DOCKER_IMAGE", EndpointKind.IMAGE,
@@ -98,7 +105,7 @@ object EndpointRegistry {
         "The source repository's web page; About links to its CONTRIBUTING.md, new issue form and home. Empty = the links hide.",
     )
 
-    val ALL: List<EndpointDef> = listOf(SITE, DOCS, DOWNLOADS, SOURCE_REPO, RELEASES_REPO, RELEASES_API, DOCKER_IMAGE)
+    val ALL: List<EndpointDef> = listOf(SITE, DOCS, DOWNLOADS, SOURCE_REPO, RELEASES_REPO, RELEASES_API, PLUGIN_RELEASES_API, DOCKER_IMAGE)
 
     private val byKey = ALL.associateBy { it.key }
 

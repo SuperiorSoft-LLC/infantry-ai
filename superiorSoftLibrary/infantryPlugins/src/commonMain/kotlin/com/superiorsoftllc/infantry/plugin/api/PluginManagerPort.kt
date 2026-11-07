@@ -24,6 +24,8 @@ interface PluginManagerPort {
     fun addSource(id: String, cls: String, location: String): ActionResult
     fun removeSource(id: String): ActionResult
     fun refresh(): List<RefreshView>
+    /** PLUGIN-REPO-1: imports a plugin list (a JSON file path or URL) as a community source; a host without one answers not ok. */
+    fun importList(location: String): ActionResult = ActionResult(false, "importing a plugin list is not supported on this host")
 }
 
 /**
@@ -41,7 +43,14 @@ data class PluginView(
 /** A newer version offered for an installed plugin; [newGrants] non-empty = "asks for new permissions". */
 data class UpdateView(val id: String, val from: String, val to: String, val newGrants: List<String>)
 
-data class HitView(val id: String, val source: String, val cls: String, val version: String?, val description: String, val license: String?, val installed: Boolean)
+/**
+ * One catalog / plugin list entry. PLUGIN-REPO-1: [name] = the display name (null = the id), [listName] = the list it came
+ * from, [repo] = its repository, [fromRepo] = it installs from that repo's latest release ([version] is then null).
+ */
+data class HitView(
+    val id: String, val source: String, val cls: String, val version: String?, val description: String, val license: String?, val installed: Boolean,
+    val name: String? = null, val tags: List<String> = emptyList(), val repo: String? = null, val listName: String? = null, val fromRepo: Boolean = false,
+)
 
 /** What the consent dialog shows. */
 data class InspectView(

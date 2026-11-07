@@ -21,6 +21,8 @@ import java.io.File
 internal object PluginCli {
     const val USAGE = """usage: infantry plugin <command>
   list                          installed and bundled plugins (class, tier, version, enabled)
+  list import <file|url> [--id ID]   import a plugin list (JSON of plugin repos) as a community source
+  list remove <id>              remove an imported list (the same as: sources remove <id>)
   search [text] [--tag t]       plugins in the configured catalogs
   show <ref>                    check a plugin and print its class, signer, licence and requested grants (installs nothing)
   install <ref> [--grant g]... [--grant-all-requested] [--no-grants] [--disabled]
@@ -95,6 +97,12 @@ internal object PluginCli {
         val arg = rest.getOrNull(1)
         when (sub) {
             "list" -> {
+                when (arg) {
+                    "import" -> return show(m.importList(rest.getOrNull(2) ?: return usage("list import needs a file or URL"), id))
+                    "remove" -> return show(m.removeSource(rest.getOrNull(2) ?: return usage("list remove needs a list id")))
+                    null -> {}
+                    else -> return usage("unknown list command '$arg' (import | remove)")
+                }
                 val rows = m.list()
                 if (rows.isEmpty()) out.appendLine("no plugins")
                 rows.forEach { out.appendLine("${it.id}  ${it.version}  ${it.cls.label}${if (it.bundled) "/bundled" else ""}  ${it.tier.name.lowercase()}  ${if (it.enabled) "enabled" else "disabled"}  ${it.source ?: "unlisted"}${it.yanked?.let { y -> "  yanked: $y" } ?: ""}") }
@@ -103,7 +111,10 @@ internal object PluginCli {
             "search" -> {
                 val hits = m.search(arg.orEmpty(), tags)
                 if (hits.isEmpty()) out.appendLine("nothing found (sources: ${m.sources().joinToString { it.id }.ifEmpty { "none; add one with: plugin sources add" }})")
-                hits.forEach { h -> out.appendLine("${h.source}:${h.entry.id}  ${h.latest?.version ?: "no compatible version"}  ${h.cls.label}  [${h.entry.tags.joinToString(",")}]  ${h.entry.description}") }
+                hits.forEach { h ->
+                    val ver = h.latest?.version ?: if (h.fromRepo) "latest release" else "no compatible version"
+                    out.appendLine("${h.source}:${h.entry.id}  $ver  ${h.cls.label}  [${h.entry.tags.joinToString(",")}]  ${h.entry.name?.let { "$it: " } ?: ""}${h.entry.description}${h.entry.repo?.let { "  repo $it" } ?: ""}")
+                }
                 return 0
             }
             "show" -> {
