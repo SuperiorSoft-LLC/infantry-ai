@@ -209,4 +209,33 @@ class ChatVoiceSeamsUiTest {
             onAllNodesWithTag(MESSAGE_ACTIONS_TAG).assertCountEquals(0)
         }
     }
+
+    // --- PLUGIN-SLOT-UX-1: no credit tag on inline fills; chat.message.header ---
+
+    private fun communityModule(slot: String, tag: String, text: String) = InfantryModule(
+        ModuleManifest("Acme_Voice", "1.0.0", author = "Acme", license = "Apache-2.0", panels = listOf(PanelDeclaration("acme.$tag", slot))),
+        tier = Tier.COMMUNITY,
+        panels = listOf(PanelProvider(id = "acme.$tag", panel = slot, order = 0, testTag = "sec-$tag") { Text(text, Modifier.testTag(tag)) }),
+    )
+
+    @Test fun `a community header fill draws on every card with no credit tag`() {
+        val header = communityModule(ChatSlots.MESSAGE_HEADER, "hdr", "H")
+        withFeed(TabFactory(base + header)) {
+            onAllNodesWithTag("hdr").assertCountEquals(2)
+            onAllNodesWithTag(com.superiorsoftllc.infantry.ui.plugin.COMMUNITY_BADGE_TAG).assertCountEquals(0)
+        }
+    }
+
+    @Test fun `a community composer fill has no credit tag and an empty fill takes no height`() {
+        val empty = InfantryModule(
+            ModuleManifest("Acme_Voice", "1.0.0", author = "Acme", license = "Apache-2.0", panels = listOf(PanelDeclaration("acme.e", ChatSlots.COMPOSER_ACTIONS))),
+            tier = Tier.COMMUNITY,
+            panels = listOf(PanelProvider(id = "acme.e", panel = ChatSlots.COMPOSER_ACTIONS, order = 0, testTag = "sec-e") { }),
+        )
+        withPanel(TabFactory(base + empty)) { _, _ ->
+            onAllNodesWithTag(com.superiorsoftllc.infantry.ui.plugin.COMMUNITY_BADGE_TAG).assertCountEquals(0)
+            val h = onNodeWithTag("sec-e").fetchSemanticsNode().size.height
+            assertEquals(0, h)
+        }
+    }
 }

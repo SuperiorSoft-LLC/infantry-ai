@@ -204,6 +204,7 @@ fills a slot with a `panels` entry and reads its arguments from `LocalSlotArgs.c
 |---|---|---|
 | `chat.composer.actions` | slot (row, beside attach) | `sessionId` (null in New agent mode), `draft` (the box's text), `sending` (a send is in flight) |
 | `chat.message.actions` | slot (row over a message: hover on desktop/web, long-press on Android) | `sessionId`, `messageId` (the row's index in its session's transcript), `author` (`owner`, `agent`, `external`, `system`), `authorRole`, `authorAgent`, `text` (plain, markdown stripped) |
+| `chat.message.header` | slot (small icons in every chat card's header row, left of the timestamp; give each a tooltip) | the `chat.message.actions` arguments plus `kind` (the row kind) |
 | `chat.composer.insert` | event (declare it in your `events`, use the `events` service) | payload `sessionId?`, `text`, `mode` (`append` or `replace`), `send` (`true`/`false`) |
 
 `chat.composer.insert` goes to the composer showing `sessionId`; with none, to the focused composer, else the one

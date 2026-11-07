@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,6 +36,42 @@ import com.superiorsoftllc.infantry.ui.plugin.slotFilled
  * feed draws it on each message row (the owner's and the agent's messages). The argument keys are Chat's `MessageArgs`.
  */
 const val MESSAGE_ACTIONS_SLOT = "chat.message.actions"
+
+/** PLUGIN-SLOT-UX-1: the per-card header slot, drawn left of the timestamp by every card. */
+const val MESSAGE_HEADER_SLOT = "chat.message.header"
+
+/** The [MESSAGE_HEADER_SLOT] arguments of the card being drawn (null outside a message row). */
+internal val LocalCardHeaderArgs = staticCompositionLocalOf<Map<String, Any?>?> { null }
+
+/** The header slot arguments of any chat line [row] (every card kind): [messageArgs] fields plus `kind`; null for non-line rows. */
+internal fun headerArgs(row: RowItem, index: Int): Map<String, Any?>? {
+    (row.item as? ChatItem.Contribution)?.let { c ->
+        return mapOf("sessionId" to row.agentId, "messageId" to index.toString(), "author" to "system", "authorRole" to null, "authorAgent" to null, "text" to c.item.text.ifBlank { c.item.label }, "kind" to row.kind)
+    }
+    val line = (row.item as? ChatItem.Line)?.line ?: return null
+    val (author, role, agentId) = when (val o = line.origin) {
+        MessageOrigin.Owner -> Triple("owner", null, null)
+        is MessageOrigin.Agent -> Triple("agent", o.role, o.agentId ?: o.sessionId)
+        is MessageOrigin.External -> Triple("external", null, null)
+        is MessageOrigin.System -> Triple("system", null, null)
+    }
+    val a = if (row.kind == "text") Triple("agent", row.agentRole, row.agentId) else Triple(author, role, agentId)
+    return mapOf(
+        "sessionId" to row.agentId, "messageId" to index.toString(), "author" to a.first, "authorRole" to a.second,
+        "authorAgent" to a.third, "text" to plainMessageText(line.text), "kind" to row.kind,
+    )
+}
+
+/** Card header icons: the [MESSAGE_HEADER_SLOT] fills for the current card; nothing when unfilled or outside a message row. */
+@Composable
+internal fun CardHeaderSlot() {
+    val host = LocalMessageActionsHost.current ?: return
+    val args = LocalCardHeaderArgs.current ?: return
+    if (!slotFilled(MESSAGE_HEADER_SLOT)) return
+    ChildSlotRow(MESSAGE_HEADER_SLOT, host.state, host.controller, Modifier.padding(start = 6.dp).testTag(CARD_HEADER_SLOT_TAG), args = args)
+}
+
+const val CARD_HEADER_SLOT_TAG = "chat-card-header-slot"
 
 /** Test tag on the actions row shown over a message. */
 const val MESSAGE_ACTIONS_TAG = "chat-message-actions"
@@ -73,6 +110,12 @@ internal fun messageArgs(row: RowItem, index: Int): Map<String, Any?>? {
  */
 @Composable
 internal fun MessageWithActions(row: RowItem, index: Int, content: @Composable () -> Unit) {
+    val hostArgs = remember(row, index) { headerArgs(row, index) }
+    CompositionLocalProvider(LocalCardHeaderArgs provides hostArgs) { MessageWithActionsInner(row, index, content) }
+}
+
+@Composable
+private fun MessageWithActionsInner(row: RowItem, index: Int, content: @Composable () -> Unit) {
     val host = LocalMessageActionsHost.current
     val args = if (host != null && slotFilled(MESSAGE_ACTIONS_SLOT)) messageArgs(row, index) else null
     if (host == null || args == null) { content(); return }
