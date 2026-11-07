@@ -469,6 +469,11 @@ class InfantryDaemon(
      * process-watch scheduler, stopped by [close] after its last reap. A daemon that is closed leaves no thread running.
      */
     private val background: List<AutoCloseable> = emptyList(),
+    /**
+     * CI-FIX-PLUGINLOAD: closed by [close] AFTER the session manager's shutdown, so the exits that shutdown emits still reach the plugins
+     * that hold them (the board plugin writes the killed run's `ticket_runs` row); an early close would unload the board first.
+     */
+    private val afterSessions: List<AutoCloseable> = emptyList(),
     /** Ticket 55d60a5e: the health limits [build] resolved at start-up; [main] starts the watchdog from them. */
     /** RUNNER-POOL-10: what this daemon is; a runner refuses the board frames. */
     val deploymentMode: DeploymentMode = DeploymentMode.BOTH,
@@ -551,6 +556,8 @@ class InfantryDaemon(
         // Ticket b785f383: a clean stop leaves nothing of an ended or removed session behind; live sessions' bg jobs stay.
         // STACK-NEUTRAL-2: the process-watch plugin (if loaded) sweeps them from its own shutdown listener.
         runCatching { processHost?.fireShutdown() }
+        // CI-FIX-PLUGINLOAD: the plugins stop only now (the board applies the kills' exits first, then drains and closes).
+        afterSessions.forEach { runCatching { it.close() } }
         // Everything the kills above queued is applied before the store is released; see the KDoc.
         runCatching { boardPorts.close() }
         // CLIPATH-1: launches after this no longer read this daemon's (about to close) store for overrides.
@@ -2195,7 +2202,8 @@ class InfantryDaemon(
                 portReservation = portReservation,
                 handover = handover,
                 processHost = localProcesses,
-                background = listOf(AutoCloseable { usageRefresher.stop() }, runnerLinkService, workerSweepCloser, AutoCloseable { agentWatchdog.close() }, AutoCloseable { finishNotice.close() }, AutoCloseable { stallDetector.close() }, healthGate, plugins, AutoCloseable { harnessModulesRef.get()?.close() }),
+                background = listOf(AutoCloseable { usageRefresher.stop() }, runnerLinkService, workerSweepCloser, AutoCloseable { agentWatchdog.close() }, AutoCloseable { finishNotice.close() }, AutoCloseable { stallDetector.close() }, healthGate, AutoCloseable { harnessModulesRef.get()?.close() }),
+                afterSessions = listOf(plugins),
                 healthSettings = healthSettings,
                 deploymentMode = deploymentMode,
             )
