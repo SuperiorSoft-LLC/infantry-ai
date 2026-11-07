@@ -24,6 +24,8 @@ interface PluginManagerPort {
     fun addSource(id: String, cls: String, location: String): ActionResult
     fun removeSource(id: String): ActionResult
     fun refresh(): List<RefreshView>
+    /** PLUGIN-SOURCES-1: like [refresh] but only for sources whose cached catalog is stale; a host without one does nothing. */
+    fun refreshIfStale(): List<RefreshView> = emptyList()
     /** PLUGIN-REPO-1: imports a plugin list (a JSON file path or URL) as a community source; a host without one answers not ok. */
     fun importList(location: String): ActionResult = ActionResult(false, "importing a plugin list is not supported on this host")
 }

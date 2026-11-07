@@ -139,6 +139,11 @@ fun PluginsScreen(port: PluginManagerPort) {
     var busy by remember { mutableStateOf(false) }
     var version by remember { mutableStateOf(0) }
     val scope = rememberCoroutineScope()
+    // PLUGIN-SOURCES-1: opening the tab refreshes stale catalogs in the background, then reloads so update offers show.
+    LaunchedEffect(Unit) {
+        val r = withContext(Dispatchers.Default) { runCatching { port.refreshIfStale() }.getOrNull() }
+        if (!r.isNullOrEmpty()) version++
+    }
     /** PLUGINS-UI-1: plugin id -> the state its switch was flipped to, while the daemon applies it. */
     val pending = remember { mutableStateMapOf<String, Boolean>() }
 

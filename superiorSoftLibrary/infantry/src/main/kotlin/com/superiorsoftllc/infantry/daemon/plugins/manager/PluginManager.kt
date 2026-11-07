@@ -196,10 +196,16 @@ class PluginManager(
     // ---------------------------------------------------------------- sources and catalogs
 
     /** The saved sources; a state dir that never saved any starts from the bundled data file `plugins/default-sources.json` (REGISTRY-2). */
-    fun sources(): List<CatalogSource> =
+    fun sources(): List<CatalogSource> {
+        val file = readSourcesFile() ?: return defaultSources()
+        // PLUGIN-SOURCES-1: a list saved before the defaults existed still gets every bundled default whose id is missing, unless removed on purpose.
+        val have = file.sources.map { it.id }.toSet()
+        return file.sources + defaultSources().filter { it.id !in have && it.id !in file.removedDefaults.orEmpty() }
+    }
+
+    private fun readSourcesFile(): SourcesFile? =
         File(root, "sources.json").takeIf { it.isFile }
-            ?.let { runCatching { ManagerJson.decodeFromString(SourcesFile.serializer(), it.readText()).sources }.getOrNull() }
-            ?: defaultSources()
+            ?.let { runCatching { ManagerJson.decodeFromString(SourcesFile.serializer(), it.readText()) }.getOrNull() }
 
     private fun defaultSources(): List<CatalogSource> =
         PluginManager::class.java.getResourceAsStream("/plugins/default-sources.json")
@@ -207,7 +213,10 @@ class PluginManager(
 
     fun setSources(list: List<CatalogSource>) {
         root.mkdirs()
-        File(root, "sources.json").writeText(ManagerJson.encodeToString(SourcesFile.serializer(), SourcesFile(list)) + "\n")
+        // PLUGIN-SOURCES-1: a bundled default missing from the saved whole list counts as removed on purpose and stays removed.
+        val ids = list.map { it.id }.toSet()
+        val removed = (readSourcesFile()?.removedDefaults.orEmpty() + defaultSources().map { it.id }.filter { it !in ids }).distinct()
+        File(root, "sources.json").writeText(ManagerJson.encodeToString(SourcesFile.serializer(), SourcesFile(list, removed)) + "\n")
     }
 
     fun addSource(s: CatalogSource): ManagerResult {
@@ -261,6 +270,15 @@ class PluginManager(
             if (r == null) SourceRefresh(s.id, false, false, 0, "no catalog (offline and not cached, or unreadable)")
             else SourceRefresh(s.id, !r.stale, r.stale, r.catalog.plugins.size, if (r.stale) "offline: using the cached catalog" else "ok")
         }
+
+    /**
+     * PLUGIN-SOURCES-1: refreshes only the url sources whose cached catalog is missing or older than [maxAgeMs], so opening the
+     * Plugins tab shows update offers without a fetch on every open. Never throws.
+     */
+    fun refreshIfStale(maxAgeMs: Long = DEFAULT_CATALOG_STALE_MS, now: Long = System.currentTimeMillis()): List<SourceRefresh> =
+        sources().filter { it.enabled && it.url != null }
+            .filter { s -> File(catalogCache, "${s.id}.json").let { !it.isFile || now - it.lastModified() > maxAgeMs } }
+            .flatMap { refresh(it.id) }
 
     private fun load(s: CatalogSource, refresh: Boolean): Loaded? {
         if (s.dir != null) {
@@ -793,6 +811,8 @@ class PluginManager(
     private companion object {
         val ID = Regex("[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")
         const val MAX_CATALOG = 8L shl 20
+        /** Default age after which opening the Plugins tab refreshes a source: one hour. */
+        const val DEFAULT_CATALOG_STALE_MS = 60L * 60L * 1000L
         const val CUSTOM_WARNING = "not listed in any catalog: this is a CUSTOM plugin from a source you pointed at; only install code you trust"
     }
 }
