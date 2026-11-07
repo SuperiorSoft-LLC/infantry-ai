@@ -234,10 +234,10 @@ const val CONFIG_SETTINGS = "$CONFIG.settings"
 
 /**
  * RUNTIME-19: the sections an official plugin owns, one empty slot each (`infantry.shell.config.<name>`): Usage fills limits,
- * Roles fills roles, Alerts fills voice and incomingSound, Attention fills questions. An unfilled slot draws nothing and
+ * Roles fills roles, Alerts fills voice and incomingSound, Attention fills questions, Runners fills runners. An unfilled slot draws nothing and
  * offers no tab entry.
  */
-val CONFIG_OWNED_SECTION_SLOTS: List<String> = listOf("limits", "roles", "voice", "incomingSound", "questions").map { "$CONFIG.$it" }
+val CONFIG_OWNED_SECTION_SLOTS: List<String> = listOf("limits", "roles", "voice", "incomingSound", "questions", "runners").map { "$CONFIG.$it" }
 
 /**
  * CONFIG-10b: the settings surface slot (docs/CONFIG-MANIFEST-DESIGN.md section 12). Empty, the dialog draws the generated

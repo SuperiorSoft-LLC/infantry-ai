@@ -684,8 +684,10 @@ class InfantryDaemon(
              * other route. The daemon knows nothing about them (the installed desktop app adds its window activation).
              */
             extraRoutes: io.ktor.server.routing.Route.() -> Unit = {},
+            /** RUNNER-POOL-11: this daemon's state dir (the process one by default), so two daemons in one JVM keep apart. */
+            daemonStateDir: File = stateDir(),
             /** Contract 1.115.0 (ASSISTANT-1): where the global Assistant runs: a folder of its own under the app's data dir. */
-            assistantDir: File = File(stateDir(), "assistant"),
+            assistantDir: File = File(daemonStateDir, "assistant"),
             /** TICKET-HANDOVER: how long a switched ticket worker's old agent gets to write its handoff note. */
             handoffTimeoutMs: Long = SessionHandover.DEFAULT_TIMEOUT_MS,
             /** WEB-1 (contract 1.122.0): the browser client bundle served at `/` (none when it is not installed). */
@@ -698,7 +700,7 @@ class InfantryDaemon(
              * POLICY-1 (docs/POLICY.md): the ONE switch: which policy preset is active (env-pinned, a preset's `selectWhenEnv`,
              * or the owner's Settings pick). A seated preset's lockdown is a daemon plugin's (`seats` hook). A test passes its own.
              */
-            policies: com.superiorsoftllc.infantry.policy.PolicyRuntime = com.superiorsoftllc.infantry.policy.PolicyRuntime.fromEnvironment(stateDir()),
+            policies: com.superiorsoftllc.infantry.policy.PolicyRuntime = com.superiorsoftllc.infantry.policy.PolicyRuntime.fromEnvironment(daemonStateDir),
         ): InfantryDaemon {
             // SANDBOX-1: the scoped token sandboxed agents get instead of the owner token (in memory only, new every start).
             val agentToken = if (token != null) AgentFrames.newToken() else null
@@ -763,11 +765,11 @@ class InfantryDaemon(
             // STACK-NEUTRAL-1: the watch tooling is opt-in; an install that existed before keeps it on (migrated once).
             settings.migrateWatchEnabled {
                 sessionStore.load().isNotEmpty() ||
-                    File(com.superiorsoftllc.infantry.session.stateDir(), "process-ledger.json").isFile
+                    File(daemonStateDir, "process-ledger.json").isFile
             }
                 ?.let { println("[infantry] limits.watch.enabled set to $it (${if (it == 1L) "existing install: watch tooling kept on" else "fresh install: watch tooling off until enabled"})") }
             // STACK-NEUTRAL-6: this repo's test-fork properties live in the install's tool-profile override, not the bundled profile.
-            if (settings.migrateRepoProfileAdditions { sessionStore.load().isNotEmpty() || File(com.superiorsoftllc.infantry.session.stateDir(), "process-ledger.json").isFile }) {
+            if (settings.migrateRepoProfileAdditions { sessionStore.load().isNotEmpty() || File(daemonStateDir, "process-ledger.json").isFile }) {
                 com.superiorsoftllc.infantry.runner.ToolProfiles.active = settings.toolProfiles()
             }
             // Ticket 55d60a5e: resolved now, while the database answers; /health and its watchdog never read it later.
@@ -801,9 +803,9 @@ class InfantryDaemon(
             val toolApproval = com.superiorsoftllc.infantry.session.ToolApprovalService(store)
             val restoreToolApproval = com.superiorsoftllc.infantry.session.ToolApprovals.install(toolApproval::stored)
             // BUG-REAP-OWNER: no id (unwritable dir) => nothing is ever reaped, which is the safe side.
-            val instanceId = runCatching { InstanceId.loadOrCreate(com.superiorsoftllc.infantry.session.stateDir()) }.getOrNull()
+            val instanceId = runCatching { InstanceId.loadOrCreate(daemonStateDir) }.getOrNull()
             // SANDBOX-1: every CLI launch goes through the sandbox seam; with limits.sandbox.mode = 0 it is a pass-through.
-            val sandboxPlan = com.superiorsoftllc.infantry.runner.SandboxPlan(com.superiorsoftllc.infantry.session.stateDir())
+            val sandboxPlan = com.superiorsoftllc.infantry.runner.SandboxPlan(daemonStateDir)
             val sandboxConfig = {
                 com.superiorsoftllc.infantry.runner.SandboxConfig(settings.limit(LimitRegistry.SANDBOX_MODE) == 1L, settings.sandboxAllowedDirs(), agentToken)
             }
@@ -896,7 +898,7 @@ class InfantryDaemon(
             manager.assistantDir = assistantDir
             // PROGRESS-S5: the opt-in estimated mode's per-project label durations outlive a restart.
             manager.progressEstimates = com.superiorsoftllc.infantry.session.FileProgressEstimates(
-                File(com.superiorsoftllc.infantry.session.stateDir(), com.superiorsoftllc.infantry.session.FileProgressEstimates.FILE_NAME),
+                File(daemonStateDir, com.superiorsoftllc.infantry.session.FileProgressEstimates.FILE_NAME),
             )
             // PROGRESS-ALL: every working ticket session shows a daemon-computed estimate (no model call, zero tokens).
             com.superiorsoftllc.infantry.session.AutoProgressHistory(store).install(settings)
@@ -922,7 +924,7 @@ class InfantryDaemon(
             val pendingPrompts = com.superiorsoftllc.infantry.daemon.wiring.PromptsWiring.build(object : com.superiorsoftllc.infantry.daemon.api.ApprovalRulesHook { override fun match(projectId: String?, tool: String, input: String) = pluginHost.get().approvalRules.match(projectId, tool, input); override fun remember(projectId: String?, tool: String, input: String) = pluginHost.get().approvalRules.remember(projectId, tool, input) }, settings, manager, clients)
             // IN-APP BUILD T3: one saved command at a time; every frame it produces goes to every client.
             // SECRETS-1: the daemon-owned keystore, in the state dir.
-            val keystore = Keystore(stateDir())
+            val keystore = Keystore(daemonStateDir)
             // HARNESS-GAP G18: every known secret value is masked in all session output (chat rows, transcript, raw stream, a terminal's screen).
             manager.outputMask = com.superiorsoftllc.infantry.keystore.SecretMask(keystore::allValues)
             // POLICY-1: "restricted" follows the ACTIVE preset (a Settings switch included), read per call. A seated preset is
@@ -963,7 +965,7 @@ class InfantryDaemon(
             // RUNNER-POOL-6: the runner side of starts an orchestrator sends with a git remote (clone into runners.cloneRoot, cut,
             // push on each turn end), and the orchestrator side's paired runners (set once the runner link service exists).
             val remoteStarts = com.superiorsoftllc.infantry.runners.RemoteStarts(
-                cloneRoot = { settings.runnerLink().cloneRoot.takeIf { it.isNotBlank() }?.let(::File) ?: File(stateDir(), com.superiorsoftllc.infantry.runners.RemoteStarts.DEFAULT_FOLDER) },
+                cloneRoot = { settings.runnerLink().cloneRoot.takeIf { it.isNotBlank() }?.let(::File) ?: File(daemonStateDir, com.superiorsoftllc.infantry.runners.RemoteStarts.DEFAULT_FOLDER) },
                 outboxMax = { settings.limit(LimitRegistry.RUNNERS_OUTBOX_MAX).toInt() },
             )
             val runnerLinksRef = java.util.concurrent.atomic.AtomicReference<com.superiorsoftllc.infantry.daemon.api.runners.RunnerLinks>(com.superiorsoftllc.infantry.daemon.api.runners.NoRunnerLinks)
@@ -1327,7 +1329,7 @@ class InfantryDaemon(
             mail.reportCheck = { from, body -> orchestratorLink.reviewReport(from, body).refusalOrNull() }
 
             // CLI-PTY-5: each session's chat, kept across a restart so a resumed session shows its history at once.
-            val chatHistory = SessionHistoryStore(File(stateDir(), "chat-history"), { settings.limit(LimitRegistry.CHAT_HISTORY_FRAMES).toInt() })
+            val chatHistory = SessionHistoryStore(File(daemonStateDir, "chat-history"), { settings.limit(LimitRegistry.CHAT_HISTORY_FRAMES).toInt() })
             val streamSequencer = SessionFrameSequencer(chatHistory)
             // Contract 1.95.0 (1c24fdc4): each session's harness-neutral run activity, carried on `status` frames.
             val runActivity = com.superiorsoftllc.infantry.protocol.RunActivityTracker()
@@ -1547,7 +1549,7 @@ class InfantryDaemon(
                 doneWorkerReaper.onSessionEvent(event)
             }
 
-            println("[infantry] provider=${provider.id} runner=${runner.id} stateDir=${stateDir()}")
+            println("[infantry] provider=${provider.id} runner=${runner.id} stateDir=${daemonStateDir}")
             println("[infantry] sandbox: ${runCatching { settings.sandboxStatus?.invoke() }.getOrNull() ?: "off"} (setting limits.sandbox.mode)")
             println(
                 if (additionalProviders.isEmpty()) {
@@ -1586,7 +1588,7 @@ class InfantryDaemon(
                     // AGENT-REGISTRY-1: the same for modules' `agents` blocks (the first resolution is synced below, once the root is known).
                     harnessModulesRoot.get()?.let { runCatching { agentModules.sync(r, harnessModulesConfig()) }.onFailure { System.err.println("[agents] module sync failed: ${it.message}") } }
                 }) = DaemonPlugins.resolve(
-                stateDir(),
+                daemonStateDir,
                 env = { name -> if (pluginsRoot != null && name == com.superiorsoftllc.infantry.plugin.host.PluginFolders.ROOT_ENV) pluginsRoot.absolutePath else if (pluginsRoot != null && name == com.superiorsoftllc.infantry.plugin.host.PluginFolders.BUNDLED_ENV) null else System.getenv(name) },
                 property = { name -> if (pluginsRoot != null && name == com.superiorsoftllc.infantry.plugin.host.PluginFolders.BUNDLED_PROPERTY) null else System.getProperty(name) },
                 locked = locked(),
@@ -1639,8 +1641,8 @@ class InfantryDaemon(
                         // PLUGIN-MCP-1: api.plugins, the plugin manager on this host's plugins root (reads; install only on the owner's yes).
                         pluginCatalog = com.superiorsoftllc.infantry.daemon.plugins.LocalPluginCatalog(
                             com.superiorsoftllc.infantry.daemon.plugins.manager.PluginManager(
-                                com.superiorsoftllc.infantry.plugin.host.PluginFolders.root(stateDir(), { System.getenv(it) }),
-                                stateDir(), com.superiorsoftllc.infantry.plugin.host.PluginFolders.bundledRoot({ System.getenv(it) }),
+                                com.superiorsoftllc.infantry.plugin.host.PluginFolders.root(daemonStateDir, { System.getenv(it) }),
+                                daemonStateDir, com.superiorsoftllc.infantry.plugin.host.PluginFolders.bundledRoot({ System.getenv(it) }),
                                 // PLUGIN-HOTLOAD-1: an install / enable / update / remove reaches the running host (no daemon restart).
                                 hot = object : com.superiorsoftllc.infantry.daemon.plugins.manager.PluginHotApply {
                                     override fun load(id: String) = pluginHost.get().load(id)
@@ -1768,7 +1770,7 @@ class InfantryDaemon(
                             },
                         ),
                     ),
-                    stateDir(),
+                    daemonStateDir,
                 )
                 pluginHost.set(host)
                 // PLUGIN-HOTLOAD-1: what a live load reads: the plugins root as it is now, its grants, and the boot trust. No side effects (no config or harness re-sync).
@@ -1790,7 +1792,7 @@ class InfantryDaemon(
                 // HARNESS-PLUGIN-3 H4 (docs/HARNESS-PLUGINS.md 3.2): each loaded module's `harness` block, into the ONE registry,
                 // AFTER module resolution and with the daemon halves' trust. The built-ins (class path, 1.x) are already in it.
                 val harnessModules = com.superiorsoftllc.infantry.daemon.wiring.HarnessModulesWiring.build(
-                    harnesses, trustNow, daemonConfig, harnessModulesRef, executableResolver, infantryBin, pendingPrompts, stateDir(),
+                    harnesses, trustNow, daemonConfig, harnessModulesRef, executableResolver, infantryBin, pendingPrompts, daemonStateDir,
                     reserved = { manager.providers.map { it.id }.toSet() },
                 )
                 harnessModulesRoot.set(root)
@@ -1895,7 +1897,7 @@ class InfantryDaemon(
                 idleMs = { settings.limit(LimitRegistry.RUNNERS_FORWARD_WAIT_SEC) * 1000L },
             )
             val runnerLinkService = com.superiorsoftllc.infantry.runners.RunnerLinkService(
-                stateDir(), settings::limit, settings::runnerLink, localRunnerLink, transport = { plugins.runnerLinkTransport() },
+                daemonStateDir, settings::limit, settings::runnerLink, localRunnerLink, transport = { plugins.runnerLinkTransport() },
                 starts = remoteStarts,
                 forwarder = frameForwarder,
                 pump = forwardPump,
@@ -1904,6 +1906,7 @@ class InfantryDaemon(
             plugins.runnerLinks = runnerLinkService.links
             // RUNNER-POOL-10: the rows of the Runners card (`runner_admin` op `list`): health, workers / cap, paused.
             runnerLinkService.enabledNow = settings::runnersEnabled
+            runnerLinkService.setPaused = { name, paused -> settings.set("runners.$name.paused", kotlinx.serialization.json.JsonPrimitive(paused)) }
             runnerLinkService.rowStatus = { name ->
                 val e = runnerPool.runners().firstOrNull { it.name == name }
                 val running = e?.health?.running ?: 0

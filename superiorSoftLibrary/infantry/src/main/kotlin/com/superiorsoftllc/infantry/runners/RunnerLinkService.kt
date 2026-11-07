@@ -142,6 +142,13 @@ class RunnerLinkService(
             "pair_status" -> pairStatus()
             "list" -> list()
             "pair_cancel" -> { closePairing(); ok() }
+            "pause", "resume" -> {
+                val name = need("name")
+                val known = name == "local" || (RunnerLinkStore.exists(stateDir) && RunnerLinkStore.open(stateDir).runner(name) != null)
+                require(known) { "no runner '${name.filter { it in ' '..'~' }.take(SHOWN_OP_SIZE)}'" }
+                setPaused(name, op == "pause")
+                ok("name" to name, "paused" to (op == "pause").toString())
+            }
             "add" -> {
                 val r = peers(RunnerLinkStore.open(stateDir)).add(need("name"), need("url"), need("code"), str("fingerprint"), str("orchestratorName").orEmpty())
                 ok("name" to r.name, "url" to r.url, "runnerId" to r.runnerId)
@@ -166,6 +173,8 @@ class RunnerLinkService(
      */
     @Volatile var rowStatus: (String) -> Map<String, String> = { emptyMap() }
     @Volatile var enabledNow: () -> Boolean = { false }
+    /** RUNNER-POOL-11: writes `runners.<name>.paused` for the `pause` / `resume` ops; the daemon wires the setting. */
+    @Volatile var setPaused: (String, Boolean) -> Unit = { _, _ -> }
 
     private fun list(): JsonObject {
         val paired = if (RunnerLinkStore.exists(stateDir)) RunnerLinkStore.open(stateDir).runners() else emptyList()

@@ -5,6 +5,13 @@
   "author": "Infantry AI",
   "tier": "official",
   "sequence": [],
+  "entry": "com.superiorsoftllc.infantry.plugins.official.runners.RunnersPlugin",
+  "jar": "build/libs/Infantry_Runners.jar",
+  "buildOrder": 910,
+  "fills": ["infantry.shell.config.runners"],
+  "actions": [
+    {"id": "runners.admin", "label": "Pause, resume, detach or rotate a runner", "kind": "write", "frames": ["runner_admin"]}
+  ],
   "description": "Runners settings card (RUNNER-POOL-9): the runner pool's settings in one place. Only the Enable switch shows while runners.enabled is off; the rest of the card (default placement, per-runner worker caps, heartbeat) is hidden entirely until it is on. Adding a server, pausing, detaching and rotating go through `infantry runner add|pair|rotate|detach` (Infantry_RemoteRunner).",
   "config": [
     {
@@ -16,6 +23,11 @@
         { "key": "runners.default", "type": "text", "label": "Default placement", "default": "local", "scope": "daemon", "order": 2, "placeholder": "local | <runner name> | any", "visibleWhen": { "key": "runners.enabled", "eq": "true" }, "description": "Where a ticket with no pin and no routing rule starts. `any` picks the runner that is up, has the project and harness, and has the most free slots (ties go to local); it waits when none is free." },
         { "key": "runners.local.maxWorkers", "type": "number", "label": "Local worker cap", "min": 1, "default": 1, "scope": "daemon", "order": 3, "visibleWhen": { "key": "runners.enabled", "eq": "true" }, "description": "Most workers this machine runs at once, under the global worker cap. Other runners: set runners.<name>.maxWorkers." }
       ]
+    },
+    {
+      "node": "infantry.shell.config.runners", "group": "Runners", "title": "Runners", "tab": "Settings", "order": 911,
+      "keywords": ["runner", "pause", "resume", "detach", "rotate", "health", "fingerprint"],
+      "block": "infantry.shell.config.runners"
     }
   ]
 }

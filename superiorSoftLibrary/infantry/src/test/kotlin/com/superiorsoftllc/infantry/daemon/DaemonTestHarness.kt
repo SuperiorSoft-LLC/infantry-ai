@@ -380,6 +380,7 @@ class DaemonFixture private constructor(
                 pluginEnv = { name -> if (name == "INFANTRY_ROLES_DIR") File(stateDir, "roles").path else pluginEnv(name) },
                 orchestratorBindings = orchestratorBindings,
                 mode = mode,
+                daemonStateDir = stateDir,
                 policies = policies?.invoke(stateDir) ?: com.superiorsoftllc.infantry.policy.PolicyRuntime(emptyList(), { null }, null, stateDir),
             )
             beforeStart(daemon)
