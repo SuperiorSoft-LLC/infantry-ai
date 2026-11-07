@@ -41,7 +41,7 @@ surfaces are small and already fenced by class loaders.
 
 ### 1.1 What is published
 
-| artifact (group `com.superiorsoftllc.infantry`) | from module | targets | version source | stability |
+| artifact (group `tech.superiorsoftllc.infantry`) | from module | targets | version source | stability |
 |---|---|---|---|---|
 | `infantry-plugin-api` | `infantryPlugins` | jvm, android, wasmJs | `2.<minor>.<patch>`, major = `PLUGIN_API_VERSION` | stable contract |
 | `infantry-protocol` | `infantryProtocol` | as the module | app version | stable (api dependency of the two below) |
@@ -50,7 +50,7 @@ surfaces are small and already fenced by class loaders.
 | `infantry-ui-core` | `infantryUiCore` | jvm only (desktop plugins) | app version | **unstable**: published as is, marked so in its POM description |
 | `infantry-sdk-bom` | new (java-platform) | - | app version | pins one compatible set |
 | `infantry-sdk-catalog` | new (`version-catalog` plugin) | - | app version | Kotlin, Compose, serialization versions the host runs, plus the SDK artifacts |
-| Gradle plugin `com.superiorsoftllc.infantry.plugin` | new (`build-logic`, section 2.1) | - | app version | build tool |
+| Gradle plugin `tech.superiorsoftllc.infantry.plugin` | new (`build-logic`, section 2.1) | - | app version | build tool |
 
 Rules:
 * **The published version is read from the constant**, never typed in a build file, so the artifact cannot claim a contract
@@ -85,7 +85,7 @@ reverse) fails the build.
 * **Now: GitHub Packages**, `https://maven.pkg.github.com/SuperiorSoft-LLC/infantry-ai`. Trade-off recorded: GitHub Packages
   Maven needs a token to **read**, even for a public repository, so every community author must create a PAT with
   `read:packages`. Acceptable for the first official/friendly plugins; not for an open ecosystem.
-* **Later: Maven Central** (namespace `com.superiorsoftllc`, Sonatype Central Portal, GPG-signed artifacts). Same coordinates,
+* **Later: Maven Central** (namespace `tech.superiorsoftllc`, Sonatype Central Portal, GPG-signed artifacts). Same coordinates,
   so a plugin build only changes its repository line. Do this before the registry is opened to the public.
   **Done in SDK-CENTRAL-1 (2026-11-06):** `gradle/sdk-central.gradle.kts` (POM fields, sources/javadoc jars, in-memory GPG
   signing, the `centralBundle` repository; also applied to `build-logic`, so the Gradle plugin is on Central too),
@@ -100,7 +100,7 @@ reverse) fails the build.
 
 ### 2.1 The Gradle plugin (the piece that makes a repo independent)
 
-`gradle/ihq.gradle.kts` becomes a real Gradle plugin `com.superiorsoftllc.infantry.plugin` in an included build
+`gradle/ihq.gradle.kts` becomes a real Gradle plugin `tech.superiorsoftllc.infantry.plugin` in an included build
 `build-logic/` (monorepo) that is also published (section 1.1). It:
 
 1. Reads `module.json` (validates: name is a folder name, `entry`, `apiVersion` within the SDK's, halves consistent).
@@ -118,8 +118,8 @@ reverse) fails the build.
 ### 2.2 The template repo `SuperiorSoft-LLC/infantry-plugin-template` (a GitHub template)
 
 ```
-settings.gradle.kts      pluginManagement + dependencyResolutionManagement: GitHub Packages (later Central), versionCatalogs { infantry from "com.superiorsoftllc.infantry:infantry-sdk-catalog:<v>" }
-build.gradle.kts         plugins { id("com.superiorsoftllc.infantry.plugin") }  (UI half; delete src/ for a daemon-only plugin)
+settings.gradle.kts      pluginManagement + dependencyResolutionManagement: GitHub Packages (later Central), versionCatalogs { infantry from "tech.superiorsoftllc.infantry:infantry-sdk-catalog:<v>" }
+build.gradle.kts         plugins { id("tech.superiorsoftllc.infantry.plugin") }  (UI half; delete src/ for a daemon-only plugin)
 module.json              name, version, apiVersion, license (SPDX), entry, daemon {...}, harness {...}
 src/main/kotlin/...      UI half (UiPlugin)
 src/test/kotlin/...      UI tests
@@ -244,7 +244,7 @@ Desktop keeps Compose jars as the "full power" path; a plugin that wants to be e
 
 ## 7. Decisions that are expensive to reverse (owner to confirm)
 
-1. Maven coordinates (`com.superiorsoftllc.infantry:infantry-*`) and the Gradle plugin id: every external build names them.
+1. Maven coordinates (`tech.superiorsoftllc.infantry:infantry-*`) and the Gradle plugin id: every external build names them.
 2. Versioning artifacts by their contract constants (vs one release train): authors read compatibility directly from the
    version; switching later confuses every range already written.
 3. Publishing `infantry-ui-core` whole as "unstable" before the carve: external jars will compile against its internals; the

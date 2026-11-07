@@ -52,7 +52,7 @@ object ModuleJson {
 }
 
 /**
- * PLUGIN-GRADLE-1: `plugins { id("com.superiorsoftllc.infantry.plugin") }` in a plugin module's build.gradle.kts.
+ * PLUGIN-GRADLE-1: `plugins { id("tech.superiorsoftllc.infantry.plugin") }` in a plugin module's build.gradle.kts.
  * Validates module.json, adds the SDK per half, and registers `ihq` (the package) and `catalogEntry`.
  */
 class InfantryPluginPlugin : Plugin<Project> {
@@ -152,8 +152,8 @@ class InfantryPluginPlugin : Plugin<Project> {
     /** The local SDK project when this build has it, else the published coordinate through the SDK BOM: decided by whether the project exists. */
     private fun wireSdk(p: Project, compileOnly: List<String>, test: List<String>, sdkProject: String, artifact: String) {
         val local = p.rootProject.findProject(":superiorSoftLibrary:$sdkProject")
-        val coordinate = "com.superiorsoftllc.infantry:$artifact"
-        val bom = "com.superiorsoftllc.infantry:infantry-sdk-bom:" + ((p.findProperty("infantry.sdk.version") as? String) ?: "latest.release")
+        val coordinate = "tech.superiorsoftllc.infantry:$artifact"
+        val bom = "tech.superiorsoftllc.infantry:infantry-sdk-bom:" + ((p.findProperty("infantry.sdk.version") as? String) ?: "latest.release")
         for (names in listOf(compileOnly, test)) {
             val conf = names.firstOrNull { p.configurations.findByName(it) != null } ?: continue
             if (local != null) p.dependencies.add(conf, p.dependencies.project(mapOf("path" to local.path)))

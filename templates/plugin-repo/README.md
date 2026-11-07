@@ -10,8 +10,8 @@ CI and a tag-release workflow. It knows only Maven coordinates of the published 
 4. Rename the tab id and the tool in `module.json` and in the code (the app refuses anything undeclared).
 
 ## Build
-The SDK (`com.superiorsoftllc.infantry:infantry-sdk-catalog`, `-bom`, `infantry-plugin-api`, `infantry-daemon-api`,
-`infantry-harness-api`, ...) and the Gradle plugin `com.superiorsoftllc.infantry.plugin` come from Maven Central: no account
+The SDK (`tech.superiorsoftllc.infantry:infantry-sdk-catalog`, `-bom`, `infantry-plugin-api`, `infantry-daemon-api`,
+`infantry-harness-api`, ...) and the Gradle plugin `tech.superiorsoftllc.infantry.plugin` come from Maven Central: no account
 and no token. `infantry.sdk.version` in `gradle.properties` picks the SDK release.
 
     ./gradlew build ihq

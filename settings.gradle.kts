@@ -2,7 +2,7 @@
 // Copyright (c) SuperiorSoft LLC
 rootProject.name = "InfantryAI"
 pluginManagement {
-    // PLUGIN-GRADLE-1: the com.superiorsoftllc.infantry.plugin Gradle plugin (plugin modules apply it instead of gradle/ihq.gradle.kts).
+    // PLUGIN-GRADLE-1: the tech.superiorsoftllc.infantry.plugin Gradle plugin (plugin modules apply it instead of gradle/ihq.gradle.kts).
     includeBuild("build-logic")
     repositories {
         maven("https://maven.pkg.jetbrains.space/public/p/compose/dev")
