@@ -706,7 +706,7 @@ jobs:
           context: superiorSoftLibrary/infantry/build/docker
           push: true
           build-args: INFANTRY_VERSION=${{ needs.version.outputs.version }}
-          labels: org.opencontainers.image.source=https://github.com/SuperiorSoft-LLC/agenthq
+          labels: org.opencontainers.image.source=https://github.com/SuperiorSoft-LLC/infantry-ai
           tags: ${{ steps.tags.outputs.list }}
       - name: Report the digest
         shell: bash

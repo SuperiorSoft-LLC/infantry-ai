@@ -64,7 +64,7 @@ jobs:
         if: ${{ inputs.push }}
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-          docker build --label org.opencontainers.image.source=https://github.com/SuperiorSoft-LLC/agenthq \
+          docker build --label org.opencontainers.image.source=https://github.com/SuperiorSoft-LLC/infantry-ai \
             --build-arg INFANTRY_VERSION="${{ inputs.tag }}" -t "$GHCR_IMAGE:${{ inputs.tag }}" superiorSoftLibrary/infantry/build/docker
           docker push "$GHCR_IMAGE:${{ inputs.tag }}" | tee push.log
           echo "::notice::$(grep -o 'digest: sha256:[0-9a-f]*' push.log | head -1)"
