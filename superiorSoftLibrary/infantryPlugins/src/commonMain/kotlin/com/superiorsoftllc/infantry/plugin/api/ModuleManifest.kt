@@ -231,6 +231,12 @@ data class DaemonCapabilities(
      * `github`. An undeclared registration is refused; a community module also needs the grant `daemon.updateSource:<type>`.
      */
     val updateSources: List<String> = emptyList(),
+    /**
+     * RUNNER-POOL-7 (docs/RUNNER-POOL.md 2.3): the side of every frame and tool of this daemon half, `runner` (the default: answered
+     * by the daemon the caller talks to) or `orchestrator` (it reads or writes orchestrator state: a runner forwards it from the
+     * workers its remote orchestrator started). A frame's or tool's own `side` wins.
+     */
+    val side: String? = null,
 )
 
 /** DAEMON-STORAGE-1: [adopt] = core tables an official module takes over (a community module declaring any is refused). */
@@ -239,11 +245,25 @@ data class DaemonStorageDeclaration(val adopt: List<String> = emptyList())
 
 /** DAEMON-PLUGINS-1: one daemon tool: its name, its policy action id and kind, and a one-line description. */
 @Serializable
-data class DaemonToolDeclaration(val name: String, val action: String, val kind: String = "read", val description: String = "")
+data class DaemonToolDeclaration(
+    val name: String,
+    val action: String,
+    val kind: String = "read",
+    val description: String = "",
+    /** RUNNER-POOL-7: `runner` | `orchestrator`; null = the daemon half's [DaemonCapabilities.side]. */
+    val side: String? = null,
+)
 
 /** DAEMON-PLUGINS-1: one plugin-defined frame; [ownerOnly] frames are refused to a community module. */
 @Serializable
-data class DaemonFrameDeclaration(val type: String, val action: String, val kind: String = "read", val ownerOnly: Boolean = false)
+data class DaemonFrameDeclaration(
+    val type: String,
+    val action: String,
+    val kind: String = "read",
+    val ownerOnly: Boolean = false,
+    /** RUNNER-POOL-7: `runner` | `orchestrator`; null = the daemon half's [DaemonCapabilities.side]. */
+    val side: String? = null,
+)
 
 /** DAEMON-PLUGINS-1: a daemon half's limits; null = the host default. [memoryMbHint] is reported, not enforced. */
 @Serializable

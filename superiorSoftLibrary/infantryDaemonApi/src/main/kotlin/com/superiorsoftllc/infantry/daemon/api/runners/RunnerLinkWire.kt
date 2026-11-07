@@ -17,8 +17,11 @@ import kotlinx.serialization.json.Json
  * older peer's frame still decodes ([json] ignores unknown keys).
  */
 object RunnerLinkWire {
-    /** 1.1.0 (RUNNER-POOL-6): hello carries what the runner can run; health, deliver, events, transcript; a start may carry a git remote. */
-    const val CONTRACT = "1.1.0"
+    /**
+     * 1.1.0 (RUNNER-POOL-6): hello carries what the runner can run; health, deliver, events, transcript; a start may carry a git remote.
+     * 1.2.0 (RUNNER-POOL-7): [FORWARD_PULL] / [FORWARD_ANSWER], the agent frames a runner forwards to its orchestrator.
+     */
+    const val CONTRACT = "1.2.0"
 
     const val PAIR = "runner_link_pair"
     const val HELLO = "runner_link_hello"
@@ -30,6 +33,14 @@ object RunnerLinkWire {
     const val DELIVER = "runner_link_deliver"
     const val EVENTS = "runner_link_events"
     const val TRANSCRIPT = "runner_link_transcript"
+
+    /**
+     * RUNNER-POOL-7 (docs/RUNNER-POOL.md 2.3 b): the orchestrator DIALS the runner, so the runner's forwarded agent frames travel back
+     * on the orchestrator's calls: [FORWARD_PULL] waits up to [ForwardPullRequest.waitMs] for frames its workers sent, and
+     * [FORWARD_ANSWER] hands back the answer of one of them. Nothing listens on the orchestrator.
+     */
+    const val FORWARD_PULL = "runner_link_forward_pull"
+    const val FORWARD_ANSWER = "runner_link_forward_answer"
     const val REPLY = "runner_link_reply"
     const val ERROR = "runner_link_error"
 
@@ -119,6 +130,30 @@ object RunnerLinkWire {
 
     @Serializable
     data class TranscriptAnswer(val lines: List<String> = emptyList())
+
+    @Serializable
+    data class ForwardPullRequest(val waitMs: Long = 0)
+
+    /** One frame a worker of a link-started session sent: [id] is the runner's key for its answer, [sessionId] the agent session. */
+    @Serializable
+    data class ForwardFrameWire(val id: String, val sessionId: String, val type: String, val data: String = "", val requestId: String? = null)
+
+    @Serializable
+    data class ForwardPullAnswer(val frames: List<ForwardFrameWire> = emptyList())
+
+    /** The answer to forwarded frame [id]: a frame ([type], [data], [sessionId]), none ([none]), or [unavailable] with the reason. */
+    @Serializable
+    data class ForwardAnswerRequest(
+        val id: String,
+        val type: String? = null,
+        val data: String = "",
+        val sessionId: String? = null,
+        val none: Boolean = false,
+        val unavailable: String? = null,
+    )
+
+    @Serializable
+    data class ForwardAnswerAck(val delivered: Boolean)
 
     val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 }

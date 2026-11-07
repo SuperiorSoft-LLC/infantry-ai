@@ -13,6 +13,7 @@
     "entry": "com.superiorsoftllc.infantry.plugins.official.attention.daemon.AttentionDaemonPlugin",
     "jar": "daemon/build/libs/Infantry_Attention-daemon.jar",
     "apiAtLeast": "1.24.0",
+    "side": "orchestrator",
     "storage": { "adopt": ["attention", "owner_questions"] },
     "hooks": ["connected"],
     "frames": [

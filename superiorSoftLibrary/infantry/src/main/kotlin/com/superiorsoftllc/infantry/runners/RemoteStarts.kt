@@ -34,6 +34,7 @@ class RemoteStarts(
 ) {
     private val branches = TicketBranches(git)
     private val sessions = ConcurrentHashMap<String, StartWorktree>()
+    private val linked = ConcurrentHashMap.newKeySet<String>()
     private val outbox = ArrayDeque<RunnerEvent>()
     private var seq = 0L
 
@@ -82,6 +83,14 @@ class RemoteStarts(
         sessions[sessionId] = worktree
     }
 
+    /** RUNNER-POOL-7: session [sessionId] was started over the link (with or without a git remote); its agent frames are forwarded. */
+    fun linked(sessionId: String) {
+        linked += sessionId
+    }
+
+    /** RUNNER-POOL-7: whether [sessionId] is a session the paired orchestrator started here (with or without a git remote). */
+    fun isLinked(sessionId: String): Boolean = sessionId in linked || sessions.containsKey(sessionId)
+
     /** Whether [sessionId] was started by the orchestrator over the link. */
     fun isRemote(sessionId: String): Boolean = sessions.containsKey(sessionId)
 
@@ -106,6 +115,7 @@ class RemoteStarts(
     /** The session ended for good (killed or removed): no more pushes for it. */
     fun forget(sessionId: String) {
         sessions.remove(sessionId)
+        linked.remove(sessionId)
     }
 
     @Synchronized

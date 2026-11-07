@@ -2,6 +2,7 @@
 // Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.daemon.plugins
 
+import com.superiorsoftllc.infantry.daemon.api.orchestrator.FrameSide
 import com.superiorsoftllc.infantry.settings.LimitRegistry
 import com.superiorsoftllc.infantry.daemon.api.AdmissionHook
 import com.superiorsoftllc.infantry.daemon.api.Caller
@@ -109,8 +110,9 @@ class DaemonPluginHost private constructor(
     }
 
     private class Registered<T>(val owner: Loaded, val value: T)
-    private class ToolEntry(val owner: Loaded, val tool: DaemonTool, val action: ActionCatalog.Action)
-    private class FrameEntry(val owner: Loaded, val action: ActionCatalog.Action, val ownerOnly: Boolean, val handler: (Frame, Caller) -> Frame?)
+    /** RUNNER-POOL-7: [side] is the declaration's `side`, else the daemon half's (`daemon.side`), else runner. */
+    private class ToolEntry(val owner: Loaded, val tool: DaemonTool, val action: ActionCatalog.Action, val side: String = FrameSide.RUNNER)
+    private class FrameEntry(val owner: Loaded, val action: ActionCatalog.Action, val ownerOnly: Boolean, val handler: (Frame, Caller) -> Frame?, val side: String = FrameSide.RUNNER)
     private class RouteEntry(val owner: Loaded, val method: String, val path: String, val public: Boolean, val handler: (HttpCall) -> HttpReply) {
         /** Non-null for a template path: its segments, a `{name}` one binds a path param. */
         val template: List<String>? = if ('{' in path) path.trim('/').split('/') else null
@@ -335,6 +337,15 @@ class DaemonPluginHost private constructor(
     fun frameActions(): Map<String, ActionCatalog.Action> = frameHandlers.mapValues { it.value.action }
 
     fun handlesFrame(type: String): Boolean = frameHandlers.containsKey(type)
+
+    /**
+     * RUNNER-POOL-7: the side of a plugin frame, or of `plugin_tool_call` naming a plugin tool (its declared `side`, else the daemon
+     * half's `daemon.side`); null = not a plugin's.
+     */
+    fun sideOf(envelope: Envelope): String? = when (envelope.type) {
+        PLUGIN_TOOL_CALL -> toolName(envelope.data)?.let { toolEntries[com.superiorsoftllc.infantry.cli.mcp.LegacyToolNames.canonical(it)]?.side ?: toolEntries[it]?.side }
+        else -> frameHandlers[envelope.type]?.side
+    }
 
     /** Owner-only plugin frames (core/official may declare them). */
     fun ownerOnly(type: String): Boolean = frameHandlers[type]?.ownerOnly == true
@@ -980,7 +991,7 @@ class DaemonPluginHost private constructor(
                     check(!p.community) { "tool action '${decl.action}' is a core action id" }
                     check(core.kind == decl.kind) { "tool action '${decl.action}' is core's  action, declared " }
                 }
-                toolEntries[tool.name] = ToolEntry(p, tool, ActionCatalog.Action(decl.action, decl.kind, listOf(PLUGIN_TOOL_CALL)))
+                toolEntries[tool.name] = ToolEntry(p, tool, ActionCatalog.Action(decl.action, decl.kind, listOf(PLUGIN_TOOL_CALL)), FrameSide.of(decl.side ?: d.side))
             }
         }
         override val frames: Frames = object : Frames {
@@ -990,7 +1001,7 @@ class DaemonPluginHost private constructor(
                 val core = ActionCatalog.forFrame(type)
                 check(type !in CORE_FRAMES && (core == null || (!p.community && core.id == decl.action && core.kind == decl.kind))) { "frame '$type' is a core frame" }
                 check(frameHandlers[type] == null) { "frame '$type' is already answered by ${frameHandlers[type]?.owner?.id}" }
-                frameHandlers[type] = FrameEntry(p, ActionCatalog.Action(decl.action, decl.kind, listOf(type)), decl.ownerOnly, handler)
+                frameHandlers[type] = FrameEntry(p, ActionCatalog.Action(decl.action, decl.kind, listOf(type)), decl.ownerOnly, handler, FrameSide.of(decl.side ?: d.side))
             }
         }
         override val routes: Routes = object : Routes {

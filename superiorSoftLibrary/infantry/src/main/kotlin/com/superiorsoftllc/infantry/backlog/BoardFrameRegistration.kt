@@ -41,7 +41,8 @@ fun registerBoardFrames(
     storyBoard: BoardHandler,
 ) {
     val binding = FrameBinding { types, handler ->
-        frames.register(*types.toTypedArray()) { e, direct ->
+        // RUNNER-POOL-7: board frames read and write the orchestrator's board.
+        frames.register(*types.toTypedArray(), side = com.superiorsoftllc.infantry.daemon.api.orchestrator.FrameSide.ORCHESTRATOR) { e, direct ->
             handler(Frame(e.type, e.data, e.sessionId, e.requestId), direct)?.let { Envelope(it.type, it.data, it.sessionId, requestId = it.requestId) }
         }
     }
@@ -55,6 +56,8 @@ fun registerCoreProjectFrames(frames: FrameTable, projects: ProjectHandler, work
         // BASE-1a (contract 1.81.0): read, set or clear a project's base branch.
         Envelope.PROJECT_BASE,
         Envelope.PROJECT_CONFIG,
+        // RUNNER-POOL-7: the project table is the orchestrator's.
+        side = com.superiorsoftllc.infantry.daemon.api.orchestrator.FrameSide.ORCHESTRATOR,
     ) { e, _ -> projects.answer(e) }
     frames.register(Envelope.WORKSPACE_SAVE, Envelope.WORKSPACE_LIST) { e, _ -> workspaces.answer(e) }
 }

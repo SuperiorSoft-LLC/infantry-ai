@@ -28,6 +28,8 @@ import com.superiorsoftllc.infantry.daemon.api.runners.RunnerLinkWire as F
  * * RUNNER-POOL-6: [F.HELLO] reports what this runner can run (harnesses and whether each is signed in, `runner.projects`,
  *   capacity) from [runner]'s hello; [F.HEALTH], [F.DELIVER], [F.EVENTS] and [F.TRANSCRIPT] reach [runner] too. A [F.START] with a
  *   git remote is checked out by [starts] (clone or fetch, then the ticket worktree) before the session starts in it.
+ * * RUNNER-POOL-7: [F.FORWARD_PULL] hands the orchestrator the agent frames [forwarder] holds (waiting a little for the first one),
+ *   [F.FORWARD_ANSWER] completes one of them. Each frame taken is audited as `forward:<type>` with its session.
  */
 class RunnerLinkServer(
     private val store: RunnerLinkStore,
@@ -40,6 +42,10 @@ class RunnerLinkServer(
     private val clock: () -> Long = System::currentTimeMillis,
     /** RUNNER-POOL-6: the clone, cut and push of starts that carry a git remote; null = such a start is refused. */
     private val starts: RemoteStarts? = null,
+    /** RUNNER-POOL-7: the agent frames this runner's workers forward to the orchestrator; null = a pull answers none. */
+    private val forwarder: FrameForwarder? = null,
+    /** RUNNER-POOL-7: the longest a pull may wait here (below the orchestrator's link call timeout). */
+    private val forwardWaitCapMs: () -> Long = { 0L },
 ) {
     /** One answer: [type] is [F.REPLY] or [F.ERROR]; [data] is the answer JSON or the reason. */
     data class Answer(val type: String, val data: String) {
@@ -116,6 +122,16 @@ class RunnerLinkServer(
                     }
                 }
             }
+            F.FORWARD_PULL -> {
+                val r = decode(F.ForwardPullRequest.serializer(), data) ?: return refuse(seat, type, null, from, "$type refused: malformed request")
+                val frames = forwarder?.pull(r.waitMs.coerceIn(0, forwardWaitCapMs().coerceAtLeast(0))).orEmpty()
+                for (f in frames) audit.record(seat, "forward:${shownType(f.type)}", "taken session ${f.sessionId.take(SHOWN_TYPE_SIZE)}", null, from)
+                Answer(F.REPLY, F.json.encodeToString(F.ForwardPullAnswer.serializer(), F.ForwardPullAnswer(frames)))
+            }
+            F.FORWARD_ANSWER -> {
+                val r = decode(F.ForwardAnswerRequest.serializer(), data) ?: return refuse(seat, type, null, from, "$type refused: malformed request")
+                Answer(F.REPLY, F.json.encodeToString(F.ForwardAnswerAck.serializer(), F.ForwardAnswerAck(forwarder?.answer(r) == true)))
+            }
             else -> refuse(seat, type, null, from, "$type refused: not a runner link operation this runner offers (contract ${F.CONTRACT})")
         }
     }
@@ -173,6 +189,7 @@ class RunnerLinkServer(
                 audit.record(seat, F.START, result, r.ticketId, from)
                 val sessionId = reply.value.sessionId
                 if (sessionId != null && worktree != null) starts?.started(sessionId, worktree)
+                if (sessionId != null) starts?.linked(sessionId)
                 Answer(
                     F.REPLY,
                     F.json.encodeToString(F.StartAnswer.serializer(), F.StartAnswer(sessionId, reply.value.refusal, worktree?.branch, worktree?.base)),

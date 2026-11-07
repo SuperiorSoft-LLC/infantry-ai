@@ -47,6 +47,24 @@ public final class com/superiorsoftllc/infantry/plugin/api/ActionPolicyMatcher {
 	public final fun matches (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Z
 }
 
+public final class com/superiorsoftllc/infantry/plugin/api/ActionResult {
+	public fun <init> (ZLjava/lang/String;ZLjava/util/List;)V
+	public synthetic fun <init> (ZLjava/lang/String;ZLjava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Z
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Z
+	public final fun component4 ()Ljava/util/List;
+	public final fun copy (ZLjava/lang/String;ZLjava/util/List;)Lcom/superiorsoftllc/infantry/plugin/api/ActionResult;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/plugin/api/ActionResult;ZLjava/lang/String;ZLjava/util/List;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/api/ActionResult;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getMessage ()Ljava/lang/String;
+	public final fun getOk ()Z
+	public final fun getRequested ()Ljava/util/List;
+	public final fun getRestartNeeded ()Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class com/superiorsoftllc/infantry/plugin/api/AgentDefinition {
 	public static final field Companion Lcom/superiorsoftllc/infantry/plugin/api/AgentDefinition$Companion;
 	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Long;Ljava/lang/String;Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/AgentSchedule;Lcom/superiorsoftllc/infantry/plugin/api/AgentUiHints;)V
@@ -172,6 +190,15 @@ public final class com/superiorsoftllc/infantry/plugin/api/AgentUiHints$Companio
 	public final fun serializer ()Lkotlinx/serialization/KSerializer;
 }
 
+public abstract interface class com/superiorsoftllc/infantry/plugin/api/AudioCapture {
+	public abstract fun start (Lcom/superiorsoftllc/infantry/plugin/api/CaptureOptions;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;)Lcom/superiorsoftllc/infantry/plugin/api/CaptureHandle;
+	public static synthetic fun start$default (Lcom/superiorsoftllc/infantry/plugin/api/AudioCapture;Lcom/superiorsoftllc/infantry/plugin/api/CaptureOptions;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/api/CaptureHandle;
+}
+
+public final class com/superiorsoftllc/infantry/plugin/api/AudioCapture$DefaultImpls {
+	public static synthetic fun start$default (Lcom/superiorsoftllc/infantry/plugin/api/AudioCapture;Lcom/superiorsoftllc/infantry/plugin/api/CaptureOptions;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/api/CaptureHandle;
+}
+
 public final class com/superiorsoftllc/infantry/plugin/api/BlockDeclaration {
 	public static final field Companion Lcom/superiorsoftllc/infantry/plugin/api/BlockDeclaration$Companion;
 	public fun <init> (Ljava/lang/String;Ljava/lang/String;I)V
@@ -253,6 +280,49 @@ public final synthetic class com/superiorsoftllc/infantry/plugin/api/BlockTypeDe
 
 public final class com/superiorsoftllc/infantry/plugin/api/BlockTypeDeclaration$Companion {
 	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/superiorsoftllc/infantry/plugin/api/CaptureEnd {
+	public static final field BUSY Ljava/lang/String;
+	public static final field Companion Lcom/superiorsoftllc/infantry/plugin/api/CaptureEnd$Companion;
+	public static final field FAILED Ljava/lang/String;
+	public static final field LIMIT Ljava/lang/String;
+	public static final field STOPPED Ljava/lang/String;
+	public static final field UNAVAILABLE Ljava/lang/String;
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/plugin/api/CaptureEnd;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/plugin/api/CaptureEnd;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/api/CaptureEnd;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDetail ()Ljava/lang/String;
+	public final fun getReason ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/plugin/api/CaptureEnd$Companion {
+}
+
+public abstract interface class com/superiorsoftllc/infantry/plugin/api/CaptureHandle {
+	public abstract fun getActive ()Z
+	public abstract fun stop ()V
+}
+
+public final class com/superiorsoftllc/infantry/plugin/api/CaptureOptions {
+	public fun <init> ()V
+	public fun <init> (Lcom/superiorsoftllc/infantry/plugin/api/PcmFormat;Ljava/lang/Integer;)V
+	public synthetic fun <init> (Lcom/superiorsoftllc/infantry/plugin/api/PcmFormat;Ljava/lang/Integer;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Lcom/superiorsoftllc/infantry/plugin/api/PcmFormat;
+	public final fun component2 ()Ljava/lang/Integer;
+	public final fun copy (Lcom/superiorsoftllc/infantry/plugin/api/PcmFormat;Ljava/lang/Integer;)Lcom/superiorsoftllc/infantry/plugin/api/CaptureOptions;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/plugin/api/CaptureOptions;Lcom/superiorsoftllc/infantry/plugin/api/PcmFormat;Ljava/lang/Integer;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/api/CaptureOptions;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getFormat ()Lcom/superiorsoftllc/infantry/plugin/api/PcmFormat;
+	public final fun getMaxSeconds ()Ljava/lang/Integer;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
 }
 
 public final class com/superiorsoftllc/infantry/plugin/api/ConfigChangedFrame {
@@ -374,8 +444,8 @@ public final class com/superiorsoftllc/infantry/plugin/api/ConfigDeclaration$Com
 
 public final class com/superiorsoftllc/infantry/plugin/api/ConfigFieldDeclaration {
 	public static final field Companion Lcom/superiorsoftllc/infantry/plugin/api/ConfigFieldDeclaration$Companion;
-	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lkotlinx/serialization/json/JsonElement;Ljava/util/List;Ljava/lang/Double;Ljava/lang/Double;Ljava/lang/Double;Ljava/lang/String;ZZLjava/util/Map;Ljava/lang/String;ILjava/lang/String;Ljava/util/List;Ljava/util/Map;Lcom/superiorsoftllc/infantry/plugin/api/ConfigFieldDeclaration;ZLjava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/Integer;Lcom/superiorsoftllc/infantry/plugin/api/ConfigVisibleWhen;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;Ljava/util/List;)V
-	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lkotlinx/serialization/json/JsonElement;Ljava/util/List;Ljava/lang/Double;Ljava/lang/Double;Ljava/lang/Double;Ljava/lang/String;ZZLjava/util/Map;Ljava/lang/String;ILjava/lang/String;Ljava/util/List;Ljava/util/Map;Lcom/superiorsoftllc/infantry/plugin/api/ConfigFieldDeclaration;ZLjava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/Integer;Lcom/superiorsoftllc/infantry/plugin/api/ConfigVisibleWhen;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lkotlinx/serialization/json/JsonElement;Ljava/util/List;Ljava/lang/Double;Ljava/lang/Double;Ljava/lang/Double;Ljava/lang/String;ZZLjava/util/Map;Ljava/lang/String;ILjava/lang/String;Ljava/util/List;Ljava/util/Map;Lcom/superiorsoftllc/infantry/plugin/api/ConfigFieldDeclaration;ZLjava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/Integer;Lcom/superiorsoftllc/infantry/plugin/api/ConfigVisibleWhen;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;Ljava/util/List;Ljava/util/List;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lkotlinx/serialization/json/JsonElement;Ljava/util/List;Ljava/lang/Double;Ljava/lang/Double;Ljava/lang/Double;Ljava/lang/String;ZZLjava/util/Map;Ljava/lang/String;ILjava/lang/String;Ljava/util/List;Ljava/util/Map;Lcom/superiorsoftllc/infantry/plugin/api/ConfigFieldDeclaration;ZLjava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/Integer;Lcom/superiorsoftllc/infantry/plugin/api/ConfigVisibleWhen;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;Ljava/util/List;Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Ljava/lang/String;
 	public final fun component10 ()Z
 	public final fun component11 ()Z
@@ -397,6 +467,7 @@ public final class com/superiorsoftllc/infantry/plugin/api/ConfigFieldDeclaratio
 	public final fun component26 ()Ljava/util/List;
 	public final fun component27 ()Ljava/lang/String;
 	public final fun component28 ()Ljava/util/List;
+	public final fun component29 ()Ljava/util/List;
 	public final fun component3 ()Ljava/lang/String;
 	public final fun component4 ()Lkotlinx/serialization/json/JsonElement;
 	public final fun component5 ()Ljava/util/List;
@@ -404,14 +475,15 @@ public final class com/superiorsoftllc/infantry/plugin/api/ConfigFieldDeclaratio
 	public final fun component7 ()Ljava/lang/Double;
 	public final fun component8 ()Ljava/lang/Double;
 	public final fun component9 ()Ljava/lang/String;
-	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lkotlinx/serialization/json/JsonElement;Ljava/util/List;Ljava/lang/Double;Ljava/lang/Double;Ljava/lang/Double;Ljava/lang/String;ZZLjava/util/Map;Ljava/lang/String;ILjava/lang/String;Ljava/util/List;Ljava/util/Map;Lcom/superiorsoftllc/infantry/plugin/api/ConfigFieldDeclaration;ZLjava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/Integer;Lcom/superiorsoftllc/infantry/plugin/api/ConfigVisibleWhen;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;Ljava/util/List;)Lcom/superiorsoftllc/infantry/plugin/api/ConfigFieldDeclaration;
-	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/plugin/api/ConfigFieldDeclaration;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lkotlinx/serialization/json/JsonElement;Ljava/util/List;Ljava/lang/Double;Ljava/lang/Double;Ljava/lang/Double;Ljava/lang/String;ZZLjava/util/Map;Ljava/lang/String;ILjava/lang/String;Ljava/util/List;Ljava/util/Map;Lcom/superiorsoftllc/infantry/plugin/api/ConfigFieldDeclaration;ZLjava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/Integer;Lcom/superiorsoftllc/infantry/plugin/api/ConfigVisibleWhen;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;Ljava/util/List;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/api/ConfigFieldDeclaration;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lkotlinx/serialization/json/JsonElement;Ljava/util/List;Ljava/lang/Double;Ljava/lang/Double;Ljava/lang/Double;Ljava/lang/String;ZZLjava/util/Map;Ljava/lang/String;ILjava/lang/String;Ljava/util/List;Ljava/util/Map;Lcom/superiorsoftllc/infantry/plugin/api/ConfigFieldDeclaration;ZLjava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/Integer;Lcom/superiorsoftllc/infantry/plugin/api/ConfigVisibleWhen;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;Ljava/util/List;Ljava/util/List;)Lcom/superiorsoftllc/infantry/plugin/api/ConfigFieldDeclaration;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/plugin/api/ConfigFieldDeclaration;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lkotlinx/serialization/json/JsonElement;Ljava/util/List;Ljava/lang/Double;Ljava/lang/Double;Ljava/lang/Double;Ljava/lang/String;ZZLjava/util/Map;Ljava/lang/String;ILjava/lang/String;Ljava/util/List;Ljava/util/Map;Lcom/superiorsoftllc/infantry/plugin/api/ConfigFieldDeclaration;ZLjava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/Integer;Lcom/superiorsoftllc/infantry/plugin/api/ConfigVisibleWhen;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;Ljava/util/List;Ljava/util/List;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/api/ConfigFieldDeclaration;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getAutoSelectNew ()Z
 	public final fun getDefault ()Lkotlinx/serialization/json/JsonElement;
 	public final fun getDescription ()Ljava/lang/String;
 	public final fun getDisplay ()Ljava/lang/String;
 	public final fun getExposed ()Z
+	public final fun getExtensions ()Ljava/util/List;
 	public final fun getFields ()Ljava/util/List;
 	public final fun getItem ()Lcom/superiorsoftllc/infantry/plugin/api/ConfigFieldDeclaration;
 	public final fun getKey ()Ljava/lang/String;
@@ -458,12 +530,14 @@ public final class com/superiorsoftllc/infantry/plugin/api/ConfigFieldTypes {
 	public static final field CHECKBOX Ljava/lang/String;
 	public static final field CLASSES Ljava/lang/String;
 	public static final field COLOR Ljava/lang/String;
+	public static final field FILE Ljava/lang/String;
 	public static final field GROUP Ljava/lang/String;
 	public static final field IMPLEMENTATION Ljava/lang/String;
 	public static final field INSTANCE Lcom/superiorsoftllc/infantry/plugin/api/ConfigFieldTypes;
 	public static final field LIST Ljava/lang/String;
 	public static final field MULTI_SELECT Ljava/lang/String;
 	public static final field NUMBER Ljava/lang/String;
+	public static final field PATH Ljava/lang/String;
 	public static final field RADIO Ljava/lang/String;
 	public static final field SELECT Ljava/lang/String;
 	public static final field TEXT Ljava/lang/String;
@@ -689,8 +763,8 @@ public abstract interface class com/superiorsoftllc/infantry/plugin/api/DaemonAc
 public final class com/superiorsoftllc/infantry/plugin/api/DaemonCapabilities {
 	public static final field Companion Lcom/superiorsoftllc/infantry/plugin/api/DaemonCapabilities$Companion;
 	public fun <init> ()V
-	public fun <init> (Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/DaemonPluginLimits;Lcom/superiorsoftllc/infantry/plugin/api/DaemonStorageDeclaration;)V
-	public synthetic fun <init> (Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/DaemonPluginLimits;Lcom/superiorsoftllc/infantry/plugin/api/DaemonStorageDeclaration;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/DaemonPluginLimits;Lcom/superiorsoftllc/infantry/plugin/api/DaemonStorageDeclaration;Ljava/util/List;Ljava/lang/String;)V
+	public synthetic fun <init> (Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/DaemonPluginLimits;Lcom/superiorsoftllc/infantry/plugin/api/DaemonStorageDeclaration;Ljava/util/List;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Ljava/util/List;
 	public final fun component10 ()Ljava/util/List;
 	public final fun component11 ()Ljava/util/List;
@@ -698,6 +772,8 @@ public final class com/superiorsoftllc/infantry/plugin/api/DaemonCapabilities {
 	public final fun component13 ()Ljava/util/List;
 	public final fun component14 ()Lcom/superiorsoftllc/infantry/plugin/api/DaemonPluginLimits;
 	public final fun component15 ()Lcom/superiorsoftllc/infantry/plugin/api/DaemonStorageDeclaration;
+	public final fun component16 ()Ljava/util/List;
+	public final fun component17 ()Ljava/lang/String;
 	public final fun component2 ()Ljava/util/List;
 	public final fun component3 ()Ljava/util/List;
 	public final fun component4 ()Ljava/lang/String;
@@ -706,8 +782,8 @@ public final class com/superiorsoftllc/infantry/plugin/api/DaemonCapabilities {
 	public final fun component7 ()Ljava/util/List;
 	public final fun component8 ()Ljava/util/List;
 	public final fun component9 ()Ljava/util/List;
-	public final fun copy (Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/DaemonPluginLimits;Lcom/superiorsoftllc/infantry/plugin/api/DaemonStorageDeclaration;)Lcom/superiorsoftllc/infantry/plugin/api/DaemonCapabilities;
-	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/plugin/api/DaemonCapabilities;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/DaemonPluginLimits;Lcom/superiorsoftllc/infantry/plugin/api/DaemonStorageDeclaration;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/api/DaemonCapabilities;
+	public final fun copy (Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/DaemonPluginLimits;Lcom/superiorsoftllc/infantry/plugin/api/DaemonStorageDeclaration;Ljava/util/List;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/plugin/api/DaemonCapabilities;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/plugin/api/DaemonCapabilities;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/DaemonPluginLimits;Lcom/superiorsoftllc/infantry/plugin/api/DaemonStorageDeclaration;Ljava/util/List;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/api/DaemonCapabilities;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getApiAtLeast ()Ljava/lang/String;
 	public final fun getConfig ()Ljava/util/List;
@@ -721,8 +797,10 @@ public final class com/superiorsoftllc/infantry/plugin/api/DaemonCapabilities {
 	public final fun getPublicRoutes ()Ljava/util/List;
 	public final fun getRoutes ()Ljava/util/List;
 	public final fun getSecrets ()Ljava/util/List;
+	public final fun getSide ()Ljava/lang/String;
 	public final fun getStorage ()Lcom/superiorsoftllc/infantry/plugin/api/DaemonStorageDeclaration;
 	public final fun getTools ()Ljava/util/List;
+	public final fun getUpdateSources ()Ljava/util/List;
 	public final fun getWants ()Ljava/util/List;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
@@ -745,18 +823,20 @@ public final class com/superiorsoftllc/infantry/plugin/api/DaemonCapabilities$Co
 
 public final class com/superiorsoftllc/infantry/plugin/api/DaemonFrameDeclaration {
 	public static final field Companion Lcom/superiorsoftllc/infantry/plugin/api/DaemonFrameDeclaration$Companion;
-	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Z)V
-	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZLjava/lang/String;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZLjava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Ljava/lang/String;
 	public final fun component2 ()Ljava/lang/String;
 	public final fun component3 ()Ljava/lang/String;
 	public final fun component4 ()Z
-	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Z)Lcom/superiorsoftllc/infantry/plugin/api/DaemonFrameDeclaration;
-	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/plugin/api/DaemonFrameDeclaration;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/api/DaemonFrameDeclaration;
+	public final fun component5 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZLjava/lang/String;)Lcom/superiorsoftllc/infantry/plugin/api/DaemonFrameDeclaration;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/plugin/api/DaemonFrameDeclaration;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZLjava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/api/DaemonFrameDeclaration;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getAction ()Ljava/lang/String;
 	public final fun getKind ()Ljava/lang/String;
 	public final fun getOwnerOnly ()Z
+	public final fun getSide ()Ljava/lang/String;
 	public final fun getType ()Ljava/lang/String;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
@@ -883,19 +963,21 @@ public final class com/superiorsoftllc/infantry/plugin/api/DaemonStorageDeclarat
 
 public final class com/superiorsoftllc/infantry/plugin/api/DaemonToolDeclaration {
 	public static final field Companion Lcom/superiorsoftllc/infantry/plugin/api/DaemonToolDeclaration$Companion;
-	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
-	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Ljava/lang/String;
 	public final fun component2 ()Ljava/lang/String;
 	public final fun component3 ()Ljava/lang/String;
 	public final fun component4 ()Ljava/lang/String;
-	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/plugin/api/DaemonToolDeclaration;
-	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/plugin/api/DaemonToolDeclaration;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/api/DaemonToolDeclaration;
+	public final fun component5 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/plugin/api/DaemonToolDeclaration;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/plugin/api/DaemonToolDeclaration;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/api/DaemonToolDeclaration;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getAction ()Ljava/lang/String;
 	public final fun getDescription ()Ljava/lang/String;
 	public final fun getKind ()Ljava/lang/String;
 	public final fun getName ()Ljava/lang/String;
+	public final fun getSide ()Ljava/lang/String;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
 }
@@ -1314,6 +1396,40 @@ public final class com/superiorsoftllc/infantry/plugin/api/HarnessDeclaration$Co
 	public final fun serializer ()Lkotlinx/serialization/KSerializer;
 }
 
+public final class com/superiorsoftllc/infantry/plugin/api/HitView {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZLjava/lang/String;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Z)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZLjava/lang/String;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component10 ()Ljava/lang/String;
+	public final fun component11 ()Ljava/lang/String;
+	public final fun component12 ()Z
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()Ljava/lang/String;
+	public final fun component5 ()Ljava/lang/String;
+	public final fun component6 ()Ljava/lang/String;
+	public final fun component7 ()Z
+	public final fun component8 ()Ljava/lang/String;
+	public final fun component9 ()Ljava/util/List;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZLjava/lang/String;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Z)Lcom/superiorsoftllc/infantry/plugin/api/HitView;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/plugin/api/HitView;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZLjava/lang/String;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;ZILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/api/HitView;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCls ()Ljava/lang/String;
+	public final fun getDescription ()Ljava/lang/String;
+	public final fun getFromRepo ()Z
+	public final fun getId ()Ljava/lang/String;
+	public final fun getInstalled ()Z
+	public final fun getLicense ()Ljava/lang/String;
+	public final fun getListName ()Ljava/lang/String;
+	public final fun getName ()Ljava/lang/String;
+	public final fun getRepo ()Ljava/lang/String;
+	public final fun getSource ()Ljava/lang/String;
+	public final fun getTags ()Ljava/util/List;
+	public final fun getVersion ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class com/superiorsoftllc/infantry/plugin/api/ImplementationDeclaration {
 	public static final field Companion Lcom/superiorsoftllc/infantry/plugin/api/ImplementationDeclaration$Companion;
 	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
@@ -1378,6 +1494,46 @@ public final class com/superiorsoftllc/infantry/plugin/api/InjectDeclaration$Com
 	public final fun serializer ()Lkotlinx/serialization/KSerializer;
 }
 
+public final class com/superiorsoftllc/infantry/plugin/api/InspectOutcome {
+	public fun <init> ()V
+	public fun <init> (Lcom/superiorsoftllc/infantry/plugin/api/InspectView;Ljava/lang/String;)V
+	public synthetic fun <init> (Lcom/superiorsoftllc/infantry/plugin/api/InspectView;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Lcom/superiorsoftllc/infantry/plugin/api/InspectView;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Lcom/superiorsoftllc/infantry/plugin/api/InspectView;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/plugin/api/InspectOutcome;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/plugin/api/InspectOutcome;Lcom/superiorsoftllc/infantry/plugin/api/InspectView;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/api/InspectOutcome;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getError ()Ljava/lang/String;
+	public final fun getView ()Lcom/superiorsoftllc/infantry/plugin/api/InspectView;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/plugin/api/InspectView {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()Ljava/lang/String;
+	public final fun component5 ()Ljava/lang/String;
+	public final fun component6 ()Ljava/util/List;
+	public final fun component7 ()Ljava/util/List;
+	public final fun component8 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/plugin/api/InspectView;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/plugin/api/InspectView;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/api/InspectView;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCls ()Ljava/lang/String;
+	public final fun getGrants ()Ljava/util/List;
+	public final fun getId ()Ljava/lang/String;
+	public final fun getLicense ()Ljava/lang/String;
+	public final fun getSigner ()Ljava/lang/String;
+	public final fun getToken ()Ljava/lang/String;
+	public final fun getVersion ()Ljava/lang/String;
+	public final fun getWarnings ()Ljava/util/List;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class com/superiorsoftllc/infantry/plugin/api/InterceptorDeclaration {
 	public static final field Companion Lcom/superiorsoftllc/infantry/plugin/api/InterceptorDeclaration$Companion;
 	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
@@ -1412,8 +1568,8 @@ public final class com/superiorsoftllc/infantry/plugin/api/InterceptorDeclaratio
 
 public final class com/superiorsoftllc/infantry/plugin/api/ModuleManifest {
 	public static final field Companion Lcom/superiorsoftllc/infantry/plugin/api/ModuleManifest$Companion;
-	public fun <init> (Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/DaemonCapabilities;Lcom/superiorsoftllc/infantry/plugin/api/HarnessDeclaration;Ljava/util/List;Ljava/util/List;Ljava/util/List;)V
-	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/DaemonCapabilities;Lcom/superiorsoftllc/infantry/plugin/api/HarnessDeclaration;Ljava/util/List;Ljava/util/List;Ljava/util/List;IILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/DaemonCapabilities;Lcom/superiorsoftllc/infantry/plugin/api/HarnessDeclaration;Ljava/util/List;Ljava/util/List;Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/UpdateDeclaration;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/DaemonCapabilities;Lcom/superiorsoftllc/infantry/plugin/api/HarnessDeclaration;Ljava/util/List;Ljava/util/List;Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/UpdateDeclaration;IILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Ljava/lang/String;
 	public final fun component10 ()Ljava/lang/String;
 	public final fun component11 ()Ljava/lang/String;
@@ -1444,14 +1600,15 @@ public final class com/superiorsoftllc/infantry/plugin/api/ModuleManifest {
 	public final fun component34 ()Ljava/util/List;
 	public final fun component35 ()Ljava/util/List;
 	public final fun component36 ()Ljava/util/List;
+	public final fun component37 ()Lcom/superiorsoftllc/infantry/plugin/api/UpdateDeclaration;
 	public final fun component4 ()Ljava/lang/String;
 	public final fun component5 ()Ljava/lang/String;
 	public final fun component6 ()Ljava/lang/String;
 	public final fun component7 ()Ljava/lang/String;
 	public final fun component8 ()Ljava/util/List;
 	public final fun component9 ()Ljava/util/List;
-	public final fun copy (Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/DaemonCapabilities;Lcom/superiorsoftllc/infantry/plugin/api/HarnessDeclaration;Ljava/util/List;Ljava/util/List;Ljava/util/List;)Lcom/superiorsoftllc/infantry/plugin/api/ModuleManifest;
-	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/plugin/api/ModuleManifest;Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/DaemonCapabilities;Lcom/superiorsoftllc/infantry/plugin/api/HarnessDeclaration;Ljava/util/List;Ljava/util/List;Ljava/util/List;IILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/api/ModuleManifest;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/DaemonCapabilities;Lcom/superiorsoftllc/infantry/plugin/api/HarnessDeclaration;Ljava/util/List;Ljava/util/List;Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/UpdateDeclaration;)Lcom/superiorsoftllc/infantry/plugin/api/ModuleManifest;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/plugin/api/ModuleManifest;Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/DaemonCapabilities;Lcom/superiorsoftllc/infantry/plugin/api/HarnessDeclaration;Ljava/util/List;Ljava/util/List;Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/UpdateDeclaration;IILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/api/ModuleManifest;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getActions ()Ljava/util/List;
 	public final fun getAgents ()Ljava/util/List;
@@ -1489,6 +1646,7 @@ public final class com/superiorsoftllc/infantry/plugin/api/ModuleManifest {
 	public final fun getSlots ()Ljava/util/List;
 	public final fun getTabs ()Ljava/util/List;
 	public final fun getTier ()Ljava/lang/String;
+	public final fun getUpdate ()Lcom/superiorsoftllc/infantry/plugin/api/UpdateDeclaration;
 	public final fun getVersion ()Ljava/lang/String;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
@@ -1719,6 +1877,23 @@ public final class com/superiorsoftllc/infantry/plugin/api/PanelDeclaration$Comp
 	public final fun serializer ()Lkotlinx/serialization/KSerializer;
 }
 
+public final class com/superiorsoftllc/infantry/plugin/api/PcmFormat {
+	public fun <init> ()V
+	public fun <init> (III)V
+	public synthetic fun <init> (IIIILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()I
+	public final fun component2 ()I
+	public final fun component3 ()I
+	public final fun copy (III)Lcom/superiorsoftllc/infantry/plugin/api/PcmFormat;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/plugin/api/PcmFormat;IIIILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/api/PcmFormat;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getBitsPerSample ()I
+	public final fun getChannels ()I
+	public final fun getSampleRateHz ()I
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class com/superiorsoftllc/infantry/plugin/api/PluginEvent {
 	public fun <init> (Ljava/lang/String;Ljava/util/Map;)V
 	public synthetic fun <init> (Ljava/lang/String;Ljava/util/Map;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
@@ -1762,6 +1937,27 @@ public final class com/superiorsoftllc/infantry/plugin/api/PluginFolder$Companio
 	public final fun serializer ()Lkotlinx/serialization/KSerializer;
 }
 
+public abstract interface class com/superiorsoftllc/infantry/plugin/api/PluginManagerPort {
+	public abstract fun addSource (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/plugin/api/ActionResult;
+	public fun importList (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/plugin/api/ActionResult;
+	public abstract fun inspect (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/plugin/api/InspectOutcome;
+	public abstract fun install (Ljava/lang/String;Ljava/util/Set;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/plugin/api/ActionResult;
+	public abstract fun list ()Ljava/util/List;
+	public abstract fun refresh ()Ljava/util/List;
+	public abstract fun remove (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/plugin/api/ActionResult;
+	public abstract fun removeSource (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/plugin/api/ActionResult;
+	public abstract fun rollback (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/plugin/api/ActionResult;
+	public abstract fun search (Ljava/lang/String;)Ljava/util/List;
+	public abstract fun setEnabled (Ljava/lang/String;Z)Lcom/superiorsoftllc/infantry/plugin/api/ActionResult;
+	public abstract fun sources ()Ljava/util/List;
+	public abstract fun update (Ljava/lang/String;Ljava/util/Set;)Lcom/superiorsoftllc/infantry/plugin/api/ActionResult;
+	public abstract fun updates ()Ljava/util/List;
+}
+
+public final class com/superiorsoftllc/infantry/plugin/api/PluginManagerPort$DefaultImpls {
+	public static fun importList (Lcom/superiorsoftllc/infantry/plugin/api/PluginManagerPort;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/plugin/api/ActionResult;
+}
+
 public abstract interface class com/superiorsoftllc/infantry/plugin/api/PluginServices {
 	public abstract fun get (Lcom/superiorsoftllc/infantry/plugin/api/ServiceKey;)Ljava/lang/Object;
 	public abstract fun getModule ()Ljava/lang/String;
@@ -1776,6 +1972,44 @@ public abstract interface class com/superiorsoftllc/infantry/plugin/api/PluginSt
 	public abstract fun list ()Ljava/util/List;
 	public abstract fun read (Ljava/lang/String;)Ljava/lang/String;
 	public abstract fun write (Ljava/lang/String;Ljava/lang/String;)V
+}
+
+public final class com/superiorsoftllc/infantry/plugin/api/PluginView {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZZLjava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;ZLjava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZZLjava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;ZLjava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component10 ()Z
+	public final fun component11 ()Ljava/lang/String;
+	public final fun component12 ()Ljava/lang/String;
+	public final fun component13 ()Ljava/util/List;
+	public final fun component14 ()Ljava/util/List;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()Z
+	public final fun component5 ()Z
+	public final fun component6 ()Ljava/lang/String;
+	public final fun component7 ()Ljava/lang/String;
+	public final fun component8 ()Ljava/util/List;
+	public final fun component9 ()Ljava/util/List;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZZLjava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;ZLjava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;)Lcom/superiorsoftllc/infantry/plugin/api/PluginView;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/plugin/api/PluginView;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZZLjava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;ZLjava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/api/PluginView;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getBundled ()Z
+	public final fun getCanRollback ()Z
+	public final fun getCls ()Ljava/lang/String;
+	public final fun getContributes ()Ljava/util/List;
+	public final fun getDescription ()Ljava/lang/String;
+	public final fun getEnabled ()Z
+	public final fun getGranted ()Ljava/util/List;
+	public final fun getId ()Ljava/lang/String;
+	public final fun getLicense ()Ljava/lang/String;
+	public final fun getRequested ()Ljava/util/List;
+	public final fun getRequiredBy ()Ljava/util/List;
+	public final fun getSigner ()Ljava/lang/String;
+	public final fun getVersion ()Ljava/lang/String;
+	public final fun getYanked ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
 }
 
 public final class com/superiorsoftllc/infantry/plugin/api/PolicyChoice {
@@ -1975,6 +2209,25 @@ public final class com/superiorsoftllc/infantry/plugin/api/PreferenceDeclaration
 	public final fun serializer ()Lkotlinx/serialization/KSerializer;
 }
 
+public final class com/superiorsoftllc/infantry/plugin/api/RefreshView {
+	public fun <init> (Ljava/lang/String;ZZILjava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Z
+	public final fun component3 ()Z
+	public final fun component4 ()I
+	public final fun component5 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;ZZILjava/lang/String;)Lcom/superiorsoftllc/infantry/plugin/api/RefreshView;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/plugin/api/RefreshView;Ljava/lang/String;ZZILjava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/api/RefreshView;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getMessage ()Ljava/lang/String;
+	public final fun getOk ()Z
+	public final fun getPlugins ()I
+	public final fun getSource ()Ljava/lang/String;
+	public final fun getStale ()Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class com/superiorsoftllc/infantry/plugin/api/SeatsSpec {
 	public static final field Companion Lcom/superiorsoftllc/infantry/plugin/api/SeatsSpec$Companion;
 	public fun <init> ()V
@@ -2032,11 +2285,14 @@ public final class com/superiorsoftllc/infantry/plugin/api/ServiceKey {
 
 public final class com/superiorsoftllc/infantry/plugin/api/Services {
 	public static final field INSTANCE Lcom/superiorsoftllc/infantry/plugin/api/Services;
+	public final fun getAUDIO_IN ()Lcom/superiorsoftllc/infantry/plugin/api/ServiceKey;
 	public final fun getDAEMON ()Lcom/superiorsoftllc/infantry/plugin/api/ServiceKey;
 	public final fun getENDPOINTS ()Lcom/superiorsoftllc/infantry/plugin/api/ServiceKey;
 	public final fun getEVENTS ()Lcom/superiorsoftllc/infantry/plugin/api/ServiceKey;
 	public final fun getNOTIFICATIONS ()Lcom/superiorsoftllc/infantry/plugin/api/ServiceKey;
+	public final fun getSENSITIVE ()Ljava/util/Set;
 	public final fun getSETTINGS ()Lcom/superiorsoftllc/infantry/plugin/api/ServiceKey;
+	public final fun getSPEECH_OUT ()Lcom/superiorsoftllc/infantry/plugin/api/ServiceKey;
 	public final fun getSTORAGE ()Lcom/superiorsoftllc/infantry/plugin/api/ServiceKey;
 }
 
@@ -2073,6 +2329,51 @@ public final synthetic class com/superiorsoftllc/infantry/plugin/api/ShellOverri
 
 public final class com/superiorsoftllc/infantry/plugin/api/ShellOverrideDeclaration$Companion {
 	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/superiorsoftllc/infantry/plugin/api/SourceView {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Z)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()Z
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Z)Lcom/superiorsoftllc/infantry/plugin/api/SourceView;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/plugin/api/SourceView;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/api/SourceView;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCls ()Ljava/lang/String;
+	public final fun getEnabled ()Z
+	public final fun getId ()Ljava/lang/String;
+	public final fun getLocation ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/plugin/api/SpeakOptions {
+	public fun <init> ()V
+	public fun <init> (ILjava/lang/String;Z)V
+	public synthetic fun <init> (ILjava/lang/String;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()I
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Z
+	public final fun copy (ILjava/lang/String;Z)Lcom/superiorsoftllc/infantry/plugin/api/SpeakOptions;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/plugin/api/SpeakOptions;ILjava/lang/String;ZILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/api/SpeakOptions;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getInterrupt ()Z
+	public final fun getVoice ()Ljava/lang/String;
+	public final fun getVolumePercent ()I
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class com/superiorsoftllc/infantry/plugin/api/SpeechOutput {
+	public abstract fun speak (Ljava/lang/String;Lcom/superiorsoftllc/infantry/plugin/api/SpeakOptions;)Z
+	public static synthetic fun speak$default (Lcom/superiorsoftllc/infantry/plugin/api/SpeechOutput;Ljava/lang/String;Lcom/superiorsoftllc/infantry/plugin/api/SpeakOptions;ILjava/lang/Object;)Z
+	public abstract fun stop ()V
+	public abstract fun voices ()Ljava/util/List;
+}
+
+public final class com/superiorsoftllc/infantry/plugin/api/SpeechOutput$DefaultImpls {
+	public static synthetic fun speak$default (Lcom/superiorsoftllc/infantry/plugin/api/SpeechOutput;Ljava/lang/String;Lcom/superiorsoftllc/infantry/plugin/api/SpeakOptions;ILjava/lang/Object;)Z
 }
 
 public final class com/superiorsoftllc/infantry/plugin/api/TabDeclaration {
@@ -2116,6 +2417,116 @@ public final class com/superiorsoftllc/infantry/plugin/api/Tier : java/lang/Enum
 
 public final class com/superiorsoftllc/infantry/plugin/api/Tier$Companion {
 	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/superiorsoftllc/infantry/plugin/api/UpdateCredentialRef {
+	public static final field Companion Lcom/superiorsoftllc/infantry/plugin/api/UpdateCredentialRef$Companion;
+	public fun <init> ()V
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/plugin/api/UpdateCredentialRef;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/plugin/api/UpdateCredentialRef;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/api/UpdateCredentialRef;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getEnv ()Ljava/lang/String;
+	public final fun getSecret ()Ljava/lang/String;
+	public fun hashCode ()I
+	public final fun isEmpty ()Z
+	public fun toString ()Ljava/lang/String;
+}
+
+public final synthetic class com/superiorsoftllc/infantry/plugin/api/UpdateCredentialRef$$serializer : kotlinx/serialization/internal/GeneratedSerializer {
+	public static final field INSTANCE Lcom/superiorsoftllc/infantry/plugin/api/UpdateCredentialRef$$serializer;
+	public final fun childSerializers ()[Lkotlinx/serialization/KSerializer;
+	public final fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Lcom/superiorsoftllc/infantry/plugin/api/UpdateCredentialRef;
+	public synthetic fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;
+	public final fun getDescriptor ()Lkotlinx/serialization/descriptors/SerialDescriptor;
+	public final fun serialize (Lkotlinx/serialization/encoding/Encoder;Lcom/superiorsoftllc/infantry/plugin/api/UpdateCredentialRef;)V
+	public synthetic fun serialize (Lkotlinx/serialization/encoding/Encoder;Ljava/lang/Object;)V
+	public fun typeParametersSerializers ()[Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/superiorsoftllc/infantry/plugin/api/UpdateCredentialRef$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/superiorsoftllc/infantry/plugin/api/UpdateDeclaration {
+	public static final field Companion Lcom/superiorsoftllc/infantry/plugin/api/UpdateDeclaration$Companion;
+	public fun <init> (Lcom/superiorsoftllc/infantry/plugin/api/UpdateSourceRef;)V
+	public final fun component1 ()Lcom/superiorsoftllc/infantry/plugin/api/UpdateSourceRef;
+	public final fun copy (Lcom/superiorsoftllc/infantry/plugin/api/UpdateSourceRef;)Lcom/superiorsoftllc/infantry/plugin/api/UpdateDeclaration;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/plugin/api/UpdateDeclaration;Lcom/superiorsoftllc/infantry/plugin/api/UpdateSourceRef;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/api/UpdateDeclaration;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getSource ()Lcom/superiorsoftllc/infantry/plugin/api/UpdateSourceRef;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final synthetic class com/superiorsoftllc/infantry/plugin/api/UpdateDeclaration$$serializer : kotlinx/serialization/internal/GeneratedSerializer {
+	public static final field INSTANCE Lcom/superiorsoftllc/infantry/plugin/api/UpdateDeclaration$$serializer;
+	public final fun childSerializers ()[Lkotlinx/serialization/KSerializer;
+	public final fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Lcom/superiorsoftllc/infantry/plugin/api/UpdateDeclaration;
+	public synthetic fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;
+	public final fun getDescriptor ()Lkotlinx/serialization/descriptors/SerialDescriptor;
+	public final fun serialize (Lkotlinx/serialization/encoding/Encoder;Lcom/superiorsoftllc/infantry/plugin/api/UpdateDeclaration;)V
+	public synthetic fun serialize (Lkotlinx/serialization/encoding/Encoder;Ljava/lang/Object;)V
+	public fun typeParametersSerializers ()[Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/superiorsoftllc/infantry/plugin/api/UpdateDeclaration$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/superiorsoftllc/infantry/plugin/api/UpdateSourceRef {
+	public static final field Companion Lcom/superiorsoftllc/infantry/plugin/api/UpdateSourceRef$Companion;
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lcom/superiorsoftllc/infantry/plugin/api/UpdateCredentialRef;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lcom/superiorsoftllc/infantry/plugin/api/UpdateCredentialRef;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()Lcom/superiorsoftllc/infantry/plugin/api/UpdateCredentialRef;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lcom/superiorsoftllc/infantry/plugin/api/UpdateCredentialRef;)Lcom/superiorsoftllc/infantry/plugin/api/UpdateSourceRef;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/plugin/api/UpdateSourceRef;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lcom/superiorsoftllc/infantry/plugin/api/UpdateCredentialRef;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/api/UpdateSourceRef;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getChannel ()Ljava/lang/String;
+	public final fun getCredential ()Lcom/superiorsoftllc/infantry/plugin/api/UpdateCredentialRef;
+	public final fun getLocation ()Ljava/lang/String;
+	public final fun getType ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final synthetic class com/superiorsoftllc/infantry/plugin/api/UpdateSourceRef$$serializer : kotlinx/serialization/internal/GeneratedSerializer {
+	public static final field INSTANCE Lcom/superiorsoftllc/infantry/plugin/api/UpdateSourceRef$$serializer;
+	public final fun childSerializers ()[Lkotlinx/serialization/KSerializer;
+	public final fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Lcom/superiorsoftllc/infantry/plugin/api/UpdateSourceRef;
+	public synthetic fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;
+	public final fun getDescriptor ()Lkotlinx/serialization/descriptors/SerialDescriptor;
+	public final fun serialize (Lkotlinx/serialization/encoding/Encoder;Lcom/superiorsoftllc/infantry/plugin/api/UpdateSourceRef;)V
+	public synthetic fun serialize (Lkotlinx/serialization/encoding/Encoder;Ljava/lang/Object;)V
+	public fun typeParametersSerializers ()[Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/superiorsoftllc/infantry/plugin/api/UpdateSourceRef$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/superiorsoftllc/infantry/plugin/api/UpdateView {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()Ljava/util/List;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;)Lcom/superiorsoftllc/infantry/plugin/api/UpdateView;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/plugin/api/UpdateView;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/api/UpdateView;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getFrom ()Ljava/lang/String;
+	public final fun getId ()Ljava/lang/String;
+	public final fun getNewGrants ()Ljava/util/List;
+	public final fun getTo ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
 }
 
 public final class com/superiorsoftllc/infantry/plugin/host/AcceptedPreference {
@@ -2587,6 +2998,7 @@ public final class com/superiorsoftllc/infantry/plugin/host/SemVer$Companion {
 public final class com/superiorsoftllc/infantry/plugin/host/ServiceGate {
 	public static final field INSTANCE Lcom/superiorsoftllc/infantry/plugin/host/ServiceGate;
 	public final fun refusal (Ljava/lang/String;Lcom/superiorsoftllc/infantry/plugin/api/ModuleManifest;Lcom/superiorsoftllc/infantry/plugin/api/Tier;Lcom/superiorsoftllc/infantry/plugin/api/ModulesConfig;)Ljava/lang/String;
+	public final fun sensitive (Ljava/lang/String;)Z
 }
 
 public final class com/superiorsoftllc/infantry/plugin/host/ServiceRegistry {

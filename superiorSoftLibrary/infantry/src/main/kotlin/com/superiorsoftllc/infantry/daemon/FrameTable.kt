@@ -2,6 +2,7 @@
 // Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.daemon
 
+import com.superiorsoftllc.infantry.daemon.api.orchestrator.FrameSide
 import com.superiorsoftllc.infantry.protocol.Envelope
 
 /**
@@ -11,12 +12,23 @@ import com.superiorsoftllc.infantry.protocol.Envelope
  */
 class FrameTable {
     private val handlers = LinkedHashMap<String, (Envelope, Boolean) -> Envelope?>()
+    private val sides = HashMap<String, String>()
 
-    fun register(vararg types: String, handler: (envelope: Envelope, direct: Boolean) -> Envelope?) {
-        for (type in types) handlers[type] = handler
+    /**
+     * RUNNER-POOL-7: [side] is the entry's generic side attribute ([FrameSide.RUNNER] by default, [FrameSide.ORCHESTRATOR] for a frame
+     * that reads or writes orchestrator state). It is consulted only for a session a remote orchestrator started on this runner.
+     */
+    fun register(vararg types: String, side: String = FrameSide.RUNNER, handler: (envelope: Envelope, direct: Boolean) -> Envelope?) {
+        for (type in types) {
+            handlers[type] = handler
+            sides[type] = FrameSide.of(side)
+        }
     }
 
     fun handles(type: String): Boolean = type in handlers
+
+    /** RUNNER-POOL-7: the side of a registered frame, null when this table does not answer [type]. */
+    fun side(type: String): String? = sides[type]
 
     fun answer(envelope: Envelope, direct: Boolean): Envelope? = handlers.getValue(envelope.type)(envelope, direct)
 }
@@ -71,4 +83,17 @@ object BoardFrames {
 
     /** What a board-family frame with no registered handler answers: a refusal, never a hang. */
     fun noBoard(type: String): Envelope = Envelope(Envelope.ERROR, "$type refused: this daemon has no board")
+}
+
+/**
+ * RUNNER-POOL-7: the side attribute of the core frames answered inline by the connection loop (not through a [FrameTable]). The
+ * mailbox is the orchestrator's: an agent on a remote runner mails its colleagues there. Every other inline frame is runner side.
+ */
+object CoreFrameSides {
+    private val orchestrator = setOf(
+        Envelope.MAIL_SEND, Envelope.MAIL_READ, Envelope.MAIL_INBOX, Envelope.MAIL_OUTBOX,
+        Envelope.MAIL_THREAD, Envelope.MAIL_THREADS, Envelope.MAIL_WAITING,
+    )
+
+    fun side(type: String): String? = if (type in orchestrator) FrameSide.ORCHESTRATOR else null
 }

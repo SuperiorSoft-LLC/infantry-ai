@@ -207,7 +207,10 @@ interface DaemonApi {
         // 1.45.0 (RUNNER-POOL-6, additive): `runnerLinks` (RunnerLinks), daemon.api.runners.RunnerLinkWire (the link frame family, contract
         // 1.1.0), RunnerLink contract 1.1.0 (events, readTranscript; StartSpec git remote / prompt / worktree, SessionRef branch),
         // RunnerHub remote runners + heartbeat, SessionStart.runner and BoardRuntime.runners (placement on a paired runner).
-        const val VERSION = "1.45.0"
+        // 1.46.0 (RUNNER-POOL-7, additive): OrchestratorLink.forwardFrame (contract 1.2.0), FrameSide, AgentIdentity, ForwardedFrame,
+        // LocalOrchestratorServices.forwardFrame, RunnerHub.hasSessionsOn, RunnerLinkWire 1.2.0 (forward pull / answer); module.json
+        // `daemon.side` and a frame's or tool's `side`.
+        const val VERSION = "1.46.0"
     }
 }
 

@@ -102,6 +102,26 @@ orchestrator forwards `side = orchestrator` frames with the caller's agent ident
 through `FrameGate` as that agent. In local mode the attribute is never consulted (one runner, one orchestrator, same
 process).
 
+**Built (RUNNER-POOL-7, ticket 581cd08a).** The side tag: `FrameTable.register(..., side = FrameSide.ORCHESTRATOR)` (default
+`runner`); a plugin declares it in `module.json` as `daemon.side` (the plugin's default) or `side` on one tool or frame
+(Infantry_Board, Infantry_Notes, Infantry_Roles, Infantry_Scripting and Infantry_Attention are `orchestrator`); the mail frames
+the connection loop answers inline are `orchestrator` (`CoreFrameSides`). Because only the orchestrator dials, forwarding is a
+long poll over the existing link:
+
+1. A frame from a session the remote orchestrator started on this runner (`RemoteStarts.isLinked`; a daemon's own session is
+   never forwarded, so local mode never reads the tag) whose side is `orchestrator` is held by `FrameForwarder`.
+2. The orchestrator's `ForwardPump` keeps one pull loop per paired runner, and pulls ONLY while that runner has a session the
+   orchestrator placed there (`RunnerHub.hasSessionsOn`): `runner_link_forward_pull` waits up to `limits.runners.forwardWaitSec`.
+3. `ForwardedFrameGate` refuses the frame unless its session is one the orchestrator placed on THAT runner (the runner name is
+   the link's), it names no other session (its `sessionId`, a tool call's `client.sessionId`), its side is `orchestrator`, and
+   `FrameGate` passes it as a non-owner. It then runs on the orchestrator's own `/ws` as a non-owner caller (`LoopbackFrames`,
+   the agent token when the sandbox is on), so policy, plugin gates and the agent tier run exactly as for a local agent.
+4. The answer goes back with `runner_link_forward_answer` and reaches the worker with its own request id. No answer within
+   `limits.runners.forwardTimeoutSec` = an `error` "unavailable"; at most `limits.runners.forwardPendingMax` frames wait at once.
+
+The orchestrator binding offers the same call as `OrchestratorLink.forwardFrame(AgentIdentity, ForwardedFrame)`
+(`LocalOrchestratorServices.forwardFrame`), so a hosted orchestrator (step 9) answers it without the pump.
+
 ## 3. Placement: how a ticket start picks a runner
 
 All data, never code-only.
@@ -278,6 +298,9 @@ Rate limits on pairing attempts (`runners.pairAttemptsPerHour`, default 5).
 | `runners.transcripts` | `on-demand` | or `stream` |
 | `runners.cloneRoot` | `<stateDir>/clones` | remote runner clone cache (blank = the default) |
 | `limits.runners.eventsKept` | `500` | event outbox bound (built as this limit) |
+| `limits.runners.forwardWaitSec` | `10` | how long one forward pull waits on the runner (also the pump's retry pause; capped at half the link call timeout) |
+| `limits.runners.forwardTimeoutSec` | `300` | how long a remote worker's orchestrator-side frame waits for its answer |
+| `limits.runners.forwardPendingMax` | `64` | orchestrator-side frames one runner holds at once |
 | `runners.pairCodeMin`, `runners.pairAttemptsPerHour` | `10`, `5` | pairing |
 | `runners.credentialRotateDays` | `30` | rotation |
 | `runners.allowPlainTailnet` | `false` | opt-in plain ws over a tailnet |
@@ -294,7 +317,7 @@ Rate limits on pairing attempts (`runners.pairAttemptsPerHour`, default 5).
 | 4 | RUNNER-POOL-5 | pairing, runner-scoped credential, wss with pinned fingerprint, runner audit log (section 7) | only when paired |
 | 4a | RUNNER-POOL-6a | move the link transport (WebSocket client, wss listener, TLS) out of core into `Infantry_RemoteRunner` behind `RunnerLinkTransport`; `infantry runner pair/add/rotate/detach <name>` go through the daemon as the owner-only `runner_admin` frame | none with the plugin on; without it no link is served and those commands say they need it |
 | 5 | RUNNER-POOL-6 | `Infantry_RemoteRunner` binding: hello/health/start/stop/events over the link; remote clone + push; a ticket pinned `runner: <name>` starts on the server (**the first slice**) | only for pinned tickets |
-| 6 | RUNNER-POOL-7 | frame `side` tag + runner-side forwarding of agent frames (section 2.3), so a remote worker can read its ticket, comment and report | only remote workers |
+| 6 | RUNNER-POOL-7 (built) | frame `side` tag + runner-side forwarding of agent frames (section 2.3), so a remote worker can read its ticket, comment and report | only remote workers |
 | 7 | RUNNER-POOL-8 | event outbox + replay, runner-lost handling, `onLost`, `pushOnCommit` | only remote |
 | 8 | RUNNER-POOL-9 | `any` placement, per-runner caps, governor per provider account; Runners settings card (add-a-server UI) | only when `runners.enabled` |
 | 9 | (later, not filed) | reverse dial + orchestrator on a server (option B / hosted) | migration |

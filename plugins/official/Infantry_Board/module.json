@@ -13,6 +13,7 @@
     "entry": "com.superiorsoftllc.infantry.plugins.official.board.daemon.BoardDaemonPlugin",
     "jar": "daemon/build/libs/Infantry_Board-daemon.jar",
     "apiAtLeast": "1.24.0",
+    "side": "orchestrator",
     "tools": [
       { "name": "infantry_ticket_get", "action": "board.read", "kind": "read", "description": "Read ONE ticket back." },
       { "name": "infantry_ticket_files", "action": "board.files.read", "kind": "read", "description": "A ticket's changed files, or the tickets that changed a path." },
