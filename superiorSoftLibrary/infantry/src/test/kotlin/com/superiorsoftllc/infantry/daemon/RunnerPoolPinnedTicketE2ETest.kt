@@ -54,7 +54,6 @@ class RunnerPoolPinnedTicketE2ETest {
     private fun plugins() = TestDaemonPlugins.boardRoot(
         "official/Infantry_Attention", "official/Infantry_Roles", "official/Infantry_Agents", "official/Infantry_RemoteRunner",
     )
-
     private fun DaemonFixture.set(key: String, value: String) {
         val from = client.mark()
         send(Envelope.SETTINGS_SET, """{"key":"$key","value":$value}""")
@@ -166,5 +165,39 @@ class RunnerPoolPinnedTicketE2ETest {
         val again = launchRunner(world, ScriptedRunner(autoExit = false, emitSessionId = true))
         assertEquals(before, outbox.readText(), "the restarted runner loaded the outbox and did not rewrite it")
         again.await(what = "the restarted runner serves the link again and r2 is up") { orch.rows()["r2"]?.text("health") == "up" }
+    }
+
+    @Test
+    fun `the usage governor counts a local and a remote worker against one account cap`() {
+        val orchProc = ScriptedRunner(autoExit = false, emitSessionId = true)
+        val runnerProc = ScriptedRunner(autoExit = false, emitSessionId = true)
+        val (_, orch, runner) = world(orchProc, runnerProc)
+        orch.await(what = "r2 is up") { orch.rows()["r2"]?.text("health") == "up" }
+        val meter = FakeAgentProvider().id
+        fun cap(n: Int) = orch.set("usage.overrides", """{"$meter":{"workers":$n,"until":${System.currentTimeMillis() + 3_600_000L}}}""")
+        fun worker(name: String) = orch.client.saveProfile("""{"name":"$name","role":"backend","provider":"$meter"}""")
+
+        cap(1)
+        val local = orch.client.saveTicket("""{"title":"Local work","projectId":"p1","agentId":"${worker("Local").id}"}""")
+        assertEquals("started", orch.client.moveTicket(local.id, "in_progress").start?.reason)
+        assertEquals(1, orchProc.processes.size)
+
+        // One account cap of 1, already used by the local worker: a ticket pinned to r2 is refused, nothing runs on the runner.
+        val pinned = orch.client.saveTicket("""{"title":"Remote work","projectId":"p1","agentId":"${worker("Remote").id}","runner":"r2"}""")
+        val refused = orch.client.answerTo(Envelope.TICKET_START_NEXT)
+        assertTrue(refused.type == Envelope.ERROR && refused.data.contains("usage pacing"), refused.toString())
+        assertTrue(runnerProc.processes.isEmpty(), "the runner started nothing while the account cap was reached")
+
+        // Cap 2: the same ticket now starts on the runner.
+        cap(2)
+        val startedNext = orch.client.answerTo(Envelope.TICKET_START_NEXT)
+        assertEquals(Envelope.TICKET, startedNext.type, startedNext.toString())
+        runner.await(what = "the worker on the runner") { runnerProc.processes.isNotEmpty() }
+        assertEquals(1, orchProc.processes.size)
+
+        // The remote worker counts too: a third start (any runner) is refused by the cap of 2.
+        orch.client.saveTicket("""{"title":"Any work","projectId":"p1","agentId":"${worker("Third").id}","runner":"any"}""")
+        val capped = orch.client.answerTo(Envelope.TICKET_START_NEXT)
+        assertTrue(capped.type == Envelope.ERROR && capped.data.contains("usage pacing"), capped.toString())
     }
 }
