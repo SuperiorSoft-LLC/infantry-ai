@@ -5,7 +5,7 @@
   "selectWhenEnv": "INFANTRY_DEMO_LOCK",
   "disable": ["*"],
   "allow": [
-    "sessions.read", "sessions.replay", "projects.read", "settings.read", "usage.read", "board.read", "triggers.read",
+    "sessions.read", "sessions.replay", "projects.read", "settings.read", "board.read", "triggers.read",
     "commands.read", "roles.read", "harness.read", "questions.read", "mail.read", "agents.read", "attention.read",
     "prompts.read", "skills.read", "pods.read", "plugin.tools.list", "timeline.read",
     "project.git.read", "epics.read", "memory.read", "pipeline.read",

@@ -19,7 +19,8 @@ class DemoPresetParityTest {
             val a = ActionCatalog.forFrame(f)!!
             ActionPolicyMatcher.allows(preset.disable, preset.allow, a.id, a.kind)
         }.toSet()
-        assertEquals(emptySet(), DemoPresetFixture.ALLOWED_TYPES - allowed, "the old lock allowed these, the preset refuses them")
+        // Deliberate narrowing: usage_get (DEMO-USAGE-HIDE-1 17e14e91) carried the owner's plan meters and accounts.
+        assertEquals(setOf("usage_get"), DemoPresetFixture.ALLOWED_TYPES - allowed, "the old lock allowed these, the preset refuses them")
         // Deliberate widenings since the pre-POLICY-1 lock, each a read or the visitor's own chat:
         //  plugin_tools     DEMO-FIX-1 e11ec0d3: lists the plugins' tools (a call is still gated by the tool's own action).
         //  timeline_list    DEMO-CHECK-1 91495a9f: demo.json allows timeline.read (read only) so the landing page stops showing a red error.

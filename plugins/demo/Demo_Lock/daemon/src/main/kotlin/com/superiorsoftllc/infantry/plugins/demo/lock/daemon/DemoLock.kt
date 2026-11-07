@@ -146,6 +146,8 @@ class DemoLock(
         if (!enabled) return null
         val type = frame.type
         val ok = when {
+            // DEMO-USAGE-HIDE-1: the owner's plan meters and provider accounts are never a visitor's (`limits` rides settings.read).
+            type in HIDDEN_FRAMES -> false
             type == REPLAY_REQUEST -> seeded(frame.sessionId)
             type == PROMPT -> seeded(frame.sessionId) && frame.data.isNotBlank() && !frame.data.trimStart().startsWith("/")
             // The Resume button: `<sessionId>\n<prompt>`.
@@ -212,6 +214,8 @@ class DemoLock(
         /** Once seeded, no path (frame, mail, trigger, ticket) may create a session. */
         const val SPAWN_REFUSAL = "demo: new sessions are disabled in this demo"
 
+        /** Reads that carry the owner's plan, credits or accounts: refused even where the preset allows their action. */
+        val HIDDEN_FRAMES = setOf("usage_get", "limits")
         const val PROMPT = "prompt"
         const val RESUME = "resume"
         const val MAIL_SEND = "mail_send"
