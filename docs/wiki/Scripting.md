@@ -99,7 +99,9 @@ infantry_script_hook {"action":"add","on":"merge.done","script":"on-merge","glob
 ```
 
 A hook's script is confined to its project too: its tool calls (`ih.*`) refuse a ticket, session or project of another project,
-exactly as an agent's do. Only cross-project mail (`allowCrossProject: true`, below) crosses on purpose.
+exactly as an agent's do. Only cross-project mail (`allowCrossProject: true`, below) crosses on purpose. A call that names no
+project (`ih.list_sessions{}`, `ih.board{}`) means the hook's own project, for every hook kind (timer, lane, event, mail,
+`exec.*`); `projectId: "all"` is refused with "this project hook is confined to project ...".
 
 ### Shipped hooks
 
