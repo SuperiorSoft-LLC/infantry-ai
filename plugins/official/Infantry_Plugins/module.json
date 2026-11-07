@@ -15,6 +15,7 @@
       { "name": "infantry_plugin_search", "action": "plugins.read", "kind": "read", "description": "Search the plugin catalogs by text and tag." },
       { "name": "infantry_plugin_show", "action": "plugins.read", "kind": "read", "description": "Check a plugin reference and show its class, signer, licence and requested grants (installs nothing)." },
       { "name": "infantry_plugin_status", "action": "plugins.read", "kind": "read", "description": "One installed plugin's state." },
+      { "name": "infantry_plugin_list_import", "action": "plugins.request", "kind": "write", "description": "Import a plugin list (file path or URL) as a community catalog source. Installs nothing." },
       { "name": "infantry_plugin_request", "action": "plugins.request", "kind": "write", "description": "Ask the owner to install a plugin with the grants it requests. Nothing is installed until the owner answers yes." }
     ]
   }
