@@ -28,8 +28,14 @@ jobs:
             exit 1
           fi
       - name: Build and test
-        run: ./gradlew build --console=plain
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./gradlew build -Pinfantry.sdk.githubPackages=true --console=plain
       - name: Package (signed when the secrets exist)
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           sign=""
           if [ -n "$IHQ_KEYSTORE_B64" ] && [ -n "$IHQ_STOREPASS" ] && [ -n "$IHQ_ALIAS" ]; then
@@ -38,7 +44,7 @@ jobs:
           fi
           name=$(sed -n 's/.*"name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' module.json | head -n 1)
           url="https://github.com/${{ github.repository }}/releases/download/$GITHUB_REF_NAME/$name.ihq"
-          ./gradlew ihq catalogEntry -Pihq.url="$url" $sign --console=plain
+          ./gradlew ihq catalogEntry -Pinfantry.sdk.githubPackages=true -Pihq.url="$url" $sign --console=plain
       - name: Publish the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

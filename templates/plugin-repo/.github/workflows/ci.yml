@@ -16,7 +16,10 @@ jobs:
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v4
       - name: Build, test and package
-        run: ./gradlew build ihq --console=plain
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./gradlew build ihq -Pinfantry.sdk.githubPackages=true --console=plain
       - uses: actions/upload-artifact@v4
         with:
           name: ihq
