@@ -20,7 +20,7 @@ import java.util.UUID
 class OwnerQuestions(
     private val repository: OwnerQuestionRepository,
     /** Mails [subject] / [body] to the asking session (`api.sessionNotifier.notifySession`); false = not delivered. */
-    private val notify: (sessionId: String, subject: String, body: String) -> Boolean,
+    private val notify: (sessionId: String, subject: String, body: String, threadId: String) -> Boolean,
     private val clock: () -> Long = System::currentTimeMillis,
     private val newId: () -> String = { UUID.randomUUID().toString() },
     private val maxOpen: () -> Int = { DEFAULT_MAX_OPEN },
@@ -203,8 +203,8 @@ class OwnerQuestions(
 
     /** A mail failure never undoes the stored answer: it is logged, and the answer stays visible in the history. */
     private fun mail(question: OwnerQuestion, content: Pair<String, String>) {
-        // The notifier has no thread id: the thread name rides in the body so the asker can still correlate the mail.
-        runCatching { notify(question.sessionId, content.first, content.second + "\n(thread " + threadOf(question.id) + ")") }
+        // The mail rides on the question thread (it survives a restart); the name also stays in the body for a reader without thread support.
+        runCatching { notify(question.sessionId, content.first, content.second + "\n(thread " + threadOf(question.id) + ")", threadOf(question.id)) }
             .onSuccess { if (!it) System.err.println("[infantry] question ${question.id} mail not delivered (the asking session is gone)") }
             .onFailure { System.err.println("[infantry] question ${question.id} mail failed: ${it.message}") }
     }

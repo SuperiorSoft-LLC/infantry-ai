@@ -5520,6 +5520,7 @@ public final class com/superiorsoftllc/infantry/daemon/api/sessions/NoSessionNot
 	public static final field INSTANCE Lcom/superiorsoftllc/infantry/daemon/api/sessions/NoSessionNotifier;
 	public fun notifyRole (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)I
 	public fun notifySession (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Z
+	public fun notifySession (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Z
 }
 
 public final class com/superiorsoftllc/infantry/daemon/api/sessions/NoSessionReads : com/superiorsoftllc/infantry/daemon/api/sessions/SessionReads {
@@ -5575,6 +5576,11 @@ public final class com/superiorsoftllc/infantry/daemon/api/sessions/SessionBindi
 public abstract interface class com/superiorsoftllc/infantry/daemon/api/sessions/SessionNotifier {
 	public abstract fun notifyRole (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)I
 	public abstract fun notifySession (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Z
+	public fun notifySession (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Z
+}
+
+public final class com/superiorsoftllc/infantry/daemon/api/sessions/SessionNotifier$DefaultImpls {
+	public static fun notifySession (Lcom/superiorsoftllc/infantry/daemon/api/sessions/SessionNotifier;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Z
 }
 
 public abstract interface class com/superiorsoftllc/infantry/daemon/api/sessions/SessionReads {

@@ -11,6 +11,12 @@ interface SessionNotifier {
     /** Mail [subject] / [body] to the session [sessionId]; true when it was handed to the mail layer. */
     fun notifySession(sessionId: String, subject: String, body: String): Boolean
 
+    /**
+     * Like [notifySession], on the named mail thread [threadId], so the recipient can correlate the mail with what it asked
+     * (an answered owner question is `question:<id>`). A host without thread support delivers on the default thread.
+     */
+    fun notifySession(sessionId: String, subject: String, body: String, threadId: String?): Boolean = notifySession(sessionId, subject, body)
+
     /** Mail every live session of [role] in [projectId]; returns how many were mailed (0 = none live). */
     fun notifyRole(projectId: String, role: String, subject: String, body: String): Int
 }

@@ -5,7 +5,11 @@ sources `infantry-official` and `infantry-community`, bundled data `plugins/defa
 https://github.com/SuperiorSoft-LLC/infantry-plugin-template. Design: [PLUGIN-REPO-DESIGN](../PLUGIN-REPO-DESIGN.md).
 
 1. Use the template repo (GitHub "Use this template"). It builds against the published SDK with the Gradle plugin.
-2. Build the `.ihq` package: `./gradlew ihq` (output under `build/ihq/`).
+2. Build the `.ihq` package; the output lands in the plugin repo's build folder:
+
+   ```
+   ./gradlew ihq   # writes build/ihq/
+   ```
 3. Release it: tag `<Id>-v<version>` on the plugin's repo and attach the `.ihq` as a release asset.
 4. Open a PR on `infantry-plugins` adding `community/<Id>.json` (id, description, tags, license, `repo`, and per version:
    url, size, sha256, grants, api ranges). Check it with `infantry plugin catalog validate`.
