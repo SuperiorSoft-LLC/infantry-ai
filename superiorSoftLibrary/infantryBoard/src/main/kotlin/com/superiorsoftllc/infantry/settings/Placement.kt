@@ -33,8 +33,9 @@ object Placement {
     const val ANY = "any"
 
     /**
-     * [ticketPin] (the ticket's `runner`), [ruleRunner] (the first matching routing rule's `runner`) and [default]
-     * (`runners.default`) are tried in that order; blank = unset. [projectId] / [harness] narrow `any` only.
+     * RUNNER-AGENT-1, the one precedence: explicit [ticketPin] > [spawnArg] (a spawn's `runner`) > [agentRunner] (the agent
+     * profile's `runner`) > [ruleRunner] (the first matching routing rule's `runner`) > [default] (`runners.default`) > local.
+     * Blank = unset. [projectId] / [harness] narrow `any` only.
      */
     fun pick(
         ticketPin: String?,
@@ -43,8 +44,10 @@ object Placement {
         runners: List<RunnerEntry>,
         projectId: String? = null,
         harness: String? = null,
+        spawnArg: String? = null,
+        agentRunner: String? = null,
     ): PlacementResult {
-        val want = listOf(ticketPin, ruleRunner).firstNotNullOfOrNull { it?.trim()?.takeIf(String::isNotEmpty) }
+        val want = listOf(ticketPin, spawnArg, agentRunner, ruleRunner).firstNotNullOfOrNull { it?.trim()?.takeIf(String::isNotEmpty) }
             ?: default.trim().ifEmpty { LOCAL }
         if (want == ANY) {
             val eligible = runners.filter {

@@ -38,6 +38,8 @@ data class AgentDefinition(
     val contextLimit: Long? = null,
     /** EFFORT-1: the reasoning effort level by default (low / medium / high / xhigh / max); null = the harness default. Additive. */
     val effort: String? = null,
+    /** RUNNER-AGENT-1: where a session of this agent runs by default (`local` | a runner name | `any`); null = the placement default. */
+    val runner: String? = null,
     /** The daemon tools (by name) the agent may use; empty = no narrowing (what its session would get anyway). */
     val tools: List<String> = emptyList(),
     /** Optional: run a turn on a period. Declared data; who runs it is docs/AGENT-REGISTRY.md section 3.5. */
@@ -62,6 +64,9 @@ object AgentDefinitions {
     /** The role-id shape, so an agent id and a role id can never disagree about what a legal id is. */
     val ID = Regex("[a-z][a-z0-9-]{0,31}")
 
+    /** RUNNER-AGENT-1: a runner reference: `local`, `any` or a runner name. */
+    val RUNNER = Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
+
     /** A profile id (the daemon's are `agent-<8 hex>`). */
     val PROFILE_ID = Regex("[a-z][a-z0-9-]{0,63}")
 
@@ -76,6 +81,7 @@ object AgentDefinitions {
         model = def.model ?: profile.model,
         contextLimit = def.contextLimit ?: profile.contextLimit,
         effort = def.effort ?: profile.effort,
+        runner = def.runner ?: profile.runner,
     )
 
     const val MAX_NAME = 60
@@ -96,6 +102,7 @@ object AgentDefinitions {
         def.profile?.let { if (!PROFILE_ID.matches(it)) return "agent '${def.id}': profile '${it.take(40)}' must match ${PROFILE_ID.pattern}" }
         def.contextLimit?.let { if (it <= 0) return "agent '${def.id}': contextLimit must be positive" }
         def.effort?.let { if (it !in EFFORT_LEVELS) return "agent '${def.id}': effort '${it.take(40)}' must be one of $EFFORT_LEVELS" }
+        def.runner?.let { if (!RUNNER.matches(it)) return "agent '${def.id}': runner '${it.take(40)}' must match ${RUNNER.pattern}" }
         def.schedule?.let { if (it.everyMinutes < 1) return "agent '${def.id}': schedule.everyMinutes must be at least 1" }
         if (def.tools.toSet().size != def.tools.size) return "agent '${def.id}': tools lists a tool twice"
         def.ui?.color?.let { if (!Regex("#[0-9a-fA-F]{6}").matches(it)) return "agent '${def.id}': ui.color must be #rrggbb" }

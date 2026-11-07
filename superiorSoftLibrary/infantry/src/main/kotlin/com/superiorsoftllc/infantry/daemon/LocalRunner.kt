@@ -113,7 +113,24 @@ object LocalRunner {
      * A refused spec throws [IllegalArgumentException] with the runner's reason (the callers' existing refusal path); an unreachable
      * runner throws [IllegalStateException]. Placement (RUNNER-POOL-3) picks the runner later; today it is always `local`.
      */
-    fun start(pool: RunnerPool, manager: SessionManager, options: SpawnOptions?, repo: File?): SessionRecord? {
+    fun start(
+        pool: RunnerPool, manager: SessionManager, options: SpawnOptions?, repo: File?,
+        /** RUNNER-AGENT-1: the agent profile's runner, the next source after the spawn's own `runner`. */
+        agentRunner: String? = null,
+        /** RUNNER-AGENT-1: the routing rule / `runners.default` tail of the precedence (Placement.pick). */
+        defaultRunner: String = RunnerPool.LOCAL,
+    ): SessionRecord? {
+        val wanted = options?.runner?.trim().orEmpty().ifEmpty { agentRunner?.trim().orEmpty() }
+        if (wanted.isNotEmpty() && wanted != RunnerPool.LOCAL) {
+            val entries = pool.runners().map {
+                com.superiorsoftllc.infantry.settings.RunnerEntry(it.name, it.state, it.health?.freeSlots?.takeIf { s -> s >= 0 } ?: Int.MAX_VALUE)
+            }
+            when (val placed = com.superiorsoftllc.infantry.settings.Placement.pick(null, null, defaultRunner, entries, options?.projectId, options?.provider, options?.runner, agentRunner)) {
+                is com.superiorsoftllc.infantry.settings.PlacementResult.Refused -> throw IllegalArgumentException("runner refused: ${placed.reason}")
+                is com.superiorsoftllc.infantry.settings.PlacementResult.Placed ->
+                    if (placed.runner != RunnerPool.LOCAL) throw IllegalArgumentException("runner ${placed.runner}: a session outside the board on a remote runner is not wired yet (RUNNER-AGENT-1 follow-up)")
+            }
+        }
         val link = pool.link(RunnerPool.LOCAL) ?: throw IllegalStateException("no '${RunnerPool.LOCAL}' runner")
         return when (val r = link.startSession(startSpec(options, repo))) {
             is OrchestratorReply.Ok -> {
