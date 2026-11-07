@@ -124,8 +124,18 @@ interface RunnerLink {
     /** The runner's heartbeat. A read. Fail mode on Unavailable: after `runners.lostAfterSec` the runner is `down`. */
     fun health(): OrchestratorReply<RunnerHealth> = unoffered("health")
 
+    /**
+     * RUNNER-POOL-6 (1.1.0): the events of the sessions this orchestrator started on the runner, after [sinceSeq] (0 = all kept), in
+     * seq order. Natural key: (session, seq); the caller dedupes. A read. Fail mode on Unavailable: asked again from the same seq.
+     */
+    fun events(sinceSeq: Long): OrchestratorReply<List<RunnerEvent>> = unoffered("events")
+
+    /** RUNNER-POOL-6 (1.1.0): up to [maxLines] (0 = the runner's own bound) transcript lines of a session from [fromLine]; read on demand. */
+    fun readTranscript(sessionId: String, fromLine: Int = 0, maxLines: Int = 0): OrchestratorReply<List<String>> = unoffered("readTranscript")
+
     companion object {
-        const val CONTRACT_VERSION = "1.0.0"
+        /** 1.1.0 (RUNNER-POOL-6): events, readTranscript; StartSpec may name a git remote, SessionRef carries the ticket branch. */
+        const val CONTRACT_VERSION = "1.1.0"
 
         private fun unoffered(op: String): OrchestratorReply<Nothing> = OrchestratorReply.Unavailable("this runner binding does not offer '$op'")
     }

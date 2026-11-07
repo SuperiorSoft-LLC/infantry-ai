@@ -1256,6 +1256,15 @@ class TicketBoard(
             row.runner, ruleRunnerOf(row), runnersDefault(), runnerEntries(), row.projectId, providerId,
         )
         if (placed is com.superiorsoftllc.infantry.settings.PlacementResult.Refused) return refusedStart(initialTicket, placed.reason)
+        // RUNNER-POOL-6: a start placed on a remote runner cuts no branch here: the runner clones the project's git remote and
+        // cuts (or reuses) the ticket branch itself; the board records the branch the runner answers.
+        val remoteRunner = (placed as com.superiorsoftllc.infantry.settings.PlacementResult.Placed).runner
+            .takeIf { it != com.superiorsoftllc.infantry.settings.Placement.LOCAL }
+        if (remoteRunner != null && worktreeRepo == null) {
+            return refusedStart(initialTicket, "runner $remoteRunner needs the project's git remote, and this project has no git repository")
+        }
+        val remoteBase = remoteRunner?.let { host.git.baseRef(row.projectId, row.epicId).ref }
+        if (remoteRunner != null && row.branch == null && remoteBase.isNullOrBlank()) return refusedStart(initialTicket, noBaseReason(row.projectId))
         host.sessions.checkSpawn(providerId, model)?.let { return refusedStart(initialTicket, it) }
         // Story 9.7b: a drained queue is an UNATTENDED launch (startNew refuses it over a spent budget or an
         // exhausted provider); a human move or start-next is only warned, and still starts.
@@ -1273,7 +1282,7 @@ class TicketBoard(
         // so a refused base leaves nothing behind and a start never creates a second branch for one ticket.
         var cutNote: String? = null
         var readyBranch: BranchOutcome.Ready? = null
-        val ticketWorktree: TicketWorktree? = if (requestedWorktree) {
+        val ticketWorktree: TicketWorktree? = if (requestedWorktree && remoteRunner == null) {
             val root = worktreeRepo ?: return refusedStart(initialTicket, "no repo configured")
             // BASE-1c: the ref AND the setting that chose it, so a fresh cut's note names an epic's base.
             val baseChoice = host.git.baseRef(row.projectId, row.epicId)
@@ -1325,10 +1334,11 @@ class TicketBoard(
             startedBy?.let { starter -> reportTo(starter) },
         )
         val composed = context.compose(input)
+        var remoteBranch: TicketWorktree? = null
         val started = when (val result = host.sessions.start(
             SessionStart(
                 prompt = composed.prompt,
-                workingDir = if (requestedWorktree) null else (repo ?: projectFolder)?.path,
+                workingDir = if (remoteRunner != null) worktreeRepo?.path else if (requestedWorktree) null else (repo ?: projectFolder)?.path,
                 worktree = readyBranch,
                 contextSources = composed.sources.map { ContextSourceInfo(it.source, it.chars) },
                 branchHint = null,
@@ -1342,9 +1352,17 @@ class TicketBoard(
                 contextLimit = row.contextLimit ?: byWeightContext?.contextLimit, // CONTEXT-LIMIT-1; TOKEN-7 weight default
                 instance = instance,
                 origin = if (unattendedLaunch) "unattended" else "human",
+                runner = remoteRunner,
+                title = remoteRunner?.let { row.title },
+                baseBranch = remoteBase,
+                recordedBranch = remoteRunner?.let { row.branch },
+                recordedBase = remoteRunner?.let { row.base },
             ),
         )) {
-            is SessionStartResult.Started -> result.session
+            is SessionStartResult.Started -> {
+                remoteBranch = result.branch?.let { b -> TicketWorktree(b, result.base ?: row.base.orEmpty(), "", "") }
+                result.session
+            }
             is SessionStartResult.Refused -> return refusedStart(initialTicket, result.reason)
         }
 
@@ -1353,7 +1371,7 @@ class TicketBoard(
         // refused start. So the commit failing (SQLITE_BUSY_SNAPSHOT, a full disk) is compensated here: the
         // session it would have recorded is killed, never left running against a ticket still filed as todo.
         val outcome = try {
-            commitStarted(id, started.id, ticketWorktree, startedBy, keepQueue = origin == HandOutOrigin.QUEUE_DRAIN)
+            commitStarted(id, started.id, ticketWorktree ?: remoteBranch, startedBy, keepQueue = origin == HandOutOrigin.QUEUE_DRAIN)
         } catch (e: Throwable) {
             runCatching { host.sessions.kill(started.id, force = true, by = "ticket start rollback", reason = "the start could not be committed") }
                 .onFailure { e.addSuppressed(it) }
@@ -1368,7 +1386,8 @@ class TicketBoard(
         // EFFORT-1: the same for a reasoning effort the harness cannot apply.
         val effortNote = started.effort?.let { "effort $it: ${started.effortSupport}" +
             (if (started.effortSupport == "unsupported") " (recorded, not applied by ${started.provider})" else "") }
-        val detail = listOfNotNull(cutNote, ruleNote, weightNote, limitNote, effortNote, launchWarning?.let { TicketStart.LAUNCH_WARNING + it }, pacingWarning).joinToString("; ").ifEmpty { null }
+        val runnerNote = remoteRunner?.let { "on runner $it" + (remoteBranch?.let { b -> " (branch ${b.branch})" } ?: "") }
+        val detail = listOfNotNull(runnerNote, cutNote, ruleNote, weightNote, limitNote, effortNote, launchWarning?.let { TicketStart.LAUNCH_WARNING + it }, pacingWarning).joinToString("; ").ifEmpty { null }
         return startAnswer(id, TicketStart(ok = true, reason = "started", detail = detail), outcome)
     }
 

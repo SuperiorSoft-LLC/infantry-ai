@@ -84,6 +84,11 @@ object BoardFromRuntime {
                 runtime.setting("runners.default")?.let { runCatching { (json.parseToJsonElement(it) as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }.getOrNull() }
                     ?.takeIf { it.isNotBlank() } ?: "local"
             },
+            // RUNNER-POOL-6: the pool's runners (local first); none listed = only local, as before.
+            runnerEntries = {
+                runtime.runners().map { com.superiorsoftllc.infantry.settings.RunnerEntry(it.name, it.state, it.freeSlots, it.projects.toSet(), it.loggedInHarnesses.toSet()) }
+                    .ifEmpty { listOf(com.superiorsoftllc.infantry.settings.RunnerEntry(com.superiorsoftllc.infantry.settings.Placement.LOCAL)) }
+            },
             routingRules = { projectId ->
                 runCatching { json.decodeFromString(ListSerializer(RoutingRule.serializer()), runtime.routingRules(projectId)) }.getOrDefault(emptyList())
             },

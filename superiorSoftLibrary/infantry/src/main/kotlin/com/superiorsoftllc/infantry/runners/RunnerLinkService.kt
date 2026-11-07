@@ -9,6 +9,7 @@ import com.superiorsoftllc.infantry.daemon.api.runners.LinkHandler
 import com.superiorsoftllc.infantry.daemon.api.runners.LinkServing
 import com.superiorsoftllc.infantry.daemon.api.runners.LinkTlsMaterial
 import com.superiorsoftllc.infantry.daemon.api.runners.RunnerLinkTransport
+import com.superiorsoftllc.infantry.daemon.api.runners.RunnerLinks
 import com.superiorsoftllc.infantry.settings.LimitDef
 import com.superiorsoftllc.infantry.settings.LimitRegistry
 import com.superiorsoftllc.infantry.settings.RunnerLinkSettings
@@ -18,7 +19,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import java.io.File
-import com.superiorsoftllc.infantry.runners.RunnerLinkFrames as F
+import com.superiorsoftllc.infantry.daemon.api.runners.RunnerLinkWire as F
 
 /**
  * RUNNER-POOL-5: the daemon's share of the runner link, run every `limits.runners.linkCheckSeconds` by [tick]:
@@ -33,6 +34,9 @@ import com.superiorsoftllc.infantry.runners.RunnerLinkFrames as F
  * is seen). With none loaded the daemon serves no link and [admin] refuses the operations that need one ([NO_TRANSPORT]). The
  * `infantry runner pair|add|rotate|detach <name>` commands reach the daemon as the owner-only [ADMIN] frame ([admin]), so only
  * the daemon loads the plugin; the pairing listener `runner pair` used to open in the CLI process is opened here.
+ *
+ * RUNNER-POOL-6: [links] is the orchestrator side's [RunnerLinks] (`api.runnerLinks`): one frame to a paired runner by name, with
+ * the url, pin and credential this store keeps; [starts] is the runner side's clone-and-push for starts with a git remote.
  */
 class RunnerLinkService(
     private val stateDir: File,
@@ -43,6 +47,7 @@ class RunnerLinkService(
     private val host: String = ANY_HOST,
     private val log: (String) -> Unit = { System.err.println(it) },
     private val clock: () -> Long = System::currentTimeMillis,
+    private val starts: RemoteStarts? = null,
 ) : AutoCloseable {
     private var serving: LinkServing? = null
     private var pairing: Pairing? = null
@@ -82,12 +87,30 @@ class RunnerLinkService(
     }
 
     private fun serve(store: RunnerLinkStore, t: RunnerLinkTransport) {
-        val server = RunnerLinkServer(store, RunnerAudit(File(dir, RunnerAudit.FILE)), codes = null, settings = settings, runner = { runner })
+        val server = RunnerLinkServer(store, RunnerAudit(File(dir, RunnerAudit.FILE)), codes = null, settings = settings, runner = { runner }, starts = starts)
         val plain = settings().allowPlainTailnet
         val s = t.serve(handler(server), host, linkPort(), if (plain) null else tls(store), callTimeoutMs())
         serving = s
         log("[infantry] runner link: serving ${if (plain) "PLAIN ws (runners.allowPlainTailnet)" else "wss"} on $host:${s.port} for orchestrator ${store.orchestrator()?.name}")
     }
+
+    /** RUNNER-POOL-6: the paired runners by name, for a runner binding plugin (credentials stay here). */
+    val links: RunnerLinks = object : RunnerLinks {
+        override fun paired(): List<String> =
+            if (RunnerLinkStore.exists(stateDir)) RunnerLinkStore.open(stateDir).runners().map { it.name }.sorted() else emptyList()
+
+        override fun call(runner: String, type: String, data: String): LinkAnswer {
+            if (!RunnerLinkStore.exists(stateDir)) throw LinkFailure("no paired runner '$runner'")
+            val store = RunnerLinkStore.open(stateDir)
+            val r = store.runner(runner) ?: throw LinkFailure("no paired runner '$runner'")
+            val answer = clientCall(limit, settings, transport).call(r.url, r.fingerprint.ifBlank { null }, store.selfId(), r.credential, type, data)
+            return LinkAnswer(answer.type, answer.data)
+        }
+    }
+
+    /** The port the paired link is served on, or null while it is not served. */
+    @Synchronized
+    fun servingPort(): Int? = serving?.port
 
     /** The orchestrator-side operations over the loaded transport, with the daemon's settings. */
     fun peers(store: RunnerLinkStore): RunnerPeers = RunnerPeers(store, clientCall(limit, settings, transport), clock)

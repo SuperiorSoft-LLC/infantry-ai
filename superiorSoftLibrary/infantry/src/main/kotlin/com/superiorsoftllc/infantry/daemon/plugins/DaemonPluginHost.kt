@@ -121,6 +121,12 @@ class DaemonPluginHost private constructor(
     /** UPDATE-ENGINE-1: every resolved module (daemon half or not), as the update engine lists them. */
     @Volatile private var resolvedModules: List<HostUpdates.Module> = emptyList()
 
+    /**
+     * RUNNER-POOL-6: the orchestrator side's calls to its paired runners ([DaemonApi.runnerLinks]); the daemon sets it once its
+     * runner link service exists. Official / core plugins only (a runner binding starts agents on another machine).
+     */
+    @Volatile var runnerLinks: com.superiorsoftllc.infantry.daemon.api.runners.RunnerLinks = com.superiorsoftllc.infantry.daemon.api.runners.NoRunnerLinks
+
     /** UPDATE-ENGINE-1 (docs/wiki/Updates.md): the one update engine; plugins reach it through [DaemonApi.updates]. */
     val updates = HostUpdates(
         modules = { resolvedModules },
@@ -1080,6 +1086,13 @@ class DaemonPluginHost private constructor(
         // CMD-1: the run surface; official / core, or a community module with the grant `runs`.
         override val updates: com.superiorsoftllc.infantry.daemon.api.updates.Updates =
             this@DaemonPluginHost.updates.scoped(p.id, p.tier, d.updateSources, p.setting.allow.toSet())
+
+        // RUNNER-POOL-6: read at each call, so a binding built before the daemon set it still reaches the paired runners.
+        override val runnerLinks: com.superiorsoftllc.infantry.daemon.api.runners.RunnerLinks =
+            if (p.community) com.superiorsoftllc.infantry.daemon.api.runners.NoRunnerLinks else object : com.superiorsoftllc.infantry.daemon.api.runners.RunnerLinks {
+                override fun paired() = this@DaemonPluginHost.runnerLinks.paired()
+                override fun call(runner: String, type: String, data: String) = this@DaemonPluginHost.runnerLinks.call(runner, type, data)
+            }
 
         override val runs: com.superiorsoftllc.infantry.daemon.api.runs.Runs get() {
             check(!p.community || "runs" in p.setting.allow) { "missing grant 'runs' in modules.json" }

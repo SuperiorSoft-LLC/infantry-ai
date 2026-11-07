@@ -159,6 +159,16 @@ runner push the ticket branch after each worker commit so a restart elsewhere lo
   themselves, over SSH. `hello` reports which harnesses are installed and logged in (a yes/no, not the credential). API
   keys, run secrets (`infantry_run_secrets`) and the keystore master key stay in each runner's own keystore. `StartSpec`
   carries env variable **names** a session needs, the runner fills values from its own store or refuses.
+* **As built (RUNNER-POOL-6, first slice).** `Infantry_RemoteRunner` registers the `remote` runner binding: each
+  operation is one frame over `api.runnerLinks` (core holds the url, pin and credential). A ticket placed on a remote runner
+  is refused when its checkout has no git repository or no `origin` remote. Otherwise the orchestrator sends the remote URL, the base and the
+  recorded branch, never a path. The runner clones it into `runners.cloneRoot` (blank = `<stateDir>/clones`, one clone per
+  project), or fetches it again, cuts the ticket worktree with `TicketBranches`, starts the harness in it, and pushes the
+  ticket branch to `origin` after each turn. Only `ticket/*` is pushed (owner decision): a start naming another branch is refused, and no other ref is ever pushed. Then it queues a `finished` event (`limits.runners.eventsKept` bound). The
+  board records the branch the runner answers. `hello` reports the harnesses, whether each is signed in (today:
+  registered and not refused by its provider), `runner.projects` and capacity. The pool heartbeat (`limits.runners.heartbeatSec`)
+  sets up / degraded / down. Not yet: the orchestrator does not poll runner events into the ticket's run record, and
+  `envNames` are carried but not yet filled on the runner.
 * **Build caches** are per runner and local (Gradle cache, node_modules). No sharing in this design; the first build on
   a fresh server is slow, later ones are warm. Shared caches are an opt-in later idea, not a step here.
 * **Builds and releases** (the automation role) stay on `local` by routing rule unless the owner moves them: the dist
@@ -266,8 +276,8 @@ Rate limits on pairing attempts (`runners.pairAttemptsPerHour`, default 5).
 | `runners.onLost` | `attention` | or `restart-elsewhere` |
 | `runners.pushOnCommit` | `false` | push ticket branch per commit (safer restart, more pushes) |
 | `runners.transcripts` | `on-demand` | or `stream` |
-| `runners.cloneRoot` | `<stateDir>/clones` | remote runner clone cache |
-| `runners.outboxMax` | named limit | event outbox bound |
+| `runners.cloneRoot` | `<stateDir>/clones` | remote runner clone cache (blank = the default) |
+| `limits.runners.eventsKept` | `500` | event outbox bound (built as this limit) |
 | `runners.pairCodeMin`, `runners.pairAttemptsPerHour` | `10`, `5` | pairing |
 | `runners.credentialRotateDays` | `30` | rotation |
 | `runners.allowPlainTailnet` | `false` | opt-in plain ws over a tailnet |

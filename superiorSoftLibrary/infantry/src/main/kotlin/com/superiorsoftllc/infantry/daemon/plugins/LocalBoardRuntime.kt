@@ -48,6 +48,8 @@ class LocalBoardRuntime(
     private val roleNotesOf: (projectId: String, role: String) -> List<Pair<String, String>> = { _, _ -> emptyList() },
     private val relatedBlockOf: (ticketId: String, description: String) -> String? = { _, _ -> null },
     private val fixedFirstTurnOf: () -> Pair<String, List<Pair<String, Int>>>? = { null },
+    /** RUNNER-POOL-6: the runner pool's view for placement; empty = only local. */
+    private val runnersOf: () -> List<com.superiorsoftllc.infantry.daemon.api.board.BoardRunner> = { emptyList() },
 ) : BoardRuntime {
     override val host: BoardHost get() = hostSource()
     override fun setting(key: String): String? = store.settings.get(key)?.value
@@ -60,6 +62,7 @@ class LocalBoardRuntime(
         is PacingVerdict.Over -> BoardPacing(over = v.reason)
         is PacingVerdict.Allow -> BoardPacing(warning = v.warning)
     }
+    override fun runners(): List<com.superiorsoftllc.infantry.daemon.api.board.BoardRunner> = runnersOf()
     override fun routingRefused(ticketId: String, projectId: String?, detail: String) {
         attention.raise(kind = AttentionKinds.LAUNCH_BLOCKED, ticketId = ticketId, outcome = "routing_refused", detail = detail)
     }

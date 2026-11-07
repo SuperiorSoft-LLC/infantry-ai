@@ -3,12 +3,13 @@
 package com.superiorsoftllc.infantry.runners
 
 import com.superiorsoftllc.infantry.daemon.FrameGate
+import com.superiorsoftllc.infantry.daemon.api.orchestrator.MailItem
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorReply
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerLink
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.StartSpec
 import com.superiorsoftllc.infantry.settings.RunnerLinkSettings
 import kotlinx.serialization.KSerializer
-import com.superiorsoftllc.infantry.runners.RunnerLinkFrames as F
+import com.superiorsoftllc.infantry.daemon.api.runners.RunnerLinkWire as F
 
 /**
  * RUNNER-POOL-5 (docs/RUNNER-POOL.md section 7): the RUNNER side of the link, with no transport: one request in, one answer out.
@@ -24,6 +25,9 @@ import com.superiorsoftllc.infantry.runners.RunnerLinkFrames as F
  * * Remote [F.START] / [F.STOP] then pass the runner-local allow-lists `runner.projects` and `runner.harnesses` (EMPTY = NONE) and
  *   [policy] (the runner's own say) before reaching [runner], the runner's local link.
  * * Every operation, refused ones included, is appended to [audit].
+ * * RUNNER-POOL-6: [F.HELLO] reports what this runner can run (harnesses and whether each is signed in, `runner.projects`,
+ *   capacity) from [runner]'s hello; [F.HEALTH], [F.DELIVER], [F.EVENTS] and [F.TRANSCRIPT] reach [runner] too. A [F.START] with a
+ *   git remote is checked out by [starts] (clone or fetch, then the ticket worktree) before the session starts in it.
  */
 class RunnerLinkServer(
     private val store: RunnerLinkStore,
@@ -34,6 +38,8 @@ class RunnerLinkServer(
     /** The runner's own policy for a remote start/stop: (seat, frame type, ticket id) -> refusal or null. */
     private val policy: (String, String, String?) -> String? = { _, _, _ -> null },
     private val clock: () -> Long = System::currentTimeMillis,
+    /** RUNNER-POOL-6: the clone, cut and push of starts that carry a git remote; null = such a start is refused. */
+    private val starts: RemoteStarts? = null,
 ) {
     /** One answer: [type] is [F.REPLY] or [F.ERROR]; [data] is the answer JSON or the reason. */
     data class Answer(val type: String, val data: String) {
@@ -53,7 +59,18 @@ class RunnerLinkServer(
         return when (type) {
             F.PAIR -> refuse(seat, type, null, from, "$type refused: already paired; rotate with ${F.REKEY}")
             F.HELLO -> store.orchestrator()!!.let { p ->
-                ok(seat, type, null, from, F.HelloAnswer.serializer(), F.HelloAnswer(store.selfId(), p.runnerName, issuedAt = p.issuedAt))
+                val info = runner()?.hello()?.let { (it as? OrchestratorReply.Ok)?.value }
+                ok(
+                    seat, type, null, from, F.HelloAnswer.serializer(),
+                    F.HelloAnswer(
+                        store.selfId(), p.runnerName, issuedAt = p.issuedAt,
+                        harnesses = info?.harnesses.orEmpty().map { F.HarnessWire(it.id, it.models, it.loggedIn) },
+                        // What the orchestrator may place here is this runner's own allow-list, not its whole project table.
+                        projects = settings().projects,
+                        capacity = info?.capacity ?: 0,
+                        os = info?.os.orEmpty(),
+                    ),
+                )
             }
             F.REKEY -> {
                 val p = store.orchestrator()!!
@@ -68,6 +85,37 @@ class RunnerLinkServer(
             }
             F.START -> start(seat, data, from)
             F.STOP -> stop(seat, data, from)
+            F.HEALTH -> read(seat, type, from) { link ->
+                when (val h = link.health()) {
+                    is OrchestratorReply.Ok -> F.json.encodeToString(F.HealthAnswer.serializer(), h.value.let { F.HealthAnswer(it.state, it.running, it.freeSlots, it.load) })
+                    is OrchestratorReply.Unavailable -> null
+                }
+            }
+            F.DELIVER -> {
+                val d = decode(F.DeliverRequest.serializer(), data) ?: return refuse(seat, type, null, from, "$type refused: malformed request")
+                if (starts?.isRemote(d.sessionId) != true) return refuse(seat, type, null, from, "$type refused: session ${d.sessionId.take(SHOWN_TYPE_SIZE)} was not started by this orchestrator")
+                read(seat, type, from) { link ->
+                    when (val m = link.deliverMail(d.sessionId, MailItem(d.text, d.origin, d.wakeReason, d.messageIds))) {
+                        is OrchestratorReply.Ok -> F.json.encodeToString(F.DeliverAnswer.serializer(), F.DeliverAnswer(m.value.kind, m.value.reason))
+                        is OrchestratorReply.Unavailable -> null
+                    }
+                }
+            }
+            F.EVENTS -> {
+                val e = decode(F.EventsRequest.serializer(), data) ?: return refuse(seat, type, null, from, "$type refused: malformed request")
+                val events = starts?.events(e.sinceSeq).orEmpty().map { F.EventWire(it.sessionId, it.seq, it.kind, it.payload) }
+                Answer(F.REPLY, F.json.encodeToString(F.EventsAnswer.serializer(), F.EventsAnswer(events)))
+            }
+            F.TRANSCRIPT -> {
+                val t = decode(F.TranscriptRequest.serializer(), data) ?: return refuse(seat, type, null, from, "$type refused: malformed request")
+                if (starts?.isRemote(t.sessionId) != true) return refuse(seat, type, null, from, "$type refused: session ${t.sessionId.take(SHOWN_TYPE_SIZE)} was not started by this orchestrator")
+                read(seat, type, from) { link ->
+                    when (val lines = link.readTranscript(t.sessionId, t.fromLine, t.maxLines)) {
+                        is OrchestratorReply.Ok -> F.json.encodeToString(F.TranscriptAnswer.serializer(), F.TranscriptAnswer(lines.value))
+                        is OrchestratorReply.Unavailable -> null
+                    }
+                }
+            }
             else -> refuse(seat, type, null, from, "$type refused: not a runner link operation this runner offers (contract ${F.CONTRACT})")
         }
     }
@@ -102,17 +150,33 @@ class RunnerLinkServer(
         }
         if (why != null) return refuse(seat, F.START, r.ticketId, from, "${F.START} refused: $why")
         val link = runner() ?: return refuse(seat, F.START, r.ticketId, from, "${F.START} refused: this runner has no local runner")
+        // RUNNER-POOL-6: a start with a git remote runs in a ticket worktree this runner cuts in its own clone of that remote.
+        val worktree = r.gitRemote?.takeIf { it.isNotBlank() }?.let { remote ->
+            val s = starts ?: return refuse(seat, F.START, r.ticketId, from, "${F.START} refused: this runner takes no start with a git remote")
+            val ticket = r.ticketId?.takeIf { it.isNotBlank() } ?: return refuse(seat, F.START, null, from, "${F.START} refused: a start with a git remote names its ticket")
+            try {
+                s.checkout(remote, r.projectId, ticket, r.title ?: ticket, r.base, r.branch)
+            } catch (e: IllegalArgumentException) {
+                return refuse(seat, F.START, ticket, from, "${F.START} refused: ${e.message}")
+            }
+        }
         val spec = StartSpec(
             startId = r.startId, agentId = r.agentId, role = r.role, projectId = r.projectId, provider = r.provider,
-            model = r.model, effort = r.effort, ticketId = r.ticketId,
-            // Never a path from the wire: the runner cuts the working copy from its own project directory.
+            model = r.model, effort = r.effort, ticketId = r.ticketId, contextLimit = r.contextLimit,
+            // Never a path from the wire: the runner cuts the working copy from its own clone (or its own project directory).
             repo = null,
+            prompt = r.prompt, title = r.title, envNames = r.envNames, worktree = worktree,
         )
         return when (val reply = link.startSession(spec)) {
             is OrchestratorReply.Ok -> {
                 val result = reply.value.refusal?.let { "refused: $it" } ?: "ok ${reply.value.sessionId.orEmpty()}".trim()
                 audit.record(seat, F.START, result, r.ticketId, from)
-                Answer(F.REPLY, F.json.encodeToString(F.StartAnswer.serializer(), F.StartAnswer(reply.value.sessionId, reply.value.refusal)))
+                val sessionId = reply.value.sessionId
+                if (sessionId != null && worktree != null) starts?.started(sessionId, worktree)
+                Answer(
+                    F.REPLY,
+                    F.json.encodeToString(F.StartAnswer.serializer(), F.StartAnswer(sessionId, reply.value.refusal, worktree?.branch, worktree?.base)),
+                )
             }
             is OrchestratorReply.Unavailable -> refuse(seat, F.START, r.ticketId, from, "${F.START} unavailable: ${reply.reason}")
         }
@@ -126,6 +190,15 @@ class RunnerLinkServer(
             is OrchestratorReply.Ok -> ok(seat, F.STOP, r.ticketId, from, F.StopAnswer.serializer(), F.StopAnswer(reply.value))
             is OrchestratorReply.Unavailable -> refuse(seat, F.STOP, r.ticketId, from, "${F.STOP} unavailable: ${reply.reason}")
         }
+    }
+
+    /** A read-like frame answered by [answer] over the local runner; null = the runner had no answer. */
+    private fun read(seat: String, type: String, from: String?, answer: (RunnerLink) -> String?): Answer {
+        val link = runner() ?: return refuse(seat, type, null, from, "$type refused: this runner has no local runner")
+        val data = answer(link) ?: return refuse(seat, type, null, from, "$type unavailable on this runner")
+        // Health is polled every heartbeat: only the frames that act or read a session are audited.
+        if (type != F.HEALTH) audit.record(seat, type, "ok", null, from)
+        return Answer(F.REPLY, data)
     }
 
     private fun <T> ok(seat: String, type: String, ticket: String?, from: String?, serializer: KSerializer<T>, value: T): Answer {

@@ -148,6 +148,12 @@ interface DaemonApi {
      */
     val updates: com.superiorsoftllc.infantry.daemon.api.updates.Updates get() = com.superiorsoftllc.infantry.daemon.api.updates.NoUpdates
 
+    /**
+     * RUNNER-POOL-6 (1.45.0, additive): calls to the runners this orchestrator is paired with (daemon.api.runners.RunnerLinks), for a
+     * runner binding plugin. Core keeps each runner's url, pin and credential; the plugin sends frames by runner name only.
+     */
+    val runnerLinks: com.superiorsoftllc.infantry.daemon.api.runners.RunnerLinks get() = com.superiorsoftllc.infantry.daemon.api.runners.NoRunnerLinks
+
     companion object {
         // 1.31.0 (CMD-1, additive): `runs` (daemon.api.runs.Runs) and `PluginSettings.hint`.
         // 1.30.0 (MAIL-HOOK-1, additive): `hooks.incomingMail` (IncomingMailHook, IncomingMail, MailVerdict): a pre-delivery look at each accepted mail.
@@ -198,7 +204,10 @@ interface DaemonApi {
         // LocalRunnerLink, RunnerPool / RunnerHub, `hooks.runnerBinding`.
         // 1.44.0 (RUNNER-POOL-6a, additive): daemon.api.runners.RunnerLinkTransport (LinkAnswer, LinkFailure, LinkTlsMaterial,
         // LinkHandler, LinkServing) and `hooks.runnerLinkTransport`: the runner link transport is a plugin's.
-        const val VERSION = "1.44.0"
+        // 1.45.0 (RUNNER-POOL-6, additive): `runnerLinks` (RunnerLinks), daemon.api.runners.RunnerLinkWire (the link frame family, contract
+        // 1.1.0), RunnerLink contract 1.1.0 (events, readTranscript; StartSpec git remote / prompt / worktree, SessionRef branch),
+        // RunnerHub remote runners + heartbeat, SessionStart.runner and BoardRuntime.runners (placement on a paired runner).
+        const val VERSION = "1.45.0"
     }
 }
 

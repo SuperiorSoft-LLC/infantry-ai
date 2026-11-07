@@ -42,10 +42,12 @@ object BoardWiring {
         events: TicketEventLog?, store: InfantryStore, manager: SessionManager, baseRef: TicketBaseRef,
         projectDirectory: (String?) -> String?, repo: File?, agents: AgentProfiles, knowledge: KnowledgeCounter, skills: SkillsSource,
         ticketImages: TicketImages,
+        runners: com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerHub? = null,
     ): LocalBoardHost? = events?.let { log ->
         LocalBoardHost(
             store = store, sessionManager = { manager }, baseRef = baseRef, projectDirectory = projectDirectory,
             defaultRepo = repo, eventLog = { log }, agentProfiles = agents, knowledge = knowledge, skills = skills, ticketImages = ticketImages,
+            runners = runners,
         )
     }
 }

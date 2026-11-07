@@ -13,15 +13,17 @@ import com.superiorsoftllc.infantry.daemon.api.runners.RunnerLinkTransport
 /**
  * RUNNER-POOL-6a (docs/RUNNER-POOL.md 2.2 and 5): Infantry_RemoteRunner's daemon half. It offers the runner link transport
  * ([WssLinkTransport]: wss with a pinned self-signed certificate) to core with `hooks.runnerLinkTransport`. RUNNER-POOL-6 adds
- * the remote runner binding (`hooks.runnerBinding`) here.
+ * the remote runner binding (`hooks.runnerBinding`, [RemoteRunnerLink]): every command to a paired runner is one frame.
  */
 class RemoteRunnerDaemonPlugin : DaemonPlugin {
     override fun start(api: DaemonApi) {
         api.hooks.runnerLinkTransport(TRANSPORT_ID, WssLinkTransport)
+        api.hooks.runnerBinding(BINDING_ID) { name, _ -> RemoteRunnerLink(name, api.runnerLinks) }
     }
 
     companion object {
         const val TRANSPORT_ID = "wss"
+        const val BINDING_ID = "remote"
     }
 }
 

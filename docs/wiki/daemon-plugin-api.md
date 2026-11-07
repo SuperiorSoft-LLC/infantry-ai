@@ -78,6 +78,7 @@ the source comment names a grant, a community module needs it in `modules.json` 
 | `files(projectId)` | `api.files` | the project's `.infantry/` folder; official, or grant `files` |
 | `runs` | `api.runs` | run a process in a working root; grant `runs` |
 | `triggerHost` | `api.triggers` | trigger store and run events |
+| `runnerLinks` | `api.runnerLinks` | RUNNER-POOL-6 (1.45.0): the paired runners by name (`paired()`) and one link frame to one of them (`call(runner, type, data)`); core keeps the url, pin and credential. Official / core plugins only; a community plugin gets `NoRunnerLinks` |
 | `updates` | `api.updates` | the update engine ([Updates](Updates.md)): components, sources, check / fetch / apply; declare source types in `daemon.updateSources`, grant `daemon.updateSource:<type>` |
 
 The grants and the version each member was added in are in the comments of `DaemonApi.kt` (the history list inside
@@ -172,7 +173,7 @@ Register with `api.hooks.<kind>(...)`; list the kinds in `daemon.hooks`; a commu
 | `status` | `StatusHook.fields()` | fail open | official/core only; extra fields in the health answer |
 | `approvalRules` | `ApprovalRulesHook.match/remember` | fail open | official/core only; stored "allow always" rules |
 | `orchestratorBinding(providerId, binding)` | `OrchestratorBinding` | | selected when the setting `orchestrator.provider` names it |
-| `runnerBinding(bindingId, binding)` | `RunnerBinding` | | kept on the runner pool at daemon start; placement onto it arrives with RUNNER-POOL-3 (docs/RUNNER-POOL.md) |
+| `runnerBinding(bindingId, binding)` | `RunnerBinding` | | builds the link for each paired runner (RUNNER-POOL-6: `Infantry_RemoteRunner` offers `remote`, one frame per operation over `api.runnerLinks`); a ticket placed on that runner (pin, rule or `runners.default`) starts through it (docs/RUNNER-POOL.md 3, 4) |
 | `runnerLinkTransport(transportId, transport)` | `RunnerLinkTransport` | | official/core only (1.44.0); the runner link's transport: core keeps pairing, credentials, rekey, detach, audit and allow-lists. None loaded = no link served and `infantry runner pair/add/rotate/detach` say so (RUNNER-POOL-6a, docs/RUNNER-POOL.md 5) |
 
 Fail closed means a throwing or slow hook refuses the request. Fail open means it reads as "no opinion" and the
@@ -391,6 +392,7 @@ Generated for the `infantryDaemonApi` guard `SdkTypesDocumentedGuardTest`: every
 - `BoardPacing`: [over] non-null = the start is refused with that reason; [warning] is advice on an allowed start.
 - `BoardRuntime`: DP-5h-3a (DaemonApi 1.12.0, additive; docs/DAEMON-BOARD-API.md section 10): everything a BOARD PLUGIN needs from the daemon to build its board, beyond the [BoardHost] ports: the stored settings the bo
 - `NoBoardRuntime`: A daemon without a board runtime.
+- `BoardRunner`: RUNNER-POOL-6: one runner as placement sees it (`BoardRuntime.runners()`): name, `up` / `degraded` / `down`, free slots, the projects it accepts, the harnesses signed in there.
 
 ### `BoardRuntimeInputs.kt`
 
@@ -472,7 +474,9 @@ RUNNER-POOL-2 (docs/RUNNER-POOL.md 2.1, 2.2): the plain data of the runner comma
 
 - `RunnerInfo`: What a runner can run, answered by `RunnerLink.hello`.
 - `RunnerHarness`: One harness a runner offers: its id, its models, whether its CLI is signed in.
-- `StartSpec`: A session start; `startId` is the natural key, a null field is the runner's default.
+- `StartSpec`: A session start; `startId` is the natural key, a null field is the runner's default. RUNNER-POOL-6: `gitRemote` (the runner clones it and cuts the ticket worktree), `base` / `branch`, `prompt`, `title`, and `envNames` (names only, never values).
+- `StartWorktree`: The ticket worktree a runner cut for a remote start (path, branch, base, repo root), handed to its local binding in `StartSpec.worktree`.
+- `RunnerEvent`: One event a runner queued for its orchestrator (`status`, `finished` after the branch push), read with `RunnerLink.events(sinceSeq)`.
 - `SessionRef`: The answer to `RunnerLink.startSession`: the session started, a refusal, or neither (the spec names no agent and no role).
 - `MailItem`: One composed mail turn for `RunnerLink.deliverMail` (the sender as `MessageOrigin` JSON, the folded message ids).
 - `MailResult`: `delivered`, `queued` (a run is in flight: keep it queued) or `failed`.
@@ -495,6 +499,14 @@ RUNNER-POOL-6a (DaemonApi 1.44.0, additive), package `com.superiorsoftllc.infant
 - `LinkTlsMaterial`: Where the runner certificate lives (the link folder) and the keystore password core keeps; the transport makes and loads the certificate there.
 - `LinkHandler`: Core's runner-side handler the transport calls: one request (type, data, orchestrator id, credential, peer address) in, one answer out; `malformed()` for an unreadable frame.
 - `LinkServing`: A served link: its `port`; closing it stops serving.
+
+### `runners/RunnerLinkWire.kt`
+
+RUNNER-POOL-6 (DaemonApi 1.45.0, additive), package `com.superiorsoftllc.infantry.daemon.api.runners`.
+
+- `RunnerLinkWire`: The link frames (contract 1.1.0) and their JSON bodies: hello (harnesses and sign-in yes/no, accepted projects, capacity), health, start, stop, deliver, events, transcript. A runner binding encodes them; core's runner side answers them.
+- `RunnerLinks`: The orchestrator side's paired runners, offered as `api.runnerLinks`: `paired()` and `call(runner, type, data)` (a `LinkFailure` when the runner cannot be reached).
+- `NoRunnerLinks`: No paired runner (a community plugin, or a daemon without the link service).
 
 ### `OwnerAsks.kt`
 
