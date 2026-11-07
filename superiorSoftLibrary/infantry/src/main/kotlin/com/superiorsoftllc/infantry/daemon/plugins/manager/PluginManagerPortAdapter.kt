@@ -25,7 +25,10 @@ class PluginManagerPortAdapter(private val manager: PluginManager) : PluginManag
 
     override fun search(query: String): List<HitView> {
         val installed = manager.list().map { it.id }.toSet()
-        return manager.search(query).map { HitView(it.entry.id, it.source, it.cls.label, it.latest?.version, it.entry.description, it.entry.license, it.entry.id in installed) }
+        return manager.search(query).map {
+            HitView(it.entry.id, it.source, it.cls.label, it.latest?.version, it.entry.description, it.entry.license, it.entry.id in installed,
+                it.entry.name, it.entry.tags, it.entry.repo, it.listName, it.fromRepo)
+        }
     }
 
     override fun inspect(ref: String): InspectOutcome {
@@ -48,4 +51,5 @@ class PluginManagerPortAdapter(private val manager: PluginManager) : PluginManag
 
     override fun removeSource(id: String) = manager.removeSource(id).view()
     override fun refresh() = manager.refresh().map { RefreshView(it.source, it.ok, it.stale, it.plugins, it.message) }
+    override fun importList(location: String) = manager.importList(location).view()
 }

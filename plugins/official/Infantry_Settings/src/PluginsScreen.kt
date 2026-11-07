@@ -57,6 +57,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -99,6 +100,9 @@ const val SOURCE_LOCATION_TAG = "plugins-source-location"
 const val SOURCE_ADD_TAG = "plugins-source-add"
 const val SOURCE_REMOVE_PREFIX = "plugins-source-remove-"
 const val SOURCE_REFRESH_TAG = "plugins-source-refresh"
+const val LIST_IMPORT_PATH_TAG = "plugins-list-import-path"
+const val LIST_IMPORT_TAG = "plugins-list-import"
+const val BROWSE_REPO_PREFIX = "plugins-browse-repo-"
 const val PLUGINS_QUERY_TAG = "plugins-installed-query"
 const val PLUGINS_FILTER_PREFIX = "plugins-filter-"
 const val PLUGINS_EMPTY_TAG = "plugins-installed-empty"
@@ -318,12 +322,12 @@ private fun Initial(id: String) {
 /** The leading part every row shares: initial, name, version, badges, then up to two lines of description. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun RowHead(id: String, version: String?, badges: List<Pair<String, Color>>, description: String?, modifier: Modifier) {
+private fun RowHead(id: String, version: String?, badges: List<Pair<String, Color>>, description: String?, modifier: Modifier, title: String = displayName(id)) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Initial(id)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(3.dp), itemVerticalAlignment = Alignment.CenterVertically) {
-                Text(displayName(id), color = Palette.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(title, color = Palette.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 version?.takeIf { it.isNotBlank() }?.let { Text(it, color = Palette.Muted, fontSize = 12.sp) }
                 for ((b, c) in badges) Chip(b, c)
             }
@@ -451,16 +455,19 @@ private fun Browse(port: PluginManagerPort, version: Int, busy: Boolean, modifie
         }
         when {
             hits == null -> Text("Searching ...", color = Palette.Muted, fontSize = 13.sp)
-            hits.isEmpty() -> Text("Nothing found. Add a source on the Sources tab, or refresh it.", color = Palette.Muted, fontSize = 13.sp)
+            hits.isEmpty() -> Text("Nothing found. Import a plugin list or add a source on the Sources tab, or refresh it.", color = Palette.Muted, fontSize = 13.sp)
             else -> Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 for (h in hits) RowCard {
                     Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         val official = h.cls == "official"
                         val badges = listOf(
                             (if (official) "Official" else h.cls.replaceFirstChar { it.uppercase() }) to (if (official) Palette.Info else Palette.Muted),
-                            "from ${h.source}" to Palette.Muted,
-                        )
-                        RowHead(h.id, h.version, badges, h.description, Modifier.weight(1f))
+                            "from ${h.listName ?: h.source}" to Palette.Muted,
+                        ) + h.tags.map { it to Palette.Muted }
+                        Column(Modifier.weight(1f)) {
+                            RowHead(h.id, h.version ?: if (h.fromRepo) "latest release" else null, badges, h.description, Modifier.fillMaxWidth(), title = h.name ?: displayName(h.id))
+                            h.repo?.let { repo -> RepoLink(h.id, repo) }
+                        }
                         Button(onClick = { install(h) }, enabled = !busy && !h.installed, modifier = Modifier.padding(start = 8.dp).heightIn(min = 48.dp).testTag(BROWSE_INSTALL_PREFIX + h.id)) {
                             Text(if (h.installed) "Installed" else "Install")
                         }
@@ -469,6 +476,40 @@ private fun Browse(port: PluginManagerPort, version: Int, busy: Boolean, modifie
             }
         }
     }
+}
+
+/** PLUGIN-REPO-1: an entry's repository as a link (owner/name opens its GitHub page; a URL opens as given). */
+@Composable
+private fun RepoLink(id: String, repo: String) {
+    val uri = LocalUriHandler.current
+    val target = repoPage(repo)
+    TextButton(onClick = { target?.let { runCatching { uri.openUri(it) } } }, enabled = target != null,
+        modifier = Modifier.padding(start = 44.dp).heightIn(min = 32.dp).testTag(BROWSE_REPO_PREFIX + id)) {
+        Text(repo, color = Palette.Info, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/** The web page of a list entry's `repo`: `owner/name` = its GitHub page, an http(s) URL as given; null = no page (a file URL). */
+internal fun repoPage(repo: String): String? {
+    val r = repo.trim()
+    return when {
+        r.startsWith("https://", true) || r.startsWith("http://", true) -> r
+        Regex("[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9_.-]+").matches(r) -> "https://github.com/$r"
+        else -> null
+    }
+}
+
+/** PLUGIN-REPO-1: "Import plugin list": a JSON file (picker) or a URL, saved as a community source. */
+@Composable
+private fun ListImport(port: PluginManagerPort, busy: Boolean, act: Act) {
+    var location by remember { mutableStateOf("") }
+    FormRow(
+        fields = { PathField(location, { location = it }, PathKind.FILE, "Import plugin list (JSON file or URL)", Modifier.fillMaxWidth(), tag = LIST_IMPORT_PATH_TAG, title = "Choose a plugin list (.json)", extensions = listOf("json"), textStyle = LocalTextStyle.current) },
+        buttons = {
+            Button(onClick = { act({ port.importList(location.trim()) }) { if (it.ok) location = "" } }, enabled = !busy && location.isNotBlank(),
+                modifier = Modifier.heightIn(min = 48.dp).testTag(LIST_IMPORT_TAG)) { Text("Import list") }
+        },
+    )
 }
 
 /** The fields side by side when wide, stacked under 560dp; the buttons follow. */
@@ -502,6 +543,9 @@ private fun Sources(port: PluginManagerPort, version: Int, busy: Boolean, act: A
     var refreshed by remember { mutableStateOf<List<RefreshView>>(emptyList()) }
     val sources = loaded(version) { port.sources() }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        ListImport(port, busy, act)
+        Text("A list is shown as community: it never raises what a plugin may do. Every install still shows its grants and licence first.",
+            color = Palette.Muted, fontSize = 12.sp)
         FormRow(
             fields = { stacked ->
                 OutlinedTextField(id, { id = it }, label = { Text("Name") }, singleLine = true,

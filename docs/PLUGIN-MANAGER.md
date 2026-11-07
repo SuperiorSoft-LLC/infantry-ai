@@ -408,3 +408,44 @@ refused; the real entry needs the Infantry key (**G9**, owner decision 8.2); (3)
 not declare, so `RequestedGrants` cannot list it: the module.json needs `"services": ["daemon.processes"]` (or a daemon `needs` entry) to
 be shown at consent; (4) `Infantry_Processes/module.json` has no `license`. Fresh install: not installed, off; existing installs keep it
 through the STACK-NEUTRAL-1 one-time migration (untouched by this ticket).
+
+## 11. Plugin lists (PLUGIN-REPO-1, ticket 338adaf4)
+
+A plugin list is a hand-written catalog (schema 1, section 3). It is not a second format. An entry may carry only
+`id`, `name`, `description`, `repo` and `tags`. `versions`, `sha256` and `grants` stay optional extras.
+
+```json
+{ "schema": 1, "name": "My plugins",
+  "plugins": [ { "id": "Acme_Starter", "name": "Starter", "description": "An example.", "repo": "acme/starter", "tags": ["demo"] } ] }
+```
+
+- **`repo`** is a GitHub `owner/name` (a `https://github.com/owner/name` page also works) or a plain https or `file:` URL
+  to the package itself.
+- **Import.** There are three ways in, and all three call `PluginManager.importList`:
+  - the CLI, `infantry plugin list import <file|url> [--id ID]` (and `infantry plugin list remove <id>`);
+  - the Plugins screen: Sources tab, "Import list";
+  - the MCP tool `infantry_plugin_list_import`.
+
+  `PluginLists.parse` checks the list. If it finds any problem, it refuses the whole list. The list is then saved as a
+  source in `sources.json`, and several lists can be held at once. A plain path becomes a `file:` URL, so a refresh
+  re-reads the file.
+- **Trust.** An imported list is always a `community` source. That is true even when the file itself says otherwise. A
+  list is a label and never raises a trust tier. The tier still comes from the package signature. Every install shows
+  its grants and licence, and asks for consent, before anything loads.
+- **Browse.** Search shows each entry's name, description, tags and repo link, and which list it came from.
+- **Install, step by step** (`RepoReleases`):
+  1. Resolve the latest release through `GET {api}/repos/{owner}/{name}/releases/latest`. This is the public API, with
+     no token. `{api}` is the endpoint setting `urls.pluginReleasesApi` (env `INFANTRY_PLUGIN_RELEASES_API`, default
+     `https://api.github.com`).
+  2. Pick the asset: the `.ihq`, `.zip` or `.jar` whose name starts with the id, else the only package asset.
+  3. If the release has a `SHA256SUMS` asset, its line must match the downloaded bytes. Without one, the install shows
+     a warning.
+  4. The package's `module.json` name must equal the entry id.
+  5. From there the normal installer runs: consent, versions kept for rollback, and hot apply in the daemon.
+- **Update** offers a newer release tag. `update` still refuses grants that were raised. **Remove** is the normal
+  uninstall.
+
+Gap carried over: **G5**. A daemon-only package (no UI `entry`) is still refused by the installer.
+
+Later phases (not built): an official list in a public repo; a default list named in the app manifest; signed lists;
+per-version pins in a list.

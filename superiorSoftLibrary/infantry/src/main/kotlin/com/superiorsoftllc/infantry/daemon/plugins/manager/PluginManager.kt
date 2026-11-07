@@ -107,7 +107,11 @@ data class PluginRow(
     val requiredBy: List<String> = emptyList(),
 )
 
-data class CatalogHit(val source: String, val cls: PluginClass, val entry: CatalogEntry, val latest: CatalogVersion?)
+/** [listName] = the catalog's (plugin list's) display name; [latest] is null for a repo entry, which resolves its release at install. */
+data class CatalogHit(val source: String, val cls: PluginClass, val entry: CatalogEntry, val latest: CatalogVersion?, val listName: String? = null) {
+    /** PLUGIN-REPO-1: installs from its repo's latest release (no versions listed). */
+    val fromRepo: Boolean get() = entry.versions.isEmpty() && !entry.repo.isNullOrBlank()
+}
 
 data class UpdateOffer(val id: String, val from: String, val to: String, val source: String, val newGrants: List<String>) {
     val grantsRaised: Boolean get() = newGrants.isNotEmpty()
@@ -176,10 +180,17 @@ class PluginManager(
     private val keepVersions: Int = 2,
     /** PLUGIN-HOTLOAD-1: the running daemon's plugin host; null = no daemon to apply a change to (the CLI). */
     private val hot: PluginHotApply? = null,
+    /** PLUGIN-REPO-1: the releases API a list entry's `repo` resolves against (`urls.pluginReleasesApi`; env wins). */
+    private val releasesApi: () -> String = {
+        com.superiorsoftllc.infantry.settings.EndpointRegistry.resolve(
+            com.superiorsoftllc.infantry.settings.EndpointRegistry.PLUGIN_RELEASES_API, { System.getenv(it) }, { null },
+        )
+    },
 ) {
     private val catalogCache get() = File(stateDir, "plugin-catalogs")
     private val downloads get() = File(stateDir, "plugin-downloads")
     private val versionsDir get() = File(root, "_versions")
+    private val repos get() = RepoReleases({ u, d, max -> fetchAny(u, d, max) }, releasesApi, downloads.also { it.mkdirs() }, MAX_CATALOG)
 
     // ---------------------------------------------------------------- sources and catalogs
 
@@ -204,6 +215,34 @@ class PluginManager(
         setSources(sources().filter { it.id != id })
         File(catalogCache, "$id.json").delete()
         return ManagerResult.done("source $id removed")
+    }
+
+    /**
+     * PLUGIN-REPO-1: imports a plugin list (a file path, a `file:` URL or an http(s) URL): it is fetched, checked
+     * ([PluginLists.parse]) and saved as a source in `sources.json`. An imported list is always COMMUNITY: a list is a label,
+     * it never raises a trust tier. [id] overrides the source id (else the list's id / name). Importing the same location
+     * again refreshes it; another list under a taken id is refused.
+     */
+    fun importList(location: String, id: String? = null): ManagerResult {
+        val loc = location.trim().takeIf { it.isNotEmpty() } ?: return ManagerResult.refused("BAD_SOURCE", "no list file or URL given")
+        val url = PluginLists.locationUrl(loc)
+        catalogCache.mkdirs()
+        val tmp = File(catalogCache, "import-${System.nanoTime()}.json")
+        try {
+            try { fetchAny(url, tmp, MAX_CATALOG) } catch (e: Exception) { return ManagerResult.refused("FETCH_FAILED", "could not read $loc: ${e.message}") }
+            val (list, problems) = PluginLists.parse(tmp.readText())
+            if (list == null) return ManagerResult.refused("BAD_LIST", "$loc is not a plugin list: ${problems.joinToString("; ")}")
+            val sid = id?.trim()?.takeIf { it.isNotEmpty() } ?: PluginLists.sourceId(list, loc)
+            sources().firstOrNull { it.id == sid }?.let {
+                if (it.url != url) return ManagerResult.refused("SOURCE_EXISTS", "a source named '$sid' already exists (${it.url ?: it.dir}); remove it or import with another id")
+            }
+            val saved = addSource(CatalogSource(sid, PluginClass.COMMUNITY.label, url = url))
+            if (!saved.ok) return saved
+            Files.move(tmp.toPath(), File(catalogCache, "$sid.json").toPath(), StandardCopyOption.REPLACE_EXISTING)
+            return ManagerResult.done("plugin list '${list.name ?: sid}' imported as source $sid (community): ${list.plugins.size} plugin(s)")
+        } finally {
+            tmp.delete()
+        }
     }
 
     private data class Loaded(val source: CatalogSource, val catalog: Catalog, val base: String, val stale: Boolean)
@@ -267,9 +306,9 @@ class PluginManager(
         val q = query.trim().lowercase()
         return loaded().flatMap { l ->
             l.catalog.plugins.filter { e ->
-                (q.isEmpty() || e.id.lowercase().contains(q) || e.description.lowercase().contains(q) || e.tags.any { it.lowercase() == q }) &&
+                (q.isEmpty() || e.id.lowercase().contains(q) || e.name.orEmpty().lowercase().contains(q) || e.description.lowercase().contains(q) || e.tags.any { it.lowercase() == q }) &&
                     tags.all { t -> e.tags.any { it.equals(t, true) } }
-            }.map { CatalogHit(l.source.id, l.source.pluginClass, it, compatible(it).maxByOrNull { v -> semver(v.version)!! }) }
+            }.map { CatalogHit(l.source.id, l.source.pluginClass, it, compatible(it).maxByOrNull { v -> semver(v.version)!! }, l.catalog.name) }
         }
     }
 
@@ -404,6 +443,7 @@ class PluginManager(
         var cls = PluginClass.CUSTOM
         var pin: CatalogVersion? = null
         var entry: CatalogEntry? = null
+        var repoPkg: ResolvedPackage? = null
         val sourceName: String
         val file: File
         val asPath = File(ref)
@@ -441,6 +481,17 @@ class PluginManager(
                 val (l, e) = found.first()
                 entry = e
                 cls = l.source.pluginClass
+                val repoRef = e.repo?.takeIf { e.versions.isEmpty() }?.let { RepoRef.parse(it) }
+                if (repoRef != null) {
+                    // PLUGIN-REPO-1: a list entry with only a repo: its latest release, checked against the release's SHA256SUMS.
+                    val pkg = try { repos.resolve(e.id, repoRef) } catch (x: Exception) { return null to ManagerResult.refused("FETCH_FAILED", "${e.id}: could not resolve ${e.repo}: ${x.message}") }
+                    if (want != null && pkg.version.isNotEmpty() && pkg.version != want) return null to ManagerResult.refused("NOT_IN_CATALOG", "${e.id}: ${e.repo} offers only its latest release (${pkg.version}), not $want")
+                    sourceName = l.source.id
+                    file = File(downloads, "${l.source.id}-$id-${System.nanoTime()}.ihq")
+                    try { fetchAny(pkg.url, file, InstallSettings.load(root).maxPackageBytes) } catch (x: Exception) { file.delete(); return null to ManagerResult.refused("FETCH_FAILED", "could not fetch ${pkg.url}: ${x.message}") }
+                    repoPkg = pkg
+                    if (pkg.sha256 == null) warnings += "the release has no ${RepoReleases.SUMS}: nothing pins these bytes"
+                } else {
                 val all = e.versions.filter { semver(it.version) != null }
                 val chosen = if (want != null) all.firstOrNull { it.version == want } else compatible(e).maxByOrNull { semver(it.version)!! }
                 if (chosen == null) {
@@ -457,12 +508,14 @@ class PluginManager(
                     val got = file.length(); file.delete()
                     return null to ManagerResult.refused("HASH_MISMATCH", "$id ${chosen.version}: size $got is not the catalog's ${chosen.size}")
                 }
+                }
             }
         }
         fun refuse(code: String, message: String): Pair<Inspection?, ManagerResult?> { file.delete(); return null to ManagerResult.refused(code, message) }
 
         val sha = ReleaseAssets.sha256(file)
         if (pin != null && !sha.equals(pin.sha256, ignoreCase = true)) return refuse("HASH_MISMATCH", "${entry!!.id} ${pin.version}: sha256 $sha is not the catalog's ${pin.sha256}")
+        repoPkg?.sha256?.let { want -> if (!sha.equals(want, ignoreCase = true)) return refuse("HASH_MISMATCH", "${entry!!.id}: sha256 $sha of ${repoPkg.assetName} is not the release's ${RepoReleases.SUMS} $want") }
 
         val installedNow = readManifest(file)?.name?.let { userFolder(it) != null } == true
         // A broken signature is always refused. Unsigned is accepted for community/custom (the pin, or the user's own say, is the proof), never for official.
@@ -481,6 +534,10 @@ class PluginManager(
             if (n != null && h != null && h < n) return refuse("API_INCOMPATIBLE", "${m.name} needs daemon API $need, this host is $hostDaemonApi")
         }
         val grants = RequestedGrants.of(m)
+        repoPkg?.let { pkg ->
+            if (m.name != entry!!.id) return refuse("BAD_MANIFEST", "${pkg.assetName} is ${m.name}, the list entry says ${entry.id}")
+            if (pkg.version.isNotEmpty() && SemVer.parseOrNull(pkg.version) != null && pkg.version != m.version) warnings += "release ${pkg.version} carries ${m.name} ${m.version}"
+        }
         if (pin != null) {
             if (m.name != entry!!.id || m.version != pin.version) return refuse("GRANTS_MISMATCH", "package is ${m.name} ${m.version}, the catalog entry says ${entry.id} ${pin.version}")
             if (grants.toSet() != pin.grants.toSet()) return refuse("GRANTS_MISMATCH", "package asks for ${grants.joinToString()} but the catalog lists ${pin.grants.joinToString()}")
@@ -541,6 +598,13 @@ class PluginManager(
             val cur = semver(row.version) ?: return@mapNotNull null
             val l = cats.firstOrNull { it.source.id == row.source } ?: return@mapNotNull null
             val e = l.catalog.plugins.firstOrNull { it.id == id } ?: return@mapNotNull null
+            if (e.versions.isEmpty()) {
+                // PLUGIN-REPO-1: a repo entry: its latest release's tag (one API call); the grants are only known after the download, and update() asks for any new one.
+                val ref = e.repo?.let { RepoRef.parse(it) } ?: return@mapNotNull null
+                val latest = runCatching { repos.latestVersion(ref) }.getOrNull() ?: return@mapNotNull null
+                val next = semver(latest)?.takeIf { it > cur } ?: return@mapNotNull null
+                return@mapNotNull UpdateOffer(id, row.version, latest, row.source, emptyList())
+            }
             val best = compatible(e).filter { semver(it.version)!! > cur }.maxByOrNull { semver(it.version)!! } ?: return@mapNotNull null
             UpdateOffer(id, row.version, best.version, row.source, best.grants - row.granted.toSet())
         }.sortedBy { it.id }

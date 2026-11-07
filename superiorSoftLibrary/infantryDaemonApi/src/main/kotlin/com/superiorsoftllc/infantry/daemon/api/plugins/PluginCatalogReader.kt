@@ -26,6 +26,13 @@ interface PluginCatalogReader {
      * Returns at once: [PluginRequestResult.questionId] names the owner question; nothing is installed until it is answered "Install with these grants".
      */
     fun request(ref: String, reason: String, askerSessionId: String?): PluginRequestResult
+
+    /**
+     * PLUGIN-REPO-1: imports a plugin list (a JSON file path or URL) as a community catalog source and returns what was
+     * imported. It adds data only: nothing is installed, and a list never raises a trust tier. Throws [IllegalArgumentException]
+     * with the reason when the list is refused (or this host has no manager).
+     */
+    fun importList(location: String): String = throw IllegalArgumentException("this host cannot import plugin lists")
 }
 
 /** One plugin on this host. [updateTo] = the newer catalog version on offer, null = none. */
@@ -55,6 +62,10 @@ data class CatalogSummary(
     val latest: String?,
     val grants: List<String>,
     val signer: String?,
+    /** PLUGIN-REPO-1: the display name (null = the id), the repository, and the list's display name. */
+    val name: String? = null,
+    val repo: String? = null,
+    val listName: String? = null,
 )
 
 /** An inspection (nothing installed). [problem] != null = refused, the other fields are blank. */

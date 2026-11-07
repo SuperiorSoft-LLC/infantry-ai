@@ -49,6 +49,14 @@ class PluginsDaemonPlugin : DaemonPlugin {
                 reader().status(id)?.let { summary(it).toString() } ?: throw IllegalArgumentException("no plugin '$id' on this host")
             },
             PluginTool(
+                "infantry_plugin_list_import",
+                "Import a plugin list (a JSON file path or URL listing plugin repos) as a community catalog source; its plugins then show in infantry_plugin_search. Installs nothing.",
+                mapOf("location" to "The list's file path or http(s)/file URL."), listOf("location"), false,
+            ) { a, _ ->
+                val r = reader().importList(a.str("location") ?: throw IllegalArgumentException("location is required"))
+                buildJsonObject { put("message", r) }.toString()
+            },
+            PluginTool(
                 "infantry_plugin_request",
                 "Ask the owner to install a plugin with exactly the grants it requests. Returns the owner question id at once; nothing is installed until the owner answers \"Install with these grants\". You never install or grant directly.",
                 mapOf("ref" to "The plugin reference ([source:]id[@version]).", "reason" to "Why the plugin is needed."), listOf("ref", "reason"), false,
@@ -72,6 +80,7 @@ class PluginsDaemonPlugin : DaemonPlugin {
         private fun catalog(c: CatalogSummary): JsonObject = buildJsonObject {
             put("id", c.id); put("description", c.description); put("tags", strings(c.tags)); put("class", c.cls); put("source", c.source)
             put("license", c.license); put("latest", c.latest); put("grants", strings(c.grants)); put("signer", c.signer)
+            put("name", c.name); put("repo", c.repo); put("list", c.listName)
         }
     }
 }

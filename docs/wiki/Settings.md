@@ -125,6 +125,7 @@ resets a key to its default. These keys are app-scope only. Daemon code reads th
 | `INFANTRY_SOURCE_URL` | `urls.sourceRepo` | `https://github.com/SuperiorSoft-LLC/infantry-ai` | The source repository page: About > Contribute (its `CONTRIBUTING.md`), Report a problem (its new-issue form), View on GitHub |
 | `INFANTRY_UPDATE_REPO` | `urls.releasesRepo` | the Updater manifest's `update.repo` (baked at build time); a developer override | `owner/repo` whose releases hold the update files (the updater) |
 | `INFANTRY_UPDATE_API` | `urls.releasesApi` | `https://api.github.com` | The releases API base the updater asks (a mirror or a fake server in tests) |
+| `INFANTRY_PLUGIN_RELEASES_API` | `urls.pluginReleasesApi` | `https://api.github.com` | The releases API base the plugin manager asks for a listed plugin repo's latest release (a mirror or a fake server in tests) |
 | `INFANTRY_DOCKER_IMAGE` | `urls.dockerImage` | `infantryai/infantry-ai` | The image a Docker install reports for `docker pull` |
 
 Not in the registry, because they are not the product's own addresses: `INFANTRY_WEB_HOSTS` (the host names the

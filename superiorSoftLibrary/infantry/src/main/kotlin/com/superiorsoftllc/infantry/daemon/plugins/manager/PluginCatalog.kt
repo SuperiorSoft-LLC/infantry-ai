@@ -54,8 +54,14 @@ data class CatalogEntry(
     val license: String? = null,
     val homepage: String? = null,
     val versions: List<CatalogVersion> = emptyList(),
-    /** REGISTRY-1a: the plugin's source repository (url); informational. */
+    /**
+     * REGISTRY-1a: the plugin's source repository. PLUGIN-REPO-1: an entry with a [repo] and no [versions] installs from that
+     * repo's latest release: a GitHub `owner/name` (or its `https://github.com/owner/name` page), or a plain https / file URL
+     * to the release asset itself ([RepoRef]).
+     */
     val repo: String? = null,
+    /** PLUGIN-REPO-1: the name shown to people (a plugin list's `name`); null = the [id]. */
+    val name: String? = null,
 )
 
 /** `catalog.json`, schema 1: static data, no code. */
@@ -66,6 +72,8 @@ data class Catalog(
     @SerialName("class") val cls: String? = null,
     val generated: String? = null,
     val plugins: List<CatalogEntry> = emptyList(),
+    /** PLUGIN-REPO-1: a plugin list's display name (`"SuperiorSoft plugins"`); null = the source id. */
+    val name: String? = null,
 )
 
 /** One catalog source (data, in `<plugins root>/sources.json`): a catalog [url] (http(s)/file) or a [dir] (catalog.json, or bare `.ihq` files). */
