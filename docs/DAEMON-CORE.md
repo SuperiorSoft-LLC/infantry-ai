@@ -295,6 +295,16 @@ ticket row, not `TicketRef`), `ticketTransition` event, `sessionEvent` stream, `
 `cli>memory` 14, `cli>issues` 9, `cli>pipeline` 8, `backlog>session` 7, `backlog>worktree` 7, `orchestration>session` 7). The `cli>*`
 entries are wire DTOs that belong in `infantryProtocol`. (3) `orchestrator.provider` as a declared setting instead of the env var.
 
+### 6.8 Runner pool: one orchestrator, N peer runners (RUNNER-POOL-1, 2026-11-07)
+
+Design in [RUNNER-POOL.md](RUNNER-POOL.md). Summary: one orchestrator (default: the local daemon) and N peer runners (the
+PC is runner `local`, a server is a named runner). `RunnerLink` grows into the runner command contract (start/stop,
+mail delivery, `(session, seq)` events, health, agent-frame forwarding) and a `RunnerPool` holds one link per runner;
+remote runners are a plugin binding, like `orchestratorBinding`. Placement is data (`runner: local | <name> | any` on
+tickets and routing rules, `runners.default = local`). Code reaches a runner only through the project's git remote;
+secrets and logins never travel. The link is paired, TLS, runner-scoped and rotated (security review in RUNNER-POOL.md
+section 7). `runners.enabled = false` by default, so local-only behaviour is unchanged.
+
 ## 7. Plugin storage (DAEMON-STORAGE-1, DaemonApi 1.15.0)
 
 `api.storage: PluginStorage` (default `NoPluginStorage`, every call refuses) gives a module its own tables in the daemon's one SQLite file; there is no raw core handle (DAEMON-PLUGIN-PLAN decision 5, conservative option).
