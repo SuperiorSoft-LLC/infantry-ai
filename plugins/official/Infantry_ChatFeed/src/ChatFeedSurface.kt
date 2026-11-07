@@ -205,7 +205,9 @@ const val NO_SESSION_HINT = "No live session. Start a ticket from the Board, or 
 
 /** LAUNCH-FIRSTRUN-1: the empty chat's line on a daemon with no project yet: where a new user begins. */
 const val FIRST_RUN_HINT = "Welcome to Infantry AI. Start by creating a project: press + next to the project picker " +
-    "(top left) and choose your git repository. Then open the Board to create and start your first ticket."
+    "(top left) and choose your git repository. Then open the Board to create and start your first ticket. " +
+    "When the agent wants to write a file or run a command, an approval card appears here: press Allow " +
+    "(Settings > Agents > Tool approval changes this)."
 
 /** CHAT-PAD-1: the one horizontal padding of every chat's content (empty state, transcript, notes, cards). */
 val ChatSidePadding = 14.dp

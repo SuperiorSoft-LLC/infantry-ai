@@ -230,10 +230,12 @@ processes, tools, usage), with the evidence for each cell and the open gaps, is 
 - **Same everywhere** (generic daemon code): mail and `mail.incoming` hooks, `infantry bg run --notify` and its
   end-of-job wake, process attribution and reaping, model pins, resume after a daemon restart, scripted auto-merge.
 - **claude**: the interactive terminal (the default) and headless stream-json both carry MCP, effort and context
-  limit. Only headless reports cost and compaction. Tool approval ASK acts as DENY.
+  limit. Only headless reports cost and compaction. Tool approval ASK relays each call to the owner (interactive:
+  the `ClaudePermissionHook` relay, HARNESS-GAP G3; headless: `--permission-prompt-tool stdio`, G4). ASK is the fresh-install
+  default (`ToolApprovals.DEFAULT`, FIRSTRUN-PERM-1).
 - **pi**: no MCP server (agents use the `infantry` CLI); approval modes are not enforced; context limit is best
   effort; no mid-turn input.
-- **opencode**: the only harness with a working ASK approval relay; effort and context limit are recorded but not
+- **opencode**: an ASK approval relay like claude's; effort and context limit are recorded but not
   applied; no mid-turn input.
 
 ## Type index (every other public type)

@@ -2155,7 +2155,12 @@ private fun broadcast(
                     )
                     is EventNormalizer.Line.Failure -> Envelope(Envelope.ERROR, line.message, event.sessionId)
                     // BUG-PERM-1: a denied tool is a one-line chat notice (an additive `stderr` line, no new frame).
-                    is EventNormalizer.Line.Denial -> denialEnvelope(event.sessionId, line, toolApprovalFor(event.sessionId))
+                    is EventNormalizer.Line.Denial -> {
+                        val mode = toolApprovalFor(event.sessionId)
+                        // FIRSTRUN-PERM-1: a blocked turn shows on the card/board as its last action, not only as "succeeded".
+                        com.superiorsoftllc.infantry.session.SessionActivityLog.event(event.sessionId, deniedAction(line, mode))
+                        denialEnvelope(event.sessionId, line, mode)
+                    }
                     EventNormalizer.Line.ToolEnd, EventNormalizer.Line.CompactionStart, EventNormalizer.Line.CompactionEnd -> null
                 }
                 val extra = moved?.takeIf { line !is EventNormalizer.Line.Tool }?.let { runActivityEnvelope(event.sessionId, it) }
@@ -4065,6 +4070,10 @@ internal fun denialEnvelope(
     "[infantry] " + com.superiorsoftllc.infantry.session.ToolApprovalNotice.text(denial.harness, denial.tool, mode, denial.prompted),
     sessionId,
 )
+
+/** FIRSTRUN-PERM-1: the card's last action for a denied tool, e.g. "blocked: Write denied (Tool approval = deny)". */
+internal fun deniedAction(denial: EventNormalizer.Line.Denial, mode: com.superiorsoftllc.infantry.harness.ToolApproval): String =
+    "blocked: ${denial.tool} denied (Tool approval = ${mode.wire}" + (if (denial.prompted) ", not approved" else "") + ")"
 
 private fun cliLocationsEnvelope(tools: List<com.superiorsoftllc.infantry.protocol.CliLocation>): Envelope = Envelope(
     Envelope.CLI_LOCATIONS,
