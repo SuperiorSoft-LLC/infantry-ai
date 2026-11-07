@@ -24,6 +24,16 @@ object RunnerLinkSettings {
     const val ANY = "*"
     /** RUNNER-POOL-6: where this runner clones the projects an orchestrator starts here; blank = `<state dir>/runner-clones`. */
     const val CLONE_ROOT = "runners.cloneRoot"
+    /**
+     * RUNNER-POOL-8 (orchestrator side, docs/RUNNER-POOL.md 3.1): what happens when a runner with workers on it stays silent past
+     * `limits.runners.lostAfterMin`: [ON_LOST_ATTENTION] (default) raises an attention item only; [ON_LOST_RESTART] also starts each
+     * of its in-progress tickets again via placement (not on the lost runner), from the ticket's last pushed branch.
+     */
+    const val ON_LOST = "runners.onLost"
+    const val ON_LOST_ATTENTION = "attention"
+    const val ON_LOST_RESTART = "restart-elsewhere"
+    /** RUNNER-POOL-8 (orchestrator side): a remote runner pushes the ticket branch after each worker commit too; default false. */
+    const val PUSH_ON_COMMIT = "runners.pushOnCommit"
 
     /** The setting text of [ALLOW_PLAIN_TAILNET]; it states the risk. */
     const val ALLOW_PLAIN_TAILNET_TEXT =
@@ -31,7 +41,7 @@ object RunnerLinkSettings {
             "text cross the network unencrypted; anyone on the path can read them and replay the credential to start agents with " +
             "tool permissions on this machine. Only for a private tailnet (Tailscale/WireGuard) you fully control. Default false."
 
-    val KEYS: Set<String> = setOf(ALLOW_PLAIN_TAILNET, PROJECTS, HARNESSES, CLONE_ROOT)
+    val KEYS: Set<String> = setOf(ALLOW_PLAIN_TAILNET, PROJECTS, HARNESSES, CLONE_ROOT, ON_LOST, PUSH_ON_COMMIT)
 
     /** What the runner link reads; [stored] is the raw stored JSON of a key (null = unset). */
     data class Values(
@@ -39,7 +49,10 @@ object RunnerLinkSettings {
         val projects: List<String> = emptyList(),
         val harnesses: List<String> = emptyList(),
         val cloneRoot: String = "",
+        val onLost: String = ON_LOST_ATTENTION,
+        val pushOnCommit: Boolean = false,
     ) {
+        val restartElsewhere: Boolean get() = onLost == ON_LOST_RESTART
         fun allowsProject(id: String?): Boolean = allows(projects, id)
         fun allowsHarness(id: String?): Boolean = allows(harnesses, id)
         private fun allows(list: List<String>, id: String?) = !id.isNullOrBlank() && (ANY in list || id in list)
@@ -50,7 +63,12 @@ object RunnerLinkSettings {
         projects = list(stored(PROJECTS)),
         harnesses = list(stored(HARNESSES)),
         cloneRoot = runCatching { (Json.parseToJsonElement(stored(CLONE_ROOT) ?: "\"\"") as JsonPrimitive).takeIf { it.isString }?.content }.getOrNull().orEmpty(),
+        onLost = runCatching { (Json.parseToJsonElement(stored(ON_LOST) ?: "null") as JsonPrimitive).takeIf { it.isString }?.content }.getOrNull()
+            ?.takeIf { it in ON_LOST_VALUES } ?: ON_LOST_ATTENTION,
+        pushOnCommit = runCatching { (Json.parseToJsonElement(stored(PUSH_ON_COMMIT) ?: "false") as JsonPrimitive).booleanOrNull }.getOrNull() ?: false,
     )
+
+    private val ON_LOST_VALUES = setOf(ON_LOST_ATTENTION, ON_LOST_RESTART)
 
     /** The keys for the settings `all()` map. */
     fun json(stored: (String) -> String?): Map<String, JsonElement> = values(stored).let { v ->
@@ -59,6 +77,8 @@ object RunnerLinkSettings {
             PROJECTS to JsonArray(v.projects.map(::JsonPrimitive)),
             HARNESSES to JsonArray(v.harnesses.map(::JsonPrimitive)),
             CLONE_ROOT to JsonPrimitive(v.cloneRoot),
+            ON_LOST to JsonPrimitive(v.onLost),
+            PUSH_ON_COMMIT to JsonPrimitive(v.pushOnCommit),
         )
     }
 
@@ -78,6 +98,14 @@ object RunnerLinkSettings {
         CLONE_ROOT -> JsonPrimitive(
             (value as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim()
                 ?: throw IllegalArgumentException("setting '$key' must be a JSON string: a folder path (\"\" = <state dir>/runner-clones)"),
+        )
+        ON_LOST -> JsonPrimitive(
+            (value as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim()?.takeIf { it in ON_LOST_VALUES }
+                ?: throw IllegalArgumentException("setting '$key' must be \"$ON_LOST_ATTENTION\" or \"$ON_LOST_RESTART\" (restart-elsewhere loses the lost runner's unpushed work)"),
+        )
+        PUSH_ON_COMMIT -> JsonPrimitive(
+            (value as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull
+                ?: throw IllegalArgumentException("setting '$key' must be a JSON boolean (true = push the ticket branch after each worker commit)"),
         )
         else -> throw IllegalArgumentException("unknown runner link setting '$key'")
     }

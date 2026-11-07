@@ -111,6 +111,11 @@ class MailRouter(
      * runner pool). Null = resume through [manager] directly, as before. QUEUED keeps the mail queued, FAILED records it.
      */
     private val resumeTurn: ((sessionId: String, turn: String, origin: com.superiorsoftllc.infantry.protocol.MessageOrigin, wakeReason: String, messageIds: List<String>) -> com.superiorsoftllc.infantry.daemon.api.orchestrator.MailResult)? = null,
+    /**
+     * RUNNER-POOL-8: whether [sessionId] lives on a remote runner (this daemon holds no record of it). Mail to it is composed here and
+     * handed to [resumeTurn]; an unreachable runner answers QUEUED, so the mail stays queued until the runner is back.
+     */
+    private val remoteSession: (sessionId: String) -> Boolean = { false },
 ) : MailDelivery {
 
     /** XPROJ-1: a project as mail addressing sees it. */
@@ -401,7 +406,8 @@ class MailRouter(
         val resolved = resolution as RecipientResolution.Resolved
 
         val latest = manager.get(resolved.sessionId)
-            ?: return DeliveryOutcome.Failed("unknown recipient session '${resolved.sessionId}'")
+            ?: return if (remoteSession(resolved.sessionId)) deliverRemote(resolved.sessionId, message, rest)
+            else DeliveryOutcome.Failed("unknown recipient session '${resolved.sessionId}'")
         // BUG-S3: mail addressed to the AGENT (not to one conversation by its session id) follows the agent's current
         // harness. A session at rest on a harness the agent was swapped away from (a cross-harness swap during a run
         // answers `none`) is left in history; the message opens a fresh session on the new harness instead.
@@ -487,6 +493,26 @@ class MailRouter(
             DeliveryOutcome.Retry("recipient '${session.id}' has a run in flight")
         } catch (e: Exception) {
             DeliveryOutcome.Failed("resume of '${session.id}' failed: ${e.message}")
+        }
+    }
+
+    /**
+     * RUNNER-POOL-8: mail for a session on a remote runner. Everything queued for it rides in one turn (as for a local session); the
+     * runner answers DELIVERED, QUEUED (a run in flight there, or the runner is offline: the mail stays queued and the next event or
+     * reconnect pumps it again) or FAILED.
+     */
+    private fun deliverRemote(sessionId: String, message: Message, rest: List<Message>): DeliveryOutcome {
+        val routed = resumeTurn ?: return DeliveryOutcome.Failed("recipient '$sessionId' lives on a remote runner and this daemon has no runner pool")
+        val source = MailSource.of(message, manager, automationFooter)
+        val group = listOf(message) + rest
+        val text = if (group.size > 1) compactTurn(group) else renderTurn(deliveryMode("", sessionId), group, source) { MailSource.of(it, manager, automationFooter) }
+        val result = runCatching { routed(sessionId, text, source.origin, "mail", group.map { it.id }) }
+            .getOrElse { return DeliveryOutcome.Retry("runner of '$sessionId' unreachable: ${it.message}") }
+        return when (result.kind) {
+            com.superiorsoftllc.infantry.daemon.api.orchestrator.MailResult.QUEUED ->
+                DeliveryOutcome.Retry(result.reason.ifBlank { "recipient '$sessionId' has a run in flight on its runner" })
+            com.superiorsoftllc.infantry.daemon.api.orchestrator.MailResult.FAILED -> DeliveryOutcome.Failed("delivery to '$sessionId' failed: ${result.reason}")
+            else -> DeliveryOutcome.Delivered("delivered to $sessionId on its runner", rest.map { it.id })
         }
     }
 
@@ -608,6 +634,8 @@ class MailRouter(
             }
             return RecipientResolution.Resolved(recipient)
         }
+        // RUNNER-POOL-8: a session this orchestrator placed on a remote runner (no local record).
+        if (remoteSession(recipient)) return RecipientResolution.Resolved(recipient)
 
         // Check if it's a known agent profile ID
         val agentProfile = agentProfiles.get(recipient)

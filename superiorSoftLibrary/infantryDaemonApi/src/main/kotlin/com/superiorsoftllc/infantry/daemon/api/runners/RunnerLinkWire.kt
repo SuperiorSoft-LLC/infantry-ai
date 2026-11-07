@@ -20,8 +20,10 @@ object RunnerLinkWire {
     /**
      * 1.1.0 (RUNNER-POOL-6): hello carries what the runner can run; health, deliver, events, transcript; a start may carry a git remote.
      * 1.2.0 (RUNNER-POOL-7): [FORWARD_PULL] / [FORWARD_ANSWER], the agent frames a runner forwards to its orchestrator.
+     * 1.3.0 (RUNNER-POOL-8): [EventsRequest.acked] (the outbox keeps an event until acknowledged, seq per session);
+     * [StartRequest.pushOnCommit].
      */
-    const val CONTRACT = "1.2.0"
+    const val CONTRACT = "1.3.0"
 
     const val PAIR = "runner_link_pair"
     const val HELLO = "runner_link_hello"
@@ -93,6 +95,8 @@ object RunnerLinkWire {
         val base: String? = null,
         val branch: String? = null,
         val envNames: List<String> = emptyList(),
+        /** RUNNER-POOL-8: push the ticket branch after each worker commit as well as after each turn. */
+        val pushOnCommit: Boolean = false,
     )
 
     /** [branch] / [base] are the ticket branch the runner cut or reused (null without a git remote). */
@@ -115,8 +119,12 @@ object RunnerLinkWire {
     @Serializable
     data class DeliverAnswer(val kind: String, val reason: String = "")
 
+    /**
+     * RUNNER-POOL-8: [acked] maps a session to the highest seq the orchestrator applied: the runner drops those and answers every event
+     * still kept. Empty = acknowledge nothing; then [sinceSeq] (an older orchestrator's read) filters the answer.
+     */
     @Serializable
-    data class EventsRequest(val sinceSeq: Long = 0)
+    data class EventsRequest(val sinceSeq: Long = 0, val acked: Map<String, Long> = emptyMap())
 
     /** One session event of a remote-started session: [kind] `status` (payload = the state name) or `finished` (payload = exit code). */
     @Serializable

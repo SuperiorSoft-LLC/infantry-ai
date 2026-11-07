@@ -21,14 +21,18 @@ import java.util.concurrent.ConcurrentHashMap
  *   remote's view, fetched just now), or the ticket's recorded branch (fetched from `origin/<branch>` when this clone lacks it).
  * * [started] remembers a session it cut a worktree for; [onTurnEnd] pushes that session's ticket branch to `origin` after every
  *   finished turn (the orchestrator merges from the remote, never from this disk) and queues a [RunnerEvent.FINISHED] event.
- * * [events] answers the orchestrator's `events` reads: the last [eventsKept] events of sessions it started, after a seq.
+ * * [events] answers the orchestrator's `events` reads. RUNNER-POOL-8 (docs/RUNNER-POOL.md 3.1, 5): the outbox numbers each
+ *   session's events 1, 2, 3 ... and keeps an event until the orchestrator acknowledges it (`events(acked)`), bounded by
+ *   [outboxMax] (`limits.runners.outboxMax`; past it the oldest goes and the orchestrator sees the gap).
+ * * [checkCommits] (RUNNER-POOL-8, `runners.pushOnCommit`): pushes the ticket branch of a session started with push-on-commit as
+ *   soon as its worker committed, not only at the end of the turn.
  *
  * Nothing here takes a path from the wire: the clone folder comes from the project id (or the remote's hash), the worktree from
  * [TicketBranches]. Git runs through [git]; a hung git is bounded by [SystemGitCli]'s timeout.
  */
 class RemoteStarts(
     private val cloneRoot: () -> File,
-    private val eventsKept: () -> Int,
+    private val outboxMax: () -> Int,
     private val git: GitCli = SystemGitCli(),
     private val log: (String) -> Unit = { System.err.println(it) },
 ) {
@@ -36,7 +40,10 @@ class RemoteStarts(
     private val sessions = ConcurrentHashMap<String, StartWorktree>()
     private val linked = ConcurrentHashMap.newKeySet<String>()
     private val outbox = ArrayDeque<RunnerEvent>()
-    private var seq = 0L
+    /** RUNNER-POOL-8: the last seq given per session. */
+    private val seqs = HashMap<String, Long>()
+    /** RUNNER-POOL-8: sessions started with push-on-commit -> the HEAD last pushed (blank = not known yet). */
+    private val pushOnCommit = ConcurrentHashMap<String, String>()
 
     /** The clone, fetch and cut for one remote start; a refusal throws [IllegalArgumentException] with the reason. */
     fun checkout(
@@ -79,8 +86,9 @@ class RemoteStarts(
     }
 
     /** Session [sessionId] runs in [worktree], cut by [checkout] for its orchestrator. */
-    fun started(sessionId: String, worktree: StartWorktree) {
+    fun started(sessionId: String, worktree: StartWorktree, pushOnCommit: Boolean = false) {
         sessions[sessionId] = worktree
+        if (pushOnCommit) this.pushOnCommit[sessionId] = head(worktree).orEmpty()
     }
 
     /** RUNNER-POOL-7: session [sessionId] was started over the link (with or without a git remote); its agent frames are forwarded. */
@@ -107,25 +115,65 @@ class RemoteStarts(
             add(sessionId, RunnerEvent.FINISHED, code?.toString().orEmpty())
             return
         }
-        val pushed = git.run(File(wt.path), listOf("push", "origin", "${wt.branch}:refs/heads/${wt.branch}"))
-        if (!pushed.ok) log("[infantry] runner: push of ${wt.branch} for session $sessionId failed: ${pushed.err()}")
+        push(sessionId, wt)
         add(sessionId, RunnerEvent.FINISHED, code?.toString().orEmpty())
     }
+
+    /**
+     * RUNNER-POOL-8: push the ticket branch of every push-on-commit session whose HEAD moved since its last push. The daemon calls it
+     * every `limits.runners.commitCheckSec`; with no such session it runs no git at all. Returns how many branches were pushed.
+     */
+    fun checkCommits(): Int = pushOnCommit.keys.count { sessionId ->
+        val wt = sessions[sessionId] ?: run { pushOnCommit.remove(sessionId); return@count false }
+        val now = head(wt) ?: return@count false
+        if (now == pushOnCommit[sessionId] || !isTicketBranch(wt.branch)) false else push(sessionId, wt)
+    }
+
+    /** Push [wt]'s ticket branch to `origin`; true when it went through (the HEAD pushed is remembered for [checkCommits]). */
+    private fun push(sessionId: String, wt: StartWorktree): Boolean {
+        val pushed = git.run(File(wt.path), listOf("push", "origin", "${wt.branch}:refs/heads/${wt.branch}"))
+        if (!pushed.ok) {
+            log("[infantry] runner: push of ${wt.branch} for session $sessionId failed: ${pushed.err()}")
+            return false
+        }
+        if (pushOnCommit.containsKey(sessionId)) head(wt)?.let { pushOnCommit[sessionId] = it }
+        return true
+    }
+
+    private fun head(wt: StartWorktree): String? =
+        git.run(File(wt.path), listOf("rev-parse", "HEAD")).takeIf { it.ok }?.out()?.takeIf { it.isNotEmpty() }
 
     /** The session ended for good (killed or removed): no more pushes for it. */
     fun forget(sessionId: String) {
         sessions.remove(sessionId)
         linked.remove(sessionId)
+        pushOnCommit.remove(sessionId)
     }
 
+    /** Every kept event with a seq above [sinceSeq] (an older orchestrator's read; it acknowledges nothing). */
     @Synchronized
     fun events(sinceSeq: Long): List<RunnerEvent> = outbox.filter { it.seq > sinceSeq }
 
+    /**
+     * RUNNER-POOL-8: drop what [acked] acknowledges (session -> the highest seq the orchestrator applied), then answer every event
+     * still kept, oldest first. A lost answer costs nothing: the next call with the same [acked] answers the same events again.
+     */
+    @Synchronized
+    fun events(acked: Map<String, Long>): List<RunnerEvent> {
+        if (acked.isNotEmpty()) outbox.removeAll { it.seq <= (acked[it.sessionId] ?: 0L) }
+        return outbox.toList()
+    }
+
     @Synchronized
     private fun add(sessionId: String, kind: String, payload: String) {
-        outbox.addLast(RunnerEvent(sessionId, ++seq, kind, payload))
-        val keep = eventsKept().coerceAtLeast(1)
-        while (outbox.size > keep) outbox.removeFirst()
+        val next = (seqs[sessionId] ?: 0L) + 1
+        seqs[sessionId] = next
+        outbox.addLast(RunnerEvent(sessionId, next, kind, payload))
+        val keep = outboxMax().coerceAtLeast(1)
+        while (outbox.size > keep) {
+            val dropped = outbox.removeFirst()
+            log("[infantry] runner: event outbox full (limits.runners.outboxMax = $keep): dropped ${dropped.kind} #${dropped.seq} of session ${dropped.sessionId}")
+        }
     }
 
     companion object {

@@ -62,6 +62,14 @@ class PluginCoreAccess(private val board: TicketBoard, private val epics: EpicSt
                 is PromptLaunch.Refused -> "R:${l.detail}"
             }
         }
+        // RUNNER-POOL-8: [ticketId, lostRunner, problem] -> "S:<sessionId>" (started elsewhere) or "R:<detail>".
+        "restartElsewhere" -> {
+            val a = json.parseToJsonElement(payload).jsonArray
+            fun s(i: Int) = (a[i] as? JsonPrimitive)?.takeIf { it.isString }?.content.orEmpty()
+            val start = board.restartElsewhere(s(0), s(1), s(2)).ticket
+            val st = start.start
+            if (st?.ok == true && start.sessionId != null) "S:${start.sessionId}" else "R:" + listOfNotNull(st?.reason, st?.detail).joinToString(": ").ifBlank { "not started" }
+        }
         "epicGet" -> epics.get(payload)?.let { json.encodeToString(Epic.serializer(), it) }.orEmpty()
         "epicList" -> json.encodeToString(ListSerializer(Epic.serializer()), epics.list(payload))
         "epicSave" -> {

@@ -93,6 +93,8 @@ class LocalBoardHost(
     private val runners: com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerHub? = null,
     /** RUNNER-POOL-6: the git remote a remote runner clones (`origin`'s url in the orchestrator's checkout); null = none. */
     private val gitRemoteOf: (repo: File) -> String? = ::originUrl,
+    /** RUNNER-POOL-8: `runners.pushOnCommit`, read at each remote start (the runner pushes the ticket branch after each worker commit). */
+    private val pushOnCommit: () -> Boolean = { false },
 ) : BoardHost {
 
     private val listeners = CopyOnWriteArrayList<BoardSessionListener>()
@@ -131,6 +133,7 @@ class LocalBoardHost(
             agentId = request.agentId, role = request.role, projectId = request.projectId, provider = request.providerId,
             model = request.model, effort = request.effort, contextLimit = request.contextLimit, ticketId = request.ticketId,
             prompt = request.prompt, title = request.title, base = request.baseBranch, branch = request.recordedBranch, gitRemote = remote,
+            pushOnCommit = runCatching(pushOnCommit).getOrDefault(false),
         )
         return when (val reply = link.startSession(spec)) {
             is com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorReply.Unavailable -> SessionStartResult.Refused("runner $runner unavailable: ${reply.reason}")
@@ -191,11 +194,13 @@ class LocalBoardHost(
     }
 
     override val git: BoardGit = object : BoardGit {
-        override fun ensureBranch(request: BranchRequest): BranchOutcome =
-            when (val out = branches.ensure(TicketBranchRequest(request.ticketId, request.title, File(request.repo), request.baseBranch, request.recordedBranch, request.recordedBase))) {
+        override fun ensureBranch(request: BranchRequest): BranchOutcome {
+            request.recordedBranch?.let { fetchMissingTicketBranch(File(request.repo), it) }
+            return when (val out = branches.ensure(TicketBranchRequest(request.ticketId, request.title, File(request.repo), request.baseBranch, request.recordedBranch, request.recordedBase))) {
                 is TicketBranchOutcome.Ready -> BranchOutcome.Ready(out.worktree.branch, out.worktree.base, out.worktree.path, out.worktree.repoRoot, out.note, out.warning)
                 is TicketBranchOutcome.Refused -> BranchOutcome.Refused(out.reason)
             }
+        }
 
         override fun baseRef(projectId: String?, epicId: String?): BaseChoice =
             this@LocalBoardHost.baseRef.choose(BaseScope(projectId, epicId)).let { BaseChoice(it.ref, it.source) }
@@ -430,6 +435,21 @@ class LocalBoardHost(
 
     private companion object {
         const val ORIGIN_UNATTENDED = "unattended"
+    }
+}
+
+/**
+ * RUNNER-POOL-8: a ticket whose worker ran on a remote runner (restarted here after that runner was lost) has its branch only on
+ * the project's remote. When [repo] lacks the recorded `ticket/` branch, it is fetched from `origin` so the new worker starts from
+ * what was last pushed. A branch the checkout has is never touched (no rewind of local work); a failed fetch leaves the branch
+ * to be cut as before.
+ */
+internal fun fetchMissingTicketBranch(repo: File, branch: String, git: com.superiorsoftllc.infantry.worktree.GitCli = com.superiorsoftllc.infantry.worktree.SystemGitCli()) {
+    if (!com.superiorsoftllc.infantry.runners.RemoteStarts.isTicketBranch(branch) || !repo.isDirectory) return
+    runCatching {
+        if (git.run(repo, listOf("rev-parse", "--verify", "--quiet", "refs/heads/$branch")).ok) return
+        if (originUrl(repo) == null) return
+        git.run(repo, listOf("fetch", "origin", "refs/heads/$branch:refs/heads/$branch"))
     }
 }
 

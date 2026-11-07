@@ -174,7 +174,7 @@ class ForwardFramesTest {
 
     @Test
     fun `a session the remote orchestrator did not start is never forwarded`() {
-        val starts = RemoteStarts(cloneRoot = { File(dir, "clones") }, eventsKept = { 10 }, log = {})
+        val starts = RemoteStarts(cloneRoot = { File(dir, "clones") }, outboxMax = { 10 }, log = {})
         val forwarder = FrameForwarder(owns = starts::isLinked, timeoutMs = { 1_000 }, pendingMax = { 1 })
         assertFalse(forwarder.forwards("local-session"), "a daemon's own session: the side tag is never consulted")
         starts.linked("linked-session")

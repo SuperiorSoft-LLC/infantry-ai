@@ -951,7 +951,7 @@ class InfantryDaemon(
             // push on each turn end), and the orchestrator side's paired runners (set once the runner link service exists).
             val remoteStarts = com.superiorsoftllc.infantry.runners.RemoteStarts(
                 cloneRoot = { settings.runnerLink().cloneRoot.takeIf { it.isNotBlank() }?.let(::File) ?: File(stateDir(), com.superiorsoftllc.infantry.runners.RemoteStarts.DEFAULT_FOLDER) },
-                eventsKept = { settings.limit(LimitRegistry.RUNNERS_EVENTS_KEPT).toInt() },
+                outboxMax = { settings.limit(LimitRegistry.RUNNERS_OUTBOX_MAX).toInt() },
             )
             val runnerLinksRef = java.util.concurrent.atomic.AtomicReference<com.superiorsoftllc.infantry.daemon.api.runners.RunnerLinks>(com.superiorsoftllc.infantry.daemon.api.runners.NoRunnerLinks)
             val localRunnerLink = com.superiorsoftllc.infantry.daemon.api.orchestrator.LocalRunnerLink(
@@ -974,7 +974,8 @@ class InfantryDaemon(
                         )
                     },
                     capacity = { settings.limitCap(LimitRegistry.MAX_SESSIONS) },
-                    events = remoteStarts::events,
+                    events = { since -> remoteStarts.events(since) },
+                    eventsAcked = { acked -> remoteStarts.events(acked) },
                 ),
             )
             val runnerPool = com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerHub(localRunnerLink, remotes = { runnerLinksRef.get().paired() })
@@ -1225,6 +1226,8 @@ class InfantryDaemon(
                 knowledge = knowledge, skills = skillsSource, starterOf = { sid -> orchestratorLink.starterOf(sid).valueOr(null) },
                 projectRefs = { projectStore.list().map { MailRouter.ProjectRef(it.id, it.name) } },
                 resumeTurn = LocalRunner.deliverVia(runnerPool),
+                // RUNNER-POOL-8: a session placed on a remote runner takes its mail through that runner (kept queued while it is offline).
+                remoteSession = { sid -> runnerPool.runnerOf(sid) != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL },
             )
             // Story 9.5: triggers -- stored, coalesced, tripped on any non-success, their starts unattended.
             // TRIGGER-NUDGE (contract 1.105.0): a `prompt` action is mail to the target in the trigger's project.
@@ -1292,6 +1295,7 @@ class InfantryDaemon(
                 // NOGIT-1: a project's own directory decides where its start runs / cuts.
                 projectDirectory = { id -> id?.let { runCatching { projectStore.get(it).directory }.getOrNull() } },
                 repo = repo, agents = agents, knowledge = knowledge, skills = skillsSource, runners = runnerPool,
+                pushOnCommit = { settings.runnerLink().pushOnCommit },
                 // IMG-3: a ticket's images live under its project's directory (.infantry/uploads/ticket/).
                 ticketImages = com.superiorsoftllc.infantry.backlog.TicketImages { projectId ->
                     runCatching { projectStore.get(projectId) }.getOrNull()?.directory?.takeIf { it.isNotBlank() }?.let(::File)?.takeIf { it.isDirectory }
@@ -1872,9 +1876,34 @@ class InfantryDaemon(
             plugins.runnerLinks = runnerLinkService.links
             manager.addSessionEndedListener(remoteStarts::forget)
             // RUNNER-POOL-6: a heartbeat round over the paired runners every limits.runners.heartbeatSec sets up / degraded / down.
+            // RUNNER-POOL-8 (docs/RUNNER-POOL.md 3.1): after each round the watch replays the runners' outboxes (deduped by session +
+            // seq), pumps the mail of sessions that came to rest or whose runner is back, and handles a runner lost past lostAfterMin.
+            val runnerWatch = com.superiorsoftllc.infantry.runners.RunnerWatch(
+                pool = runnerPool,
+                lostAfterMs = { settings.limit(LimitRegistry.RUNNERS_LOST_AFTER_MIN) * 60_000L },
+                restartElsewhere = { settings.runnerLink().restartElsewhere },
+                apply = { _, e ->
+                    val rest = e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.FINISHED ||
+                        (e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.STATUS && e.payload.equals(SessionState.IDLE.name, ignoreCase = true))
+                    if (rest) mail.pump(e.sessionId)
+                },
+                reconnected = { _, sessions -> sessions.forEach { mail.pump(it) } },
+                attention = { runner, sessions, detail ->
+                    attentionSvc.raise(
+                        com.superiorsoftllc.infantry.daemon.api.attention.AttentionKinds.RUNNER_LOST,
+                        ticketId = sessions.firstNotNullOfOrNull { boardPorts.ticketOfWorker(it) }, sessionId = sessions.firstOrNull(),
+                        outcome = "runner $runner lost", detail = detail,
+                    )
+                },
+                ticketOf = { sid -> boardPorts.ticketOfWorker(sid) },
+                restart = { t, r, p -> boardPorts.restartElsewhere(t, r, p) },
+            )
             scheduledTicker(settings.limit(LimitRegistry.RUNNERS_HEARTBEAT_SEC) * 1000L) {
                 runCatching { runnerPool.heartbeat(settings.limit(LimitRegistry.RUNNERS_LOST_AFTER_SEC) * 1000L).forEach { println("[infantry] $it") } }
+                runCatching { runnerWatch.tick() }.onFailure { System.err.println("[infantry] runner watch failed: ${it.message}") }
             }
+            // RUNNER-POOL-8: runner side of runners.pushOnCommit: push a ticket branch once its worker committed.
+            scheduledTicker(settings.limit(LimitRegistry.RUNNERS_COMMIT_CHECK_SEC) * 1000L) { runCatching { remoteStarts.checkCommits() } }
             runCatching { runnerLinkService.tick() }
             scheduledTicker(settings.limit(LimitRegistry.RUNNERS_LINK_CHECK_SECONDS) * 1000L) { runCatching { runnerLinkService.tick() } }
             orchestratorHub.select(pluginEnv("INFANTRY_ORCHESTRATOR_PROVIDER")?.trim().orEmpty())?.let { System.err.println(it) }

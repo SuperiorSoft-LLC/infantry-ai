@@ -49,7 +49,7 @@ class RemoteStartsTest {
         return origin
     }
 
-    private fun starts() = RemoteStarts(cloneRoot = { File(dir, RemoteStarts.DEFAULT_FOLDER) }, eventsKept = { 10 }, log = {})
+    private fun starts() = RemoteStarts(cloneRoot = { File(dir, RemoteStarts.DEFAULT_FOLDER) }, outboxMax = { 10 }, log = {})
 
     @Test
     fun `only ticket branches count as pushable`() {
