@@ -1503,7 +1503,7 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
     // and the process exit are the reasons a run went wrong, so they become muted log lines on the
     // transcript instead of being silently dropped. They still count as applied (sequenced on the stream).
     Envelope.STDOUT -> s.stream(env) { a, _ -> a }
-    Envelope.STDERR -> s.stream(env) { a, _ -> a.withEntry(TranscriptEntry(env.sequence, LineKind.LOG, env.data, now)) }
+    Envelope.STDERR -> s.stream(env) { a, _ -> a.withoutDeniedWrites(env.data).withEntry(TranscriptEntry(env.sequence, LineKind.LOG, env.data, now)) }
     Envelope.EXIT -> s.stream(env) { a, _ ->
         a.withEntry(TranscriptEntry(env.sequence, LineKind.LOG, "process exited with code ${env.data}", now))
     }
@@ -2093,6 +2093,22 @@ private fun AgentView.closeLastText(): AgentView {
     val last = entries.lastOrNull() ?: return this
     if (last.kind != LineKind.TEXT || last.closed) return this
     return copy(entries = entries.dropLast(1) + last.copy(closed = true))
+}
+
+/** Tools whose denial means a file was NOT written (the harness names them as the denied tool). */
+private val WRITE_TOOLS = setOf("write", "edit", "multiedit", "apply_patch", "patch", "notebookedit")
+private val DENIED_TOOL = Regex("""^\S+ denied tool (\S+)""")
+
+/**
+ * The change box of a write the harness then denied (`<harness> denied tool Write ...` notice) never happened: drop the
+ * WRITE entries of the current turn (after the last user turn) so no created/diff card claims a file that was not written.
+ */
+private fun AgentView.withoutDeniedWrites(notice: String): AgentView {
+    val tool = DENIED_TOOL.find(notice)?.groupValues?.get(1)?.lowercase() ?: return this
+    if (tool !in WRITE_TOOLS) return this
+    val turnStart = entries.indexOfLast { it.kind == LineKind.USER } + 1
+    if (entries.drop(turnStart).none { it.kind == LineKind.WRITE }) return this
+    return copy(entries = entries.filterIndexed { i, e -> i < turnStart || e.kind != LineKind.WRITE })
 }
 
 private fun AgentView.withEntry(e: TranscriptEntry): AgentView {

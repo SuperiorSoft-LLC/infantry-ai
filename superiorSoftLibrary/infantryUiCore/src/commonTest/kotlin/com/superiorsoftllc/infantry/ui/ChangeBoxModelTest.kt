@@ -97,4 +97,14 @@ class ChangeBoxModelTest {
         assertEquals("Edit: a.kt", agent.activity?.label, "the activity row still reads the tool")
         assertEquals("✎ a.kt", agent.lastActivity, "the sidebar names the file, never the JSON")
     }
+
+    @Test
+    fun aDeniedWriteLeavesNoChangeBox() {
+        val session = Envelope(Envelope.SESSION, json.encodeToString(SessionRecord.serializer(), rec), rec.id)
+        val write = Envelope(Envelope.STATUS, """{"state":"BUSY","tool":"Write","activity":"b.txt","write":{"path":"b.txt","content":"two"}}""", rec.id)
+        val notice = Envelope(Envelope.STDERR, "claude denied tool Write (Tool approval = deny). Change it in Settings > Tool approval.", rec.id)
+        val agent = agentWith(session, write, notice)
+        assertTrue(agent.output.none { it.kind == LineKind.WRITE }, "a denied write is not drawn as created")
+        assertTrue(agent.output.any { it.kind == LineKind.LOG }, "the denial notice stays")
+    }
 }
