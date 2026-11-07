@@ -349,7 +349,7 @@ class ProjectBaseBranchDaemonTest {
             assertEquals(false, refused.start?.ok, "the start must be refused: ${refused.start}")
             assertEquals("start_refused", refused.start?.reason)
             assertEquals(
-                "no base branch configured for project $p; set one with `infantry project base $p <branch>`, an epic " +
+                "no base branch configured for project $p; pick its \"Base branch for new tasks\" in the app's Git tab, or set one with `infantry project base $p <branch>`, an epic " +
                     "base (`infantry epic base <epicId> <branch>`) or the daemon's INFANTRY_BASE_BRANCH" +
                     " (a headless daemon also needs INFANTRY_REPO=<git repo>)",
                 refused.start?.detail,

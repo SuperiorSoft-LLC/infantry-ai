@@ -1637,12 +1637,31 @@ class Controller(
         val answer = withTimeoutOrNull(8_000L) {
             _state.first { s -> s.projects.any { it.id !in beforeIds } || (s.projectRefusal != null && s.projectRefusal != beforeRefusal) }
         } ?: return r
-        if (answer.projects.any { it.id !in beforeIds }) return r
+        answer.projects.firstOrNull { it.id !in beforeIds }?.let { created ->
+            if (directory.isNotBlank()) scope.launch { adoptCheckedOutBase(created.id) }
+            return r
+        }
         pendingCreatedProject = null
         // The New Project form shows this refusal inline; hand it over so the sidebar does not repeat the same message.
         val refusal = answer.projectRefusal
         _state.update { s -> if (refusal != null && s.projectRefusal == refusal) s.dismissProjectRefusal() else s }
         return CommandResult.Refused(refusal?.text ?: "project_save refused")
+    }
+
+    /**
+     * LAUNCH-FIRSTRUN-1: a project just made with a git directory takes the branch checked out there as its base for
+     * new tasks, set explicitly through `project_base` (shown and changeable in the Git tab). Without it the daemon
+     * refuses the first ticket start (BUG-BASE-087), the first thing a new user tries. Best effort: an older daemon, a
+     * non-git folder, a detached HEAD or no answer leaves the project as it was.
+     */
+    private suspend fun adoptCheckedOutBase(projectId: String) {
+        if (!supportsProjectBase() || !supportsBranchView()) return
+        if (loadProjectBranches(projectId) !is CommandResult.Sent) return
+        val list = withTimeoutOrNull(8_000L) { _state.first { it.projectGitBranches[projectId] != null } }
+            ?.projectGitBranches?.get(projectId) ?: return
+        val current = list.current?.takeIf { list.available && it.isNotBlank() } ?: return
+        if (_state.value.projects.firstOrNull { it.id == projectId }?.baseBranch?.isNotEmpty() != false) return
+        setProjectBaseBranch(projectId, current)
     }
 
     /** Rename project [projectId] (an edit `project_save`); the daemon answers the updated `project` frame, or a refusal. */
@@ -1776,7 +1795,7 @@ class Controller(
 
     /**
      * BASE-1b: set the branch new ticket starts in [projectId] cut from (`project_base`, contract 1.81.0); null clears it
-     * (the daemon's default, the checked-out HEAD). The daemon answers the whole `project`, or an `error`
+     * (then the daemon refuses a start unless INFANTRY_BASE_BRANCH is set). The daemon answers the whole `project`, or an `error`
      * `project_base refused: ...` when the branch does not resolve where tickets are cut. Refused here below 1.81.0, for an
      * unknown project and for a blank name.
      */

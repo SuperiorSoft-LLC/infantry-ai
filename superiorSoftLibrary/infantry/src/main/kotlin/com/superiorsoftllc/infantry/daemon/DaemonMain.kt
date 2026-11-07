@@ -376,7 +376,7 @@ fun main() {
         System.err.println(
             "[infantry] WARNING: bound to ${daemon.host}, which other machines can reach. The bearer token " +
                 "and every frame cross the network in cleartext unless a TLS proxy or tunnel is in front " +
-                "of this daemon (see README, \"Remote daemon\")."
+                "of this daemon (see README, \"Headless server\")."
         )
     }
     // PORT-1: bind, record the real port in <stateDir>/daemon.port, and only THEN announce it: the ready line
