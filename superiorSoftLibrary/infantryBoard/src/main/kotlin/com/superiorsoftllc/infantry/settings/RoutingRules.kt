@@ -90,7 +90,7 @@ object RoutingRules {
             } catch (e: IllegalArgumentException) {
                 throw IllegalArgumentException("rule '$name': ${e.message}")
             }
-            RoutingRule(name, weights, types, role, provider, model, effort, setRole)
+            RoutingRule(name, weights, types, role, provider, model, effort, setRole, raw.runner?.trim()?.takeIf { it.isNotEmpty() })
         }
         require(isDefault(out.last())) {
             "the last rule must be the default row (no weights, no ticketTypes, no role), so every ticket matches one; '${out.last().name}' is not"

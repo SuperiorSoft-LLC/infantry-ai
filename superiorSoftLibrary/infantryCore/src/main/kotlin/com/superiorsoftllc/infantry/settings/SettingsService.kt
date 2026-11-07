@@ -82,6 +82,8 @@ class SettingsService(
             CHAT_IMAGE_RETENTION_DAYS to JsonPrimitive(chatImageRetentionDays()),
             QUESTIONS_MAX_OPEN_PER_AGENT to JsonPrimitive(questionsMaxOpenPerAgent()),
             QUESTIONS_MAX_PER_HOUR to JsonPrimitive(questionsMaxPerHour()),
+            RUNNERS_ENABLED to JsonPrimitive(runCatching { storedBoolean(RUNNERS_ENABLED)?.booleanOrNull }.getOrNull() ?: false),
+            RUNNERS_DEFAULT to JsonPrimitive(runnersDefault()),
             TICKET_EXIT_BEHAVIOR to JsonPrimitive(ticketExitBehavior()),
             TICKET_HANDOFF_NOTE to JsonPrimitive(ticketHandoffNote()),
             TICKET_CLOSE_DONE_WORKER_WHEN_QUEUED to JsonPrimitive(runCatching { storedBoolean(TICKET_CLOSE_DONE_WORKER_WHEN_QUEUED)?.booleanOrNull }.getOrNull() ?: true),
@@ -322,6 +324,23 @@ class SettingsService(
         return runCatching { PacingRule.parse(Json.parseToJsonElement(stored), pacingCeiling()) }.getOrDefault(PacingRule.DEFAULT)
     }
 
+    /** RUNNER-POOL-3: `runners.default` (`local` unless set); where a ticket with no pin and no rule runner starts. */
+    fun runnersDefault(): String =
+        store.settings.get(RUNNERS_DEFAULT)?.value?.let { runCatching { (Json.parseToJsonElement(it) as JsonPrimitive).content }.getOrNull() }
+            ?.takeIf { it.isNotBlank() } ?: DEFAULT_RUNNERS_DEFAULT
+
+    /** RUNNER-POOL-3: `runners.<name>.maxWorkers` (default [DEFAULT_RUNNER_MAX_WORKERS]). */
+    fun runnerMaxWorkers(name: String): Int =
+        store.settings.get("runners.$name.maxWorkers")?.value?.let { runCatching { (Json.parseToJsonElement(it) as JsonPrimitive).content.toInt() }.getOrNull() }
+            ?.takeIf { it >= 1 } ?: limit(LimitRegistry.RUNNER_MAX_WORKERS).toInt()
+
+    private fun requireRunnerName(key: String, value: JsonElement): String {
+        val v = (value as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim()?.lowercase().orEmpty()
+        com.superiorsoftllc.infantry.protocol.TicketRunner.problem(v)?.let { throw IllegalArgumentException("setting '$key': $it") }
+        require(v != com.superiorsoftllc.infantry.protocol.TicketRunner.CLEAR) { "setting '$key' must name a runner" }
+        return v
+    }
+
     /** USAGE-AUTO (1.124.0): minutes between automatic live usage reads; default 5, 0 = off, read at every tick. */
     fun usageRefreshMinutes(): Int {
         val stored = store.settings.get(USAGE_REFRESH_MINUTES)?.value ?: return USAGE_REFRESH_DEFAULT
@@ -453,6 +472,8 @@ class SettingsService(
             USAGE_PACING -> UsagePacing.ruleJson(usageSetting(key) { PacingRule.parse(value, pacingCeiling()) })
             USAGE_MANUAL -> UsagePacing.manualJson(usageSetting(key) { UsagePacing.parseManual(value) })
             USAGE_OVERRIDES -> UsagePacing.overridesJson(usageSetting(key) { UsagePacing.parseOverrides(value, pacingCeiling()) })
+            RUNNERS_ENABLED -> JsonPrimitive(requireBoolean(key, value))
+            RUNNERS_DEFAULT -> JsonPrimitive(requireRunnerName(key, value))
             USAGE_REFRESH_MINUTES -> JsonPrimitive(requireIntIn(key, value, USAGE_REFRESH_RANGE))
             DISPLAY_TIME_ZONE -> JsonPrimitive(((value as? JsonPrimitive)?.content ?: "").trim().also { com.superiorsoftllc.infantry.DisplayZone.set(it) })
             PROCESSES_AUTO_REAP -> JsonPrimitive(requireBoolean(key, value))
@@ -482,7 +503,9 @@ class SettingsService(
             MAIL_AUTOMATION_FOOTER -> JsonPrimitive(requireFooterText(key, value))
             MAIL_WAKE_MODE -> JsonPrimitive(requireWakeMode(key, value))
             MAIL_DELIVERY_MODE -> JsonPrimitive(requireDeliveryMode(key, value))
-            else -> if (key.startsWith("$MAIL_DELIVERY_MODE.") && key.length > MAIL_DELIVERY_MODE.length + 1) {
+            else -> if (key.startsWith("runners.") && key.endsWith(".maxWorkers") && key.length > "runners..maxWorkers".length) {
+                JsonPrimitive(requireIntIn(key, value, 1..1024))
+            } else if (key.startsWith("$MAIL_DELIVERY_MODE.") && key.length > MAIL_DELIVERY_MODE.length + 1) {
                 JsonPrimitive(requireDeliveryMode(key, value))
             } else if (key.startsWith("${LimitRegistry.SESSION_CONTEXT_CAP_TOKENS.key}.") && key.length > LimitRegistry.SESSION_CONTEXT_CAP_TOKENS.key.length + 1) {
                 JsonPrimitive(requireLimit(LimitRegistry.SESSION_CONTEXT_CAP_TOKENS, value))
@@ -934,6 +957,10 @@ class SettingsService(
         const val QUESTIONS_MAX_PER_HOUR = "questions.maxPerHour"
         const val DEFAULT_QUESTIONS_MAX_OPEN = 3
         const val DEFAULT_QUESTIONS_MAX_PER_HOUR = 6
+        /** RUNNER-POOL-3 (docs/RUNNER-POOL.md section 8): off = the pool is `local` only. */
+        const val RUNNERS_ENABLED = "runners.enabled"
+        const val RUNNERS_DEFAULT = "runners.default"
+        const val DEFAULT_RUNNERS_DEFAULT = "local"
         /** What a clean worker exit does to its ticket: `leave` it in_progress (default) or move it to `done`. */
         const val TICKET_EXIT_BEHAVIOR = "tickets.exitBehavior"
         /** AGENT-TASKS-2: who writes the handoff note when a ticket is unassigned: `auto` (default, the board), `worker` (one last turn) or `off`. */

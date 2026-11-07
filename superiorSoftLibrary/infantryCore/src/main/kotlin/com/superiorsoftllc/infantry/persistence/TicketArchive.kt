@@ -91,5 +91,5 @@ private fun Archived_tickets.toRow() = TicketRow(
     includeSkillsContext = include_skills_context?.let { it != 0L }, startedBy = started_by,
     images = kotlinx.serialization.json.Json.decodeFromString(TRAIT_IDS_JSON, images),
     weight = weight?.toInt(), contextLimit = context_limit?.toInt(), effort = effort,
-    queuedAgent = queued_agent, queueRank = queue_rank?.toInt(),
+    queuedAgent = queued_agent, queueRank = queue_rank?.toInt(), runner = runner,
 )

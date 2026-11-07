@@ -188,6 +188,8 @@ data class Ticket(
     /** AGENT-TASKS-3 (additive): the agent profile whose persistent queue holds this todo ticket, and its place (lowest first). */
     val queuedAgent: String? = null,
     val queueRank: Int? = null,
+    /** RUNNER-POOL-3 (additive): the runner pin `local` | <name> | `any`; absent = no pin. */
+    val runner: String? = null,
     /** The queue agent's name (display only). */
     val queuedAgentName: String? = null,
     val sessionId: String? = null,
@@ -431,6 +433,8 @@ data class TicketSave(
     val contextLimit: Int? = null,
     /** EFFORT-1 (contract 1.148.0): a level sets the worker's reasoning effort, "" / `off` / `default` removes it, absent or null keeps it. An unknown level refuses the save. */
     val effort: String? = null,
+    /** RUNNER-POOL-3: `local` | a runner name | `any` pins where the ticket starts, [TicketRunner.CLEAR] ("none" or "") removes the pin, absent or null keeps it. */
+    val runner: String? = null,
     /**
      * BACKLOG (contract 1.131.0): on a CREATE only, the column the new ticket enters: [TicketStatus.TODO] (absent or
      * null, the default) or [TicketStatus.BACKLOG]; any other column is refused. On an edit it must be absent: columns
@@ -588,3 +592,16 @@ data class SettingsSet(
 /** AGENT-TASKS-2: the work a todo ticket keeps on its own branch: the branch, its tip commit and the commits ahead of the base. */
 @kotlinx.serialization.Serializable
 data class HasWork(val branch: String, val tip: String, val ahead: Int)
+
+/** RUNNER-POOL-3: the values of a ticket's `runner` pin (docs/RUNNER-POOL.md section 3). */
+object TicketRunner {
+    const val LOCAL = "local"
+    const val ANY = "any"
+    /** On a save: removes the pin. */
+    const val CLEAR = "none"
+    private val NAME = Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,39}")
+
+    /** [value] as stored (trimmed, lower-case), or an error text; null/blank/[CLEAR] are not handled here. */
+    fun problem(value: String): String? =
+        if (!NAME.matches(value)) "runner '${value.take(40)}' must be local, any or a runner name (letters, digits, . _ -, at most 40 characters)" else null
+}

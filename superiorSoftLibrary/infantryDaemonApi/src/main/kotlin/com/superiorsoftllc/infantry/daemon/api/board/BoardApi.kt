@@ -110,6 +110,8 @@ data class TicketInfo(
     val effort: String? = null,
     val effectiveEffort: String? = null,
     val effectiveEffortSource: String? = null,
+    /** RUNNER-POOL-3: the ticket's runner pin; null = none. */
+    val runner: String? = null,
     val effortSupport: String? = null,
     /** AGENT-TASKS-2: the tip and commits-ahead of a todo ticket's kept work (null = none). */
     val workTip: String? = null,
@@ -141,6 +143,8 @@ data class TicketDraft(
     val contextLimit: Int? = null,
     /** 1.4.0: the reasoning effort level ([EffortLevels]); null = the harness default. */
     val effort: String? = null,
+    /** RUNNER-POOL-3: `local` | a runner name | `any`; null = no pin. */
+    val runner: String? = null,
 )
 
 /** An edit: a null field keeps the stored value. [description], when given, replaces the stored one verbatim. */
@@ -160,6 +164,8 @@ data class TicketPatch(
     val contextLimit: Int? = null,
     /** 1.4.0: the reasoning effort level, or blank / `off` to remove it; null keeps it. */
     val effort: String? = null,
+    /** RUNNER-POOL-3: a runner pin, or `none` to remove it; null keeps it. */
+    val runner: String? = null,
 )
 
 @Serializable

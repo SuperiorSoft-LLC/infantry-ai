@@ -612,6 +612,7 @@ class SqlInfantryStore(val handle: InfantryDatabaseHandle) : InfantryStore {
                 effort = ticket.effort,
                 queued_agent = ticket.queuedAgent,
                 queue_rank = ticket.queueRank?.toLong(),
+                runner = ticket.runner,
                 created_at = ticket.createdAt,
                 updated_at = ticket.updatedAt,
             )
@@ -648,6 +649,7 @@ class SqlInfantryStore(val handle: InfantryDatabaseHandle) : InfantryStore {
                 effort = ticket.effort,
                 queued_agent = ticket.queuedAgent,
                 queue_rank = ticket.queueRank?.toLong(),
+                runner = ticket.runner,
                 updated_at = ticket.updatedAt,
                 id = ticket.id,
             )
@@ -1019,6 +1021,7 @@ private fun Tickets.toRow() = TicketRow(
     effort = effort,
     queuedAgent = queued_agent,
     queueRank = queue_rank?.toInt(),
+    runner = runner,
 )
 
 private fun Settings.toRecord() = SettingRow(key = key, value = value_, updatedAt = updated_at)

@@ -5,7 +5,7 @@
 -- the table is REBUILT exactly like 30.sqm: new table, rows copied verbatim, old dropped, new renamed, index re-created.
 -- Column order and the index are exactly attention.sq's (SchemaMigrationTest).
 --
--- NEXT MIGRATION: 59.sqm
+-- NEXT MIGRATION: 60.sqm (59 is RUNNER-POOL-3: tickets.runner)
 
 CREATE TABLE attention_new (
     id TEXT NOT NULL PRIMARY KEY,
