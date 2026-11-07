@@ -47,7 +47,7 @@ object TestDaemonPlugins {
     fun root(vararg modules: String, folder: String = "official", tier: String = "official", modulesJson: String = "{}", officialToo: List<String> = emptyList()): File {
         val root = Files.createTempDirectory("daemon-plugins-root").toFile()
         // CI-TESTS-5: [officialToo] = official modules loaded beside [modules] when those sit in another tier's folder.
-        val extra = if (officialToo.isNotEmpty() && folder != "official") ""","{"path":"official","tier":"official"}""" else ""
+        val extra = if (officialToo.isNotEmpty() && folder != "official") """,{"path":"official","tier":"official"}""" else ""
         File(root, "modules.json").writeText("""{"folders":[{"path":"$folder","tier":"$tier"}$extra],"modules":$modulesJson}""")
         for (m in modules) copy(File(repo, "plugins/$m"), File(root, "$folder/${File(m).name}"))
         for (m in officialToo) copy(File(repo, "plugins/$m"), File(root, "official/${File(m).name}"))

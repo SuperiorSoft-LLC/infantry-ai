@@ -266,6 +266,13 @@ class ReportBackDaemonTest {
         val runner = HeldRunner(exitCodes)
         val fixture = DaemonFixture.launch(StubScript.default(), runner = runner, pluginsRoot = TestDaemonPlugins.fullRoot())
         try {
+            // USAGE-REGRESS-1: `mail.wakeMode` defaults to `real`, where automation mail (the `system` re-prompt) waits for the next turn
+            // (at most limits.mail.wakeMaxMs). These tests assert the re-prompt run starts, so they ask for the `all` mode.
+            fixture.send(Envelope(Envelope.SETTINGS_SET, """{"key":"mail.wakeMode","value":"all"}"""))
+            fixture.client.awaitWhere("mail.wakeMode set") { it.type == Envelope.SETTINGS && "\"mail.wakeMode\":\"all\"" in it.data }
+            // MAIL-TRUNC-1: the default delivery mode folds a notice line, not the body; these tests read the re-prompt text, so `full`.
+            fixture.send(Envelope(Envelope.SETTINGS_SET, """{"key":"mail.deliveryMode","value":"full"}"""))
+            fixture.client.awaitWhere("mail.deliveryMode set") { it.type == Envelope.SETTINGS && "\"mail.deliveryMode\":\"full\"" in it.data }
             block(fixture, runner)
         } finally {
             fixture.stop()

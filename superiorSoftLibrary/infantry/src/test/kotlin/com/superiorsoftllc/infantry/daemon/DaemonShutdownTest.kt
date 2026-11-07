@@ -77,7 +77,7 @@ class DaemonShutdownTest {
 
             assertTrue(
                 driver.parked.await(10, TimeUnit.SECONDS),
-                "the shutdown queued no ticket_runs write, so this test proved nothing",
+                "the shutdown queued no ticket_runs write, so this test proved nothing; writes seen since arm: ${driver.seen}",
             )
             assertEquals(
                 "infantry-ticket-session-events", driver.parkedBy.get(),
@@ -126,6 +126,8 @@ private class ParkingDriver(private val real: SqlDriver) : SqlDriver by real {
     private val armed = AtomicBoolean(false)
     val parked = CountDownLatch(1)
     val parkedBy = AtomicReference<String?>(null)
+    /** Diagnostics: the thread and first words of every write since [arm], shown when no ticket_runs write arrives. */
+    val seen = java.util.concurrent.CopyOnWriteArrayList<String>()
     private val released = CountDownLatch(1)
 
     fun arm() = armed.set(true)
@@ -140,6 +142,7 @@ private class ParkingDriver(private val real: SqlDriver) : SqlDriver by real {
     ): QueryResult<Long> {
         // Arm only on the FIRST matching write: an armed write of another table must not spend the one
         // arming, or the parked statement could be a statement this test says nothing about.
+        if (armed.get()) seen += Thread.currentThread().name + ": " + sql.take(60)
         if (sql.contains("ticket_runs") && armed.compareAndSet(true, false)) {
             parkedBy.set(Thread.currentThread().name)
             parked.countDown()

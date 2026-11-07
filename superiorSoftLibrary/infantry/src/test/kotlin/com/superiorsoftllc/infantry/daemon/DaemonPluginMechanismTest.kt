@@ -52,7 +52,7 @@ class DaemonPluginMechanismTest {
     ): Pair<DaemonFixture, Envelope> {
         val fixture = DaemonFixture.launch(
             stateDir = stateDir, pluginsRoot = root,
-            pluginTrust = DaemonPluginHost.Trust(emptyList(), devTrust = false, bundledRoot = null), pluginEnv = env,
+            pluginTrust = DaemonPluginHost.Trust(emptyList(), devTrust = true, bundledRoot = null), pluginEnv = env, // devTrust: only the official Infantry_Settings needs it (a test has no signing key); the community plugin is judged by its grants either way
         ).also { fixtures += it }
         return fixture to fixture.client.await(Envelope.READY)
     }
@@ -192,7 +192,7 @@ class DaemonPluginMechanismTest {
     }
 
     private companion object {
-        const val GUARD = "plugin.guard"
+        const val GUARD = "limits.plugin.guard"
         const val MODULE = "Acme_DaemonHello"
         const val TOOL = "acme_hello"
     }
