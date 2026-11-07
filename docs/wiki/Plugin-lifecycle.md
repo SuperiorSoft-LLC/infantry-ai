@@ -23,8 +23,8 @@ and the plugins that depend on it**:
 
 ### Class-loader lifetime
 
-Each plugin half has its own class loader (`PluginClassLoader` for the UI, a `URLClassLoader` for the daemon), never
-shared. A plugin's classes, its Kotlin `object`s and everything they hold live as long as that loader is reachable. An
+Each plugin half has its own class loader (`PluginClassLoader` for the UI, a `ShadowJarClassLoader` for the daemon and
+harness halves), never shared. A plugin's classes, its Kotlin `object`s and everything they hold live as long as that loader is reachable. An
 unload therefore has one goal: leave nothing outside the plugin that points into it, then close the loader. Once nothing
 points in, the GC frees the old version and the jar can be replaced (Windows keeps an open jar locked).
 
@@ -38,6 +38,29 @@ Unload of one UI module, in order (`DesktopPlugins`, `ModuleSet.unload`):
 
 The daemon half does the same in `DaemonPluginHost.retire`: registrations first, background work, `stop`, its scope, the
 guard drains, the loader closes.
+
+### The install folder is never held (PLUGIN-UPDATE-LOCK-1)
+
+A class loader keeps its jars open until it is closed, and Windows refuses to move or delete an open jar or the folder
+that holds it. The plugin manager moves `plugins/<tier>/<Module>` to `plugins/_versions/<Module>/<version>` on every
+update, rollback and remove, and the desktop app's own manager runs in the same process as the loaded UI half: an update
+of a running plugin used to fail with "is in use; stop the daemon or the app".
+
+So no plugin class loader reads the install folder. `PluginJarShadow` copies the module's jars into this process's own
+folder (`<java.io.tmpdir>/infantry-plugin-jars/<pid>/<Module>-<n>/`) and `ShadowJarClassLoader` reads the copy; a native
+library is copied beside them the first time the plugin loads it. The order of an update is then:
+
+1. the manager unloads the daemon half (its loader and copy go);
+2. it moves the install folder to `_versions` and installs the new version; the running UI half is untouched and keeps
+   loading classes and resources from its copy;
+3. the daemon half loads the new version (a new copy), and the UI's live swap sees the changed folder fingerprint and
+   loads the new version into a new loader (a new copy); the old loader closes and its copy is deleted.
+
+Trade-off: each load copies the module's jars once (a few hundred KB for a typical plugin) instead of reading them in
+place. A copy the OS still holds when its loader closes (a mapped native library, released only when the loader is
+collected) is retried on the next copy, and the folder of a process that has ended is removed by the next process that
+makes a copy. When no copy can be made (no space, no temp folder) the loader reads the install folder as before: the
+plugin still loads, only an update while it runs may then be refused.
 
 ### Registrar handles, not host singletons
 
@@ -137,6 +160,10 @@ to the soft restart for that change.
   in `SessionDuringPluginSwapTest`: every chunk arrives in order, and the daemon and its session manager are the same
   objects before and after. `DaemonPluginHostHotloadTest` covers the daemon leak note.
 - `PluginLifetimeTest`: `OwnedPluginScope` close order, `SimpleEventBus.dropOwner`, `LeakWatch`.
+- `PluginUpdateWhileLoadedTest` (PLUGIN-UPDATE-LOCK-1): an update applies while the old version's `PluginClassLoader` holds
+  its jar open (Windows), the old version keeps reading its copy, and closing the loader deletes the copy; with the real
+  Read Aloud packages on disk (`INFANTRY_REPRO_READALOUD_DIR`) it updates 1.1.0 to 1.2.0 through the manager and the live
+  swap, and 1.2.0 declares `readaloud.speak`. `PluginJarShadowTest`: the copy, its clean-up and the fallback.
 
 ## Where the code is
 
@@ -144,6 +171,7 @@ to the soft restart for that change.
 |---|---|
 | `PluginScope`, `OwnedPluginScope`, `every` | `superiorSoftLibrary/infantryPlugins/src/commonMain/kotlin/com/superiorsoftllc/infantry/plugin/api/PluginScope.kt` |
 | `LeakWatch` | `superiorSoftLibrary/infantryPlugins/src/jvmMain/kotlin/com/superiorsoftllc/infantry/plugin/host/LeakWatch.kt` |
+| jar copies (`PluginJarShadow`, `ShadowJarClassLoader`) | `superiorSoftLibrary/infantryPlugins/src/jvmMain/kotlin/com/superiorsoftllc/infantry/plugin/host/PluginJarShadow.kt` |
 | per-owner observers (`SimpleEventBus.dropOwner`) | `superiorSoftLibrary/infantryPlugins/src/commonMain/kotlin/com/superiorsoftllc/infantry/plugin/host/ServiceRegistry.kt` |
 | UI swap (`DesktopPlugins.Loaded.swap`) | `superiorSoftLibrary/infantryUiCore/src/jvmMain/kotlin/com/superiorsoftllc/infantry/ui/plugin/DesktopPlugins.kt` |
 | generation key | `superiorSoftLibrary/infantryUiCore/src/commonMain/kotlin/com/superiorsoftllc/infantry/ui/plugin/ModuleScope.kt` |

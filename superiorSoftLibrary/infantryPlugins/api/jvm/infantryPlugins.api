@@ -67,13 +67,14 @@ public final class com/superiorsoftllc/infantry/plugin/api/ActionResult {
 
 public final class com/superiorsoftllc/infantry/plugin/api/AgentDefinition {
 	public static final field Companion Lcom/superiorsoftllc/infantry/plugin/api/AgentDefinition$Companion;
-	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Long;Ljava/lang/String;Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/AgentSchedule;Lcom/superiorsoftllc/infantry/plugin/api/AgentUiHints;)V
-	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Long;Ljava/lang/String;Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/AgentSchedule;Lcom/superiorsoftllc/infantry/plugin/api/AgentUiHints;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Long;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/AgentSchedule;Lcom/superiorsoftllc/infantry/plugin/api/AgentUiHints;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Long;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/AgentSchedule;Lcom/superiorsoftllc/infantry/plugin/api/AgentUiHints;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Ljava/lang/String;
 	public final fun component10 ()Ljava/lang/String;
-	public final fun component11 ()Ljava/util/List;
-	public final fun component12 ()Lcom/superiorsoftllc/infantry/plugin/api/AgentSchedule;
-	public final fun component13 ()Lcom/superiorsoftllc/infantry/plugin/api/AgentUiHints;
+	public final fun component11 ()Ljava/lang/String;
+	public final fun component12 ()Ljava/util/List;
+	public final fun component13 ()Lcom/superiorsoftllc/infantry/plugin/api/AgentSchedule;
+	public final fun component14 ()Lcom/superiorsoftllc/infantry/plugin/api/AgentUiHints;
 	public final fun component2 ()Ljava/lang/String;
 	public final fun component3 ()Ljava/lang/String;
 	public final fun component4 ()Ljava/lang/String;
@@ -82,8 +83,8 @@ public final class com/superiorsoftllc/infantry/plugin/api/AgentDefinition {
 	public final fun component7 ()Ljava/lang/String;
 	public final fun component8 ()Ljava/lang/String;
 	public final fun component9 ()Ljava/lang/Long;
-	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Long;Ljava/lang/String;Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/AgentSchedule;Lcom/superiorsoftllc/infantry/plugin/api/AgentUiHints;)Lcom/superiorsoftllc/infantry/plugin/api/AgentDefinition;
-	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/plugin/api/AgentDefinition;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Long;Ljava/lang/String;Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/AgentSchedule;Lcom/superiorsoftllc/infantry/plugin/api/AgentUiHints;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/api/AgentDefinition;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Long;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/AgentSchedule;Lcom/superiorsoftllc/infantry/plugin/api/AgentUiHints;)Lcom/superiorsoftllc/infantry/plugin/api/AgentDefinition;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/plugin/api/AgentDefinition;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Long;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Lcom/superiorsoftllc/infantry/plugin/api/AgentSchedule;Lcom/superiorsoftllc/infantry/plugin/api/AgentUiHints;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/api/AgentDefinition;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getContextLimit ()Ljava/lang/Long;
 	public final fun getDescription ()Ljava/lang/String;
@@ -95,6 +96,7 @@ public final class com/superiorsoftllc/infantry/plugin/api/AgentDefinition {
 	public final fun getName ()Ljava/lang/String;
 	public final fun getProfile ()Ljava/lang/String;
 	public final fun getRole ()Ljava/lang/String;
+	public final fun getRunner ()Ljava/lang/String;
 	public final fun getSchedule ()Lcom/superiorsoftllc/infantry/plugin/api/AgentSchedule;
 	public final fun getTools ()Ljava/util/List;
 	public final fun getUi ()Lcom/superiorsoftllc/infantry/plugin/api/AgentUiHints;
@@ -125,6 +127,7 @@ public final class com/superiorsoftllc/infantry/plugin/api/AgentDefinitions {
 	public final fun getEFFORT_LEVELS ()Ljava/util/List;
 	public final fun getID ()Lkotlin/text/Regex;
 	public final fun getPROFILE_ID ()Lkotlin/text/Regex;
+	public final fun getRUNNER ()Lkotlin/text/Regex;
 	public final fun refusal (Lcom/superiorsoftllc/infantry/plugin/api/AgentDefinition;Ljava/lang/String;Z)Ljava/lang/String;
 	public final fun withProfile (Lcom/superiorsoftllc/infantry/plugin/api/AgentDefinition;Lcom/superiorsoftllc/infantry/plugin/api/AgentDefinition;)Lcom/superiorsoftllc/infantry/plugin/api/AgentDefinition;
 }
@@ -3260,6 +3263,24 @@ public final class com/superiorsoftllc/infantry/plugin/host/PluginFolders {
 	public final fun scan (Ljava/io/File;Lcom/superiorsoftllc/infantry/plugin/api/ModulesConfig;Ljava/io/File;)Ljava/util/List;
 }
 
+public final class com/superiorsoftllc/infantry/plugin/host/PluginJarShadow : java/lang/AutoCloseable {
+	public static final field Companion Lcom/superiorsoftllc/infantry/plugin/host/PluginJarShadow$Companion;
+	public synthetic fun <init> (Ljava/io/File;Ljava/io/File;Ljava/util/List;ZLkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun close ()V
+	public final fun getDir ()Ljava/io/File;
+	public final fun getFiles ()Ljava/util/List;
+	public final fun getShadowed ()Z
+	public final fun getSource ()Ljava/io/File;
+	public final fun native (Ljava/io/File;)Ljava/io/File;
+	public final fun urls ()[Ljava/net/URL;
+}
+
+public final class com/superiorsoftllc/infantry/plugin/host/PluginJarShadow$Companion {
+	public final fun getBase ()Ljava/io/File;
+	public final fun of (Ljava/io/File;Ljava/util/List;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/plugin/host/PluginJarShadow;
+	public final fun setBase (Ljava/io/File;)V
+}
+
 public final class com/superiorsoftllc/infantry/plugin/host/PluginTree {
 	public fun <init> (Ljava/util/List;)V
 	public final fun childrenOf (Ljava/lang/String;)Ljava/util/List;
@@ -3339,6 +3360,13 @@ public final class com/superiorsoftllc/infantry/plugin/host/ServiceRegistry {
 public final class com/superiorsoftllc/infantry/plugin/host/ServiceRegistryKt {
 	public static final fun provideEvents (Lcom/superiorsoftllc/infantry/plugin/host/ServiceRegistry;Lcom/superiorsoftllc/infantry/plugin/api/EventBus;Lkotlin/jvm/functions/Function1;)V
 	public static synthetic fun provideEvents$default (Lcom/superiorsoftllc/infantry/plugin/host/ServiceRegistry;Lcom/superiorsoftllc/infantry/plugin/api/EventBus;Lkotlin/jvm/functions/Function1;ILjava/lang/Object;)V
+}
+
+public class com/superiorsoftllc/infantry/plugin/host/ShadowJarClassLoader : java/net/URLClassLoader {
+	public fun <init> (Ljava/lang/String;Lcom/superiorsoftllc/infantry/plugin/host/PluginJarShadow;Ljava/lang/ClassLoader;)V
+	public fun <init> (Ljava/lang/String;Ljava/io/File;Ljava/util/List;Ljava/lang/ClassLoader;)V
+	public fun close ()V
+	public final fun getShadow ()Lcom/superiorsoftllc/infantry/plugin/host/PluginJarShadow;
 }
 
 public final class com/superiorsoftllc/infantry/plugin/host/SimpleEventBus : com/superiorsoftllc/infantry/plugin/api/EventBus {
