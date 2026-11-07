@@ -133,10 +133,14 @@ data class SourceRefresh(val source: String, val ok: Boolean, val stale: Boolean
 /** Gets a catalog or a package: an http(s) or file URL, or a plain path, into [dest]; throws [IOException] (offline is a clean failure). */
 fun interface Fetcher {
     fun fetch(url: String, dest: File, maxBytes: Long)
+    /** PLUGIN-PROGRESS-1: like [fetch], reporting the bytes read so far; a fetcher that cannot report just fetches. */
+    fun fetch(url: String, dest: File, maxBytes: Long, onBytes: (Long) -> Unit) = fetch(url, dest, maxBytes)
 }
 
 object DefaultFetcher : Fetcher {
-    override fun fetch(url: String, dest: File, maxBytes: Long) {
+    override fun fetch(url: String, dest: File, maxBytes: Long) = fetch(url, dest, maxBytes) {}
+
+    override fun fetch(url: String, dest: File, maxBytes: Long, onBytes: (Long) -> Unit) {
         dest.parentFile?.mkdirs()
         val scheme = runCatching { URI(url).scheme }.getOrNull()?.lowercase()
         val stream = when {
@@ -163,6 +167,7 @@ object DefaultFetcher : Fetcher {
                     n += r
                     if (n > maxBytes) throw IOException("$url is over the $maxBytes byte limit")
                     out.write(buf, 0, r)
+                    onBytes(n)
                 }
             }
         }
@@ -463,9 +468,27 @@ class PluginManager(
     // ---------------------------------------------------------------- inspect
 
     /** http(s) goes through the [fetcher]; a plain path or `file:` URL is read locally, so custom and folder sources never need a network. */
-    private fun fetchAny(url: String, dest: File, max: Long) {
+    private fun fetchAny(url: String, dest: File, max: Long, onBytes: (Long) -> Unit = {}) {
         val web = url.startsWith("http://", true) || url.startsWith("https://", true)
-        (if (web) fetcher else DefaultFetcher).fetch(url, dest, max)
+        (if (web) fetcher else DefaultFetcher).fetch(url, dest, max, onBytes)
+    }
+
+    /** PLUGIN-PROGRESS-1: the screen's listener for the steps of a change (see [PluginProgress]); null = nobody listens. */
+    @Volatile var progress: ((com.superiorsoftllc.infantry.plugin.api.PluginProgress) -> Unit)? = null
+
+    private fun step(id: String, step: String, done: Long = -1, total: Long = -1) {
+        runCatching { progress?.invoke(com.superiorsoftllc.infantry.plugin.api.PluginProgress(id, step, done, total)) }
+    }
+
+    /** Downloads [url] into [file], reporting bytes of [total] (null = unknown) at most four times a second. */
+    private fun download(id: String, url: String, file: File, max: Long, total: Long?) {
+        step(id, "Downloading", 0, total ?: -1)
+        var last = 0L
+        fetchAny(url, file, max) { n ->
+            val now = System.currentTimeMillis()
+            if (now - last >= 250) { last = now; step(id, "Downloading", n, total ?: -1) }
+        }
+        step(id, "Verifying")
     }
 
     private val urlLike = Regex("^[a-zA-Z][a-zA-Z0-9+.-]*://")
@@ -540,7 +563,7 @@ class PluginManager(
                 sourceName = l.source.id
                 file = File(downloads, "${l.source.id}-$id-${chosen.version}-${System.nanoTime()}.ihq")
                 val url = if (urlLike.containsMatchIn(chosen.url) || File(chosen.url).isAbsolute) chosen.url else l.base.trimEnd('/', '\\') + "/" + chosen.url
-                try { fetchAny(url, file, InstallSettings.load(root).maxPackageBytes) } catch (e2: Exception) { file.delete(); return null to ManagerResult.refused("FETCH_FAILED", "could not fetch $url: ${e2.message}") }
+                try { download(id, url, file, InstallSettings.load(root).maxPackageBytes, chosen.size) } catch (e2: Exception) { file.delete(); return null to ManagerResult.refused("FETCH_FAILED", "could not fetch $url: ${e2.message}") }
                 if (chosen.size != null && file.length() != chosen.size) {
                     val got = file.length(); file.delete()
                     return null to ManagerResult.refused("HASH_MISMATCH", "$id ${chosen.version}: size $got is not the catalog's ${chosen.size}")
@@ -606,6 +629,7 @@ class PluginManager(
             if (needsConsent) consentProblem(insp.grants, consent)?.let { return it }
             else if (sensitive.isNotEmpty()) consentProblem(sensitive, consent?.filter { it in sensitive }?.toSet())?.let { return it }
             val settings = InstallSettings.load(root).copy(allowUnsigned = insp.cls != PluginClass.OFFICIAL)
+            step(insp.id, "Installing")
             return when (val r = IhqInstaller.install(insp.file, root, config(), settings, trustedTier = Tier.OFFICIAL)) {
                 is IhqResult.Refused -> ManagerResult.refused(r.reason.name, r.message)
                 is IhqResult.Installed -> {
@@ -615,6 +639,7 @@ class PluginManager(
                     val l = ledger()
                     val row = LedgerRow(r.version, insp.cls.label, r.tier.name.lowercase(), insp.source, insp.sha256, insp.signer, granted.sorted(), emptyList(), insp.license)
                     saveLedger(Ledger(l.installed + (r.name to row)))
+                    if (hot != null && enable) step(r.name, "Reloading")
                     val outs = hot?.takeIf { enable }?.let { listOf(it.load(r.name)) }.orEmpty()
                     live("${r.name} ${r.version} installed as ${insp.cls.label} (${r.tier.name.lowercase()} tier), ${if (enable) "enabled" else "disabled"}", hasHarness(r.name), outs)
                 }
@@ -677,6 +702,7 @@ class PluginManager(
             val keep = File(versionsDir, "$id/$cur")
             val harness = hasHarness(id) || hasHarness(insp)
             // The running half goes first: its class loader holds the jar open, and a held jar cannot be moved on Windows.
+            step(id, "Installing")
             val unloaded = hot?.unload(id)
             swapOut(dir, keep)?.let { refused -> unloaded?.let { reloadAfter(hot!!, id, it) }; return refused }
             val settings = InstallSettings.load(root).copy(allowUnsigned = insp.cls != PluginClass.OFFICIAL)
@@ -693,6 +719,7 @@ class PluginManager(
             val history = pruneHistory(id, (row?.history.orEmpty() + cur.toString()).distinct())
             val updated = LedgerRow(r.version, row?.cls ?: insp.cls.label, r.tier.name.lowercase(), if (ref != null) insp.source else row!!.source, insp.sha256, insp.signer, granted.sorted(), history, insp.license)
             saveLedger(Ledger(ledger().installed + (id to updated)))
+            step(id, "Reloading")
             val outs = unloaded?.let { listOf(it) + reloadAfter(hot!!, id, it) }.orEmpty()
             return live("$id updated $cur -> ${r.version}; $cur kept for rollback", harness, outs)
         } finally {

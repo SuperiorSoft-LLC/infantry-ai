@@ -53,4 +53,5 @@ class PluginManagerPortAdapter(private val manager: PluginManager) : PluginManag
     override fun refresh() = manager.refresh().map { RefreshView(it.source, it.ok, it.stale, it.plugins, it.message) }
     override fun refreshIfStale() = manager.refreshIfStale().map { RefreshView(it.source, it.ok, it.stale, it.plugins, it.message) }
     override fun importList(location: String) = manager.importList(location).view()
+    override fun setProgressListener(listener: ((com.superiorsoftllc.infantry.plugin.api.PluginProgress) -> Unit)?) { manager.progress = listener }
 }

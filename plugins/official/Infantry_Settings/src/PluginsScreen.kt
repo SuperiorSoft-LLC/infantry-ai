@@ -31,6 +31,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import com.superiorsoftllc.infantry.plugin.api.PluginProgress
+import kotlinx.coroutines.delay
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.OutlinedTextField
@@ -90,6 +96,10 @@ const val PLUGINS_SECTION_PREFIX = "plugins-section-"
 const val PLUGIN_ROW_PREFIX = "plugin-row-"
 const val PLUGIN_ENABLE_PREFIX = "plugin-enable-"
 const val PLUGIN_UPDATE_PREFIX = "plugin-update-"
+/** PLUGIN-PROGRESS-1: the live progress strip, the result notice and the Retry button after a failure. */
+const val PLUGINS_PROGRESS_TAG = "plugins-progress"
+const val PLUGINS_RESULT_TAG = "plugins-result"
+const val PLUGINS_RETRY_TAG = "plugins-retry"
 const val PLUGIN_ROLLBACK_PREFIX = "plugin-rollback-"
 const val PLUGIN_REMOVE_PREFIX = "plugin-remove-"
 const val BROWSE_QUERY_TAG = "plugins-browse-query"
@@ -138,6 +148,11 @@ fun PluginsScreen(port: PluginManagerPort) {
     var consent by remember { mutableStateOf<Consent?>(null) }
     var consentError by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
+    // PLUGIN-PROGRESS-1: the running step (from the port), when it started, the last result and how to run it again.
+    var progress by remember { mutableStateOf<PluginProgress?>(null) }
+    var startedAt by remember { mutableStateOf(0L) }
+    var failed by remember { mutableStateOf<ActionResult?>(null) }
+    var retry by remember { mutableStateOf<(() -> Unit)?>(null) }
     var version by remember { mutableStateOf(0) }
     val scope = rememberCoroutineScope()
     // PLUGIN-SOURCES-1: opening the tab refreshes stale catalogs in the background, then reloads so update offers show.
@@ -147,19 +162,27 @@ fun PluginsScreen(port: PluginManagerPort) {
     }
     /** PLUGINS-UI-1: plugin id -> the state its switch was flipped to, while the daemon applies it. */
     val pending = remember { mutableStateMapOf<String, Boolean>() }
+    DisposableEffect(port) {
+        port.setProgressListener { p -> progress = p }
+        onDispose { port.setProgressListener(null) }
+    }
 
     /** Runs [call] off the UI thread; a restart answer sets the one banner. */
-    val act: Act = { call, then ->
-        busy = true
+    fun runAct(call: () -> ActionResult, then: (ActionResult) -> Unit) {
+        busy = true; failed = null; retry = null; note = null
+        progress = PluginProgress("", "Starting"); startedAt = System.currentTimeMillis()
         scope.launch {
             val r = withContext(Dispatchers.Default) { runCatching(call).getOrElse { ActionResult(false, "failed: ${it.message}") } }
             busy = false
+            progress = null
             note = r.message
+            if (!r.ok) { failed = r; retry = { runAct(call, then) } }
             if (r.restartNeeded) banner = r.message
             version++
             then(r)
         }
     }
+    val act: Act = { call, then -> runAct(call, then) }
 
     /**
      * PLUGIN-CONFIG-1: a change to an installed plugin reaches the daemon half live, but the UI half (tabs, panels, config
@@ -193,7 +216,9 @@ fun PluginsScreen(port: PluginManagerPort) {
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp).testTag(PLUGINS_SCREEN_TAG), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         banner?.let { Text("Restart needed: $it", color = Palette.Warn, fontSize = 13.sp, modifier = Modifier.testTag(PLUGINS_BANNER_TAG)) }
         SectionTabs(section) { section = it }
-        note?.let { Text(it, color = Palette.Muted, fontSize = 12.sp, modifier = Modifier.testTag(PLUGINS_NOTE_TAG)) }
+        progress?.let { ProgressStrip(it, startedAt) }
+        failed?.let { f -> FailedNotice(f, retry) { failed = null; retry = null } }
+        note?.takeIf { failed == null }?.let { Text(if (progress == null) "Done: $it" else it, color = if (progress == null) Palette.Ok else Palette.Muted, fontSize = 12.sp, modifier = Modifier.testTag(PLUGINS_NOTE_TAG)) }
         // PLUGIN-HOTSWAP-1: a plugin whose old version stayed in memory after a live swap (the shell was reloaded instead).
         lifecycle?.warnings?.values?.forEach { Text(it, color = Palette.Warn, fontSize = 12.sp) }
         val body = Modifier.weight(1f).fillMaxWidth()
@@ -226,6 +251,32 @@ fun PluginsScreen(port: PluginManagerPort) {
                 actUi({ c.run(granted) }) { r -> if (r.ok) consent = null else consentError = r.message }
             },
             onCancel = { consent = null })
+    }
+}
+
+/** PLUGIN-PROGRESS-1: "Downloading 40% - 12s": determinate while the size is known, else indeterminate; the seconds tick so a long step never looks stuck. */
+@Composable
+private fun ProgressStrip(p: PluginProgress, startedAt: Long) {
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(startedAt) { while (true) { delay(1000); now = System.currentTimeMillis() } }
+    val secs = ((now - startedAt) / 1000).coerceAtLeast(0)
+    val frac = if (p.total > 0 && p.done >= 0) (p.done.toFloat() / p.total).coerceIn(0f, 1f) else null
+    val who = if (p.id.isEmpty()) "" else " ${displayName(p.id)}"
+    Column(Modifier.fillMaxWidth().testTag(PLUGINS_PROGRESS_TAG), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("${p.step}$who" + (frac?.let { " ${(it * 100).toInt()}%" } ?: " ...") + " (${secs}s)", color = Palette.Text, fontSize = 13.sp,
+            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+        if (frac != null) LinearProgressIndicator(progress = { frac }, Modifier.fillMaxWidth(), color = Palette.Accent)
+        else LinearProgressIndicator(Modifier.fillMaxWidth(), color = Palette.Accent)
+    }
+}
+
+/** PLUGIN-PROGRESS-1: the exact reason a change failed, with Retry (and dismiss). */
+@Composable
+private fun FailedNotice(r: ActionResult, retry: (() -> Unit)?, dismiss: () -> Unit) {
+    Row(Modifier.fillMaxWidth().testTag(PLUGINS_RESULT_TAG), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Failed: ${r.message}", color = Palette.Danger, fontSize = 13.sp, modifier = Modifier.weight(1f))
+        if (retry != null) TextButton(onClick = { dismiss(); retry() }, modifier = Modifier.testTag(PLUGINS_RETRY_TAG)) { Text("Retry") }
+        TextButton(onClick = dismiss) { Text("Dismiss") }
     }
 }
 
