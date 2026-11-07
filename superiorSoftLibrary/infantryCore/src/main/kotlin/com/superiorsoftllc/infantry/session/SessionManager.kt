@@ -1761,23 +1761,29 @@ class SessionManager(
                 outcome = null
             }
         }
+        // FIRSTRUN-FAIL-1: a failed turn always says why, in the record, the transcript and the `finished` frame.
+        val reason = if (state != SessionState.FAILED) null
+            else if (exitCode == null) "the process ended without an exit code" else "the process exited with code $exitCode"
         if (state == SessionState.FAILED && !run.sawStdout) {
             bootLine(
                 sessionId,
                 "run failed (exit $exitCode). If this is an auth problem run `opencode auth login` / `claude login`.",
             )
+        } else if (reason != null) {
+            bootLine(sessionId, "turn failed: $reason")
         }
         update(sessionId) {
             it.copy(
                 state = state,
                 lastExitCode = exitCode,
                 killOutcome = outcome,
+                lastError = reason ?: it.lastError,
                 childPid = null,
                 lastHeartbeat = clock(),
                 isProcessAlive = false,
             )
         }
-        emit(SessionEvent.Exit(sessionId, exitCode, outcome, processExited = processExited))
+        emit(SessionEvent.Exit(sessionId, exitCode, outcome, processExited = processExited, reason = reason))
         if (state == SessionState.FAILED) closed(sessionId, "turn failed", resumable = true)
         if (state == SessionState.IDLE || state == SessionState.FAILED) scheduleQueueDrain(sessionId)
     }
@@ -1934,17 +1940,20 @@ class SessionManager(
      * see it, and the queue drain, so messages held for the session are not stranded behind the failure.
      */
     private fun failRun(sessionId: String, e: Exception, processExited: Boolean = false) {
+        val reason = e.message?.takeIf { it.isNotBlank() } ?: e.javaClass.simpleName
+        // FIRSTRUN-FAIL-1: the reason reaches the transcript and the `finished` frame, not only the record.
+        bootLine(sessionId, "turn failed: $reason")
         update(sessionId) {
             it.copy(
                 state = SessionState.FAILED,
-                lastError = e.message ?: e.javaClass.simpleName,
+                lastError = reason,
                 lastExitCode = null,
                 childPid = null,
                 lastHeartbeat = clock(),
                 isProcessAlive = false,
             )
         }
-        emit(SessionEvent.Exit(sessionId, code = null, processExited = processExited))
+        emit(SessionEvent.Exit(sessionId, code = null, processExited = processExited, reason = reason))
         closed(sessionId, "turn failed", resumable = true)
         scheduleQueueDrain(sessionId)
     }

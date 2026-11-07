@@ -456,6 +456,51 @@ class ClaudeTtySessionTest {
         assertEquals(listOf(ClaudeTtySession.DOWN, ClaudeTtySession.ENTER), s.out.written)
     }
 
+    // FIRSTRUN-FAIL-1: with no colour (a daemon's scrubbed env) ConPTY sends only the changed cell, so a Down repaints the bare pointer:
+    // the bytes Claude Code 2.1.319 wrote on Windows (ConPTY, NO_COLOR) for Down 1 (to Yes) and Down 2 (back to No).
+    private val plainMenu = "\u001b[2GQuick\u001b[8Gsafety\u001b[15Gcheck:\r\n\u001b[2G❯\u001b[4GNo,\u001b[8Gexit\r\n\u001b[4GYes,\u001b[9GI\u001b[11Gtrust\u001b[17Gthis\u001b[22Gfolder\r\n" +
+        "\u001b[4GEnter to confirm · Esc to cancel\r\n"
+    private val plainDownYes = "\u001b(B\u000f\u001b[?2004h\u001b[1D\u001b[4B\r\u001b[1C\u001b[4A \r\u001b[1C\u001b[1B❯\r\n\n\n\u001b[1C\u001b[3A"
+    private val plainDownNo = "\u001b[1D\u001b[3B\r\u001b[1C\u001b[4A❯\r\u001b[1C\u001b[1B \r\n\n\n\u001b[1C\u001b[4A"
+
+    @Test fun `with no colour the bare pointer repaint is read as the selection moving, and Enter follows`() {
+        val s = start()
+        s.c.sendTurn(request("x"))
+        s.c.onStdout(plainMenu)
+        s.c.tick()
+        assertEquals(listOf(ClaudeTtySession.DOWN), s.out.written)
+        s.c.onStdout(plainDownYes)
+        now += ClaudeTtySession.KEY_GAP_MS
+        s.c.tick()
+        assertEquals(listOf(ClaudeTtySession.DOWN, ClaudeTtySession.ENTER), s.out.written, "the lone pointer moved to the accept row")
+    }
+
+    @Test fun `with no colour two repaints after a retried Down are back on No, exit and get one more Down`() {
+        val s = start()
+        s.c.onStdout(plainMenu)
+        s.c.tick()
+        now += ClaudeTtySession.TRUST_RETRY_MS
+        s.c.tick()
+        s.c.onStdout(plainDownYes)
+        s.c.onStdout(plainDownNo)
+        repeat(11) { now += ClaudeTtySession.TICK_MS; s.c.tick() }
+        assertTrue(ClaudeTtySession.ENTER !in s.out.written, "never Enter on No, exit: " + s.out.written)
+        assertEquals(3, s.out.written.count { it == ClaudeTtySession.DOWN })
+        s.c.onStdout(plainDownYes)
+        now += ClaudeTtySession.TRUST_RETRY_MS
+        s.c.tick()
+        assertEquals(ClaudeTtySession.ENTER, s.out.written.last())
+    }
+
+    @Test fun `trustOnYes reads the last full row, then flips once per bare pointer`() {
+        assertEquals(false, ClaudeTtySession.trustOnYes("quicksafetycheck:❯no,exityes,itrustthisfolder"))
+        assertEquals(true, ClaudeTtySession.trustOnYes("❯no,exityes,itrustthisfolder❯"))
+        assertEquals(false, ClaudeTtySession.trustOnYes("❯no,exityes,itrustthisfolder❯❯"))
+        assertEquals(true, ClaudeTtySession.trustOnYes("❯no,exit❯no,exit❯yes,itrustthisfolder"))
+        assertEquals(false, ClaudeTtySession.trustOnYes("❯yes,itrustthisfolder❯"))
+        assertEquals(false, ClaudeTtySession.trustOnYes("nothing drawn yet"))
+    }
+
     @Test fun `Down is never pressed while the accept row is selected`() {
         val s = start()
         s.c.onStdout(trustMenu)
