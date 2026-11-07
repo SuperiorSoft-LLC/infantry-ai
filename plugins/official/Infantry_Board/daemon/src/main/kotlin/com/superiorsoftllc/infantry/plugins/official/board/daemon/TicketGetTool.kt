@@ -102,6 +102,7 @@ class TicketGetTool(private val api: DaemonApi, private val comments: TicketComm
             put("model", ticket.model)
             put("branch", ticket.branch)
             put("epicId", ticket.epicId)
+            put("images", buildJsonArray { ticket.images.forEach { add(JsonPrimitive(it)) } })
             put("description", if (chars <= 0 || body.length <= chars) body else body.take(chars) + "... [cut at $chars chars; detail=full for all]")
         }
 
@@ -123,6 +124,8 @@ class TicketGetTool(private val api: DaemonApi, private val comments: TicketComm
             put("title", ticket.title)
             ticket.branch?.let { put("branch", it) }
             ticket.sessionId?.let { put("sessionId", it) }
+            // The attachments a worker must see: always listed (an empty array says "none"), a few short paths.
+            put("images", buildJsonArray { ticket.images.forEach { add(JsonPrimitive(it)) } })
         }
 
         /** TOKEN-1: a write's answer: the [brief] line, or the full [summary] when the call passed `verbose: true`. */

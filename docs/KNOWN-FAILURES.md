@@ -44,7 +44,6 @@ Failing at 5f5b974e but not in the base list (so NOT a known failure; treat as n
 | infantry | `cli.mcp.McpServeConfigTest` | yes | `spawnWithoutAProjectIdUsesTheConfiguredDefault`: ComparisonFailure at McpServeConfigTest.kt:174 | |
 | infantry | `cli.mcp.McpServeTest` | yes | `rolesToolsComeFromInfantryRolesUnchanged`: AssertionError at McpServeTest.kt:730 | |
 | infantry | `cli.mcp.McpTicketAnswerRaceE2eTest` | yes | `ticketCreateAndUpdateAnswerWithTheirOwnTicketWhileAStartedTicketIsBeingPushed`: ComparisonFailure at McpTicketAnswerRaceE2eTest.kt:116 | |
-| infantry | `cli.mcp.McpTicketImagesE2eTest` | yes | `ticketsCarryImagesThroughMcpAndTheWorkerBriefListsThem`: AssertionError at McpTicketImagesE2eTest.kt:152. CI-FIX-LATER: ticket_get answer has no `images` field (the images feature is not wired in the test daemon / not returned by the MCP answer) | |
 | infantry | `cli.mcp.McpTicketToolsTest` | yes | `update changes only the fields given, description verbatim`: AssertionError at McpTicketToolsTest.kt:155 | |
 | infantry | `cli.mcp.McpWriteToolsTest` | yes | `aKilledSessionRevivedToIdleDoesNotHoldASlotAgain`: ComparisonFailure at McpWriteToolsTest.kt:96 | |
 | infantry | `daemon.AgentProfileDaemonTest` | yes | `theProfileIsReadWhenNewArrivesBecauseTheSessionIsBoundThen`: ComparisonFailure at AgentProfileDaemonTest.kt:200 | |
@@ -85,7 +84,6 @@ Failing at 5f5b974e but not in the base list (so NOT a known failure; treat as n
 | infantryUi | `ui.TicketCommentsPanelUiTest` | yes | `threadPostResolveAndNotifyPicker`: AssertionError at Assertions.kt:264 | |
 | infantryUi | `ui.TicketModalUiTest` | yes | `Open shows the ticket modal over the board, Back and Esc close it, the inline editor still works`: AssertionError at SemanticsNodeInteraction.kt:178 | |
 | infantry | `daemon.InfantryBinShellTest` | no | not failing in the 5f5b974e run (base entry kept) | |
-| infantry | `cli.mcp.McpTicketImagesE2eTest` | yes | CI-TESTS-5: answer carries no `images` field after plugins wired. CI-FIX-LATER: ticket_get answer has no `images` field (the images feature is not wired in the test daemon / not returned by the MCP answer) | e9b33f6b |
 | infantry | `cli.mcp.McpMailToolsE2eTest` | yes | CI-TESTS-5: NullPointerException after plugins wired. CI-FIX-LATER: NullPointerException in the test body (no frame in the report), mail cluster | e9b33f6b |
 | infantry | `cli.CliAcceptanceTest` | yes | CI-TESTS-5: 7 tests (inbox/threads/report handoff) fail after plugins wired. CI-FIX-LATER (7 tests): mail/inbox state: inbox lists 2 unread after read, `threads` LAST column is local-zone not UTC, an at-rest pm is queued not woken, undeliverable role send exits 0, a profile-only role resolves to a session. Cluster: mail | e9b33f6b |
 | infantry | `daemon.RoleSpawnIdentityTest` | yes | CI-TESTS-5: mail to a role-only session assertion fails | e9b33f6b |
