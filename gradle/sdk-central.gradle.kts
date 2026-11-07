@@ -25,21 +25,25 @@ val repoRoot: File = generateSequence(project.projectDir) { it.parentFile }
     .firstOrNull { File(it, "scripts/license-paths.txt").isFile }
     ?: error("SDK-CENTRAL-1: scripts/license-paths.txt not found above ${project.projectDir}")
 
-// License by path prefix, first match wins; anything not listed is Apache-2.0 (the file's own rule).
-val spdxLicense: String = run {
-    val rel = project.projectDir.relativeTo(repoRoot).invariantSeparatorsPath + "/"
-    File(repoRoot, "scripts/license-paths.txt").readLines()
-        .filter { it.isNotBlank() && !it.startsWith("#") && it.contains('\t') }
-        .map { it.substringBefore('\t') to it.substringAfter('\t').trim() }
-        .firstOrNull { (prefix, _) -> rel.startsWith(prefix) }?.second ?: "Apache-2.0"
-}
+// SDK-PUB-2 (owner 2026-11-07): every published SDK artifact is MPL-2.0; the application is licensed separately and its
+// headers / license-paths.txt are untouched. -Pinfantry.license overrides (a different id needs an entry below).
+val licenseNames = mapOf(
+    "Apache-2.0" to "Apache License, Version 2.0",
+    "MPL-2.0" to "Mozilla Public License 2.0",
+)
 val licenseUrls = mapOf(
     "Apache-2.0" to "https://www.apache.org/licenses/LICENSE-2.0.txt",
-    "MPL-2.0" to "https://www.mozilla.org/en-US/MPL/2.0/",
+    "MPL-2.0" to "https://www.mozilla.org/MPL/2.0/",
 )
-val licenseId = (findProperty("infantry.license") ?: spdxLicense).toString()
+val licenseId = (findProperty("infantry.license") ?: "MPL-2.0").toString()
 val licenseUrl = licenseUrls[licenseId]
     ?: error("SDK-CENTRAL-1: no licence URL for '$licenseId' (${project.path}); add it to licenseUrls in gradle/sdk-central.gradle.kts")
+val licenseFile = File(repoRoot, "LICENSES/$licenseId.txt")
+
+// The licence text travels inside every jar (META-INF/LICENSE).
+tasks.withType(Jar::class.java).configureEach {
+    from(licenseFile) { into("META-INF"); rename { "LICENSE" } }
+}
 
 val siteUrl = (findProperty("infantry.url") ?: "https://github.com/SuperiorSoft-LLC/infantry-ai").toString()
 val scmUrl = (findProperty("infantry.scm.url") ?: "https://github.com/SuperiorSoft-LLC/infantry-ai").toString()
@@ -82,7 +86,7 @@ extensions.configure<PublishingExtension>("publishing") {
             url.set(siteUrl)
             licenses {
                 license {
-                    name.set(licenseId)
+                    name.set(licenseNames[licenseId] ?: licenseId)
                     url.set(licenseUrl)
                     distribution.set("repo")
                 }

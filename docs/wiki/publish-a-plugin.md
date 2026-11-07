@@ -15,3 +15,11 @@ https://github.com/SuperiorSoft-LLC/infantry-plugin-template. Design: [PLUGIN-RE
 
 Community plugins are installed with explicit consent to their grants. Official-class entries must be signed; until a
 plugin signing key exists the installer refuses an unsigned official entry (`NOT_SIGNED_OFFICIAL`).
+
+## Licensing: the SDK is MPL-2.0; the application is licensed separately
+
+Every published SDK artifact (plugin API, protocol, daemon API, harness API, UI core, BOM, version catalog and the Gradle
+plugin) carries the Mozilla Public License 2.0 in its POM and as `META-INF/LICENSE` in its jar. That marks the SDK, not the
+Infantry AI application, as the MPL part; the application's own licence is stated separately and is not changed by publishing
+the SDK.
+

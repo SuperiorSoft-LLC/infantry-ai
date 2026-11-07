@@ -20,6 +20,12 @@ To build against a local SDK repository instead, add `-Pinfantry.sdkRepo=<path>`
 yet, `-Pinfantry.sdk.githubPackages=true` also reads GitHub Packages; that needs a token with `read:packages`
 (`GITHUB_ACTOR` / `GITHUB_TOKEN`, or `gpr.user` / `gpr.key` in `~/.gradle/gradle.properties`).
 
+**Until the SDK is on Maven Central, the SDK is published to GitHub Packages only, and GitHub Packages needs a token even for
+public packages.** The CI workflows here already pass `-Pinfantry.sdk.githubPackages=true` with the workflow `GITHUB_TOKEN`
+(the repository must be allowed to read the package: package settings > Manage Actions access). Locally, create a classic
+token with `read:packages` and put `gpr.user=<you>` and `gpr.key=<token>` in `~/.gradle/gradle.properties`, then build with
+`./gradlew build -Pinfantry.sdk.githubPackages=true`. The SDK artifacts are MPL-2.0.
+
 ## Install locally
 
     infantry plugin install build/ihq/<Name>.ihq --grant-all-requested
