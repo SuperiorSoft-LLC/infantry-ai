@@ -32,6 +32,12 @@ interface PlatformHost {
     /** VOICE-1: the platform's text-to-speech, or null when it has none (alerts then only toast and beep). */
     val speaker: com.superiorsoftllc.infantry.ui.voice.Speaker? get() = null
 
+    /**
+     * VOICE-SEAM-1: the host's microphone slot; non-null where plugins can capture audio (`audio.in`). The shell root
+     * draws the listening indicator from it.
+     */
+    val captureMonitor: com.superiorsoftllc.infantry.ui.voice.CaptureMonitor? get() = null
+
     /** The platform's mp3 player for the incoming-comms sound, or null when it has none (the sound is then silent). */
     val soundPlayer: com.superiorsoftllc.infantry.ui.sound.SoundPlayer? get() = null
 

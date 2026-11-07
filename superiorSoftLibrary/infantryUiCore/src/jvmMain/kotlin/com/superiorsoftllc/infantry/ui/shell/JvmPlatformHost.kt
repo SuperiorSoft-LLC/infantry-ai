@@ -182,10 +182,21 @@ class JvmPlatformHost(
      */
     @Volatile private var loaded: com.superiorsoftllc.infantry.ui.plugin.DesktopPlugins.Loaded? = null
 
+    /** VOICE-SEAM-1: one capture at a time on this host; the shell root draws the listening indicator from it. */
+    override val captureMonitor: com.superiorsoftllc.infantry.ui.voice.CaptureMonitor = com.superiorsoftllc.infantry.ui.voice.CaptureMonitor()
+
+    /** VOICE-SEAM-1: `speech.out` speaks with the enabled voice plugin (`<state dir>/plugins`), else the OS voice. */
+    private val pluginSpeech: com.superiorsoftllc.infantry.ui.voice.Speaker by lazy {
+        com.superiorsoftllc.infantry.ui.voice.plugin.PluginSpeaker.desktop(File(stateDir() ?: File(".infantry"), "plugins"), speaker)
+    }
+
     private fun load() = synchronized(this) {
         // S7: the module set it replaces is unloaded once the new one is built (observers off, loaders closed).
         val old = loaded
-        com.superiorsoftllc.infantry.ui.plugin.DesktopPlugins.load(stateDir() ?: File(".infantry"), env, property).also { loaded = it; old?.close() }
+        com.superiorsoftllc.infantry.ui.plugin.DesktopPlugins.load(
+            stateDir() ?: File(".infantry"), env, property, speech = pluginSpeech, capture = captureMonitor,
+            captureLimit = { com.superiorsoftllc.infantry.ui.voice.captureLimitSeconds(uiPref(com.superiorsoftllc.infantry.ui.voice.AUDIO_CAPTURE_MAX_SECONDS_PREF_KEY) ?: setting(com.superiorsoftllc.infantry.ui.voice.AUDIO_CAPTURE_MAX_SECONDS_ENV), it) },
+        ).also { loaded = it; old?.close() }
     }
 
     override val tabFactory: com.superiorsoftllc.infantry.ui.plugin.TabFactory get() = (loaded ?: synchronized(this) { loaded ?: load() }).factory

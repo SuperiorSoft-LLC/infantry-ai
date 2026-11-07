@@ -105,6 +105,14 @@ class PluginSpeaker(
 
     override fun beep() = fallback.beep()
 
+    /** VOICE-SEAM-1: drops what is queued, kills the running engine and stops the OS voice. */
+    override fun stop() {
+        generation++
+        worker.queue.clear()
+        current?.destroyForcibly()
+        fallback.stop()
+    }
+
     override fun voices(): List<String> = fallback.voices()
 
     /** Waits until no alert is queued or speaking (tests). */

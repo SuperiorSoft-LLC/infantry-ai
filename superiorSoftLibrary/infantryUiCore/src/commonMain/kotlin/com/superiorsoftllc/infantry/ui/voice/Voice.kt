@@ -49,6 +49,9 @@ interface Speaker {
 
     /** Voices to offer in the settings; empty = only the default. */
     fun voices(): List<String> = emptyList()
+
+    /** VOICE-SEAM-1: stops what is being said and drops what is queued; a host that cannot stop does nothing. */
+    fun stop() {}
 }
 
 enum class SpeechDecision(val speaks: Boolean) {

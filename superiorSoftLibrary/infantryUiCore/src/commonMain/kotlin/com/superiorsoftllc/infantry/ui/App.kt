@@ -448,7 +448,13 @@ fun App(
       // at launch. focusable() draws no indication, so focusing the root shows nothing.
       androidx.compose.runtime.CompositionLocalProvider(
           LocalHostSurface provides Modifier.fillMaxSize().modalBlur(modalBlur).background(Palette.Bg).focusRequester(root).focusable().onPreviewKeyEvent(::key),
-      ) { tabs.shellRoot.Render(BlockScope(Modifier, null)) }
+      ) {
+        // VOICE-SEAM-1: the listening indicator is drawn here, over the block tree, so no plugin can replace or hide it.
+        Box(Modifier.fillMaxSize()) {
+          tabs.shellRoot.Render(BlockScope(Modifier, null))
+          com.superiorsoftllc.infantry.ui.voice.ListeningIndicator(LocalPlatformHost.current.captureMonitor, Modifier.align(Alignment.TopCenter))
+        }
+      }
       }
     }
 }

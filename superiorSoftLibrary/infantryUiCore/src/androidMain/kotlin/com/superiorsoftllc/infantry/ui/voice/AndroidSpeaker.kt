@@ -27,5 +27,7 @@ class AndroidSpeaker(context: Context) : Speaker {
 
     override fun voices(): List<String> = if (!ready) emptyList() else runCatching { tts.voices.orEmpty().map { it.name }.sorted() }.getOrDefault(emptyList())
 
+    override fun stop() { runCatching { tts.stop() } }
+
     fun shutdown() { runCatching { tts.shutdown() } }
 }

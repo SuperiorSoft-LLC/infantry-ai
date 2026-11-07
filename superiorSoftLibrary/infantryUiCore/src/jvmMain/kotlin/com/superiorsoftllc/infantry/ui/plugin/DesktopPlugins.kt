@@ -70,6 +70,13 @@ object DesktopPlugins {
         print: (String) -> Unit = { System.err.println(it) },
         /** The pinned Infantry key fingerprints ([OfficialTrust.PINNED_FINGERPRINTS]); overridable for tests only. */
         pinned: Set<String> = OfficialTrust.PINNED_FINGERPRINTS,
+        /** VOICE-SEAM-1: what backs `speech.out` (the plugin voice engine, else the OS voice); null = no such service. */
+        speech: com.superiorsoftllc.infantry.ui.voice.Speaker? = null,
+        /** VOICE-SEAM-1: the host's microphone slot behind `audio.in`; null = no such service. */
+        capture: com.superiorsoftllc.infantry.ui.voice.CaptureMonitor? = null,
+        /** VOICE-SEAM-1: the seconds one capture may run, given the plugin's own request. */
+        captureLimit: (requested: Int?) -> Int = { com.superiorsoftllc.infantry.ui.voice.captureLimitSeconds(null, it) },
+        captureLines: com.superiorsoftllc.infantry.ui.voice.CaptureLines = com.superiorsoftllc.infantry.ui.voice.JavaSoundLines,
     ): Loaded {
         val log = mutableListOf<String>()
         val say: (String) -> Unit = { log += it; print(it) }
@@ -101,6 +108,8 @@ object DesktopPlugins {
             provide(Services.SETTINGS) { s -> FilePluginSettings(FilePluginStorage(dataDir(stateDir, s.name))) }
             provide(Services.DAEMON) { s -> RouteGate.gated(s.manifest!!, lockdown, config, DaemonLink.window::send) }
             provide(Services.ENDPOINTS) { s -> JvmEndpointAccess(s.manifest!!, s.tier, config, lockdown, say) }
+            speech?.let { sp -> provide(Services.SPEECH_OUT) { com.superiorsoftllc.infantry.ui.voice.SpeakerSpeechOutput(sp) } }
+            capture?.let { slot -> provide(Services.AUDIO_IN) { s -> com.superiorsoftllc.infantry.ui.voice.JvmAudioCapture(s.name, slot, captureLimit, captureLines, say) } }
         }
         val services = resolution.loaded.associate { it.name to registry.forModule(it) }
 
