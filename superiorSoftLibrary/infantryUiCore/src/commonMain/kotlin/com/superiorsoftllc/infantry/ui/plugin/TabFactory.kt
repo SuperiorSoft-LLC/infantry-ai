@@ -1042,7 +1042,11 @@ internal fun ColumnScope.PanelSection(factory: TabFactory, section: PanelProvide
 internal fun PanelSectionBody(factory: TabFactory, section: PanelProvider, context: TabContext, modifier: Modifier, badge: Boolean = true) {
     val module = factory.panelModuleOf(section.id)
     val own = context.forModule(factory.servicesOf(section.module))
-    Box(modifier) {
+    // PLUGIN-CRASH-CONTAIN-1: a plugin that threw is not drawn until it reloads; its section is probed before first draw.
+    val mod = section.module
+    val gen = mod?.let(factory.generation) ?: 0
+    val blockKey = "section/$mod/${section.id}"
+    val drawn: @Composable () -> Unit = {
         if (badge && module?.tier == Tier.COMMUNITY) {
             Column {
                 CommunityBadge(module.manifest)
@@ -1050,6 +1054,15 @@ internal fun PanelSectionBody(factory: TabFactory, section: PanelProvider, conte
             }
         } else {
             ModuleTier(module?.tier.isCoreTier()) { ModuleScope(section.module) { section.content(own) } }
+        }
+    }
+    Box(modifier) {
+        if (mod == null) drawn()
+        else if (PluginFaults.faultOf(mod, gen) == null) {
+            com.superiorsoftllc.infantry.ui.block.layout.GuardedBlock(blockKey, section, fallback = {}, content = drawn)
+            (com.superiorsoftllc.infantry.ui.block.layout.OverrideHealth.verdict(blockKey, section) as? com.superiorsoftllc.infantry.ui.block.layout.OverrideVerdict.Faulted)?.let {
+                androidx.compose.runtime.SideEffect { PluginFaults.record(mod, IllegalStateException(it.message), gen) }
+            }
         }
     }
 }

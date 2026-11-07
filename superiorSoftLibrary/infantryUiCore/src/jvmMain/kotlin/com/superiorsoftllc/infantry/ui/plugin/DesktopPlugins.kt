@@ -445,6 +445,7 @@ object DesktopPlugins {
         if (!jar.isFile) error("jar ${m.jar} not found (build it first)")
         if (!jar.canonicalPath.startsWith(dir.canonicalPath + File.separator)) error("jar ${m.jar} is outside the module folder")
         val loader = PluginClassLoader(dir, jar, DesktopPlugins::class.java.classLoader, s.tier)
+        entry.substringBeforeLast('.', "").takeIf { it.isNotEmpty() }?.let { PluginFaults.claim(s.name, it) }
         val plugin = try {
             loader.loadClass(entry).getDeclaredConstructor().newInstance() as? UiPlugin ?: error("$entry is not a UiPlugin")
         } catch (e: ReflectiveOperationException) {

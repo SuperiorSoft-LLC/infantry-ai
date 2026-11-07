@@ -2,7 +2,18 @@
 // Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Text
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.LocalWindowExceptionHandlerFactory
+import androidx.compose.ui.window.WindowExceptionHandler
+import androidx.compose.ui.window.WindowExceptionHandlerFactory
+import com.superiorsoftllc.infantry.ui.plugin.PluginFaults
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
@@ -48,11 +59,14 @@ internal val MIN_SIZE = Dimension(900, 560)
  * resize border on Windows, so `resizable = true` alone would leave it fixed-size).
  * [onFocusGained] runs on the UI thread each time the window becomes the focused window (UPDATER-DEFAULT-1: the due update check).
  */
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun ApplicationScope.InfantryWindow(onCloseRequest: () -> Unit, onFocusGained: () -> Unit = {}, content: @Composable () -> Unit) {
     val state = rememberWindowState(size = DpSize(1400.dp, 860.dp))
     // APP-ICON-1: the Infantry AI "A" mark on the title bar's taskbar entry and Alt-Tab, not the runtime default.
     val icon = remember { AppIcon.painter() }
+    // PLUGIN-CRASH-CONTAIN-1: Compose's default handler shows a native "Error" dialog; ours logs and contains it.
+    CompositionLocalProvider(LocalWindowExceptionHandlerFactory provides NoDialogExceptionHandler) {
     Window(onCloseRequest = onCloseRequest, icon = icon, state = state, title = ShellApp.current?.manifest?.windowTitle ?: "Infantry AI", undecorated = true, resizable = true) {
         val frame = window
         LaunchedEffect(frame) { frame.minimumSize = MIN_SIZE }
@@ -82,9 +96,27 @@ fun ApplicationScope.InfantryWindow(onCloseRequest: () -> Unit, onFocusGained: (
         CompositionLocalProvider(LocalWindowChrome provides chrome) {
             Box(Modifier.fillMaxSize().then(if (floating) Modifier.border(1.dp, Palette.Border) else Modifier)) {
                 content()
+                HostErrorBanner()
                 if (floating) ResizeHandles(frame)
             }
         }
+    }
+    }
+}
+
+/** PLUGIN-CRASH-CONTAIN-1: logs the exception and routes it to [PluginFaults]; never a modal, never a rethrow. */
+@OptIn(ExperimentalComposeUiApi::class)
+internal object NoDialogExceptionHandler : WindowExceptionHandlerFactory {
+    override fun exceptionHandler(window: java.awt.Window) = WindowExceptionHandler { PluginFaults.handle(it) }
+}
+
+/** PLUGIN-CRASH-CONTAIN-1: the in-app strip for an exception no plugin owned. */
+@Composable
+private fun BoxScope.HostErrorBanner() {
+    val message = PluginFaults.hostError.value ?: return
+    Row(Modifier.align(Alignment.TopCenter).background(Palette.Border).padding(horizontal = 12.dp, vertical = 4.dp).testTag("host-error-banner"), verticalAlignment = Alignment.CenterVertically) {
+        Text("Something went wrong: $message", color = Palette.Text, fontSize = 12.sp)
+        TextButton({ PluginFaults.hostError.value = null }) { Text("Dismiss") }
     }
 }
 
