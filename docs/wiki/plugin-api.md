@@ -621,6 +621,7 @@ Generated for the `infantryPlugins` guard `SdkTypesDocumentedGuardTest`: every p
 - `PluginManagerPort`: PLUGIN-UI-1 (docs/PLUGIN-MANAGER.md section 4.3): the plugin manager as a UI plugin sees it.
 - `PluginView`: One installed or bundled plugin.
 - `RefreshView`
+- `PluginProgress`: PLUGIN-PROGRESS-1: one live step (Downloading / Verifying / Installing / Reloading, bytes when known) a host reports through `PluginManagerPort.setProgressListener`.
 - `SourceView`
 - `UpdateView`: A newer version offered for an installed plugin; [newGrants] non-empty = "asks for new permissions".
 

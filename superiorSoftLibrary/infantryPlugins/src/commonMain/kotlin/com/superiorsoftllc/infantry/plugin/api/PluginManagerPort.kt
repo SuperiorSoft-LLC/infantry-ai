@@ -28,7 +28,15 @@ interface PluginManagerPort {
     fun refreshIfStale(): List<RefreshView> = emptyList()
     /** PLUGIN-REPO-1: imports a plugin list (a JSON file path or URL) as a community source; a host without one answers not ok. */
     fun importList(location: String): ActionResult = ActionResult(false, "importing a plugin list is not supported on this host")
+    /** PLUGIN-PROGRESS-1: the screen listens here for the steps of the running install / update / rollback / remove; null stops it. A host that reports none does nothing. */
+    fun setProgressListener(listener: ((PluginProgress) -> Unit)?) {}
 }
+
+/**
+ * PLUGIN-PROGRESS-1: one live step of a plugin change. [step] is Downloading / Verifying / Installing / Reloading; [done] and
+ * [total] are bytes while the size is known (-1 = unknown, the bar is indeterminate).
+ */
+data class PluginProgress(val id: String, val step: String, val done: Long = -1, val total: Long = -1)
 
 /**
  * One installed or bundled plugin. [cls] = official / community / custom. PLUGINS-UI-1: [description] is module.json's
