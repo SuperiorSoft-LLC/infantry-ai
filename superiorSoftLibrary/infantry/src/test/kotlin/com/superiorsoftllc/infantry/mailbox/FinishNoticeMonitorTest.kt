@@ -235,6 +235,27 @@ class FinishNoticeMonitorTest {
         r.monitor.sweep()
         assertEquals(2, r.sent.size, "told once")
     }
+    @Test
+    fun notifyDup1_one_finish_gives_exactly_one_automatic_notice_however_many_runs_end() {
+        val r = Rig()
+        r.status = "done"
+        r.exit(0)
+        r.turn()
+        r.exit(0)
+        r.turn()
+        r.exit(0)
+        assertEquals(1, r.sent.size)
+        assertTrue(r.sent[0].subject.orEmpty().startsWith("[AUTOMATIC] ticket t1 finished"))
+    }
+
+    @Test
+    fun notifyDup1_a_client_request_kill_sends_no_failure_notice() {
+        val r = Rig()
+        r.manager.kill(r.sessionId, by = "client request")
+        r.monitor.onSessionEvent(SessionEvent.Exit(r.sessionId, null, KillOutcome.GRACEFUL))
+        assertEquals(0, r.sent.size)
+    }
+
     private companion object {
         const val IDLE_MIN = 60L
     }

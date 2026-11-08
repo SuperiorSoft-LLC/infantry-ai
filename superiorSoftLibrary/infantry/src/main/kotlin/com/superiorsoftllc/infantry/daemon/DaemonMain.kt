@@ -1470,6 +1470,7 @@ class InfantryDaemon(
                 reports = { pluginHost.get().serviceRegistry.find(com.superiorsoftllc.infantry.daemon.api.tickets.TicketReports::class) },
                 idleComment = { settings.limit(LimitRegistry.IDLE_COMMENT) != 0L },
                 gate = nudgeGate,
+                finishOnce = { settings.limit(LimitRegistry.FINISH_ONCE) != 0L },
             ).also { it.start() }
             // STALL-4: the watch's recipient rule (`watch.escalateTo`): `starter` = the ticket's starter session, else the
             // user through the UI; `user` = always the user; `none` = nobody. No role is assumed to exist.
