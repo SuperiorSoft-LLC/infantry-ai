@@ -54,6 +54,7 @@ Every page of this wiki is listed here, one line each. The pages are written fro
 - [Add a Lua hook](recipes/add-lua-hook.md): automate a process with a script and a hook line.
 - [Add a CLI harness](recipes/add-cli-harness.md): support another agent CLI.
 - [Add a provider](recipes/add-provider.md): add a model group to the picker.
+- [Add an avatar style](recipes/add-an-avatar-style.md): draw agent avatars with your own renderer, with the portrait as fallback.
 - [Test daemon for runner repros](recipes/test-daemon-for-runner-repros.md): start a PC daemon and a runner daemon from a built dist, pair them, tear them down by PID.
 
 ## Project

@@ -351,6 +351,49 @@ Source: `ui/plugin/config/FieldTypes.kt`. Declare the id in `fieldTypes`, regist
 Declare `{ "registry": "chat.feed.renderers", "key": "user" }` in `implementations`. A config field of type
 `implementation` with `registry` set picks one key. `Infantry_ChatFeed` registers its row renderers this way.
 
+### Agent avatar renderers (AVATAR-DOCS-1)
+
+Every agent avatar in the app is drawn by one core composable, `AgentAvatar` (`superiorSoftLibrary/infantryUiCore/src/commonMain/kotlin/com/superiorsoftllc/infantry/ui/AgentAvatarRenderers.kt` holds the seam; `AgentAvatar.kt` holds the composable). A plugin can add an avatar style by registering a renderer under the registry `agent.avatar.renderers`:
+
+```kotlin
+registrar.implementation(AGENT_AVATAR_RENDERERS, "mascot", MascotAvatarRenderer)  // key = the style name
+```
+
+and declaring the same pair in `module.json`:
+
+```json
+"implementations": [{ "registry": "agent.avatar.renderers", "key": "mascot" }]
+```
+
+Your renderer is any `fun interface AgentAvatarRenderer` with a `@Composable Draw(request: AvatarRequest, modifier: Modifier)`.
+
+**The request (`AvatarRequest`).** Plain data; a renderer never sees app state or a session. Fields:
+
+| Field | Type, default | Meaning |
+|---|---|---|
+| `role` | `String?`, `null` | The agent's role id: the identity, as the built-in portrait uses it. |
+| `label` | `String`, `""` | Fallback text a renderer may draw as initials (an agent id when there is no role). |
+| `catalogColor` | `String?`, `null` | The role's colour from the daemon catalog, when known. |
+| `sizeDp` | `Int`, `28` | The size to draw in. |
+| `state` | `String?`, `null` | The session's `SessionState` **name** (`STARTING`, `BUSY`, `WAITING_INPUT`, `IDLE`, `EXITED`, `ORPHANED`, `FAILED`), or `null` when the call site knows no session. It is a string on purpose: a new daemon state does not break a renderer. A renderer maps a state it does not know to idle. |
+| `busyDetail` | `String?`, `null` | An extra note: `compacting` while the run compacts its context, `error` after a failed turn. |
+| `motion` | `AvatarMotion`, `STATIC` | Whether this site allows the avatar to move. `STATIC` for list rows, board cards and pickers; `LIVE` only at the three focus sites (sidebar, chat header, title bar). A renderer animates only under `LIVE`. |
+
+New fields are added with defaults, so an existing renderer keeps compiling. Removing or retyping a field breaks third-party renderers, so do not do it.
+
+**The preference (`agentAvatarStyle`).** `AGENT_AVATAR_PREF_KEY` (`"agentAvatarStyle"`) is a per-device UI preference holding the style key. Unset means the built-in style `AGENT_AVATAR_PORTRAIT` (`"portrait"`), the role's bundled portrait PNG. The window reads it once and provides it through `LocalAgentAvatarStyle`. Note: the Appearance picker that lists the registered keys is not built yet (ticket AVATAR-PICKER-1); until it lands, a style is chosen by setting the preference itself.
+
+**The fallback.** The built-in portrait draws in every one of these cases, so an avatar is never blank:
+
+- the preference is unset, or names `portrait`;
+- nothing is registered under that key (the plugin is not installed, disabled or removed, or the key is unknown);
+- what is registered under the key is not an `AgentAvatarRenderer`;
+- the renderer throws while composing. The failure is guarded (`GuardedBlock`, keyed by the owning module), the style is dropped for the portrait, and the fault is recorded against the module in Settings > Plugins (`PluginFaults`). It is never fatal.
+
+The fallback is the portrait, not an initials disc: the initials disc is the portrait's own fallback when its PNG cannot load.
+
+Recipe with the full minimal plugin: [Add an avatar style](recipes/add-an-avatar-style.md).
+
 ## 6. Platform services
 
 Source: `infantryPlugins/.../plugin/api/Services.kt`. Get a service with `registrar.services.get(Services.X)`, or
