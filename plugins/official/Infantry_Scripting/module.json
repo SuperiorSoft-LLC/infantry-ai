@@ -76,8 +76,14 @@
           { "key": "scripting.exec.tickSec", "type": "number", "label": "Process bridge: seconds between exec.tick events for a background run", "default": 10, "min": 1, "max": 3600, "step": 1, "scope": "daemon", "order": 19 },
           { "key": "scripting.builtins.off", "type": "text", "label": "Shipped hooks turned off (comma-separated ids, e.g. resume-after-restart; bind your own script to the event instead)", "default": "", "scope": "daemon", "order": 20 },
           { "key": "scripting.restart.resume", "type": "toggle", "label": "After a daemon restart, prompt each session whose turn it cut to continue (shipped hook resume-after-restart; its starter and the owner are told either way)", "default": true, "scope": "daemon", "order": 21 },
-          { "key": "scripting.global.writeRoles", "type": "text", "label": "Script Arsenal: roles that may save or delete app-wide scripts (comma-separated; empty = any role; the owner always may)", "default": "pm,owner", "scope": "daemon", "order": 23 },
           { "key": "scripting.restart.prompt", "type": "text", "label": "The prompt a cut session gets after a restart (empty = the script's default)", "default": "", "scope": "daemon", "order": 22 }
+        ]
+      },
+      {
+        "node": "infantry.scripting.arsenal", "group": "Scripting", "title": "Script Arsenal", "tab": "Plugins", "order": 921,
+        "keywords": ["script", "arsenal", "global", "hook", "knowledge"],
+        "fields": [
+          { "key": "scripting.global.writeRoles", "type": "text", "label": "Script Arsenal: roles that may save or delete app-wide scripts (comma-separated; empty = any role; the owner always may)", "default": "pm,owner", "scope": "daemon", "order": 1 }
         ]
       }
     ]

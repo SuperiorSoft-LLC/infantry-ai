@@ -1,4 +1,5 @@
 -- goal-handoff: when every goal ticket is done, hands the machine to another project: mails its PM and tells our PM to start nothing until handed back; fires once
+-- Scenario: The machine is lent to another project until a set of goal tickets finishes, then handed on.
 -- Args:
 --   goals (list of strings, required): 8-char ticket ids
 --   recipient (string): e.g. pm@<project id>; never name it `to`

@@ -1,4 +1,5 @@
 -- needs-owner-alert: raises a system notification when a ticket comment asks for the owner ("needs owner", "[Q: owner", "owner decision needed")
+-- Scenario: A ticket comment asks for the owner and must raise a notification at once.
 -- Args:
 --   pm (string, optional): unused here, kept for hook symmetry
 --   event payload: ticketId and optionally body/text/comment of the comment

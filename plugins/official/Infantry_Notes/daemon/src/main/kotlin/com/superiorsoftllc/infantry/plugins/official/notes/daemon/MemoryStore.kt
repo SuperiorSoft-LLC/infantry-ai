@@ -280,6 +280,7 @@ class MemoryStore(
     @Synchronized
     fun get(projectId: String, name: String, scope: String = SCOPE_PROJECT, ownerId: String = ""): MemoryNote? {
         return find(projectId.trim(), scope, ownerId.trim(), name.trim())
+            ?: if (scope == SCOPE_PROJECT && projectId.trim() != GLOBAL_PROJECT) find(GLOBAL_PROJECT, scope, "", name.trim()) else null
     }
 
     /**
@@ -340,8 +341,11 @@ class MemoryStore(
         val term = query.trim()
         // An empty term would match every note (`LIKE '%%'`), so it is refused rather than answered.
         if (owner.isEmpty() || term.isEmpty()) return emptyList()
-        return persistence.search(owner, term)
-            .filter { it.scope == scope && it.ownerId == ownerId.trim() }
+        // SCRIPT-ARSENAL-2: notes saved at the global project id are visible to every project's search (a project note of the same name wins).
+        val own = persistence.search(owner, term).filter { it.scope == scope && it.ownerId == ownerId.trim() }
+        val global = if (scope == SCOPE_PROJECT && owner != GLOBAL_PROJECT)
+            persistence.search(GLOBAL_PROJECT, term).filter { g -> g.scope == scope && own.none { it.name == g.name } } else emptyList()
+        return (own + global)
             .sortedByDescending { rankOf(it, term) }
             .map { MemorySearchResult(name = it.name, description = it.description, snippet = snippetFor(it.body, term)) }
     }
@@ -378,6 +382,9 @@ class MemoryStore(
 
     companion object {
         const val MAX_NAME_LENGTH = 200
+
+        /** SCRIPT-ARSENAL-2: the project id of app-wide notes; `get` and `search` of any project fall back to / include them. Not a real project id (contains `*`). */
+        const val GLOBAL_PROJECT = "*global*"
 
         /** P10-K1: what `append` puts between the stored body and the new content -- exactly one blank line. */
         const val APPEND_SEPARATOR = "\n\n"

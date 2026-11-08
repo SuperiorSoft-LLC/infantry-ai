@@ -1,4 +1,5 @@
 -- lane-pending-note: says on the ticket that it waits on prerequisites; when it leaves pending for the start lane, starts it
+-- Scenario: Tickets that wait on prerequisites should say so and start when released.
 -- Args:
 --   startLane (string, optional): name of the lane that means start (e.g. todo)
 --   event payload: ticketId, from, to

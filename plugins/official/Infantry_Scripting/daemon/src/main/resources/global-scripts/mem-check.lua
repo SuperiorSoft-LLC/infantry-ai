@@ -1,4 +1,5 @@
 -- mem-check: checks free memory and reaps leftover processes the daemon attributes to ended or idle sessions; notes the PM when memory is low
+-- Scenario: The machine runs low on memory because ended sessions leave processes behind.
 -- Args:
 --   floorMb (number, 8000): free MB below which the PM is noted
 --   reap (bool, true): reap rogue processes

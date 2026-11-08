@@ -63,3 +63,25 @@ data class KnowledgeDecision(val ref: String, val summary: String)
 
 /** An open issue: [ref] is `I<n>`, [location] the path it is about ("" for none). */
 data class KnowledgeIssue(val ref: String, val summary: String, val location: String)
+
+/**
+ * SCRIPT-ARSENAL-2 (DaemonApi 1.51.0, additive): the write half of [Knowledge], a service published by the plugin that owns the
+ * notes (Infantry_Notes). It lets a plugin keep GENERATED entries (the Script Arsenal writes one per script). [project] is a real
+ * project id, or [GLOBAL_PROJECT] for an entry every project's note search and show can see (a note of the project with the same
+ * name wins). Entries are plain project-scope notes; a save replaces the note of that name.
+ */
+interface KnowledgeWriter {
+    /** Create or replace the note [name] of [project]; [folder] null keeps an existing note's folder. */
+    fun save(project: String, name: String, description: String, body: String, folder: String? = null)
+
+    /** Delete the note [name] of [project]; true when it existed. */
+    fun delete(project: String, name: String): Boolean
+
+    /** The names of the notes of [project] that start with [prefix] (to drop stale generated entries). */
+    fun names(project: String, prefix: String): List<String>
+
+    companion object {
+        /** The project id of app-wide notes: every project's note search and show include them. */
+        const val GLOBAL_PROJECT = "*global*"
+    }
+}

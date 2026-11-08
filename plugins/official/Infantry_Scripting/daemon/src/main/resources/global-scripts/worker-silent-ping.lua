@@ -1,4 +1,5 @@
 -- worker-silent-ping: asks a ticket worker for status when it is busy (or waiting on a background job) but has written nothing for N minutes
+-- Scenario: Ask a worker for status when it has been busy but silent for too long.
 -- Args:
 --   pm (string, optional): session id told about each ping
 --   silentMinutes (number, 15): silence that triggers a ping, repeated every window

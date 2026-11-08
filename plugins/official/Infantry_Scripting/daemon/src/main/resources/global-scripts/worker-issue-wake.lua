@@ -1,4 +1,5 @@
 -- worker-issue-wake: wakes the PM at once when a ticket worker stops with an open ISSUE comment, instead of waiting for the idle kick
+-- Scenario: Wake the PM at once when a worker stops with an open issue comment.
 -- Args:
 --   wake (string, required): session id of the PM to wake
 --   authorPrefix (string, agent-): comment authors that count as workers

@@ -93,6 +93,15 @@ class NotesDaemonPlugin : DaemonPlugin {
             override fun roleNotes(project: String, role: String): List<Pair<String, String>> =
                 memory.index(project, SCOPE_ROLE, role).map { it.name to it.description }
         })
+        api.services.provide(com.superiorsoftllc.infantry.daemon.api.knowledge.KnowledgeWriter::class, object : com.superiorsoftllc.infantry.daemon.api.knowledge.KnowledgeWriter {
+            override fun save(project: String, name: String, description: String, body: String, folder: String?) {
+                memory.save(project, name, description, body, folder)
+            }
+
+            override fun delete(project: String, name: String): Boolean = memory.delete(project, name)
+
+            override fun names(project: String, prefix: String): List<String> = memory.index(project).map { it.name }.filter { it.startsWith(prefix) }
+        })
         api.services.provide(KnowledgeRecords::class, object : KnowledgeRecords {
             override fun activeDecisions(project: String) =
                 decisions.list(project).filter { it.active }.sortedBy { it.number }.map { KnowledgeDecision(it.ref, it.summary) }

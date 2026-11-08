@@ -1,4 +1,5 @@
 -- comment-tail: read-only: print the last N chars of a ticket's latest comment of a kind (tool results are cut at the MCP limit)
+-- Scenario: You need the end of a long ticket comment that a tool result cut off.
 -- Args:
 --   ticket (string, required): ticket id
 --   kind (string, done): comment kind

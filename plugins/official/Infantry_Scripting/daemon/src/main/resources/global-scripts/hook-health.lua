@@ -1,4 +1,5 @@
 -- hook-health: watches every script's run history; alerts when a script fails N runs in a row (the watcher of the watchers)
+-- Scenario: Alert when a script keeps failing, so a silently broken hook is noticed (watcher of the watchers).
 -- Args:
 --   pm (string, optional): session id woken with the alert
 --   failRun (number, 3): failures in a row that raise the alert
