@@ -36,6 +36,8 @@ class ProgressBridge(
     private val secret: (name: String, project: String?) -> Map<String, String>?,
     /** The absolute path of [path] under [project]'s `.infantry/` folder (refuses a path that leaves it). */
     private val projectPath: (project: String?, path: String) -> String,
+    /** Ids of the projects that exist; a session-less caller may name one with the `project` arg. */
+    private val projects: () -> Collection<String> = { emptyList() },
 ) {
     private val handles = ConcurrentHashMap<String, ProgressHandle>()
 
@@ -63,7 +65,12 @@ class ProgressBridge(
         return buildJsonObject { put("id", id); put("state", h.task.state.name.lowercase()); put("cancelRequested", h.cancelRequested) }
     }
 
-    fun download(args: JsonObject, project: String?): JsonElement {
+    fun download(args: JsonObject, callerProject: String?): JsonElement {
+        // HTTP-DOWNLOAD-1: a caller bound to a project always uses it (the arg never redirects it); a session-less caller (MCP/CLI) names one.
+        val project = callerProject ?: str(args["project"])?.also {
+            if (it !in projects()) throw IllegalArgumentException("unknown project '$it' (see infantry_projects)")
+        }
+        if (project == null) throw IllegalArgumentException("http.download runs in a project (its .infantry/ folder): this caller has no session project, so pass args.project = <project id> (see infantry_projects)")
         val s = FetchSettings.read(config)
         if (!s.enabled) throw IllegalStateException("http.download is off. Enable it with the setting scripting.fetch.enabled = true and list hosts in scripting.fetch.allow")
         val url = str(args["url"]) ?: throw IllegalArgumentException("url is required")

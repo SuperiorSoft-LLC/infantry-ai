@@ -117,11 +117,20 @@ download falls back to the core transport.
 The Scripting plugin declares three capabilities (see [Scripting](Scripting.md)):
 
 ```lua
-local t = ih.call("progress.start", {title = "Mirroring docs", steps = {"Fetching", "Unpacking"}})
-ih.call("progress.update", {id = t.id, step = "Fetching"})
-local r = ih.call("http.download", {url = "https://example.com/docs.zip", dest = "mirror/docs.zip",
-  sha256 = "...", secretHeaders = {Authorization = "docs-token"}, progressId = t.id})
-ih.call("progress.update", {id = t.id, state = r.ok and "done" or "failed", error = r.error})
+-- ih.call only queues; each answer is in input.results[i].json on the next phase (after ih.again()).
+if not input.results then
+  ih.call("progress.start", {title = "Mirroring docs", steps = {"Fetching", "Unpacking"}})
+  ih.again()
+elseif #input.results == 1 then
+  local t = input.results[1].json
+  ih.call("progress.update", {id = t.id, step = "Fetching"})
+  ih.call("http.download", {url = "https://example.com/docs.zip", dest = "mirror/docs.zip",
+    sha256 = "...", secretHeaders = {Authorization = "docs-token"}, progressId = t.id})
+  ih.again()
+else
+  local t, r = input.results[1].json, input.results[3].json
+  ih.call("progress.update", {id = t.id, state = r.ok and "done" or "failed", error = r.error})
+end
 ```
 
 ## Where it is used

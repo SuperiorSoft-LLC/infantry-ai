@@ -171,9 +171,10 @@ Args: `url`, `method` (GET, POST, PUT, PATCH, DELETE or HEAD; a body is sent on 
 truncated, json}` (`json` only when the body is a JSON object or array).
 
 ```lua
-local r = ih.call("http.fetch", {url = "https://api.example.com/v1/status", secretHeaders = {Authorization = "example-token"}})
+-- ih.call only queues: the answer is input.results[i].json on the next phase (after ih.again()), never a return value.
+ih.call("http.fetch", {url = "https://api.example.com/v1/status", secretHeaders = {Authorization = "example-token"}})
 -- PATCH with a JSON body, a query and a secret header
-local p = ih.call("http.fetch", {url = "https://api.example.com/v1/items/7", method = "PATCH",
+ih.call("http.fetch", {url = "https://api.example.com/v1/items/7", method = "PATCH",
   query = {dry_run = "1"}, headers = {["Content-Type"] = "application/json"}, body = '{"done":true}',
   secretHeaders = {Authorization = "example-token"}})
 ```
@@ -188,12 +189,18 @@ atomic move, and a task in the running-tasks list. Guarded like `http.fetch`: of
 a URL `scripting.fetch.allow` names, grant `net.out` for community callers. `http.fetch` stays for API calls.
 
 Args: `url`, `dest` (a path under `.infantry/`), `title`, `headers`, `secretHeaders = {HeaderName = "<secret name>"}`,
-`sha256`, `progressId` (fold it into a task from `progress.start`). Result: `{ok, path, bytes, sha256, attempts, status,
+`sha256`, `progressId` (fold it into a task from `progress.start`), `project` (only for a caller with no session project, such as `infantry mcp serve` or the CLI: a project id; a session or hook caller always uses its own project). Result: `{ok, path, bytes, sha256, attempts, status,
 error, retryable, cancelled}`.
 
 ```lua
-local r = ih.call("http.download", {url = "https://example.com/docs.zip", dest = "mirror/docs.zip", sha256 = "..."})
-if not r.ok then ih.log("download failed: " .. r.error) end
+-- ih.call only queues: the answer is in input.results on the next phase (never `local r = ih.call(...)`, that is nil).
+if not input.results then
+  ih.call("http.download", {url = "https://example.com/docs.zip", dest = "mirror/docs.zip", sha256 = "..."})
+  ih.again()
+else
+  local r = input.results[1].json
+  if not r.ok then ih.log("download failed: " .. tostring(r.error)) end
+end
 ```
 
 ## exec: running a process
