@@ -84,6 +84,8 @@ class ConfigBlock(children: List<Block>, place: Place = Place()) : Block(CONFIG,
                 if (next.progressStaleMin != flags.progressStaleMin) host.saveUiPref(com.superiorsoftllc.infantry.ui.model.PROGRESS_STALE_PREF_KEY, next.progressStaleMin.toString())
                 if (next.chatMarkdownEngine != flags.chatMarkdownEngine) host.saveUiPref(com.superiorsoftllc.infantry.ui.model.CHAT_MARKDOWN_PREF_KEY, next.chatMarkdownEngine)
                 if (next.reasoningPlacement != flags.reasoningPlacement) host.saveUiPref(com.superiorsoftllc.infantry.ui.model.REASONING_PLACEMENT_PREF_KEY, next.reasoningPlacement.name)
+                // AVATAR-SEAM-1: the avatar style is a UI preference, remembered like the markdown engine.
+                if (next.agentAvatarStyle != flags.agentAvatarStyle) host.saveUiPref(com.superiorsoftllc.infantry.ui.AGENT_AVATAR_PREF_KEY, next.agentAvatarStyle)
                 next.commsSound.save(host, flags.commsSound)
                 ui.flags = next
             }, onDismiss = { ui.showConfig = false },
