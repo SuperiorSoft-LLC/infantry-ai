@@ -29,6 +29,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.superiorsoftllc.infantry.ui.AhqAlertDialog
+import com.superiorsoftllc.infantry.ui.Checkbox
 import com.superiorsoftllc.infantry.ui.CopyValueButton
 import com.superiorsoftllc.infantry.ui.Palette
 import com.superiorsoftllc.infantry.ui.TextButton
@@ -118,17 +119,42 @@ fun adminRequest(op: String, name: String): String =
     JsonObject(mapOf("op" to JsonPrimitive(op), "name" to JsonPrimitive(name))).toString()
 
 /**
- * RUNNER-ADD-UI-1 (docs/wiki/RunnerPairing-design.md 4, step 5): the `add` op of the ONE link a runner prints
+ * RUNNER-ADD-LINK-1 (docs/wiki/RunnerPairing-design.md 4, step 5): the `add` op of the ONE link a runner prints
  * (`infantry runner up --name n`). [name] overrides the name the link carries; null sends none, so the link's name wins.
  * The link is sent verbatim (it is a 10-minute secret and never shown again).
+ *
+ * RUNNER-GRANT-AT-PAIR-1: [grant] asks the runner to grant [projectId] and its installed harnesses in this same pairing, and is sent
+ * only when the owner ticked the confirm AND the link's code carries the authority ([linkCarriesGrant]); the runner adds the ids to
+ * its own `runner.projects` / `runner.harnesses` once and never again from a link frame.
  */
-fun addLinkRequest(link: String, name: String? = null): String = JsonObject(
+fun addLinkRequest(link: String, name: String? = null, grant: Boolean = false, projectId: String? = null): String = JsonObject(
     buildMap {
         put("op", JsonPrimitive("add"))
         put("link", JsonPrimitive(link.trim()))
         name?.trim()?.takeIf { it.isNotEmpty() }?.let { put("name", JsonPrimitive(it)) }
+        if (grant) {
+            put("grant", JsonPrimitive("true"))
+            projectId?.takeIf { it.isNotBlank() }?.let { put("projectId", JsonPrimitive(it)) }
+        }
     },
 ).toString()
+
+/**
+ * RUNNER-GRANT-AT-PAIR-1: whether a pasted pairing link says its code may grant (`--grant-on-pair` on the runner). The card only
+ * looks for the flag; the daemon parses the link and the runner decides.
+ */
+fun linkCarriesGrant(pasted: String): Boolean = pasted.trim()
+    .substringAfter('?', "")
+    .substringBefore('#')
+    .split('&')
+    .any { it.equals("grant=1", ignoreCase = true) }
+
+/** RUNNER-GRANT-AT-PAIR-1: what the grant tick says: one project, once, chosen here. */
+fun grantLabel(projectName: String?, projectId: String?): String = when {
+    projectId.isNullOrBlank() -> "Grant this runner the project this window is on (no project is selected here)"
+    projectName.isNullOrBlank() -> "Grant this runner project $projectId, once, at pairing"
+    else -> "Grant this runner project $projectName ($projectId), once, at pairing"
+}
 
 /** RUNNER-CHECK-1: the `check` op for [name] over this window's project ([projectId]; null = the daemon checks without it). */
 fun checkRequest(name: String, projectId: String? = null): String = JsonObject(
@@ -319,19 +345,22 @@ fun RunnersEmptyHint(modifier: Modifier = Modifier) {
  * carries the one-time code), an optional name override, and Connect, which [RUNNER_ADMIN_ACTION] gates. [sending] shows
  * the wait while the daemon tries every host in the link; a refusal lands in [error] verbatim.
  * [gate] is the link the buttons ask their gate on (null = the window's, which is what the app passes).
+ * RUNNER-GRANT-AT-PAIR-1: [grantProjectId] / [grantProjectName] are the project this window is on, for the one-time grant tick.
  */
 @Composable
 fun AddRunnerDialog(
     sending: Boolean,
     error: String?,
-    onConnect: (link: String, name: String?) -> Unit,
+    onConnect: (link: String, name: String?, grant: Boolean) -> Unit,
     onDismiss: () -> Unit,
     gate: LinkContext? = null,
+    grantProjectId: String? = null,
+    grantProjectName: String? = null,
 ) {
     AhqAlertDialog(
         onDismissRequest = { if (!sending) onDismiss() },
         title = { Text("Add a runner") },
-        text = { AddRunnerForm(sending, error, onConnect, onDismiss, gate) },
+        text = { AddRunnerForm(sending, error, onConnect, onDismiss, gate, grantProjectId = grantProjectId, grantProjectName = grantProjectName) },
         confirmButton = {},
     )
 }
@@ -344,13 +373,20 @@ fun AddRunnerDialog(
 fun AddRunnerForm(
     sending: Boolean,
     error: String?,
-    onConnect: (link: String, name: String?) -> Unit,
+    onConnect: (link: String, name: String?, grant: Boolean) -> Unit,
     onDismiss: () -> Unit,
     gate: LinkContext? = null,
     modifier: Modifier = Modifier,
+    grantProjectId: String? = null,
+    grantProjectName: String? = null,
 ) {
     var link by remember { mutableStateOf("") }
     var name by remember { mutableStateOf("") }
+    // RUNNER-GRANT-AT-PAIR-1: the tick exists only for a link whose code may grant, and starts ticked (the owner already chose
+    // --grant-on-pair on the runner: one confirm here, not two).
+    val canGrant = linkCarriesGrant(link)
+    var grant by remember(link) { mutableStateOf(canGrant) }
+    val grantable = canGrant && !grantProjectId.isNullOrBlank()
     val canConnect = link.isNotBlank() && !sending
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
@@ -380,12 +416,22 @@ fun AddRunnerForm(
                 Text("Trying every address in the link…", fontSize = 12.sp, color = Palette.Muted, modifier = Modifier.testTag("runner-add-wait"))
             }
         }
+        if (canGrant) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Checkbox(grantable && grant, onCheckedChange = { if (grantable) grant = it }, enabled = grantable, modifier = Modifier.testTag("runner-add-grant"))
+                Text(grantLabel(grantProjectName, grantProjectId), fontSize = 12.sp, modifier = Modifier.weight(1f).testTag("runner-add-grant-label"))
+            }
+            Text(
+                "The runner adds it to its own runner.projects and runner.harnesses once, at this pairing; nothing else changes its grants.",
+                fontSize = 11.sp, color = Palette.Muted,
+            )
+        }
         if (error != null) Text(error, color = Palette.Danger, fontSize = 12.sp, modifier = Modifier.testTag("runner-add-error"))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Connecting adds the runner and turns runners on.", fontSize = 11.sp, color = Palette.Muted, modifier = Modifier.weight(1f))
             TextButton(onClick = { if (!sending) onDismiss() }, enabled = !sending, modifier = Modifier.testTag("runner-add-cancel")) { Text("Cancel") }
             ActionButton(
-                "runners.admin", "Connect", { onConnect(link.trim(), name.trim().ifBlank { null }) },
+                "runners.admin", "Connect", { onConnect(link.trim(), name.trim().ifBlank { null }, grantable && grant) },
                 Modifier.testTag("runner-add-connect"), link = gate, enabled = canConnect,
             )
         }
@@ -535,6 +581,7 @@ class RunnersCardBlock : Block("runnersCard", RUNNERS_CARD_NODE) {
         val link = shell.link
         /** The window's project, so a check reports whether the runner may take this project (its grant row). */
         val projectId = shell.session.activeProjectId
+        val projectName = shell.session.activeProject?.name
         var list by remember { mutableStateOf<RunnersList?>(null) }
         var listError by remember { mutableStateOf<String?>(null) }
         var dialog by remember { mutableStateOf<CardDialog?>(null) }
@@ -589,10 +636,10 @@ class RunnersCardBlock : Block("runnersCard", RUNNERS_CARD_NODE) {
             null -> Unit
             is CardDialog.Add -> AddRunnerDialog(
                 sending = open.sending, error = open.error,
-                onConnect = { pasted, name ->
+                onConnect = { pasted, name, grant ->
                     coroutines.launch {
                         dialog = CardDialog.Add(sending = true)
-                        val text = call(addLinkRequest(pasted, name))
+                        val text = call(addLinkRequest(pasted, name, grant, projectId))
                         val failure = text?.let { runnerFailure(it) }
                         when {
                             text == null -> dialog = CardDialog.Add(sending = false, error = RUNNERS_OFFLINE)
@@ -607,6 +654,8 @@ class RunnersCardBlock : Block("runnersCard", RUNNERS_CARD_NODE) {
                 },
                 onDismiss = { dialog = null },
                 gate = link,
+                grantProjectId = projectId,
+                grantProjectName = projectName,
             )
             is CardDialog.Check -> RunnerCheckDialog(
                 open.runner, open.rows, open.error, open.running,

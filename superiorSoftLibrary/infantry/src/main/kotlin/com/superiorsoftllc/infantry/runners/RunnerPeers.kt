@@ -17,8 +17,26 @@ fun interface LinkCall {
 /**
  * RUNNER-ADD-LINK-1: what one [RunnerPeers.addLink] did: the paired runner, and one line per host that was tried and skipped before
  * the one that answered ("100.64.0.5:8790 unreachable (timed out after 5s)").
+ *
+ * RUNNER-GRANT-AT-PAIR-1: [grantedProjects] / [grantedHarnesses] are what the pairing actually granted on the runner (empty = none),
+ * and [grantRefusal] is the runner's reason when it did not apply the grant that was asked for.
  */
-data class AddOutcome(val runner: PairedRunner, val skipped: List<String>)
+data class AddOutcome(
+    val runner: PairedRunner,
+    val skipped: List<String>,
+    val grantedProjects: List<String> = emptyList(),
+    val grantedHarnesses: List<String> = emptyList(),
+    val grantRefusal: String? = null,
+)
+
+/**
+ * RUNNER-GRANT-AT-PAIR-1 (owner decision D24): what the owner confirmed the runner may be granted in THIS pairing: one project id
+ * and the harness ids to ask for. Only sent when the link says `grant=1` and the runner's own record of the code carries the
+ * authority; the runner intersects the harnesses with what it has installed and with its console's ceiling.
+ */
+data class PairGrants(val projects: List<String> = emptyList(), val harnesses: List<String> = emptyList()) {
+    val any: Boolean get() = projects.isNotEmpty() || harnesses.isNotEmpty()
+}
 
 /**
  * RUNNER-POOL-5 (docs/RUNNER-POOL.md sections 6 and 7): the ORCHESTRATOR side of pairing: [add] (`infantry runner add`), [rotate]
@@ -42,7 +60,8 @@ class RunnerPeers(
     fun add(name: String, url: String, code: String, fingerprint: String?, orchestratorName: String): PairedRunner {
         checkName(name)
         require(code.isNotBlank()) { "--code is required: the one-time code `infantry runner pair` printed on the runner" }
-        val answer = link.call(url, fingerprint, null, null, F.PAIR, pairData(code, name, orchestratorName), callTimeoutSec())
+        // RUNNER-GRANT-AT-PAIR-1: the by-hand form carries no grant (no link, so no grant=1 to confirm against); `addLink` does.
+        val answer = link.call(url, fingerprint, null, null, F.PAIR, pairData(code, name, orchestratorName, null), callTimeoutSec())
         if (!answer.ok) throw LinkFailure(answer.data)
         val paired = record(name, url, fingerprint, answer)
         store.saveRunner(paired)
@@ -59,14 +78,19 @@ class RunnerPeers(
      * with its reason and never the code.
      *
      * A plain (`ws://`) link is refused unless [allowPlain] (`runners.allowPlainTailnet` on this side too).
+     *
+     * RUNNER-GRANT-AT-PAIR-1: [grants] travels in the SAME PAIR frame (one pairing, one grant) and only when [grants] is asked for
+     * AND the link says `grant=1`; the runner applies it only if its own record of the code carries the authority, and the answer
+     * lists what it granted.
      */
-    fun addLink(pairLink: RunnerPairLink, name: String, orchestratorName: String, allowPlain: Boolean): AddOutcome {
+    fun addLink(pairLink: RunnerPairLink, name: String, orchestratorName: String, allowPlain: Boolean, grants: PairGrants? = null): AddOutcome {
         checkName(name)
         require(!pairLink.plain || allowPlain) {
             "that link carries no certificate fingerprint because the runner serves plain ws:// (runners.allowPlainTailnet there); " +
                 "set runners.allowPlainTailnet on this machine too, or pair again on the runner without it"
         }
-        val data = pairData(pairLink.code, name, orchestratorName)
+        val asked = grants?.takeIf { pairLink.grant && it.any }
+        val data = pairData(pairLink.code, name, orchestratorName, asked)
         val perHost = hostTimeoutSec()
         val skipped = mutableListOf<String>()
         for (host in pairLink.hosts) {
@@ -83,7 +107,8 @@ class RunnerPeers(
             if (!answer.ok) throw LinkFailure("$label refused: ${answer.data}")
             val paired = record(name, url, pairLink.fingerprint, answer)
             store.saveRunner(paired)
-            return AddOutcome(paired, skipped)
+            val granted = grantsOf(answer)
+            return AddOutcome(paired, skipped, granted.grantedProjects, granted.grantedHarnesses, granted.grantRefusal)
         }
         throw LinkFailure("no host of the link answered: ${skipped.joinToString("; ")}")
     }
@@ -95,8 +120,19 @@ class RunnerPeers(
         require(store.runner(name) == null) { "runner '$name' is already paired; `infantry runner detach $name` first" }
     }
 
-    private fun pairData(code: String, name: String, orchestratorName: String): String =
-        F.json.encodeToString(F.PairRequest.serializer(), F.PairRequest(code = code, orchestratorId = store.selfId(), orchestratorName = orchestratorName))
+    private fun pairData(code: String, name: String, orchestratorName: String, grants: PairGrants?): String =
+        F.json.encodeToString(
+            F.PairRequest.serializer(),
+            F.PairRequest(
+                code = code, orchestratorId = store.selfId(), orchestratorName = orchestratorName,
+                grantProjects = grants?.projects.orEmpty(), grantHarnesses = grants?.harnesses.orEmpty(),
+            ),
+        )
+
+    /** RUNNER-GRANT-AT-PAIR-1: what the runner's PAIR answer says it granted (an older runner's answer says nothing). */
+    private fun grantsOf(answer: RunnerLinkServer.Answer): F.PairAnswer =
+        runCatching { F.json.decodeFromString(F.PairAnswer.serializer(), answer.data) }
+            .getOrElse { F.PairAnswer("", "", "") }
 
     private fun record(name: String, url: String, fingerprint: String?, answer: RunnerLinkServer.Answer): PairedRunner {
         val paired = runCatching { F.json.decodeFromString(F.PairAnswer.serializer(), answer.data) }.getOrElse {

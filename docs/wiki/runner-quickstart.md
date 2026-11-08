@@ -25,6 +25,22 @@ which setting is missing and prints that command. A start also needs the project
 it is refused with `git remote add origin <url>` as the fix.
 `pair` prints one pairing link (`infantry://runner?v=1&name=...&host=...&port=...&code=...&fp=...`; hosts come from `--host` flags, then the `runners.advertiseHosts` setting, else the detected addresses, tailnet first; at most `limits.runners.advertiseHostsMax`), then the one-time code and the certificate fingerprint "by hand", and keeps serving until the code is used (10 minutes).
 
+### Grant the project at pairing, from the PC (RUNNER-GRANT-AT-PAIR-1, owner decision D24)
+
+Project ids live on the PC, so typing one on the server is the step worth removing. Issue the code with `--grant-on-pair` and
+the first pairing may add ONE project (chosen on the PC, `limits.runners.grantProjectsMax`) and the harnesses installed on the
+runner (or only the ones in `--grant-harnesses-max`) to `runner.projects` / `runner.harnesses`:
+
+```
+server:  infantry runner pair --name server-1 --grant-on-pair [--grant-harnesses-max claude,echo]   # no --allow-projects
+PC:      infantry runner add '<link>' --project <project-id>   # asks once: Grant runner server-1 access to project <name> (<id>) and harnesses ...? [y/N]
+```
+
+The link then carries `grant=1`, and `infantry runner add '<link>' --grant` answers that question for you. The runner adds, never
+replaces; a `*` in a request is refused; a used or expired code grants nothing; and no link frame changes grants after pairing.
+The grant is printed by `add` and logged on the runner as `runner_link_pair_grant` (`infantry runner audit`). Without the grant
+flag the requested ids are ignored and the answer says so, so grants stay the runner's own business.
+
 ## 2. On your PC: add the server
 
 One paste, the whole handshake (RUNNER-ADD-LINK-1):
@@ -44,7 +60,9 @@ The first successful add on a machine turns `runners.enabled` on (adding is alre
 leaves it on.
 
 The card is the same flow with no terminal (RUNNER-ADD-UI-1): Settings > Runners > Add runner, paste the link into the
-(masked) link field, give a name only if you want one other than the link's, and press Connect. The card draws its heading
+(masked) link field, give a name only if you want one other than the link's, and press Connect. When the link's code was issued
+with `--grant-on-pair` the dialog also shows one tick, ticked, naming the project this window is on: connecting with it grants
+that project and the installed harnesses at pairing (RUNNER-GRANT-AT-PAIR-1). The card draws its heading
 and Add runner even while runners are off, so it is always findable. A successful add runs the health check
 (RUNNER-CHECK-1) in the same dialog and lists its rows: a tick or a cross per row, and under a failure the exact `fix:`
 step with a Copy button; Check again runs it again, Close leaves the runner paired, and each runner row's Check opens

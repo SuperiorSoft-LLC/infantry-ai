@@ -26,8 +26,12 @@ object RunnerLinkWire {
      * [CheckAnswer] rows with the fix for each failing one.
      * 1.5.0 (RUNNER-TEST-1): [REMOVE], forget a session this orchestrator started (the turn `infantry runner test` ran leaves nothing
      * behind on the runner's session list). A runner that does not know it answers an error, and the caller stops at [STOP].
+     * 1.6.0 (RUNNER-GRANT-AT-PAIR-1): [PairRequest.grantProjects] / [PairRequest.grantHarnesses] and [PairAnswer.grantedProjects] /
+     * [PairAnswer.grantedHarnesses] / [PairAnswer.grantRefusal]: a code issued on the runner console with `--grant-on-pair` may
+     * grant at most one project and installed harnesses, once, at pairing (owner decision D24). An older runner ignores the request
+     * fields (defaults) and grants nothing; an older orchestrator sends none.
      */
-    const val CONTRACT = "1.5.0"
+    const val CONTRACT = "1.6.0"
 
     const val PAIR = "runner_link_pair"
     const val HELLO = "runner_link_hello"
@@ -63,11 +67,35 @@ object RunnerLinkWire {
     const val REPLY = "runner_link_reply"
     const val ERROR = "runner_link_error"
 
+    /**
+     * RUNNER-GRANT-AT-PAIR-1 (1.6.0): the code, and, when the owner confirmed it, the grants this orchestrator asks the runner to
+     * apply ONCE at pairing. The runner trusts only its own record of the code (`--grant-on-pair`), never these fields, and it adds
+     * ids to `runner.projects` / `runner.harnesses` (never replaces them). A `*` in either list is refused; at most
+     * `limits.runners.grantProjectsMax` project ids are accepted.
+     */
     @Serializable
-    data class PairRequest(val code: String, val orchestratorId: String, val orchestratorName: String = "")
+    data class PairRequest(
+        val code: String,
+        val orchestratorId: String,
+        val orchestratorName: String = "",
+        val grantProjects: List<String> = emptyList(),
+        val grantHarnesses: List<String> = emptyList(),
+    )
 
+    /**
+     * [grantedProjects] / [grantedHarnesses] are the ids this pairing actually granted (empty = nothing). [grantRefusal] is why a
+     * requested grant was not applied: the code was not issued with `--grant-on-pair`, so grants stay the runner's own business.
+     */
     @Serializable
-    data class PairAnswer(val runnerId: String, val runnerName: String, val credential: String, val contract: String = CONTRACT)
+    data class PairAnswer(
+        val runnerId: String,
+        val runnerName: String,
+        val credential: String,
+        val contract: String = CONTRACT,
+        val grantedProjects: List<String> = emptyList(),
+        val grantedHarnesses: List<String> = emptyList(),
+        val grantRefusal: String? = null,
+    )
 
     /** One harness on the runner: installed, its models, signed in or not (a yes/no, never the credential). */
     @Serializable

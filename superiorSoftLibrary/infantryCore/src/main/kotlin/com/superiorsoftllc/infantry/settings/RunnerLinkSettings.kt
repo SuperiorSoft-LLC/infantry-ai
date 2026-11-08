@@ -133,4 +133,7 @@ object RunnerLinkSettings {
     private const val ADVERTISE_HOSTS_ERROR = "setting '$ADVERTISE_HOSTS' must be a JSON array of host names or addresses (e.g. [\"100.64.0.7\", \"runner.example.com\"]; [] = detect)"
 
     private val ID = Regex("""^(\*|[A-Za-z0-9][A-Za-z0-9._:-]{0,127})$""")
+
+    /** Whether [text] is a project or harness id this setting accepts (`*` included; see [ID]). */
+    fun isId(text: String): Boolean = ID.matches(text)
 }

@@ -39,6 +39,10 @@ import com.superiorsoftllc.infantry.daemon.api.runners.RunnerLinkWire as F
  *   [F.FORWARD_ANSWER] completes one of them. Each frame taken is audited as `forward:<type>` with its session.
  * * RUNNER-CHECK-1: [F.CHECK] answers the orchestrator's health check rows (contract, harness sign-in, grants, git, disk) with the
  *   fix for each failing one, all computed here ([check]). Read only, nothing started or written.
+ * * RUNNER-GRANT-AT-PAIR-1: [F.PAIR] grants what the orchestrator asks ([F.PairRequest.grantProjects] / `.grantHarnesses`) ONLY when
+ *   the redeemed code was issued with `--grant-on-pair` ([PairCodes.Authority]); the ids are ADDED to `runner.projects` /
+ *   `runner.harnesses` (never replacing them), harnesses must be installed here AND inside the console's ceiling, a `*` is refused,
+ *   and the grant is audited as [PAIR_GRANT]. A used or expired code grants nothing.
  */
 class RunnerLinkServer(
     private val store: RunnerLinkStore,
@@ -61,6 +65,10 @@ class RunnerLinkServer(
     private val git: (timeoutMs: Long) -> GitCli = { ms -> SystemGitCli(ms) },
     /** RUNNER-CHECK-1: folder the check's disk row looks at and its `ls-remote` runs in (`runners.cloneRoot`). */
     private val cloneRoot: () -> File = { File(System.getProperty("user.home")) },
+    /** RUNNER-GRANT-AT-PAIR-1: the harness ids installed on this runner (the ceiling's default and the intersection's bound). */
+    private val installedHarnesses: () -> List<String> = { emptyList() },
+    /** RUNNER-GRANT-AT-PAIR-1: adds ids to `runner.projects` / `runner.harnesses` (a grant at pairing ADDS, never replaces). */
+    private val grantAdd: (key: String, ids: List<String>) -> Unit = { _, _ -> },
 ) {
     /** One answer: [type] is [F.REPLY] or [F.ERROR]; [data] is the answer JSON or the reason. */
     data class Answer(val type: String, val data: String) {
@@ -250,10 +258,36 @@ class RunnerLinkServer(
 
     private fun pair(data: String, from: String?): Answer {
         val request = decode(F.PairRequest.serializer(), data) ?: return refuse(ANONYMOUS, F.PAIR, null, from, "${F.PAIR} refused: malformed request")
+        // RUNNER-GRANT-AT-PAIR-1: a grant request is checked BEFORE the code is redeemed: a refused request must not burn the code.
+        val wantedProjects = request.grantProjects.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        val wantedHarnesses = request.grantHarnesses.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        if (RunnerLinkSettings.ANY in wantedProjects || RunnerLinkSettings.ANY in wantedHarnesses) {
+            return refuse(
+                ANONYMOUS, F.PAIR, null, from,
+                "${F.PAIR} refused: a grant at pairing may not name '*' (name the ids; `infantry runner pair --allow-projects *` on the runner grants every one)",
+            )
+        }
+        val maxProjects = limit(LimitRegistry.RUNNERS_GRANT_PROJECTS_MAX).toInt()
+        if (wantedProjects.size > maxProjects) {
+            return refuse(
+                ANONYMOUS, F.PAIR, null, from,
+                "${F.PAIR} refused: at most $maxProjects project(s) may be granted at pairing (${LimitRegistry.RUNNERS_GRANT_PROJECTS_MAX.key}); this request names ${wantedProjects.size}",
+            )
+        }
+        val bad = (wantedProjects + wantedHarnesses).firstOrNull { !RunnerLinkSettings.isId(it) }
+        if (bad != null) return refuse(ANONYMOUS, F.PAIR, null, from, "${F.PAIR} refused: '${bad.filter { it in ' '..'~' }.take(SHOWN_TYPE_SIZE)}' is not an id")
+        // Everything a grant needs is read BEFORE the code is redeemed: what is installed here is a slow local call, and the console
+        // polls `pair_status` (a spent code reads as expired) while an answer is being built.
+        val current = settings()
+        val installed = installedHarnesses()
         val now = clock()
         val runnerName = codes?.liveName(now)
-        val codeRefusal = codes?.redeem(request.code, now) ?: if (codes == null) NO_CODE else null
-        if (codeRefusal != null) return refuse(ANONYMOUS, F.PAIR, null, from, "${F.PAIR} refused: $codeRefusal")
+        val redeemed = when (val r = codes?.redeem(request.code, now)) {
+            null -> PairCodes.Redeem.Refused(NO_CODE)
+            else -> r
+        }
+        if (redeemed is PairCodes.Redeem.Refused) return refuse(ANONYMOUS, F.PAIR, null, from, "${F.PAIR} refused: ${redeemed.reason}")
+        val authority = (redeemed as PairCodes.Redeem.Ok).authority
         if (request.orchestratorId.isBlank()) return refuse(ANONYMOUS, F.PAIR, null, from, "${F.PAIR} refused: no orchestrator id")
         store.orchestrator()?.takeIf { it.id != request.orchestratorId }?.let {
             return refuse(
@@ -262,8 +296,31 @@ class RunnerLinkServer(
             )
         }
         val seat = FrameGate.orchestratorSeat(request.orchestratorId)
+        // Only the runner's own record of the code lets a pairing widen its grants; the request can ask, never decide.
+        val grantedProjects = if (!authority.grant) emptyList() else wantedProjects.filter { it !in current.projects }
+        val ceiling = authority.harnessCeiling.takeIf { it.isNotEmpty() }
+        val grantedHarnesses = if (!authority.grant) emptyList() else wantedHarnesses.filter { h ->
+            h in installed && h !in current.harnesses && (ceiling == null || h in ceiling)
+        }
+        if (grantedProjects.isNotEmpty()) grantAdd(RunnerLinkSettings.PROJECTS, grantedProjects)
+        if (grantedHarnesses.isNotEmpty()) grantAdd(RunnerLinkSettings.HARNESSES, grantedHarnesses)
+        if (authority.grant && (wantedProjects.isNotEmpty() || wantedHarnesses.isNotEmpty())) {
+            audit.record(
+                seat, PAIR_GRANT,
+                "granted projects=[${grantedProjects.joinToString(",")}] harnesses=[${grantedHarnesses.joinToString(",")}]", null, from,
+            )
+        }
+        val grantRefusal = when {
+            authority.grant -> null
+            wantedProjects.isEmpty() && wantedHarnesses.isEmpty() -> null
+            else -> GRANT_NOT_ALLOWED
+        }
         val credential = store.issue(request.orchestratorId, request.orchestratorName, runnerName.orEmpty(), now)
-        return ok(seat, F.PAIR, null, from, F.PairAnswer.serializer(), F.PairAnswer(store.selfId(), runnerName.orEmpty(), credential))
+        val answer = F.PairAnswer(
+            store.selfId(), runnerName.orEmpty(), credential,
+            grantedProjects = grantedProjects, grantedHarnesses = grantedHarnesses, grantRefusal = grantRefusal,
+        )
+        return ok(seat, F.PAIR, null, from, F.PairAnswer.serializer(), answer)
     }
 
     private fun start(seat: String, data: String, from: String?): Answer {
@@ -377,6 +434,16 @@ class RunnerLinkServer(
 
     companion object {
         const val ANONYMOUS = "anonymous"
+
+        /** RUNNER-GRANT-AT-PAIR-1: the audit operation of a pairing that granted ids (`infantry runner audit` prints it). */
+        const val PAIR_GRANT = "runner_link_pair_grant"
+
+        /** RUNNER-GRANT-AT-PAIR-1: what the orchestrator reads when its code carries no grant authority. */
+        const val GRANT_NOT_ALLOWED =
+            "grant not allowed by this code; set it on the runner (issue the code there with `infantry runner pair --grant-on-pair`, " +
+                "or grant by hand: infantry settings set ${RunnerLinkSettings.PROJECTS} '[\"<project id>\"]' and " +
+                "infantry settings set ${RunnerLinkSettings.HARNESSES} '[\"<harness id>\"]')"
+
         private const val NO_CODE = "no pairing code is live on this runner (run `infantry runner pair` there)"
         private const val SHOWN_TYPE_SIZE = 64
         private const val MS_PER_SECOND = 1_000L
