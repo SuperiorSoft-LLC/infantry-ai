@@ -41,17 +41,14 @@ class WeightContext(private val byWeight: Map<Int, WeightContextEntry>) {
         const val SETTING = "tickets.weightContext"
 
         /**
-         * Every weight gets a 250k auto-compact window (WEIGHT-CONTEXT-2: workers were compacting at 150k). Efforts stay
-         * low for weights 1-2 and the role's own for 3-5. A lower contextLimit compacts earlier, and each compaction costs
-         * a full-context summary plus a cache rebuild; the owner edits these in project settings.
+         * CONTEXT-DEFAULT-1: no weight sets a context window of its own; every ticket gets `limits.session.defaultContextTokens`
+         * (500k) unless the owner adds a contextLimit to a weight here. Efforts stay low for weights 1-2 and the role's own
+         * for 3-5. A lower contextLimit compacts earlier, and each compaction costs a full-context summary plus a cache rebuild.
          */
         val DEFAULT = WeightContext(
             mapOf(
-                1 to WeightContextEntry(250_000, "low"),
-                2 to WeightContextEntry(250_000, "low"),
-                3 to WeightContextEntry(250_000, null),
-                4 to WeightContextEntry(250_000, null),
-                5 to WeightContextEntry(250_000, null),
+                1 to WeightContextEntry(null, "low"),
+                2 to WeightContextEntry(null, "low"),
             ),
         )
 

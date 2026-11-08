@@ -9,12 +9,11 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 
 class WeightContextTest {
-    @Test fun defaultsCoverEveryWeight() {
-        assertEquals(WeightContextEntry(250_000, "low"), WeightContext.DEFAULT.forWeight(1))
+    @Test fun defaultsSetEffortOnlyAndLeaveTheWindowToTheSessionDefault() {
+        // CONTEXT-DEFAULT-1: no weight carries a window; limits.session.defaultContextTokens (500k) fills it.
+        assertEquals(WeightContextEntry(null, "low"), WeightContext.DEFAULT.forWeight(1))
         assertEquals("low", WeightContext.DEFAULT.forWeight(2)?.effort)
-        assertEquals(WeightContextEntry(250_000, null), WeightContext.DEFAULT.forWeight(3))
-        assertEquals(WeightContextEntry(250_000, null), WeightContext.DEFAULT.forWeight(4))
-        assertEquals(WeightContextEntry(250_000, null), WeightContext.DEFAULT.forWeight(5))
+        for (w in 3..5) assertNull(WeightContext.DEFAULT.forWeight(w))
         assertNull(WeightContext.DEFAULT.forWeight(null))
     }
 

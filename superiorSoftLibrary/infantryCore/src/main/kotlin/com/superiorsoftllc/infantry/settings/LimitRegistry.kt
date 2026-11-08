@@ -816,6 +816,20 @@ object LimitRegistry {
         max = 10_000_000, zeroMeans = "off",
     )
 
+    /** CONTEXT-DEFAULT-1: the context limit (auto-compact window) a ticket session gets when neither the ticket nor its weight sets one. */
+    val SESSION_DEFAULT_CONTEXT_TOKENS = LimitDef(
+        "limits.session.defaultContextTokens", 500_000, "tokens",
+        "Default context size of a session started for a ticket that pins no context limit and whose weight (tickets.weightContext) sets none. Every harness gets it through the generic context-limit field (infantry_list_harnesses says supported / best_effort / unsupported). A larger window means fewer compactions but each turn re-reads more tokens; a smaller one compacts earlier and pays a summary plus a cache rebuild each time. 0 = off (the harness's own window).",
+        max = 10_000_000, zeroMeans = "off",
+    )
+
+    /** CONTEXT-DEFAULT-1: ceiling on the size at which any session's context is compacted. */
+    val SESSION_COMPACT_MAX_TOKENS = LimitDef(
+        "limits.session.compactMaxTokens", 0, "tokens",
+        "Maximum context size at which a session compacts: whatever limit applies (ticket, weight or limits.session.defaultContextTokens) is lowered to this when it is larger. Default 0 (off, cheapest: no extra compactions). A lower value caps per-turn cost on long sessions but each compaction costs a full-context summary plus a cache rebuild. Honoured by every harness through the generic context-limit field.",
+        max = 10_000_000, zeroMeans = "off",
+    )
+
     /** RUNNER-POOL-5 (docs/RUNNER-POOL.md section 7): how long a `runner pair` code stays valid. */
     val RUNNERS_PAIR_CODE_MIN = LimitDef(
         "limits.runners.pairCodeMin", 10, "minutes",
@@ -962,7 +976,7 @@ object LimitRegistry {
     )
 
     val ALL: List<LimitDef> = listOf(
-        SESSION_CONTEXT_CAP_TOKENS,
+        SESSION_CONTEXT_CAP_TOKENS, SESSION_DEFAULT_CONTEXT_TOKENS, SESSION_COMPACT_MAX_TOKENS,
         MAIL_INJECT_MAX_CHARS, MAIL_INJECT_TOTAL_CHARS,
         MAIL_PER_SENDER_PER_WINDOW, MAIL_WINDOW_MINUTES, MAIL_MAX_PER_THREAD,
         MCP_BODY_CHARS,
