@@ -164,7 +164,7 @@ class ProgressCenter(
 
         override fun eta(ms: Long) = change(force = false) { it.copy(etaMs = ms) }
 
-        override fun done(step: String) = finish { it.copy(state = ProgressState.DONE, step = step.ifBlank { it.step }, etaMs = -1, done = if (it.total > 0) it.total else it.done) }
+        override fun done(step: String) = finish { it.copy(state = ProgressState.DONE, step = step, etaMs = -1, done = if (it.total > 0) it.total else it.done) }
 
         override fun fail(reason: String, retryable: Boolean) =
             finish { it.copy(state = ProgressState.FAILED, error = reason, retryable = retryable && it.retryable, etaMs = -1) }

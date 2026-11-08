@@ -65,6 +65,17 @@ class CoreDownloadsTest {
         assertEquals("Installing plugin.jar", last.title)
     }
 
+    @Test fun `PROGRESS-STUCK-1 a finished catalog download is closed and no longer reads Verifying`() {
+        val dest = File(dir, "infantry-community.json.part")
+        val r = downloads({ _, _, _, from -> whole(from) }).download("plugins", DownloadRequest("https://example.test/c.json", dest, title = "Downloading ${dest.name}"))
+
+        assertTrue(r.ok, r.error)
+        val task = center.tasks().single()
+        assertEquals(ProgressState.DONE, task.state)
+        assertTrue(task.finished, "a finished download is not a live task")
+        assertTrue(task.step != CoreDownloads.STEP_VERIFY, "a DONE row must not keep the stale step text, was '${task.step}'")
+    }
+
     @Test fun `a sha256 mismatch fails with a clear reason and offers Retry`() {
         val opened = CountDownLatch(2)
         val bothFailed = CountDownLatch(2)
