@@ -70,7 +70,7 @@ object LimitRegistry {
     )
     val LANE_DEFAULT = LimitDef(
         "limits.concurrency.laneDefault", 1, "agents",
-        "Agents of one role that may run at once in a project, when the project sets no lane cap of its own.",
+        "Agents of one role that may run at once in a project, when the project sets no lane cap of its own; never lower than limits.workers.maxParallel (Max parallel workers).",
     )
     val PACING_CEILING = LimitDef(
         "limits.pacing.maxWorkersCeiling", 50, "workers",

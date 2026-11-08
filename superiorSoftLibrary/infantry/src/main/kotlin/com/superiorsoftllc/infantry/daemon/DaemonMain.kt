@@ -1094,8 +1094,15 @@ class InfantryDaemon(
             // order used to also append onto `Project.storyIds` here; it now lives entirely on
             // `Epic.storyIds`, appended below when the create named an epic).
             val projectStore = ProjectStore(persistence = SqlProjectPersistence((store as SqlInfantryStore).database))
+            // WORKER-CAP-UX-1: the effective-cap line a governor script records in project data shows under the limit itself.
+            settings.limitStatus = { key ->
+                if (key == LimitRegistry.WORKERS_MAX_PARALLEL.key)
+                    projectStore.list().mapNotNull { p -> projectStore.dataOf(p.id, "workers.cap.status")?.takeIf { it.isNotBlank() } }.joinToString(" ")
+                else null
+            }
             runnerProjects.set { projectStore.list().map { it.id } }
-            projectStore.laneDefault = { settings.limitCap(LimitRegistry.LANE_DEFAULT) }
+            // WORKER-CAP-UX-1: "Max parallel workers" also lifts the default per-role lane cap, so the one setting is the real cap.
+            projectStore.laneDefault = { maxOf(settings.limitCap(LimitRegistry.LANE_DEFAULT), settings.limitCap(LimitRegistry.WORKERS_MAX_PARALLEL)) }
             // SPAWN-HARNESS-1: a spawn naming no provider is routed like a ticket start: the project's routing rule for the role first.
             agents.spawnRoute = { pid, role ->
                 pid?.let { id -> runCatching { com.superiorsoftllc.infantry.settings.RoutingRules.match(projectStore.routingRulesOf(id), null, null, role) }.getOrNull() }

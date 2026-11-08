@@ -39,6 +39,10 @@ Two different caps, two settings:
 | `limits.workers.maxParallel` ("Max parallel workers", default 1, app or project scope) | How many board ticket workers run at once. The source of truth: the `lane-one-worker` guard and the `usage-governor` read it. |
 | `limits.runners.maxWorkers` ("Per-runner concurrency", default 1) | How many agents ONE runner machine runs at once. It does not change the board cap. |
 
+`limits.workers.maxParallel` also raises the default per-role lane cap (`limits.concurrency.laneDefault`) to at least its value, so a role with no `project config set <project> <role> <n>` cap of its own can run that many workers. The effective-cap status line (when a governor lowered it) is shown under the limit in `infantry settings limits` and in the Settings > Limits row.
+
+Raising the setting starts nothing by itself (no hook fires on a setting change; auto-start only runs when a ticket finishes). Hook `worker-cap` on a timer to fill: `infantry script hook add "every 120s" worker-cap --payload '{"fill":true}'`.
+
 **Precedence (effective board cap):** a hook arg `maxInProgress` (lane-one-worker) or `baseWorkers` (usage-governor) still
 overrides the setting so existing projects keep working; otherwise the cap is `limits.workers.maxParallel`, lowered by the
 governor to the project data key `workers.cap.lowered` while the weekly usage pace is >= 0. The governor records why in the

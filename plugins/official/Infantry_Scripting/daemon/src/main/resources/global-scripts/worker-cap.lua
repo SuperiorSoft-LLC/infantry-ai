@@ -23,10 +23,17 @@ local low = tonumber(data["workers.cap.lowered"])
 local eff = (low and low < v) and low or v
 ih.log("Max parallel workers " .. v .. "; effective " .. eff .. ". " .. tostring(data["workers.cap.status"] ~= "" and data["workers.cap.status"] or "Not lowered by the governor."))
 if not a.fill then return end
+-- board result: json.board = list of "  <id> | ..." lines (as on-ticket-done reads it); the text is the fallback.
+local function boardLines(r)
+  if r and r.json and type(r.json.board) == "table" then return r.json.board end
+  local t = {}
+  for line in tostring(r and r.text or ""):gmatch("[^\n]+") do t[#t + 1] = line end
+  return t
+end
 local running = 0
-for line in tostring(res(3) and res(3).text or ""):gmatch("[^\n]+") do if line:match("^  %x+ |") then running = running + 1 end end
+for _, line in ipairs(boardLines(res(3))) do if line:match("^  %x+ |") then running = running + 1 end end
 local markers = a.skipMarkers or {"[HOLD]", "[PARKED]", "[Q:"}
-for line in tostring(res(4) and res(4).text or ""):gmatch("[^\n]+") do
+for _, line in ipairs(boardLines(res(4))) do
   if running >= eff then break end
   local id, rest = line:match("^  (%x+) | (.*)$")
   if id then

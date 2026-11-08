@@ -181,6 +181,15 @@ class SettingsService(
     @Volatile
     var sandboxStatus: (() -> String)? = null
 
+    /**
+     * WORKER-CAP-UX-1: a live status line per limit key (null/blank = none), shown after the limit's description in
+     * `infantry settings limits` and the Settings UI. The daemon wires it; core names no feature.
+     */
+    var limitStatus: ((String) -> String?)? = null
+
+    private fun limitStatusLine(key: String): String =
+        runCatching { limitStatus?.invoke(key) }.getOrNull()?.takeIf { it.isNotBlank() }?.let { " Status: $it" } ?: ""
+
     private fun sandboxStatusLine(): String {
         val status = runCatching { sandboxStatus?.invoke() }.getOrNull() ?: return ""
         val dirs = sandboxAllowedDirs()
@@ -282,7 +291,7 @@ class SettingsService(
                             put("value", JsonPrimitive(limit(def)))
                             put("default", JsonPrimitive(def.default))
                             put("unit", JsonPrimitive(def.unit))
-                            put("description", JsonPrimitive(def.description + (if (def == LimitRegistry.SANDBOX_MODE) sandboxStatusLine() else "")))
+                            put("description", JsonPrimitive(def.description + (if (def == LimitRegistry.SANDBOX_MODE) sandboxStatusLine() else "") + limitStatusLine(def.key)))
                             put("min", JsonPrimitive(def.min))
                             def.max?.let { put("max", JsonPrimitive(it)) }
                             if (def.zeroIsUnlimited) put("zeroMeans", JsonPrimitive(def.zeroMeans))
