@@ -240,3 +240,49 @@ class NewAgentDialogUiTest {
         } finally { scope.cancel() }
     }
 }
+
+/** RUNNER-PICKER-1: the runner is a picker under Advanced, defaulting to Project default; the default sends no runner. */
+@OptIn(ExperimentalTestApi::class)
+class NewAgentRunnerPickerUiTest {
+    @Test
+    fun `the runner is a collapsed picker defaulting to Project default and lists registered runners with status`() = runDesktopComposeUiTest(900, 700) {
+        var picked = "unset"
+        val reg = listOf(
+            com.superiorsoftllc.infantry.ui.model.RunnerStatus("box1", "up", false),
+            com.superiorsoftllc.infantry.ui.model.RunnerStatus("box2", "down", false),
+        )
+        setContent { RunnerPickerView("", reg, { picked = it }) }
+        onNodeWithText("Project default", substring = true).assertExists()
+        onNodeWithTag(NEW_AGENT_RUNNER_FIELD_TAG).performClick()
+        onNodeWithText("This computer (local)").assertExists()
+        onNodeWithText("Any available runner").assertExists()
+        onNodeWithText("box1  (online)").assertExists()
+        onNodeWithTag(NEW_AGENT_RUNNER_OPTION_PREFIX + "box2").assertIsNotEnabled()
+        onNodeWithTag(NEW_AGENT_RUNNER_OPTION_PREFIX + "box1").performClick()
+        assertEquals("box1", picked)
+    }
+
+    @Test
+    fun `no registered runners shows the three fixed entries and a hint`() = runDesktopComposeUiTest(900, 700) {
+        setContent { RunnerPickerView("", emptyList(), {}) }
+        onNodeWithTag(NEW_AGENT_RUNNER_EMPTY_TAG).assertExists()
+        assertEquals(listOf("", "local", "any"), com.superiorsoftllc.infantry.ui.model.RunnerChoices.options(emptyList()).map { it.value })
+    }
+
+    @Test
+    fun `saving with the default stores no runner and the field is hidden under Advanced`() = runDesktopComposeUiTest(1200, 900) {
+        var runner: String? = "unset"
+        val state = AppState(
+            roles = listOf(Role("backend", "Backend Developer", "#112233")),
+            roleBindings = mapOf("backend" to RoleBinding("backend", provider = "claude", model = "sonnet")),
+            providers = listOf(ProviderInfo("claude", default = true)),
+            modelCatalog = listOf(ProviderModels("claude", "anthropic", "claude / anthropic", listOf("sonnet"))),
+        )
+        setContent { NewAgentDialog(state, { _, _, _, _, _, r -> runner = r; null }, {}) }
+        onNodeWithTag(NEW_AGENT_ROLE_TAG_PREFIX + "backend").performClick()
+        onNodeWithTag(NEW_AGENT_RUNNER_TAG).assertDoesNotExist()
+        onNodeWithTag(NEW_AGENT_TASK_TAG).performTextInput("go")
+        onNodeWithTag(NEW_AGENT_ADD_TAG).performClick()
+        assertEquals(null, runner)
+    }
+}
