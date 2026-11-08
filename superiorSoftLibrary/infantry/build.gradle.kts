@@ -43,6 +43,13 @@ application {
 // Same script and classpath, copied next to the generated ones.
 tasks.named<CreateStartScripts>("startScripts") {
     doLast {
+        // CLI-LONGPATH-1: the generated .bat lists every jar by full path, which passes cmd.exe's 8191-character
+        // line limit from a deep install folder ("The input line is too long"). The JVM expands `lib\*` itself.
+        File(outputDir, "infantry.bat").takeIf { it.isFile }?.let { bat ->
+            bat.writeText(bat.readLines().joinToString("\r\n", postfix = "\r\n") { line ->
+                if (line.startsWith("set CLASSPATH=")) "set CLASSPATH=%APP_HOME%\\lib\\*" else line
+            })
+        }
         listOf("infantry", "infantry.bat").forEach { n ->
             val src = File(outputDir, n)
             if (src.isFile) src.copyTo(File(outputDir, n.replace("infantry", "agenthq")), overwrite = true)
