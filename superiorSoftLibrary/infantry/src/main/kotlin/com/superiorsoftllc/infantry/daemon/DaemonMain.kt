@@ -1281,6 +1281,19 @@ class InfantryDaemon(
                 // RUNNER-POOL-8: a session placed on a remote runner takes its mail through that runner (kept queued while it is offline).
                 remoteSession = { sid -> runnerPool.runnerOf(sid) != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL },
             )
+            manager.mcpHealFailedSink = { session, tries ->
+                runCatching {
+                    mail.send(MailSendRequest(from = session.id, to = "pm", subject = "MCP disconnected: ${session.id}", body = "Session ${session.id} (${session.role}) still has its Infantry tools disconnected after $tries reconnect tries."))
+                }
+                attentionSvc.raise(
+                    kind = AttentionKinds.STALLED,
+                    ticketId = session.ticketId,
+                    podId = null,
+                    sessionId = session.id,
+                    outcome = "mcp-disconnected",
+                    detail = "Session ${session.id} (${session.role}) still has its Infantry tools disconnected after $tries reconnect tries. Run: infantry session mcp-reconnect --self from its shell, or restart the session.",
+                )
+            }
             // Story 9.5: triggers -- stored, coalesced, tripped on any non-success, their starts unattended.
             // TRIGGER-NUDGE (contract 1.105.0): a `prompt` action is mail to the target in the trigger's project.
             // DP-5b: triggers hand out through the Tickets API, bound once the board services exist (below).
@@ -4052,6 +4065,15 @@ private suspend fun handleConnection(
                     Envelope(Envelope.ERROR, "session_restart refused: ${e.message ?: "invalid request"}")
                 } catch (e: Exception) {
                     Envelope(Envelope.ERROR, "session_restart failed: ${e.message ?: e::class.simpleName}")
+                }
+
+                Envelope.SESSION_MCP_RECONNECT -> try {
+                    val sessionId = (envelope.sessionId ?: json.parseToJsonElement(envelope.data.ifBlank { "{}" }).jsonObject["sessionId"]?.jsonPrimitive?.contentOrNull)
+                        ?.trim().orEmpty()
+                    require(sessionId.isNotEmpty()) { "expects a sessionId" }
+                    Envelope(Envelope.SESSION_MCP_RECONNECT, manager.reconnectMcp(sessionId, force = true), sessionId)
+                } catch (e: Exception) {
+                    Envelope(Envelope.ERROR, "session_mcp_reconnect refused: ${e.message ?: e::class.simpleName}")
                 }
 
                 Envelope.SESSION_DELETE -> {

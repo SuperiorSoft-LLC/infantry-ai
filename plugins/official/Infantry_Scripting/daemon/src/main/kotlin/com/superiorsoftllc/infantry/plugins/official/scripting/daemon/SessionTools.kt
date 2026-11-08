@@ -79,7 +79,7 @@ class SessionTools(
         override val name = ACT
         override val description = "Act on a session's turn. action=interrupt stops the turn in flight now (refused when none runs); action=end_turn does the same only if a turn runs and is a no-op on an idle session; " +
             "action=mcp_reconnect brings the session's MCP servers back (session field mcp, event session.mcp) without losing it: reconnect in the live CLI, else restart it so the next turn resumes the same conversation " +
-            "(same session id, model and context); refused mid-turn unless force=true. The daemon never does this on its own. " +
+            "(same session id, model and context); refused mid-turn unless force=true. The daemon also does this on its own for every session showing mcp=disconnected (retries and delays: limits.mcp.heal*), so a script rarely needs it. " +
             "Held messages (what is typed while the agent is busy): action=queue_list lists them [{id,text,at}]; queue_add (text) holds one for the next turn (sent at once when idle); " +
             "queue_remove (id) drops one, never delivered; queue_force (id) delivers it now INTO the running turn without stopping it (harnesses with mid-turn input), or as a turn when idle. " +
             "Same project only, rate limited. Posting a note and prompting stay with chat_note (wake=true) . Script: ih.session_act{sessionId=..., action='interrupt'}."

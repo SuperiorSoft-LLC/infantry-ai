@@ -408,3 +408,11 @@ starts only projects and harnesses in its own `runner.projects` / `runner.harnes
 `infantry_ticket_create|update|move` answer ONE line (id, status, title, branch, session); pass `verbose: true` for the full ticket, or call `infantry_ticket_get`. `infantry_get_session` returns the last 5 transcript lines (`lines` for more, `brief:true` for none); `infantry_list_sessions` takes `limit`; `infantry_usage` takes `json:true` for the JSON report. Defaults live in settings `limits.tools.*`.
 
 Related changes: `infantry_ticket_get` / `ticket show` omit the RELATED(auto) block; pass `related: true` (`--related`) to include it, or call `infantry_ticket_related_files` (`ticket files <id> --related`) for related tickets + changed files.
+
+## 12. Your Infantry tools are disconnected (MCP-RECONNECT-1)
+
+The daemon reconnects a session whose MCP link shows `disconnected` by itself, with backoff (settings `limits.mcp.healAttempts`, `limits.mcp.healDelaySeconds`, `limits.mcp.healMaxDelaySeconds`). The session is told one plain line when its tools go away and one when they are back. Do nothing, do not diagnose, do not guess ports. If the tools stay away, run from your shell (no MCP tools needed):
+
+```
+infantry session mcp-reconnect --self
+```

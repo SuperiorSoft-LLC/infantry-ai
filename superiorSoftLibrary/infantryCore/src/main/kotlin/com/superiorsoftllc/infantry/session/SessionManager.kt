@@ -121,6 +121,10 @@ class SessionManager(
     private val silentMs: Long = DEFAULT_SILENT_MS,
     /** How often [sweepSilent] runs on its own; 0 = only when a test calls it. */
     private val silentPollMs: Long = DEFAULT_SILENT_POLL_MS,
+    /** MCP-RECONNECT-1: how often [healMcp] looks for sessions showing mcp=disconnected; 0 = never (tests call it). */
+    private val mcpHealPollMs: Long = DEFAULT_MCP_HEAL_POLL_MS,
+    /** MCP-RECONNECT-1: the two plain lines told to a session whose tools go away and come back; one place, overridable. */
+    private val mcpLines: McpLines = McpLines(),
     /** Where background work is read from: the OS process tree under each session's kept harness process. */
     private val processSource: ProcessSource = OsProcessSource,
     /** How often [scanBackgroundWork] runs on its own; 0 = only when a test calls it. */
@@ -657,6 +661,9 @@ class SessionManager(
         executor.scheduleWithFixedDelay(::checkUnattendedRuns, watchdogPollMs, watchdogPollMs, java.util.concurrent.TimeUnit.MILLISECONDS)
         if (silentPollMs > 0) {
             executor.scheduleWithFixedDelay({ runCatching { sweepSilent() } }, silentPollMs, silentPollMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+        }
+        if (mcpHealPollMs > 0) {
+            executor.scheduleWithFixedDelay({ runCatching { healMcp() } }, mcpHealPollMs, mcpHealPollMs, java.util.concurrent.TimeUnit.MILLISECONDS)
         }
         if (backgroundPollMs > 0) {
             executor.scheduleWithFixedDelay(
@@ -1418,6 +1425,82 @@ class SessionManager(
             )
         }
     } }
+
+    /** MCP-RECONNECT-1: the plain lines. [down] when the link goes away, [up] when it is back. No diagnosis, no ports. */
+    data class McpLines(
+        val down: String = "Your Infantry tools are disconnected; the daemon is reconnecting them, wait. If they stay away, run: infantry session mcp-reconnect --self",
+        val up: String = "Your Infantry tools are connected again.",
+        val failed: String = "Your Infantry tools are still disconnected after the daemon's reconnect tries. Run: infantry session mcp-reconnect --self",
+    )
+
+    private class McpHeal(var attempts: Int = 0, var nextAt: Long = 0, var told: Boolean = false, var agentTold: Boolean = false, var gaveUp: Boolean = false)
+
+    private val mcpHeal = ConcurrentHashMap<String, McpHeal>()
+
+    /** MCP-RECONNECT-1: told once per session that stayed disconnected through every try (the daemon wires it to a chat note for the session and its PM). */
+    @Volatile
+    var mcpHealFailedSink: ((SessionRecord, Int) -> Unit)? = null
+
+    /** MCP-RECONNECT-1: record the harness's MCP state for [sessionId] (what the live process reports). */
+    fun reportMcpState(sessionId: String, state: String, reason: String? = null) = hostEvents.mcpState(sessionId, state, reason)
+
+    /** MCP-RECONNECT-1: the line reaches the transcript AND the agent, like queue_add (an idle session gets it as a turn at once, a busy one at turn end). */
+    private fun tellAgent(sessionId: String, text: String) {
+        bootLine(sessionId, text)
+        runCatching { queueAdd(sessionId, text, healSeconds(com.superiorsoftllc.infantry.settings.LimitRegistry.CHAT_QUEUE_MAX).toInt()) }
+    }
+
+    private fun healSeconds(def: com.superiorsoftllc.infantry.settings.LimitDef): Long =
+        limitSource?.let { runCatching { it(def) }.getOrNull() } ?: def.default
+
+    /**
+     * MCP-RECONNECT-1: the daemon heals a session whose MCP link shows `disconnected`, with no agent involved. Every sweep: tell the
+     * session ONE plain line, then reconnect (live in place, else a process restart) with exponential backoff; a busy session that
+     * cannot be reconnected live is retried at turn end (the sweep keeps looking, a refused busy try does not count). After
+     * [com.superiorsoftllc.infantry.settings.LimitRegistry.MCP_HEAL_ATTEMPTS] tries, [mcpHealFailedSink] is told once.
+     */
+    fun healMcp() {
+        val now = clock()
+        val lr = com.superiorsoftllc.infantry.settings.LimitRegistry
+        val max = healSeconds(lr.MCP_HEAL_ATTEMPTS).toInt()
+        for (s in sessions.values.toList()) {
+            val st = mcpHeal[s.id]
+            if (s.mcp != MCP_DISCONNECTED) {
+                if (s.mcp == MCP_RECONNECTING) continue
+                if (st != null) {
+                    mcpHeal.remove(s.id)
+                    if (st.told && s.mcp == MCP_CONNECTED) tellAgent(s.id, mcpLines.up)
+                }
+                continue
+            }
+            val h = st ?: McpHeal().also { mcpHeal[s.id] = it }
+            if (!h.told) { h.told = true; bootLine(s.id, mcpLines.down) }
+            if (h.gaveUp || now < h.nextAt) continue
+            if (h.attempts >= max) {
+                h.gaveUp = true
+                tellAgent(s.id, mcpLines.failed)
+                runCatching { mcpHealFailedSink?.invoke(s, h.attempts) }
+                continue
+            }
+            h.attempts++
+            val base = healSeconds(lr.MCP_HEAL_DELAY_SECONDS)
+            val cap = healSeconds(lr.MCP_HEAL_MAX_DELAY_SECONDS)
+            h.nextAt = now + minOf(cap, base shl (h.attempts - 1).coerceAtMost(20)) * 1000
+            try {
+                reconnectMcp(s.id, force = false)
+            } catch (_: IllegalArgumentException) {
+                h.attempts--           // mid-turn: not a failed try; looked at again at turn end
+                h.nextAt = now + base * 1000
+            } catch (e: Exception) {
+                System.err.println("[infantry] mcp heal failed for ${s.id}: ${e.message}")
+            }
+            // The agent hears the "wait" line only if the link is still down after the try (a queued line starts a turn on an idle session).
+            if (!h.agentTold && sessions[s.id]?.mcp.let { it == MCP_DISCONNECTED || it == MCP_RECONNECTING }) {
+                h.agentTold = true
+                runCatching { queueAdd(s.id, mcpLines.down, healSeconds(lr.CHAT_QUEUE_MAX).toInt()) }
+            }
+        }
+    }
 
     /**
      * CLI-PTY-3 (`session_act mcp_reconnect`): bring [sessionId]'s MCP servers back without losing the session. Only ever called by that
@@ -2419,6 +2502,8 @@ class SessionManager(
         const val HEARTBEAT_PERSIST_MS = 1_000L
         const val MCP_CONNECTED = "connected"
         const val MCP_RECONNECTING = "reconnecting"
+        const val MCP_DISCONNECTED = "disconnected"
+        val DEFAULT_MCP_HEAL_POLL_MS = com.superiorsoftllc.infantry.settings.LimitRegistry.MCP_HEAL_POLL_SECONDS.default * 1000L
         val DEFAULT_UNATTENDED_DEADLINE_MS = com.superiorsoftllc.infantry.settings.LimitRegistry.UNATTENDED_DEADLINE_MINUTES.default * 60_000L
         val DEFAULT_UNATTENDED_STALL_MS = com.superiorsoftllc.infantry.settings.LimitRegistry.STALL_MINUTES.default * 60_000L
         const val DEFAULT_WATCHDOG_POLL_MS = 1_000L
