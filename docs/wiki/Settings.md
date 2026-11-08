@@ -168,3 +168,21 @@ as `INFANTRY_*`) set machine-level values such as the port, state dir and token;
 | `usage.mock` | off | Show mock usage data instead of real readings: for demos, screenshots and testing. Usage panel, meters, `usage_get`, limits and the pushed limits frame all show it. Env `INFANTRY_USAGE_MOCK=1`. |
 | `usage.mock.data` | two sample providers | JSON, provider id to percents and optional relative resets: `{"claude":{"session":18,"week":42,"monthly":7,"weekResetsInMinutes":3000}}`. No accounts or emails. Env `INFANTRY_USAGE_MOCK_DATA`. |
 | `usage.mock.affectsPacing` | off | Off: pacing and the usage governor keep judging the REAL usage (faked screenshots buy no workers). On: pacing judges the mock. Env `INFANTRY_USAGE_MOCK_AFFECTS_PACING`. |
+
+## Pacing allowance override (Infantry_Usage)
+
+The pacing rule decides how many ticket workers one meter (for example `claude`) may run; a ticket start beyond it is refused. An
+override replaces the rule's number for a while. Read or set it three ways, all the same `usage_set` frame:
+
+- CLI: `infantry usage override <meter> <n|none> [<hours>]`, `infantry usage override <meter> clear`.
+- MCP / Lua (`ih.call`): `infantry_usage_override {"meter":"claude","value":"2","hours":1,"reason":"owner asked"}`. `value` is a worker
+  count, `none` (no limit) or `clear` (back to the rule); leave `value` out to only read. With no `hours` the override lasts until the
+  meter's window resets, else 2 h. The answer shows the new allowance and the date the override expires.
+- Read-only: `infantry_usage` and `infantry usage` show `(override N, expires in 1h 59m)` on the meter line.
+
+| Setting | Meaning |
+|---|---|
+| `usage.overrideRoles` (default `owner,pm`) | Comma-separated roles that may SET the override through `infantry_usage_override`. `owner` = a person with no session. The role comes from the daemon's session table, not from the caller's claim. Everyone may read. |
+
+Each set or clear is written to the daemon log with the caller's session, role and `reason`. This is separate from the board worker cap
+(`limits.workers.maxParallel`, above), which does not change the pacing allowance.

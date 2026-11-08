@@ -100,7 +100,7 @@ class UsagePacing(
         val projected = if (m.override == null) m.projectedPercent?.let { ", projected ${fmt(it)}% at reset" } ?: "" else ""
         val resets = m.resetsAt?.let { "; resets ${com.superiorsoftllc.infantry.DisplayZone.stamp(it)}" } ?: ""
         return "usage pacing: ${m.meter} at $pct$pace$projected, allowance ${m.allowance} ($by), running ${m.running}$resets. " +
-            "Wait for a worker to finish, or ask the owner for an override (infantry usage override ${m.meter} <n|none>)."
+            "Wait for a worker to finish, or ask the owner or the PM for an override (MCP infantry_usage_override {\"meter\":\"${m.meter}\",\"value\":\"<n|none>\"}; CLI infantry usage override ${m.meter} <n|none>)."
     }
 
     private fun fmt(d: Double): String = if (d == Math.floor(d)) d.toLong().toString() else "%.1f".format(d)
