@@ -395,6 +395,11 @@ object LimitRegistry {
         "1 = a ticket worker that ends its turn cleanly with the ticket still in progress, and neither commented on the ticket nor mailed its starter, gets one open daemon comment on the ticket (branch, tip, dirty flag, last output); 0 = off.",
         max = 1, zeroIsUnlimited = false,
     )
+    val FINISH_ONCE = LimitDef(
+        "limits.notice.finishOnce", 1, "switch",
+        "NOTIFY-DUP-1: 1 = the daemon sends the starter ONE automatic finish notice per ticket and worker session (none when the worker already mailed its report, none for a kill the client asked for); 0 = a notice for every run that ends.",
+        max = 1, zeroIsUnlimited = false,
+    )
     val WATCH_NOTICE_DEDUPE = LimitDef(
         "limits.watch.noticeDedupe", 1, "switch",
         "STALL-6: 1 = a bg job's queued and future notices are dropped once its owner read its log/status after it ended or ran `infantry bg ack <id>`, a newer job with the same label superseded it, or its end made the 'closed output' notice stale; one 'closed output' and one 'finished' notice per job at most. 0 = every notice is sent.",
@@ -1063,7 +1068,7 @@ object LimitRegistry {
         MAX_PER_POD, MAX_SESSIONS, MAX_DEPTH, MCP_MAX_SPAWNS, LANE_DEFAULT, PACING_CEILING,
         USAGE_STALE_MAX_HOURS, USAGE_BACKOFF_MAX_MINUTES, USAGE_MANUAL_REFRESH_FLOOR_SECONDS,
         BUILD_MAX_WORKERS, BUILD_MAX_PARALLEL_FORKS, CPU_ALERT_PERCENT, CPU_ALERT_MINUTES,
-        TICKET_DEADLINE_MINUTES, UNATTENDED_DEADLINE_MINUTES, STALL_MINUTES, KILL_RETRY_MINUTES, SILENT_MINUTES, PROGRESS_STALE_MINUTES, IDLE_NUDGE_MINUTES, MAIL_WAKE_MAX_SECONDS, IDLE_NOTICE_MINUTES, IDLE_COMMENT, UNBRIEFED_GRACE_MINUTES,
+        TICKET_DEADLINE_MINUTES, UNATTENDED_DEADLINE_MINUTES, STALL_MINUTES, KILL_RETRY_MINUTES, SILENT_MINUTES, PROGRESS_STALE_MINUTES, IDLE_NUDGE_MINUTES, MAIL_WAKE_MAX_SECONDS, IDLE_NOTICE_MINUTES, IDLE_COMMENT, FINISH_ONCE, UNBRIEFED_GRACE_MINUTES,
         UNASSIGN_WAIT_SECONDS, HANDOFF_COMMITS, HANDOFF_CHARS, AGENT_QUEUE_MAX, RUNNERS_HEARTBEAT_SEC, RUNNERS_LOST_AFTER_SEC, RUNNER_MAX_WORKERS, WORKERS_MAX_PARALLEL, CHAT_QUEUE_MAX, JOBS_REMEMBERED, JOB_LOG_MAX_READ_BYTES, CHAT_SEND_ACK_SECONDS, CHAT_SENT_IDS_KEPT, CHAT_HISTORY_FRAMES,
         AUTO_DONE_MIN_OUTPUTS, PROCESS_WATCH_INTERVAL_SECONDS, PROCESS_STOP_GRACE_SECONDS, PROCESS_STUCK_MINUTES, RUN_SCROLLBACK_BYTES, RUN_HISTORY,
         RUN_INPUT_BYTES_PER_SECOND, RUN_INPUT_MAX_FRAME_BYTES, RUN_INPUT_QUEUE_BYTES, RUN_MAX_COLS, RUN_MAX_ROWS,

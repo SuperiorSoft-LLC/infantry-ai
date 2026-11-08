@@ -58,6 +58,8 @@ class FinishNoticeMonitor(
      * ended the turn. Tests pass `{ it() }` to run it inline.
      */
     private val boardWork: ((() -> Unit) -> Unit)? = null,
+    /** NOTIFY-DUP-1: `limits.notice.finishOnce`; on = one finish notice per ticket + session, none after a kill the client asked for. */
+    private val finishOnce: () -> Boolean = { true },
 ) {
     /** Tip (8 chars), commits since the start ref (null = unknown) and whether the worktree has uncommitted changes. */
     data class GitState(val tip: String, val newCommits: Int?, val dirty: Boolean)
@@ -74,6 +76,8 @@ class FinishNoticeMonitor(
     private val lastNoticeAt = ConcurrentHashMap<String, Long>()
     private val lastFailureNoticeAt = ConcurrentHashMap<String, Long>()
     private val idle = ConcurrentHashMap<String, IdlePeriod>()
+    /** NOTIFY-DUP-1: "ticket|session" pairs whose clean-finish notice (or suppression) is already decided. */
+    private val finishedKeys = ConcurrentHashMap.newKeySet<String>()
     /** TICKET-COMMENTS-4: when each session was last prompted, and the run whose idle comment was already posted. */
     private val promptedAt = ConcurrentHashMap<String, Long>()
     private val commentedRun = ConcurrentHashMap<String, Long>()
@@ -124,6 +128,8 @@ class FinishNoticeMonitor(
         if (lastNoticed.put(session.id, run) == run) return
         val killed = event.killOutcome != null
         if (killed && (ticket.status == TicketStatus.DONE || session.killedBy in QUIET_KILLERS)) return
+        // NOTIFY-DUP-1: a kill the client (the owner) asked for is not a failure; he knows.
+        if (killed && finishOnce() && session.killedBy == KILLED_BY_CLIENT_NAME) return
         val done = ticket.status == TicketStatus.DONE
         // STALL-5: a non-zero exit after the ticket is done (or the final report was mailed) is a normal end, not a failure.
         if (!killed && event.code != 0 && exemptWhenDone() && (done || reportDelivered(mailbox, session, starter))) {
@@ -143,9 +149,11 @@ class FinishNoticeMonitor(
             return
         }
         idle.remove(session.id)
+        // NOTIFY-DUP-1: one clean-finish notice per ticket + session, however many later runs end (each used to send another).
+        if (!failed && finishOnce() && !finishedKeys.add("${ticket.id}|${session.id}")) return
         val since = lastNoticeAt[session.id] ?: session.spawnedAt
         lastNoticeAt[session.id] = clock()
-        val mailedStarter = mailbox.outbox(session.id).any { it.sentAt >= since && it.to == starter }
+        val mailedStarter = mailbox.outbox(session.id).any { (finishOnce() || it.sentAt >= since) && it.to == starter }
         if (!failed && mailedStarter) return
         if (failed) {
             val now = clock()
@@ -295,6 +303,7 @@ class FinishNoticeMonitor(
             return sent > received
         }
         /** Kills the daemon makes as routine housekeeping: no failure notice. */
+        private const val KILLED_BY_CLIENT_NAME = "client request" // = SessionManager.KILLED_BY_CLIENT
         private val QUIET_KILLERS = setOf("done-worker reaper", "ticket start rollback")
         private const val TAIL_LINES = 12
         private const val OUTPUT_LINES = 6
