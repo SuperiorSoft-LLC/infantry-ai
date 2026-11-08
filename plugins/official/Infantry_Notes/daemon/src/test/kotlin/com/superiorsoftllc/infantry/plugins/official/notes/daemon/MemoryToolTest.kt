@@ -67,4 +67,35 @@ class MemoryToolTest {
         assertFalse(tool.call(call("action" to "index")).isError)
         assertEquals(true, tool.call(call("action" to "index", "scope" to "x")).isError)
     }
+
+    /** KNOWLEDGE-WRITE-GAP-1: a pm session may write a global note; search finds it by body keyword from another project; a worker is refused. */
+    @Test
+    fun globalWriteSearchByBodyReadFromAnotherProjectAndRefusedRole() {
+        val h = MemoryHandler(
+            MemoryStore(StorageMemoryPersistence(NotesTestDb.open(path + "2").also { connections += it.first }.second)),
+            caller = { id -> when (id) { "pm1" -> MemoryCaller("pm1", "pm"); "w1" -> MemoryCaller("w1", "fullstack"); else -> null } },
+        )
+        fun tc(sid: String, role: String, vararg args: Pair<String, String>) = object : ToolCall {
+            override val arguments = JsonObject(args.toMap().mapValues { JsonPrimitive(it.value) })
+            override val caller = Caller(owner = false)
+            override val clientSessionId = sid
+            override val clientRole = role
+            override fun request(type: String, data: String, sessionId: String?, timeoutMs: Long): Frame =
+                h.answer(Frame(type, data, sessionId)) ?: Frame("error", "unhandled $type")
+        }
+        val write = arrayOf("action" to "write", "scope" to "global", "name" to "usage-override", "description" to "pacing override", "body" to "run infantry usage override meter 3")
+        val ok = MemoryTool { "p1" }.call(tc("pm1", "pm", *write))
+        assertFalse(ok.isError, ok.text)
+        val refused = MemoryTool { "p1" }.call(tc("w1", "fullstack", *write))
+        assertTrue(refused.isError && refused.text.contains("may not write global"), refused.text)
+        val hit = MemoryTool { "p2" }.call(tc("w1", "fullstack", "action" to "search", "query" to "meter 3", "projectId" to "p2"))
+        assertTrue(hit.text.contains("usage-override"), hit.text)
+        val shown = MemoryTool { "p2" }.call(tc("w1", "fullstack", "action" to "show", "scope" to "global", "name" to "usage-override", "projectId" to "p2"))
+        assertTrue(shown.text.contains("infantry usage override"), shown.text)
+        val upd = MemoryTool { "p1" }.call(tc("pm1", "pm", "action" to "update", "scope" to "global", "name" to "usage-override", "content" to "verified"))
+        assertFalse(upd.isError, upd.text)
+        assertTrue(MemoryTool { "p2" }.call(tc("w1", "fullstack", "action" to "show", "scope" to "global", "name" to "usage-override")).text.endsWith("verified"))
+        assertTrue(MemoryTool { "p1" }.call(tc("w1", "fullstack", "action" to "delete", "scope" to "global", "name" to "usage-override")).isError)
+        assertFalse(MemoryTool { "p1" }.call(tc("pm1", "pm", "action" to "delete", "scope" to "global", "name" to "usage-override")).isError)
+    }
 }

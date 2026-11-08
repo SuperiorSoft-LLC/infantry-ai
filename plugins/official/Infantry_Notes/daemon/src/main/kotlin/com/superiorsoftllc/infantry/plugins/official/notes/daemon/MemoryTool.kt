@@ -5,8 +5,10 @@ package com.superiorsoftllc.infantry.plugins.official.notes.daemon
 import com.superiorsoftllc.infantry.daemon.api.DaemonTool
 import com.superiorsoftllc.infantry.daemon.api.ToolCall
 import com.superiorsoftllc.infantry.daemon.api.ToolResult
+import com.superiorsoftllc.infantry.memory.MemoryDelete
 import com.superiorsoftllc.infantry.memory.MemoryGet
 import com.superiorsoftllc.infantry.memory.MemoryList
+import com.superiorsoftllc.infantry.memory.MemorySave
 import com.superiorsoftllc.infantry.memory.MemorySearch
 import com.superiorsoftllc.infantry.protocol.Envelope
 import kotlinx.serialization.json.Json
@@ -26,9 +28,12 @@ import kotlinx.serialization.json.put
 class MemoryTool(private val projectOf: (sessionId: String) -> String?) : DaemonTool {
     override val name = NAME
     override val description =
-        "Read the project's shared knowledge notes and your own role / session notes (what `infantry memory show|search|index` " +
-            "prints). action=show needs name; action=search needs query; action=index lists notes. scope: project (default for " +
-            "search/index), role (your role's notes), session; show without scope tries role, then project, then session."
+        "Read and write knowledge notes (what `infantry memory show|search|index|save|delete` does). action=show needs name; " +
+            "action=search needs query (matches names, descriptions and bodies); action=index lists notes; action=write needs name, " +
+            "description, body (replaces the note; optional folder); action=update needs name and content (appends; with find it " +
+            "replaces that one exact passage); action=delete needs name. scope: project (default), global (shared by every project " +
+            "on this install; writing needs a role in setting knowledge.globalWriteRoles, default pm), role (your role's notes), " +
+            "session; show without scope tries role, then project (which includes global), then session."
     override val inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
@@ -36,12 +41,14 @@ class MemoryTool(private val projectOf: (sessionId: String) -> String?) : Daemon
             put("name", buildJsonObject { put("type", "string"); put("description", "Note name (action=show).") })
             put("query", buildJsonObject { put("type", "string"); put("description", "Search term (action=search).") })
             put("scope", buildJsonObject { put("type", "string"); put("enum", buildJsonArray { SCOPES.forEach { add(JsonPrimitive(it)) } }) })
+            for (k in listOf("description", "body", "content", "find", "folder")) {
+                put(k, buildJsonObject { put("type", "string"); put("description", "action=write: description, body, folder. action=update: content (+ find to replace a passage).") })
+            }
             put("projectId", buildJsonObject { put("type", "string"); put("description", "Default: this session's project.") })
         })
         put("required", buildJsonArray { add(JsonPrimitive("action")) })
         put("additionalProperties", false)
     }
-    override val annotations = buildJsonObject { put("readOnlyHint", true) }
 
     override fun call(call: ToolCall): ToolResult {
         fun arg(k: String) = (call.arguments[k] as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
@@ -73,6 +80,28 @@ class MemoryTool(private val projectOf: (sessionId: String) -> String?) : Daemon
                     val r = call.request(Envelope.MEMORY_LIST, json.encodeToString(MemoryList.serializer(), MemoryList(project, scope, session, role)), session)
                     if (r.type != Envelope.MEMORY_NOTES) refused(r.data) else ToolResult(r.data)
                 }
+                "write", "update" -> {
+                    val n = arg("name") ?: return refused("$NAME ${arg("action")} needs name")
+                    val req = if (arg("action") == "write") {
+                        val d = arg("description") ?: return refused("$NAME write needs description")
+                        val b = (call.arguments["body"] as? JsonPrimitive)?.contentOrNull ?: return refused("$NAME write needs body")
+                        MemorySave(project, n, description = d, body = b, folder = arg("folder"), scope = scope, sessionId = session, role = role)
+                    } else {
+                        val c = (call.arguments["content"] as? JsonPrimitive)?.contentOrNull ?: return refused("$NAME update needs content")
+                        val f = (call.arguments["find"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotEmpty() }
+                        MemorySave(
+                            project, n, description = arg("description"), content = c, find = f, folder = arg("folder"),
+                            mode = if (f != null) MemorySave.MODE_EDIT else MemorySave.MODE_APPEND, scope = scope, sessionId = session, role = role,
+                        )
+                    }
+                    val r = call.request(Envelope.MEMORY_SAVE, json.encodeToString(MemorySave.serializer(), req), session)
+                    if (r.type != Envelope.MEMORY_NOTE) refused(r.data) else ToolResult("saved ${scope ?: "project"} note '$n'")
+                }
+                "delete" -> {
+                    val n = arg("name") ?: return refused("$NAME delete needs name")
+                    val r = call.request(Envelope.MEMORY_DELETE, json.encodeToString(MemoryDelete.serializer(), MemoryDelete(project, n, scope, session, role)), session)
+                    if (r.type != Envelope.MEMORY_NOTES) refused(r.data) else ToolResult("deleted ${scope ?: "project"} note '$n'")
+                }
                 else -> refused("$NAME: action must be one of ${ACTIONS.joinToString("|")}")
             }
         } catch (e: Exception) {
@@ -84,8 +113,8 @@ class MemoryTool(private val projectOf: (sessionId: String) -> String?) : Daemon
 
     companion object {
         const val NAME = "infantry_memory"
-        val ACTIONS = listOf("show", "search", "index")
-        val SCOPES = listOf("project", "role", "session")
+        val ACTIONS = listOf("show", "search", "index", "write", "update", "delete")
+        val SCOPES = listOf("project", "role", "session", "global")
         private val json = Json { ignoreUnknownKeys = true }
     }
 }

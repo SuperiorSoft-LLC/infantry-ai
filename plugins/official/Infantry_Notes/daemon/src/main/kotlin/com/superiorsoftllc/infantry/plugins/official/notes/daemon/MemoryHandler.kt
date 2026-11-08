@@ -13,7 +13,7 @@ import kotlinx.serialization.json.Json
 data class MemoryCaller(val sessionId: String, val role: String)
 
 /** The resolved (scope, ownerId) pair a [MemoryScoped] request addresses. */
-private data class Target(val scope: String, val ownerId: String)
+private data class Target(val scope: String, val ownerId: String, val project: String? = null)
 
 /**
  * MEM-5 / MEM-8: the `memory_*` wire surface over a [MemoryStore], shaped after
@@ -33,6 +33,10 @@ class MemoryHandler(
     private val json: Json = Json { ignoreUnknownKeys = false; encodeDefaults = true },
     /** ROLE-NOTES-1: told when a ROLE-scoped note is saved or deleted, so live sessions of that role can re-read it. */
     private val onRoleNoteChanged: (projectId: String, role: String, name: String, deleted: Boolean) -> Unit = { _, _, _, _ -> },
+    /** KNOWLEDGE-WRITE-GAP-1: may a session of this role write or delete GLOBAL notes? (The owner, with no session, always may.) */
+    private val mayWriteGlobal: (role: String) -> Boolean = { it == PM_ROLE },
+    /** KNOWLEDGE-WRITE-GAP-1: one line per write, with writer and time. */
+    private val audit: (line: String) -> Unit = {},
 ) {
     fun answer(envelope: Frame): Frame? = when (envelope.type) {
         Envelope.MEMORY_SEARCH -> request(envelope.type) {
@@ -41,7 +45,7 @@ class MemoryHandler(
                 Envelope.MEMORY_HITS,
                 json.encodeToString(
                     ListSerializer(MemorySearchResult.serializer()),
-                    store.search(req.projectId, req.query, resolve(req).scope, resolve(req).ownerId),
+                    resolve(req).let { store.search(it.project ?: req.projectId, req.query, it.scope, it.ownerId) },
                 ),
             )
         }
@@ -49,6 +53,7 @@ class MemoryHandler(
         Envelope.MEMORY_SAVE -> request(envelope.type) {
             val req = json.decodeFromString(MemorySave.serializer(), envelope.data)
             val saved = save(req)
+            logWrite(req, "write", saved.name)
             notifyRole(saved.scope, saved.ownerId, req.projectId, saved.name, deleted = false)
             Frame(Envelope.MEMORY_NOTE, json.encodeToString(MemoryNote.serializer(), saved))
         }
@@ -56,7 +61,7 @@ class MemoryHandler(
         Envelope.MEMORY_GET -> request(envelope.type) {
             val req = json.decodeFromString(MemoryGet.serializer(), envelope.data)
             val target = resolve(req)
-            val note = store.get(req.projectId, req.name, target.scope, target.ownerId)
+            val note = store.get(target.project ?: req.projectId, req.name, target.scope, target.ownerId)
                 ?: throw MemoryRefusal(
                     MemoryRefusal.NOTE_NOT_FOUND,
                     "no ${target.scope} note '${req.name.trim()}' in project '${req.projectId.trim()}'",
@@ -76,9 +81,11 @@ class MemoryHandler(
         Envelope.MEMORY_DELETE -> request(envelope.type) {
             val req = json.decodeFromString(MemoryDelete.serializer(), envelope.data)
             val target = resolve(req)
-            if (!store.delete(req.projectId, req.name, target.scope, target.ownerId)) {
+            if (target.project != null) requireGlobalWriter(req)
+            if (!store.delete(target.project ?: req.projectId, req.name, target.scope, target.ownerId)) {
                 throw MemoryRefusal(MemoryRefusal.NOTE_NOT_FOUND, "no ${target.scope} note '${req.name.trim()}' to delete")
             }
+            logWrite(req, "delete", req.name.trim())
             notifyRole(target.scope, target.ownerId, req.projectId, req.name.trim(), deleted = true)
             Frame(Envelope.MEMORY_NOTES, indexOf(MemoryList(req.projectId, req.scope, req.sessionId, req.role)))
         }
@@ -101,7 +108,7 @@ class MemoryHandler(
         val target = resolve(req)
         return json.encodeToString(
             ListSerializer(MemoryIndexEntry.serializer()),
-            store.index(req.projectId, target.scope, target.ownerId).sortedBy { it.name }
+            store.index(target.project ?: req.projectId, target.scope, target.ownerId).sortedBy { it.name }
                 .map { MemoryIndexEntry(it.name, it.description, it.folder) },
         )
     }
@@ -119,6 +126,7 @@ class MemoryHandler(
             caller(id) ?: throw IllegalArgumentException("no session '$id' on this daemon")
         }
         return when (scope) {
+            SCOPE_GLOBAL -> Target(SCOPE_PROJECT, "", MemoryStore.GLOBAL_PROJECT)
             SCOPE_PROJECT -> Target(SCOPE_PROJECT, "")
             SCOPE_SESSION -> Target(
                 SCOPE_SESSION,
@@ -135,7 +143,7 @@ class MemoryHandler(
                 }
                 Target(SCOPE_ROLE, role)
             }
-            else -> throw IllegalArgumentException("scope '$scope' is not one of ${NOTE_SCOPES.joinToString("|")}")
+            else -> throw IllegalArgumentException("scope '$scope' is not one of ${(NOTE_SCOPES + SCOPE_GLOBAL).joinToString("|")}")
         }
     }
 
@@ -148,6 +156,8 @@ class MemoryHandler(
     private fun save(req: MemorySave): MemoryNote {
         val mode = req.mode?.trim()?.ifEmpty { null } ?: MemorySave.MODE_REPLACE
         val t = resolve(req)
+        if (t.project != null) requireGlobalWriter(req)
+        val project = t.project ?: req.projectId
         fun refuseField(field: String): Nothing =
             throw IllegalArgumentException("mode '$mode' does not take '$field'")
         return when (mode) {
@@ -156,20 +166,20 @@ class MemoryHandler(
                 if (req.find != null) refuseField("find")
                 val description = req.description ?: throw IllegalArgumentException("replace expects 'description'")
                 val body = req.body ?: throw IllegalArgumentException("replace expects 'body'")
-                store.save(req.projectId, req.name, description, body, folder = req.folder, scope = t.scope, ownerId = t.ownerId)
+                store.save(project, req.name, description, body, folder = req.folder, scope = t.scope, ownerId = t.ownerId)
             }
             MemorySave.MODE_APPEND -> {
                 if (req.body != null) refuseField("body' (append takes 'content")
                 if (req.find != null) refuseField("find")
                 val content = req.content ?: throw IllegalArgumentException("append expects 'content'")
-                store.append(req.projectId, req.name, content, req.description, req.folder, t.scope, t.ownerId)
+                store.append(project, req.name, content, req.description, req.folder, t.scope, t.ownerId)
             }
             MemorySave.MODE_EDIT -> {
                 if (req.body != null) refuseField("body' (edit takes 'content")
                 val find = req.find ?: throw IllegalArgumentException("edit expects 'find'")
                 val content = req.content
                     ?: throw IllegalArgumentException("edit expects 'content' (an empty one removes the passage)")
-                store.edit(req.projectId, req.name, find, content, req.description, req.folder, t.scope, t.ownerId)
+                store.edit(project, req.name, find, content, req.description, req.folder, t.scope, t.ownerId)
             }
             else -> throw IllegalArgumentException(
                 "unknown mode '$mode'; expected one of ${MemorySave.MODES.joinToString(", ")}",
@@ -177,7 +187,20 @@ class MemoryHandler(
         }
     }
 
-    private companion object {
+    private fun requireGlobalWriter(req: MemoryScoped) {
+        val id = req.sessionId?.trim()?.ifEmpty { null } ?: return
+        val who = caller(id) ?: throw IllegalArgumentException("no session '$id' on this daemon")
+        if (!mayWriteGlobal(who.role)) {
+            throw IllegalArgumentException("role '${who.role}' may not write global notes (setting knowledge.globalWriteRoles)")
+        }
+    }
+
+    private fun logWrite(req: MemoryScoped, what: String, name: String) {
+        val who = req.sessionId?.trim()?.ifEmpty { null }?.let { caller(it)?.let { c -> "${c.role}/${c.sessionId}" } } ?: "owner"
+        audit("memory $what scope=${req.scope ?: SCOPE_PROJECT} name=$name by=$who at=${java.time.Instant.now()}")
+    }
+
+    companion object {
         const val PM_ROLE = "pm"
     }
 
