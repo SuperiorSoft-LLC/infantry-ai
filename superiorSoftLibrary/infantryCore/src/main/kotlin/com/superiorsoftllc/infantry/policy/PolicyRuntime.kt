@@ -130,6 +130,13 @@ class PolicyRuntime(
         notice()?.let { append(" notice=").append(Base64.getUrlEncoder().withoutPadding().encodeToString(it.toByteArray(Charsets.UTF_8))) }
     }
 
+    /**
+     * Whether the active policy lets [action] run. A tool list offers an agent only the tools it may call (a model API
+     * rejects a request with too many tools, and a tool the policy refuses is noise); production allows everything.
+     */
+    fun allowsAction(action: ActionCatalog.Action): Boolean =
+        current.isEmpty || com.superiorsoftllc.infantry.plugin.api.ActionPolicyMatcher.allows(current.disable, current.allow, action.id, action.kind)
+
     /** The action [envelope] performs: core's catalog, else a plugin's frame or tool ([Extensions.action]); null = unmapped. */
     fun actionOf(envelope: Envelope): ActionCatalog.Action? = ActionCatalog.forEnvelope(envelope) ?: extensions.action(envelope)
 

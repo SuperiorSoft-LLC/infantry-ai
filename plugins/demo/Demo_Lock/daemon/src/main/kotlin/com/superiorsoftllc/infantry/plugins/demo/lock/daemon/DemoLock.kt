@@ -190,6 +190,18 @@ class DemoLock(
         return if (seeded(from) && seeded(target) && from != target && !allowCrossProject) null else mailRefusalText
     }
 
+    /**
+     * DEMO-USAGE-HIDE-1: the fixed plan meters a visitor sees (env [USAGE_SESSION_ENV] / [USAGE_WEEK_ENV], default 10 / 25 percent),
+     * resetting at fixed offsets from [now]. No plan name, account or login: the real reading never reaches the demo.
+     */
+    fun usageWindows(now: Long, env: (String) -> String?): List<com.superiorsoftllc.infantry.daemon.api.usage.LimitWindow> {
+        fun pct(name: String, default: Double) = env(name)?.trim()?.toDoubleOrNull()?.takeIf { it in 0.0..100.0 } ?: default
+        fun window(label: String, minutes: Int, percent: Double) = com.superiorsoftllc.infantry.daemon.api.usage.LimitWindow(
+            USAGE_PROVIDER, label, minutes, percent, now + minutes * 60_000L / 2, now, "live", 0.0,
+        )
+        return listOf(window("Current session", 300, pct(USAGE_SESSION_ENV, 10.0)), window("Current week", 10_080, pct(USAGE_WEEK_ENV, 25.0)))
+    }
+
     /** Null = this HTTP request may proceed (the access policy still applies); else the 403 text. */
     fun httpRefusal(method: String, path: String, webAsset: Boolean): String? {
         if (!enabled) return null
@@ -212,6 +224,10 @@ class DemoLock(
         /** Once seeded, no path (frame, mail, trigger, ticket) may create a session. */
         const val SPAWN_REFUSAL = "demo: new sessions are disabled in this demo"
 
+        /** The meter the demo seats spend (the `opencode-go` plan); the fixed reading is offered under it. */
+        const val USAGE_PROVIDER = "opencode-go"
+        const val USAGE_SESSION_ENV = "INFANTRY_DEMO_USAGE_SESSION_PERCENT"
+        const val USAGE_WEEK_ENV = "INFANTRY_DEMO_USAGE_WEEK_PERCENT"
         const val PROMPT = "prompt"
         const val RESUME = "resume"
         const val MAIL_SEND = "mail_send"

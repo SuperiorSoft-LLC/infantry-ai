@@ -117,7 +117,7 @@ internal class ProcessWatchService private constructor(private val exec: Schedul
                 stuckMinutes = settings.limit("limits.processes.stuckMinutes")?.toInt() ?: d.stuckMinutes,
                 idleMinutes = int("processes.idleMinutes", 1..1440, d.idleMinutes),
                 heavyMb = int("processes.heavyMb", 0..1_048_576, d.heavyMb.toInt()).toLong(),
-                floorMb = int("processes.floorMb", 0..1_048_576, d.floorMb.toInt()).toLong(),
+                floorMb = int("processes.floorMb", 0..1_048_576, System.getenv("INFANTRY_PROCESSES_FLOOR_MB")?.trim()?.toIntOrNull()?.takeIf { it in 0..1_048_576 } ?: d.floorMb.toInt()).toLong(),
                 autoReap = autoReap,
             )
         }

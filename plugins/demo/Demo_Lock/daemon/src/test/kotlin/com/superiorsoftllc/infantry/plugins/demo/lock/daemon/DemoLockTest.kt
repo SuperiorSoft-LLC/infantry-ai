@@ -172,4 +172,13 @@ class DemoLockTest {
             assertEquals("demo: $m $p is disabled in this demo", lock.httpRefusal(m, p, false), "$m $p")
         }
     }
+
+    @Test
+    fun `a visitor sees fixed plan meters, env overridable, bad values ignored`() {
+        val w = locked().usageWindows(1_000L, { null })
+        assertEquals(listOf(10.0, 25.0), w.map { it.percent })
+        assertEquals(setOf("opencode-go"), w.map { it.provider }.toSet())
+        val set = locked().usageWindows(1_000L, { if (it == DemoLock.USAGE_WEEK_ENV) "40" else "999" })
+        assertEquals(listOf(10.0, 40.0), set.map { it.percent })
+    }
 }

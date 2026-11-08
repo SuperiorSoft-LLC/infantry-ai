@@ -710,10 +710,14 @@ class SettingsService(
         return com.superiorsoftllc.infantry.session.ProcessWatchConfig(
             idleMinutes = int(PROCESSES_IDLE_MINUTES, PROCESSES_IDLE_RANGE, d.idleMinutes),
             heavyMb = int(PROCESSES_HEAVY_MB, PROCESSES_MB_RANGE, d.heavyMb.toInt()).toLong(),
-            floorMb = int(PROCESSES_FLOOR_MB, PROCESSES_MB_RANGE, d.floorMb.toInt()).toLong(),
+            floorMb = int(PROCESSES_FLOOR_MB, PROCESSES_MB_RANGE, envFloorMb(d.floorMb.toInt())).toLong(),
             autoReap = autoReap,
         )
     }
+
+    /** Deployment default for `processes.floorMb`: env INFANTRY_PROCESSES_FLOOR_MB when a valid number; a stored setting still wins. */
+    private fun envFloorMb(default: Int): Int =
+        env(PROCESSES_FLOOR_MB_ENV)?.trim()?.toIntOrNull()?.takeIf { it in PROCESSES_MB_RANGE } ?: default
 
     private fun storedInt(key: String, range: IntRange, default: Int): Int {
         val stored = store.settings.get(key)?.value ?: return default
@@ -1016,6 +1020,7 @@ class SettingsService(
         /** ROGUE-1 (1.120.0): the rogue process detector (auto-reap is opt-in, default false). */
         private val PLUGIN_READABLE = listOf("limits.", "watch.", "processes.", "images.", "questions.", "prompts.timeoutSec")
         const val PROCESSES_AUTO_REAP = "processes.autoReap"
+        const val PROCESSES_FLOOR_MB_ENV = "INFANTRY_PROCESSES_FLOOR_MB"
         const val PROCESSES_IDLE_MINUTES = "processes.idleMinutes"
         const val PROCESSES_HEAVY_MB = "processes.heavyMb"
         const val PROCESSES_FLOOR_MB = "processes.floorMb"

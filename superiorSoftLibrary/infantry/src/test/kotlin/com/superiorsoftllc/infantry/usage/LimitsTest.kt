@@ -172,4 +172,23 @@ class LimitsTest {
         service.snapshot()
         assertEquals(2, http.calls.size)
     }
+
+    @Test
+    fun `a plugin replacement wins over a reading cached before it, even with live reads off`() {
+        val http = FakeHttp(body = claudeBody)
+        val service = LimitService(listOf(ClaudeOAuthUsageSource(http) { "t" }), liveEnabled = { true }, clock = { now })
+        val real = service.snapshot()
+        assertEquals(1, http.calls.size)
+        assertTrue(real.any { it.provider == "claude" })
+        val fixed = object : LimitSource {
+            override val provider = "demo-plan"
+            override fun read(now: Long) = ProviderLimits(provider, "ok", listOf(LimitWindow(provider, "Current week", 10_080, 25.0, now + 1000, now, "live", 0.0)), null, now)
+        }
+        service.replacement = { listOf(fixed) }
+        assertEquals(listOf("demo-plan"), service.snapshot().map { it.provider }, "the cached real reading is not served once a replacement exists")
+        assertEquals(listOf("demo-plan"), service.cachedOrRefresh().map { it.provider })
+        assertEquals(1, http.calls.size, "the real source is never asked again")
+        service.replacement = { emptyList() }
+        assertTrue(service.snapshot().any { it.provider == "claude" }, "without a replacement the real sources are read again")
+    }
 }

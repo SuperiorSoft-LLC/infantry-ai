@@ -184,6 +184,8 @@ All in `docker/docker-compose.yml`, each overridable in `.env`, and changeable l
 | `INFANTRY_LIMIT_CONCURRENCY_MCP_MAX_SPAWNS` | `limits.concurrency.mcpMaxSpawns` | 2 | sessions one MCP connection may hold open |
 | `INFANTRY_LIMIT_CONCURRENCY_MAX_DEPTH` | `limits.concurrency.maxDepth` | 1 | spawn nesting (legacy `INFANTRY_POD_SPAWN_DEPTH`) |
 | `INFANTRY_LIMIT_CONCURRENCY_LANE_DEFAULT` | `limits.concurrency.laneDefault` | 1 | agents of one role at once per project |
+| `INFANTRY_DEMO_USAGE_SESSION_PERCENT` / `..._WEEK_PERCENT` | (Demo_Lock) | 10 / 25 | the FIXED plan meters a demo visitor sees on the `opencode-go` plan (never the real ones) |
+| `INFANTRY_PROCESSES_FLOOR_MB` | `processes.floorMb` | 256 (2 GB box; default 4096) | free RAM (MB) below which the daemon warns "memory pressure"; a stored setting still wins |
 | `INFANTRY_LIMIT_PACING_MAX_WORKERS_CEILING` | `limits.pacing.maxWorkersCeiling` | 2 | highest worker count the usage pacing rule accepts |
 | `INFANTRY_LIMIT_BUILD_MAX_WORKERS` / `..._MAX_PARALLEL_FORKS` | `limits.build.*` | 1 / 1 | Gradle workers / test forks of a worker's build |
 | `INFANTRY_LIMIT_WATCHDOG_TICKET_DEADLINE_MINUTES` | `limits.watchdog.ticketDeadlineMinutes` | 60 | unattended ticket worker deadline (legacy `INFANTRY_TICKET_DEADLINE_MIN`) |
