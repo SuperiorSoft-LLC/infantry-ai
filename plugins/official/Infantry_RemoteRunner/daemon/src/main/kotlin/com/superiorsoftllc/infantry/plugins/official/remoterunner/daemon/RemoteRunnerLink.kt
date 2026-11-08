@@ -72,6 +72,10 @@ class RemoteRunnerLink(private val name: String, private val links: RunnerLinks)
     override fun stopSession(sessionId: String, reason: String?, force: Boolean): OrchestratorReply<Boolean> =
         call(F.STOP, F.json.encodeToString(F.StopRequest.serializer(), F.StopRequest(sessionId, reason, force)), F.StopAnswer.serializer()).map { it.stopped }
 
+    /** RUNNER-TEST-1: forget a session this orchestrator started over the link (a throwaway test turn leaves nothing behind). */
+    override fun removeSession(sessionId: String): OrchestratorReply<Boolean> =
+        call(F.REMOVE, F.json.encodeToString(F.RemoveRequest.serializer(), F.RemoveRequest(sessionId)), F.RemoveAnswer.serializer()).map { it.removed }
+
     override fun deliverMail(sessionId: String, mail: MailItem): OrchestratorReply<MailResult> =
         call(
             F.DELIVER,

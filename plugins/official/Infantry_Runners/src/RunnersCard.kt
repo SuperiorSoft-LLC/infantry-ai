@@ -140,6 +140,47 @@ fun checkRequest(name: String, projectId: String? = null): String = JsonObject(
 ).toString()
 
 /**
+ * RUNNER-TEST-1: the `test` op for [name]: one throwaway turn on that runner, answered with the reply it gave. [harness] and [model]
+ * choose what runs it (null = the daemon's pick: `echo` when the runner has it, else the first harness signed in there).
+ */
+fun testRequest(name: String, harness: String? = null, model: String? = null): String = JsonObject(
+    buildMap {
+        put("op", JsonPrimitive("test"))
+        put("name", JsonPrimitive(name))
+        harness?.trim()?.takeIf { it.isNotEmpty() }?.let { put("harness", JsonPrimitive(it)) }
+        model?.trim()?.takeIf { it.isNotEmpty() }?.let { put("model", JsonPrimitive(it)) }
+    },
+).toString()
+
+/**
+ * RUNNER-TEST-1: what a `test` answered: the [reply] and [seconds] the runner's [harness] (and [model]) took to give it, or the [error]
+ * and the [lastLines] of the transcript when no answer came back. A test that answered [ok] printed no error, and the reverse.
+ */
+data class RunnerTestResult(
+    val harness: String,
+    val model: String,
+    val seconds: Double,
+    val reply: String?,
+    val error: String?,
+    val lastLines: List<String>,
+    /** The turn's exact millis (the daemon's `ms`): a fast echo answer reads as `412 ms`, not as `1 s`. 0 = not sent. */
+    val millis: Long = 0,
+) {
+    val ok: Boolean get() = reply != null
+
+    /** `echo 412 ms` / `claude 3.2 s`: the harness and how long it took, as the rows print them. */
+    val took: String
+        get() {
+            val what = when {
+                millis in 1..999 -> "$millis ms"
+                millis >= 1_000 -> "${((millis + 50) / 100) / 10.0} s"
+                else -> "$seconds s"
+            }
+            return (listOf(harness, model).filter { it.isNotBlank() } + what).joinToString(" ")
+        }
+}
+
+/**
  * The daemon's own refusal text of a `runner_admin` answer (`error`, verbatim: it never carries the pairing code), or null
  * when the answer is an ok one. A text that is not even an answer is a failure too, never a silent success.
  */
@@ -165,6 +206,29 @@ fun parseRunnerCheck(text: String): List<RunnerCheckRow>? {
             fix = r.text("fix").takeIf { it.isNotBlank() },
         )
     }
+}
+
+/**
+ * RUNNER-TEST-1: the answer of a `test` op (or null when the text is not an answer at all).
+ *
+ * The daemon answers `{ok: true, harness, model, seconds, reply}` for a turn that answered, and `{ok: false, error, lastLines}` for one
+ * that did not (the runner's refusal, or no answer within `limits.runners.testTurnSec`). Both shapes are read here, so the dialog shows
+ * whichever came back without guessing.
+ */
+fun parseRunnerTest(text: String): RunnerTestResult? {
+    val obj = parseObject(text) ?: return null
+    val reply = obj.text("reply").takeIf { it.isNotBlank() }
+    val error = obj.text("error").takeIf { it.isNotBlank() }
+    if (reply == null && error == null) return null
+    return RunnerTestResult(
+        harness = obj.text("harness"),
+        model = obj.text("model"),
+        seconds = obj.text("seconds").toDoubleOrNull() ?: 0.0,
+        reply = reply,
+        error = error,
+        lastLines = (obj["lastLines"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull },
+        millis = obj.text("ms").toLongOrNull() ?: 0,
+    )
 }
 
 /**
@@ -329,8 +393,17 @@ fun AddRunnerForm(
 }
 
 /**
+ * RUNNER-TEST-1: the cost of a test, said next to its button: a test on a real model harness spends one small turn of that account,
+ * and `echo` spends nothing.
+ */
+const val RUNNER_TEST_COST = "A test with a real model harness spends one small turn of that account; echo spends nothing."
+
+/**
  * RUNNER-ADD-UI-1 / RUNNER-CHECK-1: the check rows, as the CLI's `infantry runner check` prints them: a tick or a cross,
  * what was checked, what was found, and under a failure its fix with a copy button. [onAgain] runs the check again.
+ *
+ * RUNNER-TEST-1: [onTest] adds the "Test" button beside "Check again" (one throwaway turn on the runner) and [test] its answer: the
+ * harness, how long it took and the reply it gave, or the error and the last lines of the transcript. [testing] is the wait.
  */
 @Composable
 fun RunnerCheckRows(
@@ -340,6 +413,9 @@ fun RunnerCheckRows(
     onAgain: () -> Unit,
     gate: LinkContext? = null,
     modifier: Modifier = Modifier,
+    onTest: (() -> Unit)? = null,
+    testing: Boolean = false,
+    test: RunnerTestResult? = null,
 ) {
     Column(modifier.fillMaxWidth().testTag("runner-check-rows"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         if (checking) {
@@ -370,9 +446,47 @@ fun RunnerCheckRows(
             }
         }
         if (error != null) Text(error, color = Palette.Danger, fontSize = 12.sp, modifier = Modifier.testTag("runner-check-error"))
-        ActionButton("runners.admin", "Check again", onAgain, Modifier.testTag("runner-check-again"), link = gate, enabled = !checking)
+        if (onTest != null) RunnerTestReport(test, testing)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (onTest != null) {
+                Text(RUNNER_TEST_COST, fontSize = 11.sp, color = Palette.Muted, modifier = Modifier.weight(1f).testTag("runner-test-cost"))
+                ActionButton("runners.admin", "Test", onTest, Modifier.testTag("runner-test"), link = gate, enabled = !testing && !checking)
+            }
+            ActionButton("runners.admin", "Check again", onAgain, Modifier.testTag("runner-check-again"), link = gate, enabled = !checking)
+        }
     }
 }
+
+/**
+ * RUNNER-TEST-1: one test's outcome: while it runs, the wait; then the harness and how long it took with the reply it gave, or the
+ * failure with the last lines of the transcript. The whole block is tagged `runner-test-reply` / `runner-test-error` for the UI tests.
+ */
+@Composable
+fun RunnerTestReport(test: RunnerTestResult?, testing: Boolean, modifier: Modifier = Modifier) {
+    if (testing) {
+        Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ProgressBar(null, Modifier.width(120.dp))
+            Text("Running one throwaway turn on the runner…", fontSize = 12.sp, color = Palette.Muted, modifier = Modifier.testTag("runner-test-wait"))
+        }
+        return
+    }
+    if (test == null) return
+    Column(modifier.fillMaxWidth().testTag(if (test.ok) "runner-test-reply" else "runner-test-error"), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(
+            "${if (test.ok) "answered" else "no answer"} in ${test.took}", fontSize = 12.sp, fontWeight = FontWeight.Medium,
+            color = if (test.ok) Palette.Ok else Palette.Danger, modifier = Modifier.testTag("runner-test-summary"),
+        )
+        test.reply?.let { Text(it, fontSize = 12.sp, modifier = Modifier.testTag("runner-test-text")) }
+        test.error?.let { Text(it, fontSize = 12.sp, color = Palette.Danger, modifier = Modifier.testTag("runner-test-text")) }
+        if (!test.ok && test.lastLines.isNotEmpty()) {
+            Text("last lines of the test session:", fontSize = 11.sp, color = Palette.Muted)
+            test.lastLines.takeLast(LAST_LINES_SHOWN).forEach { Text(it, fontSize = 11.sp, color = Palette.Muted) }
+        }
+    }
+}
+
+/** RUNNER-TEST-1: how many transcript lines a failed test shows (the daemon bounds the text it sends). */
+private const val LAST_LINES_SHOWN = 10
 
 /** One runner's check rows in a dialog (after an add, and from the row's Check action). Close leaves it paired. */
 @Composable
@@ -384,11 +498,14 @@ fun RunnerCheckDialog(
     onAgain: () -> Unit,
     onDismiss: () -> Unit,
     gate: LinkContext? = null,
+    onTest: (() -> Unit)? = null,
+    testing: Boolean = false,
+    test: RunnerTestResult? = null,
 ) {
     AhqAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Runner $runner") },
-        text = { RunnerCheckRows(rows, error, checking, onAgain, gate) },
+        text = { RunnerCheckRows(rows, error, checking, onAgain, gate, onTest = onTest, testing = testing, test = test) },
         confirmButton = {
             TextButton(onClick = onDismiss, modifier = Modifier.testTag("runner-check-close")) { Text("Close") }
         },
@@ -399,8 +516,15 @@ fun RunnerCheckDialog(
 private sealed interface CardDialog {
     /** The paste form; [sending] while the daemon tries every host in the link. */
     data class Add(val sending: Boolean, val error: String? = null) : CardDialog
-    /** One runner's check rows, [running] while the answer is on its way. */
-    data class Check(val runner: String, val rows: List<RunnerCheckRow>? = null, val error: String? = null, val running: Boolean = false) : CardDialog
+    /** One runner's check rows, [running] while the answer is on its way; RUNNER-TEST-1 adds [testing] and [test]. */
+    data class Check(
+        val runner: String,
+        val rows: List<RunnerCheckRow>? = null,
+        val error: String? = null,
+        val running: Boolean = false,
+        val testing: Boolean = false,
+        val test: RunnerTestResult? = null,
+    ) : CardDialog
 }
 
 /** The fill of [RUNNERS_CARD_NODE]: lists the runners over the window's link, adds one from its link, and checks it. */
@@ -432,6 +556,19 @@ class RunnersCardBlock : Block("runnersCard", RUNNERS_CARD_NODE) {
                 text == null -> CardDialog.Check(runner, error = RUNNERS_OFFLINE)
                 else -> runnerFailure(text)?.let { CardDialog.Check(runner, error = it) }
                     ?: CardDialog.Check(runner, rows = parseRunnerCheck(text).orEmpty())
+            }
+        }
+        /**
+         * RUNNER-TEST-1: runs one throwaway turn on [runner] and shows its answer under the check rows. The rows stay as they were: a
+         * test proves the agent CLI answers, it does not replace the check.
+         */
+        suspend fun test(runner: String) {
+            dialog = CardDialog.Check(runner, testing = true)
+            val text = call(testRequest(runner))
+            dialog = when {
+                text == null -> CardDialog.Check(runner, error = RUNNERS_OFFLINE)
+                else -> parseRunnerTest(text)?.let { CardDialog.Check(runner, test = it) }
+                    ?: CardDialog.Check(runner, error = runnerFailure(text) ?: RUNNERS_UNREADABLE)
             }
         }
         LaunchedEffect(link) { refresh() }
@@ -476,6 +613,9 @@ class RunnersCardBlock : Block("runnersCard", RUNNERS_CARD_NODE) {
                 onAgain = { coroutines.launch { check(open.runner) } },
                 onDismiss = { dialog = null },
                 gate = link,
+                onTest = { coroutines.launch { test(open.runner) } },
+                testing = open.testing,
+                test = open.test,
             )
         }
     }

@@ -24,8 +24,10 @@ object RunnerLinkWire {
      * [StartRequest.pushOnCommit].
      * 1.4.0 (RUNNER-CHECK-1): [CHECK], the read-only health check (`contract`, harness sign-in, grants, git, disk), answered as
      * [CheckAnswer] rows with the fix for each failing one.
+     * 1.5.0 (RUNNER-TEST-1): [REMOVE], forget a session this orchestrator started (the turn `infantry runner test` ran leaves nothing
+     * behind on the runner's session list). A runner that does not know it answers an error, and the caller stops at [STOP].
      */
-    const val CONTRACT = "1.4.0"
+    const val CONTRACT = "1.5.0"
 
     const val PAIR = "runner_link_pair"
     const val HELLO = "runner_link_hello"
@@ -33,6 +35,13 @@ object RunnerLinkWire {
     const val DETACH = "runner_link_detach"
     const val START = "runner_link_start"
     const val STOP = "runner_link_stop"
+
+    /**
+     * RUNNER-TEST-1 (contract 1.5.0): forget a session this orchestrator started, so a throwaway turn leaves nothing on the runner's
+     * session list. The runner ends it first when it is still live (the owner's `session_remove --force` rule), so one frame does
+     * both; only a session of this orchestrator may be removed.
+     */
+    const val REMOVE = "runner_link_remove"
     const val HEALTH = "runner_link_health"
     const val DELIVER = "runner_link_deliver"
     const val EVENTS = "runner_link_events"
@@ -116,6 +125,13 @@ object RunnerLinkWire {
 
     @Serializable
     data class StopAnswer(val stopped: Boolean)
+
+    @Serializable
+    data class RemoveRequest(val sessionId: String)
+
+    /** [removed] is false when the runner no longer had the session (removed twice, or an older runner ignored it). */
+    @Serializable
+    data class RemoveAnswer(val removed: Boolean = false)
 
     @Serializable
     data class HealthAnswer(val state: String, val running: Int = 0, val freeSlots: Int = -1, val load: Double? = null)

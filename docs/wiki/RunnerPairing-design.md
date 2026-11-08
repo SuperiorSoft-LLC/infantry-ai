@@ -134,7 +134,7 @@ Inside a container the detected addresses are container-internal, so the Docker 
 | 3 | 0ae6d0dd RUNNER-UP-1 | `infantry runner up` and the Docker env that prints the link on start; fix the port drift in the docs | 1 |
 | 4 | 678c33e1 RUNNER-CHECK-1 | `runner_link_check` frame, op `check`, `infantry runner check`: rows with fixes | none |
 | 5 | 75f0778e RUNNER-ADD-UI-1 | Runners card: Add runner (paste link), check rows, always visible | 2, 4 |
-| 6 | 2bf027f5 RUNNER-TEST-1 | op `test`, `infantry runner test`, Test button: one throwaway turn, reply shown | 4 (5 for the button) |
+| 6 | 2bf027f5 RUNNER-TEST-1 (done) | op `test`, `infantry runner test`, Test button: one throwaway turn, reply shown; the turn's session is stopped and removed (`runner_link_remove`, contract 1.5.0) | 4 (5 for the button) |
 | 7 | 546262c8 RUNNER-GRANT-AT-PAIR-1 | code-scoped grant at pairing | 2 (D24 answered) |
 
 Every ticket carries its own live repro on two test daemons on 189xx ports with their own state dirs (never the owner's

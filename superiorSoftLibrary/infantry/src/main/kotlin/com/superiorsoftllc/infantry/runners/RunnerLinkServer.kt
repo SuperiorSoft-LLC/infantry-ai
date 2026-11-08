@@ -107,6 +107,7 @@ class RunnerLinkServer(
             F.START -> start(seat, data, from)
             F.CHECK -> check(seat, data, from)
             F.STOP -> stop(seat, data, from)
+            F.REMOVE -> remove(seat, data, from)
             F.HEALTH -> read(seat, type, from) { link ->
                 when (val h = link.health()) {
                     is OrchestratorReply.Ok -> F.json.encodeToString(F.HealthAnswer.serializer(), h.value.let { F.HealthAnswer(it.state, it.running, it.freeSlots, it.load) })
@@ -268,8 +269,12 @@ class RunnerLinkServer(
     private fun start(seat: String, data: String, from: String?): Answer {
         val r = decode(F.StartRequest.serializer(), data) ?: return refuse(seat, F.START, null, from, "${F.START} refused: malformed request")
         val allowed = settings()
+        // RUNNER-TEST-1: a start that names no project and takes no remote and no ticket is a health test turn (`infantry runner test`):
+        // it touches no project checkout, so the project grant has nothing to cover. A start naming a project, or taking a remote,
+        // keeps the grant gate below unchanged.
+        val projectless = r.projectId.isNullOrBlank() && r.gitRemote.isNullOrBlank() && r.ticketId.isNullOrBlank()
         val why = when {
-            !allowed.allowsProject(r.projectId) ->
+            !projectless && !allowed.allowsProject(r.projectId) ->
                 "project '${r.projectId.orEmpty()}' is not in this runner's ${RunnerLinkSettings.PROJECTS} (empty = none). Grant it on the runner: infantry settings set ${RunnerLinkSettings.PROJECTS} '[\"${r.projectId.orEmpty()}\"]' (list every allowed id; * = every project)"
             !allowed.allowsHarness(r.provider) ->
                 "harness '${r.provider.orEmpty()}' is not in this runner's ${RunnerLinkSettings.HARNESSES} (empty = none). Grant it on the runner: infantry settings set ${RunnerLinkSettings.HARNESSES} '[\"${r.provider.orEmpty()}\"]' (list every allowed id; * = every harness)"
@@ -324,6 +329,26 @@ class RunnerLinkServer(
         return when (val reply = link.stopSession(r.sessionId, r.reason, r.force)) {
             is OrchestratorReply.Ok -> ok(seat, F.STOP, r.ticketId, from, F.StopAnswer.serializer(), F.StopAnswer(reply.value))
             is OrchestratorReply.Unavailable -> refuse(seat, F.STOP, r.ticketId, from, "${F.STOP} unavailable: ${reply.reason}")
+        }
+    }
+
+    /**
+     * RUNNER-TEST-1 (contract 1.5.0): forget a session this orchestrator started, so a throwaway turn (`infantry runner test`) leaves
+     * nothing on this runner's session list. Only a session of this orchestrator may be removed; a live one is ended first, which is
+     * what the owner's `session_remove --force` does. One call, so the caller cannot lose the session between a stop and a remove
+     * (a stopped session is no longer "started by this orchestrator", so a second gate would refuse it).
+     */
+    private fun remove(seat: String, data: String, from: String?): Answer {
+        val r = decode(F.RemoveRequest.serializer(), data) ?: return refuse(seat, F.REMOVE, null, from, "${F.REMOVE} refused: malformed request")
+        if (starts?.isLinked(r.sessionId) != true) return refuse(seat, F.REMOVE, null, from, "${F.REMOVE} refused: session ${r.sessionId.take(SHOWN_TYPE_SIZE)} was not started by this orchestrator")
+        policy(seat, F.REMOVE, null)?.let { return refuse(seat, F.REMOVE, null, from, "${F.REMOVE} refused: $it") }
+        val link = runner() ?: return refuse(seat, F.REMOVE, null, from, "${F.REMOVE} refused: this runner has no local runner")
+        return when (val reply = link.removeSession(r.sessionId)) {
+            is OrchestratorReply.Ok -> {
+                if (reply.value) starts?.forget(r.sessionId)
+                ok(seat, F.REMOVE, null, from, F.RemoveAnswer.serializer(), F.RemoveAnswer(reply.value))
+            }
+            is OrchestratorReply.Unavailable -> refuse(seat, F.REMOVE, null, from, "${F.REMOVE} unavailable: ${reply.reason}")
         }
     }
 

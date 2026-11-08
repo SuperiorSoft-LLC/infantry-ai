@@ -147,6 +147,13 @@ interface RunnerLink {
     fun stopSession(sessionId: String, reason: String? = null, force: Boolean = false): OrchestratorReply<Boolean> = unoffered("stopSession")
 
     /**
+     * RUNNER-TEST-1: remove a session this orchestrator started from the runner's session list, so a throwaway turn leaves nothing
+     * behind. The session must be stopped first: removing a live one is refused. Natural key: the session id; a session the runner no
+     * longer has answers Ok(false). Fail mode on Unavailable: the caller keeps the runner's answer (an older runner does not know it).
+     */
+    fun removeSession(sessionId: String): OrchestratorReply<Boolean> = unoffered("removeSession")
+
+    /**
      * Hand one composed mail turn to a resting session (the `MailDelivery` edge, docs/DAEMON-CORE.md 6.3). Natural key: (session id,
      * [MailItem.messageIds]). Fail mode on Unavailable: the mail stays persisted in the orchestrator's mailbox and is redelivered.
      */
@@ -181,8 +188,9 @@ interface RunnerLink {
         /**
          * 1.1.0 (RUNNER-POOL-6): events, readTranscript; StartSpec may name a git remote, SessionRef carries the ticket branch.
          * 1.2.0 (RUNNER-POOL-8): events(acked), a per-session seq kept until acknowledged; StartSpec.pushOnCommit.
+         * 1.3.0 (RUNNER-TEST-1): removeSession, so a throwaway test turn leaves no session on the runner.
          */
-        const val CONTRACT_VERSION = "1.2.0"
+        const val CONTRACT_VERSION = "1.3.0"
 
         private fun unoffered(op: String): OrchestratorReply<Nothing> = OrchestratorReply.Unavailable("this runner binding does not offer '$op'")
     }

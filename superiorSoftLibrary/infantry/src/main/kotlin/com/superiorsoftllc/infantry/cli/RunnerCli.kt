@@ -44,7 +44,7 @@ import java.net.InetAddress
  * runner-side `detach` read and write the link folder here, as before. Command names, flags and printed text are unchanged.
  */
 internal object RunnerCli {
-    const val USAGE = "usage: infantry runner pair --name <n> [--host <h>]... [--allow-projects <ids|*>] [--allow-harnesses <ids|*>] | add <name> <wss-url> --code <code> [--fingerprint <fp>] | add '<infantry://runner?...>' [--name <n>] | add --link <link|-> [--name <n>] | list | check <name> [--project <id>] [--harness <id>] | rotate <name> | detach [<name>] | audit [--limit N]"
+    const val USAGE = "usage: infantry runner pair --name <n> [--host <h>]... [--allow-projects <ids|*>] [--allow-harnesses <ids|*>] | add <name> <wss-url> --code <code> [--fingerprint <fp>] | add '<infantry://runner?...>' [--name <n>] | add --link <link|-> [--name <n>] | list | check <name> [--project <id>] [--harness <id>] | test <name> [--harness <id>] [--model <id>] | rotate <name> | detach [<name>] | audit [--limit N]"
 
     /** RUNNER-ADD-LINK-1: what the usage error adds when a pasted link looks cut short (a PowerShell `&` eats the rest). */
     private const val QUOTE_HINT = "Quote the whole link, e.g. infantry runner add 'infantry://runner?v=1&...'. A shell without quotes cuts it at &."
@@ -52,11 +52,11 @@ internal object RunnerCli {
     private val json = Json { ignoreUnknownKeys = true }
 
     /** The words after `runner` and the flags the CLI parser took for it. */
-    data class Args(val words: List<String>, val name: String? = null, val code: String? = null, val fingerprint: String? = null, val limit: String? = null, val allowProjects: String? = null, val allowHarnesses: String? = null, val hosts: String? = null, val link: String? = null, val project: String? = null, val harness: String? = null) {
+    data class Args(val words: List<String>, val name: String? = null, val code: String? = null, val fingerprint: String? = null, val limit: String? = null, val allowProjects: String? = null, val allowHarnesses: String? = null, val hosts: String? = null, val link: String? = null, val project: String? = null, val harness: String? = null, val model: String? = null) {
         val action: String? get() = words.firstOrNull()?.lowercase()
         val positional: List<String> get() = words.drop(1)
         val flags: Map<String, String>
-            get() = listOfNotNull(name?.let { "name" to it }, code?.let { "code" to it }, fingerprint?.let { "fingerprint" to it }, limit?.let { "limit" to it }, allowProjects?.let { "allow-projects" to it }, allowHarnesses?.let { "allow-harnesses" to it }, hosts?.let { "host" to it }, link?.let { "link" to it }, project?.let { "project" to it }, harness?.let { "harness" to it }).toMap()
+            get() = listOfNotNull(name?.let { "name" to it }, code?.let { "code" to it }, fingerprint?.let { "fingerprint" to it }, limit?.let { "limit" to it }, allowProjects?.let { "allow-projects" to it }, allowHarnesses?.let { "allow-harnesses" to it }, hosts?.let { "host" to it }, link?.let { "link" to it }, project?.let { "project" to it }, harness?.let { "harness" to it }, model?.let { "model" to it }).toMap()
     }
 
     /** The usage error for [args], or null when they are valid. */
@@ -71,6 +71,8 @@ internal object RunnerCli {
             "detach" -> positional.size <= 1 && flags.isEmpty()
             // RUNNER-CHECK-1: `runner check <name> [--project <id>] [--harness <id>]`.
             "check" -> positional.size == 1 && positional[0].isNotBlank() && flags.keys.all { it in setOf("project", "harness") }
+            // RUNNER-TEST-1: `runner test <name> [--harness <id>] [--model <id>]`.
+            "test" -> positional.size == 1 && positional[0].isNotBlank() && flags.keys.all { it in setOf("harness", "model") }
             "audit" -> positional.isEmpty() && flags.keys.all { it == "limit" } && (args.limit == null || (args.limit.toIntOrNull() ?: 0) > 0)
             else -> false
         }
@@ -132,6 +134,8 @@ internal object RunnerCli {
                     out.appendLine(if (bad == 0) "runner '${positional[0]}': every check passed" else "runner '${positional[0]}': $bad of ${rows.size} checks failed")
                     if (bad > 0) 1 else 0
                 }
+                // RUNNER-TEST-1: one throwaway turn on the runner, its reply printed; exit 0 only when a reply came back.
+                "test" -> test(stream, positional[0], flags["harness"], flags["model"], ::limit, out, err)
                 "detach" -> {
                     val name = positional.firstOrNull()
                     if (name != null) {
@@ -191,6 +195,47 @@ internal object RunnerCli {
         val answer = stream.request(Envelope(RunnerLinkService.ADMIN, body.toString()), RunnerLinkService.ADMIN, RunnerLinkService.ADMIN, idempotent = false, timeoutMs = wait)
         return AdminAnswer(json.parseToJsonElement(answer.data).jsonObject)
     }
+
+    /**
+     * RUNNER-TEST-1 (docs/wiki/RunnerPairing-design.md 4, step 6): `infantry runner test <name> [--harness h] [--model m]`. The daemon
+     * sends the runner one throwaway turn (`runner_admin` op `test`) and stops and removes it afterwards, so the owner sees the answer
+     * that machine's agent CLI actually gave, not just a green check row. A test with a real model harness spends one small turn of
+     * that account; `echo` spends nothing (docs/RUNNER-POOL.md section 5).
+     */
+    private suspend fun test(stream: FrameStream, name: String, harness: String?, model: String?, limit: (LimitDef) -> Long, out: Appendable, err: Appendable): Int {
+        val r = admin(
+            stream, limit, "op" to "test", "name" to name, "harness" to harness, "model" to model,
+            extraSeconds = limit(LimitRegistry.RUNNERS_TEST_TURN_SEC),
+        )
+        if (r.failed) { err.appendLine("error: ${r.error}"); r.lines(LAST_LINES).takeIf { it.isNotEmpty() }?.let { printLastLines(it, out) }; return 1 }
+        val reply = r["reply"]
+        val ms = r["ms"]?.toLongOrNull()
+        val took = ms?.let(::tookText) ?: "${r["seconds"].orEmpty()} s"
+        val which = listOfNotNull(r["harness"]?.takeIf { it.isNotBlank() }, r["model"]?.takeIf { it.isNotBlank() }).joinToString(" ")
+        if (reply.isNullOrBlank()) {
+            err.appendLine("error: runner '$name'${if (which.isBlank()) "" else " ($which)"} gave no answer in $took")
+            r.lines(LAST_LINES).takeIf { it.isNotEmpty() }?.let { printLastLines(it, out) }
+            return 1
+        }
+        out.appendLine("runner '$name'${if (which.isBlank()) "" else " ($which)"} answered in $took:")
+        out.appendLine(reply)
+        r["cleanup"]?.let { out.appendLine("note: $it") }
+        return 0
+    }
+
+    /** The transcript tail of a test that got no answer, indented under its note. */
+    private fun printLastLines(lines: List<String>, out: Appendable) {
+        if (lines.isEmpty()) { out.appendLine("the test session's transcript was empty"); return }
+        out.appendLine("last lines of the test session:")
+        lines.forEach { out.appendLine("  $it") }
+    }
+
+    /** A test turn's duration as the owner reads it: `412 ms` under a second, `3.2 s` above it. */
+    private fun tookText(ms: Long): String =
+        if (ms < MS_PER_SECOND) "$ms ms" else String.format(java.util.Locale.ROOT, "%.1f s", ms / MS_PER_SECOND.toDouble())
+
+    /** The strings of a JSON array field of an admin answer (the test's `lastLines`). */
+    private fun AdminAnswer.lines(key: String): List<String> = (fields[key] as? JsonArray)?.mapNotNull { it.jsonPrimitive.contentOrNull }.orEmpty()
 
     /**
      * RUNNER-ADD-LINK-1: `add '<infantry://runner?...>' [--name <n>]` / `add --link <link|->` (one paste), and the older
@@ -337,4 +382,6 @@ internal object RunnerCli {
     private const val ID_COLUMN = 15
     private const val FAIL = "FAIL"
     private const val ROWS = "rows"
+    /** RUNNER-TEST-1: the JSON field and count of the transcript lines a test with no answer reports. */
+    private const val LAST_LINES = "lastLines"
 }
