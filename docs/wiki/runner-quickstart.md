@@ -7,12 +7,33 @@ Words: the **orchestrator** is the daemon with your board (your PC); the **runne
 
 ## 1. On the server: start the runner
 
-Use the project's runner image (or build it: `./gradlew :superiorSoftLibrary:infantry:dockerContext`, then
-`docker build -t infantry-runner superiorSoftLibrary/infantry/build/docker`). Publish the link port; mount nothing of your PC.
+One command, then copy the link it prints.
+
+**Docker.** Use the project's runner image (or build it: `./gradlew :superiorSoftLibrary:infantry:dockerContext`, then
+`docker build -t infantry-runner superiorSoftLibrary/infantry/build/docker`). Mount nothing of your PC.
 
 ```
-docker run -d --name infantry-runner -p 8934:8934 -e INFANTRY_LIMIT_RUNNERS_LINK_PORT=8934 infantry-runner
-docker exec infantry-runner infantry settings set runners.enabled true
+docker run -d --name infantry-runner -e INFANTRY_MODE=runner -e INFANTRY_RUNNER_NAME=server-1   -e INFANTRY_RUNNER_HOST=<public or tailnet address> -e INFANTRY_RUNNER_ALLOW_PROJECTS='<project-id>' -e INFANTRY_RUNNER_ALLOW_HARNESSES=claude   -p 8790:8790 -v infantry-data:/data infantry-runner
+docker logs infantry-runner        # the link is between the ==== PAIRING LINK ==== lines
+```
+
+`INFANTRY_RUNNER_NAME` makes the container print a pairing link once the daemon is up and the runner is not paired yet. Inside a
+container the detected hosts are container addresses, so set `INFANTRY_RUNNER_HOST` (the log warns when it is missing). If the
+code expires unpaired the log says so; `docker exec -it infantry-runner infantry runner pair --name server-1` issues a new one (the
+container never loops on issuing codes: each issue is a fresh 10-minute window for guessing).
+
+**An install** (no Docker): `infantry runner up --name server-1 --host <address> --allow-projects '<project-id>' --allow-harnesses claude`.
+If no daemon answers it starts one in runner mode in the background (waits `limits.runners.upStartSec`, default 60, log in
+`<state dir>/runner-up.log`), then prints the link. Run it again and it says "already paired" or "waiting" and starts nothing new.
+A daemon running in another mode is refused with that mode.
+
+**The link is a secret for 10 minutes** (it carries the one-time code) and sits in the container log; it is useless once redeemed
+or expired. The link port is `limits.runners.linkPort`, default **8790** (env `INFANTRY_LIMIT_RUNNERS_LINK_PORT`); publish it.
+
+### By hand (fallback)
+
+```
+docker run -d --name infantry-runner -p 8790:8790 -e INFANTRY_MODE=runner infantry-runner
 docker exec infantry-runner infantry runner pair --name server-1 --allow-projects '<project-id>' --allow-harnesses claude
 ```
 
@@ -28,12 +49,14 @@ it is refused with `git remote add origin <url>` as the fix.
 ## 2. On your PC: add the server
 
 ```
-infantry runner add server-1 wss://<server-address>:8934 --code <code> --fingerprint <fingerprint>
+infantry runner add server-1 wss://<host from the link>:8790 --code <code from the link> --fingerprint <fp from the link>
 infantry runner list
 ```
 
+The link (`host=`, `port=`, `code=`, `fp=`) holds those values. `runner add '<link>'` takes the whole link in one go once RUNNER-ADD-LINK-1 (ticket f9139b7b) is in.
+
 Settings > Runners > Add does the same. `runner add` needs the owner credential, so run it in your own shell, not from an agent.
-Enable `runners.enabled` on the PC too.
+Enable `runners.enabled` on the PC (the orchestrator) too; the runner does not need it.
 
 ## 3. Pick the runner when you create an agent
 

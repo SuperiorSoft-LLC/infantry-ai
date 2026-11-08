@@ -46,8 +46,9 @@ easier?? this setup we have is too complicated." No product code ships with this
 | 11 | server | give the server access to the git remote (deploy key or token) | a key | **necessary**; today it fails only at the first ticket start |
 | 12 | network | firewall or tailnet rule for the link port | a rule | **necessary**; today the failure is a bare connect error |
 
-Docs drift found on the way: the quickstart uses port 8934 and `INFANTRY_LIMIT_RUNNERS_LINK_PORT`; the default is 8790
-and `docker/runner-compare.sh` spells the variable `INFANTRY_LIMIT_RUNNERS_LINKPORT`. RUNNER-UP-1 fixes it.
+Docs drift found on the way: the quickstart used a non-default link port, and `docker/runner-compare.sh` spelled the variable
+`INFANTRY_LIMIT_RUNNERS_LINKPORT`. The default is 8790 and the real spelling is `INFANTRY_LIMIT_RUNNERS_LINK_PORT`
+(`LimitDef.env` turns `linkPort` into `LINK_PORT`). RUNNER-UP-1 fixed both.
 
 So of 12 steps, 5 are accident (2, 4-6 as separate values, 8) and 3 are necessary but silent (10-12).
 

@@ -39,7 +39,7 @@ import java.net.InetAddress
  * runner-side `detach` read and write the link folder here, as before. Command names, flags and printed text are unchanged.
  */
 internal object RunnerCli {
-    const val USAGE = "usage: infantry runner pair --name <n> [--host <h>]... [--allow-projects <ids|*>] [--allow-harnesses <ids|*>] | add <name> <wss-url> --code <code> [--fingerprint <fp>] | list | rotate <name> | detach [<name>] | audit [--limit N]"
+    const val USAGE = "usage: infantry runner up --name <n> [--host <h>]... [--allow-projects <ids|*>] [--allow-harnesses <ids|*>] | pair --name <n> [--host <h>]... [--allow-projects <ids|*>] [--allow-harnesses <ids|*>] | add <name> <wss-url> --code <code> [--fingerprint <fp>] | list | rotate <name> | detach [<name>] | audit [--limit N]"
 
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -56,7 +56,7 @@ internal object RunnerCli {
         val positional = args.positional
         val flags = args.flags
         val ok = when (args.action) {
-            "pair" -> positional.isEmpty() && !args.name.isNullOrBlank() && flags.keys.all { it in setOf("name", "allow-projects", "allow-harnesses", "host") }
+            "pair", "up" -> positional.isEmpty() && !args.name.isNullOrBlank() && flags.keys.all { it in setOf("name", "allow-projects", "allow-harnesses", "host") }
             "add" -> positional.size == 2 && !args.code.isNullOrBlank() && flags.keys.all { it in setOf("code", "fingerprint") }
             "list" -> positional.isEmpty() && flags.isEmpty()
             "rotate" -> positional.size == 1 && flags.isEmpty()
@@ -76,6 +76,7 @@ internal object RunnerCli {
         return try {
             when (args.action) {
                 "pair" -> pair(stream, flags.getValue("name"), ::limit, out, err, flags["allow-projects"], flags["allow-harnesses"], flags["host"])
+                "up" -> up(stream, flags.getValue("name"), ::limit, out, err, flags["allow-projects"], flags["allow-harnesses"], flags["host"])
                 "add" -> {
                     val r = admin(
                         stream, ::limit, "op" to "add", "name" to positional[0], "url" to positional[1], "code" to flags.getValue("code"),
@@ -161,7 +162,21 @@ internal object RunnerCli {
         return AdminAnswer(json.parseToJsonElement(answer.data).jsonObject)
     }
 
-    private suspend fun pair(stream: FrameStream, name: String, limit: (LimitDef) -> Long, out: Appendable, err: Appendable, allowProjects: String? = null, allowHarnesses: String? = null, hosts: String? = null): Int {
+    /**
+     * RUNNER-UP-1: `runner up` on a daemon that is already answering. Paired: says so and stops. A pairing link still live: says
+     * "waiting" and issues no new code (each issue is a fresh window for guessing). Otherwise issues the link and returns at once.
+     */
+    private suspend fun up(stream: FrameStream, name: String, limit: (LimitDef) -> Long, out: Appendable, err: Appendable, allowProjects: String?, allowHarnesses: String?, hosts: String?): Int {
+        val status = admin(stream, limit, "op" to "pair_status")
+        if (status.failed) { err.appendLine("error: ${status.error}"); return 1 }
+        when (status["state"]) {
+            "paired" -> { out.appendLine("already paired with ${status["orchestratorName"]}; `infantry runner detach` to pair again"); return 0 }
+            "waiting" -> { out.appendLine("waiting: a pairing link was already issued and is not used yet; it expires on its own. For a new one: infantry runner pair --name $name"); return 0 }
+        }
+        return pair(stream, name, limit, out, err, allowProjects, allowHarnesses, hosts, wait = false)
+    }
+
+    private suspend fun pair(stream: FrameStream, name: String, limit: (LimitDef) -> Long, out: Appendable, err: Appendable, allowProjects: String? = null, allowHarnesses: String? = null, hosts: String? = null, wait: Boolean = true): Int {
         require(RunnerLinkStore.NAME.matches(name)) { "runner name '$name' must be 1-32 of a-z, 0-9 and '-' (starting with a letter or digit)" }
         // RUNNER-DEFAULTS-1: the grant is part of pairing. Flags state it outright; otherwise the owner is asked at the console, with
         // the harnesses installed here pre-selected (Enter confirms). With neither flags nor a console nothing is granted; the text says how.
@@ -199,6 +214,10 @@ internal object RunnerCli {
             out.appendLine("  or: infantry settings set ${RunnerLinkSettings.PROJECTS} '[\"<project-id>\"]'  /  infantry settings set ${RunnerLinkSettings.HARNESSES} '[\"<harness>\"]'")
         }
         (out as? java.io.Flushable)?.flush()
+        if (!wait) {
+            out.appendLine("The link is a secret for ${r["expiryMin"]} minutes and useless once used or expired. Check later with: infantry runner list")
+            return 0
+        }
         try {
             while (true) {
                 val status = admin(stream, limit, "op" to "pair_status")

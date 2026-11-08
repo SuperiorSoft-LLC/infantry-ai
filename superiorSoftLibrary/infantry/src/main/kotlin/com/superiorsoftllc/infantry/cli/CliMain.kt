@@ -373,7 +373,8 @@ internal object Cli {
 
         // Where to connect and with what token are configuration: a bad value is a usage error, and
         // nothing is contacted. A token is read from its file here, and never echoed anywhere.
-        val target = try {
+        // RUNNER-UP-1: a function, because `runner up` resolves it again once the daemon it started has written its owner token.
+        val resolveFull = {
             resolveTarget(parsed, getenv).let { t ->
                 // RUNNER-POOL-6a: `infantry runner` sends the owner-only `runner_admin` frame, so it presents this machine's owner
                 // token (`<stateDir>/owner.token`, readable only to the local user; the trust RUNNER-POOL-5's local CLI had).
@@ -382,6 +383,9 @@ internal object Cli {
                     com.superiorsoftllc.infantry.session.stateDir { getenv(it) ?: com.superiorsoftllc.infantry.session.infantrySetting(it) },
                 ))
             }
+        }
+        val target = try {
+            resolveFull()
         } catch (e: UsageFailure) {
             err.appendLine("error: ${e.message}")
             return 2
@@ -433,7 +437,13 @@ internal object Cli {
         // A daemon that is not running is the common case -- the user just typed the command -- so
         // it is reported as one plain, actionable line: not a stack trace, and not a hang.
         val stream = try {
-            FrameStream.open(target, err)
+            try {
+                FrameStream.open(target, err)
+            } catch (e: Exception) {
+                // RUNNER-UP-1: `runner up` starts the runner daemon when none answers.
+                if (e is AuthRefused || command != "runner" || parsed.args.firstOrNull() != "up") throw e
+                RunnerUpLauncher.startAndConnect(resolveFull, getenv, com.superiorsoftllc.infantry.session.stateDir { getenv(it) ?: com.superiorsoftllc.infantry.session.infantrySetting(it) }, err) ?: return 2
+            }
         } catch (e: AuthRefused) {
             err.appendLine("error: ${e.message}")
             return 1
@@ -4777,6 +4787,7 @@ internal object Cli {
                                   files); --suggest rebuilds it first. ticket create/update --related-to <id|prefix> (repeatable) links one
               remote on|off|status  Let the daemon accept outside (Tailscale) connections; prints the ws address
                                   and token. Takes effect on the next daemon restart.
+              runner up --name <n> [--host <h>]... [--allow-projects <ids|*>] [--allow-harnesses <ids|*>]  Start a runner daemon here if none runs and print its pairing link (one command)
               runner pair --name <n> [--host <h>]... [--allow-projects <ids|*>] [--allow-harnesses <ids|*>]  On a RUNNER machine: grant what the
                                   orchestrator may run (asked when omitted; nothing is granted silently), print ONE pairing link (hosts, port, one-time code, fingerprint; the code is single use and expires after
                                   limits.runners.pairCodeMin), then the code and fingerprint by hand; serve the link until paired
@@ -5234,7 +5245,7 @@ internal object Cli {
                 "--host" -> {
                     val value = args.getOrNull(++i) ?: return fail(err, "--host expects a value")
                     if (value.startsWith("-")) return fail(err, "--host expects a value")
-                    if (rest.take(2) == listOf("runner", "pair")) {
+                    if (rest.take(2) == listOf("runner", "pair") || rest.take(2) == listOf("runner", "up")) {
                         // RUNNER-LINK-1: on `runner pair` it names a host for the pairing link (repeatable), not the daemon address.
                         runnerHosts = listOfNotNull(runnerHosts, value).joinToString(",")
                         i++
