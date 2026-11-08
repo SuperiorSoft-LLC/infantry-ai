@@ -1612,11 +1612,12 @@ public final class com/superiorsoftllc/infantry/ui/TicketTagKt {
 }
 
 public final class com/superiorsoftllc/infantry/ui/ToastHostKt {
+	public static final field TOAST_ACTION_TAG Ljava/lang/String;
 	public static final field TOAST_CLOSE_TAG Ljava/lang/String;
 	public static final field TOAST_HOST_TAG Ljava/lang/String;
 	public static final field TOAST_TAG Ljava/lang/String;
 	public static final fun ToastHost (Lcom/superiorsoftllc/infantry/ui/model/AppState;Lkotlin/jvm/functions/Function1;Landroidx/compose/ui/Modifier;ZLandroidx/compose/runtime/Composer;II)V
-	public static final fun ToastHost (Ljava/util/List;Lkotlin/jvm/functions/Function1;Landroidx/compose/ui/Modifier;ZLandroidx/compose/runtime/Composer;II)V
+	public static final fun ToastHost (Ljava/util/List;Lkotlin/jvm/functions/Function1;Landroidx/compose/ui/Modifier;ZLkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function1;Landroidx/compose/runtime/Composer;II)V
 	public static final fun toastColour (Lcom/superiorsoftllc/infantry/ui/model/ToastKind;)J
 }
 
@@ -5574,6 +5575,52 @@ public final class com/superiorsoftllc/infantry/ui/model/RunSummaryPayload$Compa
 	public final fun serializer ()Lkotlinx/serialization/KSerializer;
 }
 
+public final class com/superiorsoftllc/infantry/ui/model/RunnerChoice {
+	public static final field $stable I
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Z)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()Z
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Z)Lcom/superiorsoftllc/infantry/ui/model/RunnerChoice;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/ui/model/RunnerChoice;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZILjava/lang/Object;)Lcom/superiorsoftllc/infantry/ui/model/RunnerChoice;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getLabel ()Ljava/lang/String;
+	public final fun getSelectable ()Z
+	public final fun getStatus ()Ljava/lang/String;
+	public final fun getValue ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/ui/model/RunnerChoices {
+	public static final field $stable I
+	public static final field FRAME Ljava/lang/String;
+	public static final field INSTANCE Lcom/superiorsoftllc/infantry/ui/model/RunnerChoices;
+	public static final field PROJECT_DEFAULT Ljava/lang/String;
+	public final fun getListRequest ()Ljava/lang/String;
+	public final fun labelFor (Ljava/util/List;Ljava/lang/String;)Ljava/lang/String;
+	public final fun options (Ljava/util/List;)Ljava/util/List;
+	public final fun parse (Ljava/lang/String;)Ljava/util/List;
+}
+
+public final class com/superiorsoftllc/infantry/ui/model/RunnerStatus {
+	public static final field $stable I
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Z)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Z
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Z)Lcom/superiorsoftllc/infantry/ui/model/RunnerStatus;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/ui/model/RunnerStatus;Ljava/lang/String;Ljava/lang/String;ZILjava/lang/Object;)Lcom/superiorsoftllc/infantry/ui/model/RunnerStatus;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getHealth ()Ljava/lang/String;
+	public final fun getName ()Ljava/lang/String;
+	public final fun getPaused ()Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class com/superiorsoftllc/infantry/ui/model/RunsState {
 	public static final field $stable I
 	public fun <init> ()V
@@ -6271,9 +6318,10 @@ public final class com/superiorsoftllc/infantry/ui/model/TimelineItem$Companion 
 
 public final class com/superiorsoftllc/infantry/ui/model/ToastEvent {
 	public static final field $stable I
-	public fun <init> (Ljava/lang/String;JLcom/superiorsoftllc/infantry/ui/model/ToastKind;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;J)V
-	public synthetic fun <init> (Ljava/lang/String;JLcom/superiorsoftllc/infantry/ui/model/ToastKind;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Ljava/lang/String;JLcom/superiorsoftllc/infantry/ui/model/ToastKind;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JLjava/util/List;)V
+	public synthetic fun <init> (Ljava/lang/String;JLcom/superiorsoftllc/infantry/ui/model/ToastKind;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JLjava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Ljava/lang/String;
+	public final fun component10 ()Ljava/util/List;
 	public final fun component2 ()J
 	public final fun component3 ()Lcom/superiorsoftllc/infantry/ui/model/ToastKind;
 	public final fun component4 ()Ljava/lang/String;
@@ -6282,9 +6330,10 @@ public final class com/superiorsoftllc/infantry/ui/model/ToastEvent {
 	public final fun component7 ()Ljava/lang/String;
 	public final fun component8 ()Ljava/lang/String;
 	public final fun component9 ()J
-	public final fun copy (Ljava/lang/String;JLcom/superiorsoftllc/infantry/ui/model/ToastKind;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;J)Lcom/superiorsoftllc/infantry/ui/model/ToastEvent;
-	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/ui/model/ToastEvent;Ljava/lang/String;JLcom/superiorsoftllc/infantry/ui/model/ToastKind;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JILjava/lang/Object;)Lcom/superiorsoftllc/infantry/ui/model/ToastEvent;
+	public final fun copy (Ljava/lang/String;JLcom/superiorsoftllc/infantry/ui/model/ToastKind;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JLjava/util/List;)Lcom/superiorsoftllc/infantry/ui/model/ToastEvent;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/ui/model/ToastEvent;Ljava/lang/String;JLcom/superiorsoftllc/infantry/ui/model/ToastKind;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JLjava/util/List;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/ui/model/ToastEvent;
 	public fun equals (Ljava/lang/Object;)Z
+	public final fun getActions ()Ljava/util/List;
 	public final fun getAt ()J
 	public final fun getBody ()Ljava/lang/String;
 	public final fun getDurationMs ()J
@@ -6292,6 +6341,7 @@ public final class com/superiorsoftllc/infantry/ui/model/ToastEvent {
 	public final fun getKind ()Lcom/superiorsoftllc/infantry/ui/model/ToastKind;
 	public final fun getProjectId ()Ljava/lang/String;
 	public final fun getSessionId ()Ljava/lang/String;
+	public final fun getSticky ()Z
 	public final fun getTicketId ()Ljava/lang/String;
 	public final fun getTitle ()Ljava/lang/String;
 	public fun hashCode ()I
@@ -6315,7 +6365,10 @@ public final class com/superiorsoftllc/infantry/ui/model/ToastKt {
 	public static final fun noticesForSession (Lcom/superiorsoftllc/infantry/ui/model/AppState;Ljava/lang/String;)Ljava/util/List;
 	public static final fun promptToast (Lcom/superiorsoftllc/infantry/ui/model/AppState;Lcom/superiorsoftllc/infantry/ui/protocol/PromptRequestView;J)Lcom/superiorsoftllc/infantry/ui/model/ToastEvent;
 	public static final fun promptToastId (Ljava/lang/String;)Ljava/lang/String;
+	public static final fun toLevel (Lcom/superiorsoftllc/infantry/ui/model/ToastKind;)Lcom/superiorsoftllc/infantry/plugin/api/NotificationLevel;
+	public static final fun toToast (Lcom/superiorsoftllc/infantry/plugin/api/Notification;)Lcom/superiorsoftllc/infantry/ui/model/ToastEvent;
 	public static final fun toToast (Lcom/superiorsoftllc/infantry/ui/model/Notice;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/model/ToastEvent;
+	public static final fun toToastKind (Lcom/superiorsoftllc/infantry/plugin/api/NotificationLevel;)Lcom/superiorsoftllc/infantry/ui/model/ToastKind;
 	public static final fun toToastKind (Lcom/superiorsoftllc/infantry/ui/model/NoticeKind;)Lcom/superiorsoftllc/infantry/ui/model/ToastKind;
 	public static final fun visibleToasts (Ljava/util/List;JLjava/util/Set;I)Ljava/util/List;
 	public static synthetic fun visibleToasts$default (Ljava/util/List;JLjava/util/Set;IILjava/lang/Object;)Ljava/util/List;
@@ -6795,6 +6848,7 @@ public final class com/superiorsoftllc/infantry/ui/net/Controller {
 	public final fun disableTrigger (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun discardSend (Ljava/lang/String;)V
 	public final fun disconnect ()V
+	public final fun dismissNotification (Ljava/lang/String;)V
 	public final fun dismissProjectRefusal ()V
 	public final fun dismissPrompt (Ljava/lang/String;)V
 	public final fun dismissQuestions ()V
@@ -6810,6 +6864,8 @@ public final class com/superiorsoftllc/infantry/ui/net/Controller {
 	public final fun getImages ()Lcom/superiorsoftllc/infantry/ui/DaemonImageSource;
 	public final fun getMemory (Ljava/lang/String;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/model/NoteScope;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun getMemory$default (Lcom/superiorsoftllc/infantry/ui/net/Controller;Ljava/lang/String;Ljava/lang/String;Lcom/superiorsoftllc/infantry/ui/model/NoteScope;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun getNotificationSettings ()Lcom/superiorsoftllc/infantry/plugin/api/NotificationSettings;
+	public final fun getNotifications ()Lcom/superiorsoftllc/infantry/plugin/host/NotificationCenter;
 	public final fun getProgress ()Lcom/superiorsoftllc/infantry/plugin/host/ProgressCenter;
 	public final fun getProgressTasks ()Lkotlinx/coroutines/flow/StateFlow;
 	public final fun getProgressUi ()Lcom/superiorsoftllc/infantry/ui/progress/ProgressUi;
@@ -6844,6 +6900,7 @@ public final class com/superiorsoftllc/infantry/ui/net/Controller {
 	public final fun moveSecret (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun moveTicket (Ljava/lang/String;Ljava/lang/String;Ljava/lang/Boolean;Ljava/lang/Integer;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun moveTicket$default (Lcom/superiorsoftllc/infantry/ui/net/Controller;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Boolean;Ljava/lang/Integer;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun notificationAction (Ljava/lang/String;Ljava/lang/String;)V
 	public final fun openAssistant (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun openQuestion (Ljava/lang/String;)V
 	public final fun openSession (Ljava/lang/String;)V
@@ -7456,6 +7513,7 @@ public final class com/superiorsoftllc/infantry/ui/plugin/DesktopPlugins {
 	public static synthetic fun change$default (Lcom/superiorsoftllc/infantry/ui/plugin/DesktopPlugins;Ljava/io/File;Ljava/util/List;ZLcom/superiorsoftllc/infantry/ui/plugin/ModuleRequest;Ljava/io/File;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/host/ModuleChange;
 	public final fun composition (Lcom/superiorsoftllc/infantry/plugin/api/ModuleManifest;Lcom/superiorsoftllc/infantry/plugin/api/Tier;Ljava/io/File;)Lcom/superiorsoftllc/infantry/ui/plugin/InfantryModule;
 	public final fun dataDir (Ljava/io/File;Ljava/lang/String;)Ljava/io/File;
+	public final fun getNotifications ()Lcom/superiorsoftllc/infantry/ui/plugin/NotificationsRelay;
 	public final fun load (Ljava/io/File;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Ljava/util/List;Lkotlin/jvm/functions/Function1;Ljava/util/Set;Lcom/superiorsoftllc/infantry/ui/voice/Speaker;Lcom/superiorsoftllc/infantry/ui/voice/CaptureMonitor;Lkotlin/jvm/functions/Function1;Lcom/superiorsoftllc/infantry/ui/voice/CaptureLines;)Lcom/superiorsoftllc/infantry/ui/plugin/DesktopPlugins$Loaded;
 	public static synthetic fun load$default (Lcom/superiorsoftllc/infantry/ui/plugin/DesktopPlugins;Ljava/io/File;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Ljava/util/List;Lkotlin/jvm/functions/Function1;Ljava/util/Set;Lcom/superiorsoftllc/infantry/ui/voice/Speaker;Lcom/superiorsoftllc/infantry/ui/voice/CaptureMonitor;Lkotlin/jvm/functions/Function1;Lcom/superiorsoftllc/infantry/ui/voice/CaptureLines;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/ui/plugin/DesktopPlugins$Loaded;
 }
@@ -7607,6 +7665,17 @@ public abstract interface class com/superiorsoftllc/infantry/ui/plugin/ModuleCha
 	public abstract fun request (Lcom/superiorsoftllc/infantry/ui/plugin/ModuleRequest;)Lcom/superiorsoftllc/infantry/plugin/host/ModuleChange;
 }
 
+public final class com/superiorsoftllc/infantry/ui/plugin/ModuleNotifications : com/superiorsoftllc/infantry/plugin/api/Notifications {
+	public static final field $stable I
+	public fun <init> (Ljava/lang/String;Lcom/superiorsoftllc/infantry/plugin/api/Notifications;Lkotlin/jvm/functions/Function1;)V
+	public synthetic fun <init> (Ljava/lang/String;Lcom/superiorsoftllc/infantry/plugin/api/Notifications;Lkotlin/jvm/functions/Function1;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun dismiss (Ljava/lang/String;)V
+	public fun notify (Lcom/superiorsoftllc/infantry/plugin/api/Notification;)Ljava/lang/String;
+	public fun notify (Ljava/lang/String;Ljava/lang/String;)V
+	public fun onAction (Lkotlin/jvm/functions/Function1;)Ljava/lang/AutoCloseable;
+	public fun present (Ljava/lang/String;Ljava/util/Set;Lcom/superiorsoftllc/infantry/plugin/api/NotificationPresenter;)Ljava/lang/AutoCloseable;
+}
+
 public final class com/superiorsoftllc/infantry/ui/plugin/ModuleRequest {
 	public static final field $stable I
 	public fun <init> (Ljava/lang/String;ZZ)V
@@ -7682,6 +7751,20 @@ public final class com/superiorsoftllc/infantry/ui/plugin/NodeRegistry {
 
 public final class com/superiorsoftllc/infantry/ui/plugin/NodeRegistryKt {
 	public static final field CORE_SHELL_MODULE Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/ui/plugin/NotificationsRelay : com/superiorsoftllc/infantry/plugin/api/Notifications {
+	public static final field $stable I
+	public fun <init> ()V
+	public fun <init> (Lkotlin/jvm/functions/Function1;)V
+	public synthetic fun <init> (Lkotlin/jvm/functions/Function1;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun dismiss (Ljava/lang/String;)V
+	public final fun getTarget ()Lcom/superiorsoftllc/infantry/plugin/api/Notifications;
+	public fun notify (Lcom/superiorsoftllc/infantry/plugin/api/Notification;)Ljava/lang/String;
+	public fun notify (Ljava/lang/String;Ljava/lang/String;)V
+	public fun onAction (Lkotlin/jvm/functions/Function1;)Ljava/lang/AutoCloseable;
+	public fun present (Ljava/lang/String;Ljava/util/Set;Lcom/superiorsoftllc/infantry/plugin/api/NotificationPresenter;)Ljava/lang/AutoCloseable;
+	public final fun setTarget (Lcom/superiorsoftllc/infantry/plugin/api/Notifications;)V
 }
 
 public final class com/superiorsoftllc/infantry/ui/plugin/OverrideEntry {
@@ -7998,6 +8081,7 @@ public final class com/superiorsoftllc/infantry/ui/plugin/TabFactory {
 	public final fun getLoadsAtRunTime ()Z
 	public final fun getLocked ()Ljava/util/Set;
 	public final fun getModules ()Ljava/util/List;
+	public final fun getNotifications ()Lcom/superiorsoftllc/infantry/ui/plugin/NotificationsRelay;
 	public final fun getOverrideMap ()Ljava/util/List;
 	public final fun getProblems ()Ljava/util/List;
 	public final fun getResolvedConfig ()Lcom/superiorsoftllc/infantry/ui/plugin/config/ResolvedConfig;
@@ -8024,6 +8108,7 @@ public final class com/superiorsoftllc/infantry/ui/plugin/TabFactory {
 	public final fun resolvedTabTree (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/ui/block/layout/Block;
 	public final fun sessionBadgesFor (Lcom/superiorsoftllc/infantry/ui/model/AppState;Lcom/superiorsoftllc/infantry/ui/model/AgentView;)Ljava/util/List;
 	public final fun setFreshShellLauncher (Lkotlin/jvm/functions/Function1;)V
+	public final fun setNotifications (Lcom/superiorsoftllc/infantry/ui/plugin/NotificationsRelay;)V
 	public final fun setSectionExporter (Lkotlin/jvm/functions/Function1;)V
 	public final fun setToasts (Lcom/superiorsoftllc/infantry/ui/ToastService;)V
 	public final fun sorted (Ljava/lang/String;Ljava/util/List;)Ljava/util/List;
@@ -16540,6 +16625,13 @@ public final class com/superiorsoftllc/infantry/ui/shell/PluginLifecycle {
 	public final fun getWarnings ()Ljava/util/Map;
 }
 
+public final class com/superiorsoftllc/infantry/ui/shell/PluginLifecycleBridge {
+	public static final field $stable I
+	public static final field INSTANCE Lcom/superiorsoftllc/infantry/ui/shell/PluginLifecycleBridge;
+	public final fun getCurrent ()Lcom/superiorsoftllc/infantry/ui/shell/PluginLifecycle;
+	public final fun setCurrent (Lcom/superiorsoftllc/infantry/ui/shell/PluginLifecycle;)V
+}
+
 public final class com/superiorsoftllc/infantry/ui/shell/PluginSwap {
 	public static final field $stable I
 	public fun <init> (Lcom/superiorsoftllc/infantry/ui/plugin/TabFactory;Ljava/lang/String;Lkotlin/jvm/functions/Function0;)V
@@ -16885,9 +16977,32 @@ public final class com/superiorsoftllc/infantry/ui/shell/TicketsContext$DefaultI
 }
 
 public abstract interface class com/superiorsoftllc/infantry/ui/shell/ToastContext {
+	public fun action (Lcom/superiorsoftllc/infantry/ui/model/ToastEvent;Ljava/lang/String;)V
+	public fun clearHistory ()V
+	public fun dismiss (Lcom/superiorsoftllc/infantry/ui/model/ToastEvent;)V
 	public abstract fun getEvents ()Ljava/util/List;
+	public fun getHistory ()Ljava/util/List;
+	public fun getNotifications ()Lcom/superiorsoftllc/infantry/plugin/api/Notifications;
 	public abstract fun getService ()Lcom/superiorsoftllc/infantry/ui/ToastService;
 	public abstract fun open (Lcom/superiorsoftllc/infantry/ui/model/ToastEvent;)V
+}
+
+public final class com/superiorsoftllc/infantry/ui/shell/ToastContext$DefaultImpls {
+	public static fun action (Lcom/superiorsoftllc/infantry/ui/shell/ToastContext;Lcom/superiorsoftllc/infantry/ui/model/ToastEvent;Ljava/lang/String;)V
+	public static fun clearHistory (Lcom/superiorsoftllc/infantry/ui/shell/ToastContext;)V
+	public static fun dismiss (Lcom/superiorsoftllc/infantry/ui/shell/ToastContext;Lcom/superiorsoftllc/infantry/ui/model/ToastEvent;)V
+	public static fun getHistory (Lcom/superiorsoftllc/infantry/ui/shell/ToastContext;)Ljava/util/List;
+	public static fun getNotifications (Lcom/superiorsoftllc/infantry/ui/shell/ToastContext;)Lcom/superiorsoftllc/infantry/plugin/api/Notifications;
+}
+
+public final class com/superiorsoftllc/infantry/ui/shell/ToastNotifications : com/superiorsoftllc/infantry/plugin/api/Notifications {
+	public static final field $stable I
+	public fun <init> (Lcom/superiorsoftllc/infantry/ui/ToastService;)V
+	public fun dismiss (Ljava/lang/String;)V
+	public fun notify (Lcom/superiorsoftllc/infantry/plugin/api/Notification;)Ljava/lang/String;
+	public fun notify (Ljava/lang/String;Ljava/lang/String;)V
+	public fun onAction (Lkotlin/jvm/functions/Function1;)Ljava/lang/AutoCloseable;
+	public fun present (Ljava/lang/String;Ljava/util/Set;Lcom/superiorsoftllc/infantry/plugin/api/NotificationPresenter;)Ljava/lang/AutoCloseable;
 }
 
 public abstract interface class com/superiorsoftllc/infantry/ui/shell/TraitsContext {
@@ -17477,13 +17592,18 @@ public final class com/superiorsoftllc/infantry/ui/voice/JvmAudioCaptureKt {
 
 public final class com/superiorsoftllc/infantry/ui/voice/JvmSpeaker : com/superiorsoftllc/infantry/ui/voice/Speaker {
 	public static final field $stable I
+	public static final field Companion Lcom/superiorsoftllc/infantry/ui/voice/JvmSpeaker$Companion;
+	public static final field MAX_PIECE_CHARS I
 	public fun <init> ()V
-	public fun <init> (Ljava/lang/String;)V
-	public synthetic fun <init> (Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Ljava/lang/String;Lkotlin/jvm/functions/Function1;)V
+	public synthetic fun <init> (Ljava/lang/String;Lkotlin/jvm/functions/Function1;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun beep ()V
 	public fun speak (Ljava/lang/String;ILjava/lang/String;Z)Z
 	public fun stop ()V
 	public fun voices ()Ljava/util/List;
+}
+
+public final class com/superiorsoftllc/infantry/ui/voice/JvmSpeaker$Companion {
 }
 
 public final class com/superiorsoftllc/infantry/ui/voice/ListeningIndicatorKt {
@@ -17644,8 +17764,9 @@ public final class com/superiorsoftllc/infantry/ui/voice/VoiceUiKt {
 	public static final field VOICE_APPLIES_TO Ljava/lang/String;
 	public static final field VOICE_ENABLED_TAG Ljava/lang/String;
 	public static final field VOICE_TOAST_TAG Ljava/lang/String;
-	public static final fun VoiceAlerts (Lkotlinx/coroutines/flow/Flow;Lcom/superiorsoftllc/infantry/ui/voice/VoiceSettings;Landroidx/compose/ui/Modifier;Landroidx/compose/runtime/Composer;II)V
+	public static final fun VoiceAlerts (Lkotlinx/coroutines/flow/Flow;Lcom/superiorsoftllc/infantry/ui/voice/VoiceSettings;Landroidx/compose/ui/Modifier;Lcom/superiorsoftllc/infantry/plugin/api/Notifications;Landroidx/compose/runtime/Composer;II)V
 	public static final fun VoiceSettingsSection (Lcom/superiorsoftllc/infantry/ui/voice/VoiceSettings;Lkotlin/jvm/functions/Function1;Landroidx/compose/runtime/Composer;I)V
+	public static final fun toNotification (Lcom/superiorsoftllc/infantry/ui/voice/SpokenNotice;)Lcom/superiorsoftllc/infantry/plugin/api/Notification;
 }
 
 public abstract interface class com/superiorsoftllc/infantry/ui/voice/plugin/AssetDownloader {

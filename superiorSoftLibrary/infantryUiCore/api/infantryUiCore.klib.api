@@ -1411,8 +1411,15 @@ abstract interface com.superiorsoftllc.infantry.ui.shell/ToastContext { // com.s
         abstract fun <get-events>(): kotlin.collections/List<com.superiorsoftllc.infantry.ui.model/ToastEvent> // com.superiorsoftllc.infantry.ui.shell/ToastContext.events.<get-events>|<get-events>(){}[0]
     abstract val service // com.superiorsoftllc.infantry.ui.shell/ToastContext.service|{}service[0]
         abstract fun <get-service>(): com.superiorsoftllc.infantry.ui/ToastService // com.superiorsoftllc.infantry.ui.shell/ToastContext.service.<get-service>|<get-service>(){}[0]
+    open val history // com.superiorsoftllc.infantry.ui.shell/ToastContext.history|{}history[0]
+        open fun <get-history>(): kotlin.collections/List<com.superiorsoftllc.infantry.plugin.host/NotificationCenter.Record> // com.superiorsoftllc.infantry.ui.shell/ToastContext.history.<get-history>|<get-history>(){}[0]
+    open val notifications // com.superiorsoftllc.infantry.ui.shell/ToastContext.notifications|{}notifications[0]
+        open fun <get-notifications>(): com.superiorsoftllc.infantry.plugin.api/Notifications // com.superiorsoftllc.infantry.ui.shell/ToastContext.notifications.<get-notifications>|<get-notifications>(){}[0]
 
     abstract fun open(com.superiorsoftllc.infantry.ui.model/ToastEvent) // com.superiorsoftllc.infantry.ui.shell/ToastContext.open|open(com.superiorsoftllc.infantry.ui.model.ToastEvent){}[0]
+    open fun action(com.superiorsoftllc.infantry.ui.model/ToastEvent, kotlin/String) // com.superiorsoftllc.infantry.ui.shell/ToastContext.action|action(com.superiorsoftllc.infantry.ui.model.ToastEvent;kotlin.String){}[0]
+    open fun clearHistory() // com.superiorsoftllc.infantry.ui.shell/ToastContext.clearHistory|clearHistory(){}[0]
+    open fun dismiss(com.superiorsoftllc.infantry.ui.model/ToastEvent) // com.superiorsoftllc.infantry.ui.shell/ToastContext.dismiss|dismiss(com.superiorsoftllc.infantry.ui.model.ToastEvent){}[0]
 }
 
 abstract interface com.superiorsoftllc.infantry.ui.shell/TraitsContext { // com.superiorsoftllc.infantry.ui.shell/TraitsContext|null[0]
@@ -4908,6 +4915,47 @@ final class com.superiorsoftllc.infantry.ui.model/RunSummaryPayload { // com.sup
     }
 }
 
+final class com.superiorsoftllc.infantry.ui.model/RunnerChoice { // com.superiorsoftllc.infantry.ui.model/RunnerChoice|null[0]
+    constructor <init>(kotlin/String, kotlin/String, kotlin/String? = ..., kotlin/Boolean = ...) // com.superiorsoftllc.infantry.ui.model/RunnerChoice.<init>|<init>(kotlin.String;kotlin.String;kotlin.String?;kotlin.Boolean){}[0]
+
+    final val label // com.superiorsoftllc.infantry.ui.model/RunnerChoice.label|{}label[0]
+        final fun <get-label>(): kotlin/String // com.superiorsoftllc.infantry.ui.model/RunnerChoice.label.<get-label>|<get-label>(){}[0]
+    final val selectable // com.superiorsoftllc.infantry.ui.model/RunnerChoice.selectable|{}selectable[0]
+        final fun <get-selectable>(): kotlin/Boolean // com.superiorsoftllc.infantry.ui.model/RunnerChoice.selectable.<get-selectable>|<get-selectable>(){}[0]
+    final val status // com.superiorsoftllc.infantry.ui.model/RunnerChoice.status|{}status[0]
+        final fun <get-status>(): kotlin/String? // com.superiorsoftllc.infantry.ui.model/RunnerChoice.status.<get-status>|<get-status>(){}[0]
+    final val value // com.superiorsoftllc.infantry.ui.model/RunnerChoice.value|{}value[0]
+        final fun <get-value>(): kotlin/String // com.superiorsoftllc.infantry.ui.model/RunnerChoice.value.<get-value>|<get-value>(){}[0]
+
+    final fun component1(): kotlin/String // com.superiorsoftllc.infantry.ui.model/RunnerChoice.component1|component1(){}[0]
+    final fun component2(): kotlin/String // com.superiorsoftllc.infantry.ui.model/RunnerChoice.component2|component2(){}[0]
+    final fun component3(): kotlin/String? // com.superiorsoftllc.infantry.ui.model/RunnerChoice.component3|component3(){}[0]
+    final fun component4(): kotlin/Boolean // com.superiorsoftllc.infantry.ui.model/RunnerChoice.component4|component4(){}[0]
+    final fun copy(kotlin/String = ..., kotlin/String = ..., kotlin/String? = ..., kotlin/Boolean = ...): com.superiorsoftllc.infantry.ui.model/RunnerChoice // com.superiorsoftllc.infantry.ui.model/RunnerChoice.copy|copy(kotlin.String;kotlin.String;kotlin.String?;kotlin.Boolean){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // com.superiorsoftllc.infantry.ui.model/RunnerChoice.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // com.superiorsoftllc.infantry.ui.model/RunnerChoice.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // com.superiorsoftllc.infantry.ui.model/RunnerChoice.toString|toString(){}[0]
+}
+
+final class com.superiorsoftllc.infantry.ui.model/RunnerStatus { // com.superiorsoftllc.infantry.ui.model/RunnerStatus|null[0]
+    constructor <init>(kotlin/String, kotlin/String, kotlin/Boolean) // com.superiorsoftllc.infantry.ui.model/RunnerStatus.<init>|<init>(kotlin.String;kotlin.String;kotlin.Boolean){}[0]
+
+    final val health // com.superiorsoftllc.infantry.ui.model/RunnerStatus.health|{}health[0]
+        final fun <get-health>(): kotlin/String // com.superiorsoftllc.infantry.ui.model/RunnerStatus.health.<get-health>|<get-health>(){}[0]
+    final val name // com.superiorsoftllc.infantry.ui.model/RunnerStatus.name|{}name[0]
+        final fun <get-name>(): kotlin/String // com.superiorsoftllc.infantry.ui.model/RunnerStatus.name.<get-name>|<get-name>(){}[0]
+    final val paused // com.superiorsoftllc.infantry.ui.model/RunnerStatus.paused|{}paused[0]
+        final fun <get-paused>(): kotlin/Boolean // com.superiorsoftllc.infantry.ui.model/RunnerStatus.paused.<get-paused>|<get-paused>(){}[0]
+
+    final fun component1(): kotlin/String // com.superiorsoftllc.infantry.ui.model/RunnerStatus.component1|component1(){}[0]
+    final fun component2(): kotlin/String // com.superiorsoftllc.infantry.ui.model/RunnerStatus.component2|component2(){}[0]
+    final fun component3(): kotlin/Boolean // com.superiorsoftllc.infantry.ui.model/RunnerStatus.component3|component3(){}[0]
+    final fun copy(kotlin/String = ..., kotlin/String = ..., kotlin/Boolean = ...): com.superiorsoftllc.infantry.ui.model/RunnerStatus // com.superiorsoftllc.infantry.ui.model/RunnerStatus.copy|copy(kotlin.String;kotlin.String;kotlin.Boolean){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // com.superiorsoftllc.infantry.ui.model/RunnerStatus.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // com.superiorsoftllc.infantry.ui.model/RunnerStatus.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // com.superiorsoftllc.infantry.ui.model/RunnerStatus.toString|toString(){}[0]
+}
+
 final class com.superiorsoftllc.infantry.ui.model/RunsState { // com.superiorsoftllc.infantry.ui.model/RunsState|null[0]
     constructor <init>(kotlin.collections/List<com.superiorsoftllc.infantry.ui.model/CommandSpecView> = ..., kotlin.collections/Map<kotlin/String, com.superiorsoftllc.infantry.ui.model/RunState> = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/Int = ...) // com.superiorsoftllc.infantry.ui.model/RunsState.<init>|<init>(kotlin.collections.List<com.superiorsoftllc.infantry.ui.model.CommandSpecView>;kotlin.collections.Map<kotlin.String,com.superiorsoftllc.infantry.ui.model.RunState>;kotlin.String?;kotlin.String?;kotlin.Int){}[0]
 
@@ -5482,8 +5530,10 @@ final class com.superiorsoftllc.infantry.ui.model/TimelineItem { // com.superior
 }
 
 final class com.superiorsoftllc.infantry.ui.model/ToastEvent { // com.superiorsoftllc.infantry.ui.model/ToastEvent|null[0]
-    constructor <init>(kotlin/String, kotlin/Long, com.superiorsoftllc.infantry.ui.model/ToastKind, kotlin/String, kotlin/String? = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/Long = ...) // com.superiorsoftllc.infantry.ui.model/ToastEvent.<init>|<init>(kotlin.String;kotlin.Long;com.superiorsoftllc.infantry.ui.model.ToastKind;kotlin.String;kotlin.String?;kotlin.String?;kotlin.String?;kotlin.String?;kotlin.Long){}[0]
+    constructor <init>(kotlin/String, kotlin/Long, com.superiorsoftllc.infantry.ui.model/ToastKind, kotlin/String, kotlin/String? = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/Long = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/NotificationAction> = ...) // com.superiorsoftllc.infantry.ui.model/ToastEvent.<init>|<init>(kotlin.String;kotlin.Long;com.superiorsoftllc.infantry.ui.model.ToastKind;kotlin.String;kotlin.String?;kotlin.String?;kotlin.String?;kotlin.String?;kotlin.Long;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.NotificationAction>){}[0]
 
+    final val actions // com.superiorsoftllc.infantry.ui.model/ToastEvent.actions|{}actions[0]
+        final fun <get-actions>(): kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/NotificationAction> // com.superiorsoftllc.infantry.ui.model/ToastEvent.actions.<get-actions>|<get-actions>(){}[0]
     final val at // com.superiorsoftllc.infantry.ui.model/ToastEvent.at|{}at[0]
         final fun <get-at>(): kotlin/Long // com.superiorsoftllc.infantry.ui.model/ToastEvent.at.<get-at>|<get-at>(){}[0]
     final val body // com.superiorsoftllc.infantry.ui.model/ToastEvent.body|{}body[0]
@@ -5498,12 +5548,15 @@ final class com.superiorsoftllc.infantry.ui.model/ToastEvent { // com.superiorso
         final fun <get-projectId>(): kotlin/String? // com.superiorsoftllc.infantry.ui.model/ToastEvent.projectId.<get-projectId>|<get-projectId>(){}[0]
     final val sessionId // com.superiorsoftllc.infantry.ui.model/ToastEvent.sessionId|{}sessionId[0]
         final fun <get-sessionId>(): kotlin/String? // com.superiorsoftllc.infantry.ui.model/ToastEvent.sessionId.<get-sessionId>|<get-sessionId>(){}[0]
+    final val sticky // com.superiorsoftllc.infantry.ui.model/ToastEvent.sticky|{}sticky[0]
+        final fun <get-sticky>(): kotlin/Boolean // com.superiorsoftllc.infantry.ui.model/ToastEvent.sticky.<get-sticky>|<get-sticky>(){}[0]
     final val ticketId // com.superiorsoftllc.infantry.ui.model/ToastEvent.ticketId|{}ticketId[0]
         final fun <get-ticketId>(): kotlin/String? // com.superiorsoftllc.infantry.ui.model/ToastEvent.ticketId.<get-ticketId>|<get-ticketId>(){}[0]
     final val title // com.superiorsoftllc.infantry.ui.model/ToastEvent.title|{}title[0]
         final fun <get-title>(): kotlin/String // com.superiorsoftllc.infantry.ui.model/ToastEvent.title.<get-title>|<get-title>(){}[0]
 
     final fun component1(): kotlin/String // com.superiorsoftllc.infantry.ui.model/ToastEvent.component1|component1(){}[0]
+    final fun component10(): kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/NotificationAction> // com.superiorsoftllc.infantry.ui.model/ToastEvent.component10|component10(){}[0]
     final fun component2(): kotlin/Long // com.superiorsoftllc.infantry.ui.model/ToastEvent.component2|component2(){}[0]
     final fun component3(): com.superiorsoftllc.infantry.ui.model/ToastKind // com.superiorsoftllc.infantry.ui.model/ToastEvent.component3|component3(){}[0]
     final fun component4(): kotlin/String // com.superiorsoftllc.infantry.ui.model/ToastEvent.component4|component4(){}[0]
@@ -5512,7 +5565,7 @@ final class com.superiorsoftllc.infantry.ui.model/ToastEvent { // com.superiorso
     final fun component7(): kotlin/String? // com.superiorsoftllc.infantry.ui.model/ToastEvent.component7|component7(){}[0]
     final fun component8(): kotlin/String? // com.superiorsoftllc.infantry.ui.model/ToastEvent.component8|component8(){}[0]
     final fun component9(): kotlin/Long // com.superiorsoftllc.infantry.ui.model/ToastEvent.component9|component9(){}[0]
-    final fun copy(kotlin/String = ..., kotlin/Long = ..., com.superiorsoftllc.infantry.ui.model/ToastKind = ..., kotlin/String = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/Long = ...): com.superiorsoftllc.infantry.ui.model/ToastEvent // com.superiorsoftllc.infantry.ui.model/ToastEvent.copy|copy(kotlin.String;kotlin.Long;com.superiorsoftllc.infantry.ui.model.ToastKind;kotlin.String;kotlin.String?;kotlin.String?;kotlin.String?;kotlin.String?;kotlin.Long){}[0]
+    final fun copy(kotlin/String = ..., kotlin/Long = ..., com.superiorsoftllc.infantry.ui.model/ToastKind = ..., kotlin/String = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/Long = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/NotificationAction> = ...): com.superiorsoftllc.infantry.ui.model/ToastEvent // com.superiorsoftllc.infantry.ui.model/ToastEvent.copy|copy(kotlin.String;kotlin.Long;com.superiorsoftllc.infantry.ui.model.ToastKind;kotlin.String;kotlin.String?;kotlin.String?;kotlin.String?;kotlin.String?;kotlin.Long;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.NotificationAction>){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // com.superiorsoftllc.infantry.ui.model/ToastEvent.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // com.superiorsoftllc.infantry.ui.model/ToastEvent.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // com.superiorsoftllc.infantry.ui.model/ToastEvent.toString|toString(){}[0]
@@ -5788,6 +5841,8 @@ final class com.superiorsoftllc.infantry.ui.net/Controller { // com.superiorsoft
         final fun <get-client>(): com.superiorsoftllc.infantry.ui.net/DaemonClient // com.superiorsoftllc.infantry.ui.net/Controller.client.<get-client>|<get-client>(){}[0]
     final val images // com.superiorsoftllc.infantry.ui.net/Controller.images|{}images[0]
         final fun <get-images>(): com.superiorsoftllc.infantry.ui/DaemonImageSource // com.superiorsoftllc.infantry.ui.net/Controller.images.<get-images>|<get-images>(){}[0]
+    final val notifications // com.superiorsoftllc.infantry.ui.net/Controller.notifications|{}notifications[0]
+        final fun <get-notifications>(): com.superiorsoftllc.infantry.plugin.host/NotificationCenter // com.superiorsoftllc.infantry.ui.net/Controller.notifications.<get-notifications>|<get-notifications>(){}[0]
     final val progress // com.superiorsoftllc.infantry.ui.net/Controller.progress|{}progress[0]
         final fun <get-progress>(): com.superiorsoftllc.infantry.plugin.host/ProgressCenter // com.superiorsoftllc.infantry.ui.net/Controller.progress.<get-progress>|<get-progress>(){}[0]
     final val progressTasks // com.superiorsoftllc.infantry.ui.net/Controller.progressTasks|{}progressTasks[0]
@@ -5803,15 +5858,20 @@ final class com.superiorsoftllc.infantry.ui.net/Controller { // com.superiorsoft
     final val toasts // com.superiorsoftllc.infantry.ui.net/Controller.toasts|{}toasts[0]
         final fun <get-toasts>(): com.superiorsoftllc.infantry.ui/ToastService // com.superiorsoftllc.infantry.ui.net/Controller.toasts.<get-toasts>|<get-toasts>(){}[0]
 
+    final var notificationSettings // com.superiorsoftllc.infantry.ui.net/Controller.notificationSettings|{}notificationSettings[0]
+        final fun <get-notificationSettings>(): com.superiorsoftllc.infantry.plugin.api/NotificationSettings // com.superiorsoftllc.infantry.ui.net/Controller.notificationSettings.<get-notificationSettings>|<get-notificationSettings>(){}[0]
+
     final fun cancelProgress(kotlin/String) // com.superiorsoftllc.infantry.ui.net/Controller.cancelProgress|cancelProgress(kotlin.String){}[0]
     final fun clearFinishedProgress() // com.superiorsoftllc.infantry.ui.net/Controller.clearFinishedProgress|clearFinishedProgress(){}[0]
     final fun connect(kotlin/String, kotlin/String?) // com.superiorsoftllc.infantry.ui.net/Controller.connect|connect(kotlin.String;kotlin.String?){}[0]
     final fun discardSend(kotlin/String) // com.superiorsoftllc.infantry.ui.net/Controller.discardSend|discardSend(kotlin.String){}[0]
     final fun disconnect() // com.superiorsoftllc.infantry.ui.net/Controller.disconnect|disconnect(){}[0]
+    final fun dismissNotification(kotlin/String) // com.superiorsoftllc.infantry.ui.net/Controller.dismissNotification|dismissNotification(kotlin.String){}[0]
     final fun dismissProjectRefusal() // com.superiorsoftllc.infantry.ui.net/Controller.dismissProjectRefusal|dismissProjectRefusal(){}[0]
     final fun dismissPrompt(kotlin/String) // com.superiorsoftllc.infantry.ui.net/Controller.dismissPrompt|dismissPrompt(kotlin.String){}[0]
     final fun dismissQuestions() // com.superiorsoftllc.infantry.ui.net/Controller.dismissQuestions|dismissQuestions(){}[0]
     final fun dismissToast(kotlin/String) // com.superiorsoftllc.infantry.ui.net/Controller.dismissToast|dismissToast(kotlin.String){}[0]
+    final fun notificationAction(kotlin/String, kotlin/String) // com.superiorsoftllc.infantry.ui.net/Controller.notificationAction|notificationAction(kotlin.String;kotlin.String){}[0]
     final fun openQuestion(kotlin/String) // com.superiorsoftllc.infantry.ui.net/Controller.openQuestion|openQuestion(kotlin.String){}[0]
     final fun openSession(kotlin/String) // com.superiorsoftllc.infantry.ui.net/Controller.openSession|openSession(kotlin.String){}[0]
     final fun pickModel(com.superiorsoftllc.infantry.ui.model/PickedModel?) // com.superiorsoftllc.infantry.ui.net/Controller.pickModel|pickModel(com.superiorsoftllc.infantry.ui.model.PickedModel?){}[0]
@@ -6559,6 +6619,16 @@ final class com.superiorsoftllc.infantry.ui.plugin/InfantryModule { // com.super
         final fun <get-tier>(): com.superiorsoftllc.infantry.plugin.api/Tier // com.superiorsoftllc.infantry.ui.plugin/InfantryModule.tier.<get-tier>|<get-tier>(){}[0]
 }
 
+final class com.superiorsoftllc.infantry.ui.plugin/ModuleNotifications : com.superiorsoftllc.infantry.plugin.api/Notifications { // com.superiorsoftllc.infantry.ui.plugin/ModuleNotifications|null[0]
+    constructor <init>(kotlin/String, com.superiorsoftllc.infantry.plugin.api/Notifications, kotlin/Function1<kotlin/String, kotlin/Unit> = ...) // com.superiorsoftllc.infantry.ui.plugin/ModuleNotifications.<init>|<init>(kotlin.String;com.superiorsoftllc.infantry.plugin.api.Notifications;kotlin.Function1<kotlin.String,kotlin.Unit>){}[0]
+
+    final fun dismiss(kotlin/String) // com.superiorsoftllc.infantry.ui.plugin/ModuleNotifications.dismiss|dismiss(kotlin.String){}[0]
+    final fun notify(com.superiorsoftllc.infantry.plugin.api/Notification): kotlin/String // com.superiorsoftllc.infantry.ui.plugin/ModuleNotifications.notify|notify(com.superiorsoftllc.infantry.plugin.api.Notification){}[0]
+    final fun notify(kotlin/String, kotlin/String) // com.superiorsoftllc.infantry.ui.plugin/ModuleNotifications.notify|notify(kotlin.String;kotlin.String){}[0]
+    final fun onAction(kotlin/Function1<com.superiorsoftllc.infantry.plugin.api/NotificationActionEvent, kotlin/Unit>): kotlin/AutoCloseable // com.superiorsoftllc.infantry.ui.plugin/ModuleNotifications.onAction|onAction(kotlin.Function1<com.superiorsoftllc.infantry.plugin.api.NotificationActionEvent,kotlin.Unit>){}[0]
+    final fun present(kotlin/String, kotlin.collections/Set<kotlin/String>, com.superiorsoftllc.infantry.plugin.api/NotificationPresenter): kotlin/AutoCloseable // com.superiorsoftllc.infantry.ui.plugin/ModuleNotifications.present|present(kotlin.String;kotlin.collections.Set<kotlin.String>;com.superiorsoftllc.infantry.plugin.api.NotificationPresenter){}[0]
+}
+
 final class com.superiorsoftllc.infantry.ui.plugin/ModuleRequest { // com.superiorsoftllc.infantry.ui.plugin/ModuleRequest|null[0]
     constructor <init>(kotlin/String, kotlin/Boolean, kotlin/Boolean = ...) // com.superiorsoftllc.infantry.ui.plugin/ModuleRequest.<init>|<init>(kotlin.String;kotlin.Boolean;kotlin.Boolean){}[0]
 
@@ -6576,6 +6646,20 @@ final class com.superiorsoftllc.infantry.ui.plugin/ModuleRequest { // com.superi
     final fun equals(kotlin/Any?): kotlin/Boolean // com.superiorsoftllc.infantry.ui.plugin/ModuleRequest.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // com.superiorsoftllc.infantry.ui.plugin/ModuleRequest.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // com.superiorsoftllc.infantry.ui.plugin/ModuleRequest.toString|toString(){}[0]
+}
+
+final class com.superiorsoftllc.infantry.ui.plugin/NotificationsRelay : com.superiorsoftllc.infantry.plugin.api/Notifications { // com.superiorsoftllc.infantry.ui.plugin/NotificationsRelay|null[0]
+    constructor <init>(kotlin/Function1<kotlin/String, kotlin/Unit> = ...) // com.superiorsoftllc.infantry.ui.plugin/NotificationsRelay.<init>|<init>(kotlin.Function1<kotlin.String,kotlin.Unit>){}[0]
+
+    final var target // com.superiorsoftllc.infantry.ui.plugin/NotificationsRelay.target|{}target[0]
+        final fun <get-target>(): com.superiorsoftllc.infantry.plugin.api/Notifications? // com.superiorsoftllc.infantry.ui.plugin/NotificationsRelay.target.<get-target>|<get-target>(){}[0]
+        final fun <set-target>(com.superiorsoftllc.infantry.plugin.api/Notifications?) // com.superiorsoftllc.infantry.ui.plugin/NotificationsRelay.target.<set-target>|<set-target>(com.superiorsoftllc.infantry.plugin.api.Notifications?){}[0]
+
+    final fun dismiss(kotlin/String) // com.superiorsoftllc.infantry.ui.plugin/NotificationsRelay.dismiss|dismiss(kotlin.String){}[0]
+    final fun notify(com.superiorsoftllc.infantry.plugin.api/Notification): kotlin/String // com.superiorsoftllc.infantry.ui.plugin/NotificationsRelay.notify|notify(com.superiorsoftllc.infantry.plugin.api.Notification){}[0]
+    final fun notify(kotlin/String, kotlin/String) // com.superiorsoftllc.infantry.ui.plugin/NotificationsRelay.notify|notify(kotlin.String;kotlin.String){}[0]
+    final fun onAction(kotlin/Function1<com.superiorsoftllc.infantry.plugin.api/NotificationActionEvent, kotlin/Unit>): kotlin/AutoCloseable // com.superiorsoftllc.infantry.ui.plugin/NotificationsRelay.onAction|onAction(kotlin.Function1<com.superiorsoftllc.infantry.plugin.api.NotificationActionEvent,kotlin.Unit>){}[0]
+    final fun present(kotlin/String, kotlin.collections/Set<kotlin/String>, com.superiorsoftllc.infantry.plugin.api/NotificationPresenter): kotlin/AutoCloseable // com.superiorsoftllc.infantry.ui.plugin/NotificationsRelay.present|present(kotlin.String;kotlin.collections.Set<kotlin.String>;com.superiorsoftllc.infantry.plugin.api.NotificationPresenter){}[0]
 }
 
 final class com.superiorsoftllc.infantry.ui.plugin/OverrideEntry { // com.superiorsoftllc.infantry.ui.plugin/OverrideEntry|null[0]
@@ -6864,6 +6948,9 @@ final class com.superiorsoftllc.infantry.ui.plugin/TabFactory { // com.superiors
     final var freshShellLauncher // com.superiorsoftllc.infantry.ui.plugin/TabFactory.freshShellLauncher|{}freshShellLauncher[0]
         final fun <get-freshShellLauncher>(): kotlin/Function1<kotlin/String, kotlin/String>? // com.superiorsoftllc.infantry.ui.plugin/TabFactory.freshShellLauncher.<get-freshShellLauncher>|<get-freshShellLauncher>(){}[0]
         final fun <set-freshShellLauncher>(kotlin/Function1<kotlin/String, kotlin/String>?) // com.superiorsoftllc.infantry.ui.plugin/TabFactory.freshShellLauncher.<set-freshShellLauncher>|<set-freshShellLauncher>(kotlin.Function1<kotlin.String,kotlin.String>?){}[0]
+    final var notifications // com.superiorsoftllc.infantry.ui.plugin/TabFactory.notifications|{}notifications[0]
+        final fun <get-notifications>(): com.superiorsoftllc.infantry.ui.plugin/NotificationsRelay // com.superiorsoftllc.infantry.ui.plugin/TabFactory.notifications.<get-notifications>|<get-notifications>(){}[0]
+        final fun <set-notifications>(com.superiorsoftllc.infantry.ui.plugin/NotificationsRelay) // com.superiorsoftllc.infantry.ui.plugin/TabFactory.notifications.<set-notifications>|<set-notifications>(com.superiorsoftllc.infantry.ui.plugin.NotificationsRelay){}[0]
     final var sectionExporter // com.superiorsoftllc.infantry.ui.plugin/TabFactory.sectionExporter|{}sectionExporter[0]
         final fun <get-sectionExporter>(): kotlin/Function1<kotlin/String, kotlin/String>? // com.superiorsoftllc.infantry.ui.plugin/TabFactory.sectionExporter.<get-sectionExporter>|<get-sectionExporter>(){}[0]
         final fun <set-sectionExporter>(kotlin/Function1<kotlin/String, kotlin/String>?) // com.superiorsoftllc.infantry.ui.plugin/TabFactory.sectionExporter.<set-sectionExporter>|<set-sectionExporter>(kotlin.Function1<kotlin.String,kotlin.String>?){}[0]
@@ -14641,6 +14728,14 @@ final class com.superiorsoftllc.infantry.ui.shell/ShellConfig { // com.superiors
     final fun toString(): kotlin/String // com.superiorsoftllc.infantry.ui.shell/ShellConfig.toString|toString(){}[0]
 }
 
+final class com.superiorsoftllc.infantry.ui.shell/ToastNotifications : com.superiorsoftllc.infantry.plugin.api/Notifications { // com.superiorsoftllc.infantry.ui.shell/ToastNotifications|null[0]
+    constructor <init>(com.superiorsoftllc.infantry.ui/ToastService) // com.superiorsoftllc.infantry.ui.shell/ToastNotifications.<init>|<init>(com.superiorsoftllc.infantry.ui.ToastService){}[0]
+
+    final fun dismiss(kotlin/String) // com.superiorsoftllc.infantry.ui.shell/ToastNotifications.dismiss|dismiss(kotlin.String){}[0]
+    final fun notify(com.superiorsoftllc.infantry.plugin.api/Notification): kotlin/String // com.superiorsoftllc.infantry.ui.shell/ToastNotifications.notify|notify(com.superiorsoftllc.infantry.plugin.api.Notification){}[0]
+    final fun notify(kotlin/String, kotlin/String) // com.superiorsoftllc.infantry.ui.shell/ToastNotifications.notify|notify(kotlin.String;kotlin.String){}[0]
+}
+
 final class com.superiorsoftllc.infantry.ui.shell/WasmPlatformHost : com.superiorsoftllc.infantry.ui.shell/PlatformHost { // com.superiorsoftllc.infantry.ui.shell/WasmPlatformHost|null[0]
     constructor <init>(kotlin/String? = ..., kotlin/Function0<kotlin/Unit>? = ...) // com.superiorsoftllc.infantry.ui.shell/WasmPlatformHost.<init>|<init>(kotlin.String?;kotlin.Function0<kotlin.Unit>?){}[0]
 
@@ -16352,6 +16447,20 @@ final object com.superiorsoftllc.infantry.ui.model/RoleIcons { // com.superiorso
     final fun resolve(kotlin/String?, kotlin/String?): kotlin/String // com.superiorsoftllc.infantry.ui.model/RoleIcons.resolve|resolve(kotlin.String?;kotlin.String?){}[0]
 }
 
+final object com.superiorsoftllc.infantry.ui.model/RunnerChoices { // com.superiorsoftllc.infantry.ui.model/RunnerChoices|null[0]
+    final const val FRAME // com.superiorsoftllc.infantry.ui.model/RunnerChoices.FRAME|{}FRAME[0]
+        final fun <get-FRAME>(): kotlin/String // com.superiorsoftllc.infantry.ui.model/RunnerChoices.FRAME.<get-FRAME>|<get-FRAME>(){}[0]
+    final const val PROJECT_DEFAULT // com.superiorsoftllc.infantry.ui.model/RunnerChoices.PROJECT_DEFAULT|{}PROJECT_DEFAULT[0]
+        final fun <get-PROJECT_DEFAULT>(): kotlin/String // com.superiorsoftllc.infantry.ui.model/RunnerChoices.PROJECT_DEFAULT.<get-PROJECT_DEFAULT>|<get-PROJECT_DEFAULT>(){}[0]
+
+    final val listRequest // com.superiorsoftllc.infantry.ui.model/RunnerChoices.listRequest|{}listRequest[0]
+        final fun <get-listRequest>(): kotlin/String // com.superiorsoftllc.infantry.ui.model/RunnerChoices.listRequest.<get-listRequest>|<get-listRequest>(){}[0]
+
+    final fun labelFor(kotlin.collections/List<com.superiorsoftllc.infantry.ui.model/RunnerChoice>, kotlin/String): kotlin/String // com.superiorsoftllc.infantry.ui.model/RunnerChoices.labelFor|labelFor(kotlin.collections.List<com.superiorsoftllc.infantry.ui.model.RunnerChoice>;kotlin.String){}[0]
+    final fun options(kotlin.collections/List<com.superiorsoftllc.infantry.ui.model/RunnerStatus>): kotlin.collections/List<com.superiorsoftllc.infantry.ui.model/RunnerChoice> // com.superiorsoftllc.infantry.ui.model/RunnerChoices.options|options(kotlin.collections.List<com.superiorsoftllc.infantry.ui.model.RunnerStatus>){}[0]
+    final fun parse(kotlin/String): kotlin.collections/List<com.superiorsoftllc.infantry.ui.model/RunnerStatus> // com.superiorsoftllc.infantry.ui.model/RunnerChoices.parse|parse(kotlin.String){}[0]
+}
+
 final object com.superiorsoftllc.infantry.ui.model/ServerVersionCheck { // com.superiorsoftllc.infantry.ui.model/ServerVersionCheck|null[0]
     final fun mismatch(kotlin/String?, kotlin/String?, kotlin/String?, kotlin/String = ...): kotlin/String? // com.superiorsoftllc.infantry.ui.model/ServerVersionCheck.mismatch|mismatch(kotlin.String?;kotlin.String?;kotlin.String?;kotlin.String){}[0]
 }
@@ -17254,6 +17363,12 @@ final object com.superiorsoftllc.infantry.ui.shell/NoWindow : com.superiorsoftll
     final fun openConnection() // com.superiorsoftllc.infantry.ui.shell/NoWindow.openConnection|openConnection(){}[0]
     final fun showChat() // com.superiorsoftllc.infantry.ui.shell/NoWindow.showChat|showChat(){}[0]
     final fun showTab(kotlin/String) // com.superiorsoftllc.infantry.ui.shell/NoWindow.showTab|showTab(kotlin.String){}[0]
+}
+
+final object com.superiorsoftllc.infantry.ui.shell/PluginLifecycleBridge { // com.superiorsoftllc.infantry.ui.shell/PluginLifecycleBridge|null[0]
+    final var current // com.superiorsoftllc.infantry.ui.shell/PluginLifecycleBridge.current|{}current[0]
+        final fun <get-current>(): com.superiorsoftllc.infantry.ui.shell/PluginLifecycle? // com.superiorsoftllc.infantry.ui.shell/PluginLifecycleBridge.current.<get-current>|<get-current>(){}[0]
+        final fun <set-current>(com.superiorsoftllc.infantry.ui.shell/PluginLifecycle?) // com.superiorsoftllc.infantry.ui.shell/PluginLifecycleBridge.current.<set-current>|<set-current>(com.superiorsoftllc.infantry.ui.shell.PluginLifecycle?){}[0]
 }
 
 final object com.superiorsoftllc.infantry.ui.shell/ShellKeys { // com.superiorsoftllc.infantry.ui.shell/ShellKeys|null[0]
@@ -18373,6 +18488,8 @@ final const val com.superiorsoftllc.infantry.ui/TICKET_IMAGE_VIEWER_TAG // com.s
     final fun <get-TICKET_IMAGE_VIEWER_TAG>(): kotlin/String // com.superiorsoftllc.infantry.ui/TICKET_IMAGE_VIEWER_TAG.<get-TICKET_IMAGE_VIEWER_TAG>|<get-TICKET_IMAGE_VIEWER_TAG>(){}[0]
 final const val com.superiorsoftllc.infantry.ui/TITLE_BAR_ASSISTANT_TAG // com.superiorsoftllc.infantry.ui/TITLE_BAR_ASSISTANT_TAG|{}TITLE_BAR_ASSISTANT_TAG[0]
     final fun <get-TITLE_BAR_ASSISTANT_TAG>(): kotlin/String // com.superiorsoftllc.infantry.ui/TITLE_BAR_ASSISTANT_TAG.<get-TITLE_BAR_ASSISTANT_TAG>|<get-TITLE_BAR_ASSISTANT_TAG>(){}[0]
+final const val com.superiorsoftllc.infantry.ui/TOAST_ACTION_TAG // com.superiorsoftllc.infantry.ui/TOAST_ACTION_TAG|{}TOAST_ACTION_TAG[0]
+    final fun <get-TOAST_ACTION_TAG>(): kotlin/String // com.superiorsoftllc.infantry.ui/TOAST_ACTION_TAG.<get-TOAST_ACTION_TAG>|<get-TOAST_ACTION_TAG>(){}[0]
 final const val com.superiorsoftllc.infantry.ui/TOAST_CLOSE_TAG // com.superiorsoftllc.infantry.ui/TOAST_CLOSE_TAG|{}TOAST_CLOSE_TAG[0]
     final fun <get-TOAST_CLOSE_TAG>(): kotlin/String // com.superiorsoftllc.infantry.ui/TOAST_CLOSE_TAG.<get-TOAST_CLOSE_TAG>|<get-TOAST_CLOSE_TAG>(){}[0]
 final const val com.superiorsoftllc.infantry.ui/TOAST_HOST_TAG // com.superiorsoftllc.infantry.ui/TOAST_HOST_TAG|{}TOAST_HOST_TAG[0]
@@ -18659,6 +18776,9 @@ final val com.superiorsoftllc.infantry.ui.model/com_superiorsoftllc_infantry_ui_
 final val com.superiorsoftllc.infantry.ui.model/com_superiorsoftllc_infantry_ui_model_RunState$stableprop // com.superiorsoftllc.infantry.ui.model/com_superiorsoftllc_infantry_ui_model_RunState$stableprop|#static{}com_superiorsoftllc_infantry_ui_model_RunState$stableprop[0]
 final val com.superiorsoftllc.infantry.ui.model/com_superiorsoftllc_infantry_ui_model_RunSummaryPayload$stableprop // com.superiorsoftllc.infantry.ui.model/com_superiorsoftllc_infantry_ui_model_RunSummaryPayload$stableprop|#static{}com_superiorsoftllc_infantry_ui_model_RunSummaryPayload$stableprop[0]
 final val com.superiorsoftllc.infantry.ui.model/com_superiorsoftllc_infantry_ui_model_RunSummaryPayload_$serializer$stableprop // com.superiorsoftllc.infantry.ui.model/com_superiorsoftllc_infantry_ui_model_RunSummaryPayload_$serializer$stableprop|#static{}com_superiorsoftllc_infantry_ui_model_RunSummaryPayload_$serializer$stableprop[0]
+final val com.superiorsoftllc.infantry.ui.model/com_superiorsoftllc_infantry_ui_model_RunnerChoice$stableprop // com.superiorsoftllc.infantry.ui.model/com_superiorsoftllc_infantry_ui_model_RunnerChoice$stableprop|#static{}com_superiorsoftllc_infantry_ui_model_RunnerChoice$stableprop[0]
+final val com.superiorsoftllc.infantry.ui.model/com_superiorsoftllc_infantry_ui_model_RunnerChoices$stableprop // com.superiorsoftllc.infantry.ui.model/com_superiorsoftllc_infantry_ui_model_RunnerChoices$stableprop|#static{}com_superiorsoftllc_infantry_ui_model_RunnerChoices$stableprop[0]
+final val com.superiorsoftllc.infantry.ui.model/com_superiorsoftllc_infantry_ui_model_RunnerStatus$stableprop // com.superiorsoftllc.infantry.ui.model/com_superiorsoftllc_infantry_ui_model_RunnerStatus$stableprop|#static{}com_superiorsoftllc_infantry_ui_model_RunnerStatus$stableprop[0]
 final val com.superiorsoftllc.infantry.ui.model/com_superiorsoftllc_infantry_ui_model_RunsState$stableprop // com.superiorsoftllc.infantry.ui.model/com_superiorsoftllc_infantry_ui_model_RunsState$stableprop|#static{}com_superiorsoftllc_infantry_ui_model_RunsState$stableprop[0]
 final val com.superiorsoftllc.infantry.ui.model/com_superiorsoftllc_infantry_ui_model_SearchText$stableprop // com.superiorsoftllc.infantry.ui.model/com_superiorsoftllc_infantry_ui_model_SearchText$stableprop|#static{}com_superiorsoftllc_infantry_ui_model_SearchText$stableprop[0]
 final val com.superiorsoftllc.infantry.ui.model/com_superiorsoftllc_infantry_ui_model_ServerUpdateOfferWire$stableprop // com.superiorsoftllc.infantry.ui.model/com_superiorsoftllc_infantry_ui_model_ServerUpdateOfferWire$stableprop|#static{}com_superiorsoftllc_infantry_ui_model_ServerUpdateOfferWire$stableprop[0]
@@ -18773,10 +18893,12 @@ final val com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui
 final val com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_HostNode$stableprop // com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_HostNode$stableprop|#static{}com_superiorsoftllc_infantry_ui_plugin_HostNode$stableprop[0]
 final val com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_InfantryModule$stableprop // com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_InfantryModule$stableprop|#static{}com_superiorsoftllc_infantry_ui_plugin_InfantryModule$stableprop[0]
 final val com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_InterceptorKinds$stableprop // com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_InterceptorKinds$stableprop|#static{}com_superiorsoftllc_infantry_ui_plugin_InterceptorKinds$stableprop[0]
+final val com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_ModuleNotifications$stableprop // com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_ModuleNotifications$stableprop|#static{}com_superiorsoftllc_infantry_ui_plugin_ModuleNotifications$stableprop[0]
 final val com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_ModuleRequest$stableprop // com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_ModuleRequest$stableprop|#static{}com_superiorsoftllc_infantry_ui_plugin_ModuleRequest$stableprop[0]
 final val com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_ModulesSetting$stableprop // com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_ModulesSetting$stableprop|#static{}com_superiorsoftllc_infantry_ui_plugin_ModulesSetting$stableprop[0]
 final val com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_NoPluginServices$stableprop // com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_NoPluginServices$stableprop|#static{}com_superiorsoftllc_infantry_ui_plugin_NoPluginServices$stableprop[0]
 final val com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_NodeRegistry$stableprop // com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_NodeRegistry$stableprop|#static{}com_superiorsoftllc_infantry_ui_plugin_NodeRegistry$stableprop[0]
+final val com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_NotificationsRelay$stableprop // com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_NotificationsRelay$stableprop|#static{}com_superiorsoftllc_infantry_ui_plugin_NotificationsRelay$stableprop[0]
 final val com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_OverrideEntry$stableprop // com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_OverrideEntry$stableprop|#static{}com_superiorsoftllc_infantry_ui_plugin_OverrideEntry$stableprop[0]
 final val com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_PanelProvider$stableprop // com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_PanelProvider$stableprop|#static{}com_superiorsoftllc_infantry_ui_plugin_PanelProvider$stableprop[0]
 final val com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_Panels$stableprop // com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_Panels$stableprop|#static{}com_superiorsoftllc_infantry_ui_plugin_Panels$stableprop[0]
@@ -19230,12 +19352,14 @@ final val com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_
 final val com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_NodeAsk$stableprop // com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_NodeAsk$stableprop|#static{}com_superiorsoftllc_infantry_ui_shell_NodeAsk$stableprop[0]
 final val com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_PickedImage$stableprop // com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_PickedImage$stableprop|#static{}com_superiorsoftllc_infantry_ui_shell_PickedImage$stableprop[0]
 final val com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_PluginLifecycle$stableprop // com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_PluginLifecycle$stableprop|#static{}com_superiorsoftllc_infantry_ui_shell_PluginLifecycle$stableprop[0]
+final val com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_PluginLifecycleBridge$stableprop // com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_PluginLifecycleBridge$stableprop|#static{}com_superiorsoftllc_infantry_ui_shell_PluginLifecycleBridge$stableprop[0]
 final val com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_PluginSwap$stableprop // com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_PluginSwap$stableprop|#static{}com_superiorsoftllc_infantry_ui_shell_PluginSwap$stableprop[0]
 final val com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_ScopedShellContext$stableprop // com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_ScopedShellContext$stableprop|#static{}com_superiorsoftllc_infantry_ui_shell_ScopedShellContext$stableprop[0]
 final val com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_ServerChoice$stableprop // com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_ServerChoice$stableprop|#static{}com_superiorsoftllc_infantry_ui_shell_ServerChoice$stableprop[0]
 final val com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_ServerSwitcher$stableprop // com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_ServerSwitcher$stableprop|#static{}com_superiorsoftllc_infantry_ui_shell_ServerSwitcher$stableprop[0]
 final val com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_ShellConfig$stableprop // com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_ShellConfig$stableprop|#static{}com_superiorsoftllc_infantry_ui_shell_ShellConfig$stableprop[0]
 final val com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_ShellKeys$stableprop // com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_ShellKeys$stableprop|#static{}com_superiorsoftllc_infantry_ui_shell_ShellKeys$stableprop[0]
+final val com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_ToastNotifications$stableprop // com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_ToastNotifications$stableprop|#static{}com_superiorsoftllc_infantry_ui_shell_ToastNotifications$stableprop[0]
 final val com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_WasmPlatformHost$stableprop // com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_WasmPlatformHost$stableprop|#static{}com_superiorsoftllc_infantry_ui_shell_WasmPlatformHost$stableprop[0]
 final val com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_WritePolicy$stableprop // com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_WritePolicy$stableprop|#static{}com_superiorsoftllc_infantry_ui_shell_WritePolicy$stableprop[0]
 final val com.superiorsoftllc.infantry.ui.sound/com_superiorsoftllc_infantry_ui_sound_BurstCooldown$stableprop // com.superiorsoftllc.infantry.ui.sound/com_superiorsoftllc_infantry_ui_sound_BurstCooldown$stableprop|#static{}com_superiorsoftllc_infantry_ui_sound_BurstCooldown$stableprop[0]
@@ -19417,6 +19541,8 @@ final fun (androidx.compose.ui/Modifier).com.superiorsoftllc.infantry.ui/dropTar
 final fun (androidx.compose.ui/Modifier).com.superiorsoftllc.infantry.ui/handCursor(kotlin/Boolean = ..., kotlin/Boolean = ...): androidx.compose.ui/Modifier // com.superiorsoftllc.infantry.ui/handCursor|handCursor@androidx.compose.ui.Modifier(kotlin.Boolean;kotlin.Boolean){}[0]
 final fun (androidx.compose.ui/Modifier).com.superiorsoftllc.infantry.ui/modalBlur(com.superiorsoftllc.infantry.ui/ModalBlurState?, androidx.compose.runtime/Composer?, kotlin/Int, kotlin/Int): androidx.compose.ui/Modifier // com.superiorsoftllc.infantry.ui/modalBlur|modalBlur@androidx.compose.ui.Modifier(com.superiorsoftllc.infantry.ui.ModalBlurState?;androidx.compose.runtime.Composer?;kotlin.Int;kotlin.Int){}[0]
 final fun (com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration).com.superiorsoftllc.infantry.ui.plugin.config/objectItemFields(): kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/ConfigFieldDeclaration>? // com.superiorsoftllc.infantry.ui.plugin.config/objectItemFields|objectItemFields@com.superiorsoftllc.infantry.plugin.api.ConfigFieldDeclaration(){}[0]
+final fun (com.superiorsoftllc.infantry.plugin.api/Notification).com.superiorsoftllc.infantry.ui.model/toToast(): com.superiorsoftllc.infantry.ui.model/ToastEvent // com.superiorsoftllc.infantry.ui.model/toToast|toToast@com.superiorsoftllc.infantry.plugin.api.Notification(){}[0]
+final fun (com.superiorsoftllc.infantry.plugin.api/NotificationLevel).com.superiorsoftllc.infantry.ui.model/toToastKind(): com.superiorsoftllc.infantry.ui.model/ToastKind // com.superiorsoftllc.infantry.ui.model/toToastKind|toToastKind@com.superiorsoftllc.infantry.plugin.api.NotificationLevel(){}[0]
 final fun (com.superiorsoftllc.infantry.ui.block.layout/Block).com.superiorsoftllc.infantry.ui.block.layout/asPlaceholder(): com.superiorsoftllc.infantry.ui.block.layout/PlaceholderBlock // com.superiorsoftllc.infantry.ui.block.layout/asPlaceholder|asPlaceholder@com.superiorsoftllc.infantry.ui.block.layout.Block(){}[0]
 final fun (com.superiorsoftllc.infantry.ui.block.layout/BlockScope).com.superiorsoftllc.infantry.ui.block.layout/config(androidx.compose.runtime/Composer?, kotlin/Int): com.superiorsoftllc.infantry.ui.shell/ConfigValues // com.superiorsoftllc.infantry.ui.block.layout/config|config@com.superiorsoftllc.infantry.ui.block.layout.BlockScope(androidx.compose.runtime.Composer?;kotlin.Int){}[0]
 final fun (com.superiorsoftllc.infantry.ui.model/AppState).com.superiorsoftllc.infantry.ui.model/agentWork(kotlin/String?, kotlin/String? = ...): com.superiorsoftllc.infantry.ui.model/AgentWork // com.superiorsoftllc.infantry.ui.model/agentWork|agentWork@com.superiorsoftllc.infantry.ui.model.AppState(kotlin.String?;kotlin.String?){}[0]
@@ -19469,6 +19595,7 @@ final fun (com.superiorsoftllc.infantry.ui.model/ReasoningPlacement).com.superio
 final fun (com.superiorsoftllc.infantry.ui.model/SessionExecutor).com.superiorsoftllc.infantry.ui.model/switchChipText(): kotlin/String // com.superiorsoftllc.infantry.ui.model/switchChipText|switchChipText@com.superiorsoftllc.infantry.ui.model.SessionExecutor(){}[0]
 final fun (com.superiorsoftllc.infantry.ui.model/SidePanel).com.superiorsoftllc.infantry.ui.model/toggled(com.superiorsoftllc.infantry.ui.model/SidePanel): com.superiorsoftllc.infantry.ui.model/SidePanel // com.superiorsoftllc.infantry.ui.model/toggled|toggled@com.superiorsoftllc.infantry.ui.model.SidePanel(com.superiorsoftllc.infantry.ui.model.SidePanel){}[0]
 final fun (com.superiorsoftllc.infantry.ui.model/TimelineItem).com.superiorsoftllc.infantry.ui.model/wakeReasons(): kotlin/String // com.superiorsoftllc.infantry.ui.model/wakeReasons|wakeReasons@com.superiorsoftllc.infantry.ui.model.TimelineItem(){}[0]
+final fun (com.superiorsoftllc.infantry.ui.model/ToastKind).com.superiorsoftllc.infantry.ui.model/toLevel(): com.superiorsoftllc.infantry.plugin.api/NotificationLevel // com.superiorsoftllc.infantry.ui.model/toLevel|toLevel@com.superiorsoftllc.infantry.ui.model.ToastKind(){}[0]
 final fun (com.superiorsoftllc.infantry.ui.protocol/ChangeKind).com.superiorsoftllc.infantry.ui.model/badge(): kotlin/String // com.superiorsoftllc.infantry.ui.model/badge|badge@com.superiorsoftllc.infantry.ui.protocol.ChangeKind(){}[0]
 final fun (com.superiorsoftllc.infantry.ui.protocol/ChangeKind).com.superiorsoftllc.infantry.ui.model/label(): kotlin/String // com.superiorsoftllc.infantry.ui.model/label|label@com.superiorsoftllc.infantry.ui.protocol.ChangeKind(){}[0]
 final fun (com.superiorsoftllc.infantry.ui.protocol/ChangedFile).com.superiorsoftllc.infantry.ui.model/display(): kotlin/String // com.superiorsoftllc.infantry.ui.model/display|display@com.superiorsoftllc.infantry.ui.protocol.ChangedFile(){}[0]
@@ -19482,6 +19609,7 @@ final fun (com.superiorsoftllc.infantry.ui.protocol/ProjectGitStatus).com.superi
 final fun (com.superiorsoftllc.infantry.ui.protocol/SessionRecord).com.superiorsoftllc.infantry.ui/activeBorderStyle(): com.superiorsoftllc.infantry.ui/ActiveBorderStyle // com.superiorsoftllc.infantry.ui/activeBorderStyle|activeBorderStyle@com.superiorsoftllc.infantry.ui.protocol.SessionRecord(){}[0]
 final fun (com.superiorsoftllc.infantry.ui.protocol/Ticket).com.superiorsoftllc.infantry.ui.model/branchLine(): kotlin/String? // com.superiorsoftllc.infantry.ui.model/branchLine|branchLine@com.superiorsoftllc.infantry.ui.protocol.Ticket(){}[0]
 final fun (com.superiorsoftllc.infantry.ui.shell/LinkContext).com.superiorsoftllc.infantry.ui.shell/gate(kotlin/String, kotlin/String?, androidx.compose.runtime/Composer?, kotlin/Int, kotlin/Int): com.superiorsoftllc.infantry.ui.shell/ActionGate // com.superiorsoftllc.infantry.ui.shell/gate|gate@com.superiorsoftllc.infantry.ui.shell.LinkContext(kotlin.String;kotlin.String?;androidx.compose.runtime.Composer?;kotlin.Int;kotlin.Int){}[0]
+final fun (com.superiorsoftllc.infantry.ui.voice/SpokenNotice).com.superiorsoftllc.infantry.ui.voice/toNotification(): com.superiorsoftllc.infantry.plugin.api/Notification // com.superiorsoftllc.infantry.ui.voice/toNotification|toNotification@com.superiorsoftllc.infantry.ui.voice.SpokenNotice(){}[0]
 final fun (com.superiorsoftllc.infantry.ui/ActiveBorderStyle).com.superiorsoftllc.infantry.ui/periodMs(): kotlin/Int // com.superiorsoftllc.infantry.ui/periodMs|periodMs@com.superiorsoftllc.infantry.ui.ActiveBorderStyle(){}[0]
 final fun (kotlin.collections/List<com.superiorsoftllc.infantry.ui.block.layout/Block>).com.superiorsoftllc.infantry.ui.block.layout/flattened(): kotlin.collections/List<com.superiorsoftllc.infantry.ui.block.layout/Block> // com.superiorsoftllc.infantry.ui.block.layout/flattened|flattened@kotlin.collections.List<com.superiorsoftllc.infantry.ui.block.layout.Block>(){}[0]
 final fun (kotlin.collections/List<com.superiorsoftllc.infantry.ui.model/DiffTarget>).com.superiorsoftllc.infantry.ui.model/step(com.superiorsoftllc.infantry.ui.model/DiffTarget, kotlin/Int): com.superiorsoftllc.infantry.ui.model/DiffTarget? // com.superiorsoftllc.infantry.ui.model/step|step@kotlin.collections.List<com.superiorsoftllc.infantry.ui.model.DiffTarget>(com.superiorsoftllc.infantry.ui.model.DiffTarget;kotlin.Int){}[0]
@@ -19706,6 +19834,9 @@ final fun com.superiorsoftllc.infantry.ui.model/com_superiorsoftllc_infantry_ui_
 final fun com.superiorsoftllc.infantry.ui.model/com_superiorsoftllc_infantry_ui_model_RunState$stableprop_getter(): kotlin/Int // com.superiorsoftllc.infantry.ui.model/com_superiorsoftllc_infantry_ui_model_RunState$stableprop_getter|com_superiorsoftllc_infantry_ui_model_RunState$stableprop_getter(){}[0]
 final fun com.superiorsoftllc.infantry.ui.model/com_superiorsoftllc_infantry_ui_model_RunSummaryPayload$stableprop_getter(): kotlin/Int // com.superiorsoftllc.infantry.ui.model/com_superiorsoftllc_infantry_ui_model_RunSummaryPayload$stableprop_getter|com_superiorsoftllc_infantry_ui_model_RunSummaryPayload$stableprop_getter(){}[0]
 final fun com.superiorsoftllc.infantry.ui.model/com_superiorsoftllc_infantry_ui_model_RunSummaryPayload_$serializer$stableprop_getter(): kotlin/Int // com.superiorsoftllc.infantry.ui.model/com_superiorsoftllc_infantry_ui_model_RunSummaryPayload_$serializer$stableprop_getter|com_superiorsoftllc_infantry_ui_model_RunSummaryPayload_$serializer$stableprop_getter(){}[0]
+final fun com.superiorsoftllc.infantry.ui.model/com_superiorsoftllc_infantry_ui_model_RunnerChoice$stableprop_getter(): kotlin/Int // com.superiorsoftllc.infantry.ui.model/com_superiorsoftllc_infantry_ui_model_RunnerChoice$stableprop_getter|com_superiorsoftllc_infantry_ui_model_RunnerChoice$stableprop_getter(){}[0]
+final fun com.superiorsoftllc.infantry.ui.model/com_superiorsoftllc_infantry_ui_model_RunnerChoices$stableprop_getter(): kotlin/Int // com.superiorsoftllc.infantry.ui.model/com_superiorsoftllc_infantry_ui_model_RunnerChoices$stableprop_getter|com_superiorsoftllc_infantry_ui_model_RunnerChoices$stableprop_getter(){}[0]
+final fun com.superiorsoftllc.infantry.ui.model/com_superiorsoftllc_infantry_ui_model_RunnerStatus$stableprop_getter(): kotlin/Int // com.superiorsoftllc.infantry.ui.model/com_superiorsoftllc_infantry_ui_model_RunnerStatus$stableprop_getter|com_superiorsoftllc_infantry_ui_model_RunnerStatus$stableprop_getter(){}[0]
 final fun com.superiorsoftllc.infantry.ui.model/com_superiorsoftllc_infantry_ui_model_RunsState$stableprop_getter(): kotlin/Int // com.superiorsoftllc.infantry.ui.model/com_superiorsoftllc_infantry_ui_model_RunsState$stableprop_getter|com_superiorsoftllc_infantry_ui_model_RunsState$stableprop_getter(){}[0]
 final fun com.superiorsoftllc.infantry.ui.model/com_superiorsoftllc_infantry_ui_model_SearchText$stableprop_getter(): kotlin/Int // com.superiorsoftllc.infantry.ui.model/com_superiorsoftllc_infantry_ui_model_SearchText$stableprop_getter|com_superiorsoftllc_infantry_ui_model_SearchText$stableprop_getter(){}[0]
 final fun com.superiorsoftllc.infantry.ui.model/com_superiorsoftllc_infantry_ui_model_ServerUpdateOfferWire$stableprop_getter(): kotlin/Int // com.superiorsoftllc.infantry.ui.model/com_superiorsoftllc_infantry_ui_model_ServerUpdateOfferWire$stableprop_getter|com_superiorsoftllc_infantry_ui_model_ServerUpdateOfferWire$stableprop_getter(){}[0]
@@ -19953,10 +20084,12 @@ final fun com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui
 final fun com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_HostNode$stableprop_getter(): kotlin/Int // com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_HostNode$stableprop_getter|com_superiorsoftllc_infantry_ui_plugin_HostNode$stableprop_getter(){}[0]
 final fun com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_InfantryModule$stableprop_getter(): kotlin/Int // com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_InfantryModule$stableprop_getter|com_superiorsoftllc_infantry_ui_plugin_InfantryModule$stableprop_getter(){}[0]
 final fun com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_InterceptorKinds$stableprop_getter(): kotlin/Int // com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_InterceptorKinds$stableprop_getter|com_superiorsoftllc_infantry_ui_plugin_InterceptorKinds$stableprop_getter(){}[0]
+final fun com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_ModuleNotifications$stableprop_getter(): kotlin/Int // com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_ModuleNotifications$stableprop_getter|com_superiorsoftllc_infantry_ui_plugin_ModuleNotifications$stableprop_getter(){}[0]
 final fun com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_ModuleRequest$stableprop_getter(): kotlin/Int // com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_ModuleRequest$stableprop_getter|com_superiorsoftllc_infantry_ui_plugin_ModuleRequest$stableprop_getter(){}[0]
 final fun com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_ModulesSetting$stableprop_getter(): kotlin/Int // com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_ModulesSetting$stableprop_getter|com_superiorsoftllc_infantry_ui_plugin_ModulesSetting$stableprop_getter(){}[0]
 final fun com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_NoPluginServices$stableprop_getter(): kotlin/Int // com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_NoPluginServices$stableprop_getter|com_superiorsoftllc_infantry_ui_plugin_NoPluginServices$stableprop_getter(){}[0]
 final fun com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_NodeRegistry$stableprop_getter(): kotlin/Int // com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_NodeRegistry$stableprop_getter|com_superiorsoftllc_infantry_ui_plugin_NodeRegistry$stableprop_getter(){}[0]
+final fun com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_NotificationsRelay$stableprop_getter(): kotlin/Int // com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_NotificationsRelay$stableprop_getter|com_superiorsoftllc_infantry_ui_plugin_NotificationsRelay$stableprop_getter(){}[0]
 final fun com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_OverrideEntry$stableprop_getter(): kotlin/Int // com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_OverrideEntry$stableprop_getter|com_superiorsoftllc_infantry_ui_plugin_OverrideEntry$stableprop_getter(){}[0]
 final fun com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_PanelProvider$stableprop_getter(): kotlin/Int // com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_PanelProvider$stableprop_getter|com_superiorsoftllc_infantry_ui_plugin_PanelProvider$stableprop_getter(){}[0]
 final fun com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_Panels$stableprop_getter(): kotlin/Int // com.superiorsoftllc.infantry.ui.plugin/com_superiorsoftllc_infantry_ui_plugin_Panels$stableprop_getter|com_superiorsoftllc_infantry_ui_plugin_Panels$stableprop_getter(){}[0]
@@ -20396,12 +20529,14 @@ final fun com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_
 final fun com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_NodeAsk$stableprop_getter(): kotlin/Int // com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_NodeAsk$stableprop_getter|com_superiorsoftllc_infantry_ui_shell_NodeAsk$stableprop_getter(){}[0]
 final fun com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_PickedImage$stableprop_getter(): kotlin/Int // com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_PickedImage$stableprop_getter|com_superiorsoftllc_infantry_ui_shell_PickedImage$stableprop_getter(){}[0]
 final fun com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_PluginLifecycle$stableprop_getter(): kotlin/Int // com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_PluginLifecycle$stableprop_getter|com_superiorsoftllc_infantry_ui_shell_PluginLifecycle$stableprop_getter(){}[0]
+final fun com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_PluginLifecycleBridge$stableprop_getter(): kotlin/Int // com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_PluginLifecycleBridge$stableprop_getter|com_superiorsoftllc_infantry_ui_shell_PluginLifecycleBridge$stableprop_getter(){}[0]
 final fun com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_PluginSwap$stableprop_getter(): kotlin/Int // com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_PluginSwap$stableprop_getter|com_superiorsoftllc_infantry_ui_shell_PluginSwap$stableprop_getter(){}[0]
 final fun com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_ScopedShellContext$stableprop_getter(): kotlin/Int // com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_ScopedShellContext$stableprop_getter|com_superiorsoftllc_infantry_ui_shell_ScopedShellContext$stableprop_getter(){}[0]
 final fun com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_ServerChoice$stableprop_getter(): kotlin/Int // com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_ServerChoice$stableprop_getter|com_superiorsoftllc_infantry_ui_shell_ServerChoice$stableprop_getter(){}[0]
 final fun com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_ServerSwitcher$stableprop_getter(): kotlin/Int // com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_ServerSwitcher$stableprop_getter|com_superiorsoftllc_infantry_ui_shell_ServerSwitcher$stableprop_getter(){}[0]
 final fun com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_ShellConfig$stableprop_getter(): kotlin/Int // com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_ShellConfig$stableprop_getter|com_superiorsoftllc_infantry_ui_shell_ShellConfig$stableprop_getter(){}[0]
 final fun com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_ShellKeys$stableprop_getter(): kotlin/Int // com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_ShellKeys$stableprop_getter|com_superiorsoftllc_infantry_ui_shell_ShellKeys$stableprop_getter(){}[0]
+final fun com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_ToastNotifications$stableprop_getter(): kotlin/Int // com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_ToastNotifications$stableprop_getter|com_superiorsoftllc_infantry_ui_shell_ToastNotifications$stableprop_getter(){}[0]
 final fun com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_WasmPlatformHost$stableprop_getter(): kotlin/Int // com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_WasmPlatformHost$stableprop_getter|com_superiorsoftllc_infantry_ui_shell_WasmPlatformHost$stableprop_getter(){}[0]
 final fun com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_WritePolicy$stableprop_getter(): kotlin/Int // com.superiorsoftllc.infantry.ui.shell/com_superiorsoftllc_infantry_ui_shell_WritePolicy$stableprop_getter|com_superiorsoftllc_infantry_ui_shell_WritePolicy$stableprop_getter(){}[0]
 final fun com.superiorsoftllc.infantry.ui.shell/defaultPlatformHost(): com.superiorsoftllc.infantry.ui.shell/PlatformHost // com.superiorsoftllc.infantry.ui.shell/defaultPlatformHost|defaultPlatformHost(){}[0]
@@ -20429,7 +20564,7 @@ final fun com.superiorsoftllc.infantry.ui.voice.plugin/com_superiorsoftllc_infan
 final fun com.superiorsoftllc.infantry.ui.voice.plugin/com_superiorsoftllc_infantry_ui_voice_plugin_VoicePluginOutput_$serializer$stableprop_getter(): kotlin/Int // com.superiorsoftllc.infantry.ui.voice.plugin/com_superiorsoftllc_infantry_ui_voice_plugin_VoicePluginOutput_$serializer$stableprop_getter|com_superiorsoftllc_infantry_ui_voice_plugin_VoicePluginOutput_$serializer$stableprop_getter(){}[0]
 final fun com.superiorsoftllc.infantry.ui.voice.plugin/com_superiorsoftllc_infantry_ui_voice_plugin_VoicePluginRow$stableprop_getter(): kotlin/Int // com.superiorsoftllc.infantry.ui.voice.plugin/com_superiorsoftllc_infantry_ui_voice_plugin_VoicePluginRow$stableprop_getter|com_superiorsoftllc_infantry_ui_voice_plugin_VoicePluginRow$stableprop_getter(){}[0]
 final fun com.superiorsoftllc.infantry.ui.voice/ListeningIndicator(com.superiorsoftllc.infantry.ui.voice/CaptureMonitor?, androidx.compose.ui/Modifier?, androidx.compose.runtime/Composer?, kotlin/Int, kotlin/Int) // com.superiorsoftllc.infantry.ui.voice/ListeningIndicator|ListeningIndicator(com.superiorsoftllc.infantry.ui.voice.CaptureMonitor?;androidx.compose.ui.Modifier?;androidx.compose.runtime.Composer?;kotlin.Int;kotlin.Int){}[0]
-final fun com.superiorsoftllc.infantry.ui.voice/VoiceAlerts(kotlinx.coroutines.flow/Flow<com.superiorsoftllc.infantry.ui.voice/SpokenNotice>, com.superiorsoftllc.infantry.ui.voice/VoiceSettings, androidx.compose.ui/Modifier?, androidx.compose.runtime/Composer?, kotlin/Int, kotlin/Int) // com.superiorsoftllc.infantry.ui.voice/VoiceAlerts|VoiceAlerts(kotlinx.coroutines.flow.Flow<com.superiorsoftllc.infantry.ui.voice.SpokenNotice>;com.superiorsoftllc.infantry.ui.voice.VoiceSettings;androidx.compose.ui.Modifier?;androidx.compose.runtime.Composer?;kotlin.Int;kotlin.Int){}[0]
+final fun com.superiorsoftllc.infantry.ui.voice/VoiceAlerts(kotlinx.coroutines.flow/Flow<com.superiorsoftllc.infantry.ui.voice/SpokenNotice>, com.superiorsoftllc.infantry.ui.voice/VoiceSettings, androidx.compose.ui/Modifier?, com.superiorsoftllc.infantry.plugin.api/Notifications?, androidx.compose.runtime/Composer?, kotlin/Int, kotlin/Int) // com.superiorsoftllc.infantry.ui.voice/VoiceAlerts|VoiceAlerts(kotlinx.coroutines.flow.Flow<com.superiorsoftllc.infantry.ui.voice.SpokenNotice>;com.superiorsoftllc.infantry.ui.voice.VoiceSettings;androidx.compose.ui.Modifier?;com.superiorsoftllc.infantry.plugin.api.Notifications?;androidx.compose.runtime.Composer?;kotlin.Int;kotlin.Int){}[0]
 final fun com.superiorsoftllc.infantry.ui.voice/VoiceSettingsSection(com.superiorsoftllc.infantry.ui.voice/VoiceSettings, kotlin/Function1<com.superiorsoftllc.infantry.ui.voice/VoiceSettings, kotlin/Unit>, androidx.compose.runtime/Composer?, kotlin/Int) // com.superiorsoftllc.infantry.ui.voice/VoiceSettingsSection|VoiceSettingsSection(com.superiorsoftllc.infantry.ui.voice.VoiceSettings;kotlin.Function1<com.superiorsoftllc.infantry.ui.voice.VoiceSettings,kotlin.Unit>;androidx.compose.runtime.Composer?;kotlin.Int){}[0]
 final fun com.superiorsoftllc.infantry.ui.voice/captureLimitSeconds(kotlin/String?, kotlin/Int?): kotlin/Int // com.superiorsoftllc.infantry.ui.voice/captureLimitSeconds|captureLimitSeconds(kotlin.String?;kotlin.Int?){}[0]
 final fun com.superiorsoftllc.infantry.ui.voice/com_superiorsoftllc_infantry_ui_voice_CaptureMonitor$stableprop_getter(): kotlin/Int // com.superiorsoftllc.infantry.ui.voice/com_superiorsoftllc_infantry_ui_voice_CaptureMonitor$stableprop_getter|com_superiorsoftllc_infantry_ui_voice_CaptureMonitor$stableprop_getter(){}[0]
@@ -20548,7 +20683,7 @@ final fun com.superiorsoftllc.infantry.ui/TextButton(kotlin/Function0<kotlin/Uni
 final fun com.superiorsoftllc.infantry.ui/TicketImagesSection(kotlin.collections/List<kotlin/String>, kotlin/String?, kotlin.collections/Map<kotlin/String, kotlin/ByteArray>, kotlin/Boolean, kotlin/Boolean, kotlin/String?, kotlin/Function1<kotlin.collections/List<com.superiorsoftllc.infantry.ui.shell/PickedImage>, kotlin/Unit>, kotlin/Function1<kotlin/String, kotlin/Unit>, androidx.compose.runtime/Composer?, kotlin/Int) // com.superiorsoftllc.infantry.ui/TicketImagesSection|TicketImagesSection(kotlin.collections.List<kotlin.String>;kotlin.String?;kotlin.collections.Map<kotlin.String,kotlin.ByteArray>;kotlin.Boolean;kotlin.Boolean;kotlin.String?;kotlin.Function1<kotlin.collections.List<com.superiorsoftllc.infantry.ui.shell.PickedImage>,kotlin.Unit>;kotlin.Function1<kotlin.String,kotlin.Unit>;androidx.compose.runtime.Composer?;kotlin.Int){}[0]
 final fun com.superiorsoftllc.infantry.ui/TicketTag(com.superiorsoftllc.infantry.ui.model/AgentView, com.superiorsoftllc.infantry.ui.model/AppState, kotlin/Function1<kotlin/String, kotlin/Unit>?, androidx.compose.ui/Modifier?, androidx.compose.runtime/Composer?, kotlin/Int, kotlin/Int) // com.superiorsoftllc.infantry.ui/TicketTag|TicketTag(com.superiorsoftllc.infantry.ui.model.AgentView;com.superiorsoftllc.infantry.ui.model.AppState;kotlin.Function1<kotlin.String,kotlin.Unit>?;androidx.compose.ui.Modifier?;androidx.compose.runtime.Composer?;kotlin.Int;kotlin.Int){}[0]
 final fun com.superiorsoftllc.infantry.ui/ToastHost(com.superiorsoftllc.infantry.ui.model/AppState, kotlin/Function1<com.superiorsoftllc.infantry.ui.model/ToastEvent, kotlin/Unit>, androidx.compose.ui/Modifier?, kotlin/Boolean, androidx.compose.runtime/Composer?, kotlin/Int, kotlin/Int) // com.superiorsoftllc.infantry.ui/ToastHost|ToastHost(com.superiorsoftllc.infantry.ui.model.AppState;kotlin.Function1<com.superiorsoftllc.infantry.ui.model.ToastEvent,kotlin.Unit>;androidx.compose.ui.Modifier?;kotlin.Boolean;androidx.compose.runtime.Composer?;kotlin.Int;kotlin.Int){}[0]
-final fun com.superiorsoftllc.infantry.ui/ToastHost(kotlin.collections/List<com.superiorsoftllc.infantry.ui.model/ToastEvent>, kotlin/Function1<com.superiorsoftllc.infantry.ui.model/ToastEvent, kotlin/Unit>, androidx.compose.ui/Modifier?, kotlin/Boolean, androidx.compose.runtime/Composer?, kotlin/Int, kotlin/Int) // com.superiorsoftllc.infantry.ui/ToastHost|ToastHost(kotlin.collections.List<com.superiorsoftllc.infantry.ui.model.ToastEvent>;kotlin.Function1<com.superiorsoftllc.infantry.ui.model.ToastEvent,kotlin.Unit>;androidx.compose.ui.Modifier?;kotlin.Boolean;androidx.compose.runtime.Composer?;kotlin.Int;kotlin.Int){}[0]
+final fun com.superiorsoftllc.infantry.ui/ToastHost(kotlin.collections/List<com.superiorsoftllc.infantry.ui.model/ToastEvent>, kotlin/Function1<com.superiorsoftllc.infantry.ui.model/ToastEvent, kotlin/Unit>, androidx.compose.ui/Modifier?, kotlin/Boolean, kotlin/Function2<com.superiorsoftllc.infantry.ui.model/ToastEvent, kotlin/String, kotlin/Unit>?, kotlin/Function1<com.superiorsoftllc.infantry.ui.model/ToastEvent, kotlin/Unit>?, androidx.compose.runtime/Composer?, kotlin/Int, kotlin/Int) // com.superiorsoftllc.infantry.ui/ToastHost|ToastHost(kotlin.collections.List<com.superiorsoftllc.infantry.ui.model.ToastEvent>;kotlin.Function1<com.superiorsoftllc.infantry.ui.model.ToastEvent,kotlin.Unit>;androidx.compose.ui.Modifier?;kotlin.Boolean;kotlin.Function2<com.superiorsoftllc.infantry.ui.model.ToastEvent,kotlin.String,kotlin.Unit>?;kotlin.Function1<com.superiorsoftllc.infantry.ui.model.ToastEvent,kotlin.Unit>?;androidx.compose.runtime.Composer?;kotlin.Int;kotlin.Int){}[0]
 final fun com.superiorsoftllc.infantry.ui/UserAvatar(kotlin/Int, androidx.compose.ui/Modifier?, kotlin/String?, androidx.compose.runtime/Composer?, kotlin/Int, kotlin/Int) // com.superiorsoftllc.infantry.ui/UserAvatar|UserAvatar(kotlin.Int;androidx.compose.ui.Modifier?;kotlin.String?;androidx.compose.runtime.Composer?;kotlin.Int;kotlin.Int){}[0]
 final fun com.superiorsoftllc.infantry.ui/VolumeSlider(kotlin/Int, kotlin/Function1<kotlin/Int, kotlin/Unit>, kotlin/String?, androidx.compose.runtime/Composer?, kotlin/Int, kotlin/Int) // com.superiorsoftllc.infantry.ui/VolumeSlider|VolumeSlider(kotlin.Int;kotlin.Function1<kotlin.Int,kotlin.Unit>;kotlin.String?;androidx.compose.runtime.Composer?;kotlin.Int;kotlin.Int){}[0]
 final fun com.superiorsoftllc.infantry.ui/WatchFlagChip(com.superiorsoftllc.infantry.ui.model/WatchFlag?, androidx.compose.ui/Modifier?, androidx.compose.runtime/Composer?, kotlin/Int, kotlin/Int) // com.superiorsoftllc.infantry.ui/WatchFlagChip|WatchFlagChip(com.superiorsoftllc.infantry.ui.model.WatchFlag?;androidx.compose.ui.Modifier?;androidx.compose.runtime.Composer?;kotlin.Int;kotlin.Int){}[0]

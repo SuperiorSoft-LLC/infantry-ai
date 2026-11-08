@@ -106,5 +106,14 @@ class PluginLifecycle(
     val apply: () -> String,
 )
 
+/**
+ * UI-PLUGIN-BRIDGE-1: the window's one [PluginLifecycle] for code that is not composable (a client capability answers a daemon
+ * call on a coroutine, not in a composition). The shell sets it while it is shown and clears it when it leaves; the Plugins
+ * tab and a capability both call the same [PluginLifecycle.apply], so there is one swap path.
+ */
+object PluginLifecycleBridge {
+    @kotlin.concurrent.Volatile var current: PluginLifecycle? = null
+}
+
 /** PLUGIN-HOTSWAP-1: the shell's [PluginLifecycle]; null where the window has none (a test window). */
 val LocalPluginLifecycle = staticCompositionLocalOf<PluginLifecycle?> { null }

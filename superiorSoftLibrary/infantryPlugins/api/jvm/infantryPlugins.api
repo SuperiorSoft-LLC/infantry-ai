@@ -3720,6 +3720,7 @@ public final class com/superiorsoftllc/infantry/plugin/host/PluginFolders {
 	public static final field DEV_TRUST_PROPERTY Ljava/lang/String;
 	public static final field INSTANCE Lcom/superiorsoftllc/infantry/plugin/host/PluginFolders;
 	public static final field LOCKDOWN_ENV Ljava/lang/String;
+	public static final field RECORDED_ROOT_FILE Ljava/lang/String;
 	public static final field ROOT_ENV Ljava/lang/String;
 	public static final field ROOT_PROPERTY Ljava/lang/String;
 	public static final field SAFE_MODE_ENV Ljava/lang/String;
@@ -3733,12 +3734,16 @@ public final class com/superiorsoftllc/infantry/plugin/host/PluginFolders {
 	public final fun folders (Lcom/superiorsoftllc/infantry/plugin/api/ModulesConfig;)Ljava/util/List;
 	public final fun lockdown (Lkotlin/jvm/functions/Function1;)Z
 	public static synthetic fun lockdown$default (Lcom/superiorsoftllc/infantry/plugin/host/PluginFolders;Lkotlin/jvm/functions/Function1;ILjava/lang/Object;)Z
+	public final fun recordRoot (Ljava/io/File;Ljava/io/File;)V
+	public final fun recordedRoot (Ljava/io/File;)Ljava/io/File;
 	public final fun root (Ljava/io/File;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;)Ljava/io/File;
 	public static synthetic fun root$default (Lcom/superiorsoftllc/infantry/plugin/host/PluginFolders;Ljava/io/File;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;ILjava/lang/Object;)Ljava/io/File;
 	public final fun safeMode (Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;)Z
 	public static synthetic fun safeMode$default (Lcom/superiorsoftllc/infantry/plugin/host/PluginFolders;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;ILjava/lang/Object;)Z
 	public final fun scan (Ljava/io/File;Lcom/superiorsoftllc/infantry/plugin/api/ModulesConfig;)Ljava/util/List;
 	public final fun scan (Ljava/io/File;Lcom/superiorsoftllc/infantry/plugin/api/ModulesConfig;Ljava/io/File;)Ljava/util/List;
+	public final fun uiRoot (Ljava/io/File;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;)Ljava/io/File;
+	public static synthetic fun uiRoot$default (Lcom/superiorsoftllc/infantry/plugin/host/PluginFolders;Ljava/io/File;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;ILjava/lang/Object;)Ljava/io/File;
 }
 
 public final class com/superiorsoftllc/infantry/plugin/host/PluginJarShadow : java/lang/AutoCloseable {

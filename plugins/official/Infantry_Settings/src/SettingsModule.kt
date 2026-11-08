@@ -91,7 +91,30 @@ class SettingsPlugin : UiPlugin, ModuleSource {
     override fun register(registrar: UiRegistrar) {
         registrar.tab(settingsTab())
         registrar.tab(pluginsTab())
+        // UI-PLUGIN-BRIDGE-1: `plugins.apply` (module.json `capabilities`, runs client): the daemon, a script or an agent makes this
+        // window apply the plugins root as it is now, live, through the swap the Plugins tab starts (one shared call site).
+        registrar.capability(APPLY_CAPABILITY) { args -> applyPluginsLive(args, com.superiorsoftllc.infantry.ui.shell.PluginLifecycleBridge.current) }
     }
 
     override fun modules(): List<InfantryModule> = listOf(InfantrySettings)
+}
+
+/** UI-PLUGIN-BRIDGE-1: the id of this window's live-apply capability (module.json `capabilities`). */
+const val APPLY_CAPABILITY = "plugins.apply"
+
+/**
+ * UI-PLUGIN-BRIDGE-1: runs the shell's live plugin swap for a `plugins.apply` call and answers `{applied, message, warnings}`;
+ * `action` / `id` in [args] only label the answer (the swap applies whatever changed in the plugins root). Throws when the
+ * window has no lifecycle, so the caller gets the reason.
+ */
+internal fun applyPluginsLive(args: kotlinx.serialization.json.JsonObject, lifecycle: com.superiorsoftllc.infantry.ui.shell.PluginLifecycle?): kotlinx.serialization.json.JsonObject {
+    val l = lifecycle ?: throw IllegalStateException("this window has no plugin lifecycle (no live swap here)")
+    val message = l.apply()
+    return kotlinx.serialization.json.buildJsonObject {
+        put("applied", kotlinx.serialization.json.JsonPrimitive(true))
+        put("message", kotlinx.serialization.json.JsonPrimitive(message))
+        (args["id"] as? kotlinx.serialization.json.JsonPrimitive)?.let { put("id", it) }
+        (args["action"] as? kotlinx.serialization.json.JsonPrimitive)?.let { put("action", it) }
+        put("warnings", kotlinx.serialization.json.JsonArray(l.warnings.values.map { kotlinx.serialization.json.JsonPrimitive(it) }))
+    }
 }

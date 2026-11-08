@@ -228,7 +228,7 @@ class JvmPlatformHost(
 
     /** S6: drop a .ihq on the empty shell; the plugins root, demo lock and safe mode as the loader reads them. */
     override val dropIn: com.superiorsoftllc.infantry.ui.shell.PluginDropIn by lazy {
-        val root = com.superiorsoftllc.infantry.plugin.host.PluginFolders.root(stateDir() ?: File(".infantry"), env, property)
+        val root = com.superiorsoftllc.infantry.plugin.host.PluginFolders.uiRoot(stateDir() ?: File(".infantry"), env, property)
         com.superiorsoftllc.infantry.ui.plugin.DesktopDropIn(
             root, com.superiorsoftllc.infantry.plugin.host.PluginFolders.lockdown(env),
             com.superiorsoftllc.infantry.plugin.host.PluginFolders.safeMode(env, property),
