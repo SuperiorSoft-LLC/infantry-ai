@@ -18,7 +18,10 @@ val InfantryRunners = InfantryModule(
         name = "Infantry_Runners", version = "1.0.0", author = "Infantry AI", description = "The Runners settings card and its rows.",
         fills = listOf(FillDeclaration(RUNNERS_CARD_NODE)),
         config = listOf(
-            ConfigDeclaration(node = RUNNERS_CARD_NODE, group = "Runners", tab = "Settings", order = 911, title = "Runners", keywords = listOf("runner", "pause", "detach", "rotate"), block = RUNNERS_CARD_NODE),
+            ConfigDeclaration(node = RUNNERS_CARD_NODE, group = "Runners", tab = "Settings", order = 911, title = "Runners",
+            // RUNNER-ADD-UI-1: a new owner searches for how to add (pair) a runner and for the check, not only for pause.
+            keywords = listOf("runner", "add", "pair", "pairing", "link", "connect", "check", "health", "fix", "pause", "resume", "detach", "rotate"),
+            block = RUNNERS_CARD_NODE),
         ),
     ),
     fills = mapOf(RUNNERS_CARD_NODE to rowsCard),

@@ -10,9 +10,9 @@
   "buildOrder": 910,
   "fills": ["infantry.shell.config.runners"],
   "actions": [
-    {"id": "runners.admin", "label": "Pause, resume, detach or rotate a runner", "kind": "write", "frames": ["runner_admin"]}
+    {"id": "runners.admin", "label": "Add a runner from its link, check, pause, resume, detach or rotate one", "kind": "write", "frames": ["runner_admin"]}
   ],
-  "description": "Runners settings card (RUNNER-POOL-9): the runner pool's settings in one place. Only the Enable switch shows while runners.enabled is off; the rest of the card (default placement, per-runner worker caps, heartbeat) is hidden entirely until it is on. Adding a server, pausing, detaching and rotating go through `infantry runner add|pair|rotate|detach` (Infantry_RemoteRunner).",
+  "description": "Runners settings card (RUNNER-POOL-9, RUNNER-ADD-UI-1): the runner pool's settings in one place. The heading and the Add runner button always show, so a runner is paired from here by pasting the link it prints (RUNNER-ADD-LINK-1) with no terminal; a successful add runs the health check (RUNNER-CHECK-1) and shows its rows with the fix under each failure. While runners.enabled is off the rest of the card (default placement, per-runner worker caps, heartbeat) stays hidden. Pausing, detaching, rotating and checking go through the same `runner_admin` frame as `infantry runner ...`.",
   "config": [
     {
       "node": "infantry.runners", "group": "Runners", "title": "Runners", "tab": "Settings", "order": 910,
@@ -26,7 +26,7 @@
     },
     {
       "node": "infantry.shell.config.runners", "group": "Runners", "title": "Runners", "tab": "Settings", "order": 911,
-      "keywords": ["runner", "pause", "resume", "detach", "rotate", "health", "fingerprint"],
+      "keywords": ["runner", "add", "pair", "pairing", "link", "connect", "check", "health", "fix", "pause", "resume", "detach", "rotate", "fingerprint"],
       "fields": [],
       "block": "infantry.shell.config.runners"
     }

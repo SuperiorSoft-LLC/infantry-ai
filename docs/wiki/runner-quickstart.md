@@ -43,6 +43,13 @@ code) stops at once. If no host answers, the error lists each host with its reas
 The first successful add on a machine turns `runners.enabled` on (adding is already the owner's consent); detaching a runner
 leaves it on.
 
+The card is the same flow with no terminal (RUNNER-ADD-UI-1): Settings > Runners > Add runner, paste the link into the
+(masked) link field, give a name only if you want one other than the link's, and press Connect. The card draws its heading
+and Add runner even while runners are off, so it is always findable. A successful add runs the health check
+(RUNNER-CHECK-1) in the same dialog and lists its rows: a tick or a cross per row, and under a failure the exact `fix:`
+step with a Copy button; Check again runs it again, Close leaves the runner paired, and each runner row's Check opens
+those rows again. The CLI face of the rows: `infantry runner check <name> [--project <id>] [--harness <id>]`.
+
 By hand, the same pairing (older installs):
 
 ```
