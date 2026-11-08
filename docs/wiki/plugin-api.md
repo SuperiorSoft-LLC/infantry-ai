@@ -204,7 +204,7 @@ fills a slot with a `panels` entry and reads its arguments from `LocalSlotArgs.c
 | Name | Kind | What a filler gets |
 |---|---|---|
 | `chat.composer.actions` | slot (row, beside attach) | `sessionId` (null in New agent mode), `draft` (the box's text), `sending` (a send is in flight) |
-| `chat.message.actions` | slot (row over a message: hover on desktop/web, long-press on Android) | `sessionId`, `messageId` (the row's index in its session's transcript), `author` (`owner`, `agent`, `external`, `system`), `authorRole`, `authorAgent`, `text` (plain, markdown stripped) |
+| `chat.message.actions` | slot (row over a message: hover on desktop/web, long-press on Android) | `sessionId`, `messageId` (the row's index in its session's transcript), `author` (`owner`, `agent`, `external`, `system`), `authorRole`, `authorAgent`, `text` (the WHOLE message, plain, markdown stripped; never a preview or a cut copy, so a plugin needs no second fetch) |
 | `chat.message.header` | slot (small icons in every chat card's header row, left of the timestamp; give each a tooltip) | the `chat.message.actions` arguments plus `kind` (the row kind) |
 | `chat.composer.insert` | event (declare it in your `events`, use the `events` service) | payload `sessionId?`, `text`, `mode` (`append` or `replace`), `send` (`true`/`false`) |
 
@@ -365,7 +365,7 @@ it, or the platform lacks it. A community module also needs each service under `
 | `Services.EVENTS` | `EventBus` | `publish(PluginEvent)`, `subscribe(name, observer)`; the returned function unsubscribes. |
 | `Services.DAEMON` | `DaemonAccess` | `suspend call("GET /health", body)`; only the routes in `module.json` `routes`. Returns `DaemonReply.Ok(status, body)`, `Refused(reason)` or `Failed(reason)`. |
 | `Services.ENDPOINTS` | `EndpointAccess` | `suspend call(endpointId, method, path, body, headers)` to a backend you declared in `endpoints`; the host adds the credential. Returns `EndpointReply.Ok / Refused / Failed`. Redirects are not followed. |
-| `Services.SPEECH_OUT` (`"speech.out"`, since plugin API 2.1.0) | `SpeechOutput` | `speak(text, SpeakOptions(volumePercent, voice, interrupt))`, `stop()`, `voices()`. The host speaks with the voice engine the owner enabled (VOICE-PLUGIN-1), else the OS voice. Desktop today; null on web and Android. |
+| `Services.SPEECH_OUT` (`"speech.out"`, since plugin API 2.1.0) | `SpeechOutput` | `speak(text, SpeakOptions(volumePercent, voice, interrupt))`, `stop()`, `voices()`. `interrupt = false` queues the text after what is being said and returns at once; `stop()` also drops the queue. The host cuts nothing: the desktop OS voice splits text longer than one process takes into pieces played in order. A plugin that reads long text should still send it in sentence pieces (the first with `interrupt = true`, the rest `false`) so the first words come quickly and Stop works between pieces. The host speaks with the voice engine the owner enabled (VOICE-PLUGIN-1), else the OS voice. Desktop today; null on web and Android. |
 | `Services.AUDIO_IN` (`"audio.in"`, since plugin API 2.1.0) | `AudioCapture` | `start(CaptureOptions(PcmFormat(16000, 1, 16), maxSeconds), onChunk, onEnd): CaptureHandle`; `CaptureHandle.stop()`, `active`. Raw PCM chunks on a host thread; `onEnd(CaptureEnd)` once, with `reason` one of `CaptureEnd.STOPPED`, `LIMIT`, `BUSY`, `UNAVAILABLE`, `FAILED`. Sensitive (see below). Desktop today (`javax.sound`); null on web and Android. |
 
 **Notifications.** Never draw your own error toast, snackbar or native dialog (`NotificationGuardTest` fails the
