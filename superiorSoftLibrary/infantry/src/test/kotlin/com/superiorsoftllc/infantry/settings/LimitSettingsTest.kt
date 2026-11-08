@@ -95,7 +95,7 @@ class LimitSettingsTest {
         settings.set("limits.concurrency.maxPerPod", JsonPrimitive(12))
         val limits = settings.limitCatalog()["limits"] as kotlinx.serialization.json.JsonArray
         assertEquals(LimitRegistry.ALL.map { it.key }, limits.map { (it as kotlinx.serialization.json.JsonObject)["key"]!!.let { k -> (k as JsonPrimitive).content } })
-        val pod = limits.first() as kotlinx.serialization.json.JsonObject
+        val pod = limits.first { (it as kotlinx.serialization.json.JsonObject)["key"] == JsonPrimitive("limits.concurrency.maxPerPod") } as kotlinx.serialization.json.JsonObject
         assertEquals(JsonPrimitive(12L), pod["value"])
         assertEquals(JsonPrimitive(4L), pod["default"])
         assertEquals(JsonPrimitive("unlimited"), pod["zeroMeans"])

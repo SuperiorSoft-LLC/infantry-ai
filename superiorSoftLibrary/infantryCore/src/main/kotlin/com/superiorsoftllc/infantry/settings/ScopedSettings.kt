@@ -60,6 +60,8 @@ object SettingScopes {
         SettingsService.MAIL_WAKE_MODE to SettingSpec(ALL, "Which mail wakes a resting session: real | never | all.", "all wakes on every automation mail, each wake re-reads the whole context"),
         SettingsService.MAIL_DELIVERY_MODE to SettingSpec(ALL, "What a mail wake injects: notify | truncate | full.", "full injects every body, re-read on every later turn"),
         LimitRegistry.SESSION_CONTEXT_CAP_TOKENS.key to SettingSpec(ALL, "Context size past which a resting session is restarted with a handoff when mail wakes it (0 = off).", "a higher cap or 0 keeps longer context, each turn costs more tokens"),
+        LimitRegistry.SESSION_DEFAULT_CONTEXT_TOKENS.key to SettingSpec(ALL, "Default context size of a ticket session that pins none (0 = the harness's own window).", "a larger window compacts less but every turn re-reads more tokens"),
+        LimitRegistry.SESSION_COMPACT_MAX_TOKENS.key to SettingSpec(ALL, "Maximum context size at which a session compacts; any larger limit is lowered to it (0 = off).", "a lower ceiling caps per-turn cost, each compaction costs a summary plus a cache rebuild"),
         SettingsService.INCLUDE_LINKED_TASKS_CONTEXT to SettingSpec(setOf(SettingScope.APP, SettingScope.PROJECT, SettingScope.ROLE, SettingScope.SESSION), "Include the linked-tickets section in a started ticket's brief."),
         SettingsService.INCLUDE_SKILLS_CONTEXT to SettingSpec(ALL, "Include the skills section in a started ticket's brief."),
         SettingsService.INCLUDE_FINISH_INSTRUCTIONS to SettingSpec(ALL, "Include the report-instruction lines in a started ticket's brief."),
