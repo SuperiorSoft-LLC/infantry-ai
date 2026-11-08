@@ -152,7 +152,7 @@ object LocalRunner {
         if (options?.agentId == null && options?.role == null) return null
         val link = pool.link(runner) ?: throw IllegalArgumentException("runner '$runner' is not registered, or no runner binding is loaded")
         val remote = repo?.let { runCatching { com.superiorsoftllc.infantry.daemon.plugins.originUrl(it) }.getOrNull() }
-            ?: throw IllegalArgumentException("runner $runner needs the project's git remote, and ${repo?.path ?: "this project"} has no `origin` remote")
+            ?: throw IllegalArgumentException("runner $runner needs the project's git remote, and ${repo?.path ?: "this project"} has no `origin` remote. Fix: git -C <project folder> remote add origin <url the runner can reach>")
         val spec = startSpec(options, null).copy(gitRemote = remote)
         return when (val reply = link.startSession(spec)) {
             is OrchestratorReply.Unavailable -> throw IllegalStateException("runner $runner unavailable: ${reply.reason}")

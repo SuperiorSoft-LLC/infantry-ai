@@ -2,6 +2,7 @@
 // Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.runners
 
+import com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorReply
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerLink
 import com.superiorsoftllc.infantry.daemon.api.runners.LinkAnswer
 import com.superiorsoftllc.infantry.daemon.api.runners.LinkFailure
@@ -141,7 +142,8 @@ class RunnerLinkService(
         val op = need("op")
         if (op in NEEDS_TRANSPORT && transport() == null) throw IllegalArgumentException(NO_TRANSPORT)
         when (op) {
-            "pair" -> pair(need("name"))
+            "pair" -> pair(need("name"), str("allowProjects"), str("allowHarnesses"))
+            "pair_preview" -> JsonObject(ok() + ("installedHarnesses" to JsonArray(runner?.hello()?.let { (it as? OrchestratorReply.Ok)?.value }?.harnesses.orEmpty().map { JsonPrimitive(it.id) })))
             "pair_status" -> pairStatus()
             "list" -> list()
             "pair_cancel" -> { closePairing(); ok() }
@@ -188,7 +190,10 @@ class RunnerLinkService(
         return JsonObject(ok().plus(mapOf("enabled" to JsonPrimitive(enabledNow()), "runners" to JsonArray(rows))))
     }
 
-    private fun pair(name: String): JsonObject {
+    /** RUNNER-DEFAULTS-1: stores the owner's explicit grant (`runner.projects` / `runner.harnesses`); the daemon wires the setting. */
+    @Volatile var grant: (key: String, ids: List<String>) -> Unit = { _, _ -> }
+
+    private fun pair(name: String, allowProjects: String? = null, allowHarnesses: String? = null): JsonObject {
         require(RunnerLinkStore.NAME.matches(name)) { "runner name '$name' must be 1-32 of a-z, 0-9 and '-' (starting with a letter or digit)" }
         val t = transport() ?: throw IllegalArgumentException(NO_TRANSPORT)
         val store = RunnerLinkStore.open(stateDir)
@@ -197,6 +202,10 @@ class RunnerLinkService(
         }
         // A new `runner pair` replaces one still open: its code dies with its listener.
         closePairing()
+        // The grant is the owner's flag or console answer; null = untouched (the settings keep their values).
+        fun ids(csv: String?) = csv?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }
+        ids(allowProjects)?.let { grant(RunnerLinkSettings.PROJECTS, it) }
+        ids(allowHarnesses)?.let { grant(RunnerLinkSettings.HARNESSES, it) }
         val values = settings()
         val plain = values.allowPlainTailnet
         val tls = if (plain) null else tls(store)

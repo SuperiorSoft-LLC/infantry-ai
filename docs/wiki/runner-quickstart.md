@@ -13,12 +13,16 @@ Use the project's runner image (or build it: `./gradlew :superiorSoftLibrary:inf
 ```
 docker run -d --name infantry-runner -p 8934:8934 -e INFANTRY_LIMIT_RUNNERS_LINK_PORT=8934 infantry-runner
 docker exec infantry-runner infantry settings set runners.enabled true
-docker exec infantry-runner infantry settings set runner.projects '["*"]'
-docker exec infantry-runner infantry settings set runner.harnesses '["*"]'
-docker exec infantry-runner infantry runner pair --name server-1
+docker exec infantry-runner infantry runner pair --name server-1 --allow-projects '<project-id>' --allow-harnesses claude
 ```
 
-`runner.projects` / `runner.harnesses` default to `[]` (nothing may start remotely): set them or every start is refused.
+Pairing is where you grant access (RUNNER-DEFAULTS-1). `runner.projects` / `runner.harnesses` default to `[]` (nothing may
+start remotely, the least access) and nothing grants them silently. `--allow-projects` / `--allow-harnesses` take
+comma-separated ids, or `*` for every one. Run `pair` in a terminal (`docker exec -it`) without the flags and it asks, with the
+harnesses installed on the runner pre-selected (Enter confirms). `pair` writes the two settings, so the lines
+`infantry settings set runner.projects '["<id>"]'` and `runner.harnesses` do the same by hand. A start the lists refuse says
+which setting is missing and prints that command. A start also needs the project to have a git `origin` the runner can reach; without one
+it is refused with `git remote add origin <url>` as the fix.
 `pair` prints a one-time code and the certificate fingerprint and keeps serving until the code is used (10 minutes).
 
 ## 2. On your PC: add the server

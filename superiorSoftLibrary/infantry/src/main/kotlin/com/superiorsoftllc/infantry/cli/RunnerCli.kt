@@ -39,16 +39,16 @@ import java.net.InetAddress
  * runner-side `detach` read and write the link folder here, as before. Command names, flags and printed text are unchanged.
  */
 internal object RunnerCli {
-    const val USAGE = "usage: infantry runner pair --name <n> | add <name> <wss-url> --code <code> [--fingerprint <fp>] | list | rotate <name> | detach [<name>] | audit [--limit N]"
+    const val USAGE = "usage: infantry runner pair --name <n> [--allow-projects <ids|*>] [--allow-harnesses <ids|*>] | add <name> <wss-url> --code <code> [--fingerprint <fp>] | list | rotate <name> | detach [<name>] | audit [--limit N]"
 
     private val json = Json { ignoreUnknownKeys = true }
 
     /** The words after `runner` and the flags the CLI parser took for it. */
-    data class Args(val words: List<String>, val name: String? = null, val code: String? = null, val fingerprint: String? = null, val limit: String? = null) {
+    data class Args(val words: List<String>, val name: String? = null, val code: String? = null, val fingerprint: String? = null, val limit: String? = null, val allowProjects: String? = null, val allowHarnesses: String? = null) {
         val action: String? get() = words.firstOrNull()?.lowercase()
         val positional: List<String> get() = words.drop(1)
         val flags: Map<String, String>
-            get() = listOfNotNull(name?.let { "name" to it }, code?.let { "code" to it }, fingerprint?.let { "fingerprint" to it }, limit?.let { "limit" to it }).toMap()
+            get() = listOfNotNull(name?.let { "name" to it }, code?.let { "code" to it }, fingerprint?.let { "fingerprint" to it }, limit?.let { "limit" to it }, allowProjects?.let { "allow-projects" to it }, allowHarnesses?.let { "allow-harnesses" to it }).toMap()
     }
 
     /** The usage error for [args], or null when they are valid. */
@@ -56,7 +56,7 @@ internal object RunnerCli {
         val positional = args.positional
         val flags = args.flags
         val ok = when (args.action) {
-            "pair" -> positional.isEmpty() && !args.name.isNullOrBlank() && flags.keys == setOf("name")
+            "pair" -> positional.isEmpty() && !args.name.isNullOrBlank() && flags.keys.all { it in setOf("name", "allow-projects", "allow-harnesses") }
             "add" -> positional.size == 2 && !args.code.isNullOrBlank() && flags.keys.all { it in setOf("code", "fingerprint") }
             "list" -> positional.isEmpty() && flags.isEmpty()
             "rotate" -> positional.size == 1 && flags.isEmpty()
@@ -75,7 +75,7 @@ internal object RunnerCli {
         val dir = RunnerLinkStore.dir(stateDir)
         return try {
             when (args.action) {
-                "pair" -> pair(stream, flags.getValue("name"), ::limit, out, err)
+                "pair" -> pair(stream, flags.getValue("name"), ::limit, out, err, flags["allow-projects"], flags["allow-harnesses"])
                 "add" -> {
                     val r = admin(
                         stream, ::limit, "op" to "add", "name" to positional[0], "url" to positional[1], "code" to flags.getValue("code"),
@@ -161,9 +161,23 @@ internal object RunnerCli {
         return AdminAnswer(json.parseToJsonElement(answer.data).jsonObject)
     }
 
-    private suspend fun pair(stream: FrameStream, name: String, limit: (LimitDef) -> Long, out: Appendable, err: Appendable): Int {
+    private suspend fun pair(stream: FrameStream, name: String, limit: (LimitDef) -> Long, out: Appendable, err: Appendable, allowProjects: String? = null, allowHarnesses: String? = null): Int {
         require(RunnerLinkStore.NAME.matches(name)) { "runner name '$name' must be 1-32 of a-z, 0-9 and '-' (starting with a letter or digit)" }
-        val r = admin(stream, limit, "op" to "pair", "name" to name)
+        // RUNNER-DEFAULTS-1: the grant is part of pairing. Flags state it outright; otherwise the owner is asked at the console, with
+        // the harnesses installed here pre-selected (Enter confirms). With neither flags nor a console nothing is granted; the text says how.
+        val preview = admin(stream, limit, "op" to "pair_preview")
+        val installed = if (preview.failed) emptyList() else preview.list("installedHarnesses")
+        var projects = allowProjects
+        var harnesses = allowHarnesses
+        val console = System.console()
+        if (console != null) {
+            if (harnesses == null && installed.isNotEmpty()) {
+                val a = console.readLine("Harnesses the orchestrator may run here [${installed.joinToString(",")}] (Enter = these, 'none', or ids / *): ")?.trim().orEmpty()
+                harnesses = when { a.isEmpty() -> installed.joinToString(","); a.equals("none", true) -> ""; else -> a }
+            }
+            if (projects == null) projects = console.readLine("Project ids the orchestrator may run here (comma separated, * = every project, Enter = none yet): ")?.trim().orEmpty()
+        }
+        val r = admin(stream, limit, "op" to "pair", "name" to name, "allowProjects" to projects, "allowHarnesses" to harnesses)
         if (r.failed) { err.appendLine("error: ${r.error}"); return 1 }
         val code = r["code"].orEmpty()
         val plain = r["plain"] == "true"
@@ -176,6 +190,10 @@ internal object RunnerCli {
         out.appendLine("On the orchestrator run:")
         out.appendLine("  infantry runner add $name $scheme://$address:${r["port"]} --code $code" + if (plain) "" else " --fingerprint $fingerprint")
         out.appendLine("Remote starts are limited to ${RunnerLinkSettings.PROJECTS}=${r.list("projects")} and ${RunnerLinkSettings.HARNESSES}=${r.list("harnesses")} (empty = none).")
+        if (r.list("projects").isEmpty() || r.list("harnesses").isEmpty()) {
+            out.appendLine("An empty list grants nothing. To grant: infantry runner pair --name $name --allow-projects <ids|*> --allow-harnesses <ids|*>")
+            out.appendLine("  or: infantry settings set ${RunnerLinkSettings.PROJECTS} '[\"<project-id>\"]'  /  infantry settings set ${RunnerLinkSettings.HARNESSES} '[\"<harness>\"]'")
+        }
         (out as? java.io.Flushable)?.flush()
         try {
             while (true) {
