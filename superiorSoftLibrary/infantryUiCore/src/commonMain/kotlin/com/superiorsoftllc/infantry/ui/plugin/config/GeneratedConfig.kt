@@ -204,6 +204,16 @@ private fun GeneratedField(factory: TabFactory, card: ConfigCard, f: ConfigField
                     TextEditor(declared, tag, value, editable, ::write)
                 }
                 ConfigFieldTypes.TEXT, ConfigFieldTypes.NUMBER, ConfigFieldTypes.PATH, ConfigFieldTypes.FILE -> TextEditor(declared, tag, value, editable, ::write)
+                // AVATAR-PICKER-1: an implementation field offers the keys registered now (and only when exposed), like the Plugins view's editor.
+                ConfigFieldTypes.IMPLEMENTATION -> {
+                    val registry = f.registry.orEmpty()
+                    val current = (value as? JsonPrimitive)?.content
+                    val can = editable && f.exposed
+                    for (k in factory.implementations.keys(registry)) {
+                        val owner = factory.implementations.moduleOf(registry, k)?.takeIf { it != com.superiorsoftllc.infantry.ui.plugin.CORE_SHELL_MODULE }
+                        Option(tag, k, f.optionLabels[k] ?: (k.replaceFirstChar { it.uppercase() } + (owner?.let { " ($it)" } ?: "")), k == current, can) { write(JsonPrimitive(k)) }
+                    }
+                }
                 ConfigFieldTypes.MULTI_SELECT -> {
                     val picked = (value as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content }.orEmpty()
                     for (o in f.options) Option(tag, o, f.optionLabels[o] ?: o, o in picked, editable) {
