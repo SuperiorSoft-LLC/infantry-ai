@@ -498,7 +498,7 @@ internal object Cli {
                 // RUNNER-POOL-5: `infantry runner pair --name <n>` and the rest of the runner link (docs/RUNNER-POOL.md 7).
                 "runner" -> runBlocking {
                     RunnerCli.run(
-                        stream, RunnerCli.Args(parsed.args, parsed.name, parsed.code, parsed.fingerprint, parsed.limit, parsed.allowProjects, parsed.allowHarnesses, parsed.runnerHosts), out, err,
+                        stream, RunnerCli.Args(parsed.args, parsed.name, parsed.code, parsed.fingerprint, parsed.limit, parsed.allowProjects, parsed.allowHarnesses, parsed.runnerHosts, parsed.link), out, err,
                         com.superiorsoftllc.infantry.session.stateDir { getenv(it) ?: com.superiorsoftllc.infantry.session.infantrySetting(it) },
                     )
                 }
@@ -4782,6 +4782,10 @@ internal object Cli {
                                   limits.runners.pairCodeMin), then the code and fingerprint by hand; serve the link until paired
               runner add <name> <wss-url> --code <c> --fingerprint <fp>  On the ORCHESTRATOR: pin the fingerprint, trade
                                   the code for a per-pair runner credential (not the owner, remote or agent token)
+              runner add '<infantry://runner?...>' [--name <n>] | runner add --link <link|-> [--name <n>]  The one-paste form:
+                                  the link carries name, hosts, port, code and fingerprint; each host is tried in order and the
+                                  first that answers pairs (a wrong certificate is skipped before the code is sent). The first
+                                  add turns runners.enabled on
               runner list | rotate <name> | detach [<name>] | audit [--limit N]  Paired runners; in-band rekey; revoke
                                   (a name: from the orchestrator; none: on the runner); the runner's log of remote operations
               bg run [--name L] [--keep] -- CMD  Run CMD as a registered background job (session reads Running; --keep: survives the session closing); bg list|status|logs|stop ID
@@ -5067,6 +5071,8 @@ internal object Cli {
         val allowHarnesses: String? = null,
         // RUNNER-LINK-1: `runner pair --host <h>` (repeatable; comma list ok), joined with commas.
         val runnerHosts: String? = null,
+        // RUNNER-ADD-LINK-1: `runner add --link <infantry://runner?...|->` (a pasted link, or stdin with `-`).
+        val link: String? = null,
         val body: String? = null,
         val reportTo: String? = null,
         val reportFields: String? = null,
@@ -5194,6 +5200,7 @@ internal object Cli {
         var allowProjects: String? = null
         var allowHarnesses: String? = null
         var runnerHosts: String? = null
+        var link: String? = null
         var body: String? = null
         var reportTo: String? = null
         var reportFields: String? = null
@@ -5364,6 +5371,15 @@ internal object Cli {
                 }
                 "--allow-harnesses" -> {
                     allowHarnesses = flagValue(args, ++i) ?: return fail(err, "--allow-harnesses expects comma-separated harness ids (or * for every harness)")
+                    i++
+                }
+                "--link" -> {
+                    link = args.getOrNull(++i) ?: return fail(err, "--link expects a runner pairing link (infantry://runner?v=1...), or - to read it from stdin")
+                    i++
+                }
+                "--link" -> {
+                    // RUNNER-ADD-LINK-1: `runner add --link <infantry://runner?...>` (or `-` to read it from stdin).
+                    link = flagValue(args, ++i) ?: return fail(err, "--link expects a runner pairing link (infantry://runner?v=1...), or - to read it from stdin")
                     i++
                 }
                 "--report-to" -> {
@@ -5761,6 +5777,7 @@ internal object Cli {
             allowProjects = allowProjects,
             allowHarnesses = allowHarnesses,
             runnerHosts = runnerHosts,
+            link = link,
             body = body,
             reportTo = reportTo,
             reportFields = reportFields,
@@ -5909,7 +5926,7 @@ internal object Cli {
         "ask" -> askUsageError(parsed, getenv)
         "usage" -> UsageCli.usageError(parsed.args)
         "settings" -> SettingsCli.usageError(parsed.args)
-        "runner" -> RunnerCli.usageError(RunnerCli.Args(parsed.args, parsed.name, parsed.code, parsed.fingerprint, parsed.limit, parsed.allowProjects, parsed.allowHarnesses, parsed.runnerHosts))
+        "runner" -> RunnerCli.usageError(RunnerCli.Args(parsed.args, parsed.name, parsed.code, parsed.fingerprint, parsed.limit, parsed.allowProjects, parsed.allowHarnesses, parsed.runnerHosts, parsed.link))
         else -> null
     }
 

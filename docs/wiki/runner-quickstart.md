@@ -27,13 +27,30 @@ it is refused with `git remote add origin <url>` as the fix.
 
 ## 2. On your PC: add the server
 
+One paste, the whole handshake (RUNNER-ADD-LINK-1):
+
+```
+infantry runner add 'infantry://runner?v=1&name=server-1&host=...&port=8790&code=...&fp=...'
+infantry runner list
+```
+
+Quote the link: an unquoted `&` cuts it short in most shells. `--name other` pairs it under another name, and `--link -`
+reads the link from stdin so it need not land in your shell history. The link's hosts are tried in order; a host that does not
+answer (`limits.runners.addHostTimeoutSec`, 5 s each) or whose certificate is not the link's fingerprint is skipped — the
+code is only sent after the pin matched — and the first host that answers pairs. A PAIR refusal (wrong, expired or burned
+code) stops at once. If no host answers, the error lists each host with its reason.
+
+The first successful add on a machine turns `runners.enabled` on (adding is already the owner's consent); detaching a runner
+leaves it on.
+
+By hand, the same pairing (older installs):
+
 ```
 infantry runner add server-1 wss://<server-address>:8934 --code <code> --fingerprint <fingerprint>
 infantry runner list
 ```
 
 Settings > Runners > Add does the same. `runner add` needs the owner credential, so run it in your own shell, not from an agent.
-Enable `runners.enabled` on the PC too.
 
 ## 3. Pick the runner when you create an agent
 
