@@ -53,6 +53,8 @@ class RunnerLinkService(
     private val forwarder: FrameForwarder? = null,
     /** RUNNER-POOL-7 (orchestrator side): pulls and answers the frames the paired runners forward; [tick] keeps it on every paired runner. */
     private val pump: ForwardPump? = null,
+    /** RUNNER-UP-1: this daemon's deployment mode id (`both` | `runner` | `orchestrator`), so `runner up` can refuse a board-only daemon. */
+    private val mode: () -> String = { BOTH_MODE },
 ) : AutoCloseable {
     private var serving: LinkServing? = null
     private var pairing: Pairing? = null
@@ -148,7 +150,7 @@ class RunnerLinkService(
         if (op in NEEDS_TRANSPORT && transport() == null) throw IllegalArgumentException(NO_TRANSPORT)
         when (op) {
             "pair" -> pair(need("name"), str("allowProjects"), str("allowHarnesses"), str("hosts"))
-            "pair_preview" -> JsonObject(ok() + ("installedHarnesses" to JsonArray(runner?.hello()?.let { (it as? OrchestratorReply.Ok)?.value }?.harnesses.orEmpty().map { JsonPrimitive(it.id) })))
+            "pair_preview" -> JsonObject(ok() + ("mode" to JsonPrimitive(mode())) + ("installedHarnesses" to JsonArray(runner?.hello()?.let { (it as? OrchestratorReply.Ok)?.value }?.harnesses.orEmpty().map { JsonPrimitive(it.id) })))
             "pair_status" -> pairStatus()
             "list" -> list()
             "pair_cancel" -> { closePairing(); ok() }
@@ -299,6 +301,8 @@ class RunnerLinkService(
 
     companion object {
         const val ANY_HOST = "0.0.0.0"
+        /** RUNNER-UP-1: the default [mode] when the daemon does not pass one (a bare `both` daemon pairs fine). */
+        const val BOTH_MODE = "both"
         /** RUNNER-POOL-6a: the owner frame `infantry runner pair|add|rotate|detach <name>` send ([FrameGate.OWNER_ONLY]). */
         const val ADMIN = com.superiorsoftllc.infantry.policy.ActionCatalog.RUNNER_ADMIN
         const val NO_TRANSPORT = "the runner link needs the Infantry_RemoteRunner plugin (no runner link transport is loaded)"

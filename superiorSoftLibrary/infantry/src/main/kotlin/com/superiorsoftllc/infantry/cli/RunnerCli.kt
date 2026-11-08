@@ -169,6 +169,13 @@ internal object RunnerCli {
      * "waiting" and issues no new code (each issue is a fresh window for guessing). Otherwise issues the link and returns at once.
      */
     private suspend fun up(stream: FrameStream, name: String, limit: (LimitDef) -> Long, out: Appendable, err: Appendable, allowProjects: String?, allowHarnesses: String?, hosts: String?): Int {
+        // A board-only daemon can pair, but no session would ever run on it: refuse with the mode instead of handing out a link.
+        val preview = admin(stream, limit, "op" to "pair_preview")
+        if (preview.failed) { err.appendLine("error: ${preview.error}"); return 1 }
+        preview["mode"]?.takeIf { it != "runner" && it != "both" }?.let {
+            err.appendLine("error: this daemon runs in $it mode; `runner up` needs a runner (or both) daemon: infantry daemon --mode runner")
+            return 1
+        }
         val status = admin(stream, limit, "op" to "pair_status")
         if (status.failed) { err.appendLine("error: ${status.error}"); return 1 }
         when (status["state"]) {

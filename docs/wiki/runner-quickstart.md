@@ -32,6 +32,10 @@ If no daemon answers it starts one in runner mode in the background (waits `limi
 `<state dir>/runner-up.log`), then prints the link. Run it again and it says "already paired" or "waiting" and starts nothing new.
 A daemon running in another mode is refused with that mode.
 
+On Windows a bare `*` only reaches the CLI when nothing in the current folder matches it: `java.exe` expands any argument
+containing `*` against the files there (a JVM quirk; shell quoting does not stop it), so `--allow-projects '*'` typed in a
+folder full of files fails with the usage line. Run it from an empty folder, or list the ids explicitly.
+
 **The link is a secret for 10 minutes** (it carries the one-time code) and sits in the container log; it is useless once redeemed
 or expired. The link port is `limits.runners.linkPort`, default **8790** (env `INFANTRY_LIMIT_RUNNERS_LINK_PORT`); publish it.
 

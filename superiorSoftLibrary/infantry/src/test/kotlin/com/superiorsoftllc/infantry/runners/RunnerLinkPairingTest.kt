@@ -199,8 +199,8 @@ class RunnerLinkPairingTest {
         override fun fingerprint(tls: LinkTlsMaterial): String = FP
     }
 
-    private fun service(stateDir: File, transport: () -> RunnerLinkTransport?) =
-        RunnerLinkService(stateDir, { it.default }, { settings }, null, transport, host = "127.0.0.1", log = {})
+    private fun service(stateDir: File, mode: () -> String = { RunnerLinkService.BOTH_MODE }, transport: () -> RunnerLinkTransport?) =
+        RunnerLinkService(stateDir, { it.default }, { settings }, null, transport, host = "127.0.0.1", log = {}, mode = mode)
 
     private fun req(vararg fields: Pair<String, String>) = JsonObject(fields.associate { (k, v) -> k to JsonPrimitive(v) })
 
@@ -215,6 +215,15 @@ class RunnerLinkPairingTest {
         assertTrue(RunnerLinkService.NO_TRANSPORT.startsWith("the runner link needs the Infantry_RemoteRunner plugin"))
         svc.tick()
         assertEquals("expired", RunnerLinkService.field(svc.admin(req("op" to "pair_status")), "state"))
+    }
+
+    /** RUNNER-UP-1: `runner up` refuses a board-only daemon, so `pair_preview` carries the daemon's mode. */
+    @Test
+    fun `pair_preview reports this daemon's mode`() {
+        val both = service(File(dir, "mode-both")) { null }
+        assertEquals(RunnerLinkService.BOTH_MODE, RunnerLinkService.field(both.admin(req("op" to "pair_preview")), "mode"))
+        val orchestrator = service(File(dir, "mode-orch"), mode = { "orchestrator" }) { null }
+        assertEquals("orchestrator", RunnerLinkService.field(orchestrator.admin(req("op" to "pair_preview")), "mode"))
     }
 
     @Test
