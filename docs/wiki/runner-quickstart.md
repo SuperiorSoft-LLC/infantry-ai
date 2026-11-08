@@ -23,7 +23,7 @@ harnesses installed on the runner pre-selected (Enter confirms). `pair` writes t
 `infantry settings set runner.projects '["<id>"]'` and `runner.harnesses` do the same by hand. A start the lists refuse says
 which setting is missing and prints that command. A start also needs the project to have a git `origin` the runner can reach; without one
 it is refused with `git remote add origin <url>` as the fix.
-`pair` prints a one-time code and the certificate fingerprint and keeps serving until the code is used (10 minutes).
+`pair` prints one pairing link (`infantry://runner?v=1&name=...&host=...&port=...&code=...&fp=...`; hosts come from `--host` flags, then the `runners.advertiseHosts` setting, else the detected addresses, tailnet first; at most `limits.runners.advertiseHostsMax`), then the one-time code and the certificate fingerprint "by hand", and keeps serving until the code is used (10 minutes).
 
 ## 2. On your PC: add the server
 

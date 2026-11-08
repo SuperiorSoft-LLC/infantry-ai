@@ -142,7 +142,7 @@ class RunnerLinkService(
         val op = need("op")
         if (op in NEEDS_TRANSPORT && transport() == null) throw IllegalArgumentException(NO_TRANSPORT)
         when (op) {
-            "pair" -> pair(need("name"), str("allowProjects"), str("allowHarnesses"))
+            "pair" -> pair(need("name"), str("allowProjects"), str("allowHarnesses"), str("hosts"))
             "pair_preview" -> JsonObject(ok() + ("installedHarnesses" to JsonArray(runner?.hello()?.let { (it as? OrchestratorReply.Ok)?.value }?.harnesses.orEmpty().map { JsonPrimitive(it.id) })))
             "pair_status" -> pairStatus()
             "list" -> list()
@@ -193,7 +193,7 @@ class RunnerLinkService(
     /** RUNNER-DEFAULTS-1: stores the owner's explicit grant (`runner.projects` / `runner.harnesses`); the daemon wires the setting. */
     @Volatile var grant: (key: String, ids: List<String>) -> Unit = { _, _ -> }
 
-    private fun pair(name: String, allowProjects: String? = null, allowHarnesses: String? = null): JsonObject {
+    private fun pair(name: String, allowProjects: String? = null, allowHarnesses: String? = null, hosts: String? = null): JsonObject {
         require(RunnerLinkStore.NAME.matches(name)) { "runner name '$name' must be 1-32 of a-z, 0-9 and '-' (starting with a letter or digit)" }
         val t = transport() ?: throw IllegalArgumentException(NO_TRANSPORT)
         val store = RunnerLinkStore.open(stateDir)
@@ -223,8 +223,11 @@ class RunnerLinkService(
         }
         val code = codes.issue(name, clock())
         pairing = Pairing(s, codes, name)
+        // RUNNER-LINK-1: the one link; `code`, `fingerprint` and `port` stay for older CLIs.
+        val candidates = RunnerPairLink.candidates(listOfNotNull(hosts), values.advertiseHosts, limit(LimitRegistry.RUNNERS_ADVERTISE_HOSTS_MAX).toInt())
+        val link = candidates.takeIf { it.isNotEmpty() }?.let { RunnerPairLink(name, it, s.port, code, fingerprint, plain).toUri() }
         return ok(
-            "code" to code, "fingerprint" to fingerprint, "port" to s.port.toString(), "plain" to plain.toString(),
+            "code" to code, "link" to link, "fingerprint" to fingerprint, "port" to s.port.toString(), "plain" to plain.toString(),
             "expiryMin" to limit(LimitRegistry.RUNNERS_PAIR_CODE_MIN).toString(),
         ).let { JsonObject(it + mapOf("projects" to JsonArray(values.projects.map(::JsonPrimitive)), "harnesses" to JsonArray(values.harnesses.map(::JsonPrimitive)))) }
     }

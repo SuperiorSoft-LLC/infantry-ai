@@ -34,6 +34,12 @@ object RunnerLinkSettings {
     const val ON_LOST_RESTART = "restart-elsewhere"
     /** RUNNER-POOL-8 (orchestrator side): a remote runner pushes the ticket branch after each worker commit too; default false. */
     const val PUSH_ON_COMMIT = "runners.pushOnCommit"
+    /**
+     * RUNNER-LINK-1 (runner side): the hosts `runner pair` puts in its pairing link after any `--host` flag, in the order the
+     * client tries them (a DNS name, IPv4 or IPv6). Default `[]`: with no flag either, the link carries the detected interface
+     * addresses. Set it on a runner behind NAT or in a container, where the detected addresses are not reachable.
+     */
+    const val ADVERTISE_HOSTS = "runners.advertiseHosts"
 
     /** The setting text of [ALLOW_PLAIN_TAILNET]; it states the risk. */
     const val ALLOW_PLAIN_TAILNET_TEXT =
@@ -41,7 +47,7 @@ object RunnerLinkSettings {
             "text cross the network unencrypted; anyone on the path can read them and replay the credential to start agents with " +
             "tool permissions on this machine. Only for a private tailnet (Tailscale/WireGuard) you fully control. Default false."
 
-    val KEYS: Set<String> = setOf(ALLOW_PLAIN_TAILNET, PROJECTS, HARNESSES, CLONE_ROOT, ON_LOST, PUSH_ON_COMMIT)
+    val KEYS: Set<String> = setOf(ALLOW_PLAIN_TAILNET, PROJECTS, HARNESSES, CLONE_ROOT, ON_LOST, PUSH_ON_COMMIT, ADVERTISE_HOSTS)
 
     /** What the runner link reads; [stored] is the raw stored JSON of a key (null = unset). */
     data class Values(
@@ -51,6 +57,7 @@ object RunnerLinkSettings {
         val cloneRoot: String = "",
         val onLost: String = ON_LOST_ATTENTION,
         val pushOnCommit: Boolean = false,
+        val advertiseHosts: List<String> = emptyList(),
     ) {
         val restartElsewhere: Boolean get() = onLost == ON_LOST_RESTART
         fun allowsProject(id: String?): Boolean = allows(projects, id)
@@ -66,6 +73,7 @@ object RunnerLinkSettings {
         onLost = runCatching { (Json.parseToJsonElement(stored(ON_LOST) ?: "null") as JsonPrimitive).takeIf { it.isString }?.content }.getOrNull()
             ?.takeIf { it in ON_LOST_VALUES } ?: ON_LOST_ATTENTION,
         pushOnCommit = runCatching { (Json.parseToJsonElement(stored(PUSH_ON_COMMIT) ?: "false") as JsonPrimitive).booleanOrNull }.getOrNull() ?: false,
+        advertiseHosts = list(stored(ADVERTISE_HOSTS)).filter { HOST.matches(it) },
     )
 
     private val ON_LOST_VALUES = setOf(ON_LOST_ATTENTION, ON_LOST_RESTART)
@@ -79,6 +87,7 @@ object RunnerLinkSettings {
             CLONE_ROOT to JsonPrimitive(v.cloneRoot),
             ON_LOST to JsonPrimitive(v.onLost),
             PUSH_ON_COMMIT to JsonPrimitive(v.pushOnCommit),
+            ADVERTISE_HOSTS to JsonArray(v.advertiseHosts.map(::JsonPrimitive)),
         )
     }
 
@@ -107,12 +116,21 @@ object RunnerLinkSettings {
             (value as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull
                 ?: throw IllegalArgumentException("setting '$key' must be a JSON boolean (true = push the ticket branch after each worker commit)"),
         )
+        ADVERTISE_HOSTS -> JsonArray(
+            ((value as? JsonArray) ?: throw IllegalArgumentException(ADVERTISE_HOSTS_ERROR))
+                .map { e -> (e as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim()?.takeIf { HOST.matches(it) } ?: throw IllegalArgumentException(ADVERTISE_HOSTS_ERROR) }
+                .distinct().map(::JsonPrimitive),
+        )
         else -> throw IllegalArgumentException("unknown runner link setting '$key'")
     }
 
     private fun list(raw: String?): List<String> = runCatching {
         (Json.parseToJsonElement(raw ?: return emptyList()) as JsonArray).mapNotNull { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }
     }.getOrDefault(emptyList())
+
+    /** A host as the pairing link carries it: a DNS name, IPv4, or IPv6 (bare or in brackets). No spaces, `/`, `?`, `&`, `=` or `#`. */
+    val HOST = Regex("""^(\[[0-9A-Fa-f:.]{2,45}]|[0-9A-Fa-f.]*:[0-9A-Fa-f:.]{1,45}|[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?)$""")
+    private const val ADVERTISE_HOSTS_ERROR = "setting '$ADVERTISE_HOSTS' must be a JSON array of host names or addresses (e.g. [\"100.64.0.7\", \"runner.example.com\"]; [] = detect)"
 
     private val ID = Regex("""^(\*|[A-Za-z0-9][A-Za-z0-9._:-]{0,127})$""")
 }

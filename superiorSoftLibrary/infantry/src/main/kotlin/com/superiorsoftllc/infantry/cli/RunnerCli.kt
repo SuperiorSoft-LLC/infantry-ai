@@ -39,16 +39,16 @@ import java.net.InetAddress
  * runner-side `detach` read and write the link folder here, as before. Command names, flags and printed text are unchanged.
  */
 internal object RunnerCli {
-    const val USAGE = "usage: infantry runner pair --name <n> [--allow-projects <ids|*>] [--allow-harnesses <ids|*>] | add <name> <wss-url> --code <code> [--fingerprint <fp>] | list | rotate <name> | detach [<name>] | audit [--limit N]"
+    const val USAGE = "usage: infantry runner pair --name <n> [--host <h>]... [--allow-projects <ids|*>] [--allow-harnesses <ids|*>] | add <name> <wss-url> --code <code> [--fingerprint <fp>] | list | rotate <name> | detach [<name>] | audit [--limit N]"
 
     private val json = Json { ignoreUnknownKeys = true }
 
     /** The words after `runner` and the flags the CLI parser took for it. */
-    data class Args(val words: List<String>, val name: String? = null, val code: String? = null, val fingerprint: String? = null, val limit: String? = null, val allowProjects: String? = null, val allowHarnesses: String? = null) {
+    data class Args(val words: List<String>, val name: String? = null, val code: String? = null, val fingerprint: String? = null, val limit: String? = null, val allowProjects: String? = null, val allowHarnesses: String? = null, val hosts: String? = null) {
         val action: String? get() = words.firstOrNull()?.lowercase()
         val positional: List<String> get() = words.drop(1)
         val flags: Map<String, String>
-            get() = listOfNotNull(name?.let { "name" to it }, code?.let { "code" to it }, fingerprint?.let { "fingerprint" to it }, limit?.let { "limit" to it }, allowProjects?.let { "allow-projects" to it }, allowHarnesses?.let { "allow-harnesses" to it }).toMap()
+            get() = listOfNotNull(name?.let { "name" to it }, code?.let { "code" to it }, fingerprint?.let { "fingerprint" to it }, limit?.let { "limit" to it }, allowProjects?.let { "allow-projects" to it }, allowHarnesses?.let { "allow-harnesses" to it }, hosts?.let { "host" to it }).toMap()
     }
 
     /** The usage error for [args], or null when they are valid. */
@@ -56,7 +56,7 @@ internal object RunnerCli {
         val positional = args.positional
         val flags = args.flags
         val ok = when (args.action) {
-            "pair" -> positional.isEmpty() && !args.name.isNullOrBlank() && flags.keys.all { it in setOf("name", "allow-projects", "allow-harnesses") }
+            "pair" -> positional.isEmpty() && !args.name.isNullOrBlank() && flags.keys.all { it in setOf("name", "allow-projects", "allow-harnesses", "host") }
             "add" -> positional.size == 2 && !args.code.isNullOrBlank() && flags.keys.all { it in setOf("code", "fingerprint") }
             "list" -> positional.isEmpty() && flags.isEmpty()
             "rotate" -> positional.size == 1 && flags.isEmpty()
@@ -75,7 +75,7 @@ internal object RunnerCli {
         val dir = RunnerLinkStore.dir(stateDir)
         return try {
             when (args.action) {
-                "pair" -> pair(stream, flags.getValue("name"), ::limit, out, err, flags["allow-projects"], flags["allow-harnesses"])
+                "pair" -> pair(stream, flags.getValue("name"), ::limit, out, err, flags["allow-projects"], flags["allow-harnesses"], flags["host"])
                 "add" -> {
                     val r = admin(
                         stream, ::limit, "op" to "add", "name" to positional[0], "url" to positional[1], "code" to flags.getValue("code"),
@@ -161,7 +161,7 @@ internal object RunnerCli {
         return AdminAnswer(json.parseToJsonElement(answer.data).jsonObject)
     }
 
-    private suspend fun pair(stream: FrameStream, name: String, limit: (LimitDef) -> Long, out: Appendable, err: Appendable, allowProjects: String? = null, allowHarnesses: String? = null): Int {
+    private suspend fun pair(stream: FrameStream, name: String, limit: (LimitDef) -> Long, out: Appendable, err: Appendable, allowProjects: String? = null, allowHarnesses: String? = null, hosts: String? = null): Int {
         require(RunnerLinkStore.NAME.matches(name)) { "runner name '$name' must be 1-32 of a-z, 0-9 and '-' (starting with a letter or digit)" }
         // RUNNER-DEFAULTS-1: the grant is part of pairing. Flags state it outright; otherwise the owner is asked at the console, with
         // the harnesses installed here pre-selected (Enter confirms). With neither flags nor a console nothing is granted; the text says how.
@@ -177,13 +177,17 @@ internal object RunnerCli {
             }
             if (projects == null) projects = console.readLine("Project ids the orchestrator may run here (comma separated, * = every project, Enter = none yet): ")?.trim().orEmpty()
         }
-        val r = admin(stream, limit, "op" to "pair", "name" to name, "allowProjects" to projects, "allowHarnesses" to harnesses)
+        val r = admin(stream, limit, "op" to "pair", "name" to name, "allowProjects" to projects, "allowHarnesses" to harnesses, "hosts" to hosts)
         if (r.failed) { err.appendLine("error: ${r.error}"); return 1 }
         val code = r["code"].orEmpty()
         val plain = r["plain"] == "true"
         val fingerprint = r["fingerprint"]
         val address = RemoteAccess.tailscaleAddress() ?: "<this-machine-address>"
         val scheme = if (plain) "ws" else "wss"
+        r["link"]?.let {
+            out.appendLine("Paste this into Settings > Runners > Add, or run on your PC: infantry runner add '$it'")
+            out.appendLine("or by hand:")
+        }
         out.appendLine("pair code:   $code   (one use; expires in ${r["expiryMin"]} min)")
         if (plain) out.appendLine("WARNING: ${RunnerLinkSettings.ALLOW_PLAIN_TAILNET_TEXT}")
         else out.appendLine("fingerprint: $fingerprint")

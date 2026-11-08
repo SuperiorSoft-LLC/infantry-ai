@@ -899,6 +899,13 @@ object LimitRegistry {
         min = 0, max = 65535, zeroIsUnlimited = false,
     )
 
+    /** RUNNER-LINK-1: how many host candidates `runner pair` puts in its pairing link (flags, then runners.advertiseHosts, else detected). */
+    val RUNNERS_ADVERTISE_HOSTS_MAX = LimitDef(
+        "limits.runners.advertiseHostsMax", 4, "hosts",
+        "How many host candidates the `infantry runner pair` link carries (--host flags, then runners.advertiseHosts, else detected addresses); the client tries them in order. More = longer link.",
+        min = 1, max = 32, zeroIsUnlimited = false,
+    )
+
     /** RUNNER-POOL-5: how many audit lines `infantry runner audit` prints without `--limit`. */
     val RUNNERS_AUDIT_SHOWN = LimitDef(
         "limits.runners.auditShown", 50, "lines",
@@ -1044,7 +1051,7 @@ object LimitRegistry {
         SANDBOX_MODE, USAGE_QUOTA_HIT_HOLD_MINUTES,
         HEALTH_DB_TIMEOUT_SECONDS, HEALTH_EVENT_LOG_MAX, HEALTH_HEARTBEAT_SECONDS, HEALTH_WATCHDOG_FAILURES, HEALTH_WATCHDOG_INTERVAL_SECONDS, HEALTH_WATCHDOG_TIMEOUT_SECONDS,
         MAIL_WAKE_DEBOUNCE_SECONDS, MAIL_COALESCE_MAX, WATCH_STALL_NUDGES, SCRIPT_RUN_LOG_MAX,
-        RUNNERS_PAIR_CODE_MIN, RUNNERS_PAIR_ATTEMPTS_PER_HOUR, RUNNERS_CREDENTIAL_ROTATE_DAYS, RUNNERS_LINK_PORT, RUNNERS_AUDIT_SHOWN, RUNNERS_LINK_CALL_SECONDS, RUNNERS_LINK_CHECK_SECONDS,
+        RUNNERS_PAIR_CODE_MIN, RUNNERS_PAIR_ATTEMPTS_PER_HOUR, RUNNERS_CREDENTIAL_ROTATE_DAYS, RUNNERS_LINK_PORT, RUNNERS_ADVERTISE_HOSTS_MAX, RUNNERS_AUDIT_SHOWN, RUNNERS_LINK_CALL_SECONDS, RUNNERS_LINK_CHECK_SECONDS,
         RUNNERS_OUTBOX_MAX, RUNNERS_LOST_AFTER_MIN, RUNNERS_COMMIT_CHECK_SEC, RUNNERS_FORWARD_WAIT_SEC, RUNNERS_FORWARD_TIMEOUT_SEC, RUNNERS_FORWARD_PENDING_MAX,
         DOWNLOAD_RETRIES, DOWNLOAD_BACKOFF_MS, DOWNLOAD_CONNECT_TIMEOUT_SECONDS, DOWNLOAD_RESPONSE_TIMEOUT_SECONDS, DOWNLOAD_STALL_SECONDS, DOWNLOAD_MAX_MB, DOWNLOAD_REDIRECTS, DOWNLOAD_MOVE_RETRIES,
         PROGRESS_KEEP_FINISHED, PROGRESS_MIN_INTERVAL_MS,

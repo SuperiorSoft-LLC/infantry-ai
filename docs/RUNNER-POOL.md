@@ -286,6 +286,14 @@ Rate limits on pairing attempts (`runners.pairAttemptsPerHour`, default 5).
   `<stateDir>/runner-link/tls.p12`), prints its SHA-256 fingerprint and a one-time code, and serves the link until the code
   is used or expires. The code is single use, expires after `limits.runners.pairCodeMin`, and every try counts against
   `limits.runners.pairAttemptsPerHour` (kept on disk, so a new `pair` does not reset it; past the limit the live code is burned).
+- **The pairing link (RUNNER-LINK-1).** `runner pair` prints ONE line first:
+  `infantry://runner?v=1&name=<name>&host=<h1>&host=<h2>&port=<link port>&code=<XXXX-XXXX-XXXX-XXXX>&fp=<sha-256 hex, lower case, no colons>[&plain=1]`
+  (codec `runners/RunnerPairLink.kt`; `host` repeats in the order a client tries them, IPv6 in brackets; `fp` is required unless
+  `plain=1`; a link of a newer `v` is refused with "update this app"). The old code and fingerprint lines follow it under "or by hand:",
+  and the `pair` answer keeps `code`/`fingerprint`/`port` next to the new `link`. Host order: every `--host` flag (repeatable, comma
+  list ok), then the setting `runners.advertiseHosts` (default `[]`), and only if both are empty the detected non-loopback addresses
+  of up interfaces (tailnet 100.64.0.0/10 first, then private, then the rest; docker/veth/link-local skipped); at most
+  `limits.runners.advertiseHostsMax` (4). Accepting the link on the client is RUNNER-ADD-LINK-1.
 - `infantry runner add <name> <wss-url> --code <c> --fingerprint <fp>` (orchestrator) checks the pin in the TLS handshake
   (no CA, no host name), then trades the code for a 32-byte per-pair credential. The orchestrator keeps it in its link
   keystore (`<stateDir>/runner-link`, separate from the owner keystore); the runner keeps only its SHA-256. With no

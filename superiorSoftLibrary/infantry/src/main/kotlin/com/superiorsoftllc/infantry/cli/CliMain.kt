@@ -498,7 +498,7 @@ internal object Cli {
                 // RUNNER-POOL-5: `infantry runner pair --name <n>` and the rest of the runner link (docs/RUNNER-POOL.md 7).
                 "runner" -> runBlocking {
                     RunnerCli.run(
-                        stream, RunnerCli.Args(parsed.args, parsed.name, parsed.code, parsed.fingerprint, parsed.limit, parsed.allowProjects, parsed.allowHarnesses), out, err,
+                        stream, RunnerCli.Args(parsed.args, parsed.name, parsed.code, parsed.fingerprint, parsed.limit, parsed.allowProjects, parsed.allowHarnesses, parsed.runnerHosts), out, err,
                         com.superiorsoftllc.infantry.session.stateDir { getenv(it) ?: com.superiorsoftllc.infantry.session.infantrySetting(it) },
                     )
                 }
@@ -4777,9 +4777,9 @@ internal object Cli {
                                   files); --suggest rebuilds it first. ticket create/update --related-to <id|prefix> (repeatable) links one
               remote on|off|status  Let the daemon accept outside (Tailscale) connections; prints the ws address
                                   and token. Takes effect on the next daemon restart.
-              runner pair --name <n> [--allow-projects <ids|*>] [--allow-harnesses <ids|*>]  On a RUNNER machine: grant what the
-                                  orchestrator may run (asked when omitted; nothing is granted silently), print a one-time pair code (single use, expires after
-                                  limits.runners.pairCodeMin) and the wss certificate fingerprint; serve the link until paired
+              runner pair --name <n> [--host <h>]... [--allow-projects <ids|*>] [--allow-harnesses <ids|*>]  On a RUNNER machine: grant what the
+                                  orchestrator may run (asked when omitted; nothing is granted silently), print ONE pairing link (hosts, port, one-time code, fingerprint; the code is single use and expires after
+                                  limits.runners.pairCodeMin), then the code and fingerprint by hand; serve the link until paired
               runner add <name> <wss-url> --code <c> --fingerprint <fp>  On the ORCHESTRATOR: pin the fingerprint, trade
                                   the code for a per-pair runner credential (not the owner, remote or agent token)
               runner list | rotate <name> | detach [<name>] | audit [--limit N]  Paired runners; in-band rekey; revoke
@@ -5065,6 +5065,8 @@ internal object Cli {
         // RUNNER-DEFAULTS-1: `runner pair --allow-projects <ids|*> --allow-harnesses <ids|*>` (the explicit grant).
         val allowProjects: String? = null,
         val allowHarnesses: String? = null,
+        // RUNNER-LINK-1: `runner pair --host <h>` (repeatable; comma list ok), joined with commas.
+        val runnerHosts: String? = null,
         val body: String? = null,
         val reportTo: String? = null,
         val reportFields: String? = null,
@@ -5191,6 +5193,7 @@ internal object Cli {
         var fingerprint: String? = null
         var allowProjects: String? = null
         var allowHarnesses: String? = null
+        var runnerHosts: String? = null
         var body: String? = null
         var reportTo: String? = null
         var reportFields: String? = null
@@ -5231,6 +5234,12 @@ internal object Cli {
                 "--host" -> {
                     val value = args.getOrNull(++i) ?: return fail(err, "--host expects a value")
                     if (value.startsWith("-")) return fail(err, "--host expects a value")
+                    if (rest.take(2) == listOf("runner", "pair")) {
+                        // RUNNER-LINK-1: on `runner pair` it names a host for the pairing link (repeatable), not the daemon address.
+                        runnerHosts = listOfNotNull(runnerHosts, value).joinToString(",")
+                        i++
+                        continue
+                    }
                     host = value
                     addressGiven = true
                     i++
@@ -5751,6 +5760,7 @@ internal object Cli {
             fingerprint = fingerprint,
             allowProjects = allowProjects,
             allowHarnesses = allowHarnesses,
+            runnerHosts = runnerHosts,
             body = body,
             reportTo = reportTo,
             reportFields = reportFields,
@@ -5899,7 +5909,7 @@ internal object Cli {
         "ask" -> askUsageError(parsed, getenv)
         "usage" -> UsageCli.usageError(parsed.args)
         "settings" -> SettingsCli.usageError(parsed.args)
-        "runner" -> RunnerCli.usageError(RunnerCli.Args(parsed.args, parsed.name, parsed.code, parsed.fingerprint, parsed.limit, parsed.allowProjects, parsed.allowHarnesses))
+        "runner" -> RunnerCli.usageError(RunnerCli.Args(parsed.args, parsed.name, parsed.code, parsed.fingerprint, parsed.limit, parsed.allowProjects, parsed.allowHarnesses, parsed.runnerHosts))
         else -> null
     }
 
