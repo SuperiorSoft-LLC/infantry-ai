@@ -384,3 +384,10 @@ Also built: the usage allowance counts a worker on a remote runner (`workerMeter
 would use; `runners.<name>.paused` (placement answers "runner x is paused"); `runner_admin` op `list` (name, url, pinned fingerprint,
 health, workers, cap, paused; plus `enabled`) for the Runners card rows. Not built: the Compose rows of the card (Pause / Detach / Rotate
 buttons) on `Infantry_Runners`; the CLI and settings cover them.
+
+## RUNNER-REMOTE-IO-1: remote session I/O
+
+The runner's on-demand transcript (`runners/RunnerTranscript.kt`) is built from the session stream by frame type only (turns, raw
+lines, errors; answer text when a harness printed no raw line), so it holds for every harness. The orchestrator's `prompt` frame for
+a remote session goes through `LocalRunner.deliverVia` (the mail path). `RunnerLinkServer` accepts transcript and deliver frames for
+any session the orchestrator started (`RemoteStarts.isLinked`), with or without a git remote.

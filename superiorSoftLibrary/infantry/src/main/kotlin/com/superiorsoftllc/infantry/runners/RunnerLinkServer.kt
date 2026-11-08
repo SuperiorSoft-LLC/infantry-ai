@@ -99,7 +99,7 @@ class RunnerLinkServer(
             }
             F.DELIVER -> {
                 val d = decode(F.DeliverRequest.serializer(), data) ?: return refuse(seat, type, null, from, "$type refused: malformed request")
-                if (starts?.isRemote(d.sessionId) != true) return refuse(seat, type, null, from, "$type refused: session ${d.sessionId.take(SHOWN_TYPE_SIZE)} was not started by this orchestrator")
+                if (starts?.isLinked(d.sessionId) != true) return refuse(seat, type, null, from, "$type refused: session ${d.sessionId.take(SHOWN_TYPE_SIZE)} was not started by this orchestrator")
                 read(seat, type, from) { link ->
                     when (val m = link.deliverMail(d.sessionId, MailItem(d.text, d.origin, d.wakeReason, d.messageIds))) {
                         is OrchestratorReply.Ok -> F.json.encodeToString(F.DeliverAnswer.serializer(), F.DeliverAnswer(m.value.kind, m.value.reason))
@@ -116,7 +116,7 @@ class RunnerLinkServer(
             }
             F.TRANSCRIPT -> {
                 val t = decode(F.TranscriptRequest.serializer(), data) ?: return refuse(seat, type, null, from, "$type refused: malformed request")
-                if (starts?.isRemote(t.sessionId) != true) return refuse(seat, type, null, from, "$type refused: session ${t.sessionId.take(SHOWN_TYPE_SIZE)} was not started by this orchestrator")
+                if (starts?.isLinked(t.sessionId) != true) return refuse(seat, type, null, from, "$type refused: session ${t.sessionId.take(SHOWN_TYPE_SIZE)} was not started by this orchestrator")
                 read(seat, type, from) { link ->
                     when (val lines = link.readTranscript(t.sessionId, t.fromLine, t.maxLines)) {
                         is OrchestratorReply.Ok -> F.json.encodeToString(F.TranscriptAnswer.serializer(), F.TranscriptAnswer(lines.value))

@@ -1359,7 +1359,7 @@ class InfantryDaemon(
             val chatHistory = SessionHistoryStore(File(daemonStateDir, "chat-history"), { settings.limit(LimitRegistry.CHAT_HISTORY_FRAMES).toInt() })
             val streamSequencer = SessionFrameSequencer(chatHistory)
             runnerTranscript.set { id, from, max ->
-                val out = streamSequencer.replayAfter(id, 0)?.frames.orEmpty().filter { it.type == Envelope.STDOUT || it.type == Envelope.STDERR }.map { it.data }.drop(from.coerceAtLeast(0))
+                val out = com.superiorsoftllc.infantry.runners.RunnerTranscript.lines(streamSequencer.replayAfter(id, 0)?.frames.orEmpty()).drop(from.coerceAtLeast(0))
                 if (max > 0) out.take(max) else out
             }
             // Contract 1.95.0 (1c24fdc4): each session's harness-neutral run activity, carried on `status` frames.
@@ -3201,7 +3201,11 @@ private suspend fun handleConnection(
 
                     else -> {
                         val replay = streamSequencer.replayAfter(sessionId, request.lastSequence)
-                        if (replay == null) {
+                        // RUNNER-REMOTE-IO-1: the orchestrator may hold status frames for a remote session; its output still lives on the runner.
+                        val remoteOutput = runnerPool.runnerOf(sessionId) != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL &&
+                            manager.get(sessionId) == null &&
+                            (replay == null || replay.frames.none { it.type == Envelope.STDOUT || it.type == Envelope.STDERR })
+                        if (replay == null || remoteOutput) {
                             // CLI-PTY-5: a known session with nothing kept simply has no history yet; only an unknown one is an error.
                             val runnerName = runnerPool.runnerOf(sessionId)
                             if (runnerName != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL) {
@@ -3265,6 +3269,14 @@ private suspend fun handleConnection(
                             } else {
                                 envelope.data
                             }
+                            // RUNNER-REMOTE-IO-1: a session on a remote runner takes the prompt through that runner, like mail does.
+                            val remoteId = envelope.sessionId!!
+                            if (manager.get(remoteId) == null && runnerPool.runnerOf(remoteId) != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL) {
+                                val sent = LocalRunner.deliverVia(runnerPool)(remoteId, turn, MessageOrigin.Owner, "", emptyList())
+                                if (sent.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.MailResult.FAILED) throw IllegalStateException("runner refused the prompt: ${sent.reason}")
+                                if (sent.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.MailResult.QUEUED) throw IllegalStateException("runner '${runnerPool.runnerOf(remoteId)}' is busy or unreachable (${sent.reason.ifBlank { "queued" }}); send again")
+                                active = remoteId
+                            } else
                             active = manager.resume(envelope.sessionId!!, turn).id
                             plugins.turnAccepted(envelope, caller)
                             pluginSessionsAck(envelope, manager) ?: sendKey?.let { promptAck(envelope, duplicate = false) }
