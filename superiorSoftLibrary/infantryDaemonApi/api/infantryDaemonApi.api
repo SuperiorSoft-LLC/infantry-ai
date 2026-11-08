@@ -5521,17 +5521,23 @@ public final class com/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWir
 
 public final class com/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$PairAnswer {
 	public static final field Companion Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$PairAnswer$Companion;
-	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
-	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/lang/String;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Ljava/lang/String;
 	public final fun component2 ()Ljava/lang/String;
 	public final fun component3 ()Ljava/lang/String;
 	public final fun component4 ()Ljava/lang/String;
-	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$PairAnswer;
-	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$PairAnswer;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$PairAnswer;
+	public final fun component5 ()Ljava/util/List;
+	public final fun component6 ()Ljava/util/List;
+	public final fun component7 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$PairAnswer;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$PairAnswer;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$PairAnswer;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getContract ()Ljava/lang/String;
 	public final fun getCredential ()Ljava/lang/String;
+	public final fun getGrantRefusal ()Ljava/lang/String;
+	public final fun getGrantedHarnesses ()Ljava/util/List;
+	public final fun getGrantedProjects ()Ljava/util/List;
 	public final fun getRunnerId ()Ljava/lang/String;
 	public final fun getRunnerName ()Ljava/lang/String;
 	public fun hashCode ()I
@@ -5555,15 +5561,19 @@ public final class com/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWir
 
 public final class com/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$PairRequest {
 	public static final field Companion Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$PairRequest$Companion;
-	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
-	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Ljava/lang/String;
 	public final fun component2 ()Ljava/lang/String;
 	public final fun component3 ()Ljava/lang/String;
-	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$PairRequest;
-	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$PairRequest;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$PairRequest;
+	public final fun component4 ()Ljava/util/List;
+	public final fun component5 ()Ljava/util/List;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;)Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$PairRequest;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$PairRequest;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$PairRequest;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getCode ()Ljava/lang/String;
+	public final fun getGrantHarnesses ()Ljava/util/List;
+	public final fun getGrantProjects ()Ljava/util/List;
 	public final fun getOrchestratorId ()Ljava/lang/String;
 	public final fun getOrchestratorName ()Ljava/lang/String;
 	public fun hashCode ()I

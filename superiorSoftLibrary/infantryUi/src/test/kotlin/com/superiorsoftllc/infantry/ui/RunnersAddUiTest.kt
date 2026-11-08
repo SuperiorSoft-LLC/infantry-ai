@@ -16,6 +16,7 @@ import com.superiorsoftllc.infantry.plugins.official.runners.RunnerCheckRows
 import com.superiorsoftllc.infantry.plugins.official.runners.addLinkRequest
 import com.superiorsoftllc.infantry.plugins.official.runners.addedRunnerName
 import com.superiorsoftllc.infantry.plugins.official.runners.checkRequest
+import com.superiorsoftllc.infantry.plugins.official.runners.linkCarriesGrant
 import com.superiorsoftllc.infantry.plugins.official.runners.RUNNER_TEST_COST
 import com.superiorsoftllc.infantry.plugins.official.runners.parseRunnerCheck
 import com.superiorsoftllc.infantry.plugins.official.runners.parseRunnerTest
@@ -56,6 +57,13 @@ class RunnersAddUiTest {
         assertEquals("""{"op":"add","link":"$link"}""", addLinkRequest(link, "   "), "a blank override is not sent: the link's own name wins")
         assertEquals("""{"op":"check","name":"box"}""", checkRequest("box"))
         assertEquals("""{"op":"check","name":"box","projectId":"project-1"}""", checkRequest("box", "project-1"))
+        // RUNNER-GRANT-AT-PAIR-1: the one-time grant is the same frame, and only when the owner ticked it.
+        assertEquals("""{"op":"add","link":"$link","grant":"true","projectId":"project-1"}""", addLinkRequest(link, grant = true, projectId = "project-1"))
+        assertEquals("""{"op":"add","link":"$link","name":"box","grant":"true","projectId":"project-1"}""", addLinkRequest(link, "box", grant = true, projectId = "project-1"))
+        assertEquals("""{"op":"add","link":"$link"}""", addLinkRequest(link, grant = false, projectId = "project-1"), "an unticked grant sends neither the grant nor a project id")
+        assertTrue(linkCarriesGrant(link.replace("&fp=AA:BB:CC", "&fp=AA:BB:CC&grant=1")), "grant=1 in the link means the code may grant")
+        assertTrue(!linkCarriesGrant(link), "a link without grant=1 carries no authority")
+        assertTrue(!linkCarriesGrant("grant=1"), "the flag is read from the query, not from anywhere in the text")
     }
 
     @Test
@@ -76,20 +84,58 @@ class RunnersAddUiTest {
 
     @Test
     fun `connect sends the pasted link and nothing else`() = runComposeUiTest {
-        val sent = mutableListOf<Pair<String, String?>>()
-        setContent { AddRunnerForm(sending = false, error = null, onConnect = { l, n -> sent += l to n }, onDismiss = {}, gate = live) }
+        val sent = mutableListOf<Triple<String, String?, Boolean>>()
+        setContent { AddRunnerForm(sending = false, error = null, onConnect = { l, n, g -> sent += Triple(l, n, g) }, onDismiss = {}, gate = live) }
         onNodeWithTag("runner-add-connect").assertExists()
         onNodeWithTag("runner-add-link").performTextInput(link)
         onNodeWithTag("runner-add-name").performTextInput("box")
+        // RUNNER-GRANT-AT-PAIR-1: a link with no grant=1 draws no grant tick at all.
+        onAllNodesWithTag("runner-add-grant").assertCountEquals(0)
         onNodeWithTag("runner-add-connect").performClick()
-        assertEquals(listOf<Pair<String, String?>>(link to "box"), sent)
+        assertEquals(listOf<Triple<String, String?, Boolean>>(Triple(link, "box", false)), sent)
         assertEquals("""{"op":"add","link":"$link","name":"box"}""", addLinkRequest(sent.single().first, sent.single().second))
+    }
+
+    /**
+     * RUNNER-GRANT-AT-PAIR-1: a link whose code was issued with `--grant-on-pair` draws the tick, ticked, naming this window's
+     * project; connecting sends the grant, and unticking it sends none.
+     */
+    @Test
+    fun `a grant-carrying link offers the one confirm, ticked, naming this project`() = runComposeUiTest {
+        val granting = link.replace("&fp=AA:BB:CC", "&fp=AA:BB:CC&grant=1")
+        val sent = mutableListOf<Triple<String, String?, Boolean>>()
+        setContent {
+            AddRunnerForm(
+                sending = false, error = null, onConnect = { l, n, g -> sent += Triple(l, n, g) }, onDismiss = {}, gate = live,
+                grantProjectId = "project-73b27dff", grantProjectName = "Infantry AI",
+            )
+        }
+        onNodeWithTag("runner-add-link").performTextInput(granting)
+        onNodeWithTag("runner-add-grant").assertIsDisplayed()
+        onNodeWithTag("runner-add-grant-label").assertTextContains("Infantry AI (project-73b27dff)", substring = true)
+        onNodeWithTag("runner-add-connect").performClick()
+        assertEquals(Triple<String, String?, Boolean>(granting, null, true), sent.single(), "the tick starts ticked: one confirm, not two")
+        assertEquals(
+            """{"op":"add","link":"$granting","grant":"true","projectId":"project-73b27dff"}""",
+            addLinkRequest(sent.single().first, sent.single().second, sent.single().third, "project-73b27dff"),
+        )
+    }
+
+    @Test
+    fun `granting needs a project this window is on`() = runComposeUiTest {
+        val granting = link.replace("&fp=AA:BB:CC", "&fp=AA:BB:CC&grant=1")
+        val sent = mutableListOf<Triple<String, String?, Boolean>>()
+        setContent { AddRunnerForm(sending = false, error = null, onConnect = { l, n, g -> sent += Triple(l, n, g) }, onDismiss = {}, gate = live) }
+        onNodeWithTag("runner-add-link").performTextInput(granting)
+        onNodeWithTag("runner-add-grant-label").assertTextContains("no project is selected", substring = true)
+        onNodeWithTag("runner-add-connect").performClick()
+        assertEquals(Triple<String, String?, Boolean>(granting, null, false), sent.single(), "with no project there is nothing to grant, and nothing is sent")
     }
 
     @Test
     fun `a refusal from the daemon is shown under the fields`() = runComposeUiTest {
         val refusal = "no host answered: 100.64.0.7:8790 (connect timed out); 10.0.0.4:8790 (certificate does not match the pin)"
-        setContent { AddRunnerForm(sending = false, error = refusal, onConnect = { _, _ -> }, onDismiss = {}, gate = live) }
+        setContent { AddRunnerForm(sending = false, error = refusal, onConnect = { _, _, _ -> }, onDismiss = {}, gate = live) }
         onNodeWithTag("runner-add-error").assertIsDisplayed()
         onNodeWithTag("runner-add-error").assertTextContains(refusal)
     }

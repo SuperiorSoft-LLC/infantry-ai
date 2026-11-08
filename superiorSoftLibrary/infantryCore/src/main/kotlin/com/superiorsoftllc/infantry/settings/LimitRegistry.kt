@@ -911,6 +911,13 @@ object LimitRegistry {
         min = 1, max = 32, zeroIsUnlimited = false,
     )
 
+    /** RUNNER-GRANT-AT-PAIR-1: how many project ids one pairing may grant (owner decision D24: at most one project, once). */
+    val RUNNERS_GRANT_PROJECTS_MAX = LimitDef(
+        "limits.runners.grantProjectsMax", 1, "projects",
+        "How many project ids a single pairing may grant when the runner's code was issued with --grant-on-pair; more than this in the request is refused. Kept at 1: pairing is one project, granted once (owner decision D24).",
+        min = 1, max = 16, zeroIsUnlimited = false,
+    )
+
     /** RUNNER-POOL-5: how many audit lines `infantry runner audit` prints without `--limit`. */
     val RUNNERS_AUDIT_SHOWN = LimitDef(
         "limits.runners.auditShown", 50, "lines",
@@ -1108,7 +1115,7 @@ object LimitRegistry {
         SANDBOX_MODE, USAGE_QUOTA_HIT_HOLD_MINUTES,
         HEALTH_DB_TIMEOUT_SECONDS, HEALTH_EVENT_LOG_MAX, HEALTH_HEARTBEAT_SECONDS, HEALTH_WATCHDOG_FAILURES, HEALTH_WATCHDOG_INTERVAL_SECONDS, HEALTH_WATCHDOG_TIMEOUT_SECONDS,
         MAIL_WAKE_DEBOUNCE_SECONDS, MAIL_COALESCE_MAX, WATCH_STALL_NUDGES, SCRIPT_RUN_LOG_MAX,
-        RUNNERS_PAIR_CODE_MIN, RUNNERS_PAIR_ATTEMPTS_PER_HOUR, RUNNERS_CREDENTIAL_ROTATE_DAYS, RUNNERS_LINK_PORT, RUNNERS_ADVERTISE_HOSTS_MAX, RUNNERS_AUDIT_SHOWN, RUNNERS_LINK_CALL_SECONDS, RUNNERS_LINK_CHECK_SECONDS,
+        RUNNERS_PAIR_CODE_MIN, RUNNERS_PAIR_ATTEMPTS_PER_HOUR, RUNNERS_CREDENTIAL_ROTATE_DAYS, RUNNERS_LINK_PORT, RUNNERS_ADVERTISE_HOSTS_MAX, RUNNERS_AUDIT_SHOWN, RUNNERS_GRANT_PROJECTS_MAX, RUNNERS_LINK_CALL_SECONDS, RUNNERS_LINK_CHECK_SECONDS,
         RUNNERS_OUTBOX_MAX, RUNNERS_LOST_AFTER_MIN, RUNNERS_COMMIT_CHECK_SEC, RUNNERS_FORWARD_WAIT_SEC, RUNNERS_FORWARD_TIMEOUT_SEC, RUNNERS_FORWARD_PENDING_MAX,
         RUNNERS_ADD_HOST_TIMEOUT_SEC, RUNNERS_CHECK_GIT_SEC, RUNNERS_CHECK_MIN_FREE_MB,
         RUNNERS_TEST_TURN_SEC, RUNNERS_TEST_POLL_MS, RUNNERS_TEST_REPLY_CHARS,

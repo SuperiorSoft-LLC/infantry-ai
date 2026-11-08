@@ -499,7 +499,7 @@ internal object Cli {
                 // RUNNER-POOL-5: `infantry runner pair --name <n>` and the rest of the runner link (docs/RUNNER-POOL.md 7).
                 "runner" -> runBlocking {
                     RunnerCli.run(
-                        stream, RunnerCli.Args(parsed.args, parsed.name, parsed.code, parsed.fingerprint, parsed.limit, parsed.allowProjects, parsed.allowHarnesses, parsed.runnerHosts, parsed.link, project = parsed.project ?: getenv(AccessPolicy.PROJECT_ID_ENV)?.trim()?.takeIf { it.isNotEmpty() }, harness = parsed.harness, model = parsed.model), out, err,
+                        stream, RunnerCli.Args(parsed.args, parsed.name, parsed.code, parsed.fingerprint, parsed.limit, parsed.allowProjects, parsed.allowHarnesses, parsed.runnerHosts, parsed.link, project = parsed.project ?: getenv(AccessPolicy.PROJECT_ID_ENV)?.trim()?.takeIf { it.isNotEmpty() }, harness = parsed.harness, model = parsed.model, grantOnPair = parsed.grantOnPair, grantHarnessesMax = parsed.grantHarnessesMax, grant = parsed.grant), out, err,
                         com.superiorsoftllc.infantry.session.stateDir { getenv(it) ?: com.superiorsoftllc.infantry.session.infantrySetting(it) },
                     )
                 }
@@ -4778,15 +4778,19 @@ internal object Cli {
                                   files); --suggest rebuilds it first. ticket create/update --related-to <id|prefix> (repeatable) links one
               remote on|off|status  Let the daemon accept outside (Tailscale) connections; prints the ws address
                                   and token. Takes effect on the next daemon restart.
-              runner pair --name <n> [--host <h>]... [--allow-projects <ids|*>] [--allow-harnesses <ids|*>]  On a RUNNER machine: grant what the
-                                  orchestrator may run (asked when omitted; nothing is granted silently), print ONE pairing link (hosts, port, one-time code, fingerprint; the code is single use and expires after
-                                  limits.runners.pairCodeMin), then the code and fingerprint by hand; serve the link until paired
+              runner pair --name <n> [--host <h>]... [--allow-projects <ids|*>] [--allow-harnesses <ids|*>] [--grant-on-pair [--grant-harnesses-max <ids>]]
+                                  On a RUNNER machine: grant what the orchestrator may run (asked when omitted; nothing is granted
+                                  silently), print ONE pairing link (hosts, port, one-time code, fingerprint; the code is single use and expires after
+                                  limits.runners.pairCodeMin), then the code and fingerprint by hand; serve the link until paired.
+                                  --grant-on-pair lets the first pairing grant ONE project (chosen on the orchestrator, once) and the
+                                  installed harnesses (or only --grant-harnesses-max); audited as runner_link_pair_grant
               runner add <name> <wss-url> --code <c> --fingerprint <fp>  On the ORCHESTRATOR: pin the fingerprint, trade
                                   the code for a per-pair runner credential (not the owner, remote or agent token)
-              runner add '<infantry://runner?...>' [--name <n>] | runner add --link <link|-> [--name <n>]  The one-paste form:
-                                  the link carries name, hosts, port, code and fingerprint; each host is tried in order and the
-                                  first that answers pairs (a wrong certificate is skipped before the code is sent). The first
-                                  add turns runners.enabled on
+              runner add '<infantry://runner?...>' [--name <n>] [--grant [--project <id>]] | runner add --link <link|-> [--name <n>] [--grant]
+                                  The one-paste form: the link carries name, hosts, port, code and fingerprint; each host is tried
+                                  in order and the first that answers pairs (a wrong certificate is skipped before the code is
+                                  sent). The first add turns runners.enabled on. When the link's code was issued with
+                                  --grant-on-pair, the CLI asks once whether to grant this project (--grant answers yes)
               runner list | rotate <name> | detach [<name>] | audit [--limit N]  Paired runners; in-band rekey; revoke
                                   (a name: from the orchestrator; none: on the runner); the runner's log of remote operations
               runner check <name> [--project <id>] [--harness <id>]  The health check over the link: contract, harness installed and
@@ -5082,6 +5086,11 @@ internal object Cli {
         val link: String? = null,
         // RUNNER-CHECK-1: `runner check <name> --harness <id>` (the harness checked for install, sign-in and grant).
         val harness: String? = null,
+        // RUNNER-GRANT-AT-PAIR-1: `runner pair --grant-on-pair [--grant-harnesses-max <ids>]` (the code carries a one-time grant)
+        // and `runner add '<link>' --grant [--project <id>]` (the owner's one confirm for it).
+        val grantOnPair: Boolean = false,
+        val grantHarnessesMax: String? = null,
+        val grant: Boolean = false,
         val body: String? = null,
         val reportTo: String? = null,
         val reportFields: String? = null,
@@ -5209,6 +5218,10 @@ internal object Cli {
         var allowProjects: String? = null
         var allowHarnesses: String? = null
         var runnerHosts: String? = null
+        // RUNNER-GRANT-AT-PAIR-1: the runner side's grant-carrying code and the orchestrator side's one confirm.
+        var grantOnPair = false
+        var grantHarnessesMax: String? = null
+        var grant = false
         var link: String? = null
         var harness: String? = null
         var body: String? = null
@@ -5381,6 +5394,20 @@ internal object Cli {
                 }
                 "--allow-harnesses" -> {
                     allowHarnesses = flagValue(args, ++i) ?: return fail(err, "--allow-harnesses expects comma-separated harness ids (or * for every harness)")
+                    i++
+                }
+                // RUNNER-GRANT-AT-PAIR-1: the code `runner pair` issues may grant ONE project (and installed harnesses) at pairing;
+                // `--grant-harnesses-max` is that grant's ceiling, and `--grant` is the orchestrator's one confirm.
+                "--grant-on-pair" -> {
+                    grantOnPair = true
+                    i++
+                }
+                "--grant-harnesses-max" -> {
+                    grantHarnessesMax = flagValue(args, ++i) ?: return fail(err, "--grant-harnesses-max expects comma-separated harness ids (the ceiling of the grant at pairing)")
+                    i++
+                }
+                "--grant" -> {
+                    grant = true
                     i++
                 }
                 "--link" -> {
@@ -5792,6 +5819,9 @@ internal object Cli {
             allowProjects = allowProjects,
             allowHarnesses = allowHarnesses,
             runnerHosts = runnerHosts,
+            grantOnPair = grantOnPair,
+            grantHarnessesMax = grantHarnessesMax,
+            grant = grant,
             link = link,
             harness = harness,
             body = body,
@@ -5942,7 +5972,7 @@ internal object Cli {
         "ask" -> askUsageError(parsed, getenv)
         "usage" -> UsageCli.usageError(parsed.args)
         "settings" -> SettingsCli.usageError(parsed.args)
-        "runner" -> RunnerCli.usageError(RunnerCli.Args(parsed.args, parsed.name, parsed.code, parsed.fingerprint, parsed.limit, parsed.allowProjects, parsed.allowHarnesses, parsed.runnerHosts, parsed.link, project = parsed.project, harness = parsed.harness, model = parsed.model))
+        "runner" -> RunnerCli.usageError(RunnerCli.Args(parsed.args, parsed.name, parsed.code, parsed.fingerprint, parsed.limit, parsed.allowProjects, parsed.allowHarnesses, parsed.runnerHosts, parsed.link, project = parsed.project, harness = parsed.harness, model = parsed.model, grantOnPair = parsed.grantOnPair, grantHarnessesMax = parsed.grantHarnessesMax, grant = parsed.grant))
         else -> null
     }
 

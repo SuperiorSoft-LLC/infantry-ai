@@ -62,8 +62,18 @@ class RunnerLinkService(
     private var toldNoTransport = false
     private var closed = false
 
-    /** A `runner pair` in progress: its listener and its one-time code. */
-    private class Pairing(val serving: LinkServing, val codes: PairCodes, val name: String)
+    /**
+     * A `runner pair` in progress: its one-time code and its listener.
+     *
+     * RUNNER-GRANT-AT-PAIR-1: [answering] guards the listener while a PAIR is being answered. Since the code is spent at the
+     * start of the answer and the grants are written to the runner's settings before the answer goes out, a `pair_status` poll
+     * (the runner console polls every 500 ms) saw "expired" in that window and closed the listener under the answer, so the
+     * orchestrator lost the pairing it had in fact made. The flag makes the poll report its last known state instead.
+     */
+    private class Pairing(val codes: PairCodes, val name: String) {
+        @Volatile var serving: LinkServing? = null
+        @Volatile var answering = false
+    }
 
     private val dir: File get() = RunnerLinkStore.dir(stateDir)
 
@@ -71,7 +81,9 @@ class RunnerLinkService(
     fun tick() {
         // A closed service never re-opens the link listener: its ticker may fire once more while the daemon shuts down, and the port must be free for the restart.
         if (closed) return
-        pairing?.let { p -> if (RunnerLinkStore.open(stateDir).orchestrator() != null || p.codes.liveName(clock()) == null) closePairing() }
+        pairing?.let { p ->
+            if (!p.answering && (RunnerLinkStore.open(stateDir).orchestrator() != null || p.codes.liveName(clock()) == null)) closePairing()
+        }
         if (!RunnerLinkStore.exists(stateDir)) {
             pump?.sync(emptyList())
             return
@@ -140,20 +152,26 @@ class RunnerLinkService(
 
     /**
      * RUNNER-POOL-6a: one owner `runner_admin` request (`{"op": ..., ...}`) -> its answer object: `{"ok": true, ...}`, or
-     * `{"ok": false, "error": <reason>, "presentedFingerprint": <fp or null>}`. Ops: `pair {name}`, `pair_status`, `pair_cancel`,
-     * `add {name, url, code, fingerprint?, orchestratorName}` or `add {link, name?, orchestratorName}` (RUNNER-ADD-LINK-1),
+     * `{"ok": false, "error": <reason>, "presentedFingerprint": <fp or null>}`. Ops: `pair {name, allowProjects?, allowHarnesses?,
+     * hosts?, grantOnPair?, harnessCeiling?}`, `pair_status`, `pair_cancel`, `add {name, url, code, fingerprint?, orchestratorName}`
+     * or `add {link, name?, orchestratorName, grant?, projectId?}` (RUNNER-ADD-LINK-1; RUNNER-GRANT-AT-PAIR-1 adds `grant`),
      * `rotate {name}`, `detach {name}`, `check {name, projectId?, harness?}` (RUNNER-CHECK-1) and `test {name, harness?, model?}`
      * (RUNNER-TEST-1: one throwaway turn there, its reply, harness, seconds and session id).
      */
     @Synchronized
     fun admin(request: JsonObject): JsonObject = try {
         fun str(key: String) = (request[key] as? JsonPrimitive)?.takeIf { it.isString }?.content
+        fun flag(key: String) = (request[key] as? JsonPrimitive)?.content in setOf("true", "1")
         fun need(key: String) = str(key)?.takeIf { it.isNotBlank() } ?: throw IllegalArgumentException("$key is required")
         val op = need("op")
         if (op in NEEDS_TRANSPORT && transport() == null) throw IllegalArgumentException(NO_TRANSPORT)
         when (op) {
-            "pair" -> pair(need("name"), str("allowProjects"), str("allowHarnesses"), str("hosts"))
-            "pair_preview" -> JsonObject(ok() + ("installedHarnesses" to JsonArray(runner?.hello()?.let { (it as? OrchestratorReply.Ok)?.value }?.harnesses.orEmpty().map { JsonPrimitive(it.id) })))
+            "pair" -> pair(need("name"), str("allowProjects"), str("allowHarnesses"), str("hosts"), flag("grantOnPair"), str("harnessCeiling"))
+            "pair_preview" -> JsonObject(
+                ok() +
+                    ("installedHarnesses" to JsonArray(installedHarnesses().map(::JsonPrimitive))) +
+                    ("grantsAtPairing" to JsonPrimitive(limit(LimitRegistry.RUNNERS_GRANT_PROJECTS_MAX).toString())),
+            )
             "pair_status" -> pairStatus()
             "list" -> list()
             "pair_cancel" -> { closePairing(); ok() }
@@ -168,24 +186,44 @@ class RunnerLinkService(
                 // RUNNER-ADD-LINK-1: a pasted link (the one-string flow) or the older name/url/code/fingerprint form; both keep it.
                 val store = RunnerLinkStore.open(stateDir)
                 val text = str("link")
+                // RUNNER-GRANT-AT-PAIR-1: the owner confirmed the one-time grant in the CLI/UI; this side only carries it.
+                val grantAsked = flag("grant")
                 val outcome = if (text != null) {
                     val parsed = when (val p = RunnerPairLink.parse(text)) {
                         is RunnerPairLink.Parsed.Ok -> p.link
                         is RunnerPairLink.Parsed.Bad -> throw IllegalArgumentException(p.reason)
                     }
+                    if (grantAsked && !parsed.grant) {
+                        throw IllegalArgumentException(
+                            "that link carries no grant authority: its code was not issued with `--grant-on-pair` on the runner, so this " +
+                                "pairing may not widen its grants; run `infantry runner pair --grant-on-pair` there, or grant by hand on the runner",
+                        )
+                    }
+                    val project = str("projectId")?.takeIf { it.isNotBlank() }
+                    if (grantAsked && project == null) {
+                        throw IllegalArgumentException("granting at pairing needs the project to grant: run `infantry runner add ... --grant --project <id>` (or set INFANTRY_PROJECT_ID)")
+                    }
                     val name = str("name")?.takeIf { it.isNotBlank() } ?: parsed.name
-                    peers(store).addLink(parsed, name, str("orchestratorName").orEmpty(), settings().allowPlainTailnet)
+                    val grants = if (grantAsked) PairGrants(listOf(project!!), installedHarnesses()) else null
+                    peers(store).addLink(parsed, name, str("orchestratorName").orEmpty(), settings().allowPlainTailnet, grants)
                 } else {
+                    if (grantAsked) throw IllegalArgumentException("`--grant` works with a pairing link (`infantry runner add '<infantry://runner?...>' --grant`); the by-hand form has no link to check the grant authority against")
                     val r = peers(store).add(need("name"), need("url"), need("code"), str("fingerprint"), str("orchestratorName").orEmpty())
                     AddOutcome(r, emptyList())
                 }
                 // Adding a runner IS the owner's consent (`runner_admin` is owner-only), so the first add turns the feature on too.
                 val turnedOn = !enabledNow() && runCatching { setEnabled(true) }.isSuccess
                 val r = outcome.runner
-                ok(
-                    "name" to r.name, "url" to r.url, "runnerId" to r.runnerId,
-                    "skipped" to outcome.skipped.joinToString("; ").takeIf { it.isNotEmpty() },
-                    "enabledTurnedOn" to turnedOn.toString(),
+                JsonObject(
+                    ok(
+                        "name" to r.name, "url" to r.url, "runnerId" to r.runnerId,
+                        "skipped" to outcome.skipped.joinToString("; ").takeIf { it.isNotEmpty() },
+                        "enabledTurnedOn" to turnedOn.toString(),
+                        "grantRefusal" to outcome.grantRefusal,
+                    ) + mapOf(
+                        "grantedProjects" to JsonArray(outcome.grantedProjects.map(::JsonPrimitive)),
+                        "grantedHarnesses" to JsonArray(outcome.grantedHarnesses.map(::JsonPrimitive)),
+                    ),
                 )
             }
             "rotate" -> ok("name" to peers(RunnerLinkStore.open(stateDir)).rotate(need("name")).name)
@@ -207,6 +245,16 @@ class RunnerLinkService(
 
     /** RUNNER-CHECK-1: where this runner keeps its clones (the check's disk row and its `ls-remote` folder). */
     private fun cloneRootDir(): File = RemoteStarts.cloneRootDir(runCatching { settings().cloneRoot }.getOrDefault(""), stateDir)
+
+    /**
+     * RUNNER-GRANT-AT-PAIR-1: the harness ids this daemon can run (its local runner's hello), without the no-harness placeholder.
+     * On the runner they are the installed harnesses a pairing grant is intersected with (and the ceiling's default); on the
+     * orchestrator they are what it asks to grant there (the runner keeps only the ones it has).
+     */
+    private fun installedHarnesses(): List<String> =
+        runner?.hello()?.let { (it as? OrchestratorReply.Ok)?.value }?.harnesses.orEmpty()
+            .map { it.id }
+            .filter { it != com.superiorsoftllc.infantry.harness.NoHarnessProvider.ID }
 
     /**
      * RUNNER-CHECK-1 (docs/wiki/RunnerPairing-design.md 4, step 4): one health check of runner [name], from this side.
@@ -437,7 +485,14 @@ class RunnerLinkService(
     /** RUNNER-DEFAULTS-1: stores the owner's explicit grant (`runner.projects` / `runner.harnesses`); the daemon wires the setting. */
     @Volatile var grant: (key: String, ids: List<String>) -> Unit = { _, _ -> }
 
-    private fun pair(name: String, allowProjects: String? = null, allowHarnesses: String? = null, hosts: String? = null): JsonObject {
+    private fun pair(
+        name: String,
+        allowProjects: String? = null,
+        allowHarnesses: String? = null,
+        hosts: String? = null,
+        grantOnPair: Boolean = false,
+        harnessCeiling: String? = null,
+    ): JsonObject {
         require(RunnerLinkStore.NAME.matches(name)) { "runner name '$name' must be 1-32 of a-z, 0-9 and '-' (starting with a letter or digit)" }
         val t = transport() ?: throw IllegalArgumentException(NO_TRANSPORT)
         val store = RunnerLinkStore.open(stateDir)
@@ -448,6 +503,15 @@ class RunnerLinkService(
         closePairing()
         // The grant is the owner's flag or console answer; null = untouched (the settings keep their values).
         fun ids(csv: String?) = csv?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }
+        // RUNNER-GRANT-AT-PAIR-1: `--grant-harnesses-max` is the ceiling of the one grant this code carries (empty = installed here).
+        val ceiling = ids(harnessCeiling).orEmpty().filter { it != RunnerLinkSettings.ANY }
+        if (grantOnPair) {
+            // A grant at pairing is ONE project, chosen on the orchestrator: names it here would grant everything blindly.
+            require(allowProjects == null) {
+                "--grant-on-pair is the alternative to --allow-projects: the project is granted once, from the orchestrator, at pairing. Use one or the other"
+            }
+            require(ceiling.all { RunnerLinkSettings.isId(it) }) { "--grant-harnesses-max takes harness ids (comma separated)" }
+        }
         ids(allowProjects)?.let { grant(RunnerLinkSettings.PROJECTS, it) }
         ids(allowHarnesses)?.let { grant(RunnerLinkSettings.HARNESSES, it) }
         val values = settings()
@@ -459,31 +523,58 @@ class RunnerLinkService(
             expiryMs = { limit(LimitRegistry.RUNNERS_PAIR_CODE_MIN) * MS_PER_MINUTE },
             attemptsPerHour = { limit(LimitRegistry.RUNNERS_PAIR_ATTEMPTS_PER_HOUR) },
         )
-        val server = RunnerLinkServer(store, RunnerAudit(File(dir, RunnerAudit.FILE)), codes, settings = { values }, runner = { null }, clock = clock)
+        // The pairing server does not reach the local runner (`runner = { null }`): it only needs what is installed here and the
+        // add-to-setting write a granted code makes.
+        val server = RunnerLinkServer(
+            store, RunnerAudit(File(dir, RunnerAudit.FILE)), codes, settings = { values }, runner = { null }, clock = clock,
+            limit = limit, installedHarnesses = ::installedHarnesses,
+            grantAdd = { key, add ->
+                val live = settings()
+                val current = if (key == RunnerLinkSettings.PROJECTS) live.projects else live.harnesses
+                grant(key, (current + add).distinct())
+            },
+        )
+        val pending = Pairing(codes, name)
+        pairing = pending
         val s = try {
-            t.serve(handler(server), host, linkPort(), tls, callTimeoutMs())
+            t.serve(pairingHandler(server, pending), host, linkPort(), tls, callTimeoutMs())
         } catch (e: Exception) {
             throw IllegalArgumentException("cannot serve the runner link on port ${linkPort()} (${e.message}); is the daemon already serving it, or set limits.runners.linkPort")
         }
-        val code = codes.issue(name, clock())
-        pairing = Pairing(s, codes, name)
+        val code = codes.issue(name, clock(), grant = grantOnPair, harnessCeiling = ceiling)
+        pending.serving = s
         // RUNNER-LINK-1: the one link; `code`, `fingerprint` and `port` stay for older CLIs.
         val candidates = RunnerPairLink.candidates(listOfNotNull(hosts), values.advertiseHosts, limit(LimitRegistry.RUNNERS_ADVERTISE_HOSTS_MAX).toInt())
-        val link = candidates.takeIf { it.isNotEmpty() }?.let { RunnerPairLink(name, it, s.port, code, fingerprint, plain).toUri() }
+        val link = candidates.takeIf { it.isNotEmpty() }?.let { RunnerPairLink(name, it, s.port, code, fingerprint, plain, grantOnPair).toUri() }
         return ok(
             "code" to code, "link" to link, "fingerprint" to fingerprint, "port" to s.port.toString(), "plain" to plain.toString(),
-            "expiryMin" to limit(LimitRegistry.RUNNERS_PAIR_CODE_MIN).toString(),
-        ).let { JsonObject(it + mapOf("projects" to JsonArray(values.projects.map(::JsonPrimitive)), "harnesses" to JsonArray(values.harnesses.map(::JsonPrimitive)))) }
+            "expiryMin" to limit(LimitRegistry.RUNNERS_PAIR_CODE_MIN).toString(), "grant" to grantOnPair.toString(),
+        ).let {
+            JsonObject(
+                it + mapOf(
+                    "projects" to JsonArray(values.projects.map(::JsonPrimitive)),
+                    "harnesses" to JsonArray(values.harnesses.map(::JsonPrimitive)),
+                    "harnessCeiling" to JsonArray(ceiling.map(::JsonPrimitive)),
+                    "installedHarnesses" to JsonArray(installedHarnesses().map(::JsonPrimitive)),
+                ),
+            )
+        }
     }
 
-    /** `paired` (with the orchestrator), `waiting` (the code is live) or `expired`; a finished pairing's listener is closed. */
+    /**
+     * `paired` (with the orchestrator), `waiting` (the code is live, or its PAIR is being answered right now) or `expired`; a
+     * finished pairing's listener is closed. RUNNER-GRANT-AT-PAIR-1: an in-flight PAIR reads as `waiting`, never as `expired`,
+     * because the code is spent before the grants are written and the answer is built; the console polls this every 500 ms.
+     */
     private fun pairStatus(): JsonObject {
         val paired = if (RunnerLinkStore.exists(stateDir)) RunnerLinkStore.open(stateDir).orchestrator() else null
-        val live = pairing?.codes?.liveName(clock()) != null
-        if (paired != null || !live) closePairing()
+        val state = pairing
+        val live = state?.codes?.liveName(clock()) != null
+        val answering = state?.answering == true
+        if (!answering && (paired != null || !live)) closePairing()
         return when {
             paired != null -> ok("state" to "paired", "orchestratorName" to paired.name, "orchestratorId" to paired.id)
-            live -> ok("state" to "waiting")
+            live || answering -> ok("state" to "waiting")
             else -> ok("state" to "expired")
         }
     }
@@ -497,8 +588,29 @@ class RunnerLinkService(
     private fun callTimeoutMs() = (limit(LimitRegistry.RUNNERS_LINK_CALL_SECONDS) * MS_PER_SECOND).toInt()
 
     private fun closePairing() {
-        pairing?.let { runCatching { it.serving.close() } }
+        pairing?.let { p -> p.serving?.let { runCatching { it.close() } } }
         pairing = null
+    }
+
+    /**
+     * RUNNER-GRANT-AT-PAIR-1: [handler] with the pairing's "answering" flag around a PAIR, so `pair_status` / [tick] never close
+     * the listener under an answer that is still being built (a grant is written to the runner's settings before the answer).
+     */
+    private fun pairingHandler(server: RunnerLinkServer, p: Pairing): LinkHandler {
+        val inner = handler(server)
+        return object : LinkHandler {
+            override fun handle(type: String, data: String, orchestratorId: String?, credential: String?, from: String?): LinkAnswer {
+                if (type != F.PAIR) return inner.handle(type, data, orchestratorId, credential, from)
+                p.answering = true
+                try {
+                    return inner.handle(type, data, orchestratorId, credential, from)
+                } finally {
+                    p.answering = false
+                }
+            }
+
+            override fun malformed(): LinkAnswer = inner.malformed()
+        }
     }
 
     private fun closeServing() {
