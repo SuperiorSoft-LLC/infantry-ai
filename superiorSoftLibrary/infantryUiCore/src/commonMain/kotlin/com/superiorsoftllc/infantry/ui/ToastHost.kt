@@ -51,6 +51,9 @@ const val TOAST_HOST_TAG = "toast-host"
 const val TOAST_TAG = "toast"
 const val TOAST_CLOSE_TAG = "toast-close"
 
+/** NOTIFY-CORE-1: test tag prefix of a toast's action button (`toast-action-<action id>`). */
+const val TOAST_ACTION_TAG = "toast-action-"
+
 private const val SLIDE_MS = 220
 private const val TICK_MS = 50L
 
@@ -73,9 +76,20 @@ fun ToastHost(state: AppState, onOpen: (ToastEvent) -> Unit, modifier: Modifier 
     ToastHost(toastEvents(state), onOpen, modifier, reducedMotion)
 
 
-/** S2: [ToastHost] over [all], oldest first (the shell's [com.superiorsoftllc.infantry.ui.shell.ToastContext.events]). */
+/**
+ * S2: [ToastHost] over [all], oldest first (the shell's [com.superiorsoftllc.infantry.ui.shell.ToastContext.events]).
+ * NOTIFY-CORE-1: a toast's action buttons call [onAction] (and close it); the close button calls [onDismiss]. A sticky toast
+ * ([ToastEvent.sticky]) has no clock: it stays until closed.
+ */
 @Composable
-fun ToastHost(all: List<ToastEvent>, onOpen: (ToastEvent) -> Unit, modifier: Modifier = Modifier, reducedMotion: Boolean = false) {
+fun ToastHost(
+    all: List<ToastEvent>,
+    onOpen: (ToastEvent) -> Unit,
+    modifier: Modifier = Modifier,
+    reducedMotion: Boolean = false,
+    onAction: (ToastEvent, String) -> Unit = { _, _ -> },
+    onDismiss: (ToastEvent) -> Unit = {},
+) {
     val baseline = remember { all.maxOfOrNull { it.at } ?: Long.MIN_VALUE }
     var dismissed by remember { mutableStateOf(emptySet<String>()) }
     val shown = visibleToasts(all, baseline, dismissed)
@@ -86,14 +100,15 @@ fun ToastHost(all: List<ToastEvent>, onOpen: (ToastEvent) -> Unit, modifier: Mod
     ) {
         for (t in shown) {
             androidx.compose.runtime.key(t.id) {
-                Toast(t, reducedMotion, onOpen = { onOpen(t) }, onGone = { dismissed = dismissed + t.id })
+                Toast(t, reducedMotion, onOpen = { onOpen(t) }, onGone = { dismissed = dismissed + t.id },
+                    onAction = { onAction(t, it) }, onDismiss = { onDismiss(t) })
             }
         }
     }
 }
 
 @Composable
-private fun Toast(t: ToastEvent, reducedMotion: Boolean, onOpen: () -> Unit, onGone: () -> Unit) {
+private fun Toast(t: ToastEvent, reducedMotion: Boolean, onOpen: () -> Unit, onGone: () -> Unit, onAction: (String) -> Unit, onDismiss: () -> Unit) {
     var visible by remember { mutableStateOf(false) }
     var leaving by remember { mutableStateOf(false) }
     val hover = remember { MutableInteractionSource() }
@@ -103,7 +118,7 @@ private fun Toast(t: ToastEvent, reducedMotion: Boolean, onOpen: () -> Unit, onG
     LaunchedEffect(Unit) {
         visible = true
         var left = t.durationMs
-        while (left > 0 && !leaving) { delay(TICK_MS); if (!hoveredNow) left -= TICK_MS }
+        while ((t.sticky || left > 0) && !leaving) { delay(TICK_MS); if (!hoveredNow && !t.sticky) left -= TICK_MS }
         visible = false
         delay(SLIDE_MS.toLong())
         gone()
@@ -124,9 +139,15 @@ private fun Toast(t: ToastEvent, reducedMotion: Boolean, onOpen: () -> Unit, onG
             Column(Modifier.weight(1f).padding(10.dp, 6.dp)) {
                 Text(t.title, color = Palette.Muted, fontSize = 11.sp, maxLines = 1)
                 t.body?.let { Text(it, color = colour, fontSize = 12.sp, maxLines = 3) }
+                if (t.actions.isNotEmpty()) Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 4.dp)) {
+                    for (a in t.actions) {
+                        Text(a.label, color = colour, fontSize = 12.sp,
+                            modifier = Modifier.clickable { close(); onAction(a.id) }.testTag(TOAST_ACTION_TAG + a.id))
+                    }
+                }
             }
             Text("×", color = Palette.Muted, fontSize = 16.sp,
-                modifier = Modifier.clickable { close() }.semantics { contentDescription = "Dismiss notification" }
+                modifier = Modifier.clickable { close(); onDismiss() }.semantics { contentDescription = "Dismiss notification" }
                     .padding(10.dp, 4.dp).testTag(TOAST_CLOSE_TAG))
         }
     }

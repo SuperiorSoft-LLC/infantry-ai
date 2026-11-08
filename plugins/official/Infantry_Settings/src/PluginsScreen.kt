@@ -36,6 +36,10 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import com.superiorsoftllc.infantry.plugin.api.PluginProgress
+import com.superiorsoftllc.infantry.plugin.api.Notification
+import com.superiorsoftllc.infantry.plugin.api.NotificationAction
+import com.superiorsoftllc.infantry.plugin.api.NotificationLevel
+import com.superiorsoftllc.infantry.ui.shell.LocalShellContext
 import kotlinx.coroutines.delay
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LocalContentColor
@@ -155,6 +159,14 @@ fun PluginsScreen(port: PluginManagerPort) {
     var retry by remember { mutableStateOf<(() -> Unit)?>(null) }
     var version by remember { mutableStateOf(0) }
     val scope = rememberCoroutineScope()
+    // NOTIFY-CORE-1: a failed install/update/remove is also an error notification on the core bus (it reaches the user when they
+    // left this tab); its Retry action runs the change again. The inline notice below stays, next to the plugin it is about.
+    val bus = LocalShellContext.current?.toast?.notifications
+    var lastFailure by remember { mutableStateOf<String?>(null) }
+    DisposableEffect(bus) {
+        val stop = bus?.onAction { e -> if (e.notificationId == lastFailure && e.actionId == PLUGIN_RETRY_ACTION) retry?.let { r -> failed = null; retry = null; r() } }
+        onDispose { stop?.close() }
+    }
     // PLUGIN-SOURCES-1: opening the tab refreshes stale catalogs in the background, then reloads so update offers show.
     LaunchedEffect(Unit) {
         val r = withContext(Dispatchers.Default) { runCatching { port.refreshIfStale() }.getOrNull() }
@@ -176,7 +188,10 @@ fun PluginsScreen(port: PluginManagerPort) {
             busy = false
             progress = null
             note = r.message
-            if (!r.ok) { failed = r; retry = { runAct(call, then) } }
+            if (!r.ok) {
+                failed = r; retry = { runAct(call, then) }
+                lastFailure = bus?.notify(pluginFailure(r))
+            }
             if (r.restartNeeded) banner = r.message
             version++
             then(r)
@@ -269,6 +284,18 @@ private fun ProgressStrip(p: PluginProgress, startedAt: Long) {
         com.superiorsoftllc.infantry.ui.progress.ProgressBar(frac, Modifier.fillMaxWidth())
     }
 }
+
+/** NOTIFY-CORE-1: the retry action of a failed plugin change's notification. */
+const val PLUGIN_RETRY_ACTION = "retry"
+
+/** NOTIFY-CORE-1: a failed plugin change as a notification on the core bus. */
+fun pluginFailure(r: ActionResult): Notification = Notification(
+    title = "Plugin change failed",
+    body = r.message,
+    level = NotificationLevel.ERROR,
+    dedupeKey = "plugins.failed:" + r.message,
+    actions = listOf(NotificationAction(PLUGIN_RETRY_ACTION, "Retry")),
+)
 
 /** PLUGIN-PROGRESS-1: the exact reason a change failed, with Retry (and dismiss). */
 @Composable

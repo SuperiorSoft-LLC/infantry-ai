@@ -97,6 +97,7 @@ public abstract interface class com/superiorsoftllc/infantry/daemon/api/DaemonAp
 	public fun getLaunchEnv ()Lcom/superiorsoftllc/infantry/daemon/api/processes/LaunchEnv;
 	public fun getMeters ()Lcom/superiorsoftllc/infantry/daemon/api/usage/Meters;
 	public abstract fun getModuleId ()Ljava/lang/String;
+	public fun getNotifications ()Lcom/superiorsoftllc/infantry/plugin/api/Notifications;
 	public fun getPlugins ()Lcom/superiorsoftllc/infantry/daemon/api/plugins/PluginCatalogReader;
 	public abstract fun getPolicy ()Lcom/superiorsoftllc/infantry/daemon/api/Policy;
 	public fun getProcesses ()Lcom/superiorsoftllc/infantry/daemon/api/processes/Processes;
@@ -140,6 +141,7 @@ public final class com/superiorsoftllc/infantry/daemon/api/DaemonApi$DefaultImpl
 	public static fun getEpics (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;)Lcom/superiorsoftllc/infantry/daemon/api/board/Epics;
 	public static fun getLaunchEnv (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;)Lcom/superiorsoftllc/infantry/daemon/api/processes/LaunchEnv;
 	public static fun getMeters (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;)Lcom/superiorsoftllc/infantry/daemon/api/usage/Meters;
+	public static fun getNotifications (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;)Lcom/superiorsoftllc/infantry/plugin/api/Notifications;
 	public static fun getPlugins (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;)Lcom/superiorsoftllc/infantry/daemon/api/plugins/PluginCatalogReader;
 	public static fun getProcesses (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;)Lcom/superiorsoftllc/infantry/daemon/api/processes/Processes;
 	public static fun getProgress (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;)Lcom/superiorsoftllc/infantry/plugin/api/Progress;
@@ -3299,6 +3301,15 @@ public final class com/superiorsoftllc/infantry/daemon/api/knowledge/KnowledgeWr
 
 public final class com/superiorsoftllc/infantry/daemon/api/knowledge/KnowledgeWriter$DefaultImpls {
 	public static synthetic fun save$default (Lcom/superiorsoftllc/infantry/daemon/api/knowledge/KnowledgeWriter;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)V
+}
+
+public final class com/superiorsoftllc/infantry/daemon/api/notifications/NoNotifications : com/superiorsoftllc/infantry/plugin/api/Notifications {
+	public static final field INSTANCE Lcom/superiorsoftllc/infantry/daemon/api/notifications/NoNotifications;
+	public fun dismiss (Ljava/lang/String;)V
+	public fun notify (Lcom/superiorsoftllc/infantry/plugin/api/Notification;)Ljava/lang/String;
+	public fun notify (Ljava/lang/String;Ljava/lang/String;)V
+	public fun onAction (Lkotlin/jvm/functions/Function1;)Ljava/lang/AutoCloseable;
+	public fun present (Ljava/lang/String;Ljava/util/Set;Lcom/superiorsoftllc/infantry/plugin/api/NotificationPresenter;)Ljava/lang/AutoCloseable;
 }
 
 public final class com/superiorsoftllc/infantry/daemon/api/orchestrator/AgentIdentity {

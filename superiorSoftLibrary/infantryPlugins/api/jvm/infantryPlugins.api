@@ -2101,8 +2101,243 @@ public final class com/superiorsoftllc/infantry/plugin/api/NodeDeclaration$Compa
 	public final fun serializer ()Lkotlinx/serialization/KSerializer;
 }
 
+public final class com/superiorsoftllc/infantry/plugin/api/Notification {
+	public static final field Companion Lcom/superiorsoftllc/infantry/plugin/api/Notification$Companion;
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Lcom/superiorsoftllc/infantry/plugin/api/NotificationLevel;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;ZJLjava/lang/String;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;J)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Lcom/superiorsoftllc/infantry/plugin/api/NotificationLevel;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;ZJLjava/lang/String;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component10 ()Ljava/util/List;
+	public final fun component11 ()Ljava/lang/String;
+	public final fun component12 ()Ljava/lang/String;
+	public final fun component13 ()Ljava/lang/String;
+	public final fun component14 ()J
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Lcom/superiorsoftllc/infantry/plugin/api/NotificationLevel;
+	public final fun component4 ()Ljava/lang/String;
+	public final fun component5 ()Ljava/lang/String;
+	public final fun component6 ()Ljava/util/List;
+	public final fun component7 ()Z
+	public final fun component8 ()J
+	public final fun component9 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Lcom/superiorsoftllc/infantry/plugin/api/NotificationLevel;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;ZJLjava/lang/String;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;J)Lcom/superiorsoftllc/infantry/plugin/api/Notification;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/plugin/api/Notification;Ljava/lang/String;Ljava/lang/String;Lcom/superiorsoftllc/infantry/plugin/api/NotificationLevel;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;ZJLjava/lang/String;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/api/Notification;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getActions ()Ljava/util/List;
+	public final fun getAt ()J
+	public final fun getBody ()Ljava/lang/String;
+	public final fun getChannels ()Ljava/util/List;
+	public final fun getDedupeKey ()Ljava/lang/String;
+	public final fun getId ()Ljava/lang/String;
+	public final fun getLevel ()Lcom/superiorsoftllc/infantry/plugin/api/NotificationLevel;
+	public final fun getProjectId ()Ljava/lang/String;
+	public final fun getSessionId ()Ljava/lang/String;
+	public final fun getSource ()Ljava/lang/String;
+	public final fun getSticky ()Z
+	public final fun getTicketId ()Ljava/lang/String;
+	public final fun getTimeoutMs ()J
+	public final fun getTitle ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final synthetic class com/superiorsoftllc/infantry/plugin/api/Notification$$serializer : kotlinx/serialization/internal/GeneratedSerializer {
+	public static final field INSTANCE Lcom/superiorsoftllc/infantry/plugin/api/Notification$$serializer;
+	public final fun childSerializers ()[Lkotlinx/serialization/KSerializer;
+	public final fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Lcom/superiorsoftllc/infantry/plugin/api/Notification;
+	public synthetic fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;
+	public final fun getDescriptor ()Lkotlinx/serialization/descriptors/SerialDescriptor;
+	public final fun serialize (Lkotlinx/serialization/encoding/Encoder;Lcom/superiorsoftllc/infantry/plugin/api/Notification;)V
+	public synthetic fun serialize (Lkotlinx/serialization/encoding/Encoder;Ljava/lang/Object;)V
+	public fun typeParametersSerializers ()[Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/superiorsoftllc/infantry/plugin/api/Notification$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/superiorsoftllc/infantry/plugin/api/NotificationAction {
+	public static final field Companion Lcom/superiorsoftllc/infantry/plugin/api/NotificationAction$Companion;
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/plugin/api/NotificationAction;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/plugin/api/NotificationAction;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/api/NotificationAction;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getId ()Ljava/lang/String;
+	public final fun getLabel ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final synthetic class com/superiorsoftllc/infantry/plugin/api/NotificationAction$$serializer : kotlinx/serialization/internal/GeneratedSerializer {
+	public static final field INSTANCE Lcom/superiorsoftllc/infantry/plugin/api/NotificationAction$$serializer;
+	public final fun childSerializers ()[Lkotlinx/serialization/KSerializer;
+	public final fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Lcom/superiorsoftllc/infantry/plugin/api/NotificationAction;
+	public synthetic fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;
+	public final fun getDescriptor ()Lkotlinx/serialization/descriptors/SerialDescriptor;
+	public final fun serialize (Lkotlinx/serialization/encoding/Encoder;Lcom/superiorsoftllc/infantry/plugin/api/NotificationAction;)V
+	public synthetic fun serialize (Lkotlinx/serialization/encoding/Encoder;Ljava/lang/Object;)V
+	public fun typeParametersSerializers ()[Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/superiorsoftllc/infantry/plugin/api/NotificationAction$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/superiorsoftllc/infantry/plugin/api/NotificationActionEvent {
+	public static final field Companion Lcom/superiorsoftllc/infantry/plugin/api/NotificationActionEvent$Companion;
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/plugin/api/NotificationActionEvent;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/plugin/api/NotificationActionEvent;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/api/NotificationActionEvent;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getActionId ()Ljava/lang/String;
+	public final fun getNotificationId ()Ljava/lang/String;
+	public final fun getSource ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final synthetic class com/superiorsoftllc/infantry/plugin/api/NotificationActionEvent$$serializer : kotlinx/serialization/internal/GeneratedSerializer {
+	public static final field INSTANCE Lcom/superiorsoftllc/infantry/plugin/api/NotificationActionEvent$$serializer;
+	public final fun childSerializers ()[Lkotlinx/serialization/KSerializer;
+	public final fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Lcom/superiorsoftllc/infantry/plugin/api/NotificationActionEvent;
+	public synthetic fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;
+	public final fun getDescriptor ()Lkotlinx/serialization/descriptors/SerialDescriptor;
+	public final fun serialize (Lkotlinx/serialization/encoding/Encoder;Lcom/superiorsoftllc/infantry/plugin/api/NotificationActionEvent;)V
+	public synthetic fun serialize (Lkotlinx/serialization/encoding/Encoder;Ljava/lang/Object;)V
+	public fun typeParametersSerializers ()[Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/superiorsoftllc/infantry/plugin/api/NotificationActionEvent$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/superiorsoftllc/infantry/plugin/api/NotificationChannels {
+	public static final field CORE Ljava/lang/String;
+	public static final field INSTANCE Lcom/superiorsoftllc/infantry/plugin/api/NotificationChannels;
+	public static final field IN_APP Ljava/lang/String;
+	public static final field OS Ljava/lang/String;
+	public final fun getBUILT_IN ()Ljava/util/List;
+}
+
+public final class com/superiorsoftllc/infantry/plugin/api/NotificationLevel : java/lang/Enum {
+	public static final field Companion Lcom/superiorsoftllc/infantry/plugin/api/NotificationLevel$Companion;
+	public static final field ERROR Lcom/superiorsoftllc/infantry/plugin/api/NotificationLevel;
+	public static final field INFO Lcom/superiorsoftllc/infantry/plugin/api/NotificationLevel;
+	public static final field SUCCESS Lcom/superiorsoftllc/infantry/plugin/api/NotificationLevel;
+	public static final field URGENT Lcom/superiorsoftllc/infantry/plugin/api/NotificationLevel;
+	public static final field WARNING Lcom/superiorsoftllc/infantry/plugin/api/NotificationLevel;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public final fun getWire ()Ljava/lang/String;
+	public static fun valueOf (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/plugin/api/NotificationLevel;
+	public static fun values ()[Lcom/superiorsoftllc/infantry/plugin/api/NotificationLevel;
+}
+
+public final class com/superiorsoftllc/infantry/plugin/api/NotificationLevel$Companion {
+	public final fun of (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/plugin/api/NotificationLevel;
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public abstract interface class com/superiorsoftllc/infantry/plugin/api/NotificationPresenter {
+	public fun dismiss (Ljava/lang/String;)V
+	public abstract fun show (Lcom/superiorsoftllc/infantry/plugin/api/Notification;)Z
+}
+
+public final class com/superiorsoftllc/infantry/plugin/api/NotificationPresenter$DefaultImpls {
+	public static fun dismiss (Lcom/superiorsoftllc/infantry/plugin/api/NotificationPresenter;Ljava/lang/String;)V
+}
+
+public final class com/superiorsoftllc/infantry/plugin/api/NotificationSettings {
+	public static final field BODY_MAX_CHARS Ljava/lang/String;
+	public static final field Companion Lcom/superiorsoftllc/infantry/plugin/api/NotificationSettings$Companion;
+	public static final field DEDUPE_WINDOW_SEC Ljava/lang/String;
+	public static final field DEFAULT_BODY_MAX_CHARS I
+	public static final field DEFAULT_DEDUPE_WINDOW_SEC I
+	public static final field DEFAULT_HISTORY_MAX I
+	public static final field DEFAULT_TITLE_MAX_CHARS I
+	public static final field HISTORY_MAX Ljava/lang/String;
+	public static final field MAX_BODY_MAX_CHARS I
+	public static final field MAX_DEDUPE_WINDOW_SEC I
+	public static final field MAX_HISTORY_MAX I
+	public static final field MAX_TITLE_MAX_CHARS I
+	public static final field MINUTES_PER_DAY I
+	public static final field PREFIX Ljava/lang/String;
+	public static final field PRESENTER_PREFIX Ljava/lang/String;
+	public static final field QUIET_HOURS Ljava/lang/String;
+	public static final field ROUTE_PREFIX Ljava/lang/String;
+	public static final field TITLE_MAX_CHARS Ljava/lang/String;
+	public fun <init> ()V
+	public fun <init> (Ljava/util/Map;Ljava/util/Map;Ljava/lang/String;IIII)V
+	public synthetic fun <init> (Ljava/util/Map;Ljava/util/Map;Ljava/lang/String;IIIIILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/util/Map;
+	public final fun component2 ()Ljava/util/Map;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()I
+	public final fun component5 ()I
+	public final fun component6 ()I
+	public final fun component7 ()I
+	public final fun copy (Ljava/util/Map;Ljava/util/Map;Ljava/lang/String;IIII)Lcom/superiorsoftllc/infantry/plugin/api/NotificationSettings;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/plugin/api/NotificationSettings;Ljava/util/Map;Ljava/util/Map;Ljava/lang/String;IIIIILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/api/NotificationSettings;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getBodyMaxChars ()I
+	public final fun getDedupeWindowSec ()I
+	public final fun getHistoryMax ()I
+	public final fun getPresenters ()Ljava/util/Map;
+	public final fun getQuietHours ()Ljava/lang/String;
+	public final fun getRoutes ()Ljava/util/Map;
+	public final fun getTitleMaxChars ()I
+	public fun hashCode ()I
+	public final fun presenter (Ljava/lang/String;)Ljava/lang/String;
+	public final fun quiet (Ljava/lang/Integer;)Z
+	public final fun route (Lcom/superiorsoftllc/infantry/plugin/api/NotificationLevel;)Ljava/util/List;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/plugin/api/NotificationSettings$Companion {
+	public final fun from (Ljava/util/Map;)Lcom/superiorsoftllc/infantry/plugin/api/NotificationSettings;
+	public final fun fromSettingsFrame (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/plugin/api/NotificationSettings;
+	public final fun getDEFAULT_ROUTES ()Ljava/util/Map;
+	public final fun getKEYS ()Ljava/util/List;
+	public final fun isKey (Ljava/lang/String;)Z
+	public final fun json (Lcom/superiorsoftllc/infantry/plugin/api/NotificationSettings;)Ljava/util/Map;
+	public final fun parseQuietHours (Ljava/lang/String;)Lkotlin/Pair;
+	public final fun parseRoute (Ljava/lang/String;)Ljava/util/List;
+	public final fun validated (Ljava/lang/String;Lkotlinx/serialization/json/JsonElement;)Lkotlinx/serialization/json/JsonElement;
+}
+
+public final class com/superiorsoftllc/infantry/plugin/api/NotificationWire {
+	public static final field ACTION Ljava/lang/String;
+	public static final field DISMISS Ljava/lang/String;
+	public static final field EVENT_ACTION Ljava/lang/String;
+	public static final field INSTANCE Lcom/superiorsoftllc/infantry/plugin/api/NotificationWire;
+	public static final field PUSH Ljava/lang/String;
+	public final fun action (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/plugin/api/NotificationActionEvent;
+	public final fun dismiss (Ljava/lang/String;)Ljava/lang/String;
+	public final fun dismissId (Ljava/lang/String;)Ljava/lang/String;
+	public final fun encode (Lcom/superiorsoftllc/infantry/plugin/api/Notification;)Ljava/lang/String;
+	public final fun encode (Lcom/superiorsoftllc/infantry/plugin/api/NotificationActionEvent;)Ljava/lang/String;
+	public final fun getCLIENT_FRAMES ()Ljava/util/Set;
+	public final fun getJson ()Lkotlinx/serialization/json/Json;
+	public final fun notification (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/plugin/api/Notification;
+}
+
 public abstract interface class com/superiorsoftllc/infantry/plugin/api/Notifications {
+	public fun dismiss (Ljava/lang/String;)V
+	public fun notify (Lcom/superiorsoftllc/infantry/plugin/api/Notification;)Ljava/lang/String;
 	public abstract fun notify (Ljava/lang/String;Ljava/lang/String;)V
+	public fun onAction (Lkotlin/jvm/functions/Function1;)Ljava/lang/AutoCloseable;
+	public fun present (Ljava/lang/String;Ljava/util/Set;Lcom/superiorsoftllc/infantry/plugin/api/NotificationPresenter;)Ljava/lang/AutoCloseable;
+}
+
+public final class com/superiorsoftllc/infantry/plugin/api/Notifications$DefaultImpls {
+	public static fun dismiss (Lcom/superiorsoftllc/infantry/plugin/api/Notifications;Ljava/lang/String;)V
+	public static fun notify (Lcom/superiorsoftllc/infantry/plugin/api/Notifications;Lcom/superiorsoftllc/infantry/plugin/api/Notification;)Ljava/lang/String;
+	public static fun onAction (Lcom/superiorsoftllc/infantry/plugin/api/Notifications;Lkotlin/jvm/functions/Function1;)Ljava/lang/AutoCloseable;
+	public static fun present (Lcom/superiorsoftllc/infantry/plugin/api/Notifications;Ljava/lang/String;Ljava/util/Set;Lcom/superiorsoftllc/infantry/plugin/api/NotificationPresenter;)Ljava/lang/AutoCloseable;
 }
 
 public final class com/superiorsoftllc/infantry/plugin/api/ObserverDeclaration {
@@ -3399,6 +3634,70 @@ public final class com/superiorsoftllc/infantry/plugin/host/NestedDep {
 	public final fun getVersion ()Ljava/lang/String;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/plugin/host/NotificationCenter : com/superiorsoftllc/infantry/plugin/api/Notifications {
+	public static final field Companion Lcom/superiorsoftllc/infantry/plugin/host/NotificationCenter$Companion;
+	public static final field MILLIS_PER_SECOND J
+	public fun <init> ()V
+	public fun <init> (Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function3;Ljava/lang/String;)V
+	public synthetic fun <init> (Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function3;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun action (Ljava/lang/String;Ljava/lang/String;)V
+	public final fun active (Ljava/lang/String;)Ljava/lang/String;
+	public final fun channelsFor (Lcom/superiorsoftllc/infantry/plugin/api/Notification;)Ljava/util/List;
+	public final fun clearHistory ()V
+	public final fun deliver (Lcom/superiorsoftllc/infantry/plugin/api/Notification;)Lcom/superiorsoftllc/infantry/plugin/host/NotificationCenter$Delivery;
+	public fun dismiss (Ljava/lang/String;)V
+	public final fun getHistory ()Lkotlinx/coroutines/flow/StateFlow;
+	public fun notify (Lcom/superiorsoftllc/infantry/plugin/api/Notification;)Ljava/lang/String;
+	public fun notify (Ljava/lang/String;Ljava/lang/String;)V
+	public fun onAction (Lkotlin/jvm/functions/Function1;)Ljava/lang/AutoCloseable;
+	public fun present (Ljava/lang/String;Ljava/util/Set;Lcom/superiorsoftllc/infantry/plugin/api/NotificationPresenter;)Ljava/lang/AutoCloseable;
+	public final fun setDefault (Ljava/lang/String;Lcom/superiorsoftllc/infantry/plugin/api/NotificationPresenter;)V
+}
+
+public final class com/superiorsoftllc/infantry/plugin/host/NotificationCenter$Companion {
+}
+
+public final class com/superiorsoftllc/infantry/plugin/host/NotificationCenter$Delivery {
+	public fun <init> (Lcom/superiorsoftllc/infantry/plugin/api/Notification;ZLjava/util/Map;)V
+	public synthetic fun <init> (Lcom/superiorsoftllc/infantry/plugin/api/Notification;ZLjava/util/Map;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Lcom/superiorsoftllc/infantry/plugin/api/Notification;
+	public final fun component2 ()Z
+	public final fun component3 ()Ljava/util/Map;
+	public final fun copy (Lcom/superiorsoftllc/infantry/plugin/api/Notification;ZLjava/util/Map;)Lcom/superiorsoftllc/infantry/plugin/host/NotificationCenter$Delivery;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/plugin/host/NotificationCenter$Delivery;Lcom/superiorsoftllc/infantry/plugin/api/Notification;ZLjava/util/Map;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/host/NotificationCenter$Delivery;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDeduped ()Z
+	public final fun getNotification ()Lcom/superiorsoftllc/infantry/plugin/api/Notification;
+	public final fun getShownOn ()Ljava/util/Map;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/plugin/host/NotificationCenter$Record {
+	public fun <init> (Lcom/superiorsoftllc/infantry/plugin/api/Notification;Ljava/util/Map;IZ)V
+	public synthetic fun <init> (Lcom/superiorsoftllc/infantry/plugin/api/Notification;Ljava/util/Map;IZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Lcom/superiorsoftllc/infantry/plugin/api/Notification;
+	public final fun component2 ()Ljava/util/Map;
+	public final fun component3 ()I
+	public final fun component4 ()Z
+	public final fun copy (Lcom/superiorsoftllc/infantry/plugin/api/Notification;Ljava/util/Map;IZ)Lcom/superiorsoftllc/infantry/plugin/host/NotificationCenter$Record;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/plugin/host/NotificationCenter$Record;Lcom/superiorsoftllc/infantry/plugin/api/Notification;Ljava/util/Map;IZILjava/lang/Object;)Lcom/superiorsoftllc/infantry/plugin/host/NotificationCenter$Record;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDismissed ()Z
+	public final fun getNotification ()Lcom/superiorsoftllc/infantry/plugin/api/Notification;
+	public final fun getRepeats ()I
+	public final fun getShownOn ()Ljava/util/Map;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/plugin/host/NotificationCenter$SequentialIds {
+	public fun <init> ()V
+	public fun <init> (Ljava/lang/String;)V
+	public synthetic fun <init> (Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun next ()Ljava/lang/String;
 }
 
 public final class com/superiorsoftllc/infantry/plugin/host/OfficialTrust {

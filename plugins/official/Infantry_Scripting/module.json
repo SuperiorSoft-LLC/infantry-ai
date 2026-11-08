@@ -71,6 +71,7 @@
       { "name": "infantry_script_delete", "action": "script.delete", "kind": "write", "description": "Delete a stored script (scope=global: from the Script Arsenal); refused while a hook uses it." },
       { "name": "infantry_exec", "action": "script.exec", "kind": "write", "description": "Run a command line as the caller (no shell); exit code and output tails back. Off until scripting.exec.enabled." },
       { "name": "infantry_exec_status", "action": "script.exec.status", "kind": "read", "description": "State and result of a background infantry_exec run." },
+      { "name": "infantry_notification_post", "action": "script.notify", "kind": "write", "description": "Post a notification on the core notification bus (in-app toast, OS for urgent ones); script alias notify." },
       { "name": "infantry_script_stats", "action": "script.stats", "kind": "read", "description": "Script automation, read-only: turns saved, wakes by reason and the latest script runs." }
     ],
     "config": [

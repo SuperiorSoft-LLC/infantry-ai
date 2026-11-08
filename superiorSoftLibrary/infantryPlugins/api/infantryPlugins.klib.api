@@ -6,6 +6,28 @@
 // - Show declarations: true
 
 // Library unique name: <tech.superiorsoftllc.infantry:infantryPlugins>
+final enum class com.superiorsoftllc.infantry.plugin.api/NotificationLevel : kotlin/Enum<com.superiorsoftllc.infantry.plugin.api/NotificationLevel> { // com.superiorsoftllc.infantry.plugin.api/NotificationLevel|null[0]
+    enum entry ERROR // com.superiorsoftllc.infantry.plugin.api/NotificationLevel.ERROR|null[0]
+    enum entry INFO // com.superiorsoftllc.infantry.plugin.api/NotificationLevel.INFO|null[0]
+    enum entry SUCCESS // com.superiorsoftllc.infantry.plugin.api/NotificationLevel.SUCCESS|null[0]
+    enum entry URGENT // com.superiorsoftllc.infantry.plugin.api/NotificationLevel.URGENT|null[0]
+    enum entry WARNING // com.superiorsoftllc.infantry.plugin.api/NotificationLevel.WARNING|null[0]
+
+    final val entries // com.superiorsoftllc.infantry.plugin.api/NotificationLevel.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<com.superiorsoftllc.infantry.plugin.api/NotificationLevel> // com.superiorsoftllc.infantry.plugin.api/NotificationLevel.entries.<get-entries>|<get-entries>#static(){}[0]
+    final val wire // com.superiorsoftllc.infantry.plugin.api/NotificationLevel.wire|{}wire[0]
+        final fun <get-wire>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/NotificationLevel.wire.<get-wire>|<get-wire>(){}[0]
+
+    final fun valueOf(kotlin/String): com.superiorsoftllc.infantry.plugin.api/NotificationLevel // com.superiorsoftllc.infantry.plugin.api/NotificationLevel.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<com.superiorsoftllc.infantry.plugin.api/NotificationLevel> // com.superiorsoftllc.infantry.plugin.api/NotificationLevel.values|values#static(){}[0]
+
+    final object Companion : kotlinx.serialization.internal/SerializerFactory { // com.superiorsoftllc.infantry.plugin.api/NotificationLevel.Companion|null[0]
+        final fun of(kotlin/String?): com.superiorsoftllc.infantry.plugin.api/NotificationLevel // com.superiorsoftllc.infantry.plugin.api/NotificationLevel.Companion.of|of(kotlin.String?){}[0]
+        final fun serializer(): kotlinx.serialization/KSerializer<com.superiorsoftllc.infantry.plugin.api/NotificationLevel> // com.superiorsoftllc.infantry.plugin.api/NotificationLevel.Companion.serializer|serializer(){}[0]
+        final fun serializer(kotlin/Array<out kotlinx.serialization/KSerializer<*>>...): kotlinx.serialization/KSerializer<*> // com.superiorsoftllc.infantry.plugin.api/NotificationLevel.Companion.serializer|serializer(kotlin.Array<out|kotlinx.serialization.KSerializer<*>>...){}[0]
+    }
+}
+
 final enum class com.superiorsoftllc.infantry.plugin.api/ProgressState : kotlin/Enum<com.superiorsoftllc.infantry.plugin.api/ProgressState> { // com.superiorsoftllc.infantry.plugin.api/ProgressState|null[0]
     enum entry CANCELLED // com.superiorsoftllc.infantry.plugin.api/ProgressState.CANCELLED|null[0]
     enum entry DONE // com.superiorsoftllc.infantry.plugin.api/ProgressState.DONE|null[0]
@@ -61,8 +83,17 @@ abstract fun interface com.superiorsoftllc.infantry.plugin.api/DaemonAccess { //
     abstract suspend fun call(kotlin/String, kotlin/String?): com.superiorsoftllc.infantry.plugin.api/DaemonReply // com.superiorsoftllc.infantry.plugin.api/DaemonAccess.call|call(kotlin.String;kotlin.String?){}[0]
 }
 
+abstract fun interface com.superiorsoftllc.infantry.plugin.api/NotificationPresenter { // com.superiorsoftllc.infantry.plugin.api/NotificationPresenter|null[0]
+    abstract fun show(com.superiorsoftllc.infantry.plugin.api/Notification): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/NotificationPresenter.show|show(com.superiorsoftllc.infantry.plugin.api.Notification){}[0]
+    open fun dismiss(kotlin/String) // com.superiorsoftllc.infantry.plugin.api/NotificationPresenter.dismiss|dismiss(kotlin.String){}[0]
+}
+
 abstract fun interface com.superiorsoftllc.infantry.plugin.api/Notifications { // com.superiorsoftllc.infantry.plugin.api/Notifications|null[0]
     abstract fun notify(kotlin/String, kotlin/String) // com.superiorsoftllc.infantry.plugin.api/Notifications.notify|notify(kotlin.String;kotlin.String){}[0]
+    open fun dismiss(kotlin/String) // com.superiorsoftllc.infantry.plugin.api/Notifications.dismiss|dismiss(kotlin.String){}[0]
+    open fun notify(com.superiorsoftllc.infantry.plugin.api/Notification): kotlin/String // com.superiorsoftllc.infantry.plugin.api/Notifications.notify|notify(com.superiorsoftllc.infantry.plugin.api.Notification){}[0]
+    open fun onAction(kotlin/Function1<com.superiorsoftllc.infantry.plugin.api/NotificationActionEvent, kotlin/Unit>): kotlin/AutoCloseable // com.superiorsoftllc.infantry.plugin.api/Notifications.onAction|onAction(kotlin.Function1<com.superiorsoftllc.infantry.plugin.api.NotificationActionEvent,kotlin.Unit>){}[0]
+    open fun present(kotlin/String, kotlin.collections/Set<kotlin/String>, com.superiorsoftllc.infantry.plugin.api/NotificationPresenter): kotlin/AutoCloseable // com.superiorsoftllc.infantry.plugin.api/Notifications.present|present(kotlin.String;kotlin.collections.Set<kotlin.String>;com.superiorsoftllc.infantry.plugin.api.NotificationPresenter){}[0]
 }
 
 abstract fun interface com.superiorsoftllc.infantry.plugin.api/ProgressPresenter { // com.superiorsoftllc.infantry.plugin.api/ProgressPresenter|null[0]
@@ -2356,6 +2387,218 @@ final class com.superiorsoftllc.infantry.plugin.api/NodeDeclaration { // com.sup
     }
 }
 
+final class com.superiorsoftllc.infantry.plugin.api/Notification { // com.superiorsoftllc.infantry.plugin.api/Notification|null[0]
+    constructor <init>(kotlin/String, kotlin/String = ..., com.superiorsoftllc.infantry.plugin.api/NotificationLevel = ..., kotlin/String = ..., kotlin/String = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/NotificationAction> = ..., kotlin/Boolean = ..., kotlin/Long = ..., kotlin/String? = ..., kotlin.collections/List<kotlin/String> = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/Long = ...) // com.superiorsoftllc.infantry.plugin.api/Notification.<init>|<init>(kotlin.String;kotlin.String;com.superiorsoftllc.infantry.plugin.api.NotificationLevel;kotlin.String;kotlin.String;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.NotificationAction>;kotlin.Boolean;kotlin.Long;kotlin.String?;kotlin.collections.List<kotlin.String>;kotlin.String?;kotlin.String?;kotlin.String?;kotlin.Long){}[0]
+
+    final val actions // com.superiorsoftllc.infantry.plugin.api/Notification.actions|{}actions[0]
+        final fun <get-actions>(): kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/NotificationAction> // com.superiorsoftllc.infantry.plugin.api/Notification.actions.<get-actions>|<get-actions>(){}[0]
+    final val at // com.superiorsoftllc.infantry.plugin.api/Notification.at|{}at[0]
+        final fun <get-at>(): kotlin/Long // com.superiorsoftllc.infantry.plugin.api/Notification.at.<get-at>|<get-at>(){}[0]
+    final val body // com.superiorsoftllc.infantry.plugin.api/Notification.body|{}body[0]
+        final fun <get-body>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/Notification.body.<get-body>|<get-body>(){}[0]
+    final val channels // com.superiorsoftllc.infantry.plugin.api/Notification.channels|{}channels[0]
+        final fun <get-channels>(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/Notification.channels.<get-channels>|<get-channels>(){}[0]
+    final val dedupeKey // com.superiorsoftllc.infantry.plugin.api/Notification.dedupeKey|{}dedupeKey[0]
+        final fun <get-dedupeKey>(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/Notification.dedupeKey.<get-dedupeKey>|<get-dedupeKey>(){}[0]
+    final val id // com.superiorsoftllc.infantry.plugin.api/Notification.id|{}id[0]
+        final fun <get-id>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/Notification.id.<get-id>|<get-id>(){}[0]
+    final val level // com.superiorsoftllc.infantry.plugin.api/Notification.level|{}level[0]
+        final fun <get-level>(): com.superiorsoftllc.infantry.plugin.api/NotificationLevel // com.superiorsoftllc.infantry.plugin.api/Notification.level.<get-level>|<get-level>(){}[0]
+    final val projectId // com.superiorsoftllc.infantry.plugin.api/Notification.projectId|{}projectId[0]
+        final fun <get-projectId>(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/Notification.projectId.<get-projectId>|<get-projectId>(){}[0]
+    final val sessionId // com.superiorsoftllc.infantry.plugin.api/Notification.sessionId|{}sessionId[0]
+        final fun <get-sessionId>(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/Notification.sessionId.<get-sessionId>|<get-sessionId>(){}[0]
+    final val source // com.superiorsoftllc.infantry.plugin.api/Notification.source|{}source[0]
+        final fun <get-source>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/Notification.source.<get-source>|<get-source>(){}[0]
+    final val sticky // com.superiorsoftllc.infantry.plugin.api/Notification.sticky|{}sticky[0]
+        final fun <get-sticky>(): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/Notification.sticky.<get-sticky>|<get-sticky>(){}[0]
+    final val ticketId // com.superiorsoftllc.infantry.plugin.api/Notification.ticketId|{}ticketId[0]
+        final fun <get-ticketId>(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/Notification.ticketId.<get-ticketId>|<get-ticketId>(){}[0]
+    final val timeoutMs // com.superiorsoftllc.infantry.plugin.api/Notification.timeoutMs|{}timeoutMs[0]
+        final fun <get-timeoutMs>(): kotlin/Long // com.superiorsoftllc.infantry.plugin.api/Notification.timeoutMs.<get-timeoutMs>|<get-timeoutMs>(){}[0]
+    final val title // com.superiorsoftllc.infantry.plugin.api/Notification.title|{}title[0]
+        final fun <get-title>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/Notification.title.<get-title>|<get-title>(){}[0]
+
+    final fun component1(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/Notification.component1|component1(){}[0]
+    final fun component10(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/Notification.component10|component10(){}[0]
+    final fun component11(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/Notification.component11|component11(){}[0]
+    final fun component12(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/Notification.component12|component12(){}[0]
+    final fun component13(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/Notification.component13|component13(){}[0]
+    final fun component14(): kotlin/Long // com.superiorsoftllc.infantry.plugin.api/Notification.component14|component14(){}[0]
+    final fun component2(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/Notification.component2|component2(){}[0]
+    final fun component3(): com.superiorsoftllc.infantry.plugin.api/NotificationLevel // com.superiorsoftllc.infantry.plugin.api/Notification.component3|component3(){}[0]
+    final fun component4(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/Notification.component4|component4(){}[0]
+    final fun component5(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/Notification.component5|component5(){}[0]
+    final fun component6(): kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/NotificationAction> // com.superiorsoftllc.infantry.plugin.api/Notification.component6|component6(){}[0]
+    final fun component7(): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/Notification.component7|component7(){}[0]
+    final fun component8(): kotlin/Long // com.superiorsoftllc.infantry.plugin.api/Notification.component8|component8(){}[0]
+    final fun component9(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/Notification.component9|component9(){}[0]
+    final fun copy(kotlin/String = ..., kotlin/String = ..., com.superiorsoftllc.infantry.plugin.api/NotificationLevel = ..., kotlin/String = ..., kotlin/String = ..., kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/NotificationAction> = ..., kotlin/Boolean = ..., kotlin/Long = ..., kotlin/String? = ..., kotlin.collections/List<kotlin/String> = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/Long = ...): com.superiorsoftllc.infantry.plugin.api/Notification // com.superiorsoftllc.infantry.plugin.api/Notification.copy|copy(kotlin.String;kotlin.String;com.superiorsoftllc.infantry.plugin.api.NotificationLevel;kotlin.String;kotlin.String;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.NotificationAction>;kotlin.Boolean;kotlin.Long;kotlin.String?;kotlin.collections.List<kotlin.String>;kotlin.String?;kotlin.String?;kotlin.String?;kotlin.Long){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/Notification.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/Notification.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/Notification.toString|toString(){}[0]
+
+    final object $serializer : kotlinx.serialization.internal/GeneratedSerializer<com.superiorsoftllc.infantry.plugin.api/Notification> { // com.superiorsoftllc.infantry.plugin.api/Notification.$serializer|null[0]
+        final val descriptor // com.superiorsoftllc.infantry.plugin.api/Notification.$serializer.descriptor|{}descriptor[0]
+            final fun <get-descriptor>(): kotlinx.serialization.descriptors/SerialDescriptor // com.superiorsoftllc.infantry.plugin.api/Notification.$serializer.descriptor.<get-descriptor>|<get-descriptor>(){}[0]
+
+        final fun childSerializers(): kotlin/Array<kotlinx.serialization/KSerializer<*>> // com.superiorsoftllc.infantry.plugin.api/Notification.$serializer.childSerializers|childSerializers(){}[0]
+        final fun deserialize(kotlinx.serialization.encoding/Decoder): com.superiorsoftllc.infantry.plugin.api/Notification // com.superiorsoftllc.infantry.plugin.api/Notification.$serializer.deserialize|deserialize(kotlinx.serialization.encoding.Decoder){}[0]
+        final fun serialize(kotlinx.serialization.encoding/Encoder, com.superiorsoftllc.infantry.plugin.api/Notification) // com.superiorsoftllc.infantry.plugin.api/Notification.$serializer.serialize|serialize(kotlinx.serialization.encoding.Encoder;com.superiorsoftllc.infantry.plugin.api.Notification){}[0]
+    }
+
+    final object Companion { // com.superiorsoftllc.infantry.plugin.api/Notification.Companion|null[0]
+        final val $childSerializers // com.superiorsoftllc.infantry.plugin.api/Notification.Companion.$childSerializers|{}$childSerializers[0]
+
+        final fun serializer(): kotlinx.serialization/KSerializer<com.superiorsoftllc.infantry.plugin.api/Notification> // com.superiorsoftllc.infantry.plugin.api/Notification.Companion.serializer|serializer(){}[0]
+    }
+}
+
+final class com.superiorsoftllc.infantry.plugin.api/NotificationAction { // com.superiorsoftllc.infantry.plugin.api/NotificationAction|null[0]
+    constructor <init>(kotlin/String, kotlin/String) // com.superiorsoftllc.infantry.plugin.api/NotificationAction.<init>|<init>(kotlin.String;kotlin.String){}[0]
+
+    final val id // com.superiorsoftllc.infantry.plugin.api/NotificationAction.id|{}id[0]
+        final fun <get-id>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/NotificationAction.id.<get-id>|<get-id>(){}[0]
+    final val label // com.superiorsoftllc.infantry.plugin.api/NotificationAction.label|{}label[0]
+        final fun <get-label>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/NotificationAction.label.<get-label>|<get-label>(){}[0]
+
+    final fun component1(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/NotificationAction.component1|component1(){}[0]
+    final fun component2(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/NotificationAction.component2|component2(){}[0]
+    final fun copy(kotlin/String = ..., kotlin/String = ...): com.superiorsoftllc.infantry.plugin.api/NotificationAction // com.superiorsoftllc.infantry.plugin.api/NotificationAction.copy|copy(kotlin.String;kotlin.String){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/NotificationAction.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/NotificationAction.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/NotificationAction.toString|toString(){}[0]
+
+    final object $serializer : kotlinx.serialization.internal/GeneratedSerializer<com.superiorsoftllc.infantry.plugin.api/NotificationAction> { // com.superiorsoftllc.infantry.plugin.api/NotificationAction.$serializer|null[0]
+        final val descriptor // com.superiorsoftllc.infantry.plugin.api/NotificationAction.$serializer.descriptor|{}descriptor[0]
+            final fun <get-descriptor>(): kotlinx.serialization.descriptors/SerialDescriptor // com.superiorsoftllc.infantry.plugin.api/NotificationAction.$serializer.descriptor.<get-descriptor>|<get-descriptor>(){}[0]
+
+        final fun childSerializers(): kotlin/Array<kotlinx.serialization/KSerializer<*>> // com.superiorsoftllc.infantry.plugin.api/NotificationAction.$serializer.childSerializers|childSerializers(){}[0]
+        final fun deserialize(kotlinx.serialization.encoding/Decoder): com.superiorsoftllc.infantry.plugin.api/NotificationAction // com.superiorsoftllc.infantry.plugin.api/NotificationAction.$serializer.deserialize|deserialize(kotlinx.serialization.encoding.Decoder){}[0]
+        final fun serialize(kotlinx.serialization.encoding/Encoder, com.superiorsoftllc.infantry.plugin.api/NotificationAction) // com.superiorsoftllc.infantry.plugin.api/NotificationAction.$serializer.serialize|serialize(kotlinx.serialization.encoding.Encoder;com.superiorsoftllc.infantry.plugin.api.NotificationAction){}[0]
+    }
+
+    final object Companion { // com.superiorsoftllc.infantry.plugin.api/NotificationAction.Companion|null[0]
+        final fun serializer(): kotlinx.serialization/KSerializer<com.superiorsoftllc.infantry.plugin.api/NotificationAction> // com.superiorsoftllc.infantry.plugin.api/NotificationAction.Companion.serializer|serializer(){}[0]
+    }
+}
+
+final class com.superiorsoftllc.infantry.plugin.api/NotificationActionEvent { // com.superiorsoftllc.infantry.plugin.api/NotificationActionEvent|null[0]
+    constructor <init>(kotlin/String, kotlin/String, kotlin/String = ...) // com.superiorsoftllc.infantry.plugin.api/NotificationActionEvent.<init>|<init>(kotlin.String;kotlin.String;kotlin.String){}[0]
+
+    final val actionId // com.superiorsoftllc.infantry.plugin.api/NotificationActionEvent.actionId|{}actionId[0]
+        final fun <get-actionId>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/NotificationActionEvent.actionId.<get-actionId>|<get-actionId>(){}[0]
+    final val notificationId // com.superiorsoftllc.infantry.plugin.api/NotificationActionEvent.notificationId|{}notificationId[0]
+        final fun <get-notificationId>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/NotificationActionEvent.notificationId.<get-notificationId>|<get-notificationId>(){}[0]
+    final val source // com.superiorsoftllc.infantry.plugin.api/NotificationActionEvent.source|{}source[0]
+        final fun <get-source>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/NotificationActionEvent.source.<get-source>|<get-source>(){}[0]
+
+    final fun component1(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/NotificationActionEvent.component1|component1(){}[0]
+    final fun component2(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/NotificationActionEvent.component2|component2(){}[0]
+    final fun component3(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/NotificationActionEvent.component3|component3(){}[0]
+    final fun copy(kotlin/String = ..., kotlin/String = ..., kotlin/String = ...): com.superiorsoftllc.infantry.plugin.api/NotificationActionEvent // com.superiorsoftllc.infantry.plugin.api/NotificationActionEvent.copy|copy(kotlin.String;kotlin.String;kotlin.String){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/NotificationActionEvent.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/NotificationActionEvent.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/NotificationActionEvent.toString|toString(){}[0]
+
+    final object $serializer : kotlinx.serialization.internal/GeneratedSerializer<com.superiorsoftllc.infantry.plugin.api/NotificationActionEvent> { // com.superiorsoftllc.infantry.plugin.api/NotificationActionEvent.$serializer|null[0]
+        final val descriptor // com.superiorsoftllc.infantry.plugin.api/NotificationActionEvent.$serializer.descriptor|{}descriptor[0]
+            final fun <get-descriptor>(): kotlinx.serialization.descriptors/SerialDescriptor // com.superiorsoftllc.infantry.plugin.api/NotificationActionEvent.$serializer.descriptor.<get-descriptor>|<get-descriptor>(){}[0]
+
+        final fun childSerializers(): kotlin/Array<kotlinx.serialization/KSerializer<*>> // com.superiorsoftllc.infantry.plugin.api/NotificationActionEvent.$serializer.childSerializers|childSerializers(){}[0]
+        final fun deserialize(kotlinx.serialization.encoding/Decoder): com.superiorsoftllc.infantry.plugin.api/NotificationActionEvent // com.superiorsoftllc.infantry.plugin.api/NotificationActionEvent.$serializer.deserialize|deserialize(kotlinx.serialization.encoding.Decoder){}[0]
+        final fun serialize(kotlinx.serialization.encoding/Encoder, com.superiorsoftllc.infantry.plugin.api/NotificationActionEvent) // com.superiorsoftllc.infantry.plugin.api/NotificationActionEvent.$serializer.serialize|serialize(kotlinx.serialization.encoding.Encoder;com.superiorsoftllc.infantry.plugin.api.NotificationActionEvent){}[0]
+    }
+
+    final object Companion { // com.superiorsoftllc.infantry.plugin.api/NotificationActionEvent.Companion|null[0]
+        final fun serializer(): kotlinx.serialization/KSerializer<com.superiorsoftllc.infantry.plugin.api/NotificationActionEvent> // com.superiorsoftllc.infantry.plugin.api/NotificationActionEvent.Companion.serializer|serializer(){}[0]
+    }
+}
+
+final class com.superiorsoftllc.infantry.plugin.api/NotificationSettings { // com.superiorsoftllc.infantry.plugin.api/NotificationSettings|null[0]
+    constructor <init>(kotlin.collections/Map<com.superiorsoftllc.infantry.plugin.api/NotificationLevel, kotlin.collections/List<kotlin/String>> = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ..., kotlin/String = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin/Int = ...) // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.<init>|<init>(kotlin.collections.Map<com.superiorsoftllc.infantry.plugin.api.NotificationLevel,kotlin.collections.List<kotlin.String>>;kotlin.collections.Map<kotlin.String,kotlin.String>;kotlin.String;kotlin.Int;kotlin.Int;kotlin.Int;kotlin.Int){}[0]
+
+    final val bodyMaxChars // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.bodyMaxChars|{}bodyMaxChars[0]
+        final fun <get-bodyMaxChars>(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.bodyMaxChars.<get-bodyMaxChars>|<get-bodyMaxChars>(){}[0]
+    final val dedupeWindowSec // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.dedupeWindowSec|{}dedupeWindowSec[0]
+        final fun <get-dedupeWindowSec>(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.dedupeWindowSec.<get-dedupeWindowSec>|<get-dedupeWindowSec>(){}[0]
+    final val historyMax // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.historyMax|{}historyMax[0]
+        final fun <get-historyMax>(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.historyMax.<get-historyMax>|<get-historyMax>(){}[0]
+    final val presenters // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.presenters|{}presenters[0]
+        final fun <get-presenters>(): kotlin.collections/Map<kotlin/String, kotlin/String> // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.presenters.<get-presenters>|<get-presenters>(){}[0]
+    final val quietHours // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.quietHours|{}quietHours[0]
+        final fun <get-quietHours>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.quietHours.<get-quietHours>|<get-quietHours>(){}[0]
+    final val routes // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.routes|{}routes[0]
+        final fun <get-routes>(): kotlin.collections/Map<com.superiorsoftllc.infantry.plugin.api/NotificationLevel, kotlin.collections/List<kotlin/String>> // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.routes.<get-routes>|<get-routes>(){}[0]
+    final val titleMaxChars // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.titleMaxChars|{}titleMaxChars[0]
+        final fun <get-titleMaxChars>(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.titleMaxChars.<get-titleMaxChars>|<get-titleMaxChars>(){}[0]
+
+    final fun component1(): kotlin.collections/Map<com.superiorsoftllc.infantry.plugin.api/NotificationLevel, kotlin.collections/List<kotlin/String>> // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.component1|component1(){}[0]
+    final fun component2(): kotlin.collections/Map<kotlin/String, kotlin/String> // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.component2|component2(){}[0]
+    final fun component3(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.component3|component3(){}[0]
+    final fun component4(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.component4|component4(){}[0]
+    final fun component5(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.component5|component5(){}[0]
+    final fun component6(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.component6|component6(){}[0]
+    final fun component7(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.component7|component7(){}[0]
+    final fun copy(kotlin.collections/Map<com.superiorsoftllc.infantry.plugin.api/NotificationLevel, kotlin.collections/List<kotlin/String>> = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ..., kotlin/String = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin/Int = ...): com.superiorsoftllc.infantry.plugin.api/NotificationSettings // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.copy|copy(kotlin.collections.Map<com.superiorsoftllc.infantry.plugin.api.NotificationLevel,kotlin.collections.List<kotlin.String>>;kotlin.collections.Map<kotlin.String,kotlin.String>;kotlin.String;kotlin.Int;kotlin.Int;kotlin.Int;kotlin.Int){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.hashCode|hashCode(){}[0]
+    final fun presenter(kotlin/String): kotlin/String // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.presenter|presenter(kotlin.String){}[0]
+    final fun quiet(kotlin/Int?): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.quiet|quiet(kotlin.Int?){}[0]
+    final fun route(com.superiorsoftllc.infantry.plugin.api/NotificationLevel): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.route|route(com.superiorsoftllc.infantry.plugin.api.NotificationLevel){}[0]
+    final fun toString(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.toString|toString(){}[0]
+
+    final object Companion { // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion|null[0]
+        final const val BODY_MAX_CHARS // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion.BODY_MAX_CHARS|{}BODY_MAX_CHARS[0]
+            final fun <get-BODY_MAX_CHARS>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion.BODY_MAX_CHARS.<get-BODY_MAX_CHARS>|<get-BODY_MAX_CHARS>(){}[0]
+        final const val DEDUPE_WINDOW_SEC // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion.DEDUPE_WINDOW_SEC|{}DEDUPE_WINDOW_SEC[0]
+            final fun <get-DEDUPE_WINDOW_SEC>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion.DEDUPE_WINDOW_SEC.<get-DEDUPE_WINDOW_SEC>|<get-DEDUPE_WINDOW_SEC>(){}[0]
+        final const val DEFAULT_BODY_MAX_CHARS // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion.DEFAULT_BODY_MAX_CHARS|{}DEFAULT_BODY_MAX_CHARS[0]
+            final fun <get-DEFAULT_BODY_MAX_CHARS>(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion.DEFAULT_BODY_MAX_CHARS.<get-DEFAULT_BODY_MAX_CHARS>|<get-DEFAULT_BODY_MAX_CHARS>(){}[0]
+        final const val DEFAULT_DEDUPE_WINDOW_SEC // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion.DEFAULT_DEDUPE_WINDOW_SEC|{}DEFAULT_DEDUPE_WINDOW_SEC[0]
+            final fun <get-DEFAULT_DEDUPE_WINDOW_SEC>(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion.DEFAULT_DEDUPE_WINDOW_SEC.<get-DEFAULT_DEDUPE_WINDOW_SEC>|<get-DEFAULT_DEDUPE_WINDOW_SEC>(){}[0]
+        final const val DEFAULT_HISTORY_MAX // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion.DEFAULT_HISTORY_MAX|{}DEFAULT_HISTORY_MAX[0]
+            final fun <get-DEFAULT_HISTORY_MAX>(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion.DEFAULT_HISTORY_MAX.<get-DEFAULT_HISTORY_MAX>|<get-DEFAULT_HISTORY_MAX>(){}[0]
+        final const val DEFAULT_TITLE_MAX_CHARS // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion.DEFAULT_TITLE_MAX_CHARS|{}DEFAULT_TITLE_MAX_CHARS[0]
+            final fun <get-DEFAULT_TITLE_MAX_CHARS>(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion.DEFAULT_TITLE_MAX_CHARS.<get-DEFAULT_TITLE_MAX_CHARS>|<get-DEFAULT_TITLE_MAX_CHARS>(){}[0]
+        final const val HISTORY_MAX // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion.HISTORY_MAX|{}HISTORY_MAX[0]
+            final fun <get-HISTORY_MAX>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion.HISTORY_MAX.<get-HISTORY_MAX>|<get-HISTORY_MAX>(){}[0]
+        final const val MAX_BODY_MAX_CHARS // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion.MAX_BODY_MAX_CHARS|{}MAX_BODY_MAX_CHARS[0]
+            final fun <get-MAX_BODY_MAX_CHARS>(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion.MAX_BODY_MAX_CHARS.<get-MAX_BODY_MAX_CHARS>|<get-MAX_BODY_MAX_CHARS>(){}[0]
+        final const val MAX_DEDUPE_WINDOW_SEC // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion.MAX_DEDUPE_WINDOW_SEC|{}MAX_DEDUPE_WINDOW_SEC[0]
+            final fun <get-MAX_DEDUPE_WINDOW_SEC>(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion.MAX_DEDUPE_WINDOW_SEC.<get-MAX_DEDUPE_WINDOW_SEC>|<get-MAX_DEDUPE_WINDOW_SEC>(){}[0]
+        final const val MAX_HISTORY_MAX // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion.MAX_HISTORY_MAX|{}MAX_HISTORY_MAX[0]
+            final fun <get-MAX_HISTORY_MAX>(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion.MAX_HISTORY_MAX.<get-MAX_HISTORY_MAX>|<get-MAX_HISTORY_MAX>(){}[0]
+        final const val MAX_TITLE_MAX_CHARS // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion.MAX_TITLE_MAX_CHARS|{}MAX_TITLE_MAX_CHARS[0]
+            final fun <get-MAX_TITLE_MAX_CHARS>(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion.MAX_TITLE_MAX_CHARS.<get-MAX_TITLE_MAX_CHARS>|<get-MAX_TITLE_MAX_CHARS>(){}[0]
+        final const val MINUTES_PER_DAY // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion.MINUTES_PER_DAY|{}MINUTES_PER_DAY[0]
+            final fun <get-MINUTES_PER_DAY>(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion.MINUTES_PER_DAY.<get-MINUTES_PER_DAY>|<get-MINUTES_PER_DAY>(){}[0]
+        final const val PREFIX // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion.PREFIX|{}PREFIX[0]
+            final fun <get-PREFIX>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion.PREFIX.<get-PREFIX>|<get-PREFIX>(){}[0]
+        final const val PRESENTER_PREFIX // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion.PRESENTER_PREFIX|{}PRESENTER_PREFIX[0]
+            final fun <get-PRESENTER_PREFIX>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion.PRESENTER_PREFIX.<get-PRESENTER_PREFIX>|<get-PRESENTER_PREFIX>(){}[0]
+        final const val QUIET_HOURS // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion.QUIET_HOURS|{}QUIET_HOURS[0]
+            final fun <get-QUIET_HOURS>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion.QUIET_HOURS.<get-QUIET_HOURS>|<get-QUIET_HOURS>(){}[0]
+        final const val ROUTE_PREFIX // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion.ROUTE_PREFIX|{}ROUTE_PREFIX[0]
+            final fun <get-ROUTE_PREFIX>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion.ROUTE_PREFIX.<get-ROUTE_PREFIX>|<get-ROUTE_PREFIX>(){}[0]
+        final const val TITLE_MAX_CHARS // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion.TITLE_MAX_CHARS|{}TITLE_MAX_CHARS[0]
+            final fun <get-TITLE_MAX_CHARS>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion.TITLE_MAX_CHARS.<get-TITLE_MAX_CHARS>|<get-TITLE_MAX_CHARS>(){}[0]
+
+        final val DEFAULT_ROUTES // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion.DEFAULT_ROUTES|{}DEFAULT_ROUTES[0]
+            final fun <get-DEFAULT_ROUTES>(): kotlin.collections/Map<com.superiorsoftllc.infantry.plugin.api/NotificationLevel, kotlin.collections/List<kotlin/String>> // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion.DEFAULT_ROUTES.<get-DEFAULT_ROUTES>|<get-DEFAULT_ROUTES>(){}[0]
+        final val KEYS // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion.KEYS|{}KEYS[0]
+            final fun <get-KEYS>(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion.KEYS.<get-KEYS>|<get-KEYS>(){}[0]
+
+        final fun from(kotlin.collections/Map<kotlin/String, kotlinx.serialization.json/JsonElement>): com.superiorsoftllc.infantry.plugin.api/NotificationSettings // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion.from|from(kotlin.collections.Map<kotlin.String,kotlinx.serialization.json.JsonElement>){}[0]
+        final fun fromSettingsFrame(kotlin/String): com.superiorsoftllc.infantry.plugin.api/NotificationSettings? // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion.fromSettingsFrame|fromSettingsFrame(kotlin.String){}[0]
+        final fun isKey(kotlin/String): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion.isKey|isKey(kotlin.String){}[0]
+        final fun json(com.superiorsoftllc.infantry.plugin.api/NotificationSettings): kotlin.collections/Map<kotlin/String, kotlinx.serialization.json/JsonElement> // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion.json|json(com.superiorsoftllc.infantry.plugin.api.NotificationSettings){}[0]
+        final fun parseQuietHours(kotlin/String): kotlin/Pair<kotlin/Int, kotlin/Int>? // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion.parseQuietHours|parseQuietHours(kotlin.String){}[0]
+        final fun parseRoute(kotlin/String): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion.parseRoute|parseRoute(kotlin.String){}[0]
+        final fun validated(kotlin/String, kotlinx.serialization.json/JsonElement): kotlinx.serialization.json/JsonElement // com.superiorsoftllc.infantry.plugin.api/NotificationSettings.Companion.validated|validated(kotlin.String;kotlinx.serialization.json.JsonElement){}[0]
+    }
+}
+
 final class com.superiorsoftllc.infantry.plugin.api/ObserverDeclaration { // com.superiorsoftllc.infantry.plugin.api/ObserverDeclaration|null[0]
     constructor <init>(kotlin/String, kotlin/String) // com.superiorsoftllc.infantry.plugin.api/ObserverDeclaration.<init>|<init>(kotlin.String;kotlin.String){}[0]
 
@@ -3373,6 +3616,77 @@ final class com.superiorsoftllc.infantry.plugin.host/ModuleStatus { // com.super
     final fun toString(): kotlin/String // com.superiorsoftllc.infantry.plugin.host/ModuleStatus.toString|toString(){}[0]
 }
 
+final class com.superiorsoftllc.infantry.plugin.host/NotificationCenter : com.superiorsoftllc.infantry.plugin.api/Notifications { // com.superiorsoftllc.infantry.plugin.host/NotificationCenter|null[0]
+    constructor <init>(kotlin/Function0<com.superiorsoftllc.infantry.plugin.api/NotificationSettings> = ..., kotlin/Function0<kotlin/Long> = ..., kotlin/Function0<kotlin/Int?> = ..., kotlin/Function0<kotlin/String> = ..., kotlin/Function3<kotlin/String, kotlin/String, kotlin/Throwable, kotlin/Unit> = ..., kotlin/String = ...) // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.<init>|<init>(kotlin.Function0<com.superiorsoftllc.infantry.plugin.api.NotificationSettings>;kotlin.Function0<kotlin.Long>;kotlin.Function0<kotlin.Int?>;kotlin.Function0<kotlin.String>;kotlin.Function3<kotlin.String,kotlin.String,kotlin.Throwable,kotlin.Unit>;kotlin.String){}[0]
+
+    final val history // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.history|{}history[0]
+        final fun <get-history>(): kotlinx.coroutines.flow/StateFlow<kotlin.collections/List<com.superiorsoftllc.infantry.plugin.host/NotificationCenter.Record>> // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.history.<get-history>|<get-history>(){}[0]
+
+    final fun action(kotlin/String, kotlin/String) // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.action|action(kotlin.String;kotlin.String){}[0]
+    final fun active(kotlin/String): kotlin/String? // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.active|active(kotlin.String){}[0]
+    final fun channelsFor(com.superiorsoftllc.infantry.plugin.api/Notification): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.channelsFor|channelsFor(com.superiorsoftllc.infantry.plugin.api.Notification){}[0]
+    final fun clearHistory() // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.clearHistory|clearHistory(){}[0]
+    final fun deliver(com.superiorsoftllc.infantry.plugin.api/Notification): com.superiorsoftllc.infantry.plugin.host/NotificationCenter.Delivery // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.deliver|deliver(com.superiorsoftllc.infantry.plugin.api.Notification){}[0]
+    final fun dismiss(kotlin/String) // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.dismiss|dismiss(kotlin.String){}[0]
+    final fun notify(com.superiorsoftllc.infantry.plugin.api/Notification): kotlin/String // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.notify|notify(com.superiorsoftllc.infantry.plugin.api.Notification){}[0]
+    final fun notify(kotlin/String, kotlin/String) // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.notify|notify(kotlin.String;kotlin.String){}[0]
+    final fun onAction(kotlin/Function1<com.superiorsoftllc.infantry.plugin.api/NotificationActionEvent, kotlin/Unit>): kotlin/AutoCloseable // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.onAction|onAction(kotlin.Function1<com.superiorsoftllc.infantry.plugin.api.NotificationActionEvent,kotlin.Unit>){}[0]
+    final fun present(kotlin/String, kotlin.collections/Set<kotlin/String>, com.superiorsoftllc.infantry.plugin.api/NotificationPresenter): kotlin/AutoCloseable // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.present|present(kotlin.String;kotlin.collections.Set<kotlin.String>;com.superiorsoftllc.infantry.plugin.api.NotificationPresenter){}[0]
+    final fun setDefault(kotlin/String, com.superiorsoftllc.infantry.plugin.api/NotificationPresenter?) // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.setDefault|setDefault(kotlin.String;com.superiorsoftllc.infantry.plugin.api.NotificationPresenter?){}[0]
+
+    final class Delivery { // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.Delivery|null[0]
+        constructor <init>(com.superiorsoftllc.infantry.plugin.api/Notification, kotlin/Boolean, kotlin.collections/Map<kotlin/String, kotlin/String> = ...) // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.Delivery.<init>|<init>(com.superiorsoftllc.infantry.plugin.api.Notification;kotlin.Boolean;kotlin.collections.Map<kotlin.String,kotlin.String>){}[0]
+
+        final val deduped // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.Delivery.deduped|{}deduped[0]
+            final fun <get-deduped>(): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.Delivery.deduped.<get-deduped>|<get-deduped>(){}[0]
+        final val notification // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.Delivery.notification|{}notification[0]
+            final fun <get-notification>(): com.superiorsoftllc.infantry.plugin.api/Notification // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.Delivery.notification.<get-notification>|<get-notification>(){}[0]
+        final val shownOn // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.Delivery.shownOn|{}shownOn[0]
+            final fun <get-shownOn>(): kotlin.collections/Map<kotlin/String, kotlin/String> // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.Delivery.shownOn.<get-shownOn>|<get-shownOn>(){}[0]
+
+        final fun component1(): com.superiorsoftllc.infantry.plugin.api/Notification // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.Delivery.component1|component1(){}[0]
+        final fun component2(): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.Delivery.component2|component2(){}[0]
+        final fun component3(): kotlin.collections/Map<kotlin/String, kotlin/String> // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.Delivery.component3|component3(){}[0]
+        final fun copy(com.superiorsoftllc.infantry.plugin.api/Notification = ..., kotlin/Boolean = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ...): com.superiorsoftllc.infantry.plugin.host/NotificationCenter.Delivery // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.Delivery.copy|copy(com.superiorsoftllc.infantry.plugin.api.Notification;kotlin.Boolean;kotlin.collections.Map<kotlin.String,kotlin.String>){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.Delivery.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.Delivery.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.Delivery.toString|toString(){}[0]
+    }
+
+    final class Record { // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.Record|null[0]
+        constructor <init>(com.superiorsoftllc.infantry.plugin.api/Notification, kotlin.collections/Map<kotlin/String, kotlin/String> = ..., kotlin/Int = ..., kotlin/Boolean = ...) // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.Record.<init>|<init>(com.superiorsoftllc.infantry.plugin.api.Notification;kotlin.collections.Map<kotlin.String,kotlin.String>;kotlin.Int;kotlin.Boolean){}[0]
+
+        final val dismissed // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.Record.dismissed|{}dismissed[0]
+            final fun <get-dismissed>(): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.Record.dismissed.<get-dismissed>|<get-dismissed>(){}[0]
+        final val notification // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.Record.notification|{}notification[0]
+            final fun <get-notification>(): com.superiorsoftllc.infantry.plugin.api/Notification // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.Record.notification.<get-notification>|<get-notification>(){}[0]
+        final val repeats // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.Record.repeats|{}repeats[0]
+            final fun <get-repeats>(): kotlin/Int // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.Record.repeats.<get-repeats>|<get-repeats>(){}[0]
+        final val shownOn // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.Record.shownOn|{}shownOn[0]
+            final fun <get-shownOn>(): kotlin.collections/Map<kotlin/String, kotlin/String> // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.Record.shownOn.<get-shownOn>|<get-shownOn>(){}[0]
+
+        final fun component1(): com.superiorsoftllc.infantry.plugin.api/Notification // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.Record.component1|component1(){}[0]
+        final fun component2(): kotlin.collections/Map<kotlin/String, kotlin/String> // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.Record.component2|component2(){}[0]
+        final fun component3(): kotlin/Int // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.Record.component3|component3(){}[0]
+        final fun component4(): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.Record.component4|component4(){}[0]
+        final fun copy(com.superiorsoftllc.infantry.plugin.api/Notification = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ..., kotlin/Int = ..., kotlin/Boolean = ...): com.superiorsoftllc.infantry.plugin.host/NotificationCenter.Record // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.Record.copy|copy(com.superiorsoftllc.infantry.plugin.api.Notification;kotlin.collections.Map<kotlin.String,kotlin.String>;kotlin.Int;kotlin.Boolean){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.Record.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.Record.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.Record.toString|toString(){}[0]
+    }
+
+    final class SequentialIds { // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.SequentialIds|null[0]
+        constructor <init>(kotlin/String = ...) // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.SequentialIds.<init>|<init>(kotlin.String){}[0]
+
+        final fun next(): kotlin/String // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.SequentialIds.next|next(){}[0]
+    }
+
+    final object Companion { // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.Companion|null[0]
+        final const val MILLIS_PER_SECOND // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.Companion.MILLIS_PER_SECOND|{}MILLIS_PER_SECOND[0]
+            final fun <get-MILLIS_PER_SECOND>(): kotlin/Long // com.superiorsoftllc.infantry.plugin.host/NotificationCenter.Companion.MILLIS_PER_SECOND.<get-MILLIS_PER_SECOND>|<get-MILLIS_PER_SECOND>(){}[0]
+    }
+}
+
 final class com.superiorsoftllc.infantry.plugin.host/PluginTree { // com.superiorsoftllc.infantry.plugin.host/PluginTree|null[0]
     constructor <init>(kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/ModuleManifest>) // com.superiorsoftllc.infantry.plugin.host/PluginTree.<init>|<init>(kotlin.collections.List<com.superiorsoftllc.infantry.plugin.api.ModuleManifest>){}[0]
 
@@ -3666,6 +3980,41 @@ final object com.superiorsoftllc.infantry.plugin.api/NoProgress : com.superiorso
     final fun start(com.superiorsoftllc.infantry.plugin.api/ProgressSpec): com.superiorsoftllc.infantry.plugin.api/ProgressHandle // com.superiorsoftllc.infantry.plugin.api/NoProgress.start|start(com.superiorsoftllc.infantry.plugin.api.ProgressSpec){}[0]
     final fun task(kotlin/String): com.superiorsoftllc.infantry.plugin.api/ProgressTask? // com.superiorsoftllc.infantry.plugin.api/NoProgress.task|task(kotlin.String){}[0]
     final fun tasks(): kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/ProgressTask> // com.superiorsoftllc.infantry.plugin.api/NoProgress.tasks|tasks(){}[0]
+}
+
+final object com.superiorsoftllc.infantry.plugin.api/NotificationChannels { // com.superiorsoftllc.infantry.plugin.api/NotificationChannels|null[0]
+    final const val CORE // com.superiorsoftllc.infantry.plugin.api/NotificationChannels.CORE|{}CORE[0]
+        final fun <get-CORE>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/NotificationChannels.CORE.<get-CORE>|<get-CORE>(){}[0]
+    final const val IN_APP // com.superiorsoftllc.infantry.plugin.api/NotificationChannels.IN_APP|{}IN_APP[0]
+        final fun <get-IN_APP>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/NotificationChannels.IN_APP.<get-IN_APP>|<get-IN_APP>(){}[0]
+    final const val OS // com.superiorsoftllc.infantry.plugin.api/NotificationChannels.OS|{}OS[0]
+        final fun <get-OS>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/NotificationChannels.OS.<get-OS>|<get-OS>(){}[0]
+
+    final val BUILT_IN // com.superiorsoftllc.infantry.plugin.api/NotificationChannels.BUILT_IN|{}BUILT_IN[0]
+        final fun <get-BUILT_IN>(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/NotificationChannels.BUILT_IN.<get-BUILT_IN>|<get-BUILT_IN>(){}[0]
+}
+
+final object com.superiorsoftllc.infantry.plugin.api/NotificationWire { // com.superiorsoftllc.infantry.plugin.api/NotificationWire|null[0]
+    final const val ACTION // com.superiorsoftllc.infantry.plugin.api/NotificationWire.ACTION|{}ACTION[0]
+        final fun <get-ACTION>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/NotificationWire.ACTION.<get-ACTION>|<get-ACTION>(){}[0]
+    final const val DISMISS // com.superiorsoftllc.infantry.plugin.api/NotificationWire.DISMISS|{}DISMISS[0]
+        final fun <get-DISMISS>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/NotificationWire.DISMISS.<get-DISMISS>|<get-DISMISS>(){}[0]
+    final const val EVENT_ACTION // com.superiorsoftllc.infantry.plugin.api/NotificationWire.EVENT_ACTION|{}EVENT_ACTION[0]
+        final fun <get-EVENT_ACTION>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/NotificationWire.EVENT_ACTION.<get-EVENT_ACTION>|<get-EVENT_ACTION>(){}[0]
+    final const val PUSH // com.superiorsoftllc.infantry.plugin.api/NotificationWire.PUSH|{}PUSH[0]
+        final fun <get-PUSH>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/NotificationWire.PUSH.<get-PUSH>|<get-PUSH>(){}[0]
+
+    final val CLIENT_FRAMES // com.superiorsoftllc.infantry.plugin.api/NotificationWire.CLIENT_FRAMES|{}CLIENT_FRAMES[0]
+        final fun <get-CLIENT_FRAMES>(): kotlin.collections/Set<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/NotificationWire.CLIENT_FRAMES.<get-CLIENT_FRAMES>|<get-CLIENT_FRAMES>(){}[0]
+    final val json // com.superiorsoftllc.infantry.plugin.api/NotificationWire.json|{}json[0]
+        final fun <get-json>(): kotlinx.serialization.json/Json // com.superiorsoftllc.infantry.plugin.api/NotificationWire.json.<get-json>|<get-json>(){}[0]
+
+    final fun action(kotlin/String): com.superiorsoftllc.infantry.plugin.api/NotificationActionEvent? // com.superiorsoftllc.infantry.plugin.api/NotificationWire.action|action(kotlin.String){}[0]
+    final fun dismiss(kotlin/String): kotlin/String // com.superiorsoftllc.infantry.plugin.api/NotificationWire.dismiss|dismiss(kotlin.String){}[0]
+    final fun dismissId(kotlin/String): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/NotificationWire.dismissId|dismissId(kotlin.String){}[0]
+    final fun encode(com.superiorsoftllc.infantry.plugin.api/Notification): kotlin/String // com.superiorsoftllc.infantry.plugin.api/NotificationWire.encode|encode(com.superiorsoftllc.infantry.plugin.api.Notification){}[0]
+    final fun encode(com.superiorsoftllc.infantry.plugin.api/NotificationActionEvent): kotlin/String // com.superiorsoftllc.infantry.plugin.api/NotificationWire.encode|encode(com.superiorsoftllc.infantry.plugin.api.NotificationActionEvent){}[0]
+    final fun notification(kotlin/String): com.superiorsoftllc.infantry.plugin.api/Notification? // com.superiorsoftllc.infantry.plugin.api/NotificationWire.notification|notification(kotlin.String){}[0]
 }
 
 final object com.superiorsoftllc.infantry.plugin.api/PolicyRefusal { // com.superiorsoftllc.infantry.plugin.api/PolicyRefusal|null[0]

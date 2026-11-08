@@ -40,6 +40,8 @@ interface DaemonServices {
     fun broadcast(type: String, data: String) {}
     /** CORE-PROGRESS-DOWNLOAD-1: a plain-string core setting (`progress.presenter`, `downloads.transport`, `downloads.proxy`); "" = unset. */
     fun coreSetting(key: String): String = ""
+    /** NOTIFY-CORE-1: the notification bus's settings (`notifications.*`); the defaults where the daemon keeps none. */
+    fun notificationSettings(): com.superiorsoftllc.infantry.plugin.api.NotificationSettings = com.superiorsoftllc.infantry.plugin.api.NotificationSettings()
     val ticketEvents: com.superiorsoftllc.infantry.daemon.api.board.TicketEvents get() = com.superiorsoftllc.infantry.daemon.api.board.NoTicketEvents
 
     /** AGENT-REGISTRY-1: the daemon's agent registry; null = none (plugins see [com.superiorsoftllc.infantry.daemon.api.agents.NoAgents]). */

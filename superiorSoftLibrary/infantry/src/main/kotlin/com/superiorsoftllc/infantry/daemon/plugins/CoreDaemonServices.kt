@@ -73,7 +73,10 @@ class CoreDaemonServices(
     private val pluginCatalog: com.superiorsoftllc.infantry.daemon.api.plugins.PluginCatalogReader? = null,
     /** CORE-PROGRESS-DOWNLOAD-1: reads a plain-string core setting; "" = unset. */
     private val coreStringSetting: (String) -> String = { "" },
+    /** NOTIFY-CORE-1: the notification bus's settings, read at every post. */
+    private val notificationSettingsSource: () -> com.superiorsoftllc.infantry.plugin.api.NotificationSettings = { com.superiorsoftllc.infantry.plugin.api.NotificationSettings() },
 ) : DaemonServices {
+    override fun notificationSettings() = notificationSettingsSource()
     override fun coreSetting(key: String) = coreStringSetting(key)
     override val plugins get() = pluginCatalog ?: com.superiorsoftllc.infantry.daemon.api.plugins.NoPluginCatalog
     override val runs get() = runService ?: com.superiorsoftllc.infantry.daemon.api.runs.NoRuns

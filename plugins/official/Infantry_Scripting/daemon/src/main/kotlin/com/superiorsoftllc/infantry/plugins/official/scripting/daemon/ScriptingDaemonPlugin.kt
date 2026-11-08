@@ -76,6 +76,8 @@ class ScriptingDaemonPlugin : DaemonPlugin {
         api.tools.register(sessionTools.read)
         api.tools.register(sessionTools.act)
         api.tools.register(sessionTools.suppressNotice)
+        // NOTIFY-CORE-1: ih.call("notify", {...}) posts on the core notification bus.
+        api.tools.register(NotificationTools { api.notifications }.tool)
         api.tools.register(tools.run)
         api.tools.register(tools.api)
         // SCRIPT-5: hooks are data (hooks.json); one subscription on the named-event bus runs them.

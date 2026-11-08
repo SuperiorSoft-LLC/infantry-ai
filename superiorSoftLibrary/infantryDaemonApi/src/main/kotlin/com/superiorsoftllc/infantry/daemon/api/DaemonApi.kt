@@ -181,6 +181,15 @@ interface DaemonApi {
      */
     val capabilities: com.superiorsoftllc.infantry.daemon.api.capabilities.Capabilities get() = com.superiorsoftllc.infantry.daemon.api.capabilities.NoCapabilities
 
+    /**
+     * NOTIFY-CORE-1 (1.53.0, additive; docs/wiki/Notifications.md): the ONE notification bus. [com.superiorsoftllc.infantry.plugin.api.Notifications.notify]
+     * a [com.superiorsoftllc.infantry.plugin.api.Notification] (its source is set to this module) and every connected client shows
+     * it by the owner's routing (in-app toast, OS); a sticky one is replayed to a client that connects until dismissed. `onAction`
+     * hears this module's notifications' pressed buttons (also published as the named event `notification.action`). `present`
+     * is a no-op here: presenters live on the clients. A daemon without a bus drops every post ([com.superiorsoftllc.infantry.daemon.api.notifications.NoNotifications]).
+     */
+    val notifications: com.superiorsoftllc.infantry.plugin.api.Notifications get() = com.superiorsoftllc.infantry.daemon.api.notifications.NoNotifications
+
     companion object {
         // 1.31.0 (CMD-1, additive): `runs` (daemon.api.runs.Runs) and `PluginSettings.hint`.
         // 1.30.0 (MAIL-HOOK-1, additive): `hooks.incomingMail` (IncomingMailHook, IncomingMail, MailVerdict): a pre-delivery look at each accepted mail.
@@ -248,6 +257,7 @@ interface DaemonApi {
         // 1.50.0 (JOBFEED-1, additive): `Sessions.jobs` / `Sessions.jobLog` (bounded job-log tail read).
         // 1.51.0 (SCRIPT-ARSENAL-2, additive): daemon.api.knowledge.KnowledgeWriter, the write half of Knowledge (published by Infantry_Notes);
         // notes saved under KnowledgeWriter.GLOBAL_PROJECT are found by every project's search and show.
+        // 1.53.0 (NOTIFY-CORE-1, additive): `notifications` (plugin.api.Notifications), the core notification bus; daemon.api.notifications.NoNotifications.
         // 1.54.0 (CORE-PROGRESS-DOWNLOAD-1, additive): `progress` (plugin.api.Progress) and `downloads` (daemon.api.downloads.Downloads).
         const val VERSION = "1.54.0"
     }

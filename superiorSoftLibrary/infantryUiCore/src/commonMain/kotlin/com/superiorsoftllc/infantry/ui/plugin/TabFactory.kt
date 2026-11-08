@@ -476,6 +476,8 @@ class TabFactory(
     val modules: List<InfantryModule> = modules.toList()
     /** TOAST-1: where a module's `Notifications.notify` lands in the window; the window sets it to its controller's. */
     var toasts: com.superiorsoftllc.infantry.ui.ToastService = com.superiorsoftllc.infantry.ui.NoToastService
+    /** NOTIFY-CORE-1: where a module's [com.superiorsoftllc.infantry.plugin.api.Services.NOTIFICATIONS] lands; the window sets its target to its controller's bus. */
+    var notifications: NotificationsRelay = NotificationsRelay()
     /**
      * NS3: exports node id N's subtree as a composition `.ihq` and returns the line to show (the file, or the refusals);
      * null = this host cannot export (only the desktop sets it). Settings > Plugins > Registered shows "Export section…".

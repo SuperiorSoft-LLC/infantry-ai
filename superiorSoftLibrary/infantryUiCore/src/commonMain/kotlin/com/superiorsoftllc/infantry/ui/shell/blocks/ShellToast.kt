@@ -29,7 +29,8 @@ class ToastBlock(children: List<Block> = emptyList(), place: Place = Place()) :
     @Composable
     override fun Render(scope: BlockScope) = with(scope) {
         val toast = LocalShellContext.current?.toast ?: return
-        ToastHost(toast.events, onOpen = toast::open, modifier = Modifier.aligned(Alignment.BottomEnd))
+        ToastHost(toast.events, onOpen = toast::open, modifier = Modifier.aligned(Alignment.BottomEnd),
+            onAction = toast::action, onDismiss = toast::dismiss)
         // CORE-PROGRESS-DOWNLOAD-1: the global running-tasks list (core default presenter; a plugin renderer draws its rows).
         com.superiorsoftllc.infantry.ui.progress.RunningTasks(Modifier.aligned(Alignment.BottomStart).padding(12.dp))
         if (children.isNotEmpty()) CompositionLocalProvider(LocalToast provides toast.service) {

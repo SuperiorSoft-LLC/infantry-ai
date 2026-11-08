@@ -1647,6 +1647,7 @@ class InfantryDaemon(
                         pluginSettings = settings.forPlugins(),
                         // CORE-PROGRESS-DOWNLOAD-1: the core string settings the host reads (progress.presenter, downloads.*).
                         coreStringSetting = { settings.plainString(it) },
+                        notificationSettingsSource = { settings.notificationSettings() },
                         noticeSuppressor = { name, session, ms -> nudgeGate.suppress(name, session, ms) },
                         // CMD-1: api.runs, a cwd-bound child process over the runner (pty and pipes).
                         runService = com.superiorsoftllc.infantry.daemon.plugins.LocalRuns(
@@ -2868,6 +2869,18 @@ private suspend fun handleConnection(
             },
             onFailure = { Envelope(Envelope.ERROR, "${capabilityWire.EVENT}: ${it.message}", requestId = env.requestId) },
         )
+    }
+    // NOTIFY-CORE-1 (docs/wiki/Notifications.md): a client pressed a notification's action, or dismissed one the daemon pushed.
+    val notificationWire = com.superiorsoftllc.infantry.plugin.api.NotificationWire
+    frames.register(notificationWire.ACTION) { env, _ ->
+        val e = notificationWire.action(env.data)
+            ?: return@register Envelope(Envelope.ERROR, "${notificationWire.ACTION}: the data must be {notificationId, actionId}", requestId = env.requestId)
+        plugins.notifications.action(e)
+        null
+    }
+    frames.register(notificationWire.DISMISS) { env, _ ->
+        notificationWire.dismissId(env.data)?.let { plugins.notifications.dismissed(it) }
+        null
     }
     // DAEMON-PLUGINS-1: a plugin tool's own requests on this connection (requestId `plugin:<uuid>`, fed to [inbound]) are
     // answered to the waiting tool, never sent to the client.

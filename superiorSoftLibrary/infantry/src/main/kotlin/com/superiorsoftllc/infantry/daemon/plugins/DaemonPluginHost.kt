@@ -200,6 +200,18 @@ class DaemonPluginHost private constructor(
             else -> false
         }
     }
+
+    /**
+     * NOTIFY-CORE-1 (docs/wiki/Notifications.md): the daemon side of the notification bus. Plugins post through
+     * [DaemonApi.notifications], core and the scripting front door here; the connection loop feeds it the clients'
+     * `notification_action` / `notification_dismiss` frames.
+     */
+    val notifications = NotificationHub(
+        settings = { services.notificationSettings() },
+        broadcast = { type, data -> services.broadcast(type, data) },
+        publish = { name, payload, source -> runCatching { publishEvent(name, payload, source) } },
+        log = log,
+    )
     private val statuses = ConcurrentHashMap<String, String>()
     private val toolEntries = ConcurrentHashMap<String, ToolEntry>()
     private val frameHandlers = ConcurrentHashMap<String, FrameEntry>()
@@ -356,7 +368,8 @@ class DaemonPluginHost private constructor(
     /** ATTN-2a: the frames the plugins replay to one newly connected client (fail open), in plugin order. */
     fun connectedFrames(sessionId: String?): List<Frame> = connectedHooks.flatMap { h ->
         if (h.owner.guard.disabled) emptyList() else h.owner.call("connected") { h.value.frames(sessionId) }.getOrNull().orEmpty()
-    } + progress.tasks().map { Frame(com.superiorsoftllc.infantry.plugin.api.ProgressWire.PUSH, com.superiorsoftllc.infantry.plugin.api.ProgressWire.encode(it)) } // CORE-PROGRESS-DOWNLOAD-1
+    } + notifications.replay().map { Frame(com.superiorsoftllc.infantry.plugin.api.NotificationWire.PUSH, com.superiorsoftllc.infantry.plugin.api.NotificationWire.encode(it)) } +
+        progress.tasks().map { Frame(com.superiorsoftllc.infantry.plugin.api.ProgressWire.PUSH, com.superiorsoftllc.infantry.plugin.api.ProgressWire.encode(it)) } // CORE-PROGRESS-DOWNLOAD-1
 
     /** The first pinned notice a plugin gives, or null. */
     fun notice(): String? = readyHooks.firstNotNullOfOrNull { h ->
@@ -1353,6 +1366,9 @@ class DaemonPluginHost private constructor(
                 return (registry ?: error("this daemon has no agent registry")).setEnabled(id, enabled)
             }
         }
+        // NOTIFY-CORE-1 (1.53.0): the notification bus; every post is this module's.
+        override val notifications: com.superiorsoftllc.infantry.plugin.api.Notifications =
+            this@DaemonPluginHost.notifications.forModule(p.id) { p.closeables += it }
         // PLUGIN-BRIDGES-1: answer this module's daemon-side capabilities, call any capability through the host's gates.
         override val capabilities: com.superiorsoftllc.infantry.daemon.api.capabilities.Capabilities = object : com.superiorsoftllc.infantry.daemon.api.capabilities.Capabilities {
             override fun handle(id: String, handler: com.superiorsoftllc.infantry.daemon.api.capabilities.CapabilityHandler): AutoCloseable =
