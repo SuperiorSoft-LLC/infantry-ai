@@ -31,4 +31,14 @@ class PluginFaultsTest {
         assertNotNull(PluginFaults.hostError.value)
         assertEquals(0, PluginFaults.all.size)
     }
+
+    @Test fun longestClaimedPackageWinsAndASharedPackageBlamesNoOne() {
+        // VOICEINPUT-BLANK-1: three official plugins share one entry package; a fourth sits in a sub-package of it.
+        listOf("Infantry_Agents", "Infantry_Cli", "Infantry_Settings").forEach { PluginFaults.claim(it, "com.acme.official") }
+        PluginFaults.claim("Infantry_ChatFeed", "com.acme.official.chatfeed")
+        assertEquals("Infantry_ChatFeed", PluginFaults.owner(thrownFrom("com.acme.official.chatfeed.FeedSection")))
+        assertNull(PluginFaults.owner(thrownFrom("com.acme.official.AgentsSectionKt")), "a package several modules share blames none of them")
+        assertNull(PluginFaults.handle(thrownFrom("com.acme.official.AgentsSectionKt")))
+        assertNull(PluginFaults.faultOf("Infantry_Agents", 0), "the agents panel is not hidden for an exception it cannot be tied to")
+    }
 }

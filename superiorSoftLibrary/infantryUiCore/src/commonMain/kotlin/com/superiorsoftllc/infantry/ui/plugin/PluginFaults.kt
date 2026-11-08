@@ -32,7 +32,7 @@ object PluginFaults {
     private val byModule = mutableStateMapOf<String, PluginFault>()
     // commonMain (wasm too): no synchronized/System/StackTraceElement. Copy-on-write map; claims come from the loader one at a time.
     @kotlin.concurrent.Volatile
-    private var packages: Map<String, String> = emptyMap()
+    private var packages: Map<String, Set<String>> = emptyMap()
 
     /** The newest exception no plugin owned (an in-app banner shows it); null when none or dismissed. */
     val hostError = mutableStateOf<String?>(null)
@@ -52,8 +52,18 @@ object PluginFaults {
 
     fun clear(module: String) { byModule.remove(module) }
 
-    /** [module]'s classes live under [packagePrefix] (its entry class's package); the loader calls this. */
-    fun claim(module: String, packagePrefix: String) { packages = packages + (packagePrefix to module) }
+    /**
+     * [module]'s classes live under [packagePrefix] (its entry class's package); the loader calls this. Several modules may
+     * claim the same prefix (official plugins whose entry class sits in one shared package): such a prefix blames none of them.
+     */
+    fun claim(module: String, packagePrefix: String) { packages = packages + (packagePrefix to (packages[packagePrefix].orEmpty() + module)) }
+
+    /**
+     * VOICEINPUT-BLANK-1: the module that owns class [frame]: the LONGEST claimed prefix it is under, and only when one module
+     * alone claims that prefix. A shared or broader prefix must never blame (and so hide) a plugin for another one's exception.
+     */
+    private fun ownerOfFrame(frame: String, claims: Map<String, Set<String>>): String? =
+        claims.entries.filter { frame.startsWith(it.key + ".") }.maxByOrNull { it.key.length }?.value?.singleOrNull()
 
     /** The module whose claimed package a frame of [error] (or its causes) is in, or null. */
     fun owner(error: Throwable): String? {
@@ -63,7 +73,7 @@ object PluginFaults {
         while (t != null && seen.add(t)) {
             // stackTraceToString is common Kotlin; JVM frames read "at <class>.<method>(...)"
             val frames = t.stackTraceToString().lineSequence().map { it.trim().removePrefix("at ") }
-            for (f in frames) claims.entries.firstOrNull { f.startsWith(it.key + ".") }?.let { return it.value }
+            for (f in frames) ownerOfFrame(f, claims)?.let { return it }
             t = t.cause
         }
         return null

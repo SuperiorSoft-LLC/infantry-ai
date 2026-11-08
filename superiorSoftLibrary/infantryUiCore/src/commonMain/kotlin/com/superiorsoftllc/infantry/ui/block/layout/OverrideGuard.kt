@@ -42,16 +42,25 @@ sealed interface OverrideVerdict {
  * content of a lazy list / subcomposition, which composes at measure time, not in the probe.
  */
 object OverrideHealth {
-    private val verdicts = mutableStateMapOf<String, Pair<Any, OverrideVerdict>>()
+    /**
+     * VOICEINPUT-BLANK-1: a verdict and the instance it was given to. Deliberately NOT a data class (nor a Pair): the state
+     * map drops a put whose value EQUALS the stored one, and a live plugin swap hands the host equal copies of unchanged
+     * registrations (a data-class [com.superiorsoftllc.infantry.ui.plugin.PanelProvider] copy). With an equality-compared
+     * value the new copy's verdict was never stored, [verdict] never matched it, and every such block drew its fallback
+     * (nothing) for good. Identity equality makes each record land.
+     */
+    private class Entry(val instance: Any, val verdict: OverrideVerdict)
+
+    private val verdicts = mutableStateMapOf<String, Entry>()
 
     /** The verdict for [key] if it was given to this very [instance], else null (not probed yet). */
-    fun verdict(key: String, instance: Any): OverrideVerdict? = verdicts[key]?.takeIf { it.first === instance }?.second
+    fun verdict(key: String, instance: Any): OverrideVerdict? = verdicts[key]?.takeIf { it.instance === instance }?.verdict
 
     /** Every faulted block by key (`<module>/<mode>/<node id>`), with the exception's message. */
     val faults: Map<String, String>
-        get() = verdicts.mapNotNull { (k, v) -> (v.second as? OverrideVerdict.Faulted)?.let { k to it.message } }.toMap()
+        get() = verdicts.mapNotNull { (k, v) -> (v.verdict as? OverrideVerdict.Faulted)?.let { k to it.message } }.toMap()
 
-    internal fun record(key: String, instance: Any, verdict: OverrideVerdict) { verdicts[key] = instance to verdict }
+    internal fun record(key: String, instance: Any, verdict: OverrideVerdict) { verdicts[key] = Entry(instance, verdict) }
 
     /** Tests: forget every verdict. */
     fun clear() = verdicts.clear()
