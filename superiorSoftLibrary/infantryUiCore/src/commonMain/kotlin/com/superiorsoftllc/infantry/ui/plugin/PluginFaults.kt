@@ -30,7 +30,9 @@ data class PluginFault(val module: String, val message: String, val generation: 
  */
 object PluginFaults {
     private val byModule = mutableStateMapOf<String, PluginFault>()
-    private val packages = mutableMapOf<String, String>()
+    // commonMain (wasm too): no synchronized/System/StackTraceElement. Copy-on-write map; claims come from the loader one at a time.
+    @kotlin.concurrent.Volatile
+    private var packages: Map<String, String> = emptyMap()
 
     /** The newest exception no plugin owned (an in-app banner shows it); null when none or dismissed. */
     val hostError = mutableStateOf<String?>(null)
@@ -51,15 +53,17 @@ object PluginFaults {
     fun clear(module: String) { byModule.remove(module) }
 
     /** [module]'s classes live under [packagePrefix] (its entry class's package); the loader calls this. */
-    fun claim(module: String, packagePrefix: String) { synchronized(packages) { packages[packagePrefix] = module } }
+    fun claim(module: String, packagePrefix: String) { packages = packages + (packagePrefix to module) }
 
     /** The module whose claimed package a frame of [error] (or its causes) is in, or null. */
     fun owner(error: Throwable): String? {
         val seen = HashSet<Throwable>()
         var t: Throwable? = error
-        val claims = synchronized(packages) { packages.toMap() }
+        val claims = packages
         while (t != null && seen.add(t)) {
-            for (f in t.stackTrace) claims.entries.firstOrNull { f.className.startsWith(it.key + ".") }?.let { return it.value }
+            // stackTraceToString is common Kotlin; JVM frames read "at <class>.<method>(...)"
+            val frames = t.stackTraceToString().lineSequence().map { it.trim().removePrefix("at ") }
+            for (f in frames) claims.entries.firstOrNull { f.startsWith(it.key + ".") }?.let { return it.value }
             t = t.cause
         }
         return null
@@ -70,14 +74,14 @@ object PluginFaults {
      * its current reload generation); any other goes to [hostError]. Returns the module, or null.
      */
     fun handle(error: Throwable, generationOf: (String) -> Int = { generationLookup(it) }): String? {
-        System.err.println("[infantry-ui] uncaught UI exception: ${error.stackTraceToString().take(2000)}")
+        println("[infantry-ui] uncaught UI exception: ${error.stackTraceToString().take(2000)}")
         val module = owner(error)
         if (module != null) record(module, error, generationOf(module)) else hostError.value = error.toString().take(400)
         return module
     }
 
     /** Tests. */
-    fun reset() { byModule.clear(); synchronized(packages) { packages.clear() }; hostError.value = null }
+    fun reset() { byModule.clear(); packages = emptyMap(); hostError.value = null }
 }
 
 const val FAULTED_PLUGIN_TAG_PREFIX = "plugin-faulted-"
