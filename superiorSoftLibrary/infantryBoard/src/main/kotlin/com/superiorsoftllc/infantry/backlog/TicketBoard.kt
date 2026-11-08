@@ -2331,16 +2331,10 @@ class TicketBoard(
      * entry, else `limits.session.defaultContextTokens`; then lowered to `limits.session.compactMaxTokens` when that is set
      * (source `compactMax`). Null = none (the harness's own window).
      */
-    private fun resolveContextLimit(row: TicketRow): Pair<Int, String>? {
-        val (value, source) = when {
-            row.contextLimit != null -> row.contextLimit!! to "ticket"
-            else -> weightContext().forWeight(row.weight)?.contextLimit?.let { it to "weight" }
-                ?: defaultContextLimit()?.let { it to "default" }
-                ?: return null
-        }
-        val ceiling = compactMaxTokens()?.coerceAtLeast(com.superiorsoftllc.infantry.daemon.api.board.ContextLimits.MIN)
-        return if (ceiling != null && value > ceiling) ceiling to "compactMax" else value to source
-    }
+    private fun resolveContextLimit(row: TicketRow): Pair<Int, String>? =
+        com.superiorsoftllc.infantry.settings.ContextLimitResolver.resolve(
+            row.contextLimit, weightContext().forWeight(row.weight), defaultContextLimit(), compactMaxTokens(),
+        )
 
     private fun effectiveContextLimit(row: TicketRow): com.superiorsoftllc.infantry.protocol.EffectiveContextLimit {
         val resolved = resolveContextLimit(row)

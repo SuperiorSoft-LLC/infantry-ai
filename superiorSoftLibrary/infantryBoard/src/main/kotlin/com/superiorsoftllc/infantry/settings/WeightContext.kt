@@ -80,3 +80,19 @@ class WeightContext(private val byWeight: Map<Int, WeightContextEntry>) {
         }
     }
 }
+
+/**
+ * CONTEXT-DEFAULT-1/2: the one rule for the context limit a ticket session runs with and where it came from: the ticket's
+ * pin, else its weight's entry, else `limits.session.defaultContextTokens` ([defaultLimit], null = off); then lowered to
+ * `limits.session.compactMaxTokens` ([compactMax], null = off) when larger (source `compactMax`). Null = none.
+ */
+object ContextLimitResolver {
+    fun resolve(ticketPin: Int?, weight: WeightContextEntry?, defaultLimit: Int?, compactMax: Int?): Pair<Int, String>? {
+        val (value, source) = when {
+            ticketPin != null -> ticketPin to "ticket"
+            else -> weight?.contextLimit?.let { it to "weight" } ?: defaultLimit?.let { it to "default" } ?: return null
+        }
+        val ceiling = compactMax?.coerceAtLeast(ContextLimits.MIN)
+        return if (ceiling != null && value > ceiling) ceiling to "compactMax" else value to source
+    }
+}
