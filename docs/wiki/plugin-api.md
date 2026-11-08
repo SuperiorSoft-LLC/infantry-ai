@@ -365,7 +365,7 @@ and declaring the same pair in `module.json`:
 "implementations": [{ "registry": "agent.avatar.renderers", "key": "mascot" }]
 ```
 
-`MascotAvatarRenderer` is any `fun interface AgentAvatarRenderer` with a `@Composable Draw(request: AvatarRequest, modifier: Modifier)`.
+Your renderer is any `fun interface AgentAvatarRenderer` with a `@Composable Draw(request: AvatarRequest, modifier: Modifier)`.
 
 **The request (`AvatarRequest`).** Plain data; a renderer never sees app state or a session. Fields:
 
