@@ -23,6 +23,12 @@ import kotlinx.serialization.json.put
 class UsageDaemonPlugin : DaemonPlugin {
     override fun start(api: DaemonApi) {
         api.tools.register(UsageTool)
+        // USAGE-OVERRIDE-GAP-1: read/set the allowance override without the CLI; who may set it is the `usage.overrideRoles` setting.
+        api.tools.register(UsageOverrideTool(
+            roleOf = { id -> api.sessions.get(id)?.role },
+            allowedRoles = { (api.settings.stored(UsageOverrideTool.ROLES_SETTING) ?: UsageOverrideTool.DEFAULT_ROLES).split(',') },
+            audit = { api.log(it) },
+        ))
         // USAGE-MOCK-1: `usage.mock` on = usage_get, limits and the pushed limits frame carry the mock; pacing stays on the real readings
         // unless `usage.mock.affectsPacing`. A setting (or its INFANTRY_USAGE_MOCK* env) is read at every reading, so a change counts at once.
         fun value(setting: String, env: String) = api.env(env)?.takeIf { it.isNotBlank() } ?: api.config(setting)

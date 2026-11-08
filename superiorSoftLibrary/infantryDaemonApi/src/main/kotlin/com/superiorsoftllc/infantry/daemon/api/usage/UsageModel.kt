@@ -256,7 +256,7 @@ object UsageText {
             append(" [").append(m.source).append("]")
             append(" | running ").append(m.running).append(", allowance ").append(m.allowance?.toString() ?: "no limit")
             m.override?.let { o ->
-                append(" (override ").append(o.workers?.toString() ?: "no limit").append(" for ").append(until(o.until, report.observedAt)).append(")")
+                append(" (override ").append(o.workers?.toString() ?: "no limit").append(", expires in ").append(until(o.until, report.observedAt)).append(")")
             }
             append(" | ").append(if (m.canStart) "may start 1 more" else "FULL: agent ticket starts refused")
             appendLine()

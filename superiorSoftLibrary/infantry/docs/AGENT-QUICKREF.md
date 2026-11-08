@@ -405,7 +405,7 @@ starts only projects and harnesses in its own `runner.projects` / `runner.harnes
 `docs/RUNNER-POOL.md` section 7.
 
 ## Slim answers (TOKEN-1)
-`infantry_ticket_create|update|move` answer ONE line (id, status, title, branch, session); pass `verbose: true` for the full ticket, or call `infantry_ticket_get`. `infantry_get_session` returns the last 5 transcript lines (`lines` for more, `brief:true` for none); `infantry_list_sessions` takes `limit`; `infantry_usage` takes `json:true` for the JSON report. Defaults live in settings `limits.tools.*`.
+`infantry_ticket_create|update|move` answer ONE line (id, status, title, branch, session); pass `verbose: true` for the full ticket, or call `infantry_ticket_get`. `infantry_get_session` returns the last 5 transcript lines (`lines` for more, `brief:true` for none); `infantry_list_sessions` takes `limit`; `infantry_usage` takes `json:true` for the JSON report; `infantry_usage_override` reads or sets the pacing allowance override (same as `infantry usage override`; who may set it: setting `usage.overrideRoles`). Defaults live in settings `limits.tools.*`.
 
 Related changes: `infantry_ticket_get` / `ticket show` omit the RELATED(auto) block; pass `related: true` (`--related`) to include it, or call `infantry_ticket_related_files` (`ticket files <id> --related`) for related tickets + changed files.
 
