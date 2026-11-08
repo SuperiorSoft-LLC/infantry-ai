@@ -26,6 +26,8 @@ import kotlinx.serialization.json.JsonPrimitive
 object BoardFromRuntime {
     const val EXIT_BEHAVIOR = "tickets.exitBehavior"
     const val AUTO_DONE_MIN_OUTPUTS = "limits.tickets.autoDoneMinOutputs"
+    const val SESSION_DEFAULT_CONTEXT_TOKENS = "limits.session.defaultContextTokens"
+    const val SESSION_COMPACT_MAX_TOKENS = "limits.session.compactMaxTokens"
     const val HANDOFF_NOTE = "tickets.agentTasks.handoffNote"
     const val UNASSIGN_WAIT_SECONDS = "limits.agentTasks.unassignWaitSeconds"
     const val HANDOFF_COMMITS = "limits.agentTasks.handoffCommits"
@@ -79,6 +81,8 @@ object BoardFromRuntime {
                 val stored = runtime.setting(WeightContext.SETTING) ?: return@TicketBoard WeightContext.DEFAULT
                 runCatching { WeightContext.parse(json.parseToJsonElement(stored)) }.getOrDefault(WeightContext.DEFAULT)
             },
+            defaultContextLimit = { runtime.limit(SESSION_DEFAULT_CONTEXT_TOKENS)?.takeIf { it > 0 }?.toInt() },
+            compactMaxTokens = { runtime.limit(SESSION_COMPACT_MAX_TOKENS)?.takeIf { it > 0 }?.toInt() },
             laneCap = runtime::laneCap,
             runnersDefault = {
                 runtime.setting("runners.default")?.let { runCatching { (json.parseToJsonElement(it) as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }.getOrNull() }

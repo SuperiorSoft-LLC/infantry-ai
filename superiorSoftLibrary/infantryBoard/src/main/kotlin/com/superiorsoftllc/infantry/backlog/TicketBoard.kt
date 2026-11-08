@@ -141,6 +141,10 @@ class TicketBoard(
     private val weightExecutors: () -> WeightExecutors = { WeightExecutors.DEFAULT },
     /** TOKEN-7: the weight -> {contextLimit, effort} defaults, read at every start; they fill only what the ticket leaves unset. */
     private val weightContext: () -> com.superiorsoftllc.infantry.settings.WeightContext = { com.superiorsoftllc.infantry.settings.WeightContext.DEFAULT },
+    /** CONTEXT-DEFAULT-1: `limits.session.defaultContextTokens` (null = off), the context limit when neither ticket nor weight sets one. */
+    private val defaultContextLimit: () -> Int? = { null },
+    /** CONTEXT-DEFAULT-1: `limits.session.compactMaxTokens` (null = off), the ceiling every applied context limit is lowered to. */
+    private val compactMaxTokens: () -> Int? = { null },
     /** LANE-CAPS: the most agents of a role that may run at once in a project (1 = one per role, today's behaviour). */
     private val laneCap: (projectId: String?, role: String) -> Int = { _, _ -> 1 },
     /** RUNNER-POOL-3: `runners.default`, read at every start (`local` unless set). */
@@ -1355,7 +1359,7 @@ class TicketBoard(
                 role = profile.role,
                 ticketId = id,
                 projectId = row.projectId,
-                contextLimit = row.contextLimit ?: byWeightContext?.contextLimit, // CONTEXT-LIMIT-1; TOKEN-7 weight default
+                contextLimit = resolveContextLimit(row)?.first, // CONTEXT-LIMIT-1; TOKEN-7 weight default; CONTEXT-DEFAULT-1 default + compaction ceiling
                 instance = instance,
                 origin = if (unattendedLaunch) "unattended" else "human",
                 runner = remoteRunner,
@@ -2322,12 +2326,29 @@ class TicketBoard(
     }
 
     /** CONTEXT-LIMIT-1: the ticket's limit (or none) and how its effective harness would honour one. */
+    /**
+     * CONTEXT-DEFAULT-1: the limit a session of [row] runs with and where it came from: the ticket's pin, else its weight's
+     * entry, else `limits.session.defaultContextTokens`; then lowered to `limits.session.compactMaxTokens` when that is set
+     * (source `compactMax`). Null = none (the harness's own window).
+     */
+    private fun resolveContextLimit(row: TicketRow): Pair<Int, String>? {
+        val (value, source) = when {
+            row.contextLimit != null -> row.contextLimit!! to "ticket"
+            else -> weightContext().forWeight(row.weight)?.contextLimit?.let { it to "weight" }
+                ?: defaultContextLimit()?.let { it to "default" }
+                ?: return null
+        }
+        val ceiling = compactMaxTokens()?.coerceAtLeast(com.superiorsoftllc.infantry.daemon.api.board.ContextLimits.MIN)
+        return if (ceiling != null && value > ceiling) ceiling to "compactMax" else value to source
+    }
+
     private fun effectiveContextLimit(row: TicketRow): com.superiorsoftllc.infantry.protocol.EffectiveContextLimit {
+        val resolved = resolveContextLimit(row)
         val harness = sessionsOn.takeIf { it }?.let { runCatching { effectiveExecutor(row)?.provider?.value }.getOrNull() ?: host.sessions.providerId() }
         val capability = harness?.let { host.sessions.providerFor(it) }
         return com.superiorsoftllc.infantry.protocol.EffectiveContextLimit(
-            value = row.contextLimit,
-            source = if (row.contextLimit != null) "ticket" else "default",
+            value = resolved?.first,
+            source = resolved?.second ?: "default",
             support = capability?.contextLimitSupport,
             how = capability?.contextLimitHow,
         )

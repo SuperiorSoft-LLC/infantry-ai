@@ -56,3 +56,13 @@ product can compare runs with and without a limit. Data only for now; no screen.
 CONTEXT-SWITCH-1 asks for a `contextSize` choice (250k / 500k / 1M) and a fresh-context reset. It should reuse this
 value and capability rather than add a second one: its size picker writes `contextLimit`, its "change mid-session"
 falls back to restart-with-handoff at the new limit, and its per-harness support table starts from the one above.
+
+## Default and compaction ceiling (CONTEXT-DEFAULT-1)
+
+A ticket session's context limit resolves in this order: the ticket's own pin (`source: ticket`), the weight's entry in
+`tickets.weightContext` (`weight`; none by default), then `limits.session.defaultContextTokens` (`default`, **500000**; 0 = the
+harness's own window). `limits.session.compactMaxTokens` (default 0 = off) then lowers whatever applies to that ceiling
+(`compactMax`). Both are limits-group settings (Settings > Limits, `infantry settings`), so every harness receives the one
+resolved value through the generic `contextLimit` field and reports `supported` / `best_effort` / `unsupported` as before. A lower
+value compacts earlier; each compaction costs a full-context summary plus a cache rebuild. `limits.session.contextCapTokens`
+(restart of a resting session on mail wake) is a separate, unchanged setting.
