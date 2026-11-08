@@ -1059,16 +1059,6 @@ class InfantryDaemon(
                     }
                 }
             }
-            manager.mcpHealFailedSink = { session, tries ->
-                attentionSvc.raise(
-                    kind = AttentionKinds.STALLED,
-                    ticketId = session.ticketId,
-                    podId = null,
-                    sessionId = session.id,
-                    outcome = "mcp-disconnected",
-                    detail = "Session ${session.id} (${session.role}) still has its Infantry tools disconnected after $tries reconnect tries. Run: infantry session mcp-reconnect --self from its shell, or restart the session.",
-                )
-            }
             manager.silentSink = { session, minutes ->
                 attentionSvc.raise(
                     kind = AttentionKinds.STALLED,
@@ -1291,6 +1281,19 @@ class InfantryDaemon(
                 // RUNNER-POOL-8: a session placed on a remote runner takes its mail through that runner (kept queued while it is offline).
                 remoteSession = { sid -> runnerPool.runnerOf(sid) != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL },
             )
+            manager.mcpHealFailedSink = { session, tries ->
+                runCatching {
+                    mail.send(MailSendRequest(from = session.id, to = "pm", subject = "MCP disconnected: ${session.id}", body = "Session ${session.id} (${session.role}) still has its Infantry tools disconnected after $tries reconnect tries."))
+                }
+                attentionSvc.raise(
+                    kind = AttentionKinds.STALLED,
+                    ticketId = session.ticketId,
+                    podId = null,
+                    sessionId = session.id,
+                    outcome = "mcp-disconnected",
+                    detail = "Session ${session.id} (${session.role}) still has its Infantry tools disconnected after $tries reconnect tries. Run: infantry session mcp-reconnect --self from its shell, or restart the session.",
+                )
+            }
             // Story 9.5: triggers -- stored, coalesced, tripped on any non-success, their starts unattended.
             // TRIGGER-NUDGE (contract 1.105.0): a `prompt` action is mail to the target in the trigger's project.
             // DP-5b: triggers hand out through the Tickets API, bound once the board services exist (below).

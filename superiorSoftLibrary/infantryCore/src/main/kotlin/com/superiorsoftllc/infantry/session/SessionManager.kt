@@ -1430,9 +1430,10 @@ class SessionManager(
     data class McpLines(
         val down: String = "Your Infantry tools are disconnected; the daemon is reconnecting them, wait. If they stay away, run: infantry session mcp-reconnect --self",
         val up: String = "Your Infantry tools are connected again.",
+        val failed: String = "Your Infantry tools are still disconnected after the daemon's reconnect tries. Run: infantry session mcp-reconnect --self",
     )
 
-    private class McpHeal(var attempts: Int = 0, var nextAt: Long = 0, var told: Boolean = false, var gaveUp: Boolean = false)
+    private class McpHeal(var attempts: Int = 0, var nextAt: Long = 0, var told: Boolean = false, var agentTold: Boolean = false, var gaveUp: Boolean = false)
 
     private val mcpHeal = ConcurrentHashMap<String, McpHeal>()
 
@@ -1442,6 +1443,12 @@ class SessionManager(
 
     /** MCP-RECONNECT-1: record the harness's MCP state for [sessionId] (what the live process reports). */
     fun reportMcpState(sessionId: String, state: String, reason: String? = null) = hostEvents.mcpState(sessionId, state, reason)
+
+    /** MCP-RECONNECT-1: the line reaches the transcript AND the agent, like queue_add (an idle session gets it as a turn at once, a busy one at turn end). */
+    private fun tellAgent(sessionId: String, text: String) {
+        bootLine(sessionId, text)
+        runCatching { queueAdd(sessionId, text, healSeconds(com.superiorsoftllc.infantry.settings.LimitRegistry.CHAT_QUEUE_MAX).toInt()) }
+    }
 
     private fun healSeconds(def: com.superiorsoftllc.infantry.settings.LimitDef): Long =
         limitSource?.let { runCatching { it(def) }.getOrNull() } ?: def.default
@@ -1462,7 +1469,7 @@ class SessionManager(
                 if (s.mcp == MCP_RECONNECTING) continue
                 if (st != null) {
                     mcpHeal.remove(s.id)
-                    if (st.told && s.mcp == MCP_CONNECTED) bootLine(s.id, mcpLines.up)
+                    if (st.told && s.mcp == MCP_CONNECTED) tellAgent(s.id, mcpLines.up)
                 }
                 continue
             }
@@ -1471,6 +1478,7 @@ class SessionManager(
             if (h.gaveUp || now < h.nextAt) continue
             if (h.attempts >= max) {
                 h.gaveUp = true
+                tellAgent(s.id, mcpLines.failed)
                 runCatching { mcpHealFailedSink?.invoke(s, h.attempts) }
                 continue
             }
@@ -1485,6 +1493,11 @@ class SessionManager(
                 h.nextAt = now + base * 1000
             } catch (e: Exception) {
                 System.err.println("[infantry] mcp heal failed for ${s.id}: ${e.message}")
+            }
+            // The agent hears the "wait" line only if the link is still down after the try (a queued line starts a turn on an idle session).
+            if (!h.agentTold && sessions[s.id]?.mcp.let { it == MCP_DISCONNECTED || it == MCP_RECONNECTING }) {
+                h.agentTold = true
+                runCatching { queueAdd(s.id, mcpLines.down, healSeconds(lr.CHAT_QUEUE_MAX).toInt()) }
             }
         }
     }
