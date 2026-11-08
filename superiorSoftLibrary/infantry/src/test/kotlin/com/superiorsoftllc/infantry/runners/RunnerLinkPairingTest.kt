@@ -48,9 +48,9 @@ class RunnerLinkPairingTest {
     private val server = RunnerLinkServer(runnerStore, audit, codes, settings = { settings }, runner = { local }, clock = { now })
 
     /** The orchestrator side reaching [server] in process (no transport). */
-    private val direct = LinkCall { _, _, id, cred, type, data -> server.handle(type, data, id, cred, PEER) }
+    private val direct = LinkCall { _, _, id, cred, type, data, _ -> server.handle(type, data, id, cred, PEER) }
 
-    private fun orchestrator(store: RunnerLinkStore = RunnerLinkStore(LinkVault.InMemory())) = store to RunnerPeers(store, direct) { now }
+    private fun orchestrator(store: RunnerLinkStore = RunnerLinkStore(LinkVault.InMemory())) = store to RunnerPeers(store, direct, clock = { now })
 
     private fun startData(project: String? = "p1", harness: String? = "claude") =
         F.json.encodeToString(F.StartRequest.serializer(), F.StartRequest(startId = "st", projectId = project, provider = harness, ticketId = "t-1"))

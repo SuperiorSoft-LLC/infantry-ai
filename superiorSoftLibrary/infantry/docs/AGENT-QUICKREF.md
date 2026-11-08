@@ -395,10 +395,17 @@ Details: `docs/MCP.md`, "Ticket images".
 ## 11. Pair a runner machine (RUNNER-POOL-5)
 
 ```
-infantry runner pair --name box                     # on the RUNNER: one-time code + wss certificate fingerprint
-infantry runner add box wss://100.x.y.z:8790 --code ABCD-EFGH-JKLM-NPQR --fingerprint AB:CD:...   # on the ORCHESTRATOR
+infantry runner pair --name box                     # on the RUNNER: one-time code + wss certificate fingerprint + ONE pairing link
+infantry runner add 'infantry://runner?v=1&name=box&host=...&port=8790&code=...&fp=...'   # on the ORCHESTRATOR: one paste
+infantry runner add box wss://100.x.y.z:8790 --code ABCD-EFGH-JKLM-NPQR --fingerprint AB:CD:...   # the older, by-hand form
 infantry runner list | rotate box | detach [box] | audit [--limit 20]
 ```
+
+RUNNER-ADD-LINK-1: quote the link (an unquoted `&` cuts it short; the usage error says so), `--name other` renames it, and
+`--link -` reads it from stdin. The link's hosts are tried in order, each bounded by `limits.runners.addHostTimeoutSec`; a
+host that does not answer, or whose certificate is not the link's, is skipped (the pin is checked before the code is sent),
+and the first that answers PAIR wins. A PAIR refusal (wrong/expired/burned code) stops at once and the error lists every host
+tried with its reason. The first successful add turns `runners.enabled` on and says so; a detach leaves it on.
 
 The credential is per pair (not the owner, `remote` or agent token) and may call only `runner_link_*` frames. A runner
 starts only projects and harnesses in its own `runner.projects` / `runner.harnesses` settings (empty = none). Details:

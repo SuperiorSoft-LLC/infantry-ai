@@ -298,6 +298,17 @@ Rate limits on pairing attempts (`runners.pairAttemptsPerHour`, default 5).
   (no CA, no host name), then trades the code for a 32-byte per-pair credential. The orchestrator keeps it in its link
   keystore (`<stateDir>/runner-link`, separate from the owner keystore); the runner keeps only its SHA-256. With no
   `--fingerprint` the call stops after the handshake and prints the fingerprint the runner presented, to compare.
+- **As built (RUNNER-LINK-1 / RUNNER-ADD-LINK-1).** `runner pair` also prints ONE link,
+  `infantry://runner?v=1&name=<n>&host=<h1>&host=<h2>&port=<p>&code=<code>&fp=<sha-256>`, parsed and built by
+  `superiorSoftLibrary/infantry/src/main/kotlin/com/superiorsoftllc/infantry/runners/RunnerPairLink.kt` (an unknown `v` is
+  refused with "update this app"; the code is never shown by `toString`, no error echoes the input). `infantry runner add
+  '<link>'` (or `--link <link|->`, `-` = stdin) sends `runner_admin` op `add {link, name?}`: each `host` of the link is tried in
+  order as `wss://<host>:<port>`, bounded by `limits.runners.addHostTimeoutSec` (5 s). A host that does not answer, or whose
+  certificate is not the link's fingerprint, is skipped — the pin is checked in the handshake, so the code is never sent there —
+  and the first host that answers PAIR wins and is stored. A PAIR refusal (wrong/expired/burned code, another orchestrator)
+  stops at once rather than spending the code on the next host. A failure lists each host tried with its reason. A plain
+  (`plain=1`) link is refused unless `runners.allowPlainTailnet` is on this side too. The first successful add on a daemon turns
+  `runners.enabled` on and says so; detaching the last runner leaves it on. The older `add <name> <url> ...` form is unchanged.
 - Caller seat `orchestrator:<id>`: `FrameGate.refusal(type, seat)` lets that seat call only `runner_link_*` frames, and no
   other seat may call them. The runner accepts one orchestrator id; a second pair is refused until `infantry runner detach`.
 - A remote start passes `runner.projects` and `runner.harnesses` (empty = none, `*` = any; harness = the start's provider),

@@ -7,6 +7,7 @@ import com.superiorsoftllc.infantry.protocol.Envelope
 import com.superiorsoftllc.infantry.runners.RunnerAudit
 import com.superiorsoftllc.infantry.runners.RunnerLinkService
 import com.superiorsoftllc.infantry.runners.RunnerLinkStore
+import com.superiorsoftllc.infantry.runners.RunnerPairLink
 import com.superiorsoftllc.infantry.settings.LimitDef
 import com.superiorsoftllc.infantry.settings.LimitRegistry
 import com.superiorsoftllc.infantry.settings.RunnerLinkSettings
@@ -39,16 +40,19 @@ import java.net.InetAddress
  * runner-side `detach` read and write the link folder here, as before. Command names, flags and printed text are unchanged.
  */
 internal object RunnerCli {
-    const val USAGE = "usage: infantry runner pair --name <n> [--host <h>]... [--allow-projects <ids|*>] [--allow-harnesses <ids|*>] | add <name> <wss-url> --code <code> [--fingerprint <fp>] | list | rotate <name> | detach [<name>] | audit [--limit N]"
+    const val USAGE = "usage: infantry runner pair --name <n> [--host <h>]... [--allow-projects <ids|*>] [--allow-harnesses <ids|*>] | add <name> <wss-url> --code <code> [--fingerprint <fp>] | add '<infantry://runner?...>' [--name <n>] | add --link <link|-> [--name <n>] | list | rotate <name> | detach [<name>] | audit [--limit N]"
+
+    /** RUNNER-ADD-LINK-1: what the usage error adds when a pasted link looks cut short (a PowerShell `&` eats the rest). */
+    private const val QUOTE_HINT = "Quote the whole link, e.g. infantry runner add 'infantry://runner?v=1&...'. A shell without quotes cuts it at &."
 
     private val json = Json { ignoreUnknownKeys = true }
 
     /** The words after `runner` and the flags the CLI parser took for it. */
-    data class Args(val words: List<String>, val name: String? = null, val code: String? = null, val fingerprint: String? = null, val limit: String? = null, val allowProjects: String? = null, val allowHarnesses: String? = null, val hosts: String? = null) {
+    data class Args(val words: List<String>, val name: String? = null, val code: String? = null, val fingerprint: String? = null, val limit: String? = null, val allowProjects: String? = null, val allowHarnesses: String? = null, val hosts: String? = null, val link: String? = null) {
         val action: String? get() = words.firstOrNull()?.lowercase()
         val positional: List<String> get() = words.drop(1)
         val flags: Map<String, String>
-            get() = listOfNotNull(name?.let { "name" to it }, code?.let { "code" to it }, fingerprint?.let { "fingerprint" to it }, limit?.let { "limit" to it }, allowProjects?.let { "allow-projects" to it }, allowHarnesses?.let { "allow-harnesses" to it }, hosts?.let { "host" to it }).toMap()
+            get() = listOfNotNull(name?.let { "name" to it }, code?.let { "code" to it }, fingerprint?.let { "fingerprint" to it }, limit?.let { "limit" to it }, allowProjects?.let { "allow-projects" to it }, allowHarnesses?.let { "allow-harnesses" to it }, hosts?.let { "host" to it }, link?.let { "link" to it }).toMap()
     }
 
     /** The usage error for [args], or null when they are valid. */
@@ -57,14 +61,26 @@ internal object RunnerCli {
         val flags = args.flags
         val ok = when (args.action) {
             "pair" -> positional.isEmpty() && !args.name.isNullOrBlank() && flags.keys.all { it in setOf("name", "allow-projects", "allow-harnesses", "host") }
-            "add" -> positional.size == 2 && !args.code.isNullOrBlank() && flags.keys.all { it in setOf("code", "fingerprint") }
+            "add" -> addUsageOk(args) || (positional.size == 2 && !args.code.isNullOrBlank() && flags.keys.all { it in setOf("code", "fingerprint") })
             "list" -> positional.isEmpty() && flags.isEmpty()
             "rotate" -> positional.size == 1 && flags.isEmpty()
             "detach" -> positional.size <= 1 && flags.isEmpty()
             "audit" -> positional.isEmpty() && flags.keys.all { it == "limit" } && (args.limit == null || (args.limit.toIntOrNull() ?: 0) > 0)
             else -> false
         }
-        return if (ok) null else USAGE
+        // A cut-short link (a shell ate the rest after `&`) gets the quote hint, not just the usage line.
+        if (ok) return null
+        return if (positional.any { isLink(it) }) "$USAGE\n$QUOTE_HINT" else USAGE
+    }
+
+    /** RUNNER-ADD-LINK-1: `add '<infantry://runner?...>' [--name <n>]` or `add --link <link|-> [--name <n>]`. */
+    private fun addUsageOk(args: Args): Boolean {
+        val positional = args.positional
+        if (args.link != null) {
+            return positional.isEmpty() && args.code == null && args.fingerprint == null &&
+                args.flags.keys.all { it in setOf("link", "name") } && args.link.isNotBlank()
+        }
+        return positional.size == 1 && isLink(positional[0]) && args.flags.keys.all { it == "name" }
     }
 
     suspend fun run(stream: FrameStream, args: Args, out: Appendable, err: Appendable, stateDir: File): Int {
@@ -76,22 +92,7 @@ internal object RunnerCli {
         return try {
             when (args.action) {
                 "pair" -> pair(stream, flags.getValue("name"), ::limit, out, err, flags["allow-projects"], flags["allow-harnesses"], flags["host"])
-                "add" -> {
-                    val r = admin(
-                        stream, ::limit, "op" to "add", "name" to positional[0], "url" to positional[1], "code" to flags.getValue("code"),
-                        "fingerprint" to flags["fingerprint"], "orchestratorName" to hostName(),
-                    )
-                    if (r.failed) {
-                        err.appendLine("error: ${r.error}")
-                        r["presentedFingerprint"]?.takeIf { flags["fingerprint"] == null }?.let {
-                            err.appendLine("If it matches, run: infantry runner add ${positional[0]} ${positional[1]} --code ${flags.getValue("code")} --fingerprint $it")
-                        }
-                        return 1
-                    }
-                    out.appendLine("runner '${r["name"]}' paired (${r["url"]}); runner id ${r["runnerId"]}")
-                    out.appendLine("The credential is stored in this machine's link keystore only; it rotates every ${limit(LimitRegistry.RUNNERS_CREDENTIAL_ROTATE_DAYS)} days.")
-                    0
-                }
+                "add" -> add(stream, args, ::limit, out, err)
                 "list" -> {
                     if (!RunnerLinkStore.exists(stateDir)) { out.appendLine("No runner link: this machine never paired."); return 0 }
                     val store = RunnerLinkStore.open(stateDir)
@@ -154,12 +155,74 @@ internal object RunnerCli {
     }
 
     /** Sends one `runner_admin` request to the daemon; a link call may take `limits.runners.linkCallSeconds`, add makes two. */
-    private suspend fun admin(stream: FrameStream, limit: (LimitDef) -> Long, vararg fields: Pair<String, String?>): AdminAnswer {
+    private suspend fun admin(stream: FrameStream, limit: (LimitDef) -> Long, vararg fields: Pair<String, String?>, linkHosts: Int = 0): AdminAnswer {
         val body = JsonObject(fields.filter { it.second != null }.associate { (k, v) -> k to JsonPrimitive(v) })
-        val wait = maxOf(stream.answerTimeoutMs, (limit(LimitRegistry.RUNNERS_LINK_CALL_SECONDS) * ADMIN_CALLS + ADMIN_SLACK_SECONDS) * MS_PER_SECOND)
+        // An `add` from a link may try every host of the link, each bounded by limits.runners.addHostTimeoutSec.
+        val wait = maxOf(stream.answerTimeoutMs, (limit(LimitRegistry.RUNNERS_LINK_CALL_SECONDS) * ADMIN_CALLS + ADMIN_SLACK_SECONDS + linkHosts * limit(LimitRegistry.RUNNERS_ADD_HOST_TIMEOUT_SEC)) * MS_PER_SECOND)
         val answer = stream.request(Envelope(RunnerLinkService.ADMIN, body.toString()), RunnerLinkService.ADMIN, RunnerLinkService.ADMIN, idempotent = false, timeoutMs = wait)
         return AdminAnswer(json.parseToJsonElement(answer.data).jsonObject)
     }
+
+    /**
+     * RUNNER-ADD-LINK-1: `add '<infantry://runner?...>' [--name <n>]` / `add --link <link|->` (one paste), and the older
+     * `add <name> <wss-url> --code <c> [--fingerprint <fp>]`. Only the link form can try several hosts and turn `runners.enabled` on.
+     */
+    private suspend fun add(stream: FrameStream, args: Args, limit: (LimitDef) -> Long, out: Appendable, err: Appendable): Int {
+        val positional = args.positional
+        val pasted = args.link?.let { flag -> if (flag == "-") readStdin() else flag }
+            ?: positional.firstOrNull()?.takeIf { isLink(it) }
+        if (pasted == null) {
+            // The older form: one name, one URL, the code and the fingerprint by hand.
+            val r = admin(
+                stream, limit, "op" to "add", "name" to positional[0], "url" to positional[1], "code" to args.code,
+                "fingerprint" to args.fingerprint, "orchestratorName" to hostName(),
+            )
+            if (r.failed) {
+                err.appendLine("error: ${r.error}")
+                r["presentedFingerprint"]?.takeIf { args.fingerprint == null }?.let {
+                    err.appendLine("If it matches, run: infantry runner add ${positional[0]} ${positional[1]} --code ${args.code.orEmpty()} --fingerprint $it")
+                }
+                return 1
+            }
+            return reportAdd(r, limit, out)
+        }
+        if (pasted.isBlank()) {
+            err.appendLine("error: --link - read nothing; pipe the link in, e.g. infantry runner add --link - < link.txt")
+            return 1
+        }
+        val parsed = when (val p = RunnerPairLink.parse(pasted)) {
+            is RunnerPairLink.Parsed.Ok -> p.link
+            is RunnerPairLink.Parsed.Bad -> {
+                err.appendLine("error: ${p.reason}")
+                if (args.link == null) err.appendLine(QUOTE_HINT)
+                return 1
+            }
+        }
+        val r = admin(
+            stream, limit, "op" to "add", "link" to pasted,
+            "name" to args.name?.takeIf { it.isNotBlank() }, "orchestratorName" to hostName(), linkHosts = parsed.hosts.size,
+        )
+        if (r.failed) {
+            err.appendLine("error: ${r.error}")
+            return 1
+        }
+        r["skipped"]?.let { out.appendLine("skipped: $it") }
+        if (r["enabledTurnedOn"] == "true") out.appendLine("runners.enabled was off; turned on")
+        return reportAdd(r, limit, out)
+    }
+
+    /** The one answer line both add forms print once the daemon paired. */
+    private fun reportAdd(r: AdminAnswer, limit: (LimitDef) -> Long, out: Appendable): Int {
+        out.appendLine("runner '${r["name"]}' paired (${r["url"]}); runner id ${r["runnerId"]}")
+        out.appendLine("The credential is stored in this machine's link keystore only; it rotates every ${limit(LimitRegistry.RUNNERS_CREDENTIAL_ROTATE_DAYS)} days.")
+        return 0
+    }
+
+    /** `--link -`: the one line(s) piped in, so the link need not land in shell history. */
+    private fun readStdin(): String = runCatching { System.`in`.bufferedReader().readText().trim() }.getOrDefault("")
+
+    /** Whether [text] is meant as a pairing link at all (RUNNER-LINK-1's codec owns the format). */
+    private fun isLink(text: String): Boolean = text.trim().startsWith(RunnerPairLink.PREFIX, ignoreCase = true)
 
     private suspend fun pair(stream: FrameStream, name: String, limit: (LimitDef) -> Long, out: Appendable, err: Appendable, allowProjects: String? = null, allowHarnesses: String? = null, hosts: String? = null): Int {
         require(RunnerLinkStore.NAME.matches(name)) { "runner name '$name' must be 1-32 of a-z, 0-9 and '-' (starting with a letter or digit)" }
