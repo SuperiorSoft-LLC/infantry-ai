@@ -7,6 +7,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.runComposeUiTest
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.graphics.toAwtImage
 import androidx.compose.ui.unit.dp
 import com.superiorsoftllc.infantry.ui.AvatarMotion
 import com.superiorsoftllc.infantry.ui.AvatarRequest
@@ -53,5 +56,22 @@ class MascotPerfTest {
             println("MASCOT-PERF mode=$m firstMs=$f frameMs=${"%.2f".format(p)}")
             assertTrue(p < 500, "frame mean $p ms in mode $m")
         }
+    }
+
+    @Test
+    fun `desktop draws the mascot to a png`() = runComposeUiTest {
+        setContent {
+            androidx.compose.foundation.layout.Row {
+                listOf("BUSY", "IDLE", "WAITING_INPUT", "EXITED", "FAILED").forEachIndexed { i, st ->
+                    DrawMascot(AvatarRequest(role = "role$i", sizeDp = 64, state = st, motion = AvatarMotion.STATIC), "static", null, null, Modifier.size(64.dp))
+                }
+            }
+        }
+        val img = onRoot().captureToImage()
+        val out = java.io.File(System.getProperty("mascot.png") ?: "build/mascot-desktop.png")
+        out.parentFile?.mkdirs()
+        javax.imageio.ImageIO.write(img.toAwtImage(), "png", out)
+        val px = IntArray(img.width * img.height).also { img.readPixels(it) }
+        assertTrue(px.toSet().size > 3, "mascots drew nothing")
     }
 }
