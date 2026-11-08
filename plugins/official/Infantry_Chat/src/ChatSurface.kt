@@ -255,7 +255,7 @@ fun CenterHeader(
             Text(if (spawnMode) "New agent: type its task below and press Enter" else "No agent selected", color = Palette.Muted)
             return@Row
         }
-        AgentAvatar(a, state, 34)
+        AgentAvatar(a, state, 34, motion = AvatarMotion.LIVE)
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {

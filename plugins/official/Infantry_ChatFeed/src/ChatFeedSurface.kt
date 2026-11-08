@@ -404,7 +404,7 @@ fun AgentChat(agent: AgentView, nowProvider: () -> Long = { Clock.System.now().t
                     val abs = start + i
                     // M2-2: the agent's portrait opens each run of agent-side lines, like a chat. KINDS-1: the row is drawn by the renderer of its kind.
                     Box(if (abs == currentHit) Modifier.background(Palette.Accent.copy(alpha = 0.16f)).testTag(CHAT_SEARCH_HIT_TAG) else Modifier) {
-                        val row = RowItem(rows[abs], agent.id, name, agent.role, roleColor)
+                        val row = RowItem(rows[abs], agent.id, name, agent.role, roleColor, agent.session.state.name)
                         // CHAT-VOICE-SEAMS-1: a message row carries Chat's `chat.message.actions` slot (nothing when unfilled).
                         MessageWithActions(row, abs) { FeedRow(row, startsAgentRun(rows, abs, agentSide)) }
                     }
@@ -415,10 +415,10 @@ fun AgentChat(agent: AgentView, nowProvider: () -> Long = { Clock.System.now().t
                 }
                 // The live status row is agent-side too: it opens a run only when no agent line precedes it.
                 if (status != null) item(key = CHAT_STATUS_TAG) {
-                    AgentSideRow(sends.isNotEmpty() || startsAgentRun(rows, total, agentSide), agent.role, agent.id, roleColor) { ChatStatusRow(status) }
+                    AgentSideRow(sends.isNotEmpty() || startsAgentRun(rows, total, agentSide), agent.role, agent.id, roleColor, agent.session.state.name) { ChatStatusRow(status) }
                 }
                 if (bgWork != null) item(key = CHAT_BG_ROW_TAG) {
-                    AgentSideRow(status == null && (sends.isNotEmpty() || startsAgentRun(rows, total, agentSide)), agent.role, agent.id, roleColor) { BackgroundWorkRow(bgWork, now) }
+                    AgentSideRow(status == null && (sends.isNotEmpty() || startsAgentRun(rows, total, agentSide)), agent.role, agent.id, roleColor, agent.session.state.name) { BackgroundWorkRow(bgWork, now) }
                 }
             }
         }
@@ -674,9 +674,9 @@ internal fun startsAgentRun(rows: List<ChatItem>, index: Int, agentSide: (ChatIt
  * run), otherwise an empty gap of the same width so the whole run keeps one left indent.
  */
 @Composable
-fun AgentSideRow(showAvatar: Boolean, agentRole: String?, agentId: String, agentRoleColor: String?, content: @Composable () -> Unit) {
+fun AgentSideRow(showAvatar: Boolean, agentRole: String?, agentId: String, agentRoleColor: String?, sessionState: String? = null, content: @Composable () -> Unit) {
     SpeakerRow({
-        if (showAvatar) AgentAvatar(agentRole, agentId, CHAT_AVATAR_SIZE, agentRoleColor)
+        if (showAvatar) AgentAvatar(agentRole, agentId, CHAT_AVATAR_SIZE, agentRoleColor, state = sessionState)
         else Spacer(Modifier.width(CHAT_AVATAR_SIZE.dp))
     }, content)
 }
@@ -701,7 +701,7 @@ fun ChatLine(
 @Composable
 internal fun FeedRow(row: RowItem, showAvatar: Boolean) {
     val renderer = feedRendererOf(LocalTabFactory.current, row.kind)
-    if (renderer.agentSide) AgentSideRow(showAvatar, row.agentRole, row.agentId, row.roleColor) { renderer.content(row) }
+    if (renderer.agentSide) AgentSideRow(showAvatar, row.agentRole, row.agentId, row.roleColor, row.sessionState) { renderer.content(row) }
     else renderer.content(row)
 }
 

@@ -298,7 +298,7 @@ fun AgentRow(a: AgentView, state: AppState, selected: Boolean, onClick: () -> Un
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(44.dp)) {
-            AgentAvatar(a, state, 40)
+            AgentAvatar(a, state, 40, motion = AvatarMotion.LIVE)
             // The role badge on the portrait's corner: the role's first letter on its colour, ringed by the card.
             Box(
                 Modifier.align(Alignment.BottomEnd).size(16.dp).clip(CircleShape).background(if (selected) Palette.Raised else Palette.Bg)
