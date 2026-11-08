@@ -1,0 +1,12 @@
+Infantry_Mascot vendors the drawing code of material-mascot.
+
+  Source:  https://github.com/maxmaster55/material-mascot
+  Commit:  5d6e0e0d57b1660645f216274d4de2e1954f1ef1
+  License: MIT, Copyright (C) 2026 Max Master (full text in LICENSE-MIT)
+  Vendored: mascot/src/commonMain engine/, config/ and ui/MaterialBot.kt, into src/vendor/mascot/.
+  Not vendored: live/ (status bus, shake sensor, stage) and the Android samples.
+
+Changes to the upstream files (everything else is verbatim):
+  - engine/BotEngine.kt, BotFace.kt, BotMath.kt: java.lang.Math.PI -> kotlin.math.PI (common, wasm has no Math).
+  - ui/MaterialBot.kt: new parameter `frozen` (draw one frame, no frame loop: the "static" motion mode);
+    the frame clock is seeded with 0 instead of System.nanoTime() (JVM-only, wasm cannot compile it).

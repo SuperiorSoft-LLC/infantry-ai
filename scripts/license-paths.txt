@@ -7,3 +7,4 @@ superiorSoftLibrary/infantryCore/	MPL-2.0
 superiorSoftLibrary/infantryRunner/	MPL-2.0
 superiorSoftLibrary/infantry/	MPL-2.0
 plugins/core/	MPL-2.0
+plugins/official/Infantry_Mascot/src/vendor/	MIT
