@@ -67,6 +67,7 @@ object SettingScopes {
         SettingsService.INCLUDE_SKILLS_CONTEXT to SettingSpec(ALL, "Include the skills section in a started ticket's brief."),
         SettingsService.INCLUDE_FINISH_INSTRUCTIONS to SettingSpec(ALL, "Include the report-instruction lines in a started ticket's brief."),
         SettingsService.KEEP_ALIVE_MINUTES to SettingSpec(ALL, "Minutes a resting harness process is kept alive (0 = one-shot).", "a longer keep-alive holds more RAM"),
+        RunnerLinkSettings.ADVERTISE_HOSTS to SettingSpec(APP_ONLY, "Hosts the `runner pair` link offers after any --host flag, in the order the client tries them ([] = detected interface addresses)."),
     )
 
     fun spec(key: String): SettingSpec = specs[key] ?: SettingSpec(APP_ONLY, "Application-wide setting.")
