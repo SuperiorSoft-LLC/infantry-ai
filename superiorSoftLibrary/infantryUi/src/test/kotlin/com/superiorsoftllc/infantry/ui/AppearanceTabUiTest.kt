@@ -2,6 +2,14 @@
 // Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
@@ -81,8 +89,8 @@ class AppearanceTabUiTest {
         override suspend fun putManifest(manifest: ConfigManifest): Result<ConfigManifest?> { this@AppearanceTabUiTest.manifest = manifest; return Result.success(manifest) }
     }
 
-    private fun factory(withAppearance: Boolean): TabFactory {
-        val all = CoreModules.all + com.superiorsoftllc.infantry.plugins.official.header.InfantryHeader + com.superiorsoftllc.infantry.plugins.official.InfantryAgents +
+    private fun factory(withAppearance: Boolean, extra: List<com.superiorsoftllc.infantry.ui.plugin.InfantryModule> = emptyList()): TabFactory {
+        val all = CoreModules.all + extra + com.superiorsoftllc.infantry.plugins.official.header.InfantryHeader + com.superiorsoftllc.infantry.plugins.official.InfantryAgents +
             com.superiorsoftllc.infantry.plugins.official.chat.InfantryChat + com.superiorsoftllc.infantry.plugins.official.chatfeed.InfantryChatFeed + (if (withAppearance) listOf(InfantryAppearance) else emptyList())
         return TabFactory(all, statuses = all.map { ModuleStatus(it.manifest.name, it.tier, ModuleState.LOADED, manifest = it.manifest) }, configApi = api)
     }
@@ -112,6 +120,8 @@ class AppearanceTabUiTest {
                 setContent { App(controller, "ws://127.0.0.1:1/ws", null, tabs = tabs) }
                 link.push(Envelope(Envelope.READY, "contract=1.94.0 provider=stub instance=i1"))
                 waitUntil(timeoutMillis = 10_000) { controller.state.value.connection.isLive }
+                // AVATAR-PICKER-1: one live agent, so its avatar is drawn in the sidebar under the dialog.
+                link.push(Envelope(Envelope.SESSIONS, """[{"id":"s1","provider":"claude","workingDir":"/w","spawnedAt":1,"lastHeartbeat":1,"state":"IDLE"}]"""))
                 waitForIdle()
                 waitUntil(timeoutMillis = 10_000) {
                     onAllNodesWithTag(CONFIG_DIALOG_TAG).fetchSemanticsNodes().isNotEmpty() || run { onNodeWithContentDescription("Configuration").performClick(); false }
@@ -164,5 +174,55 @@ class AppearanceTabUiTest {
             onNodeWithTag(CONFIG_SECTION_TAG_PREFIX + ConfigEntry.MARKDOWN_ENGINE.name).assertExists()
             onAllNodesWithTag(GENERATED_CARD_TAG_PREFIX + THEME_NODE + "/Theme").assertCountEquals(0)
         }
+    }
+
+    /** AVATAR-PICKER-1: a style of a test plugin; it draws a tag so the test can see it instead of the portrait. */
+    private object FakeAvatar : AgentAvatarRenderer {
+        @Composable
+        override fun Draw(request: AvatarRequest, modifier: Modifier) {
+            Box(modifier.size(request.sizeDp.dp).background(Color.Magenta).testTag("fake-avatar"))
+        }
+    }
+
+    private val fakeStyle = com.superiorsoftllc.infantry.ui.plugin.InfantryModule(
+        com.superiorsoftllc.infantry.plugin.api.ModuleManifest(
+            name = "Acme_Avatar", version = "1.0.0",
+            implementations = listOf(com.superiorsoftllc.infantry.plugin.api.ImplementationDeclaration(AGENT_AVATAR_RENDERERS, "fake")),
+        ),
+        tier = com.superiorsoftllc.infantry.plugin.api.Tier.OFFICIAL,
+        implementations = mapOf(AGENT_AVATAR_RENDERERS to mapOf("fake" to FakeAvatar)),
+    )
+
+    private val avatarField = "$THEME_NODE/agentAvatarStyle"
+
+    @Test fun theAvatarStylePickerListsTheRegisteredStylesAndSwitchingDrawsThePluginRenderer() {
+        AvatarStyleChoice.chosen = null
+        withAppearance(factory(withAppearance = true, extra = listOf(fakeStyle))) {
+            // Portrait is always there; the plugin's style is listed because it registered under agent.avatar.renderers.
+            onNodeWithTag(NODE_FIELD_OPTION_TAG_PREFIX + "$avatarField/portrait").performScrollTo().assertExists()
+            waitUntil(timeoutMillis = 10_000) { onAllNodesWithTag(AVATAR_TAG).fetchSemanticsNodes().isNotEmpty() }
+            assertEquals(0, onAllNodesWithTag("fake-avatar").fetchSemanticsNodes().size)
+            onNodeWithTag(NODE_FIELD_OPTION_TAG_PREFIX + "$avatarField/fake").performScrollTo().performClick()
+            waitUntil(timeoutMillis = 10_000) { AvatarStyleChoice.chosen == "fake" }
+            waitUntil(timeoutMillis = 10_000) { onAllNodesWithTag("fake-avatar").fetchSemanticsNodes().isNotEmpty() }
+            // Back to Portrait: the fake renderer is no longer drawn.
+            onNodeWithTag(NODE_FIELD_OPTION_TAG_PREFIX + "$avatarField/portrait").performScrollTo().performClick()
+            waitUntil(timeoutMillis = 10_000) { AvatarStyleChoice.chosen == AGENT_AVATAR_PORTRAIT }
+            waitUntil(timeoutMillis = 10_000) { onAllNodesWithTag("fake-avatar").fetchSemanticsNodes().isEmpty() }
+        }
+        AvatarStyleChoice.chosen = null
+    }
+
+    @Test fun aRemovedStyleKeyDisplaysAndBehavesAsPortrait() {
+        AvatarStyleChoice.chosen = null
+        // The device remembers "gone", a style whose plugin was removed.
+        uiPrefsOverride!!["cfg.$avatarField".replace("$THEME_NODE/", "$THEME_NODE.")] = "\"gone\""
+        withAppearance(factory(withAppearance = true, extra = listOf(fakeStyle))) {
+            waitUntil(timeoutMillis = 10_000) { AvatarStyleChoice.chosen == AGENT_AVATAR_PORTRAIT }
+            waitUntil(timeoutMillis = 10_000) { onAllNodesWithTag(AVATAR_TAG).fetchSemanticsNodes().isNotEmpty() }
+            assertEquals(0, onAllNodesWithTag("fake-avatar").fetchSemanticsNodes().size)
+            assertEquals(true, onAllNodesWithTag(AVATAR_TAG).fetchSemanticsNodes().isNotEmpty(), "the portrait is drawn")
+        }
+        AvatarStyleChoice.chosen = null
     }
 }

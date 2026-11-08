@@ -3,6 +3,9 @@
 package com.superiorsoftllc.infantry.ui
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import com.superiorsoftllc.infantry.ui.plugin.config.Implementations
@@ -79,3 +82,12 @@ fun Implementations.avatarStyleRenderer(style: String?): AvatarStyleRenderer? {
  * [AGENT_AVATAR_PREF_KEY] preference (a test provides its own). The built-in portrait when unset.
  */
 val LocalAgentAvatarStyle = staticCompositionLocalOf { AGENT_AVATAR_PORTRAIT }
+
+/**
+ * AVATAR-PICKER-1: the style the user picked in the Appearance settings (a device-scope config field on the theme node),
+ * published by the module that owns the picker. Null until the user picks one; the window then uses the
+ * [AGENT_AVATAR_PREF_KEY] preference. A key nothing registered still draws the portrait ([avatarStyleRenderer]).
+ */
+object AvatarStyleChoice {
+    var chosen: String? by mutableStateOf(null)
+}

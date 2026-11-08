@@ -959,6 +959,8 @@ class TabFactory(
     val implementations: Implementations by lazy {
         val out = LinkedHashMap<String, LinkedHashMap<String, RegisteredImplementation>>()
         for ((registry, keys) in TabSorters.core) for ((key, value) in keys) out.getOrPut(registry) { LinkedHashMap() }[key] = RegisteredImplementation(registry, key, CORE_SHELL_MODULE, value)
+        // AVATAR-PICKER-1: the built-in avatar style is always a choice, so the picker lists it and it is the default.
+        out.getOrPut(com.superiorsoftllc.infantry.ui.AGENT_AVATAR_RENDERERS) { LinkedHashMap() }[com.superiorsoftllc.infantry.ui.AGENT_AVATAR_PORTRAIT] = RegisteredImplementation(com.superiorsoftllc.infantry.ui.AGENT_AVATAR_RENDERERS, com.superiorsoftllc.infantry.ui.AGENT_AVATAR_PORTRAIT, CORE_SHELL_MODULE, com.superiorsoftllc.infantry.ui.PortraitAvatarRenderer)
         val problems = mutableListOf<String>()
         for (m in modules) {
             val name = m.manifest.name
