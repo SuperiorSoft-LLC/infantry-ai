@@ -296,34 +296,75 @@ class RunsDatabaseTest {
         val path = newDatabasePath()
         InfantryDatabaseFactory.open(path).use { handle ->
             val driver = handle.driver
-            fun pragmaString(sql: String): String =
-                driver.executeQuery(
-                    null, sql,
-                    { cursor ->
-                        val hasRow = cursor.next().value
-                        QueryResult.Value(if (hasRow) cursor.getString(0) else null)
-                    },
-                    0,
-                ).value.orEmpty()
-
             // WAL is persistent in the file header, so reading it back proves the factory put the
             // database in WAL mode and that it survived to a fresh connection.
-            assertEquals("wal", pragmaString("PRAGMA journal_mode;").lowercase())
-
-            fun pragmaLong(sql: String): Long =
-                driver.executeQuery(
-                    null, sql,
-                    { cursor ->
-                        val hasRow = cursor.next().value
-                        QueryResult.Value(if (hasRow) cursor.getLong(0) ?: 0L else 0L)
-                    },
-                    0,
-                ).value
-
-            assertEquals(5_000L, pragmaLong("PRAGMA busy_timeout;"))
+            assertEquals("wal", pragmaString(driver, "PRAGMA journal_mode;").lowercase())
+            assertEquals(5_000L, pragmaLong(driver, "PRAGMA busy_timeout;"))
             // Synchronous=NORMAL is the safe pairing for WAL (FULL would be wasted fsyncs); assert
             // it so a later change cannot quietly drop durability while WAL stays on.
-            assertEquals(1L, pragmaLong("PRAGMA synchronous;"))
+            assertEquals(1L, pragmaLong(driver, "PRAGMA synchronous;"))
+            assertEquals(1L, pragmaLong(driver, "PRAGMA foreign_keys;"))
         }
     }
+
+    /**
+     * The same claim on the path a REAL INSTALL takes: an existing file written by an older build.
+     *
+     * This is not a variation for its own sake. The test above only covers a database the factory
+     * CREATED; an upgrade is a different path inside [InfantryDatabaseFactory] (`reconcileSchema`
+     * finds a stamped `user_version` and migrates the file), and the two can diverge -- a pragma
+     * applied next to `Schema.create()` would leave every upgraded install on SQLite's defaults
+     * (rollback journal, `synchronous=FULL`) while the fresh-file test stayed green.
+     *
+     * So the file is built the way an old build left it: schema at v10, `user_version` stamped, and
+     * written through a RAW driver with no URL pragmas, i.e. genuinely in the slow defaults. Then
+     * only [InfantryDatabaseFactory.open] may move it to WAL and stamp the current version -- both
+     * of which are read back out of SQLite here rather than trusted from the code that just ran.
+     */
+    @Test
+    fun `pragmas are effective on an upgraded database too`() {
+        val path = newDatabasePath()
+
+        // An OLD install: v10 schema, stamped, in SQLite's own default journal mode.
+        val oldVersion = 10L
+        JdbcSqliteDriver("jdbc:sqlite:$path").use { driver ->
+            InfantryDatabase.Schema.migrate(driver, 1, oldVersion)
+            driver.execute(null, "PRAGMA user_version = $oldVersion;", 0)
+        }
+        JdbcSqliteDriver("jdbc:sqlite:$path").use { driver ->
+            assertEquals("delete", pragmaString(driver, "PRAGMA journal_mode;").lowercase(), "the file must start in the slow defaults")
+        }
+
+        // The upgrade a daemon on that install does on its next start.
+        InfantryDatabaseFactory.open(path).use { handle ->
+            val driver = handle.driver
+            assertEquals(InfantryDatabase.Schema.version, pragmaLong(driver, "PRAGMA user_version;"), "the file was not upgraded")
+            assertEquals("wal", pragmaString(driver, "PRAGMA journal_mode;").lowercase())
+            assertEquals(5_000L, pragmaLong(driver, "PRAGMA busy_timeout;"))
+            assertEquals(1L, pragmaLong(driver, "PRAGMA synchronous;"))
+            assertEquals(1L, pragmaLong(driver, "PRAGMA foreign_keys;"))
+        }
+    }
+
+    /** One PRAGMA value as text, read off the connection that will serve the daemon. */
+    private fun pragmaString(driver: app.cash.sqldelight.db.SqlDriver, sql: String): String =
+        driver.executeQuery(
+            null, sql,
+            { cursor ->
+                val hasRow = cursor.next().value
+                QueryResult.Value(if (hasRow) cursor.getString(0) else null)
+            },
+            0,
+        ).value.orEmpty()
+
+    /** One PRAGMA value as a number. */
+    private fun pragmaLong(driver: app.cash.sqldelight.db.SqlDriver, sql: String): Long =
+        driver.executeQuery(
+            null, sql,
+            { cursor ->
+                val hasRow = cursor.next().value
+                QueryResult.Value(if (hasRow) cursor.getLong(0) ?: 0L else 0L)
+            },
+            0,
+        ).value
 }
