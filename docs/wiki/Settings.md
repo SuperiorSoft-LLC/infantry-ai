@@ -30,6 +30,22 @@ A value can be stored at four scopes. The most specific one that holds a value w
 key that is not listed below is **app-only**, and setting it at another scope is refused with the allowed list. The
 app scope cannot be cleared, only set.
 
+## Max parallel workers (board) vs per-runner concurrency
+
+Two different caps, two settings:
+
+| Setting | Meaning |
+|---|---|
+| `limits.workers.maxParallel` ("Max parallel workers", default 1, app or project scope) | How many board ticket workers run at once. The source of truth: the `lane-one-worker` guard and the `usage-governor` read it. |
+| `limits.runners.maxWorkers` ("Per-runner concurrency", default 1) | How many agents ONE runner machine runs at once. It does not change the board cap. |
+
+**Precedence (effective board cap):** a hook arg `maxInProgress` (lane-one-worker) or `baseWorkers` (usage-governor) still
+overrides the setting so existing projects keep working; otherwise the cap is `limits.workers.maxParallel`, lowered by the
+governor to the project data key `workers.cap.lowered` while the weekly usage pace is >= 0. The governor records why in the
+project data key `workers.cap.status` (for example "Lowered to 1 by the usage governor since 2026-11-08 10:00 UTC: weekly pace +1.2.
+Restores to 2 (Max parallel workers) when the weekly pace drops below 0."); read it with `infantry project config`. The status
+and the lowered key are cleared when the governor restores the cap.
+
 ## Cost-saving defaults and what each opt-in costs
 
 The default is the cheapest reasonable value. A costlier value is an opt-in. These keys allow all four scopes.

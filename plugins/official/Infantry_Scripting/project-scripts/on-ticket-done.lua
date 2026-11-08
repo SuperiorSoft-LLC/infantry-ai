@@ -5,6 +5,7 @@
 -- agentQueueNext (event payload, set by the daemon when the finished ticket's agent has a queued ticket): no todo ticket is started, the board starts the queue head when the worker exits.
 -- Event payload (enriched by the daemon): ticketId, title, branch, tipSha, workerSession.
 -- Phase 1: message VC, close the worker session, read the todo lane.  Phase 2: start the next ticket.  Phase 3: comment what was done.
+-- Auto-start replaces the finished ticket one for one; the number of parallel workers is the setting limits.workers.maxParallel (script worker-cap), enforced by lane-one-worker.
 local a = input.args
 if not a.devBranch or not a.vcRole then error("on-ticket-done needs hook args devBranch and vcRole") end
 local ticket = a.ticketId

@@ -73,6 +73,14 @@ class BundledGlobalScriptsTest {
             mapOf("pm" to pm),
             mapOf("infantry_list_sessions" to """{"sessions":[{"id":"s-worker-1","agentId":"a1","role":"backend","status":"BUSY","lastOutputAt":${now - 910_000}}]}"""),
             listOf("infantry_message", "infantry_chat_note"), minPhases = 2)),
+        "worker-cap" to listOf(Scenario(
+            mapOf("fill" to true),
+            mapOf(
+                "infantry_settings_get" to """{"value":2}""",
+                "infantry_project_config_get" to """{"data":{"workers.cap.lowered":"1","workers.cap.status":"Lowered to 1 by the usage governor"}}""",
+                "infantry_board" to "  aaaa1111 | todo | backend | a ticket\n",
+            ),
+            listOf("infantry_settings_get", "infantry_project_config_get", "infantry_board"), minPhases = 2)),
         "usage-governor" to listOf(Scenario(
             mapOf("project" to "p1", "pm" to pm),
             mapOf(
