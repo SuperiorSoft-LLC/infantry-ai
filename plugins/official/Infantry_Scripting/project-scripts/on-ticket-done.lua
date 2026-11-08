@@ -42,7 +42,8 @@ elseif input.phase == 2 then
   for _, line in ipairs(lines) do
     local id, rest = line:match("^  (%x+) | (.*)$")
     if id then
-      local skip = false
+      -- DONE-RESTART-1: never restart the ticket that just finished (board ids are the short form of ticketId).
+      local skip = (ticket == id) or (ticket:sub(-#id) == id)
       for _, m in ipairs(markers) do if rest:find(m, 1, true) then skip = true end end
       if not skip then next_id = id; break end
     end
