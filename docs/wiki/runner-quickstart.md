@@ -67,7 +67,18 @@ The orchestrator lists a remote session (`infantry sessions`, the board's worker
 you ask: `infantry logs <session>` prints the lines the runner kept (STDOUT and STDERR). Nothing streams live
 (`runners.transcripts = on-demand`; `stream` is not built yet), so run `logs` after the agent has answered. A new remote session
 reads `STARTING` until the runner reports its first status.
-No-login check with the Echo harness (not yet run live: only the in-process test below proves it) (`plugins/examples/Acme_EchoHarness`, no credentials): install it on the runner, pin an
+No-login check with the Echo harness (run live in RUNNER-E2E-3, see the result below) (`plugins/examples/Acme_EchoHarness`, no credentials): install it on the runner, pin an
 agent or ticket with provider `echo` to the runner, prompt it, then `infantry logs <session>` shows the echo reply and the
 board shows the worker live, not "gone". The two-daemon test `RunnerPoolPinnedTicketE2ETest` ("a remote session is listed on the
 orchestrator and its output is read on demand") proves the same path without Docker.
+
+Live result (RUNNER-E2E-3, Docker runner + `Acme_EchoHarness`, no login). Install the plugin on the runner under
+`/data/plugins/community/Acme_EchoHarness` (`module.json`, `icons/`, `harness/build/libs/Acme_EchoHarness-harness.jar`) with
+`/data/plugins/modules.json` granting `harness.code`, `harness.setting:echo.prefix`, `harness.cli`, `harness.cli.install`, restart the
+runner, `runner pair --allow-projects '*' --allow-harnesses echo`; install the same plugin on the orchestrator (else
+`ticket_save refused: harness 'echo' is not installed`). Seen: `ticket start` says `on runner test-runner`; the runner audit has
+`runner_link_start`; the orchestrator lists the session (`provider remote`, IDLE) and the board shows it `idle`, not "gone". NOT seen:
+the echo output on the orchestrator. The echo ran inside the container (runner `get_session` transcript: `session started (echo)`,
+`finished SUCCEEDED`), but orchestrator `infantry logs <session>` printed "no output within 30000ms" and its `get_session` says
+"no replay history"; the start did not run a turn on its own (the session stayed IDLE) and `infantry_prompt` on the orchestrator
+answers `unknown session` for a remote session. Open: ticket RUNNER-E2E-3 comment.
