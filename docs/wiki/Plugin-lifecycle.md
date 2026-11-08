@@ -110,6 +110,27 @@ one soft restart, never a lost change.
 **Expensive to reverse.** `PluginScope` is public SDK surface (ABI dumps): once plugins use it, it can only grow. The
 per-module class loader is the unit of unload; sharing a loader between plugins would make a single-plugin swap impossible.
 
+## Applying a plugin change in the open window (UI-PLUGIN-BRIDGE-1)
+
+`infantry plugin enable|disable|install|update` changes the plugins root and the daemon half (hot, PLUGIN-HOTLOAD-1); the CLI line
+"takes effect at the next daemon start" is about the harness half only. The open desktop window applies the change through the
+**`plugins.apply` capability** (a `runs: client` capability of Infantry_Settings, [Bridges](Bridges.md)). It runs the same
+`PluginLifecycle.apply` that Settings > Plugins calls (`PluginLifecycleBridge` in `PluginDropIn.kt` hands it to the capability), so
+there is one swap path. It answers `{applied, message, warnings}` when the window finishes, fails at once with "has no host" when no
+window hosts it, and fails at its timeout (`timeoutMs`, 60 s) when the window does not answer.
+
+| From | Call |
+|---|---|
+| CLI | `infantry tool call infantry_capability_call --payload '{"capability":"plugins.apply","args":{"id":"Acme_X","action":"enable"}}'` |
+| MCP | `infantry_capability_call` with `capability: "plugins.apply"` (listed by `infantry_capability_list`) |
+| Lua | `ih.call("plugins.apply", {id = "Acme_X", action = "enable"})` (`_optional = true` when no window may be open) |
+
+`id` and `action` only label the answer: the swap applies whatever changed in the plugins root.
+
+**Which folder the window reads.** The daemon records the plugins root it loads from in `<state dir>/plugins.root`
+(`PluginFolders.recordRoot`); a desktop window on the same state dir loads from that folder (`PluginFolders.uiRoot`), unless
+`INFANTRY_PLUGINS_ROOT` is set. Nothing to type. Without a recorded folder the window uses `PluginFolders.root` as before.
+
 ## PluginScope: the author's side
 
 `PluginScope` is the plugin's lifetime, owned by the host. A UI half reads it as `UiRegistrar.scope`, a daemon half as

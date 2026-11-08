@@ -129,4 +129,19 @@ class PluginFoldersTest {
         val winner = found.first { it.refusal == null }
         assertTrue(winner.dir!!.startsWith(root.absolutePath))
     }
+
+    @Test
+    fun `the UI root follows the daemon's recorded root, but the env still wins`() {
+        val state = Files.createTempDirectory("ui-root-state").toFile()
+        val daemonRoot = File(state, "daemon-plugins").apply { mkdirs() }
+        val property: (String) -> String? = { if (it == PluginFolders.ROOT_PROPERTY) "repo-plugins" else null }
+        // nothing recorded: the same answer as root()
+        assertEquals(File("repo-plugins"), PluginFolders.uiRoot(state, { null }, property))
+        PluginFolders.recordRoot(state, daemonRoot)
+        assertEquals(daemonRoot.absoluteFile, PluginFolders.uiRoot(state, { null }, property).absoluteFile)
+        assertEquals(File("e"), PluginFolders.uiRoot(state, { if (it == PluginFolders.ROOT_ENV) "e" else null }, property))
+        // the daemon's folder is gone: fall back to root()
+        daemonRoot.deleteRecursively()
+        assertEquals(File("repo-plugins"), PluginFolders.uiRoot(state, { null }, property))
+    }
 }

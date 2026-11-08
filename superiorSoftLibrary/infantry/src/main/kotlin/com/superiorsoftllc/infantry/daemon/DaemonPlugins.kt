@@ -56,6 +56,7 @@ object DaemonPlugins {
         onResolved: (com.superiorsoftllc.infantry.plugin.host.Resolution) -> Unit = {},
     ): PluginsWire {
         val root = PluginFolders.root(stateDir, env, property)
+        PluginFolders.recordRoot(stateDir, root) // UI-PLUGIN-BRIDGE-1: a desktop UI on this state dir loads from the same folder
         val config = PluginFolders.config(root, log)
         val resolution = ModuleResolver.resolve(PluginFolders.scan(root, config, PluginFolders.bundledRoot(env, property)), config, locked)
         log("[plugins] daemon root ${root.absolutePath}${if (locked) " (locked)" else ""}: ${resolution.loaded.size} loaded")

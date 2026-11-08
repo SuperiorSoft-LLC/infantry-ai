@@ -131,7 +131,7 @@ object DesktopPlugins {
     ): Loaded {
         val log = mutableListOf<String>()
         val say: (String) -> Unit = { log += it; print(it) }
-        val root = PluginFolders.root(stateDir, env, property)
+        val root = PluginFolders.uiRoot(stateDir, env, property)
         val config = PluginFolders.config(root, say)
         val lockdown = PluginFolders.lockdown(env)
         val safeMode = PluginFolders.safeMode(env, property)

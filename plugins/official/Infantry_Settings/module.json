@@ -20,6 +20,17 @@
       { "name": "infantry_settings_set", "action": "settings.save", "kind": "write", "description": "Set a setting at app, project, role or session scope." }
     ]
   },
+  "capabilities": [
+    {
+      "id": "plugins.apply",
+      "description": "Make a connected desktop window apply the plugins root as it is now, live (the swap Settings > Plugins starts), after plugin install/enable/disable/update. Answers when the window reports applied or failed.",
+      "runs": "client",
+      "kind": "write",
+      "params": { "type": "object", "properties": { "id": { "type": "string", "description": "The plugin that changed (a label)." }, "action": { "type": "string", "description": "install, enable, disable or update (a label)." } } },
+      "result": { "type": "object", "properties": { "applied": { "type": "boolean" }, "message": { "type": "string" }, "warnings": { "type": "array", "items": { "type": "string" } } } },
+      "timeoutMs": 60000
+    }
+  ],
   "tabs": [
     {
       "id": "infantry.settings",

@@ -77,6 +77,11 @@ fun InfantryShell(host: PlatformHost, controller: Controller? = null) {
             }
         }
     }
+    // UI-PLUGIN-BRIDGE-1: the same lifecycle answers the daemon's `plugins.apply` capability call (see PluginLifecycleBridge).
+    DisposableEffect(lifecycle) {
+        PluginLifecycleBridge.current = lifecycle
+        onDispose { if (PluginLifecycleBridge.current === lifecycle) PluginLifecycleBridge.current = null }
+    }
     // PATH-PICKER-1: every path field's Browse uses the host's chooser, unless an outer composition already supplied one.
     val pathPicker = com.superiorsoftllc.infantry.ui.LocalPathPicker.current ?: host.pathPicker
     CompositionLocalProvider(

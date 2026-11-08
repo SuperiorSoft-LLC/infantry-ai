@@ -33,6 +33,25 @@ object PluginFolders {
             ?: property(ROOT_PROPERTY)?.takeIf { it.isNotBlank() }?.let(::File)
             ?: File(stateDir, "plugins")
 
+    /** UI-PLUGIN-BRIDGE-1: the file in the state dir where the daemon records the plugins root it loads from. */
+    const val RECORDED_ROOT_FILE = "plugins.root"
+
+    /** UI-PLUGIN-BRIDGE-1: the daemon records its plugins root, so a UI on the same state dir follows it. Best effort: a failure is ignored. */
+    fun recordRoot(stateDir: File, root: File) {
+        runCatching { File(stateDir, RECORDED_ROOT_FILE).also { it.parentFile?.mkdirs() }.writeText(root.absolutePath) }
+    }
+
+    /** UI-PLUGIN-BRIDGE-1: the root the daemon recorded in [stateDir], when that folder exists; else null. */
+    fun recordedRoot(stateDir: File): File? =
+        runCatching { File(File(stateDir, RECORDED_ROOT_FILE).readText().trim()).takeIf { it.isDirectory } }.getOrNull()
+
+    /**
+     * UI-PLUGIN-BRIDGE-1: the plugins root a desktop UI loads from: INFANTRY_PLUGINS_ROOT, else the root the daemon on this state dir
+     * recorded ([recordRoot]), else what [root] answers. The UI follows the daemon's directory; there is no setting to type.
+     */
+    fun uiRoot(stateDir: File, env: (String) -> String? = System::getenv, property: (String) -> String? = System::getProperty): File =
+        env(ROOT_ENV)?.takeIf { it.isNotBlank() }?.let(::File) ?: recordedRoot(stateDir) ?: root(stateDir, env, property)
+
     /** INFANTRY_LOCKDOWN (or the legacy INFANTRY_DEMO_LOCK) set to anything but empty, 0, false or off. */
     fun lockdown(env: (String) -> String? = System::getenv): Boolean =
         (env(LOCKDOWN_ENV) ?: env(LEGACY_LOCKDOWN_ENV))?.trim()?.lowercase()?.let { it.isNotEmpty() && it != "0" && it != "false" && it != "off" } ?: false
