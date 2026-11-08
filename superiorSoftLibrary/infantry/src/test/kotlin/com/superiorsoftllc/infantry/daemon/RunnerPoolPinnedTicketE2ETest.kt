@@ -151,6 +151,33 @@ class RunnerPoolPinnedTicketE2ETest {
     }
 
     @Test
+    fun `a remote session is listed on the orchestrator and its output streams back (RUNNER-E2E-2)`() {
+        val orchProc = ScriptedRunner(autoExit = false, emitSessionId = true)
+        val runnerProc = ScriptedRunner(autoExit = false, emitSessionId = true)
+        val (_, orch, runner) = world(orchProc, runnerProc)
+        orch.await(what = "r2 is up") { orch.rows()["r2"]?.text("health") == "up" }
+        val worker = orch.client.saveProfile("""{"name":"Remote","role":"backend","provider":"${FakeAgentProvider().id}"}""")
+        val pinned = orch.client.saveTicket("""{"title":"Remote work","projectId":"p1","agentId":"${worker.id}","runner":"r2"}""")
+        val started = orch.client.moveTicket(pinned.id, "in_progress")
+        assertEquals("started", started.start?.reason, started.start.toString())
+        runner.await(what = "the worker process on the runner daemon") { runnerProc.processes.isNotEmpty() }
+        val sessionId = assertNotNull(started.sessionId, "the ticket records its remote session")
+        runnerProc.processes.first().say("echo: hello from the runner")
+
+        // The orchestrator's session list must carry the remote session (else the board reports its worker "gone").
+        orch.send(Envelope.SESSIONS, "")
+        val listed = orch.client.awaitWhere("the orchestrator lists remote session $sessionId") { f ->
+            f.type == Envelope.SESSIONS && f.data.contains(sessionId)
+        }
+        assertTrue(listed.data.contains("r2"), "the listing names its runner: ${listed.data.take(400)}")
+        // And its output is read from the runner on demand when a client asks for the session (`infantry logs <session>` sends this replay).
+        orch.client.send(Envelope("replay_request", """{"lastSequence":0}""", sessionId))
+        orch.client.awaitWhere("the runner's stdout line reaches the orchestrator on demand") { f ->
+            f.type == Envelope.STDOUT && f.sessionId == sessionId && f.data.contains("hello from the runner")
+        }
+    }
+
+    @Test
     fun `a runner daemon killed after a finished turn and started again keeps its events for the orchestrator`() {
         val orchProc = ScriptedRunner(autoExit = false, emitSessionId = true)
         val runnerProc = ScriptedRunner(autoExit = false, emitSessionId = true)

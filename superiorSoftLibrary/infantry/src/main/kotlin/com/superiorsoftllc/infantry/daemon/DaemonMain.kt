@@ -983,6 +983,8 @@ class InfantryDaemon(
             val runnerProjects = java.util.concurrent.atomic.AtomicReference<() -> List<String>> { emptyList() }
             // RUNNER-POOL-6: the runner side of starts an orchestrator sends with a git remote (clone into runners.cloneRoot, cut,
             // push on each turn end), and the orchestrator side's paired runners (set once the runner link service exists).
+            // RUNNER-E2E-2: the runner side of an on-demand transcript read (set once the stream sequencer exists).
+            val runnerTranscript = java.util.concurrent.atomic.AtomicReference<(String, Int, Int) -> List<String>> { _, _, _ -> emptyList() }
             val remoteStarts = com.superiorsoftllc.infantry.runners.RemoteStarts(
                 cloneRoot = { settings.runnerLink().cloneRoot.takeIf { it.isNotBlank() }?.let(::File) ?: File(daemonStateDir, com.superiorsoftllc.infantry.runners.RemoteStarts.DEFAULT_FOLDER) },
                 outboxMax = { settings.limit(LimitRegistry.RUNNERS_OUTBOX_MAX).toInt() },
@@ -1011,9 +1013,11 @@ class InfantryDaemon(
                     capacity = { settings.limitCap(LimitRegistry.MAX_SESSIONS) },
                     events = { since -> remoteStarts.events(since) },
                     eventsAcked = { acked -> remoteStarts.events(acked) },
+                    transcript = { id, from, max -> runnerTranscript.get()(id, from, max) },
                 ),
             )
             val runnerPool = com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerHub(localRunnerLink, remotes = { runnerLinksRef.get().paired() })
+            val remoteMirror = com.superiorsoftllc.infantry.runners.RemoteSessionMirror(sessionIds = { runnerPool.runners().filter { it.name != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL }.flatMap { runnerPool.sessionsOn(it.name) } })
             val forwardGateRef = java.util.concurrent.atomic.AtomicReference<com.superiorsoftllc.infantry.runners.ForwardedFrameGate?>(null)
             SessionRecordSerializer.runnerOf = runnerPool::runnerOf
             val orchestratorHub = com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorHub(
@@ -1354,6 +1358,10 @@ class InfantryDaemon(
             // CLI-PTY-5: each session's chat, kept across a restart so a resumed session shows its history at once.
             val chatHistory = SessionHistoryStore(File(daemonStateDir, "chat-history"), { settings.limit(LimitRegistry.CHAT_HISTORY_FRAMES).toInt() })
             val streamSequencer = SessionFrameSequencer(chatHistory)
+            runnerTranscript.set { id, from, max ->
+                val out = streamSequencer.replayAfter(id, 0)?.frames.orEmpty().filter { it.type == Envelope.STDOUT || it.type == Envelope.STDERR }.map { it.data }.drop(from.coerceAtLeast(0))
+                if (max > 0) out.take(max) else out
+            }
             // Contract 1.95.0 (1c24fdc4): each session's harness-neutral run activity, carried on `status` frames.
             val runActivity = com.superiorsoftllc.infantry.protocol.RunActivityTracker()
             // Story 9.7b: a run's usage is recorded when it ends and published on its session's stream.
@@ -1406,7 +1414,7 @@ class InfantryDaemon(
             )
             // CHAT-SENDING-1: one store for every connection, so a resend after a reconnect is recognised.
             val promptSendIds = PromptSendIds { settings.limit(LimitRegistry.CHAT_SENT_IDS_KEPT).toInt() }
-            val ticketStartCharge = TicketStartCharge(spawnGuard, { boardPorts.startMoves() }, manager::get, manager::setSpawner)
+            val ticketStartCharge = TicketStartCharge(spawnGuard, { boardPorts.startMoves() }, { id -> manager.get(id) ?: remoteMirror.get(id) }, manager::setSpawner)
             orchestrator.sessionStartedSink = { _, sessionId, parent -> spawnGuard.record(sessionId, parent); manager.setSpawner(sessionId, parent) }
             settings.limitEnvProblems().forEach { println("[infantry] limit ignored: $it") }
             println("[infantry] pod spawn cap=${podSpawnCap ?: settings.limit(LimitRegistry.MAX_PER_POD)} depth=${podSpawnDepth ?: settings.limit(LimitRegistry.MAX_DEPTH)} (cap 0 = unlimited; settings limits.concurrency.*; session-originated spawns only)")
@@ -1760,7 +1768,7 @@ class InfantryDaemon(
                         agentRegistry = agentRegistry,
                         // RUNTIME-LOAD-5: the sessions read model (host-scoped), with the replay buffer for transcripts.
                         sessionReadModel = com.superiorsoftllc.infantry.daemon.plugins.LocalSessionReads(
-                            sessions = { manager.list() },
+                            sessions = { manager.list() + remoteMirror.list() },
                             replay = { id ->
                                 streamSequencer.replayAfter(id, 0)?.let { batch ->
                                     com.superiorsoftllc.infantry.daemon.plugins.LocalSessionReads.Replay(
@@ -1775,7 +1783,7 @@ class InfantryDaemon(
                         ),
                         // RUNTIME-LOAD-6: the host spawn service: depth, concurrency and kill scope keyed by the calling session.
                         spawnService = com.superiorsoftllc.infantry.daemon.plugins.LocalSpawns(
-                            sessions = { manager.list() },
+                            sessions = { manager.list() + remoteMirror.list() },
                             guard = spawnGuard,
                             limit = { def -> if (def == LimitRegistry.MAX_DEPTH && podSpawnDepth != null) podSpawnDepth else settings.limitCap(def) }, // a test pins the depth through podSpawnDepth
                             tickets = { pluginBoardServices!!.tickets },
@@ -1976,6 +1984,8 @@ class InfantryDaemon(
                 lostAfterMs = { settings.limit(LimitRegistry.RUNNERS_LOST_AFTER_MIN) * 60_000L },
                 restartElsewhere = { settings.runnerLink().restartElsewhere },
                 apply = { _, e ->
+                    if (e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.STATUS) remoteMirror.status(e.sessionId, e.payload)
+                    if (e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.FINISHED) remoteMirror.finished(e.sessionId)
                     val rest = e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.FINISHED ||
                         (e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.STATUS && e.payload.equals(SessionState.IDLE.name, ignoreCase = true))
                     if (rest) mail.pump(e.sessionId)
@@ -2166,6 +2176,7 @@ class InfantryDaemon(
                             com.superiorsoftllc.infantry.agents.LayeredSkillStore(store),
                             spawnGuard,
                             runnerPool = runnerPool,
+                            remoteSessions = remoteMirror::list,
                             limits = limits,
                             usagePacing = usagePacing,
                             ticketFiles = ticketFilesText?.let { text ->
@@ -2816,6 +2827,8 @@ private suspend fun handleConnection(
     policies: com.superiorsoftllc.infantry.policy.PolicyRuntime = com.superiorsoftllc.infantry.policy.PolicyRuntime(emptyList(), { null }, null, java.io.File(".")),
     /** CHAT-SENDING-1: the client message ids of recent prompts, daemon-wide (a resend arrives on a new connection). */
     promptSendIds: PromptSendIds = PromptSendIds { LimitRegistry.CHAT_SENT_IDS_KEPT.default.toInt() },
+    /** RUNNER-E2E-2: the sessions started on remote runners (read-only mirror); the `sessions` answer lists them with the local ones. */
+    remoteSessions: () -> List<SessionRecord> = { emptyList() },
 ) {
     println("[infantry] ws connected (provider=${manager.providerId})")
     // DP-5d: the board-family frames, registered by their owner; the loop below only looks them up.
@@ -3066,7 +3079,7 @@ private suspend fun handleConnection(
     outgoing.trySend(policyEnvelope())
     val policySubscription = policies.onChange { outgoing.trySend(policyEnvelope()) }
     // Manually serialize sessions with SessionRecordSerializer to include computed `live` field
-    val sessionsElements = manager.list().map { json.encodeToJsonElement(SessionRecordSerializer, it) }
+    val sessionsElements = (manager.list() + remoteSessions()).map { json.encodeToJsonElement(SessionRecordSerializer, it) }
     val sessionsJson = JsonArray(sessionsElements)
     outgoing.trySend(Envelope(Envelope.SESSIONS, json.encodeToString(sessionsJson)))
     outgoing.trySend(
@@ -3189,7 +3202,18 @@ private suspend fun handleConnection(
                         val replay = streamSequencer.replayAfter(sessionId, request.lastSequence)
                         if (replay == null) {
                             // CLI-PTY-5: a known session with nothing kept simply has no history yet; only an unknown one is an error.
-                            if (manager.get(sessionId) == null) outgoing.trySend(Envelope(Envelope.ERROR, "no replay history for session '$sessionId'"))
+                            val runnerName = runnerPool.runnerOf(sessionId)
+                            if (runnerName != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL) {
+                                // RUNNER-E2E-2: a remote session's output is read from its runner on demand (runners.transcripts = on-demand).
+                                val link = runnerPool.link(runnerName)
+                                when (val lines = link?.readTranscript(sessionId, request.lastSequence.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt(), 0)) {
+                                    is com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorReply.Ok ->
+                                        for (line in lines.value) outgoing.trySend(Envelope(Envelope.STDOUT, line, sessionId))
+                                    is com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorReply.Unavailable ->
+                                        outgoing.trySend(Envelope(Envelope.ERROR, "runner '$runnerName' is offline: ${lines.reason}", sessionId))
+                                    null -> outgoing.trySend(Envelope(Envelope.ERROR, "runner '$runnerName' is not registered", sessionId))
+                                }
+                            } else if (manager.get(sessionId) == null) outgoing.trySend(Envelope(Envelope.ERROR, "no replay history for session '$sessionId'"))
                         } else {
                             replay.gap?.let { gap ->
                                 outgoing.trySend(
@@ -3911,7 +3935,7 @@ private suspend fun handleConnection(
                 }
 
                 Envelope.SESSIONS -> {
-                    val sessionsElements = manager.list().map { json.encodeToJsonElement(SessionRecordSerializer, it) }
+                    val sessionsElements = (manager.list() + remoteSessions()).map { json.encodeToJsonElement(SessionRecordSerializer, it) }
                     val sessionsJson = JsonArray(sessionsElements)
                     Envelope(Envelope.SESSIONS, json.encodeToString(sessionsJson))
                 }
@@ -4030,7 +4054,7 @@ private suspend fun handleConnection(
                             // Contract 1.26.0: the delete itself gets no direct reply -- every client
                             // (not just the one that asked) hears about it through a fresh `sessions`
                             // push, exactly like any other session-list mutation.
-                            val sessionsElements = manager.list().map { json.encodeToJsonElement(SessionRecordSerializer, it) }
+                            val sessionsElements = (manager.list() + remoteSessions()).map { json.encodeToJsonElement(SessionRecordSerializer, it) }
                             val pushed = Envelope(Envelope.SESSIONS, json.encodeToString(JsonArray(sessionsElements)))
                             for (client in clients) client.trySend(pushed)
                             if (wantsDirectAck(envelope)) pushed else null

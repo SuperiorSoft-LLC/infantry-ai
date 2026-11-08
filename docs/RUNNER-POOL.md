@@ -177,8 +177,7 @@ Built as RUNNER-POOL-8 (`runners/RunnerWatch.kt`, run after each heartbeat round
   lacks it.
 * `runners.pushOnCommit`: the runner checks each such session's HEAD every `limits.runners.commitCheckSec` and pushes
   the ticket branch when it moved.
-* Not yet: a remote session is not in the orchestrator's session list, so the card's `runner offline` badge
-  (RUNNER-POOL-4) does not show for it; the watch's offline state is logged, and the attention item says it.
+* A remote session is in the orchestrator's session list (`RemoteSessionMirror`: the pool's index plus the runner's status events; state `STARTING` until its first event), so the board does not call a live remote worker gone and the `runner offline` badge can show for it. Its output is read from the runner on demand (`runners.transcripts = on-demand`): a `replay_request` for a remote session calls `readTranscript`, so `infantry logs <session>` prints what the runner kept (STDOUT/STDERR lines). Live streaming (`stream`) is not built yet.
 
 ## 4. Code and git on a remote runner
 

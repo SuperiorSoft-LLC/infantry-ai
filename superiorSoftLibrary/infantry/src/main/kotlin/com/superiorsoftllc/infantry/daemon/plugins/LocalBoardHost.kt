@@ -382,8 +382,11 @@ class LocalBoardHost(
             sessionManager()?.get(sessionId)?.let { RunOutcomes.of(it) }?.let { BoardRunOutcome.valueOf(it.name) }
 
         override fun isRetryable(outcome: BoardRunOutcome) = RunOutcomes.isRetryable(FinishedPayload.Outcome.valueOf(outcome.name))
-        override fun workerProblem(sessionId: String?): String? =
-            TicketWorkerHealth.problem(sessionId?.let { sessionManager()?.get(it) }, sessionId)
+        override fun workerProblem(sessionId: String?): String? {
+            // RUNNER-E2E-2: a session on a remote runner is carried by that runner (its loss is the runner watch's business), not gone.
+            if (sessionId != null && runners?.runnerOf(sessionId)?.let { it != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL } == true) return null
+            return TicketWorkerHealth.problem(sessionId?.let { sessionManager()?.get(it) }, sessionId)
+        }
 
         override fun slowToBrief(sessionId: String, now: Long, graceMs: Long) =
             sessionManager()?.get(sessionId)?.let { TicketWorkerHealth.slowToBrief(it, now, graceMs) } ?: false
