@@ -42,6 +42,7 @@ For how the product works, start with the wiki: [docs/wiki/Architecture.md](docs
 | [docs/ARCH-AUDIT-2026-11.md](docs/ARCH-AUDIT-2026-11.md) | design record (dated 2026-11-07): duplicate and ad-hoc implementations per concern, with their consolidation tickets | none |
 | [docs/BLOCKS-INJECTORS.md](docs/BLOCKS-INJECTORS.md) | design record (dated) | [docs/wiki/Architecture.md](docs/wiki/Architecture.md) |
 | [docs/BLOCKS-LAYOUT-DESIGN.md](docs/BLOCKS-LAYOUT-DESIGN.md) | design record (dated) | [docs/wiki/Architecture.md](docs/wiki/Architecture.md) |
+| [docs/CONFIG-AUDIT-2026-11.md](docs/CONFIG-AUDIT-2026-11.md) | design record (dated 2026-11-08): audit of every setting shown in Settings, with reader, effect and verdict | none |
 | [docs/CONFIG-FIELDS.md](docs/CONFIG-FIELDS.md) | design record (dated) | [docs/wiki/Settings.md](docs/wiki/Settings.md) |
 | [docs/CONFIG-MANIFEST-DESIGN.md](docs/CONFIG-MANIFEST-DESIGN.md) | design record (dated) | [docs/wiki/Settings.md](docs/wiki/Settings.md) |
 | [docs/CORE-CLEAN.md](docs/CORE-CLEAN.md) | design record (dated) | [docs/wiki/Architecture.md](docs/wiki/Architecture.md) |
