@@ -161,9 +161,9 @@ class RunnerLinkServer(
         val allowed = settings()
         val why = when {
             !allowed.allowsProject(r.projectId) ->
-                "project '${r.projectId.orEmpty()}' is not in this runner's ${RunnerLinkSettings.PROJECTS} (empty = none)"
+                "project '${r.projectId.orEmpty()}' is not in this runner's ${RunnerLinkSettings.PROJECTS} (empty = none). Grant it on the runner: infantry settings set ${RunnerLinkSettings.PROJECTS} '[\"${r.projectId.orEmpty()}\"]' (list every allowed id; * = every project)"
             !allowed.allowsHarness(r.provider) ->
-                "harness '${r.provider.orEmpty()}' is not in this runner's ${RunnerLinkSettings.HARNESSES} (empty = none)"
+                "harness '${r.provider.orEmpty()}' is not in this runner's ${RunnerLinkSettings.HARNESSES} (empty = none). Grant it on the runner: infantry settings set ${RunnerLinkSettings.HARNESSES} '[\"${r.provider.orEmpty()}\"]' (list every allowed id; * = every harness)"
             else -> policy(seat, F.START, r.ticketId)
         }
         if (why != null) return refuse(seat, F.START, r.ticketId, from, "${F.START} refused: $why")

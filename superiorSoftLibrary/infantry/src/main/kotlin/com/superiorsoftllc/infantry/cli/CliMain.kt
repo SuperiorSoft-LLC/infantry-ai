@@ -495,7 +495,7 @@ internal object Cli {
                 // RUNNER-POOL-5: `infantry runner pair --name <n>` and the rest of the runner link (docs/RUNNER-POOL.md 7).
                 "runner" -> runBlocking {
                     RunnerCli.run(
-                        stream, RunnerCli.Args(parsed.args, parsed.name, parsed.code, parsed.fingerprint, parsed.limit), out, err,
+                        stream, RunnerCli.Args(parsed.args, parsed.name, parsed.code, parsed.fingerprint, parsed.limit, parsed.allowProjects, parsed.allowHarnesses), out, err,
                         com.superiorsoftllc.infantry.session.stateDir { getenv(it) ?: com.superiorsoftllc.infantry.session.infantrySetting(it) },
                     )
                 }
@@ -4763,7 +4763,8 @@ internal object Cli {
                                   files); --suggest rebuilds it first. ticket create/update --related-to <id|prefix> (repeatable) links one
               remote on|off|status  Let the daemon accept outside (Tailscale) connections; prints the ws address
                                   and token. Takes effect on the next daemon restart.
-              runner pair --name <n>  On a RUNNER machine: print a one-time pair code (single use, expires after
+              runner pair --name <n> [--allow-projects <ids|*>] [--allow-harnesses <ids|*>]  On a RUNNER machine: grant what the
+                                  orchestrator may run (asked when omitted; nothing is granted silently), print a one-time pair code (single use, expires after
                                   limits.runners.pairCodeMin) and the wss certificate fingerprint; serve the link until paired
               runner add <name> <wss-url> --code <c> --fingerprint <fp>  On the ORCHESTRATOR: pin the fingerprint, trade
                                   the code for a per-pair runner credential (not the owner, remote or agent token)
@@ -5042,6 +5043,9 @@ internal object Cli {
         // RUNNER-POOL-5: `runner add <name> <wss-url> --code <c> --fingerprint <fp>`.
         val code: String? = null,
         val fingerprint: String? = null,
+        // RUNNER-DEFAULTS-1: `runner pair --allow-projects <ids|*> --allow-harnesses <ids|*>` (the explicit grant).
+        val allowProjects: String? = null,
+        val allowHarnesses: String? = null,
         val body: String? = null,
         val reportTo: String? = null,
         val reportFields: String? = null,
@@ -5166,6 +5170,8 @@ internal object Cli {
         var name: String? = null
         var code: String? = null
         var fingerprint: String? = null
+        var allowProjects: String? = null
+        var allowHarnesses: String? = null
         var body: String? = null
         var reportTo: String? = null
         var reportFields: String? = null
@@ -5316,6 +5322,14 @@ internal object Cli {
                 }
                 "--fingerprint" -> {
                     fingerprint = flagValue(args, ++i) ?: return fail(err, "--fingerprint expects the certificate fingerprint `infantry runner pair` printed")
+                    i++
+                }
+                "--allow-projects" -> {
+                    allowProjects = flagValue(args, ++i) ?: return fail(err, "--allow-projects expects comma-separated project ids (or * for every project)")
+                    i++
+                }
+                "--allow-harnesses" -> {
+                    allowHarnesses = flagValue(args, ++i) ?: return fail(err, "--allow-harnesses expects comma-separated harness ids (or * for every harness)")
                     i++
                 }
                 "--report-to" -> {
@@ -5706,6 +5720,8 @@ internal object Cli {
             name = name,
             code = code,
             fingerprint = fingerprint,
+            allowProjects = allowProjects,
+            allowHarnesses = allowHarnesses,
             body = body,
             reportTo = reportTo,
             reportFields = reportFields,
@@ -5853,7 +5869,7 @@ internal object Cli {
         "ask" -> askUsageError(parsed, getenv)
         "usage" -> UsageCli.usageError(parsed.args)
         "settings" -> SettingsCli.usageError(parsed.args)
-        "runner" -> RunnerCli.usageError(RunnerCli.Args(parsed.args, parsed.name, parsed.code, parsed.fingerprint, parsed.limit))
+        "runner" -> RunnerCli.usageError(RunnerCli.Args(parsed.args, parsed.name, parsed.code, parsed.fingerprint, parsed.limit, parsed.allowProjects, parsed.allowHarnesses))
         else -> null
     }
 

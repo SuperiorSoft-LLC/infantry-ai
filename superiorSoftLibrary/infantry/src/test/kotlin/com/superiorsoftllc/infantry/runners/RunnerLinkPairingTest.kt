@@ -160,6 +160,13 @@ class RunnerLinkPairingTest {
         assertFalse(server.handle(F.START, startData(project = "p2"), id, cred, PEER).ok)
         assertFalse(server.handle(F.START, startData(harness = "codex"), id, cred, PEER).ok)
         settings = RunnerLinkSettings.Values()
+        // RUNNER-DEFAULTS-1: a refusal names the missing setting and the command that grants it; the default stays "nothing".
+        val refused = server.handle(F.START, startData(), id, cred, PEER)
+        assertFalse(refused.ok)
+        assertTrue(refused.data.contains("infantry settings set ${RunnerLinkSettings.PROJECTS}"), refused.data)
+        settings = RunnerLinkSettings.Values(projects = listOf("p1"))
+        assertTrue(server.handle(F.START, startData(), id, cred, PEER).data.contains("infantry settings set ${RunnerLinkSettings.HARNESSES}"))
+        settings = RunnerLinkSettings.Values()
         assertFalse(server.handle(F.START, startData(), id, cred, PEER).ok)
         settings = RunnerLinkSettings.Values(projects = listOf("*"), harnesses = listOf("*"))
         assertTrue(server.handle(F.START, startData(project = "p2", harness = "codex"), id, cred, PEER).ok)

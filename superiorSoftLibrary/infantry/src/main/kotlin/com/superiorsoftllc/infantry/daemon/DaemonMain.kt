@@ -1967,6 +1967,7 @@ class InfantryDaemon(
             // RUNNER-POOL-10: the rows of the Runners card (`runner_admin` op `list`): health, workers / cap, paused.
             runnerLinkService.enabledNow = settings::runnersEnabled
             runnerLinkService.setPaused = { name, paused -> settings.set("runners.$name.paused", kotlinx.serialization.json.JsonPrimitive(paused)) }
+            runnerLinkService.grant = { key, ids -> settings.set(key, kotlinx.serialization.json.JsonArray(ids.map { kotlinx.serialization.json.JsonPrimitive(it) })) }
             runnerLinkService.rowStatus = { name ->
                 val e = runnerPool.runners().firstOrNull { it.name == name }
                 val running = e?.health?.running ?: 0

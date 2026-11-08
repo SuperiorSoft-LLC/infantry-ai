@@ -127,7 +127,7 @@ class LocalBoardHost(
         val link = pool.link(runner) ?: return SessionStartResult.Refused("runner '$runner' is not registered, or no runner binding is loaded (Infantry_RemoteRunner)")
         val checkout = request.workingDir?.let(::File) ?: defaultRepo
         val remote = checkout?.let { runCatching { gitRemoteOf(it) }.getOrNull() }?.takeIf { it.isNotBlank() }
-            ?: return SessionStartResult.Refused("runner $runner needs the project's git remote, and ${checkout?.path ?: "this project"} has no `origin` remote")
+            ?: return SessionStartResult.Refused("runner $runner needs the project's git remote, and ${checkout?.path ?: "this project"} has no `origin` remote. Fix: git -C <project folder> remote add origin <url the runner can reach>")
         val spec = com.superiorsoftllc.infantry.daemon.api.orchestrator.StartSpec(
             startId = "${request.ticketId ?: "spawn"}:${clock()}",
             agentId = request.agentId, role = request.role, projectId = request.projectId, provider = request.providerId,
