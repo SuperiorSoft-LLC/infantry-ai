@@ -1004,6 +1004,31 @@ object LimitRegistry {
         min = 1, zeroIsUnlimited = false,
     )
 
+    /**
+     * RUNNER-TEST-1: how long `infantry runner test` waits for the runner's throwaway turn to answer before it stops the session and
+     * reports what the transcript had. A real model harness needs a few seconds; a runner that is signed in but too slow to answer
+     * must not hold the owner's check forever.
+     */
+    val RUNNERS_TEST_TURN_SEC = LimitDef(
+        "limits.runners.testTurnSec", 90, "seconds",
+        "How long `infantry runner test` waits for the test turn's answer from the runner's harness before it stops the session and reports the transcript it has.",
+        min = 1, max = 900, zeroIsUnlimited = false,
+    )
+
+    /** RUNNER-TEST-1: how often the test turn's transcript is read while it waits for the answer. */
+    val RUNNERS_TEST_POLL_MS = LimitDef(
+        "limits.runners.testPollMs", 1_000, "ms",
+        "How often `infantry runner test` reads the test session's transcript over the link while it waits for the answer. Shorter = the reply shows sooner, at one link call each poll.",
+        min = 100, max = 30_000, zeroIsUnlimited = false,
+    )
+
+    /** RUNNER-TEST-1: how much of the test turn's answer (`infantry runner test`, the Runners card) is kept and shown. */
+    val RUNNERS_TEST_REPLY_CHARS = LimitDef(
+        "limits.runners.testReplyChars", 500, "characters",
+        "How many characters of the test turn's answer `infantry runner test` and the Runners card keep and show (the rest is cut); the same budget bounds the transcript lines of a test that got no answer.",
+        min = 40, max = 20_000, zeroIsUnlimited = false,
+    )
+
     // CORE-PROGRESS-DOWNLOAD-1 (docs/wiki/Progress.md): the core downloader and the core progress system.
     val DOWNLOAD_RETRIES = LimitDef(
         "limits.downloads.retries", 3, "count",
@@ -1086,6 +1111,7 @@ object LimitRegistry {
         RUNNERS_PAIR_CODE_MIN, RUNNERS_PAIR_ATTEMPTS_PER_HOUR, RUNNERS_CREDENTIAL_ROTATE_DAYS, RUNNERS_LINK_PORT, RUNNERS_ADVERTISE_HOSTS_MAX, RUNNERS_AUDIT_SHOWN, RUNNERS_LINK_CALL_SECONDS, RUNNERS_LINK_CHECK_SECONDS,
         RUNNERS_OUTBOX_MAX, RUNNERS_LOST_AFTER_MIN, RUNNERS_COMMIT_CHECK_SEC, RUNNERS_FORWARD_WAIT_SEC, RUNNERS_FORWARD_TIMEOUT_SEC, RUNNERS_FORWARD_PENDING_MAX,
         RUNNERS_ADD_HOST_TIMEOUT_SEC, RUNNERS_CHECK_GIT_SEC, RUNNERS_CHECK_MIN_FREE_MB,
+        RUNNERS_TEST_TURN_SEC, RUNNERS_TEST_POLL_MS, RUNNERS_TEST_REPLY_CHARS,
         DOWNLOAD_RETRIES, DOWNLOAD_BACKOFF_MS, DOWNLOAD_CONNECT_TIMEOUT_SECONDS, DOWNLOAD_RESPONSE_TIMEOUT_SECONDS, DOWNLOAD_STALL_SECONDS, DOWNLOAD_MAX_MB, DOWNLOAD_REDIRECTS, DOWNLOAD_MOVE_RETRIES,
         PROGRESS_KEEP_FINISHED, PROGRESS_MIN_INTERVAL_MS,
     )

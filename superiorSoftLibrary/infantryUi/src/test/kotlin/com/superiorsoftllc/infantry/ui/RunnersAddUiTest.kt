@@ -16,8 +16,11 @@ import com.superiorsoftllc.infantry.plugins.official.runners.RunnerCheckRows
 import com.superiorsoftllc.infantry.plugins.official.runners.addLinkRequest
 import com.superiorsoftllc.infantry.plugins.official.runners.addedRunnerName
 import com.superiorsoftllc.infantry.plugins.official.runners.checkRequest
+import com.superiorsoftllc.infantry.plugins.official.runners.RUNNER_TEST_COST
 import com.superiorsoftllc.infantry.plugins.official.runners.parseRunnerCheck
+import com.superiorsoftllc.infantry.plugins.official.runners.parseRunnerTest
 import com.superiorsoftllc.infantry.plugins.official.runners.runnerFailure
+import com.superiorsoftllc.infantry.plugins.official.runners.testRequest
 import com.superiorsoftllc.infantry.ui.shell.LinkContext
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -103,6 +106,73 @@ class RunnersAddUiTest {
         onAllNodesWithTag("runner-check-fix:link").assertCountEquals(0)
         onNodeWithTag("runner-check-again").performClick()
         assertEquals(1, again)
+    }
+
+    @Test
+    fun `the test op names the runner and only the harness or model that was chosen`() {
+        assertEquals("""{"op":"test","name":"box"}""", testRequest("box"))
+        assertEquals("""{"op":"test","name":"box","harness":"echo"}""", testRequest("box", " echo "))
+        assertEquals("""{"op":"test","name":"box","model":"m1"}""", testRequest("box", null, "m1"))
+        assertEquals("""{"op":"test","name":"box"}""", testRequest("box", "  ", " "), "a blank choice is not sent: the daemon picks")
+    }
+
+    @Test
+    fun `a test answer reads back with its reply, and a failed one with its last lines`() {
+        val answered = assertNotNull(parseRunnerTest("""{"ok":true,"harness":"echo","model":"","seconds":1,"ms":412,"sessionId":"s-1","reply":"echo: ready"}"""))
+        assertTrue(answered.ok)
+        assertEquals("echo: ready", answered.reply)
+        assertEquals("echo 412 ms", answered.took)
+        assertNull(answered.error)
+
+        val timedOut = assertNotNull(
+            parseRunnerTest("""{"ok":false,"error":"no answer from 'claude' on 'box' within 90 s (limits.runners.testTurnSec)","harness":"claude","model":"opus","seconds":90,"ms":90001,"lastLines":["[turn] Reply with the single word: ready"]}"""),
+        )
+        assertNull(timedOut.reply)
+        assertTrue(!timedOut.ok)
+        assertTrue(timedOut.error.orEmpty().contains("no answer from 'claude'"))
+        assertEquals(listOf("[turn] Reply with the single word: ready"), timedOut.lastLines)
+        assertEquals("claude opus 90.0 s", timedOut.took)
+        // Neither shape is a success: a bare error still reads, and nonsense does not.
+        assertNotNull(parseRunnerTest("""{"ok":false,"error":"no logged-in harness on 'box'; run `infantry runner check box`"}"""))
+        assertNull(parseRunnerTest("not an answer"))
+        assertNull(parseRunnerTest("""{"ok":true}"""))
+    }
+
+    @Test
+    fun `the test button runs one turn and its answer is drawn under the check rows`() = runComposeUiTest {
+        var tests = 0
+        var again = 0
+        val answer = parseRunnerTest("""{"ok":true,"harness":"echo","model":"","seconds":1,"ms":412,"sessionId":"s-1","reply":"echo: ready"}""")
+        setContent {
+            RunnerCheckRows(
+                parseRunnerCheck(checkAnswer), null, checking = false, onAgain = { again++ }, gate = live,
+                onTest = { tests++ }, test = answer,
+            )
+        }
+        onNodeWithTag("runner-check-row:link").assertIsDisplayed()
+        onNodeWithTag("runner-test-cost").assertTextContains(RUNNER_TEST_COST, substring = true)
+        onNodeWithTag("runner-test-reply").assertIsDisplayed()
+        onNodeWithTag("runner-test-summary").assertTextContains("answered in echo 412 ms", substring = true)
+        onNodeWithTag("runner-test-text").assertTextContains("echo: ready", substring = true)
+        onNodeWithTag("runner-test").performClick()
+        assertEquals(1, tests)
+        assertEquals(0, again)
+    }
+
+    @Test
+    fun `a test with no answer draws its error and the transcript tail`() = runComposeUiTest {
+        val answer = parseRunnerTest("""{"ok":false,"error":"no answer from 'claude' on 'box' within 90 s","harness":"claude","model":"opus","seconds":90,"ms":90001,"lastLines":["[turn] Reply with the single word: ready","error: rate limited"]}""")
+        setContent { RunnerCheckRows(null, null, checking = false, onAgain = {}, gate = live, onTest = {}, test = answer) }
+        onNodeWithTag("runner-test-error").assertIsDisplayed()
+        onNodeWithTag("runner-test-summary").assertTextContains("no answer in claude opus 90.0 s", substring = true)
+        onNodeWithTag("runner-test-text").assertTextContains("no answer from 'claude'", substring = true)
+    }
+
+    @Test
+    fun `while a test runs the wait is drawn and the button is off`() = runComposeUiTest {
+        setContent { RunnerCheckRows(null, null, checking = false, onAgain = {}, gate = live, onTest = {}, testing = true) }
+        onNodeWithTag("runner-test-wait").assertIsDisplayed()
+        onAllNodesWithTag("runner-test-reply").assertCountEquals(0)
     }
 
     @Test

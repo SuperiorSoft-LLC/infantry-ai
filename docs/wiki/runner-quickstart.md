@@ -92,6 +92,18 @@ link             ok      reached wss://100.64.0.5:8790 in 42 ms
 Run each `fix:` line on the runner and check again. A full disk, an unreachable remote and a harness the runner does not
 have show up here too, instead of at the first ticket start.
 
+Green rows say the CLI is installed and signed in; they do not say it ANSWERS. For that, run one throwaway turn on the runner
+(RUNNER-TEST-1) — the Runners card's Check view has the same "Test" button:
+
+```
+infantry runner test server-1 [--harness <id>] [--model <id>]
+```
+
+It starts a session there with no ticket and no project, sends "Reply with the single word: ready", prints the harness, how long
+it took and the answer, then stops and removes the session (nothing is left on the runner's session list). Exit code 0 means an
+answer came back; otherwise the error and the last transcript lines say why. A test with a real model harness spends one small
+turn of that account; `echo` spends nothing.
+
 ## 6. Check it ran there
 
 ```

@@ -1006,11 +1006,17 @@ class InfantryDaemon(
                             contract = com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerLink.CONTRACT_VERSION,
                             projects = runnerProjects.get()(),
                             // Installed = registered here; signed in = not refused by its provider (no quota or stall seen).
-                            harnesses = manager.providers.map { p ->
-                                com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerHarness(
-                                    p.id, p.knownModels().orEmpty(),
-                                    loggedIn = providerStates.state(p.id).status == com.superiorsoftllc.infantry.usage.ProviderStatus.UNKNOWN,
+                            // RUNNER-TEST-1: a harness a plugin registered (the echo example, a third-party harness) is listed beside the
+                            // configured ones, as `providerInfos` lists it for the picker; "none" is the no-harness placeholder and never is.
+                            harnesses = run {
+                                fun wire(id: String, models: List<String>) = com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerHarness(
+                                    id, models, loggedIn = providerStates.state(id).status == com.superiorsoftllc.infantry.usage.ProviderStatus.UNKNOWN,
                                 )
+                                val configured = manager.providers
+                                    .filter { it !is com.superiorsoftllc.infantry.harness.NoHarnessProvider }
+                                    .map { p -> wire(p.id, p.knownModels().orEmpty()) }
+                                val known = configured.map { it.id }.toSet()
+                                configured + harnesses.harnessIds().filter { it !in known }.sorted().map { id -> wire(id, emptyList()) }
                             },
                             capacity = settings.limitCap(LimitRegistry.MAX_SESSIONS),
                             os = System.getProperty("os.name").orEmpty(),

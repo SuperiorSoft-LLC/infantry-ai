@@ -51,7 +51,17 @@ object LocalRunner {
         start = { spec ->
             val wt = spec.worktree
             if (wt == null) {
-                bindSessionOnSpawn(manager, agents, spawnOptions(spec), spec.repo?.let(::File))?.id
+                val dir = spec.repo?.let(::File)
+                // A spec naming an agent or a role binds that session at rest (its prompt, if any, is the caller's first mail turn).
+                bindSessionOnSpawn(manager, agents, spawnOptions(spec), dir)?.id
+                    // RUNNER-TEST-1: an ANONYMOUS start (no role, no agent) has nothing to bind, exactly like an anonymous console: its
+                    // first prompt creates the session and is its first turn. `infantry runner test` starts one this way.
+                    ?: spec.prompt?.takeIf { it.isNotBlank() }?.let { prompt ->
+                        manager.startNew(
+                            prompt = prompt, repo = dir, providerId = spec.provider, model = spec.model, effort = spec.effort,
+                            projectId = spec.projectId, contextLimit = spec.contextLimit,
+                        ).id
+                    }
             } else {
                 manager.startNew(
                     prompt = spec.prompt.orEmpty(),
@@ -82,6 +92,16 @@ object LocalRunner {
         events = events,
         eventsAcked = eventsAcked,
         transcript = transcript,
+        // RUNNER-TEST-1: `session_remove --force` by another name, so a throwaway turn leaves nothing on this runner's list: a live
+        // session is ended first (a forced kill marks the record ENDED before it returns), then its record goes.
+        remove = { sessionId ->
+            val record = manager.get(sessionId)
+            if (record == null) false else {
+                if (record.live) runCatching { manager.kill(sessionId, force = true) }
+                manager.delete(sessionId)
+                true
+            }
+        },
     )
 
     /** A pool with only the local runner over [manager] (a connection handler's default when the daemon passes none). */

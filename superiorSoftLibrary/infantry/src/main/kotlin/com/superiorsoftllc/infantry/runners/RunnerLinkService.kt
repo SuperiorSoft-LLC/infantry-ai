@@ -18,8 +18,11 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.put
 import java.io.File
+import java.util.UUID
 import com.superiorsoftllc.infantry.daemon.api.runners.RunnerLinkWire as F
 
 /**
@@ -139,7 +142,8 @@ class RunnerLinkService(
      * RUNNER-POOL-6a: one owner `runner_admin` request (`{"op": ..., ...}`) -> its answer object: `{"ok": true, ...}`, or
      * `{"ok": false, "error": <reason>, "presentedFingerprint": <fp or null>}`. Ops: `pair {name}`, `pair_status`, `pair_cancel`,
      * `add {name, url, code, fingerprint?, orchestratorName}` or `add {link, name?, orchestratorName}` (RUNNER-ADD-LINK-1),
-     * `rotate {name}`, `detach {name}`.
+     * `rotate {name}`, `detach {name}`, `check {name, projectId?, harness?}` (RUNNER-CHECK-1) and `test {name, harness?, model?}`
+     * (RUNNER-TEST-1: one throwaway turn there, its reply, harness, seconds and session id).
      */
     @Synchronized
     fun admin(request: JsonObject): JsonObject = try {
@@ -187,6 +191,8 @@ class RunnerLinkService(
             "rotate" -> ok("name" to peers(RunnerLinkStore.open(stateDir)).rotate(need("name")).name)
             // RUNNER-CHECK-1: the health check (link, contract, sign-in, grants, git, disk) with the fix for each failing row.
             "check" -> check(need("name"), str("projectId"), str("harness"))
+            // RUNNER-TEST-1: one throwaway turn on the runner, so the owner sees a real answer (and not only green check rows).
+            "test" -> test(need("name"), str("harness"), str("model"))
             "detach" -> {
                 if (!RunnerLinkStore.exists(stateDir)) throw IllegalArgumentException("this machine never paired")
                 ok("remote" to peers(RunnerLinkStore.open(stateDir)).detach(need("name")))
@@ -256,6 +262,151 @@ class RunnerLinkService(
     private fun rowsJson(rows: List<F.CheckRow>): JsonObject = JsonObject(
         ok() + mapOf("rows" to JsonArray(rows.map { F.json.encodeToJsonElement(F.CheckRow.serializer(), it) })),
     )
+
+    /**
+     * RUNNER-TEST-1 (docs/wiki/RunnerPairing-design.md 4, step 6): "test this runner": one throwaway turn there, so the owner sees a
+     * real answer from that machine and not only green check rows (RUNNER-E2E-3 found a start that "ran" and returned no output).
+     *
+     * The start is a start the orchestrator already sends ([F.START]): a provider, a model and a one-line prompt, with no ticket, no
+     * git remote and no project, so the runner clones nothing and touches no project checkout. Its own grants still decide: a harness
+     * not in its `runner.harnesses` is refused there, and that refusal is the answer's error, verbatim.
+     *
+     * The harness is the one asked for, else `echo` when the runner lists it (a test with it spends nothing), else the first harness
+     * the runner reports signed IN; a runner with none refuses here, before anything runs. A test on a real model harness spends one
+     * small turn of that account (docs/RUNNER-POOL.md section 5 says so, and the Runners card says it beside its Test button).
+     *
+     * The answer is read with [F.TRANSCRIPT] every `limits.runners.testPollMs` until a turn answer is there or
+     * `limits.runners.testTurnSec` passes; then the session is removed for good ([F.REMOVE], which ends a live session first), so
+     * neither side keeps a worker that did nothing. Answer: `{ok, harness, model, seconds, ms, sessionId, reply}`, or
+     * `{ok: false, error, lastLines}` when no answer came back.
+     *
+     * This op holds the admin lock while it waits (one `test` at a time); a `runner pair` polling `pair_status` elsewhere waits for it.
+     */
+    private fun test(name: String, harness: String?, model: String?): JsonObject {
+        val shown = name.filter { it in ' '..'~' }.take(SHOWN_OP_SIZE)
+        if (!RunnerLinkStore.exists(stateDir) || RunnerLinkStore.open(stateDir).runner(name) == null) {
+            throw IllegalArgumentException("no paired runner '$shown'")
+        }
+        val helloAnswer = links.call(name, F.HELLO, "{}")
+        if (helloAnswer.type != F.REPLY) return testFailure("runner '$shown' answered its hello with: ${helloAnswer.data.ifBlank { "no reason" }}", emptyList(), "", null, 0)
+        val hello = runCatching { F.json.decodeFromString(F.HelloAnswer.serializer(), helloAnswer.data) }.getOrNull()
+            ?: return testFailure("runner '$shown' answered a hello this daemon cannot read", emptyList(), "", null, 0)
+        val provider = harness?.takeIf { it.isNotBlank() } ?: run {
+            // "none" is the no-harness placeholder, never a pick; an empty list means the runner reports no harness at all.
+            val installed = hello.harnesses.filter { it.id != com.superiorsoftllc.infantry.harness.NoHarnessProvider.ID }
+            if (installed.any { it.id == TEST_HARNESS }) TEST_HARNESS
+            else installed.firstOrNull { it.loggedIn }?.id
+                ?: throw IllegalArgumentException(
+                    "no logged-in harness on '$shown'; run `infantry runner check $shown` to see what it can run and sign one in there",
+                )
+        }
+        val chosenModel = model?.takeIf { it.isNotBlank() }
+        val startedAt = clock()
+        val start = links.call(
+            name, F.START,
+            F.json.encodeToString(
+                F.StartRequest.serializer(),
+                F.StartRequest(startId = "test-" + UUID.randomUUID(), provider = provider, model = chosenModel, prompt = TEST_PROMPT),
+            ),
+        )
+        val startAnswer = if (start.type == F.REPLY) runCatching { F.json.decodeFromString(F.StartAnswer.serializer(), start.data) }.getOrNull() else null
+        if (start.type != F.REPLY) return testFailure(start.data.ifBlank { "runner '$shown' refused the start" }, emptyList(), provider, chosenModel, clock() - startedAt)
+        if (startAnswer == null) return testFailure("runner '$shown' answered a start this daemon cannot read", emptyList(), provider, chosenModel, clock() - startedAt)
+        val sessionId = startAnswer.sessionId
+        if (sessionId == null) return testFailure(startAnswer.refusal ?: "runner '$shown' started no session", emptyList(), provider, chosenModel, clock() - startedAt)
+
+        val deadline = startedAt + limit(LimitRegistry.RUNNERS_TEST_TURN_SEC) * MS_PER_SECOND
+        val pollMs = limit(LimitRegistry.RUNNERS_TEST_POLL_MS)
+        var lines: List<String> = emptyList()
+        var reply: String? = null
+        while (true) {
+            transcriptOf(name, sessionId)?.let { lines = it }
+            reply = lines.asReversed().firstOrNull(::isTestAnswer)?.trim()?.takeIf { it.isNotEmpty() }
+            if (reply != null || clock() >= deadline) break
+            sleepUntilNextPoll(pollMs, deadline)
+        }
+        val turnMillis = maxOf(0, clock() - startedAt)
+        val cleaned = cleanUp(name, sessionId)
+        val chars = limit(LimitRegistry.RUNNERS_TEST_REPLY_CHARS).toInt()
+        return if (reply == null) {
+            val out = testFailure("no answer from '$provider' on '$shown' within ${secondsOf(turnMillis)} s (limits.runners.testTurnSec)", lines, provider, chosenModel, turnMillis)
+            if (cleaned) out else JsonObject(out + ("cleanup" to JsonPrimitive(LEFT_BEHIND)))
+        } else {
+            val out = buildJsonObject {
+                put("ok", true)
+                put("harness", provider)
+                put("model", chosenModel ?: "")
+                put("seconds", secondsOf(turnMillis))
+                put("ms", turnMillis)
+                put("sessionId", sessionId)
+                put("reply", reply.take(chars))
+            }
+            if (cleaned) out else JsonObject(out + ("cleanup" to JsonPrimitive(LEFT_BEHIND)))
+        }
+    }
+
+    /** RUNNER-TEST-1: the shape a test that got no answer answers: what failed, and the transcript it did have. */
+    private fun testFailure(error: String, lines: List<String>, harness: String, model: String?, millis: Long): JsonObject {
+        val budget = limit(LimitRegistry.RUNNERS_TEST_REPLY_CHARS).toInt()
+        val tail = ArrayList<String>()
+        var used = 0
+        for (line in lines.asReversed()) {
+            if (tail.isNotEmpty() && used + line.length > budget) break
+            tail.add(0, line.take(budget))
+            used += line.length
+        }
+        return buildJsonObject {
+            put("ok", false)
+            put("error", error)
+            put("harness", harness)
+            put("model", model ?: "")
+            put("seconds", secondsOf(millis))
+            put("ms", millis)
+            put("lastLines", JsonArray(tail.map(::JsonPrimitive)))
+        }
+    }
+
+    /** One greeting at the test session's transcript, or null when the runner did not answer it. */
+    private fun transcriptOf(name: String, sessionId: String): List<String>? {
+        val answer = runCatching {
+            links.call(name, F.TRANSCRIPT, F.json.encodeToString(F.TranscriptRequest.serializer(), F.TranscriptRequest(sessionId)))
+        }.getOrNull() ?: return null
+        if (answer.type != F.REPLY) return null
+        return runCatching { F.json.decodeFromString(F.TranscriptAnswer.serializer(), answer.data).lines }.getOrNull()
+    }
+
+    /**
+     * RUNNER-TEST-1: whether [line] is a turn answer (what the harness said), not the request or a failure: the runner's transcript
+     * marks the turn it was asked `[turn] ...` and its errors `error: ...`.
+     */
+    private fun isTestAnswer(line: String): Boolean {
+        val t = line.trim()
+        return t.isNotEmpty() && !t.startsWith(TURN_LINE) && !t.startsWith(ERROR_LINE)
+    }
+
+    /**
+     * RUNNER-TEST-1: end the test session for good and remove it, so no worker that did nothing stays on either session list. One
+     * frame does both ([F.REMOVE] ends a live session first); an older runner that does not know it is still stopped ([F.STOP],
+     * force) so no turn keeps running, and the answer then carries [LEFT_BEHIND]. True = nothing is left on the runner's list.
+     */
+    private fun cleanUp(name: String, sessionId: String): Boolean {
+        val removed = runCatching {
+            links.call(name, F.REMOVE, F.json.encodeToString(F.RemoveRequest.serializer(), F.RemoveRequest(sessionId)))
+        }.getOrNull()
+        // `removed = false` is "the runner no longer had it": nothing is left behind either.
+        if (removed?.type == F.REPLY) return true
+        runCatching { links.call(name, F.STOP, F.json.encodeToString(F.StopRequest.serializer(), F.StopRequest(sessionId, TEST_STOP_REASON, force = true))) }
+        return false
+    }
+
+    /** Wait [pollMs], but never past [deadline]. */
+    private fun sleepUntilNextPoll(pollMs: Long, deadline: Long) {
+        val wait = minOf(pollMs, deadline - clock()).coerceAtLeast(0)
+        if (wait > 0) Thread.sleep(wait)
+    }
+
+    /** Whole seconds a test turn took, at least 1 (a sub-second answer reads as "1 s", never "0 s"). */
+    private fun secondsOf(millis: Long): Long = ((millis + MS_PER_SECOND - 1) / MS_PER_SECOND).coerceAtLeast(1)
 
     /**
      * RUNNER-POOL-10: what the Runners card shows. The pool fills health, workers and caps through [rowStatus] (one runner name -> its
@@ -368,10 +519,27 @@ class RunnerLinkService(
         /** RUNNER-POOL-6a: the owner frame `infantry runner pair|add|rotate|detach <name>` send ([FrameGate.OWNER_ONLY]). */
         const val ADMIN = com.superiorsoftllc.infantry.policy.ActionCatalog.RUNNER_ADMIN
         const val NO_TRANSPORT = "the runner link needs the Infantry_RemoteRunner plugin (no runner link transport is loaded)"
-        private val NEEDS_TRANSPORT = setOf("pair", "add", "rotate", "detach")
+        private val NEEDS_TRANSPORT = setOf("pair", "add", "rotate", "detach", "test")
         private const val MS_PER_SECOND = 1000L
         private const val MS_PER_MINUTE = 60_000L
         private const val SHOWN_OP_SIZE = 32
+
+        /**
+         * RUNNER-TEST-1: the one-line turn a test sends. A harness that answers anything proves it ran; the word makes the expected
+         * answer obvious in the reply the owner reads.
+         */
+        const val TEST_PROMPT = "Reply with the single word: ready"
+
+        /** RUNNER-TEST-1: the harness a test picks first when the runner lists it: it spends nothing and answers at once. */
+        private const val TEST_HARNESS = "echo"
+
+        /** RUNNER-TEST-1: why a test session was stopped, so the runner's session history says who ended it if the removal is late. */
+        private const val TEST_STOP_REASON = "runner test finished"
+
+        /** RUNNER-TEST-1: what the answer says when the test session was stopped but not removed on the runner. */
+        const val LEFT_BEHIND = "the test session was stopped but not removed on the runner (it may still show there until it ends)"
+        private const val TURN_LINE = "[turn]"
+        private const val ERROR_LINE = "error:"
 
         /** [LinkCall] over the loaded transport with the link call timeout and the plain-ws switch read at each call. */
         fun clientCall(limit: (LimitDef) -> Long, settings: () -> RunnerLinkSettings.Values, transport: () -> RunnerLinkTransport?) = LinkCall { url, fp, id, cred, type, data, timeoutSeconds ->

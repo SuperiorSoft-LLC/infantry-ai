@@ -231,6 +231,18 @@ RUNNER-CHECK-1 adds the health check rows: `contract`, `harness:<id>` (installed
 stripped from what git says), `disk` (free space of `runners.cloneRoot`), plus the orchestrator's own `link` and `git:origin` rows.
 Read only: nothing is cloned, started or written by a check.
 
+RUNNER-TEST-1 adds `infantry runner test <name> [--harness h] [--model m]` (`runner_admin` op `test`): one THROWAWAY turn on the
+runner, because green rows say the CLI is installed and signed in, not that it answers (RUNNER-E2E-3 found a start that "ran" and
+returned no output). The start is the ordinary `runner_link_start` with a provider, a model and the fixed prompt "Reply with the
+single word: ready", and NO ticket, NO git remote and NO project, so the runner clones nothing and touches no project checkout; its
+own `runner.harnesses` grant still decides (a harness it does not grant is refused there, verbatim). The harness is the one asked
+for, else `echo` when the runner lists it, else the first harness the runner reports signed in. The answer is read with
+`runner_link_transcript` every `limits.runners.testPollMs` until a turn answer is there or `limits.runners.testTurnSec` passes;
+then the session is removed for good (`runner_link_remove`, contract 1.5.0; the runner ends a live one first, as
+`session_remove --force` does), so no worker that did nothing stays on either session list. Answer: `{ok, harness, model, seconds, ms, sessionId, reply}` or `{ok: false, error, lastLines}`.
+COST: a test with a real model harness spends one small turn of that account; `echo` spends nothing. The Runners card's check view
+has the same button, with that note next to it.
+
 Never: file contents, diffs, credentials, keystore material. Transcripts cross only when a client asks to read one
 (setting `runners.transcripts = on-demand`, the cheapest; `stream` is opt-in).
 
@@ -347,6 +359,9 @@ Rate limits on pairing attempts (`runners.pairAttemptsPerHour`, default 5).
 | `limits.runners.forwardWaitSec` | `10` | how long one forward pull waits on the runner (also the pump's retry pause; capped at half the link call timeout) |
 | `limits.runners.forwardTimeoutSec` | `300` | how long a remote worker's orchestrator-side frame waits for its answer |
 | `limits.runners.forwardPendingMax` | `64` | orchestrator-side frames one runner holds at once |
+| `limits.runners.testTurnSec` | `90` | how long `infantry runner test` waits for the throwaway turn's answer |
+| `limits.runners.testPollMs` | `1000` | how often it reads that session's transcript (one link call per poll) |
+| `limits.runners.testReplyChars` | `500` | how much of the answer (and of the no-answer transcript) it keeps and shows |
 | `runners.pairCodeMin`, `runners.pairAttemptsPerHour` | `10`, `5` | pairing |
 | `runners.credentialRotateDays` | `30` | rotation |
 | `runners.allowPlainTailnet` | `false` | opt-in plain ws over a tailnet |
