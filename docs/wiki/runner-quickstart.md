@@ -63,7 +63,7 @@ The orchestrator lists a remote session (`infantry sessions`, the board's worker
 you ask: `infantry logs <session>` prints the lines the runner kept (STDOUT and STDERR). Nothing streams live
 (`runners.transcripts = on-demand`; `stream` is not built yet), so run `logs` after the agent has answered. A new remote session
 reads `STARTING` until the runner reports its first status.
-No-login check with the Echo harness (`plugins/examples/Acme_EchoHarness`, no credentials): install it on the runner, pin an
+No-login check with the Echo harness (not yet run live: only the in-process test below proves it) (`plugins/examples/Acme_EchoHarness`, no credentials): install it on the runner, pin an
 agent or ticket with provider `echo` to the runner, prompt it, then `infantry logs <session>` shows the echo reply and the
 board shows the worker live, not "gone". The two-daemon test `RunnerPoolPinnedTicketE2ETest` ("a remote session is listed on the
 orchestrator and its output is read on demand") proves the same path without Docker.
