@@ -89,3 +89,11 @@ on the orchestrator is not empty for any harness. A `prompt` frame (`infantry_pr
 to that runner like mail (a busy or unreachable runner answers an error to send again, not "unknown session"), and the runner
 serves the transcript and mail of a session started without a git remote too (`isLinked`). `session_act` (queue, interrupt) is not
 forwarded yet. Not yet proven live: the Docker re-run (needs the board plugins on the orchestrator).
+
+VERIFY-RUNNER-IO-1 (live, a second LOCAL runner process, not Docker; the Docker packaging stayed unverified, the engine was down): orchestrator
+(`--mode both`, Board/Attention/Roles/Agents/RemoteRunner plugins) and a `--mode runner` daemon, each on its own 189xx port and temp state dir, both
+with `Acme_EchoHarness`, paired with `runner pair` / `runner add`. A ticket pinned `--runner r2 --provider echo` started on the runner; the
+orchestrator and the runner both listed the session; `infantry logs <full session id>` on the orchestrator printed the turn and the
+`echo:` lines read from the runner; `infantry_prompt` on the orchestrator reached the runner (its transcript has `[turn from owner] ...`) and a
+second `logs` printed the `echo: <prompt>` reply. `logs` now sends one `replay_request` up front (before, it was a live tail only and printed
+nothing for a remote session). Notes: the full session id is needed (a prefix gets "no replay history"), the reply is read on demand, not streamed.

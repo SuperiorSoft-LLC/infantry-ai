@@ -871,6 +871,9 @@ internal object Cli {
             stream.trackSession(sessionId)
             checkContract(stream, err)
             out.appendLine("streaming raw stdout/stderr for session ${sessionId.take(8)}")
+            // VERIFY-RUNNER-IO-1: ask for the kept history up front (the live tail alone prints nothing for a finished or remote session:
+            // a remote session's output lives on its runner and is read on demand by this request).
+            stream.sendIfOpen(Envelope("replay_request", """{"lastSequence":0}""", sessionId))
 
             var seen = 0
             var exitCode: Int? = null
@@ -6331,6 +6334,12 @@ internal class FrameStream private constructor(
             delay(POLL_MS)
         }
         error("timed out after ${timeoutMs}ms waiting for '$type'; saw ${link.recorder.frames.map { it.type }}")
+    }
+
+    /** Send one frame on the open connection only: no reconnect, a failure is ignored (a reconnect replays on its own). */
+    suspend fun sendIfOpen(envelope: Envelope) {
+        if (link.recorder.closed) return
+        runCatching { link.socket.sendText(json.encodeToString(Envelope.serializer(), envelope), true).join() }
     }
 
     /** Send one frame, re-making the connection first if it has died. */
