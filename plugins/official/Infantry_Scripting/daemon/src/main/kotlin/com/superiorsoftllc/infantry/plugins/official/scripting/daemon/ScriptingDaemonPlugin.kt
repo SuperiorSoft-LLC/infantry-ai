@@ -125,7 +125,8 @@ class ScriptingDaemonPlugin : DaemonPlugin {
         api.capabilities.handle(FetchBridge.ID) { call -> fetch.fetch(call.args, call.caller.project) }
         // CORE-PROGRESS-DOWNLOAD-1: the core progress system and downloader for scripts (progress.start / progress.update / http.download).
         val progressBridge = ProgressBridge(api.progress, api.downloads, { api.config(it) }, { name, project -> api.runs.secretFields(name, project) },
-            { project, path -> api.files(project ?: throw IllegalArgumentException("http.download runs in a project (its .infantry/ folder)")).absolutePath(path) })
+            { project, path -> api.files(project ?: throw IllegalArgumentException("http.download runs in a project (its .infantry/ folder): pass args.project")).absolutePath(path) },
+            { api.projects.list().map { it.id } })
         api.capabilities.handle(ProgressBridge.START) { call -> progressBridge.start(call.args) }
         api.capabilities.handle(ProgressBridge.UPDATE) { call -> progressBridge.update(call.args) }
         api.capabilities.handle(ProgressBridge.DOWNLOAD) { call -> progressBridge.download(call.args, call.caller.project) }
