@@ -627,6 +627,17 @@ object LimitRegistry {
         "G15: after a harness reports a quota error (e.g. opencode's \"Free usage exceeded\"), its provider reads EXHAUSTED for this long, so pacing starts no unattended work on it and `infantry usage` shows it. Read at start-up.",
         min = 1, max = 10080, zeroIsUnlimited = false,
     )
+    /** DAEMON-HEALTH-1: the restart / disconnect log (`<stateDir>/health/events.jsonl`). */
+    val HEALTH_EVENT_LOG_MAX = LimitDef(
+        "limits.health.eventLogMax", 500, "events",
+        "DAEMON-HEALTH-1: how many restart / MCP-disconnect events the daemon keeps in its health log (`infantry health` shows the latest); older ones are dropped. Read at start-up.",
+        min = 10, max = 100000, zeroIsUnlimited = false,
+    )
+    val HEALTH_HEARTBEAT_SECONDS = LimitDef(
+        "limits.health.heartbeatSeconds", 10, "seconds",
+        "DAEMON-HEALTH-1: how often the daemon refreshes its health record (`last seen`), which `infantry health` uses to tell a dead daemon from a live one when it does not answer. Read at start-up.",
+        min = 1, max = 3600, zeroIsUnlimited = false,
+    )
     val HEALTH_WATCHDOG_FAILURES = LimitDef(
         "limits.health.watchdogFailures", 0, "checks",
         "Failed /health self-checks in a row after which the headless daemon halts its JVM so its supervisor (Docker restart policy) restarts it; Docker never restarts an unhealthy container by itself. The Docker image sets 3. Read at start-up.",
@@ -1031,7 +1042,7 @@ object LimitRegistry {
         PLUGIN_CALL_TIMEOUT_MS, PLUGIN_HANG_CEILING_MS, PLUGIN_GUARD_STRIKES, PLUGIN_GUARD_COOLDOWN_MS, PLUGIN_POOL_SIZE, PLUGIN_QUEUE_LIMIT, PLUGIN_TOOL_TIMEOUT_MS, PLUGIN_TOOL_MAX_TIMEOUT_MS, PLUGIN_CAPABILITY_TIMEOUT_MS, PLUGIN_ROUTE_RATE, PLUGIN_START_TIMEOUT_MS, PLUGIN_STOP_TIMEOUT_MS, PLUGIN_UNLOAD_CHECK_MS, PLUGIN_CATALOG_STALE_MS, PLUGIN_AUTO_RELOAD_ATTEMPTS, PLUGIN_AUTO_RELOAD_DELAY_MS,
         RUN_MAX_SECRETS, KEYSTORE_MAX_FIELDS, KEYSTORE_MAX_SECRETS,
         SANDBOX_MODE, USAGE_QUOTA_HIT_HOLD_MINUTES,
-        HEALTH_DB_TIMEOUT_SECONDS, HEALTH_WATCHDOG_FAILURES, HEALTH_WATCHDOG_INTERVAL_SECONDS, HEALTH_WATCHDOG_TIMEOUT_SECONDS,
+        HEALTH_DB_TIMEOUT_SECONDS, HEALTH_EVENT_LOG_MAX, HEALTH_HEARTBEAT_SECONDS, HEALTH_WATCHDOG_FAILURES, HEALTH_WATCHDOG_INTERVAL_SECONDS, HEALTH_WATCHDOG_TIMEOUT_SECONDS,
         MAIL_WAKE_DEBOUNCE_SECONDS, MAIL_COALESCE_MAX, WATCH_STALL_NUDGES, SCRIPT_RUN_LOG_MAX,
         RUNNERS_PAIR_CODE_MIN, RUNNERS_PAIR_ATTEMPTS_PER_HOUR, RUNNERS_CREDENTIAL_ROTATE_DAYS, RUNNERS_LINK_PORT, RUNNERS_AUDIT_SHOWN, RUNNERS_LINK_CALL_SECONDS, RUNNERS_LINK_CHECK_SECONDS,
         RUNNERS_OUTBOX_MAX, RUNNERS_LOST_AFTER_MIN, RUNNERS_COMMIT_CHECK_SEC, RUNNERS_FORWARD_WAIT_SEC, RUNNERS_FORWARD_TIMEOUT_SEC, RUNNERS_FORWARD_PENDING_MAX,

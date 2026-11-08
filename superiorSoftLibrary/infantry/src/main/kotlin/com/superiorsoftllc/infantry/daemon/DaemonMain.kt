@@ -334,6 +334,12 @@ private val TERMINAL = setOf(SessionState.EXITED, SessionState.FAILED, SessionSt
  * by the session event sink, and the `pod_submit` / `pod_query` / `pod_cancel` frames (contract
  * 1.1.0) that submit a pod and read its state back.
  */
+/** DAEMON-HEALTH-1: the property an updater (or a script) sets so the next start reports why this one stopped (`update`, ...). */
+const val HEALTH_STOP_REASON_PROPERTY = "infantry.health.stopReason"
+
+/** DAEMON-HEALTH-1: how many journal events one report shows. */
+private const val HEALTH_EVENTS_SHOWN = 20
+
 fun main(args: Array<String> = emptyArray()) {
     // RUNNER-POOL-10: `--mode both|runner|orchestrator` (the launcher passes it on); INFANTRY_MODE and daemon.mode are the other sources.
     DeploymentMode.fromArgs(args)?.let { System.setProperty(DeploymentMode.PROPERTY, it) }
@@ -2251,6 +2257,29 @@ class InfantryDaemon(
                 }
             }
 
+            // DAEMON-HEALTH-1: the restart / disconnect journal, the MCP bridge tracker and the report builder (daemon/health/).
+            val healthJournal = com.superiorsoftllc.infantry.daemon.health.HealthJournal(
+                com.superiorsoftllc.infantry.daemon.health.HealthJournal.dirIn(daemonStateDir),
+                maxEvents = { LimitRegistry.fromEnv(LimitRegistry.HEALTH_EVENT_LOG_MAX, System::getenv).toInt() },
+            )
+            healthJournal.begin(ProcessHandle.current().pid(), boundPort, com.superiorsoftllc.infantry.update.BuildInfo.current)
+            com.superiorsoftllc.infantry.daemon.health.DaemonHealth.service = com.superiorsoftllc.infantry.daemon.health.HealthService(
+                healthJournal,
+                com.superiorsoftllc.infantry.daemon.health.McpBridgeTracker(healthJournal),
+                com.superiorsoftllc.infantry.daemon.health.HealthSources(
+                    stateDir = daemonStateDir, port = { boundPort }, build = com.superiorsoftllc.infantry.update.BuildInfo.current,
+                    plugins = { pluginHost.get().moduleStatuses() },
+                    pluginRows = { pluginHost.get().statusFields() },
+                    hooks = { null },
+                    harnesses = { manager.providers.map { it.id } },
+                    sessionPaths = { id -> manager.get(id ?: "")?.let { Triple(it.repoRoot, it.worktreePath, it.worktreeBranch) } ?: Triple(null, null, null) },
+                    eventTail = LimitRegistry.fromEnv(LimitRegistry.HEALTH_EVENT_LOG_MAX, System::getenv).toInt().coerceAtMost(HEALTH_EVENTS_SHOWN),
+                ),
+            )
+            val healthBeat = java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "health-heartbeat").apply { isDaemon = true } }
+                .also { it.scheduleWithFixedDelay({ runCatching { healthJournal.heartbeat() } }, 1, LimitRegistry.fromEnv(LimitRegistry.HEALTH_HEARTBEAT_SECONDS, System::getenv), java.util.concurrent.TimeUnit.SECONDS) }
+            val healthCloser = AutoCloseable { healthBeat.shutdownNow(); runCatching { healthJournal.end(System.getProperty(HEALTH_STOP_REASON_PROPERTY) ?: "clean stop") } }
+
             return InfantryDaemon(
                 host = host,
                 port = boundPort,
@@ -2277,7 +2306,7 @@ class InfantryDaemon(
                 portReservation = portReservation,
                 handover = handover,
                 processHost = localProcesses,
-                background = listOf(AutoCloseable { usageRefresher.stop() }, runnerLinkService, workerSweepCloser, AutoCloseable { agentWatchdog.close() }, AutoCloseable { finishNotice.close() }, AutoCloseable { stallDetector.close() }, healthGate, AutoCloseable { harnessModulesRef.get()?.close() }),
+                background = listOf(healthCloser, AutoCloseable { usageRefresher.stop() }, runnerLinkService, workerSweepCloser, AutoCloseable { agentWatchdog.close() }, AutoCloseable { finishNotice.close() }, AutoCloseable { stallDetector.close() }, healthGate, AutoCloseable { harnessModulesRef.get()?.close() }),
                 afterSessions = listOf(plugins),
                 healthSettings = healthSettings,
                 deploymentMode = deploymentMode,
@@ -2861,6 +2890,11 @@ private suspend fun handleConnection(
     ) == true
     val outgoing = Channel<Envelope>(Channel.UNLIMITED)
     clients.add(outgoing)
+    // DAEMON-HEALTH-1: the MCP bridges that made a call on this connection; when it closes they are recorded as dropped.
+    val healthBridges: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+    session.coroutineContext[kotlinx.coroutines.Job]?.invokeOnCompletion { cause ->
+        com.superiorsoftllc.infantry.daemon.health.DaemonHealth.connectionClosed(healthBridges, cause?.message ?: "connection closed")
+    }
     // RUNNER-POOL-6a: `infantry runner pair|add|rotate|detach <name>` (FrameGate.OWNER_ONLY); the link calls block, so off the loop.
     runnerLink?.let { link ->
         frames.register(com.superiorsoftllc.infantry.runners.RunnerLinkService.ADMIN) { env, _ ->
@@ -3989,6 +4023,22 @@ private suspend fun handleConnection(
                     Envelope(Envelope.ERROR, "session_project refused: ${e.message ?: e::class.simpleName}")
                 }
 
+                // DAEMON-HEALTH-1: the health + environment report (one HealthReport JSON); `data` may carry {"sessionId": "..."}.
+                Envelope.HEALTH -> {
+                    val ask = runCatching { json.parseToJsonElement(envelope.data) as? JsonObject }.getOrNull()
+                    fun field(k: String) = (ask?.get(k) as? kotlinx.serialization.json.JsonPrimitive)?.content
+                    val report = com.superiorsoftllc.infantry.daemon.health.DaemonHealth.service?.report(field("sessionId"))
+                    Envelope(
+                        Envelope.HEALTH,
+                        when {
+                            report == null -> ""
+                            field("format") == "text" -> com.superiorsoftllc.infantry.daemon.health.HealthText.render(report)
+                            else -> report.toJson()
+                        },
+                        requestId = envelope.requestId,
+                    )
+                }
+
                 // ROGUE-1 (contract 1.120.0): list / reap the processes this daemon's sessions started.
                 // Answered by [processesWorker], off this loop (BUG-SpawnBoxCatalog, ticket 3615b753).
                 Envelope.PROCESSES, Envelope.PROCESSES_REAP -> {
@@ -4325,6 +4375,9 @@ private suspend fun handleConnection(
                         Envelope(Envelope.ERROR, "plugin_tool_call expects {\"name\": \"<tool>\", \"arguments\": {...}}")
                     } else {
                         val arguments = call["arguments"] as? JsonObject ?: JsonObject(emptyMap())
+                        // DAEMON-HEALTH-1: a call carrying a session id is that session's MCP bridge being alive on this connection.
+                        com.superiorsoftllc.infantry.daemon.health.DaemonHealth.bridgeSeen(
+                            ((call["client"] as? JsonObject)?.get("sessionId") as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { it.isString }?.content, healthBridges)
                         val requestId = envelope.requestId
                         session.launch(kotlinx.coroutines.Dispatchers.IO) {
                             val result = plugins.callToolSuspending(name, arguments, caller, call["client"] as? JsonObject ?: JsonObject(emptyMap())) { request, timeoutMs ->

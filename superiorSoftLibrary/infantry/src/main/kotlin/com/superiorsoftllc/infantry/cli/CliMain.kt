@@ -427,6 +427,9 @@ internal object Cli {
             return McpServer(input().buffered(), out, err, tools).serve()
         }
 
+        // DAEMON-HEALTH-1: answers from the state dir when the daemon does not (so it works with the MCP bridge down or the daemon dead).
+        if (command == "health") return HealthCli.run(target, parsed.jsonOut, out, err, getenv)
+
         // A daemon that is not running is the common case -- the user just typed the command -- so
         // it is reported as one plain, actionable line: not a stack trace, and not a hang.
         val stream = try {
@@ -4803,6 +4806,9 @@ internal object Cli {
               settings [get [<key>]]   The daemon's durable settings, one `key = value` per line
               settings set <key> <value>   Store one (a number, true/false, JSON, or text); a refusal names the accepted range
               settings limits     Every limit (caps, thresholds, timeouts): value, default, range, what 0 means, its env name
+              health [--json]     Daemon health and environment: up/down, pid, port, uptime, last restart and why, plugins (and any
+                                  PluginGuard disabled), MCP bridges, OS/shell/paths/off-limits ports. Works with the daemon or the MCP
+                                  bridge down (reads the state dir). Same report as the infantry_health MCP tool.
               processes [--all]   Rogue background processes (build daemons, node, JVMs) left by ended or idle sessions,
                                   with MB, age and owner session; --all adds healthy ones and heavy processes that are not ours
               processes reap <pid> | --all   Kill one process (or every rogue one) that a session of this daemon started;
@@ -5043,6 +5049,8 @@ internal object Cli {
         val stdin: Boolean = false,
         // `decision list --all` / `decision add --supersedes` (P10-K5).
         val all: Boolean = false,
+        /** DAEMON-HEALTH-1: `health --json`. */
+        val jsonOut: Boolean = false,
         val supersedes: String? = null,
         // `issue open / attempt / fix` (P10-K7).
         val summary: String? = null,
@@ -5189,6 +5197,7 @@ internal object Cli {
         var set: String? = null
         var clear = false
         var all = false
+        var jsonOut = false
         var supersedes: String? = null
         var summary: String? = null
         var location: String? = null
@@ -5367,6 +5376,10 @@ internal object Cli {
                 }
                 "--all" -> {
                     all = true
+                    i++
+                }
+                "--json" -> {
+                    jsonOut = true
                     i++
                 }
                 "--supersedes" -> {
@@ -5744,6 +5757,7 @@ internal object Cli {
             set = set,
             clear = clear,
             all = all,
+            jsonOut = jsonOut,
             supersedes = supersedes,
             summary = summary,
             location = location,
@@ -6085,7 +6099,7 @@ internal object Cli {
         "submit", "watch", "pods", "runs", "logs", "cancel", "tickets", "board", "ticket", "agents", "send", "inbox",
         "read", "threads", "thread", "waiting", "epics", "stories", "epic", "project", "mcp", "knowledge", "memory", "decision", "pipeline", "notify", "issue",
         "trait", "skill", "role", "ask", "harnesses", "harness-status", "archive", "harness-install", "image", "session", "remote", "bg", "kill", "usage",
-        "processes", "settings", "agent", "agent-def", "run-cmd", "event", "tests", "tool", "script", "runner",
+        "processes", "health", "settings", "agent", "agent-def", "run-cmd", "event", "tests", "tool", "script", "runner",
     )
 
     /** `infantry remote on|off|status`: edits `<stateDir>/network.properties`; takes effect on the next daemon restart. */

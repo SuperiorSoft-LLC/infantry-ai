@@ -146,6 +146,7 @@ Rule 9 in one table. Search here before you write a helper; ticket ids name the 
 - [Plugins](docs/wiki/Plugins.md) and [Make a plugin](docs/wiki/make-a-plugin.md): `module.json`, a built example.
 - [UI plugin API](docs/wiki/plugin-api.md), [Daemon plugin API](docs/wiki/daemon-plugin-api.md), [Harnesses](docs/wiki/Harnesses.md).
 - [Notifications](docs/wiki/Notifications.md): the one notification bus and its presenters.
+- [Health](docs/wiki/Health.md): `infantry health`, the daemon health and environment report, restart log.
 - [Scripting](docs/wiki/Scripting.md), [Script Arsenal](docs/wiki/script-arsenal.md) (global scripts), [Settings](docs/wiki/Settings.md), [Licensing](docs/wiki/licensing.md).
 - [Kotlin notes](docs/wiki/kotlin-notes.md): toolchain versions, UI core source sets and expect/actual, Compose MP pitfalls, the build flags.
 - Design records (older, dated; the code wins): [DAEMON-CORE](docs/DAEMON-CORE.md),
