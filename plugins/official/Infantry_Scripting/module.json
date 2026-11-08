@@ -18,12 +18,41 @@
       "timeoutMs": 120000,
       "params": { "type": "object", "properties": { "url": { "type": "string" }, "method": { "type": "string", "enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"] }, "query": { "type": "object", "description": "{name: string or list of strings}; URL-encoded and appended to the url." }, "headers": { "type": "object" }, "body": {}, "timeoutSec": { "type": "integer" }, "secretHeaders": { "type": "object", "description": "{HeaderName: secret name}; the value comes from the secrets store and is never echoed." } }, "required": ["url"] },
       "result": { "type": "object", "properties": { "status": { "type": "integer" }, "headers": { "type": "object" }, "body": { "type": "string" }, "truncated": { "type": "boolean" }, "json": {} } }
+    },
+    {
+      "id": "progress.start",
+      "description": "Start a task in the core progress system (every client's running-tasks list); answers its id. The task outlives the run: move it with progress.update.",
+      "runs": "daemon",
+      "action": "script.progress",
+      "kind": "write",
+      "params": { "type": "object", "properties": { "title": { "type": "string" }, "id": { "type": "string" }, "steps": { "type": "array", "items": { "type": "string" } }, "total": { "type": "integer" }, "unit": { "type": "string" } }, "required": ["title"] },
+      "result": { "type": "object", "properties": { "id": { "type": "string" } } }
+    },
+    {
+      "id": "progress.update",
+      "description": "Move a task a script started: a step label, an amount (done/total), or its end (state done, failed with error, cancelled). Answers its state and whether Cancel was asked.",
+      "runs": "daemon",
+      "action": "script.progress",
+      "kind": "write",
+      "params": { "type": "object", "properties": { "id": { "type": "string" }, "step": { "type": "string" }, "done": { "type": "integer" }, "total": { "type": "integer" }, "unit": { "type": "string" }, "state": { "type": "string", "enum": ["done", "failed", "cancelled"] }, "error": { "type": "string" } }, "required": ["id"] },
+      "result": { "type": "object", "properties": { "id": { "type": "string" }, "state": { "type": "string" }, "cancelRequested": { "type": "boolean" } } }
+    },
+    {
+      "id": "http.download",
+      "description": "Download one file into the project's .infantry/ folder through the core downloader (retries, resume, size cap, sha256, atomic move, progress). Same guard as http.fetch: off until scripting.fetch.enabled, allow-listed hosts only.",
+      "runs": "daemon",
+      "action": "script.download",
+      "kind": "write",
+      "grant": "net.out",
+      "timeoutMs": 600000,
+      "params": { "type": "object", "properties": { "url": { "type": "string" }, "dest": { "type": "string", "description": "A path under the project's .infantry/ folder." }, "sha256": { "type": "string" }, "title": { "type": "string" }, "headers": { "type": "object" }, "secretHeaders": { "type": "object", "description": "{HeaderName: secret name}; the value comes from the secrets store and is never echoed." }, "progressId": { "type": "string", "description": "Report into this task (from progress.start) instead of a task of its own." } }, "required": ["url", "dest"] },
+      "result": { "type": "object", "properties": { "ok": { "type": "boolean" }, "path": { "type": "string" }, "bytes": { "type": "integer" }, "sha256": { "type": "string" }, "attempts": { "type": "integer" }, "status": { "type": "integer" }, "error": { "type": "string" }, "retryable": { "type": "boolean" }, "cancelled": { "type": "boolean" } } }
     }
   ],
   "daemon": {
     "entry": "com.superiorsoftllc.infantry.plugins.official.scripting.daemon.ScriptingDaemonPlugin",
     "jar": "daemon/build/libs/Infantry_Scripting-daemon.jar",
-    "apiAtLeast": "1.30.0",
+    "apiAtLeast": "1.54.0",
     "side": "orchestrator",
     "hooks": ["incomingMail"],
     "frames": [

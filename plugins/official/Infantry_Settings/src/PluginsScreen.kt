@@ -32,7 +32,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
@@ -266,8 +265,8 @@ private fun ProgressStrip(p: PluginProgress, startedAt: Long) {
     Column(Modifier.fillMaxWidth().testTag(PLUGINS_PROGRESS_TAG), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text("${p.step}$who" + (frac?.let { " ${(it * 100).toInt()}%" } ?: " ...") + " (${secs}s)", color = Palette.Text, fontSize = 13.sp,
             modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
-        if (frac != null) LinearProgressIndicator(progress = { frac }, Modifier.fillMaxWidth(), color = Palette.Accent)
-        else LinearProgressIndicator(Modifier.fillMaxWidth(), color = Palette.Accent)
+        // CORE-PROGRESS-DOWNLOAD-1: the one core bar; the change is also a task in the core running-tasks list.
+        com.superiorsoftllc.infantry.ui.progress.ProgressBar(frac, Modifier.fillMaxWidth())
     }
 }
 

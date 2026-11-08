@@ -499,4 +499,32 @@ class PluginManagerServiceTest {
         assertTrue(r.ok && r.restartNeeded, r.message)
         assertTrue(m.setEnabled("Acme_Echo", false).restartNeeded)
     }
+    @Test fun `CORE-PROGRESS-DOWNLOAD-1 a web install downloads through the core downloader and shows one task, steps then done`() {
+        val f = pack(); catalog(entry(f, "Acme_Echo", "1.0.0", emptyList()))
+        val urls = mutableListOf<String>()
+        val transport = com.superiorsoftllc.infantry.daemon.api.downloads.DownloadTransport { url, _, _, from ->
+            urls += url
+            val file = File(repo, url.substringAfterLast('/'))
+            if (!file.isFile) throw IOException("no $url")
+            val bytes = file.readBytes()
+            com.superiorsoftllc.infantry.daemon.api.downloads.DownloadResponse(if (from > 0) 206 else 200, bytes.size - from, bytes.inputStream(from.toInt(), bytes.size - from.toInt()))
+        }
+        val center = com.superiorsoftllc.infantry.plugin.host.ProgressCenter(clock = System::currentTimeMillis, minIntervalMs = { 0 })
+        val seen = java.util.concurrent.CopyOnWriteArrayList<com.superiorsoftllc.infantry.plugin.api.ProgressTask>()
+        center.observe { seen += it }
+        val downloads = com.superiorsoftllc.infantry.downloads.CoreDownloads(progress = { center.forSource(it) }, coreTransport = transport, sleep = {})
+        val m = PluginManager(root, state, coreDownloads = downloads.forSource("plugins"), progressSystem = center.forSource("plugins"))
+        m.setSources(emptyList())
+        assertTrue(m.addSource(CatalogSource("web", "community", url = "https://example.invalid/idx/catalog.json")).ok)
+        m.refresh()
+
+        val r = PluginManagerPortAdapter(m).install("Acme_Echo", emptySet(), null)
+        assertTrue(r.ok, r.message)
+        assertTrue(urls.any { it.endsWith("/catalog.json") } && urls.any { it.endsWith("/${f.name}") }, "both downloads went through the core transport: $urls")
+        val task = center.tasks().single { it.title == "Installing Acme_Echo" }
+        assertEquals(com.superiorsoftllc.infantry.plugin.api.ProgressState.DONE, task.state)
+        val steps = seen.filter { it.id == task.id }.map { it.step }.filter { it.isNotEmpty() }.distinct()
+        assertTrue(steps.first() == "Downloading" && "Verifying" in steps, "steps: $steps")
+        assertTrue(seen.any { it.id == task.id && it.done > 0 && it.unit == "bytes" }, "the bytes show on the install task")
+    }
 }

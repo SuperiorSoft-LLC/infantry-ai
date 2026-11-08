@@ -12,6 +12,7 @@ import com.superiorsoftllc.infantry.plugins.official.updater.RouteAnswer
 import com.superiorsoftllc.infantry.plugins.official.updater.ServerUpdateService
 import com.superiorsoftllc.infantry.plugins.official.updater.UpdateRoutes
 import com.superiorsoftllc.infantry.plugins.official.updater.UpdateSettings
+import com.superiorsoftllc.infantry.plugins.official.updater.UpdateSources
 import com.superiorsoftllc.infantry.plugins.official.updater.UpdaterEnv
 import kotlinx.serialization.json.Json
 import java.io.File
@@ -103,7 +104,11 @@ class UpdaterDaemonPlugin : DaemonPlugin {
         this.api = api
         engine = runCatching {
             registrations += api.updates.registerSource(
-                ReleaseSourceType(base = { service().config }, kind = { ServerUpdateService.kindFor(service().distribution) }),
+                ReleaseSourceType(
+                    base = { service().config }, kind = { ServerUpdateService.kindFor(service().distribution) },
+                    // CORE-PROGRESS-DOWNLOAD-1: the archive download goes through the core downloader and progress system.
+                    sources = { c, k -> UpdateSources.forConfig(c, k, api.downloads, api.progress) },
+                ),
             )
             registrations += api.updates.registerApplier(CoreArchiveApplier { service().install })
             CoreEnginePath(api.updates)

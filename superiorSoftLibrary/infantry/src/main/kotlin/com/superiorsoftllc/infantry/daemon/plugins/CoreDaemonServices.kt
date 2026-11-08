@@ -71,7 +71,10 @@ class CoreDaemonServices(
     private val runService: com.superiorsoftllc.infantry.daemon.api.runs.Runs? = null,
     /** PLUGIN-MCP-1: the plugin manager view; null = none. */
     private val pluginCatalog: com.superiorsoftllc.infantry.daemon.api.plugins.PluginCatalogReader? = null,
+    /** CORE-PROGRESS-DOWNLOAD-1: reads a plain-string core setting; "" = unset. */
+    private val coreStringSetting: (String) -> String = { "" },
 ) : DaemonServices {
+    override fun coreSetting(key: String) = coreStringSetting(key)
     override val plugins get() = pluginCatalog ?: com.superiorsoftllc.infantry.daemon.api.plugins.NoPluginCatalog
     override val runs get() = runService ?: com.superiorsoftllc.infantry.daemon.api.runs.NoRuns
     override fun broadcast(type: String, data: String) { clientBroadcast?.invoke(type, data) }

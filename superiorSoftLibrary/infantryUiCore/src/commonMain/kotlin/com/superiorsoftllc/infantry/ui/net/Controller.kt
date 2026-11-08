@@ -167,6 +167,24 @@ class Controller(
     /** VOICE-1 (contract 1.104.0): every `spoken` push, in order. The shell decides what to say and show. */
     val spoken: kotlinx.coroutines.flow.SharedFlow<com.superiorsoftllc.infantry.ui.voice.SpokenNotice> = _spoken
 
+    /**
+     * CORE-PROGRESS-DOWNLOAD-1 (docs/wiki/Progress.md): this client's mirror of the daemon's progress system. Each
+     * `progress_task` frame is stored here; Cancel and Retry go back to the daemon. Local work may start tasks of its own.
+     */
+    val progress = com.superiorsoftllc.infantry.plugin.host.ProgressCenter(clock = { Clock.System.now().toEpochMilliseconds() })
+    private val _progressTasks = MutableStateFlow<List<com.superiorsoftllc.infantry.plugin.api.ProgressTask>>(emptyList())
+    /** CORE-PROGRESS-DOWNLOAD-1: every task, live first (oldest first), then the finished ones (newest first). */
+    val progressTasks: StateFlow<List<com.superiorsoftllc.infantry.plugin.api.ProgressTask>> = _progressTasks.asStateFlow()
+    private val progressWatch = progress.observe { _progressTasks.value = progress.tasks() }
+    /** CORE-PROGRESS-DOWNLOAD-1: what the core progress views read (provided at the shell root as `LocalProgress`). */
+    val progressUi: com.superiorsoftllc.infantry.ui.progress.ProgressUi = object : com.superiorsoftllc.infantry.ui.progress.ProgressUi {
+        override val tasks get() = progressTasks
+        override fun cancel(id: String) { progress.cancel(id) }
+        override fun retry(id: String) { progress.retry(id) }
+        override fun clearFinished() = clearFinishedProgress()
+    }
+
+
     private val _runBytes = kotlinx.coroutines.flow.MutableSharedFlow<com.superiorsoftllc.infantry.ui.model.RunBytesPayload>(extraBufferCapacity = 1024)
 
     /**
@@ -202,6 +220,7 @@ class Controller(
                 answerPluginTool(env)
                 answerImageFetch(env)
                 answerSpawnCatalog(env)
+                answerProgress(env)
                 if (env.type == Envelope.SPOKEN) {
                     runCatching { json.decodeFromString(com.superiorsoftllc.infantry.ui.voice.SpokenNotice.serializer(), env.data) }
                         .getOrNull()?.let { _spoken.tryEmit(it) }
@@ -490,6 +509,33 @@ class Controller(
      * Settle the pending [spawnBoxCommand] catalog wait: the daemon's direct answer (or refusal) to it, matched by
      * requestId. A daemon older than contract 1.87.0 echoes no id, so an untagged full list for the same provider counts.
      */
+    /** CORE-PROGRESS-DOWNLOAD-1: asks the daemon to cancel task [id]. */
+    fun cancelProgress(id: String) { scope.launch { client.send(Envelope(com.superiorsoftllc.infantry.plugin.api.ProgressWire.CANCEL, com.superiorsoftllc.infantry.plugin.api.ProgressWire.idFrame(id))) } }
+
+    /** CORE-PROGRESS-DOWNLOAD-1: asks the daemon to run failed task [id] again. */
+    fun retryProgress(id: String) { scope.launch { client.send(Envelope(com.superiorsoftllc.infantry.plugin.api.ProgressWire.RETRY, com.superiorsoftllc.infantry.plugin.api.ProgressWire.idFrame(id))) } }
+
+    /** CORE-PROGRESS-DOWNLOAD-1: forgets the finished tasks (the running-tasks list's Clear). */
+    fun clearFinishedProgress() { progress.clearFinished(); _progressTasks.value = progress.tasks() }
+
+    private fun answerProgress(env: Envelope) {
+        if (env.type != com.superiorsoftllc.infantry.plugin.api.ProgressWire.PUSH) return
+        val task = com.superiorsoftllc.infantry.plugin.api.ProgressWire.task(env.data) ?: return
+        val before = progress.task(task.id)
+        progress.mirror(
+            task,
+            retry = if (task.retryable) ({ retryProgress(task.id) }) else null,
+            cancel = if (task.cancellable) ({ cancelProgress(task.id) }) else null,
+        )
+        // A task that just failed raises a notice (interim, until the NOTIFY-CORE-1 bus): one per failure, not per replay.
+        val fresh = before?.let { it.state != com.superiorsoftllc.infantry.plugin.api.ProgressState.FAILED }
+            ?: (Clock.System.now().toEpochMilliseconds() - task.updatedAt < com.superiorsoftllc.infantry.ui.model.DEFAULT_TOAST_MS)
+        if (task.state == com.superiorsoftllc.infantry.plugin.api.ProgressState.FAILED && fresh) {
+            val title = task.title.ifBlank { "A task" }
+            toasts.post((task.error ?: "failed") + if (task.retryable) " (Retry is in the running tasks list)" else "", com.superiorsoftllc.infantry.ui.model.ToastKind.ERROR, "$title failed")
+        }
+    }
+
     private fun answerSpawnCatalog(env: Envelope) {
         val wait = pendingSpawnCatalog ?: return
         val matches = when {

@@ -129,6 +129,19 @@ interface DaemonApi {
     /** AR-5 (1.16.0, additive): the typed optional service registry (provide / find by interface). Community needs the grant `services.provide` to publish. */
     val services: ServicesApi get() = NoServices
 
+    /**
+     * CORE-PROGRESS-DOWNLOAD-1 (1.54.0, additive; docs/wiki/Progress.md): the ONE progress system. Tasks started here carry this
+     * module's id as `source` and show in every client's running-tasks list; [com.superiorsoftllc.infantry.plugin.api.Progress.present]
+     * registers this module as the presenter (chosen by the setting `progress.presenter`; a presenter that throws falls back to core).
+     */
+    val progress: com.superiorsoftllc.infantry.plugin.api.Progress get() = com.superiorsoftllc.infantry.plugin.api.NoProgress
+
+    /**
+     * CORE-PROGRESS-DOWNLOAD-1 (1.54.0, additive): the ONE file downloader (retries, resume, size cap, sha256, temp file + atomic
+     * move, proxy, progress). A replacement backend registers with `downloads.transport` and is chosen by the setting of that name.
+     */
+    val downloads: com.superiorsoftllc.infantry.daemon.api.downloads.Downloads get() = com.superiorsoftllc.infantry.daemon.api.downloads.NoDownloads
+
     /** DP-7e (1.19.0, additive): the mail port (notify one session or every live session of a role). Community needs the grant `sessions.notify`. */
     val sessionNotifier: com.superiorsoftllc.infantry.daemon.api.sessions.SessionNotifier get() = com.superiorsoftllc.infantry.daemon.api.sessions.NoSessionNotifier
 
@@ -235,7 +248,8 @@ interface DaemonApi {
         // 1.50.0 (JOBFEED-1, additive): `Sessions.jobs` / `Sessions.jobLog` (bounded job-log tail read).
         // 1.51.0 (SCRIPT-ARSENAL-2, additive): daemon.api.knowledge.KnowledgeWriter, the write half of Knowledge (published by Infantry_Notes);
         // notes saved under KnowledgeWriter.GLOBAL_PROJECT are found by every project's search and show.
-        const val VERSION = "1.52.0"
+        // 1.54.0 (CORE-PROGRESS-DOWNLOAD-1, additive): `progress` (plugin.api.Progress) and `downloads` (daemon.api.downloads.Downloads).
+        const val VERSION = "1.54.0"
     }
 }
 

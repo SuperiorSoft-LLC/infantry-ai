@@ -218,3 +218,4 @@ com/superiorsoftllc/infantry/runner/SessionContainers.kt:NAME_PART_MAX | layout:
 com/superiorsoftllc/infantry/runners/RemoteStarts.kt:HASH_CHARS | layout: hex characters of the remote-url hash in a clone folder name (RUNNER-POOL-6), not a cost or capacity
 com/superiorsoftllc/infantry/runners/ForwardedFrames.kt:SHOWN_CHARS|format: how much of a runner-chosen frame type or session id a forwarded-frame refusal echoes (output sanitising, not a capacity)
 com/superiorsoftllc/infantry/runners/ForwardedFrames.kt:LOGGED_CHARS|format: how much of a refused forward pull's answer the log line shows (output sanitising, not a capacity)
+com/superiorsoftllc/infantry/downloads/CoreDownloads.kt:STALL_CHECKS|precision, not a limit: the stall check runs this many times per limits.downloads.stallSeconds window (the window itself is the setting)

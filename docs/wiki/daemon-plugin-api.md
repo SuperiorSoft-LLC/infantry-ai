@@ -244,6 +244,23 @@ Each plugin has its own class loader, so plugins cannot share classes. Two mecha
   extension point is declared as an id prefix that other plugins contribute under. Closing the returned handle, or
   unloading the plugin, removes the provider.
 
+### Progress and downloads (DaemonApi 1.54.0)
+
+Full page: [Progress and downloads](Progress.md).
+
+- `api.progress` (`Progress`, see the [UI plugin API](plugin-api.md#progress-core-progress-download-1)): start a task
+  with `api.progress.start(ProgressSpec(...))` and move it with its `ProgressHandle`; it shows in every client's
+  running-tasks list. `api.progress.present("", presenter)` replaces the core presentation (the setting
+  `progress.presenter` picks one; a presenter that throws is reported and the core default is used). A failed task
+  publishes the named event `progress.failed`.
+- `api.downloads` (`Downloads`): `download(DownloadRequest(url, dest, title, headers, secretHeaders, sha256, maxBytes,
+  progress, progressId, link))` blocks until done and answers a `DownloadResult` (`ok`, `file`, `bytes`, `sha256`,
+  `attempts`, `status`, `error`, `retryable`, `cancelled`). Retries with backoff, resume, timeouts, the size cap, the hash,
+  the temp file and atomic move, the proxy and the progress task are core's. `api.downloads.transport("", transport)`
+  registers a `DownloadTransport` (it opens a `DownloadResponse`) that the setting `downloads.transport` can choose; one
+  that throws a non-IO error falls back to the core transport.
+- A host without them answers `NoProgress` and `NoDownloads`. Both registrations are removed when the plugin unloads.
+
 ## 7. Settings and storage
 
 ### Settings
@@ -350,6 +367,10 @@ Test the guard with `Acme_DaemonHello`: the tool argument `sleepMs` blocks on pu
 ## Type index (every other public type)
 
 Generated for the `infantryDaemonApi` guard `SdkTypesDocumentedGuardTest`: every public top-level type of the module is named on this page. Types above are explained in full; the rest are listed by source file with the first line of their KDoc. Read the file for the members.
+
+### `Downloads.kt`
+
+- `DownloadRequest`, `DownloadResult`, `DownloadResponse`, `DownloadTransport`, `Downloads`, `NoDownloads`: CORE-PROGRESS-DOWNLOAD-1, see [Progress and downloads](#progress-and-downloads-daemonapi-1540).
 
 ### `AgentsApi.kt`
 

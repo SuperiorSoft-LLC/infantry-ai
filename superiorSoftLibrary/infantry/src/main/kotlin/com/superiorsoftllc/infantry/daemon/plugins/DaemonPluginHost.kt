@@ -159,6 +159,47 @@ class DaemonPluginHost private constructor(
     )
     /** AR-5: the typed service registry; core callers query it here, plugins through [DaemonApi.services]. */
     val serviceRegistry = ServiceRegistry()
+
+    /**
+     * CORE-PROGRESS-DOWNLOAD-1 (docs/wiki/Progress.md): the ONE progress system of this daemon. The core default presenter
+     * pushes each change to every client (`progress_task`); a plugin presenter is chosen by the setting `progress.presenter`
+     * and falls back to that default when it throws. A task that ends failed publishes the named event `progress.failed`.
+     */
+    val progress = com.superiorsoftllc.infantry.plugin.host.ProgressCenter(
+        clock = System::currentTimeMillis,
+        presenterSetting = { services.coreSetting(com.superiorsoftllc.infantry.settings.SettingsService.PROGRESS_PRESENTER) },
+        keepFinished = { services.limit(LimitRegistry.PROGRESS_KEEP_FINISHED).toInt() },
+        minIntervalMs = { services.limit(LimitRegistry.PROGRESS_MIN_INTERVAL_MS) },
+        onFault = { id, e -> log("[plugin $id] progress presenter failed (${e.message ?: e::class.simpleName}); the core default shows the task") },
+        onFailed = { t ->
+            log("progress: task '${t.title.ifBlank { t.id }}' from ${t.source.ifBlank { "core" }} failed: ${t.error}")
+            runCatching { publishEvent(PROGRESS_FAILED_EVENT, com.superiorsoftllc.infantry.plugin.api.ProgressWire.encode(t), source = t.source.ifBlank { "daemon" }) }
+        },
+    ).apply {
+        setDefault { t -> services.broadcast(com.superiorsoftllc.infantry.plugin.api.ProgressWire.PUSH, com.superiorsoftllc.infantry.plugin.api.ProgressWire.encode(t)) }
+    }
+
+    /** CORE-PROGRESS-DOWNLOAD-1: the ONE file downloader; its backend is chosen by the setting `downloads.transport`. */
+    val downloads = com.superiorsoftllc.infantry.downloads.CoreDownloads(
+        progress = { progress.forSource(it) },
+        limit = { services.limit(it) },
+        transportSetting = { services.coreSetting(com.superiorsoftllc.infantry.settings.SettingsService.DOWNLOADS_TRANSPORT) },
+        coreTransport = com.superiorsoftllc.infantry.downloads.HttpDownloadTransport(
+            limit = { services.limit(it) },
+            proxy = { services.coreSetting(com.superiorsoftllc.infantry.settings.SettingsService.DOWNLOADS_PROXY) },
+        ),
+        onFault = { id, e -> log("[plugin $id] download transport failed (${e.message ?: e::class.simpleName}); the core transport is used") },
+    )
+
+    /** CORE-PROGRESS-DOWNLOAD-1: a client's cancel / retry of a progress task (frames `progress_cancel` / `progress_retry`). */
+    fun progressFrame(type: String, data: String): Boolean {
+        val id = com.superiorsoftllc.infantry.plugin.api.ProgressWire.id(data) ?: return false
+        return when (type) {
+            com.superiorsoftllc.infantry.plugin.api.ProgressWire.CANCEL -> progress.cancel(id)
+            com.superiorsoftllc.infantry.plugin.api.ProgressWire.RETRY -> progress.retry(id)
+            else -> false
+        }
+    }
     private val statuses = ConcurrentHashMap<String, String>()
     private val toolEntries = ConcurrentHashMap<String, ToolEntry>()
     private val frameHandlers = ConcurrentHashMap<String, FrameEntry>()
@@ -315,7 +356,7 @@ class DaemonPluginHost private constructor(
     /** ATTN-2a: the frames the plugins replay to one newly connected client (fail open), in plugin order. */
     fun connectedFrames(sessionId: String?): List<Frame> = connectedHooks.flatMap { h ->
         if (h.owner.guard.disabled) emptyList() else h.owner.call("connected") { h.value.frames(sessionId) }.getOrNull().orEmpty()
-    }
+    } + progress.tasks().map { Frame(com.superiorsoftllc.infantry.plugin.api.ProgressWire.PUSH, com.superiorsoftllc.infantry.plugin.api.ProgressWire.encode(it)) } // CORE-PROGRESS-DOWNLOAD-1
 
     /** The first pinned notice a plugin gives, or null. */
     fun notice(): String? = readyHooks.firstNotNullOfOrNull { h ->
@@ -1290,6 +1331,16 @@ class DaemonPluginHost private constructor(
         // AR-5: typed optional hostServices. Publishing: official / core, or the grant `hostServices.provide`; lookup is open. Unload closes the handle.
         override val services: com.superiorsoftllc.infantry.daemon.api.ServicesApi =
             ScopedServices(serviceRegistry, p.id, { !p.community || ScopedServices.GRANT in p.setting.allow }) { p.closeables += it }
+        // CORE-PROGRESS-DOWNLOAD-1: the core progress system and downloader, as this module (its tasks carry its id; a presenter or
+        // transport it registers is removed when it unloads).
+        override val progress: com.superiorsoftllc.infantry.plugin.api.Progress = object : com.superiorsoftllc.infantry.plugin.api.Progress by this@DaemonPluginHost.progress.forSource(p.id) {
+            override fun present(presenterId: String, presenter: com.superiorsoftllc.infantry.plugin.api.ProgressPresenter): AutoCloseable =
+                this@DaemonPluginHost.progress.present(p.id, presenter).also { p.closeables += it }
+        }
+        override val downloads: com.superiorsoftllc.infantry.daemon.api.downloads.Downloads = object : com.superiorsoftllc.infantry.daemon.api.downloads.Downloads by this@DaemonPluginHost.downloads.forSource(p.id) {
+            override fun transport(transportId: String, transport: com.superiorsoftllc.infantry.daemon.api.downloads.DownloadTransport): AutoCloseable =
+                this@DaemonPluginHost.downloads.transport(p.id, transport).also { p.closeables += it }
+        }
         // AGENT-REGISTRY-1: the agent registry, scoped to this plugin (its own declared ids; enable/disable trusted tiers only).
         override val agents: com.superiorsoftllc.infantry.daemon.api.agents.Agents = object : com.superiorsoftllc.infantry.daemon.api.agents.Agents {
             private val registry get() = hostServices.agentRegistry
@@ -1341,6 +1392,8 @@ class DaemonPluginHost private constructor(
         const val PLUGIN_TOOLS = "plugin_tools"
         /** SCRIPT-3: the built-in emit tool and its policy action (kind write; open to every role). */
         const val EVENT_EMIT_TOOL = "infantry_event_emit"
+        /** CORE-PROGRESS-DOWNLOAD-1: published when a progress task ends failed (payload: the task, as `progress_task` carries it). */
+        const val PROGRESS_FAILED_EVENT = "progress.failed"
         val EVENT_EMIT_ACTION = ActionCatalog.Action("events.emit", "write", listOf("plugin_tool_call"))
         /** FULLSUITE-2: the built-in full-suite runner tool and its policy action. */
         const val TESTS_TOOL = "infantry_tests"
@@ -1390,6 +1443,27 @@ class DaemonPluginHost private constructor(
 
         /** No daemon plugin: every seam answers neutrally. */
         fun empty(): DaemonPluginHost = DaemonPluginHost(DaemonServices.NONE, File("."), {})
+
+        /**
+         * CORE-PROGRESS-DOWNLOAD-1: the host's progress system as core caller [source] sees it, for an object built before the
+         * host (the daemon's own plugin manager): each call reaches [host] when made.
+         */
+        fun lateProgress(host: () -> DaemonPluginHost, source: String): com.superiorsoftllc.infantry.plugin.api.Progress =
+            object : com.superiorsoftllc.infantry.plugin.api.Progress {
+                private fun p() = host().progress.forSource(source)
+                override fun start(spec: com.superiorsoftllc.infantry.plugin.api.ProgressSpec) = p().start(spec)
+                override fun tasks() = p().tasks()
+                override fun task(id: String) = p().task(id)
+                override fun observe(listener: (com.superiorsoftllc.infantry.plugin.api.ProgressTask) -> Unit) = p().observe(listener)
+                override fun cancel(id: String) = p().cancel(id)
+                override fun retry(id: String) = p().retry(id)
+            }
+
+        /** CORE-PROGRESS-DOWNLOAD-1: the host's downloader as core caller [source] sees it (see [lateProgress]). */
+        fun lateDownloads(host: () -> DaemonPluginHost, source: String): com.superiorsoftllc.infantry.daemon.api.downloads.Downloads =
+            object : com.superiorsoftllc.infantry.daemon.api.downloads.Downloads {
+                override fun download(request: com.superiorsoftllc.infantry.daemon.api.downloads.DownloadRequest) = host().downloads.download(source, request)
+            }
 
         /**
          * Loads the daemon half of every module [resolution] loaded. A module that fails a rule, its trust check or its

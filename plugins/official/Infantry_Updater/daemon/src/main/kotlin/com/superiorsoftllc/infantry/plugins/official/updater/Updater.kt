@@ -48,6 +48,13 @@ class Updater(
     private val kind: AssetKind = AssetKind.WindowsInstaller,
     /** UPDATE-UX-1: how long the download may receive nothing before it is aborted (also the wait for the asset's headers). */
     private val stallTimeout: Duration = DEFAULT_STALL_TIMEOUT,
+    /**
+     * CORE-PROGRESS-DOWNLOAD-1: the daemon's core downloader and progress system. Set (the daemon half), the installer
+     * download goes through them (retries, resume, stall limit, sha256, atomic move, a task in the running-tasks list);
+     * null (the `infantry update` command, tests) keeps the plugin's own reader below.
+     */
+    private val downloads: com.superiorsoftllc.infantry.daemon.api.downloads.Downloads? = null,
+    private val progressSystem: com.superiorsoftllc.infantry.plugin.api.Progress? = null,
 ) : UpdateSource {
 
     override fun check(): UpdateCheck {
@@ -97,6 +104,7 @@ class Updater(
         into.mkdirs()
         val target = File(into, File(asset.name).name)
         progress.note("requesting ${asset.name} (${asset.size} bytes) from ${asset.url ?: asset.browserDownloadUrl}")
+        downloads?.let { return coreDownload(it, update, target, expected, progress) }
         val response = when (val got = releases.openAsset(asset, config, stallTimeout)) {
             is Fetched.Failed -> return got
             is Fetched.Ok -> got.value
@@ -148,6 +156,59 @@ class Updater(
             return Fetched.Failed(UpdateFailure.BadAsset(refusal))
         }
         return Fetched.Ok(VerifiedInstaller(update, target, actual, checksumVerified = expected != null))
+    }
+
+    /**
+     * CORE-PROGRESS-DOWNLOAD-1: the installer through the core downloader. The token goes as a secret header, only to the
+     * API host (the signed redirect GitHub answers needs none, and the downloader drops it on another host). The size must
+     * equal the asset's and the SHA-256 the checksum asset's, as on the plugin's own path.
+     */
+    private fun coreDownload(
+        core: com.superiorsoftllc.infantry.daemon.api.downloads.Downloads, update: AvailableUpdate, target: File, expected: String?, progress: DownloadProgress,
+    ): Fetched<VerifiedInstaller> {
+        val asset = update.installer
+        val url = asset.url ?: asset.browserDownloadUrl ?: return Fetched.Failed(UpdateFailure.BadAsset("${asset.name} has no download url"))
+        val apiHost = runCatching { java.net.URI(config.apiBase).host }.getOrNull()
+        val toApi = apiHost != null && runCatching { java.net.URI(url).host }.getOrNull().equals(apiHost, ignoreCase = true)
+        val secret = config.token?.takeIf { toApi }?.let { mapOf("Authorization" to "Bearer $it") }.orEmpty()
+        val task = progressSystem?.start(com.superiorsoftllc.infantry.plugin.api.ProgressSpec(
+            title = "Downloading ${asset.name}", id = "update-${asset.name}", steps = listOf(CoreSteps.DOWNLOAD, CoreSteps.VERIFY),
+            unit = "bytes", total = asset.size, cancellable = true,
+        ))
+        val r = core.download(com.superiorsoftllc.infantry.daemon.api.downloads.DownloadRequest(
+            url = url, dest = target, title = "Downloading ${asset.name}",
+            headers = mapOf("Accept" to if (asset.url != null) "application/octet-stream" else "*/*", "User-Agent" to "Infantry-updater", "X-GitHub-Api-Version" to "2022-11-28"),
+            secretHeaders = secret, sha256 = expected, maxBytes = asset.size,
+            progress = task?.let { CoreSteps.Forwarding(it, progress) },
+        ))
+        val refusal = when {
+            r.cancelled -> return Fetched.Failed(UpdateFailure.Offline("download cancelled")).also { task?.cancelled() }
+            !r.ok && r.error.orEmpty().startsWith("sha256 mismatch") -> "SHA-256 mismatch (${r.error})"
+            !r.ok -> return Fetched.Failed(UpdateFailure.Offline(r.error ?: "download failed")).also { task?.fail(r.error ?: "download failed") }
+            r.bytes != asset.size -> "size ${r.bytes} bytes, the release says ${asset.size}"
+            else -> null
+        }
+        if (refusal != null) {
+            target.delete()
+            task?.fail(refusal, retryable = false)
+            return Fetched.Failed(UpdateFailure.BadAsset(refusal))
+        }
+        task?.done("Downloaded")
+        progress.bytes(r.bytes, asset.size)
+        return Fetched.Ok(VerifiedInstaller(update, target, r.sha256 ?: ReleaseAssets.sha256(target), checksumVerified = expected != null))
+    }
+
+    /** CORE-PROGRESS-DOWNLOAD-1: the core task's steps, and a handle that also feeds the window's [DownloadProgress]. */
+    private object CoreSteps {
+        const val DOWNLOAD = "Downloading"
+        const val VERIFY = "Verifying"
+
+        class Forwarding(private val inner: com.superiorsoftllc.infantry.plugin.api.ProgressHandle, private val to: DownloadProgress) :
+            com.superiorsoftllc.infantry.plugin.api.ProgressHandle by inner {
+            override fun amount(done: Long, total: Long, unit: String) { inner.amount(done, total, unit); to.bytes(done, total) }
+            override fun step(label: String, index: Int) { inner.step(label, index); to.note(label) }
+            override fun close() {}
+        }
     }
 
     override fun expectedSha256(update: AvailableUpdate): Fetched<String> {

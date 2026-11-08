@@ -86,6 +86,11 @@ class LocalDirSource(
 
 /** UPDATE-4: picks the source for a resolved config: a local releases folder ([LocalDirSource]), else GitHub Releases ([Updater]). */
 object UpdateSources {
-    fun forConfig(config: UpdateConfig, kind: AssetKind = AssetKind.WindowsInstaller): UpdateSource =
-        config.localDir?.let { LocalDirSource(it, config.currentVersion, kind, config.channel) } ?: Updater(config, kind = kind)
+    fun forConfig(config: UpdateConfig, kind: AssetKind = AssetKind.WindowsInstaller): UpdateSource = forConfig(config, kind, null, null)
+
+    /** CORE-PROGRESS-DOWNLOAD-1: the same, with the daemon's core downloader and progress system for a GitHub download. */
+    fun forConfig(
+        config: UpdateConfig, kind: AssetKind, downloads: com.superiorsoftllc.infantry.daemon.api.downloads.Downloads?, progress: com.superiorsoftllc.infantry.plugin.api.Progress?,
+    ): UpdateSource =
+        config.localDir?.let { LocalDirSource(it, config.currentVersion, kind, config.channel) } ?: Updater(config, kind = kind, downloads = downloads, progressSystem = progress)
 }

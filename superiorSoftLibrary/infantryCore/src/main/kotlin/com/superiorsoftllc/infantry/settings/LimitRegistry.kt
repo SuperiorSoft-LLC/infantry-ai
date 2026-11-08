@@ -910,6 +910,57 @@ object LimitRegistry {
         min = 1, zeroIsUnlimited = false,
     )
 
+    // CORE-PROGRESS-DOWNLOAD-1 (docs/wiki/Progress.md): the core downloader and the core progress system.
+    val DOWNLOAD_RETRIES = LimitDef(
+        "limits.downloads.retries", 3, "count",
+        "CORE-PROGRESS-DOWNLOAD-1: how many times the core downloader tries a failed download again (offline, a timeout, a 5xx, a cut connection), resuming where the server allows. 0 = one try only.",
+        min = 0, max = 20, zeroIsUnlimited = false,
+    )
+    val DOWNLOAD_BACKOFF_MS = LimitDef(
+        "limits.downloads.backoffMs", 1_000, "ms",
+        "CORE-PROGRESS-DOWNLOAD-1: the wait before the first retry of a download; each next retry waits twice as long (a server's Retry-After wins when longer).",
+        min = 0, zeroIsUnlimited = false,
+    )
+    val DOWNLOAD_CONNECT_TIMEOUT_SECONDS = LimitDef(
+        "limits.downloads.connectTimeoutSeconds", 15, "seconds",
+        "CORE-PROGRESS-DOWNLOAD-1: how long the core downloader waits to connect to a server.",
+        min = 1, zeroIsUnlimited = false,
+    )
+    val DOWNLOAD_RESPONSE_TIMEOUT_SECONDS = LimitDef(
+        "limits.downloads.responseTimeoutSeconds", 60, "seconds",
+        "CORE-PROGRESS-DOWNLOAD-1: how long the core downloader waits for a server to start answering a request.",
+        min = 1, zeroIsUnlimited = false,
+    )
+    val DOWNLOAD_STALL_SECONDS = LimitDef(
+        "limits.downloads.stallSeconds", 60, "seconds",
+        "CORE-PROGRESS-DOWNLOAD-1: a download that receives no byte for this long is broken off and retried (resuming); 0 = never.",
+        min = 0, zeroIsUnlimited = true,
+    )
+    val DOWNLOAD_MAX_MB = LimitDef(
+        "limits.downloads.maxMb", 2_048, "MB",
+        "CORE-PROGRESS-DOWNLOAD-1: the largest file the core downloader accepts when the caller names no cap of its own. 0 = no cap.",
+    )
+    val DOWNLOAD_REDIRECTS = LimitDef(
+        "limits.downloads.redirects", 5, "count",
+        "CORE-PROGRESS-DOWNLOAD-1: how many HTTP redirects one download follows (a secret header is dropped once a redirect leaves the first host).",
+        min = 0, max = 20, zeroIsUnlimited = false,
+    )
+    val DOWNLOAD_MOVE_RETRIES = LimitDef(
+        "limits.downloads.moveRetries", 5, "count",
+        "CORE-PROGRESS-DOWNLOAD-1: how many times the downloader tries again to move a finished download into place while another program holds the target file (Windows file locks), a backoff apart.",
+        min = 0, max = 50, zeroIsUnlimited = false,
+    )
+    val PROGRESS_KEEP_FINISHED = LimitDef(
+        "limits.progress.keepFinished", 20, "tasks",
+        "CORE-PROGRESS-DOWNLOAD-1: how many finished progress tasks (done, failed, cancelled) the running-tasks list keeps. 0 = keep none.",
+        min = 0, max = 500, zeroIsUnlimited = false,
+    )
+    val PROGRESS_MIN_INTERVAL_MS = LimitDef(
+        "limits.progress.minIntervalMs", 250, "ms",
+        "CORE-PROGRESS-DOWNLOAD-1: the shortest gap between two amount-only updates of one progress task sent to the presenters and clients (a step, state or error change is always sent).",
+        min = 0, zeroIsUnlimited = false,
+    )
+
     val ALL: List<LimitDef> = listOf(
         SESSION_CONTEXT_CAP_TOKENS,
         MAIL_INJECT_MAX_CHARS, MAIL_INJECT_TOTAL_CHARS,
@@ -940,6 +991,8 @@ object LimitRegistry {
         MAIL_WAKE_DEBOUNCE_SECONDS, MAIL_COALESCE_MAX, WATCH_STALL_NUDGES, SCRIPT_RUN_LOG_MAX,
         RUNNERS_PAIR_CODE_MIN, RUNNERS_PAIR_ATTEMPTS_PER_HOUR, RUNNERS_CREDENTIAL_ROTATE_DAYS, RUNNERS_LINK_PORT, RUNNERS_AUDIT_SHOWN, RUNNERS_LINK_CALL_SECONDS, RUNNERS_LINK_CHECK_SECONDS,
         RUNNERS_OUTBOX_MAX, RUNNERS_LOST_AFTER_MIN, RUNNERS_COMMIT_CHECK_SEC, RUNNERS_FORWARD_WAIT_SEC, RUNNERS_FORWARD_TIMEOUT_SEC, RUNNERS_FORWARD_PENDING_MAX,
+        DOWNLOAD_RETRIES, DOWNLOAD_BACKOFF_MS, DOWNLOAD_CONNECT_TIMEOUT_SECONDS, DOWNLOAD_RESPONSE_TIMEOUT_SECONDS, DOWNLOAD_STALL_SECONDS, DOWNLOAD_MAX_MB, DOWNLOAD_REDIRECTS, DOWNLOAD_MOVE_RETRIES,
+        PROGRESS_KEEP_FINISHED, PROGRESS_MIN_INTERVAL_MS,
     )
 
     /** A minutes limit as milliseconds; 0 on an unlimited-capable one = [Long.MAX_VALUE] (never reached). */

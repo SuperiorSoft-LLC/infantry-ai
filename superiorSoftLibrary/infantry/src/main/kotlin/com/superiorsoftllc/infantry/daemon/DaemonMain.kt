@@ -545,6 +545,12 @@ class InfantryDaemon(
     fun pluginHotApply(): com.superiorsoftllc.infantry.daemon.plugins.manager.PluginHotApply =
         com.superiorsoftllc.infantry.daemon.plugins.manager.HostPluginHotApply(pluginHost)
 
+    /** CORE-PROGRESS-DOWNLOAD-1: this daemon's downloader and progress system, for the desktop Settings > Plugins manager. */
+    fun pluginDownloads(): com.superiorsoftllc.infantry.daemon.api.downloads.Downloads =
+        com.superiorsoftllc.infantry.daemon.plugins.DaemonPluginHost.lateDownloads(pluginHost, "plugins")
+    fun pluginProgress(): com.superiorsoftllc.infantry.plugin.api.Progress =
+        com.superiorsoftllc.infantry.daemon.plugins.DaemonPluginHost.lateProgress(pluginHost, "plugins")
+
     fun close() {
         // Triggers stop observing FIRST: the kills below must not read as trigger-run failures; a trigger
         // still running is tripped at the next boot instead ("daemon restarted mid-run").
@@ -1639,6 +1645,8 @@ class InfantryDaemon(
                         // STACK-NEUTRAL-2: api.processes / api.launchEnv / api.settings.
                         processHost = localProcesses, launchEnvHost = launchEnvHost,
                         pluginSettings = settings.forPlugins(),
+                        // CORE-PROGRESS-DOWNLOAD-1: the core string settings the host reads (progress.presenter, downloads.*).
+                        coreStringSetting = { settings.plainString(it) },
                         noticeSuppressor = { name, session, ms -> nudgeGate.suppress(name, session, ms) },
                         // CMD-1: api.runs, a cwd-bound child process over the runner (pty and pipes).
                         runService = com.superiorsoftllc.infantry.daemon.plugins.LocalRuns(
@@ -1663,6 +1671,9 @@ class InfantryDaemon(
                                 // PLUGIN-HOTLOAD-1: an install / enable / update / remove reaches the running host (no daemon restart).
                                 hot = com.superiorsoftllc.infantry.daemon.plugins.manager.HostPluginHotApply { pluginHost.get() },
                                 catalogStaleMs = { settings.limit(LimitRegistry.PLUGIN_CATALOG_STALE_MS) },
+                                // CORE-PROGRESS-DOWNLOAD-1: catalog and jar downloads go through the core downloader; each change is a progress task.
+                                coreDownloads = com.superiorsoftllc.infantry.daemon.plugins.DaemonPluginHost.lateDownloads({ pluginHost.get() }, "plugins"),
+                                progressSystem = com.superiorsoftllc.infantry.daemon.plugins.DaemonPluginHost.lateProgress({ pluginHost.get() }, "plugins"),
                             ),
                             asks = { pluginHost.get().serviceRegistry.find(com.superiorsoftllc.infantry.daemon.api.attention.OwnerAsks::class) },
                             log = { System.err.println("[infantry] $it") },
@@ -2829,6 +2840,12 @@ private suspend fun handleConnection(
     }
     // PLUGIN-BRIDGES-1 (docs/wiki/Bridges.md): this connection may host client-side capabilities (the UI halves it loaded). The
     // registry keys the host by this connection's outgoing channel; a call reaches it as a `capability_call` frame.
+    // CORE-PROGRESS-DOWNLOAD-1: a client's Cancel / Retry of a progress task (owner connections only).
+    for (type in listOf(com.superiorsoftllc.infantry.plugin.api.ProgressWire.CANCEL, com.superiorsoftllc.infantry.plugin.api.ProgressWire.RETRY)) frames.register(type) { env, _ ->
+        if (!owner) return@register Envelope(Envelope.ERROR, "$type: only an owner connection may change a task", requestId = env.requestId)
+        plugins.progressFrame(type, env.data)
+        null
+    }
     val capabilityWire = com.superiorsoftllc.infantry.plugin.api.CapabilityWire
     frames.register(capabilityWire.HOST) { env, _ ->
         if (!owner) return@register Envelope(Envelope.ERROR, "${capabilityWire.HOST}: only an owner connection hosts capabilities", requestId = env.requestId)
