@@ -37,6 +37,8 @@ data class MemoryNote(
 const val SCOPE_PROJECT = "project"
 const val SCOPE_ROLE = "role"
 const val SCOPE_SESSION = "session"
+/** KNOWLEDGE-WRITE-GAP-1: install-wide notes (every project, every agent on this daemon). Stored as project-scope notes under the daemon-side global project id; not a stored scope, so [NOTE_SCOPES] stays the three stored ones. */
+const val SCOPE_GLOBAL = "global"
 val NOTE_SCOPES = listOf(SCOPE_PROJECT, SCOPE_ROLE, SCOPE_SESSION)
 
 /**

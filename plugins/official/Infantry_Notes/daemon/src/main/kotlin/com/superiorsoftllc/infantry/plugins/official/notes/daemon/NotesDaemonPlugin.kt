@@ -51,6 +51,11 @@ class NotesDaemonPlugin : DaemonPlugin {
             api.frames.handle(type) { frame, caller ->
                 MemoryHandler(
                     memory,
+                    mayWriteGlobal = { role ->
+                        val roles = (api.settings.stored("knowledge.globalWriteRoles") ?: MemoryHandler.PM_ROLE).split(',').map { it.trim() }.filter { it.isNotEmpty() }
+                        role in roles
+                    },
+                    audit = { api.log(it) },
                     caller = { id -> session(id, caller)?.let { MemoryCaller(it.id, it.role.orEmpty()) } },
                     // ROLE-NOTES-1: a role note changed while sessions of that role run is announced to each by mail.
                     onRoleNoteChanged = { project, role, name, deleted ->

@@ -32,8 +32,18 @@
       { "type": "memory_delete", "action": "memory.delete", "kind": "destructive" },
       { "type": "memory_purge_role", "action": "memory.delete", "kind": "destructive" }
     ],
+    "config": [
+      {
+        "node": "infantry.notes", "group": "Knowledge", "title": "Notes", "tab": "Project", "order": 910,
+        "applies": "Applies to: who may write or delete global notes (shared by every project on this install).",
+        "keywords": ["notes", "memory", "global", "knowledge", "write"],
+        "fields": [
+          { "key": "knowledge.globalWriteRoles", "type": "text", "label": "Roles that may write global notes", "default": "pm", "scope": "daemon", "order": 1, "description": "Comma-separated role ids. The owner (no session) may always write. Every agent may read." }
+        ]
+      }
+    ],
     "tools": [
-      { "name": "infantry_memory", "action": "memory.read", "kind": "read", "description": "Read project memory notes and your role / session notes (show, search, index)." }
+      { "name": "infantry_memory", "action": "memory.read", "kind": "read", "description": "Read and write project memory notes, your role / session notes and global notes (show, search, index, write, update, delete)." }
     ]
   },
   "tabs": [
