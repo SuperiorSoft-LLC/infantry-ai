@@ -1,4 +1,5 @@
 -- done-forward: when a watched ticket enters done, mails its latest done comment to another project's PM, push-notifies the owner, optionally starts the next ticket; fires once
+-- Scenario: One project finishing a ticket should hand its report to another project's PM and notify the owner.
 -- Args:
 --   ticket (string, required): the 8-char ticket id to watch
 --   recipient (string, required): e.g. pm@<project id>; never name it `to`

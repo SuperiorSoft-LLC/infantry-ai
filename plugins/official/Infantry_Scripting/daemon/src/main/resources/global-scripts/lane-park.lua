@@ -1,4 +1,5 @@
 -- lane-park: a ticket leaving in_progress for anything but the done lane, or entering backlog, gives up its worker
+-- Scenario: A ticket leaving in progress without finishing must release its worker.
 -- Args:
 --   doneLane (string, required): name of the done lane
 --   event payload: ticketId, from, to, workerSession

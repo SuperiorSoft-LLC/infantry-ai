@@ -488,6 +488,7 @@ Generated for the `infantryDaemonApi` guard `SdkTypesDocumentedGuardTest`: every
 - `KnowledgeHit`: One [Knowledge.search] hit.
 - `KnowledgeIssue`: An open issue: [ref] is `I<n>`, [location] the path it is about ("" for none).
 - `KnowledgeRecords`: DP-7c (DaemonApi 1.17.0, additive): the decisions / issues half of [Knowledge], a service published in the AR-5 registry by the plugin that owns those logs (Infantry_Notes).
+- `KnowledgeWriter`: SCRIPT-ARSENAL-2 (DaemonApi 1.51.0, additive): the write half of [Knowledge], published by Infantry_Notes; `save`/`delete`/`names` of generated notes; `GLOBAL_PROJECT` entries are found by every project's note search and show.
 
 ### `LocalFiles.kt`
 

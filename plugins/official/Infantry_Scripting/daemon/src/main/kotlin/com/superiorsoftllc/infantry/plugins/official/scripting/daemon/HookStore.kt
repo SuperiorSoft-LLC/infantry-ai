@@ -72,6 +72,8 @@ data class Hook(
      * never runs for another project's events, global or not.
      */
     val global: Boolean = false,
+    /** SCRIPT-ARSENAL-2: true = read from the app-wide hook file (an arsenal hook): it runs for EVERY project's events, as that project. Never stored in a project's hooks.json. */
+    val arsenal: Boolean = false,
 ) {
     fun toJson(): JsonObject = buildJsonObject {
         put("id", id); put("on", on.toString()); put("script", script)
@@ -84,7 +86,7 @@ data class Hook(
         if (global) put("global", true)
     }
 
-    fun line(): String = "$id  on $on${to?.let { " to $it" } ?: ""} -> $script${ownerSession?.let { " (edited by $it${ownerRole?.let { r -> "/$r" } ?: ""})" } ?: ""}${if (args.isEmpty()) "" else " $args"}${if (global) "  [global]" else ""}${if (enabled) "" else "  [disabled]"}"
+    fun line(): String = "$id  on $on${to?.let { " to $it" } ?: ""} -> $script${ownerSession?.let { " (edited by $it${ownerRole?.let { r -> "/$r" } ?: ""})" } ?: ""}${if (args.isEmpty()) "" else " $args"}${if (global) "  [global]" else ""}${if (arsenal) "  [arsenal: every project]" else ""}${if (enabled) "" else "  [disabled]"}"
 }
 
 /**
@@ -92,12 +94,48 @@ data class Hook(
  * the scripts they name): `{"version":1,"hooks":[{"id":"merge-on-done","on":"lane enter done","script":"on-ticket-done","args":{}}]}`.
  * Read at each event with the file's mtime as the cache key, so an edit on disk or a `script hook add` is seen at once.
  */
-class HookStore(private val files: (String) -> ProjectFiles) {
+class HookStore(private val files: (String) -> ProjectFiles, private val arsenalFile: java.io.File?) {
+    constructor(files: (String) -> ProjectFiles) : this(files, null)
+
     private data class Cached(val stamp: Pair<Long, Long>?, val hooks: List<Hook>, val error: String?)
     private val cache = java.util.concurrent.ConcurrentHashMap<String, Cached>()
 
     /** The hooks of [projectId]; a missing file is none. A file that does not parse is none too, with the reason in [error]. */
-    fun list(projectId: String): List<Hook> = load(projectId).hooks
+    fun list(projectId: String): List<Hook> {
+        val own = load(projectId).hooks
+        // SCRIPT-ARSENAL-2: the app-wide hooks run for every project; a project hook of the same id wins (the project opts out by shadowing it).
+        return own + arsenalHooks().filter { g -> own.none { it.id == g.id } }
+    }
+
+    /** SCRIPT-ARSENAL-2: only the project's own hooks, without the arsenal ones. */
+    fun listOwn(projectId: String): List<Hook> = load(projectId).hooks
+
+    /** SCRIPT-ARSENAL-2: the app-wide hooks (`<state>/global-hooks.json`, same format as hooks.json). */
+    fun arsenalHooks(): List<Hook> {
+        val f = arsenalFile?.takeIf { it.isFile } ?: return emptyList()
+        return parse(f.readText(Charsets.UTF_8)).getOrDefault(emptyList()).map { it.copy(arsenal = true) }
+    }
+
+    @Synchronized fun addArsenal(hook: Hook) {
+        val f = arsenalFile ?: throw IllegalStateException("this daemon has no global hook file")
+        val cur = if (f.isFile) parse(f.readText(Charsets.UTF_8)).getOrElse { throw IllegalStateException("${f.name} does not parse: ${it.message}") } else emptyList()
+        require(cur.none { it.id == hook.id }) { "global hook '${hook.id}' already exists (remove it first)" }
+        writeArsenal(f, cur + hook)
+    }
+
+    @Synchronized fun removeArsenal(id: String): Boolean {
+        val f = arsenalFile?.takeIf { it.isFile } ?: return false
+        val cur = parse(f.readText(Charsets.UTF_8)).getOrElse { throw IllegalStateException("${f.name} does not parse: ${it.message}") }
+        val next = cur.filter { it.id != id }
+        if (next.size == cur.size) return false
+        writeArsenal(f, next); return true
+    }
+
+    private fun writeArsenal(f: java.io.File, hooks: List<Hook>) {
+        f.parentFile?.mkdirs()
+        val doc = buildJsonObject { put("version", 1); put("hooks", buildJsonArray { hooks.forEach { add(it.toJson()) } }) }
+        f.writeText(Json { prettyPrint = true }.encodeToString(JsonObject.serializer(), doc), Charsets.UTF_8)
+    }
 
     /** Why `hooks.json` of [projectId] could not be read, or null. */
     fun error(projectId: String): String? = load(projectId).error

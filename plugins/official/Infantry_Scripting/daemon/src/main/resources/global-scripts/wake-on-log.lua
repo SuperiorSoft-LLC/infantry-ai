@@ -1,4 +1,5 @@
 -- wake-on-log: waits (in a process) for a log file to print a pattern, then wakes a session; for a dev UI or daemon that never ends
+-- Scenario: Wake an agent when a long-running dev server or daemon prints a ready line.
 -- Args:
 --   path (string, required): the log file
 --   pattern (string, required): plain text to find

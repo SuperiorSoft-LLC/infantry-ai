@@ -1,4 +1,5 @@
 -- goal-autostart-off: when every goal ticket is done, re-adds the done-enter hook with auto-start off and tells the PM
+-- Scenario: A batch of goal tickets is running with auto-start on; stop auto-starting once the last one is done.
 -- Args:
 --   goals (list of strings, required): 8-char ticket ids
 --   pm (string, optional): PM session id

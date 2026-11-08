@@ -1,4 +1,5 @@
 -- lane-pin-check: makes sure a ticket's provider/model pin is allowed before it runs; repins (or sends it back to todo) when not
+-- Scenario: Make sure every ticket runs on an allowed provider and model before a worker starts.
 -- Args:
 --   provider (string, required): pin to set
 --   allowedProviders (list, required)

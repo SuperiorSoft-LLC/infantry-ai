@@ -1,4 +1,5 @@
 -- lane-one-worker: keeps at most N ticket workers in progress, bounces the extra one back to todo, and prompts a freshly started idle worker
+-- Scenario: Allow only N ticket workers at a time and bounce the extra one back to todo.
 -- Args:
 --   maxInProgress (number, 1)
 --   exemptRoles (list, []): roles that do not count and are never bounced

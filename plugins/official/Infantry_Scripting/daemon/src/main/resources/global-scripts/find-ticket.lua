@@ -1,4 +1,5 @@
 -- find-ticket: read-only: print the board lines (backlog, todo, in_progress by default) that contain a text; board output is capped over MCP
+-- Scenario: You know a word from a ticket title and need its id without dumping the whole board.
 -- Args:
 --   q (string, required): text to find, case-insensitive
 --   columns (string, backlog,todo,in_progress): board columns to search

@@ -79,10 +79,13 @@ class ScriptingDaemonPlugin : DaemonPlugin {
         api.tools.register(tools.run)
         api.tools.register(tools.api)
         // SCRIPT-5: hooks are data (hooks.json); one subscription on the named-event bus runs them.
-        val hookStore = HookStore { api.files(it) }
+        val hookStore = HookStore({ api.files(it) }, File(api.stateDir, "global-hooks.json"))
         val builtinHooks = BuiltinHook.fromJar { api.log(it) }
-        api.tools.register(HookTools(hookStore, store, { HookSettings.minEverySec { api.config(it) } }).tool)
-        SaveTools(store, hookStore, engines, api::displayStamp, { api.config("scripting.global.writeRoles") ?: SaveTools.DEFAULT_GLOBAL_WRITERS }, { api.projects.list().map { it.id } }).let { api.tools.register(it.save); api.tools.register(it.list); api.tools.register(it.delete) }
+        val arsenalKnowledge = ArsenalKnowledge({ api.services.find(com.superiorsoftllc.infantry.daemon.api.knowledge.KnowledgeWriter::class) }, store, { api.projects.list().map { it.id } }) { api.log(it) }
+        val saveTools = SaveTools(store, hookStore, engines, api::displayStamp, { api.config("scripting.global.writeRoles") ?: SaveTools.DEFAULT_GLOBAL_WRITERS }, { api.projects.list().map { it.id } },
+            changed = { scope, project, name -> if (scope == ScriptStore.GLOBAL || project == null) arsenalKnowledge.refreshGlobal(name) else arsenalKnowledge.refreshProject(project, name) })
+        api.tools.register(HookTools(hookStore, store, { HookSettings.minEverySec { api.config(it) } }, saveTools::globalWriteRefusal).tool)
+        saveTools.let { api.tools.register(it.save); api.tools.register(it.list); api.tools.register(it.delete) }
         val hooks = ScriptHooks(
             hookStore, store, engines, api.tools, ScriptDispatcher(api.tools, aliases, maxPhases, sessionProject = { api.sessions.get(it)?.projectId }),
             projects = { api.projects.list().map { it.id } }, limits = { limits.current() },
@@ -123,7 +126,10 @@ class ScriptingDaemonPlugin : DaemonPlugin {
         // SCRIPT-TICK-1: one 1 s clock drives `every <N>s` hooks and exec.tick (each at its own period). A throw never stops it.
         val clock = java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "script-timer").apply { isDaemon = true } }
         var lastExecTick = System.currentTimeMillis()
+        // SCRIPT-ARSENAL-2: the knowledge entries are written once the Notes plugin's writer is published (it may start after this plugin).
+        val entriesSynced = java.util.concurrent.atomic.AtomicBoolean(false)
         clock.scheduleWithFixedDelay({
+            if (!entriesSynced.get()) runCatching { val n = arsenalKnowledge.syncAll(); if (n >= 0 && entriesSynced.compareAndSet(false, true)) api.log("script arsenal knowledge entries synced: $n") }
             runCatching { hooks.timerTick(HookSettings.minEverySec { api.config(it) }) }
             runCatching {
                 val now = System.currentTimeMillis()

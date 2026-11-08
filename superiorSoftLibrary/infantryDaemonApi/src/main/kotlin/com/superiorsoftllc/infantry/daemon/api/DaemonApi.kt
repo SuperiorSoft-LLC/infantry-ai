@@ -232,6 +232,8 @@ interface DaemonApi {
         // bridge for scripts, agents and plugins to call what an installed plugin (daemon or UI half) offers.
         // 1.49.0 (PLUGIN-HOTSWAP-1, additive): `scope` (plugin.api.PluginScope), the host-owned lifetime of the daemon half.
         // 1.50.0 (JOBFEED-1, additive): `Sessions.jobs` / `Sessions.jobLog` (bounded job-log tail read).
+        // 1.51.0 (SCRIPT-ARSENAL-2, additive): daemon.api.knowledge.KnowledgeWriter, the write half of Knowledge (published by Infantry_Notes);
+        // notes saved under KnowledgeWriter.GLOBAL_PROJECT are found by every project's search and show.
         const val VERSION = "1.51.0"
     }
 }

@@ -1,4 +1,5 @@
 -- usage-governor: reads the weekly usage pace and steps worker capacity: normal -> one worker -> cheaper model only; restores when the pace drops
+-- Scenario: Slow down workers when the weekly usage pace runs ahead of the plan, and restore when it drops.
 -- Args:
 --   project (string, required): the project id whose routing and data are changed
 --   pm (string, optional): session id told on each change
