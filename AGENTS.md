@@ -25,6 +25,9 @@ every feature. The CLI is `infantry`; `agenthq` is a deprecated alias for the sa
 6. **Tests never bind ports 8787 or 8788** (the owner's daemon and UI). Use port 0 (`TestPortGuardTest`).
 7. **Run one Gradle build at a time.** The test JVMs are memory hungry; two builds in parallel can crash the host.
 8. Do not edit a test just to make it pass. If a test is wrong, say why in the commit message.
+9. **Before adding a helper or UI pattern, search for the existing seam.** If none fits, add the generic seam, never
+   a local copy. The seams are listed in section 4 ("Shared seams"); the copies found so far and their consolidation
+   tickets are in [docs/ARCH-AUDIT-2026-11.md](docs/ARCH-AUDIT-2026-11.md).
 
 ## 2. Repo layout
 
@@ -114,6 +117,25 @@ gate over a batch of changes is `scripts/infantry-gate.sh` ([docs/GATE.md](docs/
 
 If you are about to touch `DaemonMain.kt` (very large) or a core module to add a feature, stop and check whether a
 plugin can do it. Before you change a file, ask the knowledge base: `infantry issue precheck <path>`.
+
+### Shared seams: reuse, never copy
+
+Rule 9 in one table. Search here before you write a helper; ticket ids name the seams still being built.
+
+| You need | Use |
+|---|---|
+| A notice, toast or dialog | `superiorSoftLibrary/infantryUiCore/src/commonMain/kotlin/com/superiorsoftllc/infantry/ui/ToastService.kt`, `superiorSoftLibrary/infantryUiCore/src/commonMain/kotlin/com/superiorsoftllc/infantry/ui/ToastHost.kt`, `AhqAlertDialog` and `ModalBackdrop` in `superiorSoftLibrary/infantryUiCore/src/commonMain/kotlin/com/superiorsoftllc/infantry/ui/ModalBlur.kt` (NOTIFY-CORE-1 widens it) |
+| A tooltip, hover hint or menu | `IconActionTooltipBox` in `superiorSoftLibrary/infantryUiCore/src/commonMain/kotlin/com/superiorsoftllc/infantry/ui/IconAction.kt`, `InfantryDropdownMenu` in `superiorSoftLibrary/infantryUiCore/src/commonMain/kotlin/com/superiorsoftllc/infantry/ui/InfantryDropdownMenu.kt` (TOOLTIP-SEAM-1 adds a general tooltip) |
+| A clickable, button or cursor | the wrappers in `superiorSoftLibrary/infantryUiCore/src/commonMain/kotlin/com/superiorsoftllc/infantry/ui/Clickables.kt`; never the raw Material import |
+| Colours, an error colour | `Palette` in `superiorSoftLibrary/infantryUiCore/src/commonMain/kotlin/com/superiorsoftllc/infantry/ui/Theme.kt` (ERROR-UI-SEAM-1 adds one error view) |
+| A plugin fault in the UI | `PluginFaults` in `superiorSoftLibrary/infantryUiCore/src/commonMain/kotlin/com/superiorsoftllc/infantry/ui/plugin/PluginFaults.kt`; `GuardedBlock` in `superiorSoftLibrary/infantryUiCore/src/commonMain/kotlin/com/superiorsoftllc/infantry/ui/block/layout/OverrideGuard.kt` |
+| A plugin fault on the daemon | `PluginGuard` in `superiorSoftLibrary/infantry/src/main/kotlin/com/superiorsoftllc/infantry/daemon/plugins/PluginGuard.kt` |
+| Chat text, markdown, selection | `ChatMarkdownEngine` in `superiorSoftLibrary/infantryUiCore/src/commonMain/kotlin/com/superiorsoftllc/infantry/ui/model/ChatMarkdownEngine.kt`, `LocalChatMarkdown` in `superiorSoftLibrary/infantryUiCore/src/commonMain/kotlin/com/superiorsoftllc/infantry/ui/ChatBlockRenderers.kt` |
+| An HTTP client in the UI | `superiorSoftLibrary/infantryUiCore/src/commonMain/kotlin/com/superiorsoftllc/infantry/ui/net/PlatformHttpClient.kt` (the daemon has none yet: HTTP-SEAM-1) |
+| A setting | `DaemonApi` settings and `config` in `superiorSoftLibrary/infantryDaemonApi/src/main/kotlin/com/superiorsoftllc/infantry/daemon/api/DaemonApi.kt`, `HarnessHost` in `superiorSoftLibrary/infantryHarnessApi/src/main/kotlin/com/superiorsoftllc/infantry/harness/api/HarnessHost.kt`, `SettingScopes` in `superiorSoftLibrary/infantryCore/src/main/kotlin/com/superiorsoftllc/infantry/settings/ScopedSettings.kt`, `LimitRegistry` in `superiorSoftLibrary/infantryCore/src/main/kotlin/com/superiorsoftllc/infantry/settings/LimitRegistry.kt`; an env var only through `InfantryEnv` in `superiorSoftLibrary/infantryBoard/src/main/kotlin/com/superiorsoftllc/infantry/session/InfantryEnv.kt` |
+| A child process | `ProcessRunner` in `superiorSoftLibrary/infantryRunner/src/main/kotlin/com/superiorsoftllc/infantry/runner/ProcessRunner.kt`, `BoundedCommand` in `superiorSoftLibrary/infantryCore/src/main/kotlin/com/superiorsoftllc/infantry/harness/BoundedCommand.kt`, `superiorSoftLibrary/infantryCore/src/main/kotlin/com/superiorsoftllc/infantry/worktree/GitCli.kt`, `HarnessHost` for a harness, `superiorSoftLibrary/infantryDaemonApi/src/main/kotlin/com/superiorsoftllc/infantry/daemon/api/processes/ProcessesApi.kt` for a daemon plugin (PROC-SEAM-1 adds a run call) |
+| The state dir, a project file | `stateDir` in `superiorSoftLibrary/infantryCore/src/main/kotlin/com/superiorsoftllc/infantry/session/SessionStore.kt`, `StateDirMigration` in `superiorSoftLibrary/infantryCore/src/main/kotlin/com/superiorsoftllc/infantry/session/StateDirMigration.kt`, `ProjectFiles` in `superiorSoftLibrary/infantryDaemonApi/src/main/kotlin/com/superiorsoftllc/infantry/daemon/api/files/ProjectFiles.kt` (FILES-SEAM-1 adds atomic writes and hashing) |
+| A log line on the daemon | `DaemonLog` in `superiorSoftLibrary/infantry/src/main/kotlin/com/superiorsoftllc/infantry/daemon/DaemonLog.kt`; a plugin logs through `DaemonApi` or `HarnessHost`, never `println` (LOG-SEAM-1) |
 
 ## 5. Documentation map
 
