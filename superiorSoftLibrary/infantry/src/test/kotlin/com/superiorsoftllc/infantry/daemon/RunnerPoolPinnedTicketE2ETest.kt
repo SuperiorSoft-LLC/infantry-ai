@@ -178,6 +178,29 @@ class RunnerPoolPinnedTicketE2ETest {
     }
 
     @Test
+    fun `a prompt sent to a remote session on the orchestrator reaches the runner process (RUNNER-REMOTE-IO-1)`() {
+        val orchProc = ScriptedRunner(autoExit = false, emitSessionId = true)
+        val runnerProc = ScriptedRunner(autoExit = false, emitSessionId = true)
+        val (_, orch, runner) = world(orchProc, runnerProc)
+        orch.await(what = "r2 is up") { orch.rows()["r2"]?.text("health") == "up" }
+        val worker = orch.client.saveProfile("""{"name":"Remote","role":"backend","provider":"${FakeAgentProvider().id}"}""")
+        val pinned = orch.client.saveTicket("""{"title":"Remote work","projectId":"p1","agentId":"${worker.id}","runner":"r2"}""")
+        val started = orch.client.moveTicket(pinned.id, "in_progress")
+        runner.await(what = "the worker process on the runner daemon") { runnerProc.processes.isNotEmpty() }
+        val sessionId = assertNotNull(started.sessionId)
+        runnerProc.processes.first().exit(0)
+        runner.await(what = "the first turn ended") { runnerProc.processes.first().isAlive.not() }
+        orch.client.send(Envelope(Envelope.PROMPT, "please continue with part two", sessionId))
+        // The runner recorded the turn: the orchestrator reads it back on demand (also proves harness-neutral transcript lines).
+        orch.await(what = "the turn the orchestrator sent is in the runner's transcript") {
+            orch.client.send(Envelope("replay_request", """{"lastSequence":0}""", sessionId))
+            Thread.sleep(500)
+            orch.client.of(Envelope.STDOUT).any { it.sessionId == sessionId && it.data.contains("part two") }
+        }
+        assertTrue(orch.client.of(Envelope.ERROR).none { it.data.contains("unknown session") }, "the orchestrator did not refuse the prompt as an unknown session")
+    }
+
+    @Test
     fun `a runner daemon killed after a finished turn and started again keeps its events for the orchestrator`() {
         val orchProc = ScriptedRunner(autoExit = false, emitSessionId = true)
         val runnerProc = ScriptedRunner(autoExit = false, emitSessionId = true)

@@ -82,3 +82,10 @@ the echo output on the orchestrator. The echo ran inside the container (runner `
 `finished SUCCEEDED`), but orchestrator `infantry logs <session>` printed "no output within 30000ms" and its `get_session` says
 "no replay history"; the start did not run a turn on its own (the session stayed IDLE) and `infantry_prompt` on the orchestrator
 answers `unknown session` for a remote session. Open: ticket RUNNER-E2E-3 comment.
+
+RUNNER-REMOTE-IO-1 (what changed after that run): the runner's transcript read now serves the session's turns (`[turn] ...`), raw
+process lines, errors, and, for a harness that printed no raw line, its answer text (`RunnerTranscript`), so `infantry logs <session>`
+on the orchestrator is not empty for any harness. A `prompt` frame (`infantry_prompt`) for a session on a remote runner is forwarded
+to that runner like mail (a busy or unreachable runner answers an error to send again, not "unknown session"), and the runner
+serves the transcript and mail of a session started without a git remote too (`isLinked`). `session_act` (queue, interrupt) is not
+forwarded yet. Not yet proven live: the Docker re-run (needs the board plugins on the orchestrator).
