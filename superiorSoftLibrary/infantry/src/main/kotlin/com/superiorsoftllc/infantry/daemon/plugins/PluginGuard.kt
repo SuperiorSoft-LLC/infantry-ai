@@ -126,6 +126,11 @@ class PluginGuard(
         } catch (e: ExecutionException) {
             consecutiveTimeouts.set(0)
             val cause = e.cause ?: e
+            // PLUGIN-GUARD-1: a bad argument is the CALLER's error: it fails this call only and never disables the plugin.
+            if (cause is IllegalArgumentException) {
+                log("[plugins] daemon plugin $moduleId: $what rejected its arguments: ${cause.message?.lineSequence()?.firstOrNull().orEmpty()} (plugin stays loaded)")
+                return Result.failure(cause)
+            }
             disable("$what threw ${cause::class.java.simpleName}: ${cause.message?.lineSequence()?.firstOrNull().orEmpty()}")
             Result.failure(cause)
         } catch (e: InterruptedException) {
