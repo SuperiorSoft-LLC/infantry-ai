@@ -191,7 +191,7 @@ Each ticket names its check. The product tickets use stack-neutral wording.
    plugins/official/Infantry_Appearance` has a hit; a UI test switches the style and sees the fake renderer.
 4. **AVATAR-DOCS-1 (docs, low weight).** Document the registry, the request and the fallback in `docs/wiki/plugin-api.md`, plus a
    recipe "add an avatar style". Acceptance: DocsFreshnessGuardTest green; `grep -n "agent.avatar.renderers" docs/wiki/plugin-api.md`.
-5. **MASCOT-2 (new official plugin, medium weight; blocked by 1 and by owner decision 7a).** `Infantry_Mascot`: port the
+5. **MASCOT-2 (new official plugin, medium weight; blocked by 1; owner chose official, see 7a).** `Infantry_Mascot`: port the
    material-mascot drawing code into the plugin's common source set with its MIT notice and a NOTICE file, register the renderer,
    config fields motion (default static), stateMap and roleLooks. Acceptance: `grep -n "agent.avatar.renderers"
    plugins/official/Infantry_Mascot/module.json`; `grep -rn "SPDX-License-Identifier: MIT" plugins/official/Infantry_Mascot/src`
@@ -201,11 +201,11 @@ Each ticket names its check. The product tickets use stack-neutral wording.
    sidebar agents against the UI perf budget. With motion `all`, record the cost in the setting's description. Acceptance:
    PerfGuardTest green with the mascot enabled; the setting description states the measured cost.
 
-Order: 1 → 2 → 3 → 4 (the seam is useful on its own, for uploaded-image avatars too), then 5 → 6 once 7a is answered.
+Order: 1 → 2 → 3 → 4 (the seam is useful on its own, for uploaded-image avatars too), then 5 → 6.
 
 ## 7. Risks and open owner decisions
 
-- **7a. The Grok-derived look (owner decision).** The code is MIT, but it recreates the x.ai Grok avatar. Options: ship it as an official
+- **7a. The Grok-derived look: DECIDED 2026-11-08, owner chose "Official plugin" (question 8900ed58); it ships in plugins/official as a selectable style, portrait stays the default.** Original analysis: The code is MIT, but it recreates the x.ai Grok avatar. Options: ship it as an official
   plugin, ship it as a community plugin that is off by default, or use only the seam and draw an original character in the
   same style. Recommendation: **community plugin, off by default**, until the look is cleared. The seam (tickets 1-4) does not depend on
   this answer.
