@@ -19,6 +19,7 @@ Every page of this wiki is listed here, one line each. The pages are written fro
 - [Make a plugin](make-a-plugin.md): step by step from the template to a built UI + daemon example.
 - [Publish a plugin](publish-a-plugin.md): package a plugin from its own repo as an `.ihq` and list it in the community registry.
 - [Run a remote environment](run-a-remote-environment.md): start a runner-only daemon (`--mode runner`, Docker) and pair it.
+- [Runner quickstart](runner-quickstart.md): pair a server, pick it for an agent, run a ticket there (proven end to end).
 - [UI plugin API](plugin-api.md): every public type and function of the UI plugin API.
 - [Daemon plugin API](daemon-plugin-api.md): tools, routes, hooks, events, services, storage, lifecycle.
 - [Progress and downloads](Progress.md): the one progress/loader system and the one downloader; a plugin presenter, renderer or transport.
