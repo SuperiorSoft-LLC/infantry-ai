@@ -15,6 +15,8 @@ class RowItem(
     val agentName: String,
     val agentRole: String?,
     val roleColor: String?,
+    /** AVATAR-SEAM-2: the session's state name when the row's session is in the app state, else null. */
+    val sessionState: String? = null,
 ) {
     val kind: String get() = item.kind
 }
