@@ -95,7 +95,7 @@ Gradle runs with `-Xmx6g` and the Kotlin daemon with 3 GB (`gradle.properties`).
 
 Replace the module path and class name. While you work, run only the classes of the code you changed. The full
 gate over a batch of changes is `scripts/infantry-gate.sh` ([docs/GATE.md](docs/GATE.md)). Read build output with
-`tail -n 20`; errors matter, warning counts do not. More: [CONTRIBUTING.md](CONTRIBUTING.md),
+`tail -n 20`; errors matter, warning counts do not. Changed commonMain? Also run `:superiorSoftLibrary:infantryUiCore:compileKotlinWasmJs`. More: [CONTRIBUTING.md](CONTRIBUTING.md),
 [QUICKSTART.md](superiorSoftLibrary/infantry/docs/QUICKSTART.md).
 
 ## 4. Where each kind of change goes
@@ -143,6 +143,7 @@ All under `superiorSoftLibrary/infantry/src/test/kotlin/com/superiorsoftllc/infa
 | `orchestration/OrchestratorBoundaryGuardTest.kt` | The runner side does not import orchestration. |
 | `policy/NoPresetInCoreGuardTest.kt` | Policy mechanism is core, preset values are a plugin's. |
 | `runner/StackNeutralGuardTest.kt` | Core main code names no build stack. |
+| `WasmCommonMainGuardTest.kt` | `src/commonMain` code (superiorSoftLibrary and plugins) uses no JVM-only API (`System.`, `synchronized`, `java.`/`javax.`, `.stackTrace`, `Thread.`); allow a line with `// jvm-ok: <reason>`. |
 | `settings/LimitsGuardTest.kt` | No unnamed numeric limit in `src/main`. |
 | `daemon/TestPortGuardTest.kt` | Tests never bind 8787 or 8788. |
 | `daemon/PluginToolsDeclaredGuardTest.kt` | Every tool a repo daemon plugin names is declared in its `module.json` `daemon.tools` (the host refuses the plugin otherwise). |
