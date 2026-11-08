@@ -498,7 +498,7 @@ internal object Cli {
                 // RUNNER-POOL-5: `infantry runner pair --name <n>` and the rest of the runner link (docs/RUNNER-POOL.md 7).
                 "runner" -> runBlocking {
                     RunnerCli.run(
-                        stream, RunnerCli.Args(parsed.args, parsed.name, parsed.code, parsed.fingerprint, parsed.limit, parsed.allowProjects, parsed.allowHarnesses, parsed.runnerHosts, parsed.link), out, err,
+                        stream, RunnerCli.Args(parsed.args, parsed.name, parsed.code, parsed.fingerprint, parsed.limit, parsed.allowProjects, parsed.allowHarnesses, parsed.runnerHosts, parsed.link, project = parsed.project ?: getenv(AccessPolicy.PROJECT_ID_ENV)?.trim()?.takeIf { it.isNotEmpty() }, harness = parsed.harness), out, err,
                         com.superiorsoftllc.infantry.session.stateDir { getenv(it) ?: com.superiorsoftllc.infantry.session.infantrySetting(it) },
                     )
                 }
@@ -4788,6 +4788,9 @@ internal object Cli {
                                   add turns runners.enabled on
               runner list | rotate <name> | detach [<name>] | audit [--limit N]  Paired runners; in-band rekey; revoke
                                   (a name: from the orchestrator; none: on the runner); the runner's log of remote operations
+              runner check <name> [--project <id>] [--harness <id>]  The health check over the link: contract, harness installed and
+                                  signed in, project/harness granted, git remote reachable, disk, link; one line per row with the
+                                  fix under a failing one, exit 1 when any row fails (the project defaults to this one)
               bg run [--name L] [--keep] -- CMD  Run CMD as a registered background job (session reads Running; --keep: survives the session closing); bg list|status|logs|stop ID
               bg run --notify [--notify-on RE]... [--notify-tail N] [--notify-timeout MIN] [--no-default-patterns] -- CMD
                                      Start CMD detached; the daemon MAILS this session on exit, a pattern match or the timeout: end your turn, never sleep/poll
@@ -5073,6 +5076,8 @@ internal object Cli {
         val runnerHosts: String? = null,
         // RUNNER-ADD-LINK-1: `runner add --link <infantry://runner?...|->` (a pasted link, or stdin with `-`).
         val link: String? = null,
+        // RUNNER-CHECK-1: `runner check <name> --harness <id>` (the harness checked for install, sign-in and grant).
+        val harness: String? = null,
         val body: String? = null,
         val reportTo: String? = null,
         val reportFields: String? = null,
@@ -5201,6 +5206,7 @@ internal object Cli {
         var allowHarnesses: String? = null
         var runnerHosts: String? = null
         var link: String? = null
+        var harness: String? = null
         var body: String? = null
         var reportTo: String? = null
         var reportFields: String? = null
@@ -5380,6 +5386,11 @@ internal object Cli {
                 "--link" -> {
                     // RUNNER-ADD-LINK-1: `runner add --link <infantry://runner?...>` (or `-` to read it from stdin).
                     link = flagValue(args, ++i) ?: return fail(err, "--link expects a runner pairing link (infantry://runner?v=1...), or - to read it from stdin")
+                    i++
+                }
+                "--harness" -> {
+                    // RUNNER-CHECK-1: `runner check <name> --harness <id>`.
+                    harness = flagValue(args, ++i) ?: return fail(err, "--harness expects a harness id, e.g. the one you mean to run there")
                     i++
                 }
                 "--report-to" -> {
@@ -5778,6 +5789,7 @@ internal object Cli {
             allowHarnesses = allowHarnesses,
             runnerHosts = runnerHosts,
             link = link,
+            harness = harness,
             body = body,
             reportTo = reportTo,
             reportFields = reportFields,
@@ -5926,7 +5938,7 @@ internal object Cli {
         "ask" -> askUsageError(parsed, getenv)
         "usage" -> UsageCli.usageError(parsed.args)
         "settings" -> SettingsCli.usageError(parsed.args)
-        "runner" -> RunnerCli.usageError(RunnerCli.Args(parsed.args, parsed.name, parsed.code, parsed.fingerprint, parsed.limit, parsed.allowProjects, parsed.allowHarnesses, parsed.runnerHosts, parsed.link))
+        "runner" -> RunnerCli.usageError(RunnerCli.Args(parsed.args, parsed.name, parsed.code, parsed.fingerprint, parsed.limit, parsed.allowProjects, parsed.allowHarnesses, parsed.runnerHosts, parsed.link, project = parsed.project, harness = parsed.harness))
         else -> null
     }
 

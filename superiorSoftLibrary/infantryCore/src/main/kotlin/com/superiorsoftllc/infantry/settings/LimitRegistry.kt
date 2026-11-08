@@ -952,6 +952,23 @@ object LimitRegistry {
     )
 
     /**
+     * RUNNER-CHECK-1: how long `infantry runner check` lets the runner's `git ls-remote` of the project's remote run before the row
+     * fails. Bounded so a firewall that drops packets shows as a git FAIL, not a hung check.
+     */
+    val RUNNERS_CHECK_GIT_SEC = LimitDef(
+        "limits.runners.checkGitSec", 15, "seconds",
+        "How long the runner's health check (`infantry runner check`) waits for `git ls-remote` of the project's git remote before that row fails. Long enough for a slow server, short enough that a blocked port shows as a failure.",
+        min = 1, max = 300, zeroIsUnlimited = false,
+    )
+
+    /** RUNNER-CHECK-1: the free disk the runner's clone root must have for the health check's disk row to pass. */
+    val RUNNERS_CHECK_MIN_FREE_MB = LimitDef(
+        "limits.runners.checkMinFreeMb", 1_024, "MB",
+        "How much free disk space the runner's clone root (`runners.cloneRoot`) must have for the health check's disk row to pass; a full server fails every start late. 0 = any free space passes.",
+        min = 0, zeroIsUnlimited = false,
+    )
+
+    /**
      * RUNNER-ADD-LINK-1: how long `infantry runner add '<link>'` waits on ONE host of the link before it tries the next. The link
      * carries several hosts (tailnet first, then LAN); a host that does not answer must not hold up the next one for long.
      */
@@ -1063,7 +1080,7 @@ object LimitRegistry {
         MAIL_WAKE_DEBOUNCE_SECONDS, MAIL_COALESCE_MAX, WATCH_STALL_NUDGES, SCRIPT_RUN_LOG_MAX,
         RUNNERS_PAIR_CODE_MIN, RUNNERS_PAIR_ATTEMPTS_PER_HOUR, RUNNERS_CREDENTIAL_ROTATE_DAYS, RUNNERS_LINK_PORT, RUNNERS_ADVERTISE_HOSTS_MAX, RUNNERS_AUDIT_SHOWN, RUNNERS_LINK_CALL_SECONDS, RUNNERS_LINK_CHECK_SECONDS,
         RUNNERS_OUTBOX_MAX, RUNNERS_LOST_AFTER_MIN, RUNNERS_COMMIT_CHECK_SEC, RUNNERS_FORWARD_WAIT_SEC, RUNNERS_FORWARD_TIMEOUT_SEC, RUNNERS_FORWARD_PENDING_MAX,
-        RUNNERS_ADD_HOST_TIMEOUT_SEC,
+        RUNNERS_ADD_HOST_TIMEOUT_SEC, RUNNERS_CHECK_GIT_SEC, RUNNERS_CHECK_MIN_FREE_MB,
         DOWNLOAD_RETRIES, DOWNLOAD_BACKOFF_MS, DOWNLOAD_CONNECT_TIMEOUT_SECONDS, DOWNLOAD_RESPONSE_TIMEOUT_SECONDS, DOWNLOAD_STALL_SECONDS, DOWNLOAD_MAX_MB, DOWNLOAD_REDIRECTS, DOWNLOAD_MOVE_RETRIES,
         PROGRESS_KEEP_FINISHED, PROGRESS_MIN_INTERVAL_MS,
     )

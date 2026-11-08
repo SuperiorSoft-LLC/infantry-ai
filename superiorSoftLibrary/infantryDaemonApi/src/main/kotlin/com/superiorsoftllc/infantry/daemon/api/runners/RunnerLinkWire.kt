@@ -22,8 +22,10 @@ object RunnerLinkWire {
      * 1.2.0 (RUNNER-POOL-7): [FORWARD_PULL] / [FORWARD_ANSWER], the agent frames a runner forwards to its orchestrator.
      * 1.3.0 (RUNNER-POOL-8): [EventsRequest.acked] (the outbox keeps an event until acknowledged, seq per session);
      * [StartRequest.pushOnCommit].
+     * 1.4.0 (RUNNER-CHECK-1): [CHECK], the read-only health check (`contract`, harness sign-in, grants, git, disk), answered as
+     * [CheckAnswer] rows with the fix for each failing one.
      */
-    const val CONTRACT = "1.3.0"
+    const val CONTRACT = "1.4.0"
 
     const val PAIR = "runner_link_pair"
     const val HELLO = "runner_link_hello"
@@ -35,6 +37,12 @@ object RunnerLinkWire {
     const val DELIVER = "runner_link_deliver"
     const val EVENTS = "runner_link_events"
     const val TRANSCRIPT = "runner_link_transcript"
+
+    /**
+     * RUNNER-CHECK-1 (docs/wiki/RunnerPairing-design.md 4, step 4): the orchestrator's health check of one runner, answered by
+     * [CheckAnswer]. Read only: nothing is started, cloned or written.
+     */
+    const val CHECK = "runner_link_check"
 
     /**
      * RUNNER-POOL-7 (docs/RUNNER-POOL.md 2.3 b): the orchestrator DIALS the runner, so the runner's forwarded agent frames travel back
@@ -138,6 +146,30 @@ object RunnerLinkWire {
 
     @Serializable
     data class TranscriptAnswer(val lines: List<String> = emptyList())
+
+    /**
+     * RUNNER-CHECK-1: what to check. [projectId] and [harness] are the one the owner means to run there (a runner grants each id
+     * separately); [gitRemote] is the project's `origin` the runner would clone; [contract] is the orchestrator's [CONTRACT], so a
+     * runner that speaks another one can report the mismatch as a row instead of failing the whole call.
+     */
+    @Serializable
+    data class CheckRequest(
+        val projectId: String? = null,
+        val harness: String? = null,
+        val gitRemote: String? = null,
+        val contract: String? = null,
+    )
+
+    /**
+     * One checked thing: [id] is `contract`, `harness:<id>`, `grant:project`, `grant:harness`, `git`, `disk` (runner side) or
+     * `link`, `git:origin` (decided by the orchestrator); [detail] is what was found; [fix] is the exact command or step when it
+     * failed (null when [ok]). A row id is stable: a client may switch on it.
+     */
+    @Serializable
+    data class CheckRow(val id: String, val ok: Boolean, val detail: String, val fix: String? = null)
+
+    @Serializable
+    data class CheckAnswer(val rows: List<CheckRow> = emptyList())
 
     @Serializable
     data class ForwardPullRequest(val waitMs: Long = 0)

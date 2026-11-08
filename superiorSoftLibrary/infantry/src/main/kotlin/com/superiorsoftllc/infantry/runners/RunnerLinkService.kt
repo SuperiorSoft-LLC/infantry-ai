@@ -102,6 +102,7 @@ class RunnerLinkService(
         val server = RunnerLinkServer(
             store, RunnerAudit(File(dir, RunnerAudit.FILE)), codes = null, settings = settings, runner = { runner }, starts = starts,
             forwarder = forwarder, forwardWaitCapMs = ::forwardWaitMs,
+            limit = limit, cloneRoot = ::cloneRootDir,
         )
         val plain = settings().allowPlainTailnet
         val s = t.serve(handler(server), host, linkPort(), if (plain) null else tls(store), callTimeoutMs())
@@ -184,6 +185,8 @@ class RunnerLinkService(
                 )
             }
             "rotate" -> ok("name" to peers(RunnerLinkStore.open(stateDir)).rotate(need("name")).name)
+            // RUNNER-CHECK-1: the health check (link, contract, sign-in, grants, git, disk) with the fix for each failing row.
+            "check" -> check(need("name"), str("projectId"), str("harness"))
             "detach" -> {
                 if (!RunnerLinkStore.exists(stateDir)) throw IllegalArgumentException("this machine never paired")
                 ok("remote" to peers(RunnerLinkStore.open(stateDir)).detach(need("name")))
@@ -196,6 +199,64 @@ class RunnerLinkService(
         failed(e.message, null)
     }
 
+    /** RUNNER-CHECK-1: where this runner keeps its clones (the check's disk row and its `ls-remote` folder). */
+    private fun cloneRootDir(): File = RemoteStarts.cloneRootDir(runCatching { settings().cloneRoot }.getOrDefault(""), stateDir)
+
+    /**
+     * RUNNER-CHECK-1 (docs/wiki/RunnerPairing-design.md 4, step 4): one health check of runner [name], from this side.
+     *
+     * The runner answers its own rows ([F.CHECK]); this adds the two only the orchestrator can decide:
+     *
+     * * `link`: it was reached, in how many ms (or the transport error, as a failing row instead of an exception).
+     * * `git:origin`: the project's checkout has an `origin` to give the runner at all; without one the remote start would fail
+     *   (when a `projectId` is named and this daemon can look the project up).
+     *
+     * A runner that does not know [F.CHECK] answers an error: one `contract` row says it is too old.
+     */
+    private fun check(name: String, projectId: String?, harness: String?): JsonObject {
+        val store = RunnerLinkStore.open(stateDir)
+        val r = store.runner(name) ?: throw IllegalArgumentException("no paired runner '${name.filter { it in ' '..'~' }.take(SHOWN_OP_SIZE)}'")
+        val project = projectId?.takeIf { it.isNotBlank() }
+        val remote = project?.let { runCatching { projectRemoteOf(it) }.getOrNull() }?.takeIf { it.isNotBlank() }
+        val rows = mutableListOf<F.CheckRow>()
+        if (project != null && remote == null) {
+            rows += F.CheckRow(
+                "git:origin", false, "project '$project' has no git remote: its checkout has no `origin`, so the runner has nothing to clone",
+                "git -C <the project's folder on this machine> remote add origin <a url the runner can reach>",
+            )
+        }
+        val request = F.CheckRequest(projectId = project, harness = harness?.takeIf { it.isNotBlank() }, gitRemote = remote, contract = F.CONTRACT)
+        val data = F.json.encodeToString(F.CheckRequest.serializer(), request)
+        // The runner may spend limits.runners.checkGitSec in its git row: give the call that on top of a normal link call.
+        val timeout = limit(LimitRegistry.RUNNERS_LINK_CALL_SECONDS) + limit(LimitRegistry.RUNNERS_CHECK_GIT_SEC)
+        val started = clock()
+        val answer = try {
+            clientCall(limit, settings, transport).call(r.url, r.fingerprint.ifBlank { null }, store.selfId(), r.credential, F.CHECK, data, timeout)
+        } catch (e: LinkFailure) {
+            rows += F.CheckRow(
+                "link", false, "cannot reach runner '$name' at ${r.url}: ${e.message}",
+                "check the runner is running and its link port is reachable from this machine (a firewall or tailnet rule)",
+            )
+            return rowsJson(rows)
+        }
+        rows += F.CheckRow("link", true, "reached ${r.url} in ${clock() - started} ms")
+        if (!answer.ok) {
+            rows += F.CheckRow(
+                "contract", false,
+                "runner too old for checks; update it (it answered: ${answer.data.filter { it in ' '..'~' }.take(SHOWN_OP_SIZE * 4)})",
+                "update the runner to the same release as this daemon (restart it with the current image or install), then check again",
+            )
+            return rowsJson(rows)
+        }
+        val remoteRows = runCatching { F.json.decodeFromString(F.CheckAnswer.serializer(), answer.data) }.getOrNull()
+            ?: return rowsJson(rows + F.CheckRow("contract", false, "the runner's check answer could not be read", "update the runner to the same release as this daemon"))
+        return rowsJson(rows + remoteRows.rows)
+    }
+
+    private fun rowsJson(rows: List<F.CheckRow>): JsonObject = JsonObject(
+        ok() + mapOf("rows" to JsonArray(rows.map { F.json.encodeToJsonElement(F.CheckRow.serializer(), it) })),
+    )
+
     /**
      * RUNNER-POOL-10: what the Runners card shows. The pool fills health, workers and caps through [rowStatus] (one runner name -> its
      * fields); this adds the paired url and pinned fingerprint. `enabled` is [enabledNow]. Read only: pause is the setting
@@ -207,6 +268,11 @@ class RunnerLinkService(
     @Volatile var setPaused: (String, Boolean) -> Unit = { _, _ -> }
     /** RUNNER-ADD-LINK-1: writes `runners.enabled`; the first successful add turns it on so one paste is enough. */
     @Volatile var setEnabled: (Boolean) -> Unit = { }
+    /**
+     * RUNNER-CHECK-1: the git remote of a project (`origin` of its checkout), the same lookup a remote start uses; null = the
+     * project has none, which the check reports as its `git:origin` row.
+     */
+    @Volatile var projectRemoteOf: (String?) -> String? = { null }
 
     private fun list(): JsonObject {
         val paired = if (RunnerLinkStore.exists(stateDir)) RunnerLinkStore.open(stateDir).runners() else emptyList()
@@ -242,7 +308,7 @@ class RunnerLinkService(
             expiryMs = { limit(LimitRegistry.RUNNERS_PAIR_CODE_MIN) * MS_PER_MINUTE },
             attemptsPerHour = { limit(LimitRegistry.RUNNERS_PAIR_ATTEMPTS_PER_HOUR) },
         )
-        val server = RunnerLinkServer(store, RunnerAudit(File(dir, RunnerAudit.FILE)), codes, settings = { values }, runner = { null })
+        val server = RunnerLinkServer(store, RunnerAudit(File(dir, RunnerAudit.FILE)), codes, settings = { values }, runner = { null }, clock = clock)
         val s = try {
             t.serve(handler(server), host, linkPort(), tls, callTimeoutMs())
         } catch (e: Exception) {

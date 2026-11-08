@@ -8,6 +8,8 @@ import com.superiorsoftllc.infantry.runners.RunnerAudit
 import com.superiorsoftllc.infantry.runners.RunnerLinkService
 import com.superiorsoftllc.infantry.runners.RunnerLinkStore
 import com.superiorsoftllc.infantry.runners.RunnerPairLink
+import com.superiorsoftllc.infantry.daemon.api.runners.RunnerLinkWire
+import com.superiorsoftllc.infantry.daemon.api.runners.RunnerLinkWire.CheckRow
 import com.superiorsoftllc.infantry.settings.LimitDef
 import com.superiorsoftllc.infantry.settings.LimitRegistry
 import com.superiorsoftllc.infantry.settings.RunnerLinkSettings
@@ -32,6 +34,8 @@ import java.net.InetAddress
  * * `add <name> <wss-url> --code <c> --fingerprint <fp>` (on the ORCHESTRATOR): checks the pin, trades the code for the
  *   per-pair credential.
  * * `rotate <name>`: in-band rekey. `detach [<name>]`: with a name, on the orchestrator; without, on the runner.
+ * * `check <name> [--project <id>] [--harness <id>]` (RUNNER-CHECK-1): the health check over the link (contract, harness sign-in,
+ *   grants, git remote, disk, link), one line per row with the fix under a failing one; exit 1 when any row fails.
  * * `audit [--limit N]`: the runner's audit log of every remote operation.
  *
  * RUNNER-POOL-6a: the transport is the Infantry_RemoteRunner plugin's and only the daemon loads plugins, so `pair`, `add`,
@@ -40,7 +44,7 @@ import java.net.InetAddress
  * runner-side `detach` read and write the link folder here, as before. Command names, flags and printed text are unchanged.
  */
 internal object RunnerCli {
-    const val USAGE = "usage: infantry runner pair --name <n> [--host <h>]... [--allow-projects <ids|*>] [--allow-harnesses <ids|*>] | add <name> <wss-url> --code <code> [--fingerprint <fp>] | add '<infantry://runner?...>' [--name <n>] | add --link <link|-> [--name <n>] | list | rotate <name> | detach [<name>] | audit [--limit N]"
+    const val USAGE = "usage: infantry runner pair --name <n> [--host <h>]... [--allow-projects <ids|*>] [--allow-harnesses <ids|*>] | add <name> <wss-url> --code <code> [--fingerprint <fp>] | add '<infantry://runner?...>' [--name <n>] | add --link <link|-> [--name <n>] | list | check <name> [--project <id>] [--harness <id>] | rotate <name> | detach [<name>] | audit [--limit N]"
 
     /** RUNNER-ADD-LINK-1: what the usage error adds when a pasted link looks cut short (a PowerShell `&` eats the rest). */
     private const val QUOTE_HINT = "Quote the whole link, e.g. infantry runner add 'infantry://runner?v=1&...'. A shell without quotes cuts it at &."
@@ -48,11 +52,11 @@ internal object RunnerCli {
     private val json = Json { ignoreUnknownKeys = true }
 
     /** The words after `runner` and the flags the CLI parser took for it. */
-    data class Args(val words: List<String>, val name: String? = null, val code: String? = null, val fingerprint: String? = null, val limit: String? = null, val allowProjects: String? = null, val allowHarnesses: String? = null, val hosts: String? = null, val link: String? = null) {
+    data class Args(val words: List<String>, val name: String? = null, val code: String? = null, val fingerprint: String? = null, val limit: String? = null, val allowProjects: String? = null, val allowHarnesses: String? = null, val hosts: String? = null, val link: String? = null, val project: String? = null, val harness: String? = null) {
         val action: String? get() = words.firstOrNull()?.lowercase()
         val positional: List<String> get() = words.drop(1)
         val flags: Map<String, String>
-            get() = listOfNotNull(name?.let { "name" to it }, code?.let { "code" to it }, fingerprint?.let { "fingerprint" to it }, limit?.let { "limit" to it }, allowProjects?.let { "allow-projects" to it }, allowHarnesses?.let { "allow-harnesses" to it }, hosts?.let { "host" to it }, link?.let { "link" to it }).toMap()
+            get() = listOfNotNull(name?.let { "name" to it }, code?.let { "code" to it }, fingerprint?.let { "fingerprint" to it }, limit?.let { "limit" to it }, allowProjects?.let { "allow-projects" to it }, allowHarnesses?.let { "allow-harnesses" to it }, hosts?.let { "host" to it }, link?.let { "link" to it }, project?.let { "project" to it }, harness?.let { "harness" to it }).toMap()
     }
 
     /** The usage error for [args], or null when they are valid. */
@@ -65,6 +69,8 @@ internal object RunnerCli {
             "list" -> positional.isEmpty() && flags.isEmpty()
             "rotate" -> positional.size == 1 && flags.isEmpty()
             "detach" -> positional.size <= 1 && flags.isEmpty()
+            // RUNNER-CHECK-1: `runner check <name> [--project <id>] [--harness <id>]`.
+            "check" -> positional.size == 1 && positional[0].isNotBlank() && flags.keys.all { it in setOf("project", "harness") }
             "audit" -> positional.isEmpty() && flags.keys.all { it == "limit" } && (args.limit == null || (args.limit.toIntOrNull() ?: 0) > 0)
             else -> false
         }
@@ -109,6 +115,23 @@ internal object RunnerCli {
                     out.appendLine("runner '${r["name"]}': credential rotated; the old one no longer works")
                     0
                 }
+                // RUNNER-CHECK-1: one line per health-check row, with the fix under a failing one; exit 1 when any row fails.
+                "check" -> {
+                    val r = admin(
+                        stream, ::limit, "op" to "check", "name" to positional[0], "projectId" to flags["project"], "harness" to flags["harness"],
+                        extraSeconds = limit(LimitRegistry.RUNNERS_CHECK_GIT_SEC),
+                    )
+                    if (r.failed) { err.appendLine("error: ${r.error}"); return 1 }
+                    val rows = r.checks()
+                    if (rows.isEmpty()) { err.appendLine("error: the daemon returned no check rows"); return 1 }
+                    for (row in rows) {
+                        out.appendLine("${row.id.padEnd(ID_COLUMN).take(ID_COLUMN)}  ${if (row.ok) "ok" else FAIL}    ${row.detail}")
+                        row.fix?.takeIf { !row.ok }?.let { out.appendLine("${" ".repeat(ID_COLUMN + 8)}fix: $it") }
+                    }
+                    val bad = rows.count { !it.ok }
+                    out.appendLine(if (bad == 0) "runner '${positional[0]}': every check passed" else "runner '${positional[0]}': $bad of ${rows.size} checks failed")
+                    if (bad > 0) 1 else 0
+                }
                 "detach" -> {
                     val name = positional.firstOrNull()
                     if (name != null) {
@@ -152,13 +175,19 @@ internal object RunnerCli {
         val error: String get() = this["error"] ?: "the daemon gave no reason"
         operator fun get(key: String): String? = RunnerLinkService.field(fields, key)
         fun list(key: String): List<String> = (fields[key] as? JsonArray)?.mapNotNull { it.jsonPrimitive.contentOrNull }.orEmpty()
+
+        /** RUNNER-CHECK-1: the check's rows (`runner_admin` op `check`), in the runner's order. */
+        fun checks(): List<CheckRow> = (fields[ROWS] as? JsonArray).orEmpty().mapNotNull { e ->
+            runCatching { RunnerLinkWire.json.decodeFromString(CheckRow.serializer(), e.toString()) }.getOrNull()
+        }
     }
 
     /** Sends one `runner_admin` request to the daemon; a link call may take `limits.runners.linkCallSeconds`, add makes two. */
-    private suspend fun admin(stream: FrameStream, limit: (LimitDef) -> Long, vararg fields: Pair<String, String?>, linkHosts: Int = 0): AdminAnswer {
+    private suspend fun admin(stream: FrameStream, limit: (LimitDef) -> Long, vararg fields: Pair<String, String?>, linkHosts: Int = 0, extraSeconds: Long = 0): AdminAnswer {
         val body = JsonObject(fields.filter { it.second != null }.associate { (k, v) -> k to JsonPrimitive(v) })
-        // An `add` from a link may try every host of the link, each bounded by limits.runners.addHostTimeoutSec.
-        val wait = maxOf(stream.answerTimeoutMs, (limit(LimitRegistry.RUNNERS_LINK_CALL_SECONDS) * ADMIN_CALLS + ADMIN_SLACK_SECONDS + linkHosts * limit(LimitRegistry.RUNNERS_ADD_HOST_TIMEOUT_SEC)) * MS_PER_SECOND)
+        // An `add` from a link may try every host of the link, each bounded by limits.runners.addHostTimeoutSec; a `check` may spend
+        // limits.runners.checkGitSec on the runner's git row.
+        val wait = maxOf(stream.answerTimeoutMs, (limit(LimitRegistry.RUNNERS_LINK_CALL_SECONDS) * ADMIN_CALLS + ADMIN_SLACK_SECONDS + extraSeconds + linkHosts * limit(LimitRegistry.RUNNERS_ADD_HOST_TIMEOUT_SEC)) * MS_PER_SECOND)
         val answer = stream.request(Envelope(RunnerLinkService.ADMIN, body.toString()), RunnerLinkService.ADMIN, RunnerLinkService.ADMIN, idempotent = false, timeoutMs = wait)
         return AdminAnswer(json.parseToJsonElement(answer.data).jsonObject)
     }
@@ -304,4 +333,8 @@ internal object RunnerCli {
     private const val ADMIN_CALLS = 2L
     private const val ADMIN_SLACK_SECONDS = 10L
     private const val PAIR_POLL_STEP = 500L
+    /** RUNNER-CHECK-1: the column a check row's id is padded to, so `ok` / `FAIL` line up. */
+    private const val ID_COLUMN = 15
+    private const val FAIL = "FAIL"
+    private const val ROWS = "rows"
 }
