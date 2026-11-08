@@ -32,7 +32,15 @@ import com.superiorsoftllc.infantry.ui.plugin.UiRegistrar
 import com.superiorsoftllc.infantry.ui.plugin.config.FieldType
 import com.superiorsoftllc.infantry.ui.shell.LinkContext
 import com.superiorsoftllc.infantry.ui.shell.LocalShellContext
+import androidx.compose.runtime.DisposableEffect
+import com.superiorsoftllc.infantry.plugin.api.Notification
+import com.superiorsoftllc.infantry.plugin.api.NotificationChannels
+import com.superiorsoftllc.infantry.plugin.api.NotificationLevel
+import com.superiorsoftllc.infantry.plugin.api.NotificationPresenter
+import com.superiorsoftllc.infantry.plugin.api.Notifications
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
@@ -86,10 +94,17 @@ class NotifyPlugin : UiPlugin, ModuleSource {
     override fun modules(): List<InfantryModule> = listOf(InfantryNotify)
 }
 
+/** NOTIFY-CORE-1: this module's name, its presenter id on the notification bus. */
+const val NOTIFY_MODULE = "Infantry_Notify"
+
 /**
  * The invisible block in the shell's window layer: shows every `notify_push` meant for this platform as a system notification,
  * plays its sound, acks it (so the daemon's queue drops it) and opens the ticket of a clicked notification. When the link
  * goes live it asks for the queue (`notify_pending`), so one sent while no client was connected arrives now.
+ *
+ * NOTIFY-CORE-1 (docs/wiki/Notifications.md): it registers this platform's notifier as the core bus's OS-channel presenter, so
+ * every notification the bus routes to the OS (urgent ones by default, any by the owner's routes) shows here; and a
+ * `notify_push` goes through the bus (OS channel) too, so the owner's presenter choice and quiet hours apply to it.
  */
 @Composable
 fun NotifyListener() {
@@ -97,23 +112,86 @@ fun NotifyListener() {
     val link = ctx.link
     val notifier = rememberNotifier()
     val dedupe = remember { NotifyDedupe() }
-    val handle: suspend (NotifyPayload) -> Unit = { p -> deliver(p, notifier, dedupe, link) }
+    val bus = ctx.toast.notifications
+    val os = remember(notifier) { OsPresenter(notifier) }
+    DisposableEffect(bus, os) {
+        val handle = bus.present(NOTIFY_MODULE, setOf(NotificationChannels.OS), os)
+        onDispose { handle.close() }
+    }
+    val handle: suspend (NotifyPayload) -> Unit = { p -> deliver(p, notifier, dedupe, link, bus, os) }
     LaunchedEffect(link) { link.frames(NotifyFrames.PUSH).collect { NotifyPayload.parse(it)?.let { p -> handle(p) } } }
     LaunchedEffect(link) { link.frames(NotifyFrames.PENDING_LIST).collect { NotifyPayload.parseList(it).forEach { p -> handle(p) } } }
     LaunchedEffect(link.live, notifier) { if (link.live) link.sendFrame(NotifyFrames.PENDING, NotifyFrames.pending(notifier.platform)) }
     LaunchedEffect(notifier) { notifier.opened.collect { ctx.board.openTicket(it) } }
 }
 
-/** One notification on this client: shown once (by id), the sound played, the daemon told it arrived. */
-internal suspend fun deliver(p: NotifyPayload, notifier: Notifier, dedupe: NotifyDedupe, link: LinkContext): Boolean {
+/**
+ * One notification on this client: shown once (by id), the sound played, the daemon told it arrived. NOTIFY-CORE-1: with a
+ * [bus] it is posted there on the OS channel and counts as shown when [os] (this module's presenter) showed it; without one
+ * (a host with no bus) the notifier shows it directly.
+ */
+internal suspend fun deliver(
+    p: NotifyPayload, notifier: Notifier, dedupe: NotifyDedupe, link: LinkContext,
+    bus: Notifications? = null, os: OsPresenter? = null,
+): Boolean {
     if (!NotifyRouting.shows(p.target, notifier.platform)) return false
     if (!dedupe.firstTime(p.id)) return false
-    val shown = runCatching { notifier.show(p) }.getOrDefault(false)
+    val shown = if (bus != null && os != null) {
+        os.expect(p)
+        runCatching { bus.notify(p.toNotification()) }
+        os.took(p.id)
+    } else runCatching { notifier.show(p) }.getOrDefault(false)
     val data = p.soundData
     if (data != null) decodeSound(data)?.let { runCatching { notifier.play(p.soundType ?: "audio/wav", it) } }
     if (shown) link.sendFrame(NotifyFrames.ACK, NotifyFrames.ack(p.id, notifier.platform))
     return shown
 }
+
+/**
+ * NOTIFY-CORE-1: Infantry_Notify as the bus's OS-channel presenter: this platform's [Notifier]. A notification that came in as a
+ * `notify_push` keeps its own payload (sound, url, target); any other is mapped by [toPayload].
+ */
+internal class OsPresenter(private val notifier: Notifier) : NotificationPresenter {
+    private val payloads = MutableStateFlow<Map<String, NotifyPayload>>(emptyMap())
+    private val shown = MutableStateFlow<Set<String>>(emptySet())
+
+    /** [p] is about to be posted to the bus: show it with its own payload. */
+    fun expect(p: NotifyPayload) = payloads.update { it + (p.id to p) }
+
+    /** Whether this presenter showed [id] (and forgets it). */
+    fun took(id: String): Boolean {
+        payloads.update { it - id }
+        val was = id in shown.value
+        shown.update { it - id }
+        return was
+    }
+
+    override fun show(notification: Notification): Boolean {
+        val p = payloads.value[notification.id] ?: notification.toPayload()
+        val ok = notifier.show(p)
+        if (ok) shown.update { (it + notification.id).let { s -> if (s.size > OS_SHOWN_KEPT) s.drop(s.size - OS_SHOWN_KEPT).toSet() else s } }
+        return ok
+    }
+}
+
+/** How many shown ids [OsPresenter] remembers for its [OsPresenter.took] answer. */
+private const val OS_SHOWN_KEPT = 200
+
+/** NOTIFY-CORE-1: a pushed notification as a bus notification, for the OS channel only (what `infantry_notify` always meant). */
+internal fun NotifyPayload.toNotification(): Notification = Notification(
+    id = id, title = title, body = body, level = NotificationLevel.of(level), source = NOTIFY_MODULE,
+    channels = listOf(NotificationChannels.OS), ticketId = ticketId,
+)
+
+/** NOTIFY-CORE-1: a bus notification as this module's payload (level urgent stays urgent, success is a milestone). */
+internal fun Notification.toPayload(): NotifyPayload = NotifyPayload(
+    id = id, title = title, body = body, ticketId = ticketId,
+    level = when (level) {
+        NotificationLevel.URGENT -> "urgent"
+        NotificationLevel.SUCCESS -> "milestone"
+        else -> "info"
+    },
+)
 
 /**
  * NOTIFY-PUSH-1: the switch that keeps the connection alive in the background so a notification arrives with the app closed.

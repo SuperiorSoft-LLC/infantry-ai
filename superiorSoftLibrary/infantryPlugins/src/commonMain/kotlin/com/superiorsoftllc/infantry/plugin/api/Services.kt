@@ -42,9 +42,31 @@ interface PluginServices {
     fun <T : Any> get(key: ServiceKey<T>): T?
 }
 
-/** Tells the owner something. Today a line in the log (and the in-app toast where the host has one); OS toasts later. */
+/**
+ * Tells the owner something: the notification bus (NOTIFY-CORE-1, docs/wiki/Notifications.md). [notify] with a [Notification]
+ * routes it to the in-app toast and the OS by the owner's settings; the two-string form is an info notification. The host's
+ * implementation overrides every member; the defaults keep a one-lambda implementation (a test double) compiling.
+ */
 fun interface Notifications {
     fun notify(title: String, body: String)
+
+    /** NOTIFY-CORE-1 (@since revision 6): posts [notification]; the answer is its id (assigned when blank). */
+    fun notify(notification: Notification): String {
+        notify(notification.title, notification.body)
+        return notification.id
+    }
+
+    /** NOTIFY-CORE-1: takes notification [id] down on every channel (it stays in the history). */
+    fun dismiss(id: String) {}
+
+    /**
+     * NOTIFY-CORE-1: registers [presenter] as [presenterId]'s presenter (use the module name) for [channels]. It is active on a
+     * channel when `notifications.presenter.<channel>` names it, or is blank and it is the last one registered. Close to remove.
+     */
+    fun present(presenterId: String, channels: Set<String>, presenter: NotificationPresenter): AutoCloseable = AutoCloseable {}
+
+    /** NOTIFY-CORE-1: [listener] hears every pressed notification action. Close to stop. */
+    fun onAction(listener: (NotificationActionEvent) -> Unit): AutoCloseable = AutoCloseable {}
 }
 
 /** The module's own data area; no module can see another's. Names are plain file names. */

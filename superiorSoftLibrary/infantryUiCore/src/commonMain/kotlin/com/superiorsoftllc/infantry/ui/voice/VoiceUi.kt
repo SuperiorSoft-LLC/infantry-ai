@@ -27,6 +27,11 @@ import com.superiorsoftllc.infantry.ui.FilterChip
 import com.superiorsoftllc.infantry.ui.Palette
 import com.superiorsoftllc.infantry.ui.Switch
 import com.superiorsoftllc.infantry.ui.shell.LocalPlatformHost
+import com.superiorsoftllc.infantry.ui.shell.LocalShellContext
+import com.superiorsoftllc.infantry.plugin.api.Notification
+import com.superiorsoftllc.infantry.plugin.api.NotificationChannels
+import com.superiorsoftllc.infantry.plugin.api.NotificationLevel
+import com.superiorsoftllc.infantry.plugin.api.Notifications
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlin.time.Clock
@@ -39,10 +44,17 @@ const val VOICE_APPLIES_TO = "Applies to: spoken alerts agents raise with `infan
 
 /**
  * VOICE-1: collects [spoken], speaks what [VoiceSettings] and the [SpeechGate] allow (a beep when the host has no voice),
- * and shows each fresh alert as a toast in the bottom-left corner of the enclosing box.
+ * and shows each fresh alert. NOTIFY-CORE-1: on the core notification bus ([notifications], the shell's) as an in-app
+ * notification; only without a bus (no shell) as its own toast in the bottom-left corner of the enclosing box.
  */
 @Composable
-fun VoiceAlerts(spoken: Flow<SpokenNotice>, settings: VoiceSettings, modifier: Modifier = Modifier) {
+fun VoiceAlerts(
+    spoken: Flow<SpokenNotice>,
+    settings: VoiceSettings,
+    modifier: Modifier = Modifier,
+    notifications: Notifications? = LocalShellContext.current?.toast?.notifications,
+) {
+    val bus by rememberUpdatedState(notifications)
     val host = LocalPlatformHost.current
     val gate = remember { SpeechGate() }
     val current by rememberUpdatedState(settings)
@@ -53,7 +65,8 @@ fun VoiceAlerts(spoken: Flow<SpokenNotice>, settings: VoiceSettings, modifier: M
             val hour = now.toLocalDateTime(TimeZone.currentSystemDefault()).hour
             val decision = gate.decide(n, current, now.toEpochMilliseconds(), hour, host.windowFocused())
             if (decision == SpeechDecision.SKIP_DUPLICATE) return@collect
-            toast = n
+            val posted = bus?.let { b -> runCatching { b.notify(n.toNotification()) }.isSuccess } == true
+            if (!posted) toast = n
             if (decision.speaks) {
                 val spokeAloud = host.speaker?.speak(
                     spokenText(n), current.volumePercent, current.voiceName, interrupt = decision == SpeechDecision.SPEAK_INTERRUPT,
@@ -76,6 +89,23 @@ fun VoiceAlerts(spoken: Flow<SpokenNotice>, settings: VoiceSettings, modifier: M
 }
 
 /** VOICE-1: the "Spoken alerts" block of the configuration modal. */
+/** NOTIFY-CORE-1: a spoken alert as an in-app notification on the core bus (the OS one is Infantry_Notify's). */
+fun SpokenNotice.toNotification(): Notification = Notification(
+    title = listOfNotNull(projectName, VoiceLevel.fromWire(level).label).joinToString(" - "),
+    body = say,
+    level = when (VoiceLevel.fromWire(level)) {
+        VoiceLevel.URGENT -> NotificationLevel.URGENT
+        VoiceLevel.NEEDS_OWNER -> NotificationLevel.WARNING
+        else -> NotificationLevel.INFO
+    },
+    id = "voice-$id",
+    source = "voice",
+    channels = listOf(NotificationChannels.IN_APP),
+    ticketId = ticketId,
+    projectId = projectId,
+    at = at,
+)
+
 @Composable
 fun VoiceSettingsSection(settings: VoiceSettings, onChange: (VoiceSettings) -> Unit) {
     val voices = LocalPlatformHost.current.speaker?.voices().orEmpty()

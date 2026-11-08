@@ -359,7 +359,7 @@ it, or the platform lacks it. A community module also needs each service under `
 
 | Key | Type | What it gives |
 |---|---|---|
-| `Services.NOTIFICATIONS` | `Notifications` | `notify(title, body)`: a log line and, where the host has one, a toast. |
+| `Services.NOTIFICATIONS` | `Notifications` | The core notification bus (since plugin API 2.4.0): `notify(Notification)` posts one (routed to the in-app toast and, by level, the OS), `notify(title, body)` is the short form, `dismiss(id)`, `onAction(listener)` hears your notifications' pressed actions, `present(id, channels, presenter)` makes your plugin a channel's presenter. See [Notifications](Notifications.md). |
 | `Services.STORAGE` | `PluginStorage` | `read(name)`, `write(name, text)`, `list()`: your own data area, plain file names, no access to other modules. |
 | `Services.SETTINGS` | `PluginSettings` | `get(key)`, `set(key, value)`: your own key/value settings. |
 | `Services.EVENTS` | `EventBus` | `publish(PluginEvent)`, `subscribe(name, observer)`; the returned function unsubscribes. |
@@ -367,6 +367,26 @@ it, or the platform lacks it. A community module also needs each service under `
 | `Services.ENDPOINTS` | `EndpointAccess` | `suspend call(endpointId, method, path, body, headers)` to a backend you declared in `endpoints`; the host adds the credential. Returns `EndpointReply.Ok / Refused / Failed`. Redirects are not followed. |
 | `Services.SPEECH_OUT` (`"speech.out"`, since plugin API 2.1.0) | `SpeechOutput` | `speak(text, SpeakOptions(volumePercent, voice, interrupt))`, `stop()`, `voices()`. The host speaks with the voice engine the owner enabled (VOICE-PLUGIN-1), else the OS voice. Desktop today; null on web and Android. |
 | `Services.AUDIO_IN` (`"audio.in"`, since plugin API 2.1.0) | `AudioCapture` | `start(CaptureOptions(PcmFormat(16000, 1, 16), maxSeconds), onChunk, onEnd): CaptureHandle`; `CaptureHandle.stop()`, `active`. Raw PCM chunks on a host thread; `onEnd(CaptureEnd)` once, with `reason` one of `CaptureEnd.STOPPED`, `LIMIT`, `BUSY`, `UNAVAILABLE`, `FAILED`. Sensitive (see below). Desktop today (`javax.sound`); null on web and Android. |
+
+**Notifications.** Never draw your own error toast, snackbar or native dialog (`NotificationGuardTest` fails the
+build): post on the bus. A `Notification` (`plugin/api/Notification.kt`) carries `title`, `body`, `level`
+(`NotificationLevel`: `INFO`, `SUCCESS`, `WARNING`, `ERROR`, `URGENT`), `id`, `source` (the host stamps your module
+name), `actions` (`NotificationAction(id, label)`), `sticky`, `timeoutMs`, `dedupeKey` (repeats within
+`notifications.dedupeWindowSec` are dropped: one toast per outage), `channels` (`NotificationChannels.IN_APP`, `OS`;
+empty = the level's route) and optional `ticketId` / `sessionId` / `projectId`. A pressed action reaches your
+`onAction` listener as a `NotificationActionEvent`. To show notifications yourself, implement `NotificationPresenter`
+(`show(n): Boolean`, `dismiss(id)`) and register it with `present`; `notifications.presenter.<channel>` (a
+`NotificationSettings` key) picks the one active presenter per channel, and a presenter that throws is contained and
+the core default shows the notification. The bus itself is `NotificationCenter` (`plugin/host/NotificationCenter.kt`),
+pure and shared by every client; its wire frames are in `NotificationWire`. Without the service (web, Android) use
+`LocalShellContext.current?.toast?.notifications`, the same bus.
+
+```kotlin
+val bus = registrar.services.get(Services.NOTIFICATIONS)
+bus?.notify(Notification(title = "Sync failed", body = reason, level = NotificationLevel.ERROR,
+    dedupeKey = "acme.sync", actions = listOf(NotificationAction("retry", "Retry"))))
+bus?.onAction { e -> if (e.actionId == "retry") sync() }
+```
 
 **Sensitive services.** `Services.SENSITIVE` (today only `audio.in`) needs the owner's grant on top of the declaration,
 for every tier but core: the service id under `allow` in `modules.json`. The plugin manager asks for it at install even
@@ -468,9 +488,10 @@ You rarely use these in a plugin; they explain the status you see in Settings > 
 - `ModulesConfig` (`plugin/api/ModulesConfig.kt`): `<plugins root>/modules.json`: `folders`, `modules` (per module:
   `enabled`, `allow`, `deny`, `allowOverride`, `allowInject`, `endpoints`), `demoLock`, `configReadGate`.
 - `ModuleState` is `LOADED`, `DISABLED`, `LOCKED`, `REFUSED`; `ModuleStatus` carries the state, the reason and `heldOffBy` (the parents that are all off, when that is why the module is not loading).
-- `PLUGIN_API_VERSION = 2`. A module whose `apiVersion` differs is refused. `PLUGIN_API_REVISION = 4` is the additive
-  revision (1 added the `official` tier, 2 added sub-tabs, 3 added the `speech.out` and `audio.in` services, 4 added `capabilities` and `emits`). The
-  published `infantry-plugin-api` artifact is `<PLUGIN_API_VERSION>.<infantryPluginApiMinorPatch>` (gradle.properties; 2.3.0).
+- `PLUGIN_API_VERSION = 2`. A module whose `apiVersion` differs is refused. `PLUGIN_API_REVISION = 6` is the additive
+  revision (1 added the `official` tier, 2 added sub-tabs, 3 added the `speech.out` and `audio.in` services, 4 added `capabilities` and `emits`,
+  5 added `PluginScope`, 6 added the notification bus). The
+  published `infantry-plugin-api` artifact is `<PLUGIN_API_VERSION>.<infantryPluginApiMinorPatch>` (gradle.properties; 2.4.0).
 - `registerModule(manifest, tier, services, plugin): InfantryModule` runs a plugin's `register` into a module value.
   Tests use it (the template's `StarterPluginTest.kt`).
 - `TabFactory(modules)` binds modules, rejects what is not declared and lists problems in `factory.problems`. Tests
@@ -600,6 +621,21 @@ Generated for the `infantryPlugins` guard `SdkTypesDocumentedGuardTest`: every p
 - `ConfigValuesFrame`: CONFIG-8: `config_values`, the stored value of every declared daemon key (a key never set is absent: the client resolves the default).
 - `ConfigVisibleWhen`: CONFIG-FIELDS-2: show a field only while the sibling field [key] holds [eq] (compared as text; `true`/`false` for a checkbox).
 - `NodeConfigEntry`: The wire form of one `node_config` row (6s B): `GET /node-config` answers a list of them, `POST /node-config/seed` takes one (only missing keys are inserted), `PUT /node-config` writes one ([value] nu
+
+### `Notification.kt`
+
+- `Notification`: NOTIFY-CORE-1: one notification on the core bus (title, body, level, actions, sticky/timeout, dedupe key, links).
+- `NotificationAction`: one button of a notification (id + label).
+- `NotificationActionEvent`: a pressed action: the notification, the action and the module that posted it.
+- `NotificationChannels`: the channel ids (`inApp`, `os`) and `core`, the core default presenter's id.
+- `NotificationLevel`: info, success, warning, error, urgent (the wire names).
+- `NotificationPresenter`: shows a channel's notifications (`show`, `dismiss`); registered with `Notifications.present`.
+- `NotificationSettings`: the `notifications.*` settings: routes per level, presenter per channel, quiet hours, dedupe window, history size.
+- `NotificationWire`: the frames (`notification_push`, `notification_action`, `notification_dismiss`) and their codec.
+
+### `NotificationCenter.kt`
+
+- `NotificationCenter`: NOTIFY-CORE-1: the bus of one host: dedupe, routing, one active presenter per channel, fault containment, history.
 
 ### `OfficialTrust.kt`
 

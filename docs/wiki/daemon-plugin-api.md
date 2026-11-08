@@ -63,6 +63,7 @@ class HelloDaemon : DaemonPlugin {
 | `services` | typed service registry between plugins (section 6) |
 | `storage` | your own database tables (section 7) |
 | `settings` | read-only access to `limits.*`, `watch.*`, `processes.*` settings: `limit(key)`, `stored(key)`, `hint(key)` |
+| `notifications` | (1.53.0) the core notification bus ([Notifications](Notifications.md)), the same `Notifications` type a UI plugin gets: `notify(Notification)` posts as your module (the hub stamps id, time and source, drops a repeat of the same id or `dedupeKey` within `notifications.dedupeWindowSec`, and pushes it to every client, whose bus routes and shows it), `onAction(listener)` hears the actions pressed on your notifications (also published as the named event `notification.action`), `dismiss(id)` stops a sticky one from being replayed. `present` is a no-op here: presenters live on the clients. A daemon without the bus gives `NoNotifications`. |
 
 Further services, each with its own sub-package and each answering "unavailable" on a daemon that lacks it. Where
 the source comment names a grant, a community module needs it in `modules.json` `allow`:
@@ -363,6 +364,10 @@ Generated for the `infantryDaemonApi` guard `SdkTypesDocumentedGuardTest`: every
 - `AttentionEntry`: One attention item as the service shows it ([kind] is an [AttentionKinds] wire name).
 - `AttentionKinds`: The stable lower-snake-case kind names (identical to the wire names of the attention records).
 - `QuestionsOpen`: ATTN-2a (DaemonApi 1.24.0, additive): published by the plugin that owns the owner questions.
+
+### `NoNotifications.kt`
+
+- `NoNotifications`: NOTIFY-CORE-1: the default of `DaemonApi.notifications` for a daemon without the bus: posts are dropped, the id is answered.
 
 ### `BoardApi.kt`
 

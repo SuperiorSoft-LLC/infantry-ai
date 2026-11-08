@@ -197,6 +197,11 @@ class CoreShellContext(private val shell: Shell, console: RunConsoleHost?) : She
             event.projectId?.let { id -> shell.actionScope.launch { shell.controller.selectProject(id) } }
             if (event.sessionId != null && state.agents.containsKey(event.sessionId)) shell.controller.select(event.sessionId) else ui.showBoard = true
         }
+        override val notifications: com.superiorsoftllc.infantry.plugin.api.Notifications get() = shell.controller.notifications
+        override val history: List<com.superiorsoftllc.infantry.plugin.host.NotificationCenter.Record> get() = shell.controller.notifications.history.value
+        override fun action(event: ToastEvent, actionId: String) = shell.controller.notificationAction(event.id, actionId)
+        override fun dismiss(event: ToastEvent) = shell.controller.dismissNotification(event.id)
+        override fun clearHistory() = shell.controller.notifications.clearHistory()
     }
 }
 

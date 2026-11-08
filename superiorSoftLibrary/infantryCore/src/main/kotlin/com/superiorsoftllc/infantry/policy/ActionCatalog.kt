@@ -157,6 +157,9 @@ object ActionCatalog {
         // PLUGIN-BRIDGES-1: a client hosting its UI halves' capabilities (announce, answer), and their declared events.
         a("capabilities.host", READ, com.superiorsoftllc.infantry.plugin.api.CapabilityWire.HOST, com.superiorsoftllc.infantry.plugin.api.CapabilityWire.RESULT),
         a("capabilities.emit", WRITE, com.superiorsoftllc.infantry.plugin.api.CapabilityWire.EVENT),
+        // NOTIFY-CORE-1: a pressed notification action (it can start work) and a dismissed notification (stops its replay).
+        a("notifications.act", WRITE, com.superiorsoftllc.infantry.plugin.api.NotificationWire.ACTION),
+        a("notifications.dismiss", READ, com.superiorsoftllc.infantry.plugin.api.NotificationWire.DISMISS),
     )
 
     private val byFrame: Map<String, Action> = buildMap {

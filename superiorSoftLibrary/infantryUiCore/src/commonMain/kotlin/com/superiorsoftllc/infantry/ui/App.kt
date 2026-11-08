@@ -432,7 +432,7 @@ fun App(
     }
 
     // TOAST-1: a module's Notifications.notify toasts in this window.
-    remember(tabs, controller) { tabs.toasts = controller.toasts }
+    remember(tabs, controller) { tabs.toasts = controller.toasts; tabs.notifications.target = controller.notifications }
     val shell = Shell(
         state, controller, actionScope, tabs, homeTab, ui, chat, assistantPanel, assistantChat, host, modalBlur,
         switcher, serverUpdate, serverMismatch, changeConnection, pairStore, searchFocus, root, pickFile, logs, updates,

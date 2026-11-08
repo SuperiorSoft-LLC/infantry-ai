@@ -33,6 +33,7 @@ Every page of this wiki is listed here, one line each. The pages are written fro
 ## Configure
 
 - [Board and epics](Board.md): epics, and moving tickets between epics.
+- [Notifications](Notifications.md): the ONE notification bus (in-app toasts, OS notifications), presenters a plugin can override, routing settings, the inventory.
 - [Settings](Settings.md): scopes (app, project, role, session) and the cost-saving defaults.
 - [Kotlin notes](kotlin-notes.md): toolchain versions, UI core source sets and expect/actual, Compose MP pitfalls, build flags.
 - [Updates](Updates.md): the one update engine for the app and every plugin; per-plugin sources, private and paid ones.

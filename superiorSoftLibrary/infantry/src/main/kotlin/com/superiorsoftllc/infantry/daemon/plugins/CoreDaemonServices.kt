@@ -71,7 +71,10 @@ class CoreDaemonServices(
     private val runService: com.superiorsoftllc.infantry.daemon.api.runs.Runs? = null,
     /** PLUGIN-MCP-1: the plugin manager view; null = none. */
     private val pluginCatalog: com.superiorsoftllc.infantry.daemon.api.plugins.PluginCatalogReader? = null,
+    /** NOTIFY-CORE-1: the notification bus's settings, read at every post. */
+    private val notificationSettingsSource: () -> com.superiorsoftllc.infantry.plugin.api.NotificationSettings = { com.superiorsoftllc.infantry.plugin.api.NotificationSettings() },
 ) : DaemonServices {
+    override fun notificationSettings() = notificationSettingsSource()
     override val plugins get() = pluginCatalog ?: com.superiorsoftllc.infantry.daemon.api.plugins.NoPluginCatalog
     override val runs get() = runService ?: com.superiorsoftllc.infantry.daemon.api.runs.NoRuns
     override fun broadcast(type: String, data: String) { clientBroadcast?.invoke(type, data) }
