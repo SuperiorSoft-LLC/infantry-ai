@@ -165,7 +165,7 @@ class DaemonPluginHost private constructor(
     private val routeEntries = ConcurrentHashMap<String, RouteEntry>()
     private val frameGates = CopyOnWriteArrayList<Registered<FrameGateHook>>()
     private val orchestratorBindings = CopyOnWriteArrayList<Registered<Pair<String, com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorBinding>>>()
-    private val usageReadings = CopyOnWriteArrayList<Registered<Pair<String, (Long) -> List<com.superiorsoftllc.infantry.daemon.api.usage.LimitWindow>?>>>()
+    private val usageReadings = CopyOnWriteArrayList<Registered<UsageOffer>>()
     private val runnerBindings = CopyOnWriteArrayList<Registered<Pair<String, com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerBinding>>>()
     private val runnerLinkTransports = CopyOnWriteArrayList<Registered<Pair<String, com.superiorsoftllc.infantry.daemon.api.runners.RunnerLinkTransport>>>()
     private val approvalRuleHooks = CopyOnWriteArrayList<Registered<com.superiorsoftllc.infantry.daemon.api.ApprovalRulesHook>>()
@@ -241,7 +241,10 @@ class DaemonPluginHost private constructor(
     fun orchestratorBindings(): List<Pair<String, com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorBinding>> = orchestratorBindings.map { it.value }
 
     /** DEMO-USAGE-HIDE-1: the plan-limit readings plugins offered (`hooks.usageReading`); non-empty = they replace the provider sources. */
-    fun usageReadings(): List<Pair<String, (Long) -> List<com.superiorsoftllc.infantry.daemon.api.usage.LimitWindow>?>> = usageReadings.map { it.value }
+    fun usageReadings(): List<UsageOffer> = usageReadings.map { it.value }
+
+    /** USAGE-MOCK-1: one plugin's offered readings (provider id to windows; null/empty = off now) and whether pacing judges them. */
+    class UsageOffer(val affectsPacing: () -> Boolean, val read: (Long) -> Map<String, List<com.superiorsoftllc.infantry.daemon.api.usage.LimitWindow>>?)
 
     /** RUNNER-POOL-2: the runner bindings plugins offered (`hooks.runnerBinding`), kept on the runner pool at daemon start. */
     fun runnerBindings(): List<Pair<String, com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerBinding>> = runnerBindings.map { it.value }
@@ -1321,7 +1324,8 @@ class DaemonPluginHost private constructor(
             override fun turns(hook: TurnHook) { declare("turns"); turnHooks += Registered(p, hook) }
             override fun sessions(hook: SessionHook) { declare("sessions"); sessionHooks += Registered(p, hook) }
             override fun orchestratorBinding(providerId: String, binding: com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorBinding) { declare("orchestratorBinding"); orchestratorBindings += Registered(p, providerId to binding) }
-            override fun usageReading(provider: String, windows: (Long) -> List<com.superiorsoftllc.infantry.daemon.api.usage.LimitWindow>?) { declare("usageReading"); usageReadings += Registered(p, provider to windows) }
+            override fun usageReading(provider: String, windows: (Long) -> List<com.superiorsoftllc.infantry.daemon.api.usage.LimitWindow>?) { declare("usageReading"); usageReadings += Registered(p, UsageOffer({ true }) { now -> windows(now)?.let { mapOf(provider to it) } }) }
+            override fun usageReadings(affectsPacing: () -> Boolean, readings: (Long) -> Map<String, List<com.superiorsoftllc.infantry.daemon.api.usage.LimitWindow>>?) { declare("usageReading"); usageReadings += Registered(p, UsageOffer(affectsPacing, readings)) }
             override fun runnerBinding(bindingId: String, binding: com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerBinding) { declare("runnerBinding"); runnerBindings += Registered(p, bindingId to binding) }
             override fun runnerLinkTransport(transportId: String, transport: com.superiorsoftllc.infantry.daemon.api.runners.RunnerLinkTransport) { declare("runnerLinkTransport"); check(!p.community) { "the runner link transport is official / core only" }; runnerLinkTransports += Registered(p, transportId to transport) }
             override fun policyProvider(hook: PresetProviderHook) { declare("policyProvider"); presetHooks += Registered(p, hook) }

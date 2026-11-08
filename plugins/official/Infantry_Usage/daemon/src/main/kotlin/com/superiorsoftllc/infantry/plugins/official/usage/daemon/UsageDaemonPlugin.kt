@@ -18,11 +18,18 @@ import kotlinx.serialization.json.put
 /**
  * DAEMON-PLUGINS-3: Infantry_Usage's daemon half. `infantry_usage` (USAGE-PACE, contract 1.119.0) was built into the CLI's MCP
  * server; now it is one `usage_get` frame on the caller's own connection, rendered by the API's shared [UsageText]. Same
- * name, schema, answer and gating (`usage.read`).
+ * name, schema, answer and gating (`usage.read`). USAGE-MOCK-1: also the opt-in mock meters ([MockUsage]).
  */
 class UsageDaemonPlugin : DaemonPlugin {
     override fun start(api: DaemonApi) {
         api.tools.register(UsageTool)
+        // USAGE-MOCK-1: `usage.mock` on = usage_get, limits and the pushed limits frame carry the mock; pacing stays on the real readings
+        // unless `usage.mock.affectsPacing`. A setting (or its INFANTRY_USAGE_MOCK* env) is read at every reading, so a change counts at once.
+        fun value(setting: String, env: String) = api.env(env)?.takeIf { it.isNotBlank() } ?: api.config(setting)
+        api.hooks.usageReadings(
+            affectsPacing = { MockUsage.on(value(MockUsage.PACING_SETTING, MockUsage.PACING_ENV)) },
+            readings = { now -> if (MockUsage.on(value(MockUsage.SETTING, MockUsage.ENV))) MockUsage.windows(value(MockUsage.DATA_SETTING, MockUsage.DATA_ENV), now) else null },
+        )
     }
 }
 

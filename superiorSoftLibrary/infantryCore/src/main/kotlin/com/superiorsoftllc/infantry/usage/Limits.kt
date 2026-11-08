@@ -326,6 +326,12 @@ class LimitService(
     /** DEMO-USAGE-HIDE-1: sources a daemon plugin offered; non-empty = they are read INSTEAD of every other source, live or not. */
     @Volatile var replacement: () -> List<LimitSource> = { emptyList() }
 
+    /**
+     * USAGE-MOCK-1: whether the pacing rule judges the replacement's readings. False = [cachedOrRefreshForPacing] keeps reading the
+     * real sources (own cache and failure state), while [snapshot] and [cachedOrRefresh] carry the replacement.
+     */
+    @Volatile var replacementAffectsPacing: () -> Boolean = { true }
+
     private fun replaced(): Boolean = runCatching(replacement).getOrDefault(emptyList()).isNotEmpty()
 
     /** Whether [cached] was read from the replacement; a reading from the other kind of source is never served (it could be the real one). */
@@ -375,7 +381,7 @@ class LimitService(
         return fresh
     }
 
-    private fun readOne(s: LimitSource, now: Long, t: UsageReadTuning): ProviderLimits {
+    private fun readOne(s: LimitSource, now: Long, t: UsageReadTuning, states: HashMap<String, SourceState> = this.states): ProviderLimits {
         val st = states.getOrPut(s.provider) { SourceState() }
         if (st.retryAt > now) return failedView(s.provider, st, now, t) // backing off: the source is not asked
         val r = runCatching { s.read(now) }.getOrElse { ProviderLimits.unknown(s.provider, now, LimitReason.SOURCE_FAILED) }
@@ -424,6 +430,37 @@ class LimitService(
         val (last, at) = synchronized(this) { if (cachedReplaced != rep) null to 0L else cached to cachedAt }
         if (last == null || now - at >= minIntervalMs) snapshotAsync {}
         return last?.let { expire(it, now, tuning()) } ?: allSources().map { ProviderLimits.unknown(it.provider, now, LimitReason.NOT_READ_YET) }
+    }
+
+    private val realStates = HashMap<String, SourceState>()
+    private var realCached: List<ProviderLimits>? = null
+    private var realCachedAt = 0L
+
+    /** USAGE-MOCK-1: the real sources' reading, kept apart from [snapshot] (its cache and failure state), for pacing under a replacement. */
+    @Synchronized
+    private fun realSnapshot(): List<ProviderLimits> {
+        val now = clock()
+        val real = (sources + runCatching(extraSources).getOrDefault(emptyList())).distinctBy { it.provider }
+        if (!liveEnabled()) return real.map { ProviderLimits.unknown(it.provider, now, LimitReason.LIVE_SOURCES_OFF) }
+        val t = tuning()
+        realCached?.let { if (now - realCachedAt < minIntervalMs) return expire(it, now, t) }
+        val fresh = real.map { readOne(it, now, t, realStates) }
+        realCached = fresh
+        realCachedAt = now
+        return fresh
+    }
+
+    /**
+     * [cachedOrRefresh] for the pacing rule: the same unless a replacement is offered whose readings do not count for pacing
+     * ([replacementAffectsPacing] false); then the last REAL read, never blocking, refreshed off this thread.
+     */
+    fun cachedOrRefreshForPacing(): List<ProviderLimits> {
+        if (!replaced() || runCatching(replacementAffectsPacing).getOrDefault(true)) return cachedOrRefresh()
+        val now = clock()
+        val (last, at) = synchronized(this) { realCached to realCachedAt }
+        if (last == null || now - at >= minIntervalMs) worker.execute { runCatching { realSnapshot() } }
+        return last?.let { expire(it, now, tuning()) }
+            ?: sources.map { ProviderLimits.unknown(it.provider, now, LimitReason.NOT_READ_YET) }
     }
 
     /** [snapshot] off the caller's thread (a live read can take 12 s per source), then [onReady]. */

@@ -12,9 +12,23 @@
   "daemon": {
     "entry": "com.superiorsoftllc.infantry.plugins.official.usage.daemon.UsageDaemonPlugin",
     "jar": "daemon/build/libs/Infantry_Usage-daemon.jar",
-    "apiAtLeast": "1.0.0",
+    "apiAtLeast": "1.52.0",
+    "hooks": ["usageReading"],
+    "env": ["INFANTRY_USAGE_MOCK", "INFANTRY_USAGE_MOCK_DATA", "INFANTRY_USAGE_MOCK_AFFECTS_PACING"],
     "tools": [
       { "name": "infantry_usage", "action": "usage.read", "kind": "read", "description": "Plan usage per meter and the pacing allowance." }
+    ],
+    "config": [
+      {
+        "node": "infantry.usage.mock", "group": "Usage", "title": "Mock usage data", "tab": "Plugins", "order": 920,
+        "applies": "Applies to: the usage and limits shown everywhere (Usage panel, meters, usage_get, the limits frame).",
+        "keywords": ["usage", "mock", "demo", "screenshot", "fake", "plan"],
+        "fields": [
+          { "key": "usage.mock", "type": "toggle", "label": "Show mock usage data", "default": false, "scope": "daemon", "order": 1, "description": "Show mock usage data instead of real readings: for demos, screenshots and testing. Env: INFANTRY_USAGE_MOCK=1." },
+          { "key": "usage.mock.data", "type": "text", "label": "Mock data (JSON)", "default": "{\"claude\":{\"session\":18,\"week\":42,\"monthly\":null},\"opencode-go\":{\"session\":30,\"week\":12,\"monthly\":5}}", "scope": "daemon", "order": 2, "description": "Provider id to percents: {\"claude\":{\"session\":18,\"week\":42,\"monthly\":7,\"weekResetsInMinutes\":3000}}. Resets are relative to now. No accounts or emails. Empty or unreadable = the default shown here." },
+          { "key": "usage.mock.affectsPacing", "type": "toggle", "label": "Mock also drives pacing", "default": false, "scope": "daemon", "order": 3, "description": "Off (default): pacing and the usage governor keep judging the REAL usage, so faked screenshots never buy extra workers. On: pacing judges the mock." }
+        ]
+      }
     ]
   },
   "tabs": [

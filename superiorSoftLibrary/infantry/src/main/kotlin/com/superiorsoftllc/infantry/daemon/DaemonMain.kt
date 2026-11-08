@@ -1191,6 +1191,7 @@ class InfantryDaemon(
             // USAGE-PACE (1.119.0 read, 1.121.0 manual / override / rule): plan meters -> allowance of ticket workers.
             val usagePacing = UsagePacing(
                 limits = limits::cachedOrRefresh,
+                pacingLimits = limits::cachedOrRefreshForPacing,
                 rule = settings::usagePacing,
                 manual = settings::usageManual,
                 overrides = settings::usageOverrides,
@@ -1828,14 +1829,18 @@ class InfantryDaemon(
             // DEMO-USAGE-HIDE-1: plugin-offered plan-limit readings replace the provider sources (`hooks.usageReading`).
             limits.replacement = {
                 val at = System.currentTimeMillis()
-                plugins.usageReadings().mapNotNull { (provider, windows) ->
-                    val fixed = windows(at) ?: return@mapNotNull null
-                    object : com.superiorsoftllc.infantry.usage.LimitSource {
-                        override val provider = provider
-                        override fun read(now: Long) = com.superiorsoftllc.infantry.usage.ProviderLimits(provider, "ok", fixed, null, now)
+                val seen = HashSet<String>()
+                plugins.usageReadings().flatMap { offer -> runCatching { offer.read(at) }.getOrNull().orEmpty().entries }
+                    .filter { (provider, windows) -> windows.isNotEmpty() && seen.add(provider) }
+                    .map { (provider, windows) ->
+                        object : com.superiorsoftllc.infantry.usage.LimitSource {
+                            override val provider = provider
+                            override fun read(now: Long) = com.superiorsoftllc.infantry.usage.ProviderLimits(provider, "ok", windows, null, now)
+                        }
                     }
-                }
             }
+            // USAGE-MOCK-1: pacing judges the real readings unless an offering plugin says its readings count (false = a faked screenshot buys no worker).
+            limits.replacementAffectsPacing = { plugins.usageReadings().any { it.affectsPacing() } }
             // SCRIPT-3: the daemon's own happenings as named events (api.events.subscribe / infantry_event_emit share this bus).
             val eventPublisher = com.superiorsoftllc.infantry.daemon.plugins.DaemonEventPublisher { name, payload -> runCatching { plugins.publishEvent(name, payload) } }
             mail.onSent = eventPublisher::mail

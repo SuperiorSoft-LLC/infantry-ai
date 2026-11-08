@@ -191,4 +191,49 @@ class LimitsTest {
         service.replacement = { emptyList() }
         assertTrue(service.snapshot().any { it.provider == "claude" }, "without a replacement the real sources are read again")
     }
+
+    /** USAGE-MOCK-1: the reading a mock plugin offers; its percent is far above the real claude one (40 / 20). */
+    private fun mockSource() = object : LimitSource {
+        override val provider = "claude"
+        override fun read(now: Long) = ProviderLimits(provider, "ok", listOf(LimitWindow(provider, "Current week", 10_080, 95.0, now + 3 * hour, now, "live", 0.0)), null, now)
+    }
+
+    private fun pacingOver(service: LimitService) = UsagePacing(
+        limits = service::cachedOrRefresh, rule = { com.superiorsoftllc.infantry.daemon.api.usage.PacingRule.DEFAULT },
+        manual = { emptyMap() }, overrides = { emptyMap() }, workerMeters = { emptyList() }, clock = { now },
+        pacingLimits = service::cachedOrRefreshForPacing,
+    )
+
+    private fun percentOf(report: com.superiorsoftllc.infantry.daemon.api.usage.UsageReport) = report.meters.first { it.meter == "claude" }.percent
+
+    private fun waitFor(what: String, ok: () -> Boolean) {
+        val until = System.currentTimeMillis() + 5_000
+        while (!ok()) { check(System.currentTimeMillis() < until) { "timed out: $what" }; Thread.sleep(10) }
+    }
+
+    @Test
+    fun `mock on shows the mock in the report and the limits, pacing keeps the real reading unless it affects pacing`() {
+        val http = FakeHttp(body = claudeBody)
+        val service = LimitService(listOf(ClaudeOAuthUsageSource(http) { "t" }), liveEnabled = { true }, clock = { now })
+        val pacing = pacingOver(service)
+        service.snapshot() // the real reading is cached
+        var affects = false
+        service.replacement = { listOf(mockSource()) }
+        service.replacementAffectsPacing = { affects }
+        // usage_get (the report) and the limits frame carry the mock.
+        assertEquals(95.0, service.snapshot().first { it.provider == "claude" }.windows.single().percent)
+        waitFor("mock report") { percentOf(pacing.report()) == 95.0 }
+        // The pacing check reads the REAL reading (20% of the week: lots of room), though the report says 95%.
+        pacing.check("claude")
+        waitFor("real pacing read") { service.cachedOrRefreshForPacing().first { it.provider == "claude" }.windows.isNotEmpty() }
+        assertEquals(20.0, service.cachedOrRefreshForPacing().first { it.provider == "claude" }.windows.first { it.label == "Current week" }.percent)
+        assertTrue(pacing.check("claude") is PacingVerdict.Allow, "faked 95% must not throttle or free workers")
+        // affectsPacing true: the check judges the mock.
+        affects = true
+        waitFor("mock pacing read") { service.cachedOrRefreshForPacing().first { it.provider == "claude" }.windows.single().percent == 95.0 }
+        assertEquals(95.0, percentOf(pacing.report()))
+        // mock off: unchanged (real everywhere).
+        service.replacement = { emptyList() }
+        assertEquals(20.0, service.snapshot().first { it.provider == "claude" }.windows.first { it.label == "Current week" }.percent)
+    }
 }
