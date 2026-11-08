@@ -3201,7 +3201,11 @@ private suspend fun handleConnection(
 
                     else -> {
                         val replay = streamSequencer.replayAfter(sessionId, request.lastSequence)
-                        if (replay == null) {
+                        // RUNNER-REMOTE-IO-1: the orchestrator may hold status frames for a remote session; its output still lives on the runner.
+                        val remoteOutput = runnerPool.runnerOf(sessionId) != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL &&
+                            manager.get(sessionId) == null &&
+                            (replay == null || replay.frames.none { it.type == Envelope.STDOUT || it.type == Envelope.STDERR })
+                        if (replay == null || remoteOutput) {
                             // CLI-PTY-5: a known session with nothing kept simply has no history yet; only an unknown one is an error.
                             val runnerName = runnerPool.runnerOf(sessionId)
                             if (runnerName != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL) {
