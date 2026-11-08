@@ -7,7 +7,11 @@ import com.superiorsoftllc.infantry.ui.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.relocation.BringIntoViewRequester
@@ -51,6 +55,9 @@ import com.superiorsoftllc.infantry.ui.model.AppState
 import com.superiorsoftllc.infantry.ui.model.ExecutorPickerModel
 import com.superiorsoftllc.infantry.ui.model.NewAgentModalModel
 import com.superiorsoftllc.infantry.ui.model.PickedModel
+import com.superiorsoftllc.infantry.ui.model.RunnerChoices
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 
 const val NEW_AGENT_DIALOG_TAG = "new-agent-dialog"
@@ -70,6 +77,11 @@ const val NEW_AGENT_CONTEXT_LIMIT_TAG = "new-agent-context-limit"
 const val NEW_AGENT_CONTEXT_LIMIT_NOTE_TAG = "new-agent-context-limit-note"
 const val NEW_AGENT_EFFORT_SWITCH_TAG = "new-agent-effort-switch"
 const val NEW_AGENT_EFFORT_NOTE_TAG = "new-agent-effort-note"
+const val NEW_AGENT_ADVANCED_TAG = "new-agent-advanced"
+const val NEW_AGENT_RUNNER_TAG = "new-agent-runner"
+const val NEW_AGENT_RUNNER_FIELD_TAG = "new-agent-runner-field"
+const val NEW_AGENT_RUNNER_OPTION_PREFIX = "new-agent-runner-option:"
+const val NEW_AGENT_RUNNER_EMPTY_TAG = "new-agent-runner-empty"
 const val NEW_AGENT_ADD_TAG = "new-agent-add"
 const val NEW_AGENT_ADD_HINT_TAG = "new-agent-add-hint"
 const val NEW_AGENT_ERROR_TAG = "new-agent-error"
@@ -362,12 +374,59 @@ private fun NewAgentContextLimit(m: NewAgentModalModel, update: (NewAgentModalMo
     )
 }
 
-/** RUNNER-AGENT-1: where the new session runs; blank = the agent's runner, then the default (`local` unless `runners.default` says otherwise). */
+/**
+ * RUNNER-PICKER-1: where the new session runs, as a picker filled from the daemon's runner registry, under a collapsed
+ * "Advanced" row. "Project default" (the default) stores nothing. No typing.
+ */
 @Composable
 private fun NewAgentRunner(m: NewAgentModalModel, update: (NewAgentModalModel) -> Unit) {
-    OutlinedTextField(
-        m.runnerText, { update(m.withRunnerText(it)) }, singleLine = true,
-        label = { Text("Runner (optional: local, a runner name or any)") },
-        modifier = Modifier.fillMaxWidth().testTag("new-agent-runner"), colors = visibleBorderFieldColors(),
-    )
+    var open by remember { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            (if (open) "▾" else "▸") + " Advanced", fontSize = 12.sp, fontWeight = FontWeight.Bold,
+            modifier = Modifier.clickable(onClickLabel = "Show advanced settings") { open = !open }.testTag(NEW_AGENT_ADVANCED_TAG),
+        )
+        if (open) RunnerPicker(m.runnerText, { update(m.withRunnerText(it)) }, Modifier.testTag(NEW_AGENT_RUNNER_TAG))
+    }
+}
+
+/** A runner picker: a field showing the choice, a menu of [RunnerChoices.options] loaded over the window's link. */
+@Composable
+fun RunnerPicker(value: String, onPick: (String) -> Unit, modifier: Modifier = Modifier) {
+    val link = com.superiorsoftllc.infantry.ui.shell.LocalShellContext.current?.link
+    var registered by remember { mutableStateOf<List<com.superiorsoftllc.infantry.ui.model.RunnerStatus>>(emptyList()) }
+    androidx.compose.runtime.LaunchedEffect(link) {
+        if (link == null) return@LaunchedEffect
+        val answer = kotlinx.coroutines.coroutineScope {
+            val a = async(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) { link.frames(RunnerChoices.FRAME).first() }
+            if (!link.sendFrame(RunnerChoices.FRAME, RunnerChoices.listRequest)) { a.cancel(); null } else a.await()
+        }
+        if (answer != null) registered = RunnerChoices.parse(answer)
+    }
+    RunnerPickerView(value, registered, onPick, modifier)
+}
+
+/** The picker with its runners given (the testable half). */
+@Composable
+fun RunnerPickerView(value: String, registered: List<com.superiorsoftllc.infantry.ui.model.RunnerStatus>, onPick: (String) -> Unit, modifier: Modifier = Modifier) {
+    var expanded by remember { mutableStateOf(false) }
+    val options = RunnerChoices.options(registered)
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("Runner", fontSize = 11.sp, color = Palette.Muted)
+        Box {
+            OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth().testTag(NEW_AGENT_RUNNER_FIELD_TAG)) {
+                Text(RunnerChoices.labelFor(options, value) + "  ▾", modifier = Modifier.weight(1f), maxLines = 1)
+            }
+            InfantryDropdownMenu(expanded, { expanded = false }) {
+                for (o in options) {
+                    DropdownMenuItem(
+                        text = { Text(o.label + (o.status?.let { "  ($it)" } ?: ""), color = if (o.selectable) Color.Unspecified else Palette.Muted) },
+                        enabled = o.selectable, onClick = { onPick(o.value); expanded = false },
+                        modifier = Modifier.testTag(NEW_AGENT_RUNNER_OPTION_PREFIX + o.value.ifEmpty { "default" }),
+                    )
+                }
+            }
+        }
+        if (registered.isEmpty()) Text("No runners registered yet. Add one with `infantry runner pair`.", fontSize = 11.sp, color = Palette.Muted, modifier = Modifier.testTag(NEW_AGENT_RUNNER_EMPTY_TAG))
+    }
 }
