@@ -113,6 +113,9 @@ class PluginLifecycle(
  */
 object PluginLifecycleBridge {
     @kotlin.concurrent.Volatile var current: PluginLifecycle? = null
+
+    /** PLUGIN-APPLY-2: the host's plugin manager, so `plugins.apply` with an `action` changes the state before it swaps. */
+    @kotlin.concurrent.Volatile var manager: com.superiorsoftllc.infantry.plugin.api.PluginManagerPort? = null
 }
 
 /** PLUGIN-HOTSWAP-1: the shell's [PluginLifecycle]; null where the window has none (a test window). */

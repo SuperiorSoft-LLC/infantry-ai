@@ -125,7 +125,20 @@ window hosts it, and fails at its timeout (`timeoutMs`, 60 s) when the window do
 | MCP | `infantry_capability_call` with `capability: "plugins.apply"` (listed by `infantry_capability_list`) |
 | Lua | `ih.call("plugins.apply", {id = "Acme_X", action = "enable"})` (`_optional = true` when no window may be open) |
 
-`id` and `action` only label the answer: the swap applies whatever changed in the plugins root.
+With `action` = `enable` or `disable` and an `id`, one call does the whole job (PLUGIN-APPLY-2): the window changes that
+plugin's state through its plugin manager (the same `setEnabled` the Plugins tab calls), then swaps. If it cannot (no manager,
+a refusal) the call fails with the reason and swaps nothing. With no `action` (or `install` / `update`, which are labels) it
+only swaps whatever changed in the plugins root, so run `infantry plugin install|update` first.
+
+**Calls in a row.** The window's capability host keeps one frame collector for the life of the daemon link and announces each
+new module set after a swap without tearing the collector down (PLUGIN-APPLY-2); a call's answer is sent even when the swap it
+triggered replaced the module set. Before, a second `plugins.apply` could time out because the swap restarted the host and the
+answer or the next call was lost.
+
+**Which window can host it.** The daemon lets only an owner connection host a client capability. A plain `runUi` connects as a
+non-owner remote client and gets "has no host". Use `runRealDaemon` (the same shell with an in-process daemon and the owner
+credential) when you need `plugins.apply` from a script or agent. Letting a UI the user started against a daemon prove ownership is
+a security decision and is not made here (see "Needs owner" in ticket de29434a).
 
 **Which folder the window reads.** The daemon records the plugins root it loads from in `<state dir>/plugins.root`
 (`PluginFolders.recordRoot`); a desktop window on the same state dir loads from that folder (`PluginFolders.uiRoot`), unless

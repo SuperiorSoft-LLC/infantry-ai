@@ -93,7 +93,7 @@ class SettingsPlugin : UiPlugin, ModuleSource {
         registrar.tab(pluginsTab())
         // UI-PLUGIN-BRIDGE-1: `plugins.apply` (module.json `capabilities`, runs client): the daemon, a script or an agent makes this
         // window apply the plugins root as it is now, live, through the swap the Plugins tab starts (one shared call site).
-        registrar.capability(APPLY_CAPABILITY) { args -> applyPluginsLive(args, com.superiorsoftllc.infantry.ui.shell.PluginLifecycleBridge.current) }
+        registrar.capability(APPLY_CAPABILITY) { args -> applyPluginsLive(args, com.superiorsoftllc.infantry.ui.shell.PluginLifecycleBridge.current, com.superiorsoftllc.infantry.ui.shell.PluginLifecycleBridge.manager) }
     }
 
     override fun modules(): List<InfantryModule> = listOf(InfantrySettings)
@@ -103,18 +103,36 @@ class SettingsPlugin : UiPlugin, ModuleSource {
 const val APPLY_CAPABILITY = "plugins.apply"
 
 /**
- * UI-PLUGIN-BRIDGE-1: runs the shell's live plugin swap for a `plugins.apply` call and answers `{applied, message, warnings}`;
- * `action` / `id` in [args] only label the answer (the swap applies whatever changed in the plugins root). Throws when the
- * window has no lifecycle, so the caller gets the reason.
+ * UI-PLUGIN-BRIDGE-1 / PLUGIN-APPLY-2: runs the shell's live plugin swap for a `plugins.apply` call and answers
+ * `{applied, message, warnings}`. With `id` and `action` (`enable` / `disable`) it first changes that plugin's state through the
+ * window's plugin manager ([manager]), then swaps: one call does the whole job. With neither it only swaps whatever changed in
+ * the plugins root. An enable / disable that cannot be carried out (no id, no manager, a refusal) fails the call with the reason
+ * and swaps nothing. Throws when the window has no lifecycle, so the caller gets the reason.
  */
-internal fun applyPluginsLive(args: kotlinx.serialization.json.JsonObject, lifecycle: com.superiorsoftllc.infantry.ui.shell.PluginLifecycle?): kotlinx.serialization.json.JsonObject {
+internal fun applyPluginsLive(
+    args: kotlinx.serialization.json.JsonObject,
+    lifecycle: com.superiorsoftllc.infantry.ui.shell.PluginLifecycle?,
+    manager: com.superiorsoftllc.infantry.plugin.api.PluginManagerPort? = null,
+): kotlinx.serialization.json.JsonObject {
     val l = lifecycle ?: throw IllegalStateException("this window has no plugin lifecycle (no live swap here)")
+    val id = (args["id"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.takeIf { it.isNotBlank() }
+    val action = (args["action"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
+    val on = when (action) { "enable" -> true; "disable" -> false; else -> null } // install / update / other: only a label, the swap applies what changed
+    if (on != null) {
+        if (id == null) throw IllegalArgumentException("action '$action' needs an id: the plugin to $action")
+        val m = manager ?: throw IllegalStateException("this window has no plugin manager: run `infantry plugin $action $id` first, then call plugins.apply without an action")
+        val already = m.list().firstOrNull { it.id == id }?.enabled
+        if (already != on) {
+            val r = m.setEnabled(id, on)
+            if (!r.ok) throw IllegalStateException("could not $action $id: ${r.message}")
+        }
+    }
     val message = l.apply()
     return kotlinx.serialization.json.buildJsonObject {
         put("applied", kotlinx.serialization.json.JsonPrimitive(true))
         put("message", kotlinx.serialization.json.JsonPrimitive(message))
-        (args["id"] as? kotlinx.serialization.json.JsonPrimitive)?.let { put("id", it) }
-        (args["action"] as? kotlinx.serialization.json.JsonPrimitive)?.let { put("action", it) }
+        id?.let { put("id", kotlinx.serialization.json.JsonPrimitive(it)) }
+        action?.let { put("action", kotlinx.serialization.json.JsonPrimitive(it)) }
         put("warnings", kotlinx.serialization.json.JsonArray(l.warnings.values.map { kotlinx.serialization.json.JsonPrimitive(it) }))
     }
 }

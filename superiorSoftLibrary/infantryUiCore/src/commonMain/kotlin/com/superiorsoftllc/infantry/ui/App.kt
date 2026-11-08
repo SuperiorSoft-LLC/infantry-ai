@@ -364,9 +364,11 @@ fun App(
     // PLUGIN-BRIDGES-1 (docs/wiki/Bridges.md): the loaded modules' client-side capabilities, hosted on this window's live link;
     // a reconnect announces them again. Their declared events go out on the same link.
     val capabilityScope = androidx.compose.runtime.rememberCoroutineScope()
-    LaunchedEffect(tabs, linkLive) {
+    // PLUGIN-APPLY-2: keyed on the link only; a swap's new module set flows in as a snapshot, so the host is not torn down by it.
+    val currentTabs by androidx.compose.runtime.rememberUpdatedState(tabs)
+    LaunchedEffect(linkLive) {
         if (linkLive) com.superiorsoftllc.infantry.ui.plugin.ClientCapabilityHost.run(
-            tabs.modules,
+            androidx.compose.runtime.snapshotFlow { currentTabs.modules },
             com.superiorsoftllc.infantry.ui.plugin.ClientCapabilityHost.platformOf(platformName()),
             platformName(),
             controller.client.frames,

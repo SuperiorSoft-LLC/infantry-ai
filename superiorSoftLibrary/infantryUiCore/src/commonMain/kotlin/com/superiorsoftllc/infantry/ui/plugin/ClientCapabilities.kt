@@ -12,7 +12,9 @@ import com.superiorsoftllc.infantry.plugin.api.HostedModule
 import com.superiorsoftllc.infantry.ui.protocol.Envelope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonElement
@@ -72,12 +74,13 @@ object ClientCapabilityHost {
     }
 
     /**
-     * Hosts [modules] on one live link until cancelled: announces, then answers each call on its own coroutine. [send] is the
-     * link's sender; [frames] its incoming frames. Hosts nothing (sends nothing) when no module hosts or emits anything.
+     * Hosts the modules of [modules] on one live link until cancelled. The frame collector lives as long as the link; every
+     * module set [modules] emits (a live plugin swap builds a new one) is announced again WITHOUT restarting the collector, so a
+     * call that arrives while a swap is applying is not lost (PLUGIN-APPLY-2: `frames` has no replay). A call's result is sent
+     * even when the swap it triggered cancels the caller. Hosts nothing (sends nothing) while a set hosts and emits nothing.
      */
-    suspend fun run(modules: List<InfantryModule>, platform: String, label: String, frames: Flow<Envelope>, send: suspend (Envelope) -> Boolean, trySend: (Envelope) -> Boolean) {
-        val hosting = hosting(modules, platform, label)
-        if (hosting.modules.isEmpty()) return
+    suspend fun run(modules: Flow<List<InfantryModule>>, platform: String, label: String, frames: Flow<Envelope>, send: suspend (Envelope) -> Boolean, trySend: (Envelope) -> Boolean) {
+        var current: List<InfantryModule> = emptyList()
         sink = trySend
         try {
             coroutineScope {
@@ -85,10 +88,17 @@ object ClientCapabilityHost {
                     frames.collect { env ->
                         if (env.type != CapabilityWire.CALL) return@collect
                         val call = CapabilityWire.call(env.data) ?: return@collect
-                        launch { send(Envelope(CapabilityWire.RESULT, CapabilityWire.encode(answer(modules, call)))) }
+                        launch {
+                            val result = answer(current, call)
+                            withContext(NonCancellable) { send(Envelope(CapabilityWire.RESULT, CapabilityWire.encode(result))) }
+                        }
                     }
                 }
-                send(Envelope(CapabilityWire.HOST, CapabilityWire.encode(hosting)))
+                modules.collect { set ->
+                    current = set
+                    val hosting = hosting(set, platform, label)
+                    if (hosting.modules.isNotEmpty()) send(Envelope(CapabilityWire.HOST, CapabilityWire.encode(hosting)))
+                }
             }
         } finally {
             if (sink === trySend) sink = null
