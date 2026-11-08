@@ -415,6 +415,26 @@ object LimitRegistry {
         "STALL-6: how long the daemon remembers that a bg job was handled/ended (to drop its late notices) before forgetting it.",
         min = 1, max = 100_000, zeroIsUnlimited = false,
     )
+    val MCP_HEAL_ATTEMPTS = LimitDef(
+        "limits.mcp.healAttempts", 5, "tries",
+        "MCP-RECONNECT-1: how many times the daemon reconnects a session whose MCP link is disconnected before it gives up and raises a loud note to the session and its project's PM.",
+        min = 1, max = 100, zeroIsUnlimited = false,
+    )
+    val MCP_HEAL_POLL_SECONDS = LimitDef(
+        "limits.mcp.healPollSeconds", 2, "seconds",
+        "MCP-RECONNECT-1: how often the daemon looks for sessions whose MCP link is disconnected.",
+        min = 1, max = 3_600, zeroIsUnlimited = false,
+    )
+    val MCP_HEAL_DELAY_SECONDS = LimitDef(
+        "limits.mcp.healDelaySeconds", 5, "seconds",
+        "MCP-RECONNECT-1: the wait before the second reconnect try; each further try waits twice as long, up to limits.mcp.healMaxDelaySeconds.",
+        min = 1, max = 3_600, zeroIsUnlimited = false,
+    )
+    val MCP_HEAL_MAX_DELAY_SECONDS = LimitDef(
+        "limits.mcp.healMaxDelaySeconds", 60, "seconds",
+        "MCP-RECONNECT-1: the longest wait between two reconnect tries of a disconnected session.",
+        min = 1, max = 86_400, zeroIsUnlimited = false,
+    )
     val WATCH_TREE_JOB_SECONDS = LimitDef(
         "limits.watch.treeJobSeconds", 30, "seconds",
         "How long a process under a worker's harness (one the daemon did not launch) must have run for its end to be told to the worker.",
@@ -993,7 +1013,7 @@ object LimitRegistry {
         AUTO_DONE_MIN_OUTPUTS, PROCESS_WATCH_INTERVAL_SECONDS, PROCESS_STOP_GRACE_SECONDS, PROCESS_STUCK_MINUTES, RUN_SCROLLBACK_BYTES, RUN_HISTORY,
         RUN_INPUT_BYTES_PER_SECOND, RUN_INPUT_MAX_FRAME_BYTES, RUN_INPUT_QUEUE_BYTES, RUN_MAX_COLS, RUN_MAX_ROWS,
         QUESTION_TTL_MINUTES, BG_NOTIFY_TAIL_LINES, BG_NOTIFY_TIMEOUT_MINUTES, BG_NOTIFY_PATTERN_GRACE_SECONDS,
-        WATCH_QUIET_MINUTES, WATCH_HEARTBEAT_CAP_MINUTES, WATCH_STALL_MINUTES, WATCH_FOREGROUND_STALL_MINUTES, WATCH_EXEMPT_WHEN_TICKET_DONE, WATCH_NOTICE_DEDUPE, NOTICE_MAIL_PLUGIN_HEALTH, NOTICE_MAIL_BG_STATUS, BG_NOTICE_FOLD_INTO_TURN, BG_NOTICE_SKIP_IF_RESULT_READ, WATCH_HANDLED_KEEP_MINUTES, WATCH_TREE_JOB_SECONDS, WATCH_ENABLED, WATCH_FORCED, WATCH_BG_NATIVE, WATCH_HANG_GRACE_SECONDS, WATCH_TREE_WAIT_MINUTES,
+        MCP_HEAL_ATTEMPTS, MCP_HEAL_POLL_SECONDS, MCP_HEAL_DELAY_SECONDS, MCP_HEAL_MAX_DELAY_SECONDS, WATCH_QUIET_MINUTES, WATCH_HEARTBEAT_CAP_MINUTES, WATCH_STALL_MINUTES, WATCH_FOREGROUND_STALL_MINUTES, WATCH_EXEMPT_WHEN_TICKET_DONE, WATCH_NOTICE_DEDUPE, NOTICE_MAIL_PLUGIN_HEALTH, NOTICE_MAIL_BG_STATUS, BG_NOTICE_FOLD_INTO_TURN, BG_NOTICE_SKIP_IF_RESULT_READ, WATCH_HANDLED_KEEP_MINUTES, WATCH_TREE_JOB_SECONDS, WATCH_ENABLED, WATCH_FORCED, WATCH_BG_NATIVE, WATCH_HANG_GRACE_SECONDS, WATCH_TREE_WAIT_MINUTES,
         WATCH_NOTICE_LINE_CHARS, WATCH_LOG_MAX_MB, WATCH_LOG_TOTAL_MB, WATCH_LOG_KEEP_JOBS, WATCH_LOG_KEEP_DAYS, WATCH_MIN_FREE_MB, WATCH_FILE_IDLE_SECONDS,
         WATCH_READ_MAX_KB, WATCH_TAIL_READ_KB, WATCH_SPACE_CHECK_SECONDS,
         TICKET_FILES_MAX_LINES, TICKET_FILES_RELATED_TOP,

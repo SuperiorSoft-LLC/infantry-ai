@@ -1059,6 +1059,16 @@ class InfantryDaemon(
                     }
                 }
             }
+            manager.mcpHealFailedSink = { session, tries ->
+                attentionSvc.raise(
+                    kind = AttentionKinds.STALLED,
+                    ticketId = session.ticketId,
+                    podId = null,
+                    sessionId = session.id,
+                    outcome = "mcp-disconnected",
+                    detail = "Session ${session.id} (${session.role}) still has its Infantry tools disconnected after $tries reconnect tries. Run: infantry session mcp-reconnect --self from its shell, or restart the session.",
+                )
+            }
             manager.silentSink = { session, minutes ->
                 attentionSvc.raise(
                     kind = AttentionKinds.STALLED,
@@ -4052,6 +4062,15 @@ private suspend fun handleConnection(
                     Envelope(Envelope.ERROR, "session_restart refused: ${e.message ?: "invalid request"}")
                 } catch (e: Exception) {
                     Envelope(Envelope.ERROR, "session_restart failed: ${e.message ?: e::class.simpleName}")
+                }
+
+                Envelope.SESSION_MCP_RECONNECT -> try {
+                    val sessionId = (envelope.sessionId ?: json.parseToJsonElement(envelope.data.ifBlank { "{}" }).jsonObject["sessionId"]?.jsonPrimitive?.contentOrNull)
+                        ?.trim().orEmpty()
+                    require(sessionId.isNotEmpty()) { "expects a sessionId" }
+                    Envelope(Envelope.SESSION_MCP_RECONNECT, manager.reconnectMcp(sessionId, force = true), sessionId)
+                } catch (e: Exception) {
+                    Envelope(Envelope.ERROR, "session_mcp_reconnect refused: ${e.message ?: e::class.simpleName}")
                 }
 
                 Envelope.SESSION_DELETE -> {

@@ -258,6 +258,8 @@ data class Envelope(
         // session (same id, role, harness, project, worktree) whose next turn is composed anew. The changed `session`
         // record is pushed to every client; a refusal (unknown id, mid-turn without force) is an `error` frame.
         const val SESSION_RESTART = "session_restart"
+        /** MCP-RECONNECT-1: `{"sessionId"}`; reconnects that session's MCP link (`infantry session mcp-reconnect --self`). The answer carries one plain line. */
+        const val SESSION_MCP_RECONNECT = "session_mcp_reconnect"
 
         // Phase 4 -- worktree isolation.
         const val WORKTREE = "worktree"

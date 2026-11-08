@@ -1022,6 +1022,14 @@ internal object Cli {
         runBlocking {
             val requested = parsed.args[1]
             checkContract(stream, err)
+            if (parsed.args[0] == "mcp-reconnect") {
+                // MCP-RECONNECT-1: no MCP tools needed; `--self` names the caller's own session (INFANTRY_SESSION_ID).
+                val id = if (requested == "self") getenv("INFANTRY_SESSION_ID")?.takeIf { it.isNotBlank() } else requested
+                if (id == null) { err.appendLine("error: INFANTRY_SESSION_ID is not set; pass the session id instead of --self"); return@runBlocking 1 }
+                val answer = stream.request(Envelope(Envelope.SESSION_MCP_RECONNECT, """{"sessionId":"$id"}""", id), answerType = Envelope.SESSION_MCP_RECONNECT, what = "session mcp-reconnect", idempotent = false)
+                out.appendLine(answer.data)
+                return@runBlocking 0
+            }
             if (parsed.args[0] == "restart") return@runBlocking sessionRestart(stream, requested, parsed.force, out, err)
             val snapshot = json.decodeFromString(
                 com.superiorsoftllc.infantry.session.SessionListWire,
@@ -5244,6 +5252,11 @@ internal object Cli {
                     force = true
                     i++
                 }
+                // MCP-RECONNECT-1: `infantry session mcp-reconnect --self` names the caller's own session.
+                "--self" -> {
+                    rest += "self"
+                    i++
+                }
                 "--update" -> {
                     update = true
                     i++
@@ -5855,7 +5868,7 @@ internal object Cli {
         "project" -> projectUsageError(parsed)
         "image" -> imageUsageError(parsed)
         "kill" -> if (parsed.args.size != 1) "usage: infantry kill <sessionId|prefix> [--force]" else null
-        "session" -> if (parsed.args.size != 2 || parsed.args[0] !in listOf("rm", "restart")) "usage: infantry session rm|restart <sessionId|prefix> [--force] (rm --force kills a running session first)" else null
+        "session" -> if (parsed.args.size != 2 || parsed.args[0] !in listOf("rm", "restart", "mcp-reconnect")) "usage: infantry session rm|restart|mcp-reconnect <sessionId|prefix|--self> [--force] (rm --force kills a running session first)" else null
         "knowledge" -> knowledgeUsageError(parsed, getenv)
         "memory" -> memoryUsageError(parsed, getenv)
         "decision" -> decisionUsageError(parsed, getenv)
