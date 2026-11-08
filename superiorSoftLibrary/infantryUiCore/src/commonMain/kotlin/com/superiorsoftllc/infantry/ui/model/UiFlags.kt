@@ -43,6 +43,8 @@ data class UiFlags(
     val chatMarkdownEngine: String = BuiltInChatMarkdownEngine.ID,
     /** Where agent reasoning shows (client-side, per device); default inline as before. Persisted by the host. */
     val reasoningPlacement: ReasoningPlacement = ReasoningPlacement.INLINE,
+    /** AVATAR-SEAM-1: the agent avatar style key (client-side, per device); unset or unknown draws the built-in portrait. Persisted by the host. */
+    val agentAvatarStyle: String = com.superiorsoftllc.infantry.ui.AGENT_AVATAR_PORTRAIT,
 )
 
 const val PROGRESS_STALE_APPLIES_TO = "Applies to: the progress bars agents report on their card, their session header and their ticket's board card. A running bar with no update for this long turns amber."
