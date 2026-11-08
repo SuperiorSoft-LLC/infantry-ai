@@ -94,6 +94,7 @@ interface ProgressHandle : AutoCloseable {
     /** The time left in milliseconds (-1 = unknown). */
     fun eta(ms: Long)
 
+    /** Ends the task done; [step] is the closing text ("Restart needed"), blank = the plain "Done" (the last running step is not kept: a finished row must not read "Verifying"). */
     fun done(step: String = "")
 
     /** Ends the task as FAILED with the clear [reason]; [retryable] shows Retry when the spec has a retry. */
