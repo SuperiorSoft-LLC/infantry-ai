@@ -1,0 +1,17 @@
+{
+  "name": "Infantry_Health",
+  "version": "1.0.0",
+  "apiVersion": 2,
+  "author": "Infantry AI",
+  "description": "Daemon health and environment report (up/down, pid, port, uptime, last restart and why, plugin faults, MCP bridges, OS/shell/paths/off-limits ports) as the infantry_health tool (agents, MCP and Lua scripts). The CLI is `infantry health`. Daemon half only.",
+  "tier": "official",
+  "sequence": [],
+  "daemon": {
+    "entry": "com.superiorsoftllc.infantry.plugins.official.health.daemon.HealthDaemonPlugin",
+    "jar": "daemon/build/libs/Infantry_Health-daemon.jar",
+    "apiAtLeast": "1.48.0",
+    "tools": [
+      { "name": "infantry_health", "action": "host.health.read", "kind": "read", "description": "Daemon health and environment: up/down, pid, port, uptime, last restart and why, plugin faults, MCP bridges, OS, shells, paths, the owner's off-limits ports. Use it instead of probing." }
+    ]
+  }
+}

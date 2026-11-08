@@ -36,6 +36,7 @@ Every page of this wiki is listed here, one line each. The pages are written fro
 
 - [Board and epics](Board.md): epics, and moving tickets between epics.
 - [Notifications](Notifications.md): the ONE notification bus (in-app toasts, OS notifications), presenters a plugin can override, routing settings, the inventory.
+- [Health](Health.md): `infantry health`, the daemon health and environment report (up/down, restarts and why, MCP bridges, OS/shell/ports).
 - [Memory](Memory.md): project knowledge notes, the project / global / role / session scopes, the `infantry_memory` MCP actions (read and write), who may write global notes.
 - [Settings](Settings.md): scopes (app, project, role, session) and the cost-saving defaults.
 - [Kotlin notes](kotlin-notes.md): toolchain versions, UI core source sets and expect/actual, Compose MP pitfalls, build flags.

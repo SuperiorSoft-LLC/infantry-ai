@@ -256,6 +256,9 @@ class DaemonPluginHost private constructor(
     /** `module id -> loaded | refused: why | failed: why`, for `GET /plugins`. */
     fun status(module: String): String? = statuses[module]?.let { s -> loaded.firstOrNull { it.id == module }?.guard?.disabledReason?.let { "failed: $it" } ?: s }
 
+    /** DAEMON-HEALTH-1: every module's status (`loaded`, `refused: why`, `failed: why`), for the health report. */
+    fun moduleStatuses(): Map<String, String> = statuses.keys.sorted().associateWith { status(it) ?: "unknown" }
+
     /** The tool names a module registered. */
     fun toolsOf(module: String): List<String> = toolEntries.values.filter { it.owner.id == module }.map { it.tool.name }.sorted()
 

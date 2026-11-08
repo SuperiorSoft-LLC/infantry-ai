@@ -404,6 +404,9 @@ The credential is per pair (not the owner, `remote` or agent token) and may call
 starts only projects and harnesses in its own `runner.projects` / `runner.harnesses` settings (empty = none). Details:
 `docs/RUNNER-POOL.md` section 7.
 
+## 13. Health and environment (DAEMON-HEALTH-1)
+Never probe (ports, `tasklist`, `uname`) to learn the daemon's state or your machine: run `infantry health` (or `infantry health --json`; MCP `infantry_health`). It reports daemon up/down, pid, port, uptime, last restart and why, plugin faults, MCP bridge per session, the restart/disconnect log, OS, shells, project/worktree/branch, JDK/Gradle, the OWNER's off-limits ports (8787, 8788, 8797, 8798) and the free test range (18900-18999). The CLI works with the daemon or MCP bridge down (reads `<stateDir>/health/`). Page: [Health](../../../docs/wiki/Health.md).
+
 ## Slim answers (TOKEN-1)
 `infantry_ticket_create|update|move` answer ONE line (id, status, title, branch, session); pass `verbose: true` for the full ticket, or call `infantry_ticket_get`. `infantry_get_session` returns the last 5 transcript lines (`lines` for more, `brief:true` for none); `infantry_list_sessions` takes `limit`; `infantry_usage` takes `json:true` for the JSON report; `infantry_usage_override` reads or sets the pacing allowance override (same as `infantry usage override`; who may set it: setting `usage.overrideRoles`). Defaults live in settings `limits.tools.*`.
 

@@ -290,6 +290,9 @@ data class Envelope(
         /** Contract 1.143.0 (POLICY-1): the KILLING half of [PROCESSES], split off so a read-only policy can list processes: a [com.superiorsoftllc.infantry.session.ProcessesRequest] with op `reap` | `reap_rogue`, answered by `processes`. A `processes` frame whose op is not `list` is still served but gated as this action. */
         const val PROCESSES_REAP = "processes_reap"
 
+        /** DAEMON-HEALTH-1: `{sessionId?}` -> a `health` frame holding one `HealthReport` JSON (daemon, plugins, MCP bridges, environment, restart log). Read-only. */
+        const val HEALTH = "health"
+
         /** Contract 1.120.0 (ROGUE-1): pushed to every client when free RAM drops under `processes.floorMb` (a [com.superiorsoftllc.infantry.session.ProcessReport]), at most once per 10 min. */
         const val PROCESS_PRESSURE = "process_pressure"
         const val MAIL_REFUSED = "mail_refused"

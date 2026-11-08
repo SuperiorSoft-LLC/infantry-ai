@@ -59,6 +59,7 @@ object ActionCatalog {
         // POLICY-1 (1.143.0): listing is a read; the killing half is its own frame (see [forEnvelope] for a legacy reap).
         a("host.processes.read", READ, E.PROCESSES),
         a("host.processes.reap", DESTRUCTIVE, E.PROCESSES_REAP),
+        a("host.health.read", READ, E.HEALTH),
         a("secrets.read", READ, E.SECRET_STATUS),
         // PACE-TREND-1 (b4e46daf): Infantry_Pace answers this frame from its daemon half, so it has no Envelope constant.
         a("pace.read", READ, "pace_get"),
