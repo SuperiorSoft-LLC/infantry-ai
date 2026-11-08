@@ -20,8 +20,10 @@ const val PLUGIN_API_VERSION = 2
  * `TabContext.SubTabs` / `subTab` / `pickSubTab` (RUNTIME-5). 3 = the `speech.out` and `audio.in` services (VOICE-SEAM-1).
  * 4 = module.json `capabilities` and `emits` (PLUGIN-BRIDGES-1, plugin API 2.2.0). 5 = [PluginScope], the host-owned lifetime
  * of a plugin half (`UiRegistrar.scope`, `DaemonApi.scope`) that makes a live swap clean (PLUGIN-HOTSWAP-1, plugin API 2.3.0).
+ * 6 = the core notification bus: [Notification], `Notifications.notify(Notification)` / `present` / `onAction` / `dismiss`
+ * and `DaemonApi.notifications` (NOTIFY-CORE-1, plugin API 2.4.0).
  */
-const val PLUGIN_API_REVISION = 5
+const val PLUGIN_API_REVISION = 6
 
 /**
  * A module's module.json: who it is, what it needs loaded first, and everything it contributes or uses. Unknown keys

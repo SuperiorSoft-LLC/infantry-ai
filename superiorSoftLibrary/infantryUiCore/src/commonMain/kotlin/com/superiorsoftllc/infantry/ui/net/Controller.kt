@@ -115,6 +115,8 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.time.Clock
+import kotlinx.datetime.toLocalDateTime
+import com.superiorsoftllc.infantry.ui.model.toToast
 
 /** Shown (and returned as a refusal) when the connected daemon predates the project git frames (contract 1.36.0). */
 const val PROJECT_GIT_UNSUPPORTED = "This daemon does not support the project git view (needs contract 1.36.0)."
@@ -202,6 +204,7 @@ class Controller(
                 answerPluginTool(env)
                 answerImageFetch(env)
                 answerSpawnCatalog(env)
+                onNotificationFrame(env)
                 if (env.type == Envelope.SPOKEN) {
                     runCatching { json.decodeFromString(com.superiorsoftllc.infantry.ui.voice.SpokenNotice.serializer(), env.data) }
                         .getOrNull()?.let { _spoken.tryEmit(it) }
@@ -346,6 +349,74 @@ class Controller(
     val toasts: com.superiorsoftllc.infantry.ui.ToastService = object : com.superiorsoftllc.infantry.ui.ToastService {
         override fun post(toast: com.superiorsoftllc.infantry.ui.model.ToastEvent) = postToast(toast)
         override fun dismiss(id: String) = dismissToast(id)
+    }
+
+    private val notificationIds = com.superiorsoftllc.infantry.plugin.host.NotificationCenter.SequentialIds("-")
+
+    /** NOTIFY-CORE-1: the bus's settings, read from the daemon's `settings` frames (`notifications.*`); the defaults until then. */
+    @kotlin.concurrent.Volatile
+    var notificationSettings: com.superiorsoftllc.infantry.plugin.api.NotificationSettings = com.superiorsoftllc.infantry.plugin.api.NotificationSettings()
+        private set
+
+    /** NOTIFY-CORE-1: ids of the notifications the daemon pushed, whose actions and dismissals go back to it. */
+    private val remoteNotifications = MutableStateFlow<Set<String>>(emptySet())
+
+    /**
+     * NOTIFY-CORE-1 (docs/wiki/Notifications.md): this client's notification bus. Plugins post through
+     * [com.superiorsoftllc.infantry.plugin.api.Services.NOTIFICATIONS] or [com.superiorsoftllc.infantry.ui.shell.ToastContext.notifications],
+     * the daemon through `notification_push`. The core in-app presenter draws a toast; a plugin presenter that throws is
+     * recorded as that plugin's fault (PLUGIN-CRASH-CONTAIN-1) and the core default shows the notification.
+     */
+    val notifications: com.superiorsoftllc.infantry.plugin.host.NotificationCenter =
+        com.superiorsoftllc.infantry.plugin.host.NotificationCenter(
+            settings = { notificationSettings },
+            clock = { Clock.System.now().toEpochMilliseconds() },
+            minuteOfDay = {
+                runCatching {
+                    val t = Clock.System.now().toLocalDateTime(kotlinx.datetime.TimeZone.currentSystemDefault())
+                    t.hour * 60 + t.minute
+                }.getOrNull()
+            },
+            newId = { "notification-${Clock.System.now().toEpochMilliseconds()}${notificationIds.next()}" },
+            onFault = { module, channel, error ->
+                println("[infantry-ui] notification presenter $module ($channel) threw: $error; the core default shows it")
+                com.superiorsoftllc.infantry.ui.plugin.PluginFaults.record(module, error, com.superiorsoftllc.infantry.ui.plugin.PluginFaults.generationLookup(module))
+            },
+        ).also { center ->
+            center.setDefault(com.superiorsoftllc.infantry.plugin.api.NotificationChannels.IN_APP, object : com.superiorsoftllc.infantry.plugin.api.NotificationPresenter {
+                override fun show(notification: com.superiorsoftllc.infantry.plugin.api.Notification): Boolean {
+                    postToast(notification.toToast()); return true
+                }
+                override fun dismiss(id: String) = dismissToast(id)
+            })
+            center.onAction { e ->
+                if (e.notificationId in remoteNotifications.value) {
+                    scope.launch { client.send(Envelope(com.superiorsoftllc.infantry.plugin.api.NotificationWire.ACTION, com.superiorsoftllc.infantry.plugin.api.NotificationWire.encode(e))) }
+                }
+            }
+        }
+
+    /** NOTIFY-CORE-1: the owner pressed [actionId] on notification [id] (a toast button). */
+    fun notificationAction(id: String, actionId: String) = notifications.action(id, actionId)
+
+    /** NOTIFY-CORE-1: the owner closed notification [id]; one the daemon pushed is not replayed on the next connect. */
+    fun dismissNotification(id: String) {
+        notifications.dismiss(id)
+        dismissToast(id)
+        if (id in remoteNotifications.value) {
+            scope.launch { client.send(Envelope(com.superiorsoftllc.infantry.plugin.api.NotificationWire.DISMISS, com.superiorsoftllc.infantry.plugin.api.NotificationWire.dismiss(id))) }
+        }
+    }
+
+    /** NOTIFY-CORE-1: a `settings` frame updates the bus's rules; a `notification_push` posts a daemon-side notification here. */
+    private fun onNotificationFrame(env: Envelope) {
+        when (env.type) {
+            Envelope.SETTINGS -> com.superiorsoftllc.infantry.plugin.api.NotificationSettings.fromSettingsFrame(env.data)?.let { notificationSettings = it }
+            com.superiorsoftllc.infantry.plugin.api.NotificationWire.PUSH -> com.superiorsoftllc.infantry.plugin.api.NotificationWire.notification(env.data)?.let { n ->
+                if (n.id.isNotBlank()) remoteNotifications.update { it + n.id }
+                notifications.deliver(n.copy(source = n.source.ifBlank { "daemon" }))
+            }
+        }
     }
 
     /** PANEL-TOGGLE-1: the title-bar toggle for one side panel (hide it if shown, show it if hidden). */

@@ -43,7 +43,7 @@ Every tool the daemon has is callable: `ih.call("infantry_ticket_move", {ticket 
 `scripting.aliases` (short name to tool name; defaults: `move`, `comment`, `message`, `start`, `close_session`,
 `kill`, `prompt`, `ask`, `ticket_get`, `ticket_update`, `ticket_create`, `board`, `emit`) plus built-ins every project
 has: `exec`, `cli`, `exec_status`, `progress`, `chat_note`, `chat_image`, `session_read`, `session_act`,
-`notice_suppress`.
+`notice_suppress`, `notify`.
 
 A dotted name is a plugin capability (PLUGIN-BRIDGES-1): `ih.call("readaloud.speak", {text = "Done", _target = "all"})` runs
 `infantry_capability_call` with the table as the capability's `args`; `_target` picks the client host (`default`, `all` or a
@@ -223,6 +223,17 @@ duration).
 card (level `info`, `ok`, `warn` or `fail`; optional `image`). `warn` draws a yellow WARNING line, not an
 error: use it for alerts such as low memory; `fail` is red and marked FAILED. No turn and no mail, unless `wake = true`, which also prompts
 the agent: use that for real exceptions only. Same project only, rate limited per minute, text length capped.
+
+## Notifications
+
+`ih.call("notify", {title = "Build failed", body = "see the log", level = "error", dedupeKey = "build"})` (or
+`ih.notify{...}`) posts on the core notification bus (tool `infantry_notification_post`, plugin Infantry_Scripting), the
+same bus UI and daemon plugins use ([Notifications](Notifications.md)). `level` is `info` (default), `success`,
+`warning`, `error` or `urgent`; the clients route it by `notifications.route.<level>` (by default urgent goes to the
+OS notification too). Optional: `id` (a fixed id shows once), `dedupeKey` (repeats within
+`notifications.dedupeWindowSec` are dropped: one toast per outage), `sticky`, `timeoutMs`, `channels` (`inApp`, `os`),
+`actions` (`{ {id = "retry", label = "Retry"} }`; a pressed one is the named event `notification.action`, which a hook
+can run a script on), `ticketId`, `sessionId`, `projectId`. The source is `script`.
 
 ## Progress
 

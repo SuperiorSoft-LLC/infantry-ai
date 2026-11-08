@@ -21,6 +21,7 @@ import com.superiorsoftllc.infantry.ui.protocol.PromptView
 import com.superiorsoftllc.infantry.ui.protocol.SkillView
 import com.superiorsoftllc.infantry.ui.model.RunsState
 import com.superiorsoftllc.infantry.ui.model.ToastEvent
+import com.superiorsoftllc.infantry.ui.model.toToast
 import com.superiorsoftllc.infantry.ui.model.contractAtLeast
 import com.superiorsoftllc.infantry.ui.net.CommandResult
 import com.superiorsoftllc.infantry.ui.protocol.PipelineStateView
@@ -952,6 +953,40 @@ interface ToastContext {
     val events: List<ToastEvent>
     /** Opens what [event] is about: its project, then its session, else the board. */
     fun open(event: ToastEvent)
+
+    /**
+     * NOTIFY-CORE-1 (docs/wiki/Notifications.md): the notification bus. Post with [Notifications.notify]; a plugin presenter
+     * registers with [Notifications.present]. The default (a shell with no bus) draws a notification as a plain toast.
+     */
+    val notifications: com.superiorsoftllc.infantry.plugin.api.Notifications get() = ToastNotifications(service)
+
+    /** NOTIFY-CORE-1: the bus's history (the inbox), newest first; empty where the shell keeps none. */
+    val history: List<com.superiorsoftllc.infantry.plugin.host.NotificationCenter.Record> get() = emptyList()
+
+    /** NOTIFY-CORE-1: action [actionId] of toast [event] was pressed. */
+    fun action(event: ToastEvent, actionId: String) {}
+
+    /** NOTIFY-CORE-1: the owner closed toast [event]. */
+    fun dismiss(event: ToastEvent) = service.dismiss(event.id)
+
+    /** NOTIFY-CORE-1: empties the history. */
+    fun clearHistory() {}
+}
+
+/** NOTIFY-CORE-1: the bus front door of a shell that has only a [ToastService]: each notification becomes one toast. */
+class ToastNotifications(private val service: ToastService) : com.superiorsoftllc.infantry.plugin.api.Notifications {
+    override fun notify(title: String, body: String) {
+        notify(com.superiorsoftllc.infantry.plugin.api.Notification(title = title, body = body))
+    }
+
+    override fun notify(notification: com.superiorsoftllc.infantry.plugin.api.Notification): String {
+        val now = kotlin.time.Clock.System.now().toEpochMilliseconds()
+        val n = notification.copy(id = notification.id.ifBlank { "toast-$now-${notification.title.hashCode()}" }, at = notification.at.takeIf { it > 0 } ?: now)
+        service.post(n.toToast())
+        return n.id
+    }
+
+    override fun dismiss(id: String) = service.dismiss(id)
 }
 
 /**

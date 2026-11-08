@@ -18,6 +18,13 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.ui.graphics.compositeOver
 import com.superiorsoftllc.infantry.ui.model.ToastKind
+import com.superiorsoftllc.infantry.plugin.api.Notification
+import com.superiorsoftllc.infantry.plugin.api.NotificationAction
+import com.superiorsoftllc.infantry.plugin.api.NotificationLevel
+import com.superiorsoftllc.infantry.ui.plugin.DesktopPlugins
+import com.superiorsoftllc.infantry.ui.plugin.NotificationsRelay
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import com.superiorsoftllc.infantry.plugins.official.updater.indicatorLabel
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -52,8 +59,21 @@ import com.superiorsoftllc.infantry.plugins.official.updater.UpdateState
  * the manual check's answers.
  */
 @Composable
-fun UpdatePrompt(service: UpdateService) {
+fun UpdatePrompt(service: UpdateService, notifications: NotificationsRelay = DesktopPlugins.notifications) {
     val state by service.state.collectAsState()
+    // NOTIFY-CORE-1: the check's answers (a failure, "up to date") are notifications on the core bus, with "Check again" as
+    // an action. UpdateService already keeps a silent re-check of the same outage quiet, and a manual check must always
+    // answer, so no dedupe key. Without a window bus yet the card below shows them as before.
+    DisposableEffect(service, notifications) {
+        val stop = notifications.onAction { e -> if (e.source == UPDATER_SOURCE && e.actionId == UPDATE_CHECK_AGAIN) service.check(manual = true) }
+        onDispose { stop.close() }
+    }
+    val onBus = (state is UpdateState.Message || state is UpdateState.UpToDate) && notifications.target != null
+    LaunchedEffect(state, onBus) {
+        if (!onBus) return@LaunchedEffect
+        updateNotification(state)?.let { notifications.notify(it) }
+        service.dismiss()
+    }
     val toast by service.toastVisible.collectAsState()
     val dialogOpen by service.dialogOpen.collectAsState()
     val indicator by service.indicatorVisible.collectAsState()
@@ -100,8 +120,8 @@ fun UpdatePrompt(service: UpdateService) {
         }
         when (val s = state) {
             is UpdateState.Checking -> if (s.manual) UpdateCard("Checking for updates…", ToastKind.INFO, progress = UpdateProgress.Indeterminate)
-            is UpdateState.UpToDate -> UpdateCard("Infantry AI ${s.current} is up to date.", ToastKind.SUCCESS, actions = listOf("Dismiss" to { service.dismiss() }))
-            is UpdateState.Message -> UpdateCard(s.text, ToastKind.WARN, actions = listOf("Dismiss" to { service.dismiss() }))
+            is UpdateState.UpToDate -> if (!onBus) UpdateCard("Infantry AI ${s.current} is up to date.", ToastKind.SUCCESS, actions = listOf("Dismiss" to { service.dismiss() }))
+            is UpdateState.Message -> if (!onBus) UpdateCard(s.text, ToastKind.WARN, actions = listOf("Dismiss" to { service.dismiss() }))
             is UpdateState.Available -> if (toast && !dialogOpen) {
                 UpdateCard("Infantry AI ${s.update.latest} is available.", ToastKind.INFO,
                     actions = listOf("View" to { service.openDialog() }, "Dismiss" to { service.dismissToast() }))
@@ -213,3 +233,19 @@ const val UPDATE_PROGRESS_TAG = "update-progress"
 const val UPDATE_RESTART_TAG = "update-restart"
 const val UPDATE_LATER_CARD_TAG = "update-later-card"
 const val UPDATE_RETRY_TAG = "update-retry"
+
+/** NOTIFY-CORE-1: the update notices' source on the notification bus and their action. */
+const val UPDATER_SOURCE = "Infantry_Updater"
+const val UPDATE_CHECK_AGAIN = "check-again"
+
+/** NOTIFY-CORE-1: the bus notification for a check's answer, or null for a state that is not one. */
+fun updateNotification(state: UpdateState): Notification? = when (state) {
+    is UpdateState.Message -> Notification(
+        title = "Update check", body = state.text, level = NotificationLevel.WARNING, source = UPDATER_SOURCE,
+        actions = listOf(NotificationAction(UPDATE_CHECK_AGAIN, "Check again")),
+    )
+    is UpdateState.UpToDate -> Notification(
+        title = "Update check", body = "Infantry AI ${state.current} is up to date.", level = NotificationLevel.SUCCESS, source = UPDATER_SOURCE,
+    )
+    else -> null
+}

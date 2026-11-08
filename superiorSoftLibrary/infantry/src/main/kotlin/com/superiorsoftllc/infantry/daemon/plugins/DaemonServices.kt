@@ -38,6 +38,8 @@ interface DaemonServices {
     fun onSessionRemoved(listener: (String) -> Unit): AutoCloseable = AutoCloseable {}
     /** ATTN-2a (1.24.0): push one frame to every connected client (behind `api.events.broadcast`); default: no clients. */
     fun broadcast(type: String, data: String) {}
+    /** NOTIFY-CORE-1: the notification bus's settings (`notifications.*`); the defaults where the daemon keeps none. */
+    fun notificationSettings(): com.superiorsoftllc.infantry.plugin.api.NotificationSettings = com.superiorsoftllc.infantry.plugin.api.NotificationSettings()
     val ticketEvents: com.superiorsoftllc.infantry.daemon.api.board.TicketEvents get() = com.superiorsoftllc.infantry.daemon.api.board.NoTicketEvents
 
     /** AGENT-REGISTRY-1: the daemon's agent registry; null = none (plugins see [com.superiorsoftllc.infantry.daemon.api.agents.NoAgents]). */

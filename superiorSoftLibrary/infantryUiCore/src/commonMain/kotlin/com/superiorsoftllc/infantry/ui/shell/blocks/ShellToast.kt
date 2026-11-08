@@ -26,7 +26,8 @@ class ToastBlock(children: List<Block> = emptyList(), place: Place = Place()) :
     @Composable
     override fun Render(scope: BlockScope) = with(scope) {
         val toast = LocalShellContext.current?.toast ?: return
-        ToastHost(toast.events, onOpen = toast::open, modifier = Modifier.aligned(Alignment.BottomEnd))
+        ToastHost(toast.events, onOpen = toast::open, modifier = Modifier.aligned(Alignment.BottomEnd),
+            onAction = toast::action, onDismiss = toast::dismiss)
         if (children.isNotEmpty()) CompositionLocalProvider(LocalToast provides toast.service) {
             box?.run { RenderPlaced(children) } ?: RenderPlain(children)
         }

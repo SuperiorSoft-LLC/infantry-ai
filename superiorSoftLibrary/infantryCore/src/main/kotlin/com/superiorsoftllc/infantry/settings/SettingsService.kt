@@ -118,7 +118,7 @@ class SettingsService(
             MAIL_AUTOMATION_FOOTER to JsonPrimitive(automationFooter("system") ?: ""),
             MAIL_WAKE_MODE to JsonPrimitive(wakeMode(null, null)),
             MAIL_DELIVERY_MODE to JsonPrimitive(deliveryMode(null, null)),
-        ) + RunnerLinkSettings.json(::storedRaw) + LimitRegistry.ALL.associate { it.key to JsonPrimitive(limit(it)) } + EndpointRegistry.ALL.associate { it.key to JsonPrimitive(endpoint(it)) } + (userPortrait()?.let { mapOf(USER_PORTRAIT to JsonPrimitive(it)) } ?: emptyMap()),
+        ) + RunnerLinkSettings.json(::storedRaw) + com.superiorsoftllc.infantry.plugin.api.NotificationSettings.json(notificationSettings()) + LimitRegistry.ALL.associate { it.key to JsonPrimitive(limit(it)) } + EndpointRegistry.ALL.associate { it.key to JsonPrimitive(endpoint(it)) } + (userPortrait()?.let { mapOf(USER_PORTRAIT to JsonPrimitive(it)) } ?: emptyMap()),
     )
 
     /** USER-PORTRAIT (1.107.0): the stored base64 portrait, or null while unset (clients then show their bundled default). */
@@ -518,7 +518,10 @@ class SettingsService(
             MAIL_AUTOMATION_FOOTER -> JsonPrimitive(requireFooterText(key, value))
             MAIL_WAKE_MODE -> JsonPrimitive(requireWakeMode(key, value))
             MAIL_DELIVERY_MODE -> JsonPrimitive(requireDeliveryMode(key, value))
-            else -> if (key.startsWith("runners.") && key.endsWith(".paused") && key.length > "runners..paused".length) {
+            else -> if (com.superiorsoftllc.infantry.plugin.api.NotificationSettings.isKey(key)) {
+                // NOTIFY-CORE-1: the notification bus's routes, presenters, quiet hours, dedupe window and history size.
+                com.superiorsoftllc.infantry.plugin.api.NotificationSettings.validated(key, value)
+            } else if (key.startsWith("runners.") && key.endsWith(".paused") && key.length > "runners..paused".length) {
                 JsonPrimitive(requireBoolean(key, value))
             } else if (key.startsWith("runners.") && key.endsWith(".maxWorkers") && key.length > "runners..maxWorkers".length) {
                 JsonPrimitive(requireIntIn(key, value, 1..1024))
@@ -922,6 +925,14 @@ class SettingsService(
         requireKnownSkills(store, ids, "setting '$SKILL_IDS'")
         return ids
     }
+
+    /** NOTIFY-CORE-1: the notification bus's settings (`notifications.*`), read at every use; an unreadable value is its default. */
+    fun notificationSettings(): com.superiorsoftllc.infantry.plugin.api.NotificationSettings =
+        com.superiorsoftllc.infantry.plugin.api.NotificationSettings.from(
+            com.superiorsoftllc.infantry.plugin.api.NotificationSettings.KEYS.mapNotNull { k ->
+                storedRaw(k)?.let { raw -> runCatching { k to Json.parseToJsonElement(raw) }.getOrNull() }
+            }.toMap(),
+        )
 
     /** RUNNER-POOL-5: the runner link's non-numeric settings ([RunnerLinkSettings]), read at every use. */
     fun runnerLink(): RunnerLinkSettings.Values = RunnerLinkSettings.values(::storedRaw)

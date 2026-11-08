@@ -43,6 +43,12 @@ import java.lang.ref.WeakReference
  * This is a trust label, not a sandbox: a loaded jar runs in-process with the app's full access.
  */
 object DesktopPlugins {
+    /**
+     * NOTIFY-CORE-1: the process's ONE way onto the window's notification bus. Every module's [com.superiorsoftllc.infantry.plugin.api.Services.NOTIFICATIONS]
+     * posts through it, and so does app code outside the shell (the update notices); the window sets its bus as the target.
+     */
+    val notifications: NotificationsRelay = NotificationsRelay { print(it) }
+
     class Loaded(
         val factory: TabFactory,
         val root: File,
@@ -142,17 +148,14 @@ object DesktopPlugins {
         val resolution = resolve(config)
 
         var built: TabFactory? = null
+        // NOTIFY-CORE-1: ONE relay for every load, so a presenter a module registered survives the factory being rebuilt.
+        val relay = notifications
         val bus = SimpleEventBus(say)
         // PLUGIN-HOTSWAP-1: one registry per modules.json read (a live swap reads it again); the same providers each time.
         fun registry(c: ModulesConfig) = ServiceRegistry(c, say).apply {
             provideEvents(bus, say)
-            provide(Services.NOTIFICATIONS) { s ->
-                Notifications { title, body ->
-                    say("[plugins] ${s.name} notifies: $title - $body")
-                    // TOAST-1: and the window's toast (a no-op until a window has set its controller's).
-                    built?.toasts?.post(body, ToastKind.INFO, title)
-                }
-            }
+            // NOTIFY-CORE-1: the notification bus, stamped with the module's name (the window sets the bus on the relay).
+            provide(Services.NOTIFICATIONS) { s -> ModuleNotifications(s.name, relay, say) }
             provide(Services.STORAGE) { s -> FilePluginStorage(dataDir(stateDir, s.name)) }
             provide(Services.SETTINGS) { s -> FilePluginSettings(FilePluginStorage(dataDir(stateDir, s.name))) }
             provide(Services.DAEMON) { s -> RouteGate.gated(s.manifest!!, lockdown, c, DaemonLink.window::send) }
@@ -178,6 +181,7 @@ object DesktopPlugins {
         fun factoryOf(r: Resolution, c: ModulesConfig): TabFactory {
             val factory = set.factory(r, changes, c)
             built = factory
+            factory.notifications = relay
             factory.sectionExporter = { node ->
                 runCatching {
                     when (val e = exportNode(factory, node).second) {

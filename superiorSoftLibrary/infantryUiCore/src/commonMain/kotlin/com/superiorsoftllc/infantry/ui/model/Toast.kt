@@ -6,7 +6,8 @@ enum class ToastKind { INFO, SUCCESS, WARN, ERROR }
 
 /**
  * One global bottom-right toast. [sessionId] / [ticketId] / [projectId] say where a click goes; [durationMs] is how long it
- * stays (the clock pauses while hovered). [id] dedupes: posting an id that is already queued is a no-op.
+ * stays (the clock pauses while hovered; 0 or less = sticky, until closed). [id] dedupes: posting an id that is already queued
+ * is a no-op. NOTIFY-CORE-1: [actions] are its buttons; a toast the notification bus drew has the notification's id.
  */
 data class ToastEvent(
     val id: String,
@@ -18,9 +19,41 @@ data class ToastEvent(
     val sessionId: String? = null,
     val projectId: String? = null,
     val durationMs: Long = DEFAULT_TOAST_MS,
-)
+    val actions: List<com.superiorsoftllc.infantry.plugin.api.NotificationAction> = emptyList(),
+) {
+    val sticky: Boolean get() = durationMs <= 0
+}
 
 const val DEFAULT_TOAST_MS = 6_000L
+
+/** NOTIFY-CORE-1: a notification level as the toast's colour. */
+fun com.superiorsoftllc.infantry.plugin.api.NotificationLevel.toToastKind(): ToastKind = when (this) {
+    com.superiorsoftllc.infantry.plugin.api.NotificationLevel.INFO -> ToastKind.INFO
+    com.superiorsoftllc.infantry.plugin.api.NotificationLevel.SUCCESS -> ToastKind.SUCCESS
+    com.superiorsoftllc.infantry.plugin.api.NotificationLevel.WARNING -> ToastKind.WARN
+    com.superiorsoftllc.infantry.plugin.api.NotificationLevel.ERROR, com.superiorsoftllc.infantry.plugin.api.NotificationLevel.URGENT -> ToastKind.ERROR
+}
+
+/** NOTIFY-CORE-1: a toast kind as a notification level (the [com.superiorsoftllc.infantry.ui.ToastService] front door). */
+fun ToastKind.toLevel(): com.superiorsoftllc.infantry.plugin.api.NotificationLevel = when (this) {
+    ToastKind.INFO -> com.superiorsoftllc.infantry.plugin.api.NotificationLevel.INFO
+    ToastKind.SUCCESS -> com.superiorsoftllc.infantry.plugin.api.NotificationLevel.SUCCESS
+    ToastKind.WARN -> com.superiorsoftllc.infantry.plugin.api.NotificationLevel.WARNING
+    ToastKind.ERROR -> com.superiorsoftllc.infantry.plugin.api.NotificationLevel.ERROR
+}
+
+/**
+ * NOTIFY-CORE-1: how the core in-app presenter draws a notification: the title on top, the body under it (one with no body
+ * shows its source on top and its title under it), sticky = until closed, else its timeout or the default.
+ */
+fun com.superiorsoftllc.infantry.plugin.api.Notification.toToast(): ToastEvent = ToastEvent(
+    id = id, at = at, kind = level.toToastKind(),
+    title = if (body.isBlank() && source.isNotBlank()) source else title,
+    body = body.ifBlank { title.takeIf { source.isNotBlank() } },
+    ticketId = ticketId, sessionId = sessionId, projectId = projectId,
+    durationMs = if (sticky) 0 else timeoutMs.takeIf { it > 0 } ?: DEFAULT_TOAST_MS,
+    actions = actions,
+)
 
 /** At most this many toasts show at once; the newest win and sit on top. */
 const val MAX_VISIBLE_TOASTS = 3
