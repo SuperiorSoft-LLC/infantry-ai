@@ -349,6 +349,7 @@ internal object Cli {
         // connection attempt the user never asked for and a confusing "cannot reach the daemon".
         if (command !in COMMANDS) {
             err.appendLine("error: unknown command '$command'")
+            if (command == "daemon") err.appendLine("hint: the CLI does not start a daemon (there is no `daemon` command and no --mode flag here). The daemon is com.superiorsoftllc.infantry.daemon.DaemonMainKt (`--mode both|runner|orchestrator`); for a TEST daemon use scripts/testdaemon.sh (docs/wiki/recipes/test-daemon-for-runner-repros.md)")
             err.appendLine("hint: if the daemon documents this command, this CLI may be older than the daemon; use the launcher the daemon exports as INFANTRY_BIN")
             printUsage(err)
             return 2

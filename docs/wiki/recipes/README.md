@@ -14,6 +14,7 @@ touch, and says how to check the result. Read [Architecture](../Architecture.md)
 | [Add a Lua hook](add-lua-hook.md) | A script that runs when a ticket changes lane. |
 | [Add a CLI harness](add-cli-harness.md) | Support for another agent CLI, by descriptor or by plugin. |
 | [Add a provider](add-provider.md) | A model group in a harness's picker. |
+| [Start a test daemon for runner repros](test-daemon-for-runner-repros.md) | Two scrubbed test daemons (PC and runner) from a built dist, paired and torn down by PID. |
 
 Conventions in every recipe:
 
