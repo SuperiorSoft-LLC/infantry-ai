@@ -1,17 +1,28 @@
 -- lane-one-worker: keeps at most N ticket workers in progress, bounces the extra one back to todo, and prompts a freshly started idle worker
 -- Scenario: Allow only N ticket workers at a time and bounce the extra one back to todo.
 -- Args:
---   maxInProgress (number, 1)
+--   maxInProgress (number, optional): OVERRIDE; when absent the cap is the setting limits.workers.maxParallel ("Max parallel workers"), lowered by project data workers.cap.lowered when a governor set it
+--   project (string, optional): project id whose setting and data are read
 --   exemptRoles (list, []): roles that do not count and are never bounced
 --   kickPrompt (string, optional): prompt for a new idle worker; {ticket} is replaced
 --   nowMarker (string, optional): title prefix that is outside the cap
 --   event payload: ticketId, workerSession
 -- Hook: on="lane enter in_progress"  args {"maxInProgress":1,"exemptRoles":["version-control"],"kickPrompt":"Start ticket {ticket}."}
--- Gotchas: A worker that already ran two turns is not kicked again.
+-- Gotchas: The cap is the setting limits.workers.maxParallel (see script worker-cap for how to change it); limits.runners.maxWorkers is per-runner concurrency only. A worker that already ran two turns is not kicked again.
 --   GOTCHAS (all scripts): never name an arg `to`, `from`, `ticketId` or `status` unless it is meant to be the event payload's own: for a hook the event payload wins over args. Actions a run queues are readable only in the NEXT phase (ih.again()). Use ih.call(...) for an action whose refusal must not end the run.
 local a = input.args
 local ticket = a.ticketId or error("lane-one-worker: no ticketId")
-local max = tonumber(a.maxInProgress or 1)
+local override = tonumber(a.maxInProgress)
+-- WORKER-CAP-UX-1: precedence = hook arg maxInProgress (override) > min(setting limits.workers.maxParallel, workers.cap.lowered).
+local function effectiveCap(settingRes, cfgRes)
+  if override then return override end
+  local v = settingRes and settingRes.json and tonumber(settingRes.json.value) or 1
+  local data = cfgRes and cfgRes.json and cfgRes.json.data or {}
+  local low = tonumber(data["workers.cap.lowered"])
+  if low and low < v then v = low end
+  return v
+end
+local max = 1
 local exempt = {}
 for _, r in ipairs(a.exemptRoles or {}) do exempt[r:lower()] = true end
 local function res(i) return input.results and input.results[i] end
@@ -20,6 +31,8 @@ local function roleOf(line) local r = line:match("| (%w[%w%-_]*) %x+ ") ; return
 if input.phase == 1 then
   ih.infantry_ticket_get{ticketId = ticket, detail = "summary"}
   ih.infantry_board{columns = "in_progress", limit = 50}
+  ih.call("infantry_settings_get", {key = "limits.workers.maxParallel", projectId = a.project})
+  ih.call("infantry_project_config_get", {projectId = a.project})
   ih.again()
 elseif input.phase == 2 then
   local t = (res(1) and res(1).json) or {}
@@ -29,6 +42,7 @@ elseif input.phase == 2 then
   -- (Replaces bumping maxInProgress around a start: the hook ran after the revert and killed the new worker.)
   local title = tostring(t.title or "")
   if a.nowMarker and title:sub(1, #a.nowMarker) == a.nowMarker then ih.log("now-marker ticket: outside the cap"); return end
+  max = effectiveCap(res(3), res(4))
   local lines = (res(2) and res(2).json and res(2).json.board) or {}
   local others = 0
   for _, line in ipairs(lines) do

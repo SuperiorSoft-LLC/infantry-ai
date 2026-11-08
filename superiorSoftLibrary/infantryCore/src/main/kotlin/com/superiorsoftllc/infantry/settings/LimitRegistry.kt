@@ -70,7 +70,7 @@ object LimitRegistry {
     )
     val LANE_DEFAULT = LimitDef(
         "limits.concurrency.laneDefault", 1, "agents",
-        "Agents of one role that may run at once in a project, when the project sets no lane cap of its own.",
+        "Agents of one role that may run at once in a project, when the project sets no lane cap of its own; never lower than limits.workers.maxParallel (Max parallel workers).",
     )
     val PACING_CEILING = LimitDef(
         "limits.pacing.maxWorkersCeiling", 50, "workers",
@@ -212,7 +212,17 @@ object LimitRegistry {
     /** RUNNER-POOL-3: the default of `runners.<name>.maxWorkers`, workers one runner runs at once. */
     val RUNNER_MAX_WORKERS = LimitDef(
         "limits.runners.maxWorkers", 1, "workers",
-        "How many ticket workers one runner runs at once unless runners.<name>.maxWorkers says otherwise.",
+        "Per-runner concurrency: how many agents ONE runner machine runs at once unless runners.<name>.maxWorkers says otherwise. It does not set how many board workers run: that is 'Max parallel workers' (limits.workers.maxParallel).",
+        min = 1, zeroIsUnlimited = false,
+    )
+
+    /**
+     * WORKER-CAP-UX-1: the ONE board-worker cap. Auto-start and the lane/one-worker guard read it (a hook arg `maxInProgress` still
+     * overrides it, see HOOKS.md); a governor may only LOWER it, recording why in project data `workers.cap.status`.
+     */
+    val WORKERS_MAX_PARALLEL = LimitDef(
+        "limits.workers.maxParallel", 1, "workers",
+        "Max parallel workers: how many board ticket workers run at once in a project (auto-start and the one-worker guard read it). A usage governor may lower the effective value; project data `workers.cap.status` says why and since when. Per-runner machine concurrency is limits.runners.maxWorkers.",
         min = 1, zeroIsUnlimited = false,
     )
 
@@ -1009,7 +1019,7 @@ object LimitRegistry {
         USAGE_STALE_MAX_HOURS, USAGE_BACKOFF_MAX_MINUTES, USAGE_MANUAL_REFRESH_FLOOR_SECONDS,
         BUILD_MAX_WORKERS, BUILD_MAX_PARALLEL_FORKS, CPU_ALERT_PERCENT, CPU_ALERT_MINUTES,
         TICKET_DEADLINE_MINUTES, UNATTENDED_DEADLINE_MINUTES, STALL_MINUTES, KILL_RETRY_MINUTES, SILENT_MINUTES, PROGRESS_STALE_MINUTES, IDLE_NUDGE_MINUTES, MAIL_WAKE_MAX_SECONDS, IDLE_NOTICE_MINUTES, IDLE_COMMENT, UNBRIEFED_GRACE_MINUTES,
-        UNASSIGN_WAIT_SECONDS, HANDOFF_COMMITS, HANDOFF_CHARS, AGENT_QUEUE_MAX, RUNNERS_HEARTBEAT_SEC, RUNNERS_LOST_AFTER_SEC, RUNNER_MAX_WORKERS, CHAT_QUEUE_MAX, JOBS_REMEMBERED, JOB_LOG_MAX_READ_BYTES, CHAT_SEND_ACK_SECONDS, CHAT_SENT_IDS_KEPT, CHAT_HISTORY_FRAMES,
+        UNASSIGN_WAIT_SECONDS, HANDOFF_COMMITS, HANDOFF_CHARS, AGENT_QUEUE_MAX, RUNNERS_HEARTBEAT_SEC, RUNNERS_LOST_AFTER_SEC, RUNNER_MAX_WORKERS, WORKERS_MAX_PARALLEL, CHAT_QUEUE_MAX, JOBS_REMEMBERED, JOB_LOG_MAX_READ_BYTES, CHAT_SEND_ACK_SECONDS, CHAT_SENT_IDS_KEPT, CHAT_HISTORY_FRAMES,
         AUTO_DONE_MIN_OUTPUTS, PROCESS_WATCH_INTERVAL_SECONDS, PROCESS_STOP_GRACE_SECONDS, PROCESS_STUCK_MINUTES, RUN_SCROLLBACK_BYTES, RUN_HISTORY,
         RUN_INPUT_BYTES_PER_SECOND, RUN_INPUT_MAX_FRAME_BYTES, RUN_INPUT_QUEUE_BYTES, RUN_MAX_COLS, RUN_MAX_ROWS,
         QUESTION_TTL_MINUTES, BG_NOTIFY_TAIL_LINES, BG_NOTIFY_TIMEOUT_MINUTES, BG_NOTIFY_PATTERN_GRACE_SECONDS,

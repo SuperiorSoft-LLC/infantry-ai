@@ -13,6 +13,7 @@
   "needs-owner-alert.lua",
   "usage-governor.lua",
   "wake-on-log.lua",
+  "worker-cap.lua",
   "worker-issue-wake.lua",
   "worker-silent-ping.lua"
 ]
