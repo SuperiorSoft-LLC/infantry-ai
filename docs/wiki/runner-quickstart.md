@@ -13,7 +13,10 @@ One command, then copy the link it prints.
 `docker build -t infantry-runner superiorSoftLibrary/infantry/build/docker`). Mount nothing of your PC.
 
 ```
-docker run -d --name infantry-runner -e INFANTRY_MODE=runner -e INFANTRY_RUNNER_NAME=server-1   -e INFANTRY_RUNNER_HOST=<public or tailnet address> -e INFANTRY_RUNNER_ALLOW_PROJECTS='<project-id>' -e INFANTRY_RUNNER_ALLOW_HARNESSES=claude   -p 8790:8790 -v infantry-data:/data infantry-runner
+docker run -d --name infantry-runner -e INFANTRY_MODE=runner \
+  -e INFANTRY_RUNNER_NAME=server-1 -e INFANTRY_RUNNER_HOST=<public or tailnet address> \
+  -e INFANTRY_RUNNER_ALLOW_PROJECTS='<project-id>' -e INFANTRY_RUNNER_ALLOW_HARNESSES=claude \
+  -p 8790:8790 -v infantry-data:/data infantry-runner
 docker logs infantry-runner        # the link is between the ==== PAIRING LINK ==== lines
 ```
 
@@ -23,6 +26,8 @@ code expires unpaired the log says so; `docker exec -it infantry-runner infantry
 container never loops on issuing codes: each issue is a fresh 10-minute window for guessing).
 
 **An install** (no Docker): `infantry runner up --name server-1 --host <address> --allow-projects '<project-id>' --allow-harnesses claude`.
+`--allow-projects` / `--allow-harnesses` take comma-separated ids, or `*` for every one; without them a console prompt asks (nothing
+granted silently).
 If no daemon answers it starts one in runner mode in the background (waits `limits.runners.upStartSec`, default 60, log in
 `<state dir>/runner-up.log`), then prints the link. Run it again and it says "already paired" or "waiting" and starts nothing new.
 A daemon running in another mode is refused with that mode.
@@ -48,15 +53,32 @@ it is refused with `git remote add origin <url>` as the fix.
 
 ## 2. On your PC: add the server
 
+Paste the link `runner up` (or the container log) printed. One paste, the whole handshake (RUNNER-ADD-LINK-1):
+
+```
+infantry runner add 'infantry://runner?v=1&name=server-1&host=...&port=8790&code=...&fp=...'
+infantry runner list
+```
+
+Quote the link: an unquoted `&` cuts it short in most shells. `--name other` pairs it under another name, and `--link -`
+reads the link from stdin so it need not land in your shell history. The link's hosts are tried in order; a host that does not
+answer (`limits.runners.addHostTimeoutSec`, 5 s each) or whose certificate is not the link's fingerprint is skipped — the
+code is only sent after the pin matched — and the first host that answers pairs. A PAIR refusal (wrong, expired or burned
+code) stops at once. If no host answers, the error lists each host with its reason.
+
+The first successful add on a machine turns `runners.enabled` on (adding is already the owner's consent); detaching a runner
+leaves it on.
+
+By hand, the same pairing (older installs):
+
 ```
 infantry runner add server-1 wss://<host from the link>:8790 --code <code from the link> --fingerprint <fp from the link>
 infantry runner list
 ```
 
-The link (`host=`, `port=`, `code=`, `fp=`) holds those values. `runner add '<link>'` takes the whole link in one go once RUNNER-ADD-LINK-1 (ticket f9139b7b) is in.
+The link (`host=`, `port=`, `code=`, `fp=`) holds those values.
 
 Settings > Runners > Add does the same. `runner add` needs the owner credential, so run it in your own shell, not from an agent.
-Enable `runners.enabled` on the PC (the orchestrator) too; the runner does not need it.
 
 ## 3. Pick the runner when you create an agent
 

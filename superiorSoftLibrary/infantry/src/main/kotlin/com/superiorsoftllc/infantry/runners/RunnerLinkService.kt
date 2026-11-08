@@ -118,7 +118,7 @@ class RunnerLinkService(
             if (!RunnerLinkStore.exists(stateDir)) throw LinkFailure("no paired runner '$runner'")
             val store = RunnerLinkStore.open(stateDir)
             val r = store.runner(runner) ?: throw LinkFailure("no paired runner '$runner'")
-            val answer = clientCall(limit, settings, transport).call(r.url, r.fingerprint.ifBlank { null }, store.selfId(), r.credential, type, data)
+            val answer = clientCall(limit, settings, transport).call(r.url, r.fingerprint.ifBlank { null }, store.selfId(), r.credential, type, data, limit(LimitRegistry.RUNNERS_LINK_CALL_SECONDS))
             return LinkAnswer(answer.type, answer.data)
         }
     }
@@ -128,12 +128,17 @@ class RunnerLinkService(
     fun servingPort(): Int? = serving?.port
 
     /** The orchestrator-side operations over the loaded transport, with the daemon's settings. */
-    fun peers(store: RunnerLinkStore): RunnerPeers = RunnerPeers(store, clientCall(limit, settings, transport), clock)
+    fun peers(store: RunnerLinkStore): RunnerPeers = RunnerPeers(
+        store, clientCall(limit, settings, transport), clock,
+        callTimeoutSec = { limit(LimitRegistry.RUNNERS_LINK_CALL_SECONDS) },
+        hostTimeoutSec = { limit(LimitRegistry.RUNNERS_ADD_HOST_TIMEOUT_SEC) },
+    )
 
     /**
      * RUNNER-POOL-6a: one owner `runner_admin` request (`{"op": ..., ...}`) -> its answer object: `{"ok": true, ...}`, or
      * `{"ok": false, "error": <reason>, "presentedFingerprint": <fp or null>}`. Ops: `pair {name}`, `pair_status`, `pair_cancel`,
-     * `add {name, url, code, fingerprint?, orchestratorName}`, `rotate {name}`, `detach {name}`.
+     * `add {name, url, code, fingerprint?, orchestratorName}` or `add {link, name?, orchestratorName}` (RUNNER-ADD-LINK-1),
+     * `rotate {name}`, `detach {name}`.
      */
     @Synchronized
     fun admin(request: JsonObject): JsonObject = try {
@@ -155,8 +160,28 @@ class RunnerLinkService(
                 ok("name" to name, "paused" to (op == "pause").toString())
             }
             "add" -> {
-                val r = peers(RunnerLinkStore.open(stateDir)).add(need("name"), need("url"), need("code"), str("fingerprint"), str("orchestratorName").orEmpty())
-                ok("name" to r.name, "url" to r.url, "runnerId" to r.runnerId)
+                // RUNNER-ADD-LINK-1: a pasted link (the one-string flow) or the older name/url/code/fingerprint form; both keep it.
+                val store = RunnerLinkStore.open(stateDir)
+                val text = str("link")
+                val outcome = if (text != null) {
+                    val parsed = when (val p = RunnerPairLink.parse(text)) {
+                        is RunnerPairLink.Parsed.Ok -> p.link
+                        is RunnerPairLink.Parsed.Bad -> throw IllegalArgumentException(p.reason)
+                    }
+                    val name = str("name")?.takeIf { it.isNotBlank() } ?: parsed.name
+                    peers(store).addLink(parsed, name, str("orchestratorName").orEmpty(), settings().allowPlainTailnet)
+                } else {
+                    val r = peers(store).add(need("name"), need("url"), need("code"), str("fingerprint"), str("orchestratorName").orEmpty())
+                    AddOutcome(r, emptyList())
+                }
+                // Adding a runner IS the owner's consent (`runner_admin` is owner-only), so the first add turns the feature on too.
+                val turnedOn = !enabledNow() && runCatching { setEnabled(true) }.isSuccess
+                val r = outcome.runner
+                ok(
+                    "name" to r.name, "url" to r.url, "runnerId" to r.runnerId,
+                    "skipped" to outcome.skipped.joinToString("; ").takeIf { it.isNotEmpty() },
+                    "enabledTurnedOn" to turnedOn.toString(),
+                )
             }
             "rotate" -> ok("name" to peers(RunnerLinkStore.open(stateDir)).rotate(need("name")).name)
             "detach" -> {
@@ -180,6 +205,8 @@ class RunnerLinkService(
     @Volatile var enabledNow: () -> Boolean = { false }
     /** RUNNER-POOL-11: writes `runners.<name>.paused` for the `pause` / `resume` ops; the daemon wires the setting. */
     @Volatile var setPaused: (String, Boolean) -> Unit = { _, _ -> }
+    /** RUNNER-ADD-LINK-1: writes `runners.enabled`; the first successful add turns it on so one paste is enough. */
+    @Volatile var setEnabled: (Boolean) -> Unit = { }
 
     private fun list(): JsonObject {
         val paired = if (RunnerLinkStore.exists(stateDir)) RunnerLinkStore.open(stateDir).runners() else emptyList()
@@ -281,9 +308,9 @@ class RunnerLinkService(
         private const val SHOWN_OP_SIZE = 32
 
         /** [LinkCall] over the loaded transport with the link call timeout and the plain-ws switch read at each call. */
-        fun clientCall(limit: (LimitDef) -> Long, settings: () -> RunnerLinkSettings.Values, transport: () -> RunnerLinkTransport?) = LinkCall { url, fp, id, cred, type, data ->
+        fun clientCall(limit: (LimitDef) -> Long, settings: () -> RunnerLinkSettings.Values, transport: () -> RunnerLinkTransport?) = LinkCall { url, fp, id, cred, type, data, timeoutSeconds ->
             val t = transport() ?: throw LinkFailure(NO_TRANSPORT)
-            t.call(url, fp, settings().allowPlainTailnet, id, cred, type, data, limit(LimitRegistry.RUNNERS_LINK_CALL_SECONDS))
+            t.call(url, fp, settings().allowPlainTailnet, id, cred, type, data, timeoutSeconds)
                 .let { RunnerLinkServer.Answer(it.type, it.data) }
         }
 

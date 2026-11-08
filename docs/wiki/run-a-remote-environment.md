@@ -28,13 +28,21 @@ Choose it, first source wins: `infantry daemon --mode runner` (or `--mode=runner
    ```
    `/data` holds the state (token, link keystore, agent logins), `/work` the repositories and worktrees. Port 8790 is the runner
    link (`limits.runners.linkPort`, TLS). The daemon's own port 8787 stays closed. The image bakes in `opencode` and `pi`; build
-   with `--build-arg INSTALL_CLAUDE=true` to add `claude`. From an install instead: `infantry daemon --mode runner`.
+   with `--build-arg INSTALL_CLAUDE=true` to add `claude`. Add `-e INFANTRY_RUNNER_NAME=server-1` (plus `INFANTRY_RUNNER_HOST`,
+   `INFANTRY_RUNNER_ALLOW_PROJECTS`, `INFANTRY_RUNNER_ALLOW_HARNESSES`) and the container prints its pairing link in `docker logs`
+   once it is up and not paired yet (see [Runner quickstart](runner-quickstart.md)). From an install instead: `infantry runner up
+   --name server-1 --host <address>`, which starts a runner-mode daemon when none answers and prints the link.
 2. **Log the agent CLI in on the server**, for example `docker exec -it infantry-runner claude login` (the login lands in `/data`).
    Logins and secrets never travel from your PC.
 3. **Allow what it may run** on the runner: the settings `runner.projects` and `runner.harnesses` (empty means none, `*` means any).
-4. **Pair.** On the server (`docker exec -it infantry-runner infantry runner pair --name server-1`) it prints one pairing link (`infantry://runner?...`, carrying hosts, port, code and fingerprint; add `--host <address>` for an address the runner cannot detect, e.g. behind Docker NAT), then the one-time code and fingerprint by hand.
-   On your PC: `infantry runner add server-1 wss://<host>:<port> --code <code> --fingerprint <fingerprint>` (compare the fingerprint first).
-5. **Use it.** Turn on `runners.enabled`, then pin a ticket to `runner: server-1`, or set `runners.default` to `server-1` or `any`.
+4. **Pair.** On the server (`docker exec -it infantry-runner infantry runner pair --name server-1`) it prints one pairing link
+   (`infantry://runner?...`, carrying hosts, port, code and fingerprint; add `--host <address>` for an address the runner cannot detect,
+   e.g. behind Docker NAT), then the one-time code and fingerprint by hand.
+   On your PC, paste that link: `infantry runner add 'infantry://runner?v=1&name=server-1&host=...&port=8790&code=...&fp=...'`
+   (quote it). The link's hosts are tried in order; a host that does not answer or whose certificate is not the link's is skipped
+   without sending the code, and the first that answers pairs. The by-hand form still works:
+   `infantry runner add server-1 wss://<host>:<port> --code <code> --fingerprint <fingerprint>`.
+5. **Use it.** The first successful add turns `runners.enabled` on; then pin a ticket to `runner: server-1`, or set `runners.default` to `server-1` or `any`.
    Caps: `runners.<name>.maxWorkers`. Pause a runner with `runners.<name>.paused` = true (running workers go on, no new start).
    Revoke with `infantry runner detach server-1`; rotate the credential with `infantry runner rotate server-1`.
 
