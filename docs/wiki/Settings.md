@@ -137,3 +137,11 @@ Gradle properties; the CI workflows use `${GITHUB_REPOSITORY}`.
 Plugins add their own keys through `config` cards in their `module.json` (see [Plugins](Plugins.md)). The full list
 for your build: `infantry settings`, and the Settings tab (searchable). Environment variables (`INFANTRY_*`, also read
 as `INFANTRY_*`) set machine-level values such as the port, state dir and token; see the README.
+
+## Mock usage data (Infantry_Usage)
+
+| Key | Default | What it does |
+|---|---|---|
+| `usage.mock` | off | Show mock usage data instead of real readings: for demos, screenshots and testing. Usage panel, meters, `usage_get`, limits and the pushed limits frame all show it. Env `INFANTRY_USAGE_MOCK=1`. |
+| `usage.mock.data` | two sample providers | JSON, provider id to percents and optional relative resets: `{"claude":{"session":18,"week":42,"monthly":7,"weekResetsInMinutes":3000}}`. No accounts or emails. Env `INFANTRY_USAGE_MOCK_DATA`. |
+| `usage.mock.affectsPacing` | off | Off: pacing and the usage governor keep judging the REAL usage (faked screenshots buy no workers). On: pacing judges the mock. Env `INFANTRY_USAGE_MOCK_AFFECTS_PACING`. |

@@ -188,6 +188,7 @@ interface DaemonApi {
         // 1.16.0 (AR-5, additive): `services` (ServicesApi).
         // 1.15.0 (DAEMON-STORAGE-1, additive): `storage` (daemon.api.storage.PluginStorage).
         // 1.13.0 (DP-5h-3a2, additive): BoardRuntime.ticketEvents / stories / epics / relatedDescription / unknownSkills.
+        // 1.52.0 (USAGE-MOCK-1, additive): `usageReadings` (many providers, `affectsPacing`): a reading the pacing rule may ignore.
         // 1.51.0 (DEMO-USAGE-HIDE-1, additive): `usageReading` (declare `usageReading` in `daemon.hooks`): a plugin supplies the plan-limit reading.
         // 1.20.0 (USAGE-FIT, additive): `Meters.requests(sinceMs)` and `MeterRequest`, the recorded model requests (read-only).
         // 1.12.0 (DP-5h-3a, additive): `boardRuntime` (BoardRuntime): what a board plugin builds its board from.
@@ -234,7 +235,7 @@ interface DaemonApi {
         // 1.50.0 (JOBFEED-1, additive): `Sessions.jobs` / `Sessions.jobLog` (bounded job-log tail read).
         // 1.51.0 (SCRIPT-ARSENAL-2, additive): daemon.api.knowledge.KnowledgeWriter, the write half of Knowledge (published by Infantry_Notes);
         // notes saved under KnowledgeWriter.GLOBAL_PROJECT are found by every project's search and show.
-        const val VERSION = "1.51.0"
+        const val VERSION = "1.52.0"
     }
 }
 
@@ -700,4 +701,11 @@ interface Hooks {
      * (usage, limits, the pushed limits frame) carries them. [windows] is called with the epoch millis of the read; null = this reading is off right now (the provider sources are read). Default: ignored.
      */
     fun usageReading(provider: String, windows: (now: Long) -> List<com.superiorsoftllc.infantry.daemon.api.usage.LimitWindow>?) {}
+
+    /**
+     * USAGE-MOCK-1 (1.52.0, additive): like [usageReading], for several providers at once ([readings] maps provider id to its windows;
+     * null or empty = off right now). [affectsPacing] is asked at every pacing check: false = the usage pacing rule and the usage governor
+     * keep judging the REAL readings, while usage, limits and the pushed limits frame carry the offered ones. Default: ignored.
+     */
+    fun usageReadings(affectsPacing: () -> Boolean, readings: (now: Long) -> Map<String, List<com.superiorsoftllc.infantry.daemon.api.usage.LimitWindow>>?) {}
 }

@@ -187,6 +187,7 @@ All in `docker/docker-compose.yml`, each overridable in `.env`, and changeable l
 | `INFANTRY_DEMO_USAGE_SESSION_PERCENT` / `..._WEEK_PERCENT` | (Demo_Lock) | 10 / 25 | the FIXED plan meters a demo visitor sees on the `opencode-go` plan (never the real ones) |
 | `INFANTRY_PROCESSES_FLOOR_MB` | `processes.floorMb` | 256 (2 GB box; default 4096) | free RAM (MB) below which the daemon warns "memory pressure"; a stored setting still wins |
 | `INFANTRY_LIMIT_PACING_MAX_WORKERS_CEILING` | `limits.pacing.maxWorkersCeiling` | 2 | highest worker count the usage pacing rule accepts |
+| `INFANTRY_USAGE_MOCK` | `usage.mock` | off | `1` shows mock usage data (Infantry_Usage); see `INFANTRY_USAGE_MOCK_DATA` (JSON) and `INFANTRY_USAGE_MOCK_AFFECTS_PACING` (default off: pacing keeps the real usage) |
 | `INFANTRY_LIMIT_BUILD_MAX_WORKERS` / `..._MAX_PARALLEL_FORKS` | `limits.build.*` | 1 / 1 | Gradle workers / test forks of a worker's build |
 | `INFANTRY_LIMIT_WATCHDOG_TICKET_DEADLINE_MINUTES` | `limits.watchdog.ticketDeadlineMinutes` | 60 | unattended ticket worker deadline (legacy `INFANTRY_TICKET_DEADLINE_MIN`) |
 | `INFANTRY_LIMIT_WATCHDOG_DEADLINE_MINUTES` | `limits.watchdog.deadlineMinutes` | 30 | other unattended runs |

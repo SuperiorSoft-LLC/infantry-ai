@@ -21,10 +21,14 @@ class UsagePacing(
     /** The meter of every live ticket worker (one entry per worker). */
     private val workerMeters: () -> List<String>,
     private val clock: () -> Long = System::currentTimeMillis,
+    /** USAGE-MOCK-1: the readings [check] judges; the report shows [limits]. They differ only while a mock reading does not count for pacing. */
+    private val pacingLimits: () -> List<ProviderLimits> = limits,
 ) {
-    fun report(): UsageReport {
+    fun report(): UsageReport = report(limits)
+
+    private fun report(source: () -> List<ProviderLimits>): UsageReport {
         val now = clock()
-        val live = limits().associateBy { it.provider }
+        val live = source().associateBy { it.provider }
         val manualNow = manual().filterValues { it.expiresAt > now }
         val overridesNow = overrides().filterValues { it.until > now }
         val running = workerMeters().groupingBy { it }.eachCount()
@@ -37,7 +41,7 @@ class UsagePacing(
 
     /** Whether one more ticket worker may start on [meter] now. */
     fun check(meter: String): PacingVerdict {
-        val m = report().meters.firstOrNull { it.meter == meter } ?: return PacingVerdict.Allow()
+        val m = report(pacingLimits).meters.firstOrNull { it.meter == meter } ?: return PacingVerdict.Allow()
         if (m.canStart) return PacingVerdict.Allow(m.warning)
         return PacingVerdict.Over(refusal(m))
     }
