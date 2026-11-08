@@ -223,7 +223,13 @@ What crosses between orchestrator and runner, and nothing more:
 | start/stop session (`StartSpec`: ids, role/provider/model, brief text, branch) | `hello`, `health` |
 | mail text for a session | session events `(session, seq)`: status, finished, usage numbers, progress, denied |
 | transcript read requests (UI on demand) | transcript lines (on demand only) |
-| | forwarded agent frames (board, comments, mail, knowledge calls of its workers) |
+| the health check ask (`CheckRequest`: project id, harness, git remote, contract) | forwarded agent frames (board, comments, mail, knowledge calls of its workers) |
+| | health check rows (`CheckRow`: id, ok, detail, fix) |
+
+RUNNER-CHECK-1 adds the health check rows: `contract`, `harness:<id>` (installed and signed in), `grant:project` / `grant:harness`
+(the fix is the exact `infantry settings set` line that adds the id), `git` (`git ls-remote` of the project's remote, credential
+stripped from what git says), `disk` (free space of `runners.cloneRoot`), plus the orchestrator's own `link` and `git:origin` rows.
+Read only: nothing is cloned, started or written by a check.
 
 Never: file contents, diffs, credentials, keystore material. Transcripts cross only when a client asks to read one
 (setting `runners.transcripts = on-demand`, the cheapest; `stream` is opt-in).

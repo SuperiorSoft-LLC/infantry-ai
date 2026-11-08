@@ -578,7 +578,7 @@ RUNNER-POOL-6a (DaemonApi 1.44.0, additive), package `com.superiorsoftllc.infant
 
 RUNNER-POOL-6 (DaemonApi 1.45.0, additive), package `com.superiorsoftllc.infantry.daemon.api.runners`.
 
-- `RunnerLinkWire`: The link frames (contract 1.2.0) and their JSON bodies: hello (harnesses and sign-in yes/no, accepted projects, capacity), health, start, stop, deliver, events, transcript; RUNNER-POOL-7 (1.46.0): `forward_pull` / `forward_answer`, the orchestrator taking the frames a runner holds for it and answering them. A runner binding encodes them; core's runner side answers them.
+- `RunnerLinkWire`: The link frames (contract 1.4.0) and their JSON bodies: hello (harnesses and sign-in yes/no, accepted projects, capacity), health, start, stop, deliver, events, transcript; RUNNER-POOL-7 (1.46.0): `forward_pull` / `forward_answer`, the orchestrator taking the frames a runner holds for it and answering them; RUNNER-CHECK-1 (`check`): the read-only health check of one runner, answered as rows with the fix for each failing one (`contract`, `harness:<id>`, `grant:project`, `grant:harness`, `git`, `disk`; the orchestrator adds `link` and `git:origin`). A runner binding encodes them; core's runner side answers them. `CheckRequest` asks (project id, harness, git remote, the orchestrator's contract), `CheckAnswer` carries the `CheckRow`s (`id`, `ok`, `detail`, `fix`).
 - `RunnerLinks`: The orchestrator side's paired runners, offered as `api.runnerLinks`: `paired()` and `call(runner, type, data)` (a `LinkFailure` when the runner cannot be reached).
 - `NoRunnerLinks`: No paired runner (a community plugin, or a daemon without the link service).
 

@@ -5,10 +5,17 @@ package com.superiorsoftllc.infantry.runners
 import com.superiorsoftllc.infantry.daemon.FrameGate
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.MailItem
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorReply
+import com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerHarness
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerLink
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.StartSpec
+import com.superiorsoftllc.infantry.settings.LimitDef
+import com.superiorsoftllc.infantry.settings.LimitRegistry
 import com.superiorsoftllc.infantry.settings.RunnerLinkSettings
+import com.superiorsoftllc.infantry.worktree.GitCli
+import com.superiorsoftllc.infantry.worktree.SystemGitCli
 import kotlinx.serialization.KSerializer
+import java.io.File
+import kotlinx.serialization.json.JsonArray
 import com.superiorsoftllc.infantry.daemon.api.runners.RunnerLinkWire as F
 
 /**
@@ -30,6 +37,8 @@ import com.superiorsoftllc.infantry.daemon.api.runners.RunnerLinkWire as F
  *   git remote is checked out by [starts] (clone or fetch, then the ticket worktree) before the session starts in it.
  * * RUNNER-POOL-7: [F.FORWARD_PULL] hands the orchestrator the agent frames [forwarder] holds (waiting a little for the first one),
  *   [F.FORWARD_ANSWER] completes one of them. Each frame taken is audited as `forward:<type>` with its session.
+ * * RUNNER-CHECK-1: [F.CHECK] answers the orchestrator's health check rows (contract, harness sign-in, grants, git, disk) with the
+ *   fix for each failing one, all computed here ([check]). Read only, nothing started or written.
  */
 class RunnerLinkServer(
     private val store: RunnerLinkStore,
@@ -46,6 +55,12 @@ class RunnerLinkServer(
     private val forwarder: FrameForwarder? = null,
     /** RUNNER-POOL-7: the longest a pull may wait here (below the orchestrator's link call timeout). */
     private val forwardWaitCapMs: () -> Long = { 0L },
+    /** RUNNER-CHECK-1: `limits.*` by key, for the check's git timeout and minimum free disk. */
+    private val limit: (LimitDef) -> Long = { it.default },
+    /** RUNNER-CHECK-1: the git seam the check's `ls-remote` runs through, built with that call's timeout in ms. */
+    private val git: (timeoutMs: Long) -> GitCli = { ms -> SystemGitCli(ms) },
+    /** RUNNER-CHECK-1: folder the check's disk row looks at and its `ls-remote` runs in (`runners.cloneRoot`). */
+    private val cloneRoot: () -> File = { File(System.getProperty("user.home")) },
 ) {
     /** One answer: [type] is [F.REPLY] or [F.ERROR]; [data] is the answer JSON or the reason. */
     data class Answer(val type: String, val data: String) {
@@ -90,6 +105,7 @@ class RunnerLinkServer(
                 Answer(F.REPLY, "{}")
             }
             F.START -> start(seat, data, from)
+            F.CHECK -> check(seat, data, from)
             F.STOP -> stop(seat, data, from)
             F.HEALTH -> read(seat, type, from) { link ->
                 when (val h = link.health()) {
@@ -136,6 +152,99 @@ class RunnerLinkServer(
             }
             else -> refuse(seat, type, null, from, "$type refused: not a runner link operation this runner offers (contract ${F.CONTRACT})")
         }
+    }
+
+    /**
+     * RUNNER-CHECK-1 (docs/wiki/RunnerPairing-design.md 4, step 4): the read-only health check the orchestrator runs right after
+     * pairing, so the manual server steps (agent CLI sign-in, grants, git access, disk) are loud and early instead of failing the
+     * first ticket start. Every row is computed HERE, on the runner, and carries the fix for a failing one:
+     *
+     * * `contract`: this runner's [F.CONTRACT] against the orchestrator's ([F.CheckRequest.contract]); a mismatch says to update one.
+     * * `harness:<id>`: installed, and signed in (the same yes/no [F.HELLO] reports). For the requested harness, or every installed
+     *   one.
+     * * `grant:project` / `grant:harness`: the id is in `runner.projects` / `runner.harnesses` (`*` counts); the fix is the exact
+     *   `infantry settings set` line that ADDS the id to the current list.
+     * * `git`: `git ls-remote --heads <remote>` through the git seam with `limits.runners.checkGitSec` and no terminal prompt (the
+     *   seam sets GIT_TERMINAL_PROMPT=0), so a blocked port or a missing key fails instead of hanging; any `user:token@` in what it
+     *   says is stripped. No clone, no write. Only when the orchestrator sent a remote.
+     * * `disk`: free space of the clone root against `limits.runners.checkMinFreeMb`.
+     */
+    private fun check(seat: String, data: String, from: String?): Answer {
+        val r = decode(F.CheckRequest.serializer(), data) ?: return refuse(seat, F.CHECK, null, from, "${F.CHECK} refused: malformed request")
+        val allowed = settings()
+        val rows = mutableListOf<F.CheckRow>()
+        rows += contractRow(r.contract)
+        val wanted = r.harness?.takeIf { it.isNotBlank() }
+        val installed = (runner()?.hello() as? OrchestratorReply.Ok)?.value?.harnesses.orEmpty()
+        if (wanted != null) rows += harnessRow(wanted, installed.firstOrNull { it.id == wanted }) else installed.forEach { rows += harnessRow(it.id, it) }
+        r.projectId?.takeIf { it.isNotBlank() }?.let { rows += grantRow("grant:project", RunnerLinkSettings.PROJECTS, it, allowed.projects) }
+        if (wanted != null) rows += grantRow("grant:harness", RunnerLinkSettings.HARNESSES, wanted, allowed.harnesses)
+        r.gitRemote?.takeIf { it.isNotBlank() }?.let { rows += gitRow(it) }
+        rows += diskRow()
+        return ok(seat, F.CHECK, null, from, F.CheckAnswer.serializer(), F.CheckAnswer(rows))
+    }
+
+    private fun contractRow(peer: String?): F.CheckRow = when {
+        peer == null || peer == F.CONTRACT -> F.CheckRow("contract", true, "this runner speaks contract ${F.CONTRACT}")
+        else -> F.CheckRow(
+            "contract", false, "this runner speaks contract ${F.CONTRACT}, the orchestrator $peer",
+            "update the runner to the same release as the orchestrator (restart it with the current image or install), then check again",
+        )
+    }
+
+    private fun harnessRow(id: String, harness: RunnerHarness?): F.CheckRow = when {
+        harness == null -> F.CheckRow(
+            "harness:$id", false, "harness '$id' is not installed on this runner",
+            "install the $id CLI on this runner, then sign it in there (logins never travel from the orchestrator)",
+        )
+        !harness.loggedIn -> F.CheckRow(
+            "harness:$id", false,
+            "harness '$id' is installed but not signed in; a session would start and the model could not answer " +
+                "(hint: in a container, prepend `docker exec -it <container>` to the login)",
+            "log $id in on this runner: run `$id` there once and sign in",
+        )
+        else -> F.CheckRow("harness:$id", true, "harness '$id' is installed and signed in")
+    }
+
+    /** `*` counts as a grant of every id; otherwise the fix ADDS [id] to the runner's current list. */
+    private fun grantRow(row: String, key: String, id: String, current: List<String>): F.CheckRow {
+        if (RunnerLinkSettings.ANY in current || id in current) {
+            return F.CheckRow(row, true, "$key allows '$id'")
+        }
+        val next = (current + id).distinct()
+        val value = JsonArray(next.map { kotlinx.serialization.json.JsonPrimitive(it) }).toString()
+        val shown = if (current.isEmpty()) "empty = none" else current.joinToString(", ")
+        return F.CheckRow(
+            row, false, "$id is not in this runner's $key ($shown)",
+            "on this runner: infantry settings set $key '$value'",
+        )
+    }
+
+    private fun gitRow(remote: String): F.CheckRow {
+        val timeoutMs = limit(LimitRegistry.RUNNERS_CHECK_GIT_SEC) * MS_PER_SECOND
+        val fix = "give the runner read+push access to ${scrubCredentials(remote)} (a deploy key or a token), then run this check again"
+        val dir = cloneRoot().let { it.takeIf { d -> d.isDirectory } ?: it.absoluteFile.parentFile } ?: File(".")
+        val result = runCatching { git(timeoutMs).run(dir, listOf("ls-remote", "--heads", remote)) }.getOrElse {
+            return F.CheckRow("git", false, "git could not run on this runner: ${scrubCredentials(it.message.orEmpty())}", fix)
+        }
+        if (result.ok) {
+            val heads = result.out().lines().count { it.isNotBlank() }
+            return F.CheckRow("git", true, "${scrubCredentials(remote)} is reachable ($heads branch heads read)")
+        }
+        val reason = scrubCredentials(result.err().lines().firstOrNull { it.isNotBlank() }.orEmpty())
+        return F.CheckRow("git", false, "git ls-remote exited ${result.exitCode}${if (reason.isEmpty()) "" else ": $reason"}", fix)
+    }
+
+    private fun diskRow(): F.CheckRow {
+        val dir = cloneRoot().let { root ->
+            generateSequence(root.absoluteFile) { it.parentFile }.firstOrNull { it.isDirectory } ?: root.absoluteFile
+        }
+        val minMb = limit(LimitRegistry.RUNNERS_CHECK_MIN_FREE_MB)
+        val freeMb = runCatching { dir.usableSpace / MB }.getOrNull()
+            ?: return F.CheckRow("disk", false, "could not read the free space of ${dir.path}", "check that the runner can read ${dir.path}")
+        val detail = "$freeMb MB free in ${dir.path} (${LimitRegistry.RUNNERS_CHECK_MIN_FREE_MB.key} = $minMb)"
+        return if (freeMb >= minMb) F.CheckRow("disk", true, detail)
+        else F.CheckRow("disk", false, detail, "free disk space on this runner: it needs room for clones and worktrees")
     }
 
     private fun pair(data: String, from: String?): Answer {
@@ -245,5 +354,15 @@ class RunnerLinkServer(
         const val ANONYMOUS = "anonymous"
         private const val NO_CODE = "no pairing code is live on this runner (run `infantry runner pair` there)"
         private const val SHOWN_TYPE_SIZE = 64
+        private const val MS_PER_SECOND = 1_000L
+        private const val MB = 1L shl 20
+
+        /**
+         * RUNNER-CHECK-1: [text] with any credential a URL carries taken out (`https://user:token@host/x` -> `https://host/x`). Git
+         * echoes the remote it tried in its errors, and that text crosses the link and is printed by the CLI.
+         */
+        fun scrubCredentials(text: String): String = CREDENTIALS.replace(text, "$1")
+
+        private val CREDENTIALS = Regex("""([a-zA-Z][a-zA-Z0-9+.-]*://)[^/@\s]*@""")
     }
 }

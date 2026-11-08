@@ -4969,6 +4969,7 @@ public abstract interface class com/superiorsoftllc/infantry/daemon/api/runners/
 }
 
 public final class com/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire {
+	public static final field CHECK Ljava/lang/String;
 	public static final field CONTRACT Ljava/lang/String;
 	public static final field DELIVER Ljava/lang/String;
 	public static final field DETACH Ljava/lang/String;
@@ -4986,6 +4987,104 @@ public final class com/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWir
 	public static final field STOP Ljava/lang/String;
 	public static final field TRANSCRIPT Ljava/lang/String;
 	public final fun getJson ()Lkotlinx/serialization/json/Json;
+}
+
+public final class com/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$CheckAnswer {
+	public static final field Companion Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$CheckAnswer$Companion;
+	public fun <init> ()V
+	public fun <init> (Ljava/util/List;)V
+	public synthetic fun <init> (Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/util/List;
+	public final fun copy (Ljava/util/List;)Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$CheckAnswer;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$CheckAnswer;Ljava/util/List;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$CheckAnswer;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getRows ()Ljava/util/List;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final synthetic class com/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$CheckAnswer$$serializer : kotlinx/serialization/internal/GeneratedSerializer {
+	public static final field INSTANCE Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$CheckAnswer$$serializer;
+	public final fun childSerializers ()[Lkotlinx/serialization/KSerializer;
+	public final fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$CheckAnswer;
+	public synthetic fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;
+	public final fun getDescriptor ()Lkotlinx/serialization/descriptors/SerialDescriptor;
+	public final fun serialize (Lkotlinx/serialization/encoding/Encoder;Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$CheckAnswer;)V
+	public synthetic fun serialize (Lkotlinx/serialization/encoding/Encoder;Ljava/lang/Object;)V
+	public fun typeParametersSerializers ()[Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$CheckAnswer$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$CheckRequest {
+	public static final field Companion Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$CheckRequest$Companion;
+	public fun <init> ()V
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$CheckRequest;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$CheckRequest;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$CheckRequest;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getContract ()Ljava/lang/String;
+	public final fun getGitRemote ()Ljava/lang/String;
+	public final fun getHarness ()Ljava/lang/String;
+	public final fun getProjectId ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final synthetic class com/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$CheckRequest$$serializer : kotlinx/serialization/internal/GeneratedSerializer {
+	public static final field INSTANCE Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$CheckRequest$$serializer;
+	public final fun childSerializers ()[Lkotlinx/serialization/KSerializer;
+	public final fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$CheckRequest;
+	public synthetic fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;
+	public final fun getDescriptor ()Lkotlinx/serialization/descriptors/SerialDescriptor;
+	public final fun serialize (Lkotlinx/serialization/encoding/Encoder;Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$CheckRequest;)V
+	public synthetic fun serialize (Lkotlinx/serialization/encoding/Encoder;Ljava/lang/Object;)V
+	public fun typeParametersSerializers ()[Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$CheckRequest$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$CheckRow {
+	public static final field Companion Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$CheckRow$Companion;
+	public fun <init> (Ljava/lang/String;ZLjava/lang/String;Ljava/lang/String;)V
+	public synthetic fun <init> (Ljava/lang/String;ZLjava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Z
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;ZLjava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$CheckRow;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$CheckRow;Ljava/lang/String;ZLjava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$CheckRow;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDetail ()Ljava/lang/String;
+	public final fun getFix ()Ljava/lang/String;
+	public final fun getId ()Ljava/lang/String;
+	public final fun getOk ()Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final synthetic class com/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$CheckRow$$serializer : kotlinx/serialization/internal/GeneratedSerializer {
+	public static final field INSTANCE Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$CheckRow$$serializer;
+	public final fun childSerializers ()[Lkotlinx/serialization/KSerializer;
+	public final fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$CheckRow;
+	public synthetic fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;
+	public final fun getDescriptor ()Lkotlinx/serialization/descriptors/SerialDescriptor;
+	public final fun serialize (Lkotlinx/serialization/encoding/Encoder;Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$CheckRow;)V
+	public synthetic fun serialize (Lkotlinx/serialization/encoding/Encoder;Ljava/lang/Object;)V
+	public fun typeParametersSerializers ()[Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$CheckRow$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
 }
 
 public final class com/superiorsoftllc/infantry/daemon/api/runners/RunnerLinkWire$DeliverAnswer {

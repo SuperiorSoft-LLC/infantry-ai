@@ -992,7 +992,7 @@ class InfantryDaemon(
             // RUNNER-E2E-2: the runner side of an on-demand transcript read (set once the stream sequencer exists).
             val runnerTranscript = java.util.concurrent.atomic.AtomicReference<(String, Int, Int) -> List<String>> { _, _, _ -> emptyList() }
             val remoteStarts = com.superiorsoftllc.infantry.runners.RemoteStarts(
-                cloneRoot = { settings.runnerLink().cloneRoot.takeIf { it.isNotBlank() }?.let(::File) ?: File(daemonStateDir, com.superiorsoftllc.infantry.runners.RemoteStarts.DEFAULT_FOLDER) },
+                cloneRoot = { com.superiorsoftllc.infantry.runners.RemoteStarts.cloneRootDir(settings.runnerLink().cloneRoot, daemonStateDir) },
                 outboxMax = { settings.limit(LimitRegistry.RUNNERS_OUTBOX_MAX).toInt() },
                 persistTo = File(daemonStateDir, "runner-outbox.json"),
             )
@@ -1996,6 +1996,12 @@ class InfantryDaemon(
             // RUNNER-ADD-LINK-1: the first successful add turns runners.enabled on (no second setting to flip by hand).
             runnerLinkService.setEnabled = { on -> settings.set(com.superiorsoftllc.infantry.settings.SettingsService.RUNNERS_ENABLED, kotlinx.serialization.json.JsonPrimitive(on)) }
             runnerLinkService.grant = { key, ids -> settings.set(key, kotlinx.serialization.json.JsonArray(ids.map { kotlinx.serialization.json.JsonPrimitive(it) })) }
+            // RUNNER-CHECK-1: the check's `git:origin` row and the remote the runner would clone: the project checkout's `origin`,
+            // the same lookup a remote start uses (LocalBoardHost.gitRemoteOf).
+            runnerLinkService.projectRemoteOf = { id ->
+                id?.let { runCatching { projectStore.get(it).directory }.getOrNull() }?.takeIf { it.isNotBlank() }
+                    ?.let { dir -> File(dir).takeIf { it.isDirectory }?.let { runCatching { com.superiorsoftllc.infantry.daemon.plugins.originUrl(it) }.getOrNull() } }
+            }
             runnerLinkService.rowStatus = { name ->
                 val e = runnerPool.runners().firstOrNull { it.name == name }
                 val running = e?.health?.running ?: 0

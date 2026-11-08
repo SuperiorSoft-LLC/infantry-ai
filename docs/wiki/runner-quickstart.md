@@ -70,6 +70,21 @@ refused with: `runner server-1 needs the project's git remote ... has no origin 
 - Give the server access to the git remote (a deploy key or token).
 - Open the link port to your PC only (firewall or tailnet).
 
+Then check it from your PC: `infantry runner check <name> [--project <id>] [--harness <id>]` (RUNNER-CHECK-1) runs the
+check over the link and prints one line per row with the fix under a failing one, and exits 1 when any row fails:
+
+```
+contract         ok      this runner speaks contract 1.4.0
+harness:claude   FAIL    harness 'claude' is installed but not signed in; a session would start and the model could not answer
+                         fix: log claude in on this runner: run `claude` there once and sign in
+grant:project    FAIL    my-project is not in this runner's runner.projects (empty = none)
+                         fix: on this runner: infantry settings set runner.projects '["my-project"]'
+link             ok      reached wss://100.64.0.5:8790 in 42 ms
+```
+
+Run each `fix:` line on the runner and check again. A full disk, an unreachable remote and a harness the runner does not
+have show up here too, instead of at the first ticket start.
+
 ## 6. Check it ran there
 
 ```
