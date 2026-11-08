@@ -99,4 +99,13 @@ class PolicyRuntimeTest {
         assertEquals(listOf("kind:read", "chat.*"), g.allow)
         assertEquals("Guest", g.reason)
     }
+
+    @Test fun `a tool list offers only the actions the active policy allows`() {
+        val write = ActionCatalog.Action("board.ticket.move", ActionKind.WRITE, listOf("ticket_save"))
+        val read = ActionCatalog.Action("mail.read", ActionKind.READ, listOf("mail_read"))
+        assertTrue(runtime().allowsAction(write), "production allows every action")
+        val guest = runtime(mapOf(PolicyRuntime.POLICY_ENV to "read-only"))
+        assertTrue(guest.allowsAction(read))
+        assertFalse(guest.allowsAction(write))
+    }
 }

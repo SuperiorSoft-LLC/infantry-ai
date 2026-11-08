@@ -326,6 +326,11 @@ class LimitService(
     /** DEMO-USAGE-HIDE-1: sources a daemon plugin offered; non-empty = they are read INSTEAD of every other source, live or not. */
     @Volatile var replacement: () -> List<LimitSource> = { emptyList() }
 
+    private fun replaced(): Boolean = runCatching(replacement).getOrDefault(emptyList()).isNotEmpty()
+
+    /** Whether [cached] was read from the replacement; a reading from the other kind of source is never served (it could be the real one). */
+    private var cachedReplaced = false
+
     private fun allSources(): List<LimitSource> {
         runCatching(replacement).getOrDefault(emptyList()).takeIf { it.isNotEmpty() }?.let { return it }
         val all = sources + runCatching(extraSources).getOrDefault(emptyList())
@@ -353,8 +358,10 @@ class LimitService(
     @Synchronized
     fun snapshot(force: Boolean = false): List<ProviderLimits> {
         val now = clock()
-        if (!liveEnabled() && runCatching(replacement).getOrDefault(emptyList()).isEmpty()) return allSources().map { ProviderLimits.unknown(it.provider, now, LimitReason.LIVE_SOURCES_OFF) }
+        val rep = replaced()
+        if (!liveEnabled() && !rep) return allSources().map { ProviderLimits.unknown(it.provider, now, LimitReason.LIVE_SOURCES_OFF) }
         val t = tuning()
+        if (cachedReplaced != rep) cached = null
         cached?.let { last ->
             val age = now - cachedAt
             if (!force && age < minIntervalMs) return expire(last, now, t)
@@ -364,6 +371,7 @@ class LimitService(
         val fresh = allSources().map { readOne(it, now, t) }
         cached = fresh
         cachedAt = now
+        cachedReplaced = rep
         return fresh
     }
 
@@ -411,8 +419,9 @@ class LimitService(
      */
     fun cachedOrRefresh(): List<ProviderLimits> {
         val now = clock()
-        if (!liveEnabled()) return allSources().map { ProviderLimits.unknown(it.provider, now, LimitReason.LIVE_SOURCES_OFF) }
-        val (last, at) = synchronized(this) { cached to cachedAt }
+        val rep = replaced()
+        if (!liveEnabled() && !rep) return allSources().map { ProviderLimits.unknown(it.provider, now, LimitReason.LIVE_SOURCES_OFF) }
+        val (last, at) = synchronized(this) { if (cachedReplaced != rep) null to 0L else cached to cachedAt }
         if (last == null || now - at >= minIntervalMs) snapshotAsync {}
         return last?.let { expire(it, now, tuning()) } ?: allSources().map { ProviderLimits.unknown(it.provider, now, LimitReason.NOT_READ_YET) }
     }

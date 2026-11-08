@@ -4213,7 +4213,7 @@ private suspend fun handleConnection(
                 // DAEMON-PLUGINS-1 (docs/DAEMON-PLUGINS.md section 3): the plugins' tools, as MCP `tools/list` entries.
                 com.superiorsoftllc.infantry.daemon.plugins.DaemonPluginHost.PLUGIN_TOOLS -> Envelope(
                     com.superiorsoftllc.infantry.daemon.plugins.DaemonPluginHost.PLUGIN_TOOLS,
-                    json.encodeToString(JsonArray.serializer(), plugins.toolDescriptors()),
+                    json.encodeToString(JsonArray.serializer(), plugins.toolDescriptors(policies::allowsAction)),
                 )
                 // DAEMON-PLUGINS-1: `{name, arguments}` -> `plugin_tool_result {name, text, isError}`. Off the loop: a tool may
                 // send frames on this connection itself (each through every gate above, as this caller) and wait for them.

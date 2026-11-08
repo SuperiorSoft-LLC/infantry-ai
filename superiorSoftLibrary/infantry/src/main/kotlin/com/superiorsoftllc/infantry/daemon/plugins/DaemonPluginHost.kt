@@ -501,8 +501,8 @@ class DaemonPluginHost private constructor(
     ))
 
     /** `plugin_tools`: every healthy plugin tool, as MCP `tools/list` entries. */
-    fun toolDescriptors(): JsonArray = JsonArray(listOf(emitDescriptor, testsDescriptor, capabilityListDescriptor, capabilityCallDescriptor) +
-        toolEntries.values.filter { !it.owner.guard.disabled }.sortedBy { it.tool.name }.map { e ->
+    fun toolDescriptors(allowed: (ActionCatalog.Action) -> Boolean = { true }): JsonArray = JsonArray(listOf(emitDescriptor, testsDescriptor, capabilityListDescriptor, capabilityCallDescriptor) +
+        toolEntries.values.filter { !it.owner.guard.disabled && allowed(it.action) }.sortedBy { it.tool.name }.map { e ->
             JsonObject(buildMap {
                 put("name", JsonPrimitive(e.tool.name))
                 put("description", JsonPrimitive(e.tool.description))
