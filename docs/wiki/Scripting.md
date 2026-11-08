@@ -81,6 +81,7 @@ A hook says "when this happens, run this script with these fixed args". The `on`
 | `exec.tick` | every `scripting.exec.tickSec` seconds while a background exec runs | `id`, `script`, `session`, `elapsedMs`, `stdoutTail`, `stderrTail`, `bytesSinceLast` |
 | `every <N>s` | a timer; minimum `scripting.hooks.minEverySec` (default 10) | `tick`, `at`, `hookId` |
 | any event name | a named event: `ticket.commented`, `merge.done`, `ticket.*`, or your own via `infantry_event_emit` | the event's payload |
+| `progress.failed` | a task of the core progress system failed | the task: `id`, `source`, `title`, `error`, `retryable`, `step` |
 | `daemon.started` | once, when the daemon's port is bound after a start | `cutTurns` and `orphaned`: lists of `{sessionId, role, agentId, ticketId, projectId, lastAction, lastOutputAt, starter}` (a key is absent when unknown; `starter` = the ticket's starter, else the spawner); `orphanedIds` |
 | `session.idle` | a session's turn ends and it is at rest | `sessionId`, `state`, `previous`, `role`, `agentId`, `ticketId`, `projectId` |
 | `session.first-turn-timeout` | reserved, not published yet: the first-turn watch lives in the harness, which has no event seam (needs a harness API bump) | none |
@@ -179,6 +180,22 @@ local p = ih.call("http.fetch", {url = "https://api.example.com/v1/items/7", met
 
 Agents use `infantry_capability_call {capability = "http.fetch", args = {...}}`.
 
+## download: files from a script (capability `http.download`)
+
+CORE-PROGRESS-DOWNLOAD-1. `http.download` saves one file into the project's `.infantry/` folder through the core
+downloader ([Progress and downloads](Progress.md)): retries, resume, the size cap, a sha256 check, a temp file then an
+atomic move, and a task in the running-tasks list. Guarded like `http.fetch`: off until `scripting.fetch.enabled`, only to
+a URL `scripting.fetch.allow` names, grant `net.out` for community callers. `http.fetch` stays for API calls.
+
+Args: `url`, `dest` (a path under `.infantry/`), `title`, `headers`, `secretHeaders = {HeaderName = "<secret name>"}`,
+`sha256`, `progressId` (fold it into a task from `progress.start`). Result: `{ok, path, bytes, sha256, attempts, status,
+error, retryable, cancelled}`.
+
+```lua
+local r = ih.call("http.download", {url = "https://example.com/docs.zip", dest = "mirror/docs.zip", sha256 = "..."})
+if not r.ok then ih.log("download failed: " .. r.error) end
+```
+
 ## exec: running a process
 
 A script is sandboxed and runs nothing itself; it queues `ih.exec{...}` (same as `ih.cli`; MCP tool `infantry_exec`)
@@ -241,6 +258,11 @@ can run a script on), `ticketId`, `sessionId`, `projectId`. The source is `scrip
 that session; otherwise on the caller, or the `sessionId` you name (same project only). Agents use the CLI form:
 `infantry progress 40 "compiling"`, `progress plan "a" "b"`, `progress step`, `progress done`, `progress fail`.
 `infantry run --label tests -- <cmd>` runs a command with progress reported on exit.
+
+A task of the app-wide running-tasks list (not tied to a session) goes through the core progress system
+([Progress and downloads](Progress.md)): `ih.call("progress.start", {title, steps, unit, total, id})` answers `{id}`; a later
+run moves it with `ih.call("progress.update", {id, step, done, total, unit, state = "done" | "failed" | "cancelled",
+error})`, which answers `{id, state, cancelRequested}`. A failed task publishes the event `progress.failed`.
 
 ## The session bridge
 

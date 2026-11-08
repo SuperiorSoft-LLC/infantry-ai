@@ -28,6 +28,27 @@ final enum class com.superiorsoftllc.infantry.plugin.api/NotificationLevel : kot
     }
 }
 
+final enum class com.superiorsoftllc.infantry.plugin.api/ProgressState : kotlin/Enum<com.superiorsoftllc.infantry.plugin.api/ProgressState> { // com.superiorsoftllc.infantry.plugin.api/ProgressState|null[0]
+    enum entry CANCELLED // com.superiorsoftllc.infantry.plugin.api/ProgressState.CANCELLED|null[0]
+    enum entry DONE // com.superiorsoftllc.infantry.plugin.api/ProgressState.DONE|null[0]
+    enum entry FAILED // com.superiorsoftllc.infantry.plugin.api/ProgressState.FAILED|null[0]
+    enum entry QUEUED // com.superiorsoftllc.infantry.plugin.api/ProgressState.QUEUED|null[0]
+    enum entry RUNNING // com.superiorsoftllc.infantry.plugin.api/ProgressState.RUNNING|null[0]
+
+    final val entries // com.superiorsoftllc.infantry.plugin.api/ProgressState.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<com.superiorsoftllc.infantry.plugin.api/ProgressState> // com.superiorsoftllc.infantry.plugin.api/ProgressState.entries.<get-entries>|<get-entries>#static(){}[0]
+    final val finished // com.superiorsoftllc.infantry.plugin.api/ProgressState.finished|{}finished[0]
+        final fun <get-finished>(): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/ProgressState.finished.<get-finished>|<get-finished>(){}[0]
+
+    final fun valueOf(kotlin/String): com.superiorsoftllc.infantry.plugin.api/ProgressState // com.superiorsoftllc.infantry.plugin.api/ProgressState.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<com.superiorsoftllc.infantry.plugin.api/ProgressState> // com.superiorsoftllc.infantry.plugin.api/ProgressState.values|values#static(){}[0]
+
+    final object Companion : kotlinx.serialization.internal/SerializerFactory { // com.superiorsoftllc.infantry.plugin.api/ProgressState.Companion|null[0]
+        final fun serializer(): kotlinx.serialization/KSerializer<com.superiorsoftllc.infantry.plugin.api/ProgressState> // com.superiorsoftllc.infantry.plugin.api/ProgressState.Companion.serializer|serializer(){}[0]
+        final fun serializer(kotlin/Array<out kotlinx.serialization/KSerializer<*>>...): kotlinx.serialization/KSerializer<*> // com.superiorsoftllc.infantry.plugin.api/ProgressState.Companion.serializer|serializer(kotlin.Array<out|kotlinx.serialization.KSerializer<*>>...){}[0]
+    }
+}
+
 final enum class com.superiorsoftllc.infantry.plugin.api/Tier : kotlin/Enum<com.superiorsoftllc.infantry.plugin.api/Tier> { // com.superiorsoftllc.infantry.plugin.api/Tier|null[0]
     enum entry COMMUNITY // com.superiorsoftllc.infantry.plugin.api/Tier.COMMUNITY|null[0]
     enum entry CORE // com.superiorsoftllc.infantry.plugin.api/Tier.CORE|null[0]
@@ -73,6 +94,10 @@ abstract fun interface com.superiorsoftllc.infantry.plugin.api/Notifications { /
     open fun notify(com.superiorsoftllc.infantry.plugin.api/Notification): kotlin/String // com.superiorsoftllc.infantry.plugin.api/Notifications.notify|notify(com.superiorsoftllc.infantry.plugin.api.Notification){}[0]
     open fun onAction(kotlin/Function1<com.superiorsoftllc.infantry.plugin.api/NotificationActionEvent, kotlin/Unit>): kotlin/AutoCloseable // com.superiorsoftllc.infantry.plugin.api/Notifications.onAction|onAction(kotlin.Function1<com.superiorsoftllc.infantry.plugin.api.NotificationActionEvent,kotlin.Unit>){}[0]
     open fun present(kotlin/String, kotlin.collections/Set<kotlin/String>, com.superiorsoftllc.infantry.plugin.api/NotificationPresenter): kotlin/AutoCloseable // com.superiorsoftllc.infantry.plugin.api/Notifications.present|present(kotlin.String;kotlin.collections.Set<kotlin.String>;com.superiorsoftllc.infantry.plugin.api.NotificationPresenter){}[0]
+}
+
+abstract fun interface com.superiorsoftllc.infantry.plugin.api/ProgressPresenter { // com.superiorsoftllc.infantry.plugin.api/ProgressPresenter|null[0]
+    abstract fun show(com.superiorsoftllc.infantry.plugin.api/ProgressTask) // com.superiorsoftllc.infantry.plugin.api/ProgressPresenter.show|show(com.superiorsoftllc.infantry.plugin.api.ProgressTask){}[0]
 }
 
 abstract interface com.superiorsoftllc.infantry.plugin.api/AudioCapture { // com.superiorsoftllc.infantry.plugin.api/AudioCapture|null[0]
@@ -141,6 +166,34 @@ abstract interface com.superiorsoftllc.infantry.plugin.api/PluginStorage { // co
     abstract fun list(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/PluginStorage.list|list(){}[0]
     abstract fun read(kotlin/String): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/PluginStorage.read|read(kotlin.String){}[0]
     abstract fun write(kotlin/String, kotlin/String) // com.superiorsoftllc.infantry.plugin.api/PluginStorage.write|write(kotlin.String;kotlin.String){}[0]
+}
+
+abstract interface com.superiorsoftllc.infantry.plugin.api/Progress { // com.superiorsoftllc.infantry.plugin.api/Progress|null[0]
+    abstract fun cancel(kotlin/String): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/Progress.cancel|cancel(kotlin.String){}[0]
+    abstract fun observe(kotlin/Function1<com.superiorsoftllc.infantry.plugin.api/ProgressTask, kotlin/Unit>): kotlin/AutoCloseable // com.superiorsoftllc.infantry.plugin.api/Progress.observe|observe(kotlin.Function1<com.superiorsoftllc.infantry.plugin.api.ProgressTask,kotlin.Unit>){}[0]
+    abstract fun retry(kotlin/String): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/Progress.retry|retry(kotlin.String){}[0]
+    abstract fun start(com.superiorsoftllc.infantry.plugin.api/ProgressSpec): com.superiorsoftllc.infantry.plugin.api/ProgressHandle // com.superiorsoftllc.infantry.plugin.api/Progress.start|start(com.superiorsoftllc.infantry.plugin.api.ProgressSpec){}[0]
+    abstract fun task(kotlin/String): com.superiorsoftllc.infantry.plugin.api/ProgressTask? // com.superiorsoftllc.infantry.plugin.api/Progress.task|task(kotlin.String){}[0]
+    abstract fun tasks(): kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/ProgressTask> // com.superiorsoftllc.infantry.plugin.api/Progress.tasks|tasks(){}[0]
+    open fun present(kotlin/String, com.superiorsoftllc.infantry.plugin.api/ProgressPresenter): kotlin/AutoCloseable // com.superiorsoftllc.infantry.plugin.api/Progress.present|present(kotlin.String;com.superiorsoftllc.infantry.plugin.api.ProgressPresenter){}[0]
+}
+
+abstract interface com.superiorsoftllc.infantry.plugin.api/ProgressHandle : kotlin/AutoCloseable { // com.superiorsoftllc.infantry.plugin.api/ProgressHandle|null[0]
+    abstract val cancelRequested // com.superiorsoftllc.infantry.plugin.api/ProgressHandle.cancelRequested|{}cancelRequested[0]
+        abstract fun <get-cancelRequested>(): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/ProgressHandle.cancelRequested.<get-cancelRequested>|<get-cancelRequested>(){}[0]
+    abstract val id // com.superiorsoftllc.infantry.plugin.api/ProgressHandle.id|{}id[0]
+        abstract fun <get-id>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/ProgressHandle.id.<get-id>|<get-id>(){}[0]
+    abstract val task // com.superiorsoftllc.infantry.plugin.api/ProgressHandle.task|{}task[0]
+        abstract fun <get-task>(): com.superiorsoftllc.infantry.plugin.api/ProgressTask // com.superiorsoftllc.infantry.plugin.api/ProgressHandle.task.<get-task>|<get-task>(){}[0]
+
+    abstract fun amount(kotlin/Long, kotlin/Long = ..., kotlin/String = ...) // com.superiorsoftllc.infantry.plugin.api/ProgressHandle.amount|amount(kotlin.Long;kotlin.Long;kotlin.String){}[0]
+    abstract fun cancelled() // com.superiorsoftllc.infantry.plugin.api/ProgressHandle.cancelled|cancelled(){}[0]
+    abstract fun done(kotlin/String = ...) // com.superiorsoftllc.infantry.plugin.api/ProgressHandle.done|done(kotlin.String){}[0]
+    abstract fun eta(kotlin/Long) // com.superiorsoftllc.infantry.plugin.api/ProgressHandle.eta|eta(kotlin.Long){}[0]
+    abstract fun fail(kotlin/String, kotlin/Boolean = ...) // com.superiorsoftllc.infantry.plugin.api/ProgressHandle.fail|fail(kotlin.String;kotlin.Boolean){}[0]
+    abstract fun onCancel(kotlin/Function0<kotlin/Unit>): kotlin/AutoCloseable // com.superiorsoftllc.infantry.plugin.api/ProgressHandle.onCancel|onCancel(kotlin.Function0<kotlin.Unit>){}[0]
+    abstract fun step(kotlin/String, kotlin/Int = ...) // com.superiorsoftllc.infantry.plugin.api/ProgressHandle.step|step(kotlin.String;kotlin.Int){}[0]
+    open fun close() // com.superiorsoftllc.infantry.plugin.api/ProgressHandle.close|close(){}[0]
 }
 
 abstract interface com.superiorsoftllc.infantry.plugin.api/SpeechOutput { // com.superiorsoftllc.infantry.plugin.api/SpeechOutput|null[0]
@@ -2993,6 +3046,120 @@ final class com.superiorsoftllc.infantry.plugin.api/PreferenceDeclaration { // c
     }
 }
 
+final class com.superiorsoftllc.infantry.plugin.api/ProgressSpec { // com.superiorsoftllc.infantry.plugin.api/ProgressSpec|null[0]
+    constructor <init>(kotlin/String, kotlin/String = ..., kotlin.collections/List<kotlin/String> = ..., kotlin/String = ..., kotlin/Long = ..., kotlin/Boolean = ..., kotlin/String? = ..., kotlin/Function0<kotlin/Unit>? = ...) // com.superiorsoftllc.infantry.plugin.api/ProgressSpec.<init>|<init>(kotlin.String;kotlin.String;kotlin.collections.List<kotlin.String>;kotlin.String;kotlin.Long;kotlin.Boolean;kotlin.String?;kotlin.Function0<kotlin.Unit>?){}[0]
+
+    final val cancellable // com.superiorsoftllc.infantry.plugin.api/ProgressSpec.cancellable|{}cancellable[0]
+        final fun <get-cancellable>(): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/ProgressSpec.cancellable.<get-cancellable>|<get-cancellable>(){}[0]
+    final val id // com.superiorsoftllc.infantry.plugin.api/ProgressSpec.id|{}id[0]
+        final fun <get-id>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/ProgressSpec.id.<get-id>|<get-id>(){}[0]
+    final val link // com.superiorsoftllc.infantry.plugin.api/ProgressSpec.link|{}link[0]
+        final fun <get-link>(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/ProgressSpec.link.<get-link>|<get-link>(){}[0]
+    final val retry // com.superiorsoftllc.infantry.plugin.api/ProgressSpec.retry|{}retry[0]
+        final fun <get-retry>(): kotlin/Function0<kotlin/Unit>? // com.superiorsoftllc.infantry.plugin.api/ProgressSpec.retry.<get-retry>|<get-retry>(){}[0]
+    final val steps // com.superiorsoftllc.infantry.plugin.api/ProgressSpec.steps|{}steps[0]
+        final fun <get-steps>(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/ProgressSpec.steps.<get-steps>|<get-steps>(){}[0]
+    final val title // com.superiorsoftllc.infantry.plugin.api/ProgressSpec.title|{}title[0]
+        final fun <get-title>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/ProgressSpec.title.<get-title>|<get-title>(){}[0]
+    final val total // com.superiorsoftllc.infantry.plugin.api/ProgressSpec.total|{}total[0]
+        final fun <get-total>(): kotlin/Long // com.superiorsoftllc.infantry.plugin.api/ProgressSpec.total.<get-total>|<get-total>(){}[0]
+    final val unit // com.superiorsoftllc.infantry.plugin.api/ProgressSpec.unit|{}unit[0]
+        final fun <get-unit>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/ProgressSpec.unit.<get-unit>|<get-unit>(){}[0]
+
+    final fun component1(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/ProgressSpec.component1|component1(){}[0]
+    final fun component2(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/ProgressSpec.component2|component2(){}[0]
+    final fun component3(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/ProgressSpec.component3|component3(){}[0]
+    final fun component4(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/ProgressSpec.component4|component4(){}[0]
+    final fun component5(): kotlin/Long // com.superiorsoftllc.infantry.plugin.api/ProgressSpec.component5|component5(){}[0]
+    final fun component6(): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/ProgressSpec.component6|component6(){}[0]
+    final fun component7(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/ProgressSpec.component7|component7(){}[0]
+    final fun component8(): kotlin/Function0<kotlin/Unit>? // com.superiorsoftllc.infantry.plugin.api/ProgressSpec.component8|component8(){}[0]
+    final fun copy(kotlin/String = ..., kotlin/String = ..., kotlin.collections/List<kotlin/String> = ..., kotlin/String = ..., kotlin/Long = ..., kotlin/Boolean = ..., kotlin/String? = ..., kotlin/Function0<kotlin/Unit>? = ...): com.superiorsoftllc.infantry.plugin.api/ProgressSpec // com.superiorsoftllc.infantry.plugin.api/ProgressSpec.copy|copy(kotlin.String;kotlin.String;kotlin.collections.List<kotlin.String>;kotlin.String;kotlin.Long;kotlin.Boolean;kotlin.String?;kotlin.Function0<kotlin.Unit>?){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/ProgressSpec.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/ProgressSpec.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/ProgressSpec.toString|toString(){}[0]
+}
+
+final class com.superiorsoftllc.infantry.plugin.api/ProgressTask { // com.superiorsoftllc.infantry.plugin.api/ProgressTask|null[0]
+    constructor <init>(kotlin/String, kotlin/String = ..., kotlin/String = ..., com.superiorsoftllc.infantry.plugin.api/ProgressState = ..., kotlin/Long = ..., kotlin/Long = ..., kotlin/String = ..., kotlin/String = ..., kotlin.collections/List<kotlin/String> = ..., kotlin/Int = ..., kotlin/Long = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/String? = ..., kotlin/Long = ..., kotlin/Long = ..., kotlin/String? = ...) // com.superiorsoftllc.infantry.plugin.api/ProgressTask.<init>|<init>(kotlin.String;kotlin.String;kotlin.String;com.superiorsoftllc.infantry.plugin.api.ProgressState;kotlin.Long;kotlin.Long;kotlin.String;kotlin.String;kotlin.collections.List<kotlin.String>;kotlin.Int;kotlin.Long;kotlin.Boolean;kotlin.Boolean;kotlin.String?;kotlin.Long;kotlin.Long;kotlin.String?){}[0]
+
+    final val cancellable // com.superiorsoftllc.infantry.plugin.api/ProgressTask.cancellable|{}cancellable[0]
+        final fun <get-cancellable>(): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/ProgressTask.cancellable.<get-cancellable>|<get-cancellable>(){}[0]
+    final val done // com.superiorsoftllc.infantry.plugin.api/ProgressTask.done|{}done[0]
+        final fun <get-done>(): kotlin/Long // com.superiorsoftllc.infantry.plugin.api/ProgressTask.done.<get-done>|<get-done>(){}[0]
+    final val error // com.superiorsoftllc.infantry.plugin.api/ProgressTask.error|{}error[0]
+        final fun <get-error>(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/ProgressTask.error.<get-error>|<get-error>(){}[0]
+    final val etaMs // com.superiorsoftllc.infantry.plugin.api/ProgressTask.etaMs|{}etaMs[0]
+        final fun <get-etaMs>(): kotlin/Long // com.superiorsoftllc.infantry.plugin.api/ProgressTask.etaMs.<get-etaMs>|<get-etaMs>(){}[0]
+    final val finished // com.superiorsoftllc.infantry.plugin.api/ProgressTask.finished|{}finished[0]
+        final fun <get-finished>(): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/ProgressTask.finished.<get-finished>|<get-finished>(){}[0]
+    final val fraction // com.superiorsoftllc.infantry.plugin.api/ProgressTask.fraction|{}fraction[0]
+        final fun <get-fraction>(): kotlin/Float? // com.superiorsoftllc.infantry.plugin.api/ProgressTask.fraction.<get-fraction>|<get-fraction>(){}[0]
+    final val id // com.superiorsoftllc.infantry.plugin.api/ProgressTask.id|{}id[0]
+        final fun <get-id>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/ProgressTask.id.<get-id>|<get-id>(){}[0]
+    final val link // com.superiorsoftllc.infantry.plugin.api/ProgressTask.link|{}link[0]
+        final fun <get-link>(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/ProgressTask.link.<get-link>|<get-link>(){}[0]
+    final val retryable // com.superiorsoftllc.infantry.plugin.api/ProgressTask.retryable|{}retryable[0]
+        final fun <get-retryable>(): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/ProgressTask.retryable.<get-retryable>|<get-retryable>(){}[0]
+    final val source // com.superiorsoftllc.infantry.plugin.api/ProgressTask.source|{}source[0]
+        final fun <get-source>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/ProgressTask.source.<get-source>|<get-source>(){}[0]
+    final val startedAt // com.superiorsoftllc.infantry.plugin.api/ProgressTask.startedAt|{}startedAt[0]
+        final fun <get-startedAt>(): kotlin/Long // com.superiorsoftllc.infantry.plugin.api/ProgressTask.startedAt.<get-startedAt>|<get-startedAt>(){}[0]
+    final val state // com.superiorsoftllc.infantry.plugin.api/ProgressTask.state|{}state[0]
+        final fun <get-state>(): com.superiorsoftllc.infantry.plugin.api/ProgressState // com.superiorsoftllc.infantry.plugin.api/ProgressTask.state.<get-state>|<get-state>(){}[0]
+    final val step // com.superiorsoftllc.infantry.plugin.api/ProgressTask.step|{}step[0]
+        final fun <get-step>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/ProgressTask.step.<get-step>|<get-step>(){}[0]
+    final val stepIndex // com.superiorsoftllc.infantry.plugin.api/ProgressTask.stepIndex|{}stepIndex[0]
+        final fun <get-stepIndex>(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/ProgressTask.stepIndex.<get-stepIndex>|<get-stepIndex>(){}[0]
+    final val steps // com.superiorsoftllc.infantry.plugin.api/ProgressTask.steps|{}steps[0]
+        final fun <get-steps>(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/ProgressTask.steps.<get-steps>|<get-steps>(){}[0]
+    final val title // com.superiorsoftllc.infantry.plugin.api/ProgressTask.title|{}title[0]
+        final fun <get-title>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/ProgressTask.title.<get-title>|<get-title>(){}[0]
+    final val total // com.superiorsoftllc.infantry.plugin.api/ProgressTask.total|{}total[0]
+        final fun <get-total>(): kotlin/Long // com.superiorsoftllc.infantry.plugin.api/ProgressTask.total.<get-total>|<get-total>(){}[0]
+    final val unit // com.superiorsoftllc.infantry.plugin.api/ProgressTask.unit|{}unit[0]
+        final fun <get-unit>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/ProgressTask.unit.<get-unit>|<get-unit>(){}[0]
+    final val updatedAt // com.superiorsoftllc.infantry.plugin.api/ProgressTask.updatedAt|{}updatedAt[0]
+        final fun <get-updatedAt>(): kotlin/Long // com.superiorsoftllc.infantry.plugin.api/ProgressTask.updatedAt.<get-updatedAt>|<get-updatedAt>(){}[0]
+
+    final fun component1(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/ProgressTask.component1|component1(){}[0]
+    final fun component10(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/ProgressTask.component10|component10(){}[0]
+    final fun component11(): kotlin/Long // com.superiorsoftllc.infantry.plugin.api/ProgressTask.component11|component11(){}[0]
+    final fun component12(): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/ProgressTask.component12|component12(){}[0]
+    final fun component13(): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/ProgressTask.component13|component13(){}[0]
+    final fun component14(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/ProgressTask.component14|component14(){}[0]
+    final fun component15(): kotlin/Long // com.superiorsoftllc.infantry.plugin.api/ProgressTask.component15|component15(){}[0]
+    final fun component16(): kotlin/Long // com.superiorsoftllc.infantry.plugin.api/ProgressTask.component16|component16(){}[0]
+    final fun component17(): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/ProgressTask.component17|component17(){}[0]
+    final fun component2(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/ProgressTask.component2|component2(){}[0]
+    final fun component3(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/ProgressTask.component3|component3(){}[0]
+    final fun component4(): com.superiorsoftllc.infantry.plugin.api/ProgressState // com.superiorsoftllc.infantry.plugin.api/ProgressTask.component4|component4(){}[0]
+    final fun component5(): kotlin/Long // com.superiorsoftllc.infantry.plugin.api/ProgressTask.component5|component5(){}[0]
+    final fun component6(): kotlin/Long // com.superiorsoftllc.infantry.plugin.api/ProgressTask.component6|component6(){}[0]
+    final fun component7(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/ProgressTask.component7|component7(){}[0]
+    final fun component8(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/ProgressTask.component8|component8(){}[0]
+    final fun component9(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.api/ProgressTask.component9|component9(){}[0]
+    final fun copy(kotlin/String = ..., kotlin/String = ..., kotlin/String = ..., com.superiorsoftllc.infantry.plugin.api/ProgressState = ..., kotlin/Long = ..., kotlin/Long = ..., kotlin/String = ..., kotlin/String = ..., kotlin.collections/List<kotlin/String> = ..., kotlin/Int = ..., kotlin/Long = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/String? = ..., kotlin/Long = ..., kotlin/Long = ..., kotlin/String? = ...): com.superiorsoftllc.infantry.plugin.api/ProgressTask // com.superiorsoftllc.infantry.plugin.api/ProgressTask.copy|copy(kotlin.String;kotlin.String;kotlin.String;com.superiorsoftllc.infantry.plugin.api.ProgressState;kotlin.Long;kotlin.Long;kotlin.String;kotlin.String;kotlin.collections.List<kotlin.String>;kotlin.Int;kotlin.Long;kotlin.Boolean;kotlin.Boolean;kotlin.String?;kotlin.Long;kotlin.Long;kotlin.String?){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/ProgressTask.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // com.superiorsoftllc.infantry.plugin.api/ProgressTask.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/ProgressTask.toString|toString(){}[0]
+
+    final object $serializer : kotlinx.serialization.internal/GeneratedSerializer<com.superiorsoftllc.infantry.plugin.api/ProgressTask> { // com.superiorsoftllc.infantry.plugin.api/ProgressTask.$serializer|null[0]
+        final val descriptor // com.superiorsoftllc.infantry.plugin.api/ProgressTask.$serializer.descriptor|{}descriptor[0]
+            final fun <get-descriptor>(): kotlinx.serialization.descriptors/SerialDescriptor // com.superiorsoftllc.infantry.plugin.api/ProgressTask.$serializer.descriptor.<get-descriptor>|<get-descriptor>(){}[0]
+
+        final fun childSerializers(): kotlin/Array<kotlinx.serialization/KSerializer<*>> // com.superiorsoftllc.infantry.plugin.api/ProgressTask.$serializer.childSerializers|childSerializers(){}[0]
+        final fun deserialize(kotlinx.serialization.encoding/Decoder): com.superiorsoftllc.infantry.plugin.api/ProgressTask // com.superiorsoftllc.infantry.plugin.api/ProgressTask.$serializer.deserialize|deserialize(kotlinx.serialization.encoding.Decoder){}[0]
+        final fun serialize(kotlinx.serialization.encoding/Encoder, com.superiorsoftllc.infantry.plugin.api/ProgressTask) // com.superiorsoftllc.infantry.plugin.api/ProgressTask.$serializer.serialize|serialize(kotlinx.serialization.encoding.Encoder;com.superiorsoftllc.infantry.plugin.api.ProgressTask){}[0]
+    }
+
+    final object Companion { // com.superiorsoftllc.infantry.plugin.api/ProgressTask.Companion|null[0]
+        final val $childSerializers // com.superiorsoftllc.infantry.plugin.api/ProgressTask.Companion.$childSerializers|{}$childSerializers[0]
+
+        final fun serializer(): kotlinx.serialization/KSerializer<com.superiorsoftllc.infantry.plugin.api/ProgressTask> // com.superiorsoftllc.infantry.plugin.api/ProgressTask.Companion.serializer|serializer(){}[0]
+    }
+}
+
 final class com.superiorsoftllc.infantry.plugin.api/RefreshView { // com.superiorsoftllc.infantry.plugin.api/RefreshView|null[0]
     constructor <init>(kotlin/String, kotlin/Boolean, kotlin/Boolean, kotlin/Int, kotlin/String) // com.superiorsoftllc.infantry.plugin.api/RefreshView.<init>|<init>(kotlin.String;kotlin.Boolean;kotlin.Boolean;kotlin.Int;kotlin.String){}[0]
 
@@ -3531,6 +3698,31 @@ final class com.superiorsoftllc.infantry.plugin.host/PluginTree { // com.superio
     final fun roots(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.host/PluginTree.roots|roots(){}[0]
 }
 
+final class com.superiorsoftllc.infantry.plugin.host/ProgressCenter { // com.superiorsoftllc.infantry.plugin.host/ProgressCenter|null[0]
+    constructor <init>(kotlin/Function0<kotlin/Long>, kotlin/Function0<kotlin/String> = ..., kotlin/Function0<kotlin/Int> = ..., kotlin/Function0<kotlin/Long> = ..., kotlin/Function2<kotlin/String, kotlin/Throwable, kotlin/Unit> = ..., kotlin/Function1<com.superiorsoftllc.infantry.plugin.api/ProgressTask, kotlin/Unit> = ...) // com.superiorsoftllc.infantry.plugin.host/ProgressCenter.<init>|<init>(kotlin.Function0<kotlin.Long>;kotlin.Function0<kotlin.String>;kotlin.Function0<kotlin.Int>;kotlin.Function0<kotlin.Long>;kotlin.Function2<kotlin.String,kotlin.Throwable,kotlin.Unit>;kotlin.Function1<com.superiorsoftllc.infantry.plugin.api.ProgressTask,kotlin.Unit>){}[0]
+
+    final fun activePresenterId(): kotlin/String // com.superiorsoftllc.infantry.plugin.host/ProgressCenter.activePresenterId|activePresenterId(){}[0]
+    final fun cancel(kotlin/String): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.host/ProgressCenter.cancel|cancel(kotlin.String){}[0]
+    final fun clearFinished() // com.superiorsoftllc.infantry.plugin.host/ProgressCenter.clearFinished|clearFinished(){}[0]
+    final fun forSource(kotlin/String): com.superiorsoftllc.infantry.plugin.api/Progress // com.superiorsoftllc.infantry.plugin.host/ProgressCenter.forSource|forSource(kotlin.String){}[0]
+    final fun mirror(com.superiorsoftllc.infantry.plugin.api/ProgressTask, kotlin/Function0<kotlin/Unit>? = ..., kotlin/Function0<kotlin/Unit>? = ...) // com.superiorsoftllc.infantry.plugin.host/ProgressCenter.mirror|mirror(com.superiorsoftllc.infantry.plugin.api.ProgressTask;kotlin.Function0<kotlin.Unit>?;kotlin.Function0<kotlin.Unit>?){}[0]
+    final fun observe(kotlin/Function1<com.superiorsoftllc.infantry.plugin.api/ProgressTask, kotlin/Unit>): kotlin/AutoCloseable // com.superiorsoftllc.infantry.plugin.host/ProgressCenter.observe|observe(kotlin.Function1<com.superiorsoftllc.infantry.plugin.api.ProgressTask,kotlin.Unit>){}[0]
+    final fun present(kotlin/String, com.superiorsoftllc.infantry.plugin.api/ProgressPresenter): kotlin/AutoCloseable // com.superiorsoftllc.infantry.plugin.host/ProgressCenter.present|present(kotlin.String;com.superiorsoftllc.infantry.plugin.api.ProgressPresenter){}[0]
+    final fun presenterIds(): kotlin.collections/List<kotlin/String> // com.superiorsoftllc.infantry.plugin.host/ProgressCenter.presenterIds|presenterIds(){}[0]
+    final fun retry(kotlin/String): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.host/ProgressCenter.retry|retry(kotlin.String){}[0]
+    final fun setDefault(com.superiorsoftllc.infantry.plugin.api/ProgressPresenter?) // com.superiorsoftllc.infantry.plugin.host/ProgressCenter.setDefault|setDefault(com.superiorsoftllc.infantry.plugin.api.ProgressPresenter?){}[0]
+    final fun start(kotlin/String, com.superiorsoftllc.infantry.plugin.api/ProgressSpec): com.superiorsoftllc.infantry.plugin.api/ProgressHandle // com.superiorsoftllc.infantry.plugin.host/ProgressCenter.start|start(kotlin.String;com.superiorsoftllc.infantry.plugin.api.ProgressSpec){}[0]
+    final fun task(kotlin/String): com.superiorsoftllc.infantry.plugin.api/ProgressTask? // com.superiorsoftllc.infantry.plugin.host/ProgressCenter.task|task(kotlin.String){}[0]
+    final fun tasks(): kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/ProgressTask> // com.superiorsoftllc.infantry.plugin.host/ProgressCenter.tasks|tasks(){}[0]
+
+    final object Companion { // com.superiorsoftllc.infantry.plugin.host/ProgressCenter.Companion|null[0]
+        final const val DEFAULT_KEEP_FINISHED // com.superiorsoftllc.infantry.plugin.host/ProgressCenter.Companion.DEFAULT_KEEP_FINISHED|{}DEFAULT_KEEP_FINISHED[0]
+            final fun <get-DEFAULT_KEEP_FINISHED>(): kotlin/Int // com.superiorsoftllc.infantry.plugin.host/ProgressCenter.Companion.DEFAULT_KEEP_FINISHED.<get-DEFAULT_KEEP_FINISHED>|<get-DEFAULT_KEEP_FINISHED>(){}[0]
+        final const val DEFAULT_MIN_INTERVAL_MS // com.superiorsoftllc.infantry.plugin.host/ProgressCenter.Companion.DEFAULT_MIN_INTERVAL_MS|{}DEFAULT_MIN_INTERVAL_MS[0]
+            final fun <get-DEFAULT_MIN_INTERVAL_MS>(): kotlin/Long // com.superiorsoftllc.infantry.plugin.host/ProgressCenter.Companion.DEFAULT_MIN_INTERVAL_MS.<get-DEFAULT_MIN_INTERVAL_MS>|<get-DEFAULT_MIN_INTERVAL_MS>(){}[0]
+    }
+}
+
 final class com.superiorsoftllc.infantry.plugin.host/Resolution { // com.superiorsoftllc.infantry.plugin.host/Resolution|null[0]
     constructor <init>(kotlin.collections/List<com.superiorsoftllc.infantry.plugin.host/ModuleStatus>, kotlin.collections/List<com.superiorsoftllc.infantry.plugin.host/AcceptedPreference>, kotlin.collections/List<kotlin/String>, kotlin.collections/List<com.superiorsoftllc.infantry.plugin.host/AcceptedShellOverride> = ...) // com.superiorsoftllc.infantry.plugin.host/Resolution.<init>|<init>(kotlin.collections.List<com.superiorsoftllc.infantry.plugin.host.ModuleStatus>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.host.AcceptedPreference>;kotlin.collections.List<kotlin.String>;kotlin.collections.List<com.superiorsoftllc.infantry.plugin.host.AcceptedShellOverride>){}[0]
 
@@ -3781,6 +3973,15 @@ final object com.superiorsoftllc.infantry.plugin.api/GrantPattern { // com.super
     final fun matches(kotlin/String, kotlin/String): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/GrantPattern.matches|matches(kotlin.String;kotlin.String){}[0]
 }
 
+final object com.superiorsoftllc.infantry.plugin.api/NoProgress : com.superiorsoftllc.infantry.plugin.api/Progress { // com.superiorsoftllc.infantry.plugin.api/NoProgress|null[0]
+    final fun cancel(kotlin/String): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/NoProgress.cancel|cancel(kotlin.String){}[0]
+    final fun observe(kotlin/Function1<com.superiorsoftllc.infantry.plugin.api/ProgressTask, kotlin/Unit>): kotlin/AutoCloseable // com.superiorsoftllc.infantry.plugin.api/NoProgress.observe|observe(kotlin.Function1<com.superiorsoftllc.infantry.plugin.api.ProgressTask,kotlin.Unit>){}[0]
+    final fun retry(kotlin/String): kotlin/Boolean // com.superiorsoftllc.infantry.plugin.api/NoProgress.retry|retry(kotlin.String){}[0]
+    final fun start(com.superiorsoftllc.infantry.plugin.api/ProgressSpec): com.superiorsoftllc.infantry.plugin.api/ProgressHandle // com.superiorsoftllc.infantry.plugin.api/NoProgress.start|start(com.superiorsoftllc.infantry.plugin.api.ProgressSpec){}[0]
+    final fun task(kotlin/String): com.superiorsoftllc.infantry.plugin.api/ProgressTask? // com.superiorsoftllc.infantry.plugin.api/NoProgress.task|task(kotlin.String){}[0]
+    final fun tasks(): kotlin.collections/List<com.superiorsoftllc.infantry.plugin.api/ProgressTask> // com.superiorsoftllc.infantry.plugin.api/NoProgress.tasks|tasks(){}[0]
+}
+
 final object com.superiorsoftllc.infantry.plugin.api/NotificationChannels { // com.superiorsoftllc.infantry.plugin.api/NotificationChannels|null[0]
     final const val CORE // com.superiorsoftllc.infantry.plugin.api/NotificationChannels.CORE|{}CORE[0]
         final fun <get-CORE>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/NotificationChannels.CORE.<get-CORE>|<get-CORE>(){}[0]
@@ -3818,6 +4019,20 @@ final object com.superiorsoftllc.infantry.plugin.api/NotificationWire { // com.s
 
 final object com.superiorsoftllc.infantry.plugin.api/PolicyRefusal { // com.superiorsoftllc.infantry.plugin.api/PolicyRefusal|null[0]
     final fun text(kotlin/String?, kotlin/String?, kotlin/String, kotlin/String, kotlin/String?): kotlin/String // com.superiorsoftllc.infantry.plugin.api/PolicyRefusal.text|text(kotlin.String?;kotlin.String?;kotlin.String;kotlin.String;kotlin.String?){}[0]
+}
+
+final object com.superiorsoftllc.infantry.plugin.api/ProgressWire { // com.superiorsoftllc.infantry.plugin.api/ProgressWire|null[0]
+    final const val CANCEL // com.superiorsoftllc.infantry.plugin.api/ProgressWire.CANCEL|{}CANCEL[0]
+        final fun <get-CANCEL>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/ProgressWire.CANCEL.<get-CANCEL>|<get-CANCEL>(){}[0]
+    final const val PUSH // com.superiorsoftllc.infantry.plugin.api/ProgressWire.PUSH|{}PUSH[0]
+        final fun <get-PUSH>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/ProgressWire.PUSH.<get-PUSH>|<get-PUSH>(){}[0]
+    final const val RETRY // com.superiorsoftllc.infantry.plugin.api/ProgressWire.RETRY|{}RETRY[0]
+        final fun <get-RETRY>(): kotlin/String // com.superiorsoftllc.infantry.plugin.api/ProgressWire.RETRY.<get-RETRY>|<get-RETRY>(){}[0]
+
+    final fun encode(com.superiorsoftllc.infantry.plugin.api/ProgressTask): kotlin/String // com.superiorsoftllc.infantry.plugin.api/ProgressWire.encode|encode(com.superiorsoftllc.infantry.plugin.api.ProgressTask){}[0]
+    final fun id(kotlin/String): kotlin/String? // com.superiorsoftllc.infantry.plugin.api/ProgressWire.id|id(kotlin.String){}[0]
+    final fun idFrame(kotlin/String): kotlin/String // com.superiorsoftllc.infantry.plugin.api/ProgressWire.idFrame|idFrame(kotlin.String){}[0]
+    final fun task(kotlin/String): com.superiorsoftllc.infantry.plugin.api/ProgressTask? // com.superiorsoftllc.infantry.plugin.api/ProgressWire.task|task(kotlin.String){}[0]
 }
 
 final object com.superiorsoftllc.infantry.plugin.api/Services { // com.superiorsoftllc.infantry.plugin.api/Services|null[0]

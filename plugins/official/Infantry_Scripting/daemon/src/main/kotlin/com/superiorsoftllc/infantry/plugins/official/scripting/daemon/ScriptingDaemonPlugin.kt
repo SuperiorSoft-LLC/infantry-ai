@@ -123,6 +123,12 @@ class ScriptingDaemonPlugin : DaemonPlugin {
         // SCRIPT-FETCH-1: capability http.fetch (module.json `capabilities`), off until scripting.fetch.enabled.
         val fetch = FetchBridge({ api.config(it) }, { name, project -> api.runs.secretFields(name, project) }, { api.log(it) })
         api.capabilities.handle(FetchBridge.ID) { call -> fetch.fetch(call.args, call.caller.project) }
+        // CORE-PROGRESS-DOWNLOAD-1: the core progress system and downloader for scripts (progress.start / progress.update / http.download).
+        val progressBridge = ProgressBridge(api.progress, api.downloads, { api.config(it) }, { name, project -> api.runs.secretFields(name, project) },
+            { project, path -> api.files(project ?: throw IllegalArgumentException("http.download runs in a project (its .infantry/ folder)")).absolutePath(path) })
+        api.capabilities.handle(ProgressBridge.START) { call -> progressBridge.start(call.args) }
+        api.capabilities.handle(ProgressBridge.UPDATE) { call -> progressBridge.update(call.args) }
+        api.capabilities.handle(ProgressBridge.DOWNLOAD) { call -> progressBridge.download(call.args, call.caller.project) }
         api.tools.register(exec.exec)
         api.tools.register(exec.status)
         // SCRIPT-TICK-1: one 1 s clock drives `every <N>s` hooks and exec.tick (each at its own period). A throw never stops it.

@@ -175,6 +175,28 @@ internal class InProcessDaemon(
         override fun reload(id: String) = d()?.reload(id) ?: none()
     }
 
+    // Before the daemon starts: the same core downloader, reporting no progress.
+    private val standaloneDownloads by lazy {
+        com.superiorsoftllc.infantry.downloads.CoreDownloads({ com.superiorsoftllc.infantry.plugin.api.NoProgress }).forSource("plugins")
+    }
+
+    /** CORE-PROGRESS-DOWNLOAD-1: the running in-process daemon's downloader (a standalone core downloader until it starts). */
+    fun pluginDownloads(): com.superiorsoftllc.infantry.daemon.api.downloads.Downloads = object : com.superiorsoftllc.infantry.daemon.api.downloads.Downloads {
+        override fun download(request: com.superiorsoftllc.infantry.daemon.api.downloads.DownloadRequest) =
+            (daemon?.pluginDownloads() ?: standaloneDownloads).download(request)
+    }
+
+    /** CORE-PROGRESS-DOWNLOAD-1: the running in-process daemon's progress system (none until it starts). */
+    fun pluginProgress(): com.superiorsoftllc.infantry.plugin.api.Progress = object : com.superiorsoftllc.infantry.plugin.api.Progress {
+        private fun p() = daemon?.pluginProgress() ?: com.superiorsoftllc.infantry.plugin.api.NoProgress
+        override fun start(spec: com.superiorsoftllc.infantry.plugin.api.ProgressSpec) = p().start(spec)
+        override fun tasks() = p().tasks()
+        override fun task(id: String) = p().task(id)
+        override fun observe(listener: (com.superiorsoftllc.infantry.plugin.api.ProgressTask) -> Unit) = p().observe(listener)
+        override fun cancel(id: String) = p().cancel(id)
+        override fun retry(id: String) = p().retry(id)
+    }
+
     fun runningAgents(): Int = daemon?.manager?.list()?.count { it.isBusy() } ?: 0
 
     @Synchronized
@@ -274,6 +296,9 @@ internal class PinnedDaemonHost(
                     com.superiorsoftllc.infantry.plugin.host.PluginFolders.bundledRoot({ System.getenv(it) }),
                     // PLUGIN-HOTSWAP-2: a daemon-half change made here reaches the running daemon's host (same path as the daemon's own manager).
                     hot = (local as? InProcessDaemon)?.pluginHotApply(),
+                    // CORE-PROGRESS-DOWNLOAD-1: downloads and progress through the running daemon's core services.
+                    coreDownloads = (local as? InProcessDaemon)?.pluginDownloads(),
+                    progressSystem = (local as? InProcessDaemon)?.pluginProgress(),
                 ),
             )
         }.getOrNull()

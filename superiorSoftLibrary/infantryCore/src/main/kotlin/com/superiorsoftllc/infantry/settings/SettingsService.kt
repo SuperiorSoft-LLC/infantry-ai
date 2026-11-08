@@ -84,6 +84,9 @@ class SettingsService(
             QUESTIONS_MAX_PER_HOUR to JsonPrimitive(questionsMaxPerHour()),
             RUNNERS_ENABLED to JsonPrimitive(runCatching { storedBoolean(RUNNERS_ENABLED)?.booleanOrNull }.getOrNull() ?: false),
             RUNNERS_DEFAULT to JsonPrimitive(runnersDefault()),
+            PROGRESS_PRESENTER to JsonPrimitive(plainString(PROGRESS_PRESENTER)),
+            DOWNLOADS_TRANSPORT to JsonPrimitive(plainString(DOWNLOADS_TRANSPORT)),
+            DOWNLOADS_PROXY to JsonPrimitive(plainString(DOWNLOADS_PROXY)),
             TICKET_EXIT_BEHAVIOR to JsonPrimitive(ticketExitBehavior()),
             TICKET_HANDOFF_NOTE to JsonPrimitive(ticketHandoffNote()),
             TICKET_CLOSE_DONE_WORKER_WHEN_QUEUED to JsonPrimitive(runCatching { storedBoolean(TICKET_CLOSE_DONE_WORKER_WHEN_QUEUED)?.booleanOrNull }.getOrNull() ?: true),
@@ -347,6 +350,28 @@ class SettingsService(
     fun runnerPaused(name: String): Boolean =
         store.settings.get("runners.$name.paused")?.value?.let { runCatching { (Json.parseToJsonElement(it) as JsonPrimitive).content.toBoolean() }.getOrNull() } ?: false
 
+    /**
+     * CORE-PROGRESS-DOWNLOAD-1: a stored plain-string setting ("" when never set): `progress.presenter` (the progress
+     * presenter plugin, blank = the last registered, else core), `downloads.transport` (blank = the core HTTP transport) and
+     * `downloads.proxy` (`host:port`, blank = the system proxy settings).
+     */
+    fun plainString(key: String): String =
+        store.settings.get(key)?.value?.let { runCatching { (Json.parseToJsonElement(it) as JsonPrimitive).content }.getOrNull() }?.trim().orEmpty()
+
+    private fun requirePlainName(key: String, value: JsonElement): String {
+        val v = (value as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim()
+            ?: throw IllegalArgumentException("setting '$key' must be a string (a plugin name, or \"\" for the core default)")
+        require(v.isEmpty() || Regex("[A-Za-z0-9_.-]{1,80}").matches(v)) { "setting '$key' must be a plugin name (letters, digits, _ . -), or \"\" for the core default" }
+        return v
+    }
+
+    private fun requireProxy(key: String, value: JsonElement): String {
+        val v = (value as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim()
+            ?: throw IllegalArgumentException("setting '$key' must be a string: host:port, or \"\" for the system proxy")
+        require(v.isEmpty() || Regex("[A-Za-z0-9_.-]+:[0-9]{1,5}").matches(v)) { "setting '$key' must be host:port, or \"\" for the system proxy" }
+        return v
+    }
+
     private fun requireRunnerName(key: String, value: JsonElement): String {
         val v = (value as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim()?.lowercase().orEmpty()
         com.superiorsoftllc.infantry.protocol.TicketRunner.problem(v)?.let { throw IllegalArgumentException("setting '$key': $it") }
@@ -489,6 +514,8 @@ class SettingsService(
             RUNNERS_ENABLED -> JsonPrimitive(requireBoolean(key, value))
             DAEMON_MODE -> JsonPrimitive(requireOneOf(key, value, listOf("both", "runner", "orchestrator")))
             RUNNERS_DEFAULT -> JsonPrimitive(requireRunnerName(key, value))
+            PROGRESS_PRESENTER, DOWNLOADS_TRANSPORT -> JsonPrimitive(requirePlainName(key, value))
+            DOWNLOADS_PROXY -> JsonPrimitive(requireProxy(key, value))
             USAGE_REFRESH_MINUTES -> JsonPrimitive(requireIntIn(key, value, USAGE_REFRESH_RANGE))
             DISPLAY_TIME_ZONE -> JsonPrimitive(((value as? JsonPrimitive)?.content ?: "").trim().also { com.superiorsoftllc.infantry.DisplayZone.set(it) })
             PROCESSES_AUTO_REAP -> JsonPrimitive(requireBoolean(key, value))
@@ -1002,6 +1029,12 @@ class SettingsService(
         /** RUNNER-POOL-10: what this daemon is at start-up (read once; `--mode` and INFANTRY_MODE win over it). */
         const val DAEMON_MODE = "daemon.mode"
         const val RUNNERS_DEFAULT = "runners.default"
+        /** CORE-PROGRESS-DOWNLOAD-1: the active progress presenter plugin ("" = the last registered, else the core default). */
+        const val PROGRESS_PRESENTER = "progress.presenter"
+        /** CORE-PROGRESS-DOWNLOAD-1: the download transport plugin ("" = the core HTTP transport). */
+        const val DOWNLOADS_TRANSPORT = "downloads.transport"
+        /** CORE-PROGRESS-DOWNLOAD-1: the downloads proxy, `host:port` ("" = the JVM's system proxy settings). */
+        const val DOWNLOADS_PROXY = "downloads.proxy"
         const val DEFAULT_RUNNERS_DEFAULT = "local"
         /** What a clean worker exit does to its ticket: `leave` it in_progress (default) or move it to `done`. */
         const val TICKET_EXIT_BEHAVIOR = "tickets.exitBehavior"

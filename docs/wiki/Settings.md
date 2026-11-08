@@ -61,6 +61,9 @@ The default is the cheapest reasonable value. A costlier value is an opt-in. The
 |---|---|---|
 | `tickets.weightExecutors` | (unset) | Provider and model per ticket weight 1 to 5 |
 | project `directory` (`infantry_project_config_set`) | (unset) | The project's folder. The Run tab's commands belong to one project each and run relative to this folder; see [Plugins](Plugins.md#run-tab-commands-as-tools-infantry_run) |
+| `limits.downloads.*` | see [Progress and downloads](Progress.md) | The core downloader: `retries` (3), `backoffMs` (1000), `connectTimeoutSeconds` (15), `responseTimeoutSeconds` (60), `stallSeconds` (60), `maxMb` (2048), `redirects` (5), `moveRetries` (5) |
+| `downloads.proxy`, `downloads.transport` | (unset) | The downloader's proxy (`host:port`; unset = the system proxy) and the plugin transport to use (unset = the core one) |
+| `progress.presenter`, `limits.progress.keepFinished`, `limits.progress.minIntervalMs` | (unset), 20, 250 | The daemon-side presenter to use (unset = the last registered, else the core default), finished tasks kept, the most often an amount change is sent |
 | `scripting.*` | see [Scripting](Scripting.md) | Run limits, hook guards, the process bridge (off by default) |
 | `processes.autoReap` | off | Reap rogue background processes (Gradle/Kotlin daemons, node) left by ended sessions |
 | `processes.reapKinds` | `[]` (every kind) | The kinds a session's close reaps: tool profile names (`gradle`, `kotlin`, ...) or `other`; a process of an unlisted kind is spared |

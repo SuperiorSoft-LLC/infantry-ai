@@ -209,6 +209,10 @@ class PluginManager(
             com.superiorsoftllc.infantry.settings.EndpointRegistry.PLUGIN_RELEASES_API, { System.getenv(it) }, { null },
         )
     },
+    /** CORE-PROGRESS-DOWNLOAD-1: the core downloader web fetches go through (null = the [fetcher] alone: the CLI, a test). */
+    private val coreDownloads: com.superiorsoftllc.infantry.daemon.api.downloads.Downloads? = null,
+    /** CORE-PROGRESS-DOWNLOAD-1: the core progress system a [track]ed change reports to (null = the legacy listener only). */
+    private val progressSystem: com.superiorsoftllc.infantry.plugin.api.Progress? = null,
 ) {
     private val catalogCache get() = File(stateDir, "plugin-catalogs")
     private val downloads get() = File(stateDir, "plugin-downloads")
@@ -480,14 +484,61 @@ class PluginManager(
     /** http(s) goes through the [fetcher]; a plain path or `file:` URL is read locally, so custom and folder sources never need a network. */
     private fun fetchAny(url: String, dest: File, max: Long, onBytes: (Long) -> Unit = {}) {
         val web = url.startsWith("http://", true) || url.startsWith("https://", true)
+        // CORE-PROGRESS-DOWNLOAD-1: web downloads go through the core downloader (retries, resume, temp file + atomic move,
+        // proxy) when this host has one and no test fetcher replaced the default.
+        val core = coreDownloads
+        if (web && core != null && fetcher === DefaultFetcher) {
+            val h = task
+            val r = core.download(com.superiorsoftllc.infantry.daemon.api.downloads.DownloadRequest(
+                url = url, dest = dest, title = "Downloading ${dest.name}", maxBytes = max,
+                progress = h?.let { BytesForwarding(it, onBytes) },
+            ))
+            if (!r.ok) throw IOException(r.error ?: "download failed")
+            return
+        }
         (if (web) fetcher else DefaultFetcher).fetch(url, dest, max, onBytes)
+    }
+
+    /** CORE-PROGRESS-DOWNLOAD-1: the running change's task, with each byte count also told to the legacy [progress] listener. */
+    private class BytesForwarding(
+        private val inner: com.superiorsoftllc.infantry.plugin.api.ProgressHandle,
+        private val onBytes: (Long) -> Unit,
+    ) : com.superiorsoftllc.infantry.plugin.api.ProgressHandle by inner {
+        override fun amount(done: Long, total: Long, unit: String) { inner.amount(done, total, unit); onBytes(done) }
+        override fun close() {} // the change, not the download, ends the task
     }
 
     /** PLUGIN-PROGRESS-1: the screen's listener for the steps of a change (see [PluginProgress]); null = nobody listens. */
     @Volatile var progress: ((com.superiorsoftllc.infantry.plugin.api.PluginProgress) -> Unit)? = null
 
+    /** CORE-PROGRESS-DOWNLOAD-1: the core progress task of the change running now ([track]); null = none. */
+    @Volatile private var task: com.superiorsoftllc.infantry.plugin.api.ProgressHandle? = null
+
     private fun step(id: String, step: String, done: Long = -1, total: Long = -1) {
         runCatching { progress?.invoke(com.superiorsoftllc.infantry.plugin.api.PluginProgress(id, step, done, total)) }
+        task?.let { h -> runCatching { if (done >= 0 && h.task.step == step) h.amount(done, total, "bytes") else h.step(step) } }
+    }
+
+    /**
+     * CORE-PROGRESS-DOWNLOAD-1: runs one plugin change [call] as a task of the core progress system titled [title] (steps
+     * Downloading / Verifying / Installing / Reloading), ended done or failed with the answer's message; a failed task's
+     * Retry runs [call] again. Without a progress system it just runs [call].
+     */
+    fun track(title: String, link: String?, call: () -> ManagerResult): ManagerResult {
+        val sys = progressSystem ?: return call()
+        val h = sys.start(com.superiorsoftllc.infantry.plugin.api.ProgressSpec(
+            title = title, steps = TRACK_STEPS, link = link,
+            retry = { Thread({ track(title, link, call) }, "plugin-change-retry").apply { isDaemon = true }.start() },
+        ))
+        task = h
+        return try {
+            call().also { r -> if (r.ok) h.done(if (r.restartNeeded) "Restart needed" else "") else h.fail(r.message) }
+        } catch (e: Exception) {
+            h.fail("failed: ${e.message ?: e::class.simpleName}")
+            throw e
+        } finally {
+            task = null
+        }
     }
 
     /** Downloads [url] into [file], reporting bytes of [total] (null = unknown) at most four times a second. */
@@ -858,6 +909,8 @@ class PluginManager(
     private fun sha256Text(s: String) = MessageDigest.getInstance("SHA-256").digest(s.toByteArray()).joinToString("") { "%02x".format(it) }
 
     private companion object {
+        /** CORE-PROGRESS-DOWNLOAD-1: the steps of a [track]ed plugin change. */
+        val TRACK_STEPS = listOf("Downloading", "Verifying", "Installing", "Reloading")
         val ID = Regex("[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")
         const val MAX_CATALOG = 8L shl 20
         const val CUSTOM_WARNING = "not listed in any catalog: this is a CUSTOM plugin from a source you pointed at; only install code you trust"

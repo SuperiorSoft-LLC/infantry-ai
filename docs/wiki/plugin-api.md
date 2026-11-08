@@ -412,6 +412,30 @@ Button(onClick = { scope.launch {
 } }) { Text("Ping") }
 ```
 
+### Progress (CORE-PROGRESS-DOWNLOAD-1)
+
+The ONE progress/loader system; full page: [Progress and downloads](Progress.md). Source:
+`infantryPlugins/.../plugin/api/Progress.kt`. The same types serve the daemon (`DaemonApi.progress`) and the UI.
+
+| Type | What it is |
+|---|---|
+| `ProgressTask` | One task as everyone sees it (and as the frame carries it): id, source, title, `state`, `done` / `total` / `unit`, `step` / `steps` / `stepIndex`, `etaMs`, `cancellable`, `retryable`, `error`, `link`; `fraction` (null = indeterminate), `finished`. |
+| `ProgressState` | `QUEUED`, `RUNNING`, `DONE`, `FAILED`, `CANCELLED`. |
+| `ProgressSpec` | What a starter asks for: title, id (blank = generated), steps, unit, total, cancellable, link, `retry` (the Retry action). |
+| `ProgressHandle` | The starter's side: `step`, `amount`, `eta`, `done`, `fail(reason, retryable)`, `cancelled`, `cancelRequested`, `onCancel`. |
+| `ProgressPresenter` | `show(task)`: a plugin's presentation of every change; registered with `Progress.present`. |
+| `Progress` | `start`, `tasks`, `task`, `observe`, `cancel`, `retry`, `present`. |
+| `NoProgress` | A host without the system: tasks run, nothing is shown. |
+| `ProgressWire` | The frames `progress_task` (push), `progress_cancel`, `progress_retry` and their encoding. |
+| `ProgressCenter` | `plugin.host`: the one implementation both hosts run; `mirror` stores a task pushed by another host. |
+
+In the UI (`infantryUiCore/.../ui/progress/ProgressViews.kt`): `LocalProgress` gives the client's `ProgressUi` (the
+controller mirrors the daemon's tasks into it); draw with `ProgressIndicator(taskId)`, `ProgressView(task)` or
+`ProgressBar(fraction)`, never a raw Material indicator. To replace the drawing, implement `ProgressRenderer` and
+register it under `PROGRESS_RENDERER_REGISTRY` (see [Implementations](#implementations)); it gets the task and its
+`ProgressActions` (Cancel / Retry), runs inside `GuardedBlock`, and the core drawing (`CoreProgressView`) takes over if it
+throws.
+
 ## 7. Blocks, shell nodes, overrides and injections
 
 The window is a tree of `Block` nodes (`CoreShell.root`). A plugin can fill, replace, wrap or add to nodes by id.
@@ -652,6 +676,14 @@ Generated for the `infantryPlugins` guard `SdkTypesDocumentedGuardTest`: every p
 - `FilePluginStorage`: A module's private data area: files directly in [dir] (names cannot climb out of it).
 - `ModulesFile`: PLUGINS-2: writes the owner's enable list back to `<root>/modules.json` after Settings changed it.
 - `PluginFolders`: PLUGINS-1 (JVM): where the plugins live and what is in them.
+
+### `Progress.kt`
+
+- `ProgressTask`, `ProgressState`, `ProgressSpec`, `ProgressHandle`, `ProgressPresenter`, `Progress`, `NoProgress`, `ProgressWire`: see [Progress](#progress-core-progress-download-1).
+
+### `ProgressCenter.kt`
+
+- `ProgressCenter`: CORE-PROGRESS-DOWNLOAD-1: the one implementation of `Progress`, run by the daemon and by each client.
 
 ### `PluginManagerPort.kt`
 

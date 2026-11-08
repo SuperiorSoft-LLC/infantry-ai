@@ -453,6 +453,8 @@ fun App(
           com.superiorsoftllc.infantry.ui.shell.LocalShellContext provides com.superiorsoftllc.infantry.ui.shell.CoreShellContext(shell, LocalRunConsole.current),
           // TOAST-1: every block can toast; a subtree may provide its own (nearest wins).
           LocalToast provides controller.toasts,
+          // CORE-PROGRESS-DOWNLOAD-1: every block can show a progress task (ProgressIndicator) from the one progress system.
+          com.superiorsoftllc.infantry.ui.progress.LocalProgress provides controller.progressUi,
           com.superiorsoftllc.infantry.ui.shell.LocalWritePolicySink provides writePolicy,
       ) {
       // BLOCKS-LAYOUT L3: the window is one block tree (L5: with the modules' overrides in); the docked column (`infantry.shell.frame`) wears the surface.

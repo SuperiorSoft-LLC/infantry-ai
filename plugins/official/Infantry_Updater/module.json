@@ -23,7 +23,7 @@
   "daemon": {
     "entry": "com.superiorsoftllc.infantry.plugins.official.updater.daemon.UpdaterDaemonPlugin",
     "jar": "daemon/build/libs/Infantry_Updater-daemon.jar",
-    "apiAtLeast": "1.0.0",
+    "apiAtLeast": "1.54.0",
     "routes": ["GET /update/status", "POST /update/check", "POST /update/apply", "GET /update/client"],
     "env": [
       "INFANTRY_UPDATE_TOKEN", "INFANTRY_UPDATE_SOURCE", "INFANTRY_UPDATE_REPO", "INFANTRY_UPDATE_DIR", "INFANTRY_UPDATE_API",

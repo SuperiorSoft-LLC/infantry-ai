@@ -37,11 +37,12 @@ class PluginManagerPortAdapter(private val manager: PluginManager) : PluginManag
         else InspectOutcome(InspectView(i.id, i.version, i.cls.label, i.license, i.signer, i.grants, i.warnings, i.token))
     }
 
-    override fun install(ref: String, consent: Set<String>, token: String?) = manager.install(ref, consent, token).view()
+    // CORE-PROGRESS-DOWNLOAD-1: each change is one task of the core progress system (the running-tasks list, Retry).
+    override fun install(ref: String, consent: Set<String>, token: String?) = manager.track("Installing ${java.io.File(ref.substringAfterLast('/')).name}", ref) { manager.install(ref, consent, token) }.view()
     override fun setEnabled(id: String, enabled: Boolean) = manager.setEnabled(id, enabled).view()
-    override fun update(id: String, consent: Set<String>?) = manager.update(id, consent).view()
-    override fun rollback(id: String) = manager.rollback(id).view()
-    override fun remove(id: String) = manager.remove(id).view()
+    override fun update(id: String, consent: Set<String>?) = manager.track("Updating $id", id) { manager.update(id, consent) }.view()
+    override fun rollback(id: String) = manager.track("Rolling back $id", id) { manager.rollback(id) }.view()
+    override fun remove(id: String) = manager.track("Removing $id", id) { manager.remove(id) }.view()
     override fun sources() = manager.sources().map { SourceView(it.id, it.cls, it.url ?: it.dir.orEmpty(), it.enabled) }
 
     override fun addSource(id: String, cls: String, location: String): ActionResult {

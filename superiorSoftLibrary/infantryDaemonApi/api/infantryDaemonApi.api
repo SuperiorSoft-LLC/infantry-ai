@@ -89,6 +89,7 @@ public abstract interface class com/superiorsoftllc/infantry/daemon/api/DaemonAp
 	public fun getBoard ()Lcom/superiorsoftllc/infantry/daemon/api/board/Board;
 	public fun getBoardRuntime ()Lcom/superiorsoftllc/infantry/daemon/api/board/BoardRuntime;
 	public fun getCapabilities ()Lcom/superiorsoftllc/infantry/daemon/api/capabilities/Capabilities;
+	public fun getDownloads ()Lcom/superiorsoftllc/infantry/daemon/api/downloads/Downloads;
 	public fun getEpics ()Lcom/superiorsoftllc/infantry/daemon/api/board/Epics;
 	public abstract fun getEvents ()Lcom/superiorsoftllc/infantry/daemon/api/Events;
 	public abstract fun getFrames ()Lcom/superiorsoftllc/infantry/daemon/api/Frames;
@@ -100,6 +101,7 @@ public abstract interface class com/superiorsoftllc/infantry/daemon/api/DaemonAp
 	public fun getPlugins ()Lcom/superiorsoftllc/infantry/daemon/api/plugins/PluginCatalogReader;
 	public abstract fun getPolicy ()Lcom/superiorsoftllc/infantry/daemon/api/Policy;
 	public fun getProcesses ()Lcom/superiorsoftllc/infantry/daemon/api/processes/Processes;
+	public fun getProgress ()Lcom/superiorsoftllc/infantry/plugin/api/Progress;
 	public abstract fun getProjects ()Lcom/superiorsoftllc/infantry/daemon/api/Projects;
 	public abstract fun getRoutes ()Lcom/superiorsoftllc/infantry/daemon/api/Routes;
 	public fun getRunnerLinks ()Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinks;
@@ -135,12 +137,14 @@ public final class com/superiorsoftllc/infantry/daemon/api/DaemonApi$DefaultImpl
 	public static fun getBoard (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;)Lcom/superiorsoftllc/infantry/daemon/api/board/Board;
 	public static fun getBoardRuntime (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;)Lcom/superiorsoftllc/infantry/daemon/api/board/BoardRuntime;
 	public static fun getCapabilities (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;)Lcom/superiorsoftllc/infantry/daemon/api/capabilities/Capabilities;
+	public static fun getDownloads (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;)Lcom/superiorsoftllc/infantry/daemon/api/downloads/Downloads;
 	public static fun getEpics (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;)Lcom/superiorsoftllc/infantry/daemon/api/board/Epics;
 	public static fun getLaunchEnv (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;)Lcom/superiorsoftllc/infantry/daemon/api/processes/LaunchEnv;
 	public static fun getMeters (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;)Lcom/superiorsoftllc/infantry/daemon/api/usage/Meters;
 	public static fun getNotifications (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;)Lcom/superiorsoftllc/infantry/plugin/api/Notifications;
 	public static fun getPlugins (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;)Lcom/superiorsoftllc/infantry/daemon/api/plugins/PluginCatalogReader;
 	public static fun getProcesses (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;)Lcom/superiorsoftllc/infantry/daemon/api/processes/Processes;
+	public static fun getProgress (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;)Lcom/superiorsoftllc/infantry/plugin/api/Progress;
 	public static fun getRunnerLinks (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;)Lcom/superiorsoftllc/infantry/daemon/api/runners/RunnerLinks;
 	public static fun getRuns (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;)Lcom/superiorsoftllc/infantry/daemon/api/runs/Runs;
 	public static fun getScope (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;)Lcom/superiorsoftllc/infantry/plugin/api/PluginScope;
@@ -2760,6 +2764,93 @@ public final class com/superiorsoftllc/infantry/daemon/api/capabilities/NoCapabi
 	public fun call (Ljava/lang/String;Lkotlinx/serialization/json/JsonObject;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/daemon/api/capabilities/CapabilityResult;
 	public fun handle (Ljava/lang/String;Lcom/superiorsoftllc/infantry/daemon/api/capabilities/CapabilityHandler;)Ljava/lang/AutoCloseable;
 	public fun list ()Ljava/util/List;
+}
+
+public final class com/superiorsoftllc/infantry/daemon/api/downloads/DownloadRequest {
+	public fun <init> (Ljava/lang/String;Ljava/io/File;Ljava/lang/String;Ljava/util/Map;Ljava/util/Map;Ljava/lang/String;JLcom/superiorsoftllc/infantry/plugin/api/ProgressHandle;Ljava/lang/String;Ljava/lang/String;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/io/File;Ljava/lang/String;Ljava/util/Map;Ljava/util/Map;Ljava/lang/String;JLcom/superiorsoftllc/infantry/plugin/api/ProgressHandle;Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component10 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/io/File;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()Ljava/util/Map;
+	public final fun component5 ()Ljava/util/Map;
+	public final fun component6 ()Ljava/lang/String;
+	public final fun component7 ()J
+	public final fun component8 ()Lcom/superiorsoftllc/infantry/plugin/api/ProgressHandle;
+	public final fun component9 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/io/File;Ljava/lang/String;Ljava/util/Map;Ljava/util/Map;Ljava/lang/String;JLcom/superiorsoftllc/infantry/plugin/api/ProgressHandle;Ljava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/daemon/api/downloads/DownloadRequest;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/daemon/api/downloads/DownloadRequest;Ljava/lang/String;Ljava/io/File;Ljava/lang/String;Ljava/util/Map;Ljava/util/Map;Ljava/lang/String;JLcom/superiorsoftllc/infantry/plugin/api/ProgressHandle;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/daemon/api/downloads/DownloadRequest;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDest ()Ljava/io/File;
+	public final fun getHeaders ()Ljava/util/Map;
+	public final fun getLink ()Ljava/lang/String;
+	public final fun getMaxBytes ()J
+	public final fun getProgress ()Lcom/superiorsoftllc/infantry/plugin/api/ProgressHandle;
+	public final fun getProgressId ()Ljava/lang/String;
+	public final fun getSecretHeaders ()Ljava/util/Map;
+	public final fun getSha256 ()Ljava/lang/String;
+	public final fun getTitle ()Ljava/lang/String;
+	public final fun getUrl ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/daemon/api/downloads/DownloadResponse : java/io/Closeable {
+	public fun <init> (IJLjava/io/InputStream;J)V
+	public synthetic fun <init> (IJLjava/io/InputStream;JILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun close ()V
+	public final fun getBody ()Ljava/io/InputStream;
+	public final fun getLength ()J
+	public final fun getRetryAfterMs ()J
+	public final fun getStatus ()I
+}
+
+public final class com/superiorsoftllc/infantry/daemon/api/downloads/DownloadResult {
+	public fun <init> (ZLjava/io/File;JLjava/lang/String;ILjava/lang/String;ZZI)V
+	public synthetic fun <init> (ZLjava/io/File;JLjava/lang/String;ILjava/lang/String;ZZIILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Z
+	public final fun component2 ()Ljava/io/File;
+	public final fun component3 ()J
+	public final fun component4 ()Ljava/lang/String;
+	public final fun component5 ()I
+	public final fun component6 ()Ljava/lang/String;
+	public final fun component7 ()Z
+	public final fun component8 ()Z
+	public final fun component9 ()I
+	public final fun copy (ZLjava/io/File;JLjava/lang/String;ILjava/lang/String;ZZI)Lcom/superiorsoftllc/infantry/daemon/api/downloads/DownloadResult;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/daemon/api/downloads/DownloadResult;ZLjava/io/File;JLjava/lang/String;ILjava/lang/String;ZZIILjava/lang/Object;)Lcom/superiorsoftllc/infantry/daemon/api/downloads/DownloadResult;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAttempts ()I
+	public final fun getBytes ()J
+	public final fun getCancelled ()Z
+	public final fun getError ()Ljava/lang/String;
+	public final fun getFile ()Ljava/io/File;
+	public final fun getOk ()Z
+	public final fun getRetryable ()Z
+	public final fun getSha256 ()Ljava/lang/String;
+	public final fun getStatus ()I
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class com/superiorsoftllc/infantry/daemon/api/downloads/DownloadTransport {
+	public abstract fun open (Ljava/lang/String;Ljava/util/Map;Ljava/util/Map;J)Lcom/superiorsoftllc/infantry/daemon/api/downloads/DownloadResponse;
+}
+
+public abstract interface class com/superiorsoftllc/infantry/daemon/api/downloads/Downloads {
+	public abstract fun download (Lcom/superiorsoftllc/infantry/daemon/api/downloads/DownloadRequest;)Lcom/superiorsoftllc/infantry/daemon/api/downloads/DownloadResult;
+	public fun transport (Ljava/lang/String;Lcom/superiorsoftllc/infantry/daemon/api/downloads/DownloadTransport;)Ljava/lang/AutoCloseable;
+}
+
+public final class com/superiorsoftllc/infantry/daemon/api/downloads/Downloads$DefaultImpls {
+	public static fun transport (Lcom/superiorsoftllc/infantry/daemon/api/downloads/Downloads;Ljava/lang/String;Lcom/superiorsoftllc/infantry/daemon/api/downloads/DownloadTransport;)Ljava/lang/AutoCloseable;
+}
+
+public final class com/superiorsoftllc/infantry/daemon/api/downloads/NoDownloads : com/superiorsoftllc/infantry/daemon/api/downloads/Downloads {
+	public static final field INSTANCE Lcom/superiorsoftllc/infantry/daemon/api/downloads/NoDownloads;
+	public fun download (Lcom/superiorsoftllc/infantry/daemon/api/downloads/DownloadRequest;)Lcom/superiorsoftllc/infantry/daemon/api/downloads/DownloadResult;
+	public fun transport (Ljava/lang/String;Lcom/superiorsoftllc/infantry/daemon/api/downloads/DownloadTransport;)Ljava/lang/AutoCloseable;
 }
 
 public final class com/superiorsoftllc/infantry/daemon/api/files/DirectoryProjectFiles : com/superiorsoftllc/infantry/daemon/api/files/ProjectFiles {
