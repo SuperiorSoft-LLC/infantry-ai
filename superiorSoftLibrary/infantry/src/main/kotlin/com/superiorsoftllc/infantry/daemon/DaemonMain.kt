@@ -2122,6 +2122,13 @@ class InfantryDaemon(
                 },
             )
 
+            // MODEL-CATALOG-1 (reopened): warm the model catalog at boot, off the start path, so the first caller (a PM's
+            // infantry_list_harnesses, a client's connect burst) is answered from the cache, never from a cold child process.
+            Thread({
+                runCatching { modelCatalog(manager, harnesses, modelCatalogs, catalogCache) }
+                    .onFailure { System.err.println("[infantry] model catalog warm-up failed: ${it.message ?: it::class.simpleName}") }
+            }, "model-catalog-warmup").apply { isDaemon = true }.start()
+
             val server = embeddedServer(CIO, port = boundPort, host = host) {
                 install(WebSockets)
                 install(ContentNegotiation) { json() }
@@ -3014,9 +3021,12 @@ private suspend fun handleConnection(
     // `pi --list-models`, `opencode models` -- bounded at 20 s. Answering it inline on the request loop below made
     // every later request on this connection queue behind the child. One worker per connection answers it off the
     // loop, on IO, in the order the `models` requests arrived; other replies may now overtake a `models` reply.
-    val modelsRequests = Channel<Unit>(Channel.UNLIMITED)
+    // MODEL-CATALOG-1 (reopened): the worker answers with the request's id. Without it a plugin tool's own `models` request
+    // (requestId `plugin:<uuid>`, e.g. infantry_list_harnesses) never reached its waiter and timed out at 20 s every
+    // time, however fast the catalog was; only clients that match a reply by its type (the CLI, the UI) got the list.
+    val modelsRequests = Channel<String?>(Channel.UNLIMITED)
     val modelsWorker = session.launch(kotlinx.coroutines.Dispatchers.IO) {
-        for (unused in modelsRequests) {
+        for (requestId in modelsRequests) {
             val answer = try {
                 Envelope(
                     Envelope.MODELS,
@@ -3029,7 +3039,7 @@ private suspend fun handleConnection(
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 Envelope(Envelope.ERROR, "models failed: ${e.message ?: e::class.simpleName}")
             }
-            outgoing.trySend(answer)
+            outgoing.trySend(answer.copy(requestId = requestId))
         }
     }
 
@@ -3632,13 +3642,14 @@ private suspend fun handleConnection(
 
                 // Answered by [modelsWorker], off this loop (BUG-ModelsHeadOfLine).
                 Envelope.MODELS -> {
-                    modelsRequests.trySend(Unit)
+                    modelsRequests.trySend(envelope.requestId)
                     null
                 }
 
                 // U1 (contract 1.59.0): a live read can take 12 s per source, so it is answered off the request loop.
                 Envelope.LIMITS -> {
-                    session.launch(kotlinx.coroutines.Dispatchers.IO) { outgoing.trySend(limitsEnvelope(limits.snapshot())) }
+                    val requestId = envelope.requestId
+                    session.launch(kotlinx.coroutines.Dispatchers.IO) { outgoing.trySend(limitsEnvelope(limits.snapshot()).copy(requestId = requestId)) }
                     null
                 }
 

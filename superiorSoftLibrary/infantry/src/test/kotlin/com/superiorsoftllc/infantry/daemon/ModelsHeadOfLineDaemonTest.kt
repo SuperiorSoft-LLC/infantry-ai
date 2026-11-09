@@ -145,6 +145,35 @@ class ModelsHeadOfLineDaemonTest {
     }
 
     /**
+     * MODEL-CATALOG-1 (reopened): a `models` request that carries an id is answered with that id. A daemon plugin tool
+     * (infantry_list_harnesses) sends its own `models` request as `plugin:<uuid>` and waits for exactly that id; the
+     * worker answered without it, so the tool timed out at 20 s every time ("models got no answer in 20000 ms") while
+     * the CLI and the UI, which match a reply by its type, still saw the list.
+     */
+    @Test
+    fun aModelsRequestWithAnIdIsAnsweredWithThatId() {
+        val registry = HarnessRegistry().also { it.register(StubCatalogHarness.plugin("claude")) }
+        val fixture = DaemonFixture.launch(
+            harnesses = registry,
+            modelCatalogs = HarnessModelCatalogs(
+                mapOf("claude" to HarnessModelCatalog { listOf(ProviderModels("claude", "acme", "acme", listOf("opus"))) }),
+            ),
+            modelCatalogCache = ModelCatalogCache(ttlMs = { 60_000 }, waitMs = { 2_000 }),
+        )
+        try {
+            fixture.client.await(Envelope.READY)
+            fixture.send(Envelope(Envelope.MODELS, requestId = "plugin:models-1"))
+            val answer = fixture.client.await(Envelope.MODELS)
+            assertEquals("plugin:models-1", answer.requestId, "the models answer echoes its request's id")
+            val rows = json.decodeFromString(ListSerializer(ProviderModels.serializer()), answer.data)
+            assertEquals(listOf("opus"), rows.filter { it.provider == "claude" }.flatMap { it.models })
+        } finally {
+            fixture.stop()
+            fixture.deleteState()
+        }
+    }
+
+    /**
      * Asks again (bounded) until the cached pi listing has landed; returns it and the next occurrence index to read,
      * because the fixture's [DaemonFixture.client] answers are indexed, not consumed.
      */
