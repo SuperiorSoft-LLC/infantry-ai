@@ -405,7 +405,7 @@ internal object Cli {
                 if (command != "runner" && command != "settings") t
                 else Target(t.url, t.token, t.tokenSource, t.answerTimeoutMs, com.superiorsoftllc.infantry.daemon.OwnerCredential.stored(
                     com.superiorsoftllc.infantry.session.stateDir { getenv(it) ?: com.superiorsoftllc.infantry.session.infantrySetting(it) },
-                ))
+                ), t.sessionId)
             }
         }
         val target = try {
@@ -4662,7 +4662,10 @@ internal object Cli {
                 ?: (null to "endpoint '${endpoint.name}', which names no token file")
             else -> environmentToken(getenv, installedStateDir(getenv))
         }
-        return Target(url = url, token = token, tokenSource = source, answerTimeoutMs = answerTimeoutMs(getenv))
+        return Target(
+            url = url, token = token, tokenSource = source, answerTimeoutMs = answerTimeoutMs(getenv),
+            sessionId = getenv(AccessPolicy.SESSION_ID_ENV)?.trim()?.takeIf { it.isNotEmpty() },
+        )
     }
 
     /** BUG-G2d: the daemon URL [args] would connect to under [getenv], or null for unusable args. Contacts nothing. */
@@ -6356,6 +6359,12 @@ internal class Target(
     val answerTimeoutMs: Long = ANSWER_TIMEOUT_MS,
     /** RUNNER-POOL-6a: the owner token, sent as [com.superiorsoftllc.infantry.daemon.OwnerCredential.HEADER]; null = not the owner. */
     val ownerToken: String? = null,
+    /**
+     * RUNNER-DONE-1: the agent session this CLI or MCP server runs in (`INFANTRY_SESSION_ID`), sent as the session header so a
+     * runner daemon forwards the frames of a session its remote orchestrator started (a `ticket_list` names no session). Null =
+     * not inside a session.
+     */
+    val sessionId: String? = null,
 )
 
 /** The daemon refused this client's credential (HTTP 401 or 403). Never retried. */
@@ -6799,6 +6808,7 @@ private fun openLinkOnce(target: Target): Link {
     val builder = HttpClient.newBuilder().connectTimeout(java.time.Duration.ofSeconds(10)).build().newWebSocketBuilder()
     target.token?.let { builder.header("Authorization", "Bearer $it") }
     target.ownerToken?.let { builder.header(com.superiorsoftllc.infantry.daemon.OwnerCredential.HEADER, it) }
+    target.sessionId?.let { builder.header(com.superiorsoftllc.infantry.runners.FrameForwarder.SESSION_HEADER, it) }
     val socket = try {
         builder.buildAsync(URI.create(target.url), recorder).get(15, java.util.concurrent.TimeUnit.SECONDS)
     } catch (e: java.util.concurrent.ExecutionException) {

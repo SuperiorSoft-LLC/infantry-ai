@@ -96,8 +96,34 @@ class FrameForwarder(
     /** Frames held now (for a test or the log). */
     fun held(): Int = lock.withLock { pending.size }
 
-    private companion object {
-        const val MS_PER_SECOND = 1000L
+    companion object {
+        private const val MS_PER_SECOND = 1000L
+
+        /**
+         * RUNNER-DONE-1: the agent session a client frame speaks for, which decides whether it is forwarded. First the session the
+         * frame names, then the one this connection drives ([active]), then a tool call's `client.sessionId`, then the session the
+         * client declared when it connected ([declared], the [SESSION_HEADER] the CLI and the MCP server send from
+         * `INFANTRY_SESSION_ID`). A worker's `ticket move` looks its ticket up with a `ticket_list` that names no session, and its MCP
+         * tools send `plugin_tool_call` with the session only inside `client`: without the last two, neither was forwarded and the
+         * runner answered them itself ("runner mode"), so a remote worker could never move its ticket to done.
+         * Only who is asking comes from here; the orchestrator still checks the session is one it placed on THIS runner.
+         */
+        fun callerSession(type: String, data: String, sessionId: String?, active: String?, declared: String?): String? =
+            sessionId?.takeIf { it.isNotBlank() }
+                ?: active?.takeIf { it.isNotBlank() }
+                ?: toolClientSession(type, data)
+                ?: declared?.trim()?.takeIf { it.isNotEmpty() }
+
+        /** The header a client names its own agent session in (the same one the watch hooks read). */
+        const val SESSION_HEADER = com.superiorsoftllc.infantry.daemon.WatchHooks.SESSION_HEADER
+
+        /** A `plugin_tool_call`'s `client.sessionId`; null for any other frame or when it names none. */
+        internal fun toolClientSession(type: String, data: String): String? {
+            if (type != ForwardedFrameGate.PLUGIN_TOOL_CALL) return null
+            val call = runCatching { Json.parseToJsonElement(data) as? JsonObject }.getOrNull() ?: return null
+            val client = call["client"] as? JsonObject ?: return null
+            return (client["sessionId"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.isNotBlank() }
+        }
     }
 }
 
@@ -142,12 +168,7 @@ class ForwardedFrameGate(
         }
     }
 
-    private fun clientSession(frame: ForwardedFrame): String? {
-        if (frame.type != PLUGIN_TOOL_CALL) return null
-        val call = runCatching { json.parseToJsonElement(frame.data) as? JsonObject }.getOrNull() ?: return null
-        val client = call["client"] as? JsonObject ?: return null
-        return (client["sessionId"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.isNotBlank() }
-    }
+    private fun clientSession(frame: ForwardedFrame): String? = FrameForwarder.toolClientSession(frame.type, frame.data)
 
     private fun shown(s: String?) = s.orEmpty().filter { it in ' '..'~' }.take(SHOWN_CHARS)
 
@@ -155,7 +176,6 @@ class ForwardedFrameGate(
         const val ERROR = "error"
         const val PLUGIN_TOOL_CALL = "plugin_tool_call"
         private const val SHOWN_CHARS = 64
-        private val json = Json { ignoreUnknownKeys = true }
     }
 }
 
