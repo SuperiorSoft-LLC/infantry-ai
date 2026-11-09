@@ -3223,6 +3223,14 @@ private suspend fun handleConnection(
                 outgoing.trySend(Envelope(Envelope.ERROR, why, requestId = envelope.requestId))
                 continue
             }
+            // RUNNER-SETTINGS-OWNER-1: owner-only setting keys (runner trust keys) are writable only with the owner credential.
+            if (envelope.type == Envelope.SETTINGS_SET) {
+                val key = runCatching { SettingsSet.decode(envelope.data).key }.getOrNull()
+                FrameGate.settingRefusal(envelope.type, key, owner)?.let { why ->
+                    outgoing.trySend(Envelope(Envelope.ERROR, why, requestId = envelope.requestId))
+                    continue
+                }
+            }
             // DAEMON-PLUGINS-1 (`frameGate`, fail closed): the plugins' own gates (a seated lockdown scopes frames here).
             plugins.frameRefusal(envelope, caller)?.let { reason ->
                 outgoing.trySend(Envelope(Envelope.ERROR, reason).copy(requestId = envelope.requestId))

@@ -28,6 +28,25 @@ object FrameGate {
         com.superiorsoftllc.infantry.runners.RunnerLinkService.ADMIN,
     )
 
+    /**
+     * RUNNER-SETTINGS-OWNER-1: setting keys (exact, or a prefix ending in `.`) only an owner connection may WRITE through
+     * `settings_set`; a read stays open. The runner's trust keys: its grants, harness allow-list, limits and link settings.
+     */
+    val OWNER_ONLY_SETTING_KEYS: Set<String> = setOf(
+        "runner.", "limits.runners.", "runners.enabled", "runners.advertiseHosts", "runners.fingerprint",
+    )
+
+    fun isOwnerOnlySetting(key: String): Boolean {
+        val k = key.trim()
+        return OWNER_ONLY_SETTING_KEYS.any { if (it.endsWith(".")) k.startsWith(it, ignoreCase = true) else k.equals(it, ignoreCase = true) }
+    }
+
+    /** Why [envelope] is refused for a non-owner: a `settings_set` of an [OWNER_ONLY_SETTING_KEYS] key; null otherwise. */
+    fun settingRefusal(type: String, key: String?, owner: Boolean): String? =
+        if (!owner && type == Envelope.SETTINGS_SET && key != null && isOwnerOnlySetting(key))
+            "settings_set refused: ${shown(key)} needs the owner credential (${OwnerCredential.HEADER}); agents do not hold it"
+        else null
+
     /** Why a frame of [type] is refused on this connection, or null when it may be dispatched. */
     fun refusal(type: String, owner: Boolean, pluginOwnerOnly: Boolean = false): String? = when {
         !owner && (type in OWNER_ONLY || pluginOwnerOnly) -> "${shown(type)} refused: it needs the owner credential (${OwnerCredential.HEADER}); agents do not hold it"
