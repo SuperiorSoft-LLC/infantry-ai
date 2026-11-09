@@ -203,6 +203,8 @@ class PluginManager(
     private val hot: PluginHotApply? = null,
     /** PLUGIN-HOTSWAP-2: age after which a cached catalog is refreshed (`limits.plugins.catalogStaleMs`). */
     private val catalogStaleMs: () -> Long = { com.superiorsoftllc.infantry.settings.LimitRegistry.PLUGIN_CATALOG_STALE_MS.default },
+    /** BUG PLUGIN-SOURCE-REFRESH-FREEZE-1: the most a whole refresh waits (`limits.plugins.refreshTimeoutMs`). */
+    private val refreshTimeoutMs: () -> Long = { com.superiorsoftllc.infantry.settings.LimitRegistry.PLUGIN_REFRESH_TIMEOUT_MS.default },
     /** PLUGIN-REPO-1: the releases API a list entry's `repo` resolves against (`urls.pluginReleasesApi`; env wins). */
     private val releasesApi: () -> String = {
         com.superiorsoftllc.infantry.settings.EndpointRegistry.resolve(
@@ -290,12 +292,27 @@ class PluginManager(
     private data class Loaded(val source: CatalogSource, val catalog: Catalog, val base: String, val stale: Boolean)
 
     /** Fetches url sources into the cache (an offline source keeps its cache, marked stale); dir sources need no network. Never throws. */
-    fun refresh(sourceId: String? = null): List<SourceRefresh> =
-        sources().filter { it.enabled && (sourceId == null || it.id == sourceId) }.map { s ->
-            val r = load(s, refresh = true)
-            if (r == null) SourceRefresh(s.id, false, false, 0, "no catalog (offline and not cached, or unreadable)")
-            else SourceRefresh(s.id, !r.stale, r.stale, r.catalog.plugins.size, if (r.stale) "offline: using the cached catalog" else "ok")
-        }
+    fun refresh(sourceId: String? = null): List<SourceRefresh> {
+        val list = sources().filter { it.enabled && (sourceId == null || it.id == sourceId) }
+        if (list.isEmpty()) return emptyList()
+        val pool = java.util.concurrent.Executors.newFixedThreadPool(minOf(list.size, 8)) { r -> Thread(r, "plugin-refresh").apply { isDaemon = true } }
+        try {
+            val futures = list.map { s -> s to pool.submit<SourceRefresh> {
+                val r = load(s, refresh = true)
+                if (r == null) SourceRefresh(s.id, false, false, 0, "no catalog (offline and not cached, or unreadable)")
+                else SourceRefresh(s.id, !r.stale, r.stale, r.catalog.plugins.size, if (r.stale) "offline: using the cached catalog" else "ok")
+            } }
+            val limit = refreshTimeoutMs()
+            val deadline = System.nanoTime() + limit * 1_000_000
+            return futures.map { (s, f) ->
+                try { f.get(maxOf(0L, deadline - System.nanoTime()), java.util.concurrent.TimeUnit.NANOSECONDS) }
+                catch (e: Exception) {
+                    f.cancel(true)
+                    SourceRefresh(s.id, false, false, 0, "timed out after ${limit / 1000}s (limits.plugins.refreshTimeoutMs); the cached copy, if any, is kept")
+                }
+            }
+        } finally { pool.shutdownNow() }
+    }
 
     /**
      * PLUGIN-SOURCES-1: refreshes only the url sources whose cached catalog is missing or older than [maxAgeMs], so opening the
