@@ -20,6 +20,30 @@ Run from the repository root (JDK 21; the modules use `jvmToolchain(21)`).
   use it to check the UI works before touching real CLIs.
 - Other entry points: `:superiorSoftLibrary:infantry:runClient` (CLI client), `installDist` (an `infantry` binary).
 
+### `infantry` from any terminal (CLI-PATH-1)
+
+`installDist` writes `build/install/infantry/bin/infantry` (plus `infantry.bat` and the deprecated `agenthq` copies).
+Nothing puts that folder on a PATH; one command does, for YOUR user only (never the machine PATH, so no administrator):
+
+```
+./gradlew :superiorSoftLibrary:infantry:installDist
+build/install/infantry/bin/infantry install-cli      # then open a NEW terminal and type: infantry health
+build/install/infantry/bin/infantry uninstall-cli    # take it off again
+```
+
+An installed desktop app needs none of that: at every start it keeps its own launcher folder
+(`<install>\app\resources`) on the user PATH, which is also how the entry survives an update. The switch is the setting
+`paths.addCli` (on by default): `infantry settings set paths.addCli false` makes the next start remove the entry.
+
+- Windows: the **user** environment (`HKCU\Environment`, value `Path`) plus a `WM_SETTINGCHANGE` broadcast. macOS/Linux:
+  one marked block in your own shell profile (`~/.zshrc`, `~/.bashrc`, `~/.bash_profile` or `~/.profile`). The Docker
+  image already sets `PATH=/opt/infantry/bin:$PATH`.
+- A running terminal keeps the PATH it started with: open a **new** one (both commands say so).
+- `infantry health` prints a `CLI:` line: whether the entry is there, where it points, and whether that folder still
+  holds a launcher. `--dry-run` shows what `install-cli` would write. `INFANTRY_CLI_PATH_FILE=<file>` sends the write to
+  that file instead of the machine's environment (containers, CI, tests).
+- Full reference: [docs/wiki/CommandLine.md](../../../docs/wiki/CommandLine.md).
+
 ### Ports: one fixed port per use
 
 | Port | Who binds it |

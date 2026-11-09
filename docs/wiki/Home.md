@@ -11,6 +11,7 @@ These pages are written from the code on the dev head. Where an older document d
 wins, and the page says so.
 
 - [Architecture](Architecture.md): the three layers, the daemon, the protocol, a request from click to daemon and back, slots, scripting.
+- [Command line](CommandLine.md): `infantry` from any terminal after an install (`install-cli` / `uninstall-cli`, what each OS writes).
 - [Recipes](recipes/README.md): worked how-to-add-X guides (UI plugin, child plugin, daemon tool, setting, Lua hook, harness, provider).
 - [Plugins](Plugins.md): `module.json`, the UI and daemon halves, block types, panels and slots, config fields, building, installing, signing, and a hello plugin step by step.
 - [Plugin lifecycle](Plugin-lifecycle.md): live swap of one plugin (install, update, enable, disable, remove), `PluginScope`, the leak check, and the do and don't for authors.

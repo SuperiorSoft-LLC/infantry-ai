@@ -23,7 +23,8 @@ Exit code of the CLI: 0 daemon up, 1 down.
   with the socket's close cause.
 - **environment**: OS and arch, the shells and their syntax caveats, project and worktree path, git branch, JDK, the Gradle
   version the wrapper pins, the OWNER's off-limits ports (8787, 8788, 8797, 8798), the free test range (18900-18999),
-  installed harnesses, the state dir. All read by the daemon.
+  installed harnesses, the state dir, and the `CLI:` line (whether `infantry` is on this machine's user PATH, where that
+  entry points and whether it still resolves; CLI-PATH-1, [Command line](CommandLine.md)). All read by the daemon.
 - **recent restarts / disconnects**: the last 20 events of the log.
 
 ## Files (in `<stateDir>/health/`)

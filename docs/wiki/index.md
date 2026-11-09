@@ -11,6 +11,7 @@ Every page of this wiki is listed here, one line each. The pages are written fro
 
 - [Home](Home.md): the wiki front page, how the pages were checked, how to support the project.
 - [Architecture](Architecture.md): the three layers, the daemon, the protocol, a request from click to daemon and back, slots, scripting.
+- [Command line](CommandLine.md): `infantry` on your PATH after an install, `install-cli` / `uninstall-cli`, what each OS writes.
 
 ## Build plugins
 

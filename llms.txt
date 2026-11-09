@@ -9,6 +9,7 @@ Read AGENTS.md first. Facts in these docs come from the code; where an older des
 - [AGENTS.md](AGENTS.md): the guide for AI coding agents: rules, repo layout, build and test commands, where each change goes.
 - [Architecture](docs/wiki/Architecture.md): the three layers, the daemon, the protocol, the request flow from a click to the daemon and back, slots and child plugins, scripting.
 - [Recipes](docs/wiki/recipes/README.md): worked "how to add X" guides with the exact files to touch.
+- [Command line](docs/wiki/CommandLine.md): `infantry` from any terminal after an install (`install-cli` / `uninstall-cli`, what each OS writes).
 
 ## Build plugins
 

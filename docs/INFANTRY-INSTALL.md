@@ -85,6 +85,27 @@ pointing there falls back to the default, with a warning in the log). If you cho
 itself as the install folder, the state dir moves to `%APPDATA%\SuperiorSoft\InfantryAI`. The first log line says
 both: `[infantry-install] app=<install dir> state=<state dir> port=<port>`.
 
+### `infantry` from any terminal (CLI-PATH-1)
+
+The installed app ships the `infantry` CLI in `<install>\app\resources` (`infantry.cmd`, an `infantry` sh shim for Git
+Bash, `infantry.ps1` where PowerShell may run scripts, plus the deprecated `agenthq` copies). At **every start** the
+installed app makes sure that folder is on the **user** PATH - never the machine PATH, so no administrator is needed -
+and that is also how the entry survives an update: an upgrade uninstalls the old version and its install folder first,
+and the new version re-writes the entry, replacing one that pointed at a folder that is gone.
+
+- Windows: `HKCU\Environment`, value `Path`, written with its existing type (an expandable `%USERPROFILE%` PATH stays
+  expandable), followed by a `WM_SETTINGCHANGE` broadcast. Open a **new** terminal afterwards: a running one keeps the
+  PATH it started with.
+- The switch is the setting `paths.addCli` (app scope, on by default): `infantry settings set paths.addCli false` makes
+  the next start REMOVE the entry instead. `infantry install-cli` / `infantry uninstall-cli` do it immediately by hand.
+- `infantry health` shows the result: `CLI: infantry is on your user PATH (HKCU\Environment) at <folder>`, or the
+  command to run when it is not.
+- Nothing about the MSI itself changed: jpackage through Compose Desktop offers no WiX source hook (its `--resource-dir`
+  is Compose's own temporary folder, and jpackage only lets a resource dir override `main.wxs`/`overrides.wxi`), so the
+  entry cannot be an MSI `Environment` row. Consequence for a real install: uninstalling without starting the app again
+  leaves one PATH entry pointing at the deleted folder (harmless - Windows and POSIX shells skip a missing folder) until
+  `infantry uninstall-cli` or the next install. Page: [docs/wiki/CommandLine.md](../wiki/CommandLine.md).
+
 ## What the installed app uses
 
 | | Installed app | Dev setup (untouched) |

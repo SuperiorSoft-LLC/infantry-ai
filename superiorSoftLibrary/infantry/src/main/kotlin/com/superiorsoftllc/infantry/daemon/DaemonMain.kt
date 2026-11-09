@@ -783,6 +783,9 @@ class InfantryDaemon(
             }
             // BUG-M2-11b-2: `session.keepAliveMinutes` decides, per launch, whether a session's process is kept (plan section 8).
             val settings = SettingsService(store)
+            // CLI-PATH-1: an INSTALLED app keeps `infantry` on the user's PATH (setting paths.addCli, default on) and heals
+            // the entry after an update that moved the install folder. Dev runs, test daemons and containers never write it.
+            CliPathAuto.applyAtStart(settings, InfantryBin.resolve())
             // RUNNER-POOL-10: a value that is no mode refuses the start, here, before anything else is wired.
             val deploymentMode = mode ?: DeploymentMode.resolve(infantrySetting(DeploymentMode.ENV) ?: System.getProperty(DeploymentMode.PROPERTY), null, settings.daemonMode())
             // STALL-3: the hooks and the process watch read the tool profiles in force from here on (refreshed per launch).
