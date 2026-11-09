@@ -3,7 +3,10 @@
 package com.superiorsoftllc.infantry.plugins.official.mascot
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -25,18 +28,21 @@ const val MASCOT_NODE = "infantry.mascot"
 /** MASCOT-2: how long the mascot is Happy after a clean finish, when motion is live. */
 const val HAPPY_MS = 3_000L
 
+/** MASCOT-LIVE-1: how long a static avatar morphs into a new pose after its state changes, then freezes again. */
+const val SETTLE_MS = 900L
+
 /** MASCOT-2: the `mascot` avatar style. Static by default (one frame per state); loops only as `mascot.motion` allows. */
 object MascotAvatarRenderer : AgentAvatarRenderer {
     @Composable
     override fun Draw(request: AvatarRequest, modifier: Modifier) {
         val cfg = LocalShellContext.current?.config?.values(MASCOT_NODE)
-        DrawMascot(request, cfg?.string("mascot.motion") ?: "static", cfg?.string("mascot.stateMap"), cfg?.string("mascot.roleLooks"), modifier)
+        DrawMascot(request, cfg?.string("mascot.motion") ?: "static", cfg?.string("mascot.stateMap"), cfg?.string("mascot.roleLooks"), modifier, (cfg?.int("mascot.settleMs") ?: SETTLE_MS.toInt()).toLong())
     }
 }
 
 /** MASCOT-3: the drawing with the settings passed in, so a perf test can run it per motion mode without a shell. */
 @Composable
-internal fun DrawMascot(request: AvatarRequest, mode: String, stateText: String?, looksText: String?, modifier: Modifier) {
+internal fun DrawMascot(request: AvatarRequest, mode: String, stateText: String?, looksText: String?, modifier: Modifier, settleMs: Long = SETTLE_MS) {
     run {
         val live = MascotMapping.live(mode, request.motion)
         val map = remember(stateText) { MascotMapping.parseStateMap(stateText) }
@@ -53,14 +59,23 @@ internal fun DrawMascot(request: AvatarRequest, mode: String, stateText: String?
         val state = MascotMapping.stateFor(request, map, happy)
         val body = parseHexColor(request.catalogColor)?.let { Color(it) }
             ?: Color.hsv(roleHue(request.role ?: request.label), 0.55f, 0.55f)
+        // MASCOT-LIVE-1: a static avatar still morphs into a new pose (a short settle window after a state change), then
+        // freezes again, so it is one tick per change, never a loop. It was a snapshot swap before.
+        var shown by remember { mutableStateOf(state) }
+        var settling by remember { mutableStateOf(false) }
+        if (!live && shown != state) { shown = state; settling = settleMs > 0 }
+        LaunchedEffect(state) {
+            if (settling) {
+                delay(settleMs)
+                settling = false
+            }
+        }
+        val animating = live || settling
         val config = MascotConfig(
-            state = state, initialState = state, color = body, size = request.sizeDp.dp, motion = live,
+            state = state, initialState = if (animating) shown else state, color = body, size = request.sizeDp.dp, motion = animating,
             energy = 1.3f, eyeStyle = look.eyes, finish = look.finish, cat = look.cat,
         )
         val description = request.label.ifBlank { request.role }
-        // Frozen: a new engine per state, so the pose is the settled one and nothing ticks.
-        if (live) MaterialBot(config, modifier, description) else key(state) {
-            MaterialBot(config, modifier, description, frozen = true)
-        }
+        MaterialBot(config, modifier, description, frozen = !animating)
     }
 }

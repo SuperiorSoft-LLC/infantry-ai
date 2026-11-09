@@ -129,6 +129,9 @@ public fun MaterialBot(
 
     LaunchedEffect(shownState) {
         if (engine.state != shownState) {
+            // MASCOT-LIVE-1: a bot that was frozen and now morphs waits one frame so the ticker has set the clock; the
+            // morph then starts from now, not from the stale frozen time (which would finish it at once: a snapshot).
+            if (!frozen) withFrameNanos { }
             // Read inside the effect, not in composition: same current value,
             // without subscribing the composable to the per-frame ticker.
             engine.setState(shownState, frameMs.longValue)
