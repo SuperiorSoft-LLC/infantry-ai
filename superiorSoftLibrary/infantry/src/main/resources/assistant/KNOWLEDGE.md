@@ -79,6 +79,18 @@ The Assistant can do any of these steps for you: just ask.
 - **Is it free?** It is a private prototype today. **TODO (owner): pricing and license wording.** No license is chosen yet.
 - **Where are my settings?** The gear, bottom right. The CLI covers the same ground (`infantry --help`).
 
+## Plugins from the catalog (community tier)
+
+Rules learned shipping Mascot (the avatar plugin). Agents and the Assistant must follow them.
+
+- **Where they land.** Catalog installs go to `plugins/community/` and run in the community tier: the plugin class loader hides host packages (e.g. `ui.shell`). Only seam types visible by exact name work (for avatars: `AgentAvatarRenderer`, `AvatarRequest`, `AvatarMotion`). A renderer reads its settings through `moduleConfig(nodeId)`.
+- **Config node naming.** A community plugin may declare settings only on its own tabs, on nodes named `<ModuleName>.<x>` (e.g. `Infantry_Mascot.avatars`), or on nodes the host granted. Anything else is silently dropped: no warning, the setting just never appears. Renaming a node loses the device-scope values saved under the old name (no migration).
+- **Rebuild on host change.** A published plugin jar is a snapshot. When the host rules change (class visibility, node rules), rebuild and republish the plugin; an old jar then fails on a new app (this was the real cause of "Mascot switch does nothing").
+- **Fallback.** If a community avatar renderer fails to load (`NoClassDefFoundError`), the app falls back to Portrait.
+- **Publish procedure (only on the owner's explicit yes).** 1) bump the version in the plugin's `module.json`, 2) build the jar, 3) attach it as a release asset on `SuperiorSoft-LLC/infantry-plugins`, 4) add `community/<Plugin>.json` on main with size and sha256, 5) hand-push `community.json` to `gh-pages` (the publish workflow cannot deploy). Users then press Plugins > Sources > Refresh (the app caches the catalog) before Update turns active.
+- **Live proof before "done".** Merged is not verified. Test in a real app window against the published catalog: install or update the plugin, switch the setting, confirm the visible change, restart and confirm it persisted. Say "merged, not verified" until you did.
+- **Mascot settings** (Configuration > Plugins > "Mascot avatars", node `Infantry_Mascot.avatars`): Motion (Static default / Focus only / Everywhere), Pose change ms, State map (`SESSION_STATE=Mood;...`, default `STARTING=Greet;BUSY=Working;WAITING_INPUT=Notify;IDLE=Idle;EXITED=Sleepy;ORPHANED=Confused;FAILED=Alert`), Idle fidget seconds, Role looks (`role=eyes/finish/cat`). The avatar style itself is chosen in the avatar picker; Mascot must be installed and enabled first.
+
 ## Troubleshooting
 
 - **The app says reconnecting / daemon not reachable.** Restart the app. A taken port does not stop the daemon: it moves

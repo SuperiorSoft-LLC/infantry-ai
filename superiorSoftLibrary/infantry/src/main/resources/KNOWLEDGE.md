@@ -30,3 +30,6 @@ The UI always adds an "Other" row where the owner types their own answer, whatev
 
 ## TO-DO LIST <!-- skip: pm,architect -->
 Keep your own to-do list current with your harness's to-do tool (claude `TaskCreate`/`TaskUpdate`, opencode and pi `todowrite`; always send the FULL list). Make it when the task has more than two steps, keep exactly one item `in_progress`, and mark an item `completed` as soon as it is really done, never ahead of time. The owner sees it as the to-do box next to the reasoning button, and it drives your progress bar (N of M done) whenever you are not reporting progress yourself; your own `infantry run` markers or `infantry_progress` reports take precedence while they run.
+
+## COMMUNITY PLUGINS
+Catalog plugins run in the community tier: settings only on nodes named `<ModuleName>.<x>` (others are silently dropped), host packages are hidden, and a plugin jar must be rebuilt and republished when host rules change. Publishing needs the owner's explicit yes; "done" needs live proof in a real window, not just a merge. Full rules and the Mascot settings: assistant/KNOWLEDGE.md, section "Plugins from the catalog".
