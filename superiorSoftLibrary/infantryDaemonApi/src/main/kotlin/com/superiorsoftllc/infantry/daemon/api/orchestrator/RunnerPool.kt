@@ -69,8 +69,16 @@ data class StartWorktree(val path: String, val branch: String, val base: String,
  * The answer to [RunnerLink.startSession]: the session started ([sessionId]), a refusal ([refusal], the spec named an unknown agent
  * or role, a project it does not belong to, ...), or neither when the spec names no agent and no role (nothing to bind yet).
  * RUNNER-POOL-6: [branch] / [base] are the ticket branch a remote runner cut or reused (null for a start with no git remote).
+ * RUNNER-WORKTREE-PATH-1: [worktreePath] is where that branch is checked out ON THE RUNNER (a path on the runner's disk, never one
+ * on the orchestrator's); null for a start with no worktree, or from a runner too old to send it.
  */
-data class SessionRef(val sessionId: String? = null, val refusal: String? = null, val branch: String? = null, val base: String? = null)
+data class SessionRef(
+    val sessionId: String? = null,
+    val refusal: String? = null,
+    val branch: String? = null,
+    val base: String? = null,
+    val worktreePath: String? = null,
+)
 
 /**
  * RUNNER-POOL-6: one event of a session a runner runs for its orchestrator: [kind] [STATUS] (payload = state) or [FINISHED] (payload =
@@ -144,7 +152,7 @@ class LocalRunnerLink(private val services: LocalRunnerServices) : RunnerLink {
 
     override fun startSession(spec: StartSpec): OrchestratorReply<SessionRef> =
         try {
-            OrchestratorReply.Ok(SessionRef(sessionId = services.start(spec), branch = spec.worktree?.branch, base = spec.worktree?.base))
+            OrchestratorReply.Ok(SessionRef(sessionId = services.start(spec), branch = spec.worktree?.branch, base = spec.worktree?.base, worktreePath = spec.worktree?.path))
         } catch (e: IllegalArgumentException) {
             OrchestratorReply.Ok(SessionRef(refusal = e.message ?: "start refused"))
         }

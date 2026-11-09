@@ -151,7 +151,7 @@ class LocalBoardHost(
                 val ref = reply.value
                 val id = ref.sessionId ?: return SessionStartResult.Refused("runner $runner refused the start: ${ref.refusal ?: "no session"}")
                 pool.placed(id, runner)
-                remotePlaced(id, com.superiorsoftllc.infantry.runners.RemoteSessionMirror.Placed(request.providerId.orEmpty(), request.model, checkout.path, ref.branch, request.ticketId))
+                remotePlaced(id, com.superiorsoftllc.infantry.runners.RemoteSessionMirror.Placed(request.providerId.orEmpty(), request.model, checkout.path, ref.branch, request.ticketId, ref.worktreePath))
                 SessionStartResult.Started(
                     SessionView(
                         id = id, agentId = request.agentId, role = request.role, provider = request.providerId.orEmpty(), model = request.model,

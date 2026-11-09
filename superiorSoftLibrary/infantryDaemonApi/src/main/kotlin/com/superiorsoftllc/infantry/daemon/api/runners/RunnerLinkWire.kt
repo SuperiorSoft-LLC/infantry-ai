@@ -144,9 +144,18 @@ object RunnerLinkWire {
         val pushOnCommit: Boolean = false,
     )
 
-    /** [branch] / [base] are the ticket branch the runner cut or reused (null without a git remote). */
+    /**
+     * [branch] / [base] are the ticket branch the runner cut or reused (null without a git remote). RUNNER-WORKTREE-PATH-1 (additive):
+     * [worktreePath] is that branch's worktree on the runner's disk; an older runner omits it.
+     */
     @Serializable
-    data class StartAnswer(val sessionId: String? = null, val refusal: String? = null, val branch: String? = null, val base: String? = null)
+    data class StartAnswer(
+        val sessionId: String? = null,
+        val refusal: String? = null,
+        val branch: String? = null,
+        val base: String? = null,
+        val worktreePath: String? = null,
+    )
 
     @Serializable
     data class StopRequest(val sessionId: String, val reason: String? = null, val force: Boolean = false, val ticketId: String? = null)
