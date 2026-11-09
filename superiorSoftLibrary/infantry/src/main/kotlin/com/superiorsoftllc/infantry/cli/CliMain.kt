@@ -244,6 +244,7 @@ fun main(args: Array<String>) {
  * infantry threads              my conversations: who else is in each, how many messages, when last
  * infantry thread <id>          one conversation, message by message in thread order
  * infantry waiting              every open question on this daemon and who each is waiting on
+ * infantry waiting on|off|show  flag THIS session "active but waiting" (--reason "..." [--minutes N]), or clear/read it (WAITING-FLAG-1)
  * infantry knowledge            the project's knowledge at a glance: notes, live decisions, open issues (P10-K8)
  * infantry memory index|show|search|save   the project's memory notes (P10-K3)
  * infantry decision list|show|add          the project's append-only decisions log (P10-K5)
@@ -294,6 +295,14 @@ internal object Cli {
         if (args.firstOrNull() == "watch-file") return run(arrayOf("bg") + args, out, err, getenv, input, cwd, rawInput)
         // Contract 1.117.0: `progress ...` and `run -- <cmd...>` never meet the global flag parser either, and never fail
         // outside Infantry AI: no session, no daemon or a bad connection option all mean "report nothing".
+        // WAITING-FLAG-1: `waiting on|off|show` flags the caller's own session; it prints why when it cannot (unlike progress).
+        // A bare `waiting` stays the mailbox view (every open question and who each is waiting on), so the two never collide.
+        if (args.firstOrNull() == "waiting" && args.getOrNull(1)?.lowercase() in WaitingCli.OPS) {
+            return WaitingCli.run(
+                args.drop(1), out, err, getenv,
+                open = { FrameStream.open(resolveTarget(parseArgs(emptyArray(), DiscardAppendable) ?: error("no connection target"), getenv), err) },
+            )
+        }
         if (args.firstOrNull() == "progress" || args.firstOrNull() == "run") {
             val quiet = getenv(ProgressCli.DEBUG_ENV)?.trim() != "1"
             val open = {

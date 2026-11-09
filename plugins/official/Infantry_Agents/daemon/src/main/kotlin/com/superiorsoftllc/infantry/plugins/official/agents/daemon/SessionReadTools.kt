@@ -81,6 +81,17 @@ internal object SessionReadTools {
         session.lastEventAt?.let { put("lastEventAt", it) }
         session.lastTurnAt?.let { put("lastTurnAt", it) }
         session.backgroundWork?.let { put("backgroundWork", it) }
+        session.ticketId?.let { put("ticketId", it) }
+        // WAITING-FLAG-1: the session's own "active but waiting" flag; "waitingActive" is false once past its expiry.
+        session.waitingReason?.let { reason ->
+            put("waiting", buildJsonObject {
+                put("reason", reason)
+                session.waitingSince?.let { put("since", it) }
+                session.waitingUntilAt?.let { put("untilAt", it) }
+                session.waitingExpiresAt?.let { put("expiresAt", it) }
+                put("active", session.waitingExpiresAt?.let { now <= it } ?: true)
+            })
+        }
         // Contract 1.117.0: the agent's own progress report, raw (for a monitor) and as one readable line.
         session.progress?.let { p ->
             put("progress", Json.encodeToJsonElement(SessionProgress.serializer(), p))

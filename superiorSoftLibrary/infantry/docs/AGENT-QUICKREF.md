@@ -426,3 +426,15 @@ The daemon reconnects a session whose MCP link shows `disconnected` by itself, w
 ```
 infantry session mcp-reconnect --self
 ```
+
+## Waiting flag (WAITING-FLAG-1)
+
+Waiting on a build, a long test or a background process and your turn is about to end? Say so, one plain command (no MCP needed):
+
+```
+infantry waiting on --reason "gradle test" --minutes 20   # card shows "active, waiting"; no idle nudge
+infantry waiting off                                      # also clears by itself when your next turn starts
+infantry waiting show
+```
+
+MCP twin: `infantry_waiting` (`mode` on/off/get, `reason`, `untilMinutes`). It expires after the minutes plus a grace. Details: [docs/wiki/Waiting.md](../../../docs/wiki/Waiting.md).

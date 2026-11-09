@@ -84,6 +84,8 @@ class StallDetector(
         val active = runCatching { ticketInProgress(ticket) || (!exempt && ticketDone(ticket)) }.getOrDefault(false)
         if (!active) return null
         if (exempt && runCatching { reportDelivered(s) }.getOrDefault(false)) return null
+        // WAITING-FLAG-1: a session that flagged itself "active but waiting" (and the flag still counts) is not stalled.
+        if (s.waiting?.active(now) == true) return null
         val silentFor = now - s.lastHeartbeat
         if (!s.isBusy()) {
             if (s.state != SessionState.IDLE || s.bgJobs.isNotEmpty() || s.backgroundWork != null) return null

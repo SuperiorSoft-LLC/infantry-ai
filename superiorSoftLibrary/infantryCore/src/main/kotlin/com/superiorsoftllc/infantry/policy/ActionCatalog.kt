@@ -96,7 +96,7 @@ object ActionCatalog {
         a("agents.swap", WRITE, E.SESSION_SWAP, E.AGENT_SWAP),
         a("agents.profile.save", WRITE, E.AGENT_SAVE),
         a("agents.profile.delete", DESTRUCTIVE, E.AGENT_DELETE),
-        a("agents.report", WRITE, E.BG_JOB, E.PROGRESS),
+        a("agents.report", WRITE, E.BG_JOB, E.PROGRESS, E.WAITING),
         a("worktrees.remove", DESTRUCTIVE, E.WORKTREE_REMOVE),
         a("repo.set", WRITE, E.REPO),
         a("mail.send", WRITE, E.MAIL_SEND),

@@ -22,6 +22,7 @@
       { "name": "infantry_harness_install", "action": "harness.install", "kind": "write", "description": "npm-install harness CLIs on the daemon's machine." },
       { "name": "infantry_list_harnesses", "action": "harness.read", "kind": "read", "description": "The harnesses a ticket can run on, with their models." },
       { "name": "infantry_progress", "action": "agents.report", "kind": "write", "description": "Report how far along the calling session's long job is." },
+      { "name": "infantry_waiting", "action": "agents.report", "kind": "write", "description": "Flag the calling session active but waiting (on) or not waiting (off)." },
       { "name": "infantry_list_sessions", "action": "sessions.read", "kind": "read", "description": "The sessions the daemon knows, in the caller's scope." },
       { "name": "infantry_get_session", "action": "sessions.replay", "kind": "read", "description": "One session's status and the tail of its transcript." },
       { "name": "infantry_pod_state", "action": "agents.read", "kind": "read", "description": "Profiles by role, sessions by status, a project's roster, a pod." },

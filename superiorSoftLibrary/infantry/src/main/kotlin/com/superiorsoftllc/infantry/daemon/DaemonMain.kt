@@ -4127,6 +4127,21 @@ private suspend fun handleConnection(
                     Envelope(Envelope.ERROR, "progress refused: ${e.message ?: e::class.simpleName}")
                 }
 
+                // WAITING-FLAG-1: an agent's "active but waiting" flag on its own session; the answer is the flag (or null).
+                Envelope.WAITING -> try {
+                    val req = json.decodeFromString(com.superiorsoftllc.infantry.session.WaitingRequest.serializer(), envelope.data)
+                    val sid = envelope.sessionId?.trim()?.takeIf { it.isNotEmpty() }
+                        ?: throw IllegalArgumentException("expects the frame's sessionId (INFANTRY_SESSION_ID)")
+                    val record = manager.setWaiting(sid, req) ?: throw IllegalArgumentException("no session '${sid.take(80)}'")
+                    Envelope(
+                        Envelope.WAITING,
+                        record.waiting?.let { json.encodeToString(com.superiorsoftllc.infantry.session.SessionWaiting.serializer(), it) } ?: "null",
+                        sid,
+                    )
+                } catch (e: Exception) {
+                    Envelope(Envelope.ERROR, "waiting refused: ${e.message ?: e::class.simpleName}")
+                }
+
                 Envelope.SESSION_RESTART -> try {
                     val body = json.parseToJsonElement(envelope.data.ifBlank { "{}" }).jsonObject
                     val sessionId = body["sessionId"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()

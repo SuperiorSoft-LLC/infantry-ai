@@ -52,7 +52,7 @@ class BuiltinToolsListGuardTest {
             "Infantry_Attention" to listOf("infantry_ask"),
             // RUNTIME-LOAD-4: the session's own progress report moved with the Agents family.
             // RUNTIME-LOAD-5: the session reads, over the host's sessions read model.
-            "Infantry_Agents" to listOf("infantry_progress", "infantry_list_sessions", "infantry_get_session", "infantry_pod_state",
+            "Infantry_Agents" to listOf("infantry_progress", "infantry_waiting", "infantry_list_sessions", "infantry_get_session", "infantry_pod_state",
                 // RUNTIME-LOAD-7 (F5 last): the spawn family, over the host spawn service.
                 "infantry_spawn", "infantry_prompt", "infantry_kill", "infantry_session_restart", "infantry_session_remove"),
             "Infantry_Settings" to listOf("infantry_project_config_get", "infantry_project_config_set", "infantry_settings_get", "infantry_settings_set"),

@@ -38,7 +38,10 @@ object BoardLines {
      * (null = the compact default: done shows its last [DONE_SHOWN], backlog and todo show [QUEUE_SHOWN] lines and a count of the
      * rest, unless [columns] names them; an explicit [limit] applies to every listed column).
      */
-    data class Options(val columns: Set<String>? = null, val limit: Int? = null, val compact: Boolean = false, val queueShown: Int = QUEUE_SHOWN, val doneShown: Int = DONE_SHOWN) {
+    data class Options(val columns: Set<String>? = null, val limit: Int? = null, val compact: Boolean = false, val queueShown: Int = QUEUE_SHOWN, val doneShown: Int = DONE_SHOWN,
+        /** WAITING-FLAG-1: only the tickets whose worker is flagged "active but waiting" (and the flag still counts). */
+        val waitingOnly: Boolean = false,
+    ) {
         companion object {
             /** The full board, as it always printed (what the golden tests read). */
             val FULL = Options()
@@ -55,7 +58,8 @@ object BoardLines {
         val known = COLUMNS.toSet()
         val groups = COLUMNS.associateWith { column -> tickets.filter { it.status == column }.sortedBy { it.position } } +
             tickets.filter { it.status !in known }.groupBy { it.status }
-        for ((column, group) in groups) {
+        for ((column, allGroup) in groups) {
+            val group = if (options.waitingOnly) allGroup.filter { t -> t.sessionId?.let { bySession[it] }?.let { waitingActive(it, now) } == true } else allGroup
             if (group.isEmpty() || (options.columns != null && column !in options.columns)) continue
             lines += "$column (${group.size})"
             val shown = when {
@@ -77,6 +81,7 @@ object BoardLines {
             worker.lastAction?.let { parts += "doing '$it'" }
             parts += "out ${SessionText.ago(worker.lastOutputAt, now)}"
             worker.progress?.let { parts += "progress " + ProgressText.line(it, now) }
+            waitingText(worker, now)?.let { parts += it }
         } else if (t.sessionId != null) parts += "worker ${t.sessionId.take(8)} gone"
         t.branch?.let { b -> parts += "$b@${commitOf(t) ?: "no commit"}" }
         // AGENT-TASKS-2: a todo ticket whose branch keeps work: `[WORK <tip7> +<ahead>]`.
@@ -84,6 +89,16 @@ object BoardLines {
         // AGENT-TASKS-3: a todo ticket in an agent's persistent queue: `[Q:<agent name>#<place>]`.
         if (t.queuedAgent != null && t.queueRank != null) parts += "[Q:${t.queuedAgentName ?: t.queuedAgent.take(SHORT_ID_LEN)}#${t.queueRank}]"
         return parts.joinToString(" | ")
+    }
+
+    /** WAITING-FLAG-1: the session's waiting flag still counts at [now]. */
+    fun waitingActive(s: SessionView, now: Long): Boolean = s.waitingReason != null && now <= (s.waitingExpiresAt ?: Long.MAX_VALUE)
+
+    /** WAITING-FLAG-1: `WAITING 3m (build): reason`, or `WAITING EXPIRED ...` past its expiry; null when not flagged. */
+    fun waitingText(s: SessionView, now: Long): String? {
+        val reason = s.waitingReason ?: return null
+        val since = s.waitingSince ?: now
+        return if (waitingActive(s, now)) "WAITING ${(now - since) / 60_000}m: $reason" else "WAITING EXPIRED ${(now - (s.waitingUntilAt ?: since)) / 60_000}m ago: $reason"
     }
 
     /** [title] on one line, at most [TITLE_WIDTH] characters, ending in [ELLIPSIS] only when it was cut. */

@@ -239,7 +239,7 @@ class FinishNoticeMonitor(
                 idle.remove(id)
                 continue
             }
-            if (session.state != SessionState.IDLE || sessions.isHeld(id) || session.backgroundWork != null || session.bgJobs.isNotEmpty()) {
+            if (session.state != SessionState.IDLE || sessions.isHeld(id) || session.backgroundWork != null || session.bgJobs.isNotEmpty() || session.waiting?.active(now) == true) { // WAITING-FLAG-1: a flagged wait is not an idle worker
                 period.since = now
                 continue
             }

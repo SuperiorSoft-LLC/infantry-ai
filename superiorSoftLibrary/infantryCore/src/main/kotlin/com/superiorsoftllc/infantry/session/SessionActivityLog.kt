@@ -64,6 +64,7 @@ object SessionActivityLog {
             lastAction = e.action ?: record.lastAction, lastOutputAt = e.outputAt ?: record.lastOutputAt, lastEventAt = e.eventAt,
             lastTurnAt = e.turnAt ?: record.lastTurnAt,
             progress = AutoProgress.overlay(record, e.toolCalls, e.toolAt, e.eventAt, now),
+            waiting = WaitingRules.overlay(record.waiting, e.outputAt ?: record.lastOutputAt),
         )
     }
 }
