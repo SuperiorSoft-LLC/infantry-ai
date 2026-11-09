@@ -286,7 +286,10 @@ val repoPluginsRoot = rootProject.file("plugins")
 val communityModuleJars = rootProject.subprojects.filter { it.path.startsWith(":plugins:community:") }.map { "${it.path}:jar" }
 // RUNTIME-3: and every official module's jar (plugins/official/<Module>/build/libs), loaded at run time. A dev build is
 // not signed with the Infantry key, so the dev runs pass devTrust (never the packaged launcher: OfficialTrust).
-val officialModuleJars = rootProject.subprojects.filter { it.path.startsWith(":plugins:official:") }.map { "${it.path}:jvmJar" }
+// PLUGIN-STANDALONE-BUNDLE-2: a "standalone" plugin (plugins/build-presets.json) is not built into the dev runs.
+@Suppress("UNCHECKED_CAST")
+val standaloneIds = ((groovy.json.JsonSlurper().parse(rootProject.file("plugins/build-presets.json")) as Map<String, Any?>)["classes"] as Map<String, String>).filterValues { it == "standalone" }.keys
+val officialModuleJars = rootProject.subprojects.filter { it.path.startsWith(":plugins:official:") && it.name !in standaloneIds }.map { "${it.path}:jvmJar" }
 tasks.matching { it.name in setOf("run", "runRealDaemon", "runTabShots", "renderTabShotsForDiff") }.configureEach {
     (this as? JavaExec)?.systemProperty("infantry.plugins.root", repoPluginsRoot.absolutePath)
     (this as? JavaExec)?.systemProperty("infantry.plugins.devTrust", "true")
