@@ -34,6 +34,13 @@ class MascotCommunityTierTest {
         assertTrue(tabs.implementations.has(AGENT_AVATAR_RENDERERS, "mascot"), "mascot registered by the community-loaded module: $detail")
         assertTrue(tabs.implementations.avatarStyleRenderer("mascot") != null, detail)
         assertTrue("mascot" in tabs.implementations.keys(AGENT_AVATAR_RENDERERS), "the Avatar style picker lists the mascot: $detail")
+        // MASCOT-CONFIG-GONE-1 (ticket 4cf7de55): a community module declares config only on nodes under its own name, so
+        // the Mascot avatars card (Motion) must sit on such a node or Configuration > Plugins drops it.
+        val cfg = tabs.configTree
+        val refused = cfg.problems.filter { "Infantry_Mascot" in it }
+        assertTrue(refused.isEmpty(), "Mascot's config is accepted at the community tier: $refused")
+        assertTrue(cfg.field(com.superiorsoftllc.infantry.plugins.official.mascot.MASCOT_NODE, "mascot.motion") != null, "the Motion field is in the config tree: ${cfg.problems}")
+        assertTrue(cfg.declarations.any { it.module == "Infantry_Mascot" && it.declaration.tab == "Plugins" }, "the Mascot avatars card is on the Plugins tab")
         // Drawn through the live AgentAvatar path: a host class the renderer touches only while composing would fault here.
         androidx.compose.ui.test.runDesktopComposeUiTest {
             setContent {
