@@ -656,6 +656,8 @@ class InfantryDaemon(
             harnesses: HarnessRegistry = loadHarnesses(),
             /** ROLE-FIRST S4: model listings for registered harnesses that have no provider of their own (Pi). */
             modelCatalogs: com.superiorsoftllc.infantry.provider.HarnessModelCatalogs = com.superiorsoftllc.infantry.provider.HarnessModelCatalogs.builtIn(),
+            /** MODEL-CATALOG-1: the cache every `models` answer reads its sources through; null = one for this daemon, bounded by the two `limits.models.*` settings. A test hands in its own (a fake clock, a zero wait). */
+            modelCatalogCache: com.superiorsoftllc.infantry.provider.ModelCatalogCache? = null,
             /** BUG-CHANGES-BRANCH-2: the git the `project_git_*` frames read through; a test hands in a slow fake. */
             projectGitCli: com.superiorsoftllc.infantry.worktree.GitCli = SystemGitCli(),
             /** PERF-3: the machine the executable resolver reads (PATH, file stats); a test hands in a slow fake. */
@@ -783,6 +785,13 @@ class InfantryDaemon(
             }
             // BUG-M2-11b-2: `session.keepAliveMinutes` decides, per launch, whether a session's process is kept (plan section 8).
             val settings = SettingsService(store)
+            // MODEL-CATALOG-1: ONE catalog cache for the daemon's life. A harness's model list is a child process away
+            // (tens of seconds cold), every client asks for it as it connects, and one slow harness used to empty the
+            // catalog for all of them; so the last good list is served at once and refreshed in the background.
+            val catalogCache = modelCatalogCache ?: com.superiorsoftllc.infantry.provider.ModelCatalogCache(
+                ttlMs = { settings.limit(LimitRegistry.MODELS_CATALOG_TTL_MS) },
+                waitMs = { settings.limit(LimitRegistry.MODELS_CATALOG_WAIT_MS) },
+            )
             // CLI-PATH-1: an INSTALLED app keeps `infantry` on the user's PATH (setting paths.addCli, default on) and heals
             // the entry after an update that moved the install folder. Dev runs, test daemons and containers never write it.
             CliPathAuto.applyAtStart(settings, InfantryBin.resolve())
@@ -2218,6 +2227,7 @@ class InfantryDaemon(
                             com.superiorsoftllc.infantry.persistence.TraitStore(store.traits, { rolesLookup.role(it) != null }, boundBy = { id -> store.traitReferences(id, runCatching { pluginHost.get().serviceRegistry.find(com.superiorsoftllc.infantry.daemon.api.roles.RoleTraitLists::class)?.all() }.getOrNull().orEmpty()) }),
                             knowledge,
                             modelCatalogs,
+                            catalogCache,
                             skillsSource,
                             com.superiorsoftllc.infantry.agents.LayeredSkillStore(store),
                             spawnGuard,
@@ -2845,6 +2855,8 @@ private suspend fun handleConnection(
     traits: com.superiorsoftllc.infantry.persistence.TraitStore,
     knowledge: KnowledgeCounter,
     modelCatalogs: com.superiorsoftllc.infantry.provider.HarnessModelCatalogs = com.superiorsoftllc.infantry.provider.HarnessModelCatalogs.EMPTY,
+    /** MODEL-CATALOG-1: the per-source catalog cache (a fresh one here means every request lists again). */
+    modelCatalogCache: com.superiorsoftllc.infantry.provider.ModelCatalogCache = com.superiorsoftllc.infantry.provider.ModelCatalogCache(),
     /** P10-K15: the `skills` section every first turn renders after `knowledge`. */
     skillsSource: com.superiorsoftllc.infantry.agents.SkillsSource = com.superiorsoftllc.infantry.agents.SkillsSource.NONE,
     /** SKILLS-GLOBAL-1b: the layered skill store behind `layer_skill_*` (null = those frames are refused). */
@@ -3010,7 +3022,7 @@ private suspend fun handleConnection(
                     Envelope.MODELS,
                     json.encodeToString(
                         ListSerializer(ProviderModels.serializer()),
-                        allowedCatalog(modelCatalog(manager, harnesses, modelCatalogs), manager.allowedModels()),
+                        allowedCatalog(modelCatalog(manager, harnesses, modelCatalogs, modelCatalogCache), manager.allowedModels()),
                     ),
                 )
             } catch (e: Exception) {
@@ -4646,22 +4658,24 @@ private fun offeredModels(provider: AgentProvider): List<String>? = try {
  * The `models` answer: every configured provider's models, then (ROLE-FIRST S4) the rows [catalogs] yields for
  * registered harnesses no configured provider covers (Claude Code, Pi; S5: a descriptor's `models` section). A failing
  * listing becomes a noted empty entry.
+ *
+ * MODEL-CATALOG-1: every source is read through [cache], so ONE slow harness cannot empty the catalog for the others and
+ * no request waits on a child process for longer than the setting `limits.models.catalogWaitMs`. A source that listed
+ * before is answered from its last good list (with its age), refreshed in the background.
  */
 private fun modelCatalog(
     manager: SessionManager,
     harnesses: HarnessRegistry? = null,
     catalogs: com.superiorsoftllc.infantry.provider.HarnessModelCatalogs = com.superiorsoftllc.infantry.provider.HarnessModelCatalogs.EMPTY,
+    cache: com.superiorsoftllc.infantry.provider.ModelCatalogCache = com.superiorsoftllc.infantry.provider.ModelCatalogCache(),
 ): List<ProviderModels> {
     val fromProviders = manager.providers.flatMap { p ->
-        try {
-            p.models()
-        } catch (e: Exception) {
-            listOf(ProviderModels(p.id, "", p.id, emptyList(), "could not list models: ${e.message ?: e::class.simpleName}"))
-        }
+        val cached = cache.read("provider:${p.id}") { p.models() }
+        cached.rows ?: listOf(ProviderModels(p.id, "", p.id, emptyList(), cache.noteFor(p.id, cached)))
     }
     val covered = manager.providers.map { it.id }.toSet()
     // ROLE-FIRST S5: a descriptor harness's `models` section is its catalog, so it needs no Kotlin source.
-    val rows = fromProviders + catalogs.rows(harnesses?.harnessIds().orEmpty(), covered) { id ->
+    val rows = fromProviders + catalogs.rows(harnesses?.harnessIds().orEmpty(), covered, cache) { id ->
         harnesses?.resolve(id)?.catalog()
     }
     // CLIPATH-1: a row whose CLI cannot be found says so (appended, so an existing note is kept), resolved once per id.

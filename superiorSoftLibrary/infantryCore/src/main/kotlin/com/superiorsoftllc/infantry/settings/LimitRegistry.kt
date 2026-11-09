@@ -773,6 +773,25 @@ object LimitRegistry {
         min = 0, zeroIsUnlimited = false,
     )
 
+    /** BUG MODEL-CATALOG-1: the `models` answer is cached per harness, so a slow harness CLI never empties the catalog. */
+    val MODELS_CATALOG_TTL_MS = LimitDef(
+        "limits.models.catalogTtlMs", 300_000, "ms",
+        "MODEL-CATALOG-1: how old a harness's model list may be before the `models` answer serves it anyway and refreshes it in the background (the answer then says the list is being refreshed). A listing can take tens of seconds (a cold CLI, a first-run download), and every client asks for the list as it connects; 0 = refresh on every request.",
+        min = 0, zeroIsUnlimited = false,
+    )
+    val MODELS_CATALOG_WAIT_MS = LimitDef(
+        "limits.models.catalogWaitMs", 4_000, "ms",
+        "MODEL-CATALOG-1: how long ONE `models` request waits for a harness that has never listed its models before it answers that the harness is still listing (and how to pin a model id by hand), while the listing keeps running for the next request. Raise it on a host whose harness CLIs are slow to start; 0 = answer at once, never wait.",
+        min = 0, zeroIsUnlimited = false,
+    )
+    /** MODEL-CATALOG-1 / CLI-TIMEOUT-1: how long one CLI request waits for its answer. */
+    val CLI_ANSWER_TIMEOUT_MS = LimitDef(
+        "limits.cli.answerTimeoutMs", 20_000, "ms",
+        "MODEL-CATALOG-1: how long one `infantry` command waits for the daemon's answer to one request before it reports the daemon unreachable or a frame missing; raise it on a slow host. The older INFANTRY_CLI_ANSWER_TIMEOUT_MS still overrides it.",
+        min = 1, zeroIsUnlimited = false,
+        legacyEnv = listOf("INFANTRY_CLI_ANSWER_TIMEOUT_MS", "AGENTHQ_CLI_ANSWER_TIMEOUT_MS"),
+    )
+
     /** TOKEN-1: default sizes of the MCP/CLI tool answers (an explicit `limit` argument wins); 0 = no cap. */
     val TOOLS_INBOX_LIMIT = LimitDef(
         "limits.tools.inboxLimit", 20, "messages",
@@ -1149,6 +1168,7 @@ object LimitRegistry {
         TICKET_FILES_MAX_LINES, TICKET_FILES_RELATED_TOP,
         RELATED_BRIEF_TICKETS, RELATED_BRIEF_FILES, RELATED_BRIEF_CHARS, RELATED_BLOCK_TICKETS, RELATED_BLOCK_FILES, RELATED_BLOCK_CHARS,
         PLUGIN_CALL_TIMEOUT_MS, PLUGIN_HANG_CEILING_MS, PLUGIN_GUARD_STRIKES, PLUGIN_GUARD_COOLDOWN_MS, PLUGIN_POOL_SIZE, PLUGIN_QUEUE_LIMIT, PLUGIN_TOOL_TIMEOUT_MS, PLUGIN_TOOL_MAX_TIMEOUT_MS, PLUGIN_CAPABILITY_TIMEOUT_MS, PLUGIN_ROUTE_RATE, PLUGIN_START_TIMEOUT_MS, PLUGIN_STOP_TIMEOUT_MS, PLUGIN_UNLOAD_CHECK_MS, PLUGIN_CATALOG_STALE_MS, PLUGIN_AUTO_RELOAD_ATTEMPTS, PLUGIN_AUTO_RELOAD_DELAY_MS,
+        MODELS_CATALOG_TTL_MS, MODELS_CATALOG_WAIT_MS, CLI_ANSWER_TIMEOUT_MS,
         RUN_MAX_SECRETS, KEYSTORE_MAX_FIELDS, KEYSTORE_MAX_SECRETS,
         SANDBOX_MODE, USAGE_QUOTA_HIT_HOLD_MINUTES,
         HEALTH_DB_TIMEOUT_SECONDS, HEALTH_EVENT_LOG_MAX, HEALTH_HEARTBEAT_SECONDS, HEALTH_WATCHDOG_FAILURES, HEALTH_WATCHDOG_INTERVAL_SECONDS, HEALTH_WATCHDOG_TIMEOUT_SECONDS,

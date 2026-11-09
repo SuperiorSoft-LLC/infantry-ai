@@ -13,7 +13,6 @@ com/superiorsoftllc/infantry/backlog/TicketBoard.kt:MAX_DESCRIPTION_LENGTH|pendi
 com/superiorsoftllc/infantry/backlog/TicketBoard.kt:MAX_REFUSALS_SHOWN|pending S2-S4 (not yet routed through LimitRegistry)
 com/superiorsoftllc/infantry/backlog/TicketBoard.kt:MAX_TITLE_LENGTH|pending S2-S4 (not yet routed through LimitRegistry)
 com/superiorsoftllc/infantry/cli/BgCli.kt:BEAT_MS|pending S2-S4 (not yet routed through LimitRegistry)
-com/superiorsoftllc/infantry/cli/CliMain.kt:ANSWER_TIMEOUT_MS|pending S2-S4 (not yet routed through LimitRegistry)
 com/superiorsoftllc/infantry/cli/CliMain.kt:ASK_GRACE_MS|pending S2-S4 (not yet routed through LimitRegistry)
 com/superiorsoftllc/infantry/cli/CliMain.kt:ASK_POLL_MS|pending S2-S4 (not yet routed through LimitRegistry)
 com/superiorsoftllc/infantry/cli/CliMain.kt:DEFAULT_PORT|pending S2-S4 (not yet routed through LimitRegistry)

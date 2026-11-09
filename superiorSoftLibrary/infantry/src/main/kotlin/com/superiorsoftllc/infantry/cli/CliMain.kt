@@ -135,14 +135,22 @@ private const val DEFAULT_PORT = 8787
 /** How long `watch` waits for a new frame before re-asking the daemon about the pod. */
 private const val WATCH_IDLE_MS = 500L
 
-/** How long any single command waits for one answer before it calls the daemon unreachable. */
-internal const val ANSWER_TIMEOUT_MS = 20_000L
+/**
+ * MODEL-CATALOG-1 / CLI-TIMEOUT-1: how long any single command waits for one answer before it calls the daemon
+ * unreachable. A named limit, `limits.cli.answerTimeoutMs`; [answerTimeoutMs] reads the environment for it.
+ */
+internal val ANSWER_TIMEOUT_MS: Long = com.superiorsoftllc.infantry.settings.LimitRegistry.CLI_ANSWER_TIMEOUT_MS.default
 
 /** CLI-TIMEOUT-1: overrides [ANSWER_TIMEOUT_MS] for tests and slow hosts; a value <= 0 or non-numeric is ignored. */
 internal const val ANSWER_TIMEOUT_ENV = "INFANTRY_CLI_ANSWER_TIMEOUT_MS"
 
 internal fun answerTimeoutMs(getenv: (String) -> String?): Long =
-    getenv(ANSWER_TIMEOUT_ENV)?.trim()?.toLongOrNull()?.takeIf { it > 0 } ?: ANSWER_TIMEOUT_MS
+    getenv(ANSWER_TIMEOUT_ENV)?.trim()?.toLongOrNull()?.takeIf { it > 0 }
+        ?: runCatching {
+            com.superiorsoftllc.infantry.settings.LimitRegistry.fromEnv(
+                com.superiorsoftllc.infantry.settings.LimitRegistry.CLI_ANSWER_TIMEOUT_MS,
+            ) { name -> getenv(name) }
+        }.getOrDefault(ANSWER_TIMEOUT_MS)
 
 /** Error message when daemon is unreachable. */
 private const val DAEMON_UNREACHABLE_MSG = "Infantry AI daemon not running on %s:%d — start it with `infantry daemon`"

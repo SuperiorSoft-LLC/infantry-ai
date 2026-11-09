@@ -270,6 +270,8 @@ class DaemonFixture private constructor(
             harnesses: com.superiorsoftllc.infantry.harness.HarnessRegistry = com.superiorsoftllc.infantry.harness.HarnessRegistry(),
             /** ROLE-FIRST S4: empty by default, so no test ever spawns the operator's real `pi --list-models`. */
             modelCatalogs: com.superiorsoftllc.infantry.provider.HarnessModelCatalogs = com.superiorsoftllc.infantry.provider.HarnessModelCatalogs.EMPTY,
+            /** MODEL-CATALOG-1: the `models` cache; null = the daemon's own, bounded by the `limits.models.*` settings. */
+            modelCatalogCache: com.superiorsoftllc.infantry.provider.ModelCatalogCache? = null,
             /** BUG-CHANGES-BRANCH-2: the git `project_git_*` reads through; the real one unless a test fakes a slow git. */
             projectGitCli: com.superiorsoftllc.infantry.worktree.GitCli = com.superiorsoftllc.infantry.worktree.SystemGitCli(),
             /** PERF-3: the machine the executable resolver reads; the real one unless a test fakes a slow PATH scan. */
@@ -362,6 +364,7 @@ class DaemonFixture private constructor(
                 commandsFile = commandsFile,
                 harnesses = harnesses,
                 modelCatalogs = modelCatalogs,
+                modelCatalogCache = modelCatalogCache,
                 projectGitCli = projectGitCli,
                 executableEnvironment = executableEnvironment,
                 infantryBin = infantryBin,
