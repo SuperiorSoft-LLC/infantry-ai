@@ -70,6 +70,9 @@ class PluginClassLoaderTest {
             for (name in shell) assertEquals(name, loader.loadClass(name).name, "$name must be visible to an official jar")
             assertFailsWith<ClassNotFoundException> { loader.loadClass("com.superiorsoftllc.infantry.ui.net.DaemonClient") }
             assertFailsWith<ClassNotFoundException> { loader.loadClass("com.superiorsoftllc.infantry.ui.plugin.DaemonLink") }
+            // PLUGIN-LOADER-UIPAIR-1 (ticket 73e9c106): ui.pair holds saved servers and their daemon tokens; no plugin links it.
+            for (name in listOf("com.superiorsoftllc.infantry.ui.pair.SavedServersKt", "com.superiorsoftllc.infantry.ui.pair.SavedServer"))
+                assertFailsWith<ClassNotFoundException>(name) { loader.loadClass(name) }
         }
         PluginClassLoader(dir, jar, javaClass.classLoader, Tier.COMMUNITY).use { loader ->
             for (name in shell) assertFailsWith<ClassNotFoundException>(name) { loader.loadClass(name) }

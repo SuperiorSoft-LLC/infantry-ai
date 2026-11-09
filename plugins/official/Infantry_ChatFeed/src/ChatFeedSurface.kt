@@ -69,7 +69,6 @@ import androidx.compose.ui.draganddrop.DragAndDropEvent
 import androidx.compose.ui.draganddrop.DragAndDropTarget
 import com.superiorsoftllc.infantry.ui.net.ImageUploadOutcome
 import com.superiorsoftllc.infantry.ui.protocol.ImageUploadWire
-import com.superiorsoftllc.infantry.ui.pair.applyPairing
 import com.superiorsoftllc.infantry.ui.shell.LocalPlatformHost
 import com.superiorsoftllc.infantry.ui.shell.LocalShellContext
 import com.superiorsoftllc.infantry.ui.shell.ServerChoice
