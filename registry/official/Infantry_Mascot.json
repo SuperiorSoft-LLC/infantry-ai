@@ -1,0 +1,18 @@
+{
+  "id": "Infantry_Mascot",
+  "description": "Mascot avatars: a selectable avatar style that draws each agent as a small living character whose pose follows the session state. The role portrait stays the default.",
+  "tags": ["avatar","agent","appearance"],
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/SuperiorSoft-LLC/infantry-plugins",
+  "repo": "SuperiorSoft-LLC/infantry-plugins",
+  "versions": [
+    {
+      "version": "1.0.0",
+      "api": { "plugin": ">=2" },
+      "grants": [],
+      "url": "https://github.com/SuperiorSoft-LLC/infantry-plugins/releases/download/Infantry_Mascot-v1.0.0/Infantry_Mascot.ihq",
+      "size": 177586,
+      "sha256": "81c7681b467458792f803309083621dae84709420d98c5874f03e77e60b94dcc"
+    }
+  ]
+}
