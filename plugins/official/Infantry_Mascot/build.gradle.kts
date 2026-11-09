@@ -6,6 +6,7 @@ plugins {
     alias(libs.plugins.androidKotlinMultiplatformLibrary)
     alias(libs.plugins.composeCompiler)
     alias(libs.plugins.composeMultiplatform)
+    id("tech.superiorsoftllc.infantry.plugin")
 }
 
 kotlin {
@@ -45,6 +46,8 @@ val officialJar = tasks.named<Jar>("jvmJar") {
     archiveFileName.set("Infantry_Mascot.jar")
     // OfficialTrust: the jar carries a signed module.json equal to the one on disk.
     from(layout.projectDirectory.file("module.json"))
+    // PUBLISH-MASCOT-1: the vendored MIT notice travels inside the package.
+    from(layout.projectDirectory.files("NOTICE", "LICENSE-MIT")) { into("META-INF") }
     val keystore = providers.gradleProperty("ihq.keystore")
     val alias = providers.gradleProperty("ihq.alias")
     val storePass = providers.environmentVariable("IHQ_STOREPASS")
