@@ -77,6 +77,17 @@ class DaemonConfig(private val settings: SettingsService, private val store: Inf
     })
 
     /**
+     * RUNNER-CARD-STALE-1b: a daemon-side write of declared field [key] that did not come through [set] (the first runner add turns
+     * `runners.enabled` on) is pushed to every client the same way, so an open settings card follows it. No-op for an undeclared key.
+     */
+    fun announce(key: String, by: String = ConfigSetBy.USER) {
+        val (node, _) = fields[key] ?: return
+        val value = settings.storedDeclared(key)
+        revision.incrementAndGet()
+        onChanged?.invoke(ConfigChangedFrame(node, key, value?.takeIf { it !is JsonNull }, by, rev))
+    }
+
+    /**
      * Writes [frame]: refused (IllegalArgumentException) when the key is not declared on that node, belongs to a read-only
      * (community) declaration, [ConfigSetFrame.expectRev] is stale, or the declared validator rejects the value. A null value resets.
      */
