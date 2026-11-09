@@ -32,6 +32,21 @@ class PluginClassLoaderTest {
         }
     }
 
+    /**
+     * UI-FREEZE-NIGHTLY-1 (ticket 5fd5ba18): the shared progress seam (ProgressBar / ProgressView / ProgressIndicator) must load from
+     * every filtered tier. Hidden, Infantry_Settings' ProgressStrip and Infantry_Runners' AddRunnerForm threw NoClassDefFoundError in
+     * composition and froze the window on Plugins > Refresh and Runners > Connect.
+     */
+    @Test
+    fun `community and official loaders see the shared progress views`() {
+        val dir = Files.createTempDirectory("plugin-loader").toFile()
+        for (tier in listOf(Tier.COMMUNITY, Tier.OFFICIAL)) PluginClassLoader(dir, File(dir, "empty.jar"), javaClass.classLoader, tier).use { loader ->
+            val name = "com.superiorsoftllc.infantry.ui.progress.ProgressViewsKt"
+            assertEquals(name, loader.loadClass(name).name, "$tier: the progress seam is part of the plugin surface")
+            assertFailsWith<ClassNotFoundException>("$tier: the daemon link stays hidden") { loader.loadClass("com.superiorsoftllc.infantry.ui.plugin.DaemonLink") }
+        }
+    }
+
     @Test
     fun `a community loader sees ConfigValues and nothing else in ui shell`() {
         val dir = Files.createTempDirectory("plugin-loader").toFile()
