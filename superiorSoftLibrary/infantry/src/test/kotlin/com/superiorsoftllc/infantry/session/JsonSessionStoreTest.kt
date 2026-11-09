@@ -3,6 +3,7 @@
 package com.superiorsoftllc.infantry.session
 
 import java.io.File
+import org.junit.Assume.assumeTrue
 import java.io.FileNotFoundException
 import java.io.IOException
 import java.io.RandomAccessFile
@@ -203,6 +204,7 @@ class JsonSessionStoreTest {
 
     @Test
     fun aWriteThatMeetsAReaderHoldingTheStoreStillCommits() {
+        assumeTrue("Windows-only: on POSIX an open handle or a FileLock blocks neither a read nor a rename (locks are advisory, per process), so a held store cannot occur and the precondition this test asserts is false", WINDOWS_LOCKS) // CI-TESTS-1
         // Given: a committed snapshot, and another party holding the store OPEN -- which is exactly
         // what a concurrent `load()`, the integration test's `storeFile.readText()`, a backup or an
         // editor does. The precondition is asserted rather than assumed: while that handle is open,
@@ -283,6 +285,7 @@ class JsonSessionStoreTest {
      */
     @Test
     fun aStoreHeldUnreadableByAnotherPartyIsNeverReportedAsEmpty() {
+        assumeTrue("Windows-only: on POSIX an open handle or a FileLock blocks neither a read nor a rename (locks are advisory, per process), so a held store cannot occur and the precondition this test asserts is false", WINDOWS_LOCKS) // CI-TESTS-1
         val dir = storeDir()
         val file = File(dir, "sessions.json")
         val tmp = tmpOf(file)
@@ -411,6 +414,7 @@ class JsonSessionStoreTest {
      */
     @Test
     fun anUnreadableStoreIsNeverOverwrittenByTheInstanceThatCouldNotReadIt() {
+        assumeTrue("Windows-only: on POSIX an open handle or a FileLock blocks neither a read nor a rename (locks are advisory, per process), so a held store cannot occur and the precondition this test asserts is false", WINDOWS_LOCKS) // CI-TESTS-1
         val dir = storeDir()
         val file = File(dir, "sessions.json")
         JsonSessionStore(file).saveAll(listOf(session("committed")))
@@ -557,3 +561,6 @@ class JsonSessionStoreTest {
         const val OPEN_ATTEMPTS = 500
     }
 }
+
+/** CI-TESTS-1: Windows share modes make an open handle or a lock deny other readers and the atomic replace. */
+private val WINDOWS_LOCKS = System.getProperty("os.name").orEmpty().startsWith("Windows", ignoreCase = true)

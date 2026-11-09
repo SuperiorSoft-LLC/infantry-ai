@@ -21,8 +21,8 @@ Exit code of the CLI: 0 daemon up, 1 down.
 - **mcp bridges**: per session id, connected or dropped, last seen, reconnect count. A bridge is recognised by the session id
   it sends with each tool call (`plugin_tool_call` `client.sessionId`); when that connection closes it is logged as dropped
   with the socket's close cause.
-- **environment**: OS and arch, the shells and their syntax caveats, project and worktree path, git branch, JDK, the Gradle
-  version the wrapper pins, the OWNER's off-limits ports (8787, 8788, 8797, 8798), the free test range (18900-18999),
+- **environment**: OS and arch, the shells and their syntax caveats, project and worktree path, git branch, JDK, the version
+  each build tool pins in the project (the tool profiles' `version` probes, `watch.toolProfiles`; e.g. `gradle 9.4.1`), the OWNER's off-limits ports (8787, 8788, 8797, 8798), the free test range (18900-18999),
   installed harnesses, the state dir, and the `CLI:` line (whether `infantry` is on this machine's user PATH, where that
   entry points and whether it still resolves; CLI-PATH-1, [Command line](CommandLine.md)). All read by the daemon.
 - **recent restarts / disconnects**: the last 20 events of the log.

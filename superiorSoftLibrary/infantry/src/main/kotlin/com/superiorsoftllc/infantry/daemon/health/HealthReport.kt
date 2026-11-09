@@ -2,6 +2,8 @@
 // Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.daemon.health
 
+import com.superiorsoftllc.infantry.runner.ToolProfile
+import com.superiorsoftllc.infantry.runner.ToolProfiles
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.io.File
@@ -24,7 +26,8 @@ data class EnvironmentFacts(
     val worktreePath: String? = null,
     val gitBranch: String? = null,
     val jdk: String,
-    val gradle: String? = null,
+    /** CI-TESTS-1: tool name -> the version the project pins, from the tool profiles' `version` probes (data, not code). */
+    val buildTools: Map<String, String> = emptyMap(),
     val ownerPorts: List<Int>,
     val testPortRange: String,
     val harnesses: List<String> = emptyList(),
@@ -85,20 +88,16 @@ object EnvironmentProbe {
             "PowerShell (pwsh 7: && and || work; no head/tail/grep/rm -rf) and Git Bash (POSIX; /dev/null; forward slashes); each tool call is one shell, state does not persist"
         else "bash/zsh (POSIX)"
 
-    /** The Gradle version the wrapper in [projectPath] pins, read from `gradle/wrapper/gradle-wrapper.properties`. */
-    fun gradle(projectPath: String?): String? = projectPath?.let { p ->
-        runCatching {
-            File(p, "gradle/wrapper/gradle-wrapper.properties").takeIf { it.isFile }?.readLines()
-                ?.firstOrNull { it.startsWith("distributionUrl") }?.let { Regex("gradle-([0-9][^-]*)-").find(it)?.groupValues?.get(1) }
-        }.getOrNull()
-    }
+    /** CI-TESTS-1: the version each active tool profile with a `version` probe finds pinned in [projectPath]. */
+    fun buildTools(projectPath: String?, profiles: List<ToolProfile> = ToolProfiles.active): Map<String, String> =
+        projectPath?.let { p -> profiles.mapNotNull { t -> t.version?.read(File(p))?.let { t.name to it } }.toMap() }.orEmpty()
 
     fun facts(stateDir: File, projectPath: String?, worktreePath: String?, gitBranch: String?, harnesses: List<String>): EnvironmentFacts {
         val os = System.getProperty("os.name", "?") + " " + System.getProperty("os.version", "")
         return EnvironmentFacts(
             os = os.trim(), arch = System.getProperty("os.arch", "?"), shells = shells(os),
             projectPath = projectPath, worktreePath = worktreePath, gitBranch = gitBranch,
-            jdk = System.getProperty("java.version", "?"), gradle = gradle(worktreePath ?: projectPath),
+            jdk = System.getProperty("java.version", "?"), buildTools = buildTools(worktreePath ?: projectPath),
             ownerPorts = HealthPorts.OWNER, testPortRange = HealthPorts.TEST_RANGE, harnesses = harnesses, stateDir = stateDir.path,
             cliPath = cliPathLine(),
         )
@@ -139,7 +138,7 @@ object HealthText {
         if (r.freeMemoryMb != null || r.freeDiskMb != null) appendLine("free: memory ${r.freeMemoryMb ?: "?"} MB, disk ${r.freeDiskMb ?: "?"} MB")
         val e = r.environment
         appendLine("environment:")
-        appendLine("  os ${e.os} ${e.arch}; jdk ${e.jdk}; gradle ${e.gradle ?: "?"}")
+        appendLine("  os ${e.os} ${e.arch}; jdk ${e.jdk}" + e.buildTools.entries.joinToString("") { (k, v) -> "; $k $v" })
         appendLine("  shells: ${e.shells}")
         appendLine("  project ${e.projectPath ?: "-"}; worktree ${e.worktreePath ?: "-"}; branch ${e.gitBranch ?: "-"}")
         appendLine("  OWNER ports (off limits): ${e.ownerPorts.joinToString(", ")}; free for test daemons: ${e.testPortRange}")

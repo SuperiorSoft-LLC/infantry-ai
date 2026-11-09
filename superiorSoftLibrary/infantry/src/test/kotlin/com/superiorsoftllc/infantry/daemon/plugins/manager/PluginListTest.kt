@@ -32,6 +32,10 @@ class PluginListTest {
 
     private fun manager() = PluginManager(root, state, fetcher = fake, releasesApi = { API })
 
+    /** PLUGIN-SOURCES-1: sources() always carries the bundled defaults (plugins/default-sources.json); these tests check the imported ones. */
+    private val bundled: Set<String> by lazy { PluginManager(File(tmp, "fresh"), state, fetcher = fake).sources().map { it.id }.toSet() }
+    private fun PluginManager.imported() = sources().filterNot { it.id in bundled }
+
     private fun pack(id: String = "Acme_Echo", version: String = "1.0.0"): File {
         val f = File(repo, "$id-$version.ihq")
         val manifest = """{"name":"$id","version":"$version","apiVersion":2,"author":"Acme","license":"Apache-2.0","entry":"x.Y","jar":"lib/$id.jar"}"""
@@ -99,7 +103,7 @@ class PluginListTest {
         val f = listFile()
         val r = m.importList(f.path)
         assertTrue(r.ok, "${r.code}: ${r.message}")
-        val s = m.sources().single()
+        val s = m.imported().single()
         assertEquals("superiorsoft-plugins", s.id)
         assertEquals("community", s.cls)
         assertEquals(f.absoluteFile.toURI().toString(), s.url)
@@ -112,17 +116,17 @@ class PluginListTest {
         val other = listFile("other.json")
         assertEquals("SOURCE_EXISTS", m.importList(other.path).code)
         assertTrue(m.importList(other.path, id = "second").ok)
-        assertEquals(2, m.sources().size)
+        assertEquals(2, m.imported().size)
         assertTrue(m.removeSource("second").ok)
         assertTrue(m.removeSource("superiorsoft-plugins").ok)
-        assertTrue(m.sources().isEmpty())
+        assertTrue(m.imported().isEmpty())
         assertTrue(m.search().isEmpty())
     }
 
     @Test fun `an official class in the list file never makes the imported source official`() {
         val m = manager()
         assertTrue(m.importList(listFile(text = MINIMAL.replace("\"schema\": 1,", "\"schema\": 1, \"class\": \"official\",")).path).ok)
-        assertEquals("community", m.sources().single().cls)
+        assertEquals("community", m.imported().single().cls)
     }
 
     @Test fun `an unreadable or invalid list is refused and nothing is saved`() {
@@ -130,7 +134,7 @@ class PluginListTest {
         assertEquals("FETCH_FAILED", m.importList(File(tmp, "missing.json").path).code)
         assertEquals("FETCH_FAILED", m.importList("https://nowhere.test/list.json").code)
         assertEquals("BAD_LIST", m.importList(listFile(text = """{"schema":1,"plugins":[{"id":"A"}]}""").path).code)
-        assertTrue(m.sources().isEmpty())
+        assertTrue(m.imported().isEmpty())
     }
 
     @Test fun `a repo resolves to the asset named after the plugin and its SHA256SUMS line`() {
