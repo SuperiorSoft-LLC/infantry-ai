@@ -9,8 +9,10 @@
 -- Hook: on="every 20s"  args {"idleSeconds":60,"tickSec":20}
 -- Gotchas: Never nudges a session with an active waiting flag (infantry waiting on), a session running a background job, a session
 --   whose ticket is not In Progress, or a session twice for the same idle period (the nudge lands once, in the tick that crosses the
---   threshold). A flag past its expiry gets one "still waiting?" nudge. The nudge is queue_add: a held message the worker reads
---   at its next turn (sent at once when idle). Edit the text in this file, not the hook.
+--   threshold). A flag past its expiry gets one "still waiting?" nudge, in a window three ticks wide: the first nudge starts a turn
+--   and that turn start clears the flag, so it cannot repeat, and a drifting tick cadence (a run takes ~1 s) cannot make it fall
+--   between two ticks. The nudge is queue_add: a held message the worker reads at its next turn (sent at once when idle).
+--   Edit the text in this file, not the hook.
 --   GOTCHAS (all scripts): never name an arg `to`, `from`, `ticketId` or `status` unless it is meant to be the event payload's own: for a hook the event payload wins over args. Actions a run queues are readable only in the NEXT phase (ih.again()). Use ih.call(...) for an action whose refusal must not end the run.
 local a = input.args or {}
 if a.enabled == false or tostring(a.enabled) == "false" then return end
@@ -38,9 +40,11 @@ local function candidates(list, now)
       if w and w.active then
         -- flagged and in force: leave it alone
       elseif w then
-        -- flag ran out: one "still waiting?" nudge in the tick that crosses its expiry
+        -- flag ran out: one "still waiting?" nudge. The window is three ticks wide so neither a drifting cadence (each run
+        -- takes about a second) nor a busy daemon can make the expiry fall between two ticks; a repeat is impossible because
+        -- the first nudge starts a turn and the next turn start clears the flag.
         local since = now - (tonumber(w.expiresAt) or now)
-        if since >= 0 and since < tickMs then table.insert(out, {id = s.id, ticket = s.ticketId, text = EXPIRED}) end
+        if since >= 0 and since < tickMs * 3 then table.insert(out, {id = s.id, ticket = s.ticketId, text = EXPIRED}) end
       elseif idle >= idleMs and idle < idleMs + tickMs then
         table.insert(out, {id = s.id, ticket = s.ticketId, text = NUDGE})
       end
