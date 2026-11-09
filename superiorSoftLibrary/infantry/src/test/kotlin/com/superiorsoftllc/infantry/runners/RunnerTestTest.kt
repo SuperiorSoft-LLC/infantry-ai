@@ -157,6 +157,7 @@ class RunnerTestTest {
             listOf(
                 "[turn] Reply with the single word: ready",
                 """{"type":"system","subtype":"init","session_id":"s1"}""",
+                "[infantry] * session started (claude · default)",
                 "[infantry] turn failed: the claude process did not start: Claude Code is not signed in.",
             )
         }
@@ -164,6 +165,12 @@ class RunnerTestTest {
         assertEquals("false", RunnerLinkService.field(answer, "ok"), answer.toString())
         assertTrue(RunnerLinkService.field(answer, "error")!!.contains("no answer from"), answer.toString())
         assertTrue(answer.lines("lastLines").any { it.contains("turn failed") }, answer.toString())
+    }
+
+    @Test
+    fun `a stream-json result event answers with its result text`() {
+        transcript = { listOf("[infantry] * session started (claude)", """{"type":"result","subtype":"success","result":"ready"}""") }
+        assertEquals("ready", RunnerLinkService.field(test(), "reply"))
     }
 
     @Test

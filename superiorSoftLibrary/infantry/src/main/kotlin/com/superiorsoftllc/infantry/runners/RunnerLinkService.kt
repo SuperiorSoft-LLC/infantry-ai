@@ -372,7 +372,7 @@ class RunnerLinkService(
         var reply: String? = null
         while (true) {
             transcriptOf(name, sessionId)?.let { lines = it }
-            reply = lines.asReversed().firstOrNull(::isTestAnswer)?.trim()?.takeIf { it.isNotEmpty() }
+            reply = lines.asReversed().firstOrNull(::isTestAnswer)?.trim()?.let(::resultText)?.takeIf { it.isNotEmpty() }
             if (reply != null || clock() >= deadline) break
             sleepUntilNextPoll(pollMs, deadline)
         }
@@ -430,12 +430,19 @@ class RunnerLinkService(
      * RUNNER-TEST-1: whether [line] is a turn answer (what the harness said), not the request or a failure: the runner's transcript
      * marks the turn it was asked `[turn] ...` and its errors `error: ...`.
      */
+    /** RUNNER-CLAUDE-PROOF-1: claude's stream-json `result` event carries the reply in its `result` field; show that text, not the event. */
+    private fun resultText(line: String): String {
+        if (!line.startsWith("{\"type\":\"result\"")) return line
+        val text = runCatching { (F.json.parseToJsonElement(line) as? JsonObject)?.get("result") as? JsonPrimitive }.getOrNull()?.takeIf { it.isString }?.content
+        return text ?: line
+    }
+
     private fun isTestAnswer(line: String): Boolean {
         val t = line.trim()
         // RUNNER-TEST-ANSWER-1: a failed turn ("[infantry] turn failed: ...") and a stream-json system event (claude's init line)
         // are not what the harness said: the first made a signed-out claude "answer", the second a reply of only {"type":"system"...}.
         return t.isNotEmpty() && !t.startsWith(TURN_LINE) && !t.startsWith(ERROR_LINE) &&
-            !t.startsWith(FAILED_TURN_LINE) && !t.startsWith(SYSTEM_EVENT_LINE)
+            !t.startsWith(FAILED_TURN_LINE) && !t.startsWith(SYSTEM_EVENT_LINE) && !t.startsWith(SESSION_NOTE_LINE)
     }
 
     /**
@@ -661,6 +668,8 @@ class RunnerLinkService(
         private const val TURN_LINE = "[turn]"
         private const val ERROR_LINE = "error:"
         private const val FAILED_TURN_LINE = "[infantry] turn failed"
+        /** RUNNER-CLAUDE-PROOF-1: the session's own `[infantry] * session started (...)` note is bookkeeping, not an answer. */
+        private const val SESSION_NOTE_LINE = "[infantry] *"
         private const val SYSTEM_EVENT_LINE = "{\"type\":\"system\""
 
         /** [LinkCall] over the loaded transport with the link call timeout and the plain-ws switch read at each call. */
