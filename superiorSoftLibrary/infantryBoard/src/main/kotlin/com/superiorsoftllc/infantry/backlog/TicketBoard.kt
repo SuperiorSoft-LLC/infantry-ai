@@ -180,6 +180,8 @@ class TicketBoard(
     private val queueMax: () -> Long = { 5 },
     /** AGENT-TASKS-3: `tickets.agentTasks.closeDoneWorkerWhenQueued`: end a done ticket's idle worker when its agent has a queued ticket. */
     private val closeDoneWorkerWhenQueued: () -> Boolean = { true },
+    /** BUG PLUGIN-SOURCE-REFRESH-FREEZE-2: `limits.board.hasWorkTtlMs`: how long a todo ticket's "has work" facts are served before git checks them again (0 = on every list). */
+    private val hasWorkTtlMs: () -> Long = { 60_000L },
 ) {
 
     /** DP-5f-3d: whether the host has a session manager (was a null check on the constructor's manager). */
@@ -858,9 +860,34 @@ class TicketBoard(
         val base = row.base ?: return null
         if (row.status != TicketStatus.TODO) return null
         val repoPath = runCatching { cutRepo(row.projectId)?.path }.getOrNull() ?: return null
+        val ttl = hasWorkTtlMs()
+        if (ttl <= 0) return checkWork(repoPath, branch, base)
+        // BUG PLUGIN-SOURCE-REFRESH-FREEZE-2: never run git here. A list runs under the board lock and a SQL transaction, and
+        // every event stamp and plugin tool call lists the board; a git call per todo ticket per list spawned thousands of git
+        // processes on a busy board and froze the whole app. Serve the last answer; a stale one is checked in the background,
+        // one git call at a time, outside the lock. The chip is display only (nothing decides on it), so a late chip is safe.
+        val key = "$repoPath\u0000$branch\u0000$base"
+        val known = workFacts[key]
+        if ((known == null || System.currentTimeMillis() - known.at >= ttl) && workChecking.add(key)) {
+            runCatching {
+                WORK_CHECKER.execute {
+                    try { workFacts[key] = WorkFacts(checkWork(repoPath, branch, base), System.currentTimeMillis()) }
+                    finally { workChecking.remove(key) }
+                }
+            }.onFailure { workChecking.remove(key) }
+        }
+        return known?.work
+    }
+
+    private fun checkWork(repoPath: String, branch: String, base: String): HasWork? {
         val facts = runCatching { host.git.handoffFacts(repoPath, branch, base, null, 0) }.getOrNull() ?: return null
         return if (facts.ahead > 0) HasWork(branch, facts.tip, facts.ahead) else null
     }
+
+    /** BUG PLUGIN-SOURCE-REFRESH-FREEZE-2: the last "has work" answer per (repo, branch, base), and the keys being checked now. */
+    private class WorkFacts(val work: HasWork?, val at: Long)
+    private val workFacts = java.util.concurrent.ConcurrentHashMap<String, WorkFacts>()
+    private val workChecking: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
 
     /** Create a ticket (no id) or edit one (see [TicketSave]). */
     @Synchronized
@@ -2141,6 +2168,11 @@ class TicketBoard(
         const val MAX_DESCRIPTION_LENGTH = 100_000
         /** BUG-REGRESS-1: how many candidates' refusals a `nothing startable` names before counting the rest. */
         private const val MAX_REFUSALS_SHOWN = 3
+
+        /** BUG PLUGIN-SOURCE-REFRESH-FREEZE-2: the one background thread that checks "has work" git facts, one call at a time. */
+        private val WORK_CHECKER: java.util.concurrent.ExecutorService by lazy {
+            java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "board-has-work").apply { isDaemon = true } }
+        }
 
         /**
          * BUG-WT-1: the top of the git checkout [dir] sits in ([dir] or the nearest parent holding a `.git`, a
