@@ -75,6 +75,8 @@ testImplementation(project(":plugins:official:Infantry_Pace"))
     testImplementation(project(":plugins:official:Infantry_Alerts"))
     // CONFIG-3: and Infantry_Appearance (the theme slot; the Appearance tab is generated from its config).
     testImplementation(project(":plugins:official:Infantry_Appearance"))
+    // MASCOT-LIVE-1: and Infantry_Mascot, so the Appearance picker test draws the real mascot renderer through AgentAvatar.
+    testImplementation(project(":plugins:official:Infantry_Mascot"))
     // RUNTIME-18: and Infantry_Processes (the status bar's processes badge; its UI tests run the whole window).
     testImplementation(project(":plugins:official:Infantry_Processes"))
     // RUNTIME-20: and Infantry_Header (the title bar; every window test draws it).
