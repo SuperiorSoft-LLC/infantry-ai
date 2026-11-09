@@ -378,7 +378,8 @@ internal object Cli {
             resolveTarget(parsed, getenv).let { t ->
                 // RUNNER-POOL-6a: `infantry runner` sends the owner-only `runner_admin` frame, so it presents this machine's owner
                 // token (`<stateDir>/owner.token`, readable only to the local user; the trust RUNNER-POOL-5's local CLI had).
-                if (command != "runner") t
+                // RUNNER-SETTINGS-OWNER-1: `infantry settings` presents it too, since the runner trust keys are owner-only writes.
+                if (command != "runner" && command != "settings") t
                 else Target(t.url, t.token, t.tokenSource, t.answerTimeoutMs, com.superiorsoftllc.infantry.daemon.OwnerCredential.stored(
                     com.superiorsoftllc.infantry.session.stateDir { getenv(it) ?: com.superiorsoftllc.infantry.session.infantrySetting(it) },
                 ))
