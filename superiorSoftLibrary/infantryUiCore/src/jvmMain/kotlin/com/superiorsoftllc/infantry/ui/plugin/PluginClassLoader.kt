@@ -66,8 +66,14 @@ class PluginClassLoader(private val dir: File, jar: File, parent: ClassLoader, f
         }
         /** CONFIG-7b: TabContext.config / BlockScope.config return this one `ui.shell` type; a plugin must be able to name it. Exact match, nothing else in ui.shell. */
         const val CONFIG_VALUES = "com.superiorsoftllc.infantry.ui.shell.ConfigValues"
+        /**
+         * UI-FREEZE-NIGHTLY-1 (ticket 5fd5ba18): `ui.progress` is the shared progress seam plugins are told to use (AGENTS.md
+         * "Shared seams"; DownloadProgressGuardTest forbids raw Material indicators). Hidden, the first ProgressBar a plugin drew
+         * threw NoClassDefFoundError inside composition, which killed the recomposer: Plugins > Refresh and Runners > Connect froze the
+         * whole window. It holds composables and progress data only, no daemon link or credential.
+         */
         val ALLOWED = listOf("java.", "javax.", "kotlin.", "kotlinx.", "androidx.compose", "org.jetbrains.compose", "org.jetbrains.skiko", "com.superiorsoftllc.infantry.plugin.api.", "com.superiorsoftllc.infantry.ui.plugin.",
-            "com.superiorsoftllc.infantry.ui.model.", "com.superiorsoftllc.infantry.ui.protocol.", "com.superiorsoftllc.infantry.ui.block.")
+            "com.superiorsoftllc.infantry.ui.model.", "com.superiorsoftllc.infantry.ui.protocol.", "com.superiorsoftllc.infantry.ui.block.", "com.superiorsoftllc.infantry.ui.progress.")
         val HIDDEN = listOf("com.superiorsoftllc.infantry.ui.plugin.DaemonLink", "com.superiorsoftllc.infantry.ui.plugin.PluginClassLoader", "com.superiorsoftllc.infantry.ui.plugin.config.DaemonNodeConfigApi", "com.superiorsoftllc.infantry.ui.plugin.JvmEndpointAccess")
         fun jars(dir: File, jar: File): List<File> =
             listOf(jar) + File(dir, "lib").listFiles { f -> f.isFile && f.name.endsWith(".jar") }.orEmpty().sortedBy { it.name }
