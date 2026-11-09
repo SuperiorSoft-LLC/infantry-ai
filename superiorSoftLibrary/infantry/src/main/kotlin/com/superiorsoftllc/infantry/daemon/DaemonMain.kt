@@ -2080,7 +2080,12 @@ class InfantryDaemon(
                 restart = { t, r, p -> boardPorts.restartElsewhere(t, r, p) },
             )
             scheduledTicker(settings.limit(LimitRegistry.RUNNERS_HEARTBEAT_SEC) * 1000L) {
-                runCatching { runnerPool.heartbeat(settings.limit(LimitRegistry.RUNNERS_LOST_AFTER_SEC) * 1000L).forEach { println("[infantry] $it") } }
+                runCatching {
+                    val changed = runnerPool.heartbeat(settings.limit(LimitRegistry.RUNNERS_LOST_AFTER_SEC) * 1000L)
+                    changed.forEach { println("[infantry] $it") }
+                    // RUNNER-CARD-STALE-1: a runner went up / degraded / down: every client re-lists (the Runners card did not).
+                    if (changed.isNotEmpty()) broadcastRunnersChanged(clients)
+                }
                 runCatching { runnerWatch.tick() }.onFailure { System.err.println("[infantry] runner watch failed: ${it.message}") }
             }
             // RUNNER-POOL-8: runner side of runners.pushOnCommit: push a ticket branch once its worker committed.
@@ -2795,6 +2800,12 @@ private val DEAD_SESSION_STATES = setOf(
 private fun limitsEnvelope(snapshot: List<ProviderLimits>): Envelope =
     Envelope(Envelope.LIMITS, json.encodeToString(ListSerializer(ProviderLimits.serializer()), snapshot))
 
+/** RUNNER-CARD-STALE-1: tells every client the runner list may read differently ([RunnerLinkService.STATE_FRAME][com.superiorsoftllc.infantry.runners.RunnerLinkService.STATE_FRAME]). */
+internal fun broadcastRunnersChanged(clients: List<Channel<Envelope>>) {
+    val envelope = Envelope(com.superiorsoftllc.infantry.runners.RunnerLinkService.STATE_FRAME, "{}")
+    for (client in clients.toList()) client.trySend(envelope)
+}
+
 private fun broadcastProviderState(clients: List<Channel<Envelope>>, state: ProviderState) {
     val envelope = Envelope(Envelope.PROVIDER_STATE, json.encodeToString(ProviderState.serializer(), state))
     for (client in clients) client.trySend(envelope)
@@ -2964,6 +2975,10 @@ private suspend fun handleConnection(
             session.launch(kotlinx.coroutines.Dispatchers.IO) {
                 val answer = link.admin(request)
                 outgoing.trySend(Envelope(com.superiorsoftllc.infantry.runners.RunnerLinkService.ADMIN, answer.toString(), requestId = env.requestId))
+                // RUNNER-CARD-STALE-1: a runner added, removed, paused or resumed here shows in every other window too.
+                val op = (request["op"] as? kotlinx.serialization.json.JsonPrimitive)?.content
+                val ok = (answer["ok"] as? kotlinx.serialization.json.JsonPrimitive)?.content == "true"
+                if (ok && op in com.superiorsoftllc.infantry.runners.RunnerLinkService.LIST_CHANGING_OPS) broadcastRunnersChanged(clients)
             }
             null
         }
