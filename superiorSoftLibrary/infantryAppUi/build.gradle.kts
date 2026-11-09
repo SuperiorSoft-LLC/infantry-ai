@@ -25,8 +25,13 @@ val generatedJvmListDir = generatedModuleListRoot.map { it.dir("jvmMain/kotlin")
 val generatedConfigWebDir = generatedModuleListRoot.map { it.dir("generatedConfigWeb/kotlin") }
 val generatedConfigAndroidDir = generatedModuleListRoot.map { it.dir("generatedConfigAndroid/kotlin") }
 val generatedCompiledInListDir = generatedModuleListRoot.map { it.dir("compiledIn/kotlin") }
+// PLUGIN-STANDALONE-BUNDLE-2: a plugin classed "standalone" in plugins/build-presets.json is published through the plugin catalog
+// and compiled into no target (desktop, web, Android). Its source stays a buildable project (its own .ihq).
+@Suppress("UNCHECKED_CAST")
+val standalonePluginIds: Set<String> = ((groovy.json.JsonSlurper().parse(rootProject.file("plugins/build-presets.json")) as Map<String, Any?>)["classes"] as Map<String, String>)
+    .filterValues { it == "standalone" }.keys
 // RUNTIME-3: the official modules that have sources (their own projects; settings.gradle.kts scans the same folder).
-val officialModuleProjects = rootProject.file("plugins/official").listFiles { f -> f.isDirectory && !f.name.startsWith("_") && File(f, "build.gradle.kts").isFile }
+val officialModuleProjects = rootProject.file("plugins/official").listFiles { f -> f.isDirectory && !f.name.startsWith("_") && File(f, "build.gradle.kts").isFile && f.name !in standalonePluginIds }
     .orEmpty().sortedBy { it.name }.map { ":plugins:official:${it.name}" }
 // OVERRIDE-1: -Pdemo=true compiles plugins/demo/* into the web and Android builds, after the live modules ("demo over live", D16).
 val demoBuild = providers.gradleProperty("demo").orNull == "true"
@@ -34,7 +39,7 @@ val demoModuleProjects = if (!demoBuild) emptyList() else rootProject.file("plug
     .orEmpty().sortedBy { it.name }.map { ":plugins:demo:${it.name}" }
 // GAP-AUDIT-1 (d): the generator itself, one function, so testModuleListGenerator runs the very code the build runs.
 /** Writes the module list and the compile-time config from the core / official / demo manifests into [base]. */
-fun writeModuleList(base: File, core: Set<File>, official: Set<File>, demo: Set<File>, demoOn: Boolean) {
+fun writeModuleList(base: File, core: Set<File>, official: Set<File>, demo: Set<File>, demoOn: Boolean, standalone: Set<String> = standalonePluginIds) {
     // name, entry, buildOrder, official
     fun read(files: Set<File>, official: Boolean) = files.mapNotNull { f ->
         @Suppress("UNCHECKED_CAST")
@@ -47,7 +52,7 @@ fun writeModuleList(base: File, core: Set<File>, official: Set<File>, demo: Set<
         val entry = (m["entry"] as? String)?.takeIf { it.isNotBlank() } ?: error("${f.path}: no entry (its ModuleSource)")
         listOf(name, entry, (m["buildOrder"] as? Number)?.toInt() ?: Int.MAX_VALUE, official, m["config"] ?: emptyList<Any>())
     }
-    val modules = (read(core, false) + read(official, true))
+    val modules = (read(core, false) + read(official.filter { it.parentFile.name !in standalone }.toSet(), true))
         .sortedWith(compareBy({ it[2] as Int }, { it[0] as String }))
     // OVERRIDE-1: the demo modules go last, so their overrides and config win over the live ones (D16); desktop never lists them.
     val demoModules = if (demoOn) read(demo, true).sortedBy { it[0] as String } else emptyList()
