@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) SuperiorSoft LLC
 # TESTDAEMON-START-1: start / stop a scrubbed TEST daemon from a built dist, for live repros (runner pairing etc.).
-#   scripts/testdaemon.sh up   --name <n> [--mode both|runner|orchestrator] [--port <p>] [--dist <dir>] [--timeout <s>]
+#   scripts/testdaemon.sh up   --name <n> [--mode both|runner|orchestrator] [--port <p>] [--dist <dir>] [--timeout <s>] [--state <dir>]
 #   scripts/testdaemon.sh cli  --name <n> -- <infantry args...>     (the CLI pinned to that daemon + its state dir)
 #   scripts/testdaemon.sh down --name <n>                           (kills by PID only, never by image name)
 #   scripts/testdaemon.sh list
@@ -14,10 +14,10 @@ TMPD="${TEMP:-/tmp}"; command -v cygpath >/dev/null 2>&1 && TMPD="$(cygpath -u "
 REG="${TESTDAEMON_REG:-$TMPD/testdaemon}"; mkdir -p "$REG"
 die() { echo "testdaemon: $*" >&2; exit 1; }
 cmd="${1:-}"; shift || true
-name=""; mode=""; port=""; dist=""; tmo=90; rest=()
+name=""; mode=""; port=""; dist=""; statearg=""; tmo=90; rest=()
 while [ $# -gt 0 ]; do case "$1" in
   --name) name="$2"; shift 2;; --mode) mode="$2"; shift 2;; --port) port="$2"; shift 2;;
-  --dist) dist="$2"; shift 2;; --timeout) tmo="$2"; shift 2;; --) shift; rest=("$@"); break;;
+  --dist) dist="$2"; shift 2;; --state) statearg="$2"; shift 2;; --timeout) tmo="$2"; shift 2;; --) shift; rest=("$@"); break;;
   *) die "unknown flag '$1' (see the header of $0)";; esac; done
 conf="$REG/$name.env"
 scrub() { for v in $(env | sed -n 's/^\(INFANTRY_[A-Z_0-9]*\|AGENTHQ_[A-Z_0-9]*\|CLAUDE[A-Z_0-9]*\)=.*/\1/p'); do unset "$v"; done; }
@@ -41,7 +41,7 @@ up)
   # the runner link listener (pairing + remote starts) defaults to 8790, which would collide with the owner's runner: pin it too
   link=""; for p in $(seq 18900 18999); do [ "$p" != "$port" ] && ! inuse "$p" && { link=$p; break; }; done
   [ -n "$link" ] || die "no free link port in 18900-18999"
-  state="$(mktemp -d "${TEMP:-/tmp}/td-XXXXXX")"; state="$(winpath "$state")"; log="$state/daemon.log"
+  if [ -n "$statearg" ]; then mkdir -p "$statearg"; state="$(winpath "$statearg")"; else state="$(mktemp -d "${TEMP:-/tmp}/td-XXXXXX")"; state="$(winpath "$state")"; fi; log="$state/daemon.log"  # --state: reuse a state dir (plugins/pairing survive a restart); log="$state/daemon.log"
   scrub
   export INFANTRY_STATE_DIR="$state" INFANTRY_HOME="$state" INFANTRY_PORT="$port" INFANTRY_PORT_STRICT=true INFANTRY_BIN="$bin" INFANTRY_LIMIT_RUNNERS_LINK_PORT="$link"
   [ -n "$mode" ] && export INFANTRY_MODE="$mode"

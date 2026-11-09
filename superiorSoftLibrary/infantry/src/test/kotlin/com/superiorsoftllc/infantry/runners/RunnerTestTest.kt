@@ -152,6 +152,21 @@ class RunnerTestTest {
     }
 
     @Test
+    fun `a failed turn line and a stream-json init event are not taken for the answer`() {
+        transcript = {
+            listOf(
+                "[turn] Reply with the single word: ready",
+                """{"type":"system","subtype":"init","session_id":"s1"}""",
+                "[infantry] turn failed: the claude process did not start: Claude Code is not signed in.",
+            )
+        }
+        val answer = test()
+        assertEquals("false", RunnerLinkService.field(answer, "ok"), answer.toString())
+        assertTrue(RunnerLinkService.field(answer, "error")!!.contains("no answer from"), answer.toString())
+        assertTrue(answer.lines("lastLines").any { it.contains("turn failed") }, answer.toString())
+    }
+
+    @Test
     fun `the turn line the runner writes is not taken for the answer`() {
         transcript = { listOf("[turn] Reply with the single word: ready") }
         val answer = test()
