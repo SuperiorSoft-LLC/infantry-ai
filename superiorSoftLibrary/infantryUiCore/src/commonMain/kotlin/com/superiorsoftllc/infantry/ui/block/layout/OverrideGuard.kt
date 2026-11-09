@@ -49,12 +49,17 @@ object OverrideHealth {
      * value the new copy's verdict was never stored, [verdict] never matched it, and every such block drew its fallback
      * (nothing) for good. Identity equality makes each record land.
      */
-    private class Entry(val instance: Any, val verdict: OverrideVerdict)
+    private class Entry(instance: Any, val verdict: OverrideVerdict) {
+        // PLUGIN-LIFECYCLE-1: weak. This map is process-wide; a strong ref to a module's registration (its renderer, panel
+        // provider) pinned the module's class loader after the plugin was disabled or removed ("did not unload cleanly").
+        private val ref = WeakRef(instance)
+        fun isFor(other: Any): Boolean = ref.get() === other
+    }
 
     private val verdicts = mutableStateMapOf<String, Entry>()
 
     /** The verdict for [key] if it was given to this very [instance], else null (not probed yet). */
-    fun verdict(key: String, instance: Any): OverrideVerdict? = verdicts[key]?.takeIf { it.instance === instance }?.verdict
+    fun verdict(key: String, instance: Any): OverrideVerdict? = verdicts[key]?.takeIf { it.isFor(instance) }?.verdict
 
     /** Every faulted block by key (`<module>/<mode>/<node id>`), with the exception's message. */
     val faults: Map<String, String>

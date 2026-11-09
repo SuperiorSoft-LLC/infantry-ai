@@ -126,6 +126,8 @@ const val PLUGIN_EXPAND_PREFIX = "plugin-expand-"
 const val PLUGIN_DETAILS_PREFIX = "plugin-details-"
 const val PLUGIN_PENDING_PREFIX = "plugin-pending-"
 const val PLUGIN_DESCRIPTION_PREFIX = "plugin-description-"
+const val REMOVE_CONFIRM_TAG = "plugin-remove-confirm"
+const val REMOVE_CONFIRM_OK_TAG = "plugin-remove-confirm-ok"
 const val DISABLE_CONFIRM_TAG = "plugin-disable-confirm"
 const val DISABLE_CONFIRM_OK_TAG = "plugin-disable-confirm-ok"
 const val DISABLE_CONFIRM_CANCEL_TAG = "plugin-disable-confirm-cancel"
@@ -494,6 +496,15 @@ private fun InstalledRow(
         else if (parentsOn.size >= 2) add(("In use by " + parentsOn.map { displayName(it) }.let { n -> n.dropLast(1).joinToString(", ") + " and " + n.last() }) to Palette.Muted)
     }
     val on = pendingTo ?: p.enabled
+    var confirmRemove by remember { mutableStateOf(false) }
+    if (confirmRemove) AlertDialog(
+        onDismissRequest = { confirmRemove = false },
+        modifier = Modifier.testTag(REMOVE_CONFIRM_TAG),
+        title = { Text("Remove ${displayName(p.id)}?") },
+        text = { Text("It is turned off and its files are deleted. Install it again from Browse to get it back.", fontSize = 13.sp) },
+        confirmButton = { TextButton(onClick = { confirmRemove = false; act({ port.remove(p.id) }, {}) }, modifier = Modifier.testTag(REMOVE_CONFIRM_OK_TAG)) { Text("Remove", color = Palette.Danger) } },
+        dismissButton = { TextButton(onClick = { confirmRemove = false }) { Text("Keep") } },
+    )
     RowCard(Modifier.testTag(PLUGIN_ROW_PREFIX + p.id)) {
         Row(
             Modifier.fillMaxWidth().clickable(onClick = onExpand).heightIn(min = 64.dp).padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
@@ -512,6 +523,13 @@ private fun InstalledRow(
                 Chevron(open, displayName(p.id), Modifier.testTag(PLUGIN_EXPAND_PREFIX + p.id), onExpand)
             }
         }
+        // PLUGIN-LIFECYCLE-1: Update and Remove sit on the row itself (not behind the expand arrow) for every plugin the manager installed.
+            if (p.bundled) Column(Modifier.padding(start = 12.dp, end = 12.dp, bottom = 8.dp)) { Detail("Remove", "Not available: it ships with the app. Turn it off instead.", Palette.Muted) }
+            if (!p.bundled) Row(Modifier.padding(start = 8.dp, bottom = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                TextButton(onClick = { act({ port.update(p.id, null) }, {}) }, enabled = !busy && offer != null, modifier = Modifier.testTag(PLUGIN_UPDATE_PREFIX + p.id)) { Text("Update") }
+                TextButton(onClick = { act({ port.rollback(p.id) }, {}) }, enabled = !busy && p.canRollback, modifier = Modifier.testTag(PLUGIN_ROLLBACK_PREFIX + p.id)) { Text("Roll back") }
+                TextButton(onClick = { confirmRemove = true }, enabled = !busy, modifier = Modifier.testTag(PLUGIN_REMOVE_PREFIX + p.id)) { Text("Remove", color = Palette.Danger) }
+            }
         if (open) {
             HorizontalDivider(color = Palette.Border)
             Column(
@@ -529,11 +547,6 @@ private fun InstalledRow(
                 offer?.let {
                     Detail("Update", "${it.to} is available" + if (it.newGrants.isNotEmpty()) "; asks for new permissions: ${it.newGrants.joinToString()}" else "",
                         if (it.newGrants.isNotEmpty()) Palette.Warn else Palette.Text)
-                }
-                if (!p.bundled) Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    TextButton(onClick = { act({ port.update(p.id, null) }, {}) }, enabled = !busy && offer != null, modifier = Modifier.testTag(PLUGIN_UPDATE_PREFIX + p.id)) { Text("Update") }
-                    TextButton(onClick = { act({ port.rollback(p.id) }, {}) }, enabled = !busy && p.canRollback, modifier = Modifier.testTag(PLUGIN_ROLLBACK_PREFIX + p.id)) { Text("Roll back") }
-                    TextButton(onClick = { act({ port.remove(p.id) }, {}) }, enabled = !busy, modifier = Modifier.testTag(PLUGIN_REMOVE_PREFIX + p.id)) { Text("Remove", color = Palette.Danger) }
                 }
             }
         }
