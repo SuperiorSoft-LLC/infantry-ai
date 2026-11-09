@@ -262,6 +262,8 @@ fun App(
                 chatMarkdownEngine = host.uiPref(com.superiorsoftllc.infantry.ui.model.CHAT_MARKDOWN_PREF_KEY) ?: com.superiorsoftllc.infantry.ui.model.BuiltInChatMarkdownEngine.ID,
                 reasoningPlacement = com.superiorsoftllc.infantry.ui.model.ReasoningPlacement.fromId(host.uiPref(com.superiorsoftllc.infantry.ui.model.REASONING_PLACEMENT_PREF_KEY)),
                 progressStaleMin = host.uiPref(com.superiorsoftllc.infantry.ui.model.PROGRESS_STALE_PREF_KEY)?.toIntOrNull()?.takeIf { it > 0 } ?: com.superiorsoftllc.infantry.ui.model.PROGRESS_STALE_DEFAULT_MIN,
+                // AVATAR-SEAM-1: the avatar style the host remembered; unset (or a style nothing registered) draws the portrait.
+                agentAvatarStyle = host.uiPref(com.superiorsoftllc.infantry.ui.AGENT_AVATAR_PREF_KEY) ?: com.superiorsoftllc.infantry.ui.AGENT_AVATAR_PORTRAIT,
             ),
             initialUrl, initialToken.orEmpty(),
         )
@@ -450,6 +452,8 @@ fun App(
           LocalReasoningPlacement provides flags.reasoningPlacement,
           LocalTabFactory provides tabs.also { f -> com.superiorsoftllc.infantry.ui.plugin.PluginFaults.generationLookup = f.generation },
           LocalChatMarkdown provides remember(flags.chatMarkdownEngine) { ChatMarkdownConfig(com.superiorsoftllc.infantry.ui.model.ChatMarkdown.engines.resolve(flags.chatMarkdownEngine), chatBlockRenderers) },
+          // AVATAR-SEAM-1: the avatar style every site draws with, so a renderer change reaches the whole window.
+          com.superiorsoftllc.infantry.ui.LocalAgentAvatarStyle provides (com.superiorsoftllc.infantry.ui.AvatarStyleChoice.chosen ?: flags.agentAvatarStyle),
           LocalShell provides shell,
           // S2: what the blocks read instead of [shell]'s App/Controller internals.
           com.superiorsoftllc.infantry.ui.shell.LocalShellContext provides com.superiorsoftllc.infantry.ui.shell.CoreShellContext(shell, LocalRunConsole.current),

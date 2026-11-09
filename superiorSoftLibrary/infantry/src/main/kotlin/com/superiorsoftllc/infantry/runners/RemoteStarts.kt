@@ -239,6 +239,10 @@ class RemoteStarts(
         /** The default of `runners.cloneRoot`: under the runner's state dir. */
         const val DEFAULT_FOLDER = "clones"
 
+        /** RUNNER-CHECK-1: where a runner keeps its clones: the `runners.cloneRoot` setting when set, else [DEFAULT_FOLDER] under [stateDir]. */
+        fun cloneRootDir(configured: String, stateDir: File): File =
+            configured.takeIf { it.isNotBlank() }?.let(::File) ?: File(stateDir, DEFAULT_FOLDER)
+
         /** Whether [branch] is a ticket branch (the only refs a runner pushes): under the prefix, with no `..` or ref tricks. */
         fun isTicketBranch(branch: String): Boolean =
             branch.startsWith(TicketBranches.BRANCH_PREFIX) && branch.length > TicketBranches.BRANCH_PREFIX.length &&

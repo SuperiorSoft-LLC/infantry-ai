@@ -223,7 +223,25 @@ What crosses between orchestrator and runner, and nothing more:
 | start/stop session (`StartSpec`: ids, role/provider/model, brief text, branch) | `hello`, `health` |
 | mail text for a session | session events `(session, seq)`: status, finished, usage numbers, progress, denied |
 | transcript read requests (UI on demand) | transcript lines (on demand only) |
-| | forwarded agent frames (board, comments, mail, knowledge calls of its workers) |
+| the health check ask (`CheckRequest`: project id, harness, git remote, contract) | forwarded agent frames (board, comments, mail, knowledge calls of its workers) |
+| | health check rows (`CheckRow`: id, ok, detail, fix) |
+
+RUNNER-CHECK-1 adds the health check rows: `contract`, `harness:<id>` (installed and signed in), `grant:project` / `grant:harness`
+(the fix is the exact `infantry settings set` line that adds the id), `git` (`git ls-remote` of the project's remote, credential
+stripped from what git says), `disk` (free space of `runners.cloneRoot`), plus the orchestrator's own `link` and `git:origin` rows.
+Read only: nothing is cloned, started or written by a check.
+
+RUNNER-TEST-1 adds `infantry runner test <name> [--harness h] [--model m]` (`runner_admin` op `test`): one THROWAWAY turn on the
+runner, because green rows say the CLI is installed and signed in, not that it answers (RUNNER-E2E-3 found a start that "ran" and
+returned no output). The start is the ordinary `runner_link_start` with a provider, a model and the fixed prompt "Reply with the
+single word: ready", and NO ticket, NO git remote and NO project, so the runner clones nothing and touches no project checkout; its
+own `runner.harnesses` grant still decides (a harness it does not grant is refused there, verbatim). The harness is the one asked
+for, else `echo` when the runner lists it, else the first harness the runner reports signed in. The answer is read with
+`runner_link_transcript` every `limits.runners.testPollMs` until a turn answer is there or `limits.runners.testTurnSec` passes;
+then the session is removed for good (`runner_link_remove`, contract 1.5.0; the runner ends a live one first, as
+`session_remove --force` does), so no worker that did nothing stays on either session list. Answer: `{ok, harness, model, seconds, ms, sessionId, reply}` or `{ok: false, error, lastLines}`.
+COST: a test with a real model harness spends one small turn of that account; `echo` spends nothing. The Runners card's check view
+has the same button, with that note next to it.
 
 Never: file contents, diffs, credentials, keystore material. Transcripts cross only when a client asks to read one
 (setting `runners.transcripts = on-demand`, the cheapest; `stream` is opt-in).
@@ -272,6 +290,7 @@ is not good enough for a runner link and the runner link must not reuse that tok
 | A stolen pair credential is valid for ever | Per-pair credential (not the owner token, not an agent token), stored in each side's keystore; rotated in-band every `runners.credentialRotateDays` (default 30); revocable from either side (`runner detach`). |
 | Wrong orchestrator drives the runner | **Scoping:** a runner accepts link frames from exactly one paired orchestrator id. The runner credential can call only the link operations; it cannot call owner frames (settings, plugins, keystore, updater, remote on/off). |
 | Orchestrator asks for anything | **Runner keeps the final say.** Every remote-originated start/stop passes the runner's `FrameGate` and active policy as a non-owner caller seat `orchestrator:<id>`. Runner-local allow-lists: `runner.projects` (which projects it will clone), `runner.harnesses`, its own worker cap, and a local kill switch `infantry runner detach`. A remote policy can tighten, never loosen (DAEMON-CORE 6.4). |
+| Who may grant, and when | **The runner console, once.** `runner.projects` / `runner.harnesses` are written on the runner: by `infantry runner pair --allow-projects/--allow-harnesses`, by `infantry settings set` there, or (owner decision D24, RUNNER-GRANT-AT-PAIR-1) by the ONE pairing whose code was issued with `--grant-on-pair`: the orchestrator may then ask for at most `limits.runners.grantProjectsMax` project (default 1) and harnesses that are installed on the runner and inside the console's ceiling (`--grant-harnesses-max`), which the runner ADDS at pairing. A `*` in the request is refused, a used or expired code grants nothing, no link frame changes grants after pairing, and the grant is audited as `runner_link_pair_grant`. Without the flag the requested grant is ignored and the answer says "grant not allowed by this code". |
 | Replay of a captured start | `startId` idempotency + per-frame nonce and timestamp window inside TLS. |
 | Secrets in transit | None beyond the brief and mail text. Env values, API keys, harness logins never cross (section 4). |
 | Forwarded agent frames escalate | The orchestrator re-gates every forwarded frame as the named agent; a runner cannot claim the owner identity (the credential is runner-scoped, the identity field is checked against the sessions that runner owns). |
@@ -341,6 +360,9 @@ Rate limits on pairing attempts (`runners.pairAttemptsPerHour`, default 5).
 | `limits.runners.forwardWaitSec` | `10` | how long one forward pull waits on the runner (also the pump's retry pause; capped at half the link call timeout) |
 | `limits.runners.forwardTimeoutSec` | `300` | how long a remote worker's orchestrator-side frame waits for its answer |
 | `limits.runners.forwardPendingMax` | `64` | orchestrator-side frames one runner holds at once |
+| `limits.runners.testTurnSec` | `90` | how long `infantry runner test` waits for the throwaway turn's answer |
+| `limits.runners.testPollMs` | `1000` | how often it reads that session's transcript (one link call per poll) |
+| `limits.runners.testReplyChars` | `500` | how much of the answer (and of the no-answer transcript) it keeps and shows |
 | `runners.pairCodeMin`, `runners.pairAttemptsPerHour` | `10`, `5` | pairing |
 | `runners.credentialRotateDays` | `30` | rotation |
 | `runners.allowPlainTailnet` | `false` | opt-in plain ws over a tailnet |

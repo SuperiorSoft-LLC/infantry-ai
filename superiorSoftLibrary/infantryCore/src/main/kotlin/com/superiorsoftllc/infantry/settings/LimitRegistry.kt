@@ -395,6 +395,11 @@ object LimitRegistry {
         "1 = a ticket worker that ends its turn cleanly with the ticket still in progress, and neither commented on the ticket nor mailed its starter, gets one open daemon comment on the ticket (branch, tip, dirty flag, last output); 0 = off.",
         max = 1, zeroIsUnlimited = false,
     )
+    val FINISH_ONCE = LimitDef(
+        "limits.notice.finishOnce", 1, "switch",
+        "NOTIFY-DUP-1: 1 = the daemon sends the starter ONE automatic finish notice per ticket and worker session (none when the worker already mailed its report, none for a kill the client asked for); 0 = a notice for every run that ends.",
+        max = 1, zeroIsUnlimited = false,
+    )
     val WATCH_NOTICE_DEDUPE = LimitDef(
         "limits.watch.noticeDedupe", 1, "switch",
         "STALL-6: 1 = a bg job's queued and future notices are dropped once its owner read its log/status after it ended or ran `infantry bg ack <id>`, a newer job with the same label superseded it, or its end made the 'closed output' notice stale; one 'closed output' and one 'finished' notice per job at most. 0 = every notice is sent.",
@@ -913,6 +918,13 @@ object LimitRegistry {
         min = 1, max = 32, zeroIsUnlimited = false,
     )
 
+    /** RUNNER-GRANT-AT-PAIR-1: how many project ids one pairing may grant (owner decision D24: at most one project, once). */
+    val RUNNERS_GRANT_PROJECTS_MAX = LimitDef(
+        "limits.runners.grantProjectsMax", 1, "projects",
+        "How many project ids a single pairing may grant when the runner's code was issued with --grant-on-pair; more than this in the request is refused. Kept at 1: pairing is one project, granted once (owner decision D24).",
+        min = 1, max = 16, zeroIsUnlimited = false,
+    )
+
     /** RUNNER-POOL-5: how many audit lines `infantry runner audit` prints without `--limit`. */
     val RUNNERS_AUDIT_SHOWN = LimitDef(
         "limits.runners.auditShown", 50, "lines",
@@ -959,6 +971,23 @@ object LimitRegistry {
     )
 
     /**
+     * RUNNER-CHECK-1: how long `infantry runner check` lets the runner's `git ls-remote` of the project's remote run before the row
+     * fails. Bounded so a firewall that drops packets shows as a git FAIL, not a hung check.
+     */
+    val RUNNERS_CHECK_GIT_SEC = LimitDef(
+        "limits.runners.checkGitSec", 15, "seconds",
+        "How long the runner's health check (`infantry runner check`) waits for `git ls-remote` of the project's git remote before that row fails. Long enough for a slow server, short enough that a blocked port shows as a failure.",
+        min = 1, max = 300, zeroIsUnlimited = false,
+    )
+
+    /** RUNNER-CHECK-1: the free disk the runner's clone root must have for the health check's disk row to pass. */
+    val RUNNERS_CHECK_MIN_FREE_MB = LimitDef(
+        "limits.runners.checkMinFreeMb", 1_024, "MB",
+        "How much free disk space the runner's clone root (`runners.cloneRoot`) must have for the health check's disk row to pass; a full server fails every start late. 0 = any free space passes.",
+        min = 0, zeroIsUnlimited = false,
+    )
+
+    /**
      * RUNNER-ADD-LINK-1: how long `infantry runner add '<link>'` waits on ONE host of the link before it tries the next. The link
      * carries several hosts (tailnet first, then LAN); a host that does not answer must not hold up the next one for long.
      */
@@ -987,6 +1016,31 @@ object LimitRegistry {
         "limits.runners.forwardPendingMax", 64, "frames",
         "How many agent frames a runner holds for its orchestrator at once; one more is refused at once. Fewer = less memory.",
         min = 1, zeroIsUnlimited = false,
+    )
+
+    /**
+     * RUNNER-TEST-1: how long `infantry runner test` waits for the runner's throwaway turn to answer before it stops the session and
+     * reports what the transcript had. A real model harness needs a few seconds; a runner that is signed in but too slow to answer
+     * must not hold the owner's check forever.
+     */
+    val RUNNERS_TEST_TURN_SEC = LimitDef(
+        "limits.runners.testTurnSec", 90, "seconds",
+        "How long `infantry runner test` waits for the test turn's answer from the runner's harness before it stops the session and reports the transcript it has.",
+        min = 1, max = 900, zeroIsUnlimited = false,
+    )
+
+    /** RUNNER-TEST-1: how often the test turn's transcript is read while it waits for the answer. */
+    val RUNNERS_TEST_POLL_MS = LimitDef(
+        "limits.runners.testPollMs", 1_000, "ms",
+        "How often `infantry runner test` reads the test session's transcript over the link while it waits for the answer. Shorter = the reply shows sooner, at one link call each poll.",
+        min = 100, max = 30_000, zeroIsUnlimited = false,
+    )
+
+    /** RUNNER-TEST-1: how much of the test turn's answer (`infantry runner test`, the Runners card) is kept and shown. */
+    val RUNNERS_TEST_REPLY_CHARS = LimitDef(
+        "limits.runners.testReplyChars", 500, "characters",
+        "How many characters of the test turn's answer `infantry runner test` and the Runners card keep and show (the rest is cut); the same budget bounds the transcript lines of a test that got no answer.",
+        min = 40, max = 20_000, zeroIsUnlimited = false,
     )
 
     // CORE-PROGRESS-DOWNLOAD-1 (docs/wiki/Progress.md): the core downloader and the core progress system.
@@ -1053,7 +1107,7 @@ object LimitRegistry {
         MAX_PER_POD, MAX_SESSIONS, MAX_DEPTH, MCP_MAX_SPAWNS, LANE_DEFAULT, PACING_CEILING,
         USAGE_STALE_MAX_HOURS, USAGE_BACKOFF_MAX_MINUTES, USAGE_MANUAL_REFRESH_FLOOR_SECONDS,
         BUILD_MAX_WORKERS, BUILD_MAX_PARALLEL_FORKS, CPU_ALERT_PERCENT, CPU_ALERT_MINUTES,
-        TICKET_DEADLINE_MINUTES, UNATTENDED_DEADLINE_MINUTES, STALL_MINUTES, KILL_RETRY_MINUTES, SILENT_MINUTES, PROGRESS_STALE_MINUTES, IDLE_NUDGE_MINUTES, MAIL_WAKE_MAX_SECONDS, IDLE_NOTICE_MINUTES, IDLE_COMMENT, UNBRIEFED_GRACE_MINUTES,
+        TICKET_DEADLINE_MINUTES, UNATTENDED_DEADLINE_MINUTES, STALL_MINUTES, KILL_RETRY_MINUTES, SILENT_MINUTES, PROGRESS_STALE_MINUTES, IDLE_NUDGE_MINUTES, MAIL_WAKE_MAX_SECONDS, IDLE_NOTICE_MINUTES, IDLE_COMMENT, FINISH_ONCE, UNBRIEFED_GRACE_MINUTES,
         UNASSIGN_WAIT_SECONDS, HANDOFF_COMMITS, HANDOFF_CHARS, AGENT_QUEUE_MAX, RUNNERS_HEARTBEAT_SEC, RUNNERS_LOST_AFTER_SEC, RUNNER_MAX_WORKERS, WORKERS_MAX_PARALLEL, CHAT_QUEUE_MAX, JOBS_REMEMBERED, JOB_LOG_MAX_READ_BYTES, CHAT_SEND_ACK_SECONDS, CHAT_SENT_IDS_KEPT, CHAT_HISTORY_FRAMES,
         AUTO_DONE_MIN_OUTPUTS, PROCESS_WATCH_INTERVAL_SECONDS, PROCESS_STOP_GRACE_SECONDS, PROCESS_STUCK_MINUTES, RUN_SCROLLBACK_BYTES, RUN_HISTORY,
         RUN_INPUT_BYTES_PER_SECOND, RUN_INPUT_MAX_FRAME_BYTES, RUN_INPUT_QUEUE_BYTES, RUN_MAX_COLS, RUN_MAX_ROWS,
@@ -1068,9 +1122,10 @@ object LimitRegistry {
         SANDBOX_MODE, USAGE_QUOTA_HIT_HOLD_MINUTES,
         HEALTH_DB_TIMEOUT_SECONDS, HEALTH_EVENT_LOG_MAX, HEALTH_HEARTBEAT_SECONDS, HEALTH_WATCHDOG_FAILURES, HEALTH_WATCHDOG_INTERVAL_SECONDS, HEALTH_WATCHDOG_TIMEOUT_SECONDS,
         MAIL_WAKE_DEBOUNCE_SECONDS, MAIL_COALESCE_MAX, WATCH_STALL_NUDGES, SCRIPT_RUN_LOG_MAX,
-        RUNNERS_PAIR_CODE_MIN, RUNNERS_PAIR_ATTEMPTS_PER_HOUR, RUNNERS_CREDENTIAL_ROTATE_DAYS, RUNNERS_LINK_PORT, RUNNERS_UP_START_SEC, RUNNERS_ADVERTISE_HOSTS_MAX, RUNNERS_AUDIT_SHOWN, RUNNERS_LINK_CALL_SECONDS, RUNNERS_LINK_CHECK_SECONDS,
+        RUNNERS_PAIR_CODE_MIN, RUNNERS_PAIR_ATTEMPTS_PER_HOUR, RUNNERS_CREDENTIAL_ROTATE_DAYS, RUNNERS_LINK_PORT, RUNNERS_UP_START_SEC, RUNNERS_ADVERTISE_HOSTS_MAX, RUNNERS_AUDIT_SHOWN, RUNNERS_GRANT_PROJECTS_MAX, RUNNERS_LINK_CALL_SECONDS, RUNNERS_LINK_CHECK_SECONDS,
         RUNNERS_OUTBOX_MAX, RUNNERS_LOST_AFTER_MIN, RUNNERS_COMMIT_CHECK_SEC, RUNNERS_FORWARD_WAIT_SEC, RUNNERS_FORWARD_TIMEOUT_SEC, RUNNERS_FORWARD_PENDING_MAX,
-        RUNNERS_ADD_HOST_TIMEOUT_SEC,
+        RUNNERS_ADD_HOST_TIMEOUT_SEC, RUNNERS_CHECK_GIT_SEC, RUNNERS_CHECK_MIN_FREE_MB,
+        RUNNERS_TEST_TURN_SEC, RUNNERS_TEST_POLL_MS, RUNNERS_TEST_REPLY_CHARS,
         DOWNLOAD_RETRIES, DOWNLOAD_BACKOFF_MS, DOWNLOAD_CONNECT_TIMEOUT_SECONDS, DOWNLOAD_RESPONSE_TIMEOUT_SECONDS, DOWNLOAD_STALL_SECONDS, DOWNLOAD_MAX_MB, DOWNLOAD_REDIRECTS, DOWNLOAD_MOVE_RETRIES,
         PROGRESS_KEEP_FINISHED, PROGRESS_MIN_INTERVAL_MS,
     )

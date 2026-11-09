@@ -1,0 +1,33 @@
+{
+  "name": "Infantry_Mascot",
+  "version": "1.0.0",
+  "apiVersion": 2,
+  "author": "Infantry AI",
+  "description": "Mascot avatars: a selectable avatar style that draws each agent as a small living character (the vendored material-mascot drawing code, MIT) whose pose follows the session state. The role portrait stays the default; disabling this plugin puts it back on its own.",
+  "tier": "official",
+  "sequence": [],
+  "entry": "com.superiorsoftllc.infantry.plugins.official.mascot.MascotPlugin",
+  "jar": "build/libs/Infantry_Mascot.jar",
+  "buildOrder": 220,
+  "implementations": [
+    { "registry": "agent.avatar.renderers", "key": "mascot" }
+  ],
+  "config": [
+    {
+      "node": "infantry.mascot", "group": "Mascot avatars", "title": "Mascot avatars", "tab": "Plugins", "order": 920,
+      "applies": "Applies to: agent avatars, once the Mascot style is chosen as the avatar style.",
+      "keywords": ["mascot", "avatar", "agent", "animation", "motion", "character"],
+      "fields": [
+        { "key": "mascot.motion", "type": "select", "label": "Motion", "default": "static", "scope": "device", "order": 1,
+          "options": ["static", "focus", "all"],
+          "optionLabels": { "static": "Static", "focus": "Focus only", "all": "Everywhere" },
+          "description": "Static (cheapest, default): one frame per state, no idle loop; the pose changes when the state does. Focus only: the idle loop runs only where the app allows live motion (sidebar, chat header, title bar). Everywhere: every avatar loops, which costs a frame ticker per visible avatar: costly in long chats and big lists." },
+        { "key": "mascot.stateMap", "type": "text", "label": "State map", "scope": "device", "order": 2,
+          "default": "STARTING=Greet;BUSY=Working;WAITING_INPUT=Notify;IDLE=Idle;EXITED=Sleepy;ORPHANED=Confused;FAILED=Alert",
+          "description": "SESSION_STATE=Mood pairs separated by semicolons. A state not listed, or a mood the mascot does not know, draws Idle. While compacting a busy session shows Reading; a failed turn shows Alert." },
+        { "key": "mascot.roleLooks", "type": "text", "label": "Role looks", "scope": "device", "order": 3, "default": "",
+          "description": "Optional overrides, role=eyes/finish/cat separated by semicolons, e.g. architect=round/chrome/cat. Eyes: classic, big, round, dot, vizor. Finish: flat, chrome, outline. Cat: cat or nocat. Roles not listed get a look from a hash of the role id." }
+      ]
+    }
+  ]
+}

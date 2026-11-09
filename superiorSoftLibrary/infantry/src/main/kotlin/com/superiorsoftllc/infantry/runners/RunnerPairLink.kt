@@ -12,11 +12,13 @@ import java.net.NetworkInterface
  * RUNNER-LINK-1 (docs/wiki/RunnerPairing-design.md, step 1): the ONE string `infantry runner pair` prints, carrying everything a
  * client needs to pair with this runner:
  *
- * `infantry://runner?v=1&name=<runner name>&host=<h1>&host=<h2>&port=<link port>&code=<XXXX-XXXX-XXXX-XXXX>&fp=<sha-256 hex>[&plain=1]`
+ * `infantry://runner?v=1&name=<runner name>&host=<h1>&host=<h2>&port=<link port>&code=<XXXX-XXXX-XXXX-XXXX>&fp=<sha-256 hex>[&plain=1][&grant=1]`
  *
  * * `host` repeats, in the order the client tries them; an IPv6 address is in brackets.
  * * `fp` is the link certificate's SHA-256, lower-case hex without colons; required unless `plain=1` (`runners.allowPlainTailnet`).
  * * `v` is the format version: a link of a newer version is refused with a text that says to update.
+ * * `grant=1` (RUNNER-GRANT-AT-PAIR-1) says the code was issued with `--grant-on-pair`: the client may ask for the one project it is
+ *   added from. It is informational for the client UI only; the runner never reads it back, it trusts its own record of the code.
  *
  * The prefix differs from PAIR-1's `infantry://connect?` on purpose (that one is a client-to-daemon link with a bearer token; this
  * one is a runner pairing link with a one-time code). Same rules: [toString] never prints the code, and parse errors are fixed
@@ -30,6 +32,8 @@ class RunnerPairLink(
     /** Normalized ([normalizeFingerprint]); null only with [plain]. */
     val fingerprint: String?,
     val plain: Boolean = false,
+    /** RUNNER-GRANT-AT-PAIR-1: the code carries the one-time grant authority (`runner pair --grant-on-pair`). */
+    val grant: Boolean = false,
 ) {
     /** The `infantry://runner?...` text (contains the one-time code: a secret until it is used or expires). */
     fun toUri(): String = buildString {
@@ -40,6 +44,7 @@ class RunnerPairLink(
         append("&code=").append(encode(code))
         fingerprint?.let { append("&fp=").append(encode(normalizeFingerprint(it))) }
         if (plain) append("&plain=1")
+        if (grant) append("&grant=1")
     }
 
     /** True when [other] is the same certificate fingerprint as this link's (case and colons ignored, as `LinkTls.normalized`). */
@@ -47,12 +52,12 @@ class RunnerPairLink(
         fingerprint != null && other != null && normalizeFingerprint(fingerprint) == normalizeFingerprint(other)
 
     override fun toString(): String =
-        "RunnerPairLink(name=$name, hosts=$hosts, port=$port, code=redacted, fingerprint=${fingerprint ?: "none"}, plain=$plain)"
+        "RunnerPairLink(name=$name, hosts=$hosts, port=$port, code=redacted, fingerprint=${fingerprint ?: "none"}, plain=$plain, grant=$grant)"
 
     override fun equals(other: Any?): Boolean = other is RunnerPairLink && name == other.name && hosts == other.hosts && port == other.port &&
-        code == other.code && fingerprint == other.fingerprint && plain == other.plain
+        code == other.code && fingerprint == other.fingerprint && plain == other.plain && grant == other.grant
 
-    override fun hashCode(): Int = listOf(name, hosts, port, code, fingerprint, plain).hashCode()
+    override fun hashCode(): Int = listOf(name, hosts, port, code, fingerprint, plain, grant).hashCode()
 
     sealed interface Parsed {
         class Ok(val link: RunnerPairLink) : Parsed
@@ -100,7 +105,7 @@ class RunnerPairLink(
             val fp = single["fp"]?.let(::normalizeFingerprint)?.takeIf { it.isNotEmpty() }
             if (fp == null && !plain) return Parsed.Bad("The runner pairing link has no certificate fingerprint (fp).")
             if (fp != null && !HEX.matches(fp)) return Parsed.Bad("The certificate fingerprint in the link is not a SHA-256.")
-            return Parsed.Ok(RunnerPairLink(name, hosts.map(::bracketed).distinct(), port, code.uppercase(), fp, plain))
+            return Parsed.Ok(RunnerPairLink(name, hosts.map(::bracketed).distinct(), port, code.uppercase(), fp, plain, single["grant"] == "1"))
         }
 
         /** Lower-case hex without colons or spaces: the `LinkTls.normalized` form, so a compare ignores case and colons. */

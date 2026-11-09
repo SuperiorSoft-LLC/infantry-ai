@@ -22,8 +22,16 @@ object RunnerLinkWire {
      * 1.2.0 (RUNNER-POOL-7): [FORWARD_PULL] / [FORWARD_ANSWER], the agent frames a runner forwards to its orchestrator.
      * 1.3.0 (RUNNER-POOL-8): [EventsRequest.acked] (the outbox keeps an event until acknowledged, seq per session);
      * [StartRequest.pushOnCommit].
+     * 1.4.0 (RUNNER-CHECK-1): [CHECK], the read-only health check (`contract`, harness sign-in, grants, git, disk), answered as
+     * [CheckAnswer] rows with the fix for each failing one.
+     * 1.5.0 (RUNNER-TEST-1): [REMOVE], forget a session this orchestrator started (the turn `infantry runner test` ran leaves nothing
+     * behind on the runner's session list). A runner that does not know it answers an error, and the caller stops at [STOP].
+     * 1.6.0 (RUNNER-GRANT-AT-PAIR-1): [PairRequest.grantProjects] / [PairRequest.grantHarnesses] and [PairAnswer.grantedProjects] /
+     * [PairAnswer.grantedHarnesses] / [PairAnswer.grantRefusal]: a code issued on the runner console with `--grant-on-pair` may
+     * grant at most one project and installed harnesses, once, at pairing (owner decision D24). An older runner ignores the request
+     * fields (defaults) and grants nothing; an older orchestrator sends none.
      */
-    const val CONTRACT = "1.3.0"
+    const val CONTRACT = "1.6.0"
 
     const val PAIR = "runner_link_pair"
     const val HELLO = "runner_link_hello"
@@ -31,10 +39,23 @@ object RunnerLinkWire {
     const val DETACH = "runner_link_detach"
     const val START = "runner_link_start"
     const val STOP = "runner_link_stop"
+
+    /**
+     * RUNNER-TEST-1 (contract 1.5.0): forget a session this orchestrator started, so a throwaway turn leaves nothing on the runner's
+     * session list. The runner ends it first when it is still live (the owner's `session_remove --force` rule), so one frame does
+     * both; only a session of this orchestrator may be removed.
+     */
+    const val REMOVE = "runner_link_remove"
     const val HEALTH = "runner_link_health"
     const val DELIVER = "runner_link_deliver"
     const val EVENTS = "runner_link_events"
     const val TRANSCRIPT = "runner_link_transcript"
+
+    /**
+     * RUNNER-CHECK-1 (docs/wiki/RunnerPairing-design.md 4, step 4): the orchestrator's health check of one runner, answered by
+     * [CheckAnswer]. Read only: nothing is started, cloned or written.
+     */
+    const val CHECK = "runner_link_check"
 
     /**
      * RUNNER-POOL-7 (docs/RUNNER-POOL.md 2.3 b): the orchestrator DIALS the runner, so the runner's forwarded agent frames travel back
@@ -46,11 +67,35 @@ object RunnerLinkWire {
     const val REPLY = "runner_link_reply"
     const val ERROR = "runner_link_error"
 
+    /**
+     * RUNNER-GRANT-AT-PAIR-1 (1.6.0): the code, and, when the owner confirmed it, the grants this orchestrator asks the runner to
+     * apply ONCE at pairing. The runner trusts only its own record of the code (`--grant-on-pair`), never these fields, and it adds
+     * ids to `runner.projects` / `runner.harnesses` (never replaces them). A `*` in either list is refused; at most
+     * `limits.runners.grantProjectsMax` project ids are accepted.
+     */
     @Serializable
-    data class PairRequest(val code: String, val orchestratorId: String, val orchestratorName: String = "")
+    data class PairRequest(
+        val code: String,
+        val orchestratorId: String,
+        val orchestratorName: String = "",
+        val grantProjects: List<String> = emptyList(),
+        val grantHarnesses: List<String> = emptyList(),
+    )
 
+    /**
+     * [grantedProjects] / [grantedHarnesses] are the ids this pairing actually granted (empty = nothing). [grantRefusal] is why a
+     * requested grant was not applied: the code was not issued with `--grant-on-pair`, so grants stay the runner's own business.
+     */
     @Serializable
-    data class PairAnswer(val runnerId: String, val runnerName: String, val credential: String, val contract: String = CONTRACT)
+    data class PairAnswer(
+        val runnerId: String,
+        val runnerName: String,
+        val credential: String,
+        val contract: String = CONTRACT,
+        val grantedProjects: List<String> = emptyList(),
+        val grantedHarnesses: List<String> = emptyList(),
+        val grantRefusal: String? = null,
+    )
 
     /** One harness on the runner: installed, its models, signed in or not (a yes/no, never the credential). */
     @Serializable
@@ -110,6 +155,13 @@ object RunnerLinkWire {
     data class StopAnswer(val stopped: Boolean)
 
     @Serializable
+    data class RemoveRequest(val sessionId: String)
+
+    /** [removed] is false when the runner no longer had the session (removed twice, or an older runner ignored it). */
+    @Serializable
+    data class RemoveAnswer(val removed: Boolean = false)
+
+    @Serializable
     data class HealthAnswer(val state: String, val running: Int = 0, val freeSlots: Int = -1, val load: Double? = null)
 
     /** One mail turn: [origin] is the wire's `MessageOrigin` JSON text, [messageIds] the mailbox ids folded into it. */
@@ -138,6 +190,30 @@ object RunnerLinkWire {
 
     @Serializable
     data class TranscriptAnswer(val lines: List<String> = emptyList())
+
+    /**
+     * RUNNER-CHECK-1: what to check. [projectId] and [harness] are the one the owner means to run there (a runner grants each id
+     * separately); [gitRemote] is the project's `origin` the runner would clone; [contract] is the orchestrator's [CONTRACT], so a
+     * runner that speaks another one can report the mismatch as a row instead of failing the whole call.
+     */
+    @Serializable
+    data class CheckRequest(
+        val projectId: String? = null,
+        val harness: String? = null,
+        val gitRemote: String? = null,
+        val contract: String? = null,
+    )
+
+    /**
+     * One checked thing: [id] is `contract`, `harness:<id>`, `grant:project`, `grant:harness`, `git`, `disk` (runner side) or
+     * `link`, `git:origin` (decided by the orchestrator); [detail] is what was found; [fix] is the exact command or step when it
+     * failed (null when [ok]). A row id is stable: a client may switch on it.
+     */
+    @Serializable
+    data class CheckRow(val id: String, val ok: Boolean, val detail: String, val fix: String? = null)
+
+    @Serializable
+    data class CheckAnswer(val rows: List<CheckRow> = emptyList())
 
     @Serializable
     data class ForwardPullRequest(val waitMs: Long = 0)

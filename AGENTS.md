@@ -112,6 +112,7 @@ gate over a batch of changes is `scripts/infantry-gate.sh` ([docs/GATE.md](docs/
 | Automate a process | a Lua script and a hook | [add a Lua hook](docs/wiki/recipes/add-lua-hook.md) |
 | Support another agent CLI | a harness plugin or a JSON descriptor | [add a CLI harness](docs/wiki/recipes/add-cli-harness.md) |
 | Add a model group to the picker | a harness's `models` | [add a provider](docs/wiki/recipes/add-provider.md) |
+| Draw agent avatars in a new style | a UI plugin's `agent.avatar.renderers` implementation | [add an avatar style](docs/wiki/recipes/add-an-avatar-style.md) |
 | Change the wire format | `infantryProtocol` (`Protocol.kt`), then both ends | [Architecture](docs/wiki/Architecture.md) |
 | Change what core can do | only if it is a generic mechanism; read [docs/DAEMON-CORE.md](docs/DAEMON-CORE.md) first | none |
 

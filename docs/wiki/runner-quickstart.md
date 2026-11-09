@@ -55,6 +55,22 @@ which setting is missing and prints that command. A start also needs the project
 it is refused with `git remote add origin <url>` as the fix.
 `pair` prints one pairing link (`infantry://runner?v=1&name=...&host=...&port=...&code=...&fp=...`; hosts come from `--host` flags, then the `runners.advertiseHosts` setting, else the detected addresses, tailnet first; at most `limits.runners.advertiseHostsMax`), then the one-time code and the certificate fingerprint "by hand", and keeps serving until the code is used (10 minutes).
 
+### Grant the project at pairing, from the PC (RUNNER-GRANT-AT-PAIR-1, owner decision D24)
+
+Project ids live on the PC, so typing one on the server is the step worth removing. Issue the code with `--grant-on-pair` and
+the first pairing may add ONE project (chosen on the PC, `limits.runners.grantProjectsMax`) and the harnesses installed on the
+runner (or only the ones in `--grant-harnesses-max`) to `runner.projects` / `runner.harnesses`:
+
+```
+server:  infantry runner pair --name server-1 --grant-on-pair [--grant-harnesses-max claude,echo]   # no --allow-projects
+PC:      infantry runner add '<link>' --project <project-id>   # asks once: Grant runner server-1 access to project <name> (<id>) and harnesses ...? [y/N]
+```
+
+The link then carries `grant=1`, and `infantry runner add '<link>' --grant` answers that question for you. The runner adds, never
+replaces; a `*` in a request is refused; a used or expired code grants nothing; and no link frame changes grants after pairing.
+The grant is printed by `add` and logged on the runner as `runner_link_pair_grant` (`infantry runner audit`). Without the grant
+flag the requested ids are ignored and the answer says so, so grants stay the runner's own business.
+
 ## 2. On your PC: add the server
 
 Paste the link `runner up` (or the container log) printed. One paste, the whole handshake (RUNNER-ADD-LINK-1):
@@ -72,6 +88,15 @@ code) stops at once. If no host answers, the error lists each host with its reas
 
 The first successful add on a machine turns `runners.enabled` on (adding is already the owner's consent); detaching a runner
 leaves it on.
+
+The card is the same flow with no terminal (RUNNER-ADD-UI-1): Settings > Runners > Add runner, paste the link into the
+(masked) link field, give a name only if you want one other than the link's, and press Connect. When the link's code was issued
+with `--grant-on-pair` the dialog also shows one tick, ticked, naming the project this window is on: connecting with it grants
+that project and the installed harnesses at pairing (RUNNER-GRANT-AT-PAIR-1). The card draws its heading
+and Add runner even while runners are off, so it is always findable. A successful add runs the health check
+(RUNNER-CHECK-1) in the same dialog and lists its rows: a tick or a cross per row, and under a failure the exact `fix:`
+step with a Copy button; Check again runs it again, Close leaves the runner paired, and each runner row's Check opens
+those rows again. The CLI face of the rows: `infantry runner check <name> [--project <id>] [--harness <id>]`.
 
 By hand, the same pairing (older installs):
 
@@ -101,6 +126,33 @@ refused with: `runner server-1 needs the project's git remote ... has no origin 
   Without a login the session starts but the model cannot answer.
 - Give the server access to the git remote (a deploy key or token).
 - Open the link port to your PC only (firewall or tailnet).
+
+Then check it from your PC: `infantry runner check <name> [--project <id>] [--harness <id>]` (RUNNER-CHECK-1) runs the
+check over the link and prints one line per row with the fix under a failing one, and exits 1 when any row fails:
+
+```
+contract         ok      this runner speaks contract 1.4.0
+harness:claude   FAIL    harness 'claude' is installed but not signed in; a session would start and the model could not answer
+                         fix: log claude in on this runner: run `claude` there once and sign in
+grant:project    FAIL    my-project is not in this runner's runner.projects (empty = none)
+                         fix: on this runner: infantry settings set runner.projects '["my-project"]'
+link             ok      reached wss://100.64.0.5:8790 in 42 ms
+```
+
+Run each `fix:` line on the runner and check again. A full disk, an unreachable remote and a harness the runner does not
+have show up here too, instead of at the first ticket start.
+
+Green rows say the CLI is installed and signed in; they do not say it ANSWERS. For that, run one throwaway turn on the runner
+(RUNNER-TEST-1) — the Runners card's Check view has the same "Test" button:
+
+```
+infantry runner test server-1 [--harness <id>] [--model <id>]
+```
+
+It starts a session there with no ticket and no project, sends "Reply with the single word: ready", prints the harness, how long
+it took and the answer, then stops and removes the session (nothing is left on the runner's session list). Exit code 0 means an
+answer came back; otherwise the error and the last transcript lines say why. A test with a real model harness spends one small
+turn of that account; `echo` spends nothing.
 
 ## 6. Check it ran there
 

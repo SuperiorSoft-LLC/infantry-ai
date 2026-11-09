@@ -178,6 +178,31 @@ class RunnerLinkPairingTest {
         assertTrue(log.all { it.from == PEER }, log.toString())
     }
 
+    @Test
+    fun `a start with no project, no remote and no ticket is a health test turn, and the harness grant still decides`() {
+        val (store, peers) = orchestrator()
+        val cred = peers.add("box", "wss://h:1", codes.issue("box", now), "AA", "orch").credential
+        val id = store.selfId()
+        // RUNNER-TEST-1: `infantry runner test` starts a session that touches no project checkout, so no project grant is needed...
+        val testStart = F.json.encodeToString(
+            F.StartRequest.serializer(),
+            F.StartRequest(startId = "test-1", provider = "echo", prompt = "Reply with the single word: ready"),
+        )
+        settings = RunnerLinkSettings.Values(harnesses = listOf("echo"))
+        assertTrue(server.handle(F.START, testStart, id, cred, PEER).ok)
+        val spec = starts.last()
+        assertNull(spec.projectId)
+        assertNull(spec.gitRemote)
+        assertNull(spec.ticketId)
+        // ... but the runner's harness grant still does, and a start that names a project needs its grant as before.
+        settings = RunnerLinkSettings.Values()
+        val harnessRefused = server.handle(F.START, testStart, id, cred, PEER)
+        assertFalse(harnessRefused.ok)
+        assertTrue(harnessRefused.data.contains("infantry settings set ${RunnerLinkSettings.HARNESSES}"), harnessRefused.data)
+        settings = RunnerLinkSettings.Values(harnesses = listOf("echo"))
+        assertFalse(server.handle(F.START, startData(project = "p9", harness = "echo"), id, cred, PEER).ok)
+    }
+
     // RUNNER-POOL-6a: the wss end-to-end and plain-ws tests moved with the transport to Infantry_RemoteRunner
     // (WssLinkTransportTest). Core is tested through the seam with an in-process transport.
 

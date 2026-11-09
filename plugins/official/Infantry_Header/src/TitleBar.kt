@@ -225,7 +225,7 @@ fun RowScope.TitleBarAgents(
             visibleAgents(state, "", null, agentScope = agentScope).take(14).forEach { a ->
                 val ring = if (a.id == state.selectedId) Palette.Text else if (needsInput(a, state.waiting, state.openPrompts, state.openQuestionSessions)) Palette.Accent else Color.Transparent
                 Box(Modifier.padding(end = 4.dp).clip(CircleShape).border(2.dp, ring, CircleShape).padding(1.dp).testTag(TITLE_BAR_AVATAR_TAG_PREFIX + a.id)) {
-                    AgentAvatar(a, state, 22)
+                    AgentAvatar(a, state, 22, motion = AvatarMotion.LIVE)
                 }
             }
             // ASSISTANT-1: the Assistant is the LAST portrait of the team.

@@ -11,6 +11,9 @@ import com.superiorsoftllc.infantry.plugin.api.ConfigFieldTypes
 import com.superiorsoftllc.infantry.plugin.api.ConfigScopes
 import com.superiorsoftllc.infantry.plugin.api.FillDeclaration
 import com.superiorsoftllc.infantry.plugin.api.ModuleManifest
+import com.superiorsoftllc.infantry.ui.AGENT_AVATAR_PORTRAIT
+import com.superiorsoftllc.infantry.ui.AGENT_AVATAR_RENDERERS
+import com.superiorsoftllc.infantry.ui.AvatarStyleChoice
 import com.superiorsoftllc.infantry.ui.LocalModalBlur
 import com.superiorsoftllc.infantry.ui.Palette
 import com.superiorsoftllc.infantry.ui.block.layout.Block
@@ -31,6 +34,9 @@ const val THEME_FILL_ID = "infantry.shell.theme"
 const val ACCENT_KEY = "accent"
 const val DARK_KEY = "dark"
 const val BLUR_KEY = "blur"
+
+/** AVATAR-PICKER-1: the avatar style field of node [THEME_FILL_ID]: a key registered under `agent.avatar.renderers`; "portrait" is the default. */
+const val AVATAR_STYLE_KEY = "agentAvatarStyle"
 
 /**
  * The module's config, the same as its module.json `config` (a test pins them equal): the Settings dialog's Appearance
@@ -55,6 +61,17 @@ val APPEARANCE_CONFIG: List<ConfigDeclaration> = listOf(
         keywords = listOf("dialog", "scrim", "modal"),
         fields = listOf(ConfigFieldDeclaration(BLUR_KEY, ConfigFieldTypes.TOGGLE, "Blur behind dialogs", JsonPrimitive(true), scope = ConfigScopes.DEVICE)),
     ),
+    ConfigDeclaration(
+        node = THEME_FILL_ID, group = "Agent avatars", tab = "Appearance", order = 25, title = "Avatar style",
+        applies = "Applies to: every agent avatar in the app. Changes how agents look; Portrait is the default.",
+        keywords = listOf("avatar", "agent", "look", "mascot", "picture"),
+        fields = listOf(
+            ConfigFieldDeclaration(
+                AVATAR_STYLE_KEY, ConfigFieldTypes.IMPLEMENTATION, "Avatar style", JsonPrimitive(AGENT_AVATAR_PORTRAIT), registry = AGENT_AVATAR_RENDERERS, exposed = true,
+                description = "How agents look in lists, chat and the title bar. A style that is removed shows as Portrait.", scope = ConfigScopes.DEVICE,
+            ),
+        ),
+    ),
     ConfigDeclaration(node = "infantry.shell.config.userPortrait", group = "Your portrait", tab = "Appearance", order = 30, title = "Your portrait", keywords = listOf("avatar", "picture", "photo"), block = "infantry.shell.config.userPortrait"),
 )
 
@@ -75,7 +92,10 @@ object ThemeBlock : Block(THEME_FILL_ID, THEME_FILL_ID) {
         val accent = if (cfg.overridden(ACCENT_KEY) || applied.accent) ThemeAccent.entries.firstOrNull { it.name == cfg.string(ACCENT_KEY) } else null
         val dark = if (cfg.overridden(DARK_KEY) || applied.dark) cfg.boolean(DARK_KEY) else null
         val wantBlur = if (cfg.overridden(BLUR_KEY) || applied.blur) cfg.boolean(BLUR_KEY) else null
+        // AVATAR-PICKER-1: a key the user picked; unset keeps the window's own preference. The resolved value is already the default when the picked style is gone.
+        val avatar = cfg.string(AVATAR_STYLE_KEY)?.takeIf { cfg.overridden(AVATAR_STYLE_KEY) }
         SideEffect {
+            if (AvatarStyleChoice.chosen != avatar) AvatarStyleChoice.chosen = avatar
             val now = Palette.theme
             val next = ThemeSettings(accent ?: now.accent, dark ?: now.dark)
             if (next != now) Palette.theme = next

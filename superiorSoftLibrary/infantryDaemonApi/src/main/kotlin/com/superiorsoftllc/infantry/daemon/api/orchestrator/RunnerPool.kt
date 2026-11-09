@@ -130,6 +130,11 @@ class LocalRunnerServices(
     val eventsAcked: ((acked: Map<String, Long>) -> List<RunnerEvent>)? = null,
     /** RUNNER-POOL-6: (session, fromLine, maxLines) -> transcript lines; default none. */
     val transcript: (sessionId: String, fromLine: Int, maxLines: Int) -> List<String> = { _, _, _ -> emptyList() },
+    /**
+     * RUNNER-TEST-1: forget a session for good (the `session_remove` the owner runs by hand): its record and durable row go, as if it
+     * had never run. Returns false for an unknown session; a live one is refused with [IllegalArgumentException].
+     */
+    val remove: (sessionId: String) -> Boolean = { false },
 )
 
 /** The binding for the runner in this process ([RunnerPool.LOCAL]). */
@@ -146,6 +151,13 @@ class LocalRunnerLink(private val services: LocalRunnerServices) : RunnerLink {
 
     override fun stopSession(sessionId: String, reason: String?, force: Boolean): OrchestratorReply<Boolean> =
         OrchestratorReply.Ok(services.stop(sessionId, reason, force))
+
+    override fun removeSession(sessionId: String): OrchestratorReply<Boolean> =
+        try {
+            OrchestratorReply.Ok(services.remove(sessionId))
+        } catch (e: IllegalArgumentException) {
+            OrchestratorReply.Unavailable(e.message ?: "remove refused")
+        }
 
     override fun deliverMail(sessionId: String, mail: MailItem): OrchestratorReply<MailResult> = OrchestratorReply.Ok(services.deliver(sessionId, mail))
     override fun health(): OrchestratorReply<RunnerHealth> = OrchestratorReply.Ok(services.health())

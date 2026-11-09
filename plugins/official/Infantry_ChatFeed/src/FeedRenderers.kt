@@ -16,6 +16,7 @@ import com.superiorsoftllc.infantry.ui.Mono
 import com.superiorsoftllc.infantry.ui.Palette
 import com.superiorsoftllc.infantry.ui.LocalChatMarkdown
 import com.superiorsoftllc.infantry.ui.ChatImageLines
+import com.superiorsoftllc.infantry.ui.model.MessageOrigin
 import com.superiorsoftllc.infantry.ui.model.ChatItem
 import com.superiorsoftllc.infantry.ui.model.LineKind
 import com.superiorsoftllc.infantry.ui.model.OutputLine
@@ -62,7 +63,7 @@ private fun RowItem.line(): OutputLine = when (val i = item) {
 internal val UserRow: RowRenderer = RowRenderer(agentSide = false) { row ->
     val line = row.line()
     val (said, images) = ChatImageLines.split(line.text)
-    SpeakerRow({ OriginAvatar(line.origin, CHAT_AVATAR_SIZE) }) {
+    SpeakerRow({ OriginAvatar(line.origin, CHAT_AVATAR_SIZE, row.sessionState.takeIf { (line.origin as? MessageOrigin.Agent)?.let { it.agentId ?: it.sessionId } == row.agentId }) }) {
         Column {
             OriginLabel(line.origin)
             CommsCard(commsCardStyle(line.origin), line.at) {

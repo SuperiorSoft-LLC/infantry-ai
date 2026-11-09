@@ -63,6 +63,15 @@ class OnTicketDoneScriptTest {
         assertTrue("version-control" in f.str(c, "body")!! && "Started the next todo ticket" in f.str(c, "body")!!)
     }
 
+    @Test fun `the ticket that just finished is never started again`() {
+        val f = Fake(listOf("aaaa1111 | T1 | backend", "33333333 | real work | backend"))
+        assertTrue(run(f, args).ok)
+        assertEquals("33333333", f.str(f.named("infantry_ticket_start").single(), "ticketId"))
+        val g = Fake(listOf("aaaa1111 | T1 | backend"))
+        assertTrue(run(g, args).ok)
+        assertTrue(g.named("infantry_ticket_start").isEmpty())
+    }
+
     @Test fun `empty board comments that and starts nothing`() {
         val f = Fake(listOf("11111111 | [HOLD] wait"))
         assertTrue(run(f, args).ok)

@@ -87,6 +87,33 @@
       ]
     },
     {
+      "node": "infantry.shell.theme",
+      "tab": "Appearance",
+      "group": "Agent avatars",
+      "order": 25,
+      "title": "Avatar style",
+      "applies": "Applies to: every agent avatar in the app. Changes how agents look; Portrait is the default.",
+      "keywords": [
+        "avatar",
+        "agent",
+        "look",
+        "mascot",
+        "picture"
+      ],
+      "fields": [
+        {
+          "key": "agentAvatarStyle",
+          "type": "implementation",
+          "label": "Avatar style",
+          "default": "portrait",
+          "registry": "agent.avatar.renderers",
+          "exposed": true,
+          "description": "How agents look in lists, chat and the title bar. A style that is removed shows as Portrait.",
+          "scope": "device"
+        }
+      ]
+    },
+    {
       "node": "infantry.shell.config.userPortrait",
       "group": "Your portrait",
       "title": "Your portrait",
