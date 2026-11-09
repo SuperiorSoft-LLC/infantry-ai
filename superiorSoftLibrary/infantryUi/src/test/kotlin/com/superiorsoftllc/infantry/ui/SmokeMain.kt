@@ -28,7 +28,8 @@ fun main() {
     val provider = StubProvider(StubScript.default(), delayMs = 0)
     val daemon = InfantryDaemon.build(
         memory = FixedMemory,
-        port = 18787, provider = provider, runner = provider.transport()!!,
+        // Loopback always: the default host reads the owner's ~/.infantry remote-access setting (0.0.0.0 needs a token).
+        port = 18787, host = "127.0.0.1", provider = provider, runner = provider.transport()!!,
         sessionStore = JsonSessionStore(File(dir, "sessions.json")), mailStore = JsonMailStore(File(dir, "mailbox.json")),
         store = SqlInfantryStore.open(File(dir, "infantry.db").absolutePath), mailBaseUrl = "http://127.0.0.1:1", token = null,
     )
