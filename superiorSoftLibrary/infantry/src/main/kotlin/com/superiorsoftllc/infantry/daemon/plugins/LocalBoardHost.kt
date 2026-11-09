@@ -95,6 +95,8 @@ class LocalBoardHost(
     private val gitRemoteOf: (repo: File) -> String? = ::originUrl,
     /** RUNNER-POOL-8: `runners.pushOnCommit`, read at each remote start (the runner pushes the ticket branch after each worker commit). */
     private val pushOnCommit: () -> Boolean = { false },
+    /** RUNNER-TICKET-ROW-1: told what each remote ticket start pinned (harness, model, checkout, branch), so the board row can show it. */
+    private val remotePlaced: (sessionId: String, info: com.superiorsoftllc.infantry.runners.RemoteSessionMirror.Placed) -> Unit = { _, _ -> },
 ) : BoardHost {
 
     private val listeners = CopyOnWriteArrayList<BoardSessionListener>()
@@ -113,6 +115,14 @@ class LocalBoardHost(
             else -> return
         }
         for (l in listeners) runCatching { l.onEvent(mapped) }
+    }
+
+    /**
+     * RUNNER-TICKET-ROW-1: a remote worker's turn ended (the runner's FINISHED event). The board hears it as the exit a local worker
+     * would give, so `tickets.exitBehavior` and the run record work for a runner worker too. [view] is the mirror's view of it.
+     */
+    fun publishRemoteExit(view: SessionView, code: Int?) {
+        for (l in listeners) runCatching { l.onEvent(BoardSessionEvent.Exit(view.id, code, processExited = false, session = view)) }
     }
 
     override fun now(): Long = clock()
@@ -141,6 +151,7 @@ class LocalBoardHost(
                 val ref = reply.value
                 val id = ref.sessionId ?: return SessionStartResult.Refused("runner $runner refused the start: ${ref.refusal ?: "no session"}")
                 pool.placed(id, runner)
+                remotePlaced(id, com.superiorsoftllc.infantry.runners.RemoteSessionMirror.Placed(request.providerId.orEmpty(), request.model, checkout.path, ref.branch, request.ticketId))
                 SessionStartResult.Started(
                     SessionView(
                         id = id, agentId = request.agentId, role = request.role, provider = request.providerId.orEmpty(), model = request.model,
@@ -454,6 +465,16 @@ internal fun fetchMissingTicketBranch(repo: File, branch: String, git: com.super
         if (originUrl(repo) == null) return
         git.run(repo, listOf("fetch", "origin", "refs/heads/$branch:refs/heads/$branch"))
     }
+}
+
+/**
+ * RUNNER-TICKET-ROW-1: after a runner worker's turn, bring its pushed ticket branch to the orchestrator's checkout so the board row
+ * has a commit tip and done-enter's merge request has something to merge. The runner is the authority for that branch, so it is
+ * forced; git itself refuses when the checkout has the branch checked out, which leaves local work alone. True when it was fetched.
+ */
+internal fun fetchRunnerTicketBranch(repo: File, branch: String, git: com.superiorsoftllc.infantry.worktree.GitCli = com.superiorsoftllc.infantry.worktree.SystemGitCli()): Boolean {
+    if (!com.superiorsoftllc.infantry.runners.RemoteStarts.isTicketBranch(branch) || !repo.isDirectory || originUrl(repo) == null) return false
+    return runCatching { git.run(repo, listOf("fetch", "origin", "+refs/heads/$branch:refs/heads/$branch")).ok }.getOrDefault(false)
 }
 
 /** `git remote get-url origin` in [repo], or null when it has none. */

@@ -1392,6 +1392,7 @@ class InfantryDaemon(
                 projectDirectory = { id -> id?.let { runCatching { projectStore.get(it).directory }.getOrNull() } },
                 repo = repo, agents = agents, knowledge = knowledge, skills = skillsSource, runners = runnerPool,
                 pushOnCommit = { settings.runnerLink().pushOnCommit },
+                remotePlaced = remoteMirror::placed,
                 // IMG-3: a ticket's images live under its project's directory (.infantry/uploads/ticket/).
                 ticketImages = com.superiorsoftllc.infantry.backlog.TicketImages { projectId ->
                     runCatching { projectStore.get(projectId) }.getOrNull()?.directory?.takeIf { it.isNotBlank() }?.let(::File)?.takeIf { it.isDirectory }
@@ -2040,7 +2041,16 @@ class InfantryDaemon(
                 restartElsewhere = { settings.runnerLink().restartElsewhere },
                 apply = { _, e ->
                     if (e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.STATUS) remoteMirror.status(e.sessionId, e.payload)
-                    if (e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.FINISHED) remoteMirror.finished(e.sessionId)
+                    if (e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.FINISHED) {
+                        remoteMirror.finished(e.sessionId)
+                        // RUNNER-TICKET-ROW-1: fetch the runner's pushed branch to the checkout, then tell the board the turn ended.
+                        val placed = remoteMirror.placement(e.sessionId)
+                        if (placed?.repoRoot != null && placed.branch != null)
+                            com.superiorsoftllc.infantry.daemon.plugins.fetchRunnerTicketBranch(File(placed.repoRoot), placed.branch)
+                        remoteMirror.get(e.sessionId)?.takeIf { it.ticketId != null }?.let { rec ->
+                            coreHost?.publishRemoteExit(com.superiorsoftllc.infantry.daemon.plugins.SessionViews.of(rec), e.payload.toIntOrNull())
+                        }
+                    }
                     val rest = e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.FINISHED ||
                         (e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.STATUS && e.payload.equals(SessionState.IDLE.name, ignoreCase = true))
                     if (rest) mail.pump(e.sessionId)
