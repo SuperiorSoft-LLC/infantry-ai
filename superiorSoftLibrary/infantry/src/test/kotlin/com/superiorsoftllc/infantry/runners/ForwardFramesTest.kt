@@ -188,6 +188,23 @@ class ForwardFramesTest {
         assertEquals(0, forwarder.held())
     }
 
+    /**
+     * RUNNER-DONE-1 (live repro on dn1pc/dn1rn): a remote worker's `infantry ticket move <id> done` first sends a `ticket_list` that
+     * names no session, and its MCP tools send `plugin_tool_call` with the session only in `client`; the runner refused both itself
+     * ("runner mode"), so the ticket never left in_progress. The caller's session now also comes from the tool call and the
+     * session header the CLI sends from INFANTRY_SESSION_ID.
+     */
+    @Test
+    fun `a worker frame that names no session is attributed to the tool call client or the declared session`() {
+        val f = FrameForwarder
+        assertEquals("w1", f.callerSession(Envelope.TICKET_LIST, "project-1", null, null, "w1"), "ticket_list: the declared session")
+        assertEquals("w1", f.callerSession(PLUGIN_TOOL_CALL, toolCall("infantry_ticket_move", "w1"), null, null, null), "tool call: client.sessionId")
+        assertEquals("named", f.callerSession(Envelope.TICKET_MOVE, "{}", "named", "active", "w1"), "the frame's own session wins")
+        assertEquals("active", f.callerSession(Envelope.TICKET_LIST, "", " ", "active", "w1"), "then the session the connection drives")
+        assertNull(f.callerSession(Envelope.TICKET_LIST, "", null, null, "  "), "no session anywhere: nothing is forwarded")
+        assertNull(f.callerSession(Envelope.TICKET_LIST, "not json", null, null, null))
+    }
+
     private companion object {
         const val PLUGIN_TOOL_CALL = "plugin_tool_call"
         const val PURGE = "board_purge"

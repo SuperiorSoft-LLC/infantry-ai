@@ -3232,6 +3232,9 @@ private suspend fun handleConnection(
     // The session this connection is driving. A first prompt starts a fresh session; later prompts
     // continue it (resume) until it reaches a terminal state, so context carries across turns.
     var active: String? = null
+    // RUNNER-DONE-1: the agent session the client says it runs in (the CLI and MCP server send INFANTRY_SESSION_ID); read only to
+    // decide whether a frame of a session a remote orchestrator started here is forwarded to it.
+    val declaredSession = session.call.request.headers[com.superiorsoftllc.infantry.runners.FrameForwarder.SESSION_HEADER]
     // The repository new sessions are cut from for THIS connection; overridable with a `repo` frame.
     var repo: File? = defaultRepo
     // Contract 1.3.0: how the sessions this connection creates are spawned, set by a `new` frame. Null =
@@ -3283,7 +3286,7 @@ private suspend fun handleConnection(
             // RUNNER-POOL-7 (docs/RUNNER-POOL.md 2.3 b): a session a REMOTE orchestrator started here asks for orchestrator state (the
             // board, knowledge, mail, scripts): the frame goes over the link and the orchestrator's answer comes back to this caller.
             // Asked first whether the session is link-started, so a daemon that is its own orchestrator never reads the side tag.
-            val forwardedFor = envelope.sessionId?.takeIf { it.isNotBlank() } ?: active
+            val forwardedFor = com.superiorsoftllc.infantry.runners.FrameForwarder.callerSession(envelope.type, envelope.data, envelope.sessionId, active, declaredSession)
             if (forwarder != null && forwardedFor != null && forwarder.forwards(forwardedFor) &&
                 frameSide(frames, plugins, envelope) == com.superiorsoftllc.infantry.daemon.api.orchestrator.FrameSide.ORCHESTRATOR
             ) {
@@ -3814,10 +3817,12 @@ private suspend fun handleConnection(
                     if (projectId.isEmpty()) {
                         Envelope(Envelope.ERROR, "agent_roster refused: projectId is blank")
                     } else {
+                        // RUNNER-DONE-1: a worker on a remote runner is one of the project's agents too (it read "No agents here").
+                        val rosterSessions = manager.list() + remoteSessions()
                         val rows = roster(
                             projectId,
-                            projectAgents(projectId, manager.list(), agents::get),
-                            manager.list(),
+                            projectAgents(projectId, rosterSessions, agents::get),
+                            rosterSessions,
                             mailbox,
                             boardPorts.titlesBySession(),
                         )

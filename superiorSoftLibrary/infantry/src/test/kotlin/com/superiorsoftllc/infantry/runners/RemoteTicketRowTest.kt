@@ -30,6 +30,11 @@ class RemoteTicketRowTest {
         mirror.placed("s1", RemoteSessionMirror.Placed("claude", "sonnet", work.path, branch, "t1"))
         val rec = mirror.get("s1")!!
         assertEquals("sonnet", rec.model); assertEquals(work.path, rec.repoRoot); assertEquals("t1", rec.ticketId)
+        // RUNNER-DONE-1: the project roster (`agents --live --project`) filters on these; a remote worker read "No agents here".
+        mirror.placed("s1", RemoteSessionMirror.Placed("claude", "sonnet", work.path, branch, "t1", projectId = "p1", agentId = "a1", role = "backend"))
+        mirror.get("s1")!!.let { assertEquals("p1", it.projectId); assertEquals("a1", it.agentId); assertEquals("backend", it.role) }
+        val agents = com.superiorsoftllc.infantry.daemon.projectAgents("p1", mirror.list()) { null }
+        assertEquals(listOf("a1"), agents.map { it.agentId }, "the remote worker is one of the project's agents")
 
         assertEquals(null, BoardSummary.gitCommit(branch, rec.repoRoot), "before the fetch: no commit")
         assertTrue(com.superiorsoftllc.infantry.daemon.plugins.fetchRunnerTicketBranch(work, branch))
