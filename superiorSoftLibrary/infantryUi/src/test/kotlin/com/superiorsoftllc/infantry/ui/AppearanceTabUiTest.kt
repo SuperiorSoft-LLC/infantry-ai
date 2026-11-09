@@ -6,6 +6,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
@@ -222,6 +224,82 @@ class AppearanceTabUiTest {
             waitUntil(timeoutMillis = 10_000) { AvatarStyleChoice.chosen == "mascot" }
             waitUntil(timeoutMillis = 10_000) { onAllNodesWithTag(AVATAR_TAG).fetchSemanticsNodes().isEmpty() }
             assertEquals(emptyList(), com.superiorsoftllc.infantry.ui.plugin.PluginFaults.all.map { it.toString() }, "no plugin fault")
+        }
+        AvatarStyleChoice.chosen = null
+    }
+
+    /** MASCOT-LIVE-1: disable the style's plugin (portrait), enable it again: the stored choice draws the style again. */
+    @Test fun aStyleComesBackWhenItsPluginIsEnabledAgain() {
+        AvatarStyleChoice.chosen = null
+        uiPrefsOverride!!["cfg.$THEME_NODE.agentAvatarStyle"] = "\"fake\""
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        try {
+            val link = NoDialLink(scope)
+            val controller = Controller(scope, link)
+            var current by androidx.compose.runtime.mutableStateOf(factory(withAppearance = true, extra = listOf(fakeStyle)))
+            runDesktopComposeUiTest(1400, 860) {
+                setContent { App(controller, "ws://127.0.0.1:1/ws", null, tabs = current) }
+                link.push(Envelope(Envelope.READY, "contract=1.94.0 provider=stub instance=i1"))
+                waitUntil(timeoutMillis = 10_000) { controller.state.value.connection.isLive }
+                link.push(Envelope(Envelope.SESSIONS, """[{"id":"s1","provider":"claude","workingDir":"/w","spawnedAt":1,"lastHeartbeat":1,"state":"IDLE"}]"""))
+                waitUntil(timeoutMillis = 10_000) { onAllNodesWithTag("fake-avatar").fetchSemanticsNodes().isNotEmpty() }
+                // Disabled: the style is gone, the portrait draws.
+                current = factory(withAppearance = true)
+                waitUntil(timeoutMillis = 10_000) { onAllNodesWithTag("fake-avatar").fetchSemanticsNodes().isEmpty() && onAllNodesWithTag(AVATAR_TAG).fetchSemanticsNodes().isNotEmpty() }
+                // Enabled again: a new factory with the style; the user's stored choice is still "fake".
+                current = factory(withAppearance = true, extra = listOf(fakeStyle))
+                waitUntil(timeoutMillis = 10_000) { onAllNodesWithTag("fake-avatar").fetchSemanticsNodes().isNotEmpty() }
+            }
+        } finally {
+            scope.cancel()
+        }
+        AvatarStyleChoice.chosen = null
+    }
+
+    /** MASCOT-LIVE-1: the real hot swap (Plugins tab): Infantry_Mascot loaded from its jar, disabled, enabled again, window mounted. */
+    @Test fun theMascotComesBackAfterTheRealLiveSwapDisableAndEnable() {
+        AvatarStyleChoice.chosen = null
+        uiPrefsOverride!!["cfg.$THEME_NODE.agentAvatarStyle"] = "\"mascot\""
+        val repoRoot = generateSequence(java.io.File("").absoluteFile) { it.parentFile }.map { java.io.File(it, "plugins") }.first { java.io.File(it, "official/Infantry_Mascot").isDirectory }
+        val state = java.nio.file.Files.createTempDirectory("mascot-swap").toFile()
+        val root = java.io.File(state, "plugins")
+        for (m in listOf("Infantry_Mascot", "Infantry_Appearance")) {
+            java.io.File(repoRoot, "official/$m").let { src ->
+                java.io.File(root, "official/$m/build/libs").mkdirs()
+                java.io.File(src, "module.json").copyTo(java.io.File(root, "official/$m/module.json"))
+                java.io.File(src, "build/libs/$m.jar").copyTo(java.io.File(root, "official/$m/build/libs/$m.jar"))
+            }
+        }
+        fun enable(on: Boolean) = java.io.File(root, "modules.json").writeText("""{"modules":{"Infantry_Mascot":{"enabled":$on}}}""")
+        enable(true)
+        val devTrust = com.superiorsoftllc.infantry.plugin.host.PluginFolders.DEV_TRUST_PROPERTY
+        var loaded = com.superiorsoftllc.infantry.ui.plugin.DesktopPlugins.load(state, env = { if (it == com.superiorsoftllc.infantry.plugin.host.PluginFolders.ROOT_ENV) root.absolutePath else null }, property = { if (it == devTrust) "true" else null }, print = {})
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        try {
+            val link = NoDialLink(scope)
+            val controller = Controller(scope, link)
+            var current by androidx.compose.runtime.mutableStateOf(loaded.factory)
+            runDesktopComposeUiTest(1400, 860) {
+                setContent { App(controller, "ws://127.0.0.1:1/ws", null, tabs = current) }
+                link.push(Envelope(Envelope.READY, "contract=1.94.0 provider=stub instance=i1"))
+                waitUntil(timeoutMillis = 10_000) { controller.state.value.connection.isLive }
+                link.push(Envelope(Envelope.SESSIONS, """[{"id":"s1","provider":"claude","workingDir":"/w","spawnedAt":1,"lastHeartbeat":1,"state":"IDLE"}]"""))
+                waitUntil(timeoutMillis = 10_000) { AvatarStyleChoice.chosen == "mascot" }
+                waitUntil(timeoutMillis = 10_000) { onAllNodesWithTag(AVATAR_TAG).fetchSemanticsNodes().isEmpty() }
+                for (on in listOf(false, true)) {
+                    enable(on)
+                    val r = loaded.swap() as com.superiorsoftllc.infantry.ui.plugin.DesktopPlugins.Swap.Applied
+                    loaded = r.next
+                    current = loaded.factory
+                    waitForIdle()
+                    if (!on) waitUntil(timeoutMillis = 10_000) { onAllNodesWithTag(AVATAR_TAG).fetchSemanticsNodes().isNotEmpty() }
+                    else waitUntil(timeoutMillis = 10_000) { onAllNodesWithTag(AVATAR_TAG).fetchSemanticsNodes().isEmpty() }
+                }
+            }
+        } finally {
+            scope.cancel()
+            runCatching { loaded.close() }
+            state.deleteRecursively()
         }
         AvatarStyleChoice.chosen = null
     }
