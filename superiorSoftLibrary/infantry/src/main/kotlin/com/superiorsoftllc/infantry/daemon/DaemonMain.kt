@@ -1994,6 +1994,7 @@ class InfantryDaemon(
                 starts = remoteStarts,
                 forwarder = frameForwarder,
                 pump = forwardPump,
+                mode = { deploymentMode.id },
             )
             runnerLinksRef.set(runnerLinkService.links)
             plugins.runnerLinks = runnerLinkService.links

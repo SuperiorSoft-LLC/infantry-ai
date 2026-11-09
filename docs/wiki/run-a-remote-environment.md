@@ -28,7 +28,10 @@ Choose it, first source wins: `infantry daemon --mode runner` (or `--mode=runner
    ```
    `/data` holds the state (token, link keystore, agent logins), `/work` the repositories and worktrees. Port 8790 is the runner
    link (`limits.runners.linkPort`, TLS). The daemon's own port 8787 stays closed. The image bakes in `opencode` and `pi`; build
-   with `--build-arg INSTALL_CLAUDE=true` to add `claude`. From an install instead: `infantry daemon --mode runner`.
+   with `--build-arg INSTALL_CLAUDE=true` to add `claude`. Add `-e INFANTRY_RUNNER_NAME=server-1` (plus `INFANTRY_RUNNER_HOST`,
+   `INFANTRY_RUNNER_ALLOW_PROJECTS`, `INFANTRY_RUNNER_ALLOW_HARNESSES`) and the container prints its pairing link in `docker logs`
+   once it is up and not paired yet (see [Runner quickstart](runner-quickstart.md)). From an install instead: `infantry runner up
+   --name server-1 --host <address>`, which starts a runner-mode daemon when none answers and prints the link.
 2. **Log the agent CLI in on the server**, for example `docker exec -it infantry-runner claude login` (the login lands in `/data`).
    Logins and secrets never travel from your PC.
 3. **Allow what it may run** on the runner: the settings `runner.projects` and `runner.harnesses` (empty means none, `*` means any).
