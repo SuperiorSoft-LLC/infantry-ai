@@ -39,8 +39,6 @@ import com.superiorsoftllc.infantry.ui.progress.ProgressBar
 import com.superiorsoftllc.infantry.ui.shell.ActionButton
 import com.superiorsoftllc.infantry.ui.shell.LinkContext
 import com.superiorsoftllc.infantry.ui.shell.LocalShellContext
-import kotlinx.coroutines.async
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -215,6 +213,10 @@ fun runnerFailure(text: String): String? {
     if (obj.okAnswer()) return null
     return obj.text("error").ifBlank { "the daemon refused the request" }
 }
+
+/** RUNNER-UI-ADD-1: the daemon's `error` refusal of a request ([text] says why) as a failed answer, so [runnerFailure] shows it. */
+fun refusalAnswer(text: String): String =
+    JsonObject(mapOf("ok" to JsonPrimitive("false"), "error" to JsonPrimitive(text.ifBlank { "the daemon refused the request" }))).toString()
 
 /** The name of the runner an `add` answer paired, or null when the answer carries none. */
 fun addedRunnerName(text: String): String? = parseObject(text)?.takeIf { it.okAnswer() }?.text("name")?.takeIf { it.isNotBlank() }
@@ -586,10 +588,13 @@ class RunnersCardBlock : Block("runnersCard", RUNNERS_CARD_NODE) {
         var listError by remember { mutableStateOf<String?>(null) }
         var dialog by remember { mutableStateOf<CardDialog?>(null) }
         val coroutines = rememberCoroutineScope()
-        /** Sends one request and returns the daemon's next `runner_admin` answer (subscribed before the send, so it cannot be missed). */
-        suspend fun call(request: String): String? = kotlinx.coroutines.coroutineScope {
-            val answer = async(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) { link.frames(RUNNER_ADMIN_FRAME).first() }
-            if (!link.sendFrame(RUNNER_ADMIN_FRAME, request)) { answer.cancel(); null } else answer.await()
+        /**
+         * Sends one request and returns the daemon's answer to THAT request (matched by request id), or null when nothing was sent.
+         * RUNNER-UI-ADD-1: taking the next `runner_admin` frame instead let a `list` answer stand in for an `add` one, which closed
+         * the dialog as if paired and dropped the add's error. A refusal (an `error` frame) comes back as a failed answer.
+         */
+        suspend fun call(request: String): String? = link.request(RUNNER_ADMIN_FRAME, request)?.let { reply ->
+            if (reply.refused) refusalAnswer(reply.data) else reply.data
         }
         suspend fun refresh() {
             val text = call(adminRequest("list", "")) ?: return
@@ -618,7 +623,9 @@ class RunnersCardBlock : Block("runnersCard", RUNNERS_CARD_NODE) {
                     ?: CardDialog.Check(runner, error = runnerFailure(text) ?: RUNNERS_UNREADABLE)
             }
         }
-        LaunchedEffect(link) { refresh() }
+        // RUNNER-UI-ADD-1: on connect and reconnect, not per link object (the shell hands a new one each recomposition, which
+        // re-listed about once a second).
+        LaunchedEffect(link.live) { if (link.live) refresh() }
         RunnersCard(
             list, listError,
             onAdd = { dialog = CardDialog.Add(sending = false) },

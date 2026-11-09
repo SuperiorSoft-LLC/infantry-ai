@@ -56,8 +56,6 @@ import com.superiorsoftllc.infantry.ui.model.ExecutorPickerModel
 import com.superiorsoftllc.infantry.ui.model.NewAgentModalModel
 import com.superiorsoftllc.infantry.ui.model.PickedModel
 import com.superiorsoftllc.infantry.ui.model.RunnerChoices
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 
 const val NEW_AGENT_DIALOG_TAG = "new-agent-dialog"
@@ -395,13 +393,10 @@ private fun NewAgentRunner(m: NewAgentModalModel, update: (NewAgentModalModel) -
 fun RunnerPicker(value: String, onPick: (String) -> Unit, modifier: Modifier = Modifier) {
     val link = com.superiorsoftllc.infantry.ui.shell.LocalShellContext.current?.link
     var registered by remember { mutableStateOf<List<com.superiorsoftllc.infantry.ui.model.RunnerStatus>>(emptyList()) }
-    androidx.compose.runtime.LaunchedEffect(link) {
-        if (link == null) return@LaunchedEffect
-        val answer = kotlinx.coroutines.coroutineScope {
-            val a = async(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) { link.frames(RunnerChoices.FRAME).first() }
-            if (!link.sendFrame(RunnerChoices.FRAME, RunnerChoices.listRequest)) { a.cancel(); null } else a.await()
-        }
-        if (answer != null) registered = RunnerChoices.parse(answer)
+    // RUNNER-UI-ADD-1: the answer to THIS list request (request id), never another `runner_admin` answer; once per connect.
+    androidx.compose.runtime.LaunchedEffect(link?.live) {
+        if (link == null || !link.live) return@LaunchedEffect
+        link.request(RunnerChoices.FRAME, RunnerChoices.listRequest)?.takeIf { !it.refused }?.let { registered = RunnerChoices.parse(it.data) }
     }
     RunnerPickerView(value, registered, onPick, modifier)
 }

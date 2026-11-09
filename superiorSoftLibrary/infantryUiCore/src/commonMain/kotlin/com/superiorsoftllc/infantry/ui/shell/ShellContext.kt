@@ -546,6 +546,20 @@ interface LinkContext {
     fun frames(type: String): kotlinx.coroutines.flow.Flow<String> = kotlinx.coroutines.flow.emptyFlow()
     /** NOTIFY-1 (additive, generic): sends one frame of [type] with [data] on this link (a plugin's own frame); false when not sent. */
     suspend fun sendFrame(type: String, data: String): Boolean = false
+    /**
+     * RUNNER-UI-ADD-1 (additive, generic): sends one frame of [type] with [data] under a fresh request id and returns the
+     * daemon's DIRECT answer to it: the frame the daemon echoes that id on (an answer of [type], or its `error` refusal,
+     * [LinkReply.refused]). Never another request's answer of the same type, which [frames] + [sendFrame] cannot tell apart
+     * when two requests of one type are in flight. Null when nothing was sent (no link, or outside a shell). The daemon must
+     * echo the id (contract 1.87.0); a frame it answers without one is never matched.
+     */
+    suspend fun request(type: String, data: String): LinkReply? = null
+}
+
+/** RUNNER-UI-ADD-1: the daemon's direct answer to one [LinkContext.request]: its frame [type] and [data]. */
+data class LinkReply(val type: String, val data: String) {
+    /** The daemon refused the request (an `error` frame, e.g. a policy or owner-only gate); [data] says why. */
+    val refused: Boolean get() = type == com.superiorsoftllc.infantry.ui.protocol.Envelope.ERROR
 }
 
 /** The window's working context: the active project and the daemon's refusals. */
