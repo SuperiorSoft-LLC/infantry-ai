@@ -22,6 +22,7 @@ Every page of this wiki is listed here, one line each. The pages are written fro
 - [Runner quickstart](runner-quickstart.md): pair a server, pick it for an agent, run a ticket there (proven end to end).
 - [Runner pairing design](RunnerPairing-design.md): RUNNER-PAIR-UX-1 (2026-11-08): today's 12 pairing steps and the one-link flow that replaces them (design record, tickets in backlog).
 - [Agent avatar mascot design](Agent-avatar-mascot-design.md): MASCOT-1 (2026-11-08): where agent avatars are drawn today, a pluggable avatar-renderer seam in UI core, and the material-mascot plugin on top of it (design record, tickets not filed).
+- [UI verify design](UI-verify-design.md): UI-VERIFY-1 (2026-11-08): offscreen shots, test-scoped input, real-clock frame bench, headless web check and an Android CI smoke so workers check the UI without the owner's desktop (design record, tickets not filed).
 - [UI plugin API](plugin-api.md): every public type and function of the UI plugin API.
 - [Daemon plugin API](daemon-plugin-api.md): tools, routes, hooks, events, services, storage, lifecycle.
 - [Progress and downloads](Progress.md): the one progress/loader system and the one downloader; a plugin presenter, renderer or transport.
