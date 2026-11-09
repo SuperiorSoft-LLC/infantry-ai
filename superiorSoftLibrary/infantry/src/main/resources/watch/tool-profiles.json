@@ -5,6 +5,7 @@
     "shim": ["gradle"],
     "args": ["--console=plain"],
     "argsUnless": ["--console"],
+    "version": { "file": "gradle/wrapper/gradle-wrapper.properties", "match": "^distributionUrl=.*gradle-([0-9][^-]*)-" },
     "daemons": ["GradleDaemon", "org\\.gradle\\.launcher\\.daemon"],
     "sharedDaemon": true,
     "clients": ["gradlew", "GradleWrapperMain", "GradleMain"],

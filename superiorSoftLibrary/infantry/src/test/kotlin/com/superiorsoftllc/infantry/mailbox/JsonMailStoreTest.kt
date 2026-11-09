@@ -3,6 +3,7 @@
 package com.superiorsoftllc.infantry.mailbox
 
 import java.io.File
+import org.junit.Assume.assumeTrue
 import java.io.IOException
 import java.io.RandomAccessFile
 import java.nio.file.Files
@@ -179,6 +180,7 @@ class JsonMailStoreTest {
 
     @Test
     fun aWriteThatMeetsAReaderHoldingTheStoreStillCommits() {
+        assumeTrue("Windows-only: on POSIX an open handle or a FileLock blocks neither a read nor a rename (locks are advisory, per process), so a held store cannot occur and the precondition this test asserts is false", WINDOWS_LOCKS) // CI-TESTS-1
         // Given: a committed store, and another party holding it OPEN -- which is what a concurrent
         // load(), a backup or an editor does. A blanket catch that answers the denial by unlinking the
         // store (the delete-then-copy the old fallback ran) turns a READ into the loss of every mail.
@@ -233,3 +235,6 @@ class JsonMailStoreTest {
         )
     }
 }
+
+/** CI-TESTS-1: Windows share modes make an open handle or a lock deny other readers and the atomic replace. */
+private val WINDOWS_LOCKS = System.getProperty("os.name").orEmpty().startsWith("Windows", ignoreCase = true)

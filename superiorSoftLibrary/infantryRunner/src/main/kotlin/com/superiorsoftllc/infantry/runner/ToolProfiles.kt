@@ -80,6 +80,8 @@ data class ToolProfile(
      * process watch can give a detached daemon whose client is gone to the session whose worktree that is. Null = none.
      */
     val daemonDir: DaemonDirSource? = null,
+    /** CI-TESTS-1: where a project pins this tool's version (the health report's environment lists it). Null = not reported. */
+    val version: VersionSource? = null,
     /** In an override: drop the default entry of this [name]. */
     val disabled: Boolean = false,
 )
@@ -90,6 +92,19 @@ data class ToolProfile(
  */
 @Serializable
 data class DaemonDirSource(val paths: List<String> = emptyList(), val match: String = "")
+
+/**
+ * CI-TESTS-1: [file] is a path relative to the project root; [match] is a regex over its lines whose group 1 is the
+ * version the project pins (the first matching line wins).
+ */
+@Serializable
+data class VersionSource(val file: String, val match: String) {
+    /** The version [projectDir] pins, or null when the file is missing or no line matches. */
+    fun read(projectDir: java.io.File): String? = runCatching {
+        val re = Regex(match)
+        java.io.File(projectDir, file).takeIf { it.isFile }?.readLines()?.firstNotNullOfOrNull { re.find(it)?.groupValues?.getOrNull(1) }
+    }.getOrNull()
+}
 
 /**
  * STACK-NEUTRAL-1: one env value a worker session gets. [value] may name the build limits as `${maxWorkers}` and
@@ -154,6 +169,10 @@ object ToolProfiles {
 
     fun validate(p: ToolProfile) {
         require(p.name.isNotBlank()) { "a tool profile needs a name" }
+        p.version?.let { v ->
+            require(v.file.isNotBlank()) { "tool profile '${p.name}': version needs a file" }
+            runCatching { Regex(v.match) }.exceptionOrNull()?.let { throw IllegalArgumentException("tool profile '${p.name}': bad regex '${v.match}' (${it.message})") }
+        }
         (p.daemons + p.notifyOn + p.failureMarkers + p.redirects + p.clients + p.heavyImages + p.heavyCommands).forEach { re ->
             runCatching { Regex(re) }.exceptionOrNull()?.let { throw IllegalArgumentException("tool profile '${p.name}': bad regex '$re' (${it.message})") }
         }

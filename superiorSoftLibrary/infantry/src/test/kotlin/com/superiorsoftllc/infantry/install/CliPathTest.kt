@@ -17,6 +17,12 @@ import kotlin.test.assertTrue
  * key (never `HKCU\Environment`) for the Windows user-environment one.
  */
 class CliPathTest {
+    /**
+     * CI-TESTS-1: another tool's PATH entries in this OS's own form. A `C:\...` literal carries the drive colon, which IS
+     * the separator on Linux and macOS, so there it split into two entries and the tests failed on the fixture, not the code.
+     */
+    private val FOREIGN_JAVA = if (File.pathSeparatorChar == ';') "C:\\Program Files\\Java\\bin" else "/opt/Program Files/java/bin"
+    private val FOREIGN_SYS = if (File.pathSeparatorChar == ';') "C:\\Windows" else "/usr/bin"
     private val temp: File = File(System.getProperty("java.io.tmpdir"), "infantry-clipath-test-" + System.nanoTime()).apply { mkdirs() }
     private val windows: Boolean = CliPath.isWindows()
 
@@ -66,12 +72,12 @@ class CliPathTest {
     fun `install adds the launcher dir and keeps every other entry`() {
         val bin = launcherDir("bin")
         val other = File(temp, "other").apply { mkdirs() }
-        val store = FakeStore(listOf(other.path, "C:\\Program Files\\Java\\bin").joinToString(File.pathSeparator))
+        val store = FakeStore(listOf(other.path, FOREIGN_JAVA).joinToString(File.pathSeparator))
 
         val out = CliPath.install(store, bin)
 
         assertTrue(out.changed)
-        assertEquals(listOf(other.path, "C:\\Program Files\\Java\\bin", bin.absolutePath), store.entryList())
+        assertEquals(listOf(other.path, FOREIGN_JAVA, bin.absolutePath), store.entryList())
         assertEquals(listOf(bin.absolutePath), out.plan!!.added)
         assertTrue(store.entryList().any { it == other.path }, "another tool's entry is preserved")
         assertEquals(1, store.notified, "the user environment change is broadcast once")
@@ -208,7 +214,7 @@ class CliPathTest {
         val bin = launcherDir("bin")
         val other = File(temp, "other").apply { mkdirs() }
         val file = File(temp, "path.txt")
-        file.writeText(listOf(other.path, "C:\\Windows").joinToString(File.pathSeparator))
+        file.writeText(listOf(other.path, FOREIGN_SYS).joinToString(File.pathSeparator))
         val store = FileUserPath(file)
 
         assertTrue(CliPath.install(store, bin).changed)
@@ -218,10 +224,10 @@ class CliPathTest {
         bin.deleteRecursively() // an update moved or removed the folder: only the record knows it was ours
         val moved = launcherDir("moved")
         assertTrue(CliPath.install(store, moved).changed)
-        assertEquals(listOf(other.path, "C:\\Windows", moved.absolutePath), CliPath.entries(FileUserPath(file).read()))
+        assertEquals(listOf(other.path, FOREIGN_SYS, moved.absolutePath), CliPath.entries(FileUserPath(file).read()))
 
         assertTrue(CliPath.uninstall(store, moved).changed)
-        assertEquals(listOf(other.path, "C:\\Windows"), CliPath.entries(FileUserPath(file).read()))
+        assertEquals(listOf(other.path, FOREIGN_SYS), CliPath.entries(FileUserPath(file).read()))
         assertTrue(FileUserPath(file).recorded().isEmpty())
     }
 
