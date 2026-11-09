@@ -527,4 +527,17 @@ class PluginManagerServiceTest {
         assertTrue(steps.first() == "Downloading" && "Verifying" in steps, "steps: $steps")
         assertTrue(seen.any { it.id == task.id && it.done > 0 && it.unit == "bytes" }, "the bytes show on the install task")
     }
+
+@Test fun `a hung source cannot hold a refresh past the timeout and the others still answer`() {
+    val fetcher = Fetcher { url, dest, _ -> if (url.contains("hung")) Thread.sleep(60_000) else { dest.parentFile.mkdirs(); dest.writeText("""{"plugins":[]}""") } }
+    val m = PluginManager(root, state, fetcher = fetcher, refreshTimeoutMs = { 1_500 })
+    m.setSources(emptyList())
+    assertTrue(m.addSource(CatalogSource("hung", "community", url = "https://example.invalid/hung/c.json")).ok)
+    assertTrue(m.addSource(CatalogSource("fast", "community", url = "https://example.invalid/fast/c.json")).ok)
+    val t0 = System.currentTimeMillis()
+    val r = m.refresh().associateBy { it.source }
+    assertTrue(System.currentTimeMillis() - t0 < 10_000, "refresh returned within the limit")
+    assertFalse(r.getValue("hung").ok); assertTrue(r.getValue("hung").message.startsWith("timed out"))
+    assertTrue(r.getValue("fast").ok)
+}
 }
