@@ -8,7 +8,7 @@
   "description": "The opencode harness (HARNESS H8b-2/3): launches opencode (run --format json, or the persistent opencode serve over HTTP/SSE), maps tool approval to its permissions, merges the session's MCP server and the watch plugin into its inline config, lists its models carries the / command catalog and reads its session store.",
   "harness": {
     "jar": "harness/build/libs/Infantry_OpenCode-harness.jar",
-    "contract": "2.17.0",
+    "contract": "2.18.0",
     "ids": ["opencode"],
     "cli": { "id": "opencode", "command": "opencode", "label": "OpenCode" },
     "settings": ["harness.opencode.maxRetries"],

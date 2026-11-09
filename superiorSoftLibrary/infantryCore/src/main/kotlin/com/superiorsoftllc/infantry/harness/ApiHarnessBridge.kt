@@ -136,6 +136,11 @@ class ApiCliHarness(
         api.approvalArgs(approval.toApi())
     } catch (t: Throwable) { onFailure(PluginFailure(pluginId, PluginFailurePhase.RUN, t)); emptyList() }
 
+    /** RUNNER-CHECK-SIGNIN-1: API 2.18 [ApiHarness.signInProblem]; a 2.0 - 2.17 plugin answers null (unknown), a throw is attributed and reads as null. */
+    override fun signInProblem(): String? = try {
+        api.signInProblem()?.takeIf { it.isNotBlank() }
+    } catch (t: Throwable) { onFailure(PluginFailure(pluginId, PluginFailurePhase.RUN, t)); null }
+
     /** H7b-1: API 2.10 [ApiHarness.mcpToolRule]; a throw is attributed and yields no rule. */
     override fun mcpToolRule(serverName: String): String? = try {
         api.mcpToolRule(serverName)
