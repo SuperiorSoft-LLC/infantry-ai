@@ -1024,8 +1024,12 @@ class InfantryDaemon(
                                 fun wire(id: String, models: List<String>) = com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerHarness(
                                     id, models, loggedIn = providerStates.state(id).status == com.superiorsoftllc.infantry.usage.ProviderStatus.UNKNOWN,
                                 )
+                                // RUNNER-IMAGE-CLAUDE-1: a harness whose CLI does not resolve is not installed here, so it is not listed
+                                // (the runner check then says "not installed", never "signed in").
+                                val cliTools = cliTools(harnesses, harnessModulesRef.get()?.cliTools().orEmpty()).associateBy { it.id }
                                 val configured = manager.providers
                                     .filter { it !is com.superiorsoftllc.infantry.harness.NoHarnessProvider }
+                                    .filter { p -> cliTools[p.id]?.let { executableResolver.resolve(it).found } ?: true }
                                     .map { p -> wire(p.id, p.knownModels().orEmpty()) }
                                 val known = configured.map { it.id }.toSet()
                                 configured + harnesses.harnessIds().filter { it !in known }.sorted().map { id -> wire(id, emptyList()) }

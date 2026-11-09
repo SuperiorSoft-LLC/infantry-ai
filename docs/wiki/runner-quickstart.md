@@ -122,7 +122,7 @@ refused with: `runner server-1 needs the project's git remote ... has no origin 
 ## 5. What you must do yourself
 
 - Log the agent CLI in on the server (the runner holds its own credentials): `docker exec -it infantry-runner claude login`
-  (Claude is built in only with `--build-arg INSTALL_CLAUDE=true`; opencode and pi are always in the image).
+  (claude, opencode and pi are all in the image, on `/usr/local/bin`; `--build-arg INSTALL_CLAUDE=false` leaves claude out, and then `runner check` reports `harness 'claude' is not installed on this runner`).
   Without a login the session starts but the model cannot answer.
 - Give the server access to the git remote (a deploy key or token).
 - Open the link port to your PC only (firewall or tailnet).

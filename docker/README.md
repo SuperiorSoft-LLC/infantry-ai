@@ -28,7 +28,7 @@ authenticated route refuses without a token, non-root, a ticket started with a f
 
 ## Demo droplet (opencode + pi inside, token generated on first start)
 
-The image now carries the opencode and pi CLIs (claude with `--build-arg INSTALL_CLAUDE=true`). With no token
+The image now carries the opencode and pi CLIs (claude too; `--build-arg INSTALL_CLAUDE=false` leaves it out). With no token
 configured, `entrypoint.sh` generates one into `/data/access-token` on first start (`INFANTRY_TOKEN_AUTO=false` turns that
 off). `docker-compose.yml` is the 2 GB droplet demo (limits as env settings, `mem_limit`, token in the volume); the full
 DigitalOcean recipe, the measured memory and the Linux notes are in `docs/docker-deploy.md`.

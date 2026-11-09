@@ -5,7 +5,7 @@
 # (infantry/web), so the image holds exactly what a droplet runs. installDist is the daemon's own runtime classpath:
 # no Compose/skiko jar is in it (those are only in the desktop app), so nothing Windows-only reaches the image.
 #
-# Harness CLIs baked in (DOCKER-2, ticket c00d1d1c): opencode and pi always, claude only with --build-arg INSTALL_CLAUDE=true.
+# Harness CLIs baked in (DOCKER-2, ticket c00d1d1c): opencode, pi and claude (RUNNER-IMAGE-CLAUDE-1); --build-arg INSTALL_CLAUDE=false leaves claude out.
 # Pin versions with --build-arg OPENCODE_VERSION=... / PI_VERSION=... / CLAUDE_VERSION=... (default: latest at build time).
 # They land in /usr/local/bin, which the daemon finds on PATH (executables/ExecutableResolver.kt). The built-in installer
 # (`infantry harness-install <id>` -> /data/harness-tools) still works and wins over the baked-in copy when used.
@@ -34,7 +34,7 @@ RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
 
 ARG OPENCODE_VERSION=latest
 ARG PI_VERSION=latest
-ARG INSTALL_CLAUDE=false
+ARG INSTALL_CLAUDE=true
 ARG CLAUDE_VERSION=latest
 RUN npm install -g --no-audit --no-fund "opencode-ai@${OPENCODE_VERSION}" "@earendil-works/pi-coding-agent@${PI_VERSION}" \
     && if [ "$INSTALL_CLAUDE" = "true" ]; then npm install -g --no-audit --no-fund "@anthropic-ai/claude-code@${CLAUDE_VERSION}"; fi \
