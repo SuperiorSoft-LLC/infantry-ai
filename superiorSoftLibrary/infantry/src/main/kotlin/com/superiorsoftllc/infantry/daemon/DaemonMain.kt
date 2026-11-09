@@ -2045,8 +2045,11 @@ class InfantryDaemon(
                 restartElsewhere = { settings.runnerLink().restartElsewhere },
                 apply = { _, e ->
                     if (e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.STATUS) remoteMirror.status(e.sessionId, e.payload)
-                    if (e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.FINISHED) {
-                        remoteMirror.finished(e.sessionId)
+                    // RUNNER-CLAUDE-PROOF-1: an interactive session (claude) never finishes between turns, it comes to rest (IDLE): that ends the turn too.
+                    val turnEnded = e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.FINISHED ||
+                        (e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.STATUS && e.payload.equals(SessionState.IDLE.name, ignoreCase = true))
+                    if (turnEnded) {
+                        if (e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.FINISHED) remoteMirror.finished(e.sessionId)
                         // RUNNER-TICKET-ROW-1: fetch the runner's pushed branch to the checkout, then tell the board the turn ended.
                         val placed = remoteMirror.placement(e.sessionId)
                         if (placed?.repoRoot != null && placed.branch != null)
