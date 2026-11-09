@@ -48,7 +48,7 @@ class PluginClassLoader(private val dir: File, jar: File, parent: ClassLoader, f
             return real.loadClass(name)
         }
         override fun getResource(name: String) = if (allowed(name.removeSuffix(".class").replace('/', '.'))) real.getResource(name) else null
-        private fun allowed(n: String) = HIDDEN.none { n.startsWith(it) } && (ALLOWED.any { n.startsWith(it) } || n == CONFIG_VALUES || seamAllowed(n) || (official && officialAllowed(n)))
+        private fun allowed(n: String) = HIDDEN.none { n.startsWith(it) } && (ALLOWED.any { n.startsWith(it) } || n == CONFIG_VALUES || (official && officialAllowed(n)))
     }
 
     private companion object {
@@ -63,18 +63,6 @@ class PluginClassLoader(private val dir: File, jar: File, parent: ClassLoader, f
             val r = n.removePrefix(UI)
             return r.startsWith("shell.") || r.startsWith("sound.") || r.startsWith("voice.") || '.' !in r ||
                 OFFICIAL_NET.any { r == it || r.startsWith("$it$") }
-        }
-        /**
-         * MASCOT-PICKER-1 (ticket f37b281a): the plugin seams that live directly in the `ui` package, by exact type (and its
-         * nested classes). The avatar seam (AgentAvatarRenderers.kt: a renderer, its request, its motion) is a documented
-         * plugin seam (recipe add-an-avatar-style); hidden, a community-installed Infantry_Mascot was refused at load with
-         * NoClassDefFoundError and Appearance > Avatar style offered only Portrait. Plain data and one fun interface.
-         */
-        val SEAM_TYPES = listOf("AgentAvatarRenderer", "AvatarRequest", "AvatarMotion")
-        fun seamAllowed(n: String): Boolean {
-            if (!n.startsWith(UI)) return false
-            val r = n.removePrefix(UI)
-            return SEAM_TYPES.any { r == it || r.startsWith("$it$") }
         }
         /** CONFIG-7b: TabContext.config / BlockScope.config return this one `ui.shell` type; a plugin must be able to name it. Exact match, nothing else in ui.shell. */
         const val CONFIG_VALUES = "com.superiorsoftllc.infantry.ui.shell.ConfigValues"

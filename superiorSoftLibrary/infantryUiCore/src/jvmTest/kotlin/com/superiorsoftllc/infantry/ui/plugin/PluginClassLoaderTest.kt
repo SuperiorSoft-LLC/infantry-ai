@@ -47,18 +47,6 @@ class PluginClassLoaderTest {
         }
     }
 
-    /** MASCOT-PICKER-1 (ticket f37b281a): the avatar seam types load from a community jar; the rest of the `ui` package stays hidden. */
-    @Test
-    fun `a community loader sees the avatar seam and nothing else in the ui package`() {
-        val dir = Files.createTempDirectory("plugin-loader").toFile()
-        PluginClassLoader(dir, File(dir, "empty.jar"), javaClass.classLoader, Tier.COMMUNITY).use { loader ->
-            for (name in listOf("AgentAvatarRenderer", "AvatarRequest", "AvatarMotion").map { "com.superiorsoftllc.infantry.ui.$it" })
-                assertEquals(name, loader.loadClass(name).name, "$name is part of the plugin surface")
-            for (hidden in listOf("PortraitAvatarRenderer", "AgentAvatarRendererFake", "AppKt").map { "com.superiorsoftllc.infantry.ui.$it" })
-                assertFailsWith<ClassNotFoundException>("$hidden must stay hidden") { loader.loadClass(hidden) }
-        }
-    }
-
     @Test
     fun `a community loader sees ConfigValues and nothing else in ui shell`() {
         val dir = Files.createTempDirectory("plugin-loader").toFile()

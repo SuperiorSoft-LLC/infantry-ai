@@ -88,11 +88,6 @@ Nothing in `settings.gradle.kts` changes: it scans `plugins/community/*` for a `
    Use `request.motion` to decide whether to animate: draw a still frame unless it is `AvatarMotion.LIVE`. A list row or
    a board card always gets `STATIC`.
 
-   To read your own settings inside `Draw`, call `moduleConfig("<your node id>")` (package
-   `com.superiorsoftllc.infantry.ui.plugin`). It returns `ConfigValues`, and a key that is not set reads null. Do not use
-   `LocalShellContext`: a community jar cannot see `ui.shell`, so the renderer fails with a missing-class error. A community class
-   loader shows only `AgentAvatarRenderer`, `AvatarRequest` and `AvatarMotion` from the `ui` package.
-
 4. Register it in the plugin entry point. `UiPlugin.register` receives the `UiRegistrar`:
 
    ```kotlin
