@@ -100,6 +100,9 @@ class ClaudeHarness internal constructor(
 
     override fun models(): List<HarnessModels> = ClaudeCommand.models()
 
+    /** RUNNER-CHECK-SIGNIN-1: the same proof a launch checks (FIRST-RUN-F1), for the runner hello's `loggedIn`; the daemon's env, no session env. */
+    override fun signInProblem(): String? = ClaudeSignIn.problem(System.getenv(), home())
+
     private fun liveIdle(): Int = host.setting(ClaudeCommand.LIVE_IDLE_SETTING)?.trim()?.toIntOrNull()?.takeIf { it >= 0 } ?: 0
 
     private fun interactive(): Boolean = ClaudeCommand.isInteractive(host.setting(ClaudeCommand.MODE_SETTING))

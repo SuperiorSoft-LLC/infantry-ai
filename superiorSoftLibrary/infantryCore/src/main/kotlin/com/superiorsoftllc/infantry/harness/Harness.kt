@@ -169,6 +169,9 @@ interface Harness {
     /** HARNESS H6a (API 2.8.0): this harness's own model listing for the `models` frame; null = none (the daemon then notes a free-text field). Isolated by the implementor. */
     fun catalog(): com.superiorsoftllc.infantry.provider.HarnessModelCatalog? = null
 
+    /** RUNNER-CHECK-SIGNIN-1 (API 2.18.0): why this harness's CLI is not signed in here (the fix), or null (signed in, or unknown). Isolated by the implementor. */
+    fun signInProblem(): String? = null
+
     /** HARNESS H7b-1 (API 2.10.0): the argv a run's [approval] adds (a permission-mode flag); empty = none. */
     fun approvalArgs(approval: ToolApproval): List<String> = emptyList()
 

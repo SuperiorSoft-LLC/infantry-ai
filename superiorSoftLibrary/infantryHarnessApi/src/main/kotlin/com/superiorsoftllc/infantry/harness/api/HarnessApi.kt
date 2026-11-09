@@ -88,8 +88,12 @@ import java.io.File
  *
  * 2.17.0 (DENIED-LABEL-1, additive): [SessionOutput.denied], a tool call the harness refused (the owner pressed Deny, or Tool approval said no) without
  * printing a denial record the translator could read. The host shows it on the card as "blocked: <tool> denied (...)". A 2.8 - 2.16 plugin keeps the default: nothing reported.
+ *
+ * 2.18.0 (RUNNER-CHECK-SIGNIN-1, additive): [Harness.signInProblem], why this harness's CLI is not signed in on this machine (the fix, for
+ * a user), or null. A runner reports it in its hello, so `runner check` says "not signed in" instead of "signed in" on a machine with no
+ * login. A 2.0 - 2.17 plugin keeps the default: null (unknown), and the host keeps judging sign-in by the provider's quota state alone.
  */
-const val HARNESS_API_VERSION: String = "2.17.0"
+const val HARNESS_API_VERSION: String = "2.18.0"
 
 /** What a harness jar ships: registers its harnesses, given the [HarnessHost] scoped to its module. */
 interface HarnessPlugin {
@@ -186,6 +190,13 @@ interface Harness {
 
     /** 2.10.0: the tool-allow rule that covers every tool of the session's own MCP server named [serverName], or null (default = none needed). */
     fun mcpToolRule(serverName: String): String? = null
+
+    /**
+     * 2.18.0: why this harness's CLI is not signed in on this machine (a sentence with the fix, shown to a user), or null (default = signed in,
+     * or not known). Answer only on proof (a missing login file, say), never on doubt; keep it cheap (a file read, no child process): the host
+     * calls it for every runner hello. A throw is isolated and attributed, and reads as null.
+     */
+    fun signInProblem(): String? = null
 }
 
 /**

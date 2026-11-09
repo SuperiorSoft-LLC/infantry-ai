@@ -95,6 +95,7 @@ Core types:
 | MCP tool allow rule | 2.10 | `mcpToolRule(serverName)` | `mcp` |
 | Config merge | 2.11 | `mergeConfig(existing, ConfigParts(mcp, watchPlugin))` | `config` |
 | Non-stdio sessions (HTTP/SSE) | 2.12 | `SessionOutput.output/diagnostic/requestApproval`, `HarnessSession.connect(out, launched)` | `session` |
+| Sign-in state (runner check) | 2.18 | `signInProblem()` (null = signed in or unknown; cheap, proof only) | none |
 
 A community plugin must be granted each hook in `modules.json` (`harness.hook.<name>`, plus `harness.code`,
 `harness.cli`, `harness.cli.install`, `harness.setting:<key>` as needed).

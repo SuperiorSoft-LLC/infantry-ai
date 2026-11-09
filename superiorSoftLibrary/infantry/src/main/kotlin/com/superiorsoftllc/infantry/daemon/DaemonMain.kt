@@ -1021,8 +1021,10 @@ class InfantryDaemon(
                             // RUNNER-TEST-1: a harness a plugin registered (the echo example, a third-party harness) is listed beside the
                             // configured ones, as `providerInfos` lists it for the picker; "none" is the no-harness placeholder and never is.
                             harnesses = run {
+                                // RUNNER-CHECK-SIGNIN-1: and the harness itself does not report its CLI as not signed in (API 2.18 signInProblem).
                                 fun wire(id: String, models: List<String>) = com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerHarness(
-                                    id, models, loggedIn = providerStates.state(id).status == com.superiorsoftllc.infantry.usage.ProviderStatus.UNKNOWN,
+                                    id, models, loggedIn = providerStates.state(id).status == com.superiorsoftllc.infantry.usage.ProviderStatus.UNKNOWN &&
+                                        harnesses.signInProblem(id) == null,
                                 )
                                 // RUNNER-IMAGE-CLAUDE-1: a harness whose CLI does not resolve is not installed here, so it is not listed
                                 // (the runner check then says "not installed", never "signed in").

@@ -93,6 +93,10 @@ class HarnessRegistry(
     fun sandboxFor(harnessId: String, worktree: java.io.File): PluginSandbox? =
         runCatching { resolve(harnessId)?.sandboxContribution(worktree) }.getOrNull()
 
+    /** RUNNER-CHECK-SIGNIN-1: why harness [harnessId]'s CLI is not signed in here, or null (signed in, unknown id, no answer, or a throw). */
+    fun signInProblem(harnessId: String): String? =
+        runCatching { resolve(harnessId)?.signInProblem() }.getOrNull()
+
     fun pluginIds(): List<String> = synchronized(lock) { plugins.keys.toList() }
 
     fun resolve(harnessId: String): Harness? = synchronized(lock) {
