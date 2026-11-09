@@ -87,6 +87,17 @@ data class Resolution(
 object ModuleResolver {
     private val NAME = Regex("^[A-Z][A-Za-z0-9]*_[A-Z][A-Za-z0-9]*$")
 
+    /**
+     * MASCOT-LICENSE-1: what a community-tier module must declare to load (an author and a license); null = it does.
+     * The installer runs this same check before it installs a package into the community tier, so a package the
+     * loader would refuse is refused at install, with the same reason.
+     */
+    fun communityRefusal(m: ModuleManifest): String? = when {
+        m.author.isNullOrBlank() -> "community module without an author"
+        m.license.isNullOrBlank() -> "community module without a license"
+        else -> null
+    }
+
     fun resolve(
         candidates: List<ModuleCandidate>,
         config: ModulesConfig = ModulesConfig(),
@@ -122,8 +133,7 @@ object ModuleResolver {
                 platform != null && m.platforms != null && platform !in m.platforms ->
                     refuse("not available on this platform ($platform); it works on ${m.platforms.joinToString()}")
                 EndpointGate.invalid(m.endpoints) != null -> refuse(EndpointGate.invalid(m.endpoints)!!)
-                c.tier == Tier.COMMUNITY && m.author.isNullOrBlank() -> refuse("community module without an author")
-                c.tier == Tier.COMMUNITY && m.license.isNullOrBlank() -> refuse("community module without a license")
+                c.tier == Tier.COMMUNITY && communityRefusal(m) != null -> refuse(communityRefusal(m)!!)
                 else -> {
                     seen[m.name] = c
                     m.tier?.let { claimed ->

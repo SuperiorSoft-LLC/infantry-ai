@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toAwtImage
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsNodeInteractionsProvider
 import androidx.compose.ui.test.assertIsOff
@@ -37,6 +38,7 @@ import com.superiorsoftllc.infantry.plugins.official.PLUGIN_ENABLE_PREFIX
 import com.superiorsoftllc.infantry.plugins.official.PLUGIN_EXPAND_PREFIX
 import com.superiorsoftllc.infantry.plugins.official.PLUGIN_PENDING_PREFIX
 import com.superiorsoftllc.infantry.plugins.official.PLUGIN_ROW_PREFIX
+import com.superiorsoftllc.infantry.plugins.official.PLUGIN_REFUSED_PREFIX
 import com.superiorsoftllc.infantry.plugins.official.PluginsScreen
 import com.superiorsoftllc.infantry.ui.model.ThemeSettings
 import java.io.File
@@ -150,6 +152,18 @@ class PluginsInstalledListUiTest {
         waitUntil(timeoutMillis = 10_000) { port.toggles.isNotEmpty() }
         assertEquals(0, onAllNodesWithTag(DISABLE_CONFIRM_TAG).fetchSemanticsNodes().size)
         assertEquals(listOf("Acme_Notes" to true), port.toggles)
+    }
+
+    /** MASCOT-LICENSE-1: a plugin the loader refuses shows "Refused: <reason>" in its row, not an ON toggle. */
+    @Test fun `a refused plugin shows its reason instead of a toggle`() = runDesktopComposeUiTest(1000, 900) {
+        val refused = PluginView("Infantry_Mascot", "1.0.0", "community", false, true, null, null, emptyList(), emptyList(), false, null,
+            "Mascot avatars.", emptyList(), refused = "community module without a license")
+        val port = FakePluginPort(samplePlugins() + refused)
+        setContent { InfantryTheme { PluginsScreen(port) } }
+        waitUntil(timeoutMillis = 10_000) { rows() == 7 }
+        onNodeWithTag(PLUGIN_REFUSED_PREFIX + "Infantry_Mascot").assertTextEquals("Refused: community module without a license")
+        assertEquals(0, onAllNodesWithTag(PLUGIN_ENABLE_PREFIX + "Infantry_Mascot").fetchSemanticsNodes().size)
+        onNodeWithTag(PLUGIN_ENABLE_PREFIX + "Acme_Notes").assertExists()
     }
 }
 

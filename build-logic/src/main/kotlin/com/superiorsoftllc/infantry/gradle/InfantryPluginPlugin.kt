@@ -113,6 +113,19 @@ class InfantryPluginPlugin : Plugin<Project> {
             val keystore = project.providers.gradleProperty("ihq.keystore")
             val alias = project.providers.gradleProperty("ihq.alias")
             val storePass = project.providers.environmentVariable("IHQ_STOREPASS")
+            // MASCOT-LICENSE-1: an unsigned package always installs into the community tier, and the loader refuses a
+            // community module without an author or a license (ModuleResolver.communityRefusal). Refuse to build one.
+            val projectDir = project.projectDir
+            z.doFirst {
+                if (!keystore.isPresent) {
+                    val raw = ModuleJson.read(projectDir).raw
+                    val missing = listOf("author", "license").filter { (raw[it] as? String).isNullOrBlank() }
+                    if (missing.isNotEmpty()) throw GradleException(
+                        "PLUGIN: module.json of ${module.name} has no ${missing.joinToString(" or ") { "\"$it\"" }}: an unsigned package lands in the community tier, " +
+                            "where the loader refuses it (\"community module without ${if ("author" in missing) "an author" else "a license"}\")",
+                    )
+                }
+            }
             z.doLast {
                 if (keystore.isPresent) {
                     val jarsigner = File(File(System.getProperty("java.home"), "bin"), "jarsigner" + if (OperatingSystem.current().isWindows) ".exe" else "").path

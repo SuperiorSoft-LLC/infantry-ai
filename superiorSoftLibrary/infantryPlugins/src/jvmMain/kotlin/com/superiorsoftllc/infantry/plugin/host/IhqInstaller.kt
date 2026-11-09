@@ -162,6 +162,7 @@ object IhqInstaller {
 
                 val signer = signerOf(payload, settings)
                 val tier = if (signer != null && trusted.any { it == signer }) trustedTier else Tier.COMMUNITY
+                if (tier == Tier.COMMUNITY) ModuleResolver.communityRefusal(manifest)?.let { throw Refusal(IhqRefusal.BAD_MANIFEST, "$it; the loader would refuse it") }
                 val folder = config.folders.firstOrNull { it.tier == tier } ?: throw Refusal(IhqRefusal.NO_TIER_FOLDER, "modules.json has no ${tier.name.lowercase()} folder")
                 if (!replace && config.folders.any { f -> File(File(root, f.path), manifest.name).exists() }) throw Refusal(IhqRefusal.ALREADY_INSTALLED, "${manifest.name} is already installed")
                 val tierDir = File(root, folder.path).also { it.mkdirs() }

@@ -42,7 +42,7 @@ class IhqInstallerTest {
     }
 
     private fun manifest(name: String = "Test_Mod", jar: String = "lib/$name.jar") =
-        """{"name":"$name","version":"1.0.0","entry":"x.Y","jar":"$jar"}"""
+        """{"name":"$name","version":"1.0.0","author":"Acme","license":"Apache-2.0","entry":"x.Y","jar":"$jar"}"""
 
     private fun zip(name: String, entries: Map<String, ByteArray>): File {
         val f = File(tmp, name)
@@ -95,6 +95,20 @@ class IhqInstallerTest {
         val r = IhqInstaller.install(p, root, settings = InstallSettings(allowUnsigned = true))
         assertIs<IhqResult.Installed>(r)
         assertEquals(Tier.COMMUNITY, r.tier)
+    }
+
+    /** MASCOT-LICENSE-1: a package that lands in the community tier must carry what the loader needs, or it is refused at install. */
+    @Test fun `a community package without a license or an author is refused before install`() {
+        val noLicense = zip("nolic.ihq", mapOf("module.json" to """{"name":"Test_Mod","version":"1.0.0","author":"Acme","entry":"x.Y","jar":"lib/Test_Mod.jar"}""".toByteArray(), "lib/Test_Mod.jar" to byteArrayOf(1)))
+        val r = IhqInstaller.install(noLicense, root, settings = InstallSettings(allowUnsigned = true))
+        assertRefused(r, IhqRefusal.BAD_MANIFEST)
+        assertTrue((r as IhqResult.Refused).message.contains("community module without a license"), r.message)
+        assertRefused(IhqInstaller.inspect(noLicense, root, settings = InstallSettings(allowUnsigned = true)), IhqRefusal.BAD_MANIFEST)
+        val noAuthor = zip("noauth.ihq", mapOf("module.json" to """{"name":"Test_Mod","version":"1.0.0","license":"MIT","entry":"x.Y","jar":"lib/Test_Mod.jar"}""".toByteArray(), "lib/Test_Mod.jar" to byteArrayOf(1)))
+        val r2 = IhqInstaller.install(noAuthor, root, settings = InstallSettings(allowUnsigned = true))
+        assertRefused(r2, IhqRefusal.BAD_MANIFEST)
+        assertTrue((r2 as IhqResult.Refused).message.contains("without an author"), r2.message)
+        noHalfInstall()
     }
 
     @Test fun `a tampered jar is refused and nothing is left`() {
@@ -258,7 +272,7 @@ class IhqInstallerTest {
 
     /** PLUGIN-GRADLE-1: the shape the Gradle plugin's `ihq` task packs for a module with a daemon half (module.json + both jars under lib/). */
     @Test fun `a package with a daemon half packed by the gradle plugin installs`() {
-        val m = """{"name":"Test_Mod","version":"1.0.0","entry":"x.Y","jar":"lib/Test_Mod.jar","daemon":{"entry":"x.D","jar":"lib/Test_Mod-daemon.jar","apiAtLeast":"1.8.0"}}"""
+        val m = """{"name":"Test_Mod","version":"1.0.0","author":"Acme","license":"Apache-2.0","entry":"x.Y","jar":"lib/Test_Mod.jar","daemon":{"entry":"x.D","jar":"lib/Test_Mod-daemon.jar","apiAtLeast":"1.8.0"}}"""
         val p = zip("Test_Mod.ihq", mapOf("module.json" to m.toByteArray(), "lib/Test_Mod.jar" to ByteArray(50) { it.toByte() }, "lib/Test_Mod-daemon.jar" to ByteArray(60) { it.toByte() }))
         val r = IhqInstaller.install(p, root, settings = InstallSettings(allowUnsigned = true))
         assertIs<IhqResult.Installed>(r, r.toString())

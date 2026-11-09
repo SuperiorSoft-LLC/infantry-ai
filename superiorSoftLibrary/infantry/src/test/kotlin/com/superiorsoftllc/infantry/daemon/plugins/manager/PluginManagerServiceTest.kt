@@ -57,7 +57,7 @@ class PluginManagerServiceTest {
     /** An Acme package: module.json + one jar. [extra] is spliced into the manifest (a daemon block, services). */
     private fun pack(id: String = "Acme_Echo", version: String = "1.0.0", extra: String = "", api: Int = 2, dir: File = repo): File {
         val f = File(dir, "$id-$version.ihq")
-        val manifest = """{"name":"$id","version":"$version","apiVersion":$api,"license":"Apache-2.0","entry":"x.Y","jar":"lib/$id.jar"${if (extra.isEmpty()) "" else ",$extra"}}"""
+        val manifest = """{"name":"$id","version":"$version","apiVersion":$api,"author":"Acme","license":"Apache-2.0","entry":"x.Y","jar":"lib/$id.jar"${if (extra.isEmpty()) "" else ",$extra"}}"""
         ZipOutputStream(f.outputStream()).use { z ->
             z.putNextEntry(ZipEntry("module.json")); z.write(manifest.toByteArray()); z.closeEntry()
             z.putNextEntry(ZipEntry("lib/$id.jar")); z.write(ByteArray(300) { (it + version.hashCode()).toByte() }); z.closeEntry()
@@ -303,7 +303,7 @@ class PluginManagerServiceTest {
 
         // A plugin folder (a work in progress) is a custom source too.
         val dir = File(tmp, "wip/Acme_Dir").also { File(it, "lib").mkdirs() }
-        File(dir, "module.json").writeText("""{"name":"Acme_Dir","version":"0.1.0","entry":"x.Y","jar":"lib/a.jar"}""")
+        File(dir, "module.json").writeText("""{"name":"Acme_Dir","version":"0.1.0","author":"Acme","license":"MIT","entry":"x.Y","jar":"lib/a.jar"}""")
         File(dir, "lib/a.jar").writeBytes(ByteArray(50))
         installOk(m, dir.path)
         assertEquals(PluginClass.CUSTOM, m.status("Acme_Dir")!!.cls)

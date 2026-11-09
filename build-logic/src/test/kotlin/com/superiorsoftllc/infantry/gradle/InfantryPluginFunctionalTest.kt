@@ -50,7 +50,7 @@ class InfantryPluginFunctionalTest {
         GradleRunner.create().withProjectDir(dir).withPluginClasspath().withArguments(*args, "--stacktrace").let { if (fail) it.buildAndFail() else it.build() }
 
     @Test fun packsBothHalvesAndWritesCatalogEntry() {
-        project("""{"name":"Acme_Mod","version":"1.2.3","apiVersion":2,"entry":"a.A","jar":"build/libs/Acme_Mod.jar","daemon":{"entry":"b.B","jar":"daemon/build/libs/x.jar","apiAtLeast":"1.8.0"}}""", daemon = true)
+        project("""{"name":"Acme_Mod","version":"1.2.3","apiVersion":2,"author":"Acme","license":"MIT","entry":"a.A","jar":"build/libs/Acme_Mod.jar","daemon":{"entry":"b.B","jar":"daemon/build/libs/x.jar","apiAtLeast":"1.8.0"}}""", daemon = true)
         run(":plug:catalogEntry", "-Pihq.url=https://example.test/Acme_Mod.ihq")
         val ihq = File(dir, "official/Acme_Mod/build/ihq/Acme_Mod.ihq")
         ZipFile(ihq).use { z ->
@@ -68,11 +68,18 @@ class InfantryPluginFunctionalTest {
     }
 
     @Test fun uiOnlyModulePacksOneJar() {
-        project("""{"name":"Acme_Mod","version":"1.0.0","entry":"a.A","jar":"x"}""", daemon = false)
+        project("""{"name":"Acme_Mod","version":"1.0.0","author":"Acme","license":"MIT","entry":"a.A","jar":"x"}""", daemon = false)
         run(":plug:ihq")
         ZipFile(File(dir, "official/Acme_Mod/build/ihq/Acme_Mod.ihq")).use { z ->
             assertEquals(setOf("module.json", "lib/Acme_Mod.jar"), z.entries().toList().filter { !it.isDirectory }.map { it.name }.toSet())
         }
+    }
+
+    /** MASCOT-LICENSE-1: an unsigned package lands in the community tier, where the loader refuses a module without a license. */
+    @Test fun refusesUnsignedPackageWithoutLicense() {
+        project("""{"name":"Acme_Mod","version":"1.0.0","author":"Acme","entry":"a.A","jar":"x"}""", daemon = false)
+        val out = run(":plug:ihq", fail = true).output
+        assertTrue("has no \"license\"" in out && "community module without a license" in out, out)
     }
 
     @Test fun refusesDaemonDeclaredWithoutFolder() {
