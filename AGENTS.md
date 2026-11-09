@@ -147,6 +147,7 @@ Rule 9 in one table. Search here before you write a helper; ticket ids name the 
 - [UI plugin API](docs/wiki/plugin-api.md), [Daemon plugin API](docs/wiki/daemon-plugin-api.md), [Harnesses](docs/wiki/Harnesses.md).
 - [Notifications](docs/wiki/Notifications.md): the one notification bus and its presenters.
 - [Health](docs/wiki/Health.md): `infantry health`, the daemon health and environment report, restart log.
+- [Waiting flag](docs/wiki/Waiting.md): `infantry waiting on|off`, the "active but waiting" card state, the idle-nudge watcher.
 - [Scripting](docs/wiki/Scripting.md), [Script Arsenal](docs/wiki/script-arsenal.md) (global scripts), [Settings](docs/wiki/Settings.md), [Licensing](docs/wiki/licensing.md).
 - [Kotlin notes](docs/wiki/kotlin-notes.md): toolchain versions, UI core source sets and expect/actual, Compose MP pitfalls, the build flags.
 - Design records (older, dated; the code wins): [DAEMON-CORE](docs/DAEMON-CORE.md),

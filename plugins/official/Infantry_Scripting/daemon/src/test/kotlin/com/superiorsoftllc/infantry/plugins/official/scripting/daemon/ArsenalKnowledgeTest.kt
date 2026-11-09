@@ -92,9 +92,9 @@ class ArsenalKnowledgeTest {
     @Test fun `syncAll writes every global script and drops entries of scripts that are gone`() {
         BundledScripts.seed(global, File(tmp, "state/seed"), BundledScripts.fromJar())
         writer.save(KnowledgeWriter.GLOBAL_PROJECT, "script-arsenal-ghost", "x", "x")
-        assertEquals(17, kb.syncAll())
+        assertEquals(18, kb.syncAll())
         assertNull(writer.notes[KnowledgeWriter.GLOBAL_PROJECT to "script-arsenal-ghost"])
-        assertEquals(17, writer.notes.keys.count { it.first == KnowledgeWriter.GLOBAL_PROJECT })
+        assertEquals(18, writer.notes.keys.count { it.first == KnowledgeWriter.GLOBAL_PROJECT })
         val hh = writer.notes.getValue(KnowledgeWriter.GLOBAL_PROJECT to "script-arsenal-hook-health")
         assertTrue("alert when a script keeps failing" in (hh.first + hh.second).lowercase())
         assertEquals(-1, ArsenalKnowledge({ null }, store, { emptyList() }).syncAll(), "no writer yet: nothing happens, the caller retries")
@@ -131,7 +131,7 @@ class ArsenalKnowledgeTest {
     /** The docs page's table is generated from the bundled headers; this fails when it is stale. ARSENAL_INDEX_WRITE=1 rewrites it. */
     @Test fun `the docs index table equals the one generated from the bundled headers`() {
         val docs = BundledScripts.fromJar().map { assertNotNull(ScriptHeader.parse(it.name, it.source), "${it.name} has no header") }
-        assertEquals(17, docs.size)
+        assertEquals(18, docs.size)
         docs.forEach { assertTrue(it.scenario != it.purpose, "${it.name} needs a Scenario: line") }
         val table = ScriptHeader.indexTable(docs)
         var dir: File? = File("").absoluteFile

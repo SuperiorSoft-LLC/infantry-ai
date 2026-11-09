@@ -283,6 +283,9 @@ data class Envelope(
 
         /** Contract 1.117.0: `infantry progress` / `infantry_progress`: one [com.superiorsoftllc.infantry.session.ProgressReport] for the frame's session; answered by a `progress` frame (the session's progress, or `null`). The change reaches clients as a `session` push. */
         const val PROGRESS = "progress"
+        /** WAITING-FLAG-1: `infantry waiting` / `infantry_waiting`: one [com.superiorsoftllc.infantry.session.WaitingRequest] for the frame's session; answered by a `waiting` frame (the session's waiting flag, or `null`). The change reaches clients as a `session` push. */
+        const val WAITING = "waiting"
+
 
         /** Contract 1.120.0 (ROGUE-1): [com.superiorsoftllc.infantry.session.ProcessesRequest] -> [com.superiorsoftllc.infantry.session.ProcessesAnswer]: list / reap the processes this daemon's sessions started. */
         const val PROCESSES = "processes"

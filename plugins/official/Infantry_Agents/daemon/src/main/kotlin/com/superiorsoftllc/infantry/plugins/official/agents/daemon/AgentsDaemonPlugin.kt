@@ -39,6 +39,7 @@ class AgentsDaemonPlugin : DaemonPlugin {
         api.tools.register(ListHarnessesTool)
         // RUNTIME-LOAD-4 (F5): the session's own progress report.
         api.tools.register(ProgressTool)
+        api.tools.register(WaitingTool)
         // RUNTIME-LOAD-5 (F5 remainder): the session reads, over the host's sessions read model.
         api.tools.register(SessionReadTools.ListSessions(api))
         api.tools.register(SessionReadTools.GetSession(api))

@@ -35,7 +35,9 @@ for _, s in ipairs(list) do
   local bgRunning = tostring(s.backgroundWork or "") ~= ""
   local isWorker = s.agentId or a.includeNonAgents
   local onlyOk = not a.onlySession or tostring(s.id):sub(1, #a.onlySession) == a.onlySession
-  if isWorker and onlyOk and not exempt[role] and (st == "BUSY" or st == "RUNNING" or st == "WORKING" or bgRunning) then
+  -- WAITING-FLAG-1: a session that flagged itself waiting (infantry waiting on) and whose flag still counts is not silent
+  local flagged = s.waiting and s.waiting.active
+  if isWorker and onlyOk and not flagged and not exempt[role] and (st == "BUSY" or st == "RUNNING" or st == "WORKING" or bgRunning) then
     local p = s.progress or {}
     local last = tonumber(s.lastTurnAt) or tonumber(s.lastOutputAt) or tonumber(p.lastOutputAt) or tonumber(p.updatedAt) or tonumber(p.startedAt) or tonumber(s.lastEventAt)
     if last then

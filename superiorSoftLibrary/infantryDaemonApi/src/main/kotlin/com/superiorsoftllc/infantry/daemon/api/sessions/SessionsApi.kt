@@ -34,6 +34,11 @@ data class SessionView(
     val backgroundWork: String? = null,
     /** The agent's own progress report (contract 1.117.0), or null. */
     val progress: SessionProgress? = null,
+    /** WAITING-FLAG-1: the session's own "active but waiting" flag: why, when it was set, when the wait was expected to end, and when the flag stops counting (epoch millis); all null when not flagged. */
+    val waitingReason: String? = null,
+    val waitingSince: Long? = null,
+    val waitingUntilAt: Long? = null,
+    val waitingExpiresAt: Long? = null,
     val runCount: Int = 0,
     val lastExitCode: Int? = null,
     val lastError: String? = null,

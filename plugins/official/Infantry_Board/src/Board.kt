@@ -765,6 +765,8 @@ fun TicketCardBadgesSection(card: BoardCardHost, modifier: Modifier = Modifier) 
         if (t.wontFix) Chip("won't fix", Palette.Danger)
         if (t.queuedFor != null) Chip("queued", Palette.Accent)
         AgentTaskBadges(t)
+        // WAITING-FLAG-1: the worker flagged itself "active but waiting"; the ticket stays In Progress, the chip says why.
+        if (t.status == TicketColumns.IN_PROGRESS) deps.agent(t.sessionId)?.session?.waiting?.let { WaitingChip(t.id, it) }
         ReportFlagChip(deps.reportFlag(t), Modifier.testTag("ticket-report-${t.id}"))
         // KNOWLEDGE-PTR-2: how many tickets this one relates to (relates_to links + series members).
         RelatedView.count(t).takeIf { it > 0 }?.let { Chip("$it related", Palette.Muted, Modifier.testTag("ticket-related-count-${t.id}")) }

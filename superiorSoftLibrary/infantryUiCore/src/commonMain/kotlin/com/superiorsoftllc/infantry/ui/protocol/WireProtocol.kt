@@ -1178,6 +1178,8 @@ data class SessionRecord(
     val global: Boolean = false,
     /** Contract 1.117.0: the agent's own report on its long job; null = none, or an older daemon. */
     val progress: ProgressView? = null,
+    /** WAITING-FLAG-1: the agent's own "active but waiting" flag; null = none, or an older daemon. */
+    val waiting: WaitingView? = null,
     /**
      * STALL-2: the daemon's one-line watch state for this session (`watching X (quiet 2m)`, `watch OFF: reason`,
      * `busy, silent Nm`, `stalled`, `idle`); null = nothing to say, or an older daemon.
@@ -1209,6 +1211,10 @@ data class AgentWatchView(
  * Contract 1.117.0: the daemon's `SessionProgress`, the agent's MEASUREMENT of its long job (never an estimate). [mode] and
  * [state] stay wire strings so a newer daemon's value decodes; [percent] is null for `indeterminate`.
  */
+/** WAITING-FLAG-1: a session's "active but waiting" flag (epoch millis; the flag stops counting at [expiresAt]). */
+@Serializable
+data class WaitingView(val reason: String, val since: Long, val untilAt: Long, val expiresAt: Long)
+
 @Serializable
 data class ProgressView(
     val mode: String,

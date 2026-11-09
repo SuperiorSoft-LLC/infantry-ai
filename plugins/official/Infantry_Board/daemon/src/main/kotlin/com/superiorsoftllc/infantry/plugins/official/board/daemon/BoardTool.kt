@@ -48,6 +48,10 @@ class BoardTool(private val api: DaemonApi) : DaemonTool {
                 put("type", "string")
                 put("description", "Comma-separated columns to show, e.g. in_progress,pending (backlog, todo, in_progress, pending, done). Default: all, compact.")
             }
+            putJsonObject("waiting") {
+                put("type", "boolean")
+                put("description", "true = only the tickets whose worker flagged itself 'active but waiting' (infantry waiting on). Their lines always show WAITING <age>: <reason>.")
+            }
             putJsonObject("limit") {
                 put("type", "integer")
                 put("minimum", 1)
@@ -79,6 +83,7 @@ class BoardTool(private val api: DaemonApi) : DaemonTool {
             columns, limit, compact = true,
             queueShown = api.settings.limit("limits.tools.boardQueueShown")?.toInt() ?: BoardLines.QUEUE_SHOWN,
             doneShown = api.settings.limit("limits.tools.boardDoneShown")?.toInt() ?: BoardLines.DONE_SHOWN,
+            waitingOnly = (call.arguments["waiting"] as? JsonPrimitive)?.contentOrNull?.trim() == "true",
         )
         val lines = BoardLines.render(tickets.map(BoardLines::row), workers, System.currentTimeMillis(), commits(workers), options)
             .map { line -> if (scope.projectId == null) tickets.firstOrNull { line.startsWith("  " + BoardLines.shortId(it.id) + " ") }?.let { "  [${it.projectId}] ${line.trimStart()}" } ?: line else line }

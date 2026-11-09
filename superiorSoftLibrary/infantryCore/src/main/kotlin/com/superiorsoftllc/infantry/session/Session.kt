@@ -220,6 +220,8 @@ data class SessionRecord(
      * daemon start clears it), cleared when the session ends or a turn ends with no report in it. Omitted when none.
      */
     @EncodeDefault(EncodeDefault.Mode.NEVER) val progress: SessionProgress? = null,
+    /** WAITING-FLAG-1: the session's own "active but waiting" flag ([SessionWaiting]); cleared when its next turn starts. Omitted when none. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val waiting: SessionWaiting? = null,
     /**
      * CLI-PTY-3: the live process's own MCP server link as its harness reports it (`connected`, `disconnected`, `reconnecting`); omitted
      * when the harness reports nothing (headless runs start their servers per turn). Recorded only: the daemon acts on it nowhere; a project

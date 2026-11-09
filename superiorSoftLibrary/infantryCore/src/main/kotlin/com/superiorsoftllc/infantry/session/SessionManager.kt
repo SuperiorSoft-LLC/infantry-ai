@@ -726,6 +726,25 @@ class SessionManager(
         return true
     }
 
+    /** WAITING-FLAG-1: the `limits.waiting.*` settings, read at every call so a change applies at once. */
+    private fun waitingConfig(): WaitingRules.Config {
+        val l = com.superiorsoftllc.infantry.settings.LimitRegistry
+        fun lim(d: com.superiorsoftllc.infantry.settings.LimitDef) = runCatching { limitSource?.invoke(d) }.getOrNull() ?: d.default
+        return WaitingRules.Config(
+            lim(l.WAITING_DEFAULT_MINUTES), lim(l.WAITING_GRACE_MINUTES), lim(l.WAITING_CLEAR_ON_OUTPUT) != 0L, lim(l.WAITING_OUTPUT_GRACE_SECONDS),
+            lim(l.WAITING_MAX_MINUTES), lim(l.WAITING_REASON_CHARS).toInt(),
+        )
+    }
+
+    /** WAITING-FLAG-1: apply one waiting [req] to [sessionId]. Null when there is no such session; throws [IllegalArgumentException] for a bad request. */
+    fun setWaiting(sessionId: String, req: WaitingRequest): SessionRecord? {
+        val current = sessions[sessionId] ?: return null
+        if (req.op == "get") return current
+        val cfg = waitingConfig()
+        WaitingRules.apply(current.waiting, req, clock(), cfg) // validate first, so a bad request changes nothing
+        return update(sessionId) { it.copy(waiting = WaitingRules.apply(it.waiting, req, clock(), cfg)) }
+    }
+
     /**
      * Contract 1.117.0: fold one progress [report] into [sessionId]'s [SessionRecord.progress]; the change reaches every
      * client as a `session` push. Null when there is no such session; throws [IllegalArgumentException] for a bad report.
@@ -924,7 +943,7 @@ class SessionManager(
             // STALL-1: a watched (`--notify`) job is KEPT across the restart: its runner re-registers by its next beat, or the pid
             // probe drops it and the watcher reports it ("exit N" from its exit file, else "runner lost, exit unknown").
             val persisted = loadedRecord.copy(
-                keptProcess = null, backgroundWork = null, automation = null, watch = null, progress = null, watchLabel = null, mcp = null, mcpChangedAt = null,
+                keptProcess = null, backgroundWork = null, automation = null, watch = null, progress = null, waiting = null, watchLabel = null, mcp = null, mcpChangedAt = null,
                 bgJobs = loadedRecord.bgJobs.filter { it.notify != null }.map { it.copy(lastBeat = clock()) },
             ).let {
                 if ((loadedRecord.backgroundWork != null || loadedRecord.bgJobs.isNotEmpty()) && it.state == SessionState.BUSY && it.childPid == null) it.copy(state = SessionState.IDLE) else it
@@ -1683,7 +1702,7 @@ class SessionManager(
         // M2-12: the status follows the TURN, not the process. The turn was accepted above, so the agent is WORKING
         // (BUSY) from now until the turn ends; booting a process for it is plumbing and never a STARTING flip.
         update(sessionId) {
-            it.copy(state = SessionState.BUSY, dormant = false, childPid = null, runCount = it.runCount + 1, lastHeartbeat = clock(), isProcessAlive = true, backgroundWork = null, killedBy = null, killReason = null)
+            it.copy(state = SessionState.BUSY, dormant = false, childPid = null, runCount = it.runCount + 1, lastHeartbeat = clock(), isProcessAlive = true, backgroundWork = null, waiting = null, killedBy = null, killReason = null)
         }
         // BUG-M2-11b-1: the host owns the process and the ONE chat line per launch; the per-turn plumbing is Activity.
         bootDetails.forEach { emit(SessionEvent.Activity(sessionId, provider.id, it)) }
@@ -1702,7 +1721,7 @@ class SessionManager(
             interruptedTurns.remove(sessionId)
             runs[sessionId] = ActiveRun(clock())
             update(sessionId) {
-                it.copy(state = SessionState.BUSY, runCount = it.runCount + 1, lastHeartbeat = clock(), isProcessAlive = true, backgroundWork = null, killedBy = null, killReason = null)
+                it.copy(state = SessionState.BUSY, runCount = it.runCount + 1, lastHeartbeat = clock(), isProcessAlive = true, backgroundWork = null, waiting = null, killedBy = null, killReason = null)
             }
             session.provider
         }

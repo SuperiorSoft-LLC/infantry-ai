@@ -149,6 +149,37 @@ object LimitRegistry {
         "How long a working ticket session may show no tool or event activity before its progress bar is flagged stale (PROGRESS-ALL).",
         zeroMeans = "never flagged",
     )
+    /** WAITING-FLAG-1: the session's own "active but waiting" flag. */
+    val WAITING_DEFAULT_MINUTES = LimitDef(
+        "limits.waiting.defaultMinutes", 30, "minutes",
+        "How long a session's waiting flag (infantry waiting on) is expected to last when the agent names no duration.",
+        min = 1, zeroIsUnlimited = false,
+    )
+    val WAITING_GRACE_MINUTES = LimitDef(
+        "limits.waiting.graceMinutes", 5, "minutes",
+        "How long past its expected end a waiting flag still counts; after that the session counts as silent again and the watcher asks it once whether it is still waiting.",
+        min = 0, zeroIsUnlimited = false,
+    )
+    val WAITING_CLEAR_ON_OUTPUT = LimitDef(
+        "limits.waiting.clearOnOutput", 0, "flag",
+        "1 = the waiting flag also clears at the session's first output after it; 0 = it clears only when the session's next turn starts.",
+        max = 1, zeroMeans = "cleared only when the next turn starts",
+    )
+    val WAITING_OUTPUT_GRACE_SECONDS = LimitDef(
+        "limits.waiting.outputGraceSeconds", 10, "seconds",
+        "Output within this long after the flag is set is the flagging command's own answer and does not clear it (when limits.waiting.clearOnOutput is on).",
+        zeroMeans = "any later output clears it",
+    )
+    val WAITING_MAX_MINUTES = LimitDef(
+        "limits.waiting.maxMinutes", 10_080, "minutes",
+        "The longest wait a session may ask for (infantry waiting on --minutes, infantry_waiting untilMinutes); a longer one is refused.",
+        min = 1, zeroIsUnlimited = false,
+    )
+    val WAITING_REASON_CHARS = LimitDef(
+        "limits.waiting.reasonMaxChars", 200, "characters",
+        "How much of a waiting reason the card chip, the board line and the session JSON keep; the rest is cut.",
+        min = 1, zeroIsUnlimited = false,
+    )
     /** OVERNIGHT-1: the worker is prompted before its starter is told. */
     val IDLE_NUDGE_MINUTES = LimitDef(
         "limits.watchdog.idleNudgeMinutes", 10, "minutes",
@@ -1029,7 +1060,7 @@ object LimitRegistry {
         MAX_PER_POD, MAX_SESSIONS, MAX_DEPTH, MCP_MAX_SPAWNS, LANE_DEFAULT, PACING_CEILING,
         USAGE_STALE_MAX_HOURS, USAGE_BACKOFF_MAX_MINUTES, USAGE_MANUAL_REFRESH_FLOOR_SECONDS,
         BUILD_MAX_WORKERS, BUILD_MAX_PARALLEL_FORKS, CPU_ALERT_PERCENT, CPU_ALERT_MINUTES,
-        TICKET_DEADLINE_MINUTES, UNATTENDED_DEADLINE_MINUTES, STALL_MINUTES, KILL_RETRY_MINUTES, SILENT_MINUTES, PROGRESS_STALE_MINUTES, IDLE_NUDGE_MINUTES, MAIL_WAKE_MAX_SECONDS, IDLE_NOTICE_MINUTES, IDLE_COMMENT, UNBRIEFED_GRACE_MINUTES,
+        TICKET_DEADLINE_MINUTES, UNATTENDED_DEADLINE_MINUTES, STALL_MINUTES, KILL_RETRY_MINUTES, SILENT_MINUTES, PROGRESS_STALE_MINUTES, WAITING_DEFAULT_MINUTES, WAITING_GRACE_MINUTES, WAITING_CLEAR_ON_OUTPUT, WAITING_OUTPUT_GRACE_SECONDS, WAITING_MAX_MINUTES, WAITING_REASON_CHARS, IDLE_NUDGE_MINUTES, MAIL_WAKE_MAX_SECONDS, IDLE_NOTICE_MINUTES, IDLE_COMMENT, UNBRIEFED_GRACE_MINUTES,
         UNASSIGN_WAIT_SECONDS, HANDOFF_COMMITS, HANDOFF_CHARS, AGENT_QUEUE_MAX, RUNNERS_HEARTBEAT_SEC, RUNNERS_LOST_AFTER_SEC, RUNNER_MAX_WORKERS, WORKERS_MAX_PARALLEL, CHAT_QUEUE_MAX, JOBS_REMEMBERED, JOB_LOG_MAX_READ_BYTES, CHAT_SEND_ACK_SECONDS, CHAT_SENT_IDS_KEPT, CHAT_HISTORY_FRAMES,
         AUTO_DONE_MIN_OUTPUTS, PROCESS_WATCH_INTERVAL_SECONDS, PROCESS_STOP_GRACE_SECONDS, PROCESS_STUCK_MINUTES, RUN_SCROLLBACK_BYTES, RUN_HISTORY,
         RUN_INPUT_BYTES_PER_SECOND, RUN_INPUT_MAX_FRAME_BYTES, RUN_INPUT_QUEUE_BYTES, RUN_MAX_COLS, RUN_MAX_ROWS,

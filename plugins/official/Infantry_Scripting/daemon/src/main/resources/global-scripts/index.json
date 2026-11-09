@@ -15,5 +15,6 @@
   "wake-on-log.lua",
   "worker-cap.lua",
   "worker-issue-wake.lua",
-  "worker-silent-ping.lua"
+  "worker-silent-ping.lua",
+  "worker-waiting-nudge.lua"
 ]
