@@ -293,7 +293,12 @@ class RunnerLinkService(
                 "git -C <the project's folder on this machine> remote add origin <a url the runner can reach>",
             )
         }
-        val request = F.CheckRequest(projectId = project, harness = harness?.takeIf { it.isNotBlank() }, gitRemote = remote, contract = F.CONTRACT)
+        // RUNNER-GIT-IDENT-1: the identity a start for this project would carry, so the runner's `git:identity` row is the real answer.
+        val identity = project?.let { runCatching { projectIdentityOf(it) }.getOrNull() }
+        val request = F.CheckRequest(
+            projectId = project, harness = harness?.takeIf { it.isNotBlank() }, gitRemote = remote, contract = F.CONTRACT,
+            gitName = identity?.first, gitEmail = identity?.second,
+        )
         val data = F.json.encodeToString(F.CheckRequest.serializer(), request)
         // The runner may spend limits.runners.checkGitSec in its git row: give the call that on top of a normal link call.
         val timeout = limit(LimitRegistry.RUNNERS_LINK_CALL_SECONDS) + limit(LimitRegistry.RUNNERS_CHECK_GIT_SEC)
@@ -496,6 +501,9 @@ class RunnerLinkService(
      * project has none, which the check reports as its `git:origin` row.
      */
     @Volatile var projectRemoteOf: (String?) -> String? = { null }
+
+    /** RUNNER-GIT-IDENT-1: the git identity (name, email) of a project's checkout, the same lookup a remote start uses; null = none. */
+    @Volatile var projectIdentityOf: (String?) -> Pair<String, String>? = { null }
 
     private fun list(): JsonObject {
         val paired = if (RunnerLinkStore.exists(stateDir)) RunnerLinkStore.open(stateDir).runners() else emptyList()

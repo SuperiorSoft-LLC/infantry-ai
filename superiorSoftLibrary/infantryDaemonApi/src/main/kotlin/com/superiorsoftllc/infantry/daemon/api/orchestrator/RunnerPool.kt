@@ -60,6 +60,12 @@ data class StartSpec(
      * side), so a restart elsewhere loses at most uncommitted edits. Default false (fewer pushes).
      */
     val pushOnCommit: Boolean = false,
+    /**
+     * RUNNER-GIT-IDENT-1: the git author/committer identity a remote worker commits with (the orchestrator checkout's `user.name` /
+     * `user.email`); null = none known. A runner's own `runner.gitName` / `runner.gitEmail` win over it.
+     */
+    val gitName: String? = null,
+    val gitEmail: String? = null,
 )
 
 /** RUNNER-POOL-6: a ticket worktree on the runner: [path], [branch], [base] (a commit), [repoRoot]. */

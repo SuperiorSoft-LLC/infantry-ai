@@ -51,6 +51,7 @@ class RunnerCheckTest {
     private val cloneRoot = File(dir, "clones").also { it.mkdirs() }
     private var gitResult = GitResult(emptyList(), 0, "", "")
     private val gitCalls = mutableListOf<List<String>>()
+    private var ownIdentity: Pair<String, String>? = null
     private val gitTimeouts = mutableListOf<Long>()
     private val harnesses = listOf(RunnerHarness("alpha", listOf("m1"), loggedIn = false), RunnerHarness("echo", loggedIn = true))
 
@@ -67,6 +68,7 @@ class RunnerCheckTest {
         limit = { def -> limits[def.key] ?: def.default },
         git = { ms -> gitTimeouts += ms; GitCli { _, args -> gitCalls += args; gitResult } },
         cloneRoot = { cloneRoot },
+        ownGitIdentity = { ownIdentity },
     )
 
     /** The orchestrator store a check is made for; paired once (a runner accepts one orchestrator), then reused. */
@@ -85,9 +87,11 @@ class RunnerCheckTest {
         harness: String? = null,
         gitRemote: String? = null,
         contract: String? = F.CONTRACT,
+        gitName: String? = null,
+        gitEmail: String? = null,
     ): List<CheckRow> {
         val (store, credential) = pair()
-        val request = F.CheckRequest(projectId = project, harness = harness, gitRemote = gitRemote, contract = contract)
+        val request = F.CheckRequest(projectId = project, harness = harness, gitRemote = gitRemote, contract = contract, gitName = gitName, gitEmail = gitEmail)
         val answer = server.handle(F.CHECK, F.json.encodeToString(F.CheckRequest.serializer(), request), store.selfId(), credential)
         assertTrue(answer.ok, answer.data)
         return F.json.decodeFromString(F.CheckAnswer.serializer(), answer.data).rows
@@ -108,6 +112,26 @@ class RunnerCheckTest {
 
         // An older orchestrator that sends no contract is not a mismatch.
         assertTrue(row(checkRows(contract = null), "contract").ok)
+    }
+
+    @Test
+    fun `the git identity row says who a worker commits as, and fails with the fix when nobody gives one`() {
+        val none = row(checkRows(), RunnerLinkServer.IDENTITY_ROW)
+        assertFalse(none.ok, none.detail)
+        assertTrue(none.fix!!.contains(RunnerLinkSettings.GIT_NAME) && none.fix!!.contains(RunnerLinkSettings.GIT_EMAIL), none.fix!!)
+
+        ownIdentity = "Box User" to "box@x.test"
+        assertTrue(row(checkRows(), RunnerLinkServer.IDENTITY_ROW).detail.contains("Box User <box@x.test>"))
+
+        val sent = row(checkRows(gitName = "Owner", gitEmail = "o@x.test"), RunnerLinkServer.IDENTITY_ROW)
+        assertTrue(sent.ok && sent.detail.contains("Owner <o@x.test>") && sent.detail.contains("orchestrator"), sent.detail)
+
+        settings = settings.copy(gitName = "Runner", gitEmail = "r@x.test")
+        val own = row(checkRows(gitName = "Owner", gitEmail = "o@x.test"), RunnerLinkServer.IDENTITY_ROW)
+        assertTrue(own.ok && own.detail.contains("Runner <r@x.test>"), own.detail)
+        // Half a setting is no identity: the orchestrator's is used.
+        settings = settings.copy(gitEmail = "")
+        assertTrue(row(checkRows(gitName = "Owner", gitEmail = "o@x.test"), RunnerLinkServer.IDENTITY_ROW).detail.contains("Owner <o@x.test>"))
     }
 
     @Test

@@ -142,6 +142,13 @@ object RunnerLinkWire {
         val envNames: List<String> = emptyList(),
         /** RUNNER-POOL-8: push the ticket branch after each worker commit as well as after each turn. */
         val pushOnCommit: Boolean = false,
+        /**
+         * RUNNER-GIT-IDENT-1 (additive): the git author/committer identity the worker commits with: the orchestrator's own (its
+         * project checkout's `user.name` / `user.email`). The runner writes it into its clone unless its own `runner.gitName` /
+         * `runner.gitEmail` override it. Null = the orchestrator has none (an older orchestrator sends neither).
+         */
+        val gitName: String? = null,
+        val gitEmail: String? = null,
     )
 
     /**
@@ -211,10 +218,13 @@ object RunnerLinkWire {
         val harness: String? = null,
         val gitRemote: String? = null,
         val contract: String? = null,
+        /** RUNNER-GIT-IDENT-1 (additive): the identity a start would carry ([StartRequest.gitName]), for the `git:identity` row. */
+        val gitName: String? = null,
+        val gitEmail: String? = null,
     )
 
     /**
-     * One checked thing: [id] is `contract`, `harness:<id>`, `grant:project`, `grant:harness`, `git`, `disk` (runner side) or
+     * One checked thing: [id] is `contract`, `harness:<id>`, `grant:project`, `grant:harness`, `git`, `git:identity`, `disk` (runner side) or
      * `link`, `git:origin` (decided by the orchestrator); [detail] is what was found; [fix] is the exact command or step when it
      * failed (null when [ok]). A row id is stable: a client may switch on it.
      */

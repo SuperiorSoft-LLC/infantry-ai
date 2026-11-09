@@ -144,7 +144,7 @@ class LocalBoardHost(
             model = request.model, effort = request.effort, contextLimit = request.contextLimit, ticketId = request.ticketId,
             prompt = request.prompt, title = request.title, base = request.baseBranch, branch = request.recordedBranch, gitRemote = remote,
             pushOnCommit = runCatching(pushOnCommit).getOrDefault(false),
-        )
+        ).let { s -> checkout?.let { runCatching { gitIdentityOf(it) }.getOrNull() }?.let { (n, e) -> s.copy(gitName = n, gitEmail = e) } ?: s }
         return when (val reply = link.startSession(spec)) {
             is com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorReply.Unavailable -> SessionStartResult.Refused("runner $runner unavailable: ${reply.reason}")
             is com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorReply.Ok -> {
@@ -478,5 +478,11 @@ internal fun fetchRunnerTicketBranch(repo: File, branch: String, git: com.superi
 }
 
 /** `git remote get-url origin` in [repo], or null when it has none. */
+/**
+ * RUNNER-GIT-IDENT-1: the git identity commits in [repo] get (`git config user.name` / `user.email`, local over global), or null
+ * when either is unset. A remote start carries it so the runner's worker commits as a local worker would.
+ */
+internal fun gitIdentityOf(repo: File): Pair<String, String>? = com.superiorsoftllc.infantry.runners.RunnerLinkServer.userGitIdentity(repo)
+
 internal fun originUrl(repo: File): String? =
     com.superiorsoftllc.infantry.worktree.SystemGitCli().run(repo, listOf("remote", "get-url", "origin")).takeIf { it.ok }?.out()?.takeIf { it.isNotBlank() }

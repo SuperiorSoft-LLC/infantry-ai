@@ -142,6 +142,19 @@ class RemoteStarts(
         }
     }
 
+    /**
+     * RUNNER-GIT-IDENT-1: write [identity] (name, email) into the clone at [repo] as its `user.name` / `user.email`, so every worktree
+     * cut from it commits as that identity (author and committer) instead of failing with "Author identity unknown". Null = nothing
+     * written (the clone keeps whatever git config the runner user has). Best effort: a failure is logged, the start goes on.
+     */
+    fun applyIdentity(repo: File, identity: Pair<String, String>?) {
+        val (name, email) = identity ?: return
+        for ((key, value) in listOf("user.name" to name, "user.email" to email)) {
+            val set = git.run(repo, listOf("config", key, value))
+            if (!set.ok) log("[infantry] runner: could not set $key in ${repo.name}: ${set.err()}")
+        }
+    }
+
     /** Session [sessionId] runs in [worktree], cut by [checkout] for its orchestrator. */
     fun started(sessionId: String, worktree: StartWorktree, pushOnCommit: Boolean = false) {
         sessions[sessionId] = worktree
