@@ -10,7 +10,20 @@ import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runComposeUiTest
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Modifier
+import com.superiorsoftllc.infantry.plugins.official.runners.RUNNERS_CHANGED_FRAME
+import com.superiorsoftllc.infantry.plugins.official.runners.RUNNER_ADMIN_FRAME
 import com.superiorsoftllc.infantry.plugins.official.runners.RunnersCard
+import com.superiorsoftllc.infantry.plugins.official.runners.RunnersCardBlock
+import com.superiorsoftllc.infantry.ui.block.layout.BlockScope
+import com.superiorsoftllc.infantry.ui.shell.LinkContext
+import com.superiorsoftllc.infantry.ui.shell.LinkReply
+import com.superiorsoftllc.infantry.ui.shell.LocalShellContext
+import com.superiorsoftllc.infantry.ui.shell.SessionContext
+import com.superiorsoftllc.infantry.ui.shell.ShellContext
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import com.superiorsoftllc.infantry.plugins.official.runners.RunnersRows
 import com.superiorsoftllc.infantry.plugins.official.runners.adminRequest
 import com.superiorsoftllc.infantry.plugins.official.runners.parseRunnersList
@@ -77,5 +90,38 @@ class RunnersCardUiTest {
         onAllNodesWithTag("runners-rows").assertCountEquals(0)
         onNodeWithTag("runners-add").performClick()
         assertEquals(0, added, "outside a shell the link is not live, so the gated Add button is disabled")
+    }
+
+    /**
+     * RUNNER-CARD-STALE-1: a runner the daemon marks up after the card listed it `down` turns `up` in place when the daemon pushes
+     * `runners_changed`, without reopening the card (a new runner read `down` behind its passing check until then).
+     */
+    @Test
+    fun `the row follows a runners_changed push without reopening the card`() = runComposeUiTest {
+        var health = "down"
+        var lists = 0
+        val pushes = MutableSharedFlow<String>(extraBufferCapacity = 4)
+        val link = object : LinkContext {
+            override val live = true
+            override val contract = "1.200.0"
+            override fun frames(type: String): Flow<String> = if (type == RUNNERS_CHANGED_FRAME) pushes else kotlinx.coroutines.flow.emptyFlow()
+            override suspend fun request(type: String, data: String): LinkReply? {
+                assertEquals(RUNNER_ADMIN_FRAME, type)
+                lists++
+                return LinkReply(type, """{"ok":true,"enabled":true,"runners":[{"name":"efd2","health":"$health","workers":"0","cap":"1","paused":"false"}]}""")
+            }
+        }
+        val session = java.lang.reflect.Proxy.newProxyInstance(javaClass.classLoader, arrayOf(SessionContext::class.java)) { _, _, _ -> null } as SessionContext
+        val shell = java.lang.reflect.Proxy.newProxyInstance(javaClass.classLoader, arrayOf(ShellContext::class.java)) { _, m, _ ->
+            when (m.name) { "getLink" -> link; "getSession" -> session; else -> null }
+        } as ShellContext
+        setContent { CompositionLocalProvider(LocalShellContext provides shell) { RunnersCardBlock().Render(BlockScope(Modifier, null)) } }
+        waitForIdle()
+        onNodeWithTag("runner-status:efd2").assertTextContains("down ·", substring = true)
+        health = "up"
+        pushes.tryEmit("{}")
+        waitUntil(timeoutMillis = 5_000) { lists >= 2 }
+        waitForIdle()
+        onNodeWithTag("runner-status:efd2").assertTextContains("up ·", substring = true)
     }
 }

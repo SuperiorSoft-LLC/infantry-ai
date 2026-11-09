@@ -676,6 +676,14 @@ class RunnerLinkService(
         const val BOTH_MODE = "both"
         /** RUNNER-POOL-6a: the owner frame `infantry runner pair|add|rotate|detach <name>` send ([FrameGate.OWNER_ONLY]). */
         const val ADMIN = com.superiorsoftllc.infantry.policy.ActionCatalog.RUNNER_ADMIN
+        /**
+         * RUNNER-CARD-STALE-1: the push frame the daemon sends every client when the runner list may read differently: a heartbeat
+         * changed a runner's state (`up` / `degraded` / `down`), or an [ADMIN] op added, removed, paused or resumed one. The data is
+         * `{}` (no runner names: a guest connection receives it too); a client re-lists with an [ADMIN] `list` of its own.
+         */
+        const val STATE_FRAME = "runners_changed"
+        /** RUNNER-CARD-STALE-1: the [ADMIN] ops whose success changes what `list` answers, so a [STATE_FRAME] follows them. */
+        val LIST_CHANGING_OPS = setOf("add", "detach", "pause", "resume")
         const val NO_TRANSPORT = "the runner link needs the Infantry_RemoteRunner plugin (no runner link transport is loaded)"
         private val NEEDS_TRANSPORT = setOf("pair", "add", "rotate", "detach", "test")
         private const val MS_PER_SECOND = 1000L

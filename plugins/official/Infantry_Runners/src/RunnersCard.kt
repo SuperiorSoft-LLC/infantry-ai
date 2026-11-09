@@ -52,6 +52,12 @@ import kotlinx.serialization.json.contentOrNull
 const val RUNNER_ADMIN_FRAME = "runner_admin"
 const val RUNNER_ADMIN_ACTION = "runners.admin"
 
+/**
+ * RUNNER-CARD-STALE-1: the daemon's push frame (data `{}`) when the runner list may read differently: a runner went up, degraded or
+ * down on a heartbeat, or one was added, detached, paused or resumed in any window. The card re-lists on it.
+ */
+const val RUNNERS_CHANGED_FRAME = "runners_changed"
+
 /** The slot of the Runners card (`infantry.shell.config.runners`) and the card's fill id. */
 const val RUNNERS_CARD_NODE = "infantry.shell.config.runners"
 
@@ -626,6 +632,8 @@ class RunnersCardBlock : Block("runnersCard", RUNNERS_CARD_NODE) {
         // RUNNER-UI-ADD-1: on connect and reconnect, not per link object (the shell hands a new one each recomposition, which
         // re-listed about once a second).
         LaunchedEffect(link.live) { if (link.live) refresh() }
+        // RUNNER-CARD-STALE-1: the row follows the daemon's verdict without reopening the card (a new runner read `down` until then).
+        LaunchedEffect(link.live) { if (link.live) link.frames(RUNNERS_CHANGED_FRAME).collect { refresh() } }
         RunnersCard(
             list, listError,
             onAdd = { dialog = CardDialog.Add(sending = false) },
