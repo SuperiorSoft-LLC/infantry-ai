@@ -16,7 +16,7 @@ const val MASCOT_STYLE = "mascot"
 /** MASCOT-2: Infantry_Mascot as a compiled-in module (web and Android, D9). */
 val InfantryMascot = InfantryModule(
     ModuleManifest(
-        name = "Infantry_Mascot", version = "1.0.1", author = "Infantry AI", license = "Apache-2.0", description = "Mascot avatars.",
+        name = "Infantry_Mascot", version = "1.0.2", author = "Infantry AI", license = "Apache-2.0", description = "Mascot avatars.",
         implementations = listOf(ImplementationDeclaration(AGENT_AVATAR_RENDERERS, MASCOT_STYLE)),
     ),
     implementations = mapOf(AGENT_AVATAR_RENDERERS to mapOf(MASCOT_STYLE to MascotAvatarRenderer)),
