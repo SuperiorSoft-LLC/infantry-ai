@@ -11,17 +11,18 @@ function Throws([scriptblock]$B) { try { & $B | Out-Null; $null } catch { $_.Exc
 $real = @(Get-PluginInventory $root)
 Check 'real inventory has official and optional plugins' (($real | Where-Object Class -eq 'optional').Count -gt 0 -and ($real | Where-Object Class -eq 'official').Count -gt 0)
 $root = Join-Path ([IO.Path]::GetTempPath()) ("plugin-sel-" + [guid]::NewGuid().ToString('N').Substring(0, 8))
-foreach ($n in 'core/Core_A', 'official/Off_B', 'official/Opt_C', 'official/Opt_D') {
+foreach ($n in 'core/Core_A', 'official/Off_B', 'official/Opt_C', 'official/Opt_D', 'official/Solo_E') {
   $d = Join-Path $root $n; New-Item -ItemType Directory -Path $d | Out-Null
   Set-Content -LiteralPath (Join-Path $d 'module.json') -Value ('{"name":"' + (Split-Path $n -Leaf) + '","version":"1.2.3","jar":"build/libs/x.jar"}')
 }
-Set-Content -LiteralPath (Join-Path $root 'build-presets.json') -Value '{"classes":{"Opt_C":"optional","Opt_D":"optional"},"presets":{"full":{"exclude":[]},"no-optional":{"exclude":["@optional"]}}}'
+Set-Content -LiteralPath (Join-Path $root 'build-presets.json') -Value '{"classes":{"Opt_C":"optional","Opt_D":"optional","Solo_E":"standalone"},"presets":{"full":{"exclude":[]},"no-optional":{"exclude":["@optional"]}}}'
 $inv = @(Get-PluginInventory $root)
-Check 'fixture inventory has core, official, optional' (@($inv | Where-Object Class -eq 'core').Count -eq 1 -and @($inv | Where-Object Class -eq 'official').Count -eq 1 -and @($inv | Where-Object Class -eq 'optional').Count -eq 2)
+Check 'fixture inventory has core, official, optional' (@($inv | Where-Object Class -eq 'core').Count -eq 1 -and @($inv | Where-Object Class -eq 'official').Count -eq 1 -and @($inv | Where-Object Class -eq 'optional').Count -eq 2 -and @($inv | Where-Object Class -eq 'standalone').Count -eq 1)
 $opt = 'Opt_C'; $core = 'Core_A'; $off = 'Off_B'
 
 $none = Resolve-PluginSelection $inv $root @() @() ''
-Check 'default excludes nothing' ($none.Excluded.Count -eq 0 -and $none.Included.Count -eq $inv.Count)
+Check 'default leaves out only the standalone plugin' (($none.Excluded -join ',') -eq 'Solo_E' -and $none.Included.Count -eq $inv.Count - 1)
+Check 'include packages a standalone plugin' ((Resolve-PluginSelection $inv $root @('Solo_E') @() '').Excluded -notcontains 'Solo_E')
 Check 'exclude optional works' ((Resolve-PluginSelection $inv $root @() @($opt) '').Excluded -contains $opt)
 $m = Throws { Resolve-PluginSelection $inv $root @() @($core) '' }
 Check 'core cannot be excluded (reason given)' ($m -match "cannot exclude '$core'" -and $m -match "class 'core'")
@@ -29,7 +30,7 @@ Check 'official cannot be excluded' ((Throws { Resolve-PluginSelection $inv $roo
 Check 'unknown exclude refused' ((Throws { Resolve-PluginSelection $inv $root @() @('Nope_X') '' }) -match 'unknown')
 Check 'unknown preset refused' ((Throws { Resolve-PluginSelection $inv $root @() @() 'bogus' }) -match 'unknown preset')
 $no = Resolve-PluginSelection $inv $root @() @() 'no-optional'
-Check 'no-optional leaves out exactly the optional set' (($no.Excluded -join ',') -eq ((($inv | Where-Object Class -eq 'optional').Id | Sort-Object) -join ','))
+Check 'no-optional leaves out the optional set and the standalone one' (($no.Excluded -join ',') -eq ((($inv | Where-Object { $_.Class -in 'optional', 'standalone' }).Id | Sort-Object) -join ','))
 $inc = Resolve-PluginSelection $inv $root @($opt) @() 'no-optional'
 Check 'include keeps one optional plugin' (($inc.Excluded -notcontains $opt) -and $inc.Included -contains $opt)
 
