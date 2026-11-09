@@ -6,12 +6,16 @@ import com.superiorsoftllc.infantry.daemon.InfantryBin
 import com.superiorsoftllc.infantry.session.infantrySetting
 import java.io.File
 import kotlin.test.Test
+import org.junit.Assume.assumeTrue
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 /** PKG-1: the installed app's production defaults never land on the dev daemon's state dir or ports. */
+/** CI-TESTS-2: the per-user Windows install layout these tests pin. */
+private val WINDOWS = System.getProperty("os.name").orEmpty().startsWith("Windows", ignoreCase = true)
+
 class InstallProfileTest {
     private val home = File("C:/Users/someone").path
     private val localAppData = File(home, "AppData/Local").path
@@ -22,6 +26,7 @@ class InstallProfileTest {
     private fun env(vararg pairs: Pair<String, String>): (String) -> String? = mapOf("LOCALAPPDATA" to localAppData, *pairs)::get
 
     @Test fun productionDefaultsDifferFromDev() {
+        assumeTrue("Windows-only: asserts the %LOCALAPPDATA% state-dir convention; on Linux/macOS InstallProfile.stateDir follows XDG / Library (XPLAT-STATE-1)", WINDOWS) // CI-TESTS-2
         val props = InstallProfile.properties(env(), home)
         val port = props.getValue("INFANTRY_PORT").toInt()
         assertEquals(8797, port)
@@ -44,12 +49,14 @@ class InstallProfileTest {
     }
 
     @Test fun devEnvironmentVariablesDoNotLeakIn() {
+        assumeTrue("Windows-only: asserts the %LOCALAPPDATA% state-dir convention; on Linux/macOS InstallProfile.stateDir follows XDG / Library (XPLAT-STATE-1)", WINDOWS) // CI-TESTS-2
         val props = InstallProfile.properties(env("INFANTRY_STATE_DIR" to File(home, ".infantry").path, "INFANTRY_PORT" to "9999"), home)
         assertEquals(prodState.path, props["INFANTRY_STATE_DIR"])
         assertEquals("8797", props["INFANTRY_PORT"])
     }
 
     @Test fun overridesAreHonouredButNeverOntoDev() {
+        assumeTrue("Windows-only: asserts the %LOCALAPPDATA% state-dir convention; on Linux/macOS InstallProfile.stateDir follows XDG / Library (XPLAT-STATE-1)", WINDOWS) // CI-TESTS-2
         assertEquals(9123, InstallProfile.port(env(InstallProfile.PORT_ENV to "9123")))
         InstallProfile.DEV_PORTS.forEach { dev -> assertEquals(8797, InstallProfile.port(env(InstallProfile.PORT_ENV to dev.toString()))) }
         assertEquals(8797, InstallProfile.port(env(InstallProfile.PORT_ENV to "not-a-port")))
@@ -77,6 +84,7 @@ class InstallProfileTest {
     }
 
     @Test fun aStateDirInsideTheInstallDirFallsBackToTheDefault() {
+        assumeTrue("Windows-only: asserts the %LOCALAPPDATA% state-dir convention; on Linux/macOS InstallProfile.stateDir follows XDG / Library (XPLAT-STATE-1)", WINDOWS) // CI-TESTS-2
         val install = File(home, "Apps/Infantry").absoluteFile
         val inside = File(install, "data").path
         assertEquals(prodState, InstallProfile.stateDir(env(InstallProfile.STATE_DIR_ENV to inside), home, installDir = install))
@@ -87,6 +95,7 @@ class InstallProfileTest {
     }
 
     @Test fun whenTheInstallDirHoldsTheDefaultTheRoamingDirIsUsed() {
+        assumeTrue("Windows-only: asserts the %LOCALAPPDATA% state-dir convention; on Linux/macOS InstallProfile.stateDir follows XDG / Library (XPLAT-STATE-1)", WINDOWS) // CI-TESTS-2
         // The owner picked %LOCALAPPDATA%\SuperiorSoft as the install dir in the MSI's directory chooser.
         val install = File(localAppData, "SuperiorSoft").absoluteFile
         val roaming = File(home, "AppData/Roaming").path

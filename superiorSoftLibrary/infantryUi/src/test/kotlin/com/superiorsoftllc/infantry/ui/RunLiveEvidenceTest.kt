@@ -27,6 +27,7 @@ import java.nio.file.Files
 import java.util.Collections
 import kotlin.test.AfterTest
 import kotlin.test.Test
+import org.junit.Assume.assumeTrue
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
@@ -36,6 +37,8 @@ import kotlin.test.assertTrue
  * real child processes) with two saved commands in a real commands.json. The client is the real [Controller].
  * Windows-only: the saved commands are `cmd.exe /c ...`.
  */
+private val WINDOWS = System.getProperty("os.name").orEmpty().startsWith("Windows", ignoreCase = true)
+
 class RunLiveEvidenceTest {
     private companion object { val OWNER = "o".repeat(44) }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -108,6 +111,7 @@ class RunLiveEvidenceTest {
         frames.filter { it.type in setOf(Envelope.RUN, Envelope.RUN_OUTPUT, Envelope.RUN_FINISHED) }
 
     @Test fun `echo hello runs to SUCCEEDED and the frames arrive run, output, finished`() {
+        assumeTrue("Windows-only: the saved commands are cmd.exe /c ... (no cmd.exe on Linux/macOS)", WINDOWS) // CI-TESTS-2
         val frames = Collections.synchronizedList(mutableListOf<Envelope>())
         val c = connected(frames)
         assertEquals(setOf("echo-hello", "sleeper"), c.state.value.runs.commands.map { it.id }.toSet())
@@ -131,6 +135,7 @@ class RunLiveEvidenceTest {
     }
 
     @Test fun `a sleeping command is stopped and ends KILLED`() {
+        assumeTrue("Windows-only: the saved commands are cmd.exe /c ... (no cmd.exe on Linux/macOS)", WINDOWS) // CI-TESTS-2
         val frames = Collections.synchronizedList(mutableListOf<Envelope>())
         val c = connected(frames)
 

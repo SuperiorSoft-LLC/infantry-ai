@@ -49,7 +49,7 @@ class PluginsScreenUiTest {
 
     private fun pack(): File {
         val f = File(repo, "Acme_Echo-1.0.0.ihq")
-        val manifest = """{"name":"Acme_Echo","version":"1.0.0","apiVersion":2,"license":"Apache-2.0","entry":"x.Y","jar":"lib/Acme_Echo.jar","daemon":{"entry":"x.D","jar":"lib/Acme_Echo.jar","tools":[{"name":"echo","action":"echo.read"}]}}"""
+        val manifest = """{"name":"Acme_Echo","version":"1.0.0","apiVersion":2,"license":"Apache-2.0","author":"Acme","entry":"x.Y","jar":"lib/Acme_Echo.jar","daemon":{"entry":"x.D","jar":"lib/Acme_Echo.jar","tools":[{"name":"echo","action":"echo.read"}]}}"""
         ZipOutputStream(f.outputStream()).use { z ->
             z.putNextEntry(ZipEntry("module.json")); z.write(manifest.toByteArray()); z.closeEntry()
             z.putNextEntry(ZipEntry("lib/Acme_Echo.jar")); z.write(ByteArray(300) { it.toByte() }); z.closeEntry()
