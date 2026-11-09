@@ -30,10 +30,15 @@ object MascotAvatarRenderer : AgentAvatarRenderer {
     @Composable
     override fun Draw(request: AvatarRequest, modifier: Modifier) {
         val cfg = LocalShellContext.current?.config?.values(MASCOT_NODE)
-        val mode = cfg?.string("mascot.motion") ?: "static"
+        DrawMascot(request, cfg?.string("mascot.motion") ?: "static", cfg?.string("mascot.stateMap"), cfg?.string("mascot.roleLooks"), modifier)
+    }
+}
+
+/** MASCOT-3: the drawing with the settings passed in, so a perf test can run it per motion mode without a shell. */
+@Composable
+internal fun DrawMascot(request: AvatarRequest, mode: String, stateText: String?, looksText: String?, modifier: Modifier) {
+    run {
         val live = MascotMapping.live(mode, request.motion)
-        val stateText = cfg?.string("mascot.stateMap")
-        val looksText = cfg?.string("mascot.roleLooks")
         val map = remember(stateText) { MascotMapping.parseStateMap(stateText) }
         val looks = remember(looksText) { MascotMapping.parseRoleLooks(looksText) }
         val look = MascotMapping.lookFor(request.role, looks)

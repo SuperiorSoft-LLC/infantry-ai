@@ -21,7 +21,7 @@
         { "key": "mascot.motion", "type": "select", "label": "Motion", "default": "static", "scope": "device", "order": 1,
           "options": ["static", "focus", "all"],
           "optionLabels": { "static": "Static", "focus": "Focus only", "all": "Everywhere" },
-          "description": "Static (cheapest, default): one frame per state, no idle loop; the pose changes when the state does. Focus only: the idle loop runs only where the app allows live motion (sidebar, chat header, title bar). Everywhere: every avatar loops, which costs a frame ticker per visible avatar: costly in long chats and big lists." },
+          "description": "Static (cheapest, default): one frame per state, no idle loop; the pose changes when the state does. Focus only: the idle loop runs only where the app allows live motion (sidebar, chat header, title bar). Everywhere: every avatar loops, which costs a frame ticker per visible avatar: costly in long chats and big lists. Measured (MASCOT-3, 200 chat rows + 20 sidebar agents, desktop JVM test harness): static about 12 ms per animation frame, focus about 24 ms, everywhere about 24 ms; first composition 120-220 ms for all three." },
         { "key": "mascot.stateMap", "type": "text", "label": "State map", "scope": "device", "order": 2,
           "default": "STARTING=Greet;BUSY=Working;WAITING_INPUT=Notify;IDLE=Idle;EXITED=Sleepy;ORPHANED=Confused;FAILED=Alert",
           "description": "SESSION_STATE=Mood pairs separated by semicolons. A state not listed, or a mood the mascot does not know, draws Idle. While compacting a busy session shows Reading; a failed turn shows Alert." },
