@@ -262,6 +262,7 @@ class RunnerLinkPairingTest {
         assertEquals("false", RunnerLinkService.field(pair, "plain"))
         val code = RunnerLinkService.field(pair, "code")!!
         assertEquals("waiting", RunnerLinkService.field(runner.admin(req("op" to "pair_status")), "state"))
+        val pairingListener = transport.handler
 
         val wrong = orch.admin(req("op" to "add", "name" to "box", "url" to "wss://h:1", "code" to code, "fingerprint" to "00"))
         assertEquals("false", RunnerLinkService.field(wrong, "ok"))
@@ -272,9 +273,11 @@ class RunnerLinkPairingTest {
         val status = runner.admin(req("op" to "pair_status"))
         assertEquals("paired", RunnerLinkService.field(status, "state"))
         assertEquals("orch", RunnerLinkService.field(status, "orchestratorName"))
-        assertNull(transport.handler, "the pairing listener closes once paired")
-
-        runner.tick() // paired: the daemon now serves the link
+        // RUNNER-LINK-PORT-1: the pairing listener closes once paired and the paired one takes the port over at once (it used to wait
+        // for the next tick, and nothing listened in between).
+        assertNotNull(transport.handler)
+        assertTrue(transport.handler !== pairingListener, "the paired listener replaced the pairing one")
+        runner.tick() // already served: the tick keeps it
         assertNotNull(transport.handler)
         assertEquals("box", RunnerLinkService.field(orch.admin(req("op" to "rotate", "name" to "box")), "name"))
         val detached = orch.admin(req("op" to "detach", "name" to "box"))
@@ -282,6 +285,81 @@ class RunnerLinkPairingTest {
         runner.tick() // detached: no longer served
         assertNull(transport.handler)
         runner.close(); orch.close()
+    }
+
+    /**
+     * RUNNER-LINK-PORT-1: an in-process transport that holds its port like a real listener does: a second [serve] on a port that is
+     * still served fails with the JDK's bind error until the first listener is closed.
+     */
+    private class PortTransport : RunnerLinkTransport {
+        val served = HashMap<Int, LinkHandler>()
+        override fun call(url: String, fingerprint: String?, allowPlain: Boolean, orchestratorId: String?, credential: String?, type: String, data: String, timeoutSeconds: Long): LinkAnswer {
+            val port = url.substringAfterLast(':').toInt()
+            val h = served[port] ?: throw LinkFailure("cannot reach the runner link at $url: java.net.ConnectException")
+            return h.handle(type, data, orchestratorId, credential, PEER)
+        }
+        override fun serve(handler: LinkHandler, host: String, port: Int, tls: LinkTlsMaterial?, callTimeoutMs: Int): LinkServing {
+            if (port in served) throw java.net.BindException("Address already in use: bind")
+            served[port] = handler
+            val owner = this
+            return object : LinkServing {
+                override val port: Int = port
+                override fun close() { if (owner.served[port] === handler) owner.served.remove(port) }
+            }
+        }
+        override fun fingerprint(tls: LinkTlsMaterial): String = FP
+    }
+
+    @Test
+    fun `re-pair right after a detach on the runner binds the link port, and a reused code gets the runner's refusal`() {
+        val transport = PortTransport()
+        val runnerDir = File(dir, "port-runner")
+        val runner = service(runnerDir) { transport }
+        val orch = service(File(dir, "port-orch")) { transport }
+        val pair = runner.admin(req("op" to "pair", "name" to "box"))
+        val port = RunnerLinkService.field(pair, "port")!!
+        val code = RunnerLinkService.field(pair, "code")!!
+        val url = "wss://h:$port"
+        val added = orch.admin(req("op" to "add", "name" to "box", "url" to url, "code" to code, "fingerprint" to FP, "orchestratorName" to "orch"))
+        assertEquals("true", RunnerLinkService.field(added, "ok"), added.toString())
+        assertEquals("paired", RunnerLinkService.field(runner.admin(req("op" to "pair_status")), "state"))
+
+        // No tick yet: the paired listener already holds the port, so the used code is refused by the runner, not by a closed port.
+        val reused = orch.admin(req("op" to "add", "name" to "box2", "url" to url, "code" to code, "fingerprint" to FP, "orchestratorName" to "orch"))
+        assertEquals("false", RunnerLinkService.field(reused, "ok"))
+        val why = RunnerLinkService.field(reused, "error")!!
+        assertTrue(why.contains("already used or has expired"), why)
+        assertFalse(why.contains("ConnectException"), why)
+
+        // `infantry runner detach` on the runner: the CLI unpairs the store; the daemon's next tick is up to linkCheckSeconds away.
+        assertTrue(RunnerLinkStore.open(runnerDir).unpair())
+        val again = runner.admin(req("op" to "pair", "name" to "box"))
+        assertEquals("true", RunnerLinkService.field(again, "ok"), again.toString())
+        assertEquals(port, RunnerLinkService.field(again, "port"))
+        assertEquals("waiting", RunnerLinkService.field(runner.admin(req("op" to "pair_status")), "state"))
+        val repaired = orch.admin(req("op" to "add", "name" to "box3", "url" to url, "code" to RunnerLinkService.field(again, "code")!!, "fingerprint" to FP, "orchestratorName" to "orch"))
+        assertEquals("true", RunnerLinkService.field(repaired, "ok"), repaired.toString())
+        runner.close(); orch.close()
+        assertTrue(transport.served.isEmpty(), "close frees the port")
+    }
+
+    @Test
+    fun `a pairing whose listener could not bind leaves no pairing behind`() {
+        val transport = PortTransport()
+        val runner = service(File(dir, "port-busy")) { transport }
+        val squatter = transport.serve(handler(), "127.0.0.1", com.superiorsoftllc.infantry.settings.LimitRegistry.RUNNERS_LINK_PORT.default.toInt(), null, 0)
+        val refused = runner.admin(req("op" to "pair", "name" to "box"))
+        assertEquals("false", RunnerLinkService.field(refused, "ok"))
+        assertTrue(RunnerLinkService.field(refused, "error")!!.contains("Address already in use"))
+        assertEquals("expired", RunnerLinkService.field(runner.admin(req("op" to "pair_status")), "state"))
+        squatter.close()
+        assertEquals("true", RunnerLinkService.field(runner.admin(req("op" to "pair", "name" to "box")), "ok"))
+        runner.close()
+    }
+
+    private fun handler() = object : LinkHandler {
+        override fun handle(type: String, data: String, orchestratorId: String?, credential: String?, from: String?) = LinkAnswer(F.ERROR, "")
+        override fun malformed() = LinkAnswer(F.ERROR, "")
     }
 
     @Test

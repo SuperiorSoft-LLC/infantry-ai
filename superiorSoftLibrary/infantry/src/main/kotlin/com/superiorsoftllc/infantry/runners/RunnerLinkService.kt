@@ -90,6 +90,20 @@ class RunnerLinkService(
             pump?.sync(emptyList())
             return
         }
+        val store = settle() ?: return
+        pump?.sync(store.runners().map { it.name })
+        if (store.runners().isNotEmpty()) {
+            peers(store).rotateDue(limit(LimitRegistry.RUNNERS_CREDENTIAL_ROTATE_DAYS)).forEach { log("[infantry] $it") }
+        }
+    }
+
+    /**
+     * Opens or closes the paired link listener to match the store; null when no transport is loaded (nothing more to do).
+     * RUNNER-LINK-PORT-1: [pairStatus] runs it too the moment a pairing ends, so the paired listener takes the port over at once
+     * instead of up to `limits.runners.linkCheckSeconds` later: in that gap nothing listened, so a reused code got a connection
+     * refusal instead of the runner's refusal, and a detach from the orchestrator could not reach the runner.
+     */
+    private fun settle(): RunnerLinkStore? {
         val store = RunnerLinkStore.open(stateDir)
         val paired = store.orchestrator() != null
         val t = transport()
@@ -100,7 +114,7 @@ class RunnerLinkService(
             }
             if (paired && !toldNoTransport) log("[infantry] runner link: paired, but not served: $NO_TRANSPORT")
             toldNoTransport = true
-            return
+            return null
         }
         toldNoTransport = false
         if (paired && serving == null && pairing == null) {
@@ -109,10 +123,7 @@ class RunnerLinkService(
             closeServing()
             log("[infantry] runner link: detached; the link listener is stopped")
         }
-        pump?.sync(store.runners().map { it.name })
-        if (store.runners().isNotEmpty()) {
-            peers(store).rotateDue(limit(LimitRegistry.RUNNERS_CREDENTIAL_ROTATE_DAYS)).forEach { log("[infantry] $it") }
-        }
+        return store
     }
 
     private fun serve(store: RunnerLinkStore, t: RunnerLinkTransport) {
@@ -514,6 +525,12 @@ class RunnerLinkService(
         }
         // A new `runner pair` replaces one still open: its code dies with its listener.
         closePairing()
+        // RUNNER-LINK-PORT-1: `runner detach` on this machine unpairs the store from the CLI process, so the paired listener still
+        // holds the port until the next tick ("Address already in use" on an immediate re-pair). It serves nobody now: free the port.
+        if (serving != null) {
+            closeServing()
+            log("[infantry] runner link: detached; the link listener is stopped")
+        }
         // The grant is the owner's flag or console answer; null = untouched (the settings keep their values).
         fun ids(csv: String?) = csv?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }
         // RUNNER-GRANT-AT-PAIR-1: `--grant-harnesses-max` is the ceiling of the one grant this code carries (empty = installed here).
@@ -552,6 +569,8 @@ class RunnerLinkService(
         val s = try {
             t.serve(pairingHandler(server, pending), host, linkPort(), tls, callTimeoutMs())
         } catch (e: Exception) {
+            // RUNNER-LINK-PORT-1: a pairing that never listened is no pairing; [tick] must not keep it (it blocks serving).
+            pairing = null
             throw IllegalArgumentException("cannot serve the runner link on port ${linkPort()} (${e.message}); is the daemon already serving it, or set limits.runners.linkPort")
         }
         val code = codes.issue(name, clock(), grant = grantOnPair, harnessCeiling = ceiling)
@@ -584,7 +603,11 @@ class RunnerLinkService(
         val state = pairing
         val live = state?.codes?.liveName(clock()) != null
         val answering = state?.answering == true
-        if (!answering && (paired != null || !live)) closePairing()
+        if (!answering && (paired != null || !live)) {
+            closePairing()
+            // RUNNER-LINK-PORT-1: paired: the paired listener takes the port over now, not on the next tick.
+            if (paired != null && !closed) settle()
+        }
         return when {
             paired != null -> ok("state" to "paired", "orchestratorName" to paired.name, "orchestratorId" to paired.id)
             live || answering -> ok("state" to "waiting")

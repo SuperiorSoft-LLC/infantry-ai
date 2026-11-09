@@ -444,7 +444,7 @@ class RunnerLinkServer(
                 "or grant by hand: infantry settings set ${RunnerLinkSettings.PROJECTS} '[\"<project id>\"]' and " +
                 "infantry settings set ${RunnerLinkSettings.HARNESSES} '[\"<harness id>\"]')"
 
-        private const val NO_CODE = "no pairing code is live on this runner (run `infantry runner pair` there)"
+        private const val NO_CODE = PairCodes.NO_LIVE_CODE
         private const val SHOWN_TYPE_SIZE = 64
         private const val MS_PER_SECOND = 1_000L
         private const val MB = 1L shl 20
