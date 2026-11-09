@@ -28,8 +28,17 @@ class RemoteSessionMirror(
      * RUNNER-TICKET-ROW-1: what the start pinned for [sessionId]: the harness, the effective [model], the orchestrator's checkout
      * [repoRoot] (where the runner's pushed ticket branch is fetched to, and where the board row reads its commit tip) and the
      * ticket [branch]. Without it the board row showed no commit, an empty worktree and the harness's default model.
+     * RUNNER-WORKTREE-PATH-1: [runnerWorktree] is the branch's worktree ON THE RUNNER (from the runner's start reply), the record's
+     * worktreePath; readers label it with the record's runner. Null (an older runner) leaves worktreePath unset, as before.
      */
-    class Placed(val provider: String, val model: String?, val repoRoot: String?, val branch: String?, val ticketId: String? = null)
+    class Placed(
+        val provider: String,
+        val model: String?,
+        val repoRoot: String?,
+        val branch: String?,
+        val ticketId: String? = null,
+        val runnerWorktree: String? = null,
+    )
 
     fun placed(sessionId: String, info: Placed) {
         placedAs[sessionId] = info
@@ -59,7 +68,7 @@ class RemoteSessionMirror(
         val p = placedAs[id]
         return SessionRecord(
             id = id, provider = p?.provider ?: REMOTE_PROVIDER, model = p?.model, workingDir = p?.repoRoot.orEmpty(), repoRoot = p?.repoRoot,
-            worktreeBranch = p?.branch, ticketId = p?.ticketId, spawnedAt = firstSeen.computeIfAbsent(id) { now },
+            worktreePath = p?.runnerWorktree, worktreeBranch = p?.branch, ticketId = p?.ticketId, spawnedAt = firstSeen.computeIfAbsent(id) { now },
             lastHeartbeat = s?.at ?: now, state = s?.state ?: SessionState.STARTING,
             // The brief went over the link with the start; the runner resumes its own conversation, so the board treats it as briefed.
             providerSessionId = REMOTE_PROVIDER, runCount = 1,

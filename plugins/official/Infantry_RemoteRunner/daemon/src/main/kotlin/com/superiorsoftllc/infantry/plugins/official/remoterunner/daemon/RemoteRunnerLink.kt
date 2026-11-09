@@ -66,7 +66,7 @@ class RemoteRunnerLink(private val name: String, private val links: RunnerLinks)
             return OrchestratorReply.Unavailable("runner '$name': ${e.message}")
         }
         if (answer.type == F.ERROR) return OrchestratorReply.Ok(SessionRef(refusal = answer.data.ifBlank { "refused by runner '$name'" }))
-        return decode(answer.data, F.StartAnswer.serializer()).map { SessionRef(it.sessionId, it.refusal, it.branch, it.base) }
+        return decode(answer.data, F.StartAnswer.serializer()).map { SessionRef(it.sessionId, it.refusal, it.branch, it.base, it.worktreePath) }
     }
 
     override fun stopSession(sessionId: String, reason: String?, force: Boolean): OrchestratorReply<Boolean> =

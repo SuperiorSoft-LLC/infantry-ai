@@ -372,7 +372,7 @@ class RunnerLinkServer(
                 if (sessionId != null) starts?.linked(sessionId)
                 Answer(
                     F.REPLY,
-                    F.json.encodeToString(F.StartAnswer.serializer(), F.StartAnswer(sessionId, reply.value.refusal, worktree?.branch, worktree?.base)),
+                    F.json.encodeToString(F.StartAnswer.serializer(), F.StartAnswer(sessionId, reply.value.refusal, worktree?.branch, worktree?.base, worktree?.path)),
                 )
             }
             is OrchestratorReply.Unavailable -> refuse(seat, F.START, r.ticketId, from, "${F.START} unavailable: ${reply.reason}")

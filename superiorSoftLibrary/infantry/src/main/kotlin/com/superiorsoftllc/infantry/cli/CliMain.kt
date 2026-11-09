@@ -1624,7 +1624,17 @@ internal object Cli {
         out.appendLine("  harness:  ${worker.provider}")
         out.appendLine("  model:    ${worker.model ?: "(the harness's default)"}")
         out.appendLine("  branch:   ${worker.worktreeBranch ?: ticket.branch ?: "-"}")
-        out.appendLine("  worktree: ${worker.worktreePath ?: worker.workingDir}")
+        out.appendLine("  worktree: ${worktreeLine(worker)}")
+    }
+
+    /**
+     * RUNNER-WORKTREE-PATH-1: a worker on a remote runner names its worktree on that runner (the path is on the runner's disk, so it
+     * is labelled); one with no runner path yet says so instead of printing this daemon's checkout as if the worker ran there.
+     */
+    internal fun worktreeLine(worker: SessionRecord): String {
+        val onRunner = worker.runner.takeIf { it.isNotBlank() && it != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL }
+            ?: return worker.worktreePath ?: worker.workingDir
+        return worker.worktreePath?.let { "$it (on runner $onRunner)" } ?: "(on runner $onRunner; its path was not reported)"
     }
 
     /** HARNESS-INSTALL-1: `harness-status [--check]`: which harness CLIs are installed / missing / outdated. */
