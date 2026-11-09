@@ -171,10 +171,17 @@ object InstallProfile {
 
     /** Pin [properties] as system properties. Call before the daemon is built. */
     fun apply(env: (String) -> String? = InfantryEnv::get): Map<String, String> {
-        val pinned = properties(env)
+        val pinned = properties(env) + CLI_PATH_AUTO_PROPERTY
         migrateLegacyStateDir(env, File(pinned.getValue("INFANTRY_STATE_DIR")))
         return pinned.onEach { (k, v) -> System.setProperty(k, v) }
     }
+
+    /**
+     * CLI-PATH-1: the installed app is the ONE profile that keeps `infantry` on this machine's user PATH
+     * ([com.superiorsoftllc.infantry.daemon.CliPathAuto]). A dev run, a test daemon and the Docker image never set this,
+     * so only an install ever writes an environment.
+     */
+    val CLI_PATH_AUTO_PROPERTY: Map<String, String> = mapOf(com.superiorsoftllc.infantry.daemon.CliPathAuto.ENABLED_PROPERTY to "true")
 
     /** The pre-rename directory names, only for [migrateLegacyStateDir]. */
     private const val LEGACY_APP_DIR_NAME = "AgentHQ"

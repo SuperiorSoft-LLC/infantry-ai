@@ -438,3 +438,25 @@ infantry waiting show
 ```
 
 MCP twin: `infantry_waiting` (`mode` on/off/get, `reason`, `untilMinutes`). It expires after the minutes plus a grace. Details: [docs/wiki/Waiting.md](../../../docs/wiki/Waiting.md).
+
+## 14. Run `infantry` from any terminal (CLI-PATH-1)
+
+`infantry` is on the user's PATH after an install, so a prompt can call it from any folder. When it is not (a fresh
+headless archive, a moved install, a container without the image's PATH), the commands that fix it are:
+
+```
+infantry install-cli                 # put this launcher's folder on YOUR user PATH; open a NEW terminal afterwards
+infantry install-cli --dry-run       # show what it would write, write nothing
+infantry uninstall-cli               # take every Infantry AI entry off again
+infantry health                      # the "CLI:" line: on the PATH, where it points, whether it still resolves
+```
+
+- Both commands need no daemon: they edit this machine's environment only (Windows: `HKCU\Environment` `Path` + a
+  `WM_SETTINGCHANGE` broadcast; macOS/Linux: one marked block in your own shell profile). The system (machine) PATH,
+  `/etc/*` and other tools' entries are never touched, a repeated install writes nothing, and an entry left by an update
+  that moved the app folder is replaced (`update-moved-folder`).
+- The installed desktop app does this itself at every start; `paths.addCli` (default on,
+  `infantry settings set paths.addCli false`) is its switch.
+- `INFANTRY_CLI_PATH_FILE=<file>` writes the entry into that file instead of the machine's environment: what a
+  container, a CI box or a test uses (no test ever changes a real PATH).
+- Page: [Command line](../../../docs/wiki/CommandLine.md).

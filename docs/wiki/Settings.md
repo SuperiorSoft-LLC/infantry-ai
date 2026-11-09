@@ -71,6 +71,7 @@ The default is the cheapest reasonable value. A costlier value is an opt-in. The
 | `context.includeLinkedTasksContext` | `true` | Linked-tickets section in the brief | Longer brief when on |
 | `context.includeSkillsContext` | `true` | Skills section in the brief | Longer brief when on |
 | `context.includeFinishInstructions` | `true` | Report-instruction lines in the brief | Turn off when a script or role note owns the finish step |
+| `paths.addCli` | `true` | (app scope only) The installed app keeps its `infantry` launcher folder on this machine's USER PATH at every start, and removes the entry when this is off. `infantry install-cli` / `uninstall-cli` do it immediately. [Command line](CommandLine.md) | none; it writes one entry in your own environment, never the machine PATH |
 
 `mail.wakeMode` and `mail.deliveryMode` also take per-role and per-session variants as keys with a suffix
 (`mail.wakeMode.<role>`).

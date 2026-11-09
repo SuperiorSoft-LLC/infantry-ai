@@ -85,6 +85,7 @@ class SettingsService(
             RUNNERS_ENABLED to JsonPrimitive(runCatching { storedBoolean(RUNNERS_ENABLED)?.booleanOrNull }.getOrNull() ?: false),
             RUNNERS_DEFAULT to JsonPrimitive(runnersDefault()),
             PROGRESS_PRESENTER to JsonPrimitive(plainString(PROGRESS_PRESENTER)),
+            PATHS_ADD_CLI to JsonPrimitive(addCliToPath()),
             DOWNLOADS_TRANSPORT to JsonPrimitive(plainString(DOWNLOADS_TRANSPORT)),
             DOWNLOADS_PROXY to JsonPrimitive(plainString(DOWNLOADS_PROXY)),
             TICKET_EXIT_BEHAVIOR to JsonPrimitive(ticketExitBehavior()),
@@ -524,6 +525,7 @@ class SettingsService(
             DAEMON_MODE -> JsonPrimitive(requireOneOf(key, value, listOf("both", "runner", "orchestrator")))
             RUNNERS_DEFAULT -> JsonPrimitive(requireRunnerName(key, value))
             PROGRESS_PRESENTER, DOWNLOADS_TRANSPORT -> JsonPrimitive(requirePlainName(key, value))
+            PATHS_ADD_CLI -> JsonPrimitive(requireBoolean(key, value))
             DOWNLOADS_PROXY -> JsonPrimitive(requireProxy(key, value))
             USAGE_REFRESH_MINUTES -> JsonPrimitive(requireIntIn(key, value, USAGE_REFRESH_RANGE))
             DISPLAY_TIME_ZONE -> JsonPrimitive(((value as? JsonPrimitive)?.content ?: "").trim().also { com.superiorsoftllc.infantry.DisplayZone.set(it) })
@@ -922,6 +924,13 @@ class SettingsService(
         return ids.filterNotNull()
     }
 
+    /**
+     * CLIPATH-1: whether the app keeps the `infantry` launcher folder on the USER PATH (default true, the owner's ask:
+     * after an install or an update, `infantry` works in a new terminal with no `cd` into the app folder).
+     * `infantry settings set paths.addCli false` turns it off, and the next start also removes the entry.
+     */
+    fun addCliToPath(): Boolean = storedBoolean(PATHS_ADD_CLI)?.booleanOrNull ?: true
+
     private fun requireBoolean(key: String, value: JsonElement): Boolean =
         (value as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull
             ?: throw IllegalArgumentException("setting '$key' must be a JSON boolean")
@@ -1040,6 +1049,8 @@ class SettingsService(
         const val RUNNERS_DEFAULT = "runners.default"
         /** CORE-PROGRESS-DOWNLOAD-1: the active progress presenter plugin ("" = the last registered, else the core default). */
         const val PROGRESS_PRESENTER = "progress.presenter"
+        /** CLIPATH-1: `true` (default) = the installed app keeps the `infantry` CLI's launcher folder on this machine's USER PATH. */
+        const val PATHS_ADD_CLI = "paths.addCli"
         /** CORE-PROGRESS-DOWNLOAD-1: the download transport plugin ("" = the core HTTP transport). */
         const val DOWNLOADS_TRANSPORT = "downloads.transport"
         /** CORE-PROGRESS-DOWNLOAD-1: the downloads proxy, `host:port` ("" = the JVM's system proxy settings). */

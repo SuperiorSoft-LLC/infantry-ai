@@ -371,6 +371,11 @@ internal object Cli {
         // without one (see [epics]).
         // `remote` edits a local file and contacts no daemon, so it is answered before validation and connecting.
         if (command == "remote") return remote(parsed.args, out, err, getenv)
+        // CLI-PATH-1: `install-cli` / `uninstall-cli` edit THIS machine's user PATH and must work with no daemon running
+        // (a fresh install, a server with only the CLI), so they are local commands like `remote`.
+        if (command == "install-cli" || command == "uninstall-cli") {
+            return CliPathCli.run(command, parsed.args, parsed.launcherPath, parsed.dryRun, out, err, getenv)
+        }
         val usageError = validateArgs(command, parsed, getenv)
         if (usageError != null) {
             err.appendLine("error: $usageError")
@@ -4962,6 +4967,12 @@ internal object Cli {
                         [--project <id>]   defaults also read from ./.infantry/mcp.json (flags win), see docs/MCP.md
                                   Narrow the daemon's spawn limits (--allow-kill-any is moot), see docs/MCP.md
 
+            This machine:
+              install-cli [--dir <launcher dir>] [--dry-run]   Put `infantry` on YOUR user PATH (idempotent; the system PATH is never touched)
+              uninstall-cli [--dir <launcher dir>] [--dry-run]  Take it off again (only the entries that hold Infantry AI's launcher)
+                                  A running terminal keeps the PATH it started with: open a NEW one. The desktop app keeps
+                                  the entry up to date at every start unless `infantry settings set paths.addCli false`.
+
             Where to connect (first one given wins):
               --url URL           A ws:// or wss:// daemon URL, e.g. ws://10.0.0.5:8787/ws
               --endpoint NAME     A daemon from the endpoints file
@@ -5044,6 +5055,8 @@ internal object Cli {
         /** ARCHIVE-1: `--filter <lane>[:<days>]` and `--dry-run`. */
         val filter: String? = null,
         val dryRun: Boolean = false,
+        /** CLI-PATH-1: `install-cli --dir <path>`: the launcher folder to put on the PATH (default: this CLI's own). */
+        val launcherPath: String? = null,
         /** AGENT-TASKS-2: `ticket unassign --now` ends the worker at once; `--note <text>` joins the handoff comment. */
         val now: Boolean = false,
         val unassignNote: String? = null,
@@ -5204,6 +5217,8 @@ internal object Cli {
         var limit: String? = null
         var filter: String? = null
         var dryRun = false
+        // CLI-PATH-1: `install-cli --dir <launcher dir>`: which launcher folder goes on the PATH (default: this one).
+        var launcherPath: String? = null
         var now = false
         var unassignNote: String? = null
         var queueAt: Int? = null
@@ -5496,6 +5511,11 @@ internal object Cli {
                 }
                 "--folder" -> {
                     folder = flagValue(args, ++i) ?: return fail(err, "--folder expects a folder")
+                    i++
+                }
+                // CLI-PATH-1: `install-cli --dir <launcher dir>`; not `--path`, which `ticket files` owns.
+                "--dir" -> {
+                    launcherPath = flagValue(args, ++i) ?: return fail(err, "--dir expects the folder that holds the infantry launcher")
                     i++
                 }
                 "--say" -> {
@@ -5804,6 +5824,7 @@ internal object Cli {
             limit = limit,
             filter = filter,
             dryRun = dryRun,
+            launcherPath = launcherPath,
             now = now,
             unassignNote = unassignNote,
             queueAt = queueAt,
@@ -5912,6 +5933,8 @@ internal object Cli {
      */
     private fun validateArgs(command: String, parsed: ParsedArgs, getenv: (String) -> String? = { null }): String? = when (command) {
         "submit" -> if (parsed.args.isEmpty()) "submit requires a goal" else null
+        // CLI-PATH-1: the two PATH commands take flags only (`--dir`, `--dry-run`).
+        "install-cli", "uninstall-cli" -> if (parsed.args.isEmpty()) null else "$command takes no arguments: ${CliPathCli.USAGE.removePrefix("usage: ")}"
         "mcp" -> if (parsed.args != listOf("serve")) "mcp needs a subcommand: infantry mcp serve" else null
         "watch" -> if (parsed.args.isEmpty()) "watch requires a pod id" else null
         "runs" -> if (parsed.args.isEmpty()) "runs requires a pod id" else null
@@ -6194,6 +6217,7 @@ internal object Cli {
         "read", "threads", "thread", "waiting", "epics", "stories", "epic", "project", "mcp", "knowledge", "memory", "decision", "pipeline", "notify", "issue",
         "trait", "skill", "role", "ask", "harnesses", "harness-status", "archive", "harness-install", "image", "session", "remote", "bg", "kill", "usage",
         "processes", "health", "settings", "agent", "agent-def", "run-cmd", "event", "tests", "tool", "script", "runner",
+        "install-cli", "uninstall-cli",
     )
 
     /** `infantry remote on|off|status`: edits `<stateDir>/network.properties`; takes effect on the next daemon restart. */

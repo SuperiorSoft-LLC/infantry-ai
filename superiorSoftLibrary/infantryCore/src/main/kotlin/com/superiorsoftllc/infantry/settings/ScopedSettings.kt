@@ -66,6 +66,7 @@ object SettingScopes {
         SettingsService.INCLUDE_LINKED_TASKS_CONTEXT to SettingSpec(setOf(SettingScope.APP, SettingScope.PROJECT, SettingScope.ROLE, SettingScope.SESSION), "Include the linked-tickets section in a started ticket's brief."),
         SettingsService.INCLUDE_SKILLS_CONTEXT to SettingSpec(ALL, "Include the skills section in a started ticket's brief."),
         SettingsService.INCLUDE_FINISH_INSTRUCTIONS to SettingSpec(ALL, "Include the report-instruction lines in a started ticket's brief."),
+        SettingsService.PATHS_ADD_CLI to SettingSpec(APP_ONLY, "Keep the `infantry` command on this machine's USER PATH: the installed app writes it at every start and removes it when this is off (CLI-PATH-1)."),
         SettingsService.KEEP_ALIVE_MINUTES to SettingSpec(ALL, "Minutes a resting harness process is kept alive (0 = one-shot).", "a longer keep-alive holds more RAM"),
         RunnerLinkSettings.ADVERTISE_HOSTS to SettingSpec(APP_ONLY, "Hosts the `runner pair` link offers after any --host flag, in the order the client tries them ([] = detected interface addresses)."),
     )

@@ -29,6 +29,8 @@ data class EnvironmentFacts(
     val testPortRange: String,
     val harnesses: List<String> = emptyList(),
     val stateDir: String,
+    /** CLI-PATH-1: whether `infantry` is on this machine's PATH, where that entry is and whether it still resolves. */
+    val cliPath: String? = null,
 )
 
 @Serializable
@@ -98,7 +100,19 @@ object EnvironmentProbe {
             projectPath = projectPath, worktreePath = worktreePath, gitBranch = gitBranch,
             jdk = System.getProperty("java.version", "?"), gradle = gradle(worktreePath ?: projectPath),
             ownerPorts = HealthPorts.OWNER, testPortRange = HealthPorts.TEST_RANGE, harnesses = harnesses, stateDir = stateDir.path,
+            cliPath = cliPathLine(),
         )
+    }
+
+    /**
+     * CLI-PATH-1: the PATH status line the health report carries, so `infantry health` (and every agent reading it)
+     * says whether `infantry` runs from any terminal instead of probing. Read-only: it never writes a PATH.
+     */
+    fun cliPathLine(
+        launcherDir: File? = com.superiorsoftllc.infantry.daemon.InfantryBin.resolve(),
+        getenv: (String) -> String? = com.superiorsoftllc.infantry.session.InfantryEnv::get,
+    ): String? = launcherDir?.let { dir ->
+        runCatching { com.superiorsoftllc.infantry.install.CliPath.status(com.superiorsoftllc.infantry.daemon.CliPathAuto.store(getenv), dir).line() }.getOrNull()
     }
 
     /** DAEMON-HEALTH-1: the one-line form injected into a session's start brief. */
@@ -131,6 +145,7 @@ object HealthText {
         appendLine("  OWNER ports (off limits): ${e.ownerPorts.joinToString(", ")}; free for test daemons: ${e.testPortRange}")
         appendLine("  harnesses: ${e.harnesses.joinToString(", ").ifBlank { "none" }}")
         appendLine("  state dir: ${e.stateDir}")
+        e.cliPath?.let { appendLine("  CLI: $it") }
         if (r.events.isNotEmpty()) {
             appendLine("recent restarts / disconnects:")
             r.events.forEach { appendLine("  ${java.time.Instant.ofEpochMilli(it.at)} ${it.kind}${it.cause?.let { c -> " ($c)" } ?: ""}${it.detail?.let { x -> " $x" } ?: ""}") }
