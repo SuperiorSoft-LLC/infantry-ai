@@ -54,7 +54,7 @@ class PluginsProgressUiTest {
 
     private fun pack(version: String): File {
         val f = File(repo, "Acme_Echo-$version.ihq")
-        val manifest = """{"name":"Acme_Echo","version":"$version","apiVersion":2,"license":"Apache-2.0","entry":"x.Y","jar":"lib/Acme_Echo.jar"}"""
+        val manifest = """{"name":"Acme_Echo","version":"$version","apiVersion":2,"license":"Apache-2.0","author":"Acme","entry":"x.Y","jar":"lib/Acme_Echo.jar"}"""
         ZipOutputStream(f.outputStream()).use { z ->
             z.putNextEntry(ZipEntry("module.json")); z.write(manifest.toByteArray()); z.closeEntry()
             z.putNextEntry(ZipEntry("lib/Acme_Echo.jar")); z.write(ByteArray(300) { it.toByte() }); z.closeEntry()

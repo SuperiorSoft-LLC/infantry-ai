@@ -351,7 +351,7 @@ class ProjectGitPaneUiTest {
 
         // Default clears it.
         onNodeWithTag(GIT_BASE_TOGGLE_TAG).performScrollTo().performClick()
-        onNodeWithTag(GIT_BASE_SEARCH_TAG).performTextReplacement("default")
+        onNodeWithTag(GIT_BASE_SEARCH_TAG).performTextReplacement("None") // LAUNCH-FIRSTRUN-1 renamed the Default row "None (...)"
         onNodeWithTag(GIT_BASE_DEFAULT_ITEM_TAG).assertIsSelected()
         onNodeWithTag(GIT_BASE_SEARCH_TAG).performKeyInput { pressKey(Key.Enter) }
         waitUntil(timeoutMillis = 10_000) { link.sentOf(Envelope.PROJECT_BASE).size == 2 }

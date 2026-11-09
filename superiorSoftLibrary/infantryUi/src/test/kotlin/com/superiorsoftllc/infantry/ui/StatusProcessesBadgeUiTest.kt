@@ -53,7 +53,7 @@ class StatusProcessesBadgeUiTest {
         onNodeWithTag(PROCESSES_BADGE_TAG).assertIsDisplayed()
 
         val badge = onNodeWithTag(PROCESSES_BADGE_TAG).getUnclippedBoundsInRoot()
-        val status = onNode(hasText("daemon stub", substring = true)).getUnclippedBoundsInRoot()
+        val status = onNode(hasText("connected · stub", substring = true) /* FIRSTRUN-UX-2: was "daemon stub" */).getUnclippedBoundsInRoot()
         val hint = onNode(hasText("^K search", substring = true)).getUnclippedBoundsInRoot()
         assertTrue(badge.left >= status.right, "badge $badge must start at or after the status text $status")
         assertTrue(badge.right <= hint.left, "badge $badge must end before the shortcut hint $hint")

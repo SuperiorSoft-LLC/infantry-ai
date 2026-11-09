@@ -18,6 +18,7 @@ val InfantryMascot = InfantryModule(
     ModuleManifest(
         name = "Infantry_Mascot", version = "1.0.2", author = "Infantry AI", license = "Apache-2.0", description = "Mascot avatars.",
         implementations = listOf(ImplementationDeclaration(AGENT_AVATAR_RENDERERS, MASCOT_STYLE)),
+        config = MASCOT_CONFIG, // CI-TESTS-2: the same as module.json (ModuleConfigDriftTest)
     ),
     implementations = mapOf(AGENT_AVATAR_RENDERERS to mapOf(MASCOT_STYLE to MascotAvatarRenderer)),
 )
