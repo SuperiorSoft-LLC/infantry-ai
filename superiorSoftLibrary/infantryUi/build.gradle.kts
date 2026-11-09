@@ -538,7 +538,11 @@ val javaLauncherName = if (System.getProperty("os.name").startsWith("Windows")) 
 // BUILD-PLUGINS-1: -Pihq.excludePlugins=<ids> leaves optional plugins out of the staged modules (and so the module list, the daemon
 // halves and the signed set); scripts/package-dist.ps1 resolves --include/--exclude/presets from plugins/build-presets.json and
 // guards the class. -Pihq.optionalOut=true also stages the left-out ones (same signed layout) under official-modules/optional-plugins.
-val excludedPluginIds = providers.gradleProperty("ihq.excludePlugins").orNull.orEmpty().split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+// MASCOT-BUNDLED-1: with no -Pihq.excludePlugins at all (the CI path: release.yml -> createDistributable), every "standalone"
+// plugin of plugins/build-presets.json is left out, as scripts/package-dist.ps1 does; standalone plugins install from the catalog.
+// An explicit value (even empty: package-dist.ps1 always passes its resolved list, so its -Include keeps working) replaces it.
+val excludedPluginIds = (providers.gradleProperty("ihq.excludePlugins").orNull?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }
+    ?: standaloneIds.toList()).toSet()
 val allOfficialProjects = rootProject.subprojects.filter { it.path.startsWith(":plugins:official:") }
 excludedPluginIds.filter { id -> allOfficialProjects.none { it.name == id } }.takeIf { it.isNotEmpty() }
     ?.let { error("BUILD-PLUGINS-1: -Pihq.excludePlugins names no official plugin: $it") }
