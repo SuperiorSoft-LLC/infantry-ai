@@ -170,7 +170,9 @@ $gradleArgs = @(':superiorSoftLibrary:infantryUi:createDistributable', '--no-par
   '-Dorg.gradle.jvmargs=-XX:MaxMetaspaceSize=2g -Xmx3g',  # quoted per argument when run (Invoke-Gradle)
   # the worktree is detached, so the packaging guard sees HEAD; the sha was checked to be on $ReleaseBranch above
   '-PallowAnyBranch=true') + $signArgs
-if ($selection.Excluded.Count -gt 0) { $gradleArgs += @("-Pihq.excludePlugins=$($selection.Excluded -join ',')", '-Pihq.optionalOut=true') }
+# MASCOT-BUNDLED-1: always pass the resolved list, even empty: with no flag Gradle leaves out every standalone plugin, which would undo -Include.
+$gradleArgs += "-Pihq.excludePlugins=$($selection.Excluded -join ',')"
+if ($selection.Excluded.Count -gt 0) { $gradleArgs += '-Pihq.optionalOut=true' }
 
 if ($DryRun) {
   Write-Output "DRY-RUN build: sha=$full (on $ReleaseBranch)"
