@@ -1,6 +1,7 @@
 {
-  "_doc": "BUILD-PLUGINS-1: which plugins a packaged build carries. Classes: core (never excluded; every plugins/core/* is core without being listed), official (made by us, shipped by default, not excludable unless listed optional), optional (may be left out of a build and installed later through the plugin manager), custom (community/user plugins, not packaged). A plugin not listed here is official if it lives in plugins/official. A preset names what a build leaves out; '@optional' stands for every optional plugin. 'full' (the default) leaves none out.",
+  "_doc": "BUILD-PLUGINS-1: which plugins a packaged build carries. Classes: core (never excluded; every plugins/core/* is core without being listed), official (made by us, shipped by default, not excludable unless listed optional), optional (may be left out of a build and installed later through the plugin manager), custom (community/user plugins, not packaged). A plugin not listed here is official if it lives in plugins/official. A preset names what a build leaves out; '@optional' stands for every optional plugin. 'full' (the default) leaves none out. standalone (PUBLISH-MASCOT-2): published in the plugin catalog, never packaged unless -Include names it.",
   "classes": {
+    "Infantry_Mascot": "standalone",
     "Infantry_Notify": "optional",
     "Infantry_Pace": "optional",
     "Infantry_Prompts": "optional",

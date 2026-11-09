@@ -31,6 +31,8 @@ function Resolve-PluginSelection([object[]]$Inventory, [string]$PluginsRoot, [st
   $ids = @($Inventory | ForEach-Object { $_.Id })
   $optional = @($Inventory | Where-Object { $_.Class -eq 'optional' } | ForEach-Object { $_.Id })
   $excluded = [System.Collections.Generic.HashSet[string]]::new()
+  # PUBLISH-MASCOT-2: a 'standalone' plugin is published in the plugin catalog and never packaged unless -Include names it.
+  foreach ($s in @($Inventory | Where-Object { $_.Class -eq 'standalone' })) { [void]$excluded.Add($s.Id) }
   if ($Preset) {
     $p = $presets.presets.PSObject.Properties[$Preset]
     if (-not $p) { throw "unknown preset '$Preset' (known: $(($presets.presets.PSObject.Properties.Name) -join ', '))" }
@@ -49,7 +51,7 @@ function Resolve-PluginSelection([object[]]$Inventory, [string]$PluginsRoot, [st
   foreach ($e in $excluded) {
     $plugin = $Inventory | Where-Object { $_.Id -eq $e }
     if (-not $plugin) { throw "cannot exclude unknown plugin '$e'" }
-    if ($plugin.Class -ne 'optional') { throw "cannot exclude '$e': it is class '$($plugin.Class)'; only optional plugins can be left out of a build (core and official always ship)" }
+    if ($plugin.Class -ne 'optional' -and $plugin.Class -ne 'standalone') { throw "cannot exclude '$e': it is class '$($plugin.Class)'; only optional plugins can be left out of a build (core and official always ship)" }
   }
   $out = @($excluded | Sort-Object)
   [pscustomobject]@{
