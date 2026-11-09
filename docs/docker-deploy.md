@@ -21,7 +21,7 @@ docker save infantryai/infantry-ai:dev | gzip > infantry-ai.tar.gz   # ~420 MB c
 ```
 
 Build options (`--build-arg`): `OPENCODE_VERSION=1.19.4`, `PI_VERSION=1.4.0` pin the CLIs (default: latest at build
-time); `INSTALL_CLAUDE=true` adds Claude Code (off by default: it draws on a paid subscription).
+time); `INSTALL_CLAUDE=false` leaves Claude Code out (in by default; it needs a login).
 
 ## 2. Create the droplet
 

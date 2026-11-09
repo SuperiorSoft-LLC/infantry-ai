@@ -27,8 +27,8 @@ Choose it, first source wins: `infantry daemon --mode runner` (or `--mode=runner
      -p 8790:8790 ghcr.io/superiorsoft-llc/infantry-ai:latest
    ```
    `/data` holds the state (token, link keystore, agent logins), `/work` the repositories and worktrees. Port 8790 is the runner
-   link (`limits.runners.linkPort`, TLS). The daemon's own port 8787 stays closed. The image bakes in `opencode` and `pi`; build
-   with `--build-arg INSTALL_CLAUDE=true` to add `claude`. Add `-e INFANTRY_RUNNER_NAME=server-1` (plus `INFANTRY_RUNNER_HOST`,
+   link (`limits.runners.linkPort`, TLS). The daemon's own port 8787 stays closed. The image bakes in `claude`, `opencode` and `pi`; build
+   with `--build-arg INSTALL_CLAUDE=false` to leave `claude` out. Add `-e INFANTRY_RUNNER_NAME=server-1` (plus `INFANTRY_RUNNER_HOST`,
    `INFANTRY_RUNNER_ALLOW_PROJECTS`, `INFANTRY_RUNNER_ALLOW_HARNESSES`) and the container prints its pairing link in `docker logs`
    once it is up and not paired yet (see [Runner quickstart](runner-quickstart.md)). From an install instead: `infantry runner up
    --name server-1 --host <address>`, which starts a runner-mode daemon when none answers and prints the link.
