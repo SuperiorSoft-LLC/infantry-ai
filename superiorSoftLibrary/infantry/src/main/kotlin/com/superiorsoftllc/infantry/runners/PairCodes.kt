@@ -70,7 +70,7 @@ class PairCodes(
         }
         attempts.addLast(now)
         persist()
-        val current = live ?: return Redeem.Refused("no pairing code is live on this runner (run `infantry runner pair` there)")
+        val current = live ?: return Redeem.Refused(NO_LIVE_CODE)
         if (now >= current.expiresAt) {
             live = null
             return Redeem.Refused("the pairing code expired (limits.runners.pairCodeMin); run `infantry runner pair` again")
@@ -94,6 +94,8 @@ class PairCodes(
 
     companion object {
         const val ATTEMPTS_FILE = "pair-attempts.txt"
+        /** RUNNER-LINK-PORT-1: a spent (used) or dropped code and no live one: the refusal says so, so a reused link is not a mystery. */
+        const val NO_LIVE_CODE = "no pairing code is live on this runner: that code was already used or has expired (run `infantry runner pair` there for a new one)"
         /** Crockford-style base32 without the look-alikes I, L, O, U: 16 symbols = 80 bits. */
         private const val ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
         private const val CODE_SIZE = 16
