@@ -266,7 +266,10 @@ object DesktopPlugins {
                 }.onFailure {
                     refused += s.name
                     serviceMap.remove(s.name)
-                    res = res.refuse(s.name, it.message ?: it::class.simpleName.orEmpty())
+                    val reason = it.message ?: it::class.simpleName.orEmpty()
+                    // MASCOT-PICKER-1: the resolution already logged "loaded"; a jar the loader then refuses says so too.
+                    say("[plugins] ${s.name} (${s.tier.name.lowercase()}): refused at load - ${it::class.simpleName}: $reason")
+                    res = res.refuse(s.name, reason)
                 }
             }
             // Keep the resolution's order (a swapped module goes back where it loads).

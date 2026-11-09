@@ -19,7 +19,7 @@ import com.superiorsoftllc.infantry.ui.AgentAvatarRenderer
 import com.superiorsoftllc.infantry.ui.AvatarRequest
 import com.superiorsoftllc.infantry.ui.model.parseHexColor
 import com.superiorsoftllc.infantry.ui.model.roleHue
-import com.superiorsoftllc.infantry.ui.shell.LocalShellContext
+import com.superiorsoftllc.infantry.ui.plugin.moduleConfig
 import kotlinx.coroutines.delay
 
 /** MASCOT-2: the config node of module.json. */
@@ -44,7 +44,7 @@ val FIDGET_MOODS = listOf("Happy", "Greet", "Reading", "Sleepy", "Confused")
 object MascotAvatarRenderer : AgentAvatarRenderer {
     @Composable
     override fun Draw(request: AvatarRequest, modifier: Modifier) {
-        val cfg = LocalShellContext.current?.config?.values(MASCOT_NODE)
+        val cfg = moduleConfig(MASCOT_NODE)
         DrawMascot(request, cfg?.string("mascot.motion") ?: "static", cfg?.string("mascot.stateMap"), cfg?.string("mascot.roleLooks"), modifier, (cfg?.int("mascot.settleMs") ?: SETTLE_MS.toInt()).toLong(), cfg?.int("mascot.fidgetSec") ?: FIDGET_SEC)
     }
 }

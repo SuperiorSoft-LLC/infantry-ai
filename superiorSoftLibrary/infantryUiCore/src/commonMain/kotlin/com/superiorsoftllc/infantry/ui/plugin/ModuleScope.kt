@@ -7,6 +7,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import com.superiorsoftllc.infantry.ui.LocalTabFactory
+import com.superiorsoftllc.infantry.ui.shell.ConfigValues
+import com.superiorsoftllc.infantry.ui.shell.EmptyConfig
 import com.superiorsoftllc.infantry.ui.shell.GatedConfig
 import com.superiorsoftllc.infantry.ui.shell.LocalShellContext
 import com.superiorsoftllc.infantry.ui.shell.ScopedShellContext
@@ -31,3 +33,12 @@ internal fun ModuleScope(module: String?, content: @Composable () -> Unit) {
         }
     }
 }
+
+/**
+ * MASCOT-PICKER-1 (ticket f37b281a): [nodeId]'s resolved config values for plugin code the host draws outside a tab or a
+ * block (an avatar renderer, a row renderer), live. `ui.shell` is hidden from a community jar, so this is the reader it
+ * names; inside [ModuleScope] (the host draws every plugin renderer in one) it answers through the module's `config.read`
+ * gate. Outside a shell, or for a node the module may not read, every key reads null and the caller uses its defaults.
+ */
+@Composable
+fun moduleConfig(nodeId: String): ConfigValues = LocalShellContext.current?.config?.values(nodeId) ?: EmptyConfig
