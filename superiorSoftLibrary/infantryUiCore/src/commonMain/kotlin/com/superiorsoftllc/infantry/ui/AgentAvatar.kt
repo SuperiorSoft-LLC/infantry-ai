@@ -117,8 +117,11 @@ fun AgentAvatar(request: AvatarRequest, modifier: Modifier = Modifier) {
     }
     // GAP-AUDIT-1 (a): a plugin's composable is probed once before it is drawn; until then, and for good if it threw, the portrait.
     val key = OverrideHealth.key(style.module, "avatar", "$AGENT_AVATAR_RENDERERS/${style.key}")
-    GuardedBlock(key, style.renderer, fallback = { PortraitAvatarRenderer.Draw(request, modifier) }) {
-        style.renderer.Draw(request, modifier)
+    // MASCOT-PICKER-1: drawn as its module, so a community renderer reads config through its gate and a swapped module recomposes afresh.
+    com.superiorsoftllc.infantry.ui.plugin.ModuleScope(style.module) {
+        GuardedBlock(key, style.renderer, fallback = { PortraitAvatarRenderer.Draw(request, modifier) }) {
+            style.renderer.Draw(request, modifier)
+        }
     }
     (OverrideHealth.verdict(key, style.renderer) as? OverrideVerdict.Faulted)?.let { fault ->
         SideEffect { PluginFaults.record(style.module, IllegalStateException(fault.message), PluginFaults.generationLookup(style.module)) }
