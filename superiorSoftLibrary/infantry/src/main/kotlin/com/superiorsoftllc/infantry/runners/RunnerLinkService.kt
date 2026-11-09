@@ -432,7 +432,10 @@ class RunnerLinkService(
      */
     private fun isTestAnswer(line: String): Boolean {
         val t = line.trim()
-        return t.isNotEmpty() && !t.startsWith(TURN_LINE) && !t.startsWith(ERROR_LINE)
+        // RUNNER-TEST-ANSWER-1: a failed turn ("[infantry] turn failed: ...") and a stream-json system event (claude's init line)
+        // are not what the harness said: the first made a signed-out claude "answer", the second a reply of only {"type":"system"...}.
+        return t.isNotEmpty() && !t.startsWith(TURN_LINE) && !t.startsWith(ERROR_LINE) &&
+            !t.startsWith(FAILED_TURN_LINE) && !t.startsWith(SYSTEM_EVENT_LINE)
     }
 
     /**
@@ -657,6 +660,8 @@ class RunnerLinkService(
         const val LEFT_BEHIND = "the test session was stopped but not removed on the runner (it may still show there until it ends)"
         private const val TURN_LINE = "[turn]"
         private const val ERROR_LINE = "error:"
+        private const val FAILED_TURN_LINE = "[infantry] turn failed"
+        private const val SYSTEM_EVENT_LINE = "{\"type\":\"system\""
 
         /** [LinkCall] over the loaded transport with the link call timeout and the plain-ws switch read at each call. */
         fun clientCall(limit: (LimitDef) -> Long, settings: () -> RunnerLinkSettings.Values, transport: () -> RunnerLinkTransport?) = LinkCall { url, fp, id, cred, type, data, timeoutSeconds ->
