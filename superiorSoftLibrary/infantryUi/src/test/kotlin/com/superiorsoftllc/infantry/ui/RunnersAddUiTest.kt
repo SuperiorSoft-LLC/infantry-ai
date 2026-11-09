@@ -20,9 +20,12 @@ import com.superiorsoftllc.infantry.plugins.official.runners.linkCarriesGrant
 import com.superiorsoftllc.infantry.plugins.official.runners.RUNNER_TEST_COST
 import com.superiorsoftllc.infantry.plugins.official.runners.parseRunnerCheck
 import com.superiorsoftllc.infantry.plugins.official.runners.parseRunnerTest
+import com.superiorsoftllc.infantry.plugins.official.runners.refusalAnswer
 import com.superiorsoftllc.infantry.plugins.official.runners.runnerFailure
 import com.superiorsoftllc.infantry.plugins.official.runners.testRequest
+import com.superiorsoftllc.infantry.ui.protocol.Envelope
 import com.superiorsoftllc.infantry.ui.shell.LinkContext
+import com.superiorsoftllc.infantry.ui.shell.LinkReply
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -64,6 +67,17 @@ class RunnersAddUiTest {
         assertTrue(linkCarriesGrant(link.replace("&fp=AA:BB:CC", "&fp=AA:BB:CC&grant=1")), "grant=1 in the link means the code may grant")
         assertTrue(!linkCarriesGrant(link), "a link without grant=1 carries no authority")
         assertTrue(!linkCarriesGrant("grant=1"), "the flag is read from the query, not from anywhere in the text")
+    }
+
+    @Test
+    fun `a refused request reads as a failure carrying the daemon reason, never as a pairing`() {
+        // RUNNER-UI-ADD-1: the card reads the answer to ITS request (LinkContext.request); an error frame is a failure.
+        val refused = LinkReply(Envelope.ERROR, "runners.admin is refused by the policy")
+        assertTrue(refused.refused)
+        assertEquals("runners.admin is refused by the policy", runnerFailure(refusalAnswer(refused.data)))
+        assertNull(addedRunnerName(refusalAnswer(refused.data)))
+        assertNotNull(runnerFailure(refusalAnswer("")), "a blank refusal still says something")
+        assertTrue(!LinkReply("runner_admin", """{"ok":true,"name":"loc1"}""").refused)
     }
 
     @Test

@@ -40,6 +40,7 @@ import com.superiorsoftllc.infantry.ui.protocol.Ticket
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -224,6 +225,18 @@ class CoreLink(
             ?: kotlinx.coroutines.flow.emptyFlow()
     override suspend fun sendFrame(type: String, data: String): Boolean =
         controller?.client?.send(com.superiorsoftllc.infantry.ui.protocol.Envelope(type, data)) ?: false
+    override suspend fun request(type: String, data: String): LinkReply? {
+        val client = controller?.client ?: return null
+        val id = "link-${kotlin.random.Random.nextLong().toULong().toString(36)}"
+        return coroutineScope {
+            // Subscribed before the send (UNDISPATCHED), so the answer cannot arrive unseen.
+            val answer = async(start = CoroutineStart.UNDISPATCHED) {
+                client.frames.first { it.requestId == id && (it.type == type || it.type == com.superiorsoftllc.infantry.ui.protocol.Envelope.ERROR) }
+            }
+            if (!client.send(com.superiorsoftllc.infantry.ui.protocol.Envelope(type, data, requestId = id))) { answer.cancel(); null }
+            else answer.await().let { LinkReply(it.type, it.data) }
+        }
+    }
 }
 
 /** RUNTIME-18: [state]'s process report and [controller]'s process-watch requests, for the official Infantry_Processes. */

@@ -226,7 +226,9 @@ Screenshot: `docs/img/hello-plugin.png` in the repo.
 `plugins/official/Infantry_Notify` (NOTIFY-1) sends system notifications for **milestones and checkpoints only**. Nothing
 notifies on its own: a notification is sent only when a script, an agent, the CLI asks, or when a ticket marked as a
 milestone enters done. It has a daemon half and a UI half; core only carries the generic frame seam
-(`LinkContext.frames` / `LinkContext.sendFrame` in `ShellContext.kt`).
+(`LinkContext.frames` / `LinkContext.sendFrame` in `ShellContext.kt`). A plugin that needs the answer to ONE request
+calls `LinkContext.request`: it tags the frame with a `requestId` and returns the matching `LinkReply`, so a concurrent
+answer of the same frame type is never taken for it.
 
 | Where | What it does |
 |---|---|
