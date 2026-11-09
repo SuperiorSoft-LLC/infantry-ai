@@ -5,7 +5,9 @@ sources `infantry-official` and `infantry-community`, bundled data `plugins/defa
 https://github.com/SuperiorSoft-LLC/infantry-plugin-template. Design: [PLUGIN-REPO-DESIGN](../PLUGIN-REPO-DESIGN.md).
 
 1. Use the template repo (GitHub "Use this template"). It builds against the published SDK with the Gradle plugin.
-2. Build the `.ihq` package; the output lands in the plugin repo's build folder:
+2. Build the `.ihq` package; the output lands in the plugin repo's build folder. Its `module.json` must state an
+   `author` and a `license`: an unsigned package installs into the community tier, where the loader refuses a module
+   without either, so `ihq` refuses to build one and the installer refuses to install one (MASCOT-LICENSE-1):
 
    ```
    ./gradlew ihq   # writes build/ihq/

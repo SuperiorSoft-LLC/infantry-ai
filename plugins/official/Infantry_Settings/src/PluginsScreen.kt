@@ -125,6 +125,8 @@ const val PLUGINS_EMPTY_TAG = "plugins-installed-empty"
 const val PLUGIN_EXPAND_PREFIX = "plugin-expand-"
 const val PLUGIN_DETAILS_PREFIX = "plugin-details-"
 const val PLUGIN_PENDING_PREFIX = "plugin-pending-"
+/** MASCOT-LICENSE-1: the "Refused: <reason>" line of an installed plugin the loader refuses (shown in place of its toggle). */
+const val PLUGIN_REFUSED_PREFIX = "plugin-refused-"
 const val PLUGIN_DESCRIPTION_PREFIX = "plugin-description-"
 const val REMOVE_CONFIRM_TAG = "plugin-remove-confirm"
 const val REMOVE_CONFIRM_OK_TAG = "plugin-remove-confirm-ok"
@@ -492,6 +494,7 @@ private fun InstalledRow(
         if (!p.bundled && p.signer == null) add("Unsigned" to Palette.Warn)
         if (offer != null) add("Update ${offer.to}" to Palette.Ok)
         if (p.yanked != null) add("Withdrawn" to Palette.Danger)
+        if (p.refused != null) add("Refused" to Palette.Danger)
         if (p.heldOffBy.isNotEmpty()) add(("Off: its parents are off (" + p.heldOffBy.joinToString(", ") { displayName(it) } + ")") to Palette.Warn)
         else if (parentsOn.size >= 2) add(("In use by " + parentsOn.map { displayName(it) }.let { n -> n.dropLast(1).joinToString(", ") + " and " + n.last() }) to Palette.Muted)
     }
@@ -513,7 +516,8 @@ private fun InstalledRow(
             RowHead(p.id, p.version, badges, p.description, Modifier.weight(1f))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(start = 8.dp)) {
                 if (pendingTo != null) CircularProgressIndicator(Modifier.size(16.dp).testTag(PLUGIN_PENDING_PREFIX + p.id), color = Palette.Muted, strokeWidth = 2.dp)
-                Switch(
+                // MASCOT-LICENSE-1: a refused plugin does not load whatever its flag says, so it gets no toggle; the reason shows below.
+                if (p.refused == null) Switch(
                     checked = on, onCheckedChange = onToggle, enabled = !busy && pendingTo == null,
                     modifier = Modifier.testTag(PLUGIN_ENABLE_PREFIX + p.id).semantics {
                         contentDescription = displayName(p.id)
@@ -522,6 +526,10 @@ private fun InstalledRow(
                 )
                 Chevron(open, displayName(p.id), Modifier.testTag(PLUGIN_EXPAND_PREFIX + p.id), onExpand)
             }
+        }
+        p.refused?.let {
+            Text("Refused: $it", color = Palette.Danger, fontSize = 12.sp,
+                modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 6.dp).testTag(PLUGIN_REFUSED_PREFIX + p.id))
         }
         // PLUGIN-LIFECYCLE-1: Update and Remove sit on the row itself (not behind the expand arrow) for every plugin the manager installed.
             if (p.bundled) Column(Modifier.padding(start = 12.dp, end = 12.dp, bottom = 8.dp)) { Detail("Remove", "Not available: it ships with the app. Turn it off instead.", Palette.Muted) }

@@ -1,8 +1,9 @@
 {
   "name": "Infantry_Mascot",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "apiVersion": 2,
   "author": "Infantry AI",
+  "license": "Apache-2.0",
   "description": "Mascot avatars: a selectable avatar style that draws each agent as a small living character (the vendored material-mascot drawing code, MIT) whose pose follows the session state. The role portrait stays the default; disabling this plugin puts it back on its own.",
   "tier": "official",
   "sequence": [],

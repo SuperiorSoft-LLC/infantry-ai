@@ -52,6 +52,8 @@ data class PluginView(
     val description: String = "", val contributes: List<String> = emptyList(), val requiredBy: List<String> = emptyList(),
     /** PLUGIN-TREE-2b: the plugin tree. [parents] / [children] are direct; [heldOffBy] = the parents that are all off, when that holds this one off (its own [enabled] flag stays as set). */
     val parents: List<String> = emptyList(), val children: List<String> = emptyList(), val heldOffBy: List<String> = emptyList(),
+    /** MASCOT-LICENSE-1: the loader's reason when it refuses this plugin (it is installed but does not load); null = not refused. */
+    val refused: String? = null,
 )
 
 /** A newer version offered for an installed plugin; [newGrants] non-empty = "asks for new permissions". */

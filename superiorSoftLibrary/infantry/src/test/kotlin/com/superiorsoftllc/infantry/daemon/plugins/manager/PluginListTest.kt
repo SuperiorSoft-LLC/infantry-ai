@@ -34,7 +34,7 @@ class PluginListTest {
 
     private fun pack(id: String = "Acme_Echo", version: String = "1.0.0"): File {
         val f = File(repo, "$id-$version.ihq")
-        val manifest = """{"name":"$id","version":"$version","apiVersion":2,"license":"Apache-2.0","entry":"x.Y","jar":"lib/$id.jar"}"""
+        val manifest = """{"name":"$id","version":"$version","apiVersion":2,"author":"Acme","license":"Apache-2.0","entry":"x.Y","jar":"lib/$id.jar"}"""
         ZipOutputStream(f.outputStream()).use { z ->
             z.putNextEntry(ZipEntry("module.json")); z.write(manifest.toByteArray()); z.closeEntry()
             z.putNextEntry(ZipEntry("lib/$id.jar")); z.write(ByteArray(300) { (it + version.hashCode()).toByte() }); z.closeEntry()
