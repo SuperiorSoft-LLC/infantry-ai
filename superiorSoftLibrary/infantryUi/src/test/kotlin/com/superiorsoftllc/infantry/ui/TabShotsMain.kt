@@ -91,7 +91,8 @@ import kotlin.system.exitProcess
 val SHOT_UI_PREFS: Map<String, String> = mapOf(BLUR_PREF_KEY to "off", THEME_PREF_KEY to "INFANTRY;dark")
 
 fun pinShotUiPrefs() {
-    com.superiorsoftllc.infantry.ui.shell.uiPrefsOverride = SHOT_UI_PREFS.toMutableMap()
+    // MASCOT-LIVE-1: TABSHOTS_AVATAR=<style> renders the window with that avatar style chosen (the agentAvatarStyle preference).
+    com.superiorsoftllc.infantry.ui.shell.uiPrefsOverride = (SHOT_UI_PREFS + listOfNotNull(System.getenv("TABSHOTS_AVATAR")?.takeIf { it.isNotBlank() }?.let { AGENT_AVATAR_PREF_KEY to it })).toMutableMap()
 }
 
 /**

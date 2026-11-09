@@ -213,6 +213,19 @@ class AppearanceTabUiTest {
         AvatarStyleChoice.chosen = null
     }
 
+    /** MASCOT-LIVE-1: the REAL Infantry_Mascot module, picked in the live Appearance card: AgentAvatar draws the mascot, not the portrait. */
+    @Test fun pickingTheRealMascotStyleDrawsTheMascotNotThePortrait() {
+        AvatarStyleChoice.chosen = null
+        withAppearance(factory(withAppearance = true, extra = listOf(com.superiorsoftllc.infantry.plugins.official.mascot.InfantryMascot))) {
+            waitUntil(timeoutMillis = 10_000) { onAllNodesWithTag(AVATAR_TAG).fetchSemanticsNodes().isNotEmpty() }
+            onNodeWithTag(NODE_FIELD_OPTION_TAG_PREFIX + "$avatarField/mascot").performScrollTo().performClick()
+            waitUntil(timeoutMillis = 10_000) { AvatarStyleChoice.chosen == "mascot" }
+            waitUntil(timeoutMillis = 10_000) { onAllNodesWithTag(AVATAR_TAG).fetchSemanticsNodes().isEmpty() }
+            assertEquals(emptyList(), com.superiorsoftllc.infantry.ui.plugin.PluginFaults.all.map { it.toString() }, "no plugin fault")
+        }
+        AvatarStyleChoice.chosen = null
+    }
+
     @Test fun aRemovedStyleKeyDisplaysAndBehavesAsPortrait() {
         AvatarStyleChoice.chosen = null
         // The device remembers "gone", a style whose plugin was removed.
