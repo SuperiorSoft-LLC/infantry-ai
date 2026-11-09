@@ -496,6 +496,8 @@ class RunnerLinkService(
     @Volatile var setPaused: (String, Boolean) -> Unit = { _, _ -> }
     /** RUNNER-ADD-LINK-1: writes `runners.enabled`; the first successful add turns it on so one paste is enough. */
     @Volatile var setEnabled: (Boolean) -> Unit = { }
+    /** RUNNER-CARD-STALE-1b: runs one heartbeat round after a list-changing op, before clients are told, so a new runner is not listed `down` until the next period. */
+    @Volatile var settle: () -> Unit = { }
     /**
      * RUNNER-CHECK-1: the git remote of a project (`origin` of its checkout), the same lookup a remote start uses; null = the
      * project has none, which the check reports as its `git:origin` row.

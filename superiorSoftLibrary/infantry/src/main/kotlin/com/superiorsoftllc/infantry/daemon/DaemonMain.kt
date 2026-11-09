@@ -2021,7 +2021,9 @@ class InfantryDaemon(
             runnerLinkService.enabledNow = settings::runnersEnabled
             runnerLinkService.setPaused = { name, paused -> settings.set("runners.$name.paused", kotlinx.serialization.json.JsonPrimitive(paused)) }
             // RUNNER-ADD-LINK-1: the first successful add turns runners.enabled on (no second setting to flip by hand).
-            runnerLinkService.setEnabled = { on -> settings.set(com.superiorsoftllc.infantry.settings.SettingsService.RUNNERS_ENABLED, kotlinx.serialization.json.JsonPrimitive(on)) }
+            runnerLinkService.setEnabled = { on -> settings.set(com.superiorsoftllc.infantry.settings.SettingsService.RUNNERS_ENABLED, kotlinx.serialization.json.JsonPrimitive(on)); daemonConfig.announce(com.superiorsoftllc.infantry.settings.SettingsService.RUNNERS_ENABLED) }
+            // RUNNER-CARD-STALE-1b: a list-changing op beats the runners at once, so a new runner reads `up` without waiting a heartbeat period.
+            runnerLinkService.settle = { runCatching { runnerPool.heartbeat(settings.limit(LimitRegistry.RUNNERS_LOST_AFTER_SEC) * 1000L).forEach { println("[infantry] $it") } } }
             runnerLinkService.grant = { key, ids -> settings.set(key, kotlinx.serialization.json.JsonArray(ids.map { kotlinx.serialization.json.JsonPrimitive(it) })) }
             // RUNNER-CHECK-1: the check's `git:origin` row and the remote the runner would clone: the project checkout's `origin`,
             // the same lookup a remote start uses (LocalBoardHost.gitRemoteOf).
@@ -2978,7 +2980,10 @@ private suspend fun handleConnection(
                 // RUNNER-CARD-STALE-1: a runner added, removed, paused or resumed here shows in every other window too.
                 val op = (request["op"] as? kotlinx.serialization.json.JsonPrimitive)?.content
                 val ok = (answer["ok"] as? kotlinx.serialization.json.JsonPrimitive)?.content == "true"
-                if (ok && op in com.superiorsoftllc.infantry.runners.RunnerLinkService.LIST_CHANGING_OPS) broadcastRunnersChanged(clients)
+                if (ok && op in com.superiorsoftllc.infantry.runners.RunnerLinkService.LIST_CHANGING_OPS) {
+                    link.settle()
+                    broadcastRunnersChanged(clients)
+                }
             }
             null
         }
