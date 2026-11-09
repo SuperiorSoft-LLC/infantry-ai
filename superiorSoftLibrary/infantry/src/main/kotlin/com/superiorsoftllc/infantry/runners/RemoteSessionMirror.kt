@@ -22,6 +22,20 @@ class RemoteSessionMirror(
 
     private val seen = ConcurrentHashMap<String, Seen>()
     private val firstSeen = ConcurrentHashMap<String, Long>()
+    private val placedAs = ConcurrentHashMap<String, Placed>()
+
+    /**
+     * RUNNER-TICKET-ROW-1: what the start pinned for [sessionId]: the harness, the effective [model], the orchestrator's checkout
+     * [repoRoot] (where the runner's pushed ticket branch is fetched to, and where the board row reads its commit tip) and the
+     * ticket [branch]. Without it the board row showed no commit, an empty worktree and the harness's default model.
+     */
+    class Placed(val provider: String, val model: String?, val repoRoot: String?, val branch: String?, val ticketId: String? = null)
+
+    fun placed(sessionId: String, info: Placed) {
+        placedAs[sessionId] = info
+    }
+
+    fun placement(sessionId: String): Placed? = placedAs[sessionId]
 
     /** A runner event moved [sessionId] to [state] (a SessionState name; an unknown word is ignored). */
     fun status(sessionId: String, state: String) {
@@ -42,8 +56,10 @@ class RemoteSessionMirror(
     private fun record(id: String): SessionRecord {
         val now = clock()
         val s = seen[id]
+        val p = placedAs[id]
         return SessionRecord(
-            id = id, provider = REMOTE_PROVIDER, workingDir = "", spawnedAt = firstSeen.computeIfAbsent(id) { now },
+            id = id, provider = p?.provider ?: REMOTE_PROVIDER, model = p?.model, workingDir = p?.repoRoot.orEmpty(), repoRoot = p?.repoRoot,
+            worktreeBranch = p?.branch, ticketId = p?.ticketId, spawnedAt = firstSeen.computeIfAbsent(id) { now },
             lastHeartbeat = s?.at ?: now, state = s?.state ?: SessionState.STARTING,
             // The brief went over the link with the start; the runner resumes its own conversation, so the board treats it as briefed.
             providerSessionId = REMOTE_PROVIDER, runCount = 1,
