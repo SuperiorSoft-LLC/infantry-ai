@@ -23,7 +23,7 @@ import com.superiorsoftllc.infantry.ui.plugin.moduleConfig
 import kotlinx.coroutines.delay
 
 /** MASCOT-2: the config node of module.json. */
-const val MASCOT_NODE = "infantry.mascot"
+const val MASCOT_NODE = "Infantry_Mascot.avatars"
 
 /** MASCOT-2: how long the mascot is Happy after a clean finish, when motion is live. */
 const val HAPPY_MS = 3_000L

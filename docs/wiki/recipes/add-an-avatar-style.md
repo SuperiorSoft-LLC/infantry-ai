@@ -93,6 +93,10 @@ Nothing in `settings.gradle.kts` changes: it scans `plugins/community/*` for a `
    `LocalShellContext`: a community jar cannot see `ui.shell`, so the renderer fails with a missing-class error. A community class
    loader shows only `AgentAvatarRenderer`, `AvatarRequest` and `AvatarMotion` from the `ui` package.
 
+   Name the node `<ModuleName>.<something>` (Infantry_Mascot uses `Infantry_Mascot.avatars`). A plugin installed from the
+   catalog loads at the community tier, and a community module declares config only on its own tabs, on nodes under its own
+   name, or on nodes `modules.json` grants it. Any other node is refused, and its card does not show in Configuration.
+
 4. Register it in the plugin entry point. `UiPlugin.register` receives the `UiRegistrar`:
 
    ```kotlin
