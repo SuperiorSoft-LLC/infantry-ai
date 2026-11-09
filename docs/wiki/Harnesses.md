@@ -13,6 +13,17 @@ There are two ways to add one:
 2. **A harness plugin**, a jar implementing the harness API (full control: persistent sessions, approvals,
    stats, usage).
 
+## How the model catalog is answered
+
+A harness lists its own models (`claude` is a fixed list; pi shells out to its `--list-models`, opencode reads its config
+files and falls back to `opencode models`), and a cold CLI can take tens of seconds -- longer than a caller waits. So the
+daemon keeps every harness's last good list for its whole life (`ModelCatalogCache` in
+`superiorSoftLibrary/infantryCore/src/main/kotlin/com/superiorsoftllc/infantry/provider/ModelCatalogCache.kt`): a
+request is answered from the cache at once and an old list is refreshed in the background, a harness that has never
+listed its models is waited for at most `limits.models.catalogWaitMs` (default 4 s) before the answer says it is still
+listing, and one slow harness never empties another's list. The note on such a harness says what happened and how to pin
+a model id by hand; `limits.models.catalogTtlMs` (default 5 min) says how old a served list may be.
+
 ## 1. JSON descriptor (no code)
 
 Drop a file into `<config dir>/harnesses/` (default `~/.infantry/harnesses/`; set by `INFANTRY_HOME`). Samples ship in

@@ -59,6 +59,11 @@ object HarnessCatalogText {
             "start the ticket (ticket start). A harness that lists models refuses any other; one with no list takes " +
             "any model id its CLI accepts."
 
+    /** MODEL-CATALOG-1: what to do when a harness's model list is not available: pin an id by hand. */
+    const val BY_HAND =
+        "Pin a model id by hand meanwhile: a harness with no list takes any id its --model accepts " +
+            "(ticket update --model <id>); its own CLI's help names them."
+
     /** [catalogError] is why the `models` frame could not be read (then [catalog] is empty), or null. */
     fun merge(providers: List<ProviderInfo>, catalog: List<ProviderModels>, catalogError: String?): List<PinnableHarness> =
         providers.map { info ->
@@ -68,7 +73,7 @@ object HarnessCatalogText {
             val notes = buildList {
                 if (info.modelsStale) add("model list is last-known: the latest refresh failed")
                 rows.mapNotNullTo(this) { it.note }
-                if (models == null && catalogError != null) add("model catalog unavailable: $catalogError")
+                if (models == null && catalogError != null) add("model catalog unavailable: $catalogError. $BY_HAND")
             }.distinct()
             PinnableHarness(info.id, info.default, info.defaultModel, models, info.available, info.unavailableReason, notes.joinToString("; ").ifEmpty { null }, info.contextLimit, info.contextLimitHow, info.effort, info.effortHow)
         }
