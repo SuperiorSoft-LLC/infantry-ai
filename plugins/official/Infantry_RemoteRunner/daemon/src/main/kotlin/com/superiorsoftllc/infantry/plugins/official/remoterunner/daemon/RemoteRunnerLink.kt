@@ -59,6 +59,8 @@ class RemoteRunnerLink(private val name: String, private val links: RunnerLinks)
             branch = spec.branch,
             envNames = spec.envNames,
             pushOnCommit = spec.pushOnCommit,
+            gitName = spec.gitName,
+            gitEmail = spec.gitEmail,
         )
         val answer = try {
             links.call(name, F.START, F.json.encodeToString(F.StartRequest.serializer(), request))

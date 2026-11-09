@@ -2029,6 +2029,10 @@ class InfantryDaemon(
                 id?.let { runCatching { projectStore.get(it).directory }.getOrNull() }?.takeIf { it.isNotBlank() }
                     ?.let { dir -> File(dir).takeIf { it.isDirectory }?.let { runCatching { com.superiorsoftllc.infantry.daemon.plugins.originUrl(it) }.getOrNull() } }
             }
+            runnerLinkService.projectIdentityOf = { id ->
+                id?.let { runCatching { projectStore.get(it).directory }.getOrNull() }?.takeIf { it.isNotBlank() }
+                    ?.let { dir -> File(dir).takeIf { it.isDirectory }?.let { runCatching { com.superiorsoftllc.infantry.daemon.plugins.gitIdentityOf(it) }.getOrNull() } }
+            }
             runnerLinkService.rowStatus = { name ->
                 val e = runnerPool.runners().firstOrNull { it.name == name }
                 val running = e?.health?.running ?: 0

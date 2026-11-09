@@ -142,6 +142,12 @@ link             ok      reached wss://100.64.0.5:8790 in 42 ms
 Run each `fix:` line on the runner and check again. A full disk, an unreachable remote and a harness the runner does not
 have show up here too, instead of at the first ticket start.
 
+Who a worker on the runner commits as (RUNNER-GIT-IDENT-1, row `git:identity`): every remote start carries the orchestrator's git
+identity (the project checkout's `user.name` / `user.email`) and the runner writes it into its clone, so a worker commits as a
+local one would and never has to guess a name. To make a runner commit under its own identity instead, set both on the runner:
+`infantry settings set runner.gitName '"<name>"'` and `infantry settings set runner.gitEmail '"<email>"'` (blank = use the
+orchestrator's). The row fails only when none of these, nor the runner user's own git config, gives an identity.
+
 Green rows say the CLI is installed and signed in; they do not say it ANSWERS. For that, run one throwaway turn on the runner
 (RUNNER-TEST-1) — the Runners card's Check view has the same "Test" button:
 

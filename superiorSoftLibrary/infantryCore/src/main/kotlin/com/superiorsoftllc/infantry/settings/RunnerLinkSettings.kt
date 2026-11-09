@@ -40,6 +40,14 @@ object RunnerLinkSettings {
      * addresses. Set it on a runner behind NAT or in a container, where the detected addresses are not reachable.
      */
     const val ADVERTISE_HOSTS = "runners.advertiseHosts"
+    /**
+     * RUNNER-GIT-IDENT-1 (runner side): the git author/committer name and email this runner's workers commit with. Default `""`
+     * (blank) = the identity the orchestrator sends with each start (its checkout's `user.name` / `user.email`). Set both to make
+     * this runner commit under its own identity instead; one alone is ignored. Written into the runner's clone (`git config`), so a
+     * worker's `git commit` never asks who it is and never improvises a name.
+     */
+    const val GIT_NAME = "runner.gitName"
+    const val GIT_EMAIL = "runner.gitEmail"
 
     /** The setting text of [ALLOW_PLAIN_TAILNET]; it states the risk. */
     const val ALLOW_PLAIN_TAILNET_TEXT =
@@ -47,7 +55,7 @@ object RunnerLinkSettings {
             "text cross the network unencrypted; anyone on the path can read them and replay the credential to start agents with " +
             "tool permissions on this machine. Only for a private tailnet (Tailscale/WireGuard) you fully control. Default false."
 
-    val KEYS: Set<String> = setOf(ALLOW_PLAIN_TAILNET, PROJECTS, HARNESSES, CLONE_ROOT, ON_LOST, PUSH_ON_COMMIT, ADVERTISE_HOSTS)
+    val KEYS: Set<String> = setOf(ALLOW_PLAIN_TAILNET, PROJECTS, HARNESSES, CLONE_ROOT, ON_LOST, PUSH_ON_COMMIT, ADVERTISE_HOSTS, GIT_NAME, GIT_EMAIL)
 
     /** What the runner link reads; [stored] is the raw stored JSON of a key (null = unset). */
     data class Values(
@@ -58,7 +66,11 @@ object RunnerLinkSettings {
         val onLost: String = ON_LOST_ATTENTION,
         val pushOnCommit: Boolean = false,
         val advertiseHosts: List<String> = emptyList(),
+        val gitName: String = "",
+        val gitEmail: String = "",
     ) {
+        /** RUNNER-GIT-IDENT-1: this runner's own git identity, only when both halves are set. */
+        val gitIdentity: Pair<String, String>? get() = if (gitName.isNotBlank() && gitEmail.isNotBlank()) gitName to gitEmail else null
         val restartElsewhere: Boolean get() = onLost == ON_LOST_RESTART
         fun allowsProject(id: String?): Boolean = allows(projects, id)
         fun allowsHarness(id: String?): Boolean = allows(harnesses, id)
@@ -74,7 +86,12 @@ object RunnerLinkSettings {
             ?.takeIf { it in ON_LOST_VALUES } ?: ON_LOST_ATTENTION,
         pushOnCommit = runCatching { (Json.parseToJsonElement(stored(PUSH_ON_COMMIT) ?: "false") as JsonPrimitive).booleanOrNull }.getOrNull() ?: false,
         advertiseHosts = list(stored(ADVERTISE_HOSTS)).filter { HOST.matches(it) },
+        gitName = string(stored(GIT_NAME)),
+        gitEmail = string(stored(GIT_EMAIL)),
     )
+
+    private fun string(raw: String?): String =
+        runCatching { (Json.parseToJsonElement(raw ?: "\"\"") as JsonPrimitive).takeIf { it.isString }?.content }.getOrNull().orEmpty().trim()
 
     private val ON_LOST_VALUES = setOf(ON_LOST_ATTENTION, ON_LOST_RESTART)
 
@@ -88,6 +105,8 @@ object RunnerLinkSettings {
             ON_LOST to JsonPrimitive(v.onLost),
             PUSH_ON_COMMIT to JsonPrimitive(v.pushOnCommit),
             ADVERTISE_HOSTS to JsonArray(v.advertiseHosts.map(::JsonPrimitive)),
+            GIT_NAME to JsonPrimitive(v.gitName),
+            GIT_EMAIL to JsonPrimitive(v.gitEmail),
         )
     }
 
@@ -121,6 +140,10 @@ object RunnerLinkSettings {
                 .map { e -> (e as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim()?.takeIf { HOST.matches(it) } ?: throw IllegalArgumentException(ADVERTISE_HOSTS_ERROR) }
                 .distinct().map(::JsonPrimitive),
         )
+        GIT_NAME, GIT_EMAIL -> JsonPrimitive(
+            (value as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim()?.takeIf { GIT_IDENT.matches(it) }
+                ?: throw IllegalArgumentException("setting '$key' must be a JSON string of one line (\"\" = use the identity the orchestrator sends)"),
+        )
         else -> throw IllegalArgumentException("unknown runner link setting '$key'")
     }
 
@@ -131,6 +154,9 @@ object RunnerLinkSettings {
     /** A host as the pairing link carries it: a DNS name, IPv4, or IPv6 (bare or in brackets). No spaces, `/`, `?`, `&`, `=` or `#`. */
     val HOST = Regex("""^(\[[0-9A-Fa-f:.]{2,45}]|[0-9A-Fa-f.]*:[0-9A-Fa-f:.]{1,45}|[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?)$""")
     private const val ADVERTISE_HOSTS_ERROR = "setting '$ADVERTISE_HOSTS' must be a JSON array of host names or addresses (e.g. [\"100.64.0.7\", \"runner.example.com\"]; [] = detect)"
+
+    /** One line, no control characters or angle brackets (a git identity half). Blank allowed (= unset). */
+    private val GIT_IDENT = Regex("""^[^\p{Cntrl}<>]*$""")
 
     private val ID = Regex("""^(\*|[A-Za-z0-9][A-Za-z0-9._:-]{0,127})$""")
 

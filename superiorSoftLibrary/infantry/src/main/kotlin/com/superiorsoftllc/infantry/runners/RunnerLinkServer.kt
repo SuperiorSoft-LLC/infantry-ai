@@ -69,6 +69,11 @@ class RunnerLinkServer(
     private val installedHarnesses: () -> List<String> = { emptyList() },
     /** RUNNER-GRANT-AT-PAIR-1: adds ids to `runner.projects` / `runner.harnesses` (a grant at pairing ADDS, never replaces). */
     private val grantAdd: (key: String, ids: List<String>) -> Unit = { _, _ -> },
+    /**
+     * RUNNER-GIT-IDENT-1: the identity this runner's user already has in its own git config (global), for the `git:identity` row;
+     * null = none (a fresh container image).
+     */
+    private val ownGitIdentity: () -> Pair<String, String>? = { userGitIdentity(File(System.getProperty("user.home"))) },
 ) {
     /** One answer: [type] is [F.REPLY] or [F.ERROR]; [data] is the answer JSON or the reason. */
     data class Answer(val type: String, val data: String) {
@@ -189,6 +194,7 @@ class RunnerLinkServer(
         r.projectId?.takeIf { it.isNotBlank() }?.let { rows += grantRow("grant:project", RunnerLinkSettings.PROJECTS, it, allowed.projects) }
         if (wanted != null) rows += grantRow("grant:harness", RunnerLinkSettings.HARNESSES, wanted, allowed.harnesses)
         r.gitRemote?.takeIf { it.isNotBlank() }?.let { rows += gitRow(it) }
+        rows += identityRow(allowed, identity(r.gitName, r.gitEmail))
         rows += diskRow()
         return ok(seat, F.CHECK, null, from, F.CheckAnswer.serializer(), F.CheckAnswer(rows))
     }
@@ -242,6 +248,23 @@ class RunnerLinkServer(
         }
         val reason = scrubCredentials(result.err().lines().firstOrNull { it.isNotBlank() }.orEmpty())
         return F.CheckRow("git", false, "git ls-remote exited ${result.exitCode}${if (reason.isEmpty()) "" else ": $reason"}", fix)
+    }
+
+    /**
+     * RUNNER-GIT-IDENT-1: who a worker here commits as: this runner's `runner.gitName` / `runner.gitEmail`, else the orchestrator's
+     * identity ([sent]), else the runner user's own git config. None of them = a failing row, since the worker's first commit would
+     * fail with "Author identity unknown" (and an agent would guess a name).
+     */
+    private fun identityRow(allowed: RunnerLinkSettings.Values, sent: Pair<String, String>?): F.CheckRow {
+        allowed.gitIdentity?.let { (n, e) -> return F.CheckRow(IDENTITY_ROW, true, "workers commit as $n <$e> (${RunnerLinkSettings.GIT_NAME} / ${RunnerLinkSettings.GIT_EMAIL})") }
+        sent?.let { (n, e) -> return F.CheckRow(IDENTITY_ROW, true, "workers commit as $n <$e> (the orchestrator's git identity, sent with each start)") }
+        runCatching(ownGitIdentity).getOrNull()?.let { (n, e) -> return F.CheckRow(IDENTITY_ROW, true, "workers commit as $n <$e> (this runner user's git config)") }
+        return F.CheckRow(
+            IDENTITY_ROW, false,
+            "no git identity: the orchestrator sent none, ${RunnerLinkSettings.GIT_NAME} / ${RunnerLinkSettings.GIT_EMAIL} are unset and this runner's user has no git config, so a worker's commit would fail",
+            "on this runner: infantry settings set ${RunnerLinkSettings.GIT_NAME} '\"<name>\"' and infantry settings set ${RunnerLinkSettings.GIT_EMAIL} '\"<email>\"' " +
+                "(or set user.name / user.email in the orchestrator's project checkout)",
+        )
     }
 
     private fun diskRow(): F.CheckRow {
@@ -356,6 +379,8 @@ class RunnerLinkServer(
                 return refuse(seat, F.START, ticket, from, "${F.START} refused: ${e.message}")
             }
         }
+        // RUNNER-GIT-IDENT-1: the clone the worker commits in gets a defined identity: this runner's own setting, else the orchestrator's.
+        (worktree?.repoRoot?.let(::File) ?: ticketlessRepo)?.let { repo -> starts?.applyIdentity(repo, allowed.gitIdentity ?: identity(r.gitName, r.gitEmail)) }
         val spec = StartSpec(
             startId = r.startId, agentId = r.agentId, role = r.role, projectId = r.projectId, provider = r.provider,
             model = r.model, effort = r.effort, ticketId = r.ticketId, contextLimit = r.contextLimit,
@@ -428,12 +453,30 @@ class RunnerLinkServer(
         return Answer(F.ERROR, why)
     }
 
+    /** A wire identity: both halves present, one line each (anything else is dropped, never half-written). */
+    private fun identity(name: String?, email: String?): Pair<String, String>? {
+        val n = name?.trim()?.takeIf { it.isNotEmpty() && it.none(Char::isISOControl) } ?: return null
+        val e = email?.trim()?.takeIf { it.isNotEmpty() && it.none(Char::isISOControl) } ?: return null
+        return n to e
+    }
+
     private fun <T> decode(serializer: KSerializer<T>, data: String): T? = runCatching { F.json.decodeFromString(serializer, data) }.getOrNull()
 
     private fun shownType(type: String) = type.filter { it in ' '..'~' }.take(SHOWN_TYPE_SIZE)
 
     companion object {
         const val ANONYMOUS = "anonymous"
+
+        /** RUNNER-GIT-IDENT-1: the check row that says who a worker on this runner commits as. */
+        const val IDENTITY_ROW = "git:identity"
+
+        /** RUNNER-GIT-IDENT-1: `user.name` / `user.email` from the git config seen in [dir] (global for a non-repo), or null. */
+        fun userGitIdentity(dir: File, git: GitCli = SystemGitCli()): Pair<String, String>? {
+            fun read(key: String) = runCatching { git.run(dir, listOf("config", "--get", key)) }.getOrNull()?.takeIf { it.ok }?.out()?.takeIf { it.isNotBlank() }
+            val name = read("user.name") ?: return null
+            val email = read("user.email") ?: return null
+            return name to email
+        }
 
         /** RUNNER-GRANT-AT-PAIR-1: the audit operation of a pairing that granted ids (`infantry runner audit` prints it). */
         const val PAIR_GRANT = "runner_link_pair_grant"

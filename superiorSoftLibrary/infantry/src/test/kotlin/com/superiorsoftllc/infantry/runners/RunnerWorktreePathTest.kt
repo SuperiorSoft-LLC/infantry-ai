@@ -37,6 +37,16 @@ class RunnerWorktreePathTest {
     private fun git(cwd: File, vararg a: String): String =
         ProcessBuilder(listOf("git", "-C", cwd.path) + a).redirectErrorStream(true).start().let { p -> p.inputStream.bufferedReader().readText().also { p.waitFor() } }
 
+    /** git as a runner image sees it: no global or system config, no identity in the environment (the bug's runner: no ~/.gitconfig). */
+    private fun bareGit(cwd: File, vararg a: String): Pair<Int, String> {
+        val pb = ProcessBuilder(listOf("git", "-C", cwd.path) + a).redirectErrorStream(true)
+        val env = pb.environment()
+        listOf("GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL", "EMAIL").forEach { env.remove(it) }
+        env["GIT_CONFIG_GLOBAL"] = File(dir, "no-global-gitconfig").path
+        env["GIT_CONFIG_NOSYSTEM"] = "1"
+        return pb.start().let { p -> p.inputStream.bufferedReader().readText().let { out -> p.waitFor() to out } }
+    }
+
     @Test
     fun `the runner's start reply carries the runner-side worktree and the mirror record and start line show it`() {
         // The orchestrator's checkout and the remote both sides reach.
@@ -93,6 +103,67 @@ class RunnerWorktreePathTest {
         assertEquals("$runnerPath (on runner trw1)", Cli.worktreeLine(onRunner))
         assertEquals("(on runner trw1; its path was not reported)", Cli.worktreeLine(onRunner.copy(worktreePath = null)))
         assertEquals(orchestratorCheckout.path, Cli.worktreeLine(rec.copy(worktreePath = null, workingDir = orchestratorCheckout.path)))
+    }
+
+    /**
+     * RUNNER-GIT-IDENT-1: a remote start carries the orchestrator's git identity and the runner writes it into its clone, so the
+     * worker's first commit in the ticket worktree has an author (a runner image has no ~/.gitconfig); the runner's own
+     * `runner.gitName` / `runner.gitEmail` win over it.
+     */
+    @Test
+    fun `a remote start gives the runner's clone a git identity, and the runner's own setting wins`() {
+        val origin = File(dir, "id-origin.git").also { it.mkdirs() }.also { git(it, "init", "--bare", "-b", "main") }
+        val pc = File(dir, "id-pc").also { it.mkdirs() }
+        git(pc, "init", "-b", "main"); git(pc, "config", "user.email", "owner@pc.test"); git(pc, "config", "user.name", "Owner PC")
+        File(pc, "a.txt").writeText("a"); git(pc, "add", "."); git(pc, "commit", "-m", "init")
+        git(pc, "remote", "add", "origin", origin.path); git(pc, "push", "origin", "main")
+        // The orchestrator side reads the identity a start carries from its checkout.
+        assertEquals("Owner PC" to "owner@pc.test", RunnerLinkServer.userGitIdentity(pc))
+
+        val runnerDir = File(dir, "id-runner").also { it.mkdirs() }
+        val cloneRoot = File(runnerDir, "clones")
+        var startedIn: StartWorktree? = null
+        val local = LocalRunnerLink(LocalRunnerServices(
+            ticketIdOf = { null }, info = { RunnerInfo("idr", F.CONTRACT) },
+            start = { spec: StartSpec -> startedIn = spec.worktree; "s-1" },
+            stop = { _, _, _ -> true }, deliver = { _, _ -> MailResult(MailResult.DELIVERED) }, health = { RunnerHealth(RunnerHealth.UP) },
+        ))
+        var values = RunnerLinkSettings.Values(projects = listOf("*"), harnesses = listOf("*"))
+        val codes = PairCodes(File(runnerDir, PairCodes.ATTEMPTS_FILE), expiryMs = { 10 * 60_000L }, attemptsPerHour = { 5 })
+        val server = RunnerLinkServer(
+            RunnerLinkStore(LinkVault.InMemory()), RunnerAudit(File(runnerDir, RunnerAudit.FILE)) { now }, codes,
+            settings = { values }, runner = { local }, clock = { now },
+            starts = RemoteStarts(cloneRoot = { cloneRoot }, outboxMax = { 100 }, log = {}),
+        )
+        val orchestratorStore = RunnerLinkStore(LinkVault.InMemory())
+        val credential = RunnerPeers(orchestratorStore, LinkCall { _, _, id, c, type, data, _ -> server.handle(type, data, id, c, "peer") }, clock = { now })
+            .add("idr", "wss://h:1", codes.issue("idr", now), "AA", "orch").credential
+        fun start(ticket: String) {
+            val request = F.StartRequest(
+                startId = "$ticket:1", projectId = "p1", provider = "claude", ticketId = ticket, title = "ident", gitRemote = origin.path,
+                base = "main", gitName = "Owner PC", gitEmail = "owner@pc.test",
+            )
+            val answer = server.handle(F.START, F.json.encodeToString(F.StartRequest.serializer(), request), orchestratorStore.selfId(), credential)
+            assertTrue(answer.ok, answer.data)
+        }
+
+        start("aaaa1111")
+        val wt = File(assertNotNull(startedIn).path)
+        assertEquals("Owner PC", git(wt, "config", "--local", "user.name").trim())
+        assertEquals("owner@pc.test", git(wt, "config", "--local", "user.email").trim())
+        // The worker's commit goes through with that author even with no global git config (the runner image has none).
+        File(wt, "b.txt").writeText("b"); git(wt, "add", "b.txt")
+        val (code, out) = bareGit(wt, "-c", "user.useConfigOnly=true", "commit", "-m", "worker")
+        assertEquals(0, code, out)
+        assertEquals("Owner PC <owner@pc.test>", git(wt, "log", "-1", "--format=%an <%ae>").trim())
+        assertEquals("Owner PC <owner@pc.test>", git(wt, "log", "-1", "--format=%cn <%ce>").trim())
+
+        // The runner's own identity overrides the orchestrator's on the next start.
+        values = values.copy(gitName = "Runner Box", gitEmail = "runner@box.test")
+        start("bbbb2222")
+        val wt2 = File(assertNotNull(startedIn).path)
+        assertEquals("Runner Box", git(wt2, "config", "--local", "user.name").trim())
+        assertEquals("runner@box.test", git(wt2, "config", "--local", "user.email").trim())
     }
 
     @Test
