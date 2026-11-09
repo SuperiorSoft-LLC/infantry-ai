@@ -70,6 +70,40 @@ esac
 NATIVE_DIR="${INFANTRY_NATIVE_DIR:-$STATE/native-libs}"
 mkdir -p "$NATIVE_DIR"
 
+# RUNNER-UP-1: with INFANTRY_RUNNER_NAME set and this runner not paired yet, print the pairing link into the container log
+# once the daemon answers. One code only: when it expires unpaired the log says how to get a new one (no loop: each issue is a
+# fresh 10-minute window for guessing). The link is a 10-minute secret; it is useless once redeemed or expired.
+runner_pair_when_ready() {
+  _name="$1"
+  _tries=0
+  until infantry settings get runner.projects >/dev/null 2>&1; do
+    _tries=$((_tries + 1))
+    [ "$_tries" -le "${INFANTRY_RUNNER_READY_TRIES:-120}" ] || { echo "[entrypoint] runner pairing skipped: the daemon never answered"; return 1; }
+    sleep 1
+  done
+  if infantry runner list 2>/dev/null | grep -q "^paired as runner"; then
+    echo "[entrypoint] runner already paired; \`infantry runner detach\` to pair again"
+    return 0
+  fi
+  if [ -z "${INFANTRY_RUNNER_HOST:-}" ]; then
+    echo "[entrypoint] WARNING: INFANTRY_RUNNER_HOST is not set: the link's hosts are container addresses. Set it to this server's public or tailnet address."
+  fi
+  set -- runner pair --name "$_name"
+  [ -z "${INFANTRY_RUNNER_HOST:-}" ] || set -- "$@" --host "$INFANTRY_RUNNER_HOST"
+  [ -z "${INFANTRY_RUNNER_ALLOW_PROJECTS:-}" ] || set -- "$@" --allow-projects "$INFANTRY_RUNNER_ALLOW_PROJECTS"
+  [ -z "${INFANTRY_RUNNER_ALLOW_HARNESSES:-}" ] || set -- "$@" --allow-harnesses "$INFANTRY_RUNNER_ALLOW_HARNESSES"
+  echo "==== PAIRING LINK ===="
+  if infantry "$@"; then
+    echo "==== END PAIRING LINK ===="
+  else
+    echo "==== END PAIRING LINK ===="
+    echo "[entrypoint] the pairing code expired unpaired. For a new one: docker exec -it infantry-runner infantry runner pair --name $_name"
+  fi
+}
+if [ -n "${INFANTRY_RUNNER_NAME:-}" ]; then
+  ( runner_pair_when_ready "$INFANTRY_RUNNER_NAME" ) &
+fi
+
 # shellcheck disable=SC2086  # JAVA_OPTS is a list of words on purpose
 exec java ${JAVA_OPTS:--Xms32m -Xmx512m} -Djava.awt.headless=true \
   -Dorg.sqlite.tmpdir="$NATIVE_DIR" -Djna.tmpdir="$NATIVE_DIR" --add-opens=java.base/java.util=ALL-UNNAMED -cp "/opt/infantry/lib/*" \

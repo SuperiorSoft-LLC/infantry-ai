@@ -31,12 +31,12 @@ OAH() { clean_env "$BIN" --url "ws://127.0.0.1:$ORCH_PORT/ws" --token-file "$T/o
 # ---- native runner
 mkdir -p "$T/nat/harnesses"; echo "$FAKE" > "$T/nat/harnesses/fake.json"; echo nattoken > "$T/nat/tok"; mkrepo "$T/nat-repo"
 clean_env INFANTRY_STATE_DIR="$T/nat" INFANTRY_HOME="$T/nat" INFANTRY_PORT=$NATIVE_PORT INFANTRY_TOKEN_FILE="$T/nat/tok" \
-  INFANTRY_LIMIT_RUNNERS_LINKPORT=$NLINK "$BIN" daemon --mode runner >"$T/nat.log" 2>&1 & PIDS+=($!)
+  INFANTRY_LIMIT_RUNNERS_LINK_PORT=$NLINK "$BIN" daemon --mode runner >"$T/nat.log" 2>&1 & PIDS+=($!)
 wait_http "http://127.0.0.1:$NATIVE_PORT/health" || { tail -n 20 "$T/nat.log"; exit 1; }
 NAH() { clean_env "$BIN" --url "ws://127.0.0.1:$NATIVE_PORT/ws" --token-file "$T/nat/tok" "$@"; }
 
 # ---- container runner (no host mounts; the link port is published on loopback only)
-docker run -d --name "$CN" -e INFANTRY_MODE=runner -e INFANTRY_LIMIT_RUNNERS_LINKPORT=8790 \
+docker run -d --name "$CN" -e INFANTRY_MODE=runner -e INFANTRY_LIMIT_RUNNERS_LINK_PORT=8790 \
   -p 127.0.0.1:$CONT_PORT:8787 -p 127.0.0.1:$CLINK:8790 "$IMAGE" >/dev/null || exit 1
 wait_http "http://127.0.0.1:$CONT_PORT/health" || { docker logs "$CN" | tail -n 20; exit 1; }
 CAH() { docker exec "$CN" infantry --url ws://127.0.0.1:8787/ws --token-file /data/access-token "$@"; }
