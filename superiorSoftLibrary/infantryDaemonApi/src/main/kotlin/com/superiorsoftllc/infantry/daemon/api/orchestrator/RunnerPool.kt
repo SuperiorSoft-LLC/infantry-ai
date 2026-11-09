@@ -199,6 +199,9 @@ interface RunnerPool {
     /** The runner a session lives on (the session index); [LOCAL] unless a remote start placed it elsewhere. */
     fun runnerOf(sessionId: String): String
 
+    /** LOGS-PREFIX-1: the ids of the sessions placed on a remote runner (the session index); empty when none are tracked. */
+    fun placedSessionIds(): Collection<String> = emptyList()
+
     companion object {
         const val LOCAL = "local"
     }
@@ -254,6 +257,8 @@ class RunnerHub(
     }
 
     override fun runnerOf(sessionId: String): String = sessions[sessionId] ?: RunnerPool.LOCAL
+
+    override fun placedSessionIds(): Collection<String> = sessions.keys.toList()
 
     /** RUNNER-POOL-7: whether any session placed by this orchestrator lives on runner [runner] (its forwarded frames are pulled only then). */
     fun hasSessionsOn(runner: String): Boolean = runner != RunnerPool.LOCAL && sessions.containsValue(runner)

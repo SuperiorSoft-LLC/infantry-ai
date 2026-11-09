@@ -924,7 +924,8 @@ internal object Cli {
                         1
                     } else 0
                     // One socket carries every session on the daemon; only this run's lines are ours.
-                    frame.sessionId != null && frame.sessionId != sessionId -> Unit
+                    // LOGS-PREFIX-1: the daemon answers a short id with frames carrying the full id it resolved to.
+                    frame.sessionId?.startsWith(sessionId) == false -> Unit
                     frame.type == Envelope.STDOUT -> {
                         out.appendLine(frame.data)
                         seen++

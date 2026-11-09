@@ -3311,7 +3311,10 @@ private suspend fun handleConnection(
                 continue
             }
             if (envelope.type == SESSION_REPLAY_REQUEST_TYPE) {
-                val sessionId = envelope.sessionId
+                // LOGS-PREFIX-1: a short id (the prefix `board` prints) resolves to the one full id it names before any lookup.
+                val sessionId = envelope.sessionId?.let { id ->
+                    resolveSessionIdPrefix(id, manager.list().map { it.id } + runnerPool.placedSessionIds())
+                }
                 val request = runCatching {
                     json.decodeFromString(SessionReplayRequestPayload.serializer(), envelope.data)
                 }.getOrNull()
@@ -4917,3 +4920,9 @@ internal fun isAutomationFrame(envelope: Envelope, owner: Boolean): Boolean =
 /** AR-4b-ii-b: test seam only. A Roles provider core tests install in place of the Infantry_Roles plugin (no frames; the port only). */
 @Volatile
 internal var testRoles: com.superiorsoftllc.infantry.daemon.api.roles.Roles? = null
+
+/** LOGS-PREFIX-1: [id] itself when known or when no single known id starts with it; else the one known id it is a prefix of. */
+internal fun resolveSessionIdPrefix(id: String, known: Collection<String>): String {
+    if (id.isBlank() || id in known) return id
+    return known.filter { it.startsWith(id) }.distinct().singleOrNull() ?: id
+}
