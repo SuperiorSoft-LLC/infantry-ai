@@ -3,6 +3,7 @@
   "name": "Command Code",
   "command": "command-code",
   "args": ["-p", "--output-format", "json", "{toolApproval}", ["--model", "{model}"], ["--effort", "{effort}"], ["--resume", "{sessionId}"]],
+  "install": {"npm": "command-code"},
   "capabilities": ["MODEL_SELECTION", "SESSION_RESUME", "EFFORT_SELECTION"],
   "credential": {
     "env": "COMMAND_CODE_API_KEY",

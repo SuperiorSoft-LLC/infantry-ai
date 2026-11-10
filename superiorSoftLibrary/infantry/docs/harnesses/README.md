@@ -11,3 +11,7 @@ approval mode reaches the CLI.
 | `commandcode.json` | Command Code `command-code -p --output-format json`, prompt on stdin (npm `command-code`; `cmdc` on Windows) | none (headless blocks writes/shell) | `--permission-mode accept-edits` | `--yolo` | **unverified**: from commandcode.ai/docs/core-concepts/headless; declares credential `COMMAND_CODE_API_KEY` |
 
 `ToolApprovalMatrixTest` loads this directory, so a sample that loses a mapping fails the build.
+
+## Installing from the app (HARNESS-DESCRIPTOR-INSTALL-1)
+
+A descriptor may carry `"install": {"npm": "<package>", "bin"?: "<path in package>"}`, validated like a manifest's `harness.cli.install`. The harness installer then lists and installs it into the app's own prefix (no key stored). An install ships these samples in `<install>/harness-samples` (override: `INFANTRY_HARNESS_SAMPLES`); a sample with an `install` field shows as "available, not installed", and installing it copies the file into `harnesses/` and registers it. Command Code uses the binary name `command-code` because `cmd` clashes with cmd.exe on Windows; its usage field names are undocumented, so it has no USAGE mapping.
