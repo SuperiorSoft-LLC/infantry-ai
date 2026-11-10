@@ -8,25 +8,105 @@
   "entry": "com.superiorsoftllc.infantry.plugins.official.runners.RunnersPlugin",
   "jar": "build/libs/Infantry_Runners.jar",
   "buildOrder": 910,
-  "fills": ["infantry.shell.config.runners"],
+  "fills": [
+    "infantry.shell.config.runners"
+  ],
   "actions": [
-    {"id": "runners.admin", "label": "Add a runner from its link, check, pause, resume, detach or rotate one", "kind": "write", "frames": ["runner_admin"]}
+    {
+      "id": "runners.admin",
+      "label": "Add a runner from its link, check, pause, resume, detach or rotate one",
+      "kind": "write",
+      "frames": [
+        "runner_admin"
+      ]
+    }
   ],
   "description": "Runners settings card (RUNNER-POOL-9, RUNNER-ADD-UI-1): the runner pool's settings in one place. The heading and the Add runner button always show, so a runner is paired from here by pasting the link it prints (RUNNER-ADD-LINK-1) with no terminal; a successful add runs the health check (RUNNER-CHECK-1) and shows its rows with the fix under each failure. While runners.enabled is off the rest of the card (default placement, per-runner worker caps, heartbeat) stays hidden. Pausing, detaching, rotating and checking go through the same `runner_admin` frame as `infantry runner ...`.",
+  "daemon": {
+    "config": [
+      {
+        "node": "infantry.runners",
+        "group": "Runners",
+        "title": "Runners",
+        "tab": "Settings",
+        "order": 910,
+        "applies": "Applies to: where ticket workers run. Off = every worker runs on this machine, as before.",
+        "keywords": [
+          "runner",
+          "runners",
+          "server",
+          "remote",
+          "placement",
+          "workers",
+          "any"
+        ],
+        "fields": [
+          {
+            "key": "runners.enabled",
+            "type": "toggle",
+            "label": "Use runners",
+            "default": false,
+            "scope": "daemon",
+            "order": 1,
+            "description": "Off = every worker runs on this machine and this card shows nothing else.",
+            "surfacesBuiltIn": true
+          },
+          {
+            "key": "runners.default",
+            "type": "text",
+            "label": "Default placement",
+            "default": "local",
+            "scope": "daemon",
+            "order": 2,
+            "placeholder": "local | <runner name> | any",
+            "visibleWhen": {
+              "key": "runners.enabled",
+              "eq": "true"
+            },
+            "description": "Where a ticket with no pin and no routing rule starts. `any` picks the runner that is up, has the project and harness, and has the most free slots (ties go to local); it waits when none is free.",
+            "surfacesBuiltIn": true
+          },
+          {
+            "key": "runners.local.maxWorkers",
+            "type": "number",
+            "label": "Local worker cap",
+            "min": 1,
+            "default": 1,
+            "scope": "daemon",
+            "order": 3,
+            "visibleWhen": {
+              "key": "runners.enabled",
+              "eq": "true"
+            },
+            "description": "Most workers this machine runs at once, under the global worker cap. Other runners: set runners.<name>.maxWorkers."
+          }
+        ]
+      }
+    ]
+  },
   "config": [
     {
-      "node": "infantry.runners", "group": "Runners", "title": "Runners", "tab": "Settings", "order": 910,
-      "applies": "Applies to: where ticket workers run. Off = every worker runs on this machine, as before.",
-      "keywords": ["runner", "runners", "server", "remote", "placement", "workers", "any"],
-      "fields": [
-        { "key": "runners.enabled", "type": "toggle", "label": "Use runners", "default": false, "scope": "daemon", "order": 1, "description": "Off = every worker runs on this machine and this card shows nothing else." },
-        { "key": "runners.default", "type": "text", "label": "Default placement", "default": "local", "scope": "daemon", "order": 2, "placeholder": "local | <runner name> | any", "visibleWhen": { "key": "runners.enabled", "eq": "true" }, "description": "Where a ticket with no pin and no routing rule starts. `any` picks the runner that is up, has the project and harness, and has the most free slots (ties go to local); it waits when none is free." },
-        { "key": "runners.local.maxWorkers", "type": "number", "label": "Local worker cap", "min": 1, "default": 1, "scope": "daemon", "order": 3, "visibleWhen": { "key": "runners.enabled", "eq": "true" }, "description": "Most workers this machine runs at once, under the global worker cap. Other runners: set runners.<name>.maxWorkers." }
-      ]
-    },
-    {
-      "node": "infantry.shell.config.runners", "group": "Runners", "title": "Runners", "tab": "Settings", "order": 911,
-      "keywords": ["runner", "add", "pair", "pairing", "link", "connect", "check", "health", "fix", "pause", "resume", "detach", "rotate", "fingerprint"],
+      "node": "infantry.shell.config.runners",
+      "group": "Runners",
+      "title": "Runners",
+      "tab": "Settings",
+      "order": 911,
+      "keywords": [
+        "runner",
+        "add",
+        "pair",
+        "pairing",
+        "link",
+        "connect",
+        "check",
+        "health",
+        "fix",
+        "pause",
+        "resume",
+        "detach",
+        "rotate",
+        "fingerprint"
+      ],
       "fields": [],
       "block": "infantry.shell.config.runners"
     }

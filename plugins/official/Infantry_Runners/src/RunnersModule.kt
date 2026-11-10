@@ -23,21 +23,6 @@ val InfantryRunners = InfantryModule(
         name = "Infantry_Runners", version = "1.0.0", author = "Infantry AI", description = "The Runners settings card and its rows.",
         fills = listOf(FillDeclaration(RUNNERS_CARD_NODE)),
         config = listOf(
-            ConfigDeclaration(node = "infantry.runners", group = "Runners", title = "Runners", tab = "Settings", order = 910,
-                applies = "Applies to: where ticket workers run. Off = every worker runs on this machine, as before.",
-                keywords = listOf("runner", "runners", "server", "remote", "placement", "workers", "any"),
-                fields = listOf(
-                    ConfigFieldDeclaration("runners.enabled", ConfigFieldTypes.TOGGLE, "Use runners", JsonPrimitive(false), scope = ConfigScopes.DAEMON, order = 1,
-                        description = "Off = every worker runs on this machine and this card shows nothing else."),
-                    ConfigFieldDeclaration("runners.default", ConfigFieldTypes.TEXT, "Default placement", JsonPrimitive("local"), scope = ConfigScopes.DAEMON, order = 2,
-                        placeholder = "local | <runner name> | any", visibleWhen = ConfigVisibleWhen("runners.enabled", "true"),
-                        description = "Where a ticket with no pin and no routing rule starts. `any` picks the runner that is up, has the project and " +
-                            "harness, and has the most free slots (ties go to local); it waits when none is free."),
-                    ConfigFieldDeclaration("runners.local.maxWorkers", ConfigFieldTypes.NUMBER, "Local worker cap", JsonPrimitive(1), min = 1.0, scope = ConfigScopes.DAEMON, order = 3,
-                        visibleWhen = ConfigVisibleWhen("runners.enabled", "true"),
-                        description = "Most workers this machine runs at once, under the global worker cap. Other runners: set runners.<name>.maxWorkers."),
-                ),
-            ),
             ConfigDeclaration(node = RUNNERS_CARD_NODE, group = "Runners", tab = "Settings", order = 911, title = "Runners",
             // RUNNER-ADD-UI-1: a new owner searches for how to add (pair) a runner and for the check, not only for pause.
             keywords = listOf("runner", "add", "pair", "pairing", "link", "connect", "check", "health", "fix", "pause", "resume", "detach", "rotate", "fingerprint"),
