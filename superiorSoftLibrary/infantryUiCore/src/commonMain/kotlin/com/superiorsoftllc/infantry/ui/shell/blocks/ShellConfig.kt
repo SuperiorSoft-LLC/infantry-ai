@@ -61,6 +61,7 @@ class ConfigBlock(children: List<Block>, place: Place = Place()) : Block(CONFIG,
     override fun Render(scope: BlockScope) {
         val s = LocalShell.current
         val ui = s.ui
+        val link = com.superiorsoftllc.infantry.ui.shell.LocalShellContext.current?.link
         if (!ui.showConfig) return
         val state = s.state
         val controller = s.controller
@@ -147,6 +148,15 @@ class ConfigBlock(children: List<Block>, place: Place = Place()) : Block(CONFIG,
                 currentProject = state.projects.firstOrNull { it.id == state.activeProjectId }?.let { SecretProjectRef(it.id, it.name) },
                 setAuthMode = { id, m -> actionScope.launch { controller.setHarnessAuthMode(id, m) } },
                 checkAuth = { n -> actionScope.launch { controller.checkHarnessAuth(n) } },
+                // SECRET-RENDER-1: the Infantry_Run plugin's owner-only secret_render frame; a daemon without it answers an error.
+                render = { t, o, p ->
+                    val body = kotlinx.serialization.json.buildJsonObject {
+                        put("template", kotlinx.serialization.json.JsonPrimitive(t))
+                        put("out", kotlinx.serialization.json.JsonPrimitive(o))
+                        p?.let { put("project", kotlinx.serialization.json.JsonPrimitive(it)) }
+                    }.toString()
+                    link?.request("secret_render", body)?.data ?: "not connected"
+                },
             ),
             onOpenRoles = { ui.showRoles = true },
             limits = state.limitCatalog,

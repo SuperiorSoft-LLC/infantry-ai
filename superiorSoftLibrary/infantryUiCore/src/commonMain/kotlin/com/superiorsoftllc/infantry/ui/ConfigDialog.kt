@@ -5,6 +5,7 @@ package com.superiorsoftllc.infantry.ui
 import com.superiorsoftllc.infantry.ui.plugin.config.ConfigHit
 import com.superiorsoftllc.infantry.ui.plugin.config.ConfigPlan
 
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.relocation.bringIntoViewRequester
@@ -903,6 +904,8 @@ class SecretActions(
     val setAuthMode: ((harnessId: String, mode: String) -> Unit)? = null,
     /** CLAUDE-AUTH-CHOICE-2: re-probes the sign-in of the harness whose key secret is named (the Check button); null hides it. */
     val checkAuth: ((secretName: String) -> Unit)? = null,
+    /** SECRET-RENDER-1: (template, out, project) renders a text file with the saved secrets and returns names and the path only; null hides the card. */
+    val render: (suspend (template: String, out: String, project: String?) -> String)? = null,
 )
 
 const val SECRET_AUTH_MODE_TAG = "secret-auth-mode"
@@ -988,7 +991,33 @@ private fun SecretsSection(state: SecretState, actions: SecretActions) {
             val elsewhere = state.entries.count { it.project != null }
             if (elsewhere > 0) Text(SecretForm.projectsNote(elsewhere), color = Palette.Muted, fontSize = 11.sp, modifier = Modifier.testTag(SECRET_PROJECTS_NOTE_TAG))
         }
+        actions.render?.let { render -> if (!state.locked) RenderFileCard(render, actions.currentProject?.id) }
         Text("Protected by: ${protectionText(state.protection)}", color = Palette.Muted, fontSize = 11.sp)
+    }
+}
+
+const val SECRET_RENDER_TEMPLATE_TAG = "secret-render-template"
+const val SECRET_RENDER_OUT_TAG = "secret-render-out"
+const val SECRET_RENDER_RUN_TAG = "secret-render-run"
+const val SECRET_RENDER_RESULT_TAG = "secret-render-result"
+
+/** SECRET-RENDER-1: pick a text file with secret placeholders and write a copy with the values in; the result shows names only. */
+@Composable
+private fun RenderFileCard(render: suspend (String, String, String?) -> String, project: String?) {
+    var template by remember { mutableStateOf("") }
+    var out by remember { mutableStateOf("") }
+    var result by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    Column(Modifier.secretCard(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        SecretsHeading("Render file", "Fill a text file's {{secret:NAME}} placeholders with your saved secrets. The copy is readable only by you; only names are shown here.")
+        SecretTextField(template, { template = it }, "Template file (relative = project folder)", false, Modifier.testTag(SECRET_RENDER_TEMPLATE_TAG))
+        SecretTextField(out, { out = it }, "Output file", false, Modifier.testTag(SECRET_RENDER_OUT_TAG))
+        SecretButton("Render", template.isNotBlank() && out.isNotBlank() && !busy, SECRET_RENDER_RUN_TAG) {
+            busy = true
+            scope.launch { result = runCatching { render(template, out, project) }.getOrElse { "render failed" }; busy = false }
+        }
+        if (result.isNotEmpty()) Text(result, fontFamily = Mono, fontSize = 11.sp, color = Palette.Muted, modifier = Modifier.testTag(SECRET_RENDER_RESULT_TAG))
     }
 }
 

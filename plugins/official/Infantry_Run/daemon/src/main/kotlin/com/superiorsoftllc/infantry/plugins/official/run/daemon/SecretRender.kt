@@ -106,6 +106,12 @@ class SecretRenderer(
         } catch (e: Exception) { no("could not write '${target.name}' (${e::class.simpleName})") }
     }
 
+    /** [render] with paths as a caller wrote them: a relative one is inside [root] (the project folder); absolute when there is none. */
+    fun renderIn(root: File?, template: String, out: String?, project: String?, allowMissing: Boolean = false, check: Boolean = false): RenderResult {
+        fun file(p: String): File = File(p).let { if (it.isAbsolute || root == null) it else File(root, p) }
+        return render(file(template), out?.let(::file), project, allowMissing, check)
+    }
+
     companion object {
         /** The setting `limits.secrets.renderMaxBytes` default, used until the plugin points [maxBytes] at the setting. */
         const val DEFAULT_MAX_BYTES = 1_048_576L

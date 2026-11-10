@@ -77,12 +77,10 @@ class RunCommandTools(
         crossProjectRefusal(c)?.let { return err(it) }
         val r = renderer ?: return err("secret rendering is not available")
         val project = target(c)
-        val root = rootOf(project)
-        fun file(p: String): java.io.File = java.io.File(p).let { if (it.isAbsolute || root == null) it else java.io.File(root, p) }
-        val template = file(str(c.arguments, "template") ?: return err("template is required"))
+        val template = str(c.arguments, "template") ?: return err("template is required")
         val check = (c.arguments["check"] as? JsonPrimitive)?.booleanOrNull == true
         val allowMissing = (c.arguments["allowMissing"] as? JsonPrimitive)?.booleanOrNull == true
-        val res = r.render(template, str(c.arguments, "out")?.let(::file), project, allowMissing, check)
+        val res = r.renderIn(rootOf(project), template, str(c.arguments, "out"), project, allowMissing, check)
         return if (res.ok) ToolResult(res.summary(check)) else err(res.summary(check))
     }
 

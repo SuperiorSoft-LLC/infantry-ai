@@ -44,6 +44,15 @@ class RunDaemonPlugin : DaemonPlugin {
             renderer, runs::rootOf)
             .all().forEach(api.tools::register)
 
+        // SECRET-RENDER-1: the Configuration Render file action; owner-only (module.json), answered with names and the path only.
+        api.frames.handle("secret_render") { f, _ ->
+            val a = runCatching { kotlinx.serialization.json.Json.parseToJsonElement(f.data) as kotlinx.serialization.json.JsonObject }.getOrNull()
+            fun s(k: String) = (a?.get(k) as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.isNotBlank() }
+            val template = s("template") ?: return@handle Frame(Envelope.ERROR, "secret_render refused: a template file is required")
+            val project = s("project")
+            val res = renderer.renderIn(runs.rootOf(project), template, s("out"), project)
+            if (res.ok) Frame("secret_render", res.summary(false)) else Frame(Envelope.ERROR, res.summary(false))
+        }
         fun reply(e: Envelope?): Frame? = e?.let { Frame(it.type, it.data) }
         // RUN-SCOPE-1: a client gets every command with its project and filters by the project it shows.
         fun commandsFrame() = Frame(Envelope.COMMANDS, store.refreshUnrooted().specsJson())

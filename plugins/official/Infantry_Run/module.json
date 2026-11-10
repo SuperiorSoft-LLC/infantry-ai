@@ -31,7 +31,8 @@
       { "type": "run_attach", "action": "runs.start", "kind": "spawn" },
       { "type": "run_resize", "action": "runs.start", "kind": "spawn" },
       { "type": "run_input", "action": "runs.start", "kind": "spawn" },
-      { "type": "run_stop", "action": "runs.stop", "kind": "destructive" }
+      { "type": "run_stop", "action": "runs.stop", "kind": "destructive" },
+      { "type": "secret_render", "action": "commands.save", "kind": "write", "ownerOnly": true }
     ]
   },
   "tabs": [
