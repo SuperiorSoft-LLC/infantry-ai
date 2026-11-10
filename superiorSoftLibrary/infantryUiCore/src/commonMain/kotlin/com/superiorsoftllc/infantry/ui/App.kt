@@ -454,6 +454,7 @@ fun App(
           LocalChatMarkdown provides remember(flags.chatMarkdownEngine) { ChatMarkdownConfig(com.superiorsoftllc.infantry.ui.model.ChatMarkdown.engines.resolve(flags.chatMarkdownEngine), chatBlockRenderers) },
           // AVATAR-SEAM-1: the avatar style every site draws with, so a renderer change reaches the whole window.
           com.superiorsoftllc.infantry.ui.LocalAgentAvatarStyle provides (com.superiorsoftllc.infantry.ui.AvatarStyleChoice.chosen ?: flags.agentAvatarStyle),
+          com.superiorsoftllc.infantry.ui.LocalAgentAvatarLookup provides remember(controller) { { id: String -> controller.state.value.let { s -> s.agents[id]?.let { a -> com.superiorsoftllc.infantry.ui.avatarRequestFor(a, s) } } } },
           LocalShell provides shell,
           // S2: what the blocks read instead of [shell]'s App/Controller internals.
           com.superiorsoftllc.infantry.ui.shell.LocalShellContext provides com.superiorsoftllc.infantry.ui.shell.CoreShellContext(shell, LocalRunConsole.current),

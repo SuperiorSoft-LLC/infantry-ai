@@ -85,22 +85,29 @@ fun AgentAvatar(
  */
 @Composable
 fun AgentAvatar(agent: AgentView, state: AppState, size: Int = 28, modifier: Modifier = Modifier, motion: AvatarMotion = AvatarMotion.STATIC) =
-    AgentAvatar(
-        AvatarRequest(
-            role = agent.role,
-            label = agent.id,
-            catalogColor = state.role(agent.role)?.color,
-            sizeDp = size,
-            state = agent.session.state.name,
-            busyDetail = when {
-                agent.isCompacting -> "compacting"
-                agent.lastError != null -> "error"
-                else -> null
-            },
-            motion = motion,
-        ),
-        modifier,
+    AgentAvatar(avatarRequestFor(agent, state, size, motion), modifier)
+
+/**
+ * AVATAR-CHAT-MISMATCH-1: THE one place a live session becomes an [AvatarRequest] (role, catalog colour, state, busy
+ * detail). Every surface that knows the session (card, header, chat message) draws this request: one agent, one avatar.
+ */
+fun avatarRequestFor(agent: AgentView, state: AppState, size: Int = 28, motion: AvatarMotion = AvatarMotion.STATIC): AvatarRequest =
+    AvatarRequest(
+        role = agent.role,
+        label = agent.id,
+        catalogColor = state.role(agent.role)?.color,
+        sizeDp = size,
+        state = agent.session.state.name,
+        busyDetail = when {
+            agent.isCompacting -> "compacting"
+            agent.lastError != null -> "error"
+            else -> null
+        },
+        motion = motion,
     )
+
+/** AVATAR-CHAT-MISMATCH-1: the card request of the live session behind an id (null when unknown), provided once by the window so a chat row can draw another agent's card avatar. */
+val LocalAgentAvatarLookup = androidx.compose.runtime.staticCompositionLocalOf<(String) -> AvatarRequest?> { { null } }
 
 /**
  * AVATAR-SEAM-1: the avatar of [request] in the style the window chose: the renderer the [LocalAgentAvatarStyle]
