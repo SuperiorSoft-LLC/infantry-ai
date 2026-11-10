@@ -182,3 +182,12 @@ class DemoLockTest {
         assertEquals(listOf(10.0, 40.0), set.map { it.percent })
     }
 }
+
+@Test
+fun `a seat model id with colons and slashes splits on the first two colons only`() {
+    val seats = DemoLock.parseSeats(listOf("backend:opencode:commandcode/stealth/glyph-cluster:free", "pm:opencode:commandcode/stealth/glyph-cluster:free"))
+    assertEquals(
+        listOf(DemoLock.Seat("backend", "opencode", "commandcode/stealth/glyph-cluster:free"), DemoLock.Seat("pm", "opencode", "commandcode/stealth/glyph-cluster:free")),
+        seats,
+    )
+}

@@ -428,6 +428,7 @@ tasks.register<Sync>("dockerContext") {
     from(rootProject.layout.projectDirectory.file("docker/Dockerfile"))
     // DOCKER-2: the entrypoint (first-start token in the state volume, JAVA_OPTS).
     from(rootProject.layout.projectDirectory.file("docker/entrypoint.sh"))
+    from(rootProject.layout.projectDirectory.file("docker/opencode-commandcode.json"))
     // SANDBOX-1: the Landlock launcher the Dockerfile compiles (limits.sandbox.mode).
     from(rootProject.layout.projectDirectory.file("docker/landlock-exec.c"))
     // POLICY-1: the policy presets the plugins ship as data (the demo preset: plugins/demo/Demo_Lock/policies); the Dockerfile

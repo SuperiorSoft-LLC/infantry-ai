@@ -178,7 +178,7 @@ All in `docker/docker-compose.yml`, each overridable in `.env`, and changeable l
 |---|---|---|---|
 | `INFANTRY_LIMIT_CONCURRENCY_MAX_SESSIONS` | `limits.concurrency.maxSessions` | 2 | sessions of the whole daemon OPEN at once (working, or idle with their CLI process kept alive), any path; at the cap a start is refused with "Demo busy: 2 agents are open" until one is stopped (Stop agent button in its chat) or times out (0 = unlimited) |
 | `INFANTRY_SESSION_KEEP_ALIVE_MINUTES` | `session.keepAliveMinutes` | 2 | minutes an idle agent keeps its CLI process, and so its slot above (normal app default 30; 0 = one-shot, a slot is held only during a turn) |
-| `INFANTRY_ALLOWED_MODELS` | `limits.models.allowed` | `opencode-go/beam-free` | the only models that may be picked or run (comma list, `*` = any characters); the daemon refuses every other one and the pickers hide them; a harness with no allowed model is shown dimmed. Empty = every model |
+| `INFANTRY_ALLOWED_MODELS` | `limits.models.allowed` | `commandcode/stealth/glyph-cluster:free` | the only models that may be picked or run (comma list, `*` = any characters); the daemon refuses every other one and the pickers hide them; a harness with no allowed model is shown dimmed. Empty = every model |
 | `INFANTRY_ALLOWED_ROLES` | `limits.roles.allowed` | (empty = all roles; optional, off in the demo) | when set, the only roles that may be started, assigned to a ticket or picked in the New agent dialog; the daemon refuses every other one. Sessions with no role are not affected. Empty = every role |
 | `INFANTRY_LIMIT_CONCURRENCY_MAX_PER_POD` | `limits.concurrency.maxPerPod` | 2 | sessions one session / MCP connection may add (legacy `INFANTRY_POD_SPAWN_CAP`) |
 | `INFANTRY_LIMIT_CONCURRENCY_MCP_MAX_SPAWNS` | `limits.concurrency.mcpMaxSpawns` | 2 | sessions one MCP connection may hold open |
@@ -306,7 +306,7 @@ prompting / stopping its two seeded agents and mail between those two get throug
 it off; to change it, redeploy. Without the overlay below the same image runs the normal app.
 
 The seed (`docker/demo-seed.env`): on the first locked start the entrypoint makes `/work/demo` a git repository and the
-daemon creates "Demo project" on it plus one session per seat (`backend` and `pm`, opencode, `opencode-go/beam-free`),
+daemon creates "Demo project" on it plus one session per seat (`backend` and `pm`, opencode, `commandcode/stealth/glyph-cluster:free`),
 persisted in `/data`; later starts find the same ones. The notice shown above each agent's composer is
 `INFANTRY_DEMO_NOTICE`. To re-seed: `docker compose ... down -v` (removes the volumes, the token too).
 
@@ -330,6 +330,7 @@ INFANTRY_BIND=127.0.0.1             # only Caddy reaches it
 INFANTRY_HOST_PORT=8787
 INFANTRY_WEB_HOSTS=demo.example.com # your domain; the browser is refused on any other host name
 OPENCODE_API_KEY=<the opencode-go key>
+CMD_API_KEY=<the Command Code key>
 ENV
 chmod 600 .env
 docker compose -f docker-compose.yml -f docker-compose.demo.yml --env-file .env up -d

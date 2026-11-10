@@ -22,7 +22,7 @@
     "projectName": "Demo project",
     "projectDir": "/work/demo",
     "projectGoal": "Infantry AI demo",
-    "seats": ["backend:opencode:opencode-go/beam-free", "pm:opencode:opencode-go/beam-free"],
+    "seats": ["backend:opencode:commandcode/stealth/glyph-cluster:free", "pm:opencode:commandcode/stealth/glyph-cluster:free"],
     "warmUpPrompt": "Reply with: ready",
     "turnsPerIp": 0,
     "turnWindowHours": 0,
