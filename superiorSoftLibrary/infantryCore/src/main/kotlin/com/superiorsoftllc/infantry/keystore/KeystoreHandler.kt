@@ -10,7 +10,11 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
 /** A secret the app knows how to use. [envAlias] is the older environment variable that still overrides it. */
-class KnownSecret(val name: String, val label: String, val envAlias: String? = null, val help: String = "")
+class KnownSecret(
+    val name: String, val label: String, val envAlias: String? = null, val help: String = "",
+    /** CLAUDE-AUTH-CHOICE-1: the sign-in ways the owning harness offers, and the chosen one now ("" = none chosen). */
+    val authModes: List<String> = emptyList(), val authMode: () -> String = { "" },
+)
 
 @Serializable
 class SecretSet(val name: String, val value: String) {
@@ -46,7 +50,11 @@ class PluginSecret(val module: String, val field: String, val value: String?) {
 }
 
 @Serializable
-class SecretRow(val name: String, val label: String, val set: Boolean, val tail: String, val importable: Boolean, val overriddenByEnv: Boolean, val help: String = "")
+class SecretRow(
+    val name: String, val label: String, val set: Boolean, val tail: String, val importable: Boolean, val overriddenByEnv: Boolean, val help: String = "",
+    /** CLAUDE-AUTH-CHOICE-1: the harness's sign-in ways (api-key, subscription-login) and the chosen one; empty = no choice. */
+    val authModes: List<String> = emptyList(), val authMode: String = "",
+)
 
 /** SECRETS-2: one field of a user secret: its name and a masked tail. */
 @Serializable
@@ -138,7 +146,7 @@ class KeystoreHandler(
             known.map { k ->
                 val info = infos.getValue(k.name)
                 val aliasSet = k.envAlias?.let(env)?.isNotBlank() == true
-                SecretRow(k.name, k.label, info.set, info.tail, importable = aliasSet && !info.set, overriddenByEnv = aliasSet && info.set, help = k.help)
+                SecretRow(k.name, k.label, info.set, info.tail, importable = aliasSet && !info.set, overriddenByEnv = aliasSet && info.set, help = k.help, authModes = k.authModes, authMode = k.authMode())
             },
             keystore.names().filter { it !in builtIn }.map { name ->
                 SecretEntryRow(name, keystore.describe(name).map { SecretFieldRow(it.name, it.tail) })

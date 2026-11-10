@@ -3,6 +3,7 @@
 package com.superiorsoftllc.infantry.ui.shell.blocks
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.OutlinedTextField
@@ -28,11 +29,13 @@ import kotlinx.coroutines.launch
 
 const val HARNESS_KEY_PROMPT_TAG = "harness-key-prompt"
 const val HARNESS_KEY_FIELD_TAG = "harness-key-field"
+const val SUBSCRIPTION_MODE = "subscription-login"
+const val HARNESS_SUBSCRIPTION_TAG = "harness-subscription-choice"
 const val HARNESS_KEY_SKIP_PREF = "harness.keys.skipped"
 
 /** The harness API keys the daemon says are missing (`harness.<id>.key` rows not set) and the owner has not skipped. */
 fun missingHarnessKeys(rows: List<SecretRow>, skipped: Set<String>): List<SecretRow> =
-    rows.filter { it.name.startsWith("harness.") && !it.set && it.name !in skipped }
+    rows.filter { it.name.startsWith("harness.") && !it.set && it.name !in skipped && it.authMode != SUBSCRIPTION_MODE }
 
 /**
  * FIRST-RUN-KEYS-1: asks for the API key of a harness that declares one and has none, once per harness: Save stores it in the
@@ -59,6 +62,7 @@ object ShellHarnessKeys : Block("infantry.shell.harnessKeys", "infantry.shell.ha
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("This agent CLI needs an API key to run. It is stored encrypted by the Infantry AI daemon and is never shown again.", fontSize = 12.sp)
+                    if (SUBSCRIPTION_MODE in row.authModes) Text("Or use your Claude subscription instead: no key is stored. Pick it, then sign in with /login in a Claude chat session (the login URL shows in the chat; paste the code if asked).", fontSize = 12.sp, color = Palette.Muted)
                     if (row.help.isNotBlank()) Text(row.help, fontSize = 12.sp, color = Palette.Muted)
                     Text("You can skip this and set it later in Configuration > Secrets.", fontSize = 11.sp, color = Palette.Muted)
                     OutlinedTextField(
@@ -75,7 +79,16 @@ object ShellHarnessKeys : Block("infantry.shell.harnessKeys", "infantry.shell.ha
                     if (v.isNotEmpty()) s.actionScope.launch { s.controller.setSecret(row.name, v) }
                 }) { Text("Save") }
             },
-            dismissButton = { TextButton({ skip() }) { Text("Skip") } },
+            dismissButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (SUBSCRIPTION_MODE in row.authModes) TextButton({
+                        val id = row.name.removePrefix("harness.").removeSuffix(".key")
+                        skip()
+                        s.actionScope.launch { s.controller.setHarnessAuthMode(id, SUBSCRIPTION_MODE) }
+                    }, Modifier.testTag(HARNESS_SUBSCRIPTION_TAG)) { Text("Use subscription") }
+                    TextButton({ skip() }) { Text("Skip") }
+                }
+            },
         )
     }
 }

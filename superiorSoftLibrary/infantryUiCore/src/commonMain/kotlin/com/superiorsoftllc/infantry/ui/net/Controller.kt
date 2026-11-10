@@ -712,6 +712,10 @@ class Controller(
         return send(Envelope(Envelope.CONFIG_SET, json.encodeToString(com.superiorsoftllc.infantry.plugin.api.ConfigSetFrame.serializer(), frame)))
     }
 
+    /** CLAUDE-AUTH-CHOICE-1: stores how harness [harnessId] signs in (`harness.<id>.authMode`: api-key or subscription-login). */
+    suspend fun setHarnessAuthMode(harnessId: String, mode: String): CommandResult =
+        report(send(WireRequests.settingsSet("harness.$harnessId.authMode", JsonPrimitive(mode))))
+
     suspend fun setLimit(key: String, value: Long): CommandResult {
         if (!contractAtLeast(_state.value.connection.contract, LimitsSetting.SINCE_MAJOR, LimitsSetting.SINCE_MINOR)) {
             return report(CommandResult.Refused("this daemon has no limit settings (needs contract 1.133.0)"))

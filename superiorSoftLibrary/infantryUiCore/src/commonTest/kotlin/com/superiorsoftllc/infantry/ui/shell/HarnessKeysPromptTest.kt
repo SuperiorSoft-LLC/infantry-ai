@@ -21,4 +21,10 @@ class HarnessKeysPromptTest {
         assertEquals(listOf("harness.pi.key"), missingHarnessKeys(rows, setOf("harness.opencode.key")).map { it.name })
         assertEquals(emptyList(), missingHarnessKeys(rows.map { it.copy(set = true) }, emptySet()))
     }
+
+    @Test
+    fun `a harness set to subscription login is not asked for a key`() {
+        val sub = rows.map { if (it.name == "harness.opencode.key") it.copy(authModes = listOf("api-key", "subscription-login"), authMode = "subscription-login") else it }
+        assertEquals(listOf("harness.pi.key"), missingHarnessKeys(sub, emptySet()).map { it.name })
+    }
 }
