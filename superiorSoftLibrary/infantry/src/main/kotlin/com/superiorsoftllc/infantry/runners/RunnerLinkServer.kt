@@ -5,6 +5,7 @@ package com.superiorsoftllc.infantry.runners
 import com.superiorsoftllc.infantry.daemon.FrameGate
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.MailItem
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorReply
+import com.superiorsoftllc.infantry.daemon.api.orchestrator.PromptReply
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerHarness
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerLink
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.StartSpec
@@ -155,6 +156,17 @@ class RunnerLinkServer(
                 read(seat, type, from) { link ->
                     when (val lines = link.readTranscript(t.sessionId, t.fromLine, t.maxLines)) {
                         is OrchestratorReply.Ok -> F.json.encodeToString(F.TranscriptAnswer.serializer(), F.TranscriptAnswer(lines.value))
+                        is OrchestratorReply.Unavailable -> null
+                    }
+                }
+            }
+            // RUNNER-PROMPT-RELAY-1: the owner's answer to a prompt one of this orchestrator's sessions raised here.
+            F.PROMPT_ANSWER -> {
+                val r = decode(F.PromptAnswerRequest.serializer(), data) ?: return refuse(seat, type, null, from, "$type refused: malformed request")
+                if (starts?.isLinked(r.sessionId) != true) return refuse(seat, type, null, from, "$type refused: session ${r.sessionId.take(SHOWN_TYPE_SIZE)} was not started by this orchestrator")
+                read(seat, type, from) { link ->
+                    when (val a = link.answerPrompt(r.sessionId, PromptReply(r.promptId, r.decision, r.answers, r.otherText))) {
+                        is OrchestratorReply.Ok -> F.json.encodeToString(F.PromptAnswerAck.serializer(), F.PromptAnswerAck(a.value))
                         is OrchestratorReply.Unavailable -> null
                     }
                 }

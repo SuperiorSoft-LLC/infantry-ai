@@ -1072,10 +1072,21 @@ class InfantryDaemon(
                     events = { since -> remoteStarts.events(since) },
                     eventsAcked = { acked -> remoteStarts.events(acked) },
                     transcript = { id, from, max -> runnerTranscript.get()(id, from, max) },
+                    // RUNNER-PROMPT-RELAY-1: the orchestrator's answer to a prompt of one of its sessions here.
+                    answerPrompt = { id, reply -> pendingPrompts.answerRelayed(id, reply, com.superiorsoftllc.infantry.daemon.FrameGate.ORCHESTRATOR_SEAT_PREFIX + "link") },
                 ),
             )
             val runnerPool = com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerHub(localRunnerLink, remotes = { runnerLinksRef.get().paired() })
             val remoteMirror = com.superiorsoftllc.infantry.runners.RemoteSessionMirror(sessionIds = { runnerPool.runners().filter { it.name != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL }.flatMap { runnerPool.sessionsOn(it.name) } })
+            // RUNNER-PROMPT-RELAY-1: a runner session's prompt is shown and answered in the orchestrator's app. Runner side: the prompts of
+            // the orchestrator's sessions go to the outbox and run no timer here; orchestrator side: the watch relays them (below).
+            val promptRelay = com.superiorsoftllc.infantry.runners.RunnerPromptRelay(
+                prompts = pendingPrompts,
+                link = runnerPool::link,
+                projectOf = { id -> remoteMirror.placement(id)?.projectId },
+            )
+            pendingPrompts.observer = promptRelay.runnerObserver(remoteStarts)
+            pendingPrompts.heldElsewhere = promptRelay.heldElsewhere(remoteStarts)
             val forwardGateRef = java.util.concurrent.atomic.AtomicReference<com.superiorsoftllc.infantry.runners.ForwardedFrameGate?>(null)
             SessionRecordSerializer.runnerOf = runnerPool::runnerOf
             val orchestratorHub = com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorHub(
@@ -2081,7 +2092,9 @@ class InfantryDaemon(
                 pool = runnerPool,
                 lostAfterMs = { settings.limit(LimitRegistry.RUNNERS_LOST_AFTER_MIN) * 60_000L },
                 restartElsewhere = { settings.runnerLink().restartElsewhere },
-                apply = { _, e ->
+                apply = { runner, e ->
+                    // RUNNER-PROMPT-RELAY-1: a prompt a runner session raised opens here; its close closes the card.
+                    promptRelay.apply(runner, e)
                     if (e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.STATUS) remoteMirror.status(e.sessionId, e.payload)
                     // RUNNER-CLAUDE-PROOF-1: an interactive session (claude) never finishes between turns, it comes to rest (IDLE): that ends the turn too.
                     val turnEnded = e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.FINISHED ||
@@ -2119,6 +2132,10 @@ class InfantryDaemon(
                     if (changed.isNotEmpty()) broadcastRunnersChanged(clients)
                 }
                 runCatching { runnerWatch.tick() }.onFailure { System.err.println("[infantry] runner watch failed: ${it.message}") }
+                // RUNNER-PROMPT-RELAY-1: answers a runner could not be reached for go again; on a runner, a prompt of the orchestrator's
+                // session falls back to prompts.onTimeout only once the orchestrator read nothing for its whole timer.
+                runCatching { promptRelay.retry() }
+                runCatching { pendingPrompts.expireHeld(remoteStarts.lastOrchestratorRead) }
             }
             // RUNNER-POOL-8: runner side of runners.pushOnCommit: push a ticket branch once its worker committed.
             scheduledTicker(settings.limit(LimitRegistry.RUNNERS_COMMIT_CHECK_SEC) * 1000L) { runCatching { remoteStarts.checkCommits() } }

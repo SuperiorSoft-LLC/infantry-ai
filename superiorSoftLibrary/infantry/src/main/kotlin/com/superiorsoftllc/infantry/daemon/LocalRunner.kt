@@ -45,6 +45,8 @@ object LocalRunner {
         /** RUNNER-POOL-8: acknowledge and read the outbox; null = filter [events] (no ack). */
         eventsAcked: ((acked: Map<String, Long>) -> List<RunnerEvent>)? = null,
         transcript: (sessionId: String, fromLine: Int, maxLines: Int) -> List<String> = { _, _, _ -> emptyList() },
+        /** RUNNER-PROMPT-RELAY-1: apply the orchestrator's answer to an open prompt of a session; default none open. */
+        answerPrompt: (sessionId: String, reply: com.superiorsoftllc.infantry.daemon.api.orchestrator.PromptReply) -> Boolean = { _, _ -> false },
     ) = LocalRunnerServices(
         ticketIdOf = { sessionId -> manager.get(sessionId)?.ticketId },
         info = info,
@@ -102,6 +104,7 @@ object LocalRunner {
                 true
             }
         },
+        answerPrompt = answerPrompt,
     )
 
     /** A pool with only the local runner over [manager] (a connection handler's default when the daemon passes none). */

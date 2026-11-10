@@ -5,6 +5,7 @@ package com.superiorsoftllc.infantry.plugins.official.remoterunner.daemon
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.MailItem
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.MailResult
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorReply
+import com.superiorsoftllc.infantry.daemon.api.orchestrator.PromptReply
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerHarness
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerHealth
@@ -100,6 +101,14 @@ class RemoteRunnerLink(private val name: String, private val links: RunnerLinks)
     override fun readTranscript(sessionId: String, fromLine: Int, maxLines: Int): OrchestratorReply<List<String>> =
         call(F.TRANSCRIPT, F.json.encodeToString(F.TranscriptRequest.serializer(), F.TranscriptRequest(sessionId, fromLine, maxLines)), F.TranscriptAnswer.serializer())
             .map { it.lines }
+
+    /** RUNNER-PROMPT-RELAY-1: the owner's answer to a prompt a session of this orchestrator raised on the runner. */
+    override fun answerPrompt(sessionId: String, reply: PromptReply): OrchestratorReply<Boolean> =
+        call(
+            F.PROMPT_ANSWER,
+            F.json.encodeToString(F.PromptAnswerRequest.serializer(), F.PromptAnswerRequest(sessionId, reply.promptId, reply.decision, reply.answers, reply.otherText)),
+            F.PromptAnswerAck.serializer(),
+        ).map { it.applied }
 
     private fun <T> call(type: String, data: String, serializer: KSerializer<T>): OrchestratorReply<T> {
         val answer = try {
