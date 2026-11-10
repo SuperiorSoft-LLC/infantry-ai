@@ -33,6 +33,7 @@ class PluginToolsDeclaredGuardTest {
             "infantry_ticket_create" to "script alias target (c1cc4b4f)", "infantry_ticket_move" to "script alias target (c1cc4b4f)",
             "infantry_ticket_start" to "script alias target (c1cc4b4f)", "infantry_ticket_update" to "script alias target (c1cc4b4f)",
             "infantry_capability_call" to "invoked for a dotted capability id, a core tool (PLUGIN-BRIDGES-1)",
+            "infantry_secret_render" to "script alias target (SECRET-RENDER-1b)",
         ),
     )
 

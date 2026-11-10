@@ -64,7 +64,7 @@ Template `opencode.tmpl.jsonc`:
 
 ## Agents and scripts
 
-The MCP tool `infantry_secret_render` (Lua: `ih.call("infantry_secret_render", { template = "...", out = "..." })`) takes the same arguments
+The MCP tool `infantry_secret_render` (Lua: `ih.secret_render{ template = "...", out = "..." }`, the `secret_render` alias, or `ih.call("infantry_secret_render", {...})`) takes the same arguments
 (`template`, `out`, `project`, `allowMissing`, `check`) and answers with names and the output path only. A relative path is
 inside the project folder. An agent can render a file but cannot read a value: `infantry_run_secrets` still lists names and
 scopes only.
