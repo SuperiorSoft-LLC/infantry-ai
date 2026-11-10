@@ -32,6 +32,15 @@ if exist "%APP_HOME%\runtime\bin\java.exe" (
 )
 set CLI="%JAVA%" -Xmx256m -Djava.awt.headless=true -cp "%APP_HOME%\lib\*;%APP_HOME%\modules\official\Infantry_Updater\daemon\build\libs\Infantry_Updater-daemon.jar" com.superiorsoftllc.infantry.plugins.official.updater.ServerUpdateCliKt
 
+rem Any other word is a CLI command (plugin, board, health, ...): hand it to bin\infantry.bat before adopting anything.
+set "FIRST=%~1"
+if "%FIRST%"=="" goto :notcli
+for %%W in (serve update rollback version --version) do if /i "%FIRST%"=="%%W" goto :notcli
+if "%FIRST:~0,1%"=="-" if /i not "%FIRST%"=="--help" if /i not "%FIRST%"=="-h" goto :notcli
+call "%SELF_DIR%\infantry.bat" %*
+exit /b !ERRORLEVEL!
+:notcli
+
 rem A freshly unpacked archive: copy it to <parent>\versions\<v>, then run from there.
 for %%I in ("%APP_HOME%\..") do set "PARENT=%%~fI"
 for %%I in ("%PARENT%") do set "PARENT_NAME=%%~nxI"
