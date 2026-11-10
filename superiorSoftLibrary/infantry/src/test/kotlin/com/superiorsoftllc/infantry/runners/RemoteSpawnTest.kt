@@ -3,6 +3,8 @@
 package com.superiorsoftllc.infantry.runners
 
 import com.superiorsoftllc.infantry.agents.AgentProfiles
+import com.superiorsoftllc.infantry.harness.ToolApproval
+import com.superiorsoftllc.infantry.daemon.api.orchestrator.StartSpec
 import com.superiorsoftllc.infantry.backlog.TicketBoard
 import com.superiorsoftllc.infantry.backlog.localHost
 import com.superiorsoftllc.infantry.context.ComposedContext
@@ -178,6 +180,15 @@ class RemoteSpawnTest {
             LocalRunner.start(hub, oManager, options, null, agentRunner = "r2", projectDir = { id -> checkout.takeIf { id == "p1" } }),
         )
         assertNotNull(r2Manager.get(byProject.id), "the project-folder start runs on r2")
+
+        // RUNNER-PAIR-1: the remote session runs with the Tool approval a local one would, carried over the real wire; `ask` has
+        // nobody to prompt on a runner, so it runs as `deny` at once (the local "can't prompt" rule), never a timer nobody sees.
+        val allowAll = assertIs<StartedSession.Remote>(LocalRunner.start(hub, oManager, options.copy(toolApproval = "allowAll"), checkout, agentRunner = "r2"))
+        assertEquals(ToolApproval.ALLOW_ALL, r2Manager.toolApprovalFor(allowAll.id).mode)
+        val ask = assertIs<StartedSession.Remote>(LocalRunner.start(hub, oManager, options.copy(toolApproval = "ask"), checkout, agentRunner = "r2"))
+        assertEquals(ToolApproval.DENY, r2Manager.toolApprovalFor(ask.id).mode)
+        assertEquals(ToolApproval.ALLOW_EDITS, LocalRunner.runnerToolApproval(StartSpec("s"), own = { ToolApproval.ALLOW_EDITS }), "an older orchestrator: the runner's own mode")
+        assertEquals(ToolApproval.DENY, LocalRunner.runnerToolApproval(StartSpec("s"), own = { ToolApproval.ASK }))
 
         // A spawn that names runner=local beats the agent's r2.
         val local = assertIs<StartedSession.Local>(LocalRunner.start(hub, oManager, options.copy(runner = "local"), checkout, agentRunner = "r2"))

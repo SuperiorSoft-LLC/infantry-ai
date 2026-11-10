@@ -66,6 +66,13 @@ data class StartSpec(
      */
     val gitName: String? = null,
     val gitEmail: String? = null,
+    /**
+     * RUNNER-PAIR-1 (additive): the Tool approval mode (`deny` | `allowEdits` | `allowAll` | `ask`) the orchestrator resolved for
+     * this start, the same one its own local worker would run with. The runner applies it to the session, and since it cannot
+     * relay a prompt it runs `ask` as `deny` at once (the local "can't prompt" rule). Null = an older orchestrator: the runner
+     * uses its own resolved mode under the same rule.
+     */
+    val toolApproval: String? = null,
 )
 
 /** RUNNER-POOL-6: a ticket worktree on the runner: [path], [branch], [base] (a commit), [repoRoot]. */

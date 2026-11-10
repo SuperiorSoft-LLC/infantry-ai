@@ -149,6 +149,8 @@ object RunnerLinkWire {
          */
         val gitName: String? = null,
         val gitEmail: String? = null,
+        /** RUNNER-PAIR-1 (additive): the orchestrator's resolved Tool approval mode for this start ([StartSpec.toolApproval]); null = an older orchestrator. */
+        val toolApproval: String? = null,
     )
 
     /**

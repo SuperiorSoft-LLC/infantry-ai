@@ -3,6 +3,8 @@
 package com.superiorsoftllc.infantry.daemon
 
 import com.superiorsoftllc.infantry.agents.AgentProfiles
+import com.superiorsoftllc.infantry.harness.ToolApproval
+import com.superiorsoftllc.infantry.session.ToolApprovals
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.LocalRunnerServices
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.MailItem
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.MailResult
@@ -50,16 +52,17 @@ object LocalRunner {
         info = info,
         start = { spec ->
             val wt = spec.worktree
+            val approval = runnerToolApproval(spec)
             if (wt == null) {
                 val dir = spec.repo?.let(::File)
                 // A spec naming an agent or a role binds that session at rest (its prompt, if any, is the caller's first mail turn).
-                bindSessionOnSpawn(manager, agents, spawnOptions(spec), dir)?.id
+                bindSessionOnSpawn(manager, agents, spawnOptions(spec), dir, toolApproval = approval)?.id
                     // RUNNER-TEST-1: an ANONYMOUS start (no role, no agent) has nothing to bind, exactly like an anonymous console: its
                     // first prompt creates the session and is its first turn. `infantry runner test` starts one this way.
                     ?: spec.prompt?.takeIf { it.isNotBlank() }?.let { prompt ->
                         manager.startNew(
                             prompt = prompt, repo = dir, providerId = spec.provider, model = spec.model, effort = spec.effort,
-                            projectId = spec.projectId, contextLimit = spec.contextLimit,
+                            projectId = spec.projectId, contextLimit = spec.contextLimit, toolApproval = approval,
                         ).id
                     }
             } else {
@@ -67,7 +70,7 @@ object LocalRunner {
                     prompt = spec.prompt.orEmpty(),
                     providerId = spec.provider, model = spec.model, effort = spec.effort,
                     agentId = spec.agentId, role = spec.role, ticketId = spec.ticketId, projectId = spec.projectId,
-                    contextLimit = spec.contextLimit,
+                    contextLimit = spec.contextLimit, toolApproval = approval,
                     unattended = true, launchOrigin = LaunchOrigin.UNATTENDED,
                     preWorktree = WorktreeRecord(sessionId = "", repoRoot = wt.repoRoot, path = wt.path, branch = wt.branch, baseRef = wt.base, createdAt = System.currentTimeMillis()),
                 ).id
@@ -118,6 +121,14 @@ object LocalRunner {
         provider = options?.provider, model = options?.model, effort = options?.effort, contextLimit = options?.contextLimit,
         parentSessionId = parentSessionId, repo = repo?.path,
     )
+
+    /**
+     * RUNNER-PAIR-1: the Tool approval a session started over the runner link runs with: the orchestrator's mode for the start
+     * ([StartSpec.toolApproval]), else this runner's own; `ask` becomes `deny` ([ToolApproval.withoutPrompt]) because the link
+     * carries no prompt to anyone, so a call is denied at once with the "can't prompt" notice instead of waiting out a timer.
+     */
+    fun runnerToolApproval(spec: StartSpec, own: () -> ToolApproval = { ToolApprovals.current().mode }): ToolApproval =
+        (ToolApproval.parse(spec.toolApproval) ?: own()).withoutPrompt()
 
     /** The inverse of [startSpec]: exactly the options [bindSessionOnSpawn] reads. */
     fun spawnOptions(spec: StartSpec) = SpawnOptions(
@@ -176,7 +187,9 @@ object LocalRunner {
         val remote = repo?.let { runCatching { com.superiorsoftllc.infantry.daemon.plugins.originUrl(it) }.getOrNull() }
             ?: throw IllegalArgumentException("runner $runner needs the project's git remote, and ${repo?.path ?: "this project"} has no `origin` remote. Fix: git -C <project folder> remote add origin <url the runner can reach>")
         val identity = repo?.let { runCatching { com.superiorsoftllc.infantry.daemon.plugins.gitIdentityOf(it) }.getOrNull() }
-        val spec = startSpec(options, null).copy(gitRemote = remote, gitName = identity?.first, gitEmail = identity?.second)
+        // RUNNER-PAIR-1: the Tool approval a local start of these options would run with (its own override, else this daemon's setting).
+        val approval = ToolApprovals.current(ToolApproval.parse(options?.toolApproval)).mode.wire
+        val spec = startSpec(options, null).copy(gitRemote = remote, gitName = identity?.first, gitEmail = identity?.second, toolApproval = approval)
         return when (val reply = link.startSession(spec)) {
             is OrchestratorReply.Unavailable -> throw IllegalStateException("runner $runner unavailable: ${reply.reason}")
             is OrchestratorReply.Ok -> {

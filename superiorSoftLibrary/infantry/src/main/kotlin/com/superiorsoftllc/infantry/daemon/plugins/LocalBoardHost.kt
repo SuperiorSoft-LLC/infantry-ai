@@ -144,6 +144,8 @@ class LocalBoardHost(
             model = request.model, effort = request.effort, contextLimit = request.contextLimit, ticketId = request.ticketId,
             prompt = request.prompt, title = request.title, base = request.baseBranch, branch = request.recordedBranch, gitRemote = remote,
             pushOnCommit = runCatching(pushOnCommit).getOrDefault(false),
+            // RUNNER-PAIR-1: the Tool approval this daemon's own worker would run with, so the remote one behaves the same.
+            toolApproval = com.superiorsoftllc.infantry.session.ToolApprovals.current().mode.wire,
         ).let { s -> checkout?.let { runCatching { gitIdentityOf(it) }.getOrNull() }?.let { (n, e) -> s.copy(gitName = n, gitEmail = e) } ?: s }
         return when (val reply = link.startSession(spec)) {
             is com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorReply.Unavailable -> SessionStartResult.Refused("runner $runner unavailable: ${reply.reason}")
