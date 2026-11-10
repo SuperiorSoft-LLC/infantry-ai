@@ -965,11 +965,13 @@ class InfantryDaemon(
             // IN-APP BUILD T3: one saved command at a time; every frame it produces goes to every client.
             // SECRETS-1: the daemon-owned keystore, in the state dir.
             val keystore = Keystore(daemonStateDir)
-            val harnessCredentials = com.superiorsoftllc.infantry.harness.credential.HarnessCredentials(keystore) {
+            val harnessCredentials = com.superiorsoftllc.infantry.harness.credential.HarnessCredentials(keystore, modeSource = { id ->
+                (settings.storedDeclared(com.superiorsoftllc.infantry.harness.credential.HarnessCredential.modeSettingOf(id)) as? kotlinx.serialization.json.JsonPrimitive)?.content?.takeIf { it.isNotBlank() }
+            }, declaredSource = {
                 harnessModulesRef.get()?.credentials().orEmpty() + harnesses?.harnessIds().orEmpty().mapNotNull {
                     (harnesses?.resolve(it) as? com.superiorsoftllc.infantry.harness.descriptor.DescriptorHarness)?.credential
                 }
-            }
+            })
             harnessCredentialsRef.set(harnessCredentials)
             // HARNESS-GAP G18: every known secret value is masked in all session output (chat rows, transcript, raw stream, a terminal's screen).
             manager.outputMask = com.superiorsoftllc.infantry.keystore.SecretMask(keystore::allValues)

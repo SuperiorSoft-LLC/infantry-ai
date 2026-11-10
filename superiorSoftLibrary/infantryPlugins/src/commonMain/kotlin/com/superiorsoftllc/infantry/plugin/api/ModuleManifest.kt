@@ -193,6 +193,8 @@ data class HarnessDeclaration(
     val hooks: List<String> = emptyList(),
     /** FIRST-RUN-KEYS-1: the API key the harness needs, delivered to its process in an environment variable; null = none. */
     val credential: HarnessCredentialDeclaration? = null,
+    /** CLAUDE-AUTH-CHOICE-1: the sign-in ways the harness offers: `api-key` (the [credential]) and/or `subscription-login`; empty = no choice. */
+    val authModes: List<String> = emptyList(),
 )
 
 /**

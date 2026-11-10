@@ -89,3 +89,43 @@ class HarnessCredentialsTest {
         assertEquals("X_API_KEY", m.harness?.credential?.env)
     }
 }
+
+/** CLAUDE-AUTH-CHOICE-1: the per-harness auth mode choice over the credential. */
+class HarnessAuthModeTest {
+    private val decl = HarnessCredential("claude", "ANTHROPIC_API_KEY", "Claude Code", "", listOf("api-key", "subscription-login"))
+
+    private fun creds(mode: String?): HarnessCredentials {
+        val d = Files.createTempDirectory("hc-mode").toFile()
+        return HarnessCredentials(Keystore(d, env = { null }, vault = null), { mode }) { listOf(decl) }
+    }
+
+    @Test
+    fun `no choice yet keeps the key behaviour and still asks`() {
+        val c = creds(null)
+        assertNull(c.mode("claude"))
+        assertEquals(listOf(decl), c.missing())
+    }
+
+    @Test
+    fun `subscription login injects no key and asks for none even when one is stored`() {
+        val c = creds("subscription-login")
+        c.set("claude", "sk-ant-abcdefghijklmnop")
+        assertEquals("subscription-login", c.mode("claude"))
+        assertEquals(emptyMap(), c.env("claude"))
+        assertEquals(emptyList(), creds("subscription-login").missing())
+    }
+
+    @Test
+    fun `api key mode injects the key and a mode the harness does not offer is ignored`() {
+        val c = creds("api-key")
+        c.set("claude", "sk-ant-abcdefghijklmnop")
+        assertEquals(mapOf("ANTHROPIC_API_KEY" to "sk-ant-abcdefghijklmnop"), c.env("claude"))
+        assertNull(creds("telepathy").mode("claude"))
+    }
+
+    @Test
+    fun `manifest auth modes drop unknown names and the setting name is per harness`() {
+        assertEquals(listOf("api-key"), HarnessCredential.cleanModes(listOf("api-key", "x", "api-key")))
+        assertEquals("harness.claude.authMode", decl.modeSetting)
+    }
+}
