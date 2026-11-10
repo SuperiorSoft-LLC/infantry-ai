@@ -63,6 +63,7 @@ services:
       INFANTRY_LIMIT_SANDBOX_ALLOWED_DIRS: ${INFANTRY_LIMIT_SANDBOX_ALLOWED_DIRS:-}
       # Harness credentials: pass through from the host environment / .env, never write them into this file.
       OPENCODE_API_KEY: ${OPENCODE_API_KEY:-}
+      CMD_API_KEY: ${CMD_API_KEY:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}

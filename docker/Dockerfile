@@ -44,6 +44,8 @@ RUN npm install -g --no-audit --no-fund "opencode-ai@${OPENCODE_VERSION}" "@eare
 COPY --from=stage /opt/infantry /opt/infantry
 COPY --from=landlock /landlock-exec /usr/local/bin/landlock-exec
 COPY entrypoint.sh /usr/local/bin/infantry-entrypoint
+# DEMO-MODEL-CC-1: the Command Code provider and the demo model for opencode; the key is only ever the CMD_API_KEY env at run time.
+COPY --chown=10001:10001 opencode-commandcode.json /home/infantry/.config/opencode/opencode.json
 # LF line ends are kept by .gitattributes (*.sh eol=lf); a CRLF script would fail with "not found".
 RUN chmod 755 /usr/local/bin/infantry-entrypoint
 

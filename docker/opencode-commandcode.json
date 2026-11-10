@@ -1,0 +1,11 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "commandcode": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Command Code",
+      "options": { "baseURL": "https://api.commandcode.ai/provider/v1", "apiKey": "{env:CMD_API_KEY}" },
+      "models": { "stealth/glyph-cluster:free": {} }
+    }
+  }
+}
