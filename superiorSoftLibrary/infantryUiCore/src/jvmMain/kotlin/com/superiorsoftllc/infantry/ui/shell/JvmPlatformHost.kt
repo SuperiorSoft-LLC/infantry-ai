@@ -54,12 +54,35 @@ class JvmPlatformHost(
 
     /** MODAL-BLUR: UI prefs live in the per-user Java preferences store (the registry on Windows), never in the daemon's state dir. */
     private val prefs get() = java.util.prefs.Preferences.userRoot().node("com/superiorsoftllc/infantry/ui").also { preferencesReads.incrementAndGet() }
+    /**
+     * UI-PREFS-ISOLATION-1: `INFANTRY_UI_PREFS_DIR` (property, then environment) points the UI prefs at a file
+     * `<dir>/ui-prefs.properties` instead of the shared per-user store, so a test window never reads or writes the
+     * owner's prefs. Unset: the per-user store, as before.
+     */
+    private val prefsFile: File? by lazy {
+        (property("infantry.ui.prefs.dir") ?: env("INFANTRY_UI_PREFS_DIR"))?.trim()?.takeIf { it.isNotEmpty() }
+            ?.let { File(it, "ui-prefs.properties") }
+    }
+    private fun loadFile(f: File): java.util.Properties =
+        java.util.Properties().also { p -> runCatching { if (f.isFile) f.inputStream().use { p.load(it) } } }
+
     override fun uiPref(key: String): String? {
         uiPrefsOverride?.let { return it[key] }
+        prefsFile?.let { f -> return synchronized(FILE_LOCK) { loadFile(f).getProperty(key) } }
         return runCatching { prefs.get(key, null) }.getOrNull()
     }
     override fun saveUiPref(key: String, value: String) {
         uiPrefsOverride?.let { it[key] = value; return }
+        prefsFile?.let { f ->
+            synchronized(FILE_LOCK) {
+                runCatching {
+                    val p = loadFile(f).also { it.setProperty(key, value) }
+                    f.parentFile?.mkdirs()
+                    f.outputStream().use { p.store(it, null) }
+                }
+            }
+            return
+        }
         runCatching { prefs.put(key, value); prefs.flush() }
     }
     override fun readTextFile(path: String): String? = runCatching { File(path).readText() }.getOrNull()
@@ -269,6 +292,7 @@ class JvmPlatformHost(
         /** NATIVE-PICKER-1: what an images-only attachment dialog offers. */
         val IMAGE_EXTENSIONS = listOf("png", "jpg", "jpeg", "gif", "webp", "bmp")
         const val DEFAULT_PORT = 8787
+        private val FILE_LOCK = Any()
         /** No file over the chat's largest limit (20 MB) is read into memory. */
         const val READ_LIMIT = 20L * 1024 * 1024
         /** Same name as the daemon's `DaemonPort.FILE_NAME`; this module does not depend on the daemon. */
