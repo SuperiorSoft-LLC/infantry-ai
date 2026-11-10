@@ -1077,6 +1077,9 @@ private fun SecretEntryCard(entry: SecretEntryRow, editable: Boolean, actions: S
             Text("${entry.fields.size} field${if (entry.fields.size == 1) "" else "s"}", color = Palette.Muted, fontSize = 11.sp)
             ScopeBadge(scopeBadge, Modifier.testTag("$SECRET_SCOPE_TAG-${entry.name}"))
             Spacer(Modifier.weight(1f))
+            // SECRET-RENDER-1: the placeholder a text file writes to get this secret's value (the one-value field; others are NAME#field).
+            Text(secretPlaceholder(entry.name), fontFamily = Mono, fontSize = 11.sp, color = Palette.Muted, modifier = Modifier.testTag("$SECRET_PLACEHOLDER_TAG-${entry.name}"))
+            CopyValueButton(secretPlaceholder(entry.name), Modifier.testTag("$SECRET_PLACEHOLDER_COPY_TAG-${entry.name}"))
             val move = actions.move
             if (editable && move != null && !confirmDelete) {
                 TextButton(onClick = { move(entry.name) }, modifier = Modifier.testTag("$SECRET_MOVE_TAG-${entry.name}")) { Text(actions.moveLabel, fontSize = 12.sp, color = Palette.Text) }
@@ -1245,6 +1248,11 @@ const val SECRET_ENTRIES_TAG = "secret-entries"
 const val SECRET_LOCKED_TAG = "secret-locked"
 const val SECRET_ENTRY_TAG = "secret-entry"
 const val SECRET_ENTRY_DELETE_TAG = "secret-entry-delete"
+const val SECRET_PLACEHOLDER_TAG = "secret-placeholder"
+const val SECRET_PLACEHOLDER_COPY_TAG = "secret-placeholder-copy"
+
+/** SECRET-RENDER-1: the placeholder for secret [name] (the daemon's `SecretTemplate.PLACEHOLDER_OPEN` syntax; UI core cannot import the plugin). */
+fun secretPlaceholder(name: String): String = "{{secret:$name}}"
 const val SECRET_ENTRY_DELETE_CONFIRM_TAG = "secret-entry-delete-confirm"
 const val SECRET_FIELD_TAG = "secret-field"
 const val SECRET_FIELD_REPLACE_TAG = "secret-field-replace"

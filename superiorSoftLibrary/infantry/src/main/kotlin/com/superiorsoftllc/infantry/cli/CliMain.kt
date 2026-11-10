@@ -502,6 +502,7 @@ internal object Cli {
                 "agent" -> runBlocking { when (parsed.args.firstOrNull()) { "switch" -> agentSwitch(stream, parsed, out, err, getenv); "runner" -> agentRunner(stream, parsed, out, err); else -> agentQueue(stream, parsed, out, err) } }
                 "agent-def" -> AgentDefCli.run(stream, parsed.args, out, err, getenv)
                 "run-cmd" -> RunCmdCli.run(stream, parsed.args, parsed.name, parsed.project, parsed.crossProject, parsed.force, out, err, getenv)
+                "secret" -> SecretCli.run(stream, parsed.args, parsed.renderOut, parsed.project, parsed.crossProject, parsed.allowMissing, parsed.check, out, err, getenv)
                 "harness-install" -> harnessInstall(stream, parsed, out, err)
                 "harness" -> harnessKey(stream, parsed, out, err)
                 "processes" -> processes(stream, parsed, out, err)
@@ -5132,6 +5133,9 @@ internal object Cli {
         /** BUG-G2d: `--host` or `--port` was typed, so it beats an inherited `INFANTRY_URL`. */
         val addressGiven: Boolean = false,
         val force: Boolean = false,
+        /** SECRET-RENDER-1: `secret render --out <file>` and `--allow-missing`. */
+        val renderOut: String? = null,
+        val allowMissing: Boolean = false,
         val live: Boolean = false,
         /** HARNESS-INSTALL-1: `--update` (harness-install refreshes outdated CLIs) / `--check` (harness-status asks npm for the latest). */
         val update: Boolean = false,
@@ -5310,6 +5314,8 @@ internal object Cli {
         var port = DEFAULT_PORT
         var addressGiven = false
         var force = false
+        var renderOut: String? = null
+        var allowMissing = false
         var live = false
         var update = false
         var check = false
@@ -5468,6 +5474,14 @@ internal object Cli {
                 }
                 "--force" -> {
                     force = true
+                    i++
+                }
+                "--out" -> {
+                    renderOut = flagValue(args, ++i) ?: return fail(err, "--out expects a file path")
+                    i++
+                }
+                "--allow-missing" -> {
+                    allowMissing = true
                     i++
                 }
                 // MCP-RECONNECT-1: `infantry session mcp-reconnect --self` names the caller's own session.
@@ -5940,6 +5954,8 @@ internal object Cli {
             port = port,
             addressGiven = addressGiven,
             force = force,
+            renderOut = renderOut,
+            allowMissing = allowMissing,
             live = live,
             update = update,
             check = check,
@@ -6141,6 +6157,7 @@ internal object Cli {
         "agent" -> if (parsed.args.firstOrNull().isNullOrBlank() || parsed.args.size == 1) null else agentQueueUsage(parsed.args)
         "agent-def" -> AgentDefCli.usageError(parsed.args)
         "run-cmd" -> RunCmdCli.usageError(parsed.args)
+        "secret" -> SecretCli.usageError(parsed.args, parsed.renderOut, parsed.check)
         "processes" -> ProcessesCli.usageError(parsed.args, parsed.all)
         "epic" -> epicUsageError(parsed, getenv)
         "project" -> projectUsageError(parsed)
@@ -6363,7 +6380,7 @@ internal object Cli {
         "submit", "watch", "pods", "runs", "logs", "cancel", "tickets", "board", "ticket", "agents", "send", "inbox",
         "read", "threads", "thread", "waiting", "epics", "stories", "epic", "project", "mcp", "knowledge", "memory", "decision", "pipeline", "notify", "issue",
         "trait", "skill", "role", "ask", "harnesses", "harness-status", "harness", "archive", "harness-install", "image", "session", "remote", "bg", "kill", "usage",
-        "processes", "health", "settings", "agent", "agent-def", "run-cmd", "event", "tests", "tool", "script", "runner",
+        "processes", "health", "settings", "agent", "agent-def", "run-cmd", "secret", "event", "tests", "tool", "script", "runner",
         "install-cli", "uninstall-cli", "login", "logout", "whoami",
     )
 

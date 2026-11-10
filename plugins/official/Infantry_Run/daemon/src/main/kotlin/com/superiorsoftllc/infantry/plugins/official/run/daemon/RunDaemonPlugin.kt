@@ -22,18 +22,26 @@ class RunDaemonPlugin : DaemonPlugin {
             val folders = api.projects.list().mapNotNull { p -> p.directory?.takeIf { it.isNotBlank() }?.let { p.id to File(it) } }
             store.assignUnassigned(folders).takeIf { it.isNotEmpty() }?.let { println("[infantry] run commands assigned to their project: ${it.joinToString()}") }
         }.onFailure { System.err.println("[infantry] run command migration skipped (${it::class.simpleName})") }
+        val restricted: () -> Boolean = { api.policy.active().let { it.restricted == true || it.seats != null } } // a seated preset is always restricted
+        val renderer = SecretRenderer(
+            resolve = { name, project -> if (CommandRegistry.isSecretName(name)) runs.secretFields(name, project) else null },
+            restricted = restricted,
+            maxBytes = { api.settings.limit("limits.secrets.renderMaxBytes") ?: SecretRenderer.DEFAULT_MAX_BYTES },
+        )
         val manager = RunManager(
             registry = { store.registry },
             runs = runs,
             emit = { api.events.broadcast(it.type, it.data) },
             limits = RunManager.RunLimits.from(api.settings),
-            restricted = { api.policy.active().let { it.restricted == true || it.seats != null } }, // a seated preset is always restricted
+            restricted = restricted,
             secrets = { runs.secretFields(it) },
             // SECRETS-2b: a command's project first, then the app scope.
             projectSecrets = { name, project -> runs.secretFields(name, project) },
+            renderer = renderer,
         )
 
-        RunCommandTools(store, manager, { api.events.broadcast(Envelope.COMMANDS, store.registry.specsJson()) }, { api.events.broadcast(it.type, it.data) }, runs::secretNames)
+        RunCommandTools(store, manager, { api.events.broadcast(Envelope.COMMANDS, store.registry.specsJson()) }, { api.events.broadcast(it.type, it.data) }, runs::secretNames,
+            renderer, runs::rootOf)
             .all().forEach(api.tools::register)
 
         fun reply(e: Envelope?): Frame? = e?.let { Frame(it.type, it.data) }

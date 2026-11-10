@@ -96,6 +96,8 @@ class RunManager(
     private val secrets: (String) -> Map<String, String>? = { null },
     /** SECRETS-2b: the same lookup for a run of a project (project scope first, then app); default: [secrets]. */
     private val projectSecrets: (String, String?) -> Map<String, String>? = { name, _ -> secrets(name) },
+    /** SECRET-RENDER-1: renders a saved command's templates before it starts. */
+    private val renderer: SecretRenderer? = null,
 ) {
     /** A fixed set of commands (the tests, and any caller with no store behind it). */
     constructor(registry: CommandRegistry, runs: Runs, emit: (Envelope) -> Unit, now: () -> Long = System::currentTimeMillis) :
@@ -178,7 +180,8 @@ class RunManager(
             }
             if (inFlight != null) return refuse("run_start refused: a run is already in flight")
             val env = secretEnv(command.secrets.distinct(), command.projectId).getOrElse { return refuse("run_start refused: ${it.message}") }
-            run = Run(UUID.randomUUID().toString(), command, now(), interactive, cols, rows, env)
+            val rendered = renderFor(command).getOrElse { return refuse("run_start refused: ${it.message}") }
+            run = Run(UUID.randomUUID().toString(), command, now(), interactive, cols, rows, env, rendered)
             inFlight = run
             history.addLast(run)
             prune()
@@ -290,6 +293,27 @@ class RunManager(
      * The environment [names] give a run: every field of each secret, under its field name (a later secret's field of the
      * same name wins). A refusal names the secret or the field, never a value.
      */
+    /** SECRET-RENDER-1: renders the command templates (names only in a refusal); a failure removes what it wrote. */
+    private fun renderFor(command: SavedCommand): Result<List<java.io.File>> {
+        if (command.renders.isEmpty()) return Result.success(emptyList())
+        val renderer = renderer ?: return Result.failure(IllegalArgumentException("secret rendering is not available"))
+        val done = ArrayList<java.io.File>()
+        val root = command.workingDir.canonicalFile
+        for (entry in command.renders) {
+            val (t, o) = CommandRegistry.splitRender(entry) ?: continue
+            val tf = java.io.File(root, t).canonicalFile
+            val of = java.io.File(root, o).canonicalFile
+            if (!tf.path.startsWith(root.path) || !of.path.startsWith(root.path)) {
+                done.forEach { it.delete() }
+                return Result.failure(IllegalArgumentException("a render path leaves the command folder"))
+            }
+            val r = renderer.render(tf, of, command.projectId)
+            if (!r.ok) { done.forEach { it.delete() }; return Result.failure(IllegalArgumentException(r.summary(false))) }
+            done += of
+        }
+        return Result.success(done)
+    }
+
     private fun secretEnv(names: List<String>, projectId: String?): Result<Map<String, String>> {
         fun no(why: String) = Result.failure<Map<String, String>>(IllegalArgumentException(why))
         if (names.isEmpty()) return Result.success(emptyMap())
@@ -317,6 +341,8 @@ class RunManager(
         private val cols: Int,
         private val rows: Int,
         private val env: Map<String, String> = emptyMap(),
+        /** SECRET-RENDER-1: temporary rendered files, deleted when the run ends. */
+        private val rendered: List<java.io.File> = emptyList(),
     ) {
         /** SECRETS-2: the injected values never reach a frame, the scrollback or a line. */
         private val scrubber = SecretScrubber(env.values)
@@ -482,6 +508,7 @@ class RunManager(
             synchronized(outLock) {
                 if (finished) return
                 finished = true
+                rendered.forEach { runCatching { it.delete() } }
                 val end = RunFinished(runId, exitCode, outcome, now(), detail)
                 ended = end
                 synchronized(lock) { if (inFlight === this) inFlight = null; prune() }

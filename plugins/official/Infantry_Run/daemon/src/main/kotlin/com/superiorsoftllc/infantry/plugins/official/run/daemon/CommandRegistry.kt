@@ -30,6 +30,8 @@ data class CommandSpec(
      * daemon without a repo). It is listed so it can be fixed or assigned, but it cannot start.
      */
     val rooted: Boolean = true,
+    /** SECRET-RENDER-1: `template=out` pairs (paths relative to the command folder) rendered before the run; the outputs are deleted when it ends. */
+    val renders: List<String> = emptyList(),
 ) {
     override fun toString(): String = "CommandSpec(id=$id)"
 }
@@ -45,6 +47,7 @@ internal data class CommandFileEntry(
     val secrets: List<String> = emptyList(),
     /** RUN-CMD-REPO-1: the project whose directory is the root of [cwd]; null = the daemon's own root. */
     val project: String? = null,
+    val renders: List<String> = emptyList(),
 )
 
 /**
@@ -61,16 +64,17 @@ class SavedCommand internal constructor(
     val graceMillis: Long,
     val secrets: List<String> = emptyList(),
     val projectId: String? = null,
+    val renders: List<String> = emptyList(),
 ) {
     val workingDir: File get() = dir ?: throw IllegalStateException("command '$id' has no folder to run in")
     val rooted: Boolean get() = dir != null
 
-    fun toSpec(): CommandSpec = CommandSpec(id, name, cwd, argv, graceMillis, secrets, projectId, rooted)
+    fun toSpec(): CommandSpec = CommandSpec(id, name, cwd, argv, graceMillis, secrets, projectId, rooted, renders)
 
     /** The same command under [project] with [cwd], re-rooted at [dir] (the migration's assignment). */
-    internal fun movedTo(project: String, cwd: String?, dir: File): SavedCommand = SavedCommand(id, name, argv, cwd, dir, graceMillis, secrets, project)
+    internal fun movedTo(project: String, cwd: String?, dir: File): SavedCommand = SavedCommand(id, name, argv, cwd, dir, graceMillis, secrets, project, renders)
 
-    internal fun toFileEntry(): CommandFileEntry = CommandFileEntry(id, name, argv, cwd, graceMillis, secrets, projectId)
+    internal fun toFileEntry(): CommandFileEntry = CommandFileEntry(id, name, argv, cwd, graceMillis, secrets, projectId, renders)
 
     // argv must never reach a log line by accident.
     override fun toString(): String = "SavedCommand(id=$id)"
@@ -120,6 +124,16 @@ class CommandRegistry private constructor(
         private val SECRET_NAME = Regex("^[a-z0-9][a-z0-9._-]{0,63}$")
         /** A keystore secret name (the keystore own rule). */
         fun isSecretName(name: String): Boolean = SECRET_NAME.matches(name)
+
+        /** SECRET-RENDER-1: a `template=out` render entry as (template, out), both relative and non-blank; else null. */
+        fun splitRender(entry: String): Pair<String, String>? {
+            val i = entry.indexOf('=')
+            if (i <= 0) return null
+            val t = entry.substring(0, i).trim()
+            val o = entry.substring(i + 1).trim()
+            if (t.isEmpty() || o.isEmpty() || File(t).isAbsolute || File(o).isAbsolute) return null
+            return t to o
+        }
 
         private val wire = Json { encodeDefaults = true }
         private val reader = Json { ignoreUnknownKeys = true }
@@ -181,10 +195,12 @@ class CommandRegistry private constructor(
             if (e.graceMillis > MAX_GRACE_MILLIS) return no("$where ('${e.id}') has a graceMillis over $MAX_GRACE_MILLIS")
             if (e.secrets.size > maxRunSecrets) return no("$where ('${e.id}') names more than $maxRunSecrets secrets")
             if (e.secrets.any { !CommandRegistry.isSecretName(it) }) return no("$where ('${e.id}') names an invalid secret")
+            if (e.renders.size > maxRunSecrets) return no("$where ('${e.id}') names more than $maxRunSecrets renders")
+            if (e.renders.any { splitRender(it) == null }) return no("$where ('${e.id}') has a render that is not 'template=out'")
             val written = normalCwd(root, e.cwd) ?: return no("$where ('${e.id}') has a cwd outside the project folder")
             val cwd = written.takeIf { it != "." }
             val dir = resolveCwd(root, cwd) ?: return no("$where ('${e.id}') has a cwd outside the project folder")
-            return Result.success(SavedCommand(e.id, e.name?.takeIf { it.isNotBlank() } ?: e.id, e.argv.toList(), cwd, dir, e.graceMillis, e.secrets.distinct(), e.project?.takeIf { it.isNotBlank() }))
+            return Result.success(SavedCommand(e.id, e.name?.takeIf { it.isNotBlank() } ?: e.id, e.argv.toList(), cwd, dir, e.graceMillis, e.secrets.distinct(), e.project?.takeIf { it.isNotBlank() }, e.renders.distinct()))
         }
 
         /** [validate] with no root: the same shape rules; the cwd is kept as written and checked once a folder resolves. */
@@ -192,7 +208,7 @@ class CommandRegistry private constructor(
             val scratch = canonicalRoot(File(System.getProperty("java.io.tmpdir") ?: ".")) ?: File(".").absoluteFile
             val shape = validate(e.copy(cwd = null), scratch, where).getOrElse { return Result.failure(it) }
             val cwd = e.cwd?.trim()?.takeIf { it.isNotEmpty() && it != "." }
-            return Result.success(SavedCommand(shape.id, shape.name, shape.argv, cwd, null, shape.graceMillis, shape.secrets, shape.projectId))
+            return Result.success(SavedCommand(shape.id, shape.name, shape.argv, cwd, null, shape.graceMillis, shape.secrets, shape.projectId, shape.renders))
         }
 
         /**
