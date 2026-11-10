@@ -7,6 +7,9 @@ import com.superiorsoftllc.infantry.ui.shell.blocks.*
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -1092,8 +1095,12 @@ private fun TicketForm(deps: BoardDeps, initialEpicId: String?, onDone: () -> Un
     var effortOn by remember { mutableStateOf(false) }
     var effortLevel by remember { mutableStateOf("medium") }
     val epics = deps.boardEpics
+    // ANDROID-TICKET-MODAL-SCROLL-1: the form is taller than a phone; cap it at most of the window, scroll inside, and
+    // lift it above the on-screen keyboard so the lower fields and Create stay reachable.
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
     Column(
-        Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp).clip(RoundedCornerShape(6.dp)).background(Palette.Raised).padding(10.dp),
+        Modifier.fillMaxWidth().heightIn(max = maxHeight * 0.8f).imePadding().padding(horizontal = 10.dp, vertical = 4.dp).clip(RoundedCornerShape(6.dp)).background(Palette.Raised)
+            .verticalScroll(rememberScrollState()).padding(10.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         OutlinedTextField(title, { title = it }, label = { Text("Title") }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -1128,6 +1135,7 @@ private fun TicketForm(deps: BoardDeps, initialEpicId: String?, onDone: () -> Un
             ) { Text("Create ticket") }
             TextButton(onClick = onDone) { Text("Cancel") }
         }
+    }
     }
 }
 
