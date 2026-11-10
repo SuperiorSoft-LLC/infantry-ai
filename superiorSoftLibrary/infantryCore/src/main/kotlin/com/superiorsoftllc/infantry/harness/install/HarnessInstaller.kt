@@ -17,7 +17,7 @@ import java.io.File
 import java.util.concurrent.TimeUnit
 
 /** One harness CLI the installer knows: its [tool] and the npm package that ships it. */
-class InstallableHarness(val tool: CliTool, val npmPackage: String) {
+class InstallableHarness(val tool: CliTool, val npmPackage: String, val sample: File? = null) {
     val id: String get() = tool.id
 }
 
@@ -78,13 +78,18 @@ class HarnessInstaller(
      * module loaded or unloaded since is seen). A built-in id wins; the manifest side is checked by [ManifestHarnessCli].
      */
     private val fromModules: () -> List<InstallableHarness> = { emptyList() },
+    /** HARNESS-DESCRIPTOR-INSTALL-1: JSON descriptors with an `install` field (user folder, then shipped samples), read per call. */
+    private val fromDescriptors: () -> List<InstallableHarness> = { emptyList() },
+    /** Called before a shipped sample's install: copies it into the user's harnesses folder and registers it. */
+    private val onSampleAdopted: (InstallableHarness) -> Unit = {},
 ) {
     private val lock = Any()
 
     /** Built-ins first (unchanged order), then each module's CLI whose id no earlier entry holds. */
     private fun harnesses(): List<InstallableHarness> {
         val ids = builtIn.map { it.id }.toMutableSet()
-        return builtIn + runCatching(fromModules).getOrDefault(emptyList()).filter { ids.add(it.id) }
+        val extra = runCatching(fromModules).getOrDefault(emptyList()) + runCatching(fromDescriptors).getOrDefault(emptyList())
+        return builtIn + extra.filter { ids.add(it.id) }
     }
 
     fun status(checkLatest: Boolean = false): HarnessInstallReport {
@@ -130,7 +135,16 @@ class HarnessInstaller(
                 outcomes += HarnessInstallOutcome(s.id, "failed", null, NODE_GUIDANCE)
                 continue
             }
-            outcomes += runInstall(harnesses.first { it.id == s.id }, s, npmPath, ::note)
+            val h = harnesses.first { it.id == s.id }
+            if (h.sample != null) {
+                note("[${h.id}] adopting the shipped descriptor ${h.sample.name}")
+                val err = runCatching { onSampleAdopted(h) }.exceptionOrNull()
+                if (err != null) {
+                    outcomes += HarnessInstallOutcome(h.id, "failed", null, "could not copy the descriptor: ${err.message ?: err::class.simpleName}")
+                    continue
+                }
+            }
+            outcomes += runInstall(h, s, npmPath, ::note)
         }
         HarnessInstallResult(outcomes, log, status())
     }
@@ -167,7 +181,8 @@ class HarnessInstaller(
             ?: return if (userPath != null) {
                 HarnessInstallStatus(h.id, h.tool.label, h.npmPackage, "user-managed", latest = latest, note = resolution.reason)
             } else {
-                HarnessInstallStatus(h.id, h.tool.label, h.npmPackage, "missing", wanted = wanted, latest = latest, note = resolution.reason)
+                HarnessInstallStatus(h.id, h.tool.label, h.npmPackage, "missing", wanted = wanted, latest = latest,
+                    note = if (h.sample != null) "available, not installed: a shipped sample; installing copies ${h.sample.name} into your harnesses folder" else resolution.reason)
             }
         val version = detectVersion(path)
         val target = wanted ?: latest

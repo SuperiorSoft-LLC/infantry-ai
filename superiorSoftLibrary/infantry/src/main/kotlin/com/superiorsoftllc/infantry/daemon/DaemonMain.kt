@@ -829,9 +829,14 @@ class InfantryDaemon(
             val harnessModulesRef = java.util.concurrent.atomic.AtomicReference<com.superiorsoftllc.infantry.daemon.plugins.HarnessModules?>(null)
             // HARNESS-INSTALL-1: npm installs of the harness CLIs go to <INFANTRY_HOME>/harness-tools; launches resolve them from there.
             // HARNESS-PLUGIN-4 H5a: plus each loaded harness module's `harness.cli.install` (read per call).
+            // HARNESS-DESCRIPTOR-INSTALL-1: JSON descriptors with an `install` field, plus the shipped samples as "available".
+            val descriptorFolder = File(daemonConfigDir(), "harnesses")
+            val descriptorInstallables = com.superiorsoftllc.infantry.harness.install.DescriptorInstallables(descriptorFolder, shippedHarnessSamplesDir())
             val harnessInstaller = com.superiorsoftllc.infantry.harness.install.HarnessInstaller(
                 harnessToolsDir, executableResolver, executableEnvironment, executableOverrides,
                 fromModules = { harnessModulesRef.get()?.installables().orEmpty() },
+                fromDescriptors = descriptorInstallables::list,
+                onSampleAdopted = { h -> descriptorInstallables.adopt(h); HarnessDescriptorLoader(descriptorFolder).loadInto(harnesses) },
             )
             val cliLocations = com.superiorsoftllc.infantry.executables.CliLocationService(
                 executableResolver, executableOverrides, tools = { cliTools(harnesses, harnessModulesRef.get()?.cliTools().orEmpty()) },
@@ -4683,6 +4688,13 @@ private fun cliLocationsEnvelope(tools: List<com.superiorsoftllc.infantry.protoc
     Envelope.CLI_LOCATIONS,
     json.encodeToString(com.superiorsoftllc.infantry.protocol.CliLocations.serializer(), com.superiorsoftllc.infantry.protocol.CliLocations(tools)),
 )
+
+/** HARNESS-DESCRIPTOR-INSTALL-1: the sample descriptors an install ships (`<install>/harness-samples`, or `INFANTRY_HARNESS_SAMPLES`); null = none found. */
+internal fun shippedHarnessSamplesDir(): File? {
+    infantrySetting("INFANTRY_HARNESS_SAMPLES")?.takeIf { it.isNotBlank() }?.let { return File(it) }
+    val jar = runCatching { File(HarnessRegistry::class.java.protectionDomain.codeSource.location.toURI()) }.getOrNull() ?: return null
+    return jar.parentFile?.parentFile?.resolve("harness-samples")?.takeIf { it.isDirectory }
+}
 
 /** The directory the daemon keeps its own configuration in (`INFANTRY_HOME`, else the state dir): `commands.json`, `harnesses/`. */
 internal fun daemonConfigDir(): File =

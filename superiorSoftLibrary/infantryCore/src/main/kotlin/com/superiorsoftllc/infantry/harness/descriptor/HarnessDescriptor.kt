@@ -71,6 +71,8 @@ class HarnessDescriptor internal constructor(
     internal val toolApproval: Map<ToolApproval, List<String>>? = null,
     /** FIRST-RUN-KEYS-1: `"credential": {"env": "X_API_KEY", "label"?, "help"?}`; null = the CLI needs no key from us. */
     val credential: com.superiorsoftllc.infantry.harness.credential.HarnessCredential? = null,
+    /** HARNESS-DESCRIPTOR-INSTALL-1: `"install": {"npm": "<package>", "bin"?: "<path in package>"}`; null = the installer does not offer this CLI. */
+    val install: com.superiorsoftllc.infantry.plugin.api.HarnessCliInstall? = null,
 ) {
     /** True when [mode] adds nothing because the descriptor does not map it: the run keeps today's behaviour. */
     fun unmappedToolApproval(mode: ToolApproval): Boolean = toolApproval?.containsKey(mode.withoutPrompt()) != true
@@ -135,7 +137,24 @@ class HarnessDescriptor internal constructor(
                 models = DescriptorModels.parse(obj["models"]),
                 toolApproval = parseToolApproval(obj["toolApproval"]),
                 credential = parseCredential(id, obj["credential"]),
+                install = parseInstall(id, command, obj["install"]),
             )
+        }
+
+        /** HARNESS-DESCRIPTOR-INSTALL-1: validated by the same rules as a manifest's `harness.cli.install` (fixed reasons only). */
+        private fun parseInstall(id: String, command: String, element: JsonElement?): com.superiorsoftllc.infantry.plugin.api.HarnessCliInstall? {
+            if (element == null) return null
+            val o = element as? JsonObject ?: throw InvalidDescriptor("field 'install' is not an object")
+            val npm = o.text("npm") ?: throw InvalidDescriptor("'install' needs an 'npm' package name")
+            if (!com.superiorsoftllc.infantry.harness.install.ManifestHarnessCli.COMMAND.matches(command)) {
+                throw InvalidDescriptor("'install' needs 'command' to be a bare command name")
+            }
+            val install = com.superiorsoftllc.infantry.plugin.api.HarnessCliInstall(npm, o.text("bin"))
+            val declaration = com.superiorsoftllc.infantry.plugin.api.HarnessCliDeclaration(id = id.take(40), command = command, install = install)
+            if (com.superiorsoftllc.infantry.harness.install.ManifestHarnessCli.refusal(declaration, allowBuiltIn = true) != null) {
+                throw InvalidDescriptor("'install' holds an invalid npm package or bin")
+            }
+            return install
         }
 
         private fun parseCredential(id: String, element: JsonElement?): com.superiorsoftllc.infantry.harness.credential.HarnessCredential? {

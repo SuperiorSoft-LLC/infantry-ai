@@ -406,6 +406,8 @@ fun CopySpec.daemonModules(folder: String, prefix: String) {
 tasks.named<Sync>("installDist") {
     dependsOnDaemonJars("official")
     daemonModules("official", ".")
+    // HARNESS-DESCRIPTOR-INSTALL-1: the sample harness descriptors ship beside the app; the installer offers them.
+    from("docs/harnesses") { include("*.json"); into("harness-samples") }
     val modules = destinationDir.resolve("modules")
     val expected = daemonModuleDirs("official").map { it.name }
     doLast { ihqVerifyDaemonHalves(modules, "installDist", expected) }
