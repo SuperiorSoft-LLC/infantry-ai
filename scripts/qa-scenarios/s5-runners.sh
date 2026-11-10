@@ -6,6 +6,8 @@ wd clickxy "$(at "{Configuration}")" >/dev/null; sleep 2
 wd click Plugins >/dev/null; sleep 1
 step $S "Runners card present in Settings > Plugins" has "Infantry_Runners"
 shot $S-runners >/dev/null
-echo "BLOCKED $S: add-runner needs a reachable runner endpoint and a scroll to the card; check 6ee8342c manually"
+RUN="$(scrollto "Infantry_Runners")"
+step $S "Runners card scrolled into view" test -n "$RUN"
+echo "NOTE $S: adding a runner needs a reachable runner endpoint; typein \"<label>@dx,dy\" \"<text>\" now reaches its fields"
 wd clickxy "$(at "Done")" >/dev/null
 finish $S
