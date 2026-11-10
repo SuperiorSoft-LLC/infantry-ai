@@ -9,6 +9,7 @@ import com.superiorsoftllc.infantry.protocol.ProjectConfigRequest
 import com.superiorsoftllc.infantry.protocol.ProjectSave
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
+import java.io.File
 
 /**
  * MVP Sprint-Zero, slice A3: the `project_*` WIRE SURFACE over a [ProjectStore].
@@ -53,6 +54,10 @@ class ProjectHandler(
         )
     },
 ) {
+    /** RUNNER-PAIR-1: project [id]'s own folder when it exists on disk (a runner start clones that folder's `origin`), else null. */
+    fun directoryOf(id: String): File? =
+        runCatching { store.get(id).directory }.getOrNull()?.takeIf { it.isNotBlank() }?.let { File(it) }?.takeIf { it.isDirectory }
+
     /** CP-3: the DEFAULT project (the oldest, the order `project_list` answers in), or null when there is none. */
     fun defaultProjectId(): String? = store.list().firstOrNull()?.id
 

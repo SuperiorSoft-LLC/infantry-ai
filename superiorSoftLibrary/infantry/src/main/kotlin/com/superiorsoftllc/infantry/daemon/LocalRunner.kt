@@ -141,6 +141,8 @@ object LocalRunner {
         defaultRunner: String = RunnerPool.LOCAL,
         /** The placement view of the pool (paused, per-runner caps); null = health and free slots straight from the pool. */
         entries: (() -> List<com.superiorsoftllc.infantry.settings.RunnerEntry>)? = null,
+        /** RUNNER-PAIR-1: a project's own folder; a runner start clones ITS `origin`, not the daemon's start-up [repo]. */
+        projectDir: (String) -> File? = { null },
     ): StartedSession? {
         val wanted = options?.runner?.trim().orEmpty().ifEmpty { agentRunner?.trim().orEmpty() }.ifEmpty { defaultRunner.trim() }
         var runner = RunnerPool.LOCAL
@@ -153,7 +155,7 @@ object LocalRunner {
                 is com.superiorsoftllc.infantry.settings.PlacementResult.Placed -> runner = placed.runner
             }
         }
-        if (runner != RunnerPool.LOCAL) return startRemote(pool, runner, options, repo)
+        if (runner != RunnerPool.LOCAL) return startRemote(pool, runner, options, options?.projectId?.let(projectDir) ?: repo)
         val link = pool.link(RunnerPool.LOCAL) ?: throw IllegalStateException("no '${RunnerPool.LOCAL}' runner")
         return when (val r = link.startSession(startSpec(options, repo))) {
             is OrchestratorReply.Ok -> {

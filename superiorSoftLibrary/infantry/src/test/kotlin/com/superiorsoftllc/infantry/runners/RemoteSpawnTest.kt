@@ -171,6 +171,14 @@ class RemoteSpawnTest {
         assertEquals(1, clones.size, "r2 cloned the project once: $clones")
         assertEquals("hello", File(clones.single(), "README.md").takeIf { it.exists() }?.readText()?.trim() ?: "hello")
 
+        // RUNNER-PAIR-1: the installed app starts with no daemon-wide repo; the project's OWN folder gives the remote to clone.
+        val noRepo = assertFailsWith<IllegalArgumentException> { LocalRunner.start(hub, oManager, options, null, agentRunner = "r2") }
+        assertTrue("origin" in noRepo.message.orEmpty(), noRepo.message)
+        val byProject = assertIs<StartedSession.Remote>(
+            LocalRunner.start(hub, oManager, options, null, agentRunner = "r2", projectDir = { id -> checkout.takeIf { id == "p1" } }),
+        )
+        assertNotNull(r2Manager.get(byProject.id), "the project-folder start runs on r2")
+
         // A spawn that names runner=local beats the agent's r2.
         val local = assertIs<StartedSession.Local>(LocalRunner.start(hub, oManager, options.copy(runner = "local"), checkout, agentRunner = "r2"))
         assertEquals(Placement.LOCAL, hub.runnerOf(local.id))

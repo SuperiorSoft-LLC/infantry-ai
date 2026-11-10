@@ -452,9 +452,23 @@ class RunnerLinkService(
      */
     /** RUNNER-CLAUDE-PROOF-1: claude's stream-json `result` event carries the reply in its `result` field; show that text, not the event. */
     private fun resultText(line: String): String {
-        if (!line.startsWith("{\"type\":\"result\"")) return line
-        val text = runCatching { (F.json.parseToJsonElement(line) as? JsonObject)?.get("result") as? JsonPrimitive }.getOrNull()?.takeIf { it.isString }?.content
-        return text ?: line
+        if (!line.startsWith("{")) return line
+        val obj = runCatching { F.json.parseToJsonElement(line) as? JsonObject }.getOrNull() ?: return line
+        return replyTextOf(obj) ?: line
+    }
+
+    /**
+     * The model's reply text in a JSON event line, or null when the event carries none: a stream-json `result` event (`result`)
+     * or a `text` event whose `part.text` is the reply (opencode's JSON stream; RUNNER-PAIR-1: the runner answered "ready" there
+     * and the test read it as noise, so a working runner showed "no answer").
+     */
+    private fun replyTextOf(obj: JsonObject): String? {
+        fun str(o: JsonObject?, key: String) = (o?.get(key) as? JsonPrimitive)?.takeIf { it.isString }?.content
+        return when (str(obj, "type")) {
+            "result" -> str(obj, "result")
+            "text" -> str(obj["part"] as? JsonObject, "text") ?: str(obj, "text")
+            else -> null
+        }?.takeIf { it.isNotBlank() }
     }
 
     private fun isTestAnswer(line: String): Boolean {
@@ -473,8 +487,9 @@ class RunnerLinkService(
     private fun isHarnessNoise(t: String): Boolean {
         if (t.contains("server listening", ignoreCase = true)) return true
         if (!t.startsWith("{")) return false
-        val type = runCatching { ((F.json.parseToJsonElement(t) as? JsonObject)?.get("type") as? JsonPrimitive)?.content }.getOrNull()
-        return type != null && type != "result"
+        val obj = runCatching { F.json.parseToJsonElement(t) as? JsonObject }.getOrNull() ?: return false
+        val type = (obj["type"] as? JsonPrimitive)?.content
+        return type != null && replyTextOf(obj) == null
     }
 
     /**
