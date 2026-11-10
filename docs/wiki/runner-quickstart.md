@@ -204,3 +204,26 @@ orchestrator and the runner both listed the session; `infantry logs <full sessio
 `echo:` lines read from the runner; `infantry_prompt` on the orchestrator reached the runner (its transcript has `[turn from owner] ...`) and a
 second `logs` printed the `echo: <prompt>` reply. `logs` now sends one `replay_request` up front (before, it was a live tail only and printed
 nothing for a remote session). Notes: the full session id is needed (a prefix gets "no replay history"), the reply is read on demand, not streamed.
+
+## Docker Desktop on Windows (RUNNER-LINK-HOST-1)
+
+A container's port is reached from the PC on the port Docker **published**, not on 8790, and `host.docker.internal` only
+resolves inside a container. Publish a port, then tell the runner which host and port the PC should use:
+
+```
+docker run -d --name efd-runner2 -e INFANTRY_MODE=runner \
+  -e INFANTRY_RUNNER_NAME=efd2 -e INFANTRY_RUNNER_HOST=localhost -e INFANTRY_RUNNER_PUBLIC_PORT=18921 \
+  -e INFANTRY_RUNNER_ALLOW_PROJECTS='<project-id>' -e INFANTRY_RUNNER_ALLOW_HARNESSES=claude \
+  -p 18921:8790 -v infantry-data:/data infantry-runner
+docker logs efd-runner2            # the link must read host=localhost&port=18921
+docker ps                          # PORTS: 0.0.0.0:18921->8790/tcp
+```
+
+`INFANTRY_RUNNER_PUBLIC_PORT` is the `--port` of `infantry runner pair|up` (a new pairing:
+`docker exec -it efd-runner2 infantry runner pair --name efd2 --host localhost --port 18921`). Paste the link into Settings >
+Runners > Add runner (or `infantry runner add '<link>'`). The Name field takes 1-32 of a-z, 0-9 and `-` (e.g. `docker-runner`;
+no spaces or capitals) and shows the rule as you type.
+
+If the add says "no host of the link answered", it lists what to try: the host:port pair of the link, `docker ps` for the
+published port, and `localhost` + that port. The container log warns when `INFANTRY_RUNNER_HOST` is `host.docker.internal`, or
+when a host is set without `INFANTRY_RUNNER_PUBLIC_PORT`.

@@ -88,7 +88,15 @@ runner_pair_when_ready() {
   if [ -z "${INFANTRY_RUNNER_HOST:-}" ]; then
     echo "[entrypoint] WARNING: INFANTRY_RUNNER_HOST is not set: the link's hosts are container addresses. Set it to this server's public or tailnet address."
   fi
+  case "${INFANTRY_RUNNER_HOST:-}" in
+    host.docker.internal)
+      echo "[entrypoint] WARNING: INFANTRY_RUNNER_HOST=host.docker.internal resolves inside a container only; the PC that pastes this link cannot reach it. Use localhost (same PC) or the server's public/tailnet address." ;;
+  esac
+  if [ -n "${INFANTRY_RUNNER_HOST:-}" ] && [ -z "${INFANTRY_RUNNER_PUBLIC_PORT:-}" ]; then
+    echo "[entrypoint] NOTE: the link advertises port 8790 (the container's). If you published another port (-p 18921:8790), set INFANTRY_RUNNER_PUBLIC_PORT=18921 or the link will not connect."
+  fi
   set -- runner pair --name "$_name"
+  [ -z "${INFANTRY_RUNNER_PUBLIC_PORT:-}" ] || set -- "$@" --port "$INFANTRY_RUNNER_PUBLIC_PORT"
   [ -z "${INFANTRY_RUNNER_HOST:-}" ] || set -- "$@" --host "$INFANTRY_RUNNER_HOST"
   [ -z "${INFANTRY_RUNNER_ALLOW_PROJECTS:-}" ] || set -- "$@" --allow-projects "$INFANTRY_RUNNER_ALLOW_PROJECTS"
   [ -z "${INFANTRY_RUNNER_ALLOW_HARNESSES:-}" ] || set -- "$@" --allow-harnesses "$INFANTRY_RUNNER_ALLOW_HARNESSES"

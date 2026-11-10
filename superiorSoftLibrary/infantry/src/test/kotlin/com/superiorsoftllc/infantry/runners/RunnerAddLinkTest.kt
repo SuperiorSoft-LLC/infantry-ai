@@ -140,10 +140,12 @@ class RunnerAddLinkTest {
     fun `every host failing lists each one with its reason`() {
         val fake = FakeLink { url -> if (url.contains("10.255.255.1")) Reached.Unreachable(timedOut = true) else Reached.WrongCertificate }
         val e = assertFailsWith<LinkFailure> { RunnerPeers(store, fake).addLink(link, "t1", "orch", allowPlain = false) }
-        assertEquals(
-            "no host of the link answered: 10.255.255.1:8790 unreachable (timed out after 5s); 127.0.0.1:8790 certificate does not match the link",
+        assertTrue(
+            e.message.orEmpty().startsWith("no host of the link answered: 10.255.255.1:8790 unreachable (timed out after 5s); 127.0.0.1:8790 certificate does not match the link. Try:"),
             e.message,
         )
+        // RUNNER-LINK-HOST-1: the hint names the link's pairs and the Docker published-port route.
+        assertTrue(e.message.orEmpty().contains("docker ps") && e.message.orEmpty().contains("10.255.255.1:8790"), e.message)
         assertNull(store.runner("t1"))
     }
 
