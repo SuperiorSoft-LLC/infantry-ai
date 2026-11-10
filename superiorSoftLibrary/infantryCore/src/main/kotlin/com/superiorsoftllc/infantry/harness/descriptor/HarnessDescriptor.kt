@@ -69,6 +69,8 @@ class HarnessDescriptor internal constructor(
     val models: DescriptorModels? = null,
     /** BUG-PERM-3: the argv each Tool approval mode adds; null = the descriptor declares none (see the class KDoc). */
     internal val toolApproval: Map<ToolApproval, List<String>>? = null,
+    /** FIRST-RUN-KEYS-1: `"credential": {"env": "X_API_KEY", "label"?, "help"?}`; null = the CLI needs no key from us. */
+    val credential: com.superiorsoftllc.infantry.harness.credential.HarnessCredential? = null,
 ) {
     /** True when [mode] adds nothing because the descriptor does not map it: the run keeps today's behaviour. */
     fun unmappedToolApproval(mode: ToolApproval): Boolean = toolApproval?.containsKey(mode.withoutPrompt()) != true
@@ -132,7 +134,16 @@ class HarnessDescriptor internal constructor(
                 commands = parseCommands(obj["commands"]),
                 models = DescriptorModels.parse(obj["models"]),
                 toolApproval = parseToolApproval(obj["toolApproval"]),
+                credential = parseCredential(id, obj["credential"]),
             )
+        }
+
+        private fun parseCredential(id: String, element: JsonElement?): com.superiorsoftllc.infantry.harness.credential.HarnessCredential? {
+            if (element == null) return null
+            val o = element as? JsonObject ?: throw InvalidDescriptor("field 'credential' is not an object")
+            val env = o.text("env") ?: throw InvalidDescriptor("'credential' needs an 'env' variable name")
+            com.superiorsoftllc.infantry.harness.credential.HarnessCredential.envRefusal(env)?.let { throw InvalidDescriptor(it) }
+            return com.superiorsoftllc.infantry.harness.credential.HarnessCredential(id, env, o.text("label")?.takeIf { it.isNotBlank() } ?: id, o.text("help").orEmpty())
         }
 
         private fun parseArgs(element: JsonElement?): List<List<String>> {

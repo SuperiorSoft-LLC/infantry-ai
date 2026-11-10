@@ -99,6 +99,8 @@ class SessionManager(
      * delivered prompt carries can authenticate without the literal token being written into the prompt.
      */
     private val childEnv: Map<String, String> = emptyMap(),
+    /** FIRST-RUN-KEYS-1: the API key a harness declares, as `{ENV: key}`, read at every launch so a restarted session gets a key set meanwhile. */
+    private val credentialEnv: (providerId: String) -> Map<String, String> = { emptyMap() },
     /**
      * Contract 1.3.0: the providers a spawn may name besides [provider] (`INFANTRY_PROVIDERS`). Ids must be
      * distinct from each other and from the default's.
@@ -1617,7 +1619,7 @@ class SessionManager(
         // run, so a role-only spawn (the New agent modal) knows its role from the env too.
         val limitsEnv = runCatching { buildEnv(com.superiorsoftllc.infantry.daemon.api.processes.LaunchInfo(session.id, session.role, session.projectId)) }.onFailure { System.err.println("[infantry] build limits env failed: ${it.message}") }.getOrDefault(emptyMap())
         runCatching { GradleProgressInit.install() }
-        val runEnv = PathEnv.withBinOnPath(childEnv + limitsEnv + buildMap {
+        val runEnv = PathEnv.withBinOnPath(childEnv + limitsEnv + runCatching { credentialEnv(session.provider) }.getOrDefault(emptyMap()) + buildMap {
             put(GradleProgressInit.ENV, "1")
             put(AccessPolicy.SESSION_ID_ENV, session.id)
             session.projectId?.let { put(AccessPolicy.PROJECT_ID_ENV, it) }

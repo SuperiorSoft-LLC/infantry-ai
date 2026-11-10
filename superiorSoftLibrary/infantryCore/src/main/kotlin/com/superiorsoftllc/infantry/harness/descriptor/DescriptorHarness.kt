@@ -35,6 +35,9 @@ class DescriptorHarness(
 ) {
     override val id: String = descriptor.id
 
+    /** FIRST-RUN-KEYS-1: the API key this harness declares, or null. */
+    val credential: com.superiorsoftllc.infantry.harness.credential.HarnessCredential? get() = descriptor.credential
+
     // Written out on purpose, as in every plugin: this inlines the const when THIS code is compiled.
     override val contractVersion: String = HARNESS_CONTRACT_VERSION
 

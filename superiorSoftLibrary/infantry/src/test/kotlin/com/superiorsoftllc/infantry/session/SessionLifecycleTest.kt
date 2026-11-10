@@ -305,6 +305,25 @@ class SessionLifecycleTest {
     }
 
     /** Ticket 66153313: every run carries the build limits env, read per run (a settings change applies to the next run). */
+    /** FIRST-RUN-KEYS-1: a harness's declared API key reaches its process in the declared env var, read at EVERY launch. */
+    @Test
+    fun a_launch_carries_the_harness_credential_read_at_each_launch() {
+        val (store, _) = tempStore()
+        val runner = FakeRunner()
+        var key: String? = null
+        val manager = SessionManager(
+            FakeProvider(), runner, store, killGraceMs = 50,
+            credentialEnv = { id -> if (id == FakeProvider().id && key != null) mapOf("FAKE_API_KEY" to key!!) else emptyMap() },
+        )
+
+        manager.startNew("first")
+        assertNull(runner.specs.last().env["FAKE_API_KEY"], "no key set: nothing is injected")
+
+        key = "sk-test-1234567890abcdef"
+        manager.startNew("second")
+        assertEquals("sk-test-1234567890abcdef", runner.specs.last().env["FAKE_API_KEY"])
+    }
+
     @Test
     fun a_spawned_child_receives_the_build_limits_env_read_per_run() {
         val (store, _) = tempStore()

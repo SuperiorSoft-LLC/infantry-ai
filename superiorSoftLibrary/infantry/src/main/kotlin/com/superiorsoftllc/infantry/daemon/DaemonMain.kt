@@ -874,12 +874,15 @@ class InfantryDaemon(
             })
             // PROC-LEAK-1: one OS container per session (a Windows Job Object), shared by the manager (assigns) and api.processes (reads).
             val sessionContainers = com.superiorsoftllc.infantry.runner.SessionContainers.forHost(instanceId)
+            // FIRST-RUN-KEYS-1: the harness API keys; set below, once the keystore exists, read at every launch.
+            val harnessCredentialsRef = java.util.concurrent.atomic.AtomicReference<com.superiorsoftllc.infantry.harness.credential.HarnessCredentials?>(null)
             val manager = SessionManager(
                 provider,
                 sandboxed(runner),
                 sessionStore,
                 worktrees = worktrees,
                 childEnv = childEnv,
+                credentialEnv = { id -> harnessCredentialsRef.get()?.env(id).orEmpty() },
                 bindingPolicy = com.superiorsoftllc.infantry.daemon.plugins.TicketBindingPolicy(),
                 additionalProviders = additionalProviders,
                 cliRunner = sandboxed(cliRunner),
@@ -962,6 +965,12 @@ class InfantryDaemon(
             // IN-APP BUILD T3: one saved command at a time; every frame it produces goes to every client.
             // SECRETS-1: the daemon-owned keystore, in the state dir.
             val keystore = Keystore(daemonStateDir)
+            val harnessCredentials = com.superiorsoftllc.infantry.harness.credential.HarnessCredentials(keystore) {
+                harnessModulesRef.get()?.credentials().orEmpty() + harnesses?.harnessIds().orEmpty().mapNotNull {
+                    (harnesses?.resolve(it) as? com.superiorsoftllc.infantry.harness.descriptor.DescriptorHarness)?.credential
+                }
+            }
+            harnessCredentialsRef.set(harnessCredentials)
             // HARNESS-GAP G18: every known secret value is masked in all session output (chat rows, transcript, raw stream, a terminal's screen).
             manager.outputMask = com.superiorsoftllc.infantry.keystore.SecretMask(keystore::allValues)
             // POLICY-1: "restricted" follows the ACTIVE preset (a Settings switch included), read per call. A seated preset is
@@ -1209,6 +1218,7 @@ class InfantryDaemon(
             // SECRETS-1 / SECRETS-2: the keystore's frames; a restricted policy refuses every change.
             val keystoreFrames = KeystoreHandler(
                 keystore = keystore,
+                extraKnown = { harnessCredentials.declared().map { com.superiorsoftllc.infantry.keystore.KnownSecret(it.secretName, "${it.label} API key", help = it.help) } },
                 restricted = locked,
                 push = { envelope -> for (client in clients) client.trySend(envelope) },
             )

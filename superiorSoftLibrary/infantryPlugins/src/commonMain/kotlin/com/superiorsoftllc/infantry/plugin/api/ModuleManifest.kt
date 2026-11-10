@@ -191,6 +191,19 @@ data class HarnessDeclaration(
     val settings: List<String> = emptyList(),
     /** Host hooks the harness uses: watch, mcp, ask (calls), sandbox, stats, usage (contributions, later). */
     val hooks: List<String> = emptyList(),
+    /** FIRST-RUN-KEYS-1: the API key the harness needs, delivered to its process in an environment variable; null = none. */
+    val credential: HarnessCredentialDeclaration? = null,
+)
+
+/**
+ * FIRST-RUN-KEYS-1: `harness.credential`. [env] is the variable the harness process reads its key from; the key itself lives in
+ * the keystore (secret `harness.<id>.key`), never in the manifest or config. [label] names it in the UI, [help] says where to get it.
+ */
+@Serializable
+data class HarnessCredentialDeclaration(
+    val env: String,
+    val label: String? = null,
+    val help: String? = null,
 )
 
 /**
