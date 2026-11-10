@@ -18,10 +18,12 @@ import javax.swing.SwingUtilities;
  *                                 click the node (offset from its centre) to focus a field, then type TEXT. A text
  *                                 field is not in the accessibility tree: use a label shown in or next to it, with
  *                                 @dx,dy to reach the field.
+ *   wheel "N[@x,y]"               wheel N notches (positive = down) at x,y (default: the window centre); for a scroll area
+ *                                 inside a dialog, where scrollto cannot tell a node under a clip from a visible one
  * Any other command goes to windrive10 unchanged.
  */
 public class WinDrive11 {
-    static final Set<String> MINE = Set.of("drag", "scrollto", "typein");
+    static final Set<String> MINE = Set.of("drag", "scrollto", "typein", "wheel");
     static int lastRot = 1;
 
     public static void agentmain(String a) { run(a); }
@@ -61,6 +63,14 @@ public class WinDrive11 {
                 if (to == null) return "NOTFOUND to: " + arg.substring(sep + 2);
                 drag(from, to);
                 return "OK drag " + from.x + "," + from.y + " -> " + to.x + "," + to.y;
+            }
+            case "wheel": {
+                Rectangle w = WinDrive10.onEdt(() -> WinDrive10.window().getBounds());
+                Point at = new Point(w.x + w.width / 2, w.y + w.height / 2);
+                String[] q = arg.split("@");
+                if (q.length > 1) { String[] c = q[1].split(","); at = new Point(Integer.parseInt(c[0].trim()), Integer.parseInt(c[1].trim())); }
+                wheel(at, Integer.parseInt(q[0].trim()));
+                return "OK wheel " + q[0].trim() + " at " + at.x + "," + at.y;
             }
             case "scrollto":
                 return scrollTo(arg, idx);

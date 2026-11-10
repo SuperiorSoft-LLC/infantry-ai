@@ -12,12 +12,17 @@ step() { local s="$1" l="$2"; shift 2; if "$@" >/dev/null 2>&1; then echo "PASS 
 has() { wd dump | grep -qiF -- "$1"; }
 finish() { shot "$1-end" >/dev/null; for r in "${RESULTS[@]}"; do [ "$r" = FAIL ] && exit 1; done; exit 0; }
 # reset: close any open overlay/modal (Escape) so a scenario starts from the main window
-reset() { wd key 27 >/dev/null; sleep 1; wd key 27 >/dev/null; sleep 1; }
+reset() { has "OpenCode API key" && { wd click Skip >/dev/null; sleep 1; }   # first-run key prompt on a fresh state
+  wd key 27 >/dev/null; sleep 1; wd key 27 >/dev/null; sleep 1
+  has "{Search settings}" && { wd clickxy "$(at "Done")" >/dev/null; sleep 1; }   # Escape does not close Configuration
+  return 0; }
 # at <substring>: "x,y" centre of the first dump line containing it (handles any window size/position)
-at() { wd dump | grep -m1 -F -- "$1" | sed -E 's/.*@([0-9]+),([0-9]+) ([0-9]+)x([0-9]+).*/\1 \2 \3 \4/' | awk '{printf "%d,%d", $1+$3/2, $2+$4/2}'; }
+at() { wd dump | grep -F -- "$1" | grep -E '@-?[0-9]+,-?[0-9]+ [0-9]+x[0-9]+' | head -1 | sed -E 's/.*@(-?[0-9]+),(-?[0-9]+) ([0-9]+)x([0-9]+).*/\1 \2 \3 \4/' | awk '{printf "%d,%d", $1+$3/2, $2+$4/2}'; }   # first dump line WITH bounds; prints nothing when absent
 # drag "<from>" "<to>": press on a node (or "x,y"), move, release on another. scrollto "<label>": wheel until on screen,
 # prints "x,y" of its centre. typein "<label>[@dx,dy]" "<text>": click it to focus a field, then type.
 drag() { wd drag "$1=>$2" | grep -q '^OK'; }
 scrollto() { wd scrollto "$1" | sed -n 's/^OK //p' | grep .; }
 typein() { wd typein "$1=>$2" | grep -q '^OK'; }
 export PID
+# wheel <notches>[@x,y]: wheel the window (positive = down); use inside a dialog's own scroll area
+wheel() { wd wheel "$1${2:+@$2}" | grep -q '^OK'; }
