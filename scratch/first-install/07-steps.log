@@ -1,0 +1,61 @@
+$ infantry plugin search
+infantry-community:Infantry_Mascot  1.0.3  community  [avatar,agent,appearance]  Mascot avatars: a selectable avatar style that draws each agent as a small living character whose pose follows the session state. The role 
+infantry-community:Infantry_ReadAloud  1.2.3  community  [voice,speech,chat]  Read chat messages aloud with the host's local voice.  repo SuperiorSoft-LLC/infantry-plugins
+infantry-community:Infantry_VoiceInput  1.0.0  community  [voice,speech,chat]  Dictate into the chat composer with the microphone.  repo SuperiorSoft-LLC/infantry-plugins
+exit=0
+$ infantry plugin --help
+error: unknown plugin command '--help'
+usage: infantry plugin <command>
+  list                          installed and bundled plugins (class, tier, version, enabled)
+  list import <file|url> [--id ID]   import a plugin list (JSON of plugin repos) as a community source
+  list remove <id>              remove an imported list (the same as: sources remove <id>)
+  search [text] [--tag t]       plugins in the configured catalogs
+  show <ref>                    check a plugin and print its class, signer, licence and requested grants (installs nothing)
+  install <ref> [--grant g]... [--grant-all-requested] [--no-grants] [--disabled]
+  enable <id> | disable <id>
+  grants <id> [--grant g]... [--grant-all-requested]
+  updates                       newer versions of what the manager installed
+  update <id>|--all [--grant g]... [--grant-all-requested] [--from <ref>]
+  rollback <id> | remove <id> [--purge] | status <id>
+  sources list | add <id> (--url U | --dir D) [--class official|community|custom] | remove <id> | refresh [id]
+exit=2
+$ infantry project --help
+Infantry AI CLI - control the Infantry AI daemon (`infantry`; `agenthq` is a deprecated alias)
+
+Usage: infantry [connection options] <command> [args...]
+
+Tickets:
+  tickets             List tickets from the daemon
+  tickets --project <id>         Only that project's tickets
+  board [--project <id>]         One-call summary: tickets by column, each with its worker, live state, branch@commit
+  tickets --status <column>      Only that column: backlog, todo, in_progress, pending, done
+  tickets --epic <id|prefix> --project <id>   Only that epic's tickets, in board order
+  ticket show <id|prefix>        One ticket in full: title, status, agent, links, description
+  ticket create --title <t> [--desc <d> | --desc-file <path> | --desc -] [--project <id>] [--epic <id|prefix>] [--role <id>] [--provider <id>] [--model <id>] [--weight 1-5] [--context-limit 200k|off] [--effort low|medium
+  ticket update <id|prefix> [--title <t>] [--desc <d> | --desc-file <path> | --desc -] [--epic <id|prefix>] [--role <id>] [--provider <id>] [--model <id>] [--weight 1-5|0] [--context-limit 200k|off] [--effort low|medium|
+                      --weight: how likely the ticket is to come back wrong, not its size (ROUTING-1 rubric):
+exit=0
+$ infantry project list
+error: project needs a subcommand: infantry project create "<name>" [<directory>] | find [<query>] | base <projectId> [<branch>|--clear] | branches <projectId> | rename <projectId> "<name>" | config get <projectId> | con
+exit=2
+$ infantry harness-install opencode
+opencode: failed - Node.js / npm was not found, so the harness CLIs cannot be installed here. Install Node.js 20 or newer (https://nodejs.org, or `winget install OpenJS.NodeJS.LTS`, `brew install node`, `apt install node
+id | state | version | where | package
+claude | missing | - | - | @anthropic-ai/claude-code
+opencode | missing | - | - | opencode-ai
+pi | missing | - | - | @earendil-works/pi-coding-agent
+install dir: /home/user/.infantry/harness-tools
+npm: NOT FOUND
+Node.js / npm was not found, so the harness CLIs cannot be installed here. Install Node.js 20 or newer (https://nodejs.org, or `winget install OpenJS.NodeJS.LTS`, `brew install node`, `apt install nodejs npm`), then run 
+Sign-in is separate: each CLI keeps its own login (run `claude` once, `opencode auth login`, or set the provider's API-key environment variable). Infantry AI stores no key.
+exit=1
+$ infantry ticket create --title first --desc hello
+created 09126a31
+exit=0
+$ infantry tickets
+ID | STATUS | TITLE | AGENT
+09126a31 | todo | first | -
+exit=0
+$ infantry ticket start first
+error: no ticket first
+exit=1

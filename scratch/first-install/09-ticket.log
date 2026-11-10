@@ -1,0 +1,59 @@
+$ infantry project base project-6e3a35e8 main
+base main
+exit=0
+$ infantry ticket create --title second --desc hello --project project-6e3a35e8 --provider opencode
+created 6f66ce7f
+exit=0
+$ infantry tickets --project project-6e3a35e8
+ID | STATUS | TITLE | AGENT
+6f66ce7f | todo | second | -
+exit=0
+$ infantry roles
+error: unknown command 'roles'
+hint: if the daemon documents this command, this CLI may be older than the daemon; use the launcher the daemon exports as INFANTRY_BIN
+Infantry AI CLI - control the Infantry AI daemon (`infantry`; `agenthq` is a deprecated alias)
+
+Usage: infantry [connection options] <command> [args...]
+
+Tickets:
+  tickets             List tickets from the daemon
+  tickets --project <id>         Only that project's tickets
+  board [--project <id>]         One-call summary: tickets by column, each with its worker, live state, branch@commit
+  tickets --status <column>      Only that column: backlog, todo, in_progress, pending, done
+  tickets --epic <id|prefix> --project <id>   Only that epic's tickets, in board order
+  ticket show <id|prefix>        One ticket in full: title, status, agent, links, description
+  ticket create --title <t> [--desc <d> | --desc-file <path> | --desc -] [--project <id>] [--epic <id|prefix>] [--role <id>] [--provider <id>] [--model <id>] [--weight 1-5] [--context-limit 200k|off] [--effort low|medium|high|xhigh|max|off]
+exit=2
+$ infantry harnesses
+HARNESS | DEFAULT | MODELS
+claude | no | opus, sonnet, haiku, opus[1m], sonnet[1m], opusplan, claude-opus-5-5, claude-sonnet-5-5, claude-haiku-5-5, claude-fable-5-1 | unavailable: Claude Code not found. Tried 11 location(s) and PATH (claude). Install it, or set its l
+Tried:
+  /home/user/.infantry/harness-tools/bin/claude
+  /home/user/.local/bin/claude
+  /home/user/.claude/local/claude
+  /usr/local/bin/claude
+  /usr/bin/claude
+  /usr/local/sbin/claude
+  /usr/local/bin/claude
+  /usr/sbin/claude
+  /usr/bin/claude
+  /sbin/claude
+  /bin/claude | note: Claude Code not found. Tried 11 location(s) and PATH (claude). Install it, or set its location in Settings > CLI locations.; showing the list from 14m ago; refreshing now; Claude Code not found. Tried 11 location(s) an
+exit=0
+$ ticket start 6f66ce7f
+error: ticket ticket-6f66ce7f did not start: ticket has no role; set one with `infantry ticket update <id> --role <role id>` or infantry_ticket_update's role
+exit=1
+updated 6f66ce7f (saved: role fullstack)
+started ticket-6f66ce7f -> in_progress
+  session:  8a2d3b54-c267-45eb-9308-cf248d545218
+  role:     fullstack (agent agent-9d25133e)
+  harness:  opencode
+  model:    (the harness's default)
+  branch:   ticket/6f66ce7f-second
+  worktree: /home/user/repo/.worktrees/ticket-6f66ce7f-second
+  note:     cut from main b9a993bb (project base); context limit 500k: unsupported (recorded, not applied by opencode)
+todo (1)
+  09126a31 | first
+in_progress (1)
+  6f66ce7f | second | fullstack 8a2d3b54 busy | doing 'state busy' | out 17s ago | progress · no estimate yet · last output 21s ago - working (0 tool calls) (updated 21s ago) | ticket/6f66ce7f-second@b9a993b
+error: agent_roster refused: projectId is blank

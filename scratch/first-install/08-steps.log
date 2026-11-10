@@ -1,0 +1,36 @@
+$ infantry plugin install infantry-community:Infantry_Mascot
+Infantry_Mascot 1.0.3 installed as community (community tier), enabled (takes effect at the next daemon start)
+exit=0
+$ infantry plugin list
+Infantry_Mascot  1.0.3  community  community  enabled  infantry-community
+exit=0
+$ infantry project create qa /home/user/repo
+created project project-6e3a35e8 | qa
+next: infantry project base project-6e3a35e8 <branch>   (the branch its tickets are cut from)
+exit=0
+$ infantry harness-install opencode
+[opencode] npm install opencode-ai@latest -> /home/user/.infantry/harness-tools
+[opencode] 
+[opencode] added 5 packages in 3m
+opencode: installed 1.19.5
+id | state | version | where | package
+claude | missing | - | - | @anthropic-ai/claude-code
+opencode | installed | 1.19.5 | /home/user/.infantry/harness-tools/bin/opencode (app-managed) | opencode-ai
+pi | missing | - | - | @earendil-works/pi-coding-agent
+install dir: /home/user/.infantry/harness-tools
+npm: /usr/bin/npm
+Sign-in is separate: each CLI keeps its own login (run `claude` once, `opencode auth login`, or set the provider's API-key environment variable). Infantry AI stores no key.
+exit=0
+$ infantry harness-status
+id | state | version | where | package
+claude | missing | - | - | @anthropic-ai/claude-code
+opencode | installed | 1.19.5 | /home/user/.infantry/harness-tools/bin/opencode (app-managed) | opencode-ai
+pi | missing | - | - | @earendil-works/pi-coding-agent
+install dir: /home/user/.infantry/harness-tools
+npm: /usr/bin/npm
+Sign-in is separate: each CLI keeps its own login (run `claude` once, `opencode auth login`, or set the provider's API-key environment variable). Infantry AI stores no key.
+exit=0
+$ infantry tickets
+ID | STATUS | TITLE | AGENT
+09126a31 | todo | first | -
+exit=0

@@ -1,0 +1,15 @@
+
+#9 exporting to image
+#9 exporting layers
+#9 exporting layers 8.0s done
+#9 exporting manifest sha256:572aeeef6a691190fa8e720162445fb7baca6ea9bc7b2f8bf1675c00f5430a9f 0.0s done
+#9 exporting config sha256:19fda82e17a643519b93a6712cd9fd7983a325091e0b142369ef7faf067ba4e1 0.0s done
+#9 exporting attestation manifest sha256:3dd15cdd5bb22bd0c90ec490fcc7bc62a1bbacc72ab14752d1934025022ccb25 0.0s done
+#9 exporting manifest list sha256:258d97d66d2697727145ef15eb4bc985e891408d680470e9a3606b6feb25b977
+#9 exporting manifest list sha256:258d97d66d2697727145ef15eb4bc985e891408d680470e9a3606b6feb25b977 0.0s done
+#9 naming to docker.io/library/infantry-qa-first-install:latest done
+#9 unpacking to docker.io/library/infantry-qa-first-install:latest
+#9 unpacking to docker.io/library/infantry-qa-first-install:latest 2.4s done
+#9 DONE 10.6s
+
+View build details: docker-desktop://dashboard/build/desktop-linux/desktop-linux/mmo7s64gz1c6u692dvgp7msp7

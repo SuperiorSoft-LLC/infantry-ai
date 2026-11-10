@@ -1,0 +1,24 @@
+$ infantry --help
+Adopted 1.3.2-nightly.20261110.53 into /home/user/versions; start it with /home/user/infantry
+exit=2
+$ infantry board
+Adopted 1.3.2-nightly.20261110.53 into /home/user/versions; start it with /home/user/infantry
+exit=2
+$ infantry projects
+Adopted 1.3.2-nightly.20261110.53 into /home/user/versions; start it with /home/user/infantry
+exit=2
+$ infantry plugin list
+Adopted 1.3.2-nightly.20261110.53 into /home/user/versions; start it with /home/user/infantry
+exit=2
+$ infantry plugin search notes
+Adopted 1.3.2-nightly.20261110.53 into /home/user/versions; start it with /home/user/infantry
+exit=2
+$ infantry harness-status
+Adopted 1.3.2-nightly.20261110.53 into /home/user/versions; start it with /home/user/infantry
+exit=2
+$ infantry health
+Adopted 1.3.2-nightly.20261110.53 into /home/user/versions; start it with /home/user/infantry
+exit=2
+$ infantry whoami
+Adopted 1.3.2-nightly.20261110.53 into /home/user/versions; start it with /home/user/infantry
+exit=2

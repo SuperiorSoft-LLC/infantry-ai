@@ -1,0 +1,85 @@
+$ infantry --help
+Infantry AI CLI - control the Infantry AI daemon (`infantry`; `agenthq` is a deprecated alias)
+
+Usage: infantry [connection options] <command> [args...]
+
+Tickets:
+  tickets             List tickets from the daemon
+  tickets --project <id>         Only that project's tickets
+  board [--project <id>]         One-call summary: tickets by column, each with its worker, live state, branch@commit
+  tickets --status <column>      Only that column: backlog, todo, in_progress, pending, done
+  tickets --epic <id|prefix> --project <id>   Only that epic's tickets, in board order
+  ticket show <id|prefix>        One ticket in full: title, status, agent, links, description
+  ticket create --title <t> [--desc <d> | --desc-file <path> | --desc -] [--project <id>] [--epic <id|prefix>] [--role <id>] [--provider <id>] [--model <id>] [--weight 1-5] [--context-limit 200k|off] 
+  ticket update <id|prefix> [--title <t>] [--desc <d> | --desc-file <path> | --desc -] [--epic <id|prefix>] [--role <id>] [--provider <id>] [--model <id>] [--weight 1-5|0] [--context-limit 200k|off] [
+                      --weight: how likely the ticket is to come back wrong, not its size (ROUTING-1 rubric):
+            4-5 touches the wire / contract, the daemon, auth or project scope, concurrency or SSR timing,
+                an Android build, or more than one module
+            3   gate fixes and bisects; UI that depends on daemon behaviour
+            1-2 copy changes, icons, renames, docs: mechanical, one owner file
+          An unweighted ticket is flagged; set a weight before it starts (project routing rules match on it).
+          --image (repeatable) attaches a png/jpeg/gif/webp file (max 10 MB), uploaded to the
+                      project's .infantry/uploads/ticket/; on update it is ADDED to the stored images.
+                      --remove-image (repeatable) drops an attached image, named by the path `ticket show`
+exit=0
+$ infantry board
+board is empty: no tickets
+exit=0
+$ infantry projects
+error: unknown command 'projects'
+hint: if the daemon documents this command, this CLI may be older than the daemon; use the launcher the daemon exports as INFANTRY_BIN
+Infantry AI CLI - control the Infantry AI daemon (`infantry`; `agenthq` is a deprecated alias)
+
+Usage: infantry [connection options] <command> [args...]
+
+Tickets:
+  tickets             List tickets from the daemon
+  tickets --project <id>         Only that project's tickets
+  board [--project <id>]         One-call summary: tickets by column, each with its worker, live state, branch@commit
+  tickets --status <column>      Only that column: backlog, todo, in_progress, pending, done
+  tickets --epic <id|prefix> --project <id>   Only that epic's tickets, in board order
+  ticket show <id|prefix>        One ticket in full: title, status, agent, links, description
+  ticket create --title <t> [--desc <d> | --desc-file <path> | --desc -] [--project <id>] [--epic <id|prefix>] [--role <id>] [--provider <id>] [--model <id>] [--weight 1-5] [--context-limit 200k|off] 
+  ticket update <id|prefix> [--title <t>] [--desc <d> | --desc-file <path> | --desc -] [--epic <id|prefix>] [--role <id>] [--provider <id>] [--model <id>] [--weight 1-5|0] [--context-limit 200k|off] [
+                      --weight: how likely the ticket is to come back wrong, not its size (ROUTING-1 rubric):
+            4-5 touches the wire / contract, the daemon, auth or project scope, concurrency or SSR timing,
+                an Android build, or more than one module
+            3   gate fixes and bisects; UI that depends on daemon behaviour
+            1-2 copy changes, icons, renames, docs: mechanical, one owner file
+          An unweighted ticket is flagged; set a weight before it starts (project routing rules match on it).
+          --image (repeatable) attaches a png/jpeg/gif/webp file (max 10 MB), uploaded to the
+exit=2
+$ infantry plugin list
+no plugins
+exit=0
+$ infantry plugin search notes
+nothing found (sources: infantry-official, infantry-community)
+exit=0
+$ infantry harness-status
+id | state | version | where | package
+claude | missing | - | - | @anthropic-ai/claude-code
+opencode | missing | - | - | opencode-ai
+pi | missing | - | - | @earendil-works/pi-coding-agent
+install dir: /home/user/.infantry/harness-tools
+npm: NOT FOUND
+Node.js / npm was not found, so the harness CLIs cannot be installed here. Install Node.js 20 or newer (https://nodejs.org, or `winget install OpenJS.NodeJS.LTS`, `brew install node`, `apt install nod
+Sign-in is separate: each CLI keeps its own login (run `claude` once, `opencode auth login`, or set the provider's API-key environment variable). Infantry AI stores no key.
+exit=0
+$ infantry health
+daemon: UP (live)
+  pid 8, port 8787, build 1.3.2-nightly.20261110.53+20261110.0127.2d9b0ba
+  uptime 1m
+plugins: 21 loaded, 0 not
+mcp bridges: 0 connected, 0 dropped
+free: memory 487 MB, disk 922565 MB
+environment:
+  os Linux 6.6.114.1-microsoft-standard-WSL2 amd64; jdk 21.0.13
+  shells: bash/zsh (POSIX)
+  project -; worktree -; branch -
+  OWNER ports (off limits): 8787, 8788, 8797, 8798; free for test daemons: 18900-18999
+  harnesses: none
+  state dir: /home/user/.infantry
+  CLI: `infantry` is NOT on /home/user/.profile. Add it: infantry install-cli
+recent restarts / disconnects:
+  2026-11-10T02:41:08.488Z daemon_start pid 8 port 8787 build 1.3.2-nightly.20261110.53+20261110.0127.2d9b0ba
+exit=0
