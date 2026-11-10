@@ -1,0 +1,2 @@
+$ curl -s localhost:8787/health
+{"status":"ok","provider":"none","runner":"piped","sessions":0,"worktrees":0,"pods":0,"runsInFlight":0,"contract":"1.152.0","providers":["none"],"attentionOpen":0,"providerStatus":{"none":"unknown"},"triggersTripped":0,"database":"ok","databaseDetail":null,"pluginStatus":{}}

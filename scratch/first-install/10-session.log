@@ -1,0 +1,5 @@
+todo (1)
+  09126a31 | first
+in_progress (1)
+  6f66ce7f | second | fullstack 8a2d3b54 busy | doing 'state busy' | out 54s ago | progress · no estimate yet · last output 58s ago - working (0 tool calls) (updated 58s ago) | ticket/6f66ce7f-second@b9a993b
+error: usage: infantry session rm|restart|mcp-reconnect <sessionId|prefix|--self> [--force] (rm --force kills a running session first)

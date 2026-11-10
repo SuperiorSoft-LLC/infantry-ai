@@ -1,0 +1,16 @@
+$ infantry --help
+exit=2
+$ infantry board
+exit=2
+$ infantry projects
+exit=2
+$ infantry plugin list
+exit=2
+$ infantry plugin search notes
+exit=2
+$ infantry harness-status
+exit=2
+$ infantry health
+exit=2
+$ infantry whoami
+exit=2
