@@ -714,7 +714,8 @@ class Controller(
 
     /** CLAUDE-AUTH-CHOICE-1: stores how harness [harnessId] signs in (`harness.<id>.authMode`: api-key or subscription-login). */
     suspend fun setHarnessAuthMode(harnessId: String, mode: String): CommandResult =
-        report(send(WireRequests.settingsSet("harness.$harnessId.authMode", JsonPrimitive(mode))))
+        // The choice is a setting, which pushes no secret_state: ask for the rows again so the card shows the new mode at once.
+        report(send(WireRequests.settingsSet("harness.$harnessId.authMode", JsonPrimitive(mode)))).also { if (it is CommandResult.Sent) secretFrame(WireRequests.secretStatus()) }
 
     /** CLAUDE-AUTH-CHOICE-2: asks the daemon to re-probe the sign-in of the harness whose key secret is [secretName]; it answers a secret_state. */
     suspend fun checkHarnessAuth(secretName: String): CommandResult = secretFrame(WireRequests.secretStatusCheck(secretName))
