@@ -899,7 +899,15 @@ class SecretActions(
     val delete: ((name: String) -> Unit)? = null,
     val move: ((name: String, from: String?, to: String?) -> Unit)? = null,
     val currentProject: SecretProjectRef? = null,
+    /** CLAUDE-AUTH-CHOICE-2: (harnessId, mode) stores how a harness signs in; null hides the Change button. */
+    val setAuthMode: ((harnessId: String, mode: String) -> Unit)? = null,
+    /** CLAUDE-AUTH-CHOICE-2: opens a chat session that runs /login for the harness; null hides Sign in. */
+    val login: ((harnessId: String) -> Unit)? = null,
 )
+
+const val SECRET_AUTH_MODE_TAG = "secret-auth-mode"
+const val SECRET_AUTH_CHANGE_TAG = "secret-auth-change"
+const val SECRET_AUTH_LOGIN_TAG = "secret-auth-login"
 
 /**
  * SECRETS-2b: the edits of ONE scope (the app's, or one project's), so the same cards serve Configuration > Secrets and a
@@ -997,6 +1005,17 @@ private fun BuiltInSecretCard(row: SecretRow, actions: SecretActions) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(row.label, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Palette.Text, modifier = Modifier.weight(1f))
             Text(secretStatusText(row), fontSize = 12.sp, color = if (row.set) Palette.Ok else Palette.Muted, modifier = Modifier.testTag("$SECRET_STATUS_TAG-${row.name}"))
+        }
+        val harnessId = row.name.removePrefix("harness.").removeSuffix(".key")
+        val setMode = actions.setAuthMode
+        if (row.authModes.size > 1 && setMode != null) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            val mode = row.authMode.ifBlank { row.authModes.first() }
+            Text("Sign-in: $mode", fontSize = 12.sp, color = Palette.Muted, modifier = Modifier.weight(1f).testTag("$SECRET_AUTH_MODE_TAG-${row.name}"))
+            SecretButton("Change", true, "$SECRET_AUTH_CHANGE_TAG-${row.name}") {
+                setMode(harnessId, row.authModes[(row.authModes.indexOf(mode) + 1) % row.authModes.size])
+            }
+            val login = actions.login
+            if (mode == "subscription-login" && login != null) SecretButton("Sign in", true, "$SECRET_AUTH_LOGIN_TAG-${row.name}") { login(harnessId) }
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             MaskedInput(draft, { draft = it }, if (row.set) "Replace with" else "Paste it here", Modifier.weight(1f).testTag("$SECRET_INPUT_TAG-${row.name}"))

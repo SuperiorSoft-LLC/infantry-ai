@@ -716,6 +716,18 @@ class Controller(
     suspend fun setHarnessAuthMode(harnessId: String, mode: String): CommandResult =
         report(send(WireRequests.settingsSet("harness.$harnessId.authMode", JsonPrimitive(mode))))
 
+    /**
+     * CLAUDE-AUTH-CHOICE-2: opens a fresh chat session and sends `/login` in it, so the harness's own sign-in runs where the
+     * owner sees it (the login URL shows in the chat). Never sets an API key; the session is selected when it appears.
+     */
+    suspend fun startHarnessLogin(harnessId: String): CommandResult {
+        _state.update { it.withPendingSpawn() }
+        val r = send(Envelope(Envelope.NEW, spawnOptionsData(_state.value.pickedModel, _state.value.pickedEffort, _state.value.spawnRole, _state.value.activeProjectId, null, null)))
+            .let { if (it is CommandResult.Sent) send(Envelope(Envelope.PROMPT, "/login")) else it }
+        if (r is CommandResult.Refused) _state.update { it.copy(pendingSpawn = null) }
+        return report(r)
+    }
+
     suspend fun setLimit(key: String, value: Long): CommandResult {
         if (!contractAtLeast(_state.value.connection.contract, LimitsSetting.SINCE_MAJOR, LimitsSetting.SINCE_MINOR)) {
             return report(CommandResult.Refused("this daemon has no limit settings (needs contract 1.133.0)"))
