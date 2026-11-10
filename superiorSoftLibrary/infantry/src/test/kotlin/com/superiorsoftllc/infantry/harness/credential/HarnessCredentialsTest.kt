@@ -171,4 +171,36 @@ class HarnessAuthProbeTest {
         assertEquals("", env["ANTHROPIC_API_KEY"])
         assert(env.values.none { it.contains("sk-ant") })
     }
+
+    @Test
+    fun `SECRET-REF-1 a key can reference a shared secret, resolved per launch, the value never leaves the keystore`() {
+        val key = "cc-SuperSecretKey1234567890WXYZ"
+        val decl = HarnessCredential("commandcode", "COMMANDCODE_API_KEY", "Command Code")
+        val d = Files.createTempDirectory("hc-ref").toFile()
+        val ks = Keystore(d, env = { null }, vault = null)
+        var ref: String? = "command_key"
+        val c = HarnessCredentials(ks, refSource = { ref }) { listOf(decl) }
+        assertEquals(emptyMap(), c.env("commandcode"))
+        assertEquals(listOf(decl), c.missing(), "unresolved reference = missing, naming the secret")
+        assertEquals("command_key", c.usesSecret("commandcode"))
+        ks.setField("command_key", "COMMAND_KEY", key)
+        assertEquals(mapOf("COMMANDCODE_API_KEY" to key), c.env("commandcode"))
+        ks.setField("command_key", "COMMAND_KEY", key + "2")
+        assertEquals(mapOf("COMMANDCODE_API_KEY" to key + "2"), c.env("commandcode"), "resolved per launch")
+        ks.setField("command_key", "OTHER", "x")
+        ks.setField("proj", "value", "p", "p1")
+        assertEquals(emptyMap(), c.env("commandcode"), "two fields and no value field is ambiguous")
+        ks.setField("command_key", "value", key, "p1")
+        assertEquals(key, c.env("commandcode", "p1")["COMMANDCODE_API_KEY"], "project scope wins")
+        val s = c.states().single()
+        assertFalse(s.tail.contains("SuperSecret"))
+        val h = KeystoreHandler(ks, extraKnown = { c.declared().map { k -> KnownSecret(k.secretName, k.label, usesSecret = { c.usesSecret(k.harnessId).orEmpty() }) } })
+        val wire = Json.encodeToString(com.superiorsoftllc.infantry.keystore.SecretState.serializer(), h.state())
+        assertTrue(wire.contains("command_key"))
+        assertFalse(wire.contains("SuperSecret"), "no value on the wire")
+        ks.clear("command_key"); ks.clear("command_key", "p1")
+        assertEquals(emptyMap(), c.env("commandcode"), "deleted secret = unresolved")
+        ref = "harness.other.key"
+        assertNull(c.usesSecret("commandcode"), "a built-in name is never referenced")
+    }
 }
