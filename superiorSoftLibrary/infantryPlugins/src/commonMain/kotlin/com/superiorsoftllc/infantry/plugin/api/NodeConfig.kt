@@ -65,6 +65,8 @@ data class ConfigFieldDeclaration(
     val order: Int = 0,
     /** CONFIG-4: where the user's override lives: `device` (this host's ui prefs) or `daemon`; null = today's `node_config`. */
     val scope: String? = null,
+    /** A `scope:"daemon"` field of an OFFICIAL module may serve a key the daemon already owns (the built-in validator still runs on write); any other module's claim on such a key is dropped. */
+    val surfacesBuiltIn: Boolean = false,
     /** CONFIG-9: the platforms this field exists on; null = all. */
     val platforms: List<String>? = null,
     /** CONFIG-9: a `classes` field's slots, each with the allow-list of style tokens the block's author owns. */

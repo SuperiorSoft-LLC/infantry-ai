@@ -23,7 +23,7 @@ class RunnersCardManifestTest {
     }
 
     @Test fun everyFieldButTheSwitchIsHiddenWhileRunnersAreDisabled() {
-        val fields = (manifest()["config"] as JsonArray).flatMap { it.jsonObject["fields"]!!.jsonArray }.map { it.jsonObject }
+        val fields = (manifest()["daemon"]!!.jsonObject["config"] as JsonArray).flatMap { it.jsonObject["fields"]!!.jsonArray }.map { it.jsonObject }
         val sw = fields.single { (it["key"] as JsonPrimitive).content == "runners.enabled" }
         assertTrue(sw["visibleWhen"] == null)
         val rest = fields - sw

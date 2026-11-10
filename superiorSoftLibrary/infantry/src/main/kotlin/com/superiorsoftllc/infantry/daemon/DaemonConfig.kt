@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicLong
  * `daemon.config` of every loaded module into [declarations] (only `scope:"daemon"` fields; a field from a community
  * module is marked `readOnly`), serves them as `config_schema` / `config_values`, and writes a value through
  * [SettingsService.set], so the declared field's validator is the one that checks it. A declared key is a flat
- * settings key; one the daemon already owns, or one an earlier module declared, is dropped.
+ * settings key; one the daemon already owns (unless an official module's field sets surfacesBuiltIn), or one an earlier module declared, is dropped.
  */
 class DaemonConfig(private val settings: SettingsService, private val store: InfantryStore) {
     private val revision = AtomicLong(System.currentTimeMillis())
@@ -52,7 +52,7 @@ class DaemonConfig(private val settings: SettingsService, private val store: Inf
                 val kept = decl.fields.filter { f ->
                     when {
                         f.scope != null && f.scope != ConfigScopes.DAEMON -> false
-                        f.key in byKey || settings.isBuiltIn(f.key) -> { log += "[config] ${status.name}: daemon field '${f.key}' is already declared, ignored"; false }
+                        f.key in byKey || (settings.isBuiltIn(f.key) && !(f.surfacesBuiltIn && status.tier == Tier.OFFICIAL)) -> { log += "[config] ${status.name}: daemon field '${f.key}' is already declared, ignored"; false }
                         else -> true
                     }
                 }.map { it.copy(scope = ConfigScopes.DAEMON) }

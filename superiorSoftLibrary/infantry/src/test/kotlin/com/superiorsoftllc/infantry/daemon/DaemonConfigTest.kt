@@ -90,6 +90,20 @@ class DaemonConfigTest {
     }
 
     @Test
+    fun `an official field that surfaces a built-in key is served and a push reaches the card`() {
+        val enabled = ConfigFieldDeclaration("runners.enabled", "toggle", default = JsonPrimitive(false), scope = "daemon", surfacesBuiltIn = true)
+        val dropped = load(module("Infantry_Runners", Tier.OFFICIAL, enabled, node = "infantry.runners"))
+        assertEquals(emptyList(), dropped)
+        val pushed = mutableListOf<ConfigChangedFrame>()
+        config.onChanged = { pushed += it }
+        settings.set("runners.enabled", JsonPrimitive(true))
+        config.announce("runners.enabled")
+        assertEquals(JsonPrimitive(true), config.values().rows.single { it.key == "runners.enabled" }.value)
+        assertEquals(JsonPrimitive(true), pushed.single().value)
+        assertFailsWith<IllegalArgumentException> { config.set(ConfigSetFrame("infantry.runners", "runners.enabled", JsonPrimitive("maybe"))) }
+    }
+
+    @Test
     fun `a community plugin's field is read-only and a field the daemon already owns is dropped`() {
         val dropped = load(
             module("Acme_Hook", Tier.COMMUNITY, timeout),
