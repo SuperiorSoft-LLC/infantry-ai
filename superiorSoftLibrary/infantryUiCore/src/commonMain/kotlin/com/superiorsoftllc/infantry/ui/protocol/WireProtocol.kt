@@ -1045,6 +1045,8 @@ data class SecretRow(
     val tail: String = "",
     val importable: Boolean = false,
     val overriddenByEnv: Boolean = false,
+    /** FIRST-RUN-KEYS-1: where to get the key (a harness's own words); empty for the built-ins. */
+    val help: String = "",
 )
 
 /** Contract 1.135.0 (SECRETS-2): one field of a user secret: its name and a masked tail, never the value. */

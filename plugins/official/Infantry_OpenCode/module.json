@@ -12,6 +12,7 @@
     "ids": ["opencode"],
     "cli": { "id": "opencode", "command": "opencode", "label": "OpenCode" },
     "settings": ["harness.opencode.maxRetries"],
-    "hooks": ["watch", "mcp", "config", "session", "models", "stats"]
+    "hooks": ["watch", "mcp", "config", "session", "models", "stats"],
+    "credential": { "env": "OPENCODE_API_KEY", "label": "OpenCode", "help": "Create an API key in your OpenCode account (opencode.ai) and paste it here. Only needed for the paid OpenCode Go models; the free tier needs none." }
   }
 }

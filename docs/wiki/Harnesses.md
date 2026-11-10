@@ -284,3 +284,17 @@ Generated for the `infantryHarnessApi` guard `SdkTypesDocumentedGuardTest`: ever
 - `HarnessProcessListener`
 - `HarnessQuestion`
 - `HarnessRunningProcess`
+
+## API keys a harness needs (FIRST-RUN-KEYS-1)
+
+A harness that needs an API key declares it; core names no harness. In `module.json`:
+`"harness": { ..., "credential": { "env": "OPENCODE_API_KEY", "label": "OpenCode", "help": "where to get the key" } }`.
+A JSON descriptor says the same in `"credential": {"env", "label"?, "help"?}`. `env` must be an upper-case variable name and may
+not be `PATH`-like or an `INFANTRY_` / `AGENTHQ_` variable.
+
+- The key is stored in the keystore as the secret `harness.<id>.key`, shown in Configuration > Secrets as set / not set with a masked
+  tail, never in config, never logged, masked in session output, and never handed to a saved run.
+- At every launch of a session the daemon adds `{env: key}` to the harness process environment, so a restarted session gets a key set meanwhile.
+- When a loaded harness declares a key and none is set, the shell asks for it once (`ShellHarnessKeys`: Save or Skip; Skip is
+  remembered per device and the key stays settable in Configuration).
+- CLI: `infantry harness key` lists them; `infantry harness key <name>` prompts on stdin (never an argument); `--clear` removes it.

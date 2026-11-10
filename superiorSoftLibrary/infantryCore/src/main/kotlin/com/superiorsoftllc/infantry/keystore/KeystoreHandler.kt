@@ -10,7 +10,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
 /** A secret the app knows how to use. [envAlias] is the older environment variable that still overrides it. */
-class KnownSecret(val name: String, val label: String, val envAlias: String? = null)
+class KnownSecret(val name: String, val label: String, val envAlias: String? = null, val help: String = "")
 
 @Serializable
 class SecretSet(val name: String, val value: String) {
@@ -46,7 +46,7 @@ class PluginSecret(val module: String, val field: String, val value: String?) {
 }
 
 @Serializable
-class SecretRow(val name: String, val label: String, val set: Boolean, val tail: String, val importable: Boolean, val overriddenByEnv: Boolean)
+class SecretRow(val name: String, val label: String, val set: Boolean, val tail: String, val importable: Boolean, val overriddenByEnv: Boolean, val help: String = "")
 
 /** SECRETS-2: one field of a user secret: its name and a masked tail. */
 @Serializable
@@ -82,12 +82,17 @@ class SecretState(
  */
 class KeystoreHandler(
     private val keystore: Keystore,
-    private val known: List<KnownSecret> = DEFAULT,
+    knownBase: List<KnownSecret> = DEFAULT,
+    /** FIRST-RUN-KEYS-1: secrets that appear and vanish at run time (the harness API keys), read per call. */
+    private val extraKnown: () -> List<KnownSecret> = { emptyList() },
     private val env: (String) -> String? = InfantryEnv::get,
     private val push: (Envelope) -> Unit = {},
     private val json: Json = Json { ignoreUnknownKeys = false; encodeDefaults = true },
     private val restricted: () -> Boolean = { false },
 ) {
+    private val base = knownBase
+    private val known: List<KnownSecret> get() = base + extraKnown()
+
     fun answer(envelope: Envelope): Envelope? {
         val reply = when (envelope.type) {
             Envelope.SECRET_STATUS -> request(envelope.type) { }
@@ -133,7 +138,7 @@ class KeystoreHandler(
             known.map { k ->
                 val info = infos.getValue(k.name)
                 val aliasSet = k.envAlias?.let(env)?.isNotBlank() == true
-                SecretRow(k.name, k.label, info.set, info.tail, importable = aliasSet && !info.set, overriddenByEnv = aliasSet && info.set)
+                SecretRow(k.name, k.label, info.set, info.tail, importable = aliasSet && !info.set, overriddenByEnv = aliasSet && info.set, help = k.help)
             },
             keystore.names().filter { it !in builtIn }.map { name ->
                 SecretEntryRow(name, keystore.describe(name).map { SecretFieldRow(it.name, it.tail) })
@@ -211,7 +216,7 @@ class KeystoreHandler(
          * built-in ([known]: the update token, the daemon's own credentials). A built-in name is refused with a reason.
          */
         fun runSecrets(fields: (String) -> Map<String, String>?, known: List<KnownSecret> = DEFAULT): (String) -> Map<String, String>? = { name ->
-            require(known.none { it.name == name }) { "secret '$name' is built in and never goes to a run" }
+            require(known.none { it.name == name } && !name.startsWith("harness.")) { "secret '$name' is built in and never goes to a run" }
             fields(name)
         }
 
@@ -220,7 +225,7 @@ class KeystoreHandler(
          * A built-in is refused whatever the scope.
          */
         fun projectRunSecrets(keystore: Keystore, known: List<KnownSecret> = DEFAULT): (String, String?) -> Map<String, String>? = { name, project ->
-            require(known.none { it.name == name }) { "secret '$name' is built in and never goes to a run" }
+            require(known.none { it.name == name } && !name.startsWith("harness.")) { "secret '$name' is built in and never goes to a run" }
             keystore.resolve(name, project)
         }
     }
