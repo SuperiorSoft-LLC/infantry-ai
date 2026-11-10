@@ -118,6 +118,16 @@ fun parseRunnersList(text: String): RunnersList? {
     )
 }
 
+/**
+ * RUNNER-LINK-HOST-1: the Name field's live check (the daemon's rule: 1-32 of a-z, 0-9 and '-', starting with a letter or digit);
+ * null when blank (the link's own name is used) or valid. The text names an example so the owner can fix it as they type.
+ */
+fun runnerNameError(name: String): String? {
+    val n = name.trim()
+    if (n.isEmpty() || Regex("^[a-z0-9][a-z0-9-]{0,31}$").matches(n)) return null
+    return "Use 1-32 of a-z, 0-9 and '-' (lower case, no spaces), e.g. docker-runner"
+}
+
 /** An op the card sends: `pause` / `resume` / `detach` / `rotate` on a runner. */
 fun adminRequest(op: String, name: String): String =
     JsonObject(mapOf("op" to JsonPrimitive(op), "name" to JsonPrimitive(name))).toString()
@@ -395,7 +405,7 @@ fun AddRunnerForm(
     val canGrant = linkCarriesGrant(link)
     var grant by remember(link) { mutableStateOf(canGrant) }
     val grantable = canGrant && !grantProjectId.isNullOrBlank()
-    val canConnect = link.isNotBlank() && !sending
+    val canConnect = link.isNotBlank() && !sending && runnerNameError(name) == null
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
             "On the runner machine, run `$RUNNER_UP_COMMAND` and paste the link it prints. The link is a secret for " +
@@ -415,6 +425,8 @@ fun AddRunnerForm(
             value = name, onValueChange = { name = it }, singleLine = true,
             label = { Text("Name (optional)") },
             placeholder = { Text("the name the link carries") },
+            isError = runnerNameError(name) != null,
+            supportingText = runnerNameError(name)?.let { e -> { Text(e, color = Palette.Danger, modifier = Modifier.testTag("runner-add-name-error")) } },
             shape = Palette.PopupShape,
             modifier = Modifier.fillMaxWidth().testTag("runner-add-name"),
         )

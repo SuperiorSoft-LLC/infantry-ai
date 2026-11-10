@@ -181,7 +181,7 @@ class RunnerLinkService(
         val op = need("op")
         if (op in NEEDS_TRANSPORT && transport() == null) throw IllegalArgumentException(NO_TRANSPORT)
         when (op) {
-            "pair" -> pair(need("name"), str("allowProjects"), str("allowHarnesses"), str("hosts"), flag("grantOnPair"), str("harnessCeiling"))
+            "pair" -> pair(need("name"), str("allowProjects"), str("allowHarnesses"), str("hosts"), flag("grantOnPair"), str("harnessCeiling"), str("port"))
             "pair_preview" -> JsonObject(
                 ok() +
                     ("mode" to JsonPrimitive(mode())) +
@@ -540,7 +540,12 @@ class RunnerLinkService(
         hosts: String? = null,
         grantOnPair: Boolean = false,
         harnessCeiling: String? = null,
+        /** RUNNER-LINK-HOST-1: the port the link advertises when it differs from the listener (a Docker `-p 18921:8790`). */
+        advertisePort: String? = null,
     ): JsonObject {
+        val advertised = advertisePort?.takeIf { it.isNotBlank() }?.let { p ->
+            p.toIntOrNull()?.takeIf { it in 1..65535 } ?: throw IllegalArgumentException("--port must be a port number (1-65535), the one the orchestrator reaches this runner on")
+        }
         require(RunnerLinkStore.NAME.matches(name)) { "runner name '$name' must be 1-32 of a-z, 0-9 and '-' (starting with a letter or digit)" }
         val t = transport() ?: throw IllegalArgumentException(NO_TRANSPORT)
         val store = RunnerLinkStore.open(stateDir)
@@ -601,7 +606,7 @@ class RunnerLinkService(
         pending.serving = s
         // RUNNER-LINK-1: the one link; `code`, `fingerprint` and `port` stay for older CLIs.
         val candidates = RunnerPairLink.candidates(listOfNotNull(hosts), values.advertiseHosts, limit(LimitRegistry.RUNNERS_ADVERTISE_HOSTS_MAX).toInt())
-        val link = candidates.takeIf { it.isNotEmpty() }?.let { RunnerPairLink(name, it, s.port, code, fingerprint, plain, grantOnPair).toUri() }
+        val link = candidates.takeIf { it.isNotEmpty() }?.let { RunnerPairLink(name, it, advertised ?: s.port, code, fingerprint, plain, grantOnPair).toUri() }
         return ok(
             "code" to code, "link" to link, "fingerprint" to fingerprint, "port" to s.port.toString(), "plain" to plain.toString(),
             "expiryMin" to limit(LimitRegistry.RUNNERS_PAIR_CODE_MIN).toString(), "grant" to grantOnPair.toString(),

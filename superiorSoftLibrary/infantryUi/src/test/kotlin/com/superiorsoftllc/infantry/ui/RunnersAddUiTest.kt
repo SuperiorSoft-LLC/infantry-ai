@@ -21,6 +21,7 @@ import com.superiorsoftllc.infantry.plugins.official.runners.RUNNER_TEST_COST
 import com.superiorsoftllc.infantry.plugins.official.runners.parseRunnerCheck
 import com.superiorsoftllc.infantry.plugins.official.runners.parseRunnerTest
 import com.superiorsoftllc.infantry.plugins.official.runners.refusalAnswer
+import com.superiorsoftllc.infantry.plugins.official.runners.runnerNameError
 import com.superiorsoftllc.infantry.plugins.official.runners.runnerFailure
 import com.superiorsoftllc.infantry.plugins.official.runners.testRequest
 import com.superiorsoftllc.infantry.ui.protocol.Envelope
@@ -240,5 +241,12 @@ class RunnersAddUiTest {
         setContent { RunnerCheckRows(null, null, checking = true, onAgain = {}, gate = live) }
         onNodeWithTag("runner-check-wait").assertIsDisplayed()
         onAllNodesWithTag("runner-check-row:link").assertCountEquals(0)
+    }
+
+    @Test
+    fun `the name field rejects a bad name with an example`() {
+        assertEquals(null, runnerNameError(""))
+        assertEquals(null, runnerNameError("docker-runner"))
+        assertTrue(runnerNameError("Docker Runner")!!.contains("docker-runner"))
     }
 }

@@ -110,7 +110,20 @@ class RunnerPeers(
             val granted = grantsOf(answer)
             return AddOutcome(paired, skipped, granted.grantedProjects, granted.grantedHarnesses, granted.grantRefusal)
         }
-        throw LinkFailure("no host of the link answered: ${skipped.joinToString("; ")}")
+        throw LinkFailure("no host of the link answered: ${skipped.joinToString("; ")}${unreachableHint(pairLink)}")
+    }
+
+    /**
+     * RUNNER-LINK-HOST-1: what to try when no host of the link answered (the same text in the CLI and the Add runner dialog):
+     * the pair the link names, the published port of a container, `docker ps`.
+     */
+    private fun unreachableHint(l: RunnerPairLink): String {
+        val pairs = l.hosts.joinToString(", ") { "$it:${l.port}" }
+        return ". Try: 1) the host:port the link names ($pairs) must be reachable from this PC; " +
+            "2) a Docker runner is reached on its PUBLISHED port: run `docker ps` and look at the PORTS column " +
+            "(0.0.0.0:18921->8790/tcp means localhost:18921, not 8790), then pair again with `--host localhost --port 18921` " +
+            "(Docker: INFANTRY_RUNNER_HOST=localhost, INFANTRY_RUNNER_PUBLIC_PORT=18921); " +
+            "3) host.docker.internal only resolves inside a container, never on the PC"
     }
 
     /** Validates a runner name; one write path for both add forms. */

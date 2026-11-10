@@ -53,12 +53,15 @@ internal object RunnerCli {
     private val json = Json { ignoreUnknownKeys = true }
 
     /** The words after `runner` and the flags the CLI parser took for it. */
-    data class Args(val words: List<String>, val name: String? = null, val code: String? = null, val fingerprint: String? = null, val limit: String? = null, val allowProjects: String? = null, val allowHarnesses: String? = null, val hosts: String? = null, val link: String? = null, val project: String? = null, val harness: String? = null, val model: String? = null, val grantOnPair: Boolean = false, val grantHarnessesMax: String? = null, val grant: Boolean = false) {
+    data class Args(val words: List<String>, val name: String? = null, val code: String? = null, val fingerprint: String? = null, val limit: String? = null, val allowProjects: String? = null, val allowHarnesses: String? = null, val hosts: String? = null, val link: String? = null, val project: String? = null, val harness: String? = null, val model: String? = null, val grantOnPair: Boolean = false, val grantHarnessesMax: String? = null, val grant: Boolean = false, val runnerPort: String? = null) {
         val action: String? get() = words.firstOrNull()?.lowercase()
         val positional: List<String> get() = words.drop(1)
         val flags: Map<String, String>
-            get() = listOfNotNull(name?.let { "name" to it }, code?.let { "code" to it }, fingerprint?.let { "fingerprint" to it }, limit?.let { "limit" to it }, allowProjects?.let { "allow-projects" to it }, allowHarnesses?.let { "allow-harnesses" to it }, hosts?.let { "host" to it }, link?.let { "link" to it }, project?.let { "project" to it }, harness?.let { "harness" to it }, model?.let { "model" to it }, "".takeIf { grantOnPair }?.let { "grant-on-pair" to it }, grantHarnessesMax?.let { "grant-harnesses-max" to it }, "".takeIf { grant }?.let { "grant" to it }).toMap()
+            get() = listOfNotNull(name?.let { "name" to it }, code?.let { "code" to it }, fingerprint?.let { "fingerprint" to it }, limit?.let { "limit" to it }, allowProjects?.let { "allow-projects" to it }, allowHarnesses?.let { "allow-harnesses" to it }, hosts?.let { "host" to it }, runnerPort?.let { "port" to it }, link?.let { "link" to it }, project?.let { "project" to it }, harness?.let { "harness" to it }, model?.let { "model" to it }, "".takeIf { grantOnPair }?.let { "grant-on-pair" to it }, grantHarnessesMax?.let { "grant-harnesses-max" to it }, "".takeIf { grant }?.let { "grant" to it }).toMap()
     }
+
+    /** RUNNER-LINK-HOST-1: `--port` is a port number or absent. */
+    private fun portOk(p: String?): Boolean = p == null || p.toIntOrNull()?.let { it in 1..65535 } == true
 
     /** The usage error for [args], or null when they are valid. */
     fun usageError(args: Args): String? {
@@ -66,9 +69,9 @@ internal object RunnerCli {
         val flags = args.flags
         val ok = when (args.action) {
             // RUNNER-GRANT-AT-PAIR-1: `runner pair --grant-on-pair [--grant-harnesses-max <ids>]` (the code carries a one-time grant).
-            "pair" -> positional.isEmpty() && !args.name.isNullOrBlank() && flags.keys.all { it in setOf("name", "allow-projects", "allow-harnesses", "host", "grant-on-pair", "grant-harnesses-max") } &&
-                !(args.grantOnPair && args.allowProjects != null)
-            "up" -> positional.isEmpty() && !args.name.isNullOrBlank() && flags.keys.all { it in setOf("name", "allow-projects", "allow-harnesses", "host") }
+            "pair" -> positional.isEmpty() && !args.name.isNullOrBlank() && flags.keys.all { it in setOf("name", "allow-projects", "allow-harnesses", "host", "port", "grant-on-pair", "grant-harnesses-max") } &&
+                !(args.grantOnPair && args.allowProjects != null) && portOk(args.runnerPort)
+            "up" -> positional.isEmpty() && !args.name.isNullOrBlank() && flags.keys.all { it in setOf("name", "allow-projects", "allow-harnesses", "host", "port") } && portOk(args.runnerPort)
             // RUNNER-GRANT-AT-PAIR-1: `--grant` is the owner's confirm for the one grant a link's code may carry.
             "add" -> addUsageOk(args) || (positional.size == 2 && !args.code.isNullOrBlank() && flags.keys.all { it in setOf("code", "fingerprint") })
             "list" -> positional.isEmpty() && flags.isEmpty()
@@ -108,9 +111,9 @@ internal object RunnerCli {
             when (args.action) {
                 "pair" -> pair(
                     stream, flags.getValue("name"), ::limit, out, err, flags["allow-projects"], flags["allow-harnesses"], flags["host"],
-                    grantOnPair = args.grantOnPair, grantHarnessesMax = args.grantHarnessesMax,
+                    port = flags["port"], grantOnPair = args.grantOnPair, grantHarnessesMax = args.grantHarnessesMax,
                 )
-                "up" -> up(stream, flags.getValue("name"), ::limit, out, err, flags["allow-projects"], flags["allow-harnesses"], flags["host"])
+                "up" -> up(stream, flags.getValue("name"), ::limit, out, err, flags["allow-projects"], flags["allow-harnesses"], flags["host"], flags["port"])
                 "add" -> add(stream, args, ::limit, out, err)
                 "list" -> {
                     if (!RunnerLinkStore.exists(stateDir)) { out.appendLine("No runner link: this machine never paired."); return 0 }
@@ -211,7 +214,7 @@ internal object RunnerCli {
      * RUNNER-UP-1: `runner up` on a daemon that is already answering. Paired: says so and stops. A pairing link still live: says
      * "waiting" and issues no new code (each issue is a fresh window for guessing). Otherwise issues the link and returns at once.
      */
-    private suspend fun up(stream: FrameStream, name: String, limit: (LimitDef) -> Long, out: Appendable, err: Appendable, allowProjects: String?, allowHarnesses: String?, hosts: String?): Int {
+    private suspend fun up(stream: FrameStream, name: String, limit: (LimitDef) -> Long, out: Appendable, err: Appendable, allowProjects: String?, allowHarnesses: String?, hosts: String?, port: String? = null): Int {
         // A board-only daemon can pair, but no session would ever run on it: refuse with the mode instead of handing out a link.
         val preview = admin(stream, limit, "op" to "pair_preview")
         if (preview.failed) { err.appendLine("error: ${preview.error}"); return 1 }
@@ -225,7 +228,7 @@ internal object RunnerCli {
             "paired" -> { out.appendLine("already paired with ${status["orchestratorName"]}; `infantry runner detach` to pair again"); return 0 }
             "waiting" -> { out.appendLine("waiting: a pairing link was already issued and is not used yet; it expires on its own. For a new one: infantry runner pair --name $name"); return 0 }
         }
-        return pair(stream, name, limit, out, err, allowProjects, allowHarnesses, hosts, wait = false)
+        return pair(stream, name, limit, out, err, allowProjects, allowHarnesses, hosts, port = port, wait = false)
     }
 
     /**
@@ -386,7 +389,7 @@ internal object RunnerCli {
     /** Whether [text] is meant as a pairing link at all (RUNNER-LINK-1's codec owns the format). */
     private fun isLink(text: String): Boolean = text.trim().startsWith(RunnerPairLink.PREFIX, ignoreCase = true)
 
-    private suspend fun pair(stream: FrameStream, name: String, limit: (LimitDef) -> Long, out: Appendable, err: Appendable, allowProjects: String? = null, allowHarnesses: String? = null, hosts: String? = null, grantOnPair: Boolean = false, grantHarnessesMax: String? = null, wait: Boolean = true): Int {
+    private suspend fun pair(stream: FrameStream, name: String, limit: (LimitDef) -> Long, out: Appendable, err: Appendable, allowProjects: String? = null, allowHarnesses: String? = null, hosts: String? = null, port: String? = null, grantOnPair: Boolean = false, grantHarnessesMax: String? = null, wait: Boolean = true): Int {
         require(RunnerLinkStore.NAME.matches(name)) { "runner name '$name' must be 1-32 of a-z, 0-9 and '-' (starting with a letter or digit)" }
         require(!(grantOnPair && allowProjects != null)) {
             "--grant-on-pair replaces --allow-projects: the project is granted once, from the orchestrator, at pairing"
@@ -408,7 +411,7 @@ internal object RunnerCli {
             if (projects == null) projects = console.readLine("Project ids the orchestrator may run here (comma separated, * = every project, Enter = none yet): ")?.trim().orEmpty()
         }
         val r = admin(
-            stream, limit, "op" to "pair", "name" to name, "allowProjects" to projects, "allowHarnesses" to harnesses, "hosts" to hosts,
+            stream, limit, "op" to "pair", "name" to name, "allowProjects" to projects, "allowHarnesses" to harnesses, "hosts" to hosts, "port" to port,
             "grantOnPair" to grantOnPair.takeIf { it }?.toString(), "harnessCeiling" to grantHarnessesMax?.takeIf { it.isNotBlank() },
         )
         if (r.failed) { err.appendLine("error: ${r.error}"); return 1 }
