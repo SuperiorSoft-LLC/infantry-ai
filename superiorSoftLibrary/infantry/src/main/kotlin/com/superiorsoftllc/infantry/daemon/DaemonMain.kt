@@ -1228,7 +1228,8 @@ class InfantryDaemon(
             // SECRETS-1 / SECRETS-2: the keystore's frames; a restricted policy refuses every change.
             val keystoreFrames = KeystoreHandler(
                 keystore = keystore,
-                extraKnown = { harnessCredentials.declared().map { com.superiorsoftllc.infantry.keystore.KnownSecret(it.secretName, "${it.label} API key", help = it.help, authModes = it.authModes, authMode = { harnessCredentials.mode(it.harnessId).orEmpty() }) } },
+                extraKnown = { harnessCredentials.declared().map { com.superiorsoftllc.infantry.keystore.KnownSecret(it.secretName, "${it.label} API key", help = it.help, authModes = it.authModes, authMode = { harnessCredentials.mode(it.harnessId).orEmpty() }, loginCommand = it.loginCommand, signedIn = { harnessCredentials.authStatus(it.harnessId).word }, lastProbe = { harnessCredentials.authStatus(it.harnessId).lastProbe }) } },
+                authCheck = { secretName -> harnessCredentials.declared().firstOrNull { it.secretName == secretName }?.let { harnessCredentials.checkAuth(it.harnessId) } },
                 restricted = locked,
                 push = { envelope -> for (client in clients) client.trySend(envelope) },
             )

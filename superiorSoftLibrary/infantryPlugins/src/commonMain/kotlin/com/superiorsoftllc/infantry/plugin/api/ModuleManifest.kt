@@ -195,6 +195,19 @@ data class HarnessDeclaration(
     val credential: HarnessCredentialDeclaration? = null,
     /** CLAUDE-AUTH-CHOICE-1: the sign-in ways the harness offers: `api-key` (the [credential]) and/or `subscription-login`; empty = no choice. */
     val authModes: List<String> = emptyList(),
+    /** CLAUDE-AUTH-CHOICE-2: how the daemon checks the subscription login (no tokens) and what the owner runs to sign in. */
+    val authProbe: HarnessAuthProbeDeclaration? = null,
+)
+
+/**
+ * CLAUDE-AUTH-CHOICE-2: `harness.authProbe`. [argv] is run (never a shell) and its stdout parsed as JSON; the boolean at [signedInField]
+ * says whether the CLI is signed in. [loginCommand] is what the owner types in a terminal to sign in (a headless chat cannot).
+ */
+@Serializable
+data class HarnessAuthProbeDeclaration(
+    val argv: List<String>,
+    val signedInField: String = "loggedIn",
+    val loginCommand: String = "",
 )
 
 /**

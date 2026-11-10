@@ -19,6 +19,12 @@ data class HarnessCredential(
     val help: String = "",
     /** CLAUDE-AUTH-CHOICE-1: the ways the owner may sign this harness in ([MODE_API_KEY], [MODE_SUBSCRIPTION]); empty = key only, no choice. */
     val authModes: List<String> = emptyList(),
+    /** CLAUDE-AUTH-CHOICE-2: argv that reports the subscription login as JSON on stdout (no tokens); empty = no probe. */
+    val probeArgv: List<String> = emptyList(),
+    /** The JSON boolean in the probe's output that says "signed in". */
+    val probeField: String = "loggedIn",
+    /** What the owner runs in a terminal to sign in; shown with a Copy button. */
+    val loginCommand: String = "",
 ) {
     /** The setting that stores the owner's choice of [authModes], per harness. */
     val modeSetting: String get() = modeSettingOf(harnessId)
@@ -57,6 +63,8 @@ class HarnessCredentials(
     private val keystore: Keystore,
     /** The stored choice for a harness id (its `harness.<id>.authMode` setting), or null when none was made. */
     private val modeSource: (String) -> String? = { null },
+    /** Runs a probe argv and returns its stdout whatever the exit code (a CLI may exit 1 when signed out); null when it cannot run. */
+    private val probeRunner: (List<String>, String) -> String? = ::runProbe,
     private val declaredSource: () -> List<HarnessCredential>,
 ) {
     /** CLAUDE-AUTH-CHOICE-1: the chosen auth mode of [harnessId]: the stored one when the harness offers it, else null (no choice yet). */
@@ -92,11 +100,59 @@ class HarnessCredentials(
     /** `{ENV_NAME: key}` for [harnessId]; empty when it declares none or the key is unset. */
     fun env(harnessId: String): Map<String, String> {
         val c = declaration(harnessId) ?: return emptyMap()
-        if (subscription(harnessId)) return emptyMap()
+        // CLAUDE-AUTH-CHOICE-2: a subscription session carries NO key: the variable is blanked, so a key the daemon itself inherited from its own
+        // environment cannot reach the harness and bill an API account (a blank variable reads as unset).
+        if (subscription(harnessId)) return mapOf(c.env to "")
         val v = keystore.field(c.secretName, HarnessCredential.FIELD) ?: return emptyMap()
         return mapOf(c.env to v)
     }
 
+    /** CLAUDE-AUTH-CHOICE-2: the last probe result per harness id; kept in memory, rebuilt by the next check. */
+    private val authStatus = java.util.concurrent.ConcurrentHashMap<String, AuthStatus>()
+
+    /** The last known sign-in state of [harnessId] (signedIn null = never probed or the probe was unreadable). */
+    fun authStatus(harnessId: String): AuthStatus = authStatus[harnessId] ?: AuthStatus(null, 0L)
+
+    /**
+     * Runs the harness's declared probe (e.g. `claude auth status`), records and returns the result. The probe costs no tokens and
+     * never sets or reads an API key. A harness with no probe, or a probe that fails to run or parse, is signedIn = null (unknown).
+     */
+    fun checkAuth(harnessId: String): AuthStatus {
+        val c = declaration(harnessId)
+        val signedIn = if (c == null || c.probeArgv.isEmpty()) null else probe(c.probeArgv, c.probeField, c.env)
+        return AuthStatus(signedIn, System.currentTimeMillis()).also { authStatus[harnessId] = it }
+    }
+
+    private fun probe(argv: List<String>, field: String, scrubEnv: String): Boolean? = try {
+        val out = probeRunner(argv, scrubEnv) ?: return null
+        (kotlinx.serialization.json.Json.parseToJsonElement(out) as? kotlinx.serialization.json.JsonObject)
+            ?.get(field)?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content?.toBooleanStrictOrNull() }
+    } catch (_: Exception) { null }
+
     /** The declared credentials with no key set: what the first-run step asks for. */
     fun missing(): List<HarnessCredential> = states().filter { !it.set && !subscription(it.credential.harnessId) }.map { it.credential }
 }
+
+/** CLAUDE-AUTH-CHOICE-2: one probe result. [signedIn] null = unknown; [lastProbe] is epoch millis, 0 = never probed. */
+data class AuthStatus(val signedIn: Boolean?, val lastProbe: Long) {
+    /** The wire word: `true`, `false` or `unknown`. */
+    val word: String get() = when (signedIn) { true -> "true"; false -> "false"; null -> "unknown" }
+}
+
+/** How long a sign-in probe may run before it is killed (it is a local status read, so seconds). */
+private const val PROBE_TIMEOUT_SECONDS = 30L
+
+/**
+ * Runs [argv] (never a shell), stdin closed, stderr discarded, and returns stdout whatever the exit code; null when it cannot
+ * start or outlives [PROBE_TIMEOUT_SECONDS]. The child never sees the harness's API key variable [scrubEnv]: a subscription probe must not bill one.
+ */
+internal fun runProbe(argv: List<String>, scrubEnv: String): String? = try {
+    // On Windows an npm-installed CLI is a `.cmd` shim, which CreateProcess cannot start by bare name: go through cmd /c (argv comes from a manifest, never from a client).
+    val windows = System.getProperty("os.name").orEmpty().startsWith("Windows")
+    val b = ProcessBuilder(if (windows) listOf("cmd", "/c") + argv else argv).redirectError(ProcessBuilder.Redirect.DISCARD)
+    b.environment().remove(scrubEnv)
+    val p = b.start()
+    p.outputStream.close()
+    val out = java.util.concurrent.CompletableFuture.supplyAsync { p.inputStream.readBytes().toString(Charsets.UTF_8) }
+    if (!p.waitFor(PROBE_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)) { p.destroyForcibly(); null } else out.get(PROBE_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
+} catch (_: Exception) { null }

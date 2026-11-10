@@ -899,7 +899,17 @@ class SecretActions(
     val delete: ((name: String) -> Unit)? = null,
     val move: ((name: String, from: String?, to: String?) -> Unit)? = null,
     val currentProject: SecretProjectRef? = null,
+    /** CLAUDE-AUTH-CHOICE-2: (harnessId, mode) stores how a harness signs in; null hides the Change button. */
+    val setAuthMode: ((harnessId: String, mode: String) -> Unit)? = null,
+    /** CLAUDE-AUTH-CHOICE-2: re-probes the sign-in of the harness whose key secret is named (the Check button); null hides it. */
+    val checkAuth: ((secretName: String) -> Unit)? = null,
 )
+
+const val SECRET_AUTH_MODE_TAG = "secret-auth-mode"
+const val SECRET_AUTH_CHANGE_TAG = "secret-auth-change"
+const val SECRET_AUTH_COMMAND_TAG = "secret-auth-command"
+const val SECRET_AUTH_CHECK_TAG = "secret-auth-check"
+const val SECRET_AUTH_STATE_TAG = "secret-auth-state"
 
 /**
  * SECRETS-2b: the edits of ONE scope (the app's, or one project's), so the same cards serve Configuration > Secrets and a
@@ -997,6 +1007,25 @@ private fun BuiltInSecretCard(row: SecretRow, actions: SecretActions) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(row.label, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Palette.Text, modifier = Modifier.weight(1f))
             Text(secretStatusText(row), fontSize = 12.sp, color = if (row.set) Palette.Ok else Palette.Muted, modifier = Modifier.testTag("$SECRET_STATUS_TAG-${row.name}"))
+        }
+        val harnessId = row.name.removePrefix("harness.").removeSuffix(".key")
+        val setMode = actions.setAuthMode
+        if (row.authModes.size > 1 && setMode != null) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            val mode = row.authMode.ifBlank { row.authModes.first() }
+            Text("Sign-in: $mode", fontSize = 12.sp, color = Palette.Muted, modifier = Modifier.weight(1f).testTag("$SECRET_AUTH_MODE_TAG-${row.name}"))
+            SecretButton("Change", true, "$SECRET_AUTH_CHANGE_TAG-${row.name}") {
+                setMode(harnessId, row.authModes[(row.authModes.indexOf(mode) + 1) % row.authModes.size])
+            }
+            if (mode == "subscription-login") {
+                val state = when (row.signedIn) { "true" -> "signed in"; "false" -> "not signed in"; else -> "not checked" }
+                Text(state, fontSize = 12.sp, color = if (row.signedIn == "true") Palette.Ok else Palette.Muted, modifier = Modifier.testTag("$SECRET_AUTH_STATE_TAG-${row.name}"))
+                actions.checkAuth?.let { check -> SecretButton("Check", true, "$SECRET_AUTH_CHECK_TAG-${row.name}") { check(row.name) } }
+            }
+        }
+        if ((row.authMode.ifBlank { row.authModes.firstOrNull().orEmpty() }) == "subscription-login" && row.loginCommand.isNotBlank()) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Sign in once in a terminal:", fontSize = 12.sp, color = Palette.Muted)
+            Text(row.loginCommand, fontSize = 12.sp, color = Palette.Text, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, modifier = Modifier.weight(1f).testTag("$SECRET_AUTH_COMMAND_TAG-${row.name}"))
+            CopyValueButton(row.loginCommand)
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             MaskedInput(draft, { draft = it }, if (row.set) "Replace with" else "Paste it here", Modifier.weight(1f).testTag("$SECRET_INPUT_TAG-${row.name}"))

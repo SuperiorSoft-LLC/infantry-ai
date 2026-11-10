@@ -145,6 +145,8 @@ class ConfigBlock(children: List<Block>, place: Place = Place()) : Block(CONFIG,
                 // SECRETS-2b: an app secret can move to the project on screen (1.152.0).
                 move = if (controller.supportsProjectSecrets()) { n, from, to -> actionScope.launch { controller.moveSecret(n, from, to) }; Unit } else null,
                 currentProject = state.projects.firstOrNull { it.id == state.activeProjectId }?.let { SecretProjectRef(it.id, it.name) },
+                setAuthMode = { id, m -> actionScope.launch { controller.setHarnessAuthMode(id, m) } },
+                checkAuth = { n -> actionScope.launch { controller.checkHarnessAuth(n) } },
             ),
             onOpenRoles = { ui.showRoles = true },
             limits = state.limitCatalog,

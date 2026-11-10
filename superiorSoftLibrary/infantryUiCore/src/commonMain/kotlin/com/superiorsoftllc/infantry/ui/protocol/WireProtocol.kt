@@ -1050,6 +1050,9 @@ data class SecretRow(
     /** CLAUDE-AUTH-CHOICE-1: the harness's sign-in ways and the chosen one; empty = no choice offered. */
     val authModes: List<String> = emptyList(),
     val authMode: String = "",
+    val loginCommand: String = "",
+    val signedIn: String = "unknown",
+    val lastProbe: Long = 0L,
 )
 
 /** Contract 1.135.0 (SECRETS-2): one field of a user secret: its name and a masked tail, never the value. */
@@ -2275,6 +2278,9 @@ object WireRequests {
 
     /** Contract 1.102.0 (SECRETS-1): ask for the keystore's set / not set state. */
     fun secretStatus(): Envelope = Envelope(Envelope.SECRET_STATUS, "{}")
+
+    /** CLAUDE-AUTH-CHOICE-2: a status request that also re-probes the sign-in of the harness whose key secret is [name]. */
+    fun secretStatusCheck(name: String): Envelope = Envelope(Envelope.SECRET_STATUS, """{"name":"$name"}""")
 
     /** Contract 1.102.0: store [value] as secret [name]. The value goes out once and is never read back. */
     fun secretSet(name: String, value: String): Envelope = Envelope(

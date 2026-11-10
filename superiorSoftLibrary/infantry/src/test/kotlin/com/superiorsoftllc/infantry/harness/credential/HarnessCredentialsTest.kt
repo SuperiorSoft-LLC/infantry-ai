@@ -111,7 +111,7 @@ class HarnessAuthModeTest {
         val c = creds("subscription-login")
         c.set("claude", "sk-ant-abcdefghijklmnop")
         assertEquals("subscription-login", c.mode("claude"))
-        assertEquals(emptyMap(), c.env("claude"))
+        assertEquals(mapOf("ANTHROPIC_API_KEY" to ""), c.env("claude"))
         assertEquals(emptyList(), creds("subscription-login").missing())
     }
 
@@ -127,5 +127,48 @@ class HarnessAuthModeTest {
     fun `manifest auth modes drop unknown names and the setting name is per harness`() {
         assertEquals(listOf("api-key"), HarnessCredential.cleanModes(listOf("api-key", "x", "api-key")))
         assertEquals("harness.claude.authMode", decl.modeSetting)
+    }
+}
+
+/** CLAUDE-AUTH-CHOICE-2: the subscription sign-in probe and the no-key session env. */
+class HarnessAuthProbeTest {
+    private val decl = HarnessCredential(
+        "claude", "ANTHROPIC_API_KEY", "Claude Code", "", listOf("api-key", "subscription-login"),
+        probeArgv = listOf("claude", "auth", "status"), probeField = "loggedIn", loginCommand = "claude auth login",
+    )
+
+    private fun creds(mode: String?, out: String?, ran: MutableList<List<String>> = mutableListOf()): HarnessCredentials {
+        val d = Files.createTempDirectory("hc-probe").toFile()
+        return HarnessCredentials(Keystore(d, env = { null }, vault = null), { mode }, { argv, _ -> ran += argv; out }) { listOf(decl) }
+    }
+
+    @Test
+    fun `the probe reads the manifest field and records the time`() {
+        val ran = mutableListOf<List<String>>()
+        val c = creds("subscription-login", """{"loggedIn": false, "authMethod": "none"}""", ran)
+        assertNull(c.authStatus("claude").signedIn)
+        assertEquals(0L, c.authStatus("claude").lastProbe)
+        assertEquals(false, c.checkAuth("claude").signedIn)
+        assertEquals(listOf(listOf("claude", "auth", "status")), ran)
+        assertEquals("false", c.authStatus("claude").word)
+        assert(c.authStatus("claude").lastProbe > 0L)
+        assertEquals(true, creds("subscription-login", """{"loggedIn": true}""").checkAuth("claude").signedIn)
+    }
+
+    @Test
+    fun `an unreadable or missing probe is unknown, never signed in`() {
+        assertNull(creds("subscription-login", "not json").checkAuth("claude").signedIn)
+        assertNull(creds("subscription-login", null).checkAuth("claude").signedIn)
+        assertEquals("unknown", creds("subscription-login", null).checkAuth("claude").word)
+        assertNull(creds("subscription-login", """{"loggedIn": true}""").checkAuth("nope").signedIn)
+    }
+
+    @Test
+    fun `a subscription session env never carries the stored key and blanks the variable`() {
+        val c = creds("subscription-login", null)
+        c.set("claude", "sk-ant-abcdefghijklmnop")
+        val env = c.env("claude")
+        assertEquals("", env["ANTHROPIC_API_KEY"])
+        assert(env.values.none { it.contains("sk-ant") })
     }
 }

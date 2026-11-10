@@ -74,7 +74,7 @@ class HarnessModules(
         synchronized(lock) { loaded.values.toList() }.flatMap { l ->
             val c = l.declaration.credential ?: return@flatMap emptyList()
             if (com.superiorsoftllc.infantry.harness.credential.HarnessCredential.envRefusal(c.env) != null) return@flatMap emptyList()
-            l.ids.map { id -> com.superiorsoftllc.infantry.harness.credential.HarnessCredential(id, c.env, c.label ?: id, c.help.orEmpty(), com.superiorsoftllc.infantry.harness.credential.HarnessCredential.cleanModes(l.declaration.authModes)) }
+            l.ids.map { id -> com.superiorsoftllc.infantry.harness.credential.HarnessCredential(id, c.env, c.label ?: id, c.help.orEmpty(), com.superiorsoftllc.infantry.harness.credential.HarnessCredential.cleanModes(l.declaration.authModes), l.declaration.authProbe?.argv.orEmpty(), l.declaration.authProbe?.signedInField ?: "loggedIn", l.declaration.authProbe?.loginCommand.orEmpty()) }
         }
 
     /** The tool of the loaded module whose `harness.cli.id` is [cliId], or null. */
