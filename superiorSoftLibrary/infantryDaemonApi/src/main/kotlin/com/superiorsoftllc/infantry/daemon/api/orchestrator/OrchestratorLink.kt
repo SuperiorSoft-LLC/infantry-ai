@@ -184,13 +184,23 @@ interface RunnerLink {
     /** RUNNER-POOL-6 (1.1.0): up to [maxLines] (0 = the runner's own bound) transcript lines of a session from [fromLine]; read on demand. */
     fun readTranscript(sessionId: String, fromLine: Int = 0, maxLines: Int = 0): OrchestratorReply<List<String>> = unoffered("readTranscript")
 
+    /**
+     * RUNNER-PROMPT-RELAY-1 (1.4.0): the orchestrator's answer to a prompt session [sessionId] raised on the runner (relayed to it as a
+     * [RunnerEvent.PROMPT] event): the runner resolves its open prompt [PromptReply.promptId] with it, exactly as a local client's
+     * `prompt_response` would. Ok(true) = applied; Ok(false) = the prompt was no longer open (answered, timed out, session ended).
+     * Natural key: the prompt id; a second answer answers Ok(false). Fail mode on Unavailable: the orchestrator keeps the answer and
+     * sends it again on the next round.
+     */
+    fun answerPrompt(sessionId: String, reply: PromptReply): OrchestratorReply<Boolean> = unoffered("answerPrompt")
+
     companion object {
         /**
          * 1.1.0 (RUNNER-POOL-6): events, readTranscript; StartSpec may name a git remote, SessionRef carries the ticket branch.
          * 1.2.0 (RUNNER-POOL-8): events(acked), a per-session seq kept until acknowledged; StartSpec.pushOnCommit.
          * 1.3.0 (RUNNER-TEST-1): removeSession, so a throwaway test turn leaves no session on the runner.
+         * 1.4.0 (RUNNER-PROMPT-RELAY-1): answerPrompt, and the [RunnerEvent.PROMPT] / [RunnerEvent.PROMPT_RESOLVED] event kinds.
          */
-        const val CONTRACT_VERSION = "1.3.0"
+        const val CONTRACT_VERSION = "1.4.0"
 
         private fun unoffered(op: String): OrchestratorReply<Nothing> = OrchestratorReply.Unavailable("this runner binding does not offer '$op'")
     }

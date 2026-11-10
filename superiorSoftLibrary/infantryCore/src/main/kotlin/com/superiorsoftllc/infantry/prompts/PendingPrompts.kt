@@ -164,11 +164,30 @@ class PendingPrompts(
         data class Question(val answer: Answer) : Resolution
     }
 
-    /** [fullInput] is the call's whole input (the card only carries a summary): an `allow_always` rule is made from it. */
+    /**
+     * RUNNER-PROMPT-RELAY-1: told when a prompt opens (with the call's whole input) and when it resolves, whoever resolved it. The
+     * daemon uses it on a runner to relay the prompts of the sessions its orchestrator started. A failing observer changes nothing.
+     */
+    @Volatile
+    var observer: PromptObserver? = null
+
+    /**
+     * RUNNER-PROMPT-RELAY-1: true for a session whose prompts are answered ELSEWHERE (a runner's session its orchestrator started: the
+     * card is shown in the orchestrator's app, whose own timer applies). Such a prompt gets no timer here; [expireHeld] resolves it
+     * by `prompts.onTimeout` only when the orchestrator has been unreachable for a whole timer.
+     */
+    @Volatile
+    var heldElsewhere: (sessionId: String) -> Boolean = { false }
+
+    /**
+     * [fullInput] is the call's whole input (the card only carries a summary): an `allow_always` rule is made from it.
+     * RUNNER-PROMPT-RELAY-1: [projectId] is the project of a relayed prompt (its session is not a session of this daemon).
+     */
     private class Open(
         val request: PromptRequest,
         val fullInput: String? = null,
         val result: CompletableDeferred<Resolution> = CompletableDeferred(),
+        val projectId: String? = null,
     ) {
         /** Who resolved it; set before [result] completes. */
         @Volatile
@@ -195,6 +214,7 @@ class PendingPrompts(
             return ApprovalOutcome(Decision.ALLOW_ALWAYS)
         }
         val policy = runCatching { policyFor(session) }.getOrElse { PromptTimeoutPolicy(DEFAULT_TIMEOUT_MS) }
+        val own = ownTimer(session, policy)
         // ASK-TIMER-2: the timer never stores a rule or a session grant: a recommended allow is auto-selected as allow once.
         val autoPick = recommended?.let { if (it.allows) Decision.ALLOW_ONCE else Decision.DENY }
         val now = clock()
@@ -209,7 +229,7 @@ class PendingPrompts(
             onTimeout = (autoPick ?: policy.onTimeout.decision).wire,
             recommended = autoPick?.wire,
         )
-        val settled = await(request, fullInput = input, policy = policy)
+        val settled = await(request, fullInput = input, policy = own)
         val decision = (settled.resolution as? Resolution.Approval)?.decision ?: Decision.DENY
         return ApprovalOutcome(decision, timedOut = settled.resolvedBy == PromptResolvedBy.TIMEOUT, timeoutSec = policy.timeoutMillis / 1_000)
     }
@@ -231,7 +251,7 @@ class PendingPrompts(
             allowOther = spec.allowOther,
             recommended = spec.recommended?.takeIf { rec -> spec.options.any { it.label == rec } },
         )
-        return (await(request, policy = policy).resolution as? Resolution.Question)?.answer ?: Answer.NONE
+        return (await(request, policy = ownTimer(session, policy)).resolution as? Resolution.Question)?.answer ?: Answer.NONE
     }
 
     /** True when the owner chose `allow_session` for [tool] earlier in [session]. */
@@ -285,6 +305,100 @@ class PendingPrompts(
         entries.forEach { resolve(it.request.promptId, resolvedBy, noAnswer(it.request)) }
     }
 
+    /** RUNNER-PROMPT-RELAY-1: the timer this daemon itself runs for a prompt of [session]: none when it is [heldElsewhere]. */
+    private fun ownTimer(session: String, policy: PromptTimeoutPolicy): PromptTimeoutPolicy =
+        if (runCatching { heldElsewhere(session) }.getOrDefault(false)) policy.copy(timeoutMillis = 0) else policy
+
+    /**
+     * RUNNER-PROMPT-RELAY-1 (the runner's fall back): resolve every open prompt of a [heldElsewhere] session whose timer
+     * (`prompts.timeoutSec` / the session's override; a question's own timeout) has run out with the orchestrator unreachable for
+     * all of it: no outbox read since [lastOrchestratorRead] (epoch millis; 0 = none since start), counted from the later of the
+     * prompt's opening and that read. It resolves exactly as an expired local prompt (`prompts.onTimeout`, its recommended option),
+     * with the same transcript line. Returns how many it resolved.
+     */
+    fun expireHeld(lastOrchestratorRead: Long): Int {
+        val now = clock()
+        val held = synchronized(lock) { open.values.filter { runCatching { heldElsewhere(it.request.sessionId) }.getOrDefault(false) } }
+        var n = 0
+        for (entry in held) {
+            val r = entry.request
+            val timeout = r.expiresAt?.let { it - r.createdAt } ?: continue
+            if (timeout <= 0 || now - maxOf(r.createdAt, lastOrchestratorRead) < timeout) continue
+            val policy = runCatching { policyFor(r.sessionId) }.getOrElse { PromptTimeoutPolicy(DEFAULT_TIMEOUT_MS) }.copy(timeoutMillis = timeout)
+            if (resolve(r.promptId, PromptResolvedBy.TIMEOUT, onExpiry(r, policy)) != null) {
+                n++
+                runCatching { notice(r.sessionId, expiryNotice(r, policy) + " (the orchestrator could not be reached)") }
+            }
+        }
+        return n
+    }
+
+    /**
+     * RUNNER-PROMPT-RELAY-1 (the orchestrator's side): show [request], a prompt a session raised on a runner, as an open prompt of
+     * this daemon, so every client shows the same card and answers it with the same `prompt_response` (the same callers may answer
+     * it as a local one). Suspends until it resolves; the answer is what the runner must apply, or null when the runner already
+     * closed it ([closeRelayed]) or it was already shown (a replayed event).
+     *
+     * * The timer is the runner's: [PromptRequest.expiresAt] - [PromptRequest.createdAt] from now, resolving by [PromptRequest.onTimeout]
+     *   (its recommended option first), as the runner itself would.
+     * * A remembered "Always allow" rule of [projectId] answers a tool approval at once (one transcript line), as for a local
+     *   session; an `allow_always` answer stores the rule here from [fullInput].
+     */
+    suspend fun relay(request: PromptRequest, fullInput: String?, projectId: String?): com.superiorsoftllc.infantry.daemon.api.orchestrator.PromptReply? {
+        val id = request.promptId.trim()
+        if (id.isEmpty()) return null
+        synchronized(lock) { if (open.containsKey(id) || resolved.containsKey(id)) return null }
+        if (request.kind == PromptKinds.TOOL_APPROVAL && request.tool != null) {
+            val rule = runCatching { rules.match(projectId, request.tool!!, fullInput ?: request.input.orEmpty()) }.getOrNull()
+            if (rule != null) {
+                synchronized(lock) { resolved[id] = Unit }
+                runCatching { notice(request.sessionId, ruleNotice(rule)) }
+                return com.superiorsoftllc.infantry.daemon.api.orchestrator.PromptReply(id, decision = Decision.ALLOW_ALWAYS.wire)
+            }
+        }
+        val timeout = request.expiresAt?.let { (it - request.createdAt).coerceAtLeast(0) } ?: 0L
+        val onTimeout = if (Decision.parse(request.onTimeout) == Decision.ALLOW_ONCE) TimeoutAction.APPROVE else TimeoutAction.DENY
+        val policy = PromptTimeoutPolicy(timeout, onTimeout)
+        val now = clock()
+        val shown = request.copy(promptId = id, createdAt = now, expiresAt = expiry(now, timeout))
+        val settled = await(shown, fullInput, policy, projectId)
+        if (settled.resolvedBy.startsWith(RUNNER_RESOLVED)) return null
+        return when (val r = settled.resolution) {
+            is Resolution.Approval -> com.superiorsoftllc.infantry.daemon.api.orchestrator.PromptReply(id, decision = r.decision.wire)
+            // A question with no answer (timeout without a recommended option) goes back as no answer: the runner's own resolution.
+            is Resolution.Question -> if (r.answer.answered) com.superiorsoftllc.infantry.daemon.api.orchestrator.PromptReply(id, answers = r.answer.answers, otherText = r.answer.otherText)
+            else com.superiorsoftllc.infantry.daemon.api.orchestrator.PromptReply(id)
+        }
+    }
+
+    /**
+     * RUNNER-PROMPT-RELAY-1: the runner closed relayed prompt [frame] (answered from here, timed out there, its session ended): the
+     * card closes here too, with the runner's outcome. False = it was not open here (already closed).
+     */
+    fun closeRelayed(frame: PromptResolved): Boolean {
+        val entry = synchronized(lock) { open[frame.promptId.trim()] } ?: return false
+        val resolution = if (entry.request.kind == PromptKinds.TOOL_APPROVAL) Resolution.Approval(Decision.parse(frame.outcome) ?: Decision.DENY)
+        else if (frame.outcome == PromptOutcomes.ANSWERED) Resolution.Question(Answer(emptyList(), null, answered = true))
+        else Resolution.Question(Answer.NONE)
+        return resolve(entry.request.promptId, RUNNER_RESOLVED + frame.resolvedBy, resolution) != null
+    }
+
+    /**
+     * RUNNER-PROMPT-RELAY-1: apply the orchestrator's answer [reply] to an open prompt of [sessionId], as a client's
+     * `prompt_response` from [resolvedBy]. False = it was not open (already resolved, or not a prompt of that session); an answer
+     * that does not fit the prompt is refused with [IllegalArgumentException].
+     */
+    fun answerRelayed(sessionId: String, reply: com.superiorsoftllc.infantry.daemon.api.orchestrator.PromptReply, resolvedBy: String): Boolean {
+        val id = reply.promptId.trim()
+        val entry = synchronized(lock) { open[id] } ?: return false
+        if (entry.request.sessionId != sessionId) return false
+        val response = PromptResponse(id, reply.decision, reply.answers, reply.otherText)
+        // A question the orchestrator could not get answered comes back with nothing in it: no answer, as a local timeout.
+        val resolution = if (entry.request.kind != PromptKinds.TOOL_APPROVAL && reply.decision == null && reply.answers.isEmpty() && reply.otherText.isNullOrBlank())
+            Resolution.Question(Answer.NONE) else validate(entry.request, response)
+        return resolve(id, resolvedBy, resolution) != null
+    }
+
     /** How a prompt was settled: its [resolution] and who caused it (`client:<n>`, [PromptResolvedBy.TIMEOUT], ...). */
     private data class Settled(val resolution: Resolution, val resolvedBy: String)
 
@@ -292,10 +406,11 @@ class PendingPrompts(
      * Open [request] and suspend until it resolves. ASK-TIMER: [policy] is its timer (0 = none); on expiry it resolves
      * with [PromptTimeoutPolicy.onTimeout] (a question: no answer) and one transcript line goes to [notice].
      */
-    private suspend fun await(request: PromptRequest, fullInput: String? = null, policy: PromptTimeoutPolicy): Settled {
-        val entry = Open(request, fullInput)
+    private suspend fun await(request: PromptRequest, fullInput: String? = null, policy: PromptTimeoutPolicy, projectId: String? = null): Settled {
+        val entry = Open(request, fullInput, projectId = projectId)
         synchronized(lock) { open[request.promptId] = entry }
         sink(Envelope(Envelope.PROMPT_REQUEST, json.encodeToString(PromptRequest.serializer(), request), request.sessionId))
+        observer?.let { o -> runCatching { o.opened(request, fullInput) } }
         try {
             val answered = if (policy.timeoutMillis <= 0) entry.result.await()
             else withTimeoutOrNull(policy.timeoutMillis) { entry.result.await() }
@@ -327,7 +442,9 @@ class PendingPrompts(
         if (resolution is Resolution.Approval && resolution.decision == Decision.ALLOW_ALWAYS) {
             val tool = entry.request.tool
             if (tool != null) {
-                val stored = runCatching { rules.remember(projectOf(entry.request.sessionId), tool, entry.fullInput ?: entry.request.input.orEmpty()) }
+                // RUNNER-PROMPT-RELAY-1: a relayed prompt names its project itself; a close the runner reports stores nothing again.
+                val stored = if (resolvedBy.startsWith(RUNNER_RESOLVED)) true
+                else runCatching { rules.remember(entry.projectId ?: projectOf(entry.request.sessionId), tool, entry.fullInput ?: entry.request.input.orEmpty()) }
                     .onFailure { System.err.println("[infantry] allow_always rule not stored: ${it.message}") }.getOrDefault(false)
                 // DP-10b: no rule store (plugin absent) or nothing to store: allow_always lasts the session, no error.
                 if (!stored) synchronized(lock) { sessionAllowed.getOrPut(entry.request.sessionId) { HashSet() }.add(tool) }
@@ -339,6 +456,7 @@ class PendingPrompts(
         runCatching {
             sink(Envelope(Envelope.PROMPT_RESOLVED, json.encodeToString(PromptResolved.serializer(), frame), entry.request.sessionId))
         }
+        observer?.let { o -> runCatching { o.resolved(entry.request, frame) } }
         return frame
     }
 
@@ -383,6 +501,9 @@ class PendingPrompts(
 
     companion object {
         const val DEFAULT_TIMEOUT_MS = 600_000L
+
+        /** RUNNER-PROMPT-RELAY-1: the `resolvedBy` prefix of a relayed prompt the runner closed (`runner:<its resolvedBy>`). */
+        const val RUNNER_RESOLVED = "runner:"
         /** The longest `input` summary a `prompt_request` carries. */
         const val INPUT_SUMMARY_MAX = 200
         private const val RESOLVED_MEMORY = 1024
@@ -424,6 +545,12 @@ class PendingPrompts(
             return if (oneLine.length <= INPUT_SUMMARY_MAX) oneLine else oneLine.take(INPUT_SUMMARY_MAX - 1) + "…"
         }
     }
+}
+
+/** RUNNER-PROMPT-RELAY-1: what [PendingPrompts.observer] is told: a prompt opened (with the call's whole input) and it resolved. */
+interface PromptObserver {
+    fun opened(request: PromptRequest, fullInput: String?)
+    fun resolved(request: PromptRequest, frame: PromptResolved)
 }
 
 /** DP-10b: the approval-rule port with no store behind it (Infantry_Approvals absent): no rule matches, none is kept. */

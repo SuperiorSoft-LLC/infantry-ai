@@ -38,6 +38,7 @@ class RemoteStarts(
     private val log: (String) -> Unit = { System.err.println(it) },
     /** RUNNER-POOL-12: where the outbox, the per-session seq counters and the started sessions survive a daemon restart; null = memory only. */
     private val persistTo: File? = null,
+    private val clock: () -> Long = System::currentTimeMillis,
 ) {
     private val branches = TicketBranches(git)
     private val sessions = ConcurrentHashMap<String, StartWorktree>()
@@ -178,6 +179,29 @@ class RemoteStarts(
         if (sessions.containsKey(sessionId)) add(sessionId, RunnerEvent.STATUS, state)
     }
 
+    /**
+     * RUNNER-PROMPT-RELAY-1: session [sessionId] opened a prompt ([payload] = [com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPromptEvent]
+     * JSON); queued as a [RunnerEvent.PROMPT] event for a session the orchestrator started (with or without a git remote). True = queued.
+     */
+    fun onPrompt(sessionId: String, payload: String): Boolean {
+        if (!isLinked(sessionId)) return false
+        add(sessionId, RunnerEvent.PROMPT, payload)
+        return true
+    }
+
+    /** RUNNER-PROMPT-RELAY-1: a prompt of [sessionId] closed ([payload] = the `prompt_resolved` JSON), so the orchestrator's card closes. */
+    fun onPromptResolved(sessionId: String, payload: String) {
+        if (isLinked(sessionId)) add(sessionId, RunnerEvent.PROMPT_RESOLVED, payload)
+    }
+
+    /**
+     * RUNNER-PROMPT-RELAY-1: epoch millis of the orchestrator's last outbox read (it reads every heartbeat while it is reachable); 0 =
+     * not since this daemon started. A relayed prompt falls back to the runner's own timer only once this is older than that timer.
+     */
+    @Volatile
+    var lastOrchestratorRead: Long = 0L
+        private set
+
     /** A turn of [sessionId] ended with [code]: its ticket branch is pushed to `origin`, then the event is queued. */
     fun onTurnEnd(sessionId: String, code: Int?) {
         val wt = sessions[sessionId] ?: return
@@ -223,7 +247,10 @@ class RemoteStarts(
 
     /** Every kept event with a seq above [sinceSeq] (an older orchestrator's read; it acknowledges nothing). */
     @Synchronized
-    fun events(sinceSeq: Long): List<RunnerEvent> = outbox.filter { it.seq > sinceSeq }
+    fun events(sinceSeq: Long): List<RunnerEvent> {
+        lastOrchestratorRead = clock()
+        return outbox.filter { it.seq > sinceSeq }
+    }
 
     /**
      * RUNNER-POOL-8: drop what [acked] acknowledges (session -> the highest seq the orchestrator applied), then answer every event
@@ -231,6 +258,7 @@ class RemoteStarts(
      */
     @Synchronized
     fun events(acked: Map<String, Long>): List<RunnerEvent> {
+        lastOrchestratorRead = clock()
         if (acked.isNotEmpty() && outbox.removeAll { it.seq <= (acked[it.sessionId] ?: 0L) }) save()
         return outbox.toList()
     }

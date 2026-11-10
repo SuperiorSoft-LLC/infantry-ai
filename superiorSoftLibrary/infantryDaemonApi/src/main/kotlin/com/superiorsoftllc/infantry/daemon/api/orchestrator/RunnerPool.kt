@@ -89,13 +89,47 @@ data class SessionRef(
 /**
  * RUNNER-POOL-6: one event of a session a runner runs for its orchestrator: [kind] [STATUS] (payload = state) or [FINISHED] (payload =
  * exit code). RUNNER-POOL-8: [seq] is monotonic PER SESSION (1, 2, 3 ...), so (session, seq) is the event's natural key.
+ * RUNNER-PROMPT-RELAY-1: [PROMPT] (payload = [RunnerPromptEvent.encode]: the runner's `prompt_request` JSON and the call's whole
+ * input) and [PROMPT_RESOLVED] (payload = the runner's `prompt_resolved` JSON): a session on the runner asked a human; that prompt closed.
  */
 data class RunnerEvent(val sessionId: String, val seq: Long, val kind: String, val payload: String = "") {
     companion object {
         const val STATUS = "status"
         const val FINISHED = "finished"
+        const val PROMPT = "prompt"
+        const val PROMPT_RESOLVED = "prompt_resolved"
     }
 }
+
+/**
+ * RUNNER-PROMPT-RELAY-1: the payload of a [RunnerEvent.PROMPT] event as plain data: [request] is the runner's `prompt_request` JSON
+ * (the card the owner sees; its id is the runner's prompt id), [input] the call's whole input (a card carries only a summary, and an
+ * "Always allow" rule is made from the whole input). [encode] / [decode] are the one JSON form both ends use.
+ */
+data class RunnerPromptEvent(val request: String, val input: String? = null) {
+    fun encode(): String = kotlinx.serialization.json.JsonObject(
+        buildMap {
+            put("request", kotlinx.serialization.json.JsonPrimitive(request))
+            input?.let { put("input", kotlinx.serialization.json.JsonPrimitive(it)) }
+        },
+    ).toString()
+
+    companion object {
+        /** The payload back; null for a payload of another shape (an unknown peer). */
+        fun decode(payload: String): RunnerPromptEvent? = runCatching {
+            val o = kotlinx.serialization.json.Json.parseToJsonElement(payload) as kotlinx.serialization.json.JsonObject
+            val request = (o["request"] as kotlinx.serialization.json.JsonPrimitive).content
+            val input = (o["input"] as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { it.isString }?.content
+            RunnerPromptEvent(request, input)
+        }.getOrNull()
+    }
+}
+
+/**
+ * RUNNER-PROMPT-RELAY-1: the orchestrator's answer to a runner's prompt ([RunnerLink.answerPrompt]), the fields of a client's
+ * `prompt_response`: [decision] for a tool approval, [answers] / [otherText] for a question.
+ */
+data class PromptReply(val promptId: String, val decision: String? = null, val answers: List<String> = emptyList(), val otherText: String? = null)
 
 /**
  * One composed mail turn for [RunnerLink.deliverMail]. [origin] is the sender as the wire's `MessageOrigin` JSON (so the contract
@@ -149,6 +183,11 @@ class LocalRunnerServices(
      * had never run. Returns false for an unknown session; a live one is refused with [IllegalArgumentException].
      */
     val remove: (sessionId: String) -> Boolean = { false },
+    /**
+     * RUNNER-PROMPT-RELAY-1: resolve an open prompt of a session with the orchestrator's answer; false = it was no longer open. An
+     * answer that does not fit the prompt is refused with [IllegalArgumentException]. Default: no prompts here (false).
+     */
+    val answerPrompt: (sessionId: String, reply: PromptReply) -> Boolean = { _, _ -> false },
 )
 
 /** The binding for the runner in this process ([RunnerPool.LOCAL]). */
@@ -180,6 +219,13 @@ class LocalRunnerLink(private val services: LocalRunnerServices) : RunnerLink {
         services.eventsAcked?.let { OrchestratorReply.Ok(it(acked)) } ?: super.events(acked)
     override fun readTranscript(sessionId: String, fromLine: Int, maxLines: Int): OrchestratorReply<List<String>> =
         OrchestratorReply.Ok(services.transcript(sessionId, fromLine, maxLines))
+
+    override fun answerPrompt(sessionId: String, reply: PromptReply): OrchestratorReply<Boolean> =
+        try {
+            OrchestratorReply.Ok(services.answerPrompt(sessionId, reply))
+        } catch (e: IllegalArgumentException) {
+            OrchestratorReply.Unavailable(e.message ?: "answer refused")
+        }
 }
 
 /**

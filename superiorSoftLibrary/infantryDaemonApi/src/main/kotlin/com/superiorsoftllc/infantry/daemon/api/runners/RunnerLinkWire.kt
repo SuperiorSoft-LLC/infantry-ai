@@ -30,8 +30,16 @@ object RunnerLinkWire {
      * [PairAnswer.grantedHarnesses] / [PairAnswer.grantRefusal]: a code issued on the runner console with `--grant-on-pair` may
      * grant at most one project and installed harnesses, once, at pairing (owner decision D24). An older runner ignores the request
      * fields (defaults) and grants nothing; an older orchestrator sends none.
+     * 1.7.0 (RUNNER-PROMPT-RELAY-1): [PROMPT_ANSWER], and the `prompt` / `prompt_resolved` event kinds: a session on the runner that asks
+     * a human (a tool approval, a question) is shown in the orchestrator's app, and the owner's answer comes back with this frame.
      */
-    const val CONTRACT = "1.6.0"
+    const val CONTRACT = "1.7.0"
+
+    /**
+     * RUNNER-PROMPT-RELAY-1 (contract 1.7.0): the orchestrator's answer to a prompt a session of its own raised on this runner (the
+     * `prompt` event). Only a session this orchestrator started may be answered; [PromptAnswerAck.applied] false = it was no longer open.
+     */
+    const val PROMPT_ANSWER = "runner_link_prompt_answer"
 
     const val PAIR = "runner_link_pair"
     const val HELLO = "runner_link_hello"
@@ -176,6 +184,19 @@ object RunnerLinkWire {
     /** [removed] is false when the runner no longer had the session (removed twice, or an older runner ignored it). */
     @Serializable
     data class RemoveAnswer(val removed: Boolean = false)
+
+    /** RUNNER-PROMPT-RELAY-1: the owner's answer to prompt [promptId] of [sessionId], the fields of a `prompt_response`. */
+    @Serializable
+    data class PromptAnswerRequest(
+        val sessionId: String,
+        val promptId: String,
+        val decision: String? = null,
+        val answers: List<String> = emptyList(),
+        val otherText: String? = null,
+    )
+
+    @Serializable
+    data class PromptAnswerAck(val applied: Boolean = false)
 
     @Serializable
     data class HealthAnswer(val state: String, val running: Int = 0, val freeSlots: Int = -1, val load: Double? = null)
