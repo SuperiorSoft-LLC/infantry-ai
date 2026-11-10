@@ -2571,6 +2571,14 @@ internal object Cli {
     private fun agentsProjectId(parsed: ParsedArgs, getenv: (String) -> String?): String =
         parsed.project?.trim() ?: getenv(AccessPolicy.PROJECT_ID_ENV)?.takeIf { it.isNotBlank() } ?: ""
 
+    /** The id of the only project, or null when there are none or several (or the list cannot be read). */
+    private suspend fun soleProjectId(stream: FrameStream): String? = try {
+        val answer = stream.request(Envelope(Envelope.PROJECT_LIST, ""), Envelope.PROJECTS, "project_list", idempotent = true)
+        json.decodeFromString(ListSerializer(Project.serializer()), answer.data).singleOrNull()?.id
+    } catch (e: Exception) {
+        null
+    }
+
     private suspend fun fetchRoster(stream: FrameStream, projectId: String, err: Appendable): List<RosterRow>? {
         val answer = stream.request(
             Envelope(Envelope.AGENT_ROSTER, json.encodeToString(RosterRequest.serializer(), RosterRequest(projectId))),
@@ -2593,7 +2601,13 @@ internal object Cli {
      * never a crash.
      */
     private suspend fun agentsLive(stream: FrameStream, parsed: ParsedArgs, out: Appendable, err: Appendable, getenv: (String) -> String?): Int {
-        val rows = fetchRoster(stream, agentsProjectId(parsed, getenv), err) ?: return 1
+        var projectId = agentsProjectId(parsed, getenv)
+        // FIRST-INSTALL-ROSTER-1: no --project and no env var on a fresh single-project install: use that one project,
+        // the way tickets and the board do. Several projects (or an explicit blank --project) stay refused.
+        if (projectId.isBlank() && parsed.project == null) {
+            projectId = soleProjectId(stream) ?: ""
+        }
+        val rows = fetchRoster(stream, projectId, err) ?: return 1
 
         if (rows.isEmpty()) {
             out.appendLine("No agents here.")
