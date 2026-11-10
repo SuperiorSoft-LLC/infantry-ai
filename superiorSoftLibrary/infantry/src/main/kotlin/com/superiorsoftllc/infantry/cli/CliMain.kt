@@ -248,6 +248,7 @@ fun main(args: Array<String>) {
  * infantry harnesses                            the harnesses (provider ids) a ticket can pin, and each one's models
  * infantry harness-status [--check]            which harness CLIs (claude, opencode, pi) are installed / missing / outdated (--check asks npm for the latest)
  * infantry harness key [<name>] [--clear]     FIRST-RUN-KEYS-1: which harnesses need an API key and which are set; with a name, prompts for the key (stdin, never an argument) and stores it in the keystore
+ * infantry harness auth [<name>]               CLAUDE-AUTH-CHOICE-2: each harness's sign-in mode, signedIn true/false/unknown and last probe; with a name it re-probes first (no tokens)
  * infantry harness-install [id...] [--update]  npm-install the missing harness CLIs into the app prefix (--update refreshes outdated ones)
  * infantry ticket link <id> <otherId> <type>   link one ticket to another (type: blocked_by, blocks, child_of, ...)
  * infantry threads              my conversations: who else is in each, how many messages, when last
@@ -1669,7 +1670,8 @@ internal object Cli {
      */
     private fun harnessKey(stream: FrameStream, parsed: ParsedArgs, out: Appendable, err: Appendable): Int = runBlocking {
         checkContract(stream, err)
-        if (parsed.args.firstOrNull() != "key") { err.appendLine("usage: infantry harness key [<name>] [--clear]"); return@runBlocking 2 }
+        if (parsed.args.firstOrNull() == "auth") return@runBlocking harnessAuth(stream, parsed, out)
+        if (parsed.args.firstOrNull() != "key") { err.appendLine("usage: infantry harness key [<name>] [--clear] | infantry harness auth [<name>]"); return@runBlocking 2 }
         val name = parsed.args.getOrNull(1)?.trim()?.lowercase()
         val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
         fun state(e: Envelope) = json.decodeFromString(com.superiorsoftllc.infantry.keystore.SecretState.serializer(), e.data)
@@ -1691,6 +1693,27 @@ internal object Cli {
         val reply = stream.request(frame, Envelope.SECRET_STATE, frame.type, false)
         val row = state(reply).secrets.firstOrNull { it.name == secret }
         out.appendLine("$name: ${if (row?.set == true) "key set ${row.tail}" else "key not set"}")
+        0
+    }
+
+    /**
+     * CLAUDE-AUTH-CHOICE-2: `harness auth [<name>]`: how each harness that offers a sign-in choice signs in, whether it is signed in
+     * (true / false / unknown) and when it was last probed. With a name the daemon re-probes that harness first (no tokens are
+     * spent; the probe is the manifest's `authProbe`, e.g. `claude auth status`) and prints the terminal login command when it is not signed in.
+     */
+    private fun harnessAuth(stream: FrameStream, parsed: ParsedArgs, out: Appendable): Int = runBlocking {
+        val name = parsed.args.getOrNull(1)?.trim()?.lowercase()
+        val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+        val data = if (name == null) "{}" else json.encodeToString(com.superiorsoftllc.infantry.keystore.SecretName.serializer(), com.superiorsoftllc.infantry.keystore.SecretName(com.superiorsoftllc.infantry.harness.credential.HarnessCredential.secretNameOf(name)))
+        val reply = stream.request(Envelope(Envelope.SECRET_STATUS, data), Envelope.SECRET_STATE, "secret_status", true)
+        val rows = json.decodeFromString(com.superiorsoftllc.infantry.keystore.SecretState.serializer(), reply.data).secrets
+            .filter { it.name.startsWith("harness.") && it.authModes.isNotEmpty() && (name == null || it.name == "harness.$name.key") }
+        if (rows.isEmpty()) { out.appendLine(if (name == null) "no loaded harness offers a sign-in choice" else "harness '$name' offers no sign-in choice"); return@runBlocking 1 }
+        for (r in rows) {
+            val id = r.name.removePrefix("harness.").removeSuffix(".key")
+            out.appendLine("$id  authMode=${r.authMode.ifBlank { "not chosen" }}  signedIn=${r.signedIn}  lastProbe=${if (r.lastProbe == 0L) "never" else java.time.Instant.ofEpochMilli(r.lastProbe)}")
+            if (r.authMode == com.superiorsoftllc.infantry.harness.credential.HarnessCredential.MODE_SUBSCRIPTION && r.signedIn != "true" && r.loginCommand.isNotBlank()) out.appendLine("  sign in once in a terminal: ${r.loginCommand}")
+        }
         0
     }
 
@@ -6075,7 +6098,7 @@ internal object Cli {
         "harnesses" -> if (parsed.args.isNotEmpty()) "harnesses takes no arguments: infantry harnesses" else null
         "harness-status" -> if (parsed.args.isNotEmpty()) "harness-status takes no arguments: infantry harness-status [--check]" else null
         "harness-install" -> null
-        "harness" -> if (parsed.args.firstOrNull() != "key" || parsed.args.size > 2) "usage: infantry harness key [<name>] [--clear]" else null
+        "harness" -> if ((parsed.args.firstOrNull() != "key" && parsed.args.firstOrNull() != "auth") || parsed.args.size > 2) "usage: infantry harness key [<name>] [--clear] | infantry harness auth [<name>]" else null
         "agent" -> if (parsed.args.firstOrNull().isNullOrBlank() || parsed.args.size == 1) null else agentQueueUsage(parsed.args)
         "agent-def" -> AgentDefCli.usageError(parsed.args)
         "run-cmd" -> RunCmdCli.usageError(parsed.args)

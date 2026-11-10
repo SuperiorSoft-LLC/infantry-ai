@@ -298,3 +298,14 @@ not be `PATH`-like or an `INFANTRY_` / `AGENTHQ_` variable.
 - When a loaded harness declares a key and none is set, the shell asks for it once (`ShellHarnessKeys`: Save or Skip; Skip is
   remembered per device and the key stays settable in Configuration).
 - CLI: `infantry harness key` lists them; `infantry harness key <name>` prompts on stdin (never an argument); `--clear` removes it.
+
+### Subscription sign-in (CLAUDE-AUTH-CHOICE-2)
+
+A harness that offers a choice declares `harness.authModes` (`api-key`, `subscription-login`) and, for the subscription, `harness.authProbe`:
+`{ "argv": ["claude", "auth", "status"], "signedInField": "loggedIn", "loginCommand": "claude auth login" }`. The owner's pick is the setting
+`harness.<id>.authMode`. **`/login` does not work in a headless (stream-json) Claude session**: tested on a throwaway `CLAUDE_CONFIG_DIR`,
+`claude -p /login` ends with `terminal_reason: api_error`, no tokens and no login URL. The path is the terminal command: the harness row in
+Configuration > Secrets shows `loginCommand` with a Copy button, and a **Check** button asks the daemon to run the probe (it spends no tokens).
+The daemon keeps `signedIn` (`true`, `false` or `unknown`) and `lastProbe` in memory per harness. A subscription session never carries a key:
+the key variable is set to an empty value, so one the daemon inherited cannot reach the harness.
+CLI: `infantry harness auth [<name>]` prints each harness's mode, `signedIn` and last probe; with a name it re-probes first and prints the login command when not signed in.

@@ -64,7 +64,7 @@ class HarnessCredentials(
     /** The stored choice for a harness id (its `harness.<id>.authMode` setting), or null when none was made. */
     private val modeSource: (String) -> String? = { null },
     /** Runs a probe argv and returns its stdout whatever the exit code (a CLI may exit 1 when signed out); null when it cannot run. */
-    private val probeRunner: (List<String>) -> String? = ::runProbe,
+    private val probeRunner: (List<String>, String) -> String? = ::runProbe,
     private val declaredSource: () -> List<HarnessCredential>,
 ) {
     /** CLAUDE-AUTH-CHOICE-1: the chosen auth mode of [harnessId]: the stored one when the harness offers it, else null (no choice yet). */
@@ -100,7 +100,9 @@ class HarnessCredentials(
     /** `{ENV_NAME: key}` for [harnessId]; empty when it declares none or the key is unset. */
     fun env(harnessId: String): Map<String, String> {
         val c = declaration(harnessId) ?: return emptyMap()
-        if (subscription(harnessId)) return emptyMap()
+        // CLAUDE-AUTH-CHOICE-2: a subscription session carries NO key: the variable is blanked, so a key the daemon itself inherited from its own
+        // environment cannot reach the harness and bill an API account (a blank variable reads as unset).
+        if (subscription(harnessId)) return mapOf(c.env to "")
         val v = keystore.field(c.secretName, HarnessCredential.FIELD) ?: return emptyMap()
         return mapOf(c.env to v)
     }
@@ -117,12 +119,12 @@ class HarnessCredentials(
      */
     fun checkAuth(harnessId: String): AuthStatus {
         val c = declaration(harnessId)
-        val signedIn = if (c == null || c.probeArgv.isEmpty()) null else probe(c.probeArgv, c.probeField)
+        val signedIn = if (c == null || c.probeArgv.isEmpty()) null else probe(c.probeArgv, c.probeField, c.env)
         return AuthStatus(signedIn, System.currentTimeMillis()).also { authStatus[harnessId] = it }
     }
 
-    private fun probe(argv: List<String>, field: String): Boolean? = try {
-        val out = probeRunner(argv) ?: return null
+    private fun probe(argv: List<String>, field: String, scrubEnv: String): Boolean? = try {
+        val out = probeRunner(argv, scrubEnv) ?: return null
         (kotlinx.serialization.json.Json.parseToJsonElement(out) as? kotlinx.serialization.json.JsonObject)
             ?.get(field)?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content?.toBooleanStrictOrNull() }
     } catch (_: Exception) { null }
@@ -142,11 +144,11 @@ private const val PROBE_TIMEOUT_SECONDS = 30L
 
 /**
  * Runs [argv] (never a shell), stdin closed, stderr discarded, and returns stdout whatever the exit code; null when it cannot
- * start or outlives [PROBE_TIMEOUT_SECONDS]. The child never sees an API key variable: a subscription probe must not bill one.
+ * start or outlives [PROBE_TIMEOUT_SECONDS]. The child never sees the harness's API key variable [scrubEnv]: a subscription probe must not bill one.
  */
-internal fun runProbe(argv: List<String>): String? = try {
+internal fun runProbe(argv: List<String>, scrubEnv: String): String? = try {
     val b = ProcessBuilder(argv).redirectError(ProcessBuilder.Redirect.DISCARD)
-    b.environment().remove("ANTHROPIC_API_KEY")
+    b.environment().remove(scrubEnv)
     val p = b.start()
     p.outputStream.close()
     val out = java.util.concurrent.CompletableFuture.supplyAsync { p.inputStream.readBytes().toString(Charsets.UTF_8) }
