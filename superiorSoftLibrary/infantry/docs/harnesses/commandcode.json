@@ -1,0 +1,26 @@
+{
+  "id": "commandcode",
+  "name": "Command Code",
+  "command": "command-code",
+  "args": ["-p", "--output-format", "json", "{toolApproval}", ["--model", "{model}"], ["--effort", "{effort}"], ["--resume", "{sessionId}"]],
+  "capabilities": ["MODEL_SELECTION", "SESSION_RESUME", "EFFORT_SELECTION"],
+  "credential": {
+    "env": "COMMAND_CODE_API_KEY",
+    "label": "Command Code",
+    "help": "Create an API key in Command Code Studio (commandcode.ai/studio, API keys) and paste it here. The CLI reads COMMAND_CODE_API_KEY instead of `cmd login`."
+  },
+  "output": {
+    "format": "jsonl",
+    "map": [
+      {"match": {"type": "result"}, "event": "session", "fields": {"id": "sessionId"}},
+      {"match": {"type": "result", "subtype": "success"}, "event": "text", "fields": {"text": "finalText"}},
+      {"match": {"type": "result", "subtype": "max_turns"}, "event": "text", "fields": {"text": "finalText"}},
+      {"match": {"type": "result", "subtype": "error"}, "event": "error", "fields": {"message": "error"}}
+    ]
+  },
+  "toolApproval": {
+    "deny": [],
+    "allowEdits": ["--permission-mode", "accept-edits"],
+    "allowAll": ["--yolo"]
+  }
+}

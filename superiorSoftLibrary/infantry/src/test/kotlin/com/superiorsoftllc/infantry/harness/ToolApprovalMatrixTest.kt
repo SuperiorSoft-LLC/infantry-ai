@@ -60,7 +60,7 @@ class ToolApprovalMatrixTest {
         machineDescriptorDir()?.let { dir ->
             HarnessDescriptorLoader(dir).loadInto(registry).notes.forEach { println("[matrix] machine descriptor ${it.source}: ${it.reason} ${it.detail}") }
         }
-        assertTrue(registry.harnessIds().containsAll(listOf("codex", "gemini")), "registered: ${registry.harnessIds()}")
+        assertTrue(registry.harnessIds().containsAll(listOf("codex", "gemini", "commandcode")), "registered: ${registry.harnessIds()}")
 
         // 1. every configured provider name, as the daemon resolves it first.
         for (id in ProviderFactory.ids()) {
