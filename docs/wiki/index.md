@@ -40,6 +40,7 @@ Every page of this wiki is listed here, one line each. The pages are written fro
 
 - [Board and epics](Board.md): epics, and moving tickets between epics.
 - [Notifications](Notifications.md): the ONE notification bus (in-app toasts, OS notifications), presenters a plugin can override, routing settings, the inventory.
+- [CLI login](Login.md): `infantry login|logout|whoami`, the CLI's saved daemon connection (not Claude's `/login`).
 - [Health](Health.md): `infantry health`, the daemon health and environment report (up/down, restarts and why, MCP bridges, OS/shell/ports).
 - [Waiting flag](Waiting.md): `infantry waiting on|off`, `infantry_waiting`; the "active but waiting" card state and the idle-nudge watcher.
 - [Memory](Memory.md): project knowledge notes, the project / global / role / session scopes, the `infantry_memory` MCP actions (read and write), who may write global notes.
