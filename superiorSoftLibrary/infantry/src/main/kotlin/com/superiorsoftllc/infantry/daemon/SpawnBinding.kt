@@ -23,6 +23,8 @@ fun bindSessionOnSpawn(
     agents: AgentProfiles,
     options: SpawnOptions?,
     repo: File?,
+    /** RUNNER-PAIR-1: the session's own Tool approval (a runner-link start); null = the global value. */
+    toolApproval: com.superiorsoftllc.infantry.harness.ToolApproval? = null,
 ): SessionRecord? {
     if (options?.agentId.isNullOrBlank() && options?.role.isNullOrBlank()) return null
     val resolved = agents.resolveSpawn(options)
@@ -38,5 +40,6 @@ fun bindSessionOnSpawn(
         projectId = resolved.projectId,
         instance = agents.instanceFor(resolved.agentId, resolved.role),
         contextLimit = options?.contextLimit, // CONTEXT-LIMIT-1
+        toolApproval = toolApproval,
     )
 }
