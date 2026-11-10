@@ -296,6 +296,8 @@ internal object Cli {
         // STALL-1 (ticket 802c64d5): `run-watched [opts] -- <cmd...>` is `bg run --notify [opts] -- <cmd...>` (detached, the
         // daemon tells the session when it ends); `unwatched --reason <why> -- <cmd...>` is the explicit, logged opt-out.
         // PLUGIN-MANAGER-1: `plugin ...` works on this host's plugins root; no daemon, no global flags.
+        // CLI-LOGIN-1: `login` / `logout` / `whoami` manage the saved default connection; no daemon needed.
+        if (args.firstOrNull() in setOf("login", "logout", "whoami")) return LoginCli.run(args[0], args.drop(1), out, err, getenv, input)
         if (args.firstOrNull() == "plugin") return PluginCli.run(args.drop(1), out, err, getenv)
         if (args.firstOrNull() == "run-watched") return run(arrayOf("bg", "run", "--notify") + args.drop(1), out, err, getenv, input, cwd, rawInput)
         if (args.firstOrNull() == "unwatched") return run(arrayOf("bg") + args, out, err, getenv, input, cwd, rawInput)
@@ -4648,11 +4650,13 @@ internal object Cli {
                 ?: throw UsageFailure("no endpoint named '$name' in ${file.path}")
         }
         val typed = "ws://${parsed.host}:${parsed.port}/ws"
+        val savedLogin = LoginStore.load(getenv)
         val rawUrl = parsed.url
             ?: endpoint?.url
             ?: typed.takeIf { parsed.addressGiven }
             ?: getenv(InfantryBin.URL_ENV)?.takeIf { it.isNotBlank() }
             ?: envTargetUrl(getenv)
+            ?: savedLogin?.url
             ?: installedUrl(getenv)
             ?: typed
         val url = normaliseUrl(rawUrl)
@@ -4661,7 +4665,11 @@ internal object Cli {
             endpoint != null -> endpoint.tokenFile
                 ?.let { AccessPolicy.readTokenFile(File(it)) to "endpoint '${endpoint.name}'" }
                 ?: (null to "endpoint '${endpoint.name}', which names no token file")
-            else -> environmentToken(getenv, installedStateDir(getenv))
+            else -> environmentToken(getenv, installedStateDir(getenv)).let { et ->
+                if (et.first == null && savedLogin != null && rawUrl == savedLogin.url) {
+                    LoginStore.token(savedLogin)?.let { it to "saved login" } ?: et
+                } else et
+            }
         }
         return Target(
             url = url, token = token, tokenSource = source, answerTimeoutMs = answerTimeoutMs(getenv),
@@ -4990,6 +4998,8 @@ internal object Cli {
                                   Narrow the daemon's spawn limits (--allow-kill-any is moot), see docs/MCP.md
 
             This machine:
+              login [--url <ws://host:port>] [--token <t>]     Ask for the server URL and token, check them, save as this CLI's default connection (not Claude's /login)
+              logout | whoami                                  Forget the saved connection | show the saved server
               install-cli [--dir <launcher dir>] [--dry-run]   Put `infantry` on YOUR user PATH (idempotent; the system PATH is never touched)
               uninstall-cli [--dir <launcher dir>] [--dry-run]  Take it off again (only the entries that hold Infantry AI's launcher)
                                   A running terminal keeps the PATH it started with: open a NEW one. The desktop app keeps
@@ -6239,7 +6249,7 @@ internal object Cli {
         "read", "threads", "thread", "waiting", "epics", "stories", "epic", "project", "mcp", "knowledge", "memory", "decision", "pipeline", "notify", "issue",
         "trait", "skill", "role", "ask", "harnesses", "harness-status", "archive", "harness-install", "image", "session", "remote", "bg", "kill", "usage",
         "processes", "health", "settings", "agent", "agent-def", "run-cmd", "event", "tests", "tool", "script", "runner",
-        "install-cli", "uninstall-cli",
+        "install-cli", "uninstall-cli", "login", "logout", "whoami",
     )
 
     /** `infantry remote on|off|status`: edits `<stateDir>/network.properties`; takes effect on the next daemon restart. */
