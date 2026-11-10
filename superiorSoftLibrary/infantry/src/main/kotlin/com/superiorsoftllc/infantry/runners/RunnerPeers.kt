@@ -57,8 +57,12 @@ class RunnerPeers(
      * the code is sent; with no fingerprint the call fails after the handshake and the message carries the fingerprint the
      * runner presented, for the owner to compare.
      */
-    fun add(name: String, url: String, code: String, fingerprint: String?, orchestratorName: String): PairedRunner {
-        checkName(name)
+    fun add(
+        name: String, url: String, code: String, fingerprint: String?, orchestratorName: String,
+        /** RUNNER-PAIR-1: a record of the SAME runner (same certificate pin) under [name] is replaced, not refused (a re-pasted bearer). */
+        replaceSameRunner: Boolean = false,
+    ): PairedRunner {
+        checkName(name, fingerprint.takeIf { replaceSameRunner })
         require(code.isNotBlank()) { "--code is required: the one-time code `infantry runner pair` printed on the runner" }
         // RUNNER-GRANT-AT-PAIR-1: the by-hand form carries no grant (no link, so no grant=1 to confirm against); `addLink` does.
         val answer = link.call(url, fingerprint, null, null, F.PAIR, pairData(code, name, orchestratorName, null), callTimeoutSec())
@@ -83,8 +87,18 @@ class RunnerPeers(
      * AND the link says `grant=1`; the runner applies it only if its own record of the code carries the authority, and the answer
      * lists what it granted.
      */
-    fun addLink(pairLink: RunnerPairLink, name: String, orchestratorName: String, allowPlain: Boolean, grants: PairGrants? = null): AddOutcome {
-        checkName(name)
+    fun addLink(
+        pairLink: RunnerPairLink,
+        name: String,
+        orchestratorName: String,
+        allowPlain: Boolean,
+        grants: PairGrants? = null,
+        /** RUNNER-PAIR-1: what to try when no host answered; null = the pairing-link hint ([unreachableHint]). */
+        unreachableHint: String? = null,
+        /** RUNNER-PAIR-1: a record of the SAME runner (same certificate pin) under [name] is replaced, not refused (a re-pasted bearer). */
+        replaceSameRunner: Boolean = false,
+    ): AddOutcome {
+        checkName(name, pairLink.fingerprint.takeIf { replaceSameRunner })
         require(!pairLink.plain || allowPlain) {
             "that link carries no certificate fingerprint because the runner serves plain ws:// (runners.allowPlainTailnet there); " +
                 "set runners.allowPlainTailnet on this machine too, or pair again on the runner without it"
@@ -110,7 +124,7 @@ class RunnerPeers(
             val granted = grantsOf(answer)
             return AddOutcome(paired, skipped, granted.grantedProjects, granted.grantedHarnesses, granted.grantRefusal)
         }
-        throw LinkFailure("no host of the link answered: ${skipped.joinToString("; ")}${unreachableHint(pairLink)}")
+        throw LinkFailure("no host of the link answered: ${skipped.joinToString("; ")}${unreachableHint ?: unreachableHint(pairLink)}")
     }
 
     /**
@@ -127,10 +141,14 @@ class RunnerPeers(
     }
 
     /** Validates a runner name; one write path for both add forms. */
-    private fun checkName(name: String) {
+    private fun checkName(name: String, samePin: String? = null) {
         require(RunnerLinkStore.NAME.matches(name)) { "runner name '$name' must be 1-32 of a-z, 0-9 and '-' (starting with a letter or digit)" }
         require(name != LOCAL) { "'$LOCAL' is this machine's own runner; pick another name" }
-        require(store.runner(name) == null) { "runner '$name' is already paired; `infantry runner detach $name` first" }
+        // RUNNER-PAIR-1: re-pasting a runner's bearer re-pairs that SAME runner (its certificate pin matches the stored one); the
+        // stored record is kept until the new PAIR succeeds. A different runner under the name is still refused.
+        val existing = store.runner(name)
+        val same = existing != null && !samePin.isNullOrBlank() && existing.fingerprint.equals(samePin, ignoreCase = true)
+        require(existing == null || same) { "runner '$name' is already paired; `infantry runner detach $name` first" }
     }
 
     private fun pairData(code: String, name: String, orchestratorName: String, grants: PairGrants?): String =

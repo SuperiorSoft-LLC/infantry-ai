@@ -5,7 +5,41 @@ the session started on the runner. Design: [RUNNER-POOL](../RUNNER-POOL.md). Ser
 
 Words: the **orchestrator** is the daemon with your board (your PC); the **runner** is the daemon on the server that runs the agent CLIs.
 
-## 0. One step: Connect a runner (RUNNER-PAIR-1)
+## 0. Two steps: docker run, then paste endpoint and bearer (RUNNER-PAIR-1)
+
+**Step 1, on the server** (any machine with Docker), one command:
+
+```
+docker run -d --name infantry-runner -e INFANTRY_MODE=runner -e INFANTRY_RUNNER_HOST=<this server's address> -p 8790:8790 -v infantry-runner:/data ghcr.io/superiorsoft-llc/infantry-ai:latest
+```
+
+`docker logs infantry-runner` then shows, between `==== INFANTRY RUNNER ... ====` and `==== END INFANTRY RUNNER ====`:
+
+```
+endpoint: wss://<this server's address>:8790
+bearer:   irb1.runner.<pin>.<secret>
+```
+
+**Step 2, in the app:** Settings > Runners > **Add runner**, paste the endpoint and the bearer, **Connect**. Nothing else is asked.
+Then create an agent with that runner as its location: the session runs on the server.
+
+What to know:
+
+- The bearer is made once, kept in the `infantry-runner` volume, and printed again on every start. It stays valid until you
+  rotate it: `docker exec infantry-runner infantry runner bearer --rotate`. It carries the runner's name and its TLS certificate
+  pin, so the app checks the certificate before it sends the secret. Treat it like a password.
+- Every project and every harness may run on the runner. Narrow it in the same `docker run` with
+  `-e INFANTRY_RUNNER_ALLOW_PROJECTS=<ids>` / `-e INFANTRY_RUNNER_ALLOW_HARNESSES=<ids>`. A harness key or login goes in the same
+  run too (`-e ANTHROPIC_API_KEY=...`, see [Run a remote environment](run-a-remote-environment.md)).
+- Another published port (`-p 18921:8790`)? Add `-e INFANTRY_RUNNER_PUBLIC_PORT=18921` so the printed endpoint says it; or just
+  type that port in the endpoint you paste. A runner on your own PC is reached as `localhost:<published port>`.
+- One orchestrator per runner: the same app can paste the bearer again (it gets a fresh link credential); another one is refused
+  until `docker exec infantry-runner infantry runner detach`.
+- Name it with `-e INFANTRY_RUNNER_NAME=<name>` (default `runner`). `INFANTRY_RUNNER_PAIRING=code` brings back the older
+  one-time pairing link (section 1).
+- From a terminal instead of the app: `infantry runner add wss://<address>:8790 --bearer -` (paste the bearer on stdin).
+
+## 0b. One step from this PC: Connect a runner (RUNNER-PAIR-1)
 
 When the runner daemon is already running (for example the runner image under `docker run`) and your PC can run a command on
 that machine, you do not copy any link. In the app: **Settings > Runners > Connect a runner**, then fill in:

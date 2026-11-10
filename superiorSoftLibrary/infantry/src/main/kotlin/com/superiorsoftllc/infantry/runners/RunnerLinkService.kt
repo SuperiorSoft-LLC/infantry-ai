@@ -81,6 +81,9 @@ class RunnerLinkService(
 
     private val dir: File get() = RunnerLinkStore.dir(stateDir)
 
+    /** RUNNER-PAIR-1: this runner's long-lived pairing bearer (none until `infantry runner bearer` / the image's first start makes it). */
+    private val bearer: RunnerBearer = RunnerBearer.of(stateDir)
+
     @Synchronized
     fun tick() {
         // A closed service never re-opens the link listener: its ticker may fire once more while the daemon shuts down, and the port must be free for the restart.
@@ -88,7 +91,7 @@ class RunnerLinkService(
         pairing?.let { p ->
             if (!p.answering && (RunnerLinkStore.open(stateDir).orchestrator() != null || p.codes.liveName(clock()) == null)) closePairing()
         }
-        if (!RunnerLinkStore.exists(stateDir)) {
+        if (!RunnerLinkStore.exists(stateDir) && !bearer.exists()) {
             pump?.sync(emptyList())
             return
         }
@@ -119,9 +122,11 @@ class RunnerLinkService(
             return null
         }
         toldNoTransport = false
-        if (paired && serving == null && pairing == null) {
+        // RUNNER-PAIR-1: a runner with a bearer serves its link before it is paired too: the bearer's PAIR comes in on it.
+        val standing = bearer.exists()
+        if ((paired || standing) && serving == null && pairing == null) {
             runCatching { serve(store, t) }.onFailure { log("[infantry] runner link: could not serve the link: ${it.message}") }
-        } else if (!paired && serving != null) {
+        } else if (!paired && !standing && serving != null) {
             closeServing()
             log("[infantry] runner link: detached; the link listener is stopped")
         }
@@ -131,7 +136,7 @@ class RunnerLinkService(
     private fun pairedServer(store: RunnerLinkStore) = RunnerLinkServer(
         store, RunnerAudit(File(dir, RunnerAudit.FILE)), codes = null, settings = settings, runner = { runner }, starts = starts,
         forwarder = forwarder, forwardWaitCapMs = ::forwardWaitMs,
-        limit = limit, cloneRoot = ::cloneRootDir,
+        limit = limit, cloneRoot = ::cloneRootDir, bearer = bearer.takeIf { it.exists() },
     )
 
     private fun serve(store: RunnerLinkStore, t: RunnerLinkTransport) {
@@ -139,7 +144,8 @@ class RunnerLinkService(
         val plain = settings().allowPlainTailnet
         val s = t.serve(handler(server), host, linkPort(), if (plain) null else tls(store), callTimeoutMs())
         serving = s
-        log("[infantry] runner link: serving ${if (plain) "PLAIN ws (runners.allowPlainTailnet)" else "wss"} on $host:${s.port} for orchestrator ${store.orchestrator()?.name}")
+        val who = store.orchestrator()?.name?.let { "for orchestrator $it" } ?: "for a pairing with this runner's bearer"
+        log("[infantry] runner link: serving ${if (plain) "PLAIN ws (runners.allowPlainTailnet)" else "wss"} on $host:${s.port} $who")
     }
 
     /** RUNNER-POOL-6: the paired runners by name, for a runner binding plugin (credentials stay here). */
@@ -200,7 +206,12 @@ class RunnerLinkService(
                 setPaused(name, op == "pause")
                 ok("name" to name, "paused" to (op == "pause").toString())
             }
-            "add" -> {
+            // RUNNER-PAIR-1 (runner side): make or show this runner's long-lived bearer and its endpoint (step 1 of the 2 steps).
+            "bearer" -> bearer(str("name"), flag("rotate"), str("hosts"), str("port"), str("allowProjects"), str("allowHarnesses"))
+            // RUNNER-PAIR-1 (orchestrator side, step 2): the endpoint and bearer the runner printed; nothing else is asked.
+            "add" -> if (str("bearer") != null) {
+                addByBearer(need("bearer"), need("endpoint"), str("name"), str("orchestratorName").orEmpty())
+            } else {
                 // RUNNER-ADD-LINK-1: a pasted link (the one-string flow) or the older name/url/code/fingerprint form; both keep it.
                 val store = RunnerLinkStore.open(stateDir)
                 val text = str("link")
@@ -691,6 +702,68 @@ class RunnerLinkService(
     }
 
     /**
+     * RUNNER-PAIR-1 (step 1 of the owner's 2 steps): this runner's long-lived bearer, made now when there is none ([rotate] makes a
+     * new one; every earlier bearer is refused from then on, a paired orchestrator keeps its link credential), and the endpoint to
+     * paste beside it. The link is served at once (paired or not), so the bearer works the moment it is printed.
+     *
+     * Grants: the owner's flags when given; otherwise an EMPTY `runner.projects` / `runner.harnesses` becomes `*` (a runner is "just
+     * another space for any project and any harness", owner requirement); a list the owner narrowed is kept as is.
+     */
+    private fun bearer(name: String?, rotate: Boolean, hosts: String?, advertisePort: String?, allowProjects: String?, allowHarnesses: String?): JsonObject {
+        val advertised = advertisePort?.takeIf { it.isNotBlank() }?.let { p ->
+            p.toIntOrNull()?.takeIf { it in 1..LAST_PORT } ?: throw IllegalArgumentException("--port must be a port number (1-65535), the one the orchestrator reaches this runner on")
+        }
+        val t = transport() ?: throw IllegalArgumentException(NO_TRANSPORT)
+        val store = RunnerLinkStore.open(stateDir)
+        val value = bearer.ensure(name, rotate)
+        fun ids(csv: String?) = csv?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }
+        val current = settings()
+        (ids(allowProjects) ?: listOf(RunnerLinkSettings.ANY).takeIf { current.projects.isEmpty() })?.let { grant(RunnerLinkSettings.PROJECTS, it) }
+        (ids(allowHarnesses) ?: listOf(RunnerLinkSettings.ANY).takeIf { current.harnesses.isEmpty() })?.let { grant(RunnerLinkSettings.HARNESSES, it) }
+        val values = settings()
+        val plain = values.allowPlainTailnet
+        val fingerprint = if (plain) null else t.fingerprint(tls(store))
+        // The served link reads the bearer file on every PAIR, so a rotate is live at once; only an unserved link is opened here.
+        if (pairing == null) settle()
+        val candidates = RunnerPairLink.candidates(listOfNotNull(hosts), values.advertiseHosts, limit(LimitRegistry.RUNNERS_ADVERTISE_HOSTS_MAX).toInt())
+        val endpointHost = candidates.firstOrNull() ?: UNKNOWN_HOST
+        val port = advertised ?: serving?.port ?: linkPort()
+        val endpoint = "${if (plain) "ws" else "wss"}://$endpointHost:$port"
+        return JsonObject(
+            ok(
+                "name" to value.name, "endpoint" to endpoint, "bearer" to RunnerBearer.Token(value.name, fingerprint, value.secret).text(),
+                "hostGuessed" to (hosts.isNullOrBlank() && values.advertiseHosts.isEmpty()).toString(),
+                "serving" to (serving != null).toString(), "rotated" to rotate.toString(),
+                "pairedWith" to store.orchestrator()?.name,
+            ) + mapOf(
+                "projects" to JsonArray(values.projects.map(::JsonPrimitive)),
+                "harnesses" to JsonArray(values.harnesses.map(::JsonPrimitive)),
+            ),
+        )
+    }
+
+    /**
+     * RUNNER-PAIR-1 (step 2 of the owner's 2 steps, orchestrator side): pairs with the runner at [endpointText] using the [bearerText]
+     * it printed. The bearer carries the runner's name and certificate pin, so the TLS pin is checked before its secret is sent, the
+     * same as a pairing link ([RunnerPeers.addLink]). [name] overrides the runner's own name (optional; the app does not ask).
+     */
+    private fun addByBearer(bearerText: String, endpointText: String, name: String?, orchestratorName: String): JsonObject {
+        val token = when (val p = RunnerBearer.Token.parse(bearerText)) {
+            is RunnerBearer.Token.Parsed.Ok -> p.token
+            is RunnerBearer.Token.Parsed.Bad -> throw IllegalArgumentException(p.reason)
+        }
+        val endpoint = RunnerBearer.Endpoint.parse(endpointText, linkPort())
+        val host = endpoint.host ?: throw IllegalArgumentException(endpoint.reason)
+        val pairLink = RunnerPairLink(token.name, listOf(host), endpoint.port, token.secret, token.fingerprint, token.plain)
+        val store = RunnerLinkStore.open(stateDir)
+        val chosen = name?.takeIf { it.isNotBlank() } ?: token.name
+        val hint = ". Check: the runner is running, its link port is published (`-p ${endpoint.port}:${linkPort()}` on `docker run`), " +
+            "and $host:${endpoint.port} is reachable from this machine (a firewall, a cloud security group or a tailnet rule). " +
+            "A container on THIS machine is reached as localhost:<published port>; host.docker.internal resolves only inside a container."
+        return added(peers(store).addLink(pairLink, chosen, orchestratorName, settings().allowPlainTailnet, unreachableHint = hint, replaceSameRunner = true))
+    }
+
+    /**
      * `paired` (with the orchestrator), `waiting` (the code is live, or its PAIR is being answered right now) or `expired`; a
      * finished pairing's listener is closed. RUNNER-GRANT-AT-PAIR-1: an in-flight PAIR reads as `waiting`, never as `expired`,
      * because the code is spent before the grants are written and the answer is built; the console polls this every 500 ms.
@@ -770,6 +843,9 @@ class RunnerLinkService(
 
     companion object {
         const val ANY_HOST = "0.0.0.0"
+        /** RUNNER-PAIR-1: the endpoint host printed when no address of this runner is known (set INFANTRY_RUNNER_HOST / --host). */
+        const val UNKNOWN_HOST = "<this-server-address>"
+        private const val LAST_PORT = 65535
         /** RUNNER-UP-1: the default [mode] when the daemon does not pass one (a bare `both` daemon pairs fine). */
         const val BOTH_MODE = "both"
         /** RUNNER-POOL-6a: the owner frame `infantry runner pair|add|rotate|detach <name>` send ([FrameGate.OWNER_ONLY]). */
@@ -783,7 +859,7 @@ class RunnerLinkService(
         /** RUNNER-CARD-STALE-1: the [ADMIN] ops whose success changes what `list` answers, so a [STATE_FRAME] follows them. */
         val LIST_CHANGING_OPS = setOf("add", "connect", "detach", "pause", "resume")
         const val NO_TRANSPORT = "the runner link needs the Infantry_RemoteRunner plugin (no runner link transport is loaded)"
-        private val NEEDS_TRANSPORT = setOf("pair", "add", "connect", "rotate", "detach", "test")
+        private val NEEDS_TRANSPORT = setOf("pair", "add", "connect", "rotate", "detach", "test", "bearer")
         private const val MS_PER_SECOND = 1000L
         private const val MS_PER_MINUTE = 60_000L
         private const val SHOWN_OP_SIZE = 32

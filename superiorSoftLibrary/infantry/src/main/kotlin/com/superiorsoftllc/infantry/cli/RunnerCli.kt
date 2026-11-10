@@ -45,7 +45,7 @@ import java.net.InetAddress
  * runner-side `detach` read and write the link folder here, as before. Command names, flags and printed text are unchanged.
  */
 internal object RunnerCli {
-    const val USAGE = "usage: infantry runner connect --name <n> --via \"<command>\" [--host <h>] [--port <p>] | up --name <n> [--host <h>]... [--allow-projects <ids|*>] [--allow-harnesses <ids|*>] | pair --name <n> [--host <h>]... [--allow-projects <ids|*>] [--allow-harnesses <ids|*>] [--grant-on-pair [--grant-harnesses-max <ids>]] | add <name> <wss-url> --code <code> [--fingerprint <fp>] | add '<infantry://runner?...>' [--name <n>] [--grant [--project <id>]] | add --link <link|-> [--name <n>] [--grant [--project <id>]] | list | check <name> [--project <id>] [--harness <id>] | test <name> [--harness <id>] [--model <id>] | rotate <name> | detach [<name>] | audit [--limit N]"
+    const val USAGE = "usage: infantry runner bearer [--name <n>] [--host <h>] [--port <p>] [--allow-projects <ids|*>] [--allow-harnesses <ids|*>] [--rotate] | add <endpoint> --bearer <token|-> | connect --name <n> --via \"<command>\" [--host <h>] [--port <p>] | up --name <n> [--host <h>]... [--allow-projects <ids|*>] [--allow-harnesses <ids|*>] | pair --name <n> [--host <h>]... [--allow-projects <ids|*>] [--allow-harnesses <ids|*>] [--grant-on-pair [--grant-harnesses-max <ids>]] | add <name> <wss-url> --code <code> [--fingerprint <fp>] | add '<infantry://runner?...>' [--name <n>] [--grant [--project <id>]] | add --link <link|-> [--name <n>] [--grant [--project <id>]] | list | check <name> [--project <id>] [--harness <id>] | test <name> [--harness <id>] [--model <id>] | rotate <name> | detach [<name>] | audit [--limit N]"
 
     /** RUNNER-ADD-LINK-1: what the usage error adds when a pasted link looks cut short (a PowerShell `&` eats the rest). */
     private const val QUOTE_HINT = "Quote the whole link, e.g. infantry runner add 'infantry://runner?v=1&...'. A shell without quotes cuts it at &."
@@ -53,11 +53,11 @@ internal object RunnerCli {
     private val json = Json { ignoreUnknownKeys = true }
 
     /** The words after `runner` and the flags the CLI parser took for it. */
-    data class Args(val words: List<String>, val name: String? = null, val code: String? = null, val fingerprint: String? = null, val limit: String? = null, val allowProjects: String? = null, val allowHarnesses: String? = null, val hosts: String? = null, val link: String? = null, val project: String? = null, val harness: String? = null, val model: String? = null, val grantOnPair: Boolean = false, val grantHarnessesMax: String? = null, val grant: Boolean = false, val runnerPort: String? = null, val via: String? = null) {
+    data class Args(val words: List<String>, val name: String? = null, val code: String? = null, val fingerprint: String? = null, val limit: String? = null, val allowProjects: String? = null, val allowHarnesses: String? = null, val hosts: String? = null, val link: String? = null, val project: String? = null, val harness: String? = null, val model: String? = null, val grantOnPair: Boolean = false, val grantHarnessesMax: String? = null, val grant: Boolean = false, val runnerPort: String? = null, val via: String? = null, val bearer: String? = null, val rotate: Boolean = false) {
         val action: String? get() = words.firstOrNull()?.lowercase()
         val positional: List<String> get() = words.drop(1)
         val flags: Map<String, String>
-            get() = listOfNotNull(name?.let { "name" to it }, code?.let { "code" to it }, fingerprint?.let { "fingerprint" to it }, limit?.let { "limit" to it }, allowProjects?.let { "allow-projects" to it }, allowHarnesses?.let { "allow-harnesses" to it }, hosts?.let { "host" to it }, runnerPort?.let { "port" to it }, link?.let { "link" to it }, project?.let { "project" to it }, harness?.let { "harness" to it }, model?.let { "model" to it }, "".takeIf { grantOnPair }?.let { "grant-on-pair" to it }, grantHarnessesMax?.let { "grant-harnesses-max" to it }, "".takeIf { grant }?.let { "grant" to it }, via?.let { "via" to it }).toMap()
+            get() = listOfNotNull(name?.let { "name" to it }, code?.let { "code" to it }, fingerprint?.let { "fingerprint" to it }, limit?.let { "limit" to it }, allowProjects?.let { "allow-projects" to it }, allowHarnesses?.let { "allow-harnesses" to it }, hosts?.let { "host" to it }, runnerPort?.let { "port" to it }, link?.let { "link" to it }, project?.let { "project" to it }, harness?.let { "harness" to it }, model?.let { "model" to it }, "".takeIf { grantOnPair }?.let { "grant-on-pair" to it }, grantHarnessesMax?.let { "grant-harnesses-max" to it }, "".takeIf { grant }?.let { "grant" to it }, via?.let { "via" to it }, bearer?.let { "bearer" to it }, "".takeIf { rotate }?.let { "rotate" to it }).toMap()
     }
 
     /** RUNNER-LINK-HOST-1: `--port` is a port number or absent. */
@@ -75,7 +75,11 @@ internal object RunnerCli {
             "connect" -> positional.isEmpty() && !args.name.isNullOrBlank() && !args.via.isNullOrBlank() && flags.keys.all { it in setOf("name", "via", "host", "port") } && portOk(args.runnerPort)
             "up" -> positional.isEmpty() && !args.name.isNullOrBlank() && flags.keys.all { it in setOf("name", "allow-projects", "allow-harnesses", "host", "port") } && portOk(args.runnerPort)
             // RUNNER-GRANT-AT-PAIR-1: `--grant` is the owner's confirm for the one grant a link's code may carry.
-            "add" -> addUsageOk(args) || (positional.size == 2 && !args.code.isNullOrBlank() && flags.keys.all { it in setOf("code", "fingerprint") })
+            // RUNNER-PAIR-1: `runner bearer [--name <n>] [--host <h>] [--port <p>] [--allow-projects ..] [--allow-harnesses ..] [--rotate]`.
+            "bearer" -> positional.isEmpty() && flags.keys.all { it in setOf("name", "host", "port", "allow-projects", "allow-harnesses", "rotate") } && portOk(args.runnerPort)
+            // RUNNER-PAIR-1: `runner add <endpoint> --bearer <token|->` (step 2 of the 2 steps).
+            "add" -> (positional.size == 1 && !isLink(positional[0]) && !args.bearer.isNullOrBlank() && flags.keys.all { it in setOf("bearer", "name") }) ||
+                addUsageOk(args) || (positional.size == 2 && !args.code.isNullOrBlank() && flags.keys.all { it in setOf("code", "fingerprint") })
             "list" -> positional.isEmpty() && flags.isEmpty()
             "rotate" -> positional.size == 1 && flags.isEmpty()
             "detach" -> positional.size <= 1 && flags.isEmpty()
@@ -116,7 +120,25 @@ internal object RunnerCli {
                     port = flags["port"], grantOnPair = args.grantOnPair, grantHarnessesMax = args.grantHarnessesMax,
                 )
                 "up" -> up(stream, flags.getValue("name"), ::limit, out, err, flags["allow-projects"], flags["allow-harnesses"], flags["host"], flags["port"])
-                "add" -> add(stream, args, ::limit, out, err)
+                "add" -> if (args.bearer != null) addByBearer(stream, args, ::limit, out, err) else add(stream, args, ::limit, out, err)
+                // RUNNER-PAIR-1: step 1 on the runner: its endpoint and long-lived bearer (the image prints them on every start).
+                "bearer" -> {
+                    val r = admin(
+                        stream, ::limit, "op" to "bearer", "name" to flags["name"], "rotate" to args.rotate.takeIf { it }?.toString(),
+                        "hosts" to flags["host"], "port" to flags["port"], "allowProjects" to flags["allow-projects"], "allowHarnesses" to flags["allow-harnesses"],
+                    )
+                    if (r.failed) { err.appendLine("error: ${r.error}"); return 1 }
+                    out.appendLine("endpoint: ${r["endpoint"]}")
+                    out.appendLine("bearer:   ${r["bearer"]}")
+                    if (r["hostGuessed"] == "true") {
+                        out.appendLine("note: the endpoint's host is this machine's own address as it sees it; if the PC reaches it at another address (a server's public IP, a published Docker port), use that host and port in the app")
+                    }
+                    if (r["rotated"] == "true") out.appendLine("rotated: every earlier bearer is refused from now on")
+                    r["pairedWith"]?.let { out.appendLine("already paired with orchestrator $it (re-adding from it gives a fresh credential; another orchestrator is refused until `infantry runner detach` here)") }
+                    out.appendLine("runner '${r["name"]}' may run projects ${r.list("projects").ifEmpty { listOf("none") }.joinToString(",")} and harnesses ${r.list("harnesses").ifEmpty { listOf("none") }.joinToString(",")}")
+                    out.appendLine("In the app: Settings > Runners > Add runner, paste the endpoint and the bearer.")
+                    0
+                }
                 // RUNNER-PAIR-1: the daemon runs `runner pair` on the runner through --via and redeems the link; it is never printed.
                 "connect" -> {
                     val r = admin(
@@ -365,6 +387,21 @@ internal object RunnerCli {
         r["skipped"]?.let { out.appendLine("skipped: $it") }
         if (r["enabledTurnedOn"] == "true") out.appendLine("runners.enabled was off; turned on")
         return reportAdd(r, limit, out)
+    }
+
+    /** RUNNER-PAIR-1: `runner add <endpoint> --bearer <token|->`: step 2 of the owner's 2 steps from the terminal. */
+    private suspend fun addByBearer(stream: FrameStream, args: Args, limit: (LimitDef) -> Long, out: Appendable, err: Appendable): Int {
+        val bearer = args.bearer?.let { if (it == "-") readStdin() else it }.orEmpty()
+        if (bearer.isBlank()) { err.appendLine("error: --bearer - read nothing; pipe the bearer in"); return 1 }
+        val r = admin(
+            stream, limit, "op" to "add", "endpoint" to args.positional[0], "bearer" to bearer,
+            "name" to args.name?.takeIf { it.isNotBlank() }, "orchestratorName" to hostName(),
+        )
+        if (r.failed) { err.appendLine("error: ${r.error}"); return 1 }
+        if (r["enabledTurnedOn"] == "true") out.appendLine("runners.enabled was off; turned on")
+        val code = reportAdd(r, limit, out)
+        out.appendLine("Next: infantry runner test ${r["name"]}")
+        return code
     }
 
     /** The one answer line both add forms print once the daemon paired, and what a pairing grant did. */

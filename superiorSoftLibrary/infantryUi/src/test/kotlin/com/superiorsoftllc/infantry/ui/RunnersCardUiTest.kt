@@ -85,7 +85,7 @@ class RunnersCardUiTest {
         setContent { RunnersCard(parseRunnersList(fresh), null, { added++ }, { _, _ -> }, {}) }
         onNodeWithTag("runners-add").assertIsDisplayed()
         onNodeWithTag("runners-hint").assertIsDisplayed()
-        onNodeWithTag("runners-hint-command").assertTextContains("infantry runner up --name", substring = true)
+        onNodeWithTag("runners-hint-command").assertTextContains("docker run", substring = true) // RUNNER-PAIR-1: step 1 is one docker run
         // The pool's own rows stay hidden until runners are on (RUNNER-POOL-9).
         onAllNodesWithTag("runners-rows").assertCountEquals(0)
         onNodeWithTag("runners-add").performClick()
