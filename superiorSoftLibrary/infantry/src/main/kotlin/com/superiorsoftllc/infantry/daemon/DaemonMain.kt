@@ -2096,11 +2096,23 @@ class InfantryDaemon(
                     // RUNNER-PROMPT-RELAY-1: a prompt a runner session raised opens here; its close closes the card.
                     promptRelay.apply(runner, e)
                     if (e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.STATUS) remoteMirror.status(e.sessionId, e.payload)
+                    // RUNNER-PROMPT-RELAY-1: a client connected before a runner start never heard of the session (only the connect
+                    // frame listed remote sessions), so its prompt card had no agent to show on. Each status or finish of a remote
+                    // session pushes the session list, as every other session-list change does. Events are acked, so one push per change.
+                    if (e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.STATUS ||
+                        e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.FINISHED
+                    ) {
+                        if (e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.FINISHED) remoteMirror.finished(e.sessionId)
+                        val pushed = Envelope(
+                            Envelope.SESSIONS,
+                            json.encodeToString(JsonArray((manager.list() + remoteMirror.list()).map { json.encodeToJsonElement(SessionRecordSerializer, it) })),
+                        )
+                        for (client in clients) client.trySend(pushed)
+                    }
                     // RUNNER-CLAUDE-PROOF-1: an interactive session (claude) never finishes between turns, it comes to rest (IDLE): that ends the turn too.
                     val turnEnded = e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.FINISHED ||
                         (e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.STATUS && e.payload.equals(SessionState.IDLE.name, ignoreCase = true))
                     if (turnEnded) {
-                        if (e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.FINISHED) remoteMirror.finished(e.sessionId)
                         // RUNNER-TICKET-ROW-1: fetch the runner's pushed branch to the checkout, then tell the board the turn ended.
                         val placed = remoteMirror.placement(e.sessionId)
                         if (placed?.repoRoot != null && placed.branch != null)
