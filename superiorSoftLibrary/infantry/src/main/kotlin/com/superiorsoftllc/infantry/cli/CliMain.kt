@@ -403,7 +403,8 @@ internal object Cli {
                 // RUNNER-POOL-6a: `infantry runner` sends the owner-only `runner_admin` frame, so it presents this machine's owner
                 // token (`<stateDir>/owner.token`, readable only to the local user; the trust RUNNER-POOL-5's local CLI had).
                 // RUNNER-SETTINGS-OWNER-1: `infantry settings` presents it too, since the runner trust keys are owner-only writes.
-                if (command != "runner" && command != "settings") t
+                // FIRST-RUN-KEYS-1: `infantry harness key` sets / clears a secret, an owner-only write, so it presents the token too.
+                if (command != "runner" && command != "settings" && command != "harness") t
                 else Target(t.url, t.token, t.tokenSource, t.answerTimeoutMs, com.superiorsoftllc.infantry.daemon.OwnerCredential.stored(
                     com.superiorsoftllc.infantry.session.stateDir { getenv(it) ?: com.superiorsoftllc.infantry.session.infantrySetting(it) },
                 ), t.sessionId)
@@ -6047,6 +6048,7 @@ internal object Cli {
         "harnesses" -> if (parsed.args.isNotEmpty()) "harnesses takes no arguments: infantry harnesses" else null
         "harness-status" -> if (parsed.args.isNotEmpty()) "harness-status takes no arguments: infantry harness-status [--check]" else null
         "harness-install" -> null
+        "harness" -> if (parsed.args.firstOrNull() != "key" || parsed.args.size > 2) "usage: infantry harness key [<name>] [--clear]" else null
         "agent" -> if (parsed.args.firstOrNull().isNullOrBlank() || parsed.args.size == 1) null else agentQueueUsage(parsed.args)
         "agent-def" -> AgentDefCli.usageError(parsed.args)
         "run-cmd" -> RunCmdCli.usageError(parsed.args)
@@ -6271,7 +6273,7 @@ internal object Cli {
     private val COMMANDS = setOf(
         "submit", "watch", "pods", "runs", "logs", "cancel", "tickets", "board", "ticket", "agents", "send", "inbox",
         "read", "threads", "thread", "waiting", "epics", "stories", "epic", "project", "mcp", "knowledge", "memory", "decision", "pipeline", "notify", "issue",
-        "trait", "skill", "role", "ask", "harnesses", "harness-status", "archive", "harness-install", "image", "session", "remote", "bg", "kill", "usage",
+        "trait", "skill", "role", "ask", "harnesses", "harness-status", "harness", "archive", "harness-install", "image", "session", "remote", "bg", "kill", "usage",
         "processes", "health", "settings", "agent", "agent-def", "run-cmd", "event", "tests", "tool", "script", "runner",
         "install-cli", "uninstall-cli",
     )
