@@ -1053,6 +1053,8 @@ data class SecretRow(
     val loginCommand: String = "",
     val signedIn: String = "unknown",
     val lastProbe: Long = 0L,
+    /** SECRET-REF-1: the shared secret name this harness key reads from; "" = its own value. */
+    val usesSecret: String = "",
 )
 
 /** Contract 1.135.0 (SECRETS-2): one field of a user secret: its name and a masked tail, never the value. */

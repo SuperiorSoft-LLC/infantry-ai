@@ -946,6 +946,7 @@ object SecretForm {
 
 /** The text a row shows: set (with its masked tail) or not set. Never a value. */
 fun secretStatusText(row: SecretRow): String = when {
+    row.usesSecret.isNotBlank() -> "uses secret: ${row.usesSecret}" + (if (row.set) "" else " (missing)")
     row.overriddenByEnv -> "Set (the environment variable overrides it)"
     row.set -> "Set ${row.tail}".trim()
     else -> "Not set"

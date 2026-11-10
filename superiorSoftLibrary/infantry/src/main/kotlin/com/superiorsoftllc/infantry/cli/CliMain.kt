@@ -1682,6 +1682,15 @@ internal object Cli {
             return@runBlocking 0
         }
         val secret = com.superiorsoftllc.infantry.harness.credential.HarnessCredential.secretNameOf(name)
+        // SECRET-REF-1: point the harness key at a shared secret by NAME (no value moves, so any role may). `--clear` drops the pointer too.
+        val refKey = com.superiorsoftllc.infantry.harness.credential.HarnessCredential.refSettingOf(name)
+        parsed.useSecret?.trim()?.let { ref ->
+            com.superiorsoftllc.infantry.harness.credential.HarnessCredential.refRefusal(ref)?.let { err.appendLine(it); return@runBlocking 2 }
+            stream.request(Envelope(Envelope.SETTINGS_SET, """{"key":"$refKey","value":"$ref"}"""), Envelope.SETTINGS, "settings_set", true)
+            out.appendLine("$name: key now uses shared secret '$ref'")
+            return@runBlocking 0
+        }
+        if (parsed.clear) stream.request(Envelope(Envelope.SETTINGS_SET, """{"key":"$refKey","value":""}"""), Envelope.SETTINGS, "settings_set", true)
         val frame = if (parsed.clear) Envelope(Envelope.SECRET_CLEAR, json.encodeToString(com.superiorsoftllc.infantry.keystore.SecretName.serializer(), com.superiorsoftllc.infantry.keystore.SecretName(secret)))
         else {
             System.err.print("API key for $name (input is not echoed when a console is attached): ")
@@ -5208,6 +5217,8 @@ internal object Cli {
         /** DAEMON-HEALTH-1: `health --json`. */
         val jsonOut: Boolean = false,
         val supersedes: String? = null,
+        /** SECRET-REF-1: `harness key <id> --use-secret <name>`. */
+        val useSecret: String? = null,
         // `issue open / attempt / fix` (P10-K7).
         val summary: String? = null,
         val location: String? = null,
@@ -5375,6 +5386,7 @@ internal object Cli {
         var all = false
         var jsonOut = false
         var supersedes: String? = null
+        var useSecret: String? = null
         var summary: String? = null
         var location: String? = null
         var ticket: String? = null
@@ -5590,6 +5602,10 @@ internal object Cli {
                 }
                 "--json" -> {
                     jsonOut = true
+                    i++
+                }
+                "--use-secret" -> {
+                    useSecret = flagValue(args, ++i) ?: return fail(err, "--use-secret expects a shared secret name")
                     i++
                 }
                 "--supersedes" -> {
@@ -5981,6 +5997,7 @@ internal object Cli {
             all = all,
             jsonOut = jsonOut,
             supersedes = supersedes,
+            useSecret = useSecret,
             summary = summary,
             location = location,
             ticket = ticket,

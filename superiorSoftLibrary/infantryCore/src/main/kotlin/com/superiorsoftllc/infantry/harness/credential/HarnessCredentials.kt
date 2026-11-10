@@ -37,6 +37,14 @@ data class HarnessCredential(
         const val MODE_SUBSCRIPTION = "subscription-login"
         val KNOWN_MODES = listOf(MODE_API_KEY, MODE_SUBSCRIPTION)
         fun modeSettingOf(harnessId: String): String = "harness.$harnessId.authMode"
+        /** SECRET-REF-1: the setting naming a shared secret this harness's key is read from (a name, never a value). */
+        fun refSettingOf(harnessId: String): String = "harness.$harnessId.keyRef"
+        /** Null when [name] may be referenced as a harness key; else why not (a harness key or another built-in is never lent out). */
+        fun refRefusal(name: String): String? = when {
+            !Keystore.isName(name) -> "secret names are lowercase letters, digits, '.', '_' and '-'"
+            name.startsWith("harness.") || name.startsWith("plugin.") -> "secret '$name' is built in and cannot be referenced"
+            else -> null
+        }
         /** [modes] with unknown names dropped (a manifest may not invent a mode the shell cannot run). */
         fun cleanModes(modes: List<String>): List<String> = modes.filter { it in KNOWN_MODES }.distinct()
         private val ENV_NAME = Regex("[A-Z_][A-Z0-9_]{0,63}")
@@ -65,6 +73,8 @@ class HarnessCredentials(
     private val modeSource: (String) -> String? = { null },
     /** Runs a probe argv and returns its stdout whatever the exit code (a CLI may exit 1 when signed out); null when it cannot run. */
     private val probeRunner: (List<String>, String) -> String? = ::runProbe,
+    /** SECRET-REF-1: the stored `harness.<id>.keyRef` (a shared secret's name) for a harness id, or null when none. */
+    private val refSource: (String) -> String? = { null },
     private val declaredSource: () -> List<HarnessCredential>,
 ) {
     /** CLAUDE-AUTH-CHOICE-1: the chosen auth mode of [harnessId]: the stored one when the harness offers it, else null (no choice yet). */
@@ -81,8 +91,23 @@ class HarnessCredentials(
 
     fun declaration(harnessId: String): HarnessCredential? = declared().firstOrNull { it.harnessId == harnessId }
 
+    /** SECRET-REF-1: the shared secret [harnessId] reads its key from, or null. A refused name counts as none. */
+    fun usesSecret(harnessId: String): String? =
+        refSource(harnessId)?.trim()?.takeIf { it.isNotEmpty() && HarnessCredential.refRefusal(it) == null }
+
+    /**
+     * SECRET-REF-1: the key value of [c]: the referenced shared secret (project scope first, then app) when a reference is
+     * set, else the harness's own stored key. A reference that finds nothing yields null (never a fall back to the stored key).
+     * The secret's `value` field, else its only field. Daemon side only.
+     */
+    private fun keyValue(c: HarnessCredential, project: String?): String? {
+        val ref = usesSecret(c.harnessId) ?: return keystore.field(c.secretName, HarnessCredential.FIELD)
+        val fields = keystore.resolve(ref, project) ?: return null
+        return fields[HarnessCredential.FIELD] ?: fields.values.singleOrNull()
+    }
+
     fun states(): List<HarnessCredentialState> = declared().sortedBy { it.harnessId }.map { c ->
-        val value = keystore.field(c.secretName, HarnessCredential.FIELD)
+        val value = keyValue(c, null)
         HarnessCredentialState(c, value != null, value?.let { Keystore.maskedTail(it) }.orEmpty())
     }
 
@@ -98,12 +123,12 @@ class HarnessCredentials(
     }
 
     /** `{ENV_NAME: key}` for [harnessId]; empty when it declares none or the key is unset. */
-    fun env(harnessId: String): Map<String, String> {
+    fun env(harnessId: String, project: String? = null): Map<String, String> {
         val c = declaration(harnessId) ?: return emptyMap()
         // CLAUDE-AUTH-CHOICE-2: a subscription session carries NO key: the variable is blanked, so a key the daemon itself inherited from its own
         // environment cannot reach the harness and bill an API account (a blank variable reads as unset).
         if (subscription(harnessId)) return mapOf(c.env to "")
-        val v = keystore.field(c.secretName, HarnessCredential.FIELD) ?: return emptyMap()
+        val v = keyValue(c, project) ?: return emptyMap()
         return mapOf(c.env to v)
     }
 
