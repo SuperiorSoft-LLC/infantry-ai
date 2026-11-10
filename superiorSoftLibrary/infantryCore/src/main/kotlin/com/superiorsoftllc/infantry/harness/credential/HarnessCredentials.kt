@@ -17,12 +17,22 @@ data class HarnessCredential(
     val label: String = harnessId,
     /** Plain words on where to get the key (a URL or a sentence). */
     val help: String = "",
+    /** CLAUDE-AUTH-CHOICE-1: the ways the owner may sign this harness in ([MODE_API_KEY], [MODE_SUBSCRIPTION]); empty = key only, no choice. */
+    val authModes: List<String> = emptyList(),
 ) {
+    /** The setting that stores the owner's choice of [authModes], per harness. */
+    val modeSetting: String get() = modeSettingOf(harnessId)
     val secretName: String get() = secretNameOf(harnessId)
 
     companion object {
         const val FIELD = "value"
         fun secretNameOf(harnessId: String): String = "harness.$harnessId.key"
+        const val MODE_API_KEY = "api-key"
+        const val MODE_SUBSCRIPTION = "subscription-login"
+        val KNOWN_MODES = listOf(MODE_API_KEY, MODE_SUBSCRIPTION)
+        fun modeSettingOf(harnessId: String): String = "harness.$harnessId.authMode"
+        /** [modes] with unknown names dropped (a manifest may not invent a mode the shell cannot run). */
+        fun cleanModes(modes: List<String>): List<String> = modes.filter { it in KNOWN_MODES }.distinct()
         private val ENV_NAME = Regex("[A-Z_][A-Z0-9_]{0,63}")
 
         /** Null when [env] is a usable variable name; else why not (a harness may not name `PATH`-like or daemon variables). */
@@ -45,8 +55,19 @@ data class HarnessCredentialState(val credential: HarnessCredential, val set: Bo
  */
 class HarnessCredentials(
     private val keystore: Keystore,
+    /** The stored choice for a harness id (its `harness.<id>.authMode` setting), or null when none was made. */
+    private val modeSource: (String) -> String? = { null },
     private val declaredSource: () -> List<HarnessCredential>,
 ) {
+    /** CLAUDE-AUTH-CHOICE-1: the chosen auth mode of [harnessId]: the stored one when the harness offers it, else null (no choice yet). */
+    fun mode(harnessId: String): String? {
+        val c = declaration(harnessId) ?: return null
+        return modeSource(harnessId)?.takeIf { it in c.authModes }
+    }
+
+    /** True when the owner chose the subscription login: no key is needed and none is injected. */
+    private fun subscription(harnessId: String) = mode(harnessId) == HarnessCredential.MODE_SUBSCRIPTION
+
     /** The declared credentials, one per harness id (the first declaration wins). */
     fun declared(): List<HarnessCredential> = declaredSource().distinctBy { it.harnessId }
 
@@ -71,10 +92,11 @@ class HarnessCredentials(
     /** `{ENV_NAME: key}` for [harnessId]; empty when it declares none or the key is unset. */
     fun env(harnessId: String): Map<String, String> {
         val c = declaration(harnessId) ?: return emptyMap()
+        if (subscription(harnessId)) return emptyMap()
         val v = keystore.field(c.secretName, HarnessCredential.FIELD) ?: return emptyMap()
         return mapOf(c.env to v)
     }
 
     /** The declared credentials with no key set: what the first-run step asks for. */
-    fun missing(): List<HarnessCredential> = states().filter { !it.set }.map { it.credential }
+    fun missing(): List<HarnessCredential> = states().filter { !it.set && !subscription(it.credential.harnessId) }.map { it.credential }
 }

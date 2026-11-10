@@ -16,7 +16,8 @@
           { "key": "harness.claude.mode", "type": "text", "label": "Mode: interactive (default, the Claude Code CLI as a person runs it) or headless (SDK stream-json, claude -p)", "default": "interactive", "scope": "daemon", "order": 2 },
           { "key": "harness.claude.approvalHookSeconds", "type": "number", "label": "Seconds claude waits for a tool approval answer (ask mode waits for the owner); past it the dialog is answered No", "default": 1800, "min": 1, "max": 86400, "step": 1, "scope": "daemon", "order": 3 },
           { "key": "harness.claude.firstTurnSubmitSeconds", "type": "number", "label": "Seconds an interactive claude has to take its first prompt after the paste (then one retry, then the turn fails with the screen; 0 = never)", "default": 30, "min": 0, "max": 3600, "step": 1, "scope": "daemon", "order": 4 },
-          { "key": "harness.claude.firstTurnReplySeconds", "type": "number", "label": "Seconds an interactive claude's first request has to answer after it took the prompt (then Esc and one nudge, then the turn fails with the screen; 0 = never)", "default": 300, "min": 0, "max": 86400, "step": 1, "scope": "daemon", "order": 5 }
+          { "key": "harness.claude.firstTurnReplySeconds", "type": "number", "label": "Seconds an interactive claude's first request has to answer after it took the prompt (then Esc and one nudge, then the turn fails with the screen; 0 = never)", "default": 300, "min": 0, "max": 86400, "step": 1, "scope": "daemon", "order": 5 },
+          { "key": "harness.claude.authMode", "type": "text", "label": "How Claude Code signs in: api-key (an Anthropic API key) or subscription-login (your Claude subscription, /login in the chat). Empty = not chosen yet", "default": "", "scope": "daemon", "order": 6 }
         ]
       }
     ]
@@ -26,7 +27,9 @@
     "contract": "2.18.0",
     "ids": ["claude"],
     "cli": { "id": "claude", "command": "claude", "label": "Claude Code" },
-    "settings": ["harness.claude.liveIdleMinutes", "harness.claude.mode", "harness.claude.approvalHookSeconds", "harness.claude.firstTurnSubmitSeconds", "harness.claude.firstTurnReplySeconds"],
-    "hooks": ["watch", "mcp", "session", "models", "stats", "usage"]
+    "settings": ["harness.claude.liveIdleMinutes", "harness.claude.mode", "harness.claude.approvalHookSeconds", "harness.claude.firstTurnSubmitSeconds", "harness.claude.firstTurnReplySeconds", "harness.claude.authMode"],
+    "hooks": ["watch", "mcp", "session", "models", "stats", "usage"],
+    "authModes": ["api-key", "subscription-login"],
+    "credential": { "env": "ANTHROPIC_API_KEY", "label": "Claude Code", "help": "Create an API key in the Anthropic Console (console.anthropic.com). Only needed when you choose API key; a Claude subscription signs in with /login instead." }
   }
 }
