@@ -126,12 +126,14 @@ class RunnerLinkService(
         return store
     }
 
+    private fun pairedServer(store: RunnerLinkStore) = RunnerLinkServer(
+        store, RunnerAudit(File(dir, RunnerAudit.FILE)), codes = null, settings = settings, runner = { runner }, starts = starts,
+        forwarder = forwarder, forwardWaitCapMs = ::forwardWaitMs,
+        limit = limit, cloneRoot = ::cloneRootDir,
+    )
+
     private fun serve(store: RunnerLinkStore, t: RunnerLinkTransport) {
-        val server = RunnerLinkServer(
-            store, RunnerAudit(File(dir, RunnerAudit.FILE)), codes = null, settings = settings, runner = { runner }, starts = starts,
-            forwarder = forwarder, forwardWaitCapMs = ::forwardWaitMs,
-            limit = limit, cloneRoot = ::cloneRootDir,
-        )
+        val server = pairedServer(store)
         val plain = settings().allowPlainTailnet
         val s = t.serve(handler(server), host, linkPort(), if (plain) null else tls(store), callTimeoutMs())
         serving = s
@@ -646,7 +648,14 @@ class RunnerLinkService(
         val inner = handler(server)
         return object : LinkHandler {
             override fun handle(type: String, data: String, orchestratorId: String?, credential: String?, from: String?): LinkAnswer {
-                if (type != F.PAIR) return inner.handle(type, data, orchestratorId, credential, from)
+                if (type != F.PAIR) {
+                    // RUNNER-CHECK-STALE-1: the pairing listener keeps the port until the next tick; once paired, a frame (a check
+                    // right after `runner add`) goes to the paired server (live settings, the local runner), never to this one's
+                    // `runner = { null }` and its settings snapshot.
+                    val store = RunnerLinkStore.open(stateDir)
+                    if (store.orchestrator() != null) return handler(pairedServer(store)).handle(type, data, orchestratorId, credential, from)
+                    return inner.handle(type, data, orchestratorId, credential, from)
+                }
                 p.answering = true
                 try {
                     return inner.handle(type, data, orchestratorId, credential, from)

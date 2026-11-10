@@ -257,6 +257,23 @@ class RunnerCheckTest {
     }
 
     @Test
+    fun `a check right after pairing, before any tick, is answered by the paired runner`() {
+        // RUNNER-CHECK-STALE-1: the pairing listener keeps the port until the next tick; it has no local runner.
+        val transport = InProcess()
+        val runner = RunnerLinkService(
+            File(dir, "runner"), { it.default }, { settings }, local, { transport }, host = "127.0.0.1", log = {}, clock = { now },
+        )
+        val orch = RunnerLinkService(File(dir, "orch"), { it.default }, { RunnerLinkSettings.Values() }, null, { transport }, host = "127.0.0.1", log = {}, clock = { now })
+        pairThrough(runner, orch)
+        // no runner.tick() here
+
+        val rows = rowsOf(orch.admin(op("check", "name" to "box", "projectId" to "p1", "harness" to "echo")))
+        assertTrue(row(rows, "contract").ok, row(rows, "contract").detail)
+        assertTrue(row(rows, "harness:echo").ok, row(rows, "harness:echo").detail)
+        runner.close(); orch.close()
+    }
+
+    @Test
     fun `an old runner becomes one contract row`() {
         val transport = InProcess().also { it.refuses += F.CHECK }
         val runner = RunnerLinkService(
