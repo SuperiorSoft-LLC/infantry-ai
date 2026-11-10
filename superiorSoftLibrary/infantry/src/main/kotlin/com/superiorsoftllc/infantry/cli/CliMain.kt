@@ -5614,7 +5614,9 @@ internal object Cli {
                 }
                 // RUNNER-PAIR-1: `runner add <endpoint> --bearer <token|->` (the runner's printed bearer; `-` reads stdin).
                 "--bearer" -> {
-                    bearer = flagValue(args, ++i) ?: return fail(err, "--bearer expects the bearer the runner printed (irb1....), or - to read it from stdin")
+                    // `-` (read stdin) is a value here, so not flagValue (it refuses anything starting with '-'); another flag is not.
+                    bearer = args.getOrNull(++i)?.takeIf { it == "-" || !it.startsWith("-") }
+                        ?: return fail(err, "--bearer expects the bearer the runner printed (irb1....), or - to read it from stdin")
                     i++
                 }
                 "--rotate" -> {

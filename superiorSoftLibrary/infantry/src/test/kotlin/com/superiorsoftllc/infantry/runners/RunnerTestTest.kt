@@ -174,6 +174,20 @@ class RunnerTestTest {
     }
 
     @Test
+    fun `an opencode text event answers with its part text, its step events are not the answer`() {
+        // RUNNER-PAIR-1: the live runner's opencode answered "ready" this way and the test reported "no answer".
+        transcript = {
+            listOf(
+                "opencode server listening on http://127.0.0.1:40381",
+                """{"type":"step_start","part":{"type":"step-start"}}""",
+                """{"type":"text","part":{"type":"text","text":"ready"}}""",
+                """{"type":"step_finish","part":{"reason":"stop","type":"step-finish"}}""",
+            )
+        }
+        assertEquals("ready", RunnerLinkService.field(test(), "reply"))
+    }
+
+    @Test
     fun `the turn line the runner writes is not taken for the answer`() {
         transcript = { listOf("[turn] Reply with the single word: ready") }
         val answer = test()

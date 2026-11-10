@@ -3,6 +3,8 @@
 package com.superiorsoftllc.infantry.cli
 
 import kotlin.test.Test
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
@@ -48,5 +50,16 @@ class RunnerCliUsageTest {
         assertNull(RunnerCli.usageError(RunnerCli.Args(listOf("bearer"), name = "box", rotate = true)))
         assertNotNull(RunnerCli.usageError(RunnerCli.Args(listOf("bearer", "extra"))))
         assertNotNull(RunnerCli.usageError(RunnerCli.Args(listOf("bearer"), code = "ABCD-EFGH-JKLM-NPQR")))
+    }
+
+    /** RUNNER-PAIR-1: the parser takes `--bearer -` (read stdin); it once refused it like a missing value, found on the live nightly. */
+    @Test
+    fun `the parser takes --bearer - and still refuses a missing value`() {
+        val dash = StringBuilder()
+        Cli.run(arrayOf("--port", "1", "runner", "add", "wss://h:1", "--bearer", "-"), StringBuilder(), dash, CliTestEnv.getenv)
+        assertFalse(dash.contains("--bearer expects"), dash.toString())
+        val missing = StringBuilder()
+        Cli.run(arrayOf("--port", "1", "runner", "add", "wss://h:1", "--bearer", "--name", "x"), StringBuilder(), missing, CliTestEnv.getenv)
+        assertTrue(missing.contains("--bearer expects"), missing.toString())
     }
 }

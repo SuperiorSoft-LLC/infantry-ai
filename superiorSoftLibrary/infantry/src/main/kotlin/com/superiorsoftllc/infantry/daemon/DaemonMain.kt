@@ -1338,7 +1338,7 @@ class InfantryDaemon(
             // RUNNER-AGENT-1: the placement view a non-ticket start uses (paused runners, per-runner caps), same as the board's.
             val spawnRunnerEntries = { LocalRunner.placementEntries(runnerPool, settings) }
             val bindFreshSession = { agentId: String ->
-                LocalRunner.start(runnerPool, manager, SpawnOptions(agentId = agentId, projectId = agents.get(agentId)?.projectId), repo, agentRunner = agents.get(agentId)?.runner, defaultRunner = settings.runnersDefault(), entries = spawnRunnerEntries)?.let { s -> when (s) { is StartedSession.Local -> com.superiorsoftllc.infantry.mailbox.FreshSession.Local(s.record); is StartedSession.Remote -> com.superiorsoftllc.infantry.mailbox.FreshSession.Remote(s.id) } }
+                LocalRunner.start(runnerPool, manager, SpawnOptions(agentId = agentId, projectId = agents.get(agentId)?.projectId), repo, agentRunner = agents.get(agentId)?.runner, defaultRunner = settings.runnersDefault(), entries = spawnRunnerEntries, projectDir = { id -> runCatching { projectStore.get(id).directory }.getOrNull()?.takeIf { it.isNotBlank() }?.let(::File)?.takeIf { it.isDirectory } })?.let { s -> when (s) { is StartedSession.Local -> com.superiorsoftllc.infantry.mailbox.FreshSession.Local(s.record); is StartedSession.Remote -> com.superiorsoftllc.infantry.mailbox.FreshSession.Remote(s.id) } }
             }
             val mail = MailRouter(
                 manager, mailbox, agents, mailBase,
@@ -1885,6 +1885,7 @@ class InfantryDaemon(
                                     runnerPool, manager,
                                     SpawnOptions(agentId = request.agentId, role = request.role, projectId = request.projectId, contextLimit = request.contextLimit, effort = request.effort, runner = request.runner),
                                     repo, agentRunner = request.agentId?.let { agents.get(it)?.runner }, defaultRunner = settings.runnersDefault(), entries = spawnRunnerEntries,
+                                    projectDir = { id -> runCatching { projectStore.get(id).directory }.getOrNull()?.takeIf { it.isNotBlank() }?.let(::File)?.takeIf { it.isDirectory } },
                                 ) ?: throw IllegalArgumentException("the daemon could not bind a session for this spawn")
                             },
                             firstTask = { started, task ->
@@ -3595,7 +3596,7 @@ private suspend fun handleConnection(
                             spawnOrigin = origin
                             // BIND AT CREATION: a console opened as a profile is addressable at once.
                             spawnGuard.admit(origin) { placement ->
-                                LocalRunner.start(runnerPool, manager, options, repo, agentRunner = options.agentId?.let { agents.get(it)?.runner }, defaultRunner = (settings as? SettingsService)?.runnersDefault() ?: "local", entries = (settings as? SettingsService)?.let { ss -> { LocalRunner.placementEntries(runnerPool, ss) } })
+                                LocalRunner.start(runnerPool, manager, options, repo, agentRunner = options.agentId?.let { agents.get(it)?.runner }, defaultRunner = (settings as? SettingsService)?.runnersDefault() ?: "local", entries = (settings as? SettingsService)?.let { ss -> { LocalRunner.placementEntries(runnerPool, ss) } }, projectDir = projects::directoryOf)
                                     ?.also { if (placement != null) spawnGuard.record(it.id, origin); (it as? StartedSession.Local)?.let { l -> manager.setSpawner(l.id, origin) } }
                             }?.let { active = it.id }
                             null
