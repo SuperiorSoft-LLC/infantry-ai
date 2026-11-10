@@ -74,6 +74,11 @@ class RunnerLinkServer(
      * null = none (a fresh container image).
      */
     private val ownGitIdentity: () -> Pair<String, String>? = { userGitIdentity(File(System.getProperty("user.home"))) },
+    /**
+     * RUNNER-PAIR-1: the runner's long-lived pairing bearer ([RunnerBearer]); a PAIR whose code is its secret pairs like a live
+     * one-time code (no grant authority) and may pair again: the same orchestrator gets a fresh credential, another is refused.
+     */
+    private val bearer: RunnerBearer? = null,
 ) {
     /** One answer: [type] is [F.REPLY] or [F.ERROR]; [data] is the answer JSON or the reason. */
     data class Answer(val type: String, val data: String) {
@@ -304,10 +309,15 @@ class RunnerLinkServer(
         val current = settings()
         val installed = installedHarnesses()
         val now = clock()
-        val runnerName = codes?.liveName(now)
-        val redeemed = when (val r = codes?.redeem(request.code, now)) {
-            null -> PairCodes.Redeem.Refused(NO_CODE)
-            else -> r
+        // RUNNER-PAIR-1: the long-lived bearer pairs without spending a code (and carries no grant authority).
+        val byBearer = bearer?.read()?.takeIf { bearer.accepts(request.code) }
+        val runnerName = byBearer?.name ?: codes?.liveName(now)
+        val redeemed = when {
+            byBearer != null -> PairCodes.Redeem.Ok(PairCodes.Authority())
+            codes == null -> PairCodes.Redeem.Refused(if (bearer?.exists() == true) WRONG_BEARER else NO_CODE)
+            else -> codes.redeem(request.code, now).let { r ->
+                if (r is PairCodes.Redeem.Refused && bearer?.exists() == true && r.reason == NO_CODE) PairCodes.Redeem.Refused(WRONG_BEARER) else r
+            }
         }
         if (redeemed is PairCodes.Redeem.Refused) return refuse(ANONYMOUS, F.PAIR, null, from, "${F.PAIR} refused: ${redeemed.reason}")
         val authority = (redeemed as PairCodes.Redeem.Ok).authority
@@ -488,6 +498,8 @@ class RunnerLinkServer(
                 "infantry settings set ${RunnerLinkSettings.HARNESSES} '[\"<harness id>\"]')"
 
         private const val NO_CODE = PairCodes.NO_LIVE_CODE
+        /** RUNNER-PAIR-1: a PAIR whose code is not this runner's bearer (rotated, or mistyped). */
+        const val WRONG_BEARER = "wrong bearer: it is not this runner's live bearer (it was rotated, or copied wrong); copy the 'bearer:' line the runner prints again (`infantry runner bearer` there shows it)"
         private const val SHOWN_TYPE_SIZE = 64
         private const val MS_PER_SECOND = 1_000L
         private const val MB = 1L shl 20

@@ -539,7 +539,7 @@ internal object Cli {
                 // RUNNER-POOL-5: `infantry runner pair --name <n>` and the rest of the runner link (docs/RUNNER-POOL.md 7).
                 "runner" -> runBlocking {
                     RunnerCli.run(
-                        stream, RunnerCli.Args(parsed.args, parsed.name, parsed.code, parsed.fingerprint, parsed.limit, parsed.allowProjects, parsed.allowHarnesses, parsed.runnerHosts, parsed.link, runnerPort = parsed.runnerPort, via = parsed.runnerVia, project = parsed.project ?: getenv(AccessPolicy.PROJECT_ID_ENV)?.trim()?.takeIf { it.isNotEmpty() }, harness = parsed.harness, model = parsed.model, grantOnPair = parsed.grantOnPair, grantHarnessesMax = parsed.grantHarnessesMax, grant = parsed.grant), out, err,
+                        stream, RunnerCli.Args(parsed.args, parsed.name, parsed.code, parsed.fingerprint, parsed.limit, parsed.allowProjects, parsed.allowHarnesses, parsed.runnerHosts, parsed.link, runnerPort = parsed.runnerPort, via = parsed.runnerVia, project = parsed.project ?: getenv(AccessPolicy.PROJECT_ID_ENV)?.trim()?.takeIf { it.isNotEmpty() }, harness = parsed.harness, model = parsed.model, grantOnPair = parsed.grantOnPair, grantHarnessesMax = parsed.grantHarnessesMax, grant = parsed.grant, bearer = parsed.bearer, rotate = parsed.rotate), out, err,
                         com.superiorsoftllc.infantry.session.stateDir { getenv(it) ?: com.superiorsoftllc.infantry.session.infantrySetting(it) },
                     )
                 }
@@ -4919,6 +4919,11 @@ internal object Cli {
               remote on|off|status  Let the daemon accept outside (Tailscale) connections; prints the ws address
                                   and token. Takes effect on the next daemon restart.
               runner up --name <n> [--host <h>]... [--allow-projects <ids|*>] [--allow-harnesses <ids|*>]  Start a runner daemon here if none runs and print its pairing link (one command)
+              runner bearer [--name <n>] [--host <h>] [--port <p>] [--allow-projects <ids|*>] [--allow-harnesses <ids|*>] [--rotate]
+                                  On a RUNNER machine: print its endpoint and long-lived bearer (made once, valid until --rotate);
+                                  the runner image prints them on every start. Empty grants become * (every project and harness)
+              runner add <endpoint> --bearer <token|->  On the ORCHESTRATOR: pair with the endpoint and bearer the runner printed
+                                  (the bearer carries the runner's name and certificate pin; nothing else to type)
               runner connect --name <n> --via "<command>" [--host <h>] [--port <p>]  Pair a runner in one step: runs `runner pair` on it through <command> and adds it (owner only)
               runner pair --name <n> [--host <h>]... [--port <p>] [--allow-projects <ids|*>] [--allow-harnesses <ids|*>] [--grant-on-pair [--grant-harnesses-max <ids>]]
                                   On a RUNNER machine: grant what the orchestrator may run (asked when omitted; nothing is granted
@@ -5252,6 +5257,9 @@ internal object Cli {
         val grantOnPair: Boolean = false,
         val grantHarnessesMax: String? = null,
         val grant: Boolean = false,
+        /** RUNNER-PAIR-1: `runner add <endpoint> --bearer <token|->` and `runner bearer --rotate`. */
+        val bearer: String? = null,
+        val rotate: Boolean = false,
         val body: String? = null,
         val reportTo: String? = null,
         val reportFields: String? = null,
@@ -5389,6 +5397,8 @@ internal object Cli {
         var grantOnPair = false
         var grantHarnessesMax: String? = null
         var grant = false
+        var bearer: String? = null
+        var rotate = false
         var link: String? = null
         var harness: String? = null
         var body: String? = null
@@ -5426,8 +5436,8 @@ internal object Cli {
         var defaultAfter: String? = null
         var test = false
 
-        // RUNNER-LINK-1 / RUNNER-PAIR-1: on `runner pair|up|connect`, --host and --port are the runner's link address, never the daemon's.
-        fun runnerLinkWords() = rest.firstOrNull() == "runner" && rest.getOrNull(1) in setOf("pair", "up", "connect")
+        // RUNNER-LINK-1 / RUNNER-PAIR-1: on `runner pair|up|connect|bearer`, --host and --port are the runner's link address, never the daemon's.
+        fun runnerLinkWords() = rest.firstOrNull() == "runner" && rest.getOrNull(1) in setOf("pair", "up", "connect", "bearer")
         var i = 0
         while (i < args.size) {
             when (val arg = args[i]) {
@@ -5597,6 +5607,15 @@ internal object Cli {
                 }
                 "--grant" -> {
                     grant = true
+                    i++
+                }
+                // RUNNER-PAIR-1: `runner add <endpoint> --bearer <token|->` (the runner's printed bearer; `-` reads stdin).
+                "--bearer" -> {
+                    bearer = flagValue(args, ++i) ?: return fail(err, "--bearer expects the bearer the runner printed (irb1....), or - to read it from stdin")
+                    i++
+                }
+                "--rotate" -> {
+                    rotate = true
                     i++
                 }
                 "--link" -> {
@@ -6025,6 +6044,8 @@ internal object Cli {
             grantOnPair = grantOnPair,
             grantHarnessesMax = grantHarnessesMax,
             grant = grant,
+            bearer = bearer,
+            rotate = rotate,
             link = link,
             harness = harness,
             body = body,
@@ -6180,7 +6201,7 @@ internal object Cli {
         "ask" -> askUsageError(parsed, getenv)
         "usage" -> UsageCli.usageError(parsed.args)
         "settings" -> SettingsCli.usageError(parsed.args)
-        "runner" -> RunnerCli.usageError(RunnerCli.Args(parsed.args, parsed.name, parsed.code, parsed.fingerprint, parsed.limit, parsed.allowProjects, parsed.allowHarnesses, parsed.runnerHosts, parsed.link, runnerPort = parsed.runnerPort, via = parsed.runnerVia, project = parsed.project, harness = parsed.harness, model = parsed.model, grantOnPair = parsed.grantOnPair, grantHarnessesMax = parsed.grantHarnessesMax, grant = parsed.grant))
+        "runner" -> RunnerCli.usageError(RunnerCli.Args(parsed.args, parsed.name, parsed.code, parsed.fingerprint, parsed.limit, parsed.allowProjects, parsed.allowHarnesses, parsed.runnerHosts, parsed.link, runnerPort = parsed.runnerPort, via = parsed.runnerVia, project = parsed.project, harness = parsed.harness, model = parsed.model, grantOnPair = parsed.grantOnPair, grantHarnessesMax = parsed.grantHarnessesMax, grant = parsed.grant, bearer = parsed.bearer, rotate = parsed.rotate))
         else -> null
     }
 

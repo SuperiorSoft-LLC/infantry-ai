@@ -34,4 +34,19 @@ class RunnerCliUsageTest {
         assertNotNull(RunnerCli.usageError(args("t1", "wss://h:8790")))
         assertNotNull(RunnerCli.usageError(args("not-a-link")))
     }
+
+    /** RUNNER-PAIR-1: `runner bearer [...]` on the runner and `runner add <endpoint> --bearer <token|->` on the orchestrator. */
+    @Test
+    fun `the bearer forms are valid and take nothing else`() {
+        val bearer = "irb1.t1.plain.0123456789abcdefghjkmnpqrstvwxyz"
+        assertNull(RunnerCli.usageError(RunnerCli.Args(listOf("add", "wss://203.0.113.5:8790"), bearer = bearer)))
+        assertNull(RunnerCli.usageError(RunnerCli.Args(listOf("add", "localhost:18921"), bearer = "-", name = "other")))
+        assertNotNull(RunnerCli.usageError(RunnerCli.Args(listOf("add", "wss://h:8790"), bearer = bearer, code = "ABCD-EFGH-JKLM-NPQR")))
+        assertNotNull(RunnerCli.usageError(RunnerCli.Args(listOf("add", "wss://h:8790", "extra"), bearer = bearer)))
+        assertNotNull(RunnerCli.usageError(RunnerCli.Args(listOf("add", link), bearer = bearer)))
+        assertNull(RunnerCli.usageError(RunnerCli.Args(listOf("bearer"))))
+        assertNull(RunnerCli.usageError(RunnerCli.Args(listOf("bearer"), name = "box", rotate = true)))
+        assertNotNull(RunnerCli.usageError(RunnerCli.Args(listOf("bearer", "extra"))))
+        assertNotNull(RunnerCli.usageError(RunnerCli.Args(listOf("bearer"), code = "ABCD-EFGH-JKLM-NPQR")))
+    }
 }

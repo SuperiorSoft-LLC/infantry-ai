@@ -108,7 +108,30 @@ runner_pair_when_ready() {
     echo "[entrypoint] the pairing code expired unpaired. For a new one: docker exec -it infantry-runner infantry runner pair --name $_name"
   fi
 }
-if [ -n "${INFANTRY_RUNNER_NAME:-}" ]; then
+# RUNNER-PAIR-1 (the owner's 2 steps): in runner mode, print this runner's ENDPOINT and long-lived BEARER on every start, once the
+# daemon answers. Step 2 is pasting both into the app (Settings > Runners > Add runner). The bearer is made once in the state
+# volume and stays valid until `docker exec infantry-runner infantry runner bearer --rotate`. Empty grants become * (every project
+# and harness); INFANTRY_RUNNER_ALLOW_PROJECTS / _HARNESSES narrow them. INFANTRY_RUNNER_PAIRING=code keeps the older one-time link.
+runner_bearer_when_ready() {
+  _tries=0
+  until infantry settings get runner.projects >/dev/null 2>&1; do
+    _tries=$((_tries + 1))
+    [ "$_tries" -le "${INFANTRY_RUNNER_READY_TRIES:-120}" ] || { echo "[entrypoint] runner bearer skipped: the daemon never answered"; return 1; }
+    sleep 1
+  done
+  set -- runner bearer
+  [ -z "${INFANTRY_RUNNER_NAME:-}" ] || set -- "$@" --name "$INFANTRY_RUNNER_NAME"
+  [ -z "${INFANTRY_RUNNER_HOST:-}" ] || set -- "$@" --host "$INFANTRY_RUNNER_HOST"
+  [ -z "${INFANTRY_RUNNER_PUBLIC_PORT:-}" ] || set -- "$@" --port "$INFANTRY_RUNNER_PUBLIC_PORT"
+  [ -z "${INFANTRY_RUNNER_ALLOW_PROJECTS:-}" ] || set -- "$@" --allow-projects "$INFANTRY_RUNNER_ALLOW_PROJECTS"
+  [ -z "${INFANTRY_RUNNER_ALLOW_HARNESSES:-}" ] || set -- "$@" --allow-harnesses "$INFANTRY_RUNNER_ALLOW_HARNESSES"
+  echo "==== INFANTRY RUNNER: paste these two lines into the app (Settings > Runners > Add runner) ===="
+  infantry "$@" || echo "[entrypoint] could not print the runner bearer; run: docker exec infantry-runner infantry runner bearer"
+  echo "==== END INFANTRY RUNNER ===="
+}
+if [ "${INFANTRY_MODE:-}" = "runner" ] && [ "${INFANTRY_RUNNER_PAIRING:-bearer}" != "code" ]; then
+  ( runner_bearer_when_ready ) &
+elif [ -n "${INFANTRY_RUNNER_NAME:-}" ]; then
   ( runner_pair_when_ready "$INFANTRY_RUNNER_NAME" ) &
 fi
 

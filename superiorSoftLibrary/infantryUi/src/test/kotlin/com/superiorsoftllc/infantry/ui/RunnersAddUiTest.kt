@@ -13,7 +13,9 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.runComposeUiTest
 import com.superiorsoftllc.infantry.plugins.official.runners.AddRunnerForm
 import com.superiorsoftllc.infantry.plugins.official.runners.RunnerCheckRows
+import com.superiorsoftllc.infantry.plugins.official.runners.addBearerRequest
 import com.superiorsoftllc.infantry.plugins.official.runners.addLinkRequest
+import com.superiorsoftllc.infantry.plugins.official.runners.runnerBearerError
 import com.superiorsoftllc.infantry.plugins.official.runners.addedRunnerName
 import com.superiorsoftllc.infantry.plugins.official.runners.checkRequest
 import com.superiorsoftllc.infantry.plugins.official.runners.linkCarriesGrant
@@ -97,18 +99,42 @@ class RunnersAddUiTest {
         assertNull(parseRunnerCheck("""{"ok":false,"error":"no paired runner 'box'"}"""))
     }
 
+    /**
+     * RUNNER-PAIR-1 (owner's 2 steps): the form is two fields, Endpoint and Bearer, as the runner printed them; Connect sends exactly
+     * those two (the bearer carries the runner's name and certificate pin), and nothing else is asked.
+     */
+    @Test
+    fun `connect sends the endpoint and bearer and nothing else`() = runComposeUiTest {
+        val bearer = "irb1.server-1.${"a".repeat(64)}.${"b".repeat(32)}"
+        val sent = mutableListOf<Triple<String, String?, Boolean>>()
+        setContent { AddRunnerForm(sending = false, error = null, onConnect = { l, n, g -> sent += Triple(l, n, g) }, onDismiss = {}, gate = live) }
+        onAllNodesWithTag("runner-add-name").assertCountEquals(0)
+        onNodeWithTag("runner-add-endpoint").performTextInput("wss://203.0.113.5:8790")
+        onNodeWithTag("runner-add-bearer").performTextInput(bearer)
+        onAllNodesWithTag("runner-add-grant").assertCountEquals(0)
+        onNodeWithTag("runner-add-connect").performClick()
+        assertEquals(listOf<Triple<String, String?, Boolean>>(Triple("wss://203.0.113.5:8790", bearer, false)), sent)
+        assertEquals(
+            """{"op":"add","endpoint":"wss://203.0.113.5:8790","bearer":"$bearer"}""",
+            addBearerRequest(sent.single().first, sent.single().second!!),
+        )
+        assertNull(runnerBearerError(bearer))
+        assertNotNull(runnerBearerError("XXXX-YYYY"), "a pairing code is not a bearer: the field says what to paste")
+    }
+
+    /** RUNNER-ADD-UI-1 kept: a whole pairing link pasted into Endpoint pairs as before, with no bearer field. */
     @Test
     fun `connect sends the pasted link and nothing else`() = runComposeUiTest {
         val sent = mutableListOf<Triple<String, String?, Boolean>>()
         setContent { AddRunnerForm(sending = false, error = null, onConnect = { l, n, g -> sent += Triple(l, n, g) }, onDismiss = {}, gate = live) }
         onNodeWithTag("runner-add-connect").assertExists()
-        onNodeWithTag("runner-add-link").performTextInput(link)
-        onNodeWithTag("runner-add-name").performTextInput("box")
+        onNodeWithTag("runner-add-endpoint").performTextInput(link)
+        onAllNodesWithTag("runner-add-bearer").assertCountEquals(0)
         // RUNNER-GRANT-AT-PAIR-1: a link with no grant=1 draws no grant tick at all.
         onAllNodesWithTag("runner-add-grant").assertCountEquals(0)
         onNodeWithTag("runner-add-connect").performClick()
-        assertEquals(listOf<Triple<String, String?, Boolean>>(Triple(link, "box", false)), sent)
-        assertEquals("""{"op":"add","link":"$link","name":"box"}""", addLinkRequest(sent.single().first, sent.single().second))
+        assertEquals(listOf<Triple<String, String?, Boolean>>(Triple(link, null, false)), sent)
+        assertEquals("""{"op":"add","link":"$link"}""", addLinkRequest(sent.single().first, sent.single().second))
     }
 
     /**
@@ -125,7 +151,7 @@ class RunnersAddUiTest {
                 grantProjectId = "project-73b27dff", grantProjectName = "Infantry AI",
             )
         }
-        onNodeWithTag("runner-add-link").performTextInput(granting)
+        onNodeWithTag("runner-add-endpoint").performTextInput(granting)
         onNodeWithTag("runner-add-grant").assertIsDisplayed()
         onNodeWithTag("runner-add-grant-label").assertTextContains("Infantry AI (project-73b27dff)", substring = true)
         onNodeWithTag("runner-add-connect").performClick()
@@ -141,7 +167,7 @@ class RunnersAddUiTest {
         val granting = link.replace("&fp=AA:BB:CC", "&fp=AA:BB:CC&grant=1")
         val sent = mutableListOf<Triple<String, String?, Boolean>>()
         setContent { AddRunnerForm(sending = false, error = null, onConnect = { l, n, g -> sent += Triple(l, n, g) }, onDismiss = {}, gate = live) }
-        onNodeWithTag("runner-add-link").performTextInput(granting)
+        onNodeWithTag("runner-add-endpoint").performTextInput(granting)
         onNodeWithTag("runner-add-grant-label").assertTextContains("no project is selected", substring = true)
         onNodeWithTag("runner-add-connect").performClick()
         assertEquals(Triple<String, String?, Boolean>(granting, null, false), sent.single(), "with no project there is nothing to grant, and nothing is sent")

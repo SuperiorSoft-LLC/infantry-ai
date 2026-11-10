@@ -64,6 +64,16 @@ const val RUNNERS_CARD_NODE = "infantry.shell.config.runners"
 /** RUNNER-ADD-UI-1: the command the empty card tells the owner to run on the other machine (the one it copies). */
 const val RUNNER_UP_COMMAND = "infantry runner up --name <name>"
 
+/**
+ * RUNNER-PAIR-1 (step 1 of the owner's 2 steps): the one `docker run` that starts a runner on another machine. Its log prints the
+ * endpoint and the bearer to paste into Add runner; nothing else is configured.
+ */
+const val RUNNER_DOCKER_COMMAND = "docker run -d --name infantry-runner -e INFANTRY_MODE=runner -e INFANTRY_RUNNER_HOST=<this server's address> " +
+    "-p 8790:8790 -v infantry-runner:/data ghcr.io/superiorsoft-llc/infantry-ai:latest"
+
+/** RUNNER-PAIR-1: where the runner prints them. */
+const val RUNNER_LOGS_COMMAND = "docker logs infantry-runner"
+
 /** What the card says when a request never left or its answer could not be read. */
 const val RUNNERS_OFFLINE = "not connected to the daemon: nothing was sent"
 const val RUNNERS_UNREADABLE = "the daemon's answer could not be read"
@@ -152,6 +162,24 @@ fun addLinkRequest(link: String, name: String? = null, grant: Boolean = false, p
         }
     },
 ).toString()
+
+/**
+ * RUNNER-PAIR-1 (step 2 of the owner's 2 steps): the `add` op with the [endpoint] and [bearer] the runner printed. The bearer
+ * carries the runner's name and certificate pin, so nothing else is sent.
+ */
+fun addBearerRequest(endpoint: String, bearer: String): String = JsonObject(
+    mapOf("op" to JsonPrimitive("add"), "endpoint" to JsonPrimitive(endpoint.trim()), "bearer" to JsonPrimitive(bearer.trim())),
+).toString()
+
+/** RUNNER-PAIR-1: whether the Endpoint field holds a whole pairing link (the older one-paste form): then no bearer is needed. */
+fun isPairingLink(text: String): Boolean = text.trim().startsWith("infantry://runner?", ignoreCase = true)
+
+/** RUNNER-PAIR-1: the Bearer field's live check: blank (not typed yet), or the shape the runner prints (`irb1.<name>.<pin>.<secret>`). */
+fun runnerBearerError(bearer: String): String? {
+    val b = bearer.trim()
+    if (b.isEmpty() || (b.startsWith("irb1.") && b.split('.').size == 4)) return null
+    return "Paste the whole 'bearer:' line the runner printed (it starts with irb1.)"
+}
 
 /**
  * RUNNER-PAIR-1: the `connect` op: the daemon runs `infantry runner pair` on the runner machine through [via] (the owner's own
@@ -373,12 +401,13 @@ fun RunnersCard(
 fun RunnersEmptyHint(modifier: Modifier = Modifier) {
     Column(modifier.fillMaxWidth().testTag("runners-hint"), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(
-            "Run agents on another machine. Start a runner there with `$RUNNER_UP_COMMAND` and paste the link it prints here.",
+            "Run agents on another machine: start a runner there with this one command, then Add runner and paste the endpoint " +
+                "and bearer its log (`$RUNNER_LOGS_COMMAND`) prints.",
             fontSize = 12.sp, color = Palette.Muted, modifier = Modifier.testTag("runners-hint-text"),
         )
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(RUNNER_UP_COMMAND, fontSize = 11.sp, modifier = Modifier.testTag("runners-hint-command"))
-            CopyValueButton(RUNNER_UP_COMMAND, Modifier.testTag("runners-hint-copy"))
+            Text(RUNNER_DOCKER_COMMAND, fontSize = 11.sp, modifier = Modifier.weight(1f, fill = false).testTag("runners-hint-command"))
+            CopyValueButton(RUNNER_DOCKER_COMMAND, Modifier.testTag("runners-hint-copy"))
         }
     }
 }
@@ -394,7 +423,7 @@ fun RunnersEmptyHint(modifier: Modifier = Modifier) {
 fun AddRunnerDialog(
     sending: Boolean,
     error: String?,
-    onConnect: (link: String, name: String?, grant: Boolean) -> Unit,
+    onConnect: (endpoint: String, bearer: String?, grant: Boolean) -> Unit,
     onDismiss: () -> Unit,
     gate: LinkContext? = null,
     grantProjectId: String? = null,
@@ -416,49 +445,57 @@ fun AddRunnerDialog(
 fun AddRunnerForm(
     sending: Boolean,
     error: String?,
-    onConnect: (link: String, name: String?, grant: Boolean) -> Unit,
+    /** RUNNER-PAIR-1: (endpoint, bearer, grant); bearer is null when the Endpoint field holds a whole pairing link. */
+    onConnect: (endpoint: String, bearer: String?, grant: Boolean) -> Unit,
     onDismiss: () -> Unit,
     gate: LinkContext? = null,
     modifier: Modifier = Modifier,
     grantProjectId: String? = null,
     grantProjectName: String? = null,
 ) {
-    var link by remember { mutableStateOf("") }
-    var name by remember { mutableStateOf("") }
+    var endpoint by remember { mutableStateOf("") }
+    var bearer by remember { mutableStateOf("") }
+    // RUNNER-PAIR-1: the older one-paste link still works in the Endpoint field; then the bearer is not needed.
+    val linkMode = isPairingLink(endpoint)
     // RUNNER-GRANT-AT-PAIR-1: the tick exists only for a link whose code may grant, and starts ticked (the owner already chose
     // --grant-on-pair on the runner: one confirm here, not two).
-    val canGrant = linkCarriesGrant(link)
-    var grant by remember(link) { mutableStateOf(canGrant) }
+    val canGrant = linkMode && linkCarriesGrant(endpoint)
+    var grant by remember(endpoint) { mutableStateOf(canGrant) }
     val grantable = canGrant && !grantProjectId.isNullOrBlank()
-    val canConnect = link.isNotBlank() && !sending && runnerNameError(name) == null
+    val bearerError = if (linkMode) null else runnerBearerError(bearer)
+    val canConnect = endpoint.isNotBlank() && !sending && (linkMode || (bearer.isNotBlank() && bearerError == null))
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
-            "On the runner machine, run `$RUNNER_UP_COMMAND` and paste the link it prints. The link is a secret for " +
-                "10 minutes and works once.",
+            "Paste the endpoint and the bearer the runner printed when it started (`$RUNNER_LOGS_COMMAND` on that machine shows them).",
             fontSize = 12.sp, color = Palette.Muted,
         )
         OutlinedTextField(
-            value = link, onValueChange = { link = it }, singleLine = true,
-            label = { Text("Pairing link") },
-            placeholder = { Text("infantry://runner?v=1&…") },
-            visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
+            value = endpoint, onValueChange = { endpoint = it }, singleLine = true,
+            label = { Text("Endpoint") },
+            placeholder = { Text("wss://203.0.113.5:8790") },
+            // A pasted pairing link carries a one-time code: masked like the bearer.
+            visualTransformation = if (linkMode) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, autoCorrectEnabled = false),
             shape = Palette.PopupShape,
-            modifier = Modifier.fillMaxWidth().testTag("runner-add-link"),
+            modifier = Modifier.fillMaxWidth().testTag("runner-add-endpoint"),
         )
-        OutlinedTextField(
-            value = name, onValueChange = { name = it }, singleLine = true,
-            label = { Text("Name (optional)") },
-            placeholder = { Text("the name the link carries") },
-            isError = runnerNameError(name) != null,
-            supportingText = runnerNameError(name)?.let { e -> { Text(e, color = Palette.Danger, modifier = Modifier.testTag("runner-add-name-error")) } },
-            shape = Palette.PopupShape,
-            modifier = Modifier.fillMaxWidth().testTag("runner-add-name"),
-        )
+        if (!linkMode) {
+            OutlinedTextField(
+                value = bearer, onValueChange = { bearer = it }, singleLine = true,
+                label = { Text("Bearer") },
+                placeholder = { Text("irb1.…") },
+                isError = bearerError != null,
+                supportingText = bearerError?.let { e -> { Text(e, color = Palette.Danger, modifier = Modifier.testTag("runner-add-bearer-error")) } },
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
+                shape = Palette.PopupShape,
+                modifier = Modifier.fillMaxWidth().testTag("runner-add-bearer"),
+            )
+        }
         if (sending) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ProgressBar(null, Modifier.width(120.dp))
-                Text("Trying every address in the link…", fontSize = 12.sp, color = Palette.Muted, modifier = Modifier.testTag("runner-add-wait"))
+                Text(if (linkMode) "Trying every address in the link…" else "Connecting to the runner…", fontSize = 12.sp, color = Palette.Muted, modifier = Modifier.testTag("runner-add-wait"))
             }
         }
         if (canGrant) {
@@ -476,7 +513,7 @@ fun AddRunnerForm(
             Text("Connecting adds the runner and turns runners on.", fontSize = 11.sp, color = Palette.Muted, modifier = Modifier.weight(1f))
             TextButton(onClick = { if (!sending) onDismiss() }, enabled = !sending, modifier = Modifier.testTag("runner-add-cancel")) { Text("Cancel") }
             ActionButton(
-                "runners.admin", "Connect", { onConnect(link.trim(), name.trim().ifBlank { null }, grantable && grant) },
+                "runners.admin", "Connect", { onConnect(endpoint.trim(), bearer.trim().takeUnless { linkMode }, grantable && grant) },
                 Modifier.testTag("runner-add-connect"), link = gate, enabled = canConnect,
             )
         }
@@ -788,10 +825,10 @@ class RunnersCardBlock : Block("runnersCard", RUNNERS_CARD_NODE) {
             null -> Unit
             is CardDialog.Add -> AddRunnerDialog(
                 sending = open.sending, error = open.error,
-                onConnect = { pasted, name, grant ->
+                onConnect = { pasted, bearer, grant ->
                     coroutines.launch {
                         dialog = CardDialog.Add(sending = true)
-                        val text = call(addLinkRequest(pasted, name, grant, projectId))
+                        val text = call(if (bearer != null) addBearerRequest(pasted, bearer) else addLinkRequest(pasted, null, grant, projectId))
                         val failure = text?.let { runnerFailure(it) }
                         when {
                             text == null -> dialog = CardDialog.Add(sending = false, error = RUNNERS_OFFLINE)
