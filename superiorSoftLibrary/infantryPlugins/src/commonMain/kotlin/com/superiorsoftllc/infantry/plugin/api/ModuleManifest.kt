@@ -193,6 +193,11 @@ data class HarnessDeclaration(
     val hooks: List<String> = emptyList(),
     /** FIRST-RUN-KEYS-1: the API key the harness needs, delivered to its process in an environment variable; null = none. */
     val credential: HarnessCredentialDeclaration? = null,
+    /**
+     * HARNESS-MULTI-CREDENTIAL-1: more keys for one harness (e.g. one per provider it fronts), each with its own env variable.
+     * They follow [credential] when both are present. A declaration without an `id` is the primary one (secret `harness.<id>.key`).
+     */
+    val credentials: List<HarnessCredentialDeclaration> = emptyList(),
     /** CLAUDE-AUTH-CHOICE-1: the sign-in ways the harness offers: `api-key` (the [credential]) and/or `subscription-login`; empty = no choice. */
     val authModes: List<String> = emptyList(),
     /** CLAUDE-AUTH-CHOICE-2: how the daemon checks the subscription login (no tokens) and what the owner runs to sign in. */
@@ -219,6 +224,10 @@ data class HarnessCredentialDeclaration(
     val env: String,
     val label: String? = null,
     val help: String? = null,
+    /** HARNESS-MULTI-CREDENTIAL-1: the credential's id within the harness (secret `harness.<id>.<credId>.key`); null = the primary one. */
+    val id: String? = null,
+    /** HARNESS-MULTI-CREDENTIAL-1: the provider this key is for, appended to the label so several keys read apart. */
+    val provider: String? = null,
 )
 
 /**

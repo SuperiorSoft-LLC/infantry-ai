@@ -1009,7 +1009,7 @@ private fun BuiltInSecretCard(row: SecretRow, actions: SecretActions) {
             Text(row.label, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Palette.Text, modifier = Modifier.weight(1f))
             Text(secretStatusText(row), fontSize = 12.sp, color = if (row.set) Palette.Ok else Palette.Muted, modifier = Modifier.testTag("$SECRET_STATUS_TAG-${row.name}"))
         }
-        val harnessId = row.name.removePrefix("harness.").removeSuffix(".key")
+        val harnessId = row.name.removePrefix("harness.").substringBefore('.')
         val setMode = actions.setAuthMode
         if (row.authModes.size > 1 && setMode != null) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             val mode = row.authMode.ifBlank { row.authModes.first() }

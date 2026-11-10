@@ -13,6 +13,9 @@
     "cli": { "id": "opencode", "command": "opencode", "label": "OpenCode" },
     "settings": ["harness.opencode.maxRetries"],
     "hooks": ["watch", "mcp", "config", "session", "models", "stats"],
-    "credential": { "env": "OPENCODE_API_KEY", "label": "OpenCode", "help": "Create an API key in your OpenCode account (opencode.ai) and paste it here. Only needed for the paid OpenCode Go models; the free tier needs none." }
+    "credential": { "env": "OPENCODE_API_KEY", "label": "OpenCode Go", "provider": "OpenCode Go", "help": "Create an API key in your OpenCode account (opencode.ai) and paste it here. Only needed for the paid OpenCode Go models; the free tier needs none." },
+    "credentials": [
+      { "id": "cmd", "env": "CMD_API_KEY", "label": "Command Code", "provider": "commandcode", "help": "Create an API key at commandcode.ai. Only needed for the commandcode/* models; the key is read by opencode's commandcode provider from CMD_API_KEY." }
+    ]
   }
 }

@@ -247,7 +247,7 @@ fun main(args: Array<String>) {
  * infantry run-cmd list|save|delete|start|stop|secrets the Run tab's saved commands (RUN-CMD-TOOL-1); see RunCmdCli.USAGE
  * infantry harnesses                            the harnesses (provider ids) a ticket can pin, and each one's models
  * infantry harness-status [--check]            which harness CLIs (claude, opencode, pi) are installed / missing / outdated (--check asks npm for the latest)
- * infantry harness key [<name>] [--clear]     FIRST-RUN-KEYS-1: which harnesses need an API key and which are set; with a name, prompts for the key (stdin, never an argument) and stores it in the keystore
+ * infantry harness key [<name> [<credential>]] [--clear]     FIRST-RUN-KEYS-1: which harnesses need an API key and which are set; with a name, prompts for the key (stdin, never an argument) and stores it in the keystore
  * infantry harness auth [<name>]               CLAUDE-AUTH-CHOICE-2: each harness's sign-in mode, signedIn true/false/unknown and last probe; with a name it re-probes first (no tokens)
  * infantry harness-install [id...] [--update]  npm-install the missing harness CLIs into the app prefix (--update refreshes outdated ones)
  * infantry ticket link <id> <otherId> <type>   link one ticket to another (type: blocked_by, blocks, child_of, ...)
@@ -1664,36 +1664,39 @@ internal object Cli {
     }
 
     /**
-     * FIRST-RUN-KEYS-1: `harness key [<name>] [--clear]`. No name lists every harness secret (`harness.<id>.key`) as set / not set;
+     * FIRST-RUN-KEYS-1: `harness key [<name> [<credential>]] [--clear]`. No name lists every harness secret (`harness.<id>.key`) as set / not set;
      * with a name it reads the key from stdin (a prompt on stderr, so a pipe works too; never from an argument, which a process
      * list would show) and sends `secret_set`. The daemon refuses a harness that declares no credential.
      */
     private fun harnessKey(stream: FrameStream, parsed: ParsedArgs, out: Appendable, err: Appendable): Int = runBlocking {
         checkContract(stream, err)
         if (parsed.args.firstOrNull() == "auth") return@runBlocking harnessAuth(stream, parsed, out)
-        if (parsed.args.firstOrNull() != "key") { err.appendLine("usage: infantry harness key [<name>] [--clear] | infantry harness auth [<name>]"); return@runBlocking 2 }
+        if (parsed.args.firstOrNull() != "key") { err.appendLine("usage: infantry harness key [<name> [<credential>]] [--clear] | infantry harness auth [<name>]"); return@runBlocking 2 }
         val name = parsed.args.getOrNull(1)?.trim()?.lowercase()
         val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
         fun state(e: Envelope) = json.decodeFromString(com.superiorsoftllc.infantry.keystore.SecretState.serializer(), e.data)
         if (name == null) {
             val rows = state(stream.request(Envelope(Envelope.SECRET_STATUS, "{}"), Envelope.SECRET_STATE, "secret_status", true)).secrets.filter { it.name.startsWith("harness.") }
             if (rows.isEmpty()) out.appendLine("no loaded harness declares an API key")
-            for (r in rows) out.appendLine("${r.name.removePrefix("harness.").removeSuffix(".key")}  ${r.label}: ${if (r.set) "set ${r.tail}" else "not set"}")
+            for (r in rows) out.appendLine("${r.name.removePrefix("harness.").removeSuffix(".key").replace('.', ' ')}  ${r.label}: ${if (r.set) "set ${r.tail}" else "not set"}")
             return@runBlocking 0
         }
-        val secret = com.superiorsoftllc.infantry.harness.credential.HarnessCredential.secretNameOf(name)
+        // HARNESS-MULTI-CREDENTIAL-1: an optional second word names one of the harness's credentials (`harness key opencode cmd`).
+        val credId = parsed.args.getOrNull(2)?.trim()?.lowercase().orEmpty()
+        com.superiorsoftllc.infantry.harness.credential.HarnessCredential.credIdRefusal(credId)?.let { err.appendLine(it); return@runBlocking 2 }
+        val secret = com.superiorsoftllc.infantry.harness.credential.HarnessCredential.secretNameOf(name, credId)
         // SECRET-REF-1: point the harness key at a shared secret by NAME (no value moves, so any role may). `--clear` drops the pointer too.
-        val refKey = com.superiorsoftllc.infantry.harness.credential.HarnessCredential.refSettingOf(name)
+        val refKey = com.superiorsoftllc.infantry.harness.credential.HarnessCredential.refSettingOf(name, credId)
         parsed.useSecret?.trim()?.let { ref ->
             com.superiorsoftllc.infantry.harness.credential.HarnessCredential.refRefusal(ref)?.let { err.appendLine(it); return@runBlocking 2 }
             stream.request(Envelope(Envelope.SETTINGS_SET, """{"key":"$refKey","value":"$ref"}"""), Envelope.SETTINGS, "settings_set", true)
-            out.appendLine("$name: key now uses shared secret '$ref'")
+            out.appendLine("$name${if (credId.isEmpty()) "" else " $credId"}: key now uses shared secret '$ref'")
             return@runBlocking 0
         }
         if (parsed.clear) stream.request(Envelope(Envelope.SETTINGS_SET, """{"key":"$refKey","value":""}"""), Envelope.SETTINGS, "settings_set", true)
         val frame = if (parsed.clear) Envelope(Envelope.SECRET_CLEAR, json.encodeToString(com.superiorsoftllc.infantry.keystore.SecretName.serializer(), com.superiorsoftllc.infantry.keystore.SecretName(secret)))
         else {
-            System.err.print("API key for $name (input is not echoed when a console is attached): ")
+            System.err.print("API key for $name${if (credId.isEmpty()) "" else " $credId"} (input is not echoed when a console is attached): ")
             System.err.flush()
             val value = (System.console()?.readPassword()?.concatToString() ?: readlnOrNull()).orEmpty().trim()
             if (value.isEmpty()) { err.appendLine("no key given; nothing stored"); return@runBlocking 1 }
@@ -1701,7 +1704,7 @@ internal object Cli {
         }
         val reply = stream.request(frame, Envelope.SECRET_STATE, frame.type, false)
         val row = state(reply).secrets.firstOrNull { it.name == secret }
-        out.appendLine("$name: ${if (row?.set == true) "key set ${row.tail}" else "key not set"}")
+        out.appendLine("$name${if (credId.isEmpty()) "" else " $credId"}: ${if (row?.set == true) "key set ${row.tail}" else "key not set"}")
         0
     }
 
@@ -1719,7 +1722,7 @@ internal object Cli {
             .filter { it.name.startsWith("harness.") && it.authModes.isNotEmpty() && (name == null || it.name == "harness.$name.key") }
         if (rows.isEmpty()) { out.appendLine(if (name == null) "no loaded harness offers a sign-in choice" else "harness '$name' offers no sign-in choice"); return@runBlocking 1 }
         for (r in rows) {
-            val id = r.name.removePrefix("harness.").removeSuffix(".key")
+            val id = r.name.removePrefix("harness.").substringBefore('.')
             out.appendLine("$id  authMode=${r.authMode.ifBlank { "not chosen" }}  signedIn=${r.signedIn}  lastProbe=${if (r.lastProbe == 0L) "never" else java.time.Instant.ofEpochMilli(r.lastProbe)}")
             if (r.authMode == com.superiorsoftllc.infantry.harness.credential.HarnessCredential.MODE_SUBSCRIPTION && r.signedIn != "true" && r.loginCommand.isNotBlank()) out.appendLine("  sign in once in a terminal: ${r.loginCommand}")
         }
@@ -6115,7 +6118,7 @@ internal object Cli {
         "harnesses" -> if (parsed.args.isNotEmpty()) "harnesses takes no arguments: infantry harnesses" else null
         "harness-status" -> if (parsed.args.isNotEmpty()) "harness-status takes no arguments: infantry harness-status [--check]" else null
         "harness-install" -> null
-        "harness" -> if ((parsed.args.firstOrNull() != "key" && parsed.args.firstOrNull() != "auth") || parsed.args.size > 2) "usage: infantry harness key [<name>] [--clear] | infantry harness auth [<name>]" else null
+        "harness" -> if ((parsed.args.firstOrNull() != "key" && parsed.args.firstOrNull() != "auth") || parsed.args.size > 3) "usage: infantry harness key [<name> [<credential>]] [--clear] | infantry harness auth [<name>]" else null
         "agent" -> if (parsed.args.firstOrNull().isNullOrBlank() || parsed.args.size == 1) null else agentQueueUsage(parsed.args)
         "agent-def" -> AgentDefCli.usageError(parsed.args)
         "run-cmd" -> RunCmdCli.usageError(parsed.args)

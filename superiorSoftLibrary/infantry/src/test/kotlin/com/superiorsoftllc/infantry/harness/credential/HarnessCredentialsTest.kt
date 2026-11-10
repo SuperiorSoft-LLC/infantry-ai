@@ -204,3 +204,72 @@ class HarnessAuthProbeTest {
         assertNull(c.usesSecret("commandcode"), "a built-in name is never referenced")
     }
 }
+
+/** HARNESS-MULTI-CREDENTIAL-1: several keys for one harness, each with its own env variable, secret and reference. */
+class HarnessMultiCredentialTest {
+    private val goKey = "go-FakeOpenCodeGoKey1234567890AAAA"
+    private val cmdKey = "cmd-FakeCommandCodeKey1234567890BBBB"
+    private val primary = HarnessCredential("opencode", "OPENCODE_API_KEY", "OpenCode Go")
+    private val cmd = HarnessCredential("opencode", "CMD_API_KEY", "Command Code", credId = "cmd")
+
+    private fun creds(refs: Map<String, String> = emptyMap()): Pair<Keystore, HarnessCredentials> {
+        val ks = Keystore(Files.createTempDirectory("hc-multi").toFile(), env = { null }, vault = null)
+        return ks to HarnessCredentials(ks, refSource = { refs[it] }) { listOf(primary, cmd) }
+    }
+
+    @Test
+    fun `each credential has its own secret, reference setting and env variable`() {
+        assertEquals("harness.opencode.key", primary.secretName)
+        assertEquals("harness.opencode.cmd.key", cmd.secretName)
+        assertEquals("harness.opencode.keyRef", primary.refSetting)
+        assertEquals("harness.opencode.cmd.keyRef", cmd.refSetting)
+        val (_, c) = creds()
+        assertEquals(2, c.declarations("opencode").size)
+        assertEquals(2, c.missing().size)
+        c.set("opencode", cmdKey, "cmd")
+        assertEquals(mapOf("CMD_API_KEY" to cmdKey), c.env("opencode"))
+        assertEquals(listOf(primary), c.missing(), "only the unset credential is missing")
+        c.set("opencode", goKey)
+        assertEquals(mapOf("OPENCODE_API_KEY" to goKey, "CMD_API_KEY" to cmdKey), c.env("opencode"))
+        assertFailsWith<IllegalArgumentException> { c.set("opencode", "x", "nope") }
+        assertTrue(c.clear("opencode", "cmd"))
+        assertEquals(mapOf("OPENCODE_API_KEY" to goKey), c.env("opencode"))
+    }
+
+    @Test
+    fun `a reference on one credential never feeds the other`() {
+        val (ks, c) = creds(mapOf("harness.opencode.cmd.keyRef" to "command_key"))
+        ks.setField("command_key", "value", cmdKey)
+        assertEquals(mapOf("CMD_API_KEY" to cmdKey), c.env("opencode"))
+        assertNull(c.usesSecret("opencode"))
+        assertEquals("command_key", c.usesSecret("opencode", "cmd"))
+        assertFalse(c.env("opencode").containsKey("OPENCODE_API_KEY"), "the Command Code key is never sent as OPENCODE_API_KEY")
+    }
+
+    @Test
+    fun `the single credential form still works and the wire carries no value`() {
+        val ks = Keystore(Files.createTempDirectory("hc-single").toFile(), env = { null }, vault = null)
+        val c = HarnessCredentials(ks) { listOf(primary) }
+        c.set("opencode", goKey)
+        assertEquals(mapOf("OPENCODE_API_KEY" to goKey), c.env("opencode"))
+        val (ks2, c2) = creds()
+        c2.set("opencode", goKey); c2.set("opencode", cmdKey, "cmd")
+        val h = KeystoreHandler(ks2, extraKnown = { c2.declared().map { k -> KnownSecret(k.secretName, "${k.label} API key") } })
+        val wire = Json.encodeToString(com.superiorsoftllc.infantry.keystore.SecretState.serializer(), h.state())
+        assertTrue(wire.contains("harness.opencode.cmd.key"))
+        assertFalse(wire.contains("FakeCommandCode") || wire.contains("FakeOpenCode"), "no value on the wire")
+        assertNotNull(HarnessCredential.credIdRefusal("Bad Id"))
+        assertNull(HarnessCredential.credIdRefusal(""))
+    }
+
+    @Test
+    fun `module json parses a credentials list and the opencode manifest declares both keys`() {
+        val m = Json { ignoreUnknownKeys = true }.decodeFromString(ModuleManifest.serializer(),
+            """{"name":"Infantry_X","version":"1.0.0","apiVersion":2,"harness":{"ids":["x"],"credential":{"env":"A_KEY"},"credentials":[{"id":"b","env":"B_KEY","provider":"B"}]}}""")
+        assertEquals("A_KEY", m.harness?.credential?.env)
+        assertEquals("b", m.harness?.credentials?.single()?.id)
+        val f = generateSequence(java.io.File("").absoluteFile) { it.parentFile }.map { java.io.File(it, "plugins/official/Infantry_OpenCode/module.json") }.first { it.exists() }
+        val oc = Json { ignoreUnknownKeys = true }.decodeFromString(ModuleManifest.serializer(), f.readText()).harness!!
+        assertEquals(setOf("OPENCODE_API_KEY", "CMD_API_KEY"), (listOfNotNull(oc.credential) + oc.credentials).map { it.env }.toSet())
+    }
+}

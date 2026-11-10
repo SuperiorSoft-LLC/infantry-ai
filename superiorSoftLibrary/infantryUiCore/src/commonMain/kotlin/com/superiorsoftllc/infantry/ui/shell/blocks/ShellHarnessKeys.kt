@@ -82,7 +82,7 @@ object ShellHarnessKeys : Block("infantry.shell.harnessKeys", "infantry.shell.ha
             dismissButton = {
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     if (SUBSCRIPTION_MODE in row.authModes) TextButton({
-                        val id = row.name.removePrefix("harness.").removeSuffix(".key")
+                        val id = row.name.removePrefix("harness.").substringBefore('.')
                         skip()
                         s.actionScope.launch { s.controller.setHarnessAuthMode(id, SUBSCRIPTION_MODE) }
                     }, Modifier.testTag(HARNESS_SUBSCRIPTION_TAG)) { Text("Use subscription") }
