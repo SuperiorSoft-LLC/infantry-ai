@@ -192,7 +192,7 @@ object ScriptAliases {
         "start" to "infantry_ticket_start", "close_session" to "infantry_session_remove", "kill" to "infantry_kill",
         "prompt" to "infantry_prompt", "ask" to "infantry_ask", "ticket_get" to "infantry_ticket_get",
         "ticket_update" to "infantry_ticket_update", "ticket_create" to "infantry_ticket_create", "board" to "infantry_board",
-        "emit" to "infantry_event_emit",
+        "emit" to "infantry_event_emit", "secret_render" to "infantry_secret_render",
     )
 
     /** The table a run uses: the stored setting when one is set (a stored `{}` means none), else [DEFAULTS]. */
