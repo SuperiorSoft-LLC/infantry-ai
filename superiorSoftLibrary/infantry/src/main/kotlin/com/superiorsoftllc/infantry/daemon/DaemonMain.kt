@@ -890,9 +890,10 @@ class InfantryDaemon(
                 credentialEnv = { id -> harnessCredentialsRef.get()?.env(id).orEmpty() },
                 credentialMissing = { id ->
                     harnessCredentialsRef.get()?.let { hc ->
-                        hc.missing().firstOrNull { it.harnessId == id }?.let { c ->
-                            (hc.usesSecret(c.harnessId)?.let { "Harness ${c.label} uses the shared secret '$it', which is missing or has no value: the run may fail or stall. Create it, or point the harness at another with `infantry harness key ${c.harnessId} --use-secret <name>`" }
-                                ?: ("No API key set for ${c.label}: the run may fail or stall. Set it with `infantry harness key ${c.harnessId}`")) +
+                        hc.missing().filter { it.harnessId == id }.takeIf { it.isNotEmpty() }?.joinToString(" ") { c ->
+                            val cmd = "infantry harness key ${c.harnessId}" + (if (c.credId.isNotEmpty()) " ${c.credId}" else "")
+                            (hc.usesSecret(c.harnessId, c.credId)?.let { "Harness ${c.label} uses the shared secret '$it', which is missing or has no value: the run may fail or stall. Create it, or point the harness at another with `$cmd --use-secret <name>`" }
+                                ?: ("No API key set for ${c.label} (${c.env}): the run may fail or stall. Set it with `$cmd`")) +
                                 (if (c.help.isNotBlank()) " (${c.help})" else "") + "."
                         }
                     }
@@ -981,8 +982,8 @@ class InfantryDaemon(
             val keystore = Keystore(daemonStateDir)
             val harnessCredentials = com.superiorsoftllc.infantry.harness.credential.HarnessCredentials(keystore, modeSource = { id ->
                 (settings.storedDeclared(com.superiorsoftllc.infantry.harness.credential.HarnessCredential.modeSettingOf(id)) as? kotlinx.serialization.json.JsonPrimitive)?.content?.takeIf { it.isNotBlank() }
-            }, refSource = { id ->
-                (settings.storedDeclared(com.superiorsoftllc.infantry.harness.credential.HarnessCredential.refSettingOf(id)) as? kotlinx.serialization.json.JsonPrimitive)?.content?.takeIf { it.isNotBlank() }
+            }, refSource = { key ->
+                (settings.storedDeclared(key) as? kotlinx.serialization.json.JsonPrimitive)?.content?.takeIf { it.isNotBlank() }
             }, declaredSource = {
                 harnessModulesRef.get()?.credentials().orEmpty() + harnesses?.harnessIds().orEmpty().mapNotNull {
                     (harnesses?.resolve(it) as? com.superiorsoftllc.infantry.harness.descriptor.DescriptorHarness)?.credential
@@ -1236,7 +1237,7 @@ class InfantryDaemon(
             // SECRETS-1 / SECRETS-2: the keystore's frames; a restricted policy refuses every change.
             val keystoreFrames = KeystoreHandler(
                 keystore = keystore,
-                extraKnown = { harnessCredentials.declared().map { com.superiorsoftllc.infantry.keystore.KnownSecret(it.secretName, "${it.label} API key", help = it.help, authModes = it.authModes, authMode = { harnessCredentials.mode(it.harnessId).orEmpty() }, loginCommand = it.loginCommand, signedIn = { harnessCredentials.authStatus(it.harnessId).word }, lastProbe = { harnessCredentials.authStatus(it.harnessId).lastProbe }, usesSecret = { harnessCredentials.usesSecret(it.harnessId).orEmpty() }) } },
+                extraKnown = { harnessCredentials.declared().map { com.superiorsoftllc.infantry.keystore.KnownSecret(it.secretName, "${it.label} API key", help = it.help, authModes = it.authModes, authMode = { harnessCredentials.mode(it.harnessId).orEmpty() }, loginCommand = it.loginCommand, signedIn = { harnessCredentials.authStatus(it.harnessId).word }, lastProbe = { harnessCredentials.authStatus(it.harnessId).lastProbe }, usesSecret = { harnessCredentials.usesSecret(it.harnessId, it.credId).orEmpty() }) } },
                 authCheck = { secretName -> harnessCredentials.declared().firstOrNull { it.secretName == secretName }?.let { harnessCredentials.checkAuth(it.harnessId) } },
                 restricted = locked,
                 push = { envelope -> for (client in clients) client.trySend(envelope) },

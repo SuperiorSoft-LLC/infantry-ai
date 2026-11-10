@@ -25,20 +25,30 @@ data class HarnessCredential(
     val probeField: String = "loggedIn",
     /** What the owner runs in a terminal to sign in; shown with a Copy button. */
     val loginCommand: String = "",
+    /**
+     * HARNESS-MULTI-CREDENTIAL-1: which of the harness's credentials this is. Empty = the primary (legacy) one, stored as
+     * `harness.<id>.key`; else `harness.<id>.<credId>.key` with its pointer in `harness.<id>.<credId>.keyRef`.
+     */
+    val credId: String = "",
 ) {
     /** The setting that stores the owner's choice of [authModes], per harness. */
     val modeSetting: String get() = modeSettingOf(harnessId)
-    val secretName: String get() = secretNameOf(harnessId)
+    val secretName: String get() = secretNameOf(harnessId, credId)
+    /** The setting naming the shared secret this credential reads its value from. */
+    val refSetting: String get() = refSettingOf(harnessId, credId)
 
     companion object {
         const val FIELD = "value"
-        fun secretNameOf(harnessId: String): String = "harness.$harnessId.key"
+        fun secretNameOf(harnessId: String, credId: String = ""): String = if (credId.isEmpty()) "harness.$harnessId.key" else "harness.$harnessId.$credId.key"
         const val MODE_API_KEY = "api-key"
         const val MODE_SUBSCRIPTION = "subscription-login"
         val KNOWN_MODES = listOf(MODE_API_KEY, MODE_SUBSCRIPTION)
         fun modeSettingOf(harnessId: String): String = "harness.$harnessId.authMode"
         /** SECRET-REF-1: the setting naming a shared secret this harness's key is read from (a name, never a value). */
-        fun refSettingOf(harnessId: String): String = "harness.$harnessId.keyRef"
+        fun refSettingOf(harnessId: String, credId: String = ""): String = if (credId.isEmpty()) "harness.$harnessId.keyRef" else "harness.$harnessId.$credId.keyRef"
+        private val CRED_ID = Regex("[a-z0-9][a-z0-9_-]{0,31}")
+        /** Null when [credId] is empty (the primary credential) or a usable id; else why not. */
+        fun credIdRefusal(credId: String): String? = if (credId.isEmpty() || CRED_ID.matches(credId)) null else "credential id '${credId.take(40)}' must be lowercase letters, digits, '_' and '-'"
         /** Null when [name] may be referenced as a harness key; else why not (a harness key or another built-in is never lent out). */
         fun refRefusal(name: String): String? = when {
             !Keystore.isName(name) -> "secret names are lowercase letters, digits, '.', '_' and '-'"
@@ -73,7 +83,7 @@ class HarnessCredentials(
     private val modeSource: (String) -> String? = { null },
     /** Runs a probe argv and returns its stdout whatever the exit code (a CLI may exit 1 when signed out); null when it cannot run. */
     private val probeRunner: (List<String>, String) -> String? = ::runProbe,
-    /** SECRET-REF-1: the stored `harness.<id>.keyRef` (a shared secret's name) for a harness id, or null when none. */
+    /** SECRET-REF-1: the stored value of a `harness.<id>[.<credId>].keyRef` setting key (a shared secret's name), or null when none. */
     private val refSource: (String) -> String? = { null },
     private val declaredSource: () -> List<HarnessCredential>,
 ) {
@@ -86,14 +96,18 @@ class HarnessCredentials(
     /** True when the owner chose the subscription login: no key is needed and none is injected. */
     private fun subscription(harnessId: String) = mode(harnessId) == HarnessCredential.MODE_SUBSCRIPTION
 
-    /** The declared credentials, one per harness id (the first declaration wins). */
-    fun declared(): List<HarnessCredential> = declaredSource().distinctBy { it.harnessId }
+    /** The declared credentials, one per (harness id, credential id); the first declaration wins. */
+    fun declared(): List<HarnessCredential> = declaredSource().filter { HarnessCredential.credIdRefusal(it.credId) == null }.distinctBy { it.harnessId to it.credId }
 
-    fun declaration(harnessId: String): HarnessCredential? = declared().firstOrNull { it.harnessId == harnessId }
+    /** The credential [credId] of [harnessId] (default: the primary one), or null. */
+    fun declaration(harnessId: String, credId: String = ""): HarnessCredential? = declared().firstOrNull { it.harnessId == harnessId && it.credId == credId }
 
-    /** SECRET-REF-1: the shared secret [harnessId] reads its key from, or null. A refused name counts as none. */
-    fun usesSecret(harnessId: String): String? =
-        refSource(harnessId)?.trim()?.takeIf { it.isNotEmpty() && HarnessCredential.refRefusal(it) == null }
+    /** Every credential [harnessId] declares, in declaration order. */
+    fun declarations(harnessId: String): List<HarnessCredential> = declared().filter { it.harnessId == harnessId }
+
+    /** SECRET-REF-1: the shared secret credential [credId] of [harnessId] reads its key from, or null. A refused name counts as none. */
+    fun usesSecret(harnessId: String, credId: String = ""): String? =
+        refSource(HarnessCredential.refSettingOf(harnessId, credId))?.trim()?.takeIf { it.isNotEmpty() && HarnessCredential.refRefusal(it) == null }
 
     /**
      * SECRET-REF-1: the key value of [c]: the referenced shared secret (project scope first, then app) when a reference is
@@ -101,7 +115,7 @@ class HarnessCredentials(
      * The secret's `value` field, else its only field. Daemon side only.
      */
     private fun keyValue(c: HarnessCredential, project: String?): String? {
-        val ref = usesSecret(c.harnessId) ?: return keystore.field(c.secretName, HarnessCredential.FIELD)
+        val ref = usesSecret(c.harnessId, c.credId) ?: return keystore.field(c.secretName, HarnessCredential.FIELD)
         val fields = keystore.resolve(ref, project) ?: return null
         return fields[HarnessCredential.FIELD] ?: fields.values.singleOrNull()
     }
@@ -111,25 +125,25 @@ class HarnessCredentials(
         HarnessCredentialState(c, value != null, value?.let { Keystore.maskedTail(it) }.orEmpty())
     }
 
-    /** Stores [value] as [harnessId]'s key. Refused for a harness that declares no credential. */
-    fun set(harnessId: String, value: String) {
-        val c = declaration(harnessId) ?: throw IllegalArgumentException("harness '$harnessId' declares no credential")
+    /** Stores [value] as [harnessId]'s key [credId]. Refused for a credential the harness does not declare. */
+    fun set(harnessId: String, value: String, credId: String = "") {
+        val c = declaration(harnessId, credId) ?: throw IllegalArgumentException("harness '$harnessId' declares no credential '$credId'")
         keystore.setField(c.secretName, HarnessCredential.FIELD, value)
     }
 
-    fun clear(harnessId: String): Boolean {
-        val c = declaration(harnessId) ?: return false
+    fun clear(harnessId: String, credId: String = ""): Boolean {
+        val c = declaration(harnessId, credId) ?: return false
         return keystore.clear(c.secretName)
     }
 
-    /** `{ENV_NAME: key}` for [harnessId]; empty when it declares none or the key is unset. */
+    /** `{ENV_NAME: key}` for every credential of [harnessId] that has a key; empty when it declares none or none is set. */
     fun env(harnessId: String, project: String? = null): Map<String, String> {
-        val c = declaration(harnessId) ?: return emptyMap()
+        val cs = declarations(harnessId)
+        if (cs.isEmpty()) return emptyMap()
         // CLAUDE-AUTH-CHOICE-2: a subscription session carries NO key: the variable is blanked, so a key the daemon itself inherited from its own
         // environment cannot reach the harness and bill an API account (a blank variable reads as unset).
-        if (subscription(harnessId)) return mapOf(c.env to "")
-        val v = keyValue(c, project) ?: return emptyMap()
-        return mapOf(c.env to v)
+        if (subscription(harnessId)) return cs.associate { it.env to "" }
+        return buildMap { for (c in cs) keyValue(c, project)?.let { put(c.env, it) } }
     }
 
     /** CLAUDE-AUTH-CHOICE-2: the last probe result per harness id; kept in memory, rebuilt by the next check. */
