@@ -14,7 +14,8 @@ shot $S-board >/dev/null
 step $S "board opened (columns visible)" has "TO DO"
 
 wd click "+ New ticket" >/dev/null; sleep 1
-wd clickxy "700,259" >/dev/null; wd type "QA ticket $$" >/dev/null
+typein "Assignee@200,-140" "QA ticket $$" >/dev/null   # Title field is not in the a11y tree: anchor on the Assignee label below it
+wheel 10 "$(at "Assignee")"; sleep 1   # the Create button sits under the dialog clip until the form is scrolled
 wd click "Create ticket" >/dev/null; sleep 2
 step $S "ticket created in TO DO" has "Select QA ticket"
 # Moving a card across columns is drag-only: drag the card handle onto the next column header.
