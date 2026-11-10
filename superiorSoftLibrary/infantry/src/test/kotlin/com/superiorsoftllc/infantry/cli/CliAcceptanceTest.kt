@@ -658,6 +658,20 @@ class CliAcceptanceTest {
         assertEquals("", show.out, "nothing is printed for an unknown prefix")
     }
 
+    /** CLI-TICKET-START-TITLE-1: a title is not an id; the error says so and names the id of the ticket with that title. */
+    @Test
+    fun ticketStartWithATitleSaysIdsOnlyAndNamesTheId() {
+        val fixture = launch(StubScript.default())
+        fixture.client.await(Envelope.READY)
+        val saved = saveTicketTitled(fixture, "first", """{"title":"first"}""")
+
+        val start = cli(fixture.port, "ticket", "start", "first")
+        assertEquals(1, start.exit, "a title must exit 1: ${start.err}")
+        assertTrue(start.err.contains("no ticket first"), start.err)
+        assertTrue(start.err.contains("not a title"), "the error must say ids only: ${start.err}")
+        assertTrue(start.err.contains(saved.id), "the error must name the id of the ticket titled 'first': ${start.err}")
+    }
+
     /** CLI-T4: `ticket move <id> <status>` moves the ticket; `tickets --status <status>` then lists it. */
     @Test
     fun ticketMoveThenTicketsStatusListsIt() {

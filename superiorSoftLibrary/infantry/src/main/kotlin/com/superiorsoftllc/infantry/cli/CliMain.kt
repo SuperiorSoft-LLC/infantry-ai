@@ -1251,6 +1251,9 @@ internal object Cli {
             is TicketPrefixMatch.Unique -> match.ticket
             TicketPrefixMatch.None -> {
                 err.appendLine("error: no ticket $prefix")
+                err.appendLine("ticket commands take a ticket id (the full id or the 8-char id `ticket create` and `tickets` print, e.g. 09126a31), not a title")
+                val byTitle = board.filter { it.title.equals(prefix, ignoreCase = true) }
+                for (ticket in byTitle) err.appendLine("  a ticket titled '${ticket.title}' has the id ${ticket.id}: use that")
                 null
             }
             is TicketPrefixMatch.Ambiguous -> {
@@ -4821,7 +4824,7 @@ internal object Cli {
               ticket assign <id|prefix> <agent> [--queue] [--at n]   Give a todo ticket to an existing agent (start now, or --queue behind its work)
               agent switch <agent> <ticketId> [--now]   The agent leaves its ticket (handoff, todo) for another; the worker ends, the new ticket starts on exit
               ticket unassign <id|prefix> [--now] [--note <text>]   Take an in_progress ticket off its worker: back to todo (top), branch and work kept, with a handoff comment
-              ticket start <id|prefix>       Start ticket work this way, never with a spawn: the worker runs the ticket's
+              ticket start <id|prefix>       (an id, full or the 8 chars `ticket create` prints; not a title) Start ticket work this way, never with a spawn: the worker runs the ticket's
                                   role, provider and model on its own ticket/<short-id>-<slug> branch; the ticket goes
                                   In Progress. A refused or held start exits 1 with the reason
               ticket link <id|prefix> <otherId|prefix> <type>   Link one ticket to another (see the link types)
