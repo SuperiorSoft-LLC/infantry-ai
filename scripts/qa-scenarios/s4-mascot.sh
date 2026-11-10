@@ -8,6 +8,8 @@ step $S "Avatar style offers Mascot" has "Mascot (Infantry_Mascot)"
 wd clickxy "$(at "Mascot (Infantry_Mascot)")" >/dev/null; sleep 2
 shot $S-mascot-selected >/dev/null
 step $S "Mascot avatars card has Motion control" has "Motion"
-echo "BLOCKED $S: Motion options sit far below the fold (y>7000); driver has no scroll-into-view, so Motion switching is not driven"
+MOTION="$(scrollto "Motion")"; shot $S-motion >/dev/null
+step $S "Motion control scrolled into view" test -n "$MOTION"
+[ -n "$MOTION" ] && { wd clickxy "$MOTION" >/dev/null; sleep 1; shot $S-motion-clicked >/dev/null; }
 wd clickxy "$(at "Done")" >/dev/null
 finish $S

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Shared helpers. Usage: source lib.sh; PID=<java pid of the window>; wd dump | wd click "<text>" | shot name
-QA_WD="${QA_WD:-C:/t83/wd/wd.sh}"
+QA_WD="${QA_WD:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/windrive/wd.sh}"   # windrive11: windrive10 + drag, scrollto, typein
 SHOTS="${SHOTS:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/scratch/qa}"
 mkdir -p "$SHOTS"
 RESULTS=()
@@ -15,4 +15,9 @@ finish() { shot "$1-end" >/dev/null; for r in "${RESULTS[@]}"; do [ "$r" = FAIL 
 reset() { wd key 27 >/dev/null; sleep 1; wd key 27 >/dev/null; sleep 1; }
 # at <substring>: "x,y" centre of the first dump line containing it (handles any window size/position)
 at() { wd dump | grep -m1 -F -- "$1" | sed -E 's/.*@([0-9]+),([0-9]+) ([0-9]+)x([0-9]+).*/\1 \2 \3 \4/' | awk '{printf "%d,%d", $1+$3/2, $2+$4/2}'; }
+# drag "<from>" "<to>": press on a node (or "x,y"), move, release on another. scrollto "<label>": wheel until on screen,
+# prints "x,y" of its centre. typein "<label>[@dx,dy]" "<text>": click it to focus a field, then type.
+drag() { wd drag "$1=>$2" | grep -q '^OK'; }
+scrollto() { wd scrollto "$1" | sed -n 's/^OK //p' | grep .; }
+typein() { wd typein "$1=>$2" | grep -q '^OK'; }
 export PID

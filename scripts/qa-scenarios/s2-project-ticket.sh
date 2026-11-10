@@ -17,6 +17,10 @@ wd click "+ New ticket" >/dev/null; sleep 1
 wd clickxy "700,259" >/dev/null; wd type "QA ticket $$" >/dev/null
 wd click "Create ticket" >/dev/null; sleep 2
 step $S "ticket created in TO DO" has "Select QA ticket"
-# Moving a card across columns is drag-only; windrive10 has no drag command (see README, ticket filed).
-echo "BLOCKED $S: move ticket across columns (driver has no drag)"
+# Moving a card across columns is drag-only: drag the card handle onto the next column header.
+CARD="Drag QA ticket $$"
+for COL in "IN PROGRESS" "DONE"; do
+  step $S "drag ticket to $COL" drag "$CARD" "$COL"; sleep 2
+done
+step $S "ticket moved (card still on the board)" has "QA ticket $$"
 finish $S
