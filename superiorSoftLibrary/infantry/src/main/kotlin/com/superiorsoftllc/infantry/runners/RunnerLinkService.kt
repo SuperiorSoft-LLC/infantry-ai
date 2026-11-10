@@ -58,6 +58,8 @@ class RunnerLinkService(
     private val pump: ForwardPump? = null,
     /** RUNNER-UP-1: this daemon's deployment mode id (`both` | `runner` | `orchestrator`), so `runner up` can refuse a board-only daemon. */
     private val mode: () -> String = { BOTH_MODE },
+    /** RUNNER-PAIR-1: runs the runner-side `runner pair` through the owner's command (op `connect`); tests pass a fake. */
+    private val connectIssuer: RunnerConnect.Issuer = RunnerConnect.processIssuer(),
 ) : AutoCloseable {
     private var serving: LinkServing? = null
     private var pairing: Pairing? = null
@@ -227,21 +229,10 @@ class RunnerLinkService(
                     val r = peers(store).add(need("name"), need("url"), need("code"), str("fingerprint"), str("orchestratorName").orEmpty())
                     AddOutcome(r, emptyList())
                 }
-                // Adding a runner IS the owner's consent (`runner_admin` is owner-only), so the first add turns the feature on too.
-                val turnedOn = !enabledNow() && runCatching { setEnabled(true) }.isSuccess
-                val r = outcome.runner
-                JsonObject(
-                    ok(
-                        "name" to r.name, "url" to r.url, "runnerId" to r.runnerId,
-                        "skipped" to outcome.skipped.joinToString("; ").takeIf { it.isNotEmpty() },
-                        "enabledTurnedOn" to turnedOn.toString(),
-                        "grantRefusal" to outcome.grantRefusal,
-                    ) + mapOf(
-                        "grantedProjects" to JsonArray(outcome.grantedProjects.map(::JsonPrimitive)),
-                        "grantedHarnesses" to JsonArray(outcome.grantedHarnesses.map(::JsonPrimitive)),
-                    ),
-                )
+                added(outcome)
             }
+            // RUNNER-PAIR-1: one-step connect: the runner-side `pair` through the owner's command, its link redeemed here, never shown.
+            "connect" -> connect(need("name"), need("via"), str("host"), str("port"), str("orchestratorName").orEmpty())
             "rotate" -> ok("name" to peers(RunnerLinkStore.open(stateDir)).rotate(need("name")).name)
             // RUNNER-CHECK-1: the health check (link, contract, sign-in, grants, git, disk) with the fix for each failing row.
             "check" -> check(need("name"), str("projectId"), str("harness"))
@@ -530,6 +521,83 @@ class RunnerLinkService(
         return JsonObject(ok().plus(mapOf("enabled" to JsonPrimitive(enabledNow()), "runners" to JsonArray(rows))))
     }
 
+    /** The answer of a successful add (op `add` and op `connect`). */
+    private fun added(outcome: AddOutcome): JsonObject {
+        // Adding a runner IS the owner's consent (`runner_admin` is owner-only), so the first add turns the feature on too.
+        val turnedOn = !enabledNow() && runCatching { setEnabled(true) }.isSuccess
+        val r = outcome.runner
+        return JsonObject(
+            ok(
+                "name" to r.name, "url" to r.url, "runnerId" to r.runnerId,
+                "skipped" to outcome.skipped.joinToString("; ").takeIf { it.isNotEmpty() },
+                "enabledTurnedOn" to turnedOn.toString(),
+                "grantRefusal" to outcome.grantRefusal,
+            ) + mapOf(
+                "grantedProjects" to JsonArray(outcome.grantedProjects.map(::JsonPrimitive)),
+                "grantedHarnesses" to JsonArray(outcome.grantedHarnesses.map(::JsonPrimitive)),
+            ),
+        )
+    }
+
+    /**
+     * RUNNER-PAIR-1 ([RunnerConnect]): runs `<via> infantry runner pair --name [name] --allow-projects * --allow-harnesses *` and
+     * redeems the link it prints, exactly like `add '<link>'`. The link stays here: the answer carries the runner, never the link.
+     */
+    private fun connect(name: String, via: String, host: String?, port: String?, orchestratorName: String): JsonObject {
+        require(RunnerLinkStore.NAME.matches(name)) { "runner name '${name.filter { it in ' '..'~' }.take(SHOWN_OP_SIZE)}' must be 1-32 of a-z, 0-9 and '-' (starting with a letter or digit)" }
+        val store = RunnerLinkStore.open(stateDir)
+        // Connect again is always allowed: a runner that still answers is already connected (nothing to pair); one that does not
+        // (recreated container, wiped volume) gets a fresh code, and only once the runner issued one is the stale entry replaced.
+        val existing = store.runner(name)
+        if (existing != null && answers(name)) {
+            val turnedOn = !enabledNow() && runCatching { setEnabled(true) }.isSuccess
+            return ok("name" to name, "url" to existing.url, "runnerId" to existing.runnerId, "already" to "true", "enabledTurnedOn" to turnedOn.toString())
+        }
+        val (reachHost, reachPort) = RunnerConnect.address(host, port)
+        val viaWords = RunnerConnect.splitVia(via)
+        val argv = RunnerConnect.pairCommand(viaWords, name)
+        val waitMs = limit(LimitRegistry.RUNNERS_CONNECT_SEC) * MS_PER_SECOND
+        val issued = connectIssuer.issue(argv, waitMs)
+        var finished = false
+        try {
+            val text = issued.link ?: throw IllegalArgumentException(issued.failure ?: "the runner printed no pairing link")
+            val parsed = when (val p = RunnerPairLink.parse(text)) {
+                is RunnerPairLink.Parsed.Ok -> RunnerConnect.reachAt(p.link, reachHost, reachPort)
+                is RunnerPairLink.Parsed.Bad -> throw IllegalArgumentException("the runner printed a pairing link this machine cannot read (${p.reason})")
+            }
+            // The runner issued a fresh code, so it is not paired with the entry kept here any more: that entry is stale.
+            if (existing != null) store.removeRunner(name)
+            val outcome = try {
+                peers(store).addLink(parsed, name, orchestratorName, settings().allowPlainTailnet, null)
+            } catch (e: LinkFailure) {
+                throw LinkFailure(RunnerConnect.unreachableHint(e.message, host, port), e.presentedFingerprint)
+            }
+            log("[infantry] runner link: connected runner '$name' in one step" + if (existing != null) " (replaced its stale pairing)" else "")
+            issued.finish(waitMs)
+            finished = true
+            settleRunner(viaWords, name, waitMs)
+            return added(outcome)
+        } finally {
+            if (!finished) issued.finish(waitMs)
+        }
+    }
+
+    /** Whether the paired runner [name] answers a hello now. */
+    private fun answers(name: String): Boolean = runCatching { links.call(name, F.HELLO, "{}").type == F.REPLY }.getOrDefault(false)
+
+    /**
+     * RUNNER-PAIR-1: a runner opens its paired listener when its own `pair_status` sees the pairing end; a runner older than this
+     * fix could miss that and wait for its next tick (up to `limits.runners.linkCheckSeconds`), so the check the app opens right
+     * after Connect was red. Ask it once through the same command ([RunnerConnect.settleCommand]), then wait until it answers.
+     */
+    private fun settleRunner(via: List<String>, name: String, waitMs: Long) {
+        if (answers(name)) return
+        val deadline = clock() + waitMs
+        runCatching { connectIssuer.issue(RunnerConnect.settleCommand(via, name), waitMs).finish(0) }
+        val pollMs = limit(LimitRegistry.RUNNERS_TEST_POLL_MS)
+        while (!answers(name) && clock() < deadline) sleepUntilNextPoll(pollMs, deadline)
+    }
+
     /** RUNNER-DEFAULTS-1: stores the owner's explicit grant (`runner.projects` / `runner.harnesses`); the daemon wires the setting. */
     @Volatile var grant: (key: String, ids: List<String>) -> Unit = { _, _ -> }
 
@@ -638,7 +706,9 @@ class RunnerLinkService(
             if (paired != null && !closed) settle()
         }
         return when {
-            paired != null -> ok("state" to "paired", "orchestratorName" to paired.name, "orchestratorId" to paired.id)
+            // RUNNER-PAIR-1: while the PAIR is still being answered the store already says paired, but the paired listener is not
+            // settled yet: "paired" now made `runner pair` exit and nothing listened until the next tick (up to linkCheckSeconds).
+            paired != null && !answering -> ok("state" to "paired", "orchestratorName" to paired.name, "orchestratorId" to paired.id)
             live || answering -> ok("state" to "waiting")
             else -> ok("state" to "expired")
         }
@@ -711,9 +781,9 @@ class RunnerLinkService(
          */
         const val STATE_FRAME = "runners_changed"
         /** RUNNER-CARD-STALE-1: the [ADMIN] ops whose success changes what `list` answers, so a [STATE_FRAME] follows them. */
-        val LIST_CHANGING_OPS = setOf("add", "detach", "pause", "resume")
+        val LIST_CHANGING_OPS = setOf("add", "connect", "detach", "pause", "resume")
         const val NO_TRANSPORT = "the runner link needs the Infantry_RemoteRunner plugin (no runner link transport is loaded)"
-        private val NEEDS_TRANSPORT = setOf("pair", "add", "rotate", "detach", "test")
+        private val NEEDS_TRANSPORT = setOf("pair", "add", "connect", "rotate", "detach", "test")
         private const val MS_PER_SECOND = 1000L
         private const val MS_PER_MINUTE = 60_000L
         private const val SHOWN_OP_SIZE = 32

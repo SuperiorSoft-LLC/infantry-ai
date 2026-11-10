@@ -220,3 +220,6 @@ com/superiorsoftllc/infantry/runners/ForwardedFrames.kt:LOGGED_CHARS|format: how
 com/superiorsoftllc/infantry/downloads/CoreDownloads.kt:STALL_CHECKS|precision, not a limit: the stall check runs this many times per limits.downloads.stallSeconds window (the window itself is the setting)
 com/superiorsoftllc/infantry/install/CliPath.kt:LAUNCHER_PROBE_BYTES|reading: how much of a launcher script is read to see whether a PATH entry is Infantry AI's (not a cost or capacity; CLI-PATH-1)
 com/superiorsoftllc/infantry/install/UserPathStore.kt:NOTIFY_TIMEOUT_MS|precision, not a limit: how long the Windows WM_SETTINGCHANGE broadcast waits for a hung window (CLI-PATH-1)
+com/superiorsoftllc/infantry/runners/RunnerConnect.kt:MAX_PORT|protocol constant: the highest TCP port number
+com/superiorsoftllc/infantry/runners/RunnerConnect.kt:SHOWN_LINES|layout: how many of the runner's last lines a connect error quotes
+com/superiorsoftllc/infantry/runners/RunnerConnect.kt:SHOWN_CHARS|layout: the longest quote of the runner's output in a connect error

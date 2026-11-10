@@ -1054,6 +1054,13 @@ object LimitRegistry {
      * RUNNER-ADD-LINK-1: how long `infantry runner add '<link>'` waits on ONE host of the link before it tries the next. The link
      * carries several hosts (tailnet first, then LAN); a host that does not answer must not hold up the next one for long.
      */
+    /** RUNNER-PAIR-1: how long "Connect a runner" waits for the runner-side command to print its pairing link (and then to exit). */
+    val RUNNERS_CONNECT_SEC = LimitDef(
+        "limits.runners.connectSec", 60, "seconds",
+        "How long Connect a runner (Settings > Runners, `infantry runner connect`) waits for the command that reaches the runner machine to print its pairing link, and afterwards for that command to end.",
+        min = 1, max = 600, zeroIsUnlimited = false,
+    )
+
     val RUNNERS_ADD_HOST_TIMEOUT_SEC = LimitDef(
         "limits.runners.addHostTimeoutSec", 5, "seconds",
         "How long adding a runner from a pairing link waits on one host of the link before it tries the next host (each host's server name is given the same chance).",
@@ -1188,7 +1195,7 @@ object LimitRegistry {
         MAIL_WAKE_DEBOUNCE_SECONDS, MAIL_COALESCE_MAX, WATCH_STALL_NUDGES, SCRIPT_RUN_LOG_MAX,
         RUNNERS_PAIR_CODE_MIN, RUNNERS_PAIR_ATTEMPTS_PER_HOUR, RUNNERS_CREDENTIAL_ROTATE_DAYS, RUNNERS_LINK_PORT, RUNNERS_UP_START_SEC, RUNNERS_ADVERTISE_HOSTS_MAX, RUNNERS_AUDIT_SHOWN, RUNNERS_GRANT_PROJECTS_MAX, RUNNERS_LINK_CALL_SECONDS, RUNNERS_LINK_CHECK_SECONDS,
         RUNNERS_OUTBOX_MAX, RUNNERS_LOST_AFTER_MIN, RUNNERS_COMMIT_CHECK_SEC, RUNNERS_FORWARD_WAIT_SEC, RUNNERS_FORWARD_TIMEOUT_SEC, RUNNERS_FORWARD_PENDING_MAX,
-        RUNNERS_ADD_HOST_TIMEOUT_SEC, RUNNERS_CHECK_GIT_SEC, RUNNERS_CHECK_MIN_FREE_MB,
+        RUNNERS_ADD_HOST_TIMEOUT_SEC, RUNNERS_CONNECT_SEC, RUNNERS_CHECK_GIT_SEC, RUNNERS_CHECK_MIN_FREE_MB,
         RUNNERS_TEST_TURN_SEC, RUNNERS_TEST_POLL_MS, RUNNERS_TEST_REPLY_CHARS,
         DOWNLOAD_RETRIES, DOWNLOAD_BACKOFF_MS, DOWNLOAD_CONNECT_TIMEOUT_SECONDS, DOWNLOAD_RESPONSE_TIMEOUT_SECONDS, DOWNLOAD_STALL_SECONDS, DOWNLOAD_MAX_MB, DOWNLOAD_REDIRECTS, DOWNLOAD_MOVE_RETRIES,
         PROGRESS_KEEP_FINISHED, PROGRESS_MIN_INTERVAL_MS,

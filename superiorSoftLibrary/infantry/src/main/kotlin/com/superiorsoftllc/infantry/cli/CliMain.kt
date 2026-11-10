@@ -538,7 +538,7 @@ internal object Cli {
                 // RUNNER-POOL-5: `infantry runner pair --name <n>` and the rest of the runner link (docs/RUNNER-POOL.md 7).
                 "runner" -> runBlocking {
                     RunnerCli.run(
-                        stream, RunnerCli.Args(parsed.args, parsed.name, parsed.code, parsed.fingerprint, parsed.limit, parsed.allowProjects, parsed.allowHarnesses, parsed.runnerHosts, parsed.link, runnerPort = parsed.runnerPort, project = parsed.project ?: getenv(AccessPolicy.PROJECT_ID_ENV)?.trim()?.takeIf { it.isNotEmpty() }, harness = parsed.harness, model = parsed.model, grantOnPair = parsed.grantOnPair, grantHarnessesMax = parsed.grantHarnessesMax, grant = parsed.grant), out, err,
+                        stream, RunnerCli.Args(parsed.args, parsed.name, parsed.code, parsed.fingerprint, parsed.limit, parsed.allowProjects, parsed.allowHarnesses, parsed.runnerHosts, parsed.link, runnerPort = parsed.runnerPort, via = parsed.runnerVia, project = parsed.project ?: getenv(AccessPolicy.PROJECT_ID_ENV)?.trim()?.takeIf { it.isNotEmpty() }, harness = parsed.harness, model = parsed.model, grantOnPair = parsed.grantOnPair, grantHarnessesMax = parsed.grantHarnessesMax, grant = parsed.grant), out, err,
                         com.superiorsoftllc.infantry.session.stateDir { getenv(it) ?: com.superiorsoftllc.infantry.session.infantrySetting(it) },
                     )
                 }
@@ -4918,6 +4918,7 @@ internal object Cli {
               remote on|off|status  Let the daemon accept outside (Tailscale) connections; prints the ws address
                                   and token. Takes effect on the next daemon restart.
               runner up --name <n> [--host <h>]... [--allow-projects <ids|*>] [--allow-harnesses <ids|*>]  Start a runner daemon here if none runs and print its pairing link (one command)
+              runner connect --name <n> --via "<command>" [--host <h>] [--port <p>]  Pair a runner in one step: runs `runner pair` on it through <command> and adds it (owner only)
               runner pair --name <n> [--host <h>]... [--port <p>] [--allow-projects <ids|*>] [--allow-harnesses <ids|*>] [--grant-on-pair [--grant-harnesses-max <ids>]]
                                   On a RUNNER machine: grant what the orchestrator may run (asked when omitted; nothing is granted
                                   silently), print ONE pairing link (hosts, port, one-time code, fingerprint; the code is single use and expires after
@@ -5236,6 +5237,8 @@ internal object Cli {
         val runnerHosts: String? = null,
         /** RUNNER-LINK-HOST-1: `runner pair|up --port <p>`: the port the link advertises (the one published outside a container). */
         val runnerPort: String? = null,
+        /** RUNNER-PAIR-1: `runner connect --via "<command>"`: the owner's command that runs a command on the runner machine. */
+        val runnerVia: String? = null,
         // RUNNER-ADD-LINK-1: `runner add --link <infantry://runner?...|->` (a pasted link, or stdin with `-`).
         val link: String? = null,
         // RUNNER-CHECK-1: `runner check <name> --harness <id>` (the harness checked for install, sign-in and grant).
@@ -5375,6 +5378,7 @@ internal object Cli {
         var allowHarnesses: String? = null
         var runnerHosts: String? = null
         var runnerPort: String? = null
+        var runnerVia: String? = null
         // RUNNER-GRANT-AT-PAIR-1: the runner side's grant-carrying code and the orchestrator side's one confirm.
         var grantOnPair = false
         var grantHarnessesMax: String? = null
@@ -5416,13 +5420,15 @@ internal object Cli {
         var defaultAfter: String? = null
         var test = false
 
+        // RUNNER-LINK-1 / RUNNER-PAIR-1: on `runner pair|up|connect`, --host and --port are the runner's link address, never the daemon's.
+        fun runnerLinkWords() = rest.firstOrNull() == "runner" && rest.getOrNull(1) in setOf("pair", "up", "connect")
         var i = 0
         while (i < args.size) {
             when (val arg = args[i]) {
                 "--host" -> {
                     val value = args.getOrNull(++i) ?: return fail(err, "--host expects a value")
                     if (value.startsWith("-")) return fail(err, "--host expects a value")
-                    if (rest.take(2) == listOf("runner", "pair") || rest.take(2) == listOf("runner", "up")) {
+                    if (runnerLinkWords()) {
                         // RUNNER-LINK-1: on `runner pair` it names a host for the pairing link (repeatable), not the daemon address.
                         runnerHosts = listOfNotNull(runnerHosts, value).joinToString(",")
                         i++
@@ -5433,6 +5439,12 @@ internal object Cli {
                     i++
                 }
                 "--port" -> {
+                    if (runnerLinkWords()) {
+                        // RUNNER-PAIR-1: this branch used to take every --port as the daemon's, so `runner pair --port` never worked.
+                        runnerPort = flagValue(args, ++i) ?: return fail(err, "--port expects a port number (the port the runner pairing link advertises)")
+                        i++
+                        continue
+                    }
                     port = args.getOrNull(++i)?.toIntOrNull()
                         ?: return fail(err, "--port expects a number")
                     addressGiven = true
@@ -5546,8 +5558,9 @@ internal object Cli {
                     fingerprint = flagValue(args, ++i) ?: return fail(err, "--fingerprint expects the certificate fingerprint `infantry runner pair` printed")
                     i++
                 }
-                "--port" -> {
-                    runnerPort = flagValue(args, ++i) ?: return fail(err, "--port expects a port number (the port the runner pairing link advertises)")
+                // RUNNER-PAIR-1: raw, like --content: the owner's command is several words in one quoted value.
+                "--via" -> {
+                    runnerVia = args.getOrNull(++i) ?: return fail(err, "--via expects the command that runs a command on the runner machine, in quotes")
                     i++
                 }
                 "--allow-projects" -> {
@@ -5992,6 +6005,7 @@ internal object Cli {
             allowHarnesses = allowHarnesses,
             runnerHosts = runnerHosts,
             runnerPort = runnerPort,
+            runnerVia = runnerVia,
             grantOnPair = grantOnPair,
             grantHarnessesMax = grantHarnessesMax,
             grant = grant,
@@ -6149,7 +6163,7 @@ internal object Cli {
         "ask" -> askUsageError(parsed, getenv)
         "usage" -> UsageCli.usageError(parsed.args)
         "settings" -> SettingsCli.usageError(parsed.args)
-        "runner" -> RunnerCli.usageError(RunnerCli.Args(parsed.args, parsed.name, parsed.code, parsed.fingerprint, parsed.limit, parsed.allowProjects, parsed.allowHarnesses, parsed.runnerHosts, parsed.link, runnerPort = parsed.runnerPort, project = parsed.project, harness = parsed.harness, model = parsed.model, grantOnPair = parsed.grantOnPair, grantHarnessesMax = parsed.grantHarnessesMax, grant = parsed.grant))
+        "runner" -> RunnerCli.usageError(RunnerCli.Args(parsed.args, parsed.name, parsed.code, parsed.fingerprint, parsed.limit, parsed.allowProjects, parsed.allowHarnesses, parsed.runnerHosts, parsed.link, runnerPort = parsed.runnerPort, via = parsed.runnerVia, project = parsed.project, harness = parsed.harness, model = parsed.model, grantOnPair = parsed.grantOnPair, grantHarnessesMax = parsed.grantHarnessesMax, grant = parsed.grant))
         else -> null
     }
 
