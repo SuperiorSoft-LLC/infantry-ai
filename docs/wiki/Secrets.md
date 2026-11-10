@@ -18,7 +18,7 @@ for a saved command's secrets: the project's own secret first, then the app's. T
 (`SecretTemplate` in `plugins/official/Infantry_Run/daemon/src/main/kotlin/com/superiorsoftllc/infantry/plugins/official/run/daemon/SecretRender.kt`);
 there is no per-format parsing, so quote the placeholder yourself where the format needs quotes.
 
-Configuration shows each secret's placeholder next to it with a Copy button.
+Configuration shows each secret's placeholder next to it with a Copy button, and a **Render file** card (template, output, Render). The card sends the owner-only `secret_render` frame; an agent connection is refused, and the result shows names and the path only.
 
 ## Example: `.env`
 
