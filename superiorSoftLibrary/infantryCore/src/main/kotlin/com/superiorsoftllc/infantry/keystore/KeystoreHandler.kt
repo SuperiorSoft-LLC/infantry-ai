@@ -14,6 +14,8 @@ class KnownSecret(
     val name: String, val label: String, val envAlias: String? = null, val help: String = "",
     /** CLAUDE-AUTH-CHOICE-1: the sign-in ways the owning harness offers, and the chosen one now ("" = none chosen). */
     val authModes: List<String> = emptyList(), val authMode: () -> String = { "" },
+    /** CLAUDE-AUTH-CHOICE-2: what the owner runs in a terminal to sign in; the last probe ("true"/"false"/"unknown") and its time. */
+    val loginCommand: String = "", val signedIn: () -> String = { "unknown" }, val lastProbe: () -> Long = { 0L },
 )
 
 @Serializable
@@ -54,6 +56,8 @@ class SecretRow(
     val name: String, val label: String, val set: Boolean, val tail: String, val importable: Boolean, val overriddenByEnv: Boolean, val help: String = "",
     /** CLAUDE-AUTH-CHOICE-1: the harness's sign-in ways (api-key, subscription-login) and the chosen one; empty = no choice. */
     val authModes: List<String> = emptyList(), val authMode: String = "",
+    /** CLAUDE-AUTH-CHOICE-2: terminal command that signs in, and the last probe: signedIn is true, false or unknown; lastProbe epoch millis (0 = never). */
+    val loginCommand: String = "", val signedIn: String = "unknown", val lastProbe: Long = 0L,
 )
 
 /** SECRETS-2: one field of a user secret: its name and a masked tail. */
@@ -97,13 +101,16 @@ class KeystoreHandler(
     private val push: (Envelope) -> Unit = {},
     private val json: Json = Json { ignoreUnknownKeys = false; encodeDefaults = true },
     private val restricted: () -> Boolean = { false },
+    /** CLAUDE-AUTH-CHOICE-2: re-probes the sign-in of the harness whose key secret is named. */
+    private val authCheck: (String) -> Unit = {},
 ) {
     private val base = knownBase
     private val known: List<KnownSecret> get() = base + extraKnown()
 
     fun answer(envelope: Envelope): Envelope? {
         val reply = when (envelope.type) {
-            Envelope.SECRET_STATUS -> request(envelope.type) { }
+            // CLAUDE-AUTH-CHOICE-2: a status request that names a harness key (SecretName data) re-probes that harness first (the Check button).
+            Envelope.SECRET_STATUS -> request(envelope.type) { if (envelope.data.isNotBlank() && envelope.data != "{}") authCheck(known(name(envelope)).name) }
             Envelope.SECRET_SET -> change(envelope.type) {
                 val req = json.decodeFromString(SecretSet.serializer(), envelope.data)
                 keystore.set(known(req.name).name, req.value)
@@ -146,7 +153,7 @@ class KeystoreHandler(
             known.map { k ->
                 val info = infos.getValue(k.name)
                 val aliasSet = k.envAlias?.let(env)?.isNotBlank() == true
-                SecretRow(k.name, k.label, info.set, info.tail, importable = aliasSet && !info.set, overriddenByEnv = aliasSet && info.set, help = k.help, authModes = k.authModes, authMode = k.authMode())
+                SecretRow(k.name, k.label, info.set, info.tail, importable = aliasSet && !info.set, overriddenByEnv = aliasSet && info.set, help = k.help, authModes = k.authModes, authMode = k.authMode(), loginCommand = k.loginCommand, signedIn = k.signedIn(), lastProbe = k.lastProbe())
             },
             keystore.names().filter { it !in builtIn }.map { name ->
                 SecretEntryRow(name, keystore.describe(name).map { SecretFieldRow(it.name, it.tail) })

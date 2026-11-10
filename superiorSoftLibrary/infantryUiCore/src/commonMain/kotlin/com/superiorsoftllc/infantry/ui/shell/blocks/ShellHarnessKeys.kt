@@ -62,7 +62,7 @@ object ShellHarnessKeys : Block("infantry.shell.harnessKeys", "infantry.shell.ha
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("This agent CLI needs an API key to run. It is stored encrypted by the Infantry AI daemon and is never shown again.", fontSize = 12.sp)
-                    if (SUBSCRIPTION_MODE in row.authModes) Text("Or use your Claude subscription instead: no key is stored. Pick it, then sign in with /login in a Claude chat session (the login URL shows in the chat; paste the code if asked).", fontSize = 12.sp, color = Palette.Muted)
+                    if (SUBSCRIPTION_MODE in row.authModes) Text("Or use your Claude subscription instead: no key is stored. Pick it, then sign in once in a terminal (the exact command is shown in Configuration > Secrets).", fontSize = 12.sp, color = Palette.Muted)
                     if (row.help.isNotBlank()) Text(row.help, fontSize = 12.sp, color = Palette.Muted)
                     Text("You can skip this and set it later in Configuration > Secrets.", fontSize = 11.sp, color = Palette.Muted)
                     OutlinedTextField(
@@ -84,7 +84,7 @@ object ShellHarnessKeys : Block("infantry.shell.harnessKeys", "infantry.shell.ha
                     if (SUBSCRIPTION_MODE in row.authModes) TextButton({
                         val id = row.name.removePrefix("harness.").removeSuffix(".key")
                         skip()
-                        s.actionScope.launch { s.controller.setHarnessAuthMode(id, SUBSCRIPTION_MODE); s.controller.startHarnessLogin(id) }
+                        s.actionScope.launch { s.controller.setHarnessAuthMode(id, SUBSCRIPTION_MODE) }
                     }, Modifier.testTag(HARNESS_SUBSCRIPTION_TAG)) { Text("Use subscription") }
                     TextButton({ skip() }) { Text("Skip") }
                 }
