@@ -30,7 +30,13 @@ const val ORIGIN_LABEL_TAG = "origin-label"
 fun OriginAvatar(origin: MessageOrigin, size: Int, sessionState: String? = null) {
     when (origin) {
         MessageOrigin.Owner -> UserAvatar(size)
-        is MessageOrigin.Agent -> AgentAvatar(origin.role, origin.agentId ?: origin.sessionId, size, state = sessionState)
+        is MessageOrigin.Agent -> {
+            // AVATAR-CHAT-MISMATCH-1: a known agent draws its card request (catalog colour, state); an unknown one the role fallback.
+            val id = origin.agentId ?: origin.sessionId
+            val card = LocalAgentAvatarLookup.current(id)
+            if (card != null) AgentAvatar(card.copy(sizeDp = size))
+            else AgentAvatar(origin.role, id, size, state = sessionState)
+        }
         is MessageOrigin.External, is MessageOrigin.System -> Spacer(Modifier.width(size.dp))
     }
 }
