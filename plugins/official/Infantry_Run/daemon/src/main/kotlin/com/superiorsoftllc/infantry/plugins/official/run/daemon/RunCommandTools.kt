@@ -32,6 +32,9 @@ class RunCommandTools(
     private val emit: (Envelope) -> Unit,
     /** SECRETS-2b: the secret names a project's run can use, with the scope each resolves to (names only). */
     private val secretNames: (String?) -> Map<String, String> = { emptyMap() },
+    /** SECRET-RENDER-1: the renderer and a project's folder (relative template paths are resolved against it). */
+    private val renderer: SecretRenderer? = null,
+    private val rootOf: (String?) -> java.io.File? = { null },
 ) {
     fun all(): List<DaemonTool> = listOf(
         tool("infantry_run_commands", "List a project's saved Run-tab commands (id, name, cwd, argv, project) and the unassigned ones; default: your project.",
@@ -39,11 +42,16 @@ class RunCommandTools(
         tool("infantry_run_command_save", "Add or edit a project's saved command. Give `argv` (array) or `command` (a shell line, run through the system shell).",
             listOf("id" to "command id (upsert key)", "name" to "display name", "command" to "shell command line",
                 "cwd" to "working dir relative to the project's folder (. or blank = the folder itself; an absolute path must be inside it)",
-                "project" to "project id the command is for", "allowCrossProject" to "boolean: allow a project other than the caller's"), listOf("id"), false) { save(it) },
+                "project" to "project id the command is for", "allowCrossProject" to "boolean: allow a project other than the caller's",
+                "renders" to "array of template=out secret-template renders (relative to the command folder) done before each run; outputs are deleted when it ends"), listOf("id"), false) { save(it) },
         tool("infantry_run_command_delete", "Delete a saved command by id.", listOf("id" to "command id", "project" to "project id", "allowCrossProject" to "boolean"), listOf("id"), false) { delete(it) },
         tool("infantry_run_start", "Start a saved command; returns the run id.", listOf("id" to "command id", "project" to "project id", "allowCrossProject" to "boolean"), listOf("id"), false) { start(it) },
         tool("infantry_run_secrets", "List the secret names a project's saved commands can use and the scope each resolves to (project first, then app). Names only, never a value; secrets are created in Configuration by the owner.",
             listOf("project" to "project id (default: yours)", "scope" to "project | app | all (default: all)", "allowCrossProject" to "boolean"), listOf(), true) { secretList(it) },
+        tool("infantry_secret_render", "Render a text file (.env, .json, .yaml, any text) replacing {{secret:NAME}} placeholders with the saved secret values, into an owner-only output file. Returns names and the output path only, never a value. `check` reports found/missing names and writes nothing. A missing secret fails and writes nothing unless allowMissing.",
+            listOf("template" to "the template file (relative = inside the project folder)", "out" to "output file (required unless check); never the template itself",
+                "project" to "project id for secret scope (default: yours)", "allowMissing" to "boolean: leave unknown placeholders in", "check" to "boolean: report names only, write nothing",
+                "allowCrossProject" to "boolean"), listOf("template"), false) { render(it) },
         tool("infantry_run_stop", "Stop a run by run id (force=true kills at once).", listOf("runId" to "run id", "force" to "boolean"), listOf("runId"), false) { stop(it) },
     )
 
@@ -64,6 +72,18 @@ class RunCommandTools(
         return ToolResult(rows.entries.joinToString("\n") { (n, s) -> "$n  ($s)" })
     }
 
+    /** SECRET-RENDER-1: names and the written path only; the value never leaves the renderer. */
+    private fun render(c: ToolCall): ToolResult {
+        crossProjectRefusal(c)?.let { return err(it) }
+        val r = renderer ?: return err("secret rendering is not available")
+        val project = target(c)
+        val template = str(c.arguments, "template") ?: return err("template is required")
+        val check = (c.arguments["check"] as? JsonPrimitive)?.booleanOrNull == true
+        val allowMissing = (c.arguments["allowMissing"] as? JsonPrimitive)?.booleanOrNull == true
+        val res = r.renderIn(rootOf(project), template, str(c.arguments, "out"), project, allowMissing, check)
+        return if (res.ok) ToolResult(res.summary(check)) else err(res.summary(check))
+    }
+
     /** The project a call acts in: its `project` argument, else the caller's own. */
     private fun target(c: ToolCall): String? = str(c.arguments, "project") ?: c.clientProjectId
 
@@ -79,6 +99,7 @@ class RunCommandTools(
             str(a, "name")?.let { put("name", it) }
             str(a, "cwd")?.let { put("cwd", it) }
             put("argv", JsonArray(argv.map { JsonPrimitive(it) }))
+            (a["renders"] as? JsonArray)?.let { put("renders", it) }
         }
         val refusal = store.save(Json.encodeToString(JsonObject.serializer(), data), manager::unlessRunning, str(a, "project") ?: c.clientProjectId)
         if (refusal != null) return err("infantry_run_command_save refused: $refusal")

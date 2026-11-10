@@ -46,8 +46,8 @@ class RunCommandToolsTest {
         })
     }
 
-    @Test fun `six tools are offered`() {
-        assertEquals(setOf("infantry_run_commands", "infantry_run_command_save", "infantry_run_command_delete", "infantry_run_start", "infantry_run_secrets", "infantry_run_stop"), tools.keys)
+    @Test fun `seven tools are offered`() {
+        assertEquals(setOf("infantry_run_commands", "infantry_run_command_save", "infantry_run_command_delete", "infantry_run_start", "infantry_run_secrets", "infantry_secret_render", "infantry_run_stop"), tools.keys)
     }
 
     // SECRETS-2b: names and scopes only, the caller's project by default, the cross-project refusal as for the other tools.

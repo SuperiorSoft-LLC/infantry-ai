@@ -44,6 +44,7 @@ Every page of this wiki is listed here, one line each. The pages are written fro
 - [Health](Health.md): `infantry health`, the daemon health and environment report (up/down, restarts and why, MCP bridges, OS/shell/ports).
 - [Waiting flag](Waiting.md): `infantry waiting on|off`, `infantry_waiting`; the "active but waiting" card state and the idle-nudge watcher.
 - [Memory](Memory.md): project knowledge notes, the project / global / role / session scopes, the `infantry_memory` MCP actions (read and write), who may write global notes.
+- [Secrets](Secrets.md): `infantry secret render`, the `{{secret:NAME}}` placeholder, `infantry_secret_render`; fill any text file from saved secrets.
 - [Settings](Settings.md): scopes (app, project, role, session) and the cost-saving defaults.
 - [Kotlin notes](kotlin-notes.md): toolchain versions, UI core source sets and expect/actual, Compose MP pitfalls, build flags.
 - [Updates](Updates.md): the one update engine for the app and every plugin; per-plugin sources, private and paid ones.

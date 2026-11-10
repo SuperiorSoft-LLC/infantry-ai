@@ -45,7 +45,7 @@ class CommandStore(
             strict.decodeFromString(CommandFileEntry.serializer(), data)
         } catch (e: Exception) {
             // A decode message can quote the offending text (the argv): the class name only.
-            return "expects {\"id\",\"name\"?,\"argv\":[...],\"cwd\"?,\"graceMillis\"?,\"secrets\"?:[...]} (${e::class.simpleName})"
+            return "expects {\"id\",\"name\"?,\"argv\":[...],\"cwd\"?,\"graceMillis\"?,\"secrets\"?:[...],\"renders\"?:[\"template=out\"]} (${e::class.simpleName})"
         }
         // RUN-SCOPE-1: a save that names no project keeps the one the command already has (an older client never unassigns it).
         val projectId = (project ?: entry.project)?.takeIf { it.isNotBlank() } ?: registry.find(entry.id)?.projectId
