@@ -460,7 +460,19 @@ class RunnerLinkService(
         // RUNNER-TEST-ANSWER-1: a failed turn ("[infantry] turn failed: ...") and a stream-json system event (claude's init line)
         // are not what the harness said: the first made a signed-out claude "answer", the second a reply of only {"type":"system"...}.
         return t.isNotEmpty() && !t.startsWith(TURN_LINE) && !t.startsWith(ERROR_LINE) &&
-            !t.startsWith(FAILED_TURN_LINE) && !t.startsWith(SYSTEM_EVENT_LINE) && !t.startsWith(SESSION_NOTE_LINE)
+            !t.startsWith(FAILED_TURN_LINE) && !t.startsWith(SYSTEM_EVENT_LINE) && !t.startsWith(SESSION_NOTE_LINE) &&
+            !isHarnessNoise(t)
+    }
+
+    /**
+     * RUNNER-TEST-ANSWER-2: banner and protocol lines a real harness writes before it answers (opencode "server listening on ...",
+     * pi `extension_ui_request` / other non-reply JSON events) are not the model's reply; the test keeps waiting past them.
+     */
+    private fun isHarnessNoise(t: String): Boolean {
+        if (t.contains("server listening", ignoreCase = true)) return true
+        if (!t.startsWith("{")) return false
+        val type = runCatching { ((F.json.parseToJsonElement(t) as? JsonObject)?.get("type") as? JsonPrimitive)?.content }.getOrNull()
+        return type != null && type != "result"
     }
 
     /**
