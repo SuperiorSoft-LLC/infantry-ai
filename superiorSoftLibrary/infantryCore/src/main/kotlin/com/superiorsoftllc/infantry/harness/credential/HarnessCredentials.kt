@@ -147,7 +147,9 @@ private const val PROBE_TIMEOUT_SECONDS = 30L
  * start or outlives [PROBE_TIMEOUT_SECONDS]. The child never sees the harness's API key variable [scrubEnv]: a subscription probe must not bill one.
  */
 internal fun runProbe(argv: List<String>, scrubEnv: String): String? = try {
-    val b = ProcessBuilder(argv).redirectError(ProcessBuilder.Redirect.DISCARD)
+    // On Windows an npm-installed CLI is a `.cmd` shim, which CreateProcess cannot start by bare name: go through cmd /c (argv comes from a manifest, never from a client).
+    val windows = System.getProperty("os.name").orEmpty().startsWith("Windows")
+    val b = ProcessBuilder(if (windows) listOf("cmd", "/c") + argv else argv).redirectError(ProcessBuilder.Redirect.DISCARD)
     b.environment().remove(scrubEnv)
     val p = b.start()
     p.outputStream.close()
