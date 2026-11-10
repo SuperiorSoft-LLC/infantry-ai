@@ -883,6 +883,14 @@ class InfantryDaemon(
                 worktrees = worktrees,
                 childEnv = childEnv,
                 credentialEnv = { id -> harnessCredentialsRef.get()?.env(id).orEmpty() },
+                credentialMissing = { id ->
+                    harnessCredentialsRef.get()?.let { hc ->
+                        hc.missing().firstOrNull { it.harnessId == id }?.let { c ->
+                            "No API key set for ${c.label}: the run may fail or stall. Set it with `infantry harness key ${c.harnessId}`" +
+                                (if (c.help.isNotBlank()) " (${c.help})" else "") + "."
+                        }
+                    }
+                },
                 bindingPolicy = com.superiorsoftllc.infantry.daemon.plugins.TicketBindingPolicy(),
                 additionalProviders = additionalProviders,
                 cliRunner = sandboxed(cliRunner),

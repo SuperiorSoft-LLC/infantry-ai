@@ -324,6 +324,20 @@ class SessionLifecycleTest {
         assertEquals("sk-test-1234567890abcdef", runner.specs.last().env["FAKE_API_KEY"])
     }
 
+    /** FIRST-RUN-KEYS-1: a run whose harness declares an unset key says so in the chat. */
+    @Test
+    fun a_run_without_the_declared_key_says_the_key_is_missing() {
+        val (store, _) = tempStore()
+        val manager = SessionManager(
+            FakeProvider(), FakeRunner(), store, killGraceMs = 50,
+            credentialMissing = { "No API key set for fake" },
+        )
+        val events = mutableListOf<SessionEvent>()
+        manager.eventSink = { events += it }
+        manager.startNew("first")
+        assertTrue(events.any { it is SessionEvent.Activity && it.detail.contains("No API key set") })
+    }
+
     @Test
     fun a_spawned_child_receives_the_build_limits_env_read_per_run() {
         val (store, _) = tempStore()
