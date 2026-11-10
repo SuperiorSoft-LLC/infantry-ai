@@ -33,6 +33,15 @@ run_cli() {
     "$JAVA" -Xmx256m -Djava.awt.headless=true -cp "$APP_HOME/lib/*:$APP_HOME/modules/official/Infantry_Updater/daemon/build/libs/Infantry_Updater-daemon.jar" com.superiorsoftllc.infantry.plugins.official.updater.ServerUpdateCliKt "$@"
 }
 
+# Any other word is a CLI command (plugin, board, health, ...): hand it to the CLI launcher (bin/agenthq) before
+# adopting or supervising anything, so a first CLI run neither prints the adopt note nor starts the daemon.
+case "$1" in
+    ""|serve|update|rollback|version|--version) ;;
+    --help|-h) exec "$SELF_DIR/agenthq" "$@" ;;
+    -*) ;;
+    *) exec "$SELF_DIR/agenthq" "$@" ;;
+esac
+
 # A freshly unpacked archive: copy it to <parent>/versions/<v>, then run from there.
 PARENT=$(dirname "$APP_HOME")
 if [ "$(basename "$PARENT")" != "versions" ]; then
