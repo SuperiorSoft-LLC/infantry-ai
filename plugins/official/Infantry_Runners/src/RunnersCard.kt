@@ -154,6 +154,28 @@ fun addLinkRequest(link: String, name: String? = null, grant: Boolean = false, p
 ).toString()
 
 /**
+ * RUNNER-PAIR-1: the `connect` op: the daemon runs `infantry runner pair` on the runner machine through [via] (the owner's own
+ * command that runs a command there), redeems the link it prints and never shows it. [host] / [port] are the address this machine
+ * reaches the runner on, when the runner cannot know it (a published container port); blank = the runner's own addresses.
+ */
+fun connectRequest(name: String, via: String, host: String? = null, port: String? = null): String = JsonObject(
+    buildMap {
+        put("op", JsonPrimitive("connect"))
+        put("name", JsonPrimitive(name.trim()))
+        put("via", JsonPrimitive(via.trim()))
+        host?.trim()?.takeIf { it.isNotEmpty() }?.let { put("host", JsonPrimitive(it)) }
+        port?.trim()?.takeIf { it.isNotEmpty() }?.let { put("port", JsonPrimitive(it)) }
+    },
+).toString()
+
+/** RUNNER-PAIR-1: the Port field's live check: blank, or a port number. */
+fun runnerPortError(port: String): String? {
+    val p = port.trim()
+    if (p.isEmpty() || p.toIntOrNull()?.let { it in 1..65535 } == true) return null
+    return "A port number from 1 to 65535, e.g. the one the runner's link port is published on"
+}
+
+/**
  * RUNNER-GRANT-AT-PAIR-1: whether a pasted pairing link says its code may grant (`--grant-on-pair` on the runner). The card only
  * looks for the flag; the daemon parses the link and the runner decides.
  */
@@ -328,10 +350,13 @@ fun RunnersCard(
     onOp: (op: String, name: String) -> Unit,
     onCheck: (name: String) -> Unit,
     modifier: Modifier = Modifier,
+    /** RUNNER-PAIR-1: opens the one-step Connect a runner dialog. */
+    onConnect: () -> Unit = {},
 ) {
     Column(modifier.fillMaxWidth().testTag("runners-card"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Runners", fontWeight = FontWeight.SemiBold, fontSize = 14.sp, modifier = Modifier.weight(1f))
+            ActionButton(RUNNER_ADMIN_ACTION, "Connect a runner", onConnect, Modifier.testTag("runners-connect"))
             ActionButton(RUNNER_ADMIN_ACTION, "Add runner", onAdd, Modifier.testTag("runners-add"))
         }
         val paired = list?.rows.orEmpty().count { !it.isLocal }
@@ -453,6 +478,103 @@ fun AddRunnerForm(
             ActionButton(
                 "runners.admin", "Connect", { onConnect(link.trim(), name.trim().ifBlank { null }, grantable && grant) },
                 Modifier.testTag("runner-add-connect"), link = gate, enabled = canConnect,
+            )
+        }
+    }
+}
+
+/**
+ * RUNNER-PAIR-1: the Connect a runner dialog: a name and how to reach the runner machine, nothing else to answer. Every project and
+ * every harness may run there (the owner narrows that on the runner later if they want to). [sending] while the daemon pairs.
+ */
+@Composable
+fun ConnectRunnerDialog(
+    sending: Boolean,
+    error: String?,
+    onConnect: (name: String, via: String, host: String?, port: String?) -> Unit,
+    onDismiss: () -> Unit,
+    gate: LinkContext? = null,
+) {
+    AhqAlertDialog(
+        onDismissRequest = { if (!sending) onDismiss() },
+        title = { Text("Connect a runner") },
+        text = { ConnectRunnerForm(sending, error, onConnect, onDismiss, gate) },
+        confirmButton = {},
+    )
+}
+
+/** The body of [ConnectRunnerDialog], buttons and all (rendered and tested without the dialog's window). */
+@Composable
+fun ConnectRunnerForm(
+    sending: Boolean,
+    error: String?,
+    onConnect: (name: String, via: String, host: String?, port: String?) -> Unit,
+    onDismiss: () -> Unit,
+    gate: LinkContext? = null,
+    modifier: Modifier = Modifier,
+) {
+    var name by remember { mutableStateOf("") }
+    var via by remember { mutableStateOf("") }
+    var host by remember { mutableStateOf("") }
+    var port by remember { mutableStateOf("") }
+    val nameError = if (name.isBlank()) null else runnerNameError(name)
+    val portError = runnerPortError(port)
+    val canConnect = !sending && name.isNotBlank() && nameError == null && via.isNotBlank() && portError == null
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            "The app starts the pairing on the runner machine and connects it here. Every project and harness may run there.",
+            fontSize = 12.sp, color = Palette.Muted,
+        )
+        OutlinedTextField(
+            value = name, onValueChange = { name = it }, singleLine = true,
+            label = { Text("Name") },
+            isError = nameError != null,
+            supportingText = nameError?.let { e -> { Text(e, color = Palette.Danger, modifier = Modifier.testTag("runner-connect-name-error")) } },
+            shape = Palette.PopupShape,
+            modifier = Modifier.fillMaxWidth().testTag("runner-connect-name"),
+        )
+        OutlinedTextField(
+            value = via, onValueChange = { via = it }, singleLine = true,
+            label = { Text("Command that runs a command on the runner machine") },
+            placeholder = { Text("docker exec my-runner   or   ssh me@my-server") },
+            shape = Palette.PopupShape,
+            modifier = Modifier.fillMaxWidth().testTag("runner-connect-via"),
+        )
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                value = host, onValueChange = { host = it }, singleLine = true,
+                label = { Text("Address from this PC (optional)") },
+                placeholder = { Text("localhost, an IP or a host name") },
+                shape = Palette.PopupShape,
+                modifier = Modifier.weight(2f).testTag("runner-connect-host"),
+            )
+            OutlinedTextField(
+                value = port, onValueChange = { port = it }, singleLine = true,
+                label = { Text("Port (optional)") },
+                isError = portError != null,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                shape = Palette.PopupShape,
+                modifier = Modifier.weight(1f).testTag("runner-connect-port"),
+            )
+        }
+        if (portError != null) Text(portError, color = Palette.Danger, fontSize = 12.sp, modifier = Modifier.testTag("runner-connect-port-error"))
+        Text(
+            "Fill in the address and port only when the runner is reached through a published or forwarded port.",
+            fontSize = 11.sp, color = Palette.Muted,
+        )
+        if (sending) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ProgressBar(null, Modifier.width(120.dp))
+                Text("Starting the pairing on the runner and connecting…", fontSize = 12.sp, color = Palette.Muted, modifier = Modifier.testTag("runner-connect-wait"))
+            }
+        }
+        if (error != null) Text(error, color = Palette.Danger, fontSize = 12.sp, modifier = Modifier.testTag("runner-connect-error"))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Connecting adds the runner and turns runners on.", fontSize = 11.sp, color = Palette.Muted, modifier = Modifier.weight(1f))
+            TextButton(onClick = { if (!sending) onDismiss() }, enabled = !sending, modifier = Modifier.testTag("runner-connect-cancel")) { Text("Cancel") }
+            ActionButton(
+                RUNNER_ADMIN_ACTION, "Connect", { onConnect(name.trim(), via.trim(), host.trim().ifBlank { null }, port.trim().ifBlank { null }) },
+                Modifier.testTag("runner-connect-go"), link = gate, enabled = canConnect,
             )
         }
     }
@@ -582,6 +704,8 @@ fun RunnerCheckDialog(
 private sealed interface CardDialog {
     /** The paste form; [sending] while the daemon tries every host in the link. */
     data class Add(val sending: Boolean, val error: String? = null) : CardDialog
+    /** RUNNER-PAIR-1: the one-step connect form; [sending] while the daemon pairs through the owner's command. */
+    data class Connect(val sending: Boolean, val error: String? = null) : CardDialog
     /** One runner's check rows, [running] while the answer is on its way; RUNNER-TEST-1 adds [testing] and [test]. */
     data class Check(
         val runner: String,
@@ -658,6 +782,7 @@ class RunnersCardBlock : Block("runnersCard", RUNNERS_CARD_NODE) {
             },
             onCheck = { name -> coroutines.launch { check(name) } },
             modifier = scope.modifier,
+            onConnect = { dialog = CardDialog.Connect(sending = false) },
         )
         when (val open = dialog) {
             null -> Unit
@@ -683,6 +808,27 @@ class RunnersCardBlock : Block("runnersCard", RUNNERS_CARD_NODE) {
                 gate = link,
                 grantProjectId = projectId,
                 grantProjectName = projectName,
+            )
+            is CardDialog.Connect -> ConnectRunnerDialog(
+                sending = open.sending, error = open.error,
+                onConnect = { name, via, host, port ->
+                    coroutines.launch {
+                        dialog = CardDialog.Connect(sending = true)
+                        val text = call(connectRequest(name, via, host, port))
+                        val failure = text?.let { runnerFailure(it) }
+                        when {
+                            text == null -> dialog = CardDialog.Connect(sending = false, error = RUNNERS_OFFLINE)
+                            failure != null -> dialog = CardDialog.Connect(sending = false, error = failure)
+                            else -> {
+                                refresh()
+                                // The same check rows (and Test) an add opens, so the owner sees it reachable at once.
+                                check(addedRunnerName(text) ?: name)
+                            }
+                        }
+                    }
+                },
+                onDismiss = { dialog = null },
+                gate = link,
             )
             is CardDialog.Check -> RunnerCheckDialog(
                 open.runner, open.rows, open.error, open.running,

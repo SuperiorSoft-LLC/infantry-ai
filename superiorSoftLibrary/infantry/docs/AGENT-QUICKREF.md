@@ -395,6 +395,7 @@ Details: `docs/MCP.md`, "Ticket images".
 ## 11. Pair a runner machine (RUNNER-POOL-5)
 
 ```
+infantry runner connect --name box --via "docker exec my-runner" [--host localhost --port 18921]   # OWNER, one step: runs pair there, adds it here (RUNNER-PAIR-1)
 infantry runner pair --name box                     # on the RUNNER: one-time code + wss certificate fingerprint + ONE pairing link
 infantry runner add 'infantry://runner?v=1&name=box&host=...&port=8790&code=...&fp=...'   # on the ORCHESTRATOR: one paste
 infantry runner add box wss://100.x.y.z:8790 --code ABCD-EFGH-JKLM-NPQR --fingerprint AB:CD:...   # the older, by-hand form

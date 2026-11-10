@@ -5,6 +5,44 @@ the session started on the runner. Design: [RUNNER-POOL](../RUNNER-POOL.md). Ser
 
 Words: the **orchestrator** is the daemon with your board (your PC); the **runner** is the daemon on the server that runs the agent CLIs.
 
+## 0. One step: Connect a runner (RUNNER-PAIR-1)
+
+When the runner daemon is already running (for example the runner image under `docker run`) and your PC can run a command on
+that machine, you do not copy any link. In the app: **Settings > Runners > Connect a runner**, then fill in:
+
+| Field | What to type |
+|---|---|
+| Name | the runner's name, e.g. `box` (lowercase letters, digits, `-`) |
+| Command that runs a command on the runner machine | your own command, e.g. `docker exec my-runner` or `ssh me@my-server` |
+| Address from this PC (optional) | only when the runner is reached through a published or forwarded port, e.g. `localhost` |
+| Port (optional) | that published port, e.g. `18921` for `-p 18921:8790` |
+
+The daemon runs `<command> infantry runner pair --name <name> --allow-projects * --allow-harnesses *`, reads the pairing link
+the runner prints, and adds the runner with it, all in one step. The address and port you typed are applied on this PC (tried
+first, the link's own hosts after), so a runner of any version pairs. The
+link and its one-time code stay in the daemon's memory: they are never shown, logged or written to a ticket. Every Connect asks
+for a fresh code. Every project and every harness may run there; narrow it later on the runner (`runner.projects`,
+`runner.harnesses`). Runners are turned on, and the check rows (with **Test**) open at once.
+
+Connect returns once the runner answers on its paired link. A runner from before RUNNER-PAIR-1 opens that link on its own next
+tick (`limits.runners.linkCheckSeconds`); Connect asks it once more (`<command> infantry runner up --name <name>`) and waits for
+it, never longer than `limits.runners.connectSec`. Connect again with the same name: a runner that still answers is "already
+connected" and nothing is paired; one that does not (its container was recreated, say) gets a fresh code and replaces the old
+entry.
+
+The same from the CLI, with the owner credential (agents are refused, like every runner admin op):
+
+```
+infantry runner connect --name box --via "docker exec my-runner" --host localhost --port 18921
+```
+
+How long it waits for the link is the `limits.runners.connectSec` setting (default 60 s). When it fails, the answer says why and
+what to do next: the command could not run here, the runner is already paired with another orchestrator (`infantry runner detach`
+on it first), the runner could not open its link port, or no host of its link answered (fill in the address and port).
+
+A remote shell such as `ssh` runs the words through the remote shell, which may expand a bare `*`. If the runner refuses the
+grant, put the command in a wrapper on the runner machine, or pair by hand (below).
+
 ## 1. On the server: start the runner
 
 One command, then copy the link it prints.

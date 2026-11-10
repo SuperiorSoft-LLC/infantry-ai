@@ -164,6 +164,26 @@ class FrameGateDaemonTest {
         assertTrue("Build" in list.data)
     }
 
+    /**
+     * RUNNER-PAIR-1: one-click Connect a runner is the owner's; an agent's `runner_admin` (connect, add or pair) is refused before
+     * anything runs, so an agent can never pair a runner or run a command through the connect op.
+     */
+    @Test fun `an agent connection may not connect, add or pair a runner`() {
+        val fixture = launch(owner = true)
+        val agent = fixture.connectClient(owner = false)
+        val asks = mapOf(
+            "connect" to """{"op":"connect","name":"box","via":"infantry-test-never-run"}""",
+            "add" to """{"op":"add","link":"infantry://runner?v=1&name=box&host=127.0.0.1&port=1&code=AAAA-BBBB-CCCC-DDDD&fp=ab"}""",
+            "pair" to """{"op":"pair","name":"box"}""",
+        )
+        for ((op, data) in asks) {
+            agent.send(Envelope(ActionCatalog.RUNNER_ADMIN, data, requestId = "agent:$op"))
+            val refusal = agent.awaitWhere("the agent's $op refusal") { it.requestId == "agent:$op" }
+            assertEquals(Envelope.ERROR, refusal.type, "$op: ${refusal.data}")
+            assertTrue("owner credential" in refusal.data, refusal.data)
+        }
+    }
+
     @Test fun `a wrong owner token is no owner, and the owner token may not be the access token`() {
         val credential = OwnerCredential("o".repeat(40))
         assertTrue(credential.presentedBy("o".repeat(40), null))
