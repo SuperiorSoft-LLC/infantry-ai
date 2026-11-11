@@ -42,6 +42,8 @@ class PluginGuard(
     private val onTripped: (String) -> Unit = {},
     /** Told once when a probe succeeds and the breaker closes. */
     private val onRecovered: () -> Unit = {},
+    /** BOARD-HANG-1: a recovery probe is cut off after this (at most the hang ceiling), so a hung plugin re-arms the breaker fast. */
+    probeMs: Long = 10_000,
 ) {
     /** PLUGIN-RECOVER-1 breaker: nanoTime the circuit reopens for a probe. */
     @Volatile private var openUntilNs = 0L
@@ -61,6 +63,7 @@ class PluginGuard(
     ).apply { allowCoreThreadTimeOut(true) }
     private val cpu = ManagementFactory.getThreadMXBean()
     private val pollMs = 50L
+    private val probeCeilingMs = minOf(hangCeilingMs, probeMs)
 
     /** Blocking form for plugin-internal threads; daemon request paths use [callSuspending]. */
     fun <T> call(what: String, timeoutMs: Long, block: () -> T): Result<T> = runBlocking { callSuspending(what, timeoutMs, block) }
@@ -80,10 +83,10 @@ class PluginGuard(
             if (!probing.compareAndSet(false, true)) return Result.failure(IllegalStateException("plugin $moduleId is cooling down (probe in flight), retry in 1s; $what refused"))
             probe = true
         }
-        try { return guarded(what, timeoutMs, block) } finally { if (probe) probing.set(false) }
+        try { return guarded(what, timeoutMs, block, if (probe) probeCeilingMs else null) } finally { if (probe) probing.set(false) }
     }
 
-    private suspend fun <T> guarded(what: String, timeoutMs: Long, block: () -> T): Result<T> {
+    private suspend fun <T> guarded(what: String, timeoutMs: Long, block: () -> T, ceilingOverrideMs: Long? = null): Result<T> {
         val worker = java.util.concurrent.atomic.AtomicReference<Thread?>()
         val future = try {
             pool.submit(Callable {
@@ -102,7 +105,7 @@ class PluginGuard(
             return Result.failure(e)
         }
         return try {
-            Result.success(await(future, worker, what, timeoutMs)).also { consecutiveTimeouts.set(0); recover() }
+            Result.success(await(future, worker, what, timeoutMs, ceilingOverrideMs)).also { consecutiveTimeouts.set(0); recover() }
         } catch (e: kotlinx.coroutines.CancellationException) {
             // BOARD-STALL-3: the caller gave up (its own timeout/cancel): drop the job so a queued one never runs later.
             future.cancel(true)
@@ -144,9 +147,9 @@ class PluginGuard(
      * milliseconds into seconds). A strike needs a true hang: no result by the hang ceiling. A call whose own thread burns more
      * than [cpuMsPerCall] of CPU is a runaway and disables the plugin at once, wherever the wall clock stands.
      */
-    private suspend fun <T> await(future: java.util.concurrent.Future<T>, worker: java.util.concurrent.atomic.AtomicReference<Thread?>, what: String, timeoutMs: Long): T {
+    private suspend fun <T> await(future: java.util.concurrent.Future<T>, worker: java.util.concurrent.atomic.AtomicReference<Thread?>, what: String, timeoutMs: Long, ceilingOverrideMs: Long? = null): T {
         val queuedAt = System.nanoTime()
-        val ceilingMs = maxOf(hangCeilingMs, timeoutMs)
+        val ceilingMs = ceilingOverrideMs ?: maxOf(hangCeilingMs, timeoutMs)
         var warned = false
         var base = -1L
         // BOARD-BREAKER-1: the clock starts when a worker picks the call up. Time spent queued behind other calls (a burst of

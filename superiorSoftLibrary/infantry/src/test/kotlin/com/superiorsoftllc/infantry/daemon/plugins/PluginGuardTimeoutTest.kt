@@ -87,3 +87,25 @@ class PluginGuardTimeoutTest {
         g.shutdown()
     }
 }
+
+/** BOARD-HANG-1: a hung recovery probe is cut at the probe limit (not the hang ceiling) and the plugin then recovers. */
+class PluginGuardProbeHangTest {
+    @Test
+    fun `a hung probe is cut short and the next probe recovers the plugin`() {
+        var recovered = 0
+        val g = PluginGuard("Slow", null, 10_000, {}, timeoutStrikes = 1, hangCeilingMs = 1_500, cooldownMs = 200, probeMs = 100, onRecovered = { recovered++ })
+        assertTrue(g.call("hang", 50) { Thread.sleep(5_000) }.isFailure)
+        assertTrue(g.cooling)
+        Thread.sleep(300)
+        val t0 = System.nanoTime()
+        assertTrue(g.call("probe", 50) { Thread.sleep(5_000) }.isFailure)
+        val ms = (System.nanoTime() - t0) / 1_000_000
+        assertTrue(ms < 1_000, "probe must be cut at the probe limit, took $ms ms")
+        assertTrue(g.cooling)
+        Thread.sleep(300)
+        assertEquals(1, g.call("probe2", 2_000) { 1 }.getOrNull())
+        assertFalse(g.cooling)
+        assertEquals(1, recovered)
+        g.shutdown()
+    }
+}
