@@ -117,9 +117,12 @@ class BoardTool(private val api: DaemonApi) : DaemonTool {
             val dir = t.sessionId?.let { byId[it] }?.let { it.repoRoot ?: it.worktreePath }
             if (branch == null || dir == null || System.currentTimeMillis() > deadline) null
             else runCatching {
+                // BOARD-HANG-1: wait first, with a bound, then read: readText() before waitFor blocked forever on a stuck git.
                 val p = ProcessBuilder("git", "-C", dir, "rev-parse", "--short", branch).redirectErrorStream(true).start()
-                val out = p.inputStream.bufferedReader().readText().trim()
-                if (p.waitFor(5, TimeUnit.SECONDS) && p.exitValue() == 0) out.lines().firstOrNull()?.takeIf { it.isNotBlank() } else null
+                p.outputStream.close()
+                if (!p.waitFor(GIT_CALL_MS, TimeUnit.MILLISECONDS)) { p.destroyForcibly(); null }
+                else if (p.exitValue() != 0) null
+                else p.inputStream.bufferedReader().readText().trim().lines().firstOrNull()?.takeIf { it.isNotBlank() }
             }.getOrNull()
         }
     }
@@ -128,6 +131,8 @@ class BoardTool(private val api: DaemonApi) : DaemonTool {
         const val BOARD = "infantry_board"
         /** The whole call, git lookups included (a timed-out tool call disables the plugin, so the git work is budgeted below it). */
         const val TIMEOUT_MS = 120_000L
-        const val GIT_BUDGET_MS = 60_000L
+        const val GIT_BUDGET_MS = 20_000L
+        /** One git lookup; a stuck git is killed after this. */
+        const val GIT_CALL_MS = 3_000L
     }
 }
