@@ -734,7 +734,7 @@ class ClaudeTtySessionTest {
         assertTrue(listOf("SessionStart", "UserPromptSubmit", "Stop").all { it in settingsOf(deny)["hooks"]!!.jsonObject }, "the turn hooks stay")
         assertNull(permissionHook(start(approval = ToolApproval.ALLOW_ALL)))
         val ask = start(approval = ToolApproval.ASK)
-        assertFalse("--permission-mode" in ask.argv, "ask keeps claude's default mode: ${ask.argv}")
+        assertEquals("default", ask.argv[ask.argv.indexOf("--permission-mode") + 1], "ask names claude's default mode, never the user's auto: ${ask.argv}")
         assertTrue(permissionHook(ask) != null)
     }
 
