@@ -1357,7 +1357,7 @@ class InfantryDaemon(
             // RUNNER-AGENT-1: the placement view a non-ticket start uses (paused runners, per-runner caps), same as the board's.
             val spawnRunnerEntries = { LocalRunner.placementEntries(runnerPool, settings) }
             val bindFreshSession = { agentId: String ->
-                LocalRunner.start(runnerPool, manager, SpawnOptions(agentId = agentId, projectId = agents.get(agentId)?.projectId), repo, agentRunner = agents.get(agentId)?.runner, defaultRunner = settings.runnersDefault(), entries = spawnRunnerEntries, projectDir = { id -> runCatching { projectStore.get(id).directory }.getOrNull()?.takeIf { it.isNotBlank() }?.let(::File)?.takeIf { it.isDirectory } })?.let { s -> when (s) { is StartedSession.Local -> com.superiorsoftllc.infantry.mailbox.FreshSession.Local(s.record); is StartedSession.Remote -> com.superiorsoftllc.infantry.mailbox.FreshSession.Remote(s.id) } }
+                LocalRunner.start(runnerPool, manager, SpawnOptions(agentId = agentId, projectId = agents.get(agentId)?.projectId), repo, agentRunner = agents.get(agentId)?.runner, defaultRunner = settings.runnersDefault(), entries = spawnRunnerEntries, projectDir = { id -> runCatching { projectStore.get(id).directory }.getOrNull()?.takeIf { it.isNotBlank() }?.let(::File)?.takeIf { it.isDirectory } }, remotePlaced = remoteMirror::placed)?.let { s -> when (s) { is StartedSession.Local -> com.superiorsoftllc.infantry.mailbox.FreshSession.Local(s.record); is StartedSession.Remote -> com.superiorsoftllc.infantry.mailbox.FreshSession.Remote(s.id) } }
             }
             val mail = MailRouter(
                 manager, mailbox, agents, mailBase,
@@ -1908,6 +1908,7 @@ class InfantryDaemon(
                                     SpawnOptions(agentId = request.agentId, role = request.role, projectId = request.projectId, contextLimit = request.contextLimit, effort = request.effort, runner = request.runner),
                                     repo, agentRunner = request.agentId?.let { agents.get(it)?.runner }, defaultRunner = settings.runnersDefault(), entries = spawnRunnerEntries,
                                     projectDir = { id -> runCatching { projectStore.get(id).directory }.getOrNull()?.takeIf { it.isNotBlank() }?.let(::File)?.takeIf { it.isDirectory } },
+                                    remotePlaced = remoteMirror::placed,
                                 ) ?: throw IllegalArgumentException("the daemon could not bind a session for this spawn")
                             },
                             firstTask = { started, task ->
@@ -2356,6 +2357,9 @@ class InfantryDaemon(
                             spawnGuard,
                             runnerPool = runnerPool,
                             remoteSessions = remoteMirror::list,
+                            remotePlaced = remoteMirror::placed,
+                            remoteForget = remoteMirror::forget,
+                            remoteStatus = remoteMirror::status,
                             limits = limits,
                             usagePacing = usagePacing,
                             ticketFiles = ticketFilesText?.let { text ->
@@ -3039,6 +3043,12 @@ private suspend fun handleConnection(
     promptSendIds: PromptSendIds = PromptSendIds { LimitRegistry.CHAT_SENT_IDS_KEPT.default.toInt() },
     /** RUNNER-E2E-2: the sessions started on remote runners (read-only mirror); the `sessions` answer lists them with the local ones. */
     remoteSessions: () -> List<SessionRecord> = { emptyList() },
+    /** RUNNER-SESSION-GHOST-1: records a non-board remote start's placement in the mirror (project, role, harness, model). */
+    remotePlaced: (String, com.superiorsoftllc.infantry.runners.RemoteSessionMirror.Placed) -> Unit = { _, _ -> },
+    /** RUNNER-SESSION-GHOST-1: a deleted remote session leaves the mirror. */
+    remoteForget: (String) -> Unit = {},
+    /** RUNNER-SESSION-GHOST-1: a runner event-less state change of a remote session (a kill from here ends it at once). */
+    remoteStatus: (String, String) -> Unit = { _, _ -> },
 ) {
     println("[infantry] ws connected (provider=${manager.providerId})")
     // DP-5d: the board-family frames, registered by their owner; the loop below only looks them up.
@@ -3526,6 +3536,28 @@ private suspend fun handleConnection(
                             sendKey?.let(promptSendIds::release)
                             Envelope(Envelope.ERROR, e.message ?: "resume failed")
                         }
+                    } else if (active?.let { manager.get(it) == null && runnerPool.runnerOf(it) != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL } == true) {
+                        // RUNNER-SESSION-GHOST-1: the last `new` placed this connection's session on a remote runner. Its first
+                        // task goes there as mail (as a plugin spawn's does). Before, the session was not found in [manager] and a
+                        // fresh LOCAL session was started instead, while the remote one sat in STARTING with no turn for ever.
+                        val remoteId = active!!
+                        try {
+                            val sent = LocalRunner.deliverVia(runnerPool)(remoteId, envelope.data, MessageOrigin.Owner, "spawn", emptyList())
+                            if (sent.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.MailResult.FAILED) {
+                                throw IllegalStateException("runner '${runnerPool.runnerOf(remoteId)}' refused the first task: ${sent.reason}")
+                            }
+                            plugins.turnAccepted(envelope, caller)
+                            val pushed = Envelope(Envelope.SESSIONS, json.encodeToString(JsonArray((manager.list() + remoteSessions()).map { json.encodeToJsonElement(SessionRecordSerializer, it) })))
+                            for (client in clients) client.trySend(pushed)
+                            null
+                        } catch (e: Exception) {
+                            Envelope(Envelope.ERROR, e.message ?: "the runner did not take the first task")
+                        }
+                    } else if (active?.let { manager.get(it) }.let { it == null || it.state in TERMINAL } &&
+                        spawn?.runner?.trim()?.let { it.isNotEmpty() && it != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL } == true
+                    ) {
+                        // RUNNER-SESSION-GHOST-1: a `new` that asked for a runner never falls back to a local session.
+                        Envelope(Envelope.ERROR, "no session started: runner '${spawn?.runner?.trim()}' did not start one; send a new for it again, or choose the local runner")
                     } else {
                         val current = active?.let { manager.get(it) }
                         val refused = spawnRefused
@@ -3634,11 +3666,13 @@ private suspend fun handleConnection(
                             spawnOrigin = origin
                             // BIND AT CREATION: a console opened as a profile is addressable at once.
                             spawnGuard.admit(origin) { placement ->
-                                LocalRunner.start(runnerPool, manager, options, repo, agentRunner = options.agentId?.let { agents.get(it)?.runner }, defaultRunner = (settings as? SettingsService)?.runnersDefault() ?: "local", entries = (settings as? SettingsService)?.let { ss -> { LocalRunner.placementEntries(runnerPool, ss) } }, projectDir = projects::directoryOf)
+                                LocalRunner.start(runnerPool, manager, options, repo, agentRunner = options.agentId?.let { agents.get(it)?.runner }, defaultRunner = (settings as? SettingsService)?.runnersDefault() ?: "local", entries = (settings as? SettingsService)?.let { ss -> { LocalRunner.placementEntries(runnerPool, ss) } }, projectDir = projects::directoryOf, remotePlaced = remotePlaced)
                                     ?.also { if (placement != null) spawnGuard.record(it.id, origin); (it as? StartedSession.Local)?.let { l -> manager.setSpawner(l.id, origin) } }
                             }?.let { active = it.id }
                             null
-                        } catch (e: IllegalArgumentException) {
+                        } catch (e: Exception) {
+                            // RUNNER-SESSION-GHOST-1: an unreachable runner (IllegalStateException) is a refusal too. Before, it
+                            // left `spawn` set, and the next prompt started the session LOCALLY with no word to the owner.
                             val reason = e.message ?: "invalid spawn options"
                             spawn = null
                             spawnRefused = reason
@@ -4188,8 +4222,10 @@ private suspend fun handleConnection(
                             if (manager.get(id) == null && runnerName != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL) {
                                 val link = runnerPool.link(runnerName) ?: error("runner '$runnerName' is not connected; the session there is still running")
                                 when (val reply = link.stopSession(id, "killed from the app", force)) {
-                                    is com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorReply.Ok ->
-                                        if (!reply.value) error("runner '$runnerName' does not know session $id")
+                                    // RUNNER-SESSION-GHOST-1: stopped, or the runner holds no such session (a ghost: nothing runs
+                                    // there). Either way it has ended, so it reads EXITED now, not STARTING until an event that
+                                    // never comes; `session_remove --force` (kill, then remove) can then remove it.
+                                    is com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorReply.Ok -> remoteStatus(id, SessionState.EXITED.name)
                                     else -> error("runner '$runnerName' did not stop session $id: $reply")
                                 }
                             } else {
@@ -4357,7 +4393,16 @@ private suspend fun handleConnection(
                         try {
                             // SESSION-GHOST-1: an id this daemon does not hold is already gone: a clean no-op, but the
                             // fresh `sessions` push below still goes out so a client holding a ghost row reconciles.
-                            if (manager.get(id) != null) manager.delete(id)
+                            if (manager.get(id) != null) {
+                                manager.delete(id)
+                            } else if (runnerPool.runnerOf(id) != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL) {
+                                // RUNNER-SESSION-GHOST-1: a session on a remote runner is not in [manager]: the delete stops it there
+                                // (best effort; a runner that is down or forgot it cannot keep the row alive) and drops it from the
+                                // pool's index and the mirror, so it leaves the list and nothing respawns it.
+                                runCatching { runnerPool.link(runnerPool.runnerOf(id))?.stopSession(id, "deleted from the app", true) }
+                                (runnerPool as? com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerHub)?.forget(id)
+                                remoteForget(id)
+                            }
                             streamSequencer.forget(id)
                             // Contract 1.26.0: the delete itself gets no direct reply -- every client
                             // (not just the one that asked) hears about it through a fresh `sessions`

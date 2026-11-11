@@ -161,6 +161,12 @@ object LocalRunner {
         entries: (() -> List<com.superiorsoftllc.infantry.settings.RunnerEntry>)? = null,
         /** RUNNER-PAIR-1: a project's own folder; a runner start clones ITS `origin`, not the daemon's start-up [repo]. */
         projectDir: (String) -> File? = { null },
+        /**
+         * RUNNER-SESSION-GHOST-1: records what a remote start pinned (project, agent, role, harness, model) in the orchestrator's
+         * mirror of runner sessions. Without it the session listed as provider `remote` with no project, which no project-scoped
+         * caller could remove.
+         */
+        remotePlaced: (String, com.superiorsoftllc.infantry.runners.RemoteSessionMirror.Placed) -> Unit = { _, _ -> },
     ): StartedSession? {
         val wanted = options?.runner?.trim().orEmpty().ifEmpty { agentRunner?.trim().orEmpty() }.ifEmpty { defaultRunner.trim() }
         var runner = RunnerPool.LOCAL
@@ -173,7 +179,15 @@ object LocalRunner {
                 is com.superiorsoftllc.infantry.settings.PlacementResult.Placed -> runner = placed.runner
             }
         }
-        if (runner != RunnerPool.LOCAL) return startRemote(pool, runner, options, options?.projectId?.let(projectDir) ?: repo)
+        if (runner != RunnerPool.LOCAL) {
+            // RUNNER-SESSION-GHOST-1: a runner the caller ASKED for (the spawn's own, or its agent profile's) is never answered by a
+            // local session: with nothing to bind there the start is refused here, loudly, instead of the next prompt starting locally.
+            val asked = options?.runner?.trim().orEmpty().ifEmpty { agentRunner?.trim().orEmpty() }
+            if (options?.agentId == null && options?.role == null && asked.isNotEmpty() && asked != RunnerPool.LOCAL) {
+                throw IllegalArgumentException("a session on runner '$runner' needs a role or an agent profile; pick one, or choose the local runner")
+            }
+            return startRemote(pool, runner, options, options?.projectId?.let(projectDir) ?: repo, remotePlaced)
+        }
         val link = pool.link(RunnerPool.LOCAL) ?: throw IllegalStateException("no '${RunnerPool.LOCAL}' runner")
         return when (val r = link.startSession(startSpec(options, repo))) {
             is OrchestratorReply.Ok -> {
@@ -188,7 +202,10 @@ object LocalRunner {
      * RUNNER-AGENT-1: a session outside the board on runner [runner]. The runner clones the project's git remote (the checkout's
      * `origin`) and runs the session in that clone, with no ticket branch; the session is indexed on the pool so mail and kills go there.
      */
-    private fun startRemote(pool: RunnerPool, runner: String, options: SpawnOptions?, repo: File?): StartedSession? {
+    private fun startRemote(
+        pool: RunnerPool, runner: String, options: SpawnOptions?, repo: File?,
+        remotePlaced: (String, com.superiorsoftllc.infantry.runners.RemoteSessionMirror.Placed) -> Unit,
+    ): StartedSession? {
         if (options?.agentId == null && options?.role == null) return null
         val link = pool.link(runner) ?: throw IllegalArgumentException("runner '$runner' is not registered, or no runner binding is loaded")
         val remote = repo?.let { runCatching { com.superiorsoftllc.infantry.daemon.plugins.originUrl(it) }.getOrNull() }
@@ -202,6 +219,13 @@ object LocalRunner {
             is OrchestratorReply.Ok -> {
                 val id = reply.value.sessionId ?: throw IllegalArgumentException("runner $runner refused the start: ${reply.value.refusal ?: "no session"}")
                 (pool as? com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerHub ?: throw IllegalStateException("this daemon cannot index a remote session")).placed(id, runner)
+                remotePlaced(
+                    id,
+                    com.superiorsoftllc.infantry.runners.RemoteSessionMirror.Placed(
+                        options.provider.orEmpty(), options.model, null, reply.value.branch, null, reply.value.worktreePath,
+                        projectId = options.projectId, agentId = options.agentId, role = options.role,
+                    ),
+                )
                 StartedSession.Remote(
                     runner,
                     com.superiorsoftllc.infantry.daemon.api.sessions.SessionView(

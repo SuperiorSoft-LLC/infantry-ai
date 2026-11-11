@@ -181,6 +181,23 @@ class RemoteSpawnTest {
         )
         assertNotNull(r2Manager.get(byProject.id), "the project-folder start runs on r2")
 
+        // RUNNER-SESSION-GHOST-1: the app's New agent start records what it pinned, so the session lists with its project and role
+        // (not as a project-less `remote` row nobody in the project may remove), and a deleted one leaves the mirror's list.
+        val mirror = RemoteSessionMirror(sessionIds = { hub.sessionsOn("r2") })
+        val pinned = assertIs<StartedSession.Remote>(LocalRunner.start(hub, oManager, options.copy(role = "backend"), checkout, agentRunner = "r2", remotePlaced = mirror::placed))
+        val row = assertNotNull(mirror.get(pinned.id))
+        assertEquals("p1", row.projectId)
+        assertEquals(agent.id, row.agentId)
+        assertEquals("backend", row.role)
+        assertEquals(FakeAgentProvider().id, row.provider)
+        hub.forget(pinned.id); mirror.forget(pinned.id)
+        assertTrue(mirror.list().none { it.id == pinned.id }, "a forgotten remote session is no longer listed")
+        // A start that ASKS for r2 with nothing to bind there is refused loudly, never answered by a local session.
+        val bare = assertFailsWith<IllegalArgumentException> { LocalRunner.start(hub, oManager, SpawnOptions(projectId = "p1", runner = "r2"), checkout) }
+        assertTrue("runner 'r2'" in bare.message.orEmpty(), bare.message)
+        // With only the default runner set, a plain chat (no role) keeps its old meaning: no bind now, a local session on the prompt.
+        assertEquals(null, LocalRunner.start(hub, oManager, SpawnOptions(projectId = "p1"), checkout, defaultRunner = "r2"))
+
         // RUNNER-PAIR-1: the remote session runs with the Tool approval a local one would, carried over the real wire.
         // RUNNER-DOCKER-MATRIX-1: this orchestrator relays prompts (RUNNER-PROMPT-RELAY-1), so `ask` stays `ask` and the card shows
         // in its app; an orchestrator without the relay (promptRelay = false) still gets `deny` at once, never a timer nobody sees.
