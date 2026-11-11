@@ -8,6 +8,31 @@ package com.superiorsoftllc.infantry.daemon.api.orchestrator
  * remote runners, whose links a plugin's binding builds (`api.hooks.runnerBinding`). Nothing here names a transport.
  */
 
+/**
+ * RUNNER-CRED-1 (additive): the credentials an orchestrator LENDS a session it starts on a remote runner, so the runner needs no
+ * key of its own (owner rule: a remote runner is `docker run` plus endpoint and bearer, nothing more). [env] is the harness
+ * credential as a local launch would merge it (`{ENV: key}`); [secrets] are the keystore secrets the session may render
+ * (`{{secret:NAME}}`), name -> fields; [git] is the credential for the ticket's git remote. The runner keeps them in memory for
+ * that session only and never writes them to its log, state or volume. [toString] names keys only, never a value, so a log line
+ * or an exception message that prints this object leaks nothing.
+ */
+@kotlinx.serialization.Serializable
+data class SessionCredentials(
+    val env: Map<String, String> = emptyMap(),
+    val secrets: Map<String, Map<String, String>> = emptyMap(),
+    val git: GitCredential? = null,
+) {
+    val isEmpty: Boolean get() = env.isEmpty() && secrets.isEmpty() && git == null
+    override fun toString(): String = "SessionCredentials(env=${env.keys.sorted()}, secrets=${secrets.keys.sorted()}, git=${if (git == null) "none" else "set"})"
+}
+
+/** RUNNER-CRED-1: an HTTPS git credential (a token, with the user name the host expects; GitHub takes any). Never printed. */
+@kotlinx.serialization.Serializable
+data class GitCredential(val token: String, val username: String = DEFAULT_USER) {
+    override fun toString(): String = "GitCredential(username=$username, token=***)"
+    companion object { const val DEFAULT_USER = "x-access-token" }
+}
+
 /** What a runner can run, answered by [RunnerLink.hello]. */
 data class RunnerInfo(
     val name: String,
@@ -79,7 +104,14 @@ data class StartSpec(
      * orchestrator without the relay: the runner runs `ask` as `deny`, as above.
      */
     val promptRelay: Boolean = false,
-)
+    /**
+     * RUNNER-CRED-1 (additive): the credentials lent to this session ([SessionCredentials]); null = none. Filled by the pool for a
+     * REMOTE start only ([RunnerHub] `lend`), never for the local runner, which reads its own keystore.
+     */
+    val credentials: SessionCredentials? = null,
+) {
+    override fun toString(): String = "StartSpec(startId=$startId, provider=$provider, projectId=$projectId, ticketId=$ticketId, credentials=$credentials)"
+}
 
 /** RUNNER-POOL-6: a ticket worktree on the runner: [path], [branch], [base] (a commit), [repoRoot]. */
 data class StartWorktree(val path: String, val branch: String, val base: String, val repoRoot: String)
@@ -292,6 +324,18 @@ class RunnerHub(
     private val local: RunnerLink,
     private val remotes: () -> List<String> = { emptyList() },
     private val clock: () -> Long = System::currentTimeMillis,
+    /**
+     * RUNNER-CRED-1: the credentials to lend a start on remote runner (name, spec), or null to lend none. Applied to every
+     * [RunnerLink.startSession] of a remote link this pool hands out, so every start path (board, spawn, test) lends the same way;
+     * the local runner is never wrapped. A spec that already carries [StartSpec.credentials] keeps them.
+     */
+    private val lend: (runner: String, spec: StartSpec) -> SessionCredentials? = { _, _ -> null },
+    /**
+     * RUNNER-CRED-1: the harness ids whose key this orchestrator lends runner [runner] at each start. In the [RunnerLink.hello] of
+     * that runner's link such a harness reads as signed in (installed there, and usable: the key comes with the start), so
+     * placement, the runner's health and the app treat it as ready without a login on the runner.
+     */
+    private val lentKeys: (runner: String) -> Set<String> = { emptySet() },
 ) : RunnerPool {
     private val bindings = java.util.concurrent.ConcurrentHashMap<String, RunnerBinding>()
     private val links = java.util.concurrent.ConcurrentHashMap<String, Pair<String, RunnerLink>>()
@@ -318,10 +362,28 @@ class RunnerHub(
         if (name !in remoteNames()) return null
         val (id, binding) = bindingFor() ?: return null
         links[name]?.takeIf { it.first == id }?.let { return it.second }
-        return binding.create(name, local).also { links[name] = id to it }
+        return lending(name, binding.create(name, local)).also { links[name] = id to it }
     }
 
     override fun runnerOf(sessionId: String): String = sessions[sessionId] ?: RunnerPool.LOCAL
+
+    /** RUNNER-CRED-1: [inner] with [lend] applied to its starts; a lend that fails lends nothing (the start still goes). */
+    private fun lending(name: String, inner: RunnerLink): RunnerLink = object : RunnerLink by inner {
+        override fun hello(): OrchestratorReply<RunnerInfo> = when (val r = inner.hello()) {
+            is OrchestratorReply.Unavailable -> r
+            is OrchestratorReply.Ok -> {
+                val keys = runCatching { lentKeys(name) }.getOrDefault(emptySet())
+                if (keys.isEmpty()) r
+                else OrchestratorReply.Ok(r.value.copy(harnesses = r.value.harnesses.map { h -> if (!h.loggedIn && h.id in keys) h.copy(loggedIn = true) else h }))
+            }
+        }
+
+        override fun startSession(spec: StartSpec): OrchestratorReply<SessionRef> {
+            if (spec.credentials != null) return inner.startSession(spec)
+            val lent = runCatching { lend(name, spec) }.getOrNull()?.takeIf { !it.isEmpty }
+            return inner.startSession(if (lent == null) spec else spec.copy(credentials = lent))
+        }
+    }
 
     override fun placedSessionIds(): Collection<String> = sessions.keys.toList()
 

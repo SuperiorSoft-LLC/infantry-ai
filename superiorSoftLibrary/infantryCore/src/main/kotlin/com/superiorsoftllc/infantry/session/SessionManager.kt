@@ -607,6 +607,21 @@ class SessionManager(
     private val carryPending: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
     /**
+     * RUNNER-CRED-1: environment LENT to one session by whoever started it (a runner's orchestrator: its harness key), merged into
+     * that session's launches under the daemon's own non-blank credential. Memory only: never persisted, never logged, dropped
+     * with the session ([delete]) and on restart (the orchestrator lends again at its next start).
+     */
+    private val lentEnvs = ConcurrentHashMap<String, Map<String, String>>()
+
+    /** RUNNER-CRED-1: lend [env] to [sessionId]'s launches (empty = take the loan back). */
+    fun lendEnv(sessionId: String, env: Map<String, String>) {
+        if (env.isEmpty()) lentEnvs.remove(sessionId) else lentEnvs[sessionId] = env.toMap()
+    }
+
+    /** RUNNER-CRED-1: the variable NAMES lent to [sessionId] (never a value). */
+    fun lentEnvNames(sessionId: String): Set<String> = lentEnvs[sessionId]?.keys.orEmpty()
+
+    /**
      * TICKET-HANDOVER: sessions held by a harness switch in progress ([com.superiorsoftllc.infantry.daemon.SessionHandover]).
      * While held, only the handover may start a turn ([resumeHeld]); every other [resume] is refused as a run in flight,
      * so mail or a prompt cannot slip a turn onto the old harness between the handoff turn and the switch.
@@ -1101,6 +1116,8 @@ class SessionManager(
         global: Boolean = false,
         /** CONTEXT-LIMIT-1: the session's context limit in tokens ([ContextLimits]); null = the harness's own window. */
         contextLimit: Int? = null,
+        /** RUNNER-CRED-1: environment lent to this session's launches ([lendEnv]), in place before its first run starts. */
+        lentEnv: Map<String, String> = emptyMap(),
     ): SessionRecord { return locked {
         // DAEMON-PLUGINS-1: a plugin's spawn gate binds every path (frame, mail, trigger, ticket) that creates a session.
         val binding = bindingPolicy.bindingFor(ticketId)
@@ -1132,6 +1149,7 @@ class SessionManager(
         val id = idFactory()
         val now = clock()
         toolApproval?.let { toolApprovalOverrides[id] = it }
+        if (lentEnv.isNotEmpty()) lendEnv(id, lentEnv)
 
         var worktree: WorktreeRecord? = null
         val provisioner = worktrees
@@ -1621,7 +1639,10 @@ class SessionManager(
         // run, so a role-only spawn (the New agent modal) knows its role from the env too.
         val limitsEnv = runCatching { buildEnv(com.superiorsoftllc.infantry.daemon.api.processes.LaunchInfo(session.id, session.role, session.projectId)) }.onFailure { System.err.println("[infantry] build limits env failed: ${it.message}") }.getOrDefault(emptyMap())
         runCatching { GradleProgressInit.install() }
-        val runEnv = PathEnv.withBinOnPath(childEnv + limitsEnv + runCatching { credentialEnv(session.provider) }.getOrDefault(emptyMap()) + buildMap {
+        // RUNNER-CRED-1: a lent key fills what this daemon has none of; a key of its own (non-blank) still wins.
+        val ownCredential = runCatching { credentialEnv(session.provider) }.getOrDefault(emptyMap())
+        val credential = lentEnvs[session.id]?.let { lent -> lent + ownCredential.filterValues { it.isNotEmpty() } } ?: ownCredential
+        val runEnv = PathEnv.withBinOnPath(childEnv + limitsEnv + credential + buildMap {
             put(GradleProgressInit.ENV, "1")
             put(AccessPolicy.SESSION_ID_ENV, session.id)
             session.projectId?.let { put(AccessPolicy.PROJECT_ID_ENV, it) }
@@ -1710,7 +1731,8 @@ class SessionManager(
         }
         // BUG-M2-11b-1: the host owns the process and the ONE chat line per launch; the per-turn plumbing is Activity.
         bootDetails.forEach { emit(SessionEvent.Activity(sessionId, provider.id, it)) }
-        runCatching { credentialMissing(session.provider) }.getOrNull()?.let {
+        // RUNNER-CRED-1: a session whose starter lent it a key is not missing one.
+        if (lentEnvs[sessionId].isNullOrEmpty()) runCatching { credentialMissing(session.provider) }.getOrNull()?.let {
             System.err.println("[infantry] $sessionId: $it")
             emit(SessionEvent.Activity(sessionId, provider.id, it))
         }
@@ -2205,6 +2227,7 @@ class SessionManager(
         sessions.remove(sessionId)
         conversation.drop(sessionId)
         carryPending.remove(sessionId)
+        lentEnvs.remove(sessionId)
         lastPersisted.remove(sessionId)
         instances.delete(sessionId) // TRAITS-T4: the instance goes with its record
         endedNotice(sessionId)

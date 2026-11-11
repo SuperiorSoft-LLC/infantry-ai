@@ -55,16 +55,18 @@ object LocalRunner {
         start = { spec ->
             val wt = spec.worktree
             val approval = runnerToolApproval(spec)
+            // RUNNER-CRED-1: the harness key the orchestrator lent (already screened by the link server), in place before the first run.
+            val lentEnv = spec.credentials?.env.orEmpty()
             if (wt == null) {
                 val dir = spec.repo?.let(::File)
                 // A spec naming an agent or a role binds that session at rest (its prompt, if any, is the caller's first mail turn).
-                bindSessionOnSpawn(manager, agents, spawnOptions(spec), dir, toolApproval = approval)?.id
+                bindSessionOnSpawn(manager, agents, spawnOptions(spec), dir, toolApproval = approval)?.id?.also { manager.lendEnv(it, lentEnv) }
                     // RUNNER-TEST-1: an ANONYMOUS start (no role, no agent) has nothing to bind, exactly like an anonymous console: its
                     // first prompt creates the session and is its first turn. `infantry runner test` starts one this way.
                     ?: spec.prompt?.takeIf { it.isNotBlank() }?.let { prompt ->
                         manager.startNew(
                             prompt = prompt, repo = dir, providerId = spec.provider, model = spec.model, effort = spec.effort,
-                            projectId = spec.projectId, contextLimit = spec.contextLimit, toolApproval = approval,
+                            projectId = spec.projectId, contextLimit = spec.contextLimit, toolApproval = approval, lentEnv = lentEnv,
                         ).id
                     }
             } else {
@@ -72,7 +74,7 @@ object LocalRunner {
                     prompt = spec.prompt.orEmpty(),
                     providerId = spec.provider, model = spec.model, effort = spec.effort,
                     agentId = spec.agentId, role = spec.role, ticketId = spec.ticketId, projectId = spec.projectId,
-                    contextLimit = spec.contextLimit, toolApproval = approval,
+                    contextLimit = spec.contextLimit, toolApproval = approval, lentEnv = lentEnv,
                     unattended = true, launchOrigin = LaunchOrigin.UNATTENDED,
                     preWorktree = WorktreeRecord(sessionId = "", repoRoot = wt.repoRoot, path = wt.path, branch = wt.branch, baseRef = wt.base, createdAt = System.currentTimeMillis()),
                 ).id

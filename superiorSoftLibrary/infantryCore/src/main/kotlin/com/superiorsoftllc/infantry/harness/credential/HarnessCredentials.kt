@@ -30,6 +30,11 @@ data class HarnessCredential(
      * `harness.<id>.key`; else `harness.<id>.<credId>.key` with its pointer in `harness.<id>.<credId>.keyRef`.
      */
     val credId: String = "",
+    /**
+     * RUNNER-CRED-1: the auth mode this credential serves ([MODE_SUBSCRIPTION]: a subscription token the CLI takes in place of an
+     * interactive login); empty = an API key. Such a credential goes to a session only in that mode and is never "missing".
+     */
+    val forMode: String = "",
 ) {
     /** The setting that stores the owner's choice of [authModes], per harness. */
     val modeSetting: String get() = modeSettingOf(harnessId)
@@ -142,8 +147,13 @@ class HarnessCredentials(
         if (cs.isEmpty()) return emptyMap()
         // CLAUDE-AUTH-CHOICE-2: a subscription session carries NO key: the variable is blanked, so a key the daemon itself inherited from its own
         // environment cannot reach the harness and bill an API account (a blank variable reads as unset).
-        if (subscription(harnessId)) return cs.associate { it.env to "" }
-        return buildMap { for (c in cs) keyValue(c, project)?.let { put(c.env, it) } }
+        // RUNNER-CRED-1: a credential declared for the subscription mode (a subscription token) is the one exception: it is what that mode signs in with.
+        val mode = mode(harnessId)
+        if (subscription(harnessId)) return buildMap {
+            for (c in cs) if (c.forMode != HarnessCredential.MODE_SUBSCRIPTION) putIfAbsent(c.env, "")
+            for (c in cs) if (c.forMode == HarnessCredential.MODE_SUBSCRIPTION) keyValue(c, project)?.let { put(c.env, it) }
+        }
+        return buildMap { for (c in cs) if (c.forMode.isEmpty() || c.forMode == mode) keyValue(c, project)?.let { put(c.env, it) } }
     }
 
     /** CLAUDE-AUTH-CHOICE-2: the last probe result per harness id; kept in memory, rebuilt by the next check. */
@@ -169,7 +179,7 @@ class HarnessCredentials(
     } catch (_: Exception) { null }
 
     /** The declared credentials with no key set: what the first-run step asks for. */
-    fun missing(): List<HarnessCredential> = states().filter { !it.set && !subscription(it.credential.harnessId) }.map { it.credential }
+    fun missing(): List<HarnessCredential> = states().filter { !it.set && it.credential.forMode.isEmpty() && !subscription(it.credential.harnessId) }.map { it.credential }
 }
 
 /** CLAUDE-AUTH-CHOICE-2: one probe result. [signedIn] null = unknown; [lastProbe] is epoch millis, 0 = never probed. */

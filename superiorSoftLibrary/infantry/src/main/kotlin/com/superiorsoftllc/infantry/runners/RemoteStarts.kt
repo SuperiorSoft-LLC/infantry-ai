@@ -39,7 +39,19 @@ class RemoteStarts(
     /** RUNNER-POOL-12: where the outbox, the per-session seq counters and the started sessions survive a daemon restart; null = memory only. */
     private val persistTo: File? = null,
     private val clock: () -> Long = System::currentTimeMillis,
+    /**
+     * RUNNER-CRED-1: the git a call that talks to the remote runs through when the orchestrator lent a credential: [git] with the
+     * extra environment [LentCredentials.gitEnv] builds (an HTTP header via `GIT_CONFIG_*`, never argv or config on disk).
+     */
+    private val authedGit: (env: Map<String, String>) -> GitCli = { env -> SystemGitCli(extraEnv = env) },
 ) {
+    /** RUNNER-CRED-1: the lent git credential per session, memory only (a restart forgets it; a push then uses the runner's own access). */
+    private val gitCredentials = ConcurrentHashMap<String, com.superiorsoftllc.infantry.daemon.api.orchestrator.GitCredential>()
+
+    /** [git], or the credentialed one when [credential] is set. */
+    private fun remoteGit(credential: com.superiorsoftllc.infantry.daemon.api.orchestrator.GitCredential?): GitCli =
+        if (credential == null) git else authedGit(LentCredentials.gitEnv(credential))
+
     private val branches = TicketBranches(git)
     private val sessions = ConcurrentHashMap<String, StartWorktree>()
     private val linked = ConcurrentHashMap.newKeySet<String>()
@@ -89,15 +101,16 @@ class RemoteStarts(
     }
 
     /** RUNNER-AGENT-1: clone or fetch the project remote and return the clone (a ticketless start runs in it, no ticket branch). */
-    fun cloneDir(gitRemote: String, projectId: String?): File {
+    fun cloneDir(gitRemote: String, projectId: String?, credential: com.superiorsoftllc.infantry.daemon.api.orchestrator.GitCredential? = null): File {
         val dir = File(cloneRoot(), folderFor(projectId, gitRemote))
+        val remoteGit = remoteGit(credential)
         if (!File(dir, ".git").exists()) {
             dir.parentFile?.mkdirs()
-            val cloned = git.run(dir.parentFile ?: dir, listOf("clone", gitRemote, dir.absolutePath))
+            val cloned = remoteGit.run(dir.parentFile ?: dir, listOf("clone", gitRemote, dir.absolutePath))
             require(cloned.ok) { "git clone of the project's remote failed: ${cloned.err()}" }
         } else {
             git.run(dir, listOf("remote", "set-url", "origin", gitRemote))
-            val fetched = git.run(dir, listOf("fetch", "--prune", "origin"))
+            val fetched = remoteGit.run(dir, listOf("fetch", "--prune", "origin"))
             require(fetched.ok) { "git fetch of the project's remote failed: ${fetched.err()}" }
         }
         return dir
@@ -112,17 +125,20 @@ class RemoteStarts(
         base: String?,
         branch: String?,
         recordedBase: String? = null,
+        /** RUNNER-CRED-1: the git credential the orchestrator lent for [gitRemote]; null = the runner's own access. */
+        credential: com.superiorsoftllc.infantry.daemon.api.orchestrator.GitCredential? = null,
     ): StartWorktree {
         // Owner decision (RUNNER-POOL-6): a runner works and pushes only ticket branches, never the dev branch or another ref.
         require(branch == null || isTicketBranch(branch)) { "a runner works only on ${TicketBranches.BRANCH_PREFIX}* branches, not '$branch'" }
         val dir = File(cloneRoot(), folderFor(projectId, gitRemote))
+        val remoteGit = remoteGit(credential)
         if (!File(dir, ".git").exists()) {
             dir.parentFile?.mkdirs()
-            val cloned = git.run(dir.parentFile ?: dir, listOf("clone", "--no-checkout", gitRemote, dir.absolutePath))
+            val cloned = remoteGit.run(dir.parentFile ?: dir, listOf("clone", "--no-checkout", gitRemote, dir.absolutePath))
             require(cloned.ok) { "git clone of the project's remote failed: ${cloned.err()}" }
         } else {
             git.run(dir, listOf("remote", "set-url", "origin", gitRemote))
-            val fetched = git.run(dir, listOf("fetch", "--prune", "origin"))
+            val fetched = remoteGit.run(dir, listOf("fetch", "--prune", "origin"))
             require(fetched.ok) { "git fetch of the project's remote failed: ${fetched.err()}" }
         }
         if (branch != null && !git.run(dir, listOf("rev-parse", "--verify", "--quiet", "refs/heads/$branch")).ok &&
@@ -157,7 +173,14 @@ class RemoteStarts(
     }
 
     /** Session [sessionId] runs in [worktree], cut by [checkout] for its orchestrator. */
-    fun started(sessionId: String, worktree: StartWorktree, pushOnCommit: Boolean = false) {
+    fun started(
+        sessionId: String,
+        worktree: StartWorktree,
+        pushOnCommit: Boolean = false,
+        /** RUNNER-CRED-1: the lent git credential its pushes use (memory only). */
+        credential: com.superiorsoftllc.infantry.daemon.api.orchestrator.GitCredential? = null,
+    ) {
+        if (credential != null) gitCredentials[sessionId] = credential else gitCredentials.remove(sessionId)
         sessions[sessionId] = worktree
         save()
         if (pushOnCommit) this.pushOnCommit[sessionId] = head(worktree).orEmpty()
@@ -226,7 +249,7 @@ class RemoteStarts(
 
     /** Push [wt]'s ticket branch to `origin`; true when it went through (the HEAD pushed is remembered for [checkCommits]). */
     private fun push(sessionId: String, wt: StartWorktree): Boolean {
-        val pushed = git.run(File(wt.path), listOf("push", "origin", "${wt.branch}:refs/heads/${wt.branch}"))
+        val pushed = remoteGit(gitCredentials[sessionId]).run(File(wt.path), listOf("push", "origin", "${wt.branch}:refs/heads/${wt.branch}"))
         if (!pushed.ok) {
             log("[infantry] runner: push of ${wt.branch} for session $sessionId failed: ${pushed.err()}")
             return false
@@ -243,6 +266,7 @@ class RemoteStarts(
         sessions.remove(sessionId)
         linked.remove(sessionId)
         pushOnCommit.remove(sessionId)
+        gitCredentials.remove(sessionId)
     }
 
     /** Every kept event with a seq above [sinceSeq] (an older orchestrator's read; it acknowledges nothing). */

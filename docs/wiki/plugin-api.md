@@ -645,6 +645,8 @@ Generated for the `infantryPlugins` guard `SdkTypesDocumentedGuardTest`: every p
 - `EndpointDeclaration`: PLUGIN-ENDPOINTS-1 (D1): one backend the module calls by [id], never by URL.
 - `FillDeclaration`: NS3: a fill of shell slot [node]; [layout] (a `layout/<name>.json` path in the module folder) when the tree is data.
 - `FillDeclarationSerializer`: NS3: a fill entry is a plain node id string or the object form.
+- `HarnessAuthProbeDeclaration`: CLAUDE-AUTH-CHOICE-2: `harness.authProbe`, the argv that reports a subscription login as JSON, the field that says signed in, and the login command shown to the owner.
+- `HarnessCredentialDeclaration`: FIRST-RUN-KEYS-1: `harness.credential` / `harness.credentials`, the env variable a harness reads a key from (the key lives in the keystore), its label, help, id and provider; RUNNER-CRED-1: `forMode` names the auth mode it serves (a `subscription-login` token goes only in that mode and is never asked for).
 - `HarnessCliDeclaration`: HARNESS-PLUGIN-3 H4: `harness.cli`, the CLI the harness drives; [install] is how the harness installer gets it.
 - `HarnessCliInstall`: `harness.cli.install`: an npm package and the bin script inside it.
 - `HarnessDeclaration`: HARNESS-PLUGIN-3 H4: module.json `harness`.
