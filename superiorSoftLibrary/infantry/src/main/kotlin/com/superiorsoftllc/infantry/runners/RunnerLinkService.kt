@@ -146,7 +146,7 @@ class RunnerLinkService(
         store, RunnerAudit(File(dir, RunnerAudit.FILE)), codes = null, settings = settings, runner = { runner }, starts = starts,
         forwarder = forwarder, forwardWaitCapMs = ::forwardWaitMs,
         limit = limit, cloneRoot = ::cloneRootDir, bearer = bearer.takeIf { it.exists() }, lent = lent,
-        ownLogin = { ownLoginOf(it) },
+        ownLogin = { ownLoginOf(it) }, log = log,
     )
 
     private fun serve(store: RunnerLinkStore, t: RunnerLinkTransport) {
@@ -570,6 +570,7 @@ class RunnerLinkService(
                 "skipped" to outcome.skipped.joinToString("; ").takeIf { it.isNotEmpty() },
                 "enabledTurnedOn" to turnedOn.toString(),
                 "grantRefusal" to outcome.grantRefusal,
+                "replaced" to outcome.replacedOrchestrator,
             ) + mapOf(
                 "grantedProjects" to JsonArray(outcome.grantedProjects.map(::JsonPrimitive)),
                 "grantedHarnesses" to JsonArray(outcome.grantedHarnesses.map(::JsonPrimitive)),
@@ -656,7 +657,10 @@ class RunnerLinkService(
         val t = transport() ?: throw IllegalArgumentException(NO_TRANSPORT)
         val store = RunnerLinkStore.open(stateDir)
         store.orchestrator()?.let {
-            throw IllegalArgumentException("this runner is already paired with orchestrator ${it.name}; one orchestrator only. `infantry runner detach` first.")
+            throw IllegalArgumentException(
+                "this runner is already paired with orchestrator ${it.name}; a one-time code cannot move it. Paste this runner's bearer " +
+                    "(`infantry runner bearer` prints it) in the other app instead: it moves the runner there. Or `infantry runner detach` first.",
+            )
         }
         // A new `runner pair` replaces one still open: its code dies with its listener.
         closePairing()

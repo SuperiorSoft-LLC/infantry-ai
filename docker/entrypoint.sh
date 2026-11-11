@@ -82,7 +82,7 @@ runner_pair_when_ready() {
     sleep 1
   done
   if infantry runner list 2>/dev/null | grep -q "^paired as runner"; then
-    echo "[entrypoint] runner already paired; \`infantry runner detach\` to pair again"
+    echo "[entrypoint] this runner was paired before (kept in the state volume); its bearer pairs it with any app (\`infantry runner bearer\`), or \`infantry runner detach\` for a new code"
     return 0
   fi
   if [ -z "${INFANTRY_RUNNER_HOST:-}" ]; then

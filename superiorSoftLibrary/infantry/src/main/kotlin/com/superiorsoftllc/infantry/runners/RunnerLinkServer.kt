@@ -79,7 +79,9 @@ class RunnerLinkServer(
     private val ownGitIdentity: () -> Pair<String, String>? = { userGitIdentity(File(System.getProperty("user.home"))) },
     /**
      * RUNNER-PAIR-1: the runner's long-lived pairing bearer ([RunnerBearer]); a PAIR whose code is its secret pairs like a live
-     * one-time code (no grant authority) and may pair again: the same orchestrator gets a fresh credential, another is refused.
+     * one-time code (no grant authority) and may pair again: the same orchestrator gets a fresh credential. RUNNER-REPAIR-1:
+     * holding the live bearer IS the owner's authority, so a different orchestrator takes the runner over (the old link's
+     * credential is replaced, audited as [PAIR_TAKEOVER] and logged); only a one-time code is refused while another is paired.
      */
     private val bearer: RunnerBearer? = null,
     /**
@@ -94,6 +96,8 @@ class RunnerLinkServer(
      * in [RunnerInfo] also means "no sign-in problem known", which every key-only harness (no probe) reports.
      */
     private val ownLogin: (harnessId: String) -> Boolean = { false },
+    /** RUNNER-REPAIR-1: the runner's log (its container log): a bearer takeover is said there. */
+    private val log: (String) -> Unit = {},
 ) {
     /** One answer: [type] is [F.REPLY] or [F.ERROR]; [data] is the answer JSON or the reason. */
     data class Answer(val type: String, val data: String) {
@@ -370,13 +374,20 @@ class RunnerLinkServer(
         if (redeemed is PairCodes.Redeem.Refused) return refuse(ANONYMOUS, F.PAIR, null, from, "${F.PAIR} refused: ${redeemed.reason}")
         val authority = (redeemed as PairCodes.Redeem.Ok).authority
         if (request.orchestratorId.isBlank()) return refuse(ANONYMOUS, F.PAIR, null, from, "${F.PAIR} refused: no orchestrator id")
-        store.orchestrator()?.takeIf { it.id != request.orchestratorId }?.let {
+        val previous = store.orchestrator()?.takeIf { it.id != request.orchestratorId }
+        if (previous != null && byBearer == null) {
             return refuse(
                 ANONYMOUS, F.PAIR, null, from,
-                "${F.PAIR} refused: this runner is paired with another orchestrator (${it.name}); run `infantry runner detach` on the runner first",
+                "${F.PAIR} refused: this runner is paired with another orchestrator (${previous.name}) and a one-time code cannot move it. " +
+                    "Paste the runner's bearer instead (`infantry runner bearer` on the runner prints it): the bearer moves the runner to this app",
             )
         }
         val seat = FrameGate.orchestratorSeat(request.orchestratorId)
+        // RUNNER-REPAIR-1: the live bearer moves the runner; the store holds one orchestrator, so issuing below replaces the old one.
+        if (previous != null) {
+            audit.record(seat, PAIR_TAKEOVER, "replaced orchestrator ${previous.name} (${previous.id})", null, from)
+            log("[infantry] runner link: paired with orchestrator ${request.orchestratorName.ifBlank { request.orchestratorId }} by this runner's bearer; it replaces ${previous.name}, whose link stops working")
+        }
         // Only the runner's own record of the code lets a pairing widen its grants; the request can ask, never decide.
         val grantedProjects = if (!authority.grant) emptyList() else wantedProjects.filter { it !in current.projects }
         val ceiling = authority.harnessCeiling.takeIf { it.isNotEmpty() }
@@ -400,6 +411,7 @@ class RunnerLinkServer(
         val answer = F.PairAnswer(
             store.selfId(), runnerName.orEmpty(), credential,
             grantedProjects = grantedProjects, grantedHarnesses = grantedHarnesses, grantRefusal = grantRefusal,
+            replacedOrchestrator = previous?.name,
         )
         return ok(seat, F.PAIR, null, from, F.PairAnswer.serializer(), answer)
     }
@@ -549,6 +561,9 @@ class RunnerLinkServer(
 
         /** RUNNER-GRANT-AT-PAIR-1: the audit operation of a pairing that granted ids (`infantry runner audit` prints it). */
         const val PAIR_GRANT = "runner_link_pair_grant"
+
+        /** RUNNER-REPAIR-1: the audit operation of a bearer pairing that replaced another orchestrator's link. */
+        const val PAIR_TAKEOVER = "runner_link_pair_takeover"
 
         /** RUNNER-GRANT-AT-PAIR-1: what the orchestrator reads when its code carries no grant authority. */
         const val GRANT_NOT_ALLOWED =

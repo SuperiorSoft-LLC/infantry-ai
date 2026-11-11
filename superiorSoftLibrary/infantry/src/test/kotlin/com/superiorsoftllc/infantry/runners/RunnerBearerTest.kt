@@ -108,13 +108,14 @@ class RunnerBearerTest {
     private val server = RunnerLinkServer(
         runnerStore, RunnerAudit(File(dir, RunnerAudit.FILE)) { now }, codes = null,
         settings = { RunnerLinkSettings.Values(projects = listOf("*"), harnesses = listOf("*")) }, runner = { local }, clock = { now },
-        bearer = runnerBearer,
+        bearer = runnerBearer, log = { logged += it },
     )
+    private val logged = mutableListOf<String>()
     private val direct = LinkCall { _, _, id, cred, type, data, _ -> server.handle(type, data, id, cred, PEER) }
     private fun orchestrator(store: RunnerLinkStore = RunnerLinkStore(LinkVault.InMemory())) = store to RunnerPeers(store, direct, clock = { now })
 
     @Test
-    fun `the bearer pairs, the same orchestrator re-adds with it, another is refused, a rotated one is refused`() {
+    fun `the bearer pairs, the same orchestrator re-adds with it, another takes it over, a rotated one is refused`() {
         val secret = runnerBearer.ensure("box").secret
         val (store, peers) = orchestrator()
         val first = peers.add("box", "wss://h:1", secret, FP, "orch")
@@ -127,10 +128,22 @@ class RunnerBearerTest {
         assertTrue(again.credential != first.credential)
         assertTrue(server.handle(F.HELLO, "{}", store.selfId(), again.credential).ok)
 
-        // One orchestrator per runner: another one holding the same bearer is refused while it is paired.
+        // RUNNER-REPAIR-1: holding the live bearer is the owner's authority: another orchestrator takes the runner over (a new app
+        // after a reinstall, a recreated container keeping its volume). The old link's credential stops working, the answer says so.
         val other = server.handle(F.PAIR, pairData(secret, id = "inf-second"), null, null)
-        assertFalse(other.ok)
-        assertTrue(other.data.contains("another orchestrator"), other.data)
+        assertTrue(other.ok, other.data)
+        val taken = F.json.decodeFromString(F.PairAnswer.serializer(), other.data)
+        assertEquals("orch", taken.replacedOrchestrator)
+        assertEquals("inf-second", runnerStore.orchestrator()?.id)
+        assertFalse(server.handle(F.HELLO, "{}", store.selfId(), again.credential).ok, "the replaced orchestrator's credential is refused")
+        assertTrue(server.handle(F.HELLO, "{}", "inf-second", taken.credential).ok)
+        assertTrue(logged.any { "replaces orch" in it }, logged.toString())
+        assertFalse(logged.any { secret in it }, "the log never carries the bearer")
+
+        // A one-time code never moves a runner paired with another orchestrator: only the bearer does.
+        val (_, other2) = orchestrator()
+        val coded = assertFailsWith<LinkFailure> { other2.add("box", "wss://h:1", "nope-not-a-code-xxxxxxxxxxxxxxxx", FP, "third") }
+        assertTrue("inf-second" == runnerStore.orchestrator()?.id, coded.message)
 
         // A wrong or rotated bearer is refused with the fixed text, never the presented value.
         runnerStore.unpair()

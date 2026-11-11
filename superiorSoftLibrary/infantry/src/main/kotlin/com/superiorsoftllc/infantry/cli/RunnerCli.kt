@@ -134,7 +134,8 @@ internal object RunnerCli {
                         out.appendLine("note: the endpoint's host is this machine's own address as it sees it; if the PC reaches it at another address (a server's public IP, a published Docker port), use that host and port in the app")
                     }
                     if (r["rotated"] == "true") out.appendLine("rotated: every earlier bearer is refused from now on")
-                    r["pairedWith"]?.let { out.appendLine("already paired with orchestrator $it (re-adding from it gives a fresh credential; another orchestrator is refused until `infantry runner detach` here)") }
+                    // RUNNER-REPAIR-1: a record, not a live connection (it is printed at every start, connected or not), and never a refusal.
+                    r["pairedWith"]?.let { out.appendLine("last paired with orchestrator $it; pasting this bearer in any app pairs it there and replaces that link") }
                     out.appendLine("runner '${r["name"]}' may run projects ${r.list("projects").ifEmpty { listOf("none") }.joinToString(",")} and harnesses ${r.list("harnesses").ifEmpty { listOf("none") }.joinToString(",")}")
                     out.appendLine("In the app: Settings > Runners > Add runner, paste the endpoint and the bearer.")
                     0
@@ -420,6 +421,7 @@ internal object RunnerCli {
             )
         }
         r["grantRefusal"]?.takeIf { it.isNotBlank() }?.let { out.appendLine("not granted: $it") }
+        r["replaced"]?.takeIf { it.isNotBlank() }?.let { out.appendLine("moved here: the runner was paired with orchestrator $it; that link no longer works") }
         return 0
     }
 

@@ -27,6 +27,8 @@ data class AddOutcome(
     val grantedProjects: List<String> = emptyList(),
     val grantedHarnesses: List<String> = emptyList(),
     val grantRefusal: String? = null,
+    /** RUNNER-REPAIR-1: the orchestrator whose link on the runner this pairing replaced (a bearer takeover); null = none. */
+    val replacedOrchestrator: String? = null,
 )
 
 /**
@@ -122,7 +124,7 @@ class RunnerPeers(
             val paired = record(name, url, pairLink.fingerprint, answer)
             store.saveRunner(paired)
             val granted = grantsOf(answer)
-            return AddOutcome(paired, skipped, granted.grantedProjects, granted.grantedHarnesses, granted.grantRefusal)
+            return AddOutcome(paired, skipped, granted.grantedProjects, granted.grantedHarnesses, granted.grantRefusal, granted.replacedOrchestrator)
         }
         throw LinkFailure("no host of the link answered: ${skipped.joinToString("; ")}${unreachableHint ?: unreachableHint(pairLink)}")
     }

@@ -99,8 +99,9 @@ object RunnerConnect {
         val error = said.lastOrNull { it.startsWith("error:") }?.removePrefix("error:")?.trim()
         if (error != null) {
             if (error.contains("already paired with orchestrator")) {
-                return "that runner is already paired with another orchestrator ($error). To move it here, run `infantry runner detach` " +
-                    "on the runner machine (through the same command), then Connect again."
+                return "that runner is already paired with another orchestrator ($error). To move it here, use Add runner with its " +
+                    "endpoint and bearer (`infantry runner bearer` on the runner prints them), or run `infantry runner detach` on the " +
+                    "runner machine (through the same command), then Connect again."
             }
             if (error.contains("cannot serve the runner link on port")) {
                 return "the runner could not open its link port ($error). Free that port on the runner machine, then Connect again."

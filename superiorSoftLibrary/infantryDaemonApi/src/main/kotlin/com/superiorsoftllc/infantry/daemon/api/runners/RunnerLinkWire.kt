@@ -106,6 +106,11 @@ object RunnerLinkWire {
         val grantedProjects: List<String> = emptyList(),
         val grantedHarnesses: List<String> = emptyList(),
         val grantRefusal: String? = null,
+        /**
+         * RUNNER-REPAIR-1: the orchestrator whose link this pairing replaced (a PAIR with the runner's live bearer from a
+         * different orchestrator takes the runner over; the old link's credential stops working). Null = nothing was replaced.
+         */
+        val replacedOrchestrator: String? = null,
     )
 
     /** One harness on the runner: installed, its models, signed in or not (a yes/no, never the credential). */
