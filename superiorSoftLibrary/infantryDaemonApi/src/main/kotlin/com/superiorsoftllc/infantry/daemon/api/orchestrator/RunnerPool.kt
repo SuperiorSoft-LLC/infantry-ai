@@ -73,6 +73,12 @@ data class StartSpec(
      * uses its own resolved mode under the same rule.
      */
     val toolApproval: String? = null,
+    /**
+     * RUNNER-DOCKER-MATRIX-1 (additive): true when the orchestrator relays this session's prompts to its app
+     * (RUNNER-PROMPT-RELAY-1), so the runner keeps `ask` and the tool-approval card shows on the orchestrator. False = an
+     * orchestrator without the relay: the runner runs `ask` as `deny`, as above.
+     */
+    val promptRelay: Boolean = false,
 )
 
 /** RUNNER-POOL-6: a ticket worktree on the runner: [path], [branch], [base] (a commit), [repoRoot]. */

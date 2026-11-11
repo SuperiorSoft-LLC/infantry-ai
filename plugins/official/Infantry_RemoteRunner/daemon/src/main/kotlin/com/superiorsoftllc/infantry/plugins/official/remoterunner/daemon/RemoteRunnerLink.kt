@@ -63,6 +63,7 @@ class RemoteRunnerLink(private val name: String, private val links: RunnerLinks)
             gitName = spec.gitName,
             gitEmail = spec.gitEmail,
             toolApproval = spec.toolApproval,
+            promptRelay = spec.promptRelay,
         )
         val answer = try {
             links.call(name, F.START, F.json.encodeToString(F.StartRequest.serializer(), request))

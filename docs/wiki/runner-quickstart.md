@@ -13,6 +13,23 @@ Words: the **orchestrator** is the daemon with your board (your PC); the **runne
 docker run -d --name infantry-runner -e INFANTRY_MODE=runner -e INFANTRY_RUNNER_HOST=<this server's address> -p 8790:8790 -v infantry-runner:/data ghcr.io/superiorsoft-llc/infantry-ai:latest
 ```
 
+**Image tag: match your app's channel** (`.github/workflows/release.yml`, job `docker`):
+
+| Your app | Tag | Pushed by |
+|---|---|---|
+| a stable release (`1.3.1`) | `:latest` (or the pinned `:1.3.1`) | every stable release |
+| a nightly (`1.3.2-nightly...`) | `:nightly` (or the pinned `:<nightly version>`) | every green nightly (`.github/workflows/nightly.yml` calls the release workflow) |
+
+A nightly app needs the `:nightly` runner: the link wire is additive, so a runner older than the app works but lacks the newer
+fields (for example the tool-approval prompt relay), and it refuses nothing to warn you. RUNNER-DOCKER-MATRIX-1 ran on the
+nightly. While the GHCR package is private, an anonymous pull answers `unauthorized`: run `docker login ghcr.io` first, or build the
+image yourself from the repository root:
+
+```
+./gradlew :superiorSoftLibrary:infantry:dockerContext
+docker build -t infantry-runner-local superiorSoftLibrary/infantry/build/docker
+```
+
 `docker logs infantry-runner` then shows, between `==== INFANTRY RUNNER ... ====` and `==== END INFANTRY RUNNER ====`:
 
 ```
