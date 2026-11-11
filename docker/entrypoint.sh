@@ -76,6 +76,18 @@ if [ -n "${CLAUDE_CONFIG_DIR:-}" ]; then
   fi
 fi
 
+# HARNESS-ALL-1: pi's (PI_CODING_AGENT_DIR) and opencode's (XDG_DATA_HOME/opencode) logins live in the state volume too. A login
+# made in the old home places is copied over once, only when the new place has none.
+move_login() { # <old dir> <new dir> <file that marks a login> <name>
+  [ -n "$2" ] || return 0
+  (umask 077 && mkdir -p "$2") || { echo "[entrypoint] WARNING: cannot create $2 for $4"; return 0; }
+  if [ ! -s "$2/$3" ] && [ -s "$1/$3" ] && [ "$1" != "$2" ]; then
+    cp -a "$1/." "$2/" && chmod 600 "$2/$3" && echo "[entrypoint] moved the $4 login from $1 to $2 (kept across container recreates)"
+  fi
+}
+move_login "$HOME/.pi/agent" "${PI_CODING_AGENT_DIR:-}" auth.json pi
+[ -z "${XDG_DATA_HOME:-}" ] || move_login "$HOME/.local/share/opencode" "$XDG_DATA_HOME/opencode" auth.json opencode
+
 # sqlite-jdbc and JNA extract their native .so into java.io.tmpdir (/tmp) and dlopen it. Docker mounts a compose `tmpfs:`
 # /tmp NOEXEC, so the load fails ("failed to map segment from shared object") and the daemon cannot open its database.
 # Extract them into the state volume instead (INFANTRY_NATIVE_DIR), which is executable.

@@ -61,6 +61,8 @@ ENV INFANTRY_VERSION=$INFANTRY_VERSION \
     INFANTRY_WEB_DIR=/opt/infantry/web \
     INFANTRY_POLICY_DIRS=/opt/infantry/policies \
     CLAUDE_CONFIG_DIR=/data/claude \
+    PI_CODING_AGENT_DIR=/data/pi \
+    XDG_DATA_HOME=/data/xdg-data \
     JAVA_OPTS="-Xms32m -Xmx512m" \
     INFANTRY_LIMIT_HEALTH_WATCHDOG_FAILURES=3 \
     PATH=/opt/infantry/bin:$PATH
@@ -70,6 +72,9 @@ ENV INFANTRY_VERSION=$INFANTRY_VERSION \
 # RUNNER-LOGIN-1: claude keeps its login (.credentials.json) and config (.claude.json) in CLAUDE_CONFIG_DIR, here in the /data
 # volume, so `docker exec -it <container> claude auth login` survives `docker rm` + `docker run` with the same volume. The
 # daemon and `docker exec` both read it from this ENV. The entrypoint moves a login found in the old place (~/.claude) once.
+# HARNESS-ALL-1: the same for pi (PI_CODING_AGENT_DIR: auth.json from /login, models.json) and opencode (XDG_DATA_HOME:
+# opencode/auth.json from `opencode auth login`, and its sessions). Both kept them in ~/, which a recreate drops. The
+# entrypoint moves the old ~/.pi/agent and ~/.local/share/opencode once.
 # Token: INFANTRY_TOKEN, or the file INFANTRY_TOKEN_FILE; when neither exists the entrypoint generates the file in /data on
 # first start (INFANTRY_TOKEN_AUTO=false = refuse to start instead). The daemon refuses a non-loopback bind without one.
 # WEB-1: the browser client is at http://<host>:8787/. Set INFANTRY_WEB_HOSTS to the host name(s) the browser uses
