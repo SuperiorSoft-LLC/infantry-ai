@@ -332,6 +332,7 @@ class OpenCodeServeSession(
         fun recovered() {
             sawBusy = false
             errored = false
+            errorMessage = null
             recovering = false
         }
         private val userMessages = ConcurrentHashMap.newKeySet<String>()
@@ -339,13 +340,15 @@ class OpenCodeServeSession(
         private val emitted = ConcurrentHashMap.newKeySet<String>()
         @Volatile private var sawBusy = false
         @Volatile private var errored = false
+        /** HARNESS-ALL-1: opencode's own error text (e.g. "Google Generative AI API key is missing..."), the failed turn's reason. */
+        @Volatile private var errorMessage: String? = null
 
         fun end(end: SessionTurnEnd, exitCode: Int?, reason: String?) {
             if (done.compareAndSet(false, true)) out.turnEnded(end, exitCode, reason)
         }
 
         private fun idle() = when {
-            errored -> end(SessionTurnEnd.FAILED, 1, "opencode reported an error")
+            errored -> end(SessionTurnEnd.FAILED, 1, errorMessage ?: "opencode reported an error")
             // An idle with nothing said is not a success: the owner would see a finished turn and no answer.
             !replied -> end(SessionTurnEnd.FAILED, null, noReply(model, stderrTail()))
             else -> end(SessionTurnEnd.COMPLETED, 0, null)
@@ -388,6 +391,7 @@ class OpenCodeServeSession(
                         recovering = false
                     }
                     errored = true
+                    errorMessage = message
                     sawBusy = true
                     emit(buildJsonObject {
                         put("type", "error"); put("timestamp", System.currentTimeMillis()); put("sessionID", sessionId)
