@@ -42,6 +42,8 @@ class PluginGuard(
     private val onTripped: (String) -> Unit = {},
     /** Told once when a probe succeeds and the breaker closes. */
     private val onRecovered: () -> Unit = {},
+    /** BOARD-HANG-1: a recovery probe is cut off after this (at most the hang ceiling), so a hung plugin re-arms the breaker fast. */
+    probeMs: Long = 10_000,
 ) {
     /** PLUGIN-RECOVER-1 breaker: nanoTime the circuit reopens for a probe. */
     @Volatile private var openUntilNs = 0L
@@ -61,8 +63,7 @@ class PluginGuard(
     ).apply { allowCoreThreadTimeOut(true) }
     private val cpu = ManagementFactory.getThreadMXBean()
     private val pollMs = 50L
-    /** BOARD-HANG-1: a recovery probe is cut off after this, not the full hang ceiling, so a hung plugin re-arms the breaker quickly instead of holding "probe in flight" for minutes. */
-    private val probeCeilingMs = minOf(hangCeilingMs, 10_000L)
+    private val probeCeilingMs = minOf(hangCeilingMs, probeMs)
 
     /** Blocking form for plugin-internal threads; daemon request paths use [callSuspending]. */
     fun <T> call(what: String, timeoutMs: Long, block: () -> T): Result<T> = runBlocking { callSuspending(what, timeoutMs, block) }

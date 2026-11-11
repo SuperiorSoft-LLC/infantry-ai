@@ -116,18 +116,20 @@ class BoardTool(private val api: DaemonApi) : DaemonTool {
             val branch = t.branch
             val dir = t.sessionId?.let { byId[it] }?.let { it.repoRoot ?: it.worktreePath }
             if (branch == null || dir == null || System.currentTimeMillis() > deadline) null
-            else runCatching {
-                // BOARD-HANG-1: wait first, with a bound, then read: readText() before waitFor blocked forever on a stuck git.
-                val p = ProcessBuilder("git", "-C", dir, "rev-parse", "--short", branch).redirectErrorStream(true).start()
-                p.outputStream.close()
-                if (!p.waitFor(GIT_CALL_MS, TimeUnit.MILLISECONDS)) { p.destroyForcibly(); null }
-                else if (p.exitValue() != 0) null
-                else p.inputStream.bufferedReader().readText().trim().lines().firstOrNull()?.takeIf { it.isNotBlank() }
-            }.getOrNull()
+            else gitTip(listOf("git", "-C", dir, "rev-parse", "--short", branch), GIT_CALL_MS)
         }
     }
 
     companion object {
+        /** BOARD-HANG-1: runs [command], waits at most [callMs] (then kills it), then reads: first output line, or null on failure/timeout. */
+        internal fun gitTip(command: List<String>, callMs: Long): String? = runCatching {
+            val p = ProcessBuilder(command).redirectErrorStream(true).start()
+            p.outputStream.close()
+            if (!p.waitFor(callMs, TimeUnit.MILLISECONDS)) { p.destroyForcibly(); null }
+            else if (p.exitValue() != 0) null
+            else p.inputStream.bufferedReader().readText().trim().lines().firstOrNull()?.takeIf { it.isNotBlank() }
+        }.getOrNull()
+
         const val BOARD = "infantry_board"
         /** The whole call, git lookups included (a timed-out tool call disables the plugin, so the git work is budgeted below it). */
         const val TIMEOUT_MS = 120_000L
