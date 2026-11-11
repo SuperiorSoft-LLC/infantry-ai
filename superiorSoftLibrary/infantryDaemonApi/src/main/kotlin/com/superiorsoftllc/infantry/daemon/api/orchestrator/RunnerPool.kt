@@ -393,6 +393,17 @@ class RunnerHub(
     /** RUNNER-POOL-8: the sessions this orchestrator placed on runner [runner], sorted. */
     fun sessionsOn(runner: String): List<String> = sessions.entries.filter { it.value == runner }.map { it.key }.sorted()
 
+    /**
+     * BOARD-HANG-2: the sessions this orchestrator placed on a paired remote runner, read from the session index only. Unlike
+     * [runners] it never builds the local runner's hello or health (harness PATH lookups, model lists, settings reads): a session
+     * read calls it on every lookup, so it must stay cheap. No placed session = no lookup of the paired runners at all.
+     */
+    fun remoteSessionIds(): List<String> {
+        if (sessions.isEmpty()) return emptyList()
+        val names = remoteNames().toSet()
+        return sessions.entries.filter { it.value in names }.map { it.key }.sorted()
+    }
+
     /** RUNNER-POOL-8: session [sessionId] is no longer tracked on any runner (it was restarted elsewhere or ended). */
     fun forget(sessionId: String) {
         sessions.remove(sessionId)

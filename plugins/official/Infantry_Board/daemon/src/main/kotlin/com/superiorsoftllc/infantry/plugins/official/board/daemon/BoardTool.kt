@@ -74,8 +74,12 @@ class BoardTool(private val api: DaemonApi) : DaemonTool {
         scope.refusal?.let { return ToolResult("$BOARD refused: $it", isError = true) }
         val tickets = tickets(by, scope).getOrElse { return ToolResult("$BOARD refused: ${it.message}", isError = true) }
         // Each worker as the host shows it to this caller; a worker the caller may not see (or that is gone) reads as gone.
-        val workers = tickets.mapNotNull { it.sessionId }.distinct().mapNotNull { id ->
-            (api.sessionReads.find(id, by) as? SessionsResult.Ok)?.value?.takeIf { it.id == id }
+        // BOARD-HANG-2: ONE scoped list for every worker (each find() rebuilt the host's whole session list, once per ticket); a
+        // worker outside that list (another project's session on this board) still gets its own find(), with its own scope check.
+        val ids = tickets.mapNotNull { it.sessionId }.distinct()
+        val listed = (api.sessionReads.list(by, scope.projectId ?: ReadScope.ALL) as? SessionsResult.Ok)?.value.orEmpty().associateBy { it.id }
+        val workers = ids.mapNotNull { id ->
+            listed[id] ?: (api.sessionReads.find(id, by) as? SessionsResult.Ok)?.value?.takeIf { it.id == id }
         }
         val columns = ToolArgs.string(call.arguments, "columns")?.split(',')?.map { it.trim().lowercase() }?.filter { it.isNotEmpty() }?.toSet()
         val limit = (call.arguments["limit"] as? JsonPrimitive)?.contentOrNull?.trim()?.toIntOrNull()?.takeIf { it > 0 }
