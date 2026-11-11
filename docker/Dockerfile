@@ -60,12 +60,16 @@ ENV INFANTRY_VERSION=$INFANTRY_VERSION \
     INFANTRY_BIN=/opt/infantry/bin \
     INFANTRY_WEB_DIR=/opt/infantry/web \
     INFANTRY_POLICY_DIRS=/opt/infantry/policies \
+    CLAUDE_CONFIG_DIR=/data/claude \
     JAVA_OPTS="-Xms32m -Xmx512m" \
     INFANTRY_LIMIT_HEALTH_WATCHDOG_FAILURES=3 \
     PATH=/opt/infantry/bin:$PATH
 # Ticket 55d60a5e: Docker restarts a container that EXITS, never one that is only unhealthy. The daemon's health watchdog
 # (limits.health.*) asks its own /health every 10 s and halts the JVM (exit 3) after 3 failures in a row, so
 # `restart: unless-stopped` brings it back. INFANTRY_LIMIT_HEALTH_WATCHDOG_FAILURES=0 turns it off.
+# RUNNER-LOGIN-1: claude keeps its login (.credentials.json) and config (.claude.json) in CLAUDE_CONFIG_DIR, here in the /data
+# volume, so `docker exec -it <container> claude auth login` survives `docker rm` + `docker run` with the same volume. The
+# daemon and `docker exec` both read it from this ENV. The entrypoint moves a login found in the old place (~/.claude) once.
 # Token: INFANTRY_TOKEN, or the file INFANTRY_TOKEN_FILE; when neither exists the entrypoint generates the file in /data on
 # first start (INFANTRY_TOKEN_AUTO=false = refuse to start instead). The daemon refuses a non-loopback bind without one.
 # WEB-1: the browser client is at http://<host>:8787/. Set INFANTRY_WEB_HOSTS to the host name(s) the browser uses

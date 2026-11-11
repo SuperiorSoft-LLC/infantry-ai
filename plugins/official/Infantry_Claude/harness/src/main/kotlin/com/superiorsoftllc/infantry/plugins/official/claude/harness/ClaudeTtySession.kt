@@ -62,8 +62,8 @@ class ClaudeTtySession(
     /** G3: [ClaudePermissionHook.TIMEOUT_SETTING], read at every launch. */
     private val approvalHookSeconds: () -> Int = { ClaudePermissionHook.DEFAULT_TIMEOUT_SEC },
     private val permissionHooks: PermissionHookServer = PermissionHookServer(),
-    /** FIRST-RUN-F1: why claude cannot start here (not signed in: [ClaudeSignIn.problem]) given the session env; null = go. */
-    private val signInProblem: (Map<String, String>) -> String? = { null },
+    /** RUNNER-LOGIN-1: readies claude's first-run setup for the session env ([ClaudeSignIn.prepare]); never blocks a launch. */
+    private val prepareSignIn: (Map<String, String>) -> Unit = {},
     /** FIRST-TURN-1: the first turn's deadlines ([ClaudeFirstTurn.SUBMIT_SETTING], [ClaudeFirstTurn.REPLY_SETTING]), read at every connect. */
     private val firstTurn: () -> ClaudeFirstTurn = { ClaudeFirstTurn() },
 ) : HarnessSession {
@@ -116,8 +116,9 @@ class ClaudeTtySession(
             (env + ClaudeCommand.contextLimitEnv(request.contextLimit)).toSortedMap()
 
     override fun launch(request: HarnessRequest, env: Map<String, String>): HarnessProcess {
-        // FIRST-RUN-F1: a claude that never finished its first-run setup would sit on that screen; fail the launch with the fix instead.
-        signInProblem(env)?.let { error(it) }
+        // RUNNER-LOGIN-1: the sign-in check never blocks a start. A CLI with a login gets its first-run setup marked done; one with no
+        // login opens on the setup screen, which the FIRST-RUN-F1 backstop turns into a failed turn carrying the fix and the screen.
+        runCatching { prepareSignIn(env) }
         val stored = request.sessionId?.takeIf { it.isNotBlank() }
         // G2: an id claude never wrote a transcript for cannot be resumed: start it fresh under the same id (no new id to report).
         val recovered = stored != null && !ClaudeResume.resumable(configDir(), request.project, stored)

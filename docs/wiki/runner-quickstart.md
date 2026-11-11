@@ -235,7 +235,9 @@ login`), or run `claude setup-token` on your PC and store the token as the claud
 
 ## 5b. What you must do yourself
 
-- Nothing for credentials (section 5). To sign the agent CLI in on the server instead: `docker exec -it infantry-runner claude login`
+- Nothing for credentials (section 5). To sign the agent CLI in on the server instead: `docker exec -it infantry-runner claude auth login`
+  (the image sets `CLAUDE_CONFIG_DIR=/data/claude`, so the login is in the `/data` volume and survives `docker rm` + `docker run`; Check
+  turns green at the next Check, no restart)
   (claude, opencode and pi are all in the image, on `/usr/local/bin`; `--build-arg INSTALL_CLAUDE=false` leaves claude out, and then `runner check` reports `harness 'claude' is not installed on this runner`).
 - Without `runners.gitSecret` the runner clones with whatever access it has: give it a deploy key, or set the secret.
 - Open the link port to your PC only (firewall or tailnet).

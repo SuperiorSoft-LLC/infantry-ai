@@ -180,6 +180,20 @@ class HarnessCredentials(
 
     /** The declared credentials with no key set: what the first-run step asks for. */
     fun missing(): List<HarnessCredential> = states().filter { !it.set && it.credential.forMode.isEmpty() && !subscription(it.credential.harnessId) }.map { it.credential }
+
+    /**
+     * RUNNER-LOGIN-1: the credentials a launch of [harnessId] warns about ("No API key set"). [missing] for that harness, except when no
+     * auth mode was chosen and the harness's own CLI is signed in (its declared probe, e.g. `claude auth status`, says so): that CLI
+     * answers with its login, so the warning would be false. The probe runs at most once per daemon while unprobed (a manual
+     * `infantry harness auth <id>` refreshes it); unknown keeps the warning.
+     */
+    fun missingAtLaunch(harnessId: String): List<HarnessCredential> {
+        val gaps = missing().filter { it.harnessId == harnessId }
+        if (gaps.isEmpty() || mode(harnessId) != null) return gaps
+        if (declaration(harnessId)?.probeArgv.isNullOrEmpty()) return gaps
+        val status = authStatus(harnessId).takeIf { it.lastProbe > 0L } ?: checkAuth(harnessId)
+        return if (status.signedIn == true) emptyList() else gaps
+    }
 }
 
 /** CLAUDE-AUTH-CHOICE-2: one probe result. [signedIn] null = unknown; [lastProbe] is epoch millis, 0 = never probed. */
