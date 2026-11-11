@@ -66,10 +66,19 @@ class SessionPaneActionTest {
         assertNull(sessionPaneAction(rec(SessionState.FAILED), emptyList()), "the daemon refuses it: nothing to start or resume")
     }
 
-    @Test fun `END-SESSION-1 a session that ends while open shows the Resume splash, a live one does not`() {
+    // SESSION-FAIL-VISIBLE-1: FAILED left the splash: a failed session keeps its transcript under the failure card.
+    @Test fun `END-SESSION-1 a session that ends while open shows the Resume splash, a live or failed one does not`() {
         for (st in SessionState.values()) {
             val r = rec(st, psid = "p")
-            assertEquals(st in ENDED_STATES, com.superiorsoftllc.infantry.ui.model.showsResumeSplash(r, sessionPaneAction(r, emptyList())), "state $st")
+            assertEquals(st in ENDED_STATES && st != SessionState.FAILED, com.superiorsoftllc.infantry.ui.model.showsResumeSplash(r, sessionPaneAction(r, emptyList())), "state $st")
         }
+    }
+
+    @Test fun `SESSION-FAIL-VISIBLE-1 a failed session names its exact error, any other state none`() {
+        for (st in SessionState.values()) {
+            val r = rec(st).copy(lastError = "Claude Code is not signed in.")
+            assertEquals(if (st == SessionState.FAILED) "Claude Code is not signed in." else null, com.superiorsoftllc.infantry.ui.model.sessionFailure(r), "state $st")
+        }
+        assertEquals(com.superiorsoftllc.infantry.ui.model.SESSION_FAILED_NO_REASON, com.superiorsoftllc.infantry.ui.model.sessionFailure(rec(SessionState.FAILED)))
     }
 }

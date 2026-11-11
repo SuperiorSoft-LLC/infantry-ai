@@ -60,6 +60,8 @@ internal fun FeedSection(ctx: TabContext) {
             onResume = onResume,
             floaters = floaters,
             emptyHint = if (state.projects.isEmpty()) FIRST_RUN_HINT else NO_SESSION_HINT,
+            // SESSION-FAIL-VISIBLE-1: Retry on the failure card, in place, for the same session.
+            onRetry = agent?.let { a -> failedSessionRetry(a, feedPaneAction(a, state.tickets), onResume, onApplyStart) { scope.launch { controller.restartSession(a.id, confirmed = true) } } },
             // CHAT-SENDING-1: this session's just-sent messages ("sending...", "not sent - retry") until the daemon's echo.
             pending = PendingSendsView(
                 agent?.let { state.pendingSendsFor(it.id) }.orEmpty(),
@@ -76,6 +78,26 @@ internal fun FeedSection(ctx: TabContext) {
                 onLater = { controller.dismissQuestions(); onLater() },
             )
         }
+    }
+}
+
+/**
+ * SESSION-FAIL-VISIBLE-1: what Retry on a failed session's card does, or null when it did not fail. A session with a
+ * conversation resumes it; a ticket worker that never got going starts its ticket's plan again; any other session is
+ * restarted in place ([restart]: same id and settings, back to a fresh first turn, so the next message or Start runs it).
+ */
+fun failedSessionRetry(
+    agent: com.superiorsoftllc.infantry.ui.model.AgentView,
+    action: SessionPaneAction?,
+    onResume: (String) -> Unit,
+    onApplyStart: (StartPlan) -> Unit,
+    restart: () -> Unit,
+): (() -> Unit)? {
+    if (agent.session.state != com.superiorsoftllc.infantry.ui.protocol.SessionState.FAILED) return null
+    return when (action) {
+        is SessionPaneAction.Resume -> ({ onResume(action.sessionId) })
+        is SessionPaneAction.Start -> ({ onApplyStart(action.plan) })
+        null -> restart
     }
 }
 
