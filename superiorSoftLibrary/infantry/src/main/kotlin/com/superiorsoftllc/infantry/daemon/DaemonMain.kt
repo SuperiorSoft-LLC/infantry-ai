@@ -1096,7 +1096,7 @@ class InfantryDaemon(
             )
             val runnerPool = com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerHub(localRunnerLink, remotes = { runnerLinksRef.get().paired() },
                 lend = credentialLender::lend, lentKeys = credentialLender::lentKeys)
-            val remoteMirror = com.superiorsoftllc.infantry.runners.RemoteSessionMirror(sessionIds = { runnerPool.runners().filter { it.name != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL }.flatMap { runnerPool.sessionsOn(it.name) } })
+            val remoteMirror = com.superiorsoftllc.infantry.runners.RemoteSessionMirror(sessionIds = { runnerPool.remoteSessionIds() }) // BOARD-HANG-2: the index only, never the local hello
             // RUNNER-PROMPT-RELAY-1: a runner session's prompt is shown and answered in the orchestrator's app. Runner side: the prompts of
             // the orchestrator's sessions go to the outbox and run no timer here; orchestrator side: the watch relays them (below).
             val promptRelay = com.superiorsoftllc.infantry.runners.RunnerPromptRelay(
