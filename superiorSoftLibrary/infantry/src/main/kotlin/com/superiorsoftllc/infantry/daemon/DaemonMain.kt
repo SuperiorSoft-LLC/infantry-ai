@@ -990,8 +990,26 @@ class InfantryDaemon(
                 }
             })
             harnessCredentialsRef.set(harnessCredentials)
+            // SECRETS-2b: the user secret names a run (and a render) in a project can use: the app scope, then the project's own.
+            val runSecretNames: (String?) -> Map<String, String> = { project -> buildMap {
+                keystore.names().filter { n -> KeystoreHandler.DEFAULT.none { it.name == n } }.forEach { put(it, Keystore.SCOPE_APP) }
+                if (!project.isNullOrBlank()) runCatching { keystore.names(project) }.getOrDefault(emptyList()).forEach { put(it, Keystore.SCOPE_PROJECT) }
+            } }
+            // RUNNER-CRED-1 (runner side): the secrets an orchestrator lent the sessions it started here, in memory, while the session lives.
+            val lentCredentials = com.superiorsoftllc.infantry.runners.LentCredentials(alive = { manager.get(it) != null })
+            // RUNNER-CRED-1 (orchestrator side): the harness key, the project's secrets and the git credential a remote start lends.
+            val credentialLender = com.superiorsoftllc.infantry.runners.CredentialLender(
+                lendsTo = { settings.runnerLink().lendsTo(it) },
+                harnessEnv = { id, project -> harnessCredentials.env(id, project) },
+                harnessIds = { harnessCredentials.declared().map { it.harnessId }.distinct() },
+                secretNames = { project -> runSecretNames(project).keys },
+                secret = { name, project -> KeystoreHandler.projectRunSecrets(keystore)(name, project) },
+                gitSecret = { settings.runnerLink().gitSecret },
+                maxSecrets = { settings.limit(LimitRegistry.RUNNERS_LEND_SECRETS_MAX).toInt() },
+            )
             // HARNESS-GAP G18: every known secret value is masked in all session output (chat rows, transcript, raw stream, a terminal's screen).
-            manager.outputMask = com.superiorsoftllc.infantry.keystore.SecretMask(keystore::allValues)
+            // RUNNER-CRED-1: what an orchestrator lent sessions here is masked as well as this keystore's own values.
+            manager.outputMask = com.superiorsoftllc.infantry.keystore.SecretMask(com.superiorsoftllc.infantry.keystore.SecretMask.union(keystore::allValues, manager::lentEnvValues, lentCredentials::values))
             // POLICY-1: "restricted" follows the ACTIVE preset (a Settings switch included), read per call. A seated preset is
             // always restricted (secrets locked), as the seated lockdown was before it became a plugin.
             val locked: () -> Boolean = { policies.current.let { it.restricted == true || it.seats != null } }
@@ -1076,7 +1094,8 @@ class InfantryDaemon(
                     answerPrompt = { id, reply -> pendingPrompts.answerRelayed(id, reply, com.superiorsoftllc.infantry.daemon.FrameGate.ORCHESTRATOR_SEAT_PREFIX + "link") },
                 ),
             )
-            val runnerPool = com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerHub(localRunnerLink, remotes = { runnerLinksRef.get().paired() })
+            val runnerPool = com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerHub(localRunnerLink, remotes = { runnerLinksRef.get().paired() },
+                lend = credentialLender::lend, lentKeys = credentialLender::lentKeys)
             val remoteMirror = com.superiorsoftllc.infantry.runners.RemoteSessionMirror(sessionIds = { runnerPool.runners().filter { it.name != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL }.flatMap { runnerPool.sessionsOn(it.name) } })
             // RUNNER-PROMPT-RELAY-1: a runner session's prompt is shown and answered in the orchestrator's app. Runner side: the prompts of
             // the orchestrator's sessions go to the outbox and run no timer here; orchestrator side: the watch relays them (below).
@@ -1248,7 +1267,7 @@ class InfantryDaemon(
             // SECRETS-1 / SECRETS-2: the keystore's frames; a restricted policy refuses every change.
             val keystoreFrames = KeystoreHandler(
                 keystore = keystore,
-                extraKnown = { harnessCredentials.declared().map { com.superiorsoftllc.infantry.keystore.KnownSecret(it.secretName, "${it.label} API key", help = it.help, authModes = it.authModes, authMode = { harnessCredentials.mode(it.harnessId).orEmpty() }, loginCommand = it.loginCommand, signedIn = { harnessCredentials.authStatus(it.harnessId).word }, lastProbe = { harnessCredentials.authStatus(it.harnessId).lastProbe }, usesSecret = { harnessCredentials.usesSecret(it.harnessId, it.credId).orEmpty() }) } },
+                extraKnown = { harnessCredentials.declared().map { com.superiorsoftllc.infantry.keystore.KnownSecret(it.secretName, if (it.forMode.isEmpty()) "${it.label} API key" else it.label, help = it.help, authModes = it.authModes, authMode = { harnessCredentials.mode(it.harnessId).orEmpty() }, loginCommand = it.loginCommand, signedIn = { harnessCredentials.authStatus(it.harnessId).word }, lastProbe = { harnessCredentials.authStatus(it.harnessId).lastProbe }, usesSecret = { harnessCredentials.usesSecret(it.harnessId, it.credId).orEmpty() }) } },
                 authCheck = { secretName -> harnessCredentials.declared().firstOrNull { it.secretName == secretName }?.let { harnessCredentials.checkAuth(it.harnessId) } },
                 restricted = locked,
                 push = { envelope -> for (client in clients) client.trySend(envelope) },
@@ -1759,10 +1778,11 @@ class InfantryDaemon(
                             // SEC-FIX-1 H1(b): user secrets only; a built-in (the update token) never reaches a run.
                             secrets = KeystoreHandler.runSecrets({ keystore.fields(it) }),
                             // SECRETS-2b: a project's run resolves a name in that project first, then the app scope.
-                            projectSecrets = KeystoreHandler.projectRunSecrets(keystore),
+                            // RUNNER-CRED-1: this runner's own keystore first, then what an orchestrator lent a live session of the project.
+                            projectSecrets = KeystoreHandler.projectRunSecrets(keystore).let { own -> { name: String, project: String? -> own(name, project) ?: lentCredentials.secretFields(name, project) } },
                             secretNames = { project -> buildMap {
-                                keystore.names().filter { n -> KeystoreHandler.DEFAULT.none { it.name == n } }.forEach { put(it, Keystore.SCOPE_APP) }
-                                if (!project.isNullOrBlank()) runCatching { keystore.names(project) }.getOrDefault(emptyList()).forEach { put(it, Keystore.SCOPE_PROJECT) }
+                                lentCredentials.secretNames(project).forEach { put(it, com.superiorsoftllc.infantry.runners.LentCredentials.SCOPE) }
+                                putAll(runSecretNames(project))
                             } },
                         ),
                         // PLUGIN-MCP-1: api.plugins, the plugin manager on this host's plugins root (reads; install only on the owner's yes).
@@ -2055,11 +2075,15 @@ class InfantryDaemon(
             val runnerLinkService = com.superiorsoftllc.infantry.runners.RunnerLinkService(
                 daemonStateDir, settings::limit, settings::runnerLink, localRunnerLink, transport = { plugins.runnerLinkTransport() },
                 starts = remoteStarts,
+                lent = lentCredentials,
                 forwarder = frameForwarder,
                 pump = forwardPump,
                 mode = { deploymentMode.id },
             )
             runnerLinksRef.set(runnerLinkService.links)
+            runnerLinkService.lentKeysOf = credentialLender::lentKeys
+            runnerLinkService.lentGitOf = credentialLender::lentGit
+            runnerLinkService.ownLoginOf = { id -> harnessCredentials.mode(id) == com.superiorsoftllc.infantry.harness.credential.HarnessCredential.MODE_SUBSCRIPTION }
             plugins.runnerLinks = runnerLinkService.links
             // RUNNER-POOL-10: the rows of the Runners card (`runner_admin` op `list`): health, workers / cap, paused.
             runnerLinkService.enabledNow = settings::runnersEnabled

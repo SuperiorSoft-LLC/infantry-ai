@@ -64,6 +64,8 @@ class RunnerLinkServer(
     private val limit: (LimitDef) -> Long = { it.default },
     /** RUNNER-CHECK-1: the git seam the check's `ls-remote` runs through, built with that call's timeout in ms. */
     private val git: (timeoutMs: Long) -> GitCli = { ms -> SystemGitCli(ms) },
+    /** RUNNER-CRED-1: the same seam with the extra env a lent git credential adds ([LentCredentials.gitEnv]), for the check's `git` row. */
+    private val authedGit: (timeoutMs: Long, env: Map<String, String>) -> GitCli = { ms, env -> SystemGitCli(ms, extraEnv = env) },
     /** RUNNER-CHECK-1: folder the check's disk row looks at and its `ls-remote` runs in (`runners.cloneRoot`). */
     private val cloneRoot: () -> File = { File(System.getProperty("user.home")) },
     /** RUNNER-GRANT-AT-PAIR-1: the harness ids installed on this runner (the ceiling's default and the intersection's bound). */
@@ -80,6 +82,18 @@ class RunnerLinkServer(
      * one-time code (no grant authority) and may pair again: the same orchestrator gets a fresh credential, another is refused.
      */
     private val bearer: RunnerBearer? = null,
+    /**
+     * RUNNER-CRED-1: where the secrets an orchestrator lends a start are kept (memory only) for renders in that session's project;
+     * null = a lent secret is dropped. The harness key goes into the start spec ([StartSpec.credentials], the session's launches),
+     * the git credential to [starts]. `runner.acceptCredentials` false ignores every loan.
+     */
+    private val lent: LentCredentials? = null,
+    /**
+     * RUNNER-CRED-1: the runner's owner chose its own login for this harness here (`harness.<id>.authMode` =
+     * `subscription-login` on the runner), so a lent key must not replace it. A positive choice only: a harness's "signed in"
+     * in [RunnerInfo] also means "no sign-in problem known", which every key-only harness (no probe) reports.
+     */
+    private val ownLogin: (harnessId: String) -> Boolean = { false },
 ) {
     /** One answer: [type] is [F.REPLY] or [F.ERROR]; [data] is the answer JSON or the reason. */
     data class Answer(val type: String, val data: String) {
@@ -207,10 +221,12 @@ class RunnerLinkServer(
         rows += contractRow(r.contract)
         val wanted = r.harness?.takeIf { it.isNotBlank() }
         val installed = (runner()?.hello() as? OrchestratorReply.Ok)?.value?.harnesses.orEmpty()
-        if (wanted != null) rows += harnessRow(wanted, installed.firstOrNull { it.id == wanted }) else installed.forEach { rows += harnessRow(it.id, it) }
+        val lentKey = { id: String -> id in r.lentKeys }
+        if (wanted != null) rows += harnessRow(wanted, installed.firstOrNull { it.id == wanted }, lentKey(wanted), allowed.acceptCredentials)
+        else installed.forEach { rows += harnessRow(it.id, it, lentKey(it.id), allowed.acceptCredentials) }
         r.projectId?.takeIf { it.isNotBlank() }?.let { rows += grantRow("grant:project", RunnerLinkSettings.PROJECTS, it, allowed.projects) }
         if (wanted != null) rows += grantRow("grant:harness", RunnerLinkSettings.HARNESSES, wanted, allowed.harnesses)
-        r.gitRemote?.takeIf { it.isNotBlank() }?.let { rows += gitRow(it) }
+        r.gitRemote?.takeIf { it.isNotBlank() }?.let { rows += gitRow(it, r.git?.takeIf { allowed.acceptCredentials }) }
         rows += identityRow(allowed, identity(r.gitName, r.gitEmail))
         rows += diskRow()
         return ok(seat, F.CHECK, null, from, F.CheckAnswer.serializer(), F.CheckAnswer(rows))
@@ -224,10 +240,27 @@ class RunnerLinkServer(
         )
     }
 
-    private fun harnessRow(id: String, harness: RunnerHarness?): F.CheckRow = when {
+    /** RUNNER-CRED-1: this runner's owner chose [harness]'s own login here, so a lent key does not replace it. */
+    private fun keepsOwnLogin(harness: String?): Boolean {
+        val id = harness?.takeIf { it.isNotBlank() } ?: return false
+        return runCatching { ownLogin(id) }.getOrDefault(false)
+    }
+
+    private fun harnessRow(id: String, harness: RunnerHarness?, lentKey: Boolean = false, accepts: Boolean = true): F.CheckRow = when {
         harness == null -> F.CheckRow(
             "harness:$id", false, "harness '$id' is not installed on this runner",
-            "install the $id CLI on this runner, then sign it in there (logins never travel from the orchestrator)",
+            "install the $id CLI on this runner (use the runner image, which carries it)",
+        )
+        // RUNNER-CRED-1: the orchestrator lends its API key with each start, so no login is needed here.
+        lentKey && accepts && keepsOwnLogin(id) ->
+            F.CheckRow("harness:$id", true, "harness '$id' is installed; this runner keeps its own login (${com.superiorsoftllc.infantry.harness.credential.HarnessCredential.MODE_SUBSCRIPTION}), not the key the app lends")
+        lentKey && accepts && harness.loggedIn ->
+            F.CheckRow("harness:$id", true, "harness '$id' is installed; the app lends its API key with each start")
+        !harness.loggedIn && lentKey && accepts ->
+            F.CheckRow("harness:$id", true, "harness '$id' is installed; not signed in here, the app lends its API key with each start")
+        !harness.loggedIn && lentKey -> F.CheckRow(
+            "harness:$id", false, "harness '$id' is installed but not signed in, and this runner ignores the key the app lends (${RunnerLinkSettings.ACCEPT_CREDENTIALS} is false)",
+            "on this runner: infantry settings set ${RunnerLinkSettings.ACCEPT_CREDENTIALS} true (or sign $id in there)",
         )
         !harness.loggedIn -> F.CheckRow(
             "harness:$id", false,
@@ -252,19 +285,22 @@ class RunnerLinkServer(
         )
     }
 
-    private fun gitRow(remote: String): F.CheckRow {
+    private fun gitRow(remote: String, lent: com.superiorsoftllc.infantry.daemon.api.orchestrator.GitCredential? = null): F.CheckRow {
         val timeoutMs = limit(LimitRegistry.RUNNERS_CHECK_GIT_SEC) * MS_PER_SECOND
         val fix = "give the runner read+push access to ${scrubCredentials(remote)} (a deploy key or a token), then run this check again"
         val dir = cloneRoot().let { it.takeIf { d -> d.isDirectory } ?: it.absoluteFile.parentFile } ?: File(".")
-        val result = runCatching { git(timeoutMs).run(dir, listOf("ls-remote", "--heads", remote)) }.getOrElse {
+        // RUNNER-CRED-1: with a lent credential, the check proves the access a worker will have (header via env, memory only).
+        val seam = if (lent == null) git(timeoutMs) else authedGit(timeoutMs, LentCredentials.gitEnv(lent))
+        val via = if (lent == null) "" else " with the git credential the app lends"
+        val result = runCatching { seam.run(dir, listOf("ls-remote", "--heads", remote)) }.getOrElse {
             return F.CheckRow("git", false, "git could not run on this runner: ${scrubCredentials(it.message.orEmpty())}", fix)
         }
         if (result.ok) {
             val heads = result.out().lines().count { it.isNotBlank() }
-            return F.CheckRow("git", true, "${scrubCredentials(remote)} is reachable ($heads branch heads read)")
+            return F.CheckRow("git", true, "${scrubCredentials(remote)} is reachable$via ($heads branch heads read)")
         }
         val reason = scrubCredentials(result.err().lines().firstOrNull { it.isNotBlank() }.orEmpty())
-        return F.CheckRow("git", false, "git ls-remote exited ${result.exitCode}${if (reason.isEmpty()) "" else ": $reason"}", fix)
+        return F.CheckRow("git", false, "git ls-remote$via exited ${result.exitCode}${if (reason.isEmpty()) "" else ": $reason"}", fix)
     }
 
     /**
@@ -384,6 +420,11 @@ class RunnerLinkServer(
         }
         if (why != null) return refuse(seat, F.START, r.ticketId, from, "${F.START} refused: $why")
         val link = runner() ?: return refuse(seat, F.START, r.ticketId, from, "${F.START} refused: this runner has no local runner")
+        // RUNNER-CRED-1: what the orchestrator lent, screened (env names a harness may use, user secret names, one-line git token).
+        val screened = r.credentials?.takeIf { allowed.acceptCredentials && !it.isEmpty }
+            ?.let { LentCredentials.screen(it, limit(LimitRegistry.RUNNERS_LEND_SECRETS_MAX).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()) }
+            ?.let { sc -> if (sc.credentials.env.isNotEmpty() && keepsOwnLogin(r.provider)) sc.ownLogin() else sc }
+        val gitCredential = screened?.credentials?.git
         // RUNNER-POOL-6: a start with a git remote runs in a ticket worktree this runner cuts in its own clone of that remote.
         var ticketlessRepo: java.io.File? = null
         val worktree = r.gitRemote?.takeIf { it.isNotBlank() }?.let { remote ->
@@ -391,12 +432,12 @@ class RunnerLinkServer(
             val ticket = r.ticketId?.takeIf { it.isNotBlank() }
             if (ticket == null) {
                 // RUNNER-AGENT-1: a spawn start (no ticket) runs in the project clone, no ticket branch.
-                try { ticketlessRepo = s.cloneDir(remote, r.projectId) } catch (e: IllegalArgumentException) {
+                try { ticketlessRepo = s.cloneDir(remote, r.projectId, gitCredential) } catch (e: IllegalArgumentException) {
                     return refuse(seat, F.START, null, from, "${F.START} refused: ${e.message}")
                 }
                 null
             } else try {
-                s.checkout(remote, r.projectId, ticket, r.title ?: ticket, r.base, r.branch)
+                s.checkout(remote, r.projectId, ticket, r.title ?: ticket, r.base, r.branch, credential = gitCredential)
             } catch (e: IllegalArgumentException) {
                 return refuse(seat, F.START, ticket, from, "${F.START} refused: ${e.message}")
             }
@@ -410,13 +451,18 @@ class RunnerLinkServer(
             repo = ticketlessRepo?.path,
             prompt = r.prompt, title = r.title, envNames = r.envNames, worktree = worktree, toolApproval = r.toolApproval,
             promptRelay = r.promptRelay,
+            // RUNNER-CRED-1: only the harness key travels in the spec (the session's launches); secrets and git stay here.
+            credentials = screened?.credentials?.env?.takeIf { it.isNotEmpty() }?.let { com.superiorsoftllc.infantry.daemon.api.orchestrator.SessionCredentials(env = it) },
         )
         return when (val reply = link.startSession(spec)) {
             is OrchestratorReply.Ok -> {
-                val result = reply.value.refusal?.let { "refused: $it" } ?: "ok ${reply.value.sessionId.orEmpty()}".trim()
+                // RUNNER-CRED-1: the audit names what was lent (names only, never a value).
+                val lentNote = screened?.summary()?.takeIf { it.isNotEmpty() }?.let { " (lent: $it)" }.orEmpty()
+                val result = (reply.value.refusal?.let { "refused: $it" } ?: "ok ${reply.value.sessionId.orEmpty()}".trim()) + lentNote
                 audit.record(seat, F.START, result, r.ticketId, from)
                 val sessionId = reply.value.sessionId
-                if (sessionId != null && worktree != null) starts?.started(sessionId, worktree, r.pushOnCommit)
+                if (sessionId != null && screened != null) lent?.lend(sessionId, r.projectId, screened.credentials)
+                if (sessionId != null && worktree != null) starts?.started(sessionId, worktree, r.pushOnCommit, gitCredential)
                 if (sessionId != null) starts?.linked(sessionId)
                 Answer(
                     F.REPLY,
@@ -450,7 +496,7 @@ class RunnerLinkServer(
         val link = runner() ?: return refuse(seat, F.REMOVE, null, from, "${F.REMOVE} refused: this runner has no local runner")
         return when (val reply = link.removeSession(r.sessionId)) {
             is OrchestratorReply.Ok -> {
-                if (reply.value) starts?.forget(r.sessionId)
+                if (reply.value) { starts?.forget(r.sessionId); lent?.release(r.sessionId) }
                 ok(seat, F.REMOVE, null, from, F.RemoveAnswer.serializer(), F.RemoveAnswer(reply.value))
             }
             is OrchestratorReply.Unavailable -> refuse(seat, F.REMOVE, null, from, "${F.REMOVE} unavailable: ${reply.reason}")

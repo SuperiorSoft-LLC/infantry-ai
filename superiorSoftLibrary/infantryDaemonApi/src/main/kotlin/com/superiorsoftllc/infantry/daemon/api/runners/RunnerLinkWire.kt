@@ -32,8 +32,11 @@ object RunnerLinkWire {
      * fields (defaults) and grants nothing; an older orchestrator sends none.
      * 1.7.0 (RUNNER-PROMPT-RELAY-1): [PROMPT_ANSWER], and the `prompt` / `prompt_resolved` event kinds: a session on the runner that asks
      * a human (a tool approval, a question) is shown in the orchestrator's app, and the owner's answer comes back with this frame.
+     * 1.8.0 (RUNNER-CRED-1): [StartRequest.credentials], what the orchestrator lends the session (harness key env, the secrets it
+     * may render, the git credential of its remote), held in the runner's memory for that session only. An older runner ignores it
+     * (and needs its own keys, as before); an older orchestrator sends none.
      */
-    const val CONTRACT = "1.7.0"
+    const val CONTRACT = "1.8.0"
 
     /**
      * RUNNER-PROMPT-RELAY-1 (contract 1.7.0): the orchestrator's answer to a prompt a session of its own raised on this runner (the
@@ -129,7 +132,8 @@ object RunnerLinkWire {
      * A remote start: the subset of a start spec an orchestrator may name. A runner path is never taken from the wire. With
      * [gitRemote] the runner clones (or fetches) that remote into its clone cache and cuts the ticket's worktree there
      * ([title], [base], [branch] = the branch the ticket already holds); [prompt] is the composed first turn. [envNames] are the
-     * environment variable NAMES the session needs: the runner fills them from its own store, values never cross.
+     * environment variable NAMES the session needs: the runner fills them from its own store. RUNNER-CRED-1: values cross only
+     * in [credentials].
      */
     @Serializable
     data class StartRequest(
@@ -161,7 +165,15 @@ object RunnerLinkWire {
         val toolApproval: String? = null,
         /** RUNNER-DOCKER-MATRIX-1 (additive): the orchestrator relays this session's prompts ([StartSpec.promptRelay]); false = an older one. */
         val promptRelay: Boolean = false,
-    )
+        /**
+         * RUNNER-CRED-1 (contract 1.8.0, additive): the credentials lent to this session; null = none (the runner uses its own).
+         * The ONLY field of the link that carries secret values: it crosses only the pinned, authenticated link, and no party
+         * logs it ([toString] names keys only).
+         */
+        val credentials: com.superiorsoftllc.infantry.daemon.api.orchestrator.SessionCredentials? = null,
+    ) {
+        override fun toString(): String = "StartRequest(startId=$startId, projectId=$projectId, provider=$provider, ticketId=$ticketId, credentials=$credentials)"
+    }
 
     /**
      * [branch] / [base] are the ticket branch the runner cut or reused (null without a git remote). RUNNER-WORKTREE-PATH-1 (additive):
@@ -246,6 +258,17 @@ object RunnerLinkWire {
         /** RUNNER-GIT-IDENT-1 (additive): the identity a start would carry ([StartRequest.gitName]), for the `git:identity` row. */
         val gitName: String? = null,
         val gitEmail: String? = null,
+        /**
+         * RUNNER-CRED-1 (additive): the harness ids whose API key the orchestrator lends this runner at each start, so a harness
+         * that is installed but not signed in here is ready anyway (unless `runner.acceptCredentials` is false). Names only.
+         */
+        val lentKeys: List<String> = emptyList(),
+        /**
+         * RUNNER-CRED-1 (additive): the git credential a start would lend ([SessionCredentials.git]), so the `git` row's
+         * `ls-remote` proves the access a worker will really have. Used for that one call, in memory; never stored or logged
+         * (its toString is redacted). Null when the orchestrator lends none to this runner.
+         */
+        val git: com.superiorsoftllc.infantry.daemon.api.orchestrator.GitCredential? = null,
     )
 
     /**

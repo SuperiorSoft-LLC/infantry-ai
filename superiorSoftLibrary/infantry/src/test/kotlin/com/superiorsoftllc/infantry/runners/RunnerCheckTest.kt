@@ -53,6 +53,8 @@ class RunnerCheckTest {
     private val gitCalls = mutableListOf<List<String>>()
     private var ownIdentity: Pair<String, String>? = null
     private val gitTimeouts = mutableListOf<Long>()
+    /** RUNNER-CRED-1: the env each credentialed check git ran with. */
+    private val authedEnvs = mutableListOf<Map<String, String>>()
     private val harnesses = listOf(RunnerHarness("alpha", listOf("m1"), loggedIn = false), RunnerHarness("echo", loggedIn = true))
 
     private val local = object : RunnerLink {
@@ -67,6 +69,7 @@ class RunnerCheckTest {
         runnerStore, audit, codes, settings = { settings }, runner = { local }, clock = { now },
         limit = { def -> limits[def.key] ?: def.default },
         git = { ms -> gitTimeouts += ms; GitCli { _, args -> gitCalls += args; gitResult } },
+        authedGit = { ms, env -> gitTimeouts += ms; authedEnvs += env; GitCli { _, args -> gitCalls += args; gitResult } },
         cloneRoot = { cloneRoot },
         ownGitIdentity = { ownIdentity },
     )
@@ -89,15 +92,35 @@ class RunnerCheckTest {
         contract: String? = F.CONTRACT,
         gitName: String? = null,
         gitEmail: String? = null,
+        git: com.superiorsoftllc.infantry.daemon.api.orchestrator.GitCredential? = null,
     ): List<CheckRow> {
         val (store, credential) = pair()
-        val request = F.CheckRequest(projectId = project, harness = harness, gitRemote = gitRemote, contract = contract, gitName = gitName, gitEmail = gitEmail)
+        val request = F.CheckRequest(projectId = project, harness = harness, gitRemote = gitRemote, contract = contract, gitName = gitName, gitEmail = gitEmail, git = git)
         val answer = server.handle(F.CHECK, F.json.encodeToString(F.CheckRequest.serializer(), request), store.selfId(), credential)
         assertTrue(answer.ok, answer.data)
         return F.json.decodeFromString(F.CheckAnswer.serializer(), answer.data).rows
     }
 
     private fun row(rows: List<CheckRow>, id: String): CheckRow = assertNotNull(rows.firstOrNull { it.id == id }, "no row '$id' in ${rows.map { it.id }}")
+
+    @Test
+    fun `a lent git credential is what the git row checks with, through env only, and never shows`() {
+        val token = "tok-check-123456"
+        val lent = com.superiorsoftllc.infantry.daemon.api.orchestrator.GitCredential(token)
+        val ok = row(checkRows(gitRemote = "https://git.example/p.git", git = lent), "git")
+        assertTrue(ok.ok && ok.detail.contains("lends"), ok.detail)
+        val env = authedEnvs.single()
+        assertEquals("http.extraHeader", env["GIT_CONFIG_KEY_0"])
+        assertTrue(env["GIT_CONFIG_VALUE_0"]!!.startsWith("Authorization: Basic "), "the token goes as a header")
+        assertFalse(gitCalls.single().any { token in it }, "never in argv: ${gitCalls.single()}")
+        assertFalse(ok.detail.contains(token))
+
+        // A runner that refuses loans checks with its own access.
+        settings = settings.copy(acceptCredentials = false)
+        assertFalse(row(checkRows(gitRemote = "https://git.example/p.git", git = lent), "git").detail.contains("lends"))
+        assertEquals(1, authedEnvs.size)
+        assertFalse(F.CheckRequest(git = lent).toString().contains(token))
+    }
 
     @Test
     fun `the contract row compares the runner's contract with the orchestrator's`() {

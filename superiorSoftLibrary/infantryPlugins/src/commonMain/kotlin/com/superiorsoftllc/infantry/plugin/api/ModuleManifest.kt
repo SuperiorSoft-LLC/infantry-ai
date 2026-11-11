@@ -228,6 +228,12 @@ data class HarnessCredentialDeclaration(
     val id: String? = null,
     /** HARNESS-MULTI-CREDENTIAL-1: the provider this key is for, appended to the label so several keys read apart. */
     val provider: String? = null,
+    /**
+     * RUNNER-CRED-1: the `harness.authModes` entry this credential serves (e.g. `subscription-login` for a subscription token a
+     * CLI accepts in place of an interactive login); null = an API key. It goes to a session only while the harness runs in that
+     * mode, an API key only outside it, and it is never reported missing.
+     */
+    val forMode: String? = null,
 )
 
 /**

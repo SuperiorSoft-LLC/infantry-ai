@@ -48,6 +48,23 @@ object RunnerLinkSettings {
      */
     const val GIT_NAME = "runner.gitName"
     const val GIT_EMAIL = "runner.gitEmail"
+    /**
+     * RUNNER-CRED-1 (orchestrator side): the paired runners this app LENDS credentials to at each start (the harness key, the
+     * secrets a session may render, the git credential of `runners.gitSecret`). Default `["*"]` = every paired runner, so a remote
+     * runner is two steps (`docker run`, then endpoint and bearer); `[]` = none, each runner then needs its own keys.
+     */
+    const val LEND_CREDENTIALS = "runners.lendCredentials"
+    /**
+     * RUNNER-CRED-1 (orchestrator side): the name of a keystore secret holding the HTTPS git credential a remote runner clones and
+     * pushes the ticket's remote with: field `token` (or its only field) and optional `username` (default `x-access-token`). The
+     * project's own secret of that name wins over the app's. Default `""` = none (the runner uses whatever git access it has).
+     */
+    const val GIT_SECRET = "runners.gitSecret"
+    /**
+     * RUNNER-CRED-1 (runner side): whether this runner uses the credentials its orchestrator lends with a start (kept in memory for
+     * that session only). Default `true`; `false` = ignore them and use only this runner's own keys and git access.
+     */
+    const val ACCEPT_CREDENTIALS = "runner.acceptCredentials"
 
     /** The setting text of [ALLOW_PLAIN_TAILNET]; it states the risk. */
     const val ALLOW_PLAIN_TAILNET_TEXT =
@@ -55,7 +72,7 @@ object RunnerLinkSettings {
             "text cross the network unencrypted; anyone on the path can read them and replay the credential to start agents with " +
             "tool permissions on this machine. Only for a private tailnet (Tailscale/WireGuard) you fully control. Default false."
 
-    val KEYS: Set<String> = setOf(ALLOW_PLAIN_TAILNET, PROJECTS, HARNESSES, CLONE_ROOT, ON_LOST, PUSH_ON_COMMIT, ADVERTISE_HOSTS, GIT_NAME, GIT_EMAIL)
+    val KEYS: Set<String> = setOf(ALLOW_PLAIN_TAILNET, PROJECTS, HARNESSES, CLONE_ROOT, ON_LOST, PUSH_ON_COMMIT, ADVERTISE_HOSTS, GIT_NAME, GIT_EMAIL, LEND_CREDENTIALS, GIT_SECRET, ACCEPT_CREDENTIALS)
 
     /** What the runner link reads; [stored] is the raw stored JSON of a key (null = unset). */
     data class Values(
@@ -68,7 +85,12 @@ object RunnerLinkSettings {
         val advertiseHosts: List<String> = emptyList(),
         val gitName: String = "",
         val gitEmail: String = "",
+        val lendCredentials: List<String> = listOf(ANY),
+        val gitSecret: String = "",
+        val acceptCredentials: Boolean = true,
     ) {
+        /** RUNNER-CRED-1: whether this orchestrator lends credentials to runner [name]. */
+        fun lendsTo(name: String): Boolean = ANY in lendCredentials || name in lendCredentials
         /** RUNNER-GIT-IDENT-1: this runner's own git identity, only when both halves are set. */
         val gitIdentity: Pair<String, String>? get() = if (gitName.isNotBlank() && gitEmail.isNotBlank()) gitName to gitEmail else null
         val restartElsewhere: Boolean get() = onLost == ON_LOST_RESTART
@@ -88,6 +110,9 @@ object RunnerLinkSettings {
         advertiseHosts = list(stored(ADVERTISE_HOSTS)).filter { HOST.matches(it) },
         gitName = string(stored(GIT_NAME)),
         gitEmail = string(stored(GIT_EMAIL)),
+        lendCredentials = stored(LEND_CREDENTIALS)?.let(::list) ?: listOf(ANY),
+        gitSecret = string(stored(GIT_SECRET)),
+        acceptCredentials = runCatching { (Json.parseToJsonElement(stored(ACCEPT_CREDENTIALS) ?: "true") as JsonPrimitive).booleanOrNull }.getOrNull() ?: true,
     )
 
     private fun string(raw: String?): String =
@@ -107,6 +132,9 @@ object RunnerLinkSettings {
             ADVERTISE_HOSTS to JsonArray(v.advertiseHosts.map(::JsonPrimitive)),
             GIT_NAME to JsonPrimitive(v.gitName),
             GIT_EMAIL to JsonPrimitive(v.gitEmail),
+            LEND_CREDENTIALS to JsonArray(v.lendCredentials.map(::JsonPrimitive)),
+            GIT_SECRET to JsonPrimitive(v.gitSecret),
+            ACCEPT_CREDENTIALS to JsonPrimitive(v.acceptCredentials),
         )
     }
 
@@ -116,7 +144,7 @@ object RunnerLinkSettings {
             (value as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull
                 ?: throw IllegalArgumentException("setting '$key' must be a JSON boolean. $ALLOW_PLAIN_TAILNET_TEXT"),
         )
-        PROJECTS, HARNESSES -> JsonArray(
+        PROJECTS, HARNESSES, LEND_CREDENTIALS -> JsonArray(
             ((value as? JsonArray) ?: throw IllegalArgumentException("setting '$key' must be a JSON array of ids (\"*\" = every one, [] = none)"))
                 .map { e ->
                     (e as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim()?.takeIf { ID.matches(it) }
@@ -143,6 +171,14 @@ object RunnerLinkSettings {
         GIT_NAME, GIT_EMAIL -> JsonPrimitive(
             (value as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim()?.takeIf { GIT_IDENT.matches(it) }
                 ?: throw IllegalArgumentException("setting '$key' must be a JSON string of one line (\"\" = use the identity the orchestrator sends)"),
+        )
+        GIT_SECRET -> JsonPrimitive(
+            (value as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim()?.takeIf { it.isEmpty() || com.superiorsoftllc.infantry.keystore.Keystore.isName(it) }
+                ?: throw IllegalArgumentException("setting '$key' must be a JSON string: a secret name (lowercase letters, digits, '.', '_', '-'; \"\" = none)"),
+        )
+        ACCEPT_CREDENTIALS -> JsonPrimitive(
+            (value as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull
+                ?: throw IllegalArgumentException("setting '$key' must be a JSON boolean (false = ignore the credentials an orchestrator lends)"),
         )
         else -> throw IllegalArgumentException("unknown runner link setting '$key'")
     }

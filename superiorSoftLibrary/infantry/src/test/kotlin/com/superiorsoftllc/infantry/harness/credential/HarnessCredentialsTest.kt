@@ -115,6 +115,31 @@ class HarnessAuthModeTest {
         assertEquals(emptyList(), creds("subscription-login").missing())
     }
 
+    /** RUNNER-CRED-1: a credential declared for the subscription mode (a setup-token) signs that mode in; never the API-key mode. */
+    @Test
+    fun `a subscription token goes only in subscription mode and is never missing`() {
+        val token = HarnessCredential("claude", "CLAUDE_CODE_OAUTH_TOKEN", "Claude Code subscription token", credId = "oauth", forMode = "subscription-login")
+        fun two(mode: String?): HarnessCredentials {
+            val d = Files.createTempDirectory("hc-token").toFile()
+            return HarnessCredentials(Keystore(d, env = { null }, vault = null), { mode }) { listOf(decl, token) }
+        }
+        val sub = two("subscription-login")
+        assertEquals(mapOf("ANTHROPIC_API_KEY" to ""), sub.env("claude"), "no token stored: the key stays blanked, nothing else")
+        sub.set("claude", "sk-ant-abcdefghijklmnop"); sub.set("claude", "oat-token-1234567890", "oauth")
+        assertEquals(mapOf("ANTHROPIC_API_KEY" to "", "CLAUDE_CODE_OAUTH_TOKEN" to "oat-token-1234567890"), sub.env("claude"))
+        val api = two("api-key")
+        api.set("claude", "sk-ant-abcdefghijklmnop"); api.set("claude", "oat-token-1234567890", "oauth")
+        assertEquals(mapOf("ANTHROPIC_API_KEY" to "sk-ant-abcdefghijklmnop"), api.env("claude"))
+        assertEquals(listOf(decl), two(null).missing(), "the optional token is never asked for")
+    }
+
+    @Test
+    fun `module json declares a credential for one auth mode`() {
+        val m = Json { ignoreUnknownKeys = true }.decodeFromString(ModuleManifest.serializer(),
+            """{"name":"Infantry_X","version":"1.0.0","apiVersion":2,"harness":{"ids":["x"],"credentials":[{"id":"oauth","env":"X_TOKEN","forMode":"subscription-login"}]}}""")
+        assertEquals("subscription-login", m.harness?.credentials?.single()?.forMode)
+    }
+
     @Test
     fun `api key mode injects the key and a mode the harness does not offer is ignored`() {
         val c = creds("api-key")

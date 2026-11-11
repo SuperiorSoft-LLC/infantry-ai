@@ -60,7 +60,16 @@ class RunnerLinkService(
     private val mode: () -> String = { BOTH_MODE },
     /** RUNNER-PAIR-1: runs the runner-side `runner pair` through the owner's command (op `connect`); tests pass a fake. */
     private val connectIssuer: RunnerConnect.Issuer = RunnerConnect.processIssuer(),
+    /** RUNNER-CRED-1 (runner side): where the secrets an orchestrator lends a start are held (memory only); null = none kept. */
+    private val lent: LentCredentials? = null,
 ) : AutoCloseable {
+    /** RUNNER-CRED-1 (orchestrator side): the harness ids whose key this app lends runner (name) at each start, for the check. */
+    var lentKeysOf: (runner: String) -> Set<String> = { emptySet() }
+    /** RUNNER-CRED-1 (runner side): this runner's owner chose the harness's own login here (see [RunnerLinkServer]'s `ownLogin`). */
+    var ownLoginOf: (harnessId: String) -> Boolean = { false }
+    /** RUNNER-CRED-1 (orchestrator side): the git credential a start in (project) on runner (name) would carry, for the check's `git` row. */
+    var lentGitOf: (runner: String, projectId: String?) -> com.superiorsoftllc.infantry.daemon.api.orchestrator.GitCredential? = { _, _ -> null }
+
     private var serving: LinkServing? = null
     private var pairing: Pairing? = null
     private var toldNoTransport = false
@@ -136,7 +145,8 @@ class RunnerLinkService(
     private fun pairedServer(store: RunnerLinkStore) = RunnerLinkServer(
         store, RunnerAudit(File(dir, RunnerAudit.FILE)), codes = null, settings = settings, runner = { runner }, starts = starts,
         forwarder = forwarder, forwardWaitCapMs = ::forwardWaitMs,
-        limit = limit, cloneRoot = ::cloneRootDir, bearer = bearer.takeIf { it.exists() },
+        limit = limit, cloneRoot = ::cloneRootDir, bearer = bearer.takeIf { it.exists() }, lent = lent,
+        ownLogin = { ownLoginOf(it) },
     )
 
     private fun serve(store: RunnerLinkStore, t: RunnerLinkTransport) {
@@ -302,6 +312,8 @@ class RunnerLinkService(
         val request = F.CheckRequest(
             projectId = project, harness = harness?.takeIf { it.isNotBlank() }, gitRemote = remote, contract = F.CONTRACT,
             gitName = identity?.first, gitEmail = identity?.second,
+            lentKeys = runCatching { lentKeysOf(name) }.getOrDefault(emptySet()).sorted(),
+            git = remote?.let { runCatching { lentGitOf(name, project) }.getOrNull() },
         )
         val data = F.json.encodeToString(F.CheckRequest.serializer(), request)
         // The runner may spend limits.runners.checkGitSec in its git row: give the call that on top of a normal link call.

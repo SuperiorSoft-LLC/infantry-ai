@@ -1120,6 +1120,13 @@ object LimitRegistry {
         min = 40, max = 20_000, zeroIsUnlimited = false,
     )
 
+    /** RUNNER-CRED-1: how many keystore secrets an orchestrator lends one remote start (so `{{secret:NAME}}` renders on the runner). */
+    val RUNNERS_LEND_SECRETS_MAX = LimitDef(
+        "limits.runners.lendSecretsMax", 64, "secrets",
+        "How many of the project's secrets (project scope first, then app) the app lends a session it starts on a remote runner, held in the runner's memory for that session only. 0 = lend none (the session renders only the runner's own secrets).",
+        min = 0, max = 1_000, zeroIsUnlimited = false,
+    )
+
     // CORE-PROGRESS-DOWNLOAD-1 (docs/wiki/Progress.md): the core downloader and the core progress system.
     val DOWNLOAD_RETRIES = LimitDef(
         "limits.downloads.retries", 3, "count",
@@ -1203,7 +1210,7 @@ object LimitRegistry {
         RUNNERS_PAIR_CODE_MIN, RUNNERS_PAIR_ATTEMPTS_PER_HOUR, RUNNERS_CREDENTIAL_ROTATE_DAYS, RUNNERS_LINK_PORT, RUNNERS_UP_START_SEC, RUNNERS_ADVERTISE_HOSTS_MAX, RUNNERS_AUDIT_SHOWN, RUNNERS_GRANT_PROJECTS_MAX, RUNNERS_LINK_CALL_SECONDS, RUNNERS_LINK_CHECK_SECONDS,
         RUNNERS_OUTBOX_MAX, RUNNERS_LOST_AFTER_MIN, RUNNERS_COMMIT_CHECK_SEC, RUNNERS_FORWARD_WAIT_SEC, RUNNERS_FORWARD_TIMEOUT_SEC, RUNNERS_FORWARD_PENDING_MAX,
         RUNNERS_ADD_HOST_TIMEOUT_SEC, RUNNERS_CONNECT_SEC, RUNNERS_CHECK_GIT_SEC, RUNNERS_CHECK_MIN_FREE_MB,
-        RUNNERS_TEST_TURN_SEC, RUNNERS_TEST_POLL_MS, RUNNERS_TEST_REPLY_CHARS,
+        RUNNERS_TEST_TURN_SEC, RUNNERS_TEST_POLL_MS, RUNNERS_TEST_REPLY_CHARS, RUNNERS_LEND_SECRETS_MAX,
         DOWNLOAD_RETRIES, DOWNLOAD_BACKOFF_MS, DOWNLOAD_CONNECT_TIMEOUT_SECONDS, DOWNLOAD_RESPONSE_TIMEOUT_SECONDS, DOWNLOAD_STALL_SECONDS, DOWNLOAD_MAX_MB, DOWNLOAD_REDIRECTS, DOWNLOAD_MOVE_RETRIES,
         PROGRESS_KEEP_FINISHED, PROGRESS_MIN_INTERVAL_MS,
     )

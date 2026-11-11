@@ -46,8 +46,8 @@ What to know:
   rotate it: `docker exec infantry-runner infantry runner bearer --rotate`. It carries the runner's name and its TLS certificate
   pin, so the app checks the certificate before it sends the secret. Treat it like a password.
 - Every project and every harness may run on the runner. Narrow it in the same `docker run` with
-  `-e INFANTRY_RUNNER_ALLOW_PROJECTS=<ids>` / `-e INFANTRY_RUNNER_ALLOW_HARNESSES=<ids>`. A harness key or login goes in the same
-  run too (`-e ANTHROPIC_API_KEY=...`, see [Run a remote environment](run-a-remote-environment.md)).
+  `-e INFANTRY_RUNNER_ALLOW_PROJECTS=<ids>` / `-e INFANTRY_RUNNER_ALLOW_HARNESSES=<ids>`. No harness key or git login goes in the
+  run: the app lends its own with each start (section 5).
 - Another published port (`-p 18921:8790`)? Add `-e INFANTRY_RUNNER_PUBLIC_PORT=18921` so the printed endpoint says it; or just
   type that port in the endpoint you paste. A runner on your own PC is reached as `localhost:<published port>`.
 - One orchestrator per runner: the same app can paste the bearer again (it gets a fresh link credential); another one is refused
@@ -208,12 +208,36 @@ For a ticket: `infantry ticket update <id> --runner server-1` (or `ticket create
 A runner clones the project, so the project's repository needs an `origin` the server can reach. Without one the start is
 refused with: `runner server-1 needs the project's git remote ... has no origin remote`.
 
-## 5. What you must do yourself
+## 5. Credentials: the app lends them (RUNNER-CRED-1)
 
-- Log the agent CLI in on the server (the runner holds its own credentials): `docker exec -it infantry-runner claude login`
+A runner needs no key, keystore or git login of its own. At every remote start the app lends the session, over the pinned link:
+
+- **the harness key** the session's harness uses here (`harness key <id>`, or the shared secret `--use-secret` points at), injected into
+  the session's launches as a local spawn gets it;
+- **the project's secrets**, so `{{secret:NAME}}` renders in the runner worktree (at most `limits.runners.lendSecretsMax`; a built-in
+  `harness.*` / `plugin.*` secret never goes);
+- **a git credential** for clone, fetch and push: name a secret with a `token` field (and an optional `username`, default
+  `x-access-token`) in `infantry settings set runners.gitSecret '"<secret name>"'`. Git gets it as an HTTP header through
+  `GIT_CONFIG_*` for that one call: never in argv, the clone's config, the remote URL or a credential store. `runner check` sends
+  the same credential for its `git` row, so a passing row means a worker there can really clone and push.
+
+The runner keeps them in memory for that session only: no log line, audit line, file or answer carries a value (the audit names the
+env variables and counts the secrets). A daemon restart forgets them; the next start lends again. The runner's own say wins: its own
+keystore answers a render first, its own non-blank key wins over a lent one, and a harness whose login you chose on the runner
+(`infantry settings set harness.<id>.authMode '"subscription-login"'` there, then sign it in) keeps that login instead of the lent key.
+
+Turn it off per runner: on the PC `runners.lendCredentials` lists the runners that get credentials (default `["*"]`, every runner;
+`[]` = none); on the runner `infantry settings set runner.acceptCredentials false` ignores every loan.
+
+Claude with a subscription (owner decision): either sign claude in on the runner itself (`docker exec -it infantry-runner claude auth
+login`), or run `claude setup-token` on your PC and store the token as the claude subscription token
+(`infantry harness key claude oauth`, which prompts for it): in `subscription-login` mode the app lends it as `CLAUDE_CODE_OAUTH_TOKEN`.
+
+## 5b. What you must do yourself
+
+- Nothing for credentials (section 5). To sign the agent CLI in on the server instead: `docker exec -it infantry-runner claude login`
   (claude, opencode and pi are all in the image, on `/usr/local/bin`; `--build-arg INSTALL_CLAUDE=false` leaves claude out, and then `runner check` reports `harness 'claude' is not installed on this runner`).
-  Without a login the session starts but the model cannot answer.
-- Give the server access to the git remote (a deploy key or token).
+- Without `runners.gitSecret` the runner clones with whatever access it has: give it a deploy key, or set the secret.
 - Open the link port to your PC only (firewall or tailnet).
 
 Then check it from your PC: `infantry runner check <name> [--project <id>] [--harness <id>]` (RUNNER-CHECK-1) runs the

@@ -22,8 +22,8 @@ import kotlinx.serialization.KSerializer
  * RUNNER-POOL-6 (docs/RUNNER-POOL.md 2.1, 4): the remote runner binding. Each [RunnerLink] command becomes one `runner_link_*`
  * frame sent to runner [name] through core's [RunnerLinks] (core holds the url, the pinned fingerprint and the credential). No
  * answer ([LinkFailure]) is [OrchestratorReply.Unavailable]; a runner's `runner_link_error` is the refusal it names (for a start)
- * or Unavailable (for every other command). A start never carries a runner path or an env value: the runner clones [StartSpec.gitRemote]
- * and fills [StartSpec.envNames] itself.
+ * or Unavailable (for every other command). A start never carries a runner path: the runner clones [StartSpec.gitRemote]. The only
+ * values it carries are [StartSpec.credentials] (RUNNER-CRED-1), which core's pool lent; this binding passes them on unread.
  */
 class RemoteRunnerLink(private val name: String, private val links: RunnerLinks) : RunnerLink {
     override val contractVersion: String get() = F.CONTRACT
@@ -64,6 +64,7 @@ class RemoteRunnerLink(private val name: String, private val links: RunnerLinks)
             gitEmail = spec.gitEmail,
             toolApproval = spec.toolApproval,
             promptRelay = spec.promptRelay,
+            credentials = spec.credentials,
         )
         val answer = try {
             links.call(name, F.START, F.json.encodeToString(F.StartRequest.serializer(), request))

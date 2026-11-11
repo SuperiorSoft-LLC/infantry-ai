@@ -549,6 +549,8 @@ RUNNER-POOL-2 (docs/RUNNER-POOL.md 2.1, 2.2): the plain data of the runner comma
 - `RunnerInfo`: What a runner can run, answered by `RunnerLink.hello`.
 - `RunnerHarness`: One harness a runner offers: its id, its models, whether its CLI is signed in.
 - `StartSpec`: A session start; `startId` is the natural key, a null field is the runner's default. RUNNER-POOL-6: `gitRemote` (the runner clones it and cuts the ticket worktree), `base` / `branch`, `prompt`, `title`, and `envNames` (names only, never values).
+- `SessionCredentials`: RUNNER-CRED-1: what an orchestrator lends one remote start (`StartSpec.credentials`): harness `env`, the project's `secrets` and a `git` credential; held in memory on the runner for that session only; `toString` names keys, never values.
+- `GitCredential`: RUNNER-CRED-1: the token (and username, default `x-access-token`) a runner clones, fetches and pushes a lent session's branch with; `toString` masks the token.
 - `StartWorktree`: The ticket worktree a runner cut for a remote start (path, branch, base, repo root), handed to its local binding in `StartSpec.worktree`.
 - `RunnerEvent`: One event a runner queued for its orchestrator (`status`, `finished` after the branch push; RUNNER-PROMPT-RELAY-1: `prompt` and `prompt_resolved`, a session on the runner asked a human and that prompt closed), read with `RunnerLink.events(sinceSeq)`.
 - `RunnerPromptEvent`: The payload of a `prompt` event: the runner's `prompt_request` JSON and the call's whole input (`encode` / `decode`). The orchestrator shows it as an open prompt of its own, so the app shows the same card a local session gets.
