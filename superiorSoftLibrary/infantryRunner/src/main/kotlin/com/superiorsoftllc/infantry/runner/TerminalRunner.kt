@@ -41,6 +41,7 @@ interface TerminalRunner {
  */
 class Pty4jTerminalRunner(private val useConPty: Boolean = false) : TerminalRunner {
     override fun start(spec: ProcessSpec, cols: Int, rows: Int, listener: TerminalListener): TerminalProcess {
+        ChildReaper.ensure()
         val env = HashMap(System.getenv())
         env.putAll(spec.env)
         // The emulator on the other end is an xterm-compatible one (JediTerm, or the text fallback).

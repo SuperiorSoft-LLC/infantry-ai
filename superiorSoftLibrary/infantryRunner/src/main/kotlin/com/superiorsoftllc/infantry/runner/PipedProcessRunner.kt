@@ -21,6 +21,7 @@ class PipedProcessRunner : ProcessRunner {
     override fun start(spec: ProcessSpec, listener: ProcessListener): RunningProcess {
         // Ticket 66153313: a worker session's spec names its build priority; the whole tree below it inherits it.
         val priority = ProcessPriority.requested(spec)
+        ChildReaper.ensure()
         val builder = ProcessBuilder(escapeForWindows(ProcessPriority.wrap(spec.command, priority)))
         spec.workingDir?.let { builder.directory(it) }
         builder.environment().putAll(spec.env)
