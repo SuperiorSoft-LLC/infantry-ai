@@ -409,6 +409,7 @@ class RunnerLinkServer(
             // Never a path from the wire: the runner cuts the working copy from its own clone (or its own project directory).
             repo = ticketlessRepo?.path,
             prompt = r.prompt, title = r.title, envNames = r.envNames, worktree = worktree, toolApproval = r.toolApproval,
+            promptRelay = r.promptRelay,
         )
         return when (val reply = link.startSession(spec)) {
             is OrchestratorReply.Ok -> {

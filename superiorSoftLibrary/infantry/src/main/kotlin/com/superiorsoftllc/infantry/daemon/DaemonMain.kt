@@ -1788,7 +1788,9 @@ class InfantryDaemon(
                         storageHandle = (store as? SqlInfantryStore)?.handle,
                         // DP-4a: tickets / epics / board for plugins, over the board built above (host-applied policy and scope).
                         boardServices = com.superiorsoftllc.infantry.daemon.plugins.LocalBoardServices(
-                            ops = { boardPorts.ops() }, sessions = { manager.list() }, link = { orchestratorHub.link },
+                            // RUNNER-DOCKER-MATRIX-1: a remote worker's forwarded MCP board call (infantry_ticket_get, ...) names its
+                            // session; that session is in remoteMirror, not manager, so both are known callers (as for the reads below).
+                            ops = { boardPorts.ops() }, sessions = { manager.list() + remoteMirror.list() }, link = { orchestratorHub.link },
                             gate = { type, data ->
                                 val envelope = Envelope(type, data)
                                 policies.current.takeIf { !it.isEmpty }?.let { com.superiorsoftllc.infantry.policy.PolicyRuntime.actionRefusal(it, envelope, policies.actionOf(envelope)) }
@@ -4154,7 +4156,21 @@ private suspend fun handleConnection(
                         Envelope(Envelope.ERROR, "kill expects '<sessionId> [force]'")
                     } else {
                         try {
-                            manager.kill(id, force = parts.drop(1).any { it.equals("force", ignoreCase = true) })
+                            val force = parts.drop(1).any { it.equals("force", ignoreCase = true) }
+                            // RUNNER-DOCKER-MATRIX-1: a session placed on a remote runner is not in [manager]; the app's
+                            // and the CLI's kill must reach that runner (as the board's kill does), or its harness
+                            // process lives on there while the app shows the session ended.
+                            val runnerName = runnerPool.runnerOf(id)
+                            if (manager.get(id) == null && runnerName != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL) {
+                                val link = runnerPool.link(runnerName) ?: error("runner '$runnerName' is not connected; the session there is still running")
+                                when (val reply = link.stopSession(id, "killed from the app", force)) {
+                                    is com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorReply.Ok ->
+                                        if (!reply.value) error("runner '$runnerName' does not know session $id")
+                                    else -> error("runner '$runnerName' did not stop session $id: $reply")
+                                }
+                            } else {
+                                manager.kill(id, force = force)
+                            }
                             pluginSessionsAck(envelope, manager)
                         } catch (e: Exception) {
                             Envelope(Envelope.ERROR, e.message ?: "kill failed")

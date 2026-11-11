@@ -129,9 +129,11 @@ object LocalRunner {
      * RUNNER-PAIR-1: the Tool approval a session started over the runner link runs with: the orchestrator's mode for the start
      * ([StartSpec.toolApproval]), else this runner's own; `ask` becomes `deny` ([ToolApproval.withoutPrompt]) because the link
      * carries no prompt to anyone, so a call is denied at once with the "can't prompt" notice instead of waiting out a timer.
+     * RUNNER-DOCKER-MATRIX-1: an orchestrator that relays prompts ([StartSpec.promptRelay], RUNNER-PROMPT-RELAY-1) gets `ask` as
+     * is, so the approval card shows in its app; live on nightly .60 every runner call was still denied with no card.
      */
     fun runnerToolApproval(spec: StartSpec, own: () -> ToolApproval = { ToolApprovals.current().mode }): ToolApproval =
-        (ToolApproval.parse(spec.toolApproval) ?: own()).withoutPrompt()
+        (ToolApproval.parse(spec.toolApproval) ?: own()).let { if (spec.promptRelay) it else it.withoutPrompt() }
 
     /** The inverse of [startSpec]: exactly the options [bindSessionOnSpawn] reads. */
     fun spawnOptions(spec: StartSpec) = SpawnOptions(
@@ -192,7 +194,7 @@ object LocalRunner {
         val identity = repo?.let { runCatching { com.superiorsoftllc.infantry.daemon.plugins.gitIdentityOf(it) }.getOrNull() }
         // RUNNER-PAIR-1: the Tool approval a local start of these options would run with (its own override, else this daemon's setting).
         val approval = ToolApprovals.current(ToolApproval.parse(options?.toolApproval)).mode.wire
-        val spec = startSpec(options, null).copy(gitRemote = remote, gitName = identity?.first, gitEmail = identity?.second, toolApproval = approval)
+        val spec = startSpec(options, null).copy(gitRemote = remote, gitName = identity?.first, gitEmail = identity?.second, toolApproval = approval, promptRelay = true)
         return when (val reply = link.startSession(spec)) {
             is OrchestratorReply.Unavailable -> throw IllegalStateException("runner $runner unavailable: ${reply.reason}")
             is OrchestratorReply.Ok -> {

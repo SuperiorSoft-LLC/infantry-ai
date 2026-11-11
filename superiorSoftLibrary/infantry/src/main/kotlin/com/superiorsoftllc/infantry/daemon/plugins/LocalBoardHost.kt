@@ -146,6 +146,8 @@ class LocalBoardHost(
             pushOnCommit = runCatching(pushOnCommit).getOrDefault(false),
             // RUNNER-PAIR-1: the Tool approval this daemon's own worker would run with, so the remote one behaves the same.
             toolApproval = com.superiorsoftllc.infantry.session.ToolApprovals.current().mode.wire,
+            // RUNNER-DOCKER-MATRIX-1: this daemon relays the runner session's prompts to its app (RUNNER-PROMPT-RELAY-1).
+            promptRelay = true,
         ).let { s -> checkout?.let { runCatching { gitIdentityOf(it) }.getOrNull() }?.let { (n, e) -> s.copy(gitName = n, gitEmail = e) } ?: s }
         return when (val reply = link.startSession(spec)) {
             is com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorReply.Unavailable -> SessionStartResult.Refused("runner $runner unavailable: ${reply.reason}")

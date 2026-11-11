@@ -181,14 +181,17 @@ class RemoteSpawnTest {
         )
         assertNotNull(r2Manager.get(byProject.id), "the project-folder start runs on r2")
 
-        // RUNNER-PAIR-1: the remote session runs with the Tool approval a local one would, carried over the real wire; `ask` has
-        // nobody to prompt on a runner, so it runs as `deny` at once (the local "can't prompt" rule), never a timer nobody sees.
+        // RUNNER-PAIR-1: the remote session runs with the Tool approval a local one would, carried over the real wire.
+        // RUNNER-DOCKER-MATRIX-1: this orchestrator relays prompts (RUNNER-PROMPT-RELAY-1), so `ask` stays `ask` and the card shows
+        // in its app; an orchestrator without the relay (promptRelay = false) still gets `deny` at once, never a timer nobody sees.
         val allowAll = assertIs<StartedSession.Remote>(LocalRunner.start(hub, oManager, options.copy(toolApproval = "allowAll"), checkout, agentRunner = "r2"))
         assertEquals(ToolApproval.ALLOW_ALL, r2Manager.toolApprovalFor(allowAll.id).mode)
         val ask = assertIs<StartedSession.Remote>(LocalRunner.start(hub, oManager, options.copy(toolApproval = "ask"), checkout, agentRunner = "r2"))
-        assertEquals(ToolApproval.DENY, r2Manager.toolApprovalFor(ask.id).mode)
+        assertEquals(ToolApproval.ASK, r2Manager.toolApprovalFor(ask.id).mode)
         assertEquals(ToolApproval.ALLOW_EDITS, LocalRunner.runnerToolApproval(StartSpec("s"), own = { ToolApproval.ALLOW_EDITS }), "an older orchestrator: the runner's own mode")
-        assertEquals(ToolApproval.DENY, LocalRunner.runnerToolApproval(StartSpec("s"), own = { ToolApproval.ASK }))
+        assertEquals(ToolApproval.DENY, LocalRunner.runnerToolApproval(StartSpec("s"), own = { ToolApproval.ASK }), "an older orchestrator cannot show the card")
+        assertEquals(ToolApproval.DENY, LocalRunner.runnerToolApproval(StartSpec("s", toolApproval = "ask")), "no relay: ask runs as deny")
+        assertEquals(ToolApproval.ASK, LocalRunner.runnerToolApproval(StartSpec("s", toolApproval = "ask", promptRelay = true)), "relayed: ask stays ask")
 
         // A spawn that names runner=local beats the agent's r2.
         val local = assertIs<StartedSession.Local>(LocalRunner.start(hub, oManager, options.copy(runner = "local"), checkout, agentRunner = "r2"))
