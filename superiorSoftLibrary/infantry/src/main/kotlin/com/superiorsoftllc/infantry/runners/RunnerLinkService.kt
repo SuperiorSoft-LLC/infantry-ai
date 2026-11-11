@@ -329,6 +329,15 @@ class RunnerLinkService(
             return rowsJson(rows)
         }
         rows += F.CheckRow("link", true, "reached ${r.url} in ${clock() - started} ms")
+        // RUNNER-REPAIR-1: a runner another app took over with its bearer (or one detached there) refuses this credential.
+        if (!answer.ok && RunnerLinkServer.NOT_PAIRED in answer.data) {
+            rows += F.CheckRow(
+                "pairing", false,
+                "runner '$name' is no longer paired with this app: another app paired it with its bearer, or it was detached there",
+                "to use it here, Add runner again with its endpoint and bearer (the runner prints them at every start; `infantry runner bearer` there); that moves it back",
+            )
+            return rowsJson(rows)
+        }
         if (!answer.ok) {
             rows += F.CheckRow(
                 "contract", false,

@@ -225,7 +225,18 @@ class RunnerBearerTest {
         granted.clear()
         runner.admin(req("op" to "bearer"))
         assertNull(granted[RunnerLinkSettings.PROJECTS], "a list the owner narrowed is not widened")
-        runner.close(); orch.close()
+
+        // RUNNER-REPAIR-1: a second app (a reinstall, a new state dir) pastes the same endpoint and bearer: it takes the runner
+        // over and is told so; the first app's check then says the runner moved and how to bring it back, not "update it".
+        val orch2 = service(File(dir, "svc-orch2"), transport)
+        val moved = orch2.admin(req("op" to "add", "endpoint" to "localhost:$port", "bearer" to bearer, "orchestratorName" to "laptop"))
+        assertEquals("true", RunnerLinkService.field(moved, "ok"), moved.toString())
+        assertEquals("pc", RunnerLinkService.field(moved, "replaced"))
+        assertEquals("laptop", RunnerLinkStore.open(File(dir, "svc-runner")).orchestrator()?.name)
+        val stale = orch.admin(req("op" to "check", "name" to "box")).toString()
+        assertTrue("no longer paired with this app" in stale && "Add runner again" in stale, stale)
+        assertFalse("too old" in stale, stale)
+        runner.close(); orch.close(); orch2.close()
     }
 
     @Test

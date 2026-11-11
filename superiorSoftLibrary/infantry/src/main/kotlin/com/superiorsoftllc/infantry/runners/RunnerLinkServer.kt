@@ -110,7 +110,7 @@ class RunnerLinkServer(
             return pair(data, from)
         }
         if (!store.accepts(orchestratorId, credential)) {
-            return refuse(ANONYMOUS, type, null, from, "$type refused: not the paired orchestrator or not its live credential")
+            return refuse(ANONYMOUS, type, null, from, "$type refused: $NOT_PAIRED")
         }
         val seat = FrameGate.orchestratorSeat(orchestratorId!!)
         FrameGate.refusal(type, seat)?.let { return refuse(seat, type, null, from, it) }
@@ -564,6 +564,9 @@ class RunnerLinkServer(
 
         /** RUNNER-REPAIR-1: the audit operation of a bearer pairing that replaced another orchestrator's link. */
         const val PAIR_TAKEOVER = "runner_link_pair_takeover"
+
+        /** The refusal of a frame from an orchestrator that is not (or no longer) the paired one; [RunnerLinkService] reads it. */
+        const val NOT_PAIRED = "not the paired orchestrator or not its live credential"
 
         /** RUNNER-GRANT-AT-PAIR-1: what the orchestrator reads when its code carries no grant authority. */
         const val GRANT_NOT_ALLOWED =
