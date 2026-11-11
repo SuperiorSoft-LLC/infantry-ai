@@ -50,6 +50,11 @@ class RemoteSessionMirror(
 
     fun placement(sessionId: String): Placed? = placedAs[sessionId]
 
+    /** RUNNER-SESSION-GHOST-1: [sessionId] was deleted: what this mirror kept about it goes too. */
+    fun forget(sessionId: String) {
+        placedAs.remove(sessionId); seen.remove(sessionId); firstSeen.remove(sessionId)
+    }
+
     /** A runner event moved [sessionId] to [state] (a SessionState name; an unknown word is ignored). */
     fun status(sessionId: String, state: String) {
         val s = runCatching { SessionState.valueOf(state.trim().uppercase()) }.getOrNull() ?: return
