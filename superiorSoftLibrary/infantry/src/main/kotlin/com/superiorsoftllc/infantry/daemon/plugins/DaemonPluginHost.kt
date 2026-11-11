@@ -1182,6 +1182,8 @@ class DaemonPluginHost private constructor(
             // DP-7d (1.18.0): a session killed or removed; the plugin's session-scoped data goes with it.
             override fun onSessionRemoved(listener: (String) -> Unit): AutoCloseable =
                 hostServices.onSessionRemoved { id -> if (!p.guard.disabled) p.call("events.onSessionRemoved") { listener(id) } }.also { p.closeables += it }
+            override fun onSessionDeleted(listener: (String) -> Unit): AutoCloseable =
+                hostServices.onSessionDeleted { id -> if (!p.guard.disabled) p.call("events.onSessionDeleted") { listener(id) } }.also { p.closeables += it }
 
             // SCRIPT-3 (1.26.0): generic named events. A listener runs under the plugin's limits; a disabled plugin hears nothing.
             override fun publish(name: String, payload: String, causeId: String?, depth: Int): NamedEvent =

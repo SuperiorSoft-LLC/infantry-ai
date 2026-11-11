@@ -47,6 +47,23 @@ class MemoryScopeTest {
         assertEquals(before, heard.size, "a closed listener hears nothing more")
     }
 
+    /** TURNS-SAVED-1: a kill ends the process but keeps the record (the next mail resumes it); only a delete tells the deleted listeners. */
+    @Test
+    fun sessionDeletedListenersHearOnlyADeleteNeverAKill() {
+        val manager = manager()
+        val deleted = mutableListOf<String>()
+        val handle = manager.addSessionDeletedListener { deleted += it }
+        val a = manager.startNew("")
+        manager.kill(a.id, force = true)
+        assertTrue(deleted.isEmpty(), "a kill is not a deletion: the session can be resumed, so its per-session state stays")
+        manager.delete(a.id)
+        assertEquals(listOf(a.id), deleted, "a delete tells the listener once")
+        handle.close()
+        val b = manager.startNew("")
+        manager.kill(b.id, force = true); manager.delete(b.id)
+        assertEquals(listOf(a.id), deleted, "a closed listener hears nothing more")
+    }
+
     @Test
     fun aStartListsTheRolesNotesAndOmitsTheSectionWhenThereAreNone() {
         val settings = object : ProjectSettings {

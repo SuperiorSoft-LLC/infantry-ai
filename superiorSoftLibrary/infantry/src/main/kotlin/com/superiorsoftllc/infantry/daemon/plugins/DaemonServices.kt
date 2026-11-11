@@ -36,6 +36,8 @@ interface DaemonServices {
     /** DP-4b: the typed ticket event stream (ordered, at-least-once, cursors kept across restarts). Default: none. */
     /** DP-7d (1.18.0): told once per session that is killed or removed (the session-scoped data of a plugin dies with it). */
     fun onSessionRemoved(listener: (String) -> Unit): AutoCloseable = AutoCloseable {}
+    /** TURNS-SAVED-1 (1.55.0): told once per session whose record is deleted; never on a kill (the session can be resumed). */
+    fun onSessionDeleted(listener: (String) -> Unit): AutoCloseable = AutoCloseable {}
     /** ATTN-2a (1.24.0): push one frame to every connected client (behind `api.events.broadcast`); default: no clients. */
     fun broadcast(type: String, data: String) {}
     /** CORE-PROGRESS-DOWNLOAD-1: a plain-string core setting (`progress.presenter`, `downloads.transport`, `downloads.proxy`); "" = unset. */

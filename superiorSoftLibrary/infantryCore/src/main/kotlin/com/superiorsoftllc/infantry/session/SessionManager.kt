@@ -2170,6 +2170,18 @@ class SessionManager(
         return AutoCloseable { endedListeners -= listener }
     }
 
+    /**
+     * TURNS-SAVED-1: listeners told only when a session's record is DELETED ([delete]), never on a kill. A killed session keeps its
+     * record and is resumed by its next mail or prompt (an interactive CLI's kept process is ended by a kill), so what must outlive
+     * the process (a session's mail hooks) goes only here.
+     */
+    private val deletedListeners = java.util.concurrent.CopyOnWriteArrayList<(String) -> Unit>()
+
+    fun addSessionDeletedListener(listener: (String) -> Unit): AutoCloseable {
+        deletedListeners += listener
+        return AutoCloseable { deletedListeners -= listener }
+    }
+
     private fun endedNotice(sessionId: String) {
         onSessionEnded(sessionId)
         for (l in endedListeners) runCatching { l(sessionId) }
@@ -2234,6 +2246,7 @@ class SessionManager(
         lastPersisted.remove(sessionId)
         instances.delete(sessionId) // TRAITS-T4: the instance goes with its record
         endedNotice(sessionId)
+        for (l in deletedListeners) runCatching { l(sessionId) }
         closed(sessionId, "session removed", closing)
         writeAll()
     } }

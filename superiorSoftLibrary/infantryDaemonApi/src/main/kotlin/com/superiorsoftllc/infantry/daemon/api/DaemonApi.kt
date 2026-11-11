@@ -259,7 +259,8 @@ interface DaemonApi {
         // notes saved under KnowledgeWriter.GLOBAL_PROJECT are found by every project's search and show.
         // 1.53.0 (NOTIFY-CORE-1, additive): `notifications` (plugin.api.Notifications), the core notification bus; daemon.api.notifications.NoNotifications.
         // 1.54.0 (CORE-PROGRESS-DOWNLOAD-1, additive): `progress` (plugin.api.Progress) and `downloads` (daemon.api.downloads.Downloads).
-        const val VERSION = "1.54.0"
+        // 1.55.0 (TURNS-SAVED-1, additive): `events.onSessionDeleted`, told only when a session's record is deleted (never on a kill).
+        const val VERSION = "1.55.0"
     }
 }
 
@@ -419,6 +420,13 @@ interface Events {
 
     /** DP-7d (1.18.0, additive): told with the session id once per session that is killed or removed (a plugin drops that session's own data). */
     fun onSessionRemoved(listener: (sessionId: String) -> Unit): AutoCloseable = AutoCloseable {}
+
+    /**
+     * TURNS-SAVED-1 (1.55.0, additive): told with the session id once per session whose record is DELETED, never on a kill. A killed
+     * session keeps its record and its next mail or prompt resumes it (an interactive CLI's kept process is ended by a kill), so
+     * per-session state that must outlive the process (a mail hook bound to the session) is dropped here, not in [onSessionRemoved].
+     */
+    fun onSessionDeleted(listener: (sessionId: String) -> Unit): AutoCloseable = AutoCloseable {}
 
     /**
      * ATTN-2a (1.24.0, additive): pushes one frame of [type] with payload [data] to every connected client (the way core pushes
