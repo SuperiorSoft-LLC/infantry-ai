@@ -60,8 +60,20 @@ fun sessionPaneAction(session: SessionRecord, tickets: List<Ticket>): SessionPan
 const val START_DEFAULT_PROMPT = "Start."
 
 /**
- * END-SESSION-1: an ended session (End session, exit, failure) that can be resumed shows the Resume splash at once,
+ * END-SESSION-1: an ended session (End session, exit, orphaned) that can be resumed shows the Resume splash at once,
  * even while its transcript is on screen; it is not a live chat any more.
+ * SESSION-FAIL-VISIBLE-1: a FAILED one never does: it keeps its transcript, with the failure card ([sessionFailure]) on top.
  */
 fun showsResumeSplash(session: SessionRecord, action: SessionPaneAction?): Boolean =
-    action is SessionPaneAction.Resume && session.state in setOf(SessionState.EXITED, SessionState.FAILED, SessionState.ORPHANED)
+    action is SessionPaneAction.Resume && session.state in setOf(SessionState.EXITED, SessionState.ORPHANED)
+
+/** SESSION-FAIL-VISIBLE-1: the text a failed session's card shows when the daemon recorded no reason. */
+const val SESSION_FAILED_NO_REASON = "The session failed and the daemon recorded no reason; see the lines below."
+
+/**
+ * SESSION-FAIL-VISIBLE-1: the exact error of a session whose start or last turn FAILED (the daemon's `lastError`, e.g.
+ * "the claude process did not start: Claude Code is not signed in. ..."), or null when it did not fail. Every client
+ * shows it first, above the transcript, with Retry in place.
+ */
+fun sessionFailure(session: SessionRecord): String? =
+    if (session.state != SessionState.FAILED) null else session.lastError?.trim()?.takeIf { it.isNotEmpty() } ?: SESSION_FAILED_NO_REASON

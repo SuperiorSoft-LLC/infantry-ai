@@ -229,6 +229,8 @@ fun OutputPane(
     pending: PendingSendsView = PendingSendsView(),
     /** LAUNCH-FIRSTRUN-1: the line under the emblem when no session is shown (a first run says where to begin). */
     emptyHint: String = NO_SESSION_HINT,
+    /** SESSION-FAIL-VISIBLE-1: Retry on a failed session's card (null = no Retry button). */
+    onRetry: (() -> Unit)? = null,
     questionSlot: @Composable () -> Unit = {},
 ) {
     if (a == null) {
@@ -241,6 +243,18 @@ fun OutputPane(
                 Text(emptyHint, color = Palette.Muted, fontSize = 12.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                 Spacer(Modifier.height(10.dp))
                 if (onStartSession != null) OutlinedButton(onClick = onStartSession) { Text("Start a session") }
+            }
+        }
+        return
+    }
+    // SESSION-FAIL-VISIBLE-1: a failed start or turn keeps the session open: the exact error first, Retry in place, then
+    // whatever transcript there is. Never the empty splash, never a silent drop.
+    val failure = com.superiorsoftllc.infantry.ui.model.sessionFailure(a.session)
+    if (failure != null) {
+        Column(Modifier.fillMaxSize()) {
+            SessionFailureCard(failure, onRetry)
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                AgentChat(a, roleColor = roleColor, questionSlot = questionSlot, contributions = contributions, floaters = floaters, pending = pending)
             }
         }
         return
@@ -268,6 +282,32 @@ fun OutputPane(
         return
     }
     AgentChat(a, roleColor = roleColor, questionSlot = questionSlot, contributions = contributions, floaters = floaters, pending = pending)
+}
+
+/** SESSION-FAIL-VISIBLE-1: test tag on a failed session's error card. */
+const val SESSION_FAILURE_TAG = "session-failure"
+
+/** SESSION-FAIL-VISIBLE-1: test tag on the card's Retry button. */
+const val SESSION_RETRY_TAG = "session-failure-retry"
+
+/** SESSION-FAIL-VISIBLE-1: the failed session's exact error (selectable, so it can be copied) and Retry, on top of the pane. */
+@Composable
+fun SessionFailureCard(error: String, onRetry: (() -> Unit)?) {
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = ChatSidePadding, vertical = 8.dp)
+            .border(1.dp, Palette.Danger, RoundedCornerShape(8.dp))
+            .background(Palette.Danger.copy(alpha = 0.08f), RoundedCornerShape(8.dp))
+            .padding(10.dp)
+            .testTag(SESSION_FAILURE_TAG),
+    ) {
+        Text("Session failed", color = Palette.Danger, fontSize = 12.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+        Spacer(Modifier.height(4.dp))
+        SelectionContainer { Text(error, color = MaterialTheme.colorScheme.onSurface, fontSize = 12.sp) }
+        if (onRetry != null) {
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(onClick = onRetry, modifier = Modifier.testTag(SESSION_RETRY_TAG)) { Text("Retry") }
+        }
+    }
 }
 
 /** CHAT-SENDING-1: one session's pending sends ([PendingSendRow]) and what their actions do. */
