@@ -8,6 +8,9 @@ import com.sun.jna.Native
 import com.sun.jna.Pointer
 import com.sun.jna.WString
 import com.sun.jna.platform.win32.Kernel32
+import com.sun.jna.platform.win32.Tlhelp32
+import com.sun.jna.platform.win32.WinBase
+import com.sun.jna.platform.win32.WinDef
 import com.sun.jna.platform.win32.WinNT
 import com.sun.jna.win32.StdCallLibrary
 
@@ -87,6 +90,37 @@ object ProcessTree {
         h.info().commandLine().orElse(null)?.let { return it }
         if (isWindows) runCatching { WindowsCommandLine.of(h.pid()) }.getOrNull()?.takeIf { it.isNotBlank() }?.let { return it }
         return h.info().command().orElse("")
+    }
+
+    /**
+     * PROC-WATCH-CPU-1: every live process as pid to parent pid (null when the OS names none), read in ONE call. On Windows
+     * that is a toolhelp snapshot: the JDK's `ProcessHandle.parent()` takes a whole snapshot of its own for EACH process, so
+     * walking a tree through it cost one process-table walk per member. Elsewhere `parent()` is a cheap per-process read.
+     */
+    fun parentTable(): Map<Long, Long?> {
+        if (isWindows) runCatching { windowsParentTable() }.getOrNull()?.let { return it }
+        val out = HashMap<Long, Long?>()
+        ProcessHandle.allProcesses().forEach { h -> out[h.pid()] = h.parent().map { it.pid() }.orElse(null) }
+        return out
+    }
+
+    private fun windowsParentTable(): Map<Long, Long?>? {
+        val k32 = Kernel32.INSTANCE
+        val snap = k32.CreateToolhelp32Snapshot(Tlhelp32.TH32CS_SNAPPROCESS, WinDef.DWORD(0)) ?: return null
+        if (WinBase.INVALID_HANDLE_VALUE == snap) return null
+        try {
+            val entry = Tlhelp32.PROCESSENTRY32.ByReference()
+            if (!k32.Process32First(snap, entry)) return null
+            val out = HashMap<Long, Long?>()
+            do {
+                val pid = entry.th32ProcessID.toLong()
+                val ppid = entry.th32ParentProcessID.toLong()
+                out[pid] = ppid.takeIf { it != 0L && it != pid }
+            } while (k32.Process32Next(snap, entry))
+            return out
+        } finally {
+            k32.CloseHandle(snap)
+        }
     }
 
     /** [members] without [daemon]-matching processes and anything whose parent chain (within [members]) reaches one. */
