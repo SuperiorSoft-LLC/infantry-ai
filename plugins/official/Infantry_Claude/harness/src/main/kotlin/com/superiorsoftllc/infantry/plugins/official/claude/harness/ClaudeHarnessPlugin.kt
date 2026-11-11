@@ -100,7 +100,7 @@ class ClaudeHarness internal constructor(
 
     override fun models(): List<HarnessModels> = ClaudeCommand.models()
 
-    /** RUNNER-CHECK-SIGNIN-1: the same proof a launch checks (FIRST-RUN-F1), for the runner hello's `loggedIn`; the daemon's env, no session env. */
+    /** RUNNER-CHECK-SIGNIN-1 / RUNNER-LOGIN-1: the runner hello's `loggedIn`, re-read at every hello and Check (a login or a finished setup); the daemon's env. */
     override fun signInProblem(): String? = ClaudeSignIn.problem(System.getenv(), home())
 
     private fun liveIdle(): Int = host.setting(ClaudeCommand.LIVE_IDLE_SETTING)?.trim()?.toIntOrNull()?.takeIf { it >= 0 } ?: 0
@@ -112,7 +112,7 @@ class ClaudeHarness internal constructor(
         headless = ClaudeSession(executable, ::mcp, { env -> ClaudeCommand.watchSettings(env) }, idleMinutes = ::liveIdle, stateDir = { host.stateDir }),
         interactive = ClaudeTtySession(executable, ::mcp, { env -> ClaudeCommand.watchSettings(env) }, stateDir = { host.stateDir }, idleMinutes = ::liveIdle,
             approvalHookSeconds = { ClaudePermissionHook.timeoutSec(host.setting(ClaudePermissionHook.TIMEOUT_SETTING)) },
-            signInProblem = { env -> ClaudeSignIn.problem(System.getenv() + env, home()) },
+            prepareSignIn = { env -> ClaudeSignIn.prepare(System.getenv() + env, home()) },
             firstTurn = { ClaudeFirstTurn.of(host.setting(ClaudeFirstTurn.SUBMIT_SETTING), host.setting(ClaudeFirstTurn.REPLY_SETTING)) }),
         mode = { host.setting(ClaudeCommand.MODE_SETTING) },
     )

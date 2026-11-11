@@ -890,7 +890,7 @@ class InfantryDaemon(
                 credentialEnv = { id -> harnessCredentialsRef.get()?.env(id).orEmpty() },
                 credentialMissing = { id ->
                     harnessCredentialsRef.get()?.let { hc ->
-                        hc.missing().filter { it.harnessId == id }.takeIf { it.isNotEmpty() }?.joinToString(" ") { c ->
+                        hc.missingAtLaunch(id).takeIf { it.isNotEmpty() }?.joinToString(" ") { c ->
                             val cmd = "infantry harness key ${c.harnessId}" + (if (c.credId.isNotEmpty()) " ${c.credId}" else "")
                             (hc.usesSecret(c.harnessId, c.credId)?.let { "Harness ${c.label} uses the shared secret '$it', which is missing or has no value: the run may fail or stall. Create it, or point the harness at another with `$cmd --use-secret <name>`" }
                                 ?: ("No API key set for ${c.label} (${c.env}): the run may fail or stall. Set it with `$cmd`")) +

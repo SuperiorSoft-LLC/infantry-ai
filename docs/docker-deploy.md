@@ -218,7 +218,9 @@ The model allowlist is stored-setting > env: anyone holding the owner token can 
    image installs with `npm -g` into `/usr/local/bin`, which is both a default location and on PATH: no setting needed.
 3. **Home directory / credentials**: the container user is `infantry` (uid 10001), `HOME=/home/infantry`, kept in the
    `infantry-home` volume. opencode, pi and claude keep their logins and config under it (`~/.local/share/opencode`,
-   `~/.config/opencode`, `~/.pi`, `~/.claude`); nothing is read from the host.
+   `~/.config/opencode`, `~/.pi`); claude keeps its login and config in `CLAUDE_CONFIG_DIR=/data/claude`, the state volume,
+   so a recreated container stays signed in (RUNNER-LOGIN-1; the entrypoint copies an older `~/.claude` login there once).
+   Nothing is read from the host.
 4. **Windows-only jars**: none in the image. The skiko runtime (`skiko-awt-runtime-windows-x64`) and the Compose jars
    are on the DESKTOP app's classpath only (`infantryUi`); the image uses `:infantry:installDist`, whose `lib/` has 36 jars,
    no skiko, no Compose. JNA and sqlite-jdbc carry their Linux natives.

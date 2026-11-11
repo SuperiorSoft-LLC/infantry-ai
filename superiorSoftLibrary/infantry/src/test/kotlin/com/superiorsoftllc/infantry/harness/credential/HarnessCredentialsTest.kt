@@ -181,6 +181,21 @@ class HarnessAuthProbeTest {
     }
 
     @Test
+    fun `RUNNER-LOGIN-1 no API key warning for a signed-in CLI, probed once`() {
+        val ran = mutableListOf<List<String>>()
+        val signedIn = creds(null, """{"loggedIn": true}""", ran)
+        assertEquals(emptyList(), signedIn.missingAtLaunch("claude"), "auth mode not chosen, but the CLI is logged in")
+        assertEquals(emptyList(), signedIn.missingAtLaunch("claude"))
+        assertEquals(1, ran.size, "the probe runs once, then its answer is reused")
+        assertEquals(listOf(decl), creds(null, """{"loggedIn": false}""").missingAtLaunch("claude"), "signed out: the warning stays")
+        assertEquals(listOf(decl), creds(null, null).missingAtLaunch("claude"), "unknown: the warning stays")
+        val apiKey = mutableListOf<List<String>>()
+        assertEquals(listOf(decl), creds("api-key", """{"loggedIn": true}""", apiKey).missingAtLaunch("claude"), "API-key mode chosen: a key is needed")
+        assertEquals(emptyList(), apiKey, "a chosen mode runs no probe")
+        assertEquals(emptyList(), creds("subscription-login", null).missingAtLaunch("claude"), "subscription chosen: never warns")
+    }
+
+    @Test
     fun `an unreadable or missing probe is unknown, never signed in`() {
         assertNull(creds("subscription-login", "not json").checkAuth("claude").signedIn)
         assertNull(creds("subscription-login", null).checkAuth("claude").signedIn)

@@ -64,6 +64,18 @@ case "${INFANTRY_DEMO_LOCK:-0}" in
     ;;
 esac
 
+# RUNNER-LOGIN-1: claude's login lives in the state volume (CLAUDE_CONFIG_DIR, /data/claude in the image), so a recreated container
+# keeps it. A login made before this (in ~/.claude and ~/.claude.json, e.g. on a compose home volume) is copied over once.
+if [ -n "${CLAUDE_CONFIG_DIR:-}" ]; then
+  (umask 077 && mkdir -p "$CLAUDE_CONFIG_DIR") || echo "[entrypoint] WARNING: cannot create CLAUDE_CONFIG_DIR $CLAUDE_CONFIG_DIR"
+  if [ ! -s "$CLAUDE_CONFIG_DIR/.credentials.json" ] && [ -s "$HOME/.claude/.credentials.json" ] && [ "$HOME/.claude" != "$CLAUDE_CONFIG_DIR" ]; then
+    cp -a "$HOME/.claude/." "$CLAUDE_CONFIG_DIR/" \
+      && { [ ! -s "$HOME/.claude.json" ] || [ -s "$CLAUDE_CONFIG_DIR/.claude.json" ] || cp -a "$HOME/.claude.json" "$CLAUDE_CONFIG_DIR/.claude.json"; } \
+      && chmod 700 "$CLAUDE_CONFIG_DIR" && chmod 600 "$CLAUDE_CONFIG_DIR/.credentials.json" \
+      && echo "[entrypoint] moved the claude login from $HOME/.claude to $CLAUDE_CONFIG_DIR (kept across container recreates)"
+  fi
+fi
+
 # sqlite-jdbc and JNA extract their native .so into java.io.tmpdir (/tmp) and dlopen it. Docker mounts a compose `tmpfs:`
 # /tmp NOEXEC, so the load fails ("failed to map segment from shared object") and the daemon cannot open its database.
 # Extract them into the state volume instead (INFANTRY_NATIVE_DIR), which is executable.

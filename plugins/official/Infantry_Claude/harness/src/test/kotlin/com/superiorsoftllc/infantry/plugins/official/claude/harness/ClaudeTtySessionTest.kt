@@ -555,13 +555,20 @@ class ClaudeTtySessionTest {
         assertEquals(listOf("\u001b[200~y\u001b[201~"), live.out.written)
     }
 
-    @Test fun `a launch the sign-in check refuses fails with its message`() {
-        val refused = ClaudeTtySession(
+    @Test fun `the sign-in step never blocks a launch, even when it throws`() {
+        // RUNNER-LOGIN-1: the launch used to fail on the onboarding flag alone, while `claude auth status` said loggedIn.
+        var prepared: Map<String, String>? = null
+        val ok = ClaudeTtySession(
             executable = { "claude.exe" }, mcp = { null to emptyMap() }, stateDir = { state }, configDir = { config }, poll = false,
-            signInProblem = { ClaudeSignIn.NOT_SIGNED_IN },
+            prepareSignIn = { prepared = it },
         )
-        val e = kotlin.test.assertFailsWith<IllegalStateException> { refused.launch(request(""), emptyMap()) }
-        assertEquals(ClaudeSignIn.NOT_SIGNED_IN, e.message)
+        ok.launch(request(""), mapOf("A" to "1"))
+        assertEquals("1", prepared?.get("A"), "the session env reaches the sign-in step")
+        val throwing = ClaudeTtySession(
+            executable = { "claude.exe" }, mcp = { null to emptyMap() }, stateDir = { state }, configDir = { config }, poll = false,
+            prepareSignIn = { error("disk full") },
+        )
+        throwing.launch(request(""), emptyMap())
     }
 
     @Test fun `screen text drops escapes for matching`() {

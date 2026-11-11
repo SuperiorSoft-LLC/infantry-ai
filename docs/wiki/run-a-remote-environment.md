@@ -32,7 +32,7 @@ Choose it, first source wins: `infantry daemon --mode runner` (or `--mode=runner
    `INFANTRY_RUNNER_ALLOW_PROJECTS`, `INFANTRY_RUNNER_ALLOW_HARNESSES`) and the container prints its pairing link in `docker logs`
    once it is up and not paired yet (see [Runner quickstart](runner-quickstart.md)). From an install instead: `infantry runner up
    --name server-1 --host <address>`, which starts a runner-mode daemon when none answers and prints the link.
-2. **Log the agent CLI in on the server**, for example `docker exec -it infantry-runner claude login` (the login lands in `/data`).
+2. **Log the agent CLI in on the server**, for example `docker exec -it infantry-runner claude auth login` (the login lands in `/data/claude`, so recreating the container with the same volume keeps it).
    Logins and secrets never travel from your PC.
 3. **Allow what it may run** on the runner: the settings `runner.projects` and `runner.harnesses` (empty means none, `*` means any).
 4. **Pair.** On the server (`docker exec -it infantry-runner infantry runner pair --name server-1`) it prints one pairing link
