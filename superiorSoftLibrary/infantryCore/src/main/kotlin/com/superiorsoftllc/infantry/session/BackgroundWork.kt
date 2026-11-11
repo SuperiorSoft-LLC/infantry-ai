@@ -35,25 +35,108 @@ interface ProcessSource {
     fun all(): List<ProcInfo> = emptyList()
 }
 
-/** Windows and POSIX alike: [ProcessHandle.descendants], no PowerShell polling. */
+/**
+ * Windows and POSIX alike, no PowerShell polling. PROC-WATCH-CPU-1: every read goes through [ProcessSnapshots], one OS process
+ * table shared by all sessions and both watch threads, instead of `ProcessHandle.descendants()` per session (a full
+ * process-table walk per call, plus one more per member for its parent on Windows).
+ */
 object OsProcessSource : ProcessSource {
-    override fun descendants(rootPid: Long): List<ProcInfo> {
-        val root = ProcessHandle.of(rootPid).orElse(null) ?: return emptyList()
-        return root.descendants().filter { it.isAlive }.map { h -> describe(h, parentKnown = true, full = true) }.toList()
+    override fun descendants(rootPid: Long): List<ProcInfo> = ProcessSnapshots.current().descendants(rootPid)
+
+    override fun all(): List<ProcInfo> = ProcessSnapshots.current().all()
+
+    override fun info(pid: Long): ProcInfo? = ProcessSnapshots.current().info(pid)?.copy(parentPid = null)
+}
+
+/**
+ * PROC-WATCH-CPU-1: the shared process table. [current] answers from one OS read ([ProcessTree.parentTable]) for
+ * [ttlMs]; a process's start instant and command line are read once, when its pid first shows up, and kept while it lives
+ * (a pid whose parent changed is read again, so a recycled pid is never described as the old process). Thread safe.
+ */
+object ProcessSnapshots {
+    /** `limits.processes.snapshotMillis`; the daemon sets it from the setting on every background scan. 0 = read on every call. */
+    @Volatile var ttlMs: Long = com.superiorsoftllc.infantry.settings.LimitRegistry.PROCESS_SNAPSHOT_MILLIS.default
+
+    /** The OS reads, swapped by a test only: the pid-to-parent table, and one process's details. */
+    @Volatile var readTable: () -> Map<Long, Long?> = { com.superiorsoftllc.infantry.runner.ProcessTree.parentTable() }
+    @Volatile var describe: (pid: Long) -> ProcInfo? = ::osDescribe
+    @Volatile var clock: () -> Long = { System.nanoTime() / 1_000_000L }
+
+    /** How many OS table reads ran (a test reads it). */
+    @Volatile var tableReads: Long = 0L
+        private set
+
+    private var snapshot: Snapshot? = null
+    private var takenAt = 0L
+    private val details = java.util.concurrent.ConcurrentHashMap<Long, ProcInfo>()
+
+    @Synchronized
+    fun current(): Snapshot {
+        val now = clock()
+        snapshot?.takeIf { ttlMs > 0 && now - takenAt < ttlMs }?.let { return it }
+        val table = runCatching { readTable() }.getOrDefault(emptyMap())
+        tableReads++
+        details.keys.retainAll(table.keys)
+        return Snapshot(table).also { snapshot = it; takenAt = now }
     }
 
-    override fun all(): List<ProcInfo> =
-        ProcessHandle.allProcesses().filter { it.isAlive }.map { describe(it, parentKnown = true) }.toList()
+    /** The next [current] reads the OS again. */
+    @Synchronized
+    fun newTick() { snapshot = null }
 
-    override fun info(pid: Long): ProcInfo? =
-        ProcessHandle.of(pid).filter { it.isAlive }.map { describe(it, parentKnown = false, full = true) }.orElse(null)
+    /** Forget the table and every kept process detail (a test swapping [readTable] / [describe]). */
+    @Synchronized
+    fun reset() { snapshot = null; details.clear() }
 
-    /** STALL-2: [full] = the real command line on Windows too (the JDK gives none there, so the daemon/helper filters missed). */
-    private fun describe(h: ProcessHandle, parentKnown: Boolean, full: Boolean = false): ProcInfo {
+    class Snapshot internal constructor(private val parents: Map<Long, Long?>) {
+        private val children: Map<Long, List<Long>> by lazy {
+            val m = HashMap<Long, MutableList<Long>>()
+            for ((pid, ppid) in parents) if (ppid != null) m.getOrPut(ppid) { ArrayList() } += pid
+            m
+        }
+
+        /** [pid] as of this table (parent pid included), or null when it is not alive. */
+        fun info(pid: Long): ProcInfo? {
+            if (pid !in parents) return null
+            val ppid = parents[pid]
+            details[pid]?.takeIf { it.parentPid == ppid }?.let { return it }
+            val d = runCatching { describe(pid) }.getOrNull()?.copy(parentPid = ppid) ?: return null
+            details[pid] = d
+            return d
+        }
+
+        /**
+         * Every process under [rootPid]. Like the JDK, a child that started before its parent is not its child (the parent
+         * pid was recycled), so a dead harness's pid never adopts an unrelated tree.
+         */
+        fun descendants(rootPid: Long): List<ProcInfo> {
+            val rootStart = info(rootPid)?.startedAt ?: return emptyList()
+            val out = ArrayList<ProcInfo>()
+            val seen = HashSet<Long>().apply { add(rootPid) }
+            val queue = ArrayDeque<Pair<Long, Long?>>().apply { add(rootPid to rootStart) }
+            while (queue.isNotEmpty()) {
+                val (pid, start) = queue.removeFirst()
+                for (c in children[pid].orEmpty()) {
+                    if (!seen.add(c)) continue
+                    val p = info(c) ?: continue
+                    val childStart = p.startedAt
+                    if (start != null && childStart != null && childStart < start) continue
+                    out += p
+                    queue += c to p.startedAt
+                }
+            }
+            return out
+        }
+
+        fun all(): List<ProcInfo> = parents.keys.mapNotNull { info(it) }
+    }
+
+    /** STALL-2: the real command line on Windows too (the JDK gives none there, so the daemon/helper filters missed). */
+    private fun osDescribe(pid: Long): ProcInfo? {
+        val h = ProcessHandle.of(pid).orElse(null) ?: return null
         val info = h.info()
         return ProcInfo(
-            h.pid(), if (parentKnown) h.parent().map { it.pid() }.orElse(null) else null,
-            if (full) com.superiorsoftllc.infantry.runner.ProcessTree.commandLine(h) else info.commandLine().orElse(null) ?: info.command().orElse(""),
+            pid, null, com.superiorsoftllc.infantry.runner.ProcessTree.commandLine(h),
             info.startInstant().map { it.toEpochMilli() }.orElse(null),
         )
     }

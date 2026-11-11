@@ -364,6 +364,17 @@ object LimitRegistry {
         min = 1, max = 3600, zeroIsUnlimited = false,
     )
 
+    /**
+     * PROC-WATCH-CPU-1: how long one OS process table serves every reader (each session's background scan, the process
+     * watch). The ceiling stays under the 3 s close-time grace, so a session's close cleanup always reads a table taken
+     * after the close.
+     */
+    val PROCESS_SNAPSHOT_MILLIS = LimitDef(
+        "limits.processes.snapshotMillis", 1500, "milliseconds",
+        "How long one read of the OS process table is shared by every session's background scan and the process watch; longer = less CPU, later notice of a new process.",
+        min = 0, max = 2000, zeroIsUnlimited = true, zeroMeans = "no sharing: every read asks the OS (the old, costly way)",
+    )
+
     /** PROC-LEAK-1: how long a closing session's build daemons get after their profile's graceful `stop` before they are killed. */
     val PROCESS_STOP_GRACE_SECONDS = LimitDef(
         "limits.processes.stopGraceSeconds", 10, "seconds",
@@ -497,6 +508,12 @@ object LimitRegistry {
      * STACK-NEUTRAL-1: the process/build watch tooling as a whole (process ledger and reaping, build limits env, PATH shims
      * and harness hooks). Opt-in: a fresh install starts with 0; an install that existed before is migrated to 1 once.
      */
+    /** PROC-WATCH-CPU-1: the daemon log carried every harness stdout line (whole stream-json transcripts, 7.7 MB rotations). */
+    val LOG_SESSION_STDOUT = LimitDef(
+        "limits.log.sessionStdout", 0, "switch",
+        "1 = every line a session's harness prints on stdout (the full stream-json transcript) is copied into the daemon log, for debugging; 0 = not copied (the transcript stays in the session's chat history). Stderr lines are always logged.",
+        max = 1, zeroIsUnlimited = false,
+    )
     val WATCH_ENABLED = LimitDef(
         "limits.watch.enabled", 0, "switch",
         "1 = the watch tooling is on: worker processes are tracked and reaped with their session, worker builds get the build limits env of the tool profiles, and long commands run through the watched runner; 0 = off: nothing tracked, nothing killed, no build env, plain exit codes and logs.",
@@ -1193,7 +1210,7 @@ object LimitRegistry {
         BUILD_MAX_WORKERS, BUILD_MAX_PARALLEL_FORKS, CPU_ALERT_PERCENT, CPU_ALERT_MINUTES,
         TICKET_DEADLINE_MINUTES, UNATTENDED_DEADLINE_MINUTES, STALL_MINUTES, KILL_RETRY_MINUTES, SILENT_MINUTES, PROGRESS_STALE_MINUTES, WAITING_DEFAULT_MINUTES, WAITING_GRACE_MINUTES, WAITING_CLEAR_ON_OUTPUT, WAITING_OUTPUT_GRACE_SECONDS, WAITING_MAX_MINUTES, WAITING_REASON_CHARS, IDLE_NUDGE_MINUTES, MAIL_WAKE_MAX_SECONDS, IDLE_NOTICE_MINUTES, IDLE_COMMENT, FINISH_ONCE, UNBRIEFED_GRACE_MINUTES,
         UNASSIGN_WAIT_SECONDS, HANDOFF_COMMITS, HANDOFF_CHARS, BOARD_HAS_WORK_TTL_MS, AGENT_QUEUE_MAX, RUNNERS_HEARTBEAT_SEC, RUNNERS_LOST_AFTER_SEC, RUNNER_MAX_WORKERS, WORKERS_MAX_PARALLEL, CHAT_QUEUE_MAX, JOBS_REMEMBERED, JOB_LOG_MAX_READ_BYTES, CHAT_SEND_ACK_SECONDS, CHAT_SENT_IDS_KEPT, CHAT_HISTORY_FRAMES,
-        AUTO_DONE_MIN_OUTPUTS, PROCESS_WATCH_INTERVAL_SECONDS, PROCESS_STOP_GRACE_SECONDS, PROCESS_STUCK_MINUTES, RUN_SCROLLBACK_BYTES, RUN_HISTORY,
+        AUTO_DONE_MIN_OUTPUTS, PROCESS_WATCH_INTERVAL_SECONDS, PROCESS_SNAPSHOT_MILLIS, LOG_SESSION_STDOUT, PROCESS_STOP_GRACE_SECONDS, PROCESS_STUCK_MINUTES, RUN_SCROLLBACK_BYTES, RUN_HISTORY,
         RUN_INPUT_BYTES_PER_SECOND, RUN_INPUT_MAX_FRAME_BYTES, RUN_INPUT_QUEUE_BYTES, RUN_MAX_COLS, RUN_MAX_ROWS,
         QUESTION_TTL_MINUTES, BG_NOTIFY_TAIL_LINES, BG_NOTIFY_TIMEOUT_MINUTES, BG_NOTIFY_PATTERN_GRACE_SECONDS,
         MCP_HEAL_ATTEMPTS, MCP_HEAL_POLL_SECONDS, MCP_HEAL_DELAY_SECONDS, MCP_HEAL_MAX_DELAY_SECONDS, WATCH_QUIET_MINUTES, WATCH_HEARTBEAT_CAP_MINUTES, WATCH_STALL_MINUTES, WATCH_FOREGROUND_STALL_MINUTES, WATCH_EXEMPT_WHEN_TICKET_DONE, WATCH_NOTICE_DEDUPE, NOTICE_MAIL_PLUGIN_HEALTH, NOTICE_MAIL_BG_STATUS, BG_NOTICE_FOLD_INTO_TURN, BG_NOTICE_SKIP_IF_RESULT_READ, WATCH_HANDLED_KEEP_MINUTES, WATCH_TREE_JOB_SECONDS, WATCH_ENABLED, WATCH_FORCED, WATCH_BG_NATIVE, WATCH_HANG_GRACE_SECONDS, WATCH_TREE_WAIT_MINUTES,

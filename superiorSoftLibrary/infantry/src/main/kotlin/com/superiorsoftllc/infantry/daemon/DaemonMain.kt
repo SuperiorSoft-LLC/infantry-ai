@@ -1660,7 +1660,7 @@ class InfantryDaemon(
                 broadcast(clients, event, streamSequencer, runActivity, { id, seconds ->
                     // A `sleep N` in a tool call becomes a "waiting" countdown; the call returning (or the agent moving on) ends it.
                     if (seconds != null) manager.setWait(id, com.superiorsoftllc.infantry.session.WaitHint(seconds, System.currentTimeMillis())) else manager.clearWait(id)
-                }, { id, items -> manager.setTodoProgress(id, items) }) { id -> manager.toolApprovalFor(id).mode }
+                }, { id, items -> manager.setTodoProgress(id, items) }, echoStdout = { settings.limit(LimitRegistry.LOG_SESSION_STDOUT) != 0L }) { id -> manager.toolApprovalFor(id).mode }
                 // PROMPT-1: a turn's end or a terminal session resolves its open prompts (deny / no answer).
                 pendingPrompts.onSessionEvent(event)
                 // RUNNER-POOL-6: a session its orchestrator started here pushes its ticket branch after each turn.
@@ -2531,6 +2531,8 @@ private fun broadcast(
     onWait: (sessionId: String, seconds: Long?) -> Unit = { _, _ -> },
     /** TODO-PROGRESS-1: a to-do tool call carried the agent's full list (text to status); it drives the progress bar. */
     onTodos: (sessionId: String, items: List<Pair<String, String>>) -> Unit = { _, _ -> },
+    /** PROC-WATCH-CPU-1: `limits.log.sessionStdout`: echo every harness stdout line (full stream-json) into the daemon log. Off by default. */
+    echoStdout: () -> Boolean = { false },
     /** BUG-PERM-1: the Tool approval a session runs under, named by its denial notice. */
     toolApprovalFor: (sessionId: String) -> com.superiorsoftllc.infantry.harness.ToolApproval = { com.superiorsoftllc.infantry.harness.ToolApproval.DENY },
 ) {
@@ -2562,8 +2564,8 @@ private fun broadcast(
         }
 
         is SessionEvent.Stdout -> {
-            // Kept from Phase 1: the child's lines are visible in the daemon terminal.
-            println("[${event.sessionId.take(8)}] ${event.line}")
+            // Phase 1 echoed every line into the daemon terminal (and so its log: whole stream-json transcripts). Now a debug setting.
+            if (echoStdout()) println("[${event.sessionId.take(8)}] ${event.line}")
             val raw = Envelope(Envelope.STDOUT, event.line, event.sessionId)
             val taskTodos = claudeTasks.feed(event.sessionId, event.line)
             val normalised = EventNormalizer.normalise(event.line, afterInterrupt = event.afterInterrupt).map { l ->

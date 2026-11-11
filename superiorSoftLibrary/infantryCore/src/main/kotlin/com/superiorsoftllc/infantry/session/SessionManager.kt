@@ -700,6 +700,8 @@ class SessionManager(
      * busy, so it is left alone; the next scan after it ends picks up whatever it launched. Called on a timer.
      */
     fun scanBackgroundWork() {
+        val snapDef = com.superiorsoftllc.infantry.settings.LimitRegistry.PROCESS_SNAPSHOT_MILLIS
+        ProcessSnapshots.ttlMs = limitSource?.let { src -> runCatching { src(snapDef) }.getOrNull() } ?: snapDef.default
         expireBgJobs()
         runCatching { trackTreeJobs() }
         bgJobListener?.let { l -> runCatching { l.scanned() } }
