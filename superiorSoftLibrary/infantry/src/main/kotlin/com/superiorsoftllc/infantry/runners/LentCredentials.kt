@@ -41,6 +41,9 @@ class LentCredentials(private val alive: (sessionId: String) -> Boolean = { true
     /** The lent secret names a render in [projectId] can use (names only). */
     fun secretNames(projectId: String?): Set<String> = live(projectId).flatMap { it.secrets.keys }.toSet()
 
+    /** Every lent secret VALUE, for the output mask only (never answered, logged or written). */
+    fun values(): Set<String> = loans.values.flatMapTo(HashSet()) { l -> l.secrets.values.flatMap { it.values } }
+
     /** How many sessions hold a loan (tests, health). */
     fun size(): Int = loans.size
 

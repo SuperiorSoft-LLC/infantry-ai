@@ -621,6 +621,9 @@ class SessionManager(
     /** RUNNER-CRED-1: the variable NAMES lent to [sessionId] (never a value). */
     fun lentEnvNames(sessionId: String): Set<String> = lentEnvs[sessionId]?.keys.orEmpty()
 
+    /** RUNNER-CRED-1: every lent VALUE, for the output mask only (a session that prints its lent key shows it masked). */
+    fun lentEnvValues(): Set<String> = lentEnvs.values.flatMapTo(HashSet()) { it.values }
+
     /**
      * TICKET-HANDOVER: sessions held by a harness switch in progress ([com.superiorsoftllc.infantry.daemon.SessionHandover]).
      * While held, only the handover may start a turn ([resumeHeld]); every other [resume] is refused as a run in flight,

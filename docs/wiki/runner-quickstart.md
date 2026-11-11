@@ -46,8 +46,8 @@ What to know:
   rotate it: `docker exec infantry-runner infantry runner bearer --rotate`. It carries the runner's name and its TLS certificate
   pin, so the app checks the certificate before it sends the secret. Treat it like a password.
 - Every project and every harness may run on the runner. Narrow it in the same `docker run` with
-  `-e INFANTRY_RUNNER_ALLOW_PROJECTS=<ids>` / `-e INFANTRY_RUNNER_ALLOW_HARNESSES=<ids>`. A harness key or login goes in the same
-  run too (`-e ANTHROPIC_API_KEY=...`, see [Run a remote environment](run-a-remote-environment.md)).
+  `-e INFANTRY_RUNNER_ALLOW_PROJECTS=<ids>` / `-e INFANTRY_RUNNER_ALLOW_HARNESSES=<ids>`. No harness key or git login goes in the
+  run: the app lends its own with each start (section 5).
 - Another published port (`-p 18921:8790`)? Add `-e INFANTRY_RUNNER_PUBLIC_PORT=18921` so the printed endpoint says it; or just
   type that port in the endpoint you paste. A runner on your own PC is reached as `localhost:<published port>`.
 - One orchestrator per runner: the same app can paste the bearer again (it gets a fresh link credential); another one is refused
@@ -218,11 +218,13 @@ A runner needs no key, keystore or git login of its own. At every remote start t
   `harness.*` / `plugin.*` secret never goes);
 - **a git credential** for clone, fetch and push: name a secret with a `token` field (and an optional `username`, default
   `x-access-token`) in `infantry settings set runners.gitSecret '"<secret name>"'`. Git gets it as an HTTP header through
-  `GIT_CONFIG_*` for that one call: never in argv, the clone's config, the remote URL or a credential store.
+  `GIT_CONFIG_*` for that one call: never in argv, the clone's config, the remote URL or a credential store. `runner check` sends
+  the same credential for its `git` row, so a passing row means a worker there can really clone and push.
 
 The runner keeps them in memory for that session only: no log line, audit line, file or answer carries a value (the audit names the
 env variables and counts the secrets). A daemon restart forgets them; the next start lends again. The runner's own say wins: its own
-keystore answers a render first, its own non-blank key wins over a lent one, and a harness signed in on the runner itself keeps that login.
+keystore answers a render first, its own non-blank key wins over a lent one, and a harness whose login you chose on the runner
+(`infantry settings set harness.<id>.authMode '"subscription-login"'` there, then sign it in) keeps that login instead of the lent key.
 
 Turn it off per runner: on the PC `runners.lendCredentials` lists the runners that get credentials (default `["*"]`, every runner;
 `[]` = none); on the runner `infantry settings set runner.acceptCredentials false` ignores every loan.

@@ -95,6 +95,20 @@ class RunnerCredentialLendTest {
     }
 
     @Test
+    fun `a lent value is masked in session output like a keystore value`() {
+        val store = LentCredentials()
+        val own = setOf("own-keystore-value")
+        val source = com.superiorsoftllc.infantry.keystore.SecretMask.union({ own }, { setOf(dummyKey) }, store::values)
+        val mask = com.superiorsoftllc.infantry.keystore.SecretMask(source)
+        assertTrue(mask.mask("x $dummySecret").contains(dummySecret), "not lent yet")
+        store.lend("s-1", "p1", lent)
+        val out = mask.mask("key $dummyKey secret $dummySecret own own-keystore-value")
+        noValue(out, "masked output")
+        assertFalse(out.contains("own-keystore-value"))
+        assertTrue(source() === source(), "an unchanged union keeps its identity (the mask's cache)")
+    }
+
+    @Test
     fun `the git credential goes as a header through GIT_CONFIG env, never in plain text`() {
         val env = LentCredentials.gitEnv(GitCredential(dummyToken, "bot"))
         assertEquals("http.extraHeader", env["GIT_CONFIG_KEY_0"])
@@ -160,8 +174,8 @@ class RunnerCredentialLendTest {
     }
 
     /** The runner's side, end to end through its link server: env to the session, secrets to the store, nothing in the audit file. */
-    private fun runnerStart(accept: Boolean, signedInHere: Boolean = false): Triple<StartSpec?, LentCredentials, File> {
-        val runnerDir = File(dir, "runner-$accept-$signedInHere").also { it.mkdirs() }
+    private fun runnerStart(accept: Boolean, signedInHere: Boolean = false, ownLogin: Boolean = false): Triple<StartSpec?, LentCredentials, File> {
+        val runnerDir = File(dir, "runner-$accept-$signedInHere-$ownLogin").also { it.mkdirs() }
         var started: StartSpec? = null
         val local = LocalRunnerLink(LocalRunnerServices(
             ticketIdOf = { null }, info = { RunnerInfo("r1", F.CONTRACT, listOf(RunnerHarness("claude", loggedIn = signedInHere))) },
@@ -174,7 +188,7 @@ class RunnerCredentialLendTest {
         val server = RunnerLinkServer(
             RunnerLinkStore(LinkVault.InMemory()), audit, codes,
             settings = { RunnerLinkSettings.Values(projects = listOf("*"), harnesses = listOf("*"), acceptCredentials = accept) },
-            runner = { local }, clock = { now }, lent = store,
+            runner = { local }, clock = { now }, lent = store, ownLogin = { ownLogin },
         )
         val orchestratorStore = RunnerLinkStore(LinkVault.InMemory())
         val credential = RunnerPeers(orchestratorStore, LinkCall { _, _, id, c, type, data, _ -> server.handle(type, data, id, c, "peer") }, clock = { now })
@@ -206,8 +220,15 @@ class RunnerCredentialLendTest {
     }
 
     @Test
-    fun `a harness signed in on the runner keeps its own login`() {
-        val (spec, store, _) = runnerStart(accept = true, signedInHere = true)
+    fun `a harness the runner reports signed in only because it has no sign-in probe still gets the lent key`() {
+        // A key-only harness (pi, opencode, a descriptor) reports loggedIn = "no sign-in problem known"; that is no login of its own.
+        val (spec, _, _) = runnerStart(accept = true, signedInHere = true)
+        assertEquals(mapOf("ANTHROPIC_API_KEY" to dummyKey), spec?.credentials?.env)
+    }
+
+    @Test
+    fun `a runner whose owner chose the harness's own login keeps it`() {
+        val (spec, store, _) = runnerStart(accept = true, signedInHere = true, ownLogin = true)
         assertTrue(spec?.credentials?.env.orEmpty().isEmpty(), "the runner's own login wins: ${spec?.credentials}")
         assertEquals(mapOf("value" to dummySecret), store.secretFields("db", "p1"), "secrets are still lent")
     }

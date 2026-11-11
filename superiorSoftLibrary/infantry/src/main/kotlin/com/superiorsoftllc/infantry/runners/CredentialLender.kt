@@ -54,6 +54,13 @@ class CredentialLender(
         }.toSet()
     }
 
+    /** The git credential a start in [projectId] on [runner] would carry, for the runner check's `git` row; null when none. */
+    fun lentGit(runner: String, projectId: String?): GitCredential? {
+        if (!lendsTo(runner)) return null
+        val name = gitSecret().trim().takeIf { it.isNotEmpty() } ?: return null
+        return runCatching { secret(name, projectId?.takeIf { it.isNotBlank() }) }.getOrNull()?.let(::gitOf)
+    }
+
     companion object {
         private val BUILT_IN = listOf("harness.", "plugin.")
 

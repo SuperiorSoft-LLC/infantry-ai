@@ -1008,7 +1008,8 @@ class InfantryDaemon(
                 maxSecrets = { settings.limit(LimitRegistry.RUNNERS_LEND_SECRETS_MAX).toInt() },
             )
             // HARNESS-GAP G18: every known secret value is masked in all session output (chat rows, transcript, raw stream, a terminal's screen).
-            manager.outputMask = com.superiorsoftllc.infantry.keystore.SecretMask(keystore::allValues)
+            // RUNNER-CRED-1: what an orchestrator lent sessions here is masked as well as this keystore's own values.
+            manager.outputMask = com.superiorsoftllc.infantry.keystore.SecretMask(com.superiorsoftllc.infantry.keystore.SecretMask.union(keystore::allValues, manager::lentEnvValues, lentCredentials::values))
             // POLICY-1: "restricted" follows the ACTIVE preset (a Settings switch included), read per call. A seated preset is
             // always restricted (secrets locked), as the seated lockdown was before it became a plugin.
             val locked: () -> Boolean = { policies.current.let { it.restricted == true || it.seats != null } }
@@ -2081,6 +2082,8 @@ class InfantryDaemon(
             )
             runnerLinksRef.set(runnerLinkService.links)
             runnerLinkService.lentKeysOf = credentialLender::lentKeys
+            runnerLinkService.lentGitOf = credentialLender::lentGit
+            runnerLinkService.ownLoginOf = { id -> harnessCredentials.mode(id) == com.superiorsoftllc.infantry.harness.credential.HarnessCredential.MODE_SUBSCRIPTION }
             plugins.runnerLinks = runnerLinkService.links
             // RUNNER-POOL-10: the rows of the Runners card (`runner_admin` op `list`): health, workers / cap, paused.
             runnerLinkService.enabledNow = settings::runnersEnabled

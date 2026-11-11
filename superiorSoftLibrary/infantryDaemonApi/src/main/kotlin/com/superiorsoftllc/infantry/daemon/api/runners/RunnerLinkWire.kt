@@ -263,6 +263,12 @@ object RunnerLinkWire {
          * that is installed but not signed in here is ready anyway (unless `runner.acceptCredentials` is false). Names only.
          */
         val lentKeys: List<String> = emptyList(),
+        /**
+         * RUNNER-CRED-1 (additive): the git credential a start would lend ([SessionCredentials.git]), so the `git` row's
+         * `ls-remote` proves the access a worker will really have. Used for that one call, in memory; never stored or logged
+         * (its toString is redacted). Null when the orchestrator lends none to this runner.
+         */
+        val git: com.superiorsoftllc.infantry.daemon.api.orchestrator.GitCredential? = null,
     )
 
     /**

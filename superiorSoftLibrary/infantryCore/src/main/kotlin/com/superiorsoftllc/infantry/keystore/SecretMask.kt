@@ -71,6 +71,18 @@ class SecretMask(private val values: () -> Collection<String>) {
     override fun toString(): String = "SecretMask(${targets.list.size} targets)"
 
     companion object {
+        /**
+         * RUNNER-CRED-1: one value source over several ([parts]), for a mask that also covers values held outside the keystore (a
+         * runner's lent credentials). The result keeps its identity while the union is unchanged, so the mask's target cache holds.
+         */
+        fun union(vararg parts: () -> Collection<String>): () -> Collection<String> {
+            var last: Set<String> = emptySet()
+            return {
+                val now = parts.flatMapTo(LinkedHashSet()) { p -> runCatching(p).getOrDefault(emptyList()) }
+                synchronized(this) { if (now != last) last = now; last }
+            }
+        }
+
         /** Shorter values are not masked (see the class doc). The same floor as the Run plugin's scrubber. */
         const val MIN_SECRET_LENGTH = 4
         const val MASK = "••••"
