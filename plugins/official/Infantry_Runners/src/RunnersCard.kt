@@ -287,6 +287,13 @@ fun refusalAnswer(text: String): String =
 /** The name of the runner an `add` answer paired, or null when the answer carries none. */
 fun addedRunnerName(text: String): String? = parseObject(text)?.takeIf { it.okAnswer() }?.text("name")?.takeIf { it.isNotBlank() }
 
+/**
+ * RUNNER-REPAIR-1: what to tell the owner when the add moved the runner from another app (a bearer takeover), or null.
+ * The runner's old link stops working, so the owner must know the other app lost it.
+ */
+fun addedTakeoverNotice(text: String): String? = parseObject(text)?.takeIf { it.okAnswer() }?.text("replaced")?.takeIf { it.isNotBlank() }
+    ?.let { "Moved here: this runner was paired with $it. That app's link to it no longer works." }
+
 /** The rows of a `check` answer, or null when the text is not an ok answer (its `error` says why: [runnerFailure]). */
 fun parseRunnerCheck(text: String): List<RunnerCheckRow>? {
     val obj = parseObject(text) ?: return null
@@ -726,11 +733,18 @@ fun RunnerCheckDialog(
     onTest: (() -> Unit)? = null,
     testing: Boolean = false,
     test: RunnerTestResult? = null,
+    /** RUNNER-REPAIR-1: a line above the rows (the add moved the runner from another app), or null. */
+    notice: String? = null,
 ) {
     AhqAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Runner $runner") },
-        text = { RunnerCheckRows(rows, error, checking, onAgain, gate, onTest = onTest, testing = testing, test = test) },
+        text = {
+            Column {
+                notice?.let { Text(it, color = Palette.Warn, modifier = Modifier.testTag("runner-check-notice")) }
+                RunnerCheckRows(rows, error, checking, onAgain, gate, onTest = onTest, testing = testing, test = test)
+            }
+        },
         confirmButton = {
             TextButton(onClick = onDismiss, modifier = Modifier.testTag("runner-check-close")) { Text("Close") }
         },
@@ -766,6 +780,8 @@ class RunnersCardBlock : Block("runnersCard", RUNNERS_CARD_NODE) {
         var list by remember { mutableStateOf<RunnersList?>(null) }
         var listError by remember { mutableStateOf<String?>(null) }
         var dialog by remember { mutableStateOf<CardDialog?>(null) }
+        /** RUNNER-REPAIR-1: the takeover line the check dialog opened by an add shows; cleared when that dialog closes. */
+        var notice by remember { mutableStateOf<String?>(null) }
         val coroutines = rememberCoroutineScope()
         /**
          * Sends one request and returns the daemon's answer to THAT request (matched by request id), or null when nothing was sent.
@@ -835,6 +851,7 @@ class RunnersCardBlock : Block("runnersCard", RUNNERS_CARD_NODE) {
                             failure != null -> dialog = CardDialog.Add(sending = false, error = failure)
                             else -> {
                                 refresh()
+                                notice = addedTakeoverNotice(text)
                                 val runner = addedRunnerName(text)
                                 if (runner == null) dialog = null else check(runner)
                             }
@@ -870,11 +887,12 @@ class RunnersCardBlock : Block("runnersCard", RUNNERS_CARD_NODE) {
             is CardDialog.Check -> RunnerCheckDialog(
                 open.runner, open.rows, open.error, open.running,
                 onAgain = { coroutines.launch { check(open.runner) } },
-                onDismiss = { dialog = null },
+                onDismiss = { dialog = null; notice = null },
                 gate = link,
                 onTest = { coroutines.launch { test(open.runner) } },
                 testing = open.testing,
                 test = open.test,
+                notice = notice,
             )
         }
     }

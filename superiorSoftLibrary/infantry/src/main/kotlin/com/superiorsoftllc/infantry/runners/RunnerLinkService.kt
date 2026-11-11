@@ -146,7 +146,7 @@ class RunnerLinkService(
         store, RunnerAudit(File(dir, RunnerAudit.FILE)), codes = null, settings = settings, runner = { runner }, starts = starts,
         forwarder = forwarder, forwardWaitCapMs = ::forwardWaitMs,
         limit = limit, cloneRoot = ::cloneRootDir, bearer = bearer.takeIf { it.exists() }, lent = lent,
-        ownLogin = { ownLoginOf(it) },
+        ownLogin = { ownLoginOf(it) }, log = log,
     )
 
     private fun serve(store: RunnerLinkStore, t: RunnerLinkTransport) {
@@ -329,6 +329,15 @@ class RunnerLinkService(
             return rowsJson(rows)
         }
         rows += F.CheckRow("link", true, "reached ${r.url} in ${clock() - started} ms")
+        // RUNNER-REPAIR-1: a runner another app took over with its bearer (or one detached there) refuses this credential.
+        if (!answer.ok && RunnerLinkServer.NOT_PAIRED in answer.data) {
+            rows += F.CheckRow(
+                "pairing", false,
+                "runner '$name' is no longer paired with this app: another app paired it with its bearer, or it was detached there",
+                "to use it here, Add runner again with its endpoint and bearer (the runner prints them at every start; `infantry runner bearer` there); that moves it back",
+            )
+            return rowsJson(rows)
+        }
         if (!answer.ok) {
             rows += F.CheckRow(
                 "contract", false,
@@ -570,6 +579,7 @@ class RunnerLinkService(
                 "skipped" to outcome.skipped.joinToString("; ").takeIf { it.isNotEmpty() },
                 "enabledTurnedOn" to turnedOn.toString(),
                 "grantRefusal" to outcome.grantRefusal,
+                "replaced" to outcome.replacedOrchestrator,
             ) + mapOf(
                 "grantedProjects" to JsonArray(outcome.grantedProjects.map(::JsonPrimitive)),
                 "grantedHarnesses" to JsonArray(outcome.grantedHarnesses.map(::JsonPrimitive)),
@@ -656,7 +666,10 @@ class RunnerLinkService(
         val t = transport() ?: throw IllegalArgumentException(NO_TRANSPORT)
         val store = RunnerLinkStore.open(stateDir)
         store.orchestrator()?.let {
-            throw IllegalArgumentException("this runner is already paired with orchestrator ${it.name}; one orchestrator only. `infantry runner detach` first.")
+            throw IllegalArgumentException(
+                "this runner is already paired with orchestrator ${it.name}; a one-time code cannot move it. Paste this runner's bearer " +
+                    "(`infantry runner bearer` prints it) in the other app instead: it moves the runner there. Or `infantry runner detach` first.",
+            )
         }
         // A new `runner pair` replaces one still open: its code dies with its listener.
         closePairing()
