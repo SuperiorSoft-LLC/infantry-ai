@@ -199,7 +199,9 @@ class RemoteStarts(
 
     /** A status change of one session; queued as an event only for a session the orchestrator started. */
     fun onStatus(sessionId: String, state: String) {
-        if (sessions.containsKey(sessionId)) add(sessionId, RunnerEvent.STATUS, state)
+        // RUNNER-SESSION-GHOST-1: a session started over the link without a ticket (the app's New agent) reports too; before, only
+        // ticket starts did, so the orchestrator showed the app's session in STARTING for ever.
+        if (isLinked(sessionId)) add(sessionId, RunnerEvent.STATUS, state)
     }
 
     /**
@@ -227,7 +229,8 @@ class RemoteStarts(
 
     /** A turn of [sessionId] ended with [code]: its ticket branch is pushed to `origin`, then the event is queued. */
     fun onTurnEnd(sessionId: String, code: Int?) {
-        val wt = sessions[sessionId] ?: return
+        // RUNNER-SESSION-GHOST-1: a linked session with no ticket worktree has nothing to push, but its turn end is still reported.
+        val wt = sessions[sessionId] ?: return run { if (sessionId in linked) add(sessionId, RunnerEvent.FINISHED, code?.toString().orEmpty()) }
         if (!isTicketBranch(wt.branch)) {
             log("[infantry] runner: push of ${wt.branch} for session $sessionId refused: only ${TicketBranches.BRANCH_PREFIX}* branches are pushed")
             add(sessionId, RunnerEvent.FINISHED, code?.toString().orEmpty())

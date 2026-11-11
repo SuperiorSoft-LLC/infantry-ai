@@ -52,6 +52,20 @@ class RemoteStartsTest {
     private fun starts() = RemoteStarts(cloneRoot = { File(dir, RemoteStarts.DEFAULT_FOLDER) }, outboxMax = { 10 }, log = {})
 
     @Test
+    fun `a session started over the link without a ticket reports its status and turn end`() {
+        // RUNNER-SESSION-GHOST-1: the app's New agent start has no ticket worktree; its status and turn end still reach the
+        // orchestrator (before, only ticket starts did, and the app showed the session STARTING for ever). An unknown one reports nothing.
+        val starts = starts()
+        starts.linked("app-s1")
+        starts.onStatus("app-s1", "BUSY")
+        starts.onTurnEnd("app-s1", 0)
+        starts.onStatus("stranger", "BUSY")
+        starts.onTurnEnd("stranger", 0)
+        assertEquals(listOf(RunnerEvent.STATUS to "BUSY", RunnerEvent.FINISHED to "0"), starts.events(0L).map { it.kind to it.payload })
+        assertTrue(starts.events(0L).all { it.sessionId == "app-s1" })
+    }
+
+    @Test
     fun `only ticket branches count as pushable`() {
         assertTrue(RemoteStarts.isTicketBranch("ticket/4659b768-remote-work"))
         for (b in listOf("main", "dev", "feature-agenthq-mvp", "ticket/", "ticket/../main", "ticket/a:refs/heads/main", "refs/heads/main", "ticket/a b")) {
