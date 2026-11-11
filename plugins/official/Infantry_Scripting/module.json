@@ -52,7 +52,7 @@
   "daemon": {
     "entry": "com.superiorsoftllc.infantry.plugins.official.scripting.daemon.ScriptingDaemonPlugin",
     "jar": "daemon/build/libs/Infantry_Scripting-daemon.jar",
-    "apiAtLeast": "1.54.0",
+    "apiAtLeast": "1.55.0",
     "side": "orchestrator",
     "hooks": ["incomingMail"],
     "frames": [

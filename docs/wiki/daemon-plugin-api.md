@@ -195,6 +195,7 @@ request goes ahead. A mail is never dropped by a hook.
 api.events.on("*") { frame: Frame -> /* every frame the daemon broadcasts */ }                 // returns AutoCloseable
 api.events.onTicket("my-consumer") { event -> }       // ordered, at-least-once; needs tickets.read
 api.events.onSessionRemoved { sessionId -> }          // a session was killed or removed: drop your per-session data
+api.events.onSessionDeleted { sessionId -> }          // 1.55.0: the session's record was deleted (never on a kill; a killed session is resumed)
 api.events.broadcast("my_event", """{"x":1}""")        // push one frame to every client; official/core only
 val e = api.events.publish("ticket.moved", """{"id":"t1"}""")                  // a named event
 val handle = api.events.subscribe("ticket.*") { e: NamedEvent -> }            // exact name, "prefix.*", or "*"

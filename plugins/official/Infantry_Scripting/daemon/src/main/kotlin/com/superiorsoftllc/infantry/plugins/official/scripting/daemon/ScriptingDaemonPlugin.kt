@@ -112,8 +112,9 @@ class ScriptingDaemonPlugin : DaemonPlugin {
             // SCRIPT-VIS-1b: the host dropped our verdict (timeout / limit / throw): the record must not claim a handled mail.
             override fun lost(mailId: String, reason: String) = runLog.verdictLost(mailId, reason)
         })
-        // MAIL-HOOK-1b: a session's mail hooks go with the session.
-        sessionWatch = api.events.onSessionRemoved { id -> runCatching { hookStore.removeForSession(api.projects.list().map { it.id }, id).takeIf { it > 0 }?.let { api.log("hooks: removed $it mail hook(s) of ended session $id") } } }
+        // MAIL-HOOK-1b: a session's mail hooks go with the session. TURNS-SAVED-1: only when its record is deleted, never on a kill: a killed
+        // session (an interactive CLI's kept process is ended by a kill) keeps its record and is resumed by its next mail, so its hooks stay.
+        sessionWatch = api.events.onSessionDeleted { id -> runCatching { hookStore.removeForSession(api.projects.list().map { it.id }, id).takeIf { it > 0 }?.let { api.log("hooks: removed $it mail hook(s) of removed session $id") } } }
         // SCRIPT-CMD-1: the process bridge (off until scripting.exec.enabled).
         val exec = ExecTools(
             { api.config(it) }, { project -> runCatching { File(api.files(project).absolutePath("x")).parentFile.parentFile }.getOrNull() },
