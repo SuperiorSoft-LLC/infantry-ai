@@ -103,7 +103,7 @@ class SessionManager(
     /** FIRST-RUN-KEYS-1: the API key a harness declares, as `{ENV: key}`, read at every launch so a restarted session gets a key set meanwhile. */
     private val credentialEnv: (providerId: String) -> Map<String, String> = { emptyMap() },
     /** FIRST-RUN-KEYS-1: a plain sentence when the harness declares an API key that is not set (and no subscription login was chosen), else null. Told in the chat at every run start. */
-    private val credentialMissing: (providerId: String) -> String? = { null },
+    private val credentialMissing: (providerId: String, model: String?) -> String? = { _, _ -> null },
     /**
      * Contract 1.3.0: the providers a spawn may name besides [provider] (`INFANTRY_PROVIDERS`). Ids must be
      * distinct from each other and from the default's.
@@ -1739,7 +1739,7 @@ class SessionManager(
         // BUG-M2-11b-1: the host owns the process and the ONE chat line per launch; the per-turn plumbing is Activity.
         bootDetails.forEach { emit(SessionEvent.Activity(sessionId, provider.id, it)) }
         // RUNNER-CRED-1: a session whose starter lent it a key is not missing one.
-        if (lentEnvs[sessionId].isNullOrEmpty()) runCatching { credentialMissing(session.provider) }.getOrNull()?.let {
+        if (lentEnvs[sessionId].isNullOrEmpty()) runCatching { credentialMissing(session.provider, session.model) }.getOrNull()?.let {
             System.err.println("[infantry] $sessionId: $it")
             emit(SessionEvent.Activity(sessionId, provider.id, it))
         }

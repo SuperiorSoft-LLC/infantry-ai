@@ -196,6 +196,20 @@ class HarnessAuthProbeTest {
     }
 
     @Test
+    fun `HARNESS-ALL-1 a launch warns only about the keys of its own model's provider`() {
+        val any = HarnessCredential("oc", "OPENCODE_API_KEY", "Go", credId = "")
+        val deepseek = HarnessCredential("oc", "DEEPSEEK_API_KEY", "DeepSeek", credId = "deepseek", modelPrefix = "deepseek/")
+        val google = HarnessCredential("oc", "GOOGLE_GENERATIVE_AI_API_KEY", "Google", credId = "google", modelPrefix = "google/")
+        val c = HarnessCredentials(Keystore(Files.createTempDirectory("hc-prefix").toFile(), env = { null }, vault = null)) { listOf(any, deepseek, google) }
+        assertEquals(listOf(any, deepseek), c.missingAtLaunch("oc", "deepseek/deepseek-chat"), "its provider's key, plus the one for every model")
+        assertEquals(listOf(any), c.missingAtLaunch("oc", "opencode/big-pickle"), "no provider key names a model it does not serve")
+        assertEquals(listOf(any), c.missingAtLaunch("oc"), "no model known: only the keys for every model")
+        assertEquals(listOf(any, deepseek, google), c.missing(), "the credentials list still asks for every key")
+        assertTrue(deepseek.servesModel("DeepSeek/deepseek-chat"), "the prefix ignores case")
+        assertEquals(setOf("OPENCODE_API_KEY", "DEEPSEEK_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY"), c.states().map { it.credential.env }.toSet())
+    }
+
+    @Test
     fun `an unreadable or missing probe is unknown, never signed in`() {
         assertNull(creds("subscription-login", "not json").checkAuth("claude").signedIn)
         assertNull(creds("subscription-login", null).checkAuth("claude").signedIn)
@@ -310,6 +324,6 @@ class HarnessMultiCredentialTest {
         assertEquals("b", m.harness?.credentials?.single()?.id)
         val f = generateSequence(java.io.File("").absoluteFile) { it.parentFile }.map { java.io.File(it, "plugins/official/Infantry_OpenCode/module.json") }.first { it.exists() }
         val oc = Json { ignoreUnknownKeys = true }.decodeFromString(ModuleManifest.serializer(), f.readText()).harness!!
-        assertEquals(setOf("OPENCODE_API_KEY", "CMD_API_KEY"), (listOfNotNull(oc.credential) + oc.credentials).map { it.env }.toSet())
+        assertEquals(setOf("OPENCODE_API_KEY", "CMD_API_KEY", "DEEPSEEK_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY", "MOONSHOT_API_KEY", "DASHSCOPE_API_KEY"), (listOfNotNull(oc.credential) + oc.credentials).map { it.env }.toSet())
     }
 }

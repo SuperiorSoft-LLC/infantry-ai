@@ -330,7 +330,7 @@ class SessionLifecycleTest {
         val (store, _) = tempStore()
         val manager = SessionManager(
             FakeProvider(), FakeRunner(), store, killGraceMs = 50,
-            credentialMissing = { "No API key set for fake" },
+            credentialMissing = { _, _ -> "No API key set for fake" },
         )
         val events = mutableListOf<SessionEvent>()
         manager.eventSink = { events += it }

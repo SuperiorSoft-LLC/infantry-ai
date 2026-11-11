@@ -13,9 +13,13 @@
     "cli": { "id": "opencode", "command": "opencode", "label": "OpenCode" },
     "settings": ["harness.opencode.maxRetries"],
     "hooks": ["watch", "mcp", "config", "session", "models", "stats"],
-    "credential": { "env": "OPENCODE_API_KEY", "label": "OpenCode Go", "provider": "OpenCode Go", "help": "Create an API key in your OpenCode account (opencode.ai) and paste it here. Only needed for the paid OpenCode Go models; the free tier needs none." },
+    "credential": { "env": "OPENCODE_API_KEY", "label": "OpenCode Go", "provider": "OpenCode Go", "modelPrefix": "opencode-go/", "help": "Create an API key in your OpenCode account (opencode.ai) and paste it here. Only needed for the paid OpenCode Go models; the free tier needs none." },
     "credentials": [
-      { "id": "cmd", "env": "CMD_API_KEY", "label": "Command Code", "provider": "commandcode", "help": "Create an API key at commandcode.ai. Only needed for the commandcode/* models; the key is read by opencode's commandcode provider from CMD_API_KEY." }
+      { "id": "cmd", "env": "CMD_API_KEY", "label": "Command Code", "provider": "commandcode", "modelPrefix": "commandcode/", "help": "Create an API key at commandcode.ai. Only needed for the commandcode/* models; the key is read by opencode's commandcode provider from CMD_API_KEY." },
+      { "id": "deepseek", "env": "DEEPSEEK_API_KEY", "label": "DeepSeek", "provider": "deepseek", "modelPrefix": "deepseek/", "help": "Create an API key at platform.deepseek.com. Only needed for the deepseek/* models." },
+      { "id": "google", "env": "GOOGLE_GENERATIVE_AI_API_KEY", "label": "Google Gemini", "provider": "google", "modelPrefix": "google/", "help": "Create an API key in Google AI Studio (aistudio.google.com). Only needed for the google/* models." },
+      { "id": "moonshot", "env": "MOONSHOT_API_KEY", "label": "Moonshot (Kimi)", "provider": "moonshotai", "modelPrefix": "moonshotai/", "help": "Create an API key at platform.moonshot.ai. Only needed for the moonshotai/* models." },
+      { "id": "alibaba", "env": "DASHSCOPE_API_KEY", "label": "Alibaba (Qwen)", "provider": "alibaba", "modelPrefix": "alibaba/", "help": "Create a DashScope API key in Alibaba Cloud Model Studio. Only needed for the alibaba/* models." }
     ]
   }
 }

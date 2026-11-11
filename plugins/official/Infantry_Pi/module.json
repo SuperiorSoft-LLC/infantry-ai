@@ -12,6 +12,12 @@
     "ids": ["pi"],
     "cli": { "id": "pi", "command": "pi", "label": "Pi" },
     "settings": [],
-    "hooks": ["watch", "mcp", "sandbox", "session", "models"]
+    "hooks": ["watch", "mcp", "sandbox", "session", "models"],
+    "credentials": [
+      { "id": "anthropic", "env": "ANTHROPIC_API_KEY", "label": "Anthropic", "provider": "anthropic", "modelPrefix": "anthropic/", "help": "Create an API key in the Anthropic Console (console.anthropic.com). Only needed for the anthropic/* models." },
+      { "id": "deepseek", "env": "DEEPSEEK_API_KEY", "label": "DeepSeek", "provider": "deepseek", "modelPrefix": "deepseek/", "help": "Create an API key at platform.deepseek.com. Only needed for the deepseek/* models." },
+      { "id": "google", "env": "GEMINI_API_KEY", "label": "Google Gemini", "provider": "google", "modelPrefix": "google/", "help": "Create an API key in Google AI Studio (aistudio.google.com). Only needed for the google/* models." },
+      { "id": "opencode-go", "env": "OPENCODE_API_KEY", "label": "OpenCode Go", "provider": "opencode-go", "modelPrefix": "opencode-go/", "help": "Create an API key in your OpenCode account (opencode.ai). Only needed for the opencode-go/* models." }
+    ]
   }
 }
