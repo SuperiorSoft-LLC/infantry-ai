@@ -10,7 +10,7 @@ Words: the **orchestrator** is the daemon with your board (your PC); the **runne
 **Step 1, on the server** (any machine with Docker), one command:
 
 ```
-docker run -d --name infantry-runner -e INFANTRY_MODE=runner -e INFANTRY_RUNNER_HOST=<this server's address> -p 8790:8790 -v infantry-runner:/data ghcr.io/superiorsoft-llc/infantry-ai:latest
+docker run -d --restart unless-stopped --name infantry-runner -e INFANTRY_MODE=runner -e INFANTRY_RUNNER_HOST=<this server's address> -p 8790:8790 -v infantry-runner:/data ghcr.io/superiorsoft-llc/infantry-ai:latest
 ```
 
 **Image tag: match your app's channel** (`.github/workflows/release.yml`, job `docker`):

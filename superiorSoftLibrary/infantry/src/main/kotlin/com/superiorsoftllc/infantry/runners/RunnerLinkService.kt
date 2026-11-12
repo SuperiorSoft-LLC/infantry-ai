@@ -804,7 +804,7 @@ class RunnerLinkService(
         val pairLink = RunnerPairLink(token.name, listOf(host), endpoint.port, token.secret, token.fingerprint, token.plain)
         val store = RunnerLinkStore.open(stateDir)
         val chosen = name?.takeIf { it.isNotBlank() } ?: token.name
-        val hint = ". Check: the runner is running, its link port is published (`-p ${endpoint.port}:${linkPort()}` on `docker run`), " +
+        val hint = ". Check: the runner is running (a stopped container shows in `docker ps -a`: `docker start infantry-runner`; run it with `--restart unless-stopped` so a reboot does not stop it), its link port is published (`-p ${endpoint.port}:${linkPort()}` on `docker run`), " +
             "and $host:${endpoint.port} is reachable from this machine (a firewall, a cloud security group or a tailnet rule). " +
             "A container on THIS machine is reached as localhost:<published port>; host.docker.internal resolves only inside a container."
         return added(peers(store).addLink(pairLink, chosen, orchestratorName, settings().allowPlainTailnet, unreachableHint = hint, replaceSameRunner = true))

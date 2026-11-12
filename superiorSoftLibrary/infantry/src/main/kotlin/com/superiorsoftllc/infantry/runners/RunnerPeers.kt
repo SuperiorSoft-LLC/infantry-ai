@@ -120,7 +120,7 @@ class RunnerPeers(
                 continue
             }
             // A PAIR that was answered with a refusal is final: the code was spent, or the runner will not pair with this machine.
-            if (!answer.ok) throw LinkFailure("$label refused: ${answer.data}")
+            if (!answer.ok) throw LinkFailure("$label refused: ${answer.data}${staleHint(answer.data)}")
             val paired = record(name, url, pairLink.fingerprint, answer)
             store.saveRunner(paired)
             val granted = grantsOf(answer)
@@ -218,6 +218,16 @@ class RunnerPeers(
     }
 
     companion object {
+        /**
+         * RUNNER-TAKEOVER-REFUSED-1: a runner older than RUNNER-REPAIR-1 refuses with "run `infantry runner detach` on the runner first"
+         * and never takes over by bearer: its image is older than this app.
+         */
+        fun staleHint(refusal: String): String =
+            if (refusal.contains(OLD_RUNNER_REFUSAL)) ". That runner's image is older than this app and cannot be taken over by its bearer: " +
+                "pull the current image (`docker pull ghcr.io/superiorsoft-llc/infantry-ai:latest`), then `docker rm -f infantry-runner` and `docker run` it again " +
+                "(the /data volume keeps the bearer), and Add runner again" else ""
+
+        private const val OLD_RUNNER_REFUSAL = "run `infantry runner detach` on the runner first"
         const val LOCAL = "local"
         private const val MS_PER_DAY = 86_400_000L
     }
