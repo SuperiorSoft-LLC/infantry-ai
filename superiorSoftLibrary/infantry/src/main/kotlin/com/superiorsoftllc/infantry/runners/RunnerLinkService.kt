@@ -134,7 +134,14 @@ class RunnerLinkService(
         // RUNNER-PAIR-1: a runner with a bearer serves its link before it is paired too: the bearer's PAIR comes in on it.
         val standing = bearer.exists()
         if ((paired || standing) && serving == null && pairing == null) {
-            runCatching { serve(store, t) }.onFailure { log("[infantry] runner link: could not serve the link: ${it.message}") }
+            // RUNNER-LINK-PORT-2: the port a pairing listener just closed can lag a moment; retry before waiting for the next tick.
+            var failure: Throwable? = null
+            for (attempt in 1..SERVE_ATTEMPTS) {
+                failure = runCatching { serve(store, t) }.exceptionOrNull()
+                if (failure == null) break
+                if (attempt < SERVE_ATTEMPTS) Thread.sleep(SERVE_RETRY_MS)
+            }
+            failure?.let { log("[infantry] runner link: could not serve the link: ${it.message}") }
         } else if (!paired && !standing && serving != null) {
             closeServing()
             log("[infantry] runner link: detached; the link listener is stopped")
@@ -861,11 +868,24 @@ class RunnerLinkService(
                     return inner.handle(type, data, orchestratorId, credential, from)
                 } finally {
                     p.answering = false
+                    // RUNNER-LINK-PORT-2: hand the port to the paired listener now, not when the CLI polls or the next tick fires.
+                    kotlin.concurrent.thread(name = "infantry-runner-link-handover", isDaemon = true) { handover() }
                 }
             }
 
             override fun malformed(): LinkAnswer = inner.malformed()
         }
+    }
+
+    /** RUNNER-LINK-PORT-2: after a PAIR is answered, close the finished pairing and open the paired listener at once. */
+    @Synchronized
+    private fun handover() {
+        if (closed) return
+        val p = pairing ?: return
+        if (p.answering) return
+        if (!RunnerLinkStore.exists(stateDir) || RunnerLinkStore.open(stateDir).orchestrator() == null) return
+        closePairing()
+        settle()
     }
 
     private fun closeServing() {
@@ -883,6 +903,8 @@ class RunnerLinkService(
 
     companion object {
         const val ANY_HOST = "0.0.0.0"
+        private const val SERVE_ATTEMPTS = 5
+        private const val SERVE_RETRY_MS = 200L
         /** RUNNER-PAIR-1: the endpoint host printed when no address of this runner is known (set INFANTRY_RUNNER_HOST / --host). */
         const val UNKNOWN_HOST = "<this-server-address>"
         private const val LAST_PORT = 65535
