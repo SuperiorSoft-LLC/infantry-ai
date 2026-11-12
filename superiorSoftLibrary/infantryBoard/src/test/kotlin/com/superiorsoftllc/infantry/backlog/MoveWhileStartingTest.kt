@@ -17,7 +17,7 @@ import kotlin.test.assertTrue
  * waits for the whole start and its answer arrives late. A move must answer within its budget while a start is still running.
  */
 class MoveWhileStartingTest {
-    @Ignore("TICKET-MOVE-HANG-1 repro: fails until a start stops holding the board monitor during git and session launch")
+
     @Test
     fun aMoveAnswersWhileAnotherTicketIsStarting() {
         val host = InMemoryBoardHost()
