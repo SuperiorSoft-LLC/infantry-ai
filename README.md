@@ -285,8 +285,10 @@ The same daemon with its own Java runtime bundled (nothing to install), one per 
     set INFANTRY_TOKEN_FILE=%CD%\infantry_token& set INFANTRY_HOST=0.0.0.0& InfantryAI-server-<version>-windows-x64\bin\infantry-server.bat
 
 Without `INFANTRY_HOST` it binds to 127.0.0.1 only. State goes to `~/.infantry` unless `INFANTRY_STATE_DIR` says otherwise, so do
-not run it next to an installed desktop app on the same state dir and port. `bin/infantry` in the archive is the CLI, on the
-same bundled runtime. Agent CLIs are the machine's own (`infantry harness-install <id>` needs Node 20+).
+not run it next to an installed desktop app on the same state dir and port. `bin/infantry` in the archive is both the CLI and
+the update supervisor, on the same bundled runtime: a command word (`bin/infantry board`, `health`, `--help`) runs the CLI;
+no argument or `serve` starts the daemon under the supervisor (the first run copies the folder to `<parent>/versions/` and
+writes `<parent>/infantry`, the entry point from then on; see `README.txt`). Agent CLIs are the machine's own (`infantry harness-install <id>` needs Node 20+).
 
 ## Pairing a phone or another client (QR)
 
