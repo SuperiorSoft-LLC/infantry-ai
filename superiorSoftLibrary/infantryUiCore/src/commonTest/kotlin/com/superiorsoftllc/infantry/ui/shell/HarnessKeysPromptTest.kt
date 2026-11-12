@@ -62,3 +62,15 @@ class HarnessKeysPromptTest {
         assertEquals(emptyList(), missingHarnessKeys(listOf(SecretRow("harness.pi.key", "Pi API key", usesSecret = "shared")), emptySet()))
     }
 }
+
+class MoreHarnessKeysTest {
+    @kotlin.test.Test
+    fun moreKeysAreTheNonPrimaryUnsetOnes() {
+        val rows = listOf(
+            com.superiorsoftllc.infantry.ui.protocol.SecretRow("harness.pi.key", "Pi API key"),
+            com.superiorsoftllc.infantry.ui.protocol.SecretRow("harness.opencode.commandcode.key", "Command Code key"),
+            com.superiorsoftllc.infantry.ui.protocol.SecretRow("harness.claude.oauth.key", "Claude token", set = true),
+        )
+        kotlin.test.assertEquals(listOf("harness.opencode.commandcode.key"), com.superiorsoftllc.infantry.ui.shell.blocks.moreHarnessKeys(rows).map { it.name })
+    }
+}

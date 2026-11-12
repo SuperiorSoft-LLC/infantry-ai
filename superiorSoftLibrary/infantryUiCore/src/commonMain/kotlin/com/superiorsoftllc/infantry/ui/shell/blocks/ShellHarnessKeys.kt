@@ -3,6 +3,9 @@
 package com.superiorsoftllc.infantry.ui.shell.blocks
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -39,6 +42,9 @@ const val API_KEY_MODE = "api-key"
 const val HARNESS_SUBSCRIPTION_TAG = "harness-subscription-choice"
 const val HARNESS_SUBSCRIPTION_STATE_TAG = "harness-subscription-state"
 const val HARNESS_SUBSCRIPTION_CHECK_TAG = "harness-subscription-check"
+const val HARNESS_KEY_SAVE_TAG = "harness-key-save"
+const val HARNESS_KEY_SKIP_ALL_TAG = "harness-key-skip-all"
+const val HARNESS_KEY_MORE_TAG = "harness-key-more"
 const val HARNESS_KEY_SKIP_PREF = "harness.keys.skipped"
 
 /**
@@ -64,10 +70,18 @@ fun missingHarnessKeys(rows: List<SecretRow>, skipped: Set<String>): List<Secret
     }
 
 /**
- * FIRST-RUN-KEYS-1, CLAUDE-KEY-PROMPT-1: asks once per harness how it signs in when it has no key and no login: a harness that
- * offers a subscription shows both ways (the subscription, with the terminal login command, its state and Check; or an API key).
- * Save stores the key in the keystore (the same `secret_set` as Configuration > Secrets); Use subscription stores the choice
- * (`harness.<id>.authMode`); Skip remembers the answer on this device. A harness with a sign-in probe is probed first, so a
+ * FIRST-RUN-KEYS-1b: the optional credentials that are not a harness's primary key (`harness.<id>.<credId>.key`, e.g. opencode's
+ * Command Code key): listed under "More providers" on the one first-run screen, never a trigger on their own.
+ */
+fun moreHarnessKeys(rows: List<SecretRow>): List<SecretRow> =
+    rows.filter { it.name.startsWith("harness.") && it.name.endsWith(".key") && !isPrimaryHarnessKey(it.name) && !it.set && it.usesSecret.isBlank() }
+
+/**
+ * FIRST-RUN-KEYS-1b (UX-FIRST-RUN-KEYS-1): ONE screen for every provider key, never a chain of modals. Each missing primary key is
+ * a row (masked field, what it unlocks, "optional"; a harness with a subscription sign-in also shows the login command, its
+ * state, Check and Use subscription); the other credentials sit under "More providers". Save stores each filled field through
+ * the same `setSecret` as Configuration > Secrets and remembers the rest as skipped; Skip all remembers every row as skipped
+ * (on this device); both stay reachable later in Configuration > Secrets. A harness with a sign-in probe is probed first, so a
  * machine already signed in is never asked. Draws nothing while the daemon is not live or nothing is missing.
  */
 object ShellHarnessKeys : Block("infantry.shell.harnessKeys", "infantry.shell.harnessKeys") {
@@ -77,69 +91,86 @@ object ShellHarnessKeys : Block("infantry.shell.harnessKeys", "infantry.shell.ha
         if (!s.state.connection.isLive || s.ui.showConfig) return
         val rows = s.state.secrets?.secrets ?: return
         var skipped by remember { mutableStateOf(runCatching { s.host.uiPref(HARNESS_KEY_SKIP_PREF).orEmpty().split(',').filter { it.isNotBlank() }.toSet() }.getOrDefault(emptySet())) }
-        val row = missingHarnessKeys(rows, skipped).firstOrNull() ?: return
-        // Probe the login before asking, once per app start (a login made since the daemon's last probe counts): the answer is a
+        val missing = missingHarnessKeys(rows, skipped)
+        // Probe each login once per app start before asking (a login made since the daemon's last probe counts): the answer is a
         // secret_state with a newer lastProbe and signedIn, which drops the row when it is signed in.
-        var probeSentAt by remember(row.name) { mutableStateOf<Long?>(null) }
-        if (hasAuthProbe(row) && (probeSentAt == null || row.lastProbe == probeSentAt)) {
-            LaunchedEffect(row.name) { probeSentAt = row.lastProbe; s.controller.checkHarnessAuth(row.name) }
-            return
+        val probeSent = remember { mutableStateMapOf<String, Long>() }
+        val probing = missing.filter { hasAuthProbe(it) }
+        LaunchedEffect(probing.map { it.name }) {
+            probing.filter { it.name !in probeSent }.forEach { probeSent[it.name] = it.lastProbe; s.controller.checkHarnessAuth(it.name) }
         }
-        val harnessId = row.name.removePrefix("harness.").removeSuffix(".key")
-        val offersSubscription = SUBSCRIPTION_MODE in row.authModes
-        val title = if (offersSubscription) "Sign in to ${row.label.removeSuffix(" API key")}" else row.label
-        var value by remember(row.name) { mutableStateOf("") }
-        fun skip() {
-            skipped = skipped + row.name
+        if (missing.isEmpty() || probing.any { probeSent[it.name] == null || probeSent[it.name] == it.lastProbe }) return
+        val more = moreHarnessKeys(rows).filter { it.name !in skipped }
+        val values = remember { mutableStateMapOf<String, String>() }
+        var showMore by remember { mutableStateOf(false) }
+        fun markSkipped(names: List<String>) {
+            skipped = skipped + names
             runCatching { s.host.saveUiPref(HARNESS_KEY_SKIP_PREF, skipped.joinToString(",")) }
         }
+        fun skipAll() = markSkipped(missing.map { it.name } + more.map { it.name })
         AhqAlertDialog(
-            onDismissRequest = { skip() },
+            onDismissRequest = { skipAll() },
             modifier = Modifier.testTag(HARNESS_KEY_PROMPT_TAG),
-            title = { Text(title) },
+            title = { Text("Connect your providers") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (offersSubscription) {
-                        Text("Your Claude subscription", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                        Text("No key is stored. Sign in once in a terminal, then press Check:", fontSize = 12.sp)
-                        if (row.loginCommand.isNotBlank()) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(row.loginCommand, fontSize = 12.sp, fontFamily = FontFamily.Monospace, modifier = Modifier.weight(1f))
-                            CopyValueButton(row.loginCommand)
-                        }
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            val state = when (row.signedIn) { "true" -> "signed in"; "false" -> "not signed in yet"; else -> "sign-in not checked" }
-                            Text(state, fontSize = 12.sp, color = Palette.Muted, modifier = Modifier.weight(1f).testTag(HARNESS_SUBSCRIPTION_STATE_TAG))
-                            TextButton({ s.actionScope.launch { s.controller.checkHarnessAuth(row.name) } }, Modifier.testTag(HARNESS_SUBSCRIPTION_CHECK_TAG)) { Text("Check") }
-                            TextButton({
-                                skip()
-                                s.actionScope.launch { s.controller.setHarnessAuthMode(harnessId, SUBSCRIPTION_MODE) }
-                            }, Modifier.testTag(HARNESS_SUBSCRIPTION_TAG)) { Text("Use subscription") }
-                        }
-                        Text("Or an API key", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                    } else {
-                        Text("This agent CLI needs an API key to run.", fontSize = 12.sp)
+                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Add the keys you have; every one is optional. Keys are stored encrypted by the Infantry AI daemon and kept across updates. You can add or change them later in Configuration > Secrets.", fontSize = 12.sp, color = Palette.Muted)
+                    missing.forEach { row -> HarnessKeyRow(row, SUBSCRIPTION_MODE in row.authModes, values) { markSkipped(listOf(row.name)) } }
+                    if (more.isNotEmpty()) {
+                        TextButton({ showMore = !showMore }, Modifier.testTag(HARNESS_KEY_MORE_TAG)) { Text(if (showMore) "Hide more providers" else "More providers (${more.size})") }
+                        if (showMore) more.forEach { row -> HarnessKeyRow(row, false, values) {} }
                     }
-                    Text("A key is stored encrypted by the Infantry AI daemon, kept across updates, and never shown again.", fontSize = 12.sp, color = Palette.Muted)
-                    if (row.help.isNotBlank()) Text(row.help, fontSize = 12.sp, color = Palette.Muted)
-                    OutlinedTextField(
-                        value = value, onValueChange = { value = it }, singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
-                        placeholder = { Text("API key") },
-                        modifier = Modifier.fillMaxWidth().testTag(HARNESS_KEY_FIELD_TAG),
-                    )
-                    Text("You can skip this and choose later in Configuration > Secrets.", fontSize = 11.sp, color = Palette.Muted)
                 }
             },
             confirmButton = {
                 TextButton({
-                    val v = value.trim()
-                    if (v.isNotEmpty()) s.actionScope.launch {
-                        s.controller.setSecret(row.name, v)
-                        if (API_KEY_MODE in row.authModes) s.controller.setHarnessAuthMode(harnessId, API_KEY_MODE)
+                    val filled = (missing + more).filter { values[it.name].orEmpty().isNotBlank() }
+                    skipAll()
+                    s.actionScope.launch {
+                        filled.forEach { row ->
+                            s.controller.setSecret(row.name, values[row.name].orEmpty().trim())
+                            val id = row.name.removePrefix("harness.").removeSuffix(".key")
+                            if (isPrimaryHarnessKey(row.name) && API_KEY_MODE in row.authModes) s.controller.setHarnessAuthMode(id, API_KEY_MODE)
+                        }
                     }
-                }) { Text("Save key") }
+                }, Modifier.testTag(HARNESS_KEY_SAVE_TAG)) { Text("Save") }
             },
-            dismissButton = { TextButton({ skip() }) { Text("Skip") } },
+            dismissButton = { TextButton({ skipAll() }, Modifier.testTag(HARNESS_KEY_SKIP_ALL_TAG)) { Text("Skip all") } },
+        )
+    }
+}
+
+/** One provider row of the first-run keys screen: label, "optional", help, optional subscription sign-in, masked key field. */
+@Composable
+private fun HarnessKeyRow(row: SecretRow, subscription: Boolean, values: MutableMap<String, String>, onUseSubscription: () -> Unit) {
+    val s = LocalShell.current
+    val harnessId = row.name.removePrefix("harness.").removeSuffix(".key")
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(row.label, fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text("optional", fontSize = 11.sp, color = Palette.Muted)
+        }
+        if (row.help.isNotBlank()) Text(row.help, fontSize = 11.sp, color = Palette.Muted)
+        if (subscription) {
+            if (row.loginCommand.isNotBlank()) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(row.loginCommand, fontSize = 12.sp, fontFamily = FontFamily.Monospace, modifier = Modifier.weight(1f))
+                CopyValueButton(row.loginCommand)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                val state = when (row.signedIn) { "true" -> "signed in"; "false" -> "subscription: not signed in yet"; else -> "subscription: sign-in not checked" }
+                Text(state, fontSize = 12.sp, color = Palette.Muted, modifier = Modifier.weight(1f).testTag(HARNESS_SUBSCRIPTION_STATE_TAG))
+                TextButton({ s.actionScope.launch { s.controller.checkHarnessAuth(row.name) } }, Modifier.testTag(HARNESS_SUBSCRIPTION_CHECK_TAG)) { Text("Check") }
+                TextButton({
+                    onUseSubscription()
+                    s.actionScope.launch { s.controller.setHarnessAuthMode(harnessId, SUBSCRIPTION_MODE) }
+                }, Modifier.testTag(HARNESS_SUBSCRIPTION_TAG)) { Text("Use subscription") }
+            }
+        }
+        OutlinedTextField(
+            value = values[row.name].orEmpty(), onValueChange = { values[row.name] = it }, singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            placeholder = { Text(if (subscription) "Or an API key" else "API key") },
+            modifier = Modifier.fillMaxWidth().testTag(HARNESS_KEY_FIELD_TAG),
         )
     }
 }

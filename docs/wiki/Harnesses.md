@@ -295,7 +295,7 @@ not be `PATH`-like or an `INFANTRY_` / `AGENTHQ_` variable.
 - The key is stored in the keystore as the secret `harness.<id>.key`, shown in Configuration > Secrets as set / not set with a masked
   tail, never in config, never logged, masked in session output, and never handed to a saved run.
 - At every launch of a session the daemon adds `{env: key}` to the harness process environment, so a restarted session gets a key set meanwhile.
-- When a loaded harness declares a key and none is set, the shell asks for it once (`ShellHarnessKeys`: Save or Skip; Skip is
+- When a loaded harness declares a key and none is set, the shell asks for it once (`ShellHarnessKeys`: ONE screen listing every provider, Save or Skip all; Skip is
   remembered per device and the key stays settable in Configuration).
 - CLI: `infantry harness key` lists them; `infantry harness key <name>` prompts on stdin (never an argument); `--clear` removes it.
 
