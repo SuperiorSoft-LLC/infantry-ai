@@ -47,11 +47,24 @@ local function band(x) if x < need then return -1 end return math.floor((x - nee
 for name, n in pairs(streak) do
   local before = n - (fresh[name] or 0)
   if band(n) > band(before) then
-    local msg = "HOOK BROKEN: script '" .. name .. "' failed " .. n .. " runs in a row: " .. lastErr[name]:sub(1, 160)
+    -- BOARD-COOLDOWN-STUCK-1: a daemon plugin's breaker refusing the script's calls is not a script bug: say which plugin
+    -- is cooling down, since when and at which strike, and do not ask anyone to fix the script.
+    local err = lastErr[name]
+    local plugin, since = err:match("plugin (%S+) is cooling down since (%d%d:%d%d %(strike %d+%))")
+    local msg, tail, title
+    if plugin then
+      msg = "HOOK BLOCKED: script '" .. name .. "' failed " .. n .. " runs in a row: plugin " .. plugin .. " cooling down since " .. since
+      tail = " The script is fine; it runs again when the plugin's breaker closes (hook-health)."
+      title = "Infantry plugin cooling down"
+    else
+      msg = "HOOK BROKEN: script '" .. name .. "' failed " .. n .. " runs in a row: " .. err:sub(1, 160)
+      tail = " Fix the script now (hook-health)."
+      title = "Infantry automation broken"
+    end
     if a.logOnly then ih.log("WOULD ALERT: " .. msg) else
-    ih.call("infantry_notify", {title = "Infantry automation broken", body = msg:sub(1, 200), level = "milestone", sound = "bell"})
+    ih.call("infantry_notify", {title = title, body = msg:sub(1, 200), level = "milestone", sound = "bell"})
     if a.pm then
-      ih.call("infantry_chat_note", {sessionId = a.pm, level = "fail", wake = true, text = msg .. " Fix the script now (hook-health)."})
+      ih.call("infantry_chat_note", {sessionId = a.pm, level = "fail", wake = true, text = msg .. tail})
     end
     ih.log(msg)
     end

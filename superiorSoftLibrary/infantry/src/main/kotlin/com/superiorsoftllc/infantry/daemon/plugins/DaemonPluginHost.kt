@@ -1012,9 +1012,9 @@ class DaemonPluginHost private constructor(
         return "It is reloaded automatically in ${(delayMs + 999) / 1000}s (attempt $n of $max); until then its tools and frames are gone."
     }
 
-    private fun announceTrip(id: String, why: String) = announceNotice("Daemon plugin $id cooling down", "Daemon plugin $id timed out repeatedly ($why). Its calls are refused for a short cooldown, then it is probed and comes back by itself; no restart needed.")
+    private fun announceTrip(id: String, why: String) = announceNotice("Daemon plugin $id cooling down", "Daemon plugin $id timed out repeatedly ($why). Its calls are refused for a short cooldown, then a cheap health probe runs and it comes back by itself; no restart needed.")
 
-    private fun announceRecovered(id: String) = announceNotice("Daemon plugin $id recovered", "Daemon plugin $id answered a probe call and is back in service.")
+    private fun announceRecovered(id: String) = announceNotice("Daemon plugin $id recovered", "Daemon plugin $id answered its health probe and is back in service.")
 
     private fun announceNotice(subject: String, body: String) {
         // NOTICE-ROUTE-1: infrastructure health goes to the daemon log; an agent mailbox only when the setting asks.

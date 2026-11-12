@@ -46,11 +46,13 @@ class PluginGuardTimeoutTest {
 
     @Test
     fun `a failed probe reopens the breaker without a second notice`() {
+        // BOARD-COOLDOWN-STUCK-1: the probe is the guard's health probe now (no longer the caller's call), so it is the one made to hang.
         val tripped = mutableListOf<String>()
-        val g = PluginGuard("Slow", null, 10_000, {}, timeoutStrikes = 1, hangCeilingMs = 50, cooldownMs = 300, onTripped = { tripped += it })
+        val g = PluginGuard("Slow", null, 10_000, {}, timeoutStrikes = 1, hangCeilingMs = 50, cooldownMs = 300, onTripped = { tripped += it },
+            healthProbe = { Thread.sleep(2_000) })
         g.call("slow", 50) { Thread.sleep(2_000) }
         Thread.sleep(400)
-        g.call("probe", 50) { Thread.sleep(2_000) }
+        assertTrue(g.call("probe", 50) { 1 }.isFailure)
         assertTrue(g.cooling)
         assertTrue(g.call("refused", 2_000) { 1 }.exceptionOrNull()!!.message!!.contains("cooling down"))
         assertEquals(1, tripped.size)
@@ -92,16 +94,20 @@ class PluginGuardTimeoutTest {
 class PluginGuardProbeHangTest {
     @Test
     fun `a hung probe is cut short and the next probe recovers the plugin`() {
+        // BOARD-COOLDOWN-STUCK-1: the health probe hangs on the first half-open, answers on the second.
         var recovered = 0
-        val g = PluginGuard("Slow", null, 10_000, {}, timeoutStrikes = 1, hangCeilingMs = 1_500, cooldownMs = 200, probeMs = 100, onRecovered = { recovered++ })
+        val sick = java.util.concurrent.atomic.AtomicBoolean(true)
+        val g = PluginGuard("Slow", null, 10_000, {}, timeoutStrikes = 1, hangCeilingMs = 1_500, cooldownMs = 200, probeMs = 100, onRecovered = { recovered++ },
+            healthProbe = { if (sick.get()) Thread.sleep(5_000) })
         assertTrue(g.call("hang", 50) { Thread.sleep(5_000) }.isFailure)
         assertTrue(g.cooling)
         Thread.sleep(300)
         val t0 = System.nanoTime()
-        assertTrue(g.call("probe", 50) { Thread.sleep(5_000) }.isFailure)
+        assertTrue(g.call("probe", 50) { 1 }.isFailure)
         val ms = (System.nanoTime() - t0) / 1_000_000
         assertTrue(ms < 1_000, "probe must be cut at the probe limit, took $ms ms")
         assertTrue(g.cooling)
+        sick.set(false)
         Thread.sleep(300)
         assertEquals(1, g.call("probe2", 2_000) { 1 }.getOrNull())
         assertFalse(g.cooling)

@@ -44,10 +44,19 @@ class PluginGuard(
     private val onRecovered: () -> Unit = {},
     /** BOARD-HANG-1: a recovery probe is cut off after this (at most the hang ceiling), so a hung plugin re-arms the breaker fast. */
     probeMs: Long = 10_000,
+    /**
+     * BOARD-COOLDOWN-STUCK-1: the cheap call run on this plugin's own pool when the cooldown ends (half-open). It closes the
+     * breaker before the waiting caller's call runs, so recovery never depends on that call (a full board read under memory
+     * pressure) beating the probe limit. The default is a no-op round trip: it proves a worker thread picks up and returns.
+     */
+    private val healthProbe: () -> Unit = {},
 ) {
     /** PLUGIN-RECOVER-1 breaker: nanoTime the circuit reopens for a probe. */
     @Volatile private var openUntilNs = 0L
     @Volatile private var tripped = false
+    /** BOARD-COOLDOWN-STUCK-1: wall-clock ms the current open episode began, and how often it (re)opened (trip + failed probes). */
+    @Volatile private var openedAtMs = 0L
+    @Volatile private var openStrike = 0
     private val probing = java.util.concurrent.atomic.AtomicBoolean()
     val cooling: Boolean get() = tripped
 
@@ -76,17 +85,33 @@ class PluginGuard(
     suspend fun <T> callSuspending(what: String, timeoutMs: Long, block: () -> T): Result<T> {
         disabledReason?.let { return Result.failure(IllegalStateException("plugin $moduleId is disabled: $it")) }
         if (retired) return Result.failure(IllegalStateException("plugin $moduleId is unloaded; $what refused"))
-        var probe = false
         if (tripped) {
             val leftMs = (openUntilNs - System.nanoTime()) / 1_000_000
-            if (leftMs > 0) return Result.failure(IllegalStateException("plugin $moduleId is cooling down, retry in ${(leftMs + 999) / 1000}s; $what refused"))
-            if (!probing.compareAndSet(false, true)) return Result.failure(IllegalStateException("plugin $moduleId is cooling down (probe in flight), retry in 1s; $what refused"))
-            probe = true
+            if (leftMs > 0) return Result.failure(IllegalStateException("plugin $moduleId ${coolingText()}, retry in ${(leftMs + 999) / 1000}s; $what refused"))
+            if (!probing.compareAndSet(false, true)) return Result.failure(IllegalStateException("plugin $moduleId ${coolingText()} (probe in flight), retry in 1s; $what refused"))
+            try {
+                if (tripped) {
+                    // BOARD-COOLDOWN-STUCK-1: half-open runs the cheap health probe, never the caller's own (maybe heavy) call.
+                    log("[plugins] daemon plugin $moduleId breaker open -> half-open: health probe (cut off at $probeCeilingMs ms)")
+                    val health = guarded("health probe", probeCeilingMs, { healthProbe() }, probeCeilingMs, probe = true)
+                    if (health.isFailure) {
+                        val why = health.exceptionOrNull()?.message?.lineSequence()?.firstOrNull().orEmpty()
+                        reopen("health probe failed: $why")
+                        return Result.failure(IllegalStateException("plugin $moduleId ${coolingText()}, health probe failed ($why); $what refused"))
+                    }
+                }
+            } finally { probing.set(false) }
         }
-        try { return guarded(what, timeoutMs, block, if (probe) probeCeilingMs else null) } finally { if (probe) probing.set(false) }
+        return guarded(what, timeoutMs, block)
     }
 
-    private suspend fun <T> guarded(what: String, timeoutMs: Long, block: () -> T, ceilingOverrideMs: Long? = null): Result<T> {
+    /** BOARD-COOLDOWN-STUCK-1: "cooling down since HH:MM (strike n)", the reason every refused call carries. */
+    private fun coolingText(): String {
+        val since = java.time.Instant.ofEpochMilli(openedAtMs).atZone(java.time.ZoneId.systemDefault()).toLocalTime()
+        return "is cooling down since %02d:%02d (strike %d)".format(since.hour, since.minute, openStrike)
+    }
+
+    private suspend fun <T> guarded(what: String, timeoutMs: Long, block: () -> T, ceilingOverrideMs: Long? = null, probe: Boolean = false): Result<T> {
         val worker = java.util.concurrent.atomic.AtomicReference<Thread?>()
         val future = try {
             pool.submit(Callable {
@@ -105,7 +130,7 @@ class PluginGuard(
             return Result.failure(e)
         }
         return try {
-            Result.success(await(future, worker, what, timeoutMs, ceilingOverrideMs)).also { consecutiveTimeouts.set(0); recover() }
+            Result.success(await(future, worker, what, timeoutMs, ceilingOverrideMs)).also { consecutiveTimeouts.set(0); recover(what) }
         } catch (e: kotlinx.coroutines.CancellationException) {
             // BOARD-STALL-3: the caller gave up (its own timeout/cancel): drop the job so a queued one never runs later.
             future.cancel(true)
@@ -123,7 +148,12 @@ class PluginGuard(
             future.cancel(true)
             // BOARD-DOWN-1: a slow call (a DB lock, a git call) fails only itself; a plugin that keeps timing out is disabled.
             val n = consecutiveTimeouts.incrementAndGet()
-            if (n >= timeoutStrikes || tripped) trip("$what timed out after $timeoutMs ms ($n in a row)")
+            // BOARD-COOLDOWN-STUCK-1: once open, only a failed probe re-arms the window (the caller handles that). A call that
+            // began before the trip and times out late must not push the window out again, or a burst of hung calls keeps the
+            // breaker open for hours ("retry in 18s, 7s, 26s...").
+            if (probe) Unit
+            else if (tripped) log("[plugins] daemon plugin $moduleId: $what timed out after $timeoutMs ms while the breaker is open (window not extended)")
+            else if (n >= timeoutStrikes) trip("$what timed out after $timeoutMs ms ($n in a row)")
             else log("[plugins] daemon plugin $moduleId: $what timed out after $timeoutMs ms (strike $n of $timeoutStrikes; plugin stays loaded)")
             Result.failure(e)
         } catch (e: ExecutionException) {
@@ -134,6 +164,8 @@ class PluginGuard(
                 log("[plugins] daemon plugin $moduleId: $what rejected its arguments: ${cause.message?.lineSequence()?.firstOrNull().orEmpty()} (plugin stays loaded)")
                 return Result.failure(cause)
             }
+            // BOARD-COOLDOWN-STUCK-1: a throwing health probe only keeps the breaker open; the caller re-arms the window.
+            if (probe) return Result.failure(cause)
             disable("$what threw ${cause::class.java.simpleName}: ${cause.message?.lineSequence()?.firstOrNull().orEmpty()}")
             Result.failure(cause)
         } catch (e: InterruptedException) {
@@ -185,19 +217,31 @@ class PluginGuard(
 
     @Synchronized
     private fun trip(reason: String) {
-        openUntilNs = System.nanoTime() + cooldownMs * 1_000_000
         if (tripped) return
+        openUntilNs = System.nanoTime() + cooldownMs * 1_000_000
+        openedAtMs = System.currentTimeMillis()
+        openStrike = 1
         tripped = true
-        log("[plugins] daemon plugin $moduleId TRIPPED (cooling down ${cooldownMs / 1000}s, then probes): $reason")
+        log("[plugins] daemon plugin $moduleId breaker closed -> open (strike 1, cooling down ${cooldownMs / 1000}s, then a health probe): $reason")
         runCatching { onTripped(reason) }
     }
 
+    /** BOARD-COOLDOWN-STUCK-1: a failed health probe opens the window again (no second notice; the episode goes on). */
     @Synchronized
-    private fun recover() {
+    private fun reopen(reason: String) {
+        if (!tripped) return
+        openUntilNs = System.nanoTime() + cooldownMs * 1_000_000
+        openStrike++
+        log("[plugins] daemon plugin $moduleId breaker half-open -> open (strike $openStrike, cooling down ${cooldownMs / 1000}s): $reason")
+    }
+
+    @Synchronized
+    private fun recover(what: String) {
         if (!tripped) return
         tripped = false
         openUntilNs = 0
-        log("[plugins] daemon plugin $moduleId recovered after a successful probe")
+        consecutiveTimeouts.set(0)
+        log("[plugins] daemon plugin $moduleId breaker half-open -> closed: $what answered (open since ${coolingText().substringAfter("since ")})")
         runCatching { onRecovered() }
     }
 
