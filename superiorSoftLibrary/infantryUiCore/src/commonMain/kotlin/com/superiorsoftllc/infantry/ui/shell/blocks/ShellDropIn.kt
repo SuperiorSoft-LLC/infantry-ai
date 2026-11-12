@@ -2,6 +2,7 @@
 // Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.ui.shell.blocks
 
+import com.superiorsoftllc.infantry.ui.AhqAlertDialog
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -18,7 +19,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -189,7 +189,7 @@ private fun ConsentDialog(dropIn: PluginDropIn, preview: DropPreview, onClose: (
     var error by remember(preview) { mutableStateOf<String?>(null) }
     var installing by remember(preview) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    AlertDialog(
+    AhqAlertDialog(
         onDismissRequest = onClose,
         modifier = Modifier.testTag(DROP_CONSENT_TAG),
         title = { Text("Install ${preview.name}?") },

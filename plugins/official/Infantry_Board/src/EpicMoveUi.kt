@@ -150,7 +150,7 @@ internal fun EpicMoveDialog(deps: BoardDeps, ticketIds: List<String>, epics: Lis
             busy = false
         }
     }
-    AlertDialog(
+    AhqAlertDialog(
         onDismissRequest = onClose,
         modifier = Modifier.testTag(EPIC_MOVE_DIALOG_TAG),
         title = { Text(if (ticketIds.size == 1) "Move ticket to epic" else "Move ${ticketIds.size} tickets to epic") },

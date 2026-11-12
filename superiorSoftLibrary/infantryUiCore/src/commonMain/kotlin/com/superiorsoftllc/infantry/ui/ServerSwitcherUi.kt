@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -109,7 +108,7 @@ fun ServersDialog(switcher: ServerSwitcher, onRemoved: (wasActive: Boolean) -> U
         editing = c; adding = c == null; name = c?.name.orEmpty(); url = c?.url.orEmpty(); token = c?.token.orEmpty(); error = null
     }
     val form = editing != null || adding
-    AlertDialog(
+    AhqAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Servers") },
         text = {
