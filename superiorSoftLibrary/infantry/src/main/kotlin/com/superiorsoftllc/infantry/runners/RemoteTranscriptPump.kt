@@ -27,11 +27,19 @@ import java.util.concurrent.ConcurrentHashMap
 class RemoteTranscriptPump(
     private val read: (sessionId: String, fromLine: Int) -> OrchestratorReply<List<String>>?,
     private val publish: (frames: List<Envelope>) -> Unit,
-    private val takenBefore: (sessionId: String) -> Int = { 0 },
-    private val onTaken: (sessionId: String, lines: Int) -> Unit = { _, _ -> },
+    private val takenBefore: (sessionId: String) -> Long = { 0L },
+    private val onTaken: (sessionId: String, taken: Long) -> Unit = { _, _ -> },
+    /**
+     * The runner's own stream frames of a session after a runner sequence; null = not offered (an older runner): the lines are read
+     * then. Preferred: frames lose nothing (the line read drops a harness's answer text once it printed a raw line).
+     */
+    private val readFrames: (sessionId: String, afterSequence: Long) -> OrchestratorReply<List<Envelope>>? = { _, _ -> null },
 ) {
     /** What was taken of one session: [lines] transcript lines, the last of them [last] (null = none known), and its kind. */
     private class Taken(val lines: Int, val last: String?, val lastIsText: Boolean)
+
+    /** session -> the highest runner sequence taken, for a runner that serves frames. */
+    private val takenSeq = ConcurrentHashMap<String, Long>()
 
     private val taken = ConcurrentHashMap<String, Taken>()
     /** session -> its lock: two pulls of one session (an event and a replay) never publish the same lines twice. */
@@ -39,7 +47,22 @@ class RemoteTranscriptPump(
 
     /** Read and publish what is new for [sessionId]; the answer says why nothing came (null = read fine). */
     fun pull(sessionId: String): String? = synchronized(locks.computeIfAbsent(sessionId) { Any() }) {
-        val t = taken.getOrPut(sessionId) { Taken(takenBefore(sessionId), null, false) }
+        if (!taken.containsKey(sessionId)) {
+            val after = takenSeq.getOrPut(sessionId) { takenBefore(sessionId) }
+            when (val reply = readFrames(sessionId, after)) {
+                null -> Unit // not offered: the line read below
+                is OrchestratorReply.Unavailable -> return reply.reason
+                is OrchestratorReply.Ok -> {
+                    val fresh = reply.value.filter { (it.sequence ?: 0L) > after && it.type in RELAYED }
+                    if (fresh.isNotEmpty()) publish(fresh.map { Envelope(it.type, it.data, sessionId, origin = it.origin) })
+                    val top = reply.value.maxOfOrNull { it.sequence ?: 0L } ?: after
+                    if (top > after) { takenSeq[sessionId] = top; onTaken(sessionId, top) }
+                    return null
+                }
+            }
+            takenSeq.remove(sessionId)
+        }
+        val t = taken.getOrPut(sessionId) { Taken(takenBefore(sessionId).toInt(), null, false) }
         // The last line taken is read again: a running answer may have grown it.
         val again = t.last != null && t.lines > 0
         val from = if (again) t.lines - 1 else t.lines
@@ -61,19 +84,26 @@ class RemoteTranscriptPump(
         val total = from + lines.size
         val lastLine = lines.last()
         taken[sessionId] = Taken(total, lastLine, if (fresh.isEmpty()) t.lastIsText else kindOf(lastLine) == Envelope.TEXT_DELTA)
-        if (total != t.lines) onTaken(sessionId, total)
+        if (total != t.lines) onTaken(sessionId, total.toLong())
         null
     }
 
     /** [sessionId] was deleted or moved: start over if it comes back. */
     fun forget(sessionId: String) {
         taken.remove(sessionId)
+        takenSeq.remove(sessionId)
         locks.remove(sessionId)
     }
 
     companion object {
         private const val TURN = "[turn] "
         private const val ERROR = "error: "
+
+        /** The runner frames put on the orchestrator's stream: the chat, not the runner's own session record or status. */
+        val RELAYED = setOf(
+            Envelope.TURN, Envelope.TEXT_DELTA, Envelope.REASONING, Envelope.ERROR, Envelope.STDERR, Envelope.STDOUT,
+            Envelope.EXIT, Envelope.FINISHED, Envelope.USAGE,
+        )
 
         private fun kindOf(line: String): String = when {
             line.startsWith(TURN) -> Envelope.TURN

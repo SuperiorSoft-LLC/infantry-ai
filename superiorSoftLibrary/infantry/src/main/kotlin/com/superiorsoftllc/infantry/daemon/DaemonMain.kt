@@ -1049,6 +1049,8 @@ class InfantryDaemon(
             // push on each turn end), and the orchestrator side's paired runners (set once the runner link service exists).
             // RUNNER-E2E-2: the runner side of an on-demand transcript read (set once the stream sequencer exists).
             val runnerTranscript = java.util.concurrent.atomic.AtomicReference<(String, Int, Int) -> List<String>> { _, _, _ -> emptyList() }
+            // RUNNER-OUTPUT-1: a link-started session's own stream frames, for the orchestrator's app (set once the sequencer exists).
+            val runnerFrames = java.util.concurrent.atomic.AtomicReference<(String, Long) -> List<Envelope>> { _, _ -> emptyList() }
             val remoteStarts = com.superiorsoftllc.infantry.runners.RemoteStarts(
                 cloneRoot = { com.superiorsoftllc.infantry.runners.RemoteStarts.cloneRootDir(settings.runnerLink().cloneRoot, daemonStateDir) },
                 outboxMax = { settings.limit(LimitRegistry.RUNNERS_OUTBOX_MAX).toInt() },
@@ -1090,6 +1092,7 @@ class InfantryDaemon(
                     events = { since -> remoteStarts.events(since) },
                     eventsAcked = { acked -> remoteStarts.events(acked) },
                     transcript = { id, from, max -> runnerTranscript.get()(id, from, max) },
+                    frames = { id, after -> runnerFrames.get()(id, after) },
                     // RUNNER-PROMPT-RELAY-1: the orchestrator's answer to a prompt of one of its sessions here.
                     answerPrompt = { id, reply -> pendingPrompts.answerRelayed(id, reply, com.superiorsoftllc.infantry.daemon.FrameGate.ORCHESTRATOR_SEAT_PREFIX + "link") },
                 ),
@@ -1478,10 +1481,14 @@ class InfantryDaemon(
             // RUNNER-OUTPUT-1: a remote session's output on this daemon's own stream (live, replay, get_session), read from its runner.
             val remoteTranscripts = com.superiorsoftllc.infantry.runners.RemoteTranscriptPump(
                 read = { id, from -> runnerPool.runnerOf(id).takeIf { it != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL }?.let { rn -> runnerPool.link(rn)?.readTranscript(id, from, 0) } },
+                readFrames = { id, after -> runnerPool.runnerOf(id).takeIf { it != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL }?.let { rn -> runnerPool.link(rn)?.readFrames(id, after) } },
                 publish = { frames -> streamSequencer.publish(clients, frames) },
                 takenBefore = remoteMirror::taken,
                 onTaken = remoteMirror::taken,
             )
+            runnerFrames.set { id, after ->
+                streamSequencer.replayAfter(id, after)?.frames.orEmpty().filter { it.sessionId == id && it.type != Envelope.SESSION && it.type != Envelope.STATUS }
+            }
             runnerTranscript.set { id, from, max ->
                 val out = com.superiorsoftllc.infantry.runners.RunnerTranscript.lines(streamSequencer.replayAfter(id, 0)?.frames.orEmpty()).drop(from.coerceAtLeast(0))
                 if (max > 0) out.take(max) else out

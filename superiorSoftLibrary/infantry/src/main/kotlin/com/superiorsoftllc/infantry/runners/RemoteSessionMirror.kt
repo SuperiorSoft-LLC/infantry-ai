@@ -33,11 +33,11 @@ class RemoteSessionMirror(
         val sessionId: String, val runner: String, val provider: String = "", val model: String? = null, val repoRoot: String? = null,
         val branch: String? = null, val ticketId: String? = null, val runnerWorktree: String? = null, val projectId: String? = null,
         val agentId: String? = null, val role: String? = null, val state: String? = null, val failedWhy: String? = null,
-        val firstSeen: Long? = null, val taken: Int = 0,
+        val firstSeen: Long? = null, val taken: Long = 0,
     )
 
     private val runners = ConcurrentHashMap<String, String>()
-    private val takenLines = ConcurrentHashMap<String, Int>()
+    private val takenLines = ConcurrentHashMap<String, Long>()
 
     private class Seen(val state: SessionState, val at: Long)
 
@@ -72,11 +72,11 @@ class RemoteSessionMirror(
         save()
     }
 
-    /** RUNNER-OUTPUT-1: [sessionId]'s runner transcript lines the orchestrator already put on its own stream. */
-    fun taken(sessionId: String): Int = takenLines[sessionId] ?: 0
+    /** RUNNER-OUTPUT-1: how much of [sessionId]'s runner output the orchestrator already took (a runner sequence, or lines). */
+    fun taken(sessionId: String): Long = takenLines[sessionId] ?: 0L
 
-    fun taken(sessionId: String, lines: Int) {
-        takenLines[sessionId] = lines
+    fun taken(sessionId: String, taken: Long) {
+        takenLines[sessionId] = taken
         save()
     }
 
@@ -105,7 +105,7 @@ class RemoteSessionMirror(
             val p = placedAs[id]
             Kept(
                 id, runners.getValue(id), p?.provider.orEmpty(), p?.model, p?.repoRoot, p?.branch, p?.ticketId, p?.runnerWorktree,
-                p?.projectId, p?.agentId, p?.role, seen[id]?.state?.name, failedWhy[id], firstSeen[id], takenLines[id] ?: 0,
+                p?.projectId, p?.agentId, p?.role, seen[id]?.state?.name, failedWhy[id], firstSeen[id], takenLines[id] ?: 0L,
             )
         }
         runCatching {

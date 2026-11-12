@@ -173,8 +173,10 @@ class RunnerPoolPinnedTicketE2ETest {
         // And its output is read from the runner on demand when a client asks for the session (`infantry logs <session>` sends this replay).
         orch.client.send(Envelope("replay_request", """{"lastSequence":0}""", sessionId))
         // RUNNER-OUTPUT-1: as a sequenced chat frame on the orchestrator's own stream (an unsequenced stdout line is drawn by no client).
-        val line = orch.client.awaitWhere("the runner's output line reaches the orchestrator as chat text") { f ->
-            f.type == Envelope.TEXT_DELTA && f.sessionId == sessionId && f.data.contains("hello from the runner")
+        // The runner serves the session's own frames, so the line arrives as the frame type it has on the runner (this fake harness
+        // prints it raw: stdout, as a local session of it shows).
+        val line = orch.client.awaitWhere("the runner's output line reaches the orchestrator as a sequenced stream frame") { f ->
+            (f.type == Envelope.STDOUT || f.type == Envelope.TEXT_DELTA) && f.sessionId == sessionId && f.data.contains("hello from the runner")
         }
         assertNotNull(line.sequence, "the frame is sequenced, so the app applies and replays it")
     }

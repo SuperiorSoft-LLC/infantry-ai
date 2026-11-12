@@ -105,6 +105,13 @@ class RemoteRunnerLink(private val name: String, private val links: RunnerLinks)
         call(F.TRANSCRIPT, F.json.encodeToString(F.TranscriptRequest.serializer(), F.TranscriptRequest(sessionId, fromLine, maxLines)), F.TranscriptAnswer.serializer())
             .map { it.lines }
 
+    /** RUNNER-OUTPUT-1: the session's stream frames after [afterSequence]; null when the runner answers lines only (older). */
+    override fun readFrames(sessionId: String, afterSequence: Long): OrchestratorReply<List<com.superiorsoftllc.infantry.protocol.Envelope>>? =
+        when (val r = call(F.TRANSCRIPT, F.json.encodeToString(F.TranscriptRequest.serializer(), F.TranscriptRequest(sessionId, afterSequence = afterSequence)), F.TranscriptAnswer.serializer())) {
+            is OrchestratorReply.Ok -> r.value.frames?.let { OrchestratorReply.Ok(it) }
+            is OrchestratorReply.Unavailable -> r
+        }
+
     /** RUNNER-PROMPT-RELAY-1: the owner's answer to a prompt a session of this orchestrator raised on the runner. */
     override fun answerPrompt(sessionId: String, reply: PromptReply): OrchestratorReply<Boolean> =
         call(

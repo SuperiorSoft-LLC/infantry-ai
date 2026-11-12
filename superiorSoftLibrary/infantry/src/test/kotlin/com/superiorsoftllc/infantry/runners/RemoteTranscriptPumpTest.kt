@@ -49,14 +49,37 @@ class RemoteTranscriptPumpTest {
         val before = RemoteSessionMirror(sessionIds = { listOf("s1") }, store = file, runnerOf = { "infantry-runner" })
         before.placed("s1", RemoteSessionMirror.Placed("opencode", "m", null, null, projectId = "p1"))
         before.status("s1", "IDLE")
-        before.taken("s1", 3)
+        before.taken("s1", 3L)
         val after = RemoteSessionMirror(sessionIds = { listOf("s1") }, store = file)
         assertEquals(mapOf("s1" to "infantry-runner"), after.restore())
-        assertEquals(3, after.taken("s1"))
+        assertEquals(3L, after.taken("s1"))
         val rec = after.get("s1")!!
         assertEquals("p1", rec.projectId)
         assertEquals(com.superiorsoftllc.infantry.session.SessionState.IDLE, rec.state)
         after.forget("s1")
         assertEquals(emptyMap(), RemoteSessionMirror(sessionIds = { emptyList() }, store = file).restore())
+    }
+
+    @Test
+    fun `a runner that serves frames is relayed frame by frame, after its last sequence, never by lines`() {
+        val runner = listOf(
+            Envelope(Envelope.SESSION, "{}", "s1", sequence = 1),
+            Envelope(Envelope.TURN, "ping\nreply pong", "s1", sequence = 2),
+            Envelope(Envelope.STDOUT, "opencode server listening", "s1", sequence = 3),
+            Envelope(Envelope.TEXT_DELTA, "pong", "s1", sequence = 4),
+        )
+        var upTo = 2
+        val published = mutableListOf<Envelope>()
+        val pump = RemoteTranscriptPump(
+            read = { _, _ -> error("the line read is not used when frames are served") },
+            publish = { published += it },
+            readFrames = { _, after -> OrchestratorReply.Ok(runner.take(upTo).filter { (it.sequence ?: 0) > after }) },
+        )
+        assertNull(pump.pull("s1"))
+        upTo = 4
+        assertNull(pump.pull("s1"))
+        assertNull(pump.pull("s1"))
+        assertEquals(listOf(Envelope.TURN to "ping\nreply pong", Envelope.STDOUT to "opencode server listening", Envelope.TEXT_DELTA to "pong"), published.map { it.type to it.data })
+        assertEquals(setOf<Long?>(null), published.map { it.sequence }.toSet())
     }
 }
