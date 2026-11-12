@@ -236,6 +236,11 @@ class ScriptRunLog(private val limit: () -> Int = { 200 }, private val clock: ()
         return synchronized(q) { q.toList() }.filter { session == null || it.session == session }.takeLast(n.coerceIn(1, 1000)).reversed()
     }
 
+    /** DAEMON-HEALTH-2: how many scripts failed their last [streak] runs in a row (what the hook-health script alerts on), over all projects. */
+    fun failingScripts(streak: Int): Int = runs.values.sumOf { q ->
+        synchronized(q) { q.toList() }.groupBy { it.script }.count { (_, rs) -> rs.size >= streak && rs.takeLast(streak).none { it.ok } }
+    }
+
     /** Wakes by reason for one session; `turnsSaved` = mails a hook handled without a wake. */
     fun sessionStats(session: String): JsonObject = statsOf(wakes[session].orEmpty(), lastWake[session])
 

@@ -54,7 +54,7 @@
     "jar": "daemon/build/libs/Infantry_Scripting-daemon.jar",
     "apiAtLeast": "1.55.0",
     "side": "orchestrator",
-    "hooks": ["incomingMail"],
+    "hooks": ["incomingMail", "status"],
     "frames": [
       { "type": "timeline_list", "action": "timeline.read", "kind": "read" }
     ],

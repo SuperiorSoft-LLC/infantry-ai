@@ -15,8 +15,8 @@ class HealthSources(
     val pluginRows: () -> Map<String, String>,
     val hooks: () -> Pair<Int, Int>?,
     val harnesses: () -> List<String>,
-    /** The session's project path, worktree path and branch (null = unknown or no session). */
-    val sessionPaths: (sessionId: String?) -> Triple<String?, String?, String?>,
+    /** The project path, worktree path and branch of the session, else of the project the call is for (null = none applies). */
+    val sessionPaths: (sessionId: String?, projectId: String?) -> Triple<String?, String?, String?>,
     val eventTail: Int,
 )
 
@@ -27,11 +27,12 @@ class HealthService(
     private val src: HealthSources,
     private val now: () -> Long = System::currentTimeMillis,
 ) {
-    fun report(sessionId: String? = null): HealthReport {
+    fun report(sessionId: String? = null, projectId: String? = null): HealthReport {
         val t = now()
         val st = journal.status()
-        val (project, worktree, branch) = src.sessionPaths(sessionId)
-        val hooks = src.hooks()
+        val (project, worktree, branch) = src.sessionPaths(sessionId, projectId)
+        val rows = src.pluginRows()
+        val hooks = src.hooks() ?: rows["hooks"]?.toIntOrNull()?.let { it to (rows["hookFailures"]?.toIntOrNull() ?: 0) }
         return HealthReport(
             at = t,
             daemon = DaemonRow(
@@ -40,7 +41,7 @@ class HealthService(
                 lastRestartAt = st?.lastRestartAt, lastRestartCause = st?.lastRestartCause,
             ),
             plugins = src.plugins().map { (id, status) -> PluginRow(id, if (status == "loaded" || status == "started") "loaded" else status) }.sortedBy { it.id },
-            pluginRows = src.pluginRows(),
+            pluginRows = rows - "hooks" - "hookFailures",
             mcp = bridges.rows(),
             hooks = hooks?.first, hookFailures = hooks?.second,
             freeMemoryMb = Runtime.getRuntime().maxMemory().let { (it - (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory())) / BYTES_PER_MB },
@@ -59,6 +60,10 @@ class HealthService(
  */
 object DaemonHealth {
     @Volatile var service: HealthService? = null
+
+    /** DAEMON-HEALTH-2: the start-brief environment line for [projectId], or null when no health service runs. */
+    fun briefLine(projectId: String?): String? =
+        service?.report(null, projectId)?.environment?.let(EnvironmentProbe::briefLine)
 
     /** The MCP bridge for [sessionId] made a call on a connection: it is alive now. */
     fun bridgeSeen(sessionId: String?, connection: MutableSet<String>) {

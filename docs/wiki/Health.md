@@ -34,14 +34,26 @@ trimmed to `limits.health.eventLogMax`). Both are plain JSON lines, so a script 
 
 ## Limits
 
-`limits.health.eventLogMax` (default 500 events) and `limits.health.heartbeatSeconds` (default 10). Read at start-up.
+`limits.health.eventLogMax` (default 500 events) and `limits.health.heartbeatSeconds` (default 10), `limits.health.briefEnvironment` (default 0). Read at start-up.
 
 ## Frame
 
-`health` (Envelope.HEALTH, policy action `host.health.read`, a read): data `{"sessionId"?, "format"?: "text"}`; the answer is
+`health` (Envelope.HEALTH, policy action `host.health.read`, a read): data `{"sessionId"?, "projectId"?, "format"?: "text"}`; the answer is
 a `health` frame with the `HealthReport` JSON (or its text). Code: `daemon/health/` in the `infantry` module.
 
-## Not built yet
+## Hooks (DAEMON-HEALTH-2)
 
-Hook count and hook-health failures (the hooks live in the scripting plugin and offer no read seam yet) and the start-brief
-environment line (`EnvironmentProbe.briefLine` builds it; the first-turn composer does not call it yet).
+`hooks: N, M with failures`: the number of hooks (project and app-wide) and the number of scripts whose last 3 runs all failed
+(what the `hook-health` script alerts on). The scripting plugin contributes both as rows `hooks` and `hookFailures` through the
+generic `status` hook (`api.hooks.status`); core reads the two keys as numbers and names no scripting. No scripting plugin: absent.
+
+## Project, branch and build
+
+Called without a session (the CLI, a hook), the report fills project, worktree and branch from the project the call is for (the
+`projectId` of the frame, else the first project); the branch is read from `.git/HEAD`. `build` is the stamped build string; an
+unstamped run shows `dev (unstamped; version X, commit abcd1234)` from the launcher's version and the checkout's HEAD.
+
+## Start-brief environment line
+
+`limits.health.briefEnvironment` (default 0 = off). At 1 every first turn carries one line (`Environment: OS arch; shells;
+project; off-limits ports ... Run infantry health`), about 60 tokens per session start. Off costs nothing.

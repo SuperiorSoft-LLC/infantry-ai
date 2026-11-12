@@ -41,6 +41,7 @@ class HealthDaemonPlugin : DaemonPlugin {
             val wantJson = (call.arguments["json"] as? JsonPrimitive)?.booleanOrNull == true
             val request = buildJsonObject {
                 call.clientSessionId?.let { put("sessionId", it) }
+                call.clientProjectId?.let { put("projectId", it) }
                 if (!wantJson) put("format", "text")
             }.toString()
             val reply = call.request("health", request, timeoutMs = REPLY_TIMEOUT_MS)

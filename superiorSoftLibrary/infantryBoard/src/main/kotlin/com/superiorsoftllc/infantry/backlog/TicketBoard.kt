@@ -360,7 +360,7 @@ class TicketBoard(
         // P10-K15: with the skill ids the row will freeze, so the turn renders exactly those.
         val instance = host.agents.instanceFor(profile.id, profile.role)?.let { host.agents.withSkills(it, null) }
         // P10-K9: the session's own project (TRIGGER-NUDGE: the trigger's, when it names one).
-        val first = composeFirstTurn(instance?.instructions, instance?.toSnapshots().orEmpty(), profile.role, profile.id, prompt, host.context.knowledgeSection(projectId, profile.role), host.context.skillsSection(instance?.skillIds))
+        val first = composeFirstTurn(instance?.instructions, instance?.toSnapshots().orEmpty(), profile.role, profile.id, prompt, host.context.knowledgeSection(projectId, profile.role), host.context.skillsSection(instance?.skillIds), host.context.environmentSection(projectId))
         return when (val started = host.sessions.start(
             SessionStart(
                 prompt = first,

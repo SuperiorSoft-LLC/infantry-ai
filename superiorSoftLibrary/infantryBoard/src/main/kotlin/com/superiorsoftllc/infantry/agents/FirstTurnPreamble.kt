@@ -41,6 +41,7 @@ fun composeFirstTurn(
     prompt: String,
     knowledge: String? = null,
     skills: String? = null,
+    environment: String? = null,
 ): String =
-    listOfNotNull(persona?.takeIf { it.isNotBlank() }, identityLine(role, agentId), renderTraits(traits), knowledge, skills, prompt)
+    listOfNotNull(persona?.takeIf { it.isNotBlank() }, identityLine(role, agentId), renderTraits(traits), knowledge, skills, environment, prompt)
         .joinToString("\n\n")

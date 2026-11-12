@@ -705,6 +705,11 @@ object LimitRegistry {
         "DAEMON-HEALTH-1: how often the daemon refreshes its health record (`last seen`), which `infantry health` uses to tell a dead daemon from a live one when it does not answer. Read at start-up.",
         min = 1, max = 3600, zeroIsUnlimited = false,
     )
+    val HEALTH_BRIEF_ENVIRONMENT = LimitDef(
+        "limits.health.briefEnvironment", 0, "on/off",
+        "DAEMON-HEALTH-2: 1 puts one environment line (OS, shells, project path, off-limits ports, 'run infantry health') into every session's start brief; 0 (default) leaves it out. Cost when on: about 60 tokens added to each first turn and to nothing else; off costs nothing, the agent can still call `infantry health`.",
+        max = 1, zeroIsUnlimited = false, zeroMeans = "off",
+    )
     val HEALTH_WATCHDOG_FAILURES = LimitDef(
         "limits.health.watchdogFailures", 0, "checks",
         "Failed /health self-checks in a row after which the headless daemon halts its JVM so its supervisor (Docker restart policy) restarts it; Docker never restarts an unhealthy container by itself. The Docker image sets 3. Read at start-up.",
@@ -1222,7 +1227,7 @@ object LimitRegistry {
         MODELS_CATALOG_TTL_MS, MODELS_CATALOG_WAIT_MS, CLI_ANSWER_TIMEOUT_MS,
         RUN_MAX_SECRETS, SECRET_RENDER_MAX_BYTES, KEYSTORE_MAX_FIELDS, KEYSTORE_MAX_SECRETS,
         SANDBOX_MODE, USAGE_QUOTA_HIT_HOLD_MINUTES,
-        HEALTH_DB_TIMEOUT_SECONDS, HEALTH_EVENT_LOG_MAX, HEALTH_HEARTBEAT_SECONDS, HEALTH_WATCHDOG_FAILURES, HEALTH_WATCHDOG_INTERVAL_SECONDS, HEALTH_WATCHDOG_TIMEOUT_SECONDS,
+        HEALTH_DB_TIMEOUT_SECONDS, HEALTH_BRIEF_ENVIRONMENT, HEALTH_EVENT_LOG_MAX, HEALTH_HEARTBEAT_SECONDS, HEALTH_WATCHDOG_FAILURES, HEALTH_WATCHDOG_INTERVAL_SECONDS, HEALTH_WATCHDOG_TIMEOUT_SECONDS,
         MAIL_WAKE_DEBOUNCE_SECONDS, MAIL_COALESCE_MAX, WATCH_STALL_NUDGES, SCRIPT_RUN_LOG_MAX,
         RUNNERS_PAIR_CODE_MIN, RUNNERS_PAIR_ATTEMPTS_PER_HOUR, RUNNERS_CREDENTIAL_ROTATE_DAYS, RUNNERS_LINK_PORT, RUNNERS_UP_START_SEC, RUNNERS_ADVERTISE_HOSTS_MAX, RUNNERS_AUDIT_SHOWN, RUNNERS_GRANT_PROJECTS_MAX, RUNNERS_LINK_CALL_SECONDS, RUNNERS_LINK_CHECK_SECONDS,
         RUNNERS_OUTBOX_MAX, RUNNERS_LOST_AFTER_MIN, RUNNERS_COMMIT_CHECK_SEC, RUNNERS_FORWARD_WAIT_SEC, RUNNERS_FORWARD_TIMEOUT_SEC, RUNNERS_FORWARD_PENDING_MAX,

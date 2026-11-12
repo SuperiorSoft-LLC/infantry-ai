@@ -19,6 +19,8 @@ class ScriptingDaemonPlugin : DaemonPlugin {
         const val TIMELINE_ITEM = "timeline_item"
         const val TIMELINE_LIST = "timeline_list"
         const val TIMELINE_ITEMS = "timeline_items"
+        /** The failures in a row hook-health alerts on by default. */
+        const val HEALTH_FAIL_STREAK = 3
     }
 
     private var subscription: AutoCloseable? = null
@@ -99,6 +101,11 @@ class ScriptingDaemonPlugin : DaemonPlugin {
             builtins = { builtinHooks },
             builtinConfig = { api.config(it) },
         )
+        // DAEMON-HEALTH-2: the number of hooks and of scripts failing HEALTH_FAIL_STREAK runs in a row, as generic `status` rows the health report reads.
+        api.hooks.status(com.superiorsoftllc.infantry.daemon.api.StatusHook {
+            val ids = api.projects.list().flatMap { p -> hookStore.list(p.id).map { it.id } }.toSet() + hookStore.arsenalHooks().map { it.id }
+            mapOf("hooks" to ids.size.toString(), "hookFailures" to runLog.failingScripts(HEALTH_FAIL_STREAK).toString())
+        })
         // SCRIPT-VIS-1: why each session was woken (and mails a hook handled instead), from the daemon's session.woken event.
         wakeWatch = api.events.subscribe("session.woken") { e ->
             runCatching {
