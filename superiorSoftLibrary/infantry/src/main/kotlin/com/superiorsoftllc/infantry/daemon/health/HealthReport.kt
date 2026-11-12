@@ -114,6 +114,34 @@ object EnvironmentProbe {
         runCatching { com.superiorsoftllc.infantry.install.CliPath.status(com.superiorsoftllc.infantry.daemon.CliPathAuto.store(getenv), dir).line() }.getOrNull()
     }
 
+    /**
+     * DAEMON-HEALTH-2: the running build as health shows it. A stamped build string (`-Dinfantry.build`) is shown as is; an unstamped
+     * one ("dev") is completed with the version the launcher or the jar gives and the commit of the checkout the JVM runs in.
+     */
+    fun buildLabel(
+        build: String,
+        version: String? = com.superiorsoftllc.infantry.session.InfantryEnv.get("INFANTRY_VERSION") ?: System.getProperty(com.superiorsoftllc.infantry.update.BuildInfo.VERSION_PROPERTY)
+            ?: EnvironmentProbe::class.java.`package`?.implementationVersion,
+        commit: () -> String? = { runCatching {
+            val g = com.superiorsoftllc.infantry.worktree.SystemGitCli()
+            val dir = File(System.getProperty("user.dir", "."))
+            val sha = g.run(dir, listOf("rev-parse", "--short=8", "HEAD")).takeIf { it.ok }?.out()
+            val dirty = g.run(dir, listOf("status", "--porcelain")).takeIf { it.ok }?.out()?.isNotBlank() == true
+            sha?.takeIf { it.isNotBlank() }?.let { it + if (dirty) "-dirty" else "" }
+        }.getOrNull() },
+    ): String {
+        if (build != "dev") return build
+        val parts = listOfNotNull(version?.takeIf { it.isNotBlank() }?.let { "version $it" }, commit()?.let { "commit $it" })
+        return if (parts.isEmpty()) "dev (unstamped; version and commit unknown)" else "dev (unstamped; ${parts.joinToString(", ")})"
+    }
+
+    /** DAEMON-HEALTH-2: the branch checked out in [dir] (reads `.git/HEAD`, also for a worktree's `.git` file); null for a detached HEAD or no repo. */
+    fun currentBranch(dir: File): String? = runCatching {
+        var git = File(dir, ".git")
+        if (git.isFile) git = File(git.readText().removePrefix("gitdir:").trim().let { g -> if (File(g).isAbsolute) g else File(dir, g).path })
+        File(git, "HEAD").readText().trim().removePrefix("ref: refs/heads/").takeIf { !it.matches(Regex("[0-9a-f]{40}")) && it.isNotEmpty() }
+    }.getOrNull()
+
     /** DAEMON-HEALTH-1: the one-line form injected into a session's start brief. */
     fun briefLine(e: EnvironmentFacts): String =
         "Environment: ${e.os} ${e.arch}; shells: ${e.shells.substringBefore(" (")}/Bash; project ${e.projectPath ?: e.worktreePath ?: "unknown"}; " +
@@ -140,7 +168,7 @@ object HealthText {
         appendLine("environment:")
         appendLine("  os ${e.os} ${e.arch}; jdk ${e.jdk}" + e.buildTools.entries.joinToString("") { (k, v) -> "; $k $v" })
         appendLine("  shells: ${e.shells}")
-        appendLine("  project ${e.projectPath ?: "-"}; worktree ${e.worktreePath ?: "-"}; branch ${e.gitBranch ?: "-"}")
+        appendLine(if (e.projectPath == null && e.worktreePath == null) "  project: none applies (no session and no project for this call)" else "  project ${e.projectPath ?: "-"}; worktree ${e.worktreePath ?: "-"}; branch ${e.gitBranch ?: "-"}")
         appendLine("  OWNER ports (off limits): ${e.ownerPorts.joinToString(", ")}; free for test daemons: ${e.testPortRange}")
         appendLine("  harnesses: ${e.harnesses.joinToString(", ").ifBlank { "none" }}")
         appendLine("  state dir: ${e.stateDir}")

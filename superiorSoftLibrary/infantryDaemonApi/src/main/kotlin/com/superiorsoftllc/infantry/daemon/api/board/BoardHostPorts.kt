@@ -98,6 +98,9 @@ fun interface BoardSessionListener {
 interface BoardContextSources {
     fun knowledgeSection(projectId: String?, role: String?): String? = null
 
+    /** DAEMON-HEALTH-2: the one-line environment note of a start brief; null = off (the default) or unknown. */
+    fun environmentSection(projectId: String?): String? = null
+
     /** [skillIds] is the frozen list of the session's instance (null = no instance, no section); [include] overrides the project's switch. */
     fun skillsSection(skillIds: List<String>?, include: Boolean? = null): String? = null
 }

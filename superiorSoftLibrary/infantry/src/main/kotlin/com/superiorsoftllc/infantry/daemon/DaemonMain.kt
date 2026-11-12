@@ -2452,12 +2452,18 @@ class InfantryDaemon(
                 healthJournal,
                 com.superiorsoftllc.infantry.daemon.health.McpBridgeTracker(healthJournal),
                 com.superiorsoftllc.infantry.daemon.health.HealthSources(
-                    stateDir = daemonStateDir, port = { boundPort }, build = com.superiorsoftllc.infantry.update.BuildInfo.current,
+                    stateDir = daemonStateDir, port = { boundPort }, build = com.superiorsoftllc.infantry.daemon.health.EnvironmentProbe.buildLabel(com.superiorsoftllc.infantry.update.BuildInfo.current),
                     plugins = { pluginHost.get().moduleStatuses() },
                     pluginRows = { pluginHost.get().statusFields() },
                     hooks = { null },
                     harnesses = { manager.providers.map { it.id } },
-                    sessionPaths = { id -> manager.get(id ?: "")?.let { Triple(it.repoRoot, it.worktreePath, it.worktreeBranch) } ?: Triple(null, null, null) },
+                    sessionPaths = { id, projectId ->
+                        manager.get(id ?: "")?.let { Triple(it.repoRoot, it.worktreePath, it.worktreeBranch) }
+                            ?: (projectId?.takeIf { it.isNotBlank() } ?: projects.defaultProjectId())?.let { pid ->
+                                val dir = runCatching { projects.directoryOf(pid) }.getOrNull()
+                                Triple<String?, String?, String?>(dir?.path, null, dir?.let { com.superiorsoftllc.infantry.daemon.health.EnvironmentProbe.currentBranch(it) })
+                            } ?: Triple(null, null, null)
+                    },
                     eventTail = LimitRegistry.fromEnv(LimitRegistry.HEALTH_EVENT_LOG_MAX, System::getenv).toInt().coerceAtMost(HEALTH_EVENTS_SHOWN),
                 ),
             )
@@ -4302,7 +4308,7 @@ private suspend fun handleConnection(
                 Envelope.HEALTH -> {
                     val ask = runCatching { json.parseToJsonElement(envelope.data) as? JsonObject }.getOrNull()
                     fun field(k: String) = (ask?.get(k) as? kotlinx.serialization.json.JsonPrimitive)?.content
-                    val report = com.superiorsoftllc.infantry.daemon.health.DaemonHealth.service?.report(field("sessionId"))
+                    val report = com.superiorsoftllc.infantry.daemon.health.DaemonHealth.service?.report(field("sessionId"), field("projectId"))
                     Envelope(
                         Envelope.HEALTH,
                         when {

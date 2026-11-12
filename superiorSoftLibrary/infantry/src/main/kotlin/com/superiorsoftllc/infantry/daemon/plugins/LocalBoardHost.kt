@@ -415,6 +415,11 @@ class LocalBoardHost(
                 knowledge.section(projectId, role),
                 com.superiorsoftllc.infantry.agents.renderLayeredSkills(layeredSkills.resolve(projectId, role), com.superiorsoftllc.infantry.agents.LayerSkillWire.inlineMax(store)),
             ).joinToString("\n\n").ifEmpty { null }
+        override fun environmentSection(projectId: String?): String? {
+            val on = (store.settings.get(com.superiorsoftllc.infantry.settings.LimitRegistry.HEALTH_BRIEF_ENVIRONMENT.key)?.value
+                ?: com.superiorsoftllc.infantry.settings.LimitRegistry.HEALTH_BRIEF_ENVIRONMENT.default.toString()).trim() == "1"
+            return if (on) com.superiorsoftllc.infantry.daemon.health.DaemonHealth.briefLine(projectId) else null
+        }
         override fun skillsSection(skillIds: List<String>?, include: Boolean?) = skills.section(skillIds, include)
     }
 
