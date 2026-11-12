@@ -3526,8 +3526,14 @@ private suspend fun handleConnection(
                                 if (sent.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.MailResult.FAILED) throw IllegalStateException("runner refused the prompt: ${sent.reason}")
                                 if (sent.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.MailResult.QUEUED) throw IllegalStateException("runner '${runnerPool.runnerOf(remoteId)}' is busy or unreachable (${sent.reason.ifBlank { "queued" }}); send again")
                                 active = remoteId
-                            } else
-                            active = manager.resume(envelope.sessionId!!, turn).id
+                            } else {
+                                // SESSION-UNKNOWN-1: a session only the runner mirror knows (its runner was detached or revoked) is not
+                                // local and not placed: say so, never "unknown session".
+                                if (manager.get(remoteId) == null && remoteSessions().any { it.id == remoteId }) {
+                                    throw IllegalStateException("session $remoteId lives on a runner that is no longer attached; re-attach that runner, or start the ticket again to get a new session")
+                                }
+                                active = manager.resume(envelope.sessionId!!, turn).id
+                            }
                             plugins.turnAccepted(envelope, caller)
                             pluginSessionsAck(envelope, manager) ?: sendKey?.let { promptAck(envelope, duplicate = false) }
                         } catch (e: RunInFlightException) {
@@ -3536,7 +3542,7 @@ private suspend fun handleConnection(
                             Envelope(Envelope.ERROR, "$RUN_IN_FLIGHT ${e.sessionId}: ${e.message}")
                         } catch (e: Exception) {
                             sendKey?.let(promptSendIds::release)
-                            Envelope(Envelope.ERROR, e.message ?: "resume failed")
+                            Envelope(Envelope.ERROR, e.message ?: "resume failed", envelope.sessionId)
                         }
                     } else if (active?.let { manager.get(it) == null && runnerPool.runnerOf(it) != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL } == true) {
                         // RUNNER-SESSION-GHOST-1: the last `new` placed this connection's session on a remote runner. Its first
@@ -4165,7 +4171,7 @@ private suspend fun handleConnection(
                             plugins.turnAccepted(envelope, caller)
                             null
                         } catch (e: Exception) {
-                            Envelope(Envelope.ERROR, e.message ?: "resume failed")
+                            Envelope(Envelope.ERROR, e.message ?: "resume failed", id)
                         }
                     }
                 }

@@ -356,6 +356,8 @@ class RemoteDaemonTest {
         fixture.send(Envelope(Envelope.PROMPT, "orphaned prompt", "no-such-session"))
         val refusal = fixture.client.await(Envelope.ERROR)
         assertTrue(refusal.data.isNotBlank(), "the refusal must say why")
+        // SESSION-UNKNOWN-1: the refusal names its session, so a client keeps it in that open session.
+        assertEquals("no-such-session", refusal.sessionId)
         assertEquals(0, fixture.daemon.manager.list().size, "an unknown session must not start a new one")
     }
 
