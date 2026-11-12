@@ -159,4 +159,48 @@ class LocalRunnerLinkTest {
         router.pump("remote-s1")
         assertEquals(1, remote.delivered.size, "delivered once, then no longer queued")
     }
+
+    /**
+     * HARNESS-ALL-1: the slot count a start reads is the last heartbeat's. A session ended on the runner since then frees its slot
+     * there, so a start the cached view calls "full" re-reads that runner once and goes ahead. A runner really full is still refused.
+     */
+    @Test
+    fun aStartRightAfterASessionEndedOnARunnerIsNotRefusedAsFull() {
+        class Remote : RunnerLink {
+            var free = 0
+            val starts = mutableListOf<StartSpec>()
+            override fun ticketIdOf(sessionId: String): String? = null
+            override fun health(): OrchestratorReply<com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerHealth> =
+                OrchestratorReply.Ok(com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerHealth(com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerHealth.UP, running = 1 - free, freeSlots = free))
+            override fun hello(): OrchestratorReply<com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerInfo> =
+                OrchestratorReply.Ok(com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerInfo("r2", RunnerLink.CONTRACT_VERSION, listOf(com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerHarness("claude", loggedIn = true)), capacity = 1))
+            override fun startSession(spec: StartSpec): OrchestratorReply<SessionRef> {
+                starts += spec
+                return OrchestratorReply.Ok(SessionRef(sessionId = "remote-${starts.size}"))
+            }
+        }
+        val remote = Remote()
+        val manager = SessionManager(FakeAgentProvider(), ScriptedRunner(autoExit = true), tempSessionStore(), killGraceMs = 50)
+        val agents = AgentProfiles(Repo(), manager)
+        val local = LocalRunnerLink(LocalRunner.services(manager, agents, info = { com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerInfo("local", RunnerLink.CONTRACT_VERSION) }, capacity = { 4 }))
+        val pool = RunnerHub(local, remotes = { listOf("r2") }).also { it.register("remote") { _, _ -> remote } }
+        val repo = java.nio.file.Files.createTempDirectory("slot-refresh").toFile()
+        try {
+            check(ProcessBuilder("git", "init", "-q").directory(repo).start().waitFor() == 0)
+            check(ProcessBuilder("git", "remote", "add", "origin", "https://example.invalid/p.git").directory(repo).start().waitFor() == 0)
+            val options = SpawnOptions(runner = "r2", role = "backend")
+
+            pool.heartbeat(60_000) // the last heartbeat: the runner's one slot is taken
+            val full = assertFailsWith<IllegalArgumentException> { LocalRunner.start(pool, manager, options, repo) }
+            assertTrue(full.message.orEmpty().contains("runner r2 is full"), full.message)
+
+            remote.free = 1 // that session ended on the runner; no heartbeat has run since
+            val started = LocalRunner.start(pool, manager, options, repo)
+            assertEquals(1, remote.starts.size, "the start went to r2 without waiting for the next heartbeat")
+            assertEquals("remote-1", started?.id)
+            assertEquals("r2", pool.runnerOf("remote-1"))
+        } finally {
+            repo.deleteRecursively()
+        }
+    }
 }

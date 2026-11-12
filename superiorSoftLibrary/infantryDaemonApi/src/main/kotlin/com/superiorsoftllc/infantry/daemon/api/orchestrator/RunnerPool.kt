@@ -299,6 +299,12 @@ interface RunnerPool {
     /** LOGS-PREFIX-1: the ids of the sessions placed on a remote runner (the session index); empty when none are tracked. */
     fun placedSessionIds(): Collection<String> = emptyList()
 
+    /**
+     * HARNESS-ALL-1: re-read runner [name]'s health now instead of at the next heartbeat. A start calls it when the cached view says
+     * the runner is full, so a session ended a moment ago frees its slot at once. Default: nothing (the view is always fresh).
+     */
+    fun refresh(name: String) {}
+
     companion object {
         const val LOCAL = "local"
     }
@@ -445,6 +451,17 @@ class RunnerHub(
             beats[name] = beat
             if (before?.state != beat.state) "runner '$name' is ${beat.state}" else null
         }
+    }
+
+    /**
+     * HARNESS-ALL-1: one `health` call to runner [name], kept only when it answers (the slot count a start reads). A silent runner keeps
+     * its last beat: the heartbeat, not a start, decides that a runner is lost.
+     */
+    override fun refresh(name: String) {
+        if (name == RunnerPool.LOCAL || name !in remoteNames()) return
+        val before = beats[name] ?: return
+        val health = link(name)?.health()?.valueOr(null) ?: return
+        beats[name] = before.copy(health = health)
     }
 
     private fun remoteNames(): List<String> = runCatching(remotes).getOrDefault(emptyList()).filter { it != RunnerPool.LOCAL }
