@@ -21,7 +21,9 @@ class TicketGetCompactTest {
         val d = (c["description"] as JsonPrimitive).content
         assertTrue(d.startsWith("x".repeat(300)) && d.length < 400 && "cut at 300" in d)
         assertEquals("backend", (c["role"] as JsonPrimitive).content)
-        assertFalse("images" in c || "effectiveModel" in c)
+        // CI-FIX-IMAGES (e902f13f6): compact lists attachments (an empty array says none); the heavy fields stay out.
+        assertTrue("images" in c)
+        assertFalse("effectiveModel" in c)
     }
 
     @Test fun `compact keeps a short description and drops the RELATED block`() {
