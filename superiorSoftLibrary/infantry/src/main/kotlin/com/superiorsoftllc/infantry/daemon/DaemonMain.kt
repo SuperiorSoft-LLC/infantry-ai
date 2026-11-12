@@ -1096,7 +1096,13 @@ class InfantryDaemon(
             )
             val runnerPool = com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerHub(localRunnerLink, remotes = { runnerLinksRef.get().paired() },
                 lend = credentialLender::lend, lentKeys = credentialLender::lentKeys)
-            val remoteMirror = com.superiorsoftllc.infantry.runners.RemoteSessionMirror(sessionIds = { runnerPool.remoteSessionIds() }) // BOARD-HANG-2: the index only, never the local hello
+            val remoteMirror = com.superiorsoftllc.infantry.runners.RemoteSessionMirror(
+                sessionIds = { runnerPool.remoteSessionIds() }, // BOARD-HANG-2: the index only, never the local hello
+                // RUNNER-OUTPUT-1: kept across a restart, so a session on a runner is not orphaned (its chat, mail and kills still reach it).
+                store = File(daemonStateDir, "runner-sessions.json"),
+                runnerOf = { id -> runnerPool.runnerOf(id).takeIf { it != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL } },
+            )
+            for ((id, runner) in remoteMirror.restore()) runnerPool.placed(id, runner)
             // RUNNER-PROMPT-RELAY-1: a runner session's prompt is shown and answered in the orchestrator's app. Runner side: the prompts of
             // the orchestrator's sessions go to the outbox and run no timer here; orchestrator side: the watch relays them (below).
             val promptRelay = com.superiorsoftllc.infantry.runners.RunnerPromptRelay(
@@ -1469,6 +1475,13 @@ class InfantryDaemon(
             // CLI-PTY-5: each session's chat, kept across a restart so a resumed session shows its history at once.
             val chatHistory = SessionHistoryStore(File(daemonStateDir, "chat-history"), { settings.limit(LimitRegistry.CHAT_HISTORY_FRAMES).toInt() })
             val streamSequencer = SessionFrameSequencer(chatHistory)
+            // RUNNER-OUTPUT-1: a remote session's output on this daemon's own stream (live, replay, get_session), read from its runner.
+            val remoteTranscripts = com.superiorsoftllc.infantry.runners.RemoteTranscriptPump(
+                read = { id, from -> runnerPool.runnerOf(id).takeIf { it != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL }?.let { rn -> runnerPool.link(rn)?.readTranscript(id, from, 0) } },
+                publish = { frames -> streamSequencer.publish(clients, frames) },
+                takenBefore = remoteMirror::taken,
+                onTaken = remoteMirror::taken,
+            )
             runnerTranscript.set { id, from, max ->
                 val out = com.superiorsoftllc.infantry.runners.RunnerTranscript.lines(streamSequencer.replayAfter(id, 0)?.frames.orEmpty()).drop(from.coerceAtLeast(0))
                 if (max > 0) out.take(max) else out
@@ -1892,6 +1905,8 @@ class InfantryDaemon(
                         sessionReadModel = com.superiorsoftllc.infantry.daemon.plugins.LocalSessionReads(
                             sessions = { manager.list() + remoteMirror.list() },
                             replay = { id ->
+                                // RUNNER-OUTPUT-1: a remote session's newest output is read from its runner first.
+                                if (runnerPool.runnerOf(id) != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL) remoteTranscripts.pull(id)
                                 streamSequencer.replayAfter(id, 0)?.let { batch ->
                                     com.superiorsoftllc.infantry.daemon.plugins.LocalSessionReads.Replay(
                                         batch.gap?.let { json.encodeToString(SessionReplayGapPayload.serializer(), it) }, batch.frames,
@@ -2022,7 +2037,7 @@ class InfantryDaemon(
             // CLI-PTY-5: the kept chat of every session goes back on its replay stream, as history: no process, no turn.
             run {
                 val started = System.nanoTime()
-                val loaded = runCatching { chatHistory.loadAll(manager.list().map { it.id }.toSet()) }
+                val loaded = runCatching { chatHistory.loadAll(manager.list().map { it.id }.toSet() + runnerPool.placedSessionIds()) }
                     .onFailure { System.err.println("[infantry] chat history load failed: ${it.message}") }.getOrDefault(emptyMap())
                 for ((id, history) in loaded) streamSequencer.seed(id, history)
                 println("[infantry] chat history: ${loaded.size} sessions, ${loaded.values.sumOf { it.frames.size }} items in ${(System.nanoTime() - started) / 1_000_000} ms")
@@ -2166,6 +2181,11 @@ class InfantryDaemon(
                         )
                         for (client in clients) client.trySend(pushed)
                     }
+                    // RUNNER-OUTPUT-1: each status or finish of a remote session puts its new output on this daemon's stream (the app
+                    // chat, a later replay, get_session).
+                    if (e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.STATUS ||
+                        e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.FINISHED
+                    ) remoteTranscripts.pull(e.sessionId)?.let { System.err.println("[infantry] runner '$runner': output of ${e.sessionId} not read: $it") }
                     // RUNNER-CLAUDE-PROOF-1: an interactive session (claude) never finishes between turns, it comes to rest (IDLE): that ends the turn too.
                     val turnEnded = e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.FINISHED ||
                         (e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.STATUS && e.payload.equals(SessionState.IDLE.name, ignoreCase = true))
@@ -2205,6 +2225,16 @@ class InfantryDaemon(
                 // session falls back to prompts.onTimeout only once the orchestrator read nothing for its whole timer.
                 runCatching { promptRelay.retry() }
                 runCatching { pendingPrompts.expireHeld(remoteStarts.lastOrchestratorRead) }
+            }
+            // RUNNER-OUTPUT-1: while a remote session's turn runs, its runner's events and output are read at limits.runners.outputPollMs, so
+            // the app chat fills as the turn goes (the heartbeat round alone came every limits.runners.heartbeatSec). Nothing runs = no call.
+            val outputPollMs = settings.limit(LimitRegistry.RUNNERS_OUTPUT_POLL_MS)
+            if (outputPollMs > 0) scheduledTicker(outputPollMs) {
+                val running = runnerPool.remoteSessionIds().filter { id -> remoteMirror.get(id)?.state.let { it == null || it == SessionState.STARTING || it == SessionState.BUSY } }
+                if (running.isNotEmpty()) {
+                    runCatching { runnerWatch.tick() }.onFailure { System.err.println("[infantry] runner watch failed: ${it.message}") }
+                    for (id in running) runCatching { remoteTranscripts.pull(id) }
+                }
             }
             // RUNNER-POOL-8: runner side of runners.pushOnCommit: push a ticket branch once its worker committed.
             scheduledTicker(settings.limit(LimitRegistry.RUNNERS_COMMIT_CHECK_SEC) * 1000L) { runCatching { remoteStarts.checkCommits() } }
@@ -2389,6 +2419,7 @@ class InfantryDaemon(
                             remotePlaced = remoteMirror::placed,
                             remoteForget = remoteMirror::forget,
                             remoteStatus = remoteMirror::status,
+                            remoteTranscripts = remoteTranscripts,
                             limits = limits,
                             usagePacing = usagePacing,
                             ticketFiles = ticketFilesText?.let { text ->
@@ -3035,6 +3066,8 @@ private suspend fun handleConnection(
     spawnGuard: SpawnGuard = SpawnGuard(manager::get),
     /** RUNNER-POOL-2: the runner pool a `new` console start goes through (default: the local runner over [manager]). */
     runnerPool: com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool = LocalRunner.pool(manager, agents),
+    /** RUNNER-OUTPUT-1: puts a remote session's runner output on [streamSequencer] before a replay is answered (null = none). */
+    remoteTranscripts: com.superiorsoftllc.infantry.runners.RemoteTranscriptPump? = null,
     /** U1: the plan-limit meters a `limits` request reads. */
     limits: LimitService = LimitService.NONE,
     /** USAGE-PACE (1.119.0): the meters and allowances a `usage_get` request reads. */
@@ -3485,24 +3518,16 @@ private suspend fun handleConnection(
                     )
 
                     else -> {
+                        // RUNNER-OUTPUT-1: a remote session's output is read from its runner onto this daemon's stream first, then replayed
+                        // like a local session's (sequenced chat frames). Before, its lines went out as unsequenced stdout, which no client draws.
+                        val runnerName = runnerPool.runnerOf(sessionId)
+                        val remote = runnerName != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL && manager.get(sessionId) == null
+                        val unread = if (remote) remoteTranscripts?.pull(sessionId) else null
                         val replay = streamSequencer.replayAfter(sessionId, request.lastSequence)
-                        // RUNNER-REMOTE-IO-1: the orchestrator may hold status frames for a remote session; its output still lives on the runner.
-                        val remoteOutput = runnerPool.runnerOf(sessionId) != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL &&
-                            manager.get(sessionId) == null &&
-                            (replay == null || replay.frames.none { it.type == Envelope.STDOUT || it.type == Envelope.STDERR })
-                        if (replay == null || remoteOutput) {
+                        if (replay == null) {
                             // CLI-PTY-5: a known session with nothing kept simply has no history yet; only an unknown one is an error.
-                            val runnerName = runnerPool.runnerOf(sessionId)
-                            if (runnerName != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL) {
-                                // RUNNER-E2E-2: a remote session's output is read from its runner on demand (runners.transcripts = on-demand).
-                                val link = runnerPool.link(runnerName)
-                                when (val lines = link?.readTranscript(sessionId, request.lastSequence.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt(), 0)) {
-                                    is com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorReply.Ok ->
-                                        for (line in lines.value) outgoing.trySend(Envelope(Envelope.STDOUT, line, sessionId))
-                                    is com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorReply.Unavailable ->
-                                        outgoing.trySend(Envelope(Envelope.ERROR, "runner '$runnerName' is offline: ${lines.reason}", sessionId))
-                                    null -> outgoing.trySend(Envelope(Envelope.ERROR, "runner '$runnerName' is not registered", sessionId))
-                                }
+                            if (remote) {
+                                if (unread != null) outgoing.trySend(Envelope(Envelope.ERROR, "runner '$runnerName': $unread", sessionId))
                             } else if (manager.get(sessionId) == null) outgoing.trySend(Envelope(Envelope.ERROR, "no replay history for session '$sessionId'"))
                         } else {
                             replay.gap?.let { gap ->
@@ -4446,6 +4471,7 @@ private suspend fun handleConnection(
                                 runCatching { runnerPool.link(runnerPool.runnerOf(id))?.stopSession(id, "deleted from the app", true) }
                                 (runnerPool as? com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerHub)?.forget(id)
                                 remoteForget(id)
+                                remoteTranscripts?.forget(id)
                             }
                             streamSequencer.forget(id)
                             // Contract 1.26.0: the delete itself gets no direct reply -- every client
