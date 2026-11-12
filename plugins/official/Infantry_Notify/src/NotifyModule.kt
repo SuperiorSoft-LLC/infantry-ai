@@ -5,7 +5,7 @@ package com.superiorsoftllc.infantry.plugins.official.notify
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Switch
+import com.superiorsoftllc.infantry.ui.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -143,7 +143,7 @@ internal suspend fun deliver(
     } else runCatching { notifier.show(p) }.getOrDefault(false)
     val data = p.soundData
     if (data != null) decodeSound(data)?.let { runCatching { notifier.play(p.soundType ?: "audio/wav", it) } }
-    if (shown) link.sendFrame(NotifyFrames.ACK, NotifyFrames.ack(p.id, notifier.platform))
+    if (shown) link.sendFrame(NotifyFrames.ACK, NotifyFrames.ackBody(p.id, notifier.platform))
     return shown
 }
 

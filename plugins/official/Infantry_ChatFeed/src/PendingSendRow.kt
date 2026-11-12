@@ -2,7 +2,7 @@
 // Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.plugins.official.chatfeed
 
-import androidx.compose.foundation.clickable
+import com.superiorsoftllc.infantry.ui.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column

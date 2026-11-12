@@ -81,10 +81,12 @@ fun OutlinedButton(
     enabled: Boolean = true,
     colors: ButtonColors = ButtonDefaults.outlinedButtonColors(),
     contentPadding: PaddingValues = ButtonDefaults.ContentPadding,
+    shape: androidx.compose.ui.graphics.Shape = ButtonDefaults.outlinedShape,
+    border: androidx.compose.foundation.BorderStroke? = ButtonDefaults.outlinedButtonBorder(enabled),
     content: @Composable RowScope.() -> Unit,
 ) = androidx.compose.material3.OutlinedButton(
     onClick = onClick, modifier = modifier.handCursor(enabled), enabled = enabled,
-    colors = colors, contentPadding = contentPadding, content = content,
+    shape = shape, border = border, colors = colors, contentPadding = contentPadding, content = content,
 )
 
 @Composable

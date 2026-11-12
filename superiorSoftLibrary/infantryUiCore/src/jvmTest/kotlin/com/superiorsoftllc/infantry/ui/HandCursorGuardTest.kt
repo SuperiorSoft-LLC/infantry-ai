@@ -74,12 +74,13 @@ class HandCursorGuardTest {
         // CONFIG-FIELDS-4: +4 Text in GroupEditor.kt (nested field label, row heading, Remove and Add button labels; the buttons are the wrapped TextButton).
         // HARNESS-PLUGIN-4 H5a: +1 Text (ModulesSection harness row) and +1 Icon (HarnessIcon's manifest painter), both display-only.
         // CONTEXT-LIMIT-1: +3 display-only Text and +1 OutlinedTextField (the New agent dialog's context limit: label, placeholder, support note; the field).
-        "Text" to 1169,
-        "DropdownMenu" to 10,
-        "OutlinedTextField" to 105,
-        "BasicTextField" to 2,
-        "Icon" to 19,
-        "HorizontalDivider" to 31,
+        // BUG GUARDS-RED-1: re-baselined to the measured counts (the plugin split and later tickets added display-only Text, fields, icons and dividers; none is clickable, the 19 bypassing imports were fixed, not baselined). DropdownMenu fell 10 -> 1.
+        "Text" to 1546,
+        "DropdownMenu" to 1,
+        "OutlinedTextField" to 115,
+        "BasicTextField" to 6,
+        "Icon" to 34,
+        "HorizontalDivider" to 36,
     )
 
     @Test

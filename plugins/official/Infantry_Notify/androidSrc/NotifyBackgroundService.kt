@@ -97,7 +97,7 @@ class NotifyBackgroundService : Service() {
         if (!NotifyRouting.shows(p.target, notifier.platform) || !NotifyProcess.dedupe.firstTime(p.id)) return
         if (!runCatching { notifier.show(p) }.getOrDefault(false)) return
         p.soundData?.let { d -> decodeSound(d)?.let { runCatching { notifier.play(p.soundType ?: "audio/wav", it) } } }
-        c.send(Envelope(NotifyFrames.ACK, NotifyFrames.ack(p.id, notifier.platform)))
+        c.send(Envelope(NotifyFrames.ACK, NotifyFrames.ackBody(p.id, notifier.platform)))
     }
 
     private fun foregroundNotification(): Notification {

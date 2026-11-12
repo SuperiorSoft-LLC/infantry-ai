@@ -97,7 +97,7 @@ fun IconAction(
         val buttonModifier = if (compact) buttonModifier.defaultMinSize(minWidth = 1.dp, minHeight = 1.dp) else buttonModifier
         when (style) {
             IconActionStyle.FILLED -> Button(onClick, buttonModifier, enabled, colors ?: ButtonDefaults.buttonColors(), padding, content)
-            IconActionStyle.OUTLINED -> OutlinedButton(onClick, buttonModifier, enabled, colors ?: ButtonDefaults.outlinedButtonColors(), padding, content)
+            IconActionStyle.OUTLINED -> OutlinedButton(onClick, buttonModifier, enabled, colors ?: ButtonDefaults.outlinedButtonColors(), padding, content = content)
             IconActionStyle.TEXT -> TextButton(onClick, buttonModifier, enabled, colors ?: ButtonDefaults.textButtonColors(), padding, content)
         }
     }
