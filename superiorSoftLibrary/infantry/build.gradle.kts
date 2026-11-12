@@ -490,11 +490,14 @@ val headlessContents: CopySpec = copySpec {
         // bin/infantry here is the plain startScripts copy; the supervisor launcher from headless/ (below) is the one to ship.
         exclude("bin/infantry")
         // The CLI launchers honour JAVA_HOME only: point an unset JAVA_HOME at the bundled runtime.
-        filesMatching("bin/infantry") {
-            filter { line ->
-                if (line.startsWith("if [ -n \"\$JAVA_HOME\" ]")) {
-                    "if [ -z \"\$JAVA_HOME\" ] && [ -x \"\$APP_HOME/runtime/bin/java\" ] ; then JAVA_HOME=\$APP_HOME/runtime ; fi\n$line"
-                } else line
+        // bin/agenthq is the deprecated alias copied from the same script (startScripts), so it gets the same patch (FIRSTINSTALL-1).
+        listOf("bin/infantry", "bin/agenthq").forEach { launcher ->
+            filesMatching(launcher) {
+                filter { line ->
+                    if (line.startsWith("if [ -n \"\$JAVA_HOME\" ]")) {
+                        "if [ -z \"\$JAVA_HOME\" ] && [ -x \"\$APP_HOME/runtime/bin/java\" ] ; then JAVA_HOME=\$APP_HOME/runtime ; fi\n$line"
+                    } else line
+                }
             }
         }
         filesMatching("bin/infantry.bat") {
@@ -518,7 +521,7 @@ val headlessContents: CopySpec = copySpec {
     // BUILD-STAMP-1: the server's build string, read by BuildInfo when no -Dinfantry.build reached the JVM.
     from(resources.text.fromString(rootProject.extra["infantryBuild"] as String)) { rename { "BUILD" } }
     eachFile {
-        if (path.endsWith(".sh") || path.endsWith("/bin/infantry") || path.endsWith("/bin/infantry") || path.contains("/runtime/bin/") || path.contains("/runtime/lib/jspawnhelper")) {
+        if (path.endsWith(".sh") || path.endsWith("/bin/infantry") || path.endsWith("/bin/agenthq") || path.contains("/runtime/bin/") || path.contains("/runtime/lib/jspawnhelper")) {
             permissions { unix("rwxr-xr-x") }
         }
     }
