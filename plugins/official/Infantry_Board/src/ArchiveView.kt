@@ -59,7 +59,7 @@ fun BoardArchiveDialog(deps: BoardDeps, onClose: () -> Unit) {
     }
     LaunchedEffect(query, project) { load() }
 
-    AlertDialog(
+    AhqAlertDialog(
         onDismissRequest = onClose,
         title = { Text("Archive", fontSize = 16.sp) },
         text = {

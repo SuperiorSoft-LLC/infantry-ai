@@ -2,6 +2,7 @@
 // Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.plugins.official
 
+import com.superiorsoftllc.infantry.ui.AhqAlertDialog
 import kotlin.time.TimeSource
 import androidx.compose.material3.LocalTextStyle
 import com.superiorsoftllc.infantry.ui.PathField
@@ -30,7 +31,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -500,7 +500,7 @@ private fun InstalledRow(
     }
     val on = pendingTo ?: p.enabled
     var confirmRemove by remember { mutableStateOf(false) }
-    if (confirmRemove) AlertDialog(
+    if (confirmRemove) AhqAlertDialog(
         onDismissRequest = { confirmRemove = false },
         modifier = Modifier.testTag(REMOVE_CONFIRM_TAG),
         title = { Text("Remove ${displayName(p.id)}?") },
@@ -564,7 +564,7 @@ private fun InstalledRow(
 /** PLUGINS-UI-1: "turn this off?" for a plugin the app ships or another plugin needs. */
 @Composable
 private fun DisableConfirm(p: PluginView, onYes: () -> Unit, onNo: () -> Unit) {
-    AlertDialog(
+    AhqAlertDialog(
         onDismissRequest = onNo,
         modifier = Modifier.testTag(DISABLE_CONFIRM_TAG),
         title = { Text("Turn off ${displayName(p.id)}?") },

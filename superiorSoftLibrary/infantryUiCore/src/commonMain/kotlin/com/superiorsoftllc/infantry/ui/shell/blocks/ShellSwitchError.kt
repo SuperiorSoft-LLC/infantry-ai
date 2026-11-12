@@ -2,7 +2,7 @@
 // Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.ui.shell.blocks
 
-import androidx.compose.material3.AlertDialog
+import com.superiorsoftllc.infantry.ui.AhqAlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import com.superiorsoftllc.infantry.ui.LocalShell
@@ -16,7 +16,7 @@ object ShellSwitchError : Block("infantry.shell.switchError", "infantry.shell.sw
     override fun Render(scope: BlockScope) {
         val ui = LocalShell.current.ui
         ui.switchError?.let { msg ->
-            AlertDialog(
+            AhqAlertDialog(
                 onDismissRequest = { ui.switchError = null }, title = { Text("Could not switch server") }, text = { Text(msg) },
                 confirmButton = { TextButton({ ui.switchError = null }) { Text("OK") } },
             )

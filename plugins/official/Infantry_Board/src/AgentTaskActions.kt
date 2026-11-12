@@ -90,7 +90,7 @@ fun AgentTaskMenu(card: BoardCardHost) {
     }
     val close = { step = null; picked = null }
     when (step) {
-        "unassign" -> AlertDialog(
+        "unassign" -> AhqAlertDialog(
             onDismissRequest = close, title = { Text("Unassign ticket?") },
             text = { Text("The ticket goes back to To do. Its branch and commits are kept, and the next worker continues from them.") },
             confirmButton = { TextButton(onClick = { run(AgentTaskRequests.unassign(t.id)) }) { Text("Unassign") } },
@@ -99,7 +99,7 @@ fun AgentTaskMenu(card: BoardCardHost) {
         "switch" -> {
             val agent = t.agentId
             val todos = deps.tickets.column(TicketColumns.TODO).filter { it.projectId == t.projectId }
-            AlertDialog(
+            AhqAlertDialog(
                 onDismissRequest = close, title = { Text("Switch to which ticket?") },
                 text = { Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     if (todos.isEmpty()) Text("No To do tickets.", fontSize = 12.sp)
@@ -108,7 +108,7 @@ fun AgentTaskMenu(card: BoardCardHost) {
                 confirmButton = {}, dismissButton = { TextButton(onClick = close) { Text("Cancel") } },
             )
         }
-        "assign" -> AlertDialog(
+        "assign" -> AhqAlertDialog(
             onDismissRequest = close, title = { Text(if (picked == null) "Assign to which agent?" else "Assign to ${deps.roles.profiles.firstOrNull { it.id == picked }?.name ?: "agent"}") },
             text = { Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 val p = picked
@@ -125,5 +125,5 @@ fun AgentTaskMenu(card: BoardCardHost) {
         )
         "epic" -> EpicMoveDialog(deps, listOf(t.id), card.epics, onClose = close)
     }
-    error?.let { msg -> AlertDialog(onDismissRequest = { error = null }, title = { Text("Refused") }, text = { Text(msg) }, confirmButton = { TextButton(onClick = { error = null }) { Text("OK") } }) }
+    error?.let { msg -> AhqAlertDialog(onDismissRequest = { error = null }, title = { Text("Refused") }, text = { Text(msg) }, confirmButton = { TextButton(onClick = { error = null }) { Text("OK") } }) }
 }
