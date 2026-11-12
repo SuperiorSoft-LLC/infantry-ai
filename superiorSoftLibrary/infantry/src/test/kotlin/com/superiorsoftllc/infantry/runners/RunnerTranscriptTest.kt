@@ -23,5 +23,11 @@ class RunnerTranscriptTest {
     }
 
     @Test
+    fun `the daemon's own notices do not hide the answer text`() {
+        val lines = RunnerTranscript.lines(listOf(f(Envelope.TURN, "ping"), f(Envelope.STDERR, "[infantry] * session started (opencode)"), f(Envelope.TEXT_DELTA, "pong"), f(Envelope.FINISHED, "{}")))
+        assertEquals(listOf("[turn] ping", "[infantry] * session started (opencode)", "pong"), lines)
+    }
+
+    @Test
     fun `nothing kept reads empty`() = assertEquals(emptyList(), RunnerTranscript.lines(emptyList()))
 }

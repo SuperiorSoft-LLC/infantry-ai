@@ -32,6 +32,8 @@ import kotlinx.serialization.json.put
 class AttentionDaemonPlugin : DaemonPlugin {
     override fun start(api: DaemonApi) {
         api.tools.register(AskTool)
+        // SPAWN-PARAMS-1: a pm / owner script answers an approval card with the app's own prompt_response.
+        api.tools.register(PromptAnswerTool(api))
         // ATTN-2b: the attention store, service, frames and `GET /attention` live here; core only looks the service up.
         val store = AttentionStore(api.storage)
         store.eventSink = { api.events.broadcast("attention", AttentionJson.itemText(it)) }

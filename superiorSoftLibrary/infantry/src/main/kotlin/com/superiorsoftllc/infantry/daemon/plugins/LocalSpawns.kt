@@ -108,6 +108,9 @@ class LocalSpawns(
                 }
             } catch (e: IllegalArgumentException) {
                 return SessionsResult.Refused(e.message ?: "the spawn was refused")
+            } catch (e: IllegalStateException) {
+                // SPAWN-PARAMS-1: an unreachable runner is refused with its reason, as the `new` frame refuses it (RUNNER-SESSION-GHOST-1).
+                return SessionsResult.Refused(e.message ?: "the runner could not start the session")
             }
             session to a
         }

@@ -43,7 +43,8 @@ Every tool the daemon has is callable: `ih.call("infantry_ticket_move", {ticket 
 `scripting.aliases` (short name to tool name; defaults: `move`, `comment`, `message`, `start`, `close_session`,
 `kill`, `prompt`, `ask`, `ticket_get`, `ticket_update`, `ticket_create`, `board`, `emit`) plus built-ins every project
 has: `exec`, `cli`, `exec_status`, `progress`, `chat_note`, `chat_image`, `session_read`, `session_act`,
-`notice_suppress`, `notify`.
+`notice_suppress`, `notify`, `spawn` (`infantry_spawn`: role, provider, model, runner, toolApproval, task: the app Start
+box's own path) and `prompt_answer` (`infantry_prompt_answer`: list or answer a session's approval card; owner or a pm only).
 
 A dotted name is a plugin capability (PLUGIN-BRIDGES-1): `ih.call("readaloud.speak", {text = "Done", _target = "all"})` runs
 `infantry_capability_call` with the table as the capability's `args`; `_target` picks the client host (`default`, `all` or a

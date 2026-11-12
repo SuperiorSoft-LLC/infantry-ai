@@ -711,6 +711,10 @@ RUNNER-POOL-6 (DaemonApi 1.45.0, additive), package `com.superiorsoftllc.infantr
 
 - `SpawnText`: RUNTIME-LOAD-7 (DaemonApi 1.9.0, additive): the answer texts of a ticket start, shared by `infantry_ticket_start` (Infantry_Board) and `infantry_spawn` given a `ticketId` (Infantry_Agents), the very J
 
+### `OpenPrompts.kt`
+
+- `OpenPrompts`, `OpenPrompt`: SPAWN-PARAMS-1 (DaemonApi 1.56.0): the approval cards and questions open now, published by core (`services.find(OpenPrompts::class)`); answered with the app's `prompt_response` frame.
+
 ### `SpawnsApi.kt`
 
 - `Admission`: The limits in force for one call: the depth the new session would get, the caller's open spawns, and the two maxima.
@@ -719,7 +723,7 @@ RUNNER-POOL-6 (DaemonApi 1.45.0, additive), package `com.superiorsoftllc.infantr
 - `SpawnCharge`: DP-5h-2 (DaemonApi 1.11.0, additive): the spawn guard's admit / charge semantics for a plugin that starts workers itself (a board moving a ticket to In Progress).
 - `SpawnKind`: What a spawn is for: the refusal texts name the new session, or the ticket's worker.
 - `SpawnNarrowing`: The calling client's own guardrail values (`infantry mcp serve --max-depth / --max-spawns / --mcp-depth`, `.infantry/mcp.json`).
-- `SpawnRequest`: A session to create, as the `new` frame's options.
+- `SpawnRequest`: A session to create, as the `new` frame's options (1.56.0, SPAWN-PARAMS-1: `provider`, `model`, `toolApproval`).
 - `Spawned`: The session [spawn] created, at [depth], and the caller's open spawns counting it.
 - `Spawns`: RUNTIME-LOAD-6 (DaemonApi 1.7.0, additive): the HOST spawn service (docs/RUNTIME-LOAD.md section 12).
 - `TicketStartOutcome`: What a ticket start did.
