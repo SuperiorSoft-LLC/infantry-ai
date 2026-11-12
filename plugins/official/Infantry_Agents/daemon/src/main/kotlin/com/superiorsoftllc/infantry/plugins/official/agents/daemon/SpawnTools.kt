@@ -65,6 +65,15 @@ internal object SpawnTools {
         "Where the session runs: local, a paired runner name, or any. Over the agent profile's runner, under a ticket pin; " +
             "an unknown, down, paused or full runner refuses the spawn (no silent local fallback)."
 
+    /** SPAWN-PARAMS-1: the provider / model / Tool approval arguments, the fields the app's Start box sends on its `new` frame. */
+    const val PROVIDER_HELP =
+        "Harness (provider id) the session runs, as the app's Start box picks it: see infantry_list_harnesses. Omitted = the agent " +
+            "profile, the role's binding, then the project's routing rules. An unknown provider refuses the spawn."
+    const val MODEL_HELP = "Model id of that harness (infantry_list_harnesses lists them); a model the provider does not list refuses the spawn."
+    const val TOOL_APPROVAL_HELP =
+        "This session's own Tool approval: ask (approval cards in the app), deny, allowEdits or allowAll. Omitted = the global setting."
+    val TOOL_APPROVALS = listOf("deny", "allowEdits", "allowAll", "ask")
+
     const val EFFORT_HELP =
         "Reasoning effort for the session: low, medium, high, xhigh or max (off = the harness default, the default). " +
             "How it is honoured depends on the harness: infantry_list_harnesses shows effort per harness " +
@@ -150,6 +159,9 @@ internal object SpawnTools {
             put("contextLimit", prop("string", CONTEXT_LIMIT_HELP))
             put("effort", prop("string", EFFORT_HELP))
             put("runner", prop("string", RUNNER_HELP))
+            put("provider", prop("string", PROVIDER_HELP))
+            put("model", prop("string", MODEL_HELP))
+            put("toolApproval", prop("string", TOOL_APPROVAL_HELP))
             put(
                 "ticketId",
                 prop(
@@ -176,7 +188,14 @@ internal object SpawnTools {
             contextLimit.error?.let { return refused("$SPAWN: $it") }
             val effort = EffortLevels.parse(string(args, "effort"))
             effort.error?.let { return refused("$SPAWN: $it") }
-            val request = SpawnRequest(role, agentId, string(args, "projectId") ?: call.clientProjectId, contextLimit.value, effort.value, task, string(args, "runner"))
+            // SPAWN-PARAMS-1: the app Start box's fields; the daemon checks them on the `new` frame's path (unknown provider, a model
+            // the provider does not list, an unknown runner or approval mode: refused with that reason).
+            val approval = string(args, "toolApproval")
+            if (approval != null && approval !in TOOL_APPROVALS) return refused("$SPAWN: unknown toolApproval '${approval.take(40)}' (known: ${TOOL_APPROVALS.joinToString()})")
+            val request = SpawnRequest(
+                role, agentId, string(args, "projectId") ?: call.clientProjectId, contextLimit.value, effort.value, task, string(args, "runner"),
+                provider = string(args, "provider"), model = string(args, "model"), toolApproval = approval,
+            )
             val spawned = when (val r = api.spawns.spawn(request, by(call), narrowing(call))) {
                 is SessionsResult.Ok -> r.value
                 else -> return failed(SPAWN, r)

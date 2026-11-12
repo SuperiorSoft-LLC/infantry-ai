@@ -12,7 +12,7 @@
   "daemon": {
     "entry": "com.superiorsoftllc.infantry.plugins.official.attention.daemon.AttentionDaemonPlugin",
     "jar": "daemon/build/libs/Infantry_Attention-daemon.jar",
-    "apiAtLeast": "1.24.0",
+    "apiAtLeast": "1.56.0",
     "side": "orchestrator",
     "storage": { "adopt": ["attention", "owner_questions"] },
     "hooks": ["connected"],
@@ -27,6 +27,7 @@
     "routes": ["GET /attention"],
     "tools": [
       { "name": "infantry_ask", "action": "questions.ask", "kind": "write", "description": "Ask the owner to choose between options, without waiting." },
+      { "name": "infantry_prompt_answer", "action": "approvals.answer", "kind": "write", "description": "List or answer a session's open approval card (owner or a pm of its project only)." },
       { "name": "infantry_attention_raise", "action": "attention.raise", "kind": "write", "description": "Raise an item on the owner's attention list (kind, outcome, detail; optional ticketId / sessionId)." }
     ]
   },

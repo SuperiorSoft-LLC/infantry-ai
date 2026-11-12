@@ -1902,10 +1902,14 @@ class InfantryDaemon(
                             guard = spawnGuard,
                             limit = { def -> if (def == LimitRegistry.MAX_DEPTH && podSpawnDepth != null) podSpawnDepth else settings.limitCap(def) }, // a test pins the depth through podSpawnDepth
                             tickets = { pluginBoardServices!!.tickets },
+                            // SPAWN-PARAMS-1: infantry_spawn / Lua `spawn` start through the app Start button's path: the `new` frame's
+                            // options (provider, model, runner, Tool approval), its checks, and LocalRunner.start (lent keys ride the runner link).
                             create = { request ->
+                                val options = LocalRunner.spawnOptions(request)
+                                LocalRunner.checkSpawn(manager, agents, options)
                                 LocalRunner.start(
                                     runnerPool, manager,
-                                    SpawnOptions(agentId = request.agentId, role = request.role, projectId = request.projectId, contextLimit = request.contextLimit, effort = request.effort, runner = request.runner),
+                                    options,
                                     repo, agentRunner = request.agentId?.let { agents.get(it)?.runner }, defaultRunner = settings.runnersDefault(), entries = spawnRunnerEntries,
                                     projectDir = { id -> runCatching { projectStore.get(id).directory }.getOrNull()?.takeIf { it.isNotBlank() }?.let(::File)?.takeIf { it.isDirectory } },
                                     remotePlaced = remoteMirror::placed,
@@ -1947,6 +1951,15 @@ class InfantryDaemon(
                 // SCRIPT-HOOK-3: a script's tool calls reach the core frames through the daemon's own /ws (see LoopbackFrames).
                 // AR-4b-ii-b: the Infantry_Roles plugin provides Roles / RoleBindings / RoleTraitLists; core keeps the environment port.
                 host.serviceRegistry.provide("core", com.superiorsoftllc.infantry.daemon.api.roles.RoleEnvironment::class, RolePorts.environment(store, manager, harnesses))
+                // SPAWN-PARAMS-1: the open approval cards / questions (what the app shows), read by infantry_prompt_answer.
+                host.serviceRegistry.provide("core", com.superiorsoftllc.infantry.daemon.api.prompts.OpenPrompts::class, object : com.superiorsoftllc.infantry.daemon.api.prompts.OpenPrompts {
+                    override fun open(sessionId: String?) = pendingPrompts.snapshot().filter { sessionId == null || it.sessionId == sessionId }.sortedBy { it.createdAt }.map { r ->
+                        com.superiorsoftllc.infantry.daemon.api.prompts.OpenPrompt(
+                            r.promptId, r.sessionId, r.kind, r.createdAt, r.tool, r.input, r.question,
+                            if (r.kind == com.superiorsoftllc.infantry.protocol.PromptKinds.TOOL_APPROVAL) com.superiorsoftllc.infantry.prompts.Decision.entries.map { it.wire } else r.options.map { it.label },
+                        )
+                    }
+                })
                 testRoles?.let { host.serviceRegistry.provide("core", com.superiorsoftllc.infantry.daemon.api.roles.Roles::class, it) }
                 host.loopback = com.superiorsoftllc.infantry.daemon.plugins.LoopbackFrames(loopbackHost, boundPort, token, ownerToken)
                 foundAttention.flush()
@@ -3662,8 +3675,9 @@ private suspend fun handleConnection(
                         // that counts.
                         try {
                             val options = SpawnOptions.decode(data)
-                            // LIMITS: a role the allowlist leaves out is refused now, with nothing bound.
-                            manager.requireAllowedRole(agents.resolveSpawn(options).role)
+                            // LIMITS: a role the allowlist leaves out is refused now, with nothing bound. SPAWN-PARAMS-1: the same
+                            // checks infantry_spawn makes (LocalRunner.checkSpawn), then the same LocalRunner.start below.
+                            LocalRunner.checkSpawn(manager, agents, options)
                             // BUG-G2d (1.58.0): a `new` that names the session it comes from (`infantry_spawn`) is
                             // charged to that session's pod: checked NOW, so a refusal binds nothing and leaves no
                             // spawn options behind, and again when the session is actually created.

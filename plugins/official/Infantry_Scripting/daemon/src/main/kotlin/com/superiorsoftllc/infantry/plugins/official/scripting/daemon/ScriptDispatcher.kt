@@ -180,7 +180,9 @@ class ScriptDispatcher(
         /** Names every project has without configuring: the process bridge (SCRIPT-CMD-1). */
         val BUILTIN_ALIASES = mapOf("exec" to "infantry_exec", "cli" to "infantry_exec", "exec_status" to "infantry_exec_status", "progress" to "infantry_progress", "chat_note" to "infantry_chat_note", "chat_image" to "infantry_chat_image",
             "session_read" to "infantry_session_read", "session_act" to "infantry_session_act", "notice_suppress" to "infantry_notice_suppress",
-            "notify" to NotificationTools.NAME)
+            "notify" to NotificationTools.NAME,
+            // SPAWN-PARAMS-1: ih.spawn{role=..., provider=..., model=..., runner=..., toolApproval=..., task=...} is infantry_spawn.
+            "spawn" to "infantry_spawn", "prompt_answer" to "infantry_prompt_answer")
         const val OPTIONAL = "_optional"
         /** PLUGIN-BRIDGES-1: a capability call's client host (`default`, `all` or a host id); the generic call tool; a capability id. */
         const val TARGET = "_target"

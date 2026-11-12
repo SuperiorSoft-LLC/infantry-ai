@@ -214,7 +214,26 @@ class RemoteSpawnTest {
         val local = assertIs<StartedSession.Local>(LocalRunner.start(hub, oManager, options.copy(runner = "local"), checkout, agentRunner = "r2"))
         assertEquals(Placement.LOCAL, hub.runnerOf(local.id))
         assertNotNull(oManager.get(local.id))
+        // SPAWN-PARAMS-1: a local start follows the global mode unless it names one; a named one (ask included) is kept, not
+        // turned into deny, because a local session's cards show in this app.
+        val localAsk = assertIs<StartedSession.Local>(LocalRunner.start(hub, oManager, options.copy(runner = "local", toolApproval = "ask"), checkout))
+        assertEquals(ToolApproval.ASK, oManager.toolApprovalFor(localAsk.id).mode)
 
+        // SPAWN-PARAMS-1: infantry_spawn / Lua `spawn` (a plugin's SpawnRequest) map field for field onto the `new` frame's options, so
+        // provider, model, runner and Tool approval reach the runner exactly as the app's Start sends them.
+        val request = com.superiorsoftllc.infantry.daemon.api.spawns.SpawnRequest(
+            agentId = agent.id, projectId = "p1", runner = "r2", provider = FakeAgentProvider().id, model = "m1", toolApproval = "allowEdits", effort = "high",
+        )
+        assertEquals(options.copy(runner = "r2", model = "m1", toolApproval = "allowEdits", effort = "high"), LocalRunner.spawnOptions(request))
+        val viaPlugin = assertIs<StartedSession.Remote>(LocalRunner.start(hub, oManager, LocalRunner.spawnOptions(request.copy(model = null)), checkout))
+        assertEquals("r2", viaPlugin.runner)
+        assertEquals(ToolApproval.ALLOW_EDITS, r2Manager.toolApprovalFor(viaPlugin.id).mode)
+        assertEquals(FakeAgentProvider().id, assertNotNull(r2Manager.get(viaPlugin.id)).provider)
+        // An unknown approval mode is refused with the known list, before anything starts.
+        val badMode = assertFailsWith<IllegalArgumentException> { LocalRunner.checkSpawn(oManager, oAgents, options.copy(toolApproval = "maybe")) }
+        assertTrue("unknown tool approval 'maybe'" in badMode.message.orEmpty(), badMode.message)
+        val badProvider = assertFailsWith<IllegalArgumentException> { LocalRunner.checkSpawn(oManager, oAgents, options.copy(provider = "nope")) }
+        assertTrue("nope" in badProvider.message.orEmpty(), badProvider.message)
         // A paused runner is refused with its reason: no start on r2, no silent local fallback.
         val paused = { hub.runners().map { RunnerEntry(it.name, if (it.name == "r2") "paused" else it.state) } }
         val before = r2Manager.list().size

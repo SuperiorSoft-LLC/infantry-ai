@@ -54,7 +54,9 @@ object LocalRunner {
         info = info,
         start = { spec ->
             val wt = spec.worktree
-            val approval = runnerToolApproval(spec)
+            // SPAWN-PARAMS-1: a start of THIS daemon's own (the `new` frame, infantry_spawn: promptRelay, no mode named) follows the
+            // global setting, as the app's own Start did before the runner link; a named mode or a remote orchestrator's is applied.
+            val approval = if (spec.promptRelay && spec.toolApproval == null) null else runnerToolApproval(spec)
             // RUNNER-CRED-1: the harness key the orchestrator lent (already screened by the link server), in place before the first run.
             val lentEnv = spec.credentials?.env.orEmpty()
             if (wt == null) {
@@ -143,6 +145,27 @@ object LocalRunner {
         effort = spec.effort, role = spec.role, contextLimit = spec.contextLimit,
     )
 
+    /**
+     * SPAWN-PARAMS-1: a plugin's spawn ([SpawnRequest], `infantry_spawn` / Lua `spawn`) as the `new` frame's options, field for field,
+     * so it starts through [start] exactly as the app's Start button does.
+     */
+    fun spawnOptions(request: com.superiorsoftllc.infantry.daemon.api.spawns.SpawnRequest) = SpawnOptions(
+        provider = request.provider, model = request.model, agentId = request.agentId, projectId = request.projectId,
+        effort = request.effort, role = request.role, toolApproval = request.toolApproval, contextLimit = request.contextLimit,
+        runner = request.runner,
+    )
+
+    /**
+     * SPAWN-PARAMS-1: the checks every start outside the board makes BEFORE [start], the `new` frame's and `infantry_spawn`'s alike:
+     * the agent / role / project / provider / model resolve ([AgentProfiles.resolveSpawn], which refuses an unknown provider or a
+     * model it does not list), the role is allowed, and a named Tool approval is a known mode. Throws [IllegalArgumentException]
+     * with the exact reason.
+     */
+    fun checkSpawn(manager: SessionManager, agents: AgentProfiles, options: SpawnOptions) {
+        ToolApproval.parseStrict(options.toolApproval)
+        manager.requireAllowedRole(agents.resolveSpawn(options).role)
+    }
+
     fun encodeOrigin(origin: MessageOrigin): String = originJson.encodeToString(MessageOrigin.serializer(), origin)
     fun decodeOrigin(origin: String): MessageOrigin = originJson.decodeFromString(MessageOrigin.serializer(), origin)
 
@@ -203,7 +226,9 @@ object LocalRunner {
             return startRemote(pool, runner, options, options?.projectId?.let(projectDir) ?: repo, remotePlaced)
         }
         val link = pool.link(RunnerPool.LOCAL) ?: throw IllegalStateException("no '${RunnerPool.LOCAL}' runner")
-        return when (val r = link.startSession(startSpec(options, repo))) {
+        // SPAWN-PARAMS-1: the spawn's own Tool approval (null = the global setting); prompts of a local session reach this app.
+        val spec = startSpec(options, repo).copy(toolApproval = ToolApproval.parseStrict(options?.toolApproval)?.wire, promptRelay = true)
+        return when (val r = link.startSession(spec)) {
             is OrchestratorReply.Ok -> {
                 r.value.refusal?.let { throw IllegalArgumentException(it) }
                 r.value.sessionId?.let(manager::get)?.let(StartedSession::Local)

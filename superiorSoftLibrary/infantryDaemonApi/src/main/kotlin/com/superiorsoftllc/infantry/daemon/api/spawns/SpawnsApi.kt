@@ -100,6 +100,14 @@ data class SpawnRequest(
     val task: String? = null,
     /** RUNNER-AGENT-1: where the session runs (`local` | a runner name | `any`), over the agent profile's runner; null = unset. */
     val runner: String? = null,
+    /**
+     * SPAWN-PARAMS-1 (1.56.0, additive): the harness (provider id) and model the session runs, as the app's Start box picks them
+     * (`new` frame `provider` / `model`); null = the agent profile / role binding / routing rule, as for the app.
+     */
+    val provider: String? = null,
+    val model: String? = null,
+    /** SPAWN-PARAMS-1 (1.56.0, additive): the session's own Tool approval (`ask` | `deny` | `allowEdits` | `allowAll`); null = the global setting. */
+    val toolApproval: String? = null,
 )
 
 /** The session [spawn] created, at [depth], and the caller's open spawns counting it. */

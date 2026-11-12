@@ -260,7 +260,8 @@ interface DaemonApi {
         // 1.53.0 (NOTIFY-CORE-1, additive): `notifications` (plugin.api.Notifications), the core notification bus; daemon.api.notifications.NoNotifications.
         // 1.54.0 (CORE-PROGRESS-DOWNLOAD-1, additive): `progress` (plugin.api.Progress) and `downloads` (daemon.api.downloads.Downloads).
         // 1.55.0 (TURNS-SAVED-1, additive): `events.onSessionDeleted`, told only when a session's record is deleted (never on a kill).
-        const val VERSION = "1.55.0"
+        // 1.56.0 (SPAWN-PARAMS-1, additive): `SpawnRequest.provider` / `model` / `toolApproval`, the app Start box's fields.
+        const val VERSION = "1.56.0"
     }
 }
 
