@@ -91,12 +91,16 @@ class InMemoryBoardHost(private val clock: () -> Long = System::currentTimeMilli
     var workingDir: String = System.getProperty("java.io.tmpdir")
     val starts = mutableListOf<SessionStart>()
     var refuseStarts: String? = null
+
+    /** Runs inside every [BoardSessions.start], before it answers: a test makes the start slow (git cut, session spawn) with it. */
+    var onStart: () -> Unit = {}
     private val sessionViews = LinkedHashMap<String, SessionView>()
     private val fakeProvider = BoardProviderInfo("fake", contextLimitSupport = "supported", effortSupport = "supported")
 
     override val sessions: BoardSessions = object : BoardSessions {
         override fun start(request: SessionStart): SessionStartResult {
             refuseStarts?.let { return SessionStartResult.Refused(it) }
+            onStart()
             starts += request
             val view = SessionView(
                 id = "session-${starts.size}", agentId = request.agentId, role = request.role, provider = request.providerId ?: "fake",

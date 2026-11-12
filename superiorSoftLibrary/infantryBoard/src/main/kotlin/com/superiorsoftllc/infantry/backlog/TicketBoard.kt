@@ -1168,6 +1168,34 @@ class TicketBoard(
     @Synchronized
     private fun handOut(ticketId: String, origin: HandOutOrigin, startedBy: String? = null): TicketAnswer {
         val id = checkId(ticketId)
+        // TICKET-MOVE-HANG-1: the board is open during a start's slow part, so a second start of the same ticket is refused here.
+        if (!startsInFlight.add(id)) return refusedStart(answerTicket(id), "this ticket is already starting")
+        try {
+            return handOutLocked(id, origin, startedBy)
+        } finally {
+            startsInFlight.remove(id)
+        }
+    }
+
+    private val startsInFlight: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
+    /**
+     * TICKET-MOVE-HANG-1: runs [block] (git cut, session launch) with the board monitor RELEASED: [block] runs on a helper thread and
+     * this thread waits on the monitor, which frees it (every nested hold) until [block] ends. A move, read or save of any ticket
+     * then answers during a slow start. The caller re-checks its ticket afterwards. Off the monitor, [block] simply runs.
+     */
+    private fun <T> releasingBoard(block: () -> T): T {
+        if (!Thread.holdsLock(this)) return block()
+        val done = java.util.concurrent.atomic.AtomicReference<Result<T>?>(null)
+        Thread {
+            done.set(runCatching(block))
+            synchronized(this) { (this as java.lang.Object).notifyAll() }
+        }.apply { isDaemon = true; name = "board-start-slow"; start() }
+        while (done.get() == null) (this as java.lang.Object).wait()
+        return done.get()!!.getOrThrow()
+    }
+
+    private fun handOutLocked(id: String, origin: HandOutOrigin, startedBy: String?): TicketAnswer {
         val initial = store.transaction { load() }
         val row = initial.require(id)
         val initialTicket = views(initial.rows, initial.links).getValue(id)
@@ -1339,7 +1367,7 @@ class TicketBoard(
                 recordedBranch = row.branch,
                 recordedBase = row.base,
             )
-            when (val outcome = host.git.ensureBranch(request)) {
+            when (val outcome = releasingBoard { host.git.ensureBranch(request) }) {
                 is BranchOutcome.Refused -> return refusedStart(initialTicket, outcome.reason)
                 is BranchOutcome.Ready -> TicketWorktree(outcome.branch, outcome.base, outcome.worktreePath, outcome.repoRoot).also {
                     readyBranch = outcome
@@ -1372,7 +1400,7 @@ class TicketBoard(
         )
         val composed = context.compose(input)
         var remoteBranch: TicketWorktree? = null
-        val started = when (val result = host.sessions.start(
+        val started = when (val result = releasingBoard { host.sessions.start(
             SessionStart(
                 prompt = composed.prompt,
                 workingDir = if (remoteRunner != null) worktreeRepo?.path else if (requestedWorktree) null else (repo ?: projectFolder)?.path,
@@ -1395,7 +1423,7 @@ class TicketBoard(
                 recordedBranch = remoteRunner?.let { row.branch },
                 recordedBase = remoteRunner?.let { row.base },
             ),
-        )) {
+        ) }) {
             is SessionStartResult.Started -> {
                 remoteBranch = result.branch?.let { b -> TicketWorktree(b, result.base ?: row.base.orEmpty(), "", "") }
                 result.session
@@ -1403,6 +1431,12 @@ class TicketBoard(
             is SessionStartResult.Refused -> return refusedStart(initialTicket, result.reason)
         }
 
+        // TICKET-MOVE-HANG-1: the board was open while git and the launch ran; the ticket may have changed under us.
+        val now = store.transaction { store.tickets.get(id) }
+        if (now == null || now.status != row.status || now.sessionId != row.sessionId) {
+            runCatching { host.sessions.kill(started.id, force = true, by = "ticket start rollback", reason = "the ticket changed during its start") }
+            return refusedStart(answerTicket(id).takeIf { now != null } ?: initialTicket, "the ticket changed while its worker was starting; the new worker was stopped")
+        }
         // BUG-TriggerRunIds: spawn first, commit second -- the commit records the session's id, which only exists
         // once startNew returns, and committing in_progress first would leave a ticket to roll back on every
         // refused start. So the commit failing (SQLITE_BUSY_SNAPSHOT, a full disk) is compensated here: the
