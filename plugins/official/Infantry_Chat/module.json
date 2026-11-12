@@ -84,9 +84,7 @@
   "actions": [
     { "id": "chat.prompt", "label": "Message an agent", "kind": "write", "frames": ["prompt"] },
     { "id": "chat.resume", "label": "Resume a session", "kind": "write", "frames": ["resume"] },
-    { "id": "questions.answer", "label": "Answer or cancel a question", "kind": "write", "frames": ["question_answer", "question_cancel"] },
     { "id": "approvals.answer", "label": "Answer a tool approval", "kind": "write", "frames": ["prompt_response"] },
-    { "id": "board.ticket.move", "label": "Start a ticket's session", "kind": "write", "frames": ["ticket_move"] },
     { "id": "chat.interrupt", "label": "Stop the turn", "kind": "write", "frames": ["interrupt"] },
     { "id": "agents.spawn", "label": "New agent", "kind": "spawn", "frames": ["new"] },
     { "id": "agents.swap", "label": "Switch agent", "kind": "write", "frames": ["session_swap", "agent_swap"] },

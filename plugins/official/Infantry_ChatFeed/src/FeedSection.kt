@@ -41,6 +41,7 @@ internal fun FeedSection(ctx: TabContext) {
     val args = LocalSlotArgs.current
     val controller = args[FeedArgs.CONTROLLER] as? Controller ?: return
     val state = ctx.state
+    val restartGate = rememberGate("agents.restart")
     val agent = (args[FeedArgs.SESSION_ID] as? String)?.let { state.agents[it] }
     val onStartSession = args[FeedArgs.ON_START_SESSION] as? (() -> Unit)
     val onApplyStart = args[FeedArgs.ON_APPLY_START] as? ((StartPlan) -> Unit) ?: {}
@@ -61,7 +62,7 @@ internal fun FeedSection(ctx: TabContext) {
             floaters = floaters,
             emptyHint = if (state.projects.isEmpty()) FIRST_RUN_HINT else NO_SESSION_HINT,
             // SESSION-FAIL-VISIBLE-1: Retry on the failure card, in place, for the same session.
-            onRetry = agent?.let { a -> failedSessionRetry(a, feedPaneAction(a, state.tickets), onResume, onApplyStart) { scope.launch { controller.restartSession(a.id, confirmed = true) } } },
+            onRetry = agent?.takeIf { restartGate.allowed }?.let { a -> failedSessionRetry(a, feedPaneAction(a, state.tickets), onResume, onApplyStart) { scope.launch { controller.restartSession(a.id, confirmed = true) } } },
             // CHAT-SENDING-1: this session's just-sent messages ("sending...", "not sent - retry") until the daemon's echo.
             pending = PendingSendsView(
                 agent?.let { state.pendingSendsFor(it.id) }.orEmpty(),
