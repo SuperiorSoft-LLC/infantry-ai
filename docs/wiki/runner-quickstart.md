@@ -320,6 +320,15 @@ orchestrator and the runner both listed the session; `infantry logs <full sessio
 second `logs` printed the `echo: <prompt>` reply. `logs` now sends one `replay_request` up front (before, it was a live tail only and printed
 nothing for a remote session). Notes: the full session id is needed (a prefix gets "no replay history"), the reply is read on demand, not streamed.
 
+RUNNER-OUTPUT-1 (live, gradle runDaemon + runUi, Docker runner, opencode): a remote session's chat now shows in the app as a local
+one does, live while the turn runs, again when the session is selected later, and in `get_session`. The orchestrator reads the
+session's own stream frames from its runner (`runner_link_transcript` with `afterSequence`; an older runner answers lines and is read
+that way) and puts them on its own session stream. This happens on each runner event, on every replay request, and while the turn
+runs, at `limits.runners.outputPollMs` (default 1000 ms, 0 = off). Before, the replay sent the runner's lines as raw stdout, which no
+client draws, and the line read dropped a harness's answer text once it printed a raw line (opencode always does). The session to
+runner index, with its placement, state and read position, is kept in `<state dir>/runner-sessions.json`, so a daemon restart keeps
+the session and its chat.
+
 ## Docker Desktop on Windows (RUNNER-LINK-HOST-1)
 
 A container's port is reached from the PC on the port Docker **published**, not on 8790, and `host.docker.internal` only
