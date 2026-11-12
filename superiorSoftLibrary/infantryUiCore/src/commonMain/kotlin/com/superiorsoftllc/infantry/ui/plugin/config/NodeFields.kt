@@ -187,7 +187,7 @@ internal fun SelectDropdown(field: ConfigFieldDeclaration, tag: String, value: J
     var open by remember(tag) { mutableStateOf(false) }
     val current = (value as? JsonPrimitive)?.content
     Box {
-        TextButton({ open = true }, Modifier.testTag(NODE_FIELD_INPUT_TAG_PREFIX + tag).semantics { contentDescription = field.label }, enabled = enabled) {
+        com.superiorsoftllc.infantry.ui.OutlinedButton({ open = true }, Modifier.testTag(NODE_FIELD_INPUT_TAG_PREFIX + tag).semantics { contentDescription = field.label }, enabled = enabled, shape = com.superiorsoftllc.infantry.ui.Palette.FieldShape) {
             Text((current?.let { field.optionLabels[it] ?: it } ?: field.placeholder ?: "Choose") + " ▾")
         }
         com.superiorsoftllc.infantry.ui.InfantryDropdownMenu(open, { open = false }) {
