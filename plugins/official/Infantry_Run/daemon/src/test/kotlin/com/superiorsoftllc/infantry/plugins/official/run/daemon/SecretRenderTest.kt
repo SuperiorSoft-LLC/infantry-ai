@@ -142,4 +142,19 @@ class SecretRenderTest {
         assertTrue(miss.isError)
         assertNull(names.text.lines().firstOrNull { it.contains(fake) })
     }
+
+    @Test fun `one field secret with a differently named field fills, project wins, multi-field needs FIELD, listed-but-missing says why`() {
+        val app = mapOf("commandcode" to mapOf("commandcode_key" to "APPVAL"), "db" to mapOf("USER" to "u", "PASS" to "p"))
+        val proj = mapOf("commandcode" to mapOf("commandcode_key" to "PROJVAL"))
+        val r = SecretRenderer({ n, p -> (if (p != null) proj[n] else null) ?: app[n] })
+        val t = file("n.env", "K={{secret:commandcode}}\nU={{secret:db#USER}}\n")
+        assertTrue(r.render(t, File(dir, "n.out"), null).ok)
+        assertEquals("K=APPVAL\nU=u\n", File(dir, "n.out").readText())
+        assertTrue(r.render(t, File(dir, "n2.out"), "p1").ok)
+        assertEquals("K=PROJVAL\nU=u\n", File(dir, "n2.out").readText())
+        val bad = r.render(file("b.env", "A={{secret:db}}\nB={{secret:ghost}}"), null, null, check = true)
+        val s = bad.summary(true)
+        assertTrue(s.contains("db#FIELD") && s.contains("ghost: not found in app scope"), s)
+        assertFalse(s.contains("APPVAL"))
+    }
 }
