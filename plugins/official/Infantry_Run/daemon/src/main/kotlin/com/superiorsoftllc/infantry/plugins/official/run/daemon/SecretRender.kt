@@ -59,7 +59,7 @@ object SecretTemplate {
 }
 
 /** The outcome of a file render: names and the written path only. */
-class RenderResult(val filled: List<String>, val missing: List<String>, val out: File?, val error: String? = null) {
+class RenderResult(val filled: List<String>, val missing: List<String>, val out: File?, val error: String? = null, val reasons: String = "") {
     val ok: Boolean get() = error == null
 
     /** Lines safe for any log, CLI line or tool result: names and a path, never a value. */
@@ -70,7 +70,7 @@ class RenderResult(val filled: List<String>, val missing: List<String>, val out:
             return@buildString
         }
         if (filled.isNotEmpty()) appendLine("${if (check) "found" else "filled"}: ${filled.joinToString()}")
-        if (missing.isNotEmpty()) appendLine("missing: ${missing.joinToString()}")
+        if (missing.isNotEmpty()) appendLine("missing: ${missing.joinToString()}" + if (reasons.isNotEmpty()) " ($reasons)" else "")
         if (filled.isEmpty() && missing.isEmpty()) appendLine("no secret placeholders found")
         if (out != null) append("wrote: ${out.path}") else append(if (check) "checked only, nothing written" else "nothing written")
     }.trimEnd()
@@ -94,10 +94,21 @@ class SecretRenderer(
             ?: return no("'${template.name}' is not a text file (binary or not UTF-8); only text files can be rendered")
         val cache = HashMap<String, Map<String, String>?>()
         val r = SecretTemplate.render(text) { name, field ->
-            cache.getOrPut(name) { try { resolve(name, project) } catch (e: Exception) { null } }?.get(field)
+            val fields = cache.getOrPut(name) { try { resolve(name, project) } catch (e: Exception) { null } }
+            // SECRET-RENDER-2: `{{secret:NAME}}` on a ONE-field secret is that field, whatever the field is called.
+            fields?.get(field) ?: if (field == "value" && fields != null && fields.size == 1) fields.values.first() else null
         }
-        if (check) return RenderResult(r.filled, r.missing, null)
-        if (r.missing.isNotEmpty() && !allowMissing) return no("missing secrets, nothing written", r.missing)
+        val why = r.missing.map { label ->
+            val name = label.substringBefore('#')
+            val fields = cache[name]
+            when {
+                fields == null -> "$name: not found in ${if (project.isNullOrBlank()) "app scope" else "project or app scope"}"
+                label.contains('#') -> "$label: secret '$name' has no field '${label.substringAfter('#')}' (fields: ${fields.keys.joinToString()})"
+                else -> "$label: secret '$name' has ${fields.size} fields (${fields.keys.joinToString()}); use {{secret:$name#FIELD}}"
+            }
+        }.joinToString("; ")
+        if (check) return RenderResult(r.filled, r.missing, null, reasons = why)
+        if (r.missing.isNotEmpty() && !allowMissing) return no("missing secrets, nothing written ($why)", r.missing)
         val target = out ?: return no("an output file is required")
         if (sameFile(template, target)) return no("the output may not be the template itself")
         return try {
