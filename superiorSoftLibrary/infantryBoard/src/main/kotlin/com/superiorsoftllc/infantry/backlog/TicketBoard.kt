@@ -1736,6 +1736,9 @@ class TicketBoard(
             if (changedId == id) answer else ticket
         }
         push(BoardEvent.Changed(changed))
+        // START-LANE-1: a hand-out records its STARTED event in the commit; without this the subscribers (hooks, plugin events)
+        // only got it when some later, unrelated board answer happened to deliver, so a hook-started ticket looked stuck.
+        announce(outcome)
         return TicketAnswer(answer, pushed = id in outcome.changed)
     }
 
