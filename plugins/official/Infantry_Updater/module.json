@@ -40,6 +40,8 @@
         "keywords": ["update", "updater", "release", "automatic", "check", "channel", "nightly", "stable"],
         "fields": [
           { "key": "updater.autoCheck", "type": "toggle", "label": "Check for updates automatically", "default": true, "scope": "daemon", "order": 1, "description": "At start, once a day, and when you come back to the window. Off = only when you press Check for updates. Installing is always your call." },
+          { "key": "update.waitForWorkers", "type": "toggle", "label": "Wait for agents before restarting", "default": true, "scope": "daemon", "order": 3, "description": "Restart now waits until no agent is working, then installs. Off = restart at once (running agents are stopped)." },
+          { "key": "update.resumeWorkers", "type": "toggle", "label": "Resume agents after an update", "default": true, "scope": "daemon", "order": 4, "description": "Agents that were working when the app restarted for an update continue on their ticket after the restart." },
           { "key": "updater.releaseChannel", "type": "select", "label": "Update channel", "default": "stable", "scope": "daemon", "order": 2, "options": ["stable", "nightly"], "optionLabels": { "stable": "Stable", "nightly": "Nightly" }, "description": "Stable: tested releases only. Nightly: a build of the newest development work, published once a night when there is new work; tested less, so expect rough edges. Switching from Nightly back to Stable offers the newest stable release even when it is older than the nightly you run (the update says so). Android cannot go back to an older version without uninstalling." }
         ]
       }

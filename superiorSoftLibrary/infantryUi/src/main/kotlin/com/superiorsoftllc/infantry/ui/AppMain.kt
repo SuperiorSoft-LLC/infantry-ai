@@ -55,7 +55,7 @@ fun main(args: Array<String>) {
         }
         // UPDATE-1: only the installed profile gets an updater (a dev build never updates itself).
         val stateDir = File(pinned.getValue("INFANTRY_STATE_DIR"))
-        runRealDaemonUi(logsDir = logs?.dir, stateLock = stateLock, updates = { exit, running -> InstalledUpdates.service(installed = true, stateDir = stateDir, exit = exit, runningAgents = running) })
+        runRealDaemonUi(logsDir = logs?.dir, stateLock = stateLock, updates = { exit, running, busy -> InstalledUpdates.service(installed = true, stateDir = stateDir, exit = exit, runningAgents = running, busySessions = busy) })
     } else {
         runDevUi()
     }
