@@ -75,6 +75,13 @@ class CoreDaemonServices(
     private val coreStringSetting: (String) -> String = { "" },
     /** NOTIFY-CORE-1: the notification bus's settings, read at every post. */
     private val notificationSettingsSource: () -> com.superiorsoftllc.infantry.plugin.api.NotificationSettings = { com.superiorsoftllc.infantry.plugin.api.NotificationSettings() },
+    /**
+     * SPAWN-PARAMS-1: a session this daemon placed on a REMOTE runner (the orchestrator's mirror record), so api.sessions get/status
+     * (session_read, a script's waits) see it as the session list already does. Null = not a remote session.
+     */
+    private val remoteSession: (String) -> SessionRecord? = { null },
+    /** SPAWN-PARAMS-1: the last [max] transcript lines of a remote session, read from its runner on demand; null = none / offline. */
+    private val remoteLines: (id: String, max: Int) -> List<String>? = { _, _ -> null },
 ) : DaemonServices {
     override fun notificationSettings() = notificationSettingsSource()
     override fun coreSetting(key: String) = coreStringSetting(key)
@@ -109,7 +116,7 @@ class CoreDaemonServices(
 
     override val sessions: Sessions = object : Sessions {
         override fun list(): List<SessionInfo> = manager.list().map(::info)
-        override fun get(id: String): SessionInfo? = manager.get(id)?.let(::info)
+        override fun get(id: String): SessionInfo? = (manager.get(id) ?: remoteSession(id))?.let(::info)
         override fun spawn(provider: String, model: String, role: String, projectId: String): SessionInfo =
             bindSessionOnSpawn(manager, agents, SpawnOptions(provider = provider, model = model, role = role, projectId = projectId), null)
                 ?.let(::info) ?: error("could not create the $role session")
@@ -119,10 +126,12 @@ class CoreDaemonServices(
             return info(manager.resume(id, turn))
         }
         override fun restart(id: String) { manager.restart(id) }
-        override fun status(id: String): com.superiorsoftllc.infantry.daemon.api.SessionStatus? = manager.get(id)?.let { com.superiorsoftllc.infantry.session.SessionActivityLog.overlay(it) }?.let {
+        override fun status(id: String): com.superiorsoftllc.infantry.daemon.api.SessionStatus? = (manager.get(id) ?: remoteSession(id))?.let { com.superiorsoftllc.infantry.session.SessionActivityLog.overlay(it) }?.let {
             com.superiorsoftllc.infantry.daemon.api.SessionStatus(it.id, it.state.name, it.lastAction, it.lastOutputAt, it.lastEventAt, it.lastTurnAt)
         }
-        override fun recentLines(id: String, max: Int): List<String> = com.superiorsoftllc.infantry.session.SessionFeed.recent(id, max)
+        override fun recentLines(id: String, max: Int): List<String> = com.superiorsoftllc.infantry.session.SessionFeed.recent(id, max).ifEmpty {
+            if (manager.get(id) != null) emptyList() else remoteLines(id, max)?.takeLast(max.coerceAtLeast(0)).orEmpty()
+        }
         override fun interrupt(id: String): Boolean = manager.get(id)?.let { runCatching { manager.interrupt(id) }.isSuccess } ?: false
         override fun suppressNotice(name: String, sessionId: String?, ms: Long) = noticeSuppressor(name, sessionId, ms)
         override fun setAutomation(id: String, mark: AutomationMark?) { manager.setAutomation(id, mark?.let { SessionAutomation(it.script, it.hookId, it.since) }) }

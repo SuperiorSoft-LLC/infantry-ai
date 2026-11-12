@@ -1769,6 +1769,13 @@ class InfantryDaemon(
                         coreStringSetting = { settings.plainString(it) },
                         notificationSettingsSource = { settings.notificationSettings() },
                         noticeSuppressor = { name, session, ms -> nudgeGate.suppress(name, session, ms) },
+                        // SPAWN-PARAMS-1: a session placed on a remote runner is a session to api.sessions too (session_read, script waits).
+                        remoteSession = { id -> remoteMirror.get(id) },
+                        remoteLines = { id, _ ->
+                            val name = runnerPool.runnerOf(id)
+                            if (name == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL) null
+                            else (runnerPool.link(name)?.readTranscript(id, 0, 0) as? com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorReply.Ok)?.value
+                        },
                         // CMD-1: api.runs, a cwd-bound child process over the runner (pty and pipes).
                         runService = com.superiorsoftllc.infantry.daemon.plugins.LocalRuns(
                             workRoot = repo, configDir = commandsFile.absoluteFile.parentFile ?: File("."),

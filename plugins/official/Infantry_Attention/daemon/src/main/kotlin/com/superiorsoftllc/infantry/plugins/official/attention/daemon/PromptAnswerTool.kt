@@ -76,12 +76,15 @@ class PromptAnswerTool(private val api: DaemonApi) : DaemonTool {
             decision?.let { put("decision", it) }
             if (answers.isNotEmpty()) put("answers", buildJsonArray { answers.forEach { add(JsonPrimitive(it)) } })
         }.toString()
+        // The daemon answers a refused prompt_response with an `error` frame and an accepted one with NOTHING (the app reads the
+        // card's close from the broadcast). So a request that times out (an `error` frame or an exception, by host) is the success
+        // path when the card is gone: the open-card list decides, a still-open card refuses with what the daemon said.
         val reply = try {
-            call.request(FRAME, data, null, TIMEOUT_MS)
+            call.request(FRAME, data, null, SETTLE_MS)
         } catch (e: Exception) {
-            return refused(e.message ?: e.javaClass.simpleName)
+            null.also { if (stillOpen(target.id, prompt.promptId)) return refused("the card ${prompt.promptId} is still open after the answer (${e.message ?: e.javaClass.simpleName})") }
         }
-        if (reply.type == "error") return refused(reply.data.removePrefix("$FRAME refused: "))
+        if (reply?.type == "error" && stillOpen(target.id, prompt.promptId)) return refused(reply.data.removePrefix("$FRAME refused: "))
         return ToolResult(buildJsonObject {
             put("sessionId", target.id); put("promptId", prompt.promptId); put("kind", prompt.kind)
             prompt.tool?.let { put("tool", it) }
@@ -89,6 +92,8 @@ class PromptAnswerTool(private val api: DaemonApi) : DaemonTool {
             put("answered", true)
         }.toString())
     }
+
+    private fun stillOpen(sessionId: String, promptId: String) = api.services.find(OpenPrompts::class)?.open(sessionId).orEmpty().any { it.promptId == promptId }
 
     /** The pm/owner rule; null = allowed. */
     private fun who(caller: com.superiorsoftllc.infantry.daemon.api.Caller, targetId: String, targetProject: String?): String? {
@@ -125,6 +130,7 @@ class PromptAnswerTool(private val api: DaemonApi) : DaemonTool {
         const val FRAME = "prompt_response"
         const val TOOL_APPROVAL = "tool_approval"
         const val PM = "pm"
-        const val TIMEOUT_MS = 30_000L
+        /** How long to wait for a refusal frame before the open-card list decides (an accepted answer sends no frame back). */
+        const val SETTLE_MS = 3_000L
     }
 }

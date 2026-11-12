@@ -6,13 +6,14 @@
 --   end:       the session is killed; seconds = start to end; error = the spawn refusal or the session's own [error] line.
 -- A column that did not run prints NOT-TESTED, never PASS; a row is green only when every column is PASS.
 -- Run it on a daemon paired with a throwaway runner (test ports 18900-18999, never the owner's runner). It never prints a bearer.
--- args: {runner="hm", role="fullstack", projectId=..., waitSec=60, waitCmd={...},
+-- args: {runner="hm", role="fullstack", projectId=..., waitSec=40, waitCmd={...},
 --        rows={{harness="pi", model="commandcode/..."}, {harness="opencode", model="commandcode/..."}}}
 -- Needs scripting.maxPhases >= 6 and scripting.exec.enabled (the waits are ih.exec of waitCmd).
+-- The whole run is ONE plugin call: keep 2 * waitSec well under its hang ceiling (120 s seen; limits.plugin.guard.timeoutMs).
 local a = input.args or {}
 local runner = a.runner or "hm"
 local role = a.role or "fullstack"
-local waitSec = tonumber(a.waitSec) or 60
+local waitSec = tonumber(a.waitSec) or 40
 local waitCmd = a.waitCmd or {"powershell", "-NoProfile", "-Command", "Start-Sleep -Seconds " .. waitSec}
 local rows = a.rows or {
   {harness = "pi", model = a.piModel},
@@ -59,9 +60,10 @@ if phase == 2 then
 end
 
 -- the card listing of each started row (phase 2's actions, in row order)
-local cards, k = {}, base3
+local cards, listErr, k = {}, {}, base3
 for i = 1, N do
   if sessions[i] then
+    if not (res[k] or {}).ok then listErr[i] = "card listing refused: " .. oneLine(text(k)) end
     local open = (json(k).open or {})
     local first = open[1]
     if first and first.kind == "tool_approval" then cards[i] = first.promptId end
@@ -130,18 +132,27 @@ for i, r in ipairs(rows) do
     for _, line in ipairs(t.lines or {}) do
       local l = tostring(line)
       if l:sub(1, 1) ~= "[" and l:lower():match("^%s*%**pong%**[%.!]?%s*$") then pong = true end
-      if l:sub(1, 7) == "[error]" and not err then err = oneLine(l) end
+      -- a harness whose raw lines are JSON events (opencode --format json) carries the answer as a "text" field
+      if l:match('"type"%s*:%s*"text"') and l:lower():match('"text"%s*:%s*"%s*%**pong%**[%.!]?%s*"') then pong = true end
+      -- a local transcript marks errors "[error] ..."; a remote one (read from the runner) carries the harness's own stderr
+      if not err and (l:sub(1, 7) == "[error]" or l:match("^%s*[Ee]rror:") or l:match("turn failed:")) then err = oneLine(l) end
     end
     if not err and (t.state == "FAILED" or t.state == "failed") then err = "session FAILED: " .. oneLine(t.lastError or "no error line in the transcript") end
     local approval = cards[i] and (answered[i] == true and "PASS" or "FAIL") or "FAIL"
     if cards[i] and answered[i] ~= true and not err then err = "answer refused: " .. tostring(answered[i]) end
+    if not cards[i] and not err and listErr[i] then err = listErr[i] end
     if not cards[i] and not err then err = "no approval card opened (state " .. tostring(t.state) .. ")" end
     local row = {"PASS", approval, pong and "PASS" or "FAIL", ended[i] and "PASS" or "FAIL"}
     local all = true
     for _, c in ipairs(row) do if c ~= "PASS" then all = false end end
     if all then green = green + 1 end
-    ih.log(string.format("%s | runner:%s | %s | %s | %s | %s | %.0f | %s", label, runner, row[1], row[2], row[3], row[4], secs,
+    ih.log(string.format("%s | runner:%s | %s | %s | %s | %s | %s | %s", label, runner, row[1], row[2], row[3], row[4], tostring(math.floor(secs + 0.5)),
       err or (all and "-" or "see session " .. sessions[i])))
   end
 end
 ih.log(string.format("GREEN %d of %d rows", green, N))
+-- the tail of each row's transcript, so a FAIL can be checked without opening the session
+for i, r in ipairs(rows) do
+  local lines = (transcript[i] or {}).lines or {}
+  for j = math.max(1, #lines - 5), #lines do ih.log(string.format("  %s> %s", r.harness, oneLine(lines[j]))) end
+end

@@ -9,10 +9,12 @@ import com.superiorsoftllc.infantry.protocol.Envelope
  * session stream's frame types. The raw process lines (STDOUT, STDERR) come first-class; the turns the session was asked (TURN) and
  * its errors (ERROR) are added, so a session that printed nothing still shows what it ran. When a harness printed no raw line, its
  * normalised answer text (TEXT_DELTA, joined until the next other frame) stands in, so no harness leaves the read empty.
+ * SPAWN-PARAMS-1: the daemon's own notices (STDERR lines marked [NOTICE], "session started" on every run) are not the harness
+ * printing: they no longer hide the answer text of a harness that prints no raw line (opencode's "pong" read empty).
  */
 object RunnerTranscript {
     fun lines(frames: List<Envelope>): List<String> {
-        val raw = frames.any { it.type == Envelope.STDOUT || it.type == Envelope.STDERR }
+        val raw = frames.any { it.type == Envelope.STDOUT || (it.type == Envelope.STDERR && !it.data.startsWith(NOTICE)) }
         val out = ArrayList<String>()
         val text = StringBuilder()
         fun flush() {
@@ -28,4 +30,7 @@ object RunnerTranscript {
         flush()
         return out
     }
+
+    /** The marker the daemon puts on its own stderr notices (SessionManager), never a harness's line. */
+    const val NOTICE = "[infantry]"
 }
