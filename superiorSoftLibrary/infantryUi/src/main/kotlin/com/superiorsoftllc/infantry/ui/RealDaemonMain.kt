@@ -98,19 +98,15 @@ fun runRealDaemonUi(
                 val consoles = remember { DesktopRunConsoles() }
                 // UPDATER-DEFAULT-1: back at the window after updater.checkIntervalHours (default 24) = check again, silently.
                 InfantryWindow(onCloseRequest = ::exitApplication, onFocusGained = { updater?.checkIfDue() }) {
-                    var shellUrl by remember { mutableStateOf(if (remote != null) "" else null) }
-                    var refusal by remember { mutableStateOf<String?>(null) }
-                    // FIRSTRUN-ERR-1: a refused start shows its reason in the window instead of ending the app silently.
-                    LaunchedEffect(Unit) {
-                        if (shellUrl == null) {
-                            val url = withContext(Dispatchers.IO) { local?.start()?.url }
-                            if (url != null) shellUrl = url
-                            else refusal = (local as? InProcessDaemon)?.refusal ?: "This build has no daemon and no server is configured."
-                        }
-                    }
                     androidx.compose.runtime.CompositionLocalProvider(LocalRunConsole provides consoles) {
-                        if (refusal != null) DaemonRefusalCard(refusal!!, logsDir?.path, ::exitApplication)
-                        else SplashHost {
+                        // SPLASH-STUCK-1: any start failure (not only a refusal) shows the error card with Retry / Quit.
+                        DaemonStartGate(
+                            initialUrl = if (remote != null) "" else null,
+                            start = { local?.start()?.url },
+                            refusalOf = { (local as? InProcessDaemon)?.refusal },
+                            logsDir = logsDir?.path,
+                            onQuit = ::exitApplication,
+                        ) { shellUrl ->
                             shellUrl?.let { url ->
                                 InfantryShell(PinnedDaemonHost(defaultPlatformHost(), url, logsDir, updater, servers = servers, remote = remote, local = local, activeFile = activeServer, pluginsDir = File(stateDir(), "plugins")))
                             }
