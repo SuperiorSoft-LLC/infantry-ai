@@ -234,6 +234,12 @@ data class HarnessCredentialDeclaration(
      * mode, an API key only outside it, and it is never reported missing.
      */
     val forMode: String? = null,
+    /**
+     * HARNESS-ALL-1: the model id prefix this key is for (e.g. `deepseek/` for the DeepSeek models); null = every model of the
+     * harness. A launch warns about a missing key only when its model starts with the prefix, so a harness with one key per
+     * provider does not name every unset key on every launch. The key is still lent to every session of the harness.
+     */
+    val modelPrefix: String? = null,
 )
 
 /**

@@ -50,13 +50,14 @@ class OpenCodePoisonedSessionTest {
 
     private class Out : SessionOutput {
         var end: SessionTurnEnd? = null
+        var reason: String? = null
         val lines = mutableListOf<String>()
         override fun write(text: String) = true
         override fun closeInput() {}
         override fun detail(text: String) {}
         override fun providerSession(id: String) {}
         override fun output(line: String) { lines += line }
-        override fun turnEnded(end: SessionTurnEnd, exitCode: Int?, reason: String?) { this.end = end }
+        override fun turnEnded(end: SessionTurnEnd, exitCode: Int?, reason: String?) { this.end = end; this.reason = reason }
     }
 
     private fun feed(turn: OpenCodeServeSession.Turn, ses: String, vararg events: String) = events.forEach { e ->
@@ -82,6 +83,15 @@ class OpenCodePoisonedSessionTest {
         turn.recovered()
         feed(turn, "ses_new", busy("ses_new"), text("ses_new"), idle("ses_new"))
         assertEquals(SessionTurnEnd.COMPLETED, out.end)
+    }
+
+    @Test fun `HARNESS-ALL-1 a failed turn's reason is opencode's own error text`() {
+        val out = Out()
+        val turn = OpenCodeServeSession.Turn(out, "google/gemini", recover = null)
+        val missing = """{"type":"session.error","properties":{"sessionID":"s","error":{"name":"AI_LoadAPIKeyError","data":{"message":"Google Generative AI API key is missing."}}}}"""
+        feed(turn, "s", busy("s"), missing, idle("s"))
+        assertEquals(SessionTurnEnd.FAILED, out.end)
+        assertEquals("Google Generative AI API key is missing.", out.reason, "not only 'opencode reported an error'")
     }
 
     @Test fun `a second refusal in the same turn fails it (no loop)`() {

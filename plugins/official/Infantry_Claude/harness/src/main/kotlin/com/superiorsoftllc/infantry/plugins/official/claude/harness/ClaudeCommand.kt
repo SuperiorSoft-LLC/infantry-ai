@@ -51,8 +51,10 @@ object ClaudeCommand {
     fun mcpToolRule(serverName: String): String = "mcp__${serverName}__*"
 
     /**
-     * deny = dontAsk (G3: refuses every call that is not pre-allowed, never shows a dialog), ask = no flag (Claude's default; the interactive
-     * session answers its dialogs with [ClaudePermissionHook]), allowEdits = acceptEdits, allowAll = bypassPermissions.
+     * deny = dontAsk (G3: refuses every call that is not pre-allowed, never shows a dialog), ask = `default` (the interactive session answers
+     * its dialogs with [ClaudePermissionHook]), allowEdits = acceptEdits, allowAll = bypassPermissions.
+     * HARNESS-ALL-1: ask names `default` instead of passing no flag, because with no flag claude starts in the user's own default mode, and a
+     * user who opted into claude's `auto` mode then got no approval card at all (the classifier decided every call).
      * `INFANTRY_CLAUDE_PERMISSION_MODE` still wins.
      */
     fun permissionMode(
@@ -62,11 +64,14 @@ object ClaudeCommand {
         legacy?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
         return when (approval) {
             ToolApproval.DENY -> "dontAsk"
-            ToolApproval.ASK -> null
+            ToolApproval.ASK -> ASK_PERMISSION_MODE
             ToolApproval.ALLOW_EDITS -> "acceptEdits"
             ToolApproval.ALLOW_ALL -> "bypassPermissions"
         }
     }
+
+    /** The `--permission-mode` of ask: claude's own default mode, so every call it would ask about reaches the owner. */
+    const val ASK_PERMISSION_MODE = "default"
 
     fun approvalArgs(approval: ToolApproval): List<String> = permissionMode(approval)?.let { listOf("--permission-mode", it) } ?: emptyList()
 

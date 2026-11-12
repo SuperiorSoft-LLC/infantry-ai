@@ -93,6 +93,9 @@ class PiHarness internal constructor(
     /** The extensions folder (the to-do and watch extensions) must be readable inside the session sandbox. */
     override fun sandbox(dirs: SandboxRoots): SandboxContribution = SandboxContribution(readDirs = listOf(dirs.dataDir))
 
+    /** HARNESS-ALL-1: the runner Check's `loggedIn` (re-read at every hello): pi has no provider key or login here ([PiSignIn]). */
+    override fun signInProblem(): String? = PiSignIn.problem(System.getenv(), File(System.getProperty("user.home")))
+
     companion object {
         const val HARNESS_ID = "pi"
     }

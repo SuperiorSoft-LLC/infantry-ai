@@ -171,10 +171,24 @@ object LocalRunner {
         val wanted = options?.runner?.trim().orEmpty().ifEmpty { agentRunner?.trim().orEmpty() }.ifEmpty { defaultRunner.trim() }
         var runner = RunnerPool.LOCAL
         if (wanted.isNotEmpty() && wanted != RunnerPool.LOCAL) {
-            val view = entries?.invoke() ?: pool.runners().map {
-                com.superiorsoftllc.infantry.settings.RunnerEntry(it.name, it.state, it.health?.freeSlots?.takeIf { s -> s >= 0 } ?: Int.MAX_VALUE)
+            val viewOf = {
+                entries?.invoke() ?: pool.runners().map {
+                    com.superiorsoftllc.infantry.settings.RunnerEntry(it.name, it.state, it.health?.freeSlots?.takeIf { s -> s >= 0 } ?: Int.MAX_VALUE)
+                }
             }
-            when (val placed = com.superiorsoftllc.infantry.settings.Placement.pick(null, null, defaultRunner, view, options?.projectId, options?.provider, options?.runner, agentRunner)) {
+            val pick = { view: List<com.superiorsoftllc.infantry.settings.RunnerEntry> ->
+                com.superiorsoftllc.infantry.settings.Placement.pick(null, null, defaultRunner, view, options?.projectId, options?.provider, options?.runner, agentRunner)
+            }
+            var view = viewOf()
+            var placedFirst = pick(view)
+            // HARNESS-ALL-1: the slot count is the last heartbeat's; a session ended since then still holds it there. Re-read the runner
+            // the cached view calls full once, so ending a session and starting the next is not refused as "full" for a heartbeat period.
+            if (placedFirst is com.superiorsoftllc.infantry.settings.PlacementResult.Refused && view.any { it.name == wanted && it.freeSlots <= 0 }) {
+                pool.refresh(wanted)
+                view = viewOf()
+                placedFirst = pick(view)
+            }
+            when (val placed = placedFirst) {
                 is com.superiorsoftllc.infantry.settings.PlacementResult.Refused -> throw IllegalArgumentException("runner refused: ${placed.reason}")
                 is com.superiorsoftllc.infantry.settings.PlacementResult.Placed -> runner = placed.runner
             }

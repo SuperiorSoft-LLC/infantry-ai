@@ -41,7 +41,7 @@ class ClaudePluginTest {
 
     @Test fun `tool approval maps to the permission mode and the infantry cli is allowed in every mode`() {
         assertEquals("dontAsk", ClaudeCommand.permissionMode(ToolApproval.DENY, legacy = null), "G3: deny never shows a dialog")
-        assertNull(ClaudeCommand.permissionMode(ToolApproval.ASK, legacy = null))
+        assertEquals("default", ClaudeCommand.permissionMode(ToolApproval.ASK, legacy = null), "ask names default, never the user's auto mode")
         assertEquals("acceptEdits", ClaudeCommand.permissionMode(ToolApproval.ALLOW_EDITS, legacy = null))
         assertEquals("bypassPermissions", ClaudeCommand.permissionMode(ToolApproval.ALLOW_ALL, legacy = null))
         assertEquals("plan", ClaudeCommand.permissionMode(ToolApproval.DENY, legacy = " plan "), "the legacy variable still wins")

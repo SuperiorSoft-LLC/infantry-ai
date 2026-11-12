@@ -35,7 +35,12 @@ data class HarnessCredential(
      * interactive login); empty = an API key. Such a credential goes to a session only in that mode and is never "missing".
      */
     val forMode: String = "",
+    /** HARNESS-ALL-1: the model id prefix this key is for (`deepseek/`); empty = every model. Only a launch of such a model warns that it is missing. */
+    val modelPrefix: String = "",
 ) {
+    /** HARNESS-ALL-1: true when a launch of [model] needs this key (no [modelPrefix], or the model starts with it). */
+    fun servesModel(model: String?): Boolean = modelPrefix.isEmpty() || model.orEmpty().startsWith(modelPrefix, ignoreCase = true)
+
     /** The setting that stores the owner's choice of [authModes], per harness. */
     val modeSetting: String get() = modeSettingOf(harnessId)
     val secretName: String get() = secretNameOf(harnessId, credId)
@@ -182,13 +187,14 @@ class HarnessCredentials(
     fun missing(): List<HarnessCredential> = states().filter { !it.set && it.credential.forMode.isEmpty() && !subscription(it.credential.harnessId) }.map { it.credential }
 
     /**
-     * RUNNER-LOGIN-1: the credentials a launch of [harnessId] warns about ("No API key set"). [missing] for that harness, except when no
+     * RUNNER-LOGIN-1: the credentials a launch of [harnessId] warns about ("No API key set"). [missing] for that harness (HARNESS-ALL-1:
+     * only those that serve [model], see [HarnessCredential.servesModel]), except when no
      * auth mode was chosen and the harness's own CLI is signed in (its declared probe, e.g. `claude auth status`, says so): that CLI
      * answers with its login, so the warning would be false. The probe runs at most once per daemon while unprobed (a manual
      * `infantry harness auth <id>` refreshes it); unknown keeps the warning.
      */
-    fun missingAtLaunch(harnessId: String): List<HarnessCredential> {
-        val gaps = missing().filter { it.harnessId == harnessId }
+    fun missingAtLaunch(harnessId: String, model: String? = null): List<HarnessCredential> {
+        val gaps = missing().filter { it.harnessId == harnessId && it.servesModel(model) }
         if (gaps.isEmpty() || mode(harnessId) != null) return gaps
         if (declaration(harnessId)?.probeArgv.isNullOrEmpty()) return gaps
         val status = authStatus(harnessId).takeIf { it.lastProbe > 0L } ?: checkAuth(harnessId)

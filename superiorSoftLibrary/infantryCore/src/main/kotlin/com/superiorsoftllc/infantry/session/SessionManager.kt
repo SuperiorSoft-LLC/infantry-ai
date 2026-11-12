@@ -3,6 +3,7 @@
 package com.superiorsoftllc.infantry.session
 
 import com.superiorsoftllc.infantry.daemon.api.sessions.SessionBinding
+import com.superiorsoftllc.infantry.protocol.EventNormalizer
 import com.superiorsoftllc.infantry.protocol.MessageOrigin
 import com.superiorsoftllc.infantry.daemon.AccessPolicy
 import com.superiorsoftllc.infantry.harness.AgentProvider
@@ -102,7 +103,7 @@ class SessionManager(
     /** FIRST-RUN-KEYS-1: the API key a harness declares, as `{ENV: key}`, read at every launch so a restarted session gets a key set meanwhile. */
     private val credentialEnv: (providerId: String) -> Map<String, String> = { emptyMap() },
     /** FIRST-RUN-KEYS-1: a plain sentence when the harness declares an API key that is not set (and no subscription login was chosen), else null. Told in the chat at every run start. */
-    private val credentialMissing: (providerId: String) -> String? = { null },
+    private val credentialMissing: (providerId: String, model: String?) -> String? = { _, _ -> null },
     /**
      * Contract 1.3.0: the providers a spawn may name besides [provider] (`INFANTRY_PROVIDERS`). Ids must be
      * distinct from each other and from the default's.
@@ -924,6 +925,9 @@ class SessionManager(
 
         /** True once the run printed any stdout; a failed run with none gets the auth hint (UI-BOOT-1). */
         @Volatile var sawStdout = false
+
+        /** HARNESS-ALL-1: the last error the harness itself reported this turn; a failed turn names it, not only its exit code. */
+        @Volatile var lastFailure: String? = null
         val forced = AtomicBoolean(false)
         val watchdogFired = AtomicBoolean(false)
         @Volatile var watchdogKillAt = 0L
@@ -1737,7 +1741,7 @@ class SessionManager(
         // BUG-M2-11b-1: the host owns the process and the ONE chat line per launch; the per-turn plumbing is Activity.
         bootDetails.forEach { emit(SessionEvent.Activity(sessionId, provider.id, it)) }
         // RUNNER-CRED-1: a session whose starter lent it a key is not missing one.
-        if (lentEnvs[sessionId].isNullOrEmpty()) runCatching { credentialMissing(session.provider) }.getOrNull()?.let {
+        if (lentEnvs[sessionId].isNullOrEmpty()) runCatching { credentialMissing(session.provider, session.model) }.getOrNull()?.let {
             System.err.println("[infantry] $sessionId: $it")
             emit(SessionEvent.Activity(sessionId, provider.id, it))
         }
@@ -1869,11 +1873,11 @@ class SessionManager(
             run.interruptRequested.get() || end == TurnEnd.INTERRUPTED -> settleInterrupted(sessionId, exitCode)
             run.killRequested.get() -> settle(sessionId, run, exitCode, processExited = false)
             exitCode == null && end == TurnEnd.FAILED -> failRun(sessionId, IllegalStateException(reason ?: "the turn failed"), processExited)
-            else -> settle(sessionId, run, exitCode ?: if (end == TurnEnd.COMPLETED) 0 else 1, processExited)
+            else -> settle(sessionId, run, exitCode ?: if (end == TurnEnd.COMPLETED) 0 else 1, processExited, reason)
         }
     } }
 
-    private fun settle(sessionId: String, run: ActiveRun, exitCode: Int?, processExited: Boolean) {
+    private fun settle(sessionId: String, run: ActiveRun, exitCode: Int?, processExited: Boolean, harnessReason: String? = null) {
         if (run.interruptRequested.get()) {
             settleInterrupted(sessionId, exitCode)
             return
@@ -1899,8 +1903,9 @@ class SessionManager(
             }
         }
         // FIRSTRUN-FAIL-1: a failed turn always says why, in the record, the transcript and the `finished` frame.
+        val exited = if (exitCode == null) "the process ended without an exit code" else "the process exited with code $exitCode"
         val reason = if (state != SessionState.FAILED) null
-            else if (exitCode == null) "the process ended without an exit code" else "the process exited with code $exitCode"
+            else (harnessReason?.trim()?.takeIf { it.isNotEmpty() } ?: run.lastFailure)?.let { "$it ($exited)" } ?: exited
         if (state == SessionState.FAILED && !run.sawStdout) {
             bootLine(
                 sessionId,
@@ -2311,7 +2316,13 @@ class SessionManager(
     /** BUG-M2-11b-1: what the host reports, applied to the session's record and stream. Never under the host's lock. */
     private val hostEvents = object : HostEvents {
         override fun stdout(sessionId: String, line: String) {
-            runs[sessionId]?.sawStdout = true
+            val run = runs[sessionId]
+            run?.sawStdout = true
+            // HARNESS-ALL-1: keep the harness's own error (e.g. a refused API key) for the failed turn's reason. Only a line that
+            // names an error is parsed, so an ordinary output line costs no second JSON parse.
+            if (run != null && line.contains("error", ignoreCase = true)) {
+                EventNormalizer.normalise(line).filterIsInstance<EventNormalizer.Line.Failure>().lastOrNull()?.let { run.lastFailure = it.message.trim() }
+            }
             val provider = sessions[sessionId]?.let { lookup(it.provider)?.provider }
             heartbeat(sessionId, provider?.sessionIdFromLine(line))
             if (sessionId !in interruptedTurns) conversation.output(sessionId, outputMask.mask(line))
