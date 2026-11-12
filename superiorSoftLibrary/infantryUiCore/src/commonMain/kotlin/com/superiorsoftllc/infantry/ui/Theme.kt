@@ -70,7 +70,10 @@ object Palette {
     val Warn: Color get() = tones.warn
 
     /** POPUP-ROUND-1: the one corner shape of every popup, dropdown menu and floating log (the chat cards' radius). */
-    val PopupShape: androidx.compose.ui.graphics.Shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+    val PopupShape: androidx.compose.ui.graphics.Shape get() = FieldShape
+
+    /** UI-SHAPE-1: the one soft corner of every text field, text area, dropdown trigger and dropdown menu (not a pill, not square). */
+    val FieldShape: androidx.compose.foundation.shape.RoundedCornerShape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
 
     /** Text on the accent: the original dark brown on light accents (amber), white on deep ones (the emblem red). */
     val OnAccent: Color get() = if (Accent.luminance() > 0.4f) Color(0xFF1A1200) else Color.White
@@ -122,6 +125,8 @@ fun InfantryTheme(content: @Composable () -> Unit) {
     CompositionLocalProvider(LocalTextSelectionColors provides selection) {
     MaterialTheme(
         colorScheme = scheme,
+        // UI-SHAPE-1: Material's outlined text field reads shapes.extraSmall, so it takes the shared field corner.
+        shapes = androidx.compose.material3.Shapes(extraSmall = Palette.FieldShape),
         typography = base.copy(
             bodyMedium = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
             bodySmall = TextStyle(fontSize = 11.sp, lineHeight = 15.sp),

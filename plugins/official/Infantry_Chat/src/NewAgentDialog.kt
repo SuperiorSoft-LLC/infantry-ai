@@ -409,7 +409,7 @@ fun RunnerPickerView(value: String, registered: List<com.superiorsoftllc.infantr
     Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text("Runner", fontSize = 11.sp, color = Palette.Muted)
         Box {
-            OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth().testTag(NEW_AGENT_RUNNER_FIELD_TAG)) {
+            OutlinedButton(onClick = { expanded = true }, shape = Palette.FieldShape, modifier = Modifier.fillMaxWidth().testTag(NEW_AGENT_RUNNER_FIELD_TAG)) {
                 Text(RunnerChoices.labelFor(options, value) + "  ▾", modifier = Modifier.weight(1f), maxLines = 1)
             }
             InfantryDropdownMenu(expanded, { expanded = false }) {
