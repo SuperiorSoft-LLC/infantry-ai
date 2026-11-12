@@ -118,7 +118,8 @@ class LocalRunnerLinkTest {
         assertFailsWith<IllegalArgumentException> { pool.register(RunnerPool.LOCAL) { _, l -> l } }
         pool.register("remote") { _, l -> l }
         assertEquals(listOf("remote"), pool.bindingIds())
-        assertEquals("1.2.0", link.contractVersion)
+        // The contract version is the RunnerLink constant (bumped to 1.3.0 by ba5071a8); assert the constant, not a stale literal.
+        assertEquals(RunnerLink.CONTRACT_VERSION, link.contractVersion)
     }
 
     /** RUNNER-POOL-8: mail to a session on a remote runner stays queued while that runner is offline, and is delivered once it is back. */
