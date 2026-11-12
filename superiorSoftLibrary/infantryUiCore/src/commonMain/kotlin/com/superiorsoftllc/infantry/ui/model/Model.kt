@@ -1452,7 +1452,8 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
     }
 
     // DEMO-MERGE-1: a refusal whose code the daemon declared a notice (`ready` notices=) is kept for a module to show, not an error banner.
-    Envelope.ERROR -> declaredNotice(s.connection, env.data)?.let { (code, msg) -> s.copy(connection = s.connection.copy(notices = s.connection.notices + (code to msg))) }
+    // FRAME-NOTIFY-PENDING-1: a refusal of a frame a plugin sent through the link (`link-` request id) is the plugin's to read, never a banner.
+    Envelope.ERROR -> if (env.requestId?.startsWith("link-") == true) s else declaredNotice(s.connection, env.data)?.let { (code, msg) -> s.copy(connection = s.connection.copy(notices = s.connection.notices + (code to msg))) }
         ?: requeueRefused(s, env) ?: if (env.sessionId == null) {
         // A refused command. If it was this window's spawn, no session is coming: stop waiting for one.
         // P10-C: a `prompt_*` refusal also lands inline in the Prompts tab and ends its loading state.

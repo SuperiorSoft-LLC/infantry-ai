@@ -224,7 +224,7 @@ class CoreLink(
         controller?.client?.frames?.let { f -> kotlinx.coroutines.flow.flow { f.collect { if (it.type == type) emit(it.data) } } }
             ?: kotlinx.coroutines.flow.emptyFlow()
     override suspend fun sendFrame(type: String, data: String): Boolean =
-        controller?.client?.send(com.superiorsoftllc.infantry.ui.protocol.Envelope(type, data)) ?: false
+        controller?.client?.send(com.superiorsoftllc.infantry.ui.protocol.Envelope(type, data, requestId = "link-${kotlin.random.Random.nextLong().toULong().toString(36)}")) ?: false
     override suspend fun request(type: String, data: String): LinkReply? {
         val client = controller?.client ?: return null
         val id = "link-${kotlin.random.Random.nextLong().toULong().toString(36)}"
