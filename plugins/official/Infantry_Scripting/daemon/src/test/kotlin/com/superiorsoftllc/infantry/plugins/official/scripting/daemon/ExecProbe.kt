@@ -15,6 +15,11 @@ object ExecProbe {
             "stdin" -> print(System.`in`.readBytes().decodeToString().uppercase())
             "sleep" -> Thread.sleep(args[1].toLong())
             "say" -> args.drop(1).forEach { println(it) }
+            // DEV-WORKTREE-EDIT-1: appends "<name> start" / "<name> end" to a shared file with a pause between, so overlapping runs interleave
+            "mark" -> {
+                val f = File(args[1])
+                f.appendText("${args[2]} start\n"); Thread.sleep(args[3].toLong()); f.appendText("${args[2]} end\n")
+            }
             "tree" -> {
                 val cp = System.getProperty("java.class.path")
                 val child = ProcessBuilder(File(System.getProperty("java.home"), "bin/java").path, "-cp", cp, ExecProbe::class.java.name, "sleep", "60000").inheritIO().start()
