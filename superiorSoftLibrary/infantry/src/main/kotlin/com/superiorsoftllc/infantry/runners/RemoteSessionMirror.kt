@@ -23,6 +23,7 @@ class RemoteSessionMirror(
     private val seen = ConcurrentHashMap<String, Seen>()
     private val firstSeen = ConcurrentHashMap<String, Long>()
     private val placedAs = ConcurrentHashMap<String, Placed>()
+    private val failedWhy = ConcurrentHashMap<String, String>()
 
     /**
      * RUNNER-TICKET-ROW-1: what the start pinned for [sessionId]: the harness, the effective [model], the orchestrator's checkout
@@ -52,13 +53,18 @@ class RemoteSessionMirror(
 
     /** RUNNER-SESSION-GHOST-1: [sessionId] was deleted: what this mirror kept about it goes too. */
     fun forget(sessionId: String) {
-        placedAs.remove(sessionId); seen.remove(sessionId); firstSeen.remove(sessionId)
+        placedAs.remove(sessionId); seen.remove(sessionId); firstSeen.remove(sessionId); failedWhy.remove(sessionId)
     }
 
     /** A runner event moved [sessionId] to [state] (a SessionState name; an unknown word is ignored). */
     fun status(sessionId: String, state: String) {
         val s = runCatching { SessionState.valueOf(state.trim().uppercase()) }.getOrNull() ?: return
         seen[sessionId] = Seen(s, clock())
+    }
+
+    /** GREEN-GAP-1: why [sessionId] FAILED on its runner (the runner's own error line); the failure card shows it instead of "no reason". */
+    fun failed(sessionId: String, reason: String) {
+        if (reason.isNotBlank()) failedWhy[sessionId] = reason.trim()
     }
 
     /** A turn of [sessionId] ended: the session rests until its next status says otherwise. */
@@ -80,6 +86,7 @@ class RemoteSessionMirror(
             worktreePath = p?.runnerWorktree, worktreeBranch = p?.branch, ticketId = p?.ticketId,
             projectId = p?.projectId, agentId = p?.agentId, role = p?.role, spawnedAt = firstSeen.computeIfAbsent(id) { now },
             lastHeartbeat = s?.at ?: now, state = s?.state ?: SessionState.STARTING,
+            lastError = if (s?.state == SessionState.FAILED) failedWhy[id] else null,
             // The brief went over the link with the start; the runner resumes its own conversation, so the board treats it as briefed.
             providerSessionId = REMOTE_PROVIDER, runCount = 1,
         )

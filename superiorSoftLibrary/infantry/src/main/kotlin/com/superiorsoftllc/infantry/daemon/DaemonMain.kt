@@ -2144,6 +2144,15 @@ class InfantryDaemon(
                     // RUNNER-PROMPT-RELAY-1: a prompt a runner session raised opens here; its close closes the card.
                     promptRelay.apply(runner, e)
                     if (e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.STATUS) remoteMirror.status(e.sessionId, e.payload)
+                    // GREEN-GAP-1: a session that FAILED on its runner carries the runner's own error, read from its transcript, so the
+                    // failure card never says "the daemon recorded no reason".
+                    if (e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.STATUS && e.payload.equals(SessionState.FAILED.name, ignoreCase = true)) {
+                        val rn = runnerPool.runnerOf(e.sessionId)
+                        val lines = (runnerPool.link(rn)?.readTranscript(e.sessionId) as? com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorReply.Ok)?.value.orEmpty()
+                        val why = lines.lastOrNull { it.contains("turn failed") }?.substringAfter("turn failed:", "")?.trim()?.takeIf { it.isNotEmpty() }
+                            ?: lines.lastOrNull { it.isNotBlank() }?.take(300)
+                        remoteMirror.failed(e.sessionId, why ?: "session failed on runner '$rn'; its transcript holds no error line")
+                    }
                     // RUNNER-PROMPT-RELAY-1: a client connected before a runner start never heard of the session (only the connect
                     // frame listed remote sessions), so its prompt card had no agent to show on. Each status or finish of a remote
                     // session pushes the session list, as every other session-list change does. Events are acked, so one push per change.
