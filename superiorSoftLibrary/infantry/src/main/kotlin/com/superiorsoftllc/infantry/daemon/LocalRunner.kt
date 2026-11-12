@@ -47,6 +47,8 @@ object LocalRunner {
         /** RUNNER-POOL-8: acknowledge and read the outbox; null = filter [events] (no ack). */
         eventsAcked: ((acked: Map<String, Long>) -> List<RunnerEvent>)? = null,
         transcript: (sessionId: String, fromLine: Int, maxLines: Int) -> List<String> = { _, _, _ -> emptyList() },
+        /** RUNNER-OUTPUT-1: (session, afterSequence) -> its stream frames; null = not offered. */
+        frames: ((sessionId: String, afterSequence: Long) -> List<com.superiorsoftllc.infantry.protocol.Envelope>)? = null,
         /** RUNNER-PROMPT-RELAY-1: apply the orchestrator's answer to an open prompt of a session; default none open. */
         answerPrompt: (sessionId: String, reply: com.superiorsoftllc.infantry.daemon.api.orchestrator.PromptReply) -> Boolean = { _, _ -> false },
     ) = LocalRunnerServices(
@@ -101,6 +103,7 @@ object LocalRunner {
         events = events,
         eventsAcked = eventsAcked,
         transcript = transcript,
+        frames = frames,
         // RUNNER-TEST-1: `session_remove --force` by another name, so a throwaway turn leaves nothing on this runner's list: a live
         // session is ended first (a forced kill marks the record ENDED before it returns), then its record goes.
         remove = { sessionId ->

@@ -185,6 +185,14 @@ interface RunnerLink {
     fun readTranscript(sessionId: String, fromLine: Int = 0, maxLines: Int = 0): OrchestratorReply<List<String>> = unoffered("readTranscript")
 
     /**
+     * RUNNER-OUTPUT-1: session [sessionId]'s own stream frames after the runner's [afterSequence] (turns, answer text, reasoning,
+     * errors, finishes: what a client of the runner itself would replay), each with the runner's sequence, in order. The orchestrator
+     * puts them on its own stream, so its app shows a remote session as a local one; the line read ([readTranscript]) loses the
+     * answer text whenever a harness printed a raw line. Null = not offered (an older binding or runner): read the lines instead.
+     */
+    fun readFrames(sessionId: String, afterSequence: Long): OrchestratorReply<List<com.superiorsoftllc.infantry.protocol.Envelope>>? = null
+
+    /**
      * RUNNER-PROMPT-RELAY-1 (1.4.0): the orchestrator's answer to a prompt session [sessionId] raised on the runner (relayed to it as a
      * [RunnerEvent.PROMPT] event): the runner resolves its open prompt [PromptReply.promptId] with it, exactly as a local client's
      * `prompt_response` would. Ok(true) = applied; Ok(false) = the prompt was no longer open (answered, timed out, session ended).

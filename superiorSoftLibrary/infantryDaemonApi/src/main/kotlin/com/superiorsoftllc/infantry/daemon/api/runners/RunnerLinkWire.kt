@@ -244,10 +244,15 @@ object RunnerLinkWire {
     data class EventsAnswer(val events: List<EventWire> = emptyList())
 
     @Serializable
-    data class TranscriptRequest(val sessionId: String, val fromLine: Int = 0, val maxLines: Int = 0)
+    data class TranscriptRequest(
+        val sessionId: String, val fromLine: Int = 0, val maxLines: Int = 0,
+        /** RUNNER-OUTPUT-1: set = answer the session's stream frames after this runner sequence ([TranscriptAnswer.frames]). */
+        val afterSequence: Long? = null,
+    )
 
+    /** RUNNER-OUTPUT-1: [frames] answers a request with `afterSequence`; null from an older runner, which answers [lines] only. */
     @Serializable
-    data class TranscriptAnswer(val lines: List<String> = emptyList())
+    data class TranscriptAnswer(val lines: List<String> = emptyList(), val frames: List<com.superiorsoftllc.infantry.protocol.Envelope>? = null)
 
     /**
      * RUNNER-CHECK-1: what to check. [projectId] and [harness] are the one the owner means to run there (a runner grants each id

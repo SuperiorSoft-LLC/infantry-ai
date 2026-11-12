@@ -172,6 +172,9 @@ class RunnerLinkServer(
                 val t = decode(F.TranscriptRequest.serializer(), data) ?: return refuse(seat, type, null, from, "$type refused: malformed request")
                 if (starts?.isLinked(t.sessionId) != true) return refuse(seat, type, null, from, "$type refused: session ${t.sessionId.take(SHOWN_TYPE_SIZE)} was not started by this orchestrator")
                 read(seat, type, from) { link ->
+                    // RUNNER-OUTPUT-1: the session's stream frames, when asked for and offered.
+                    val frames = t.afterSequence?.let { link.readFrames(t.sessionId, it) }
+                    if (frames is OrchestratorReply.Ok) return@read F.json.encodeToString(F.TranscriptAnswer.serializer(), F.TranscriptAnswer(frames = frames.value))
                     when (val lines = link.readTranscript(t.sessionId, t.fromLine, t.maxLines)) {
                         is OrchestratorReply.Ok -> F.json.encodeToString(F.TranscriptAnswer.serializer(), F.TranscriptAnswer(lines.value))
                         is OrchestratorReply.Unavailable -> null

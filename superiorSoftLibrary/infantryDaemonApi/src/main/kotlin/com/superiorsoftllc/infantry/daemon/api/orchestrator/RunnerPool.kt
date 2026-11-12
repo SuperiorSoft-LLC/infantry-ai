@@ -223,6 +223,8 @@ class LocalRunnerServices(
     val eventsAcked: ((acked: Map<String, Long>) -> List<RunnerEvent>)? = null,
     /** RUNNER-POOL-6: (session, fromLine, maxLines) -> transcript lines; default none. */
     val transcript: (sessionId: String, fromLine: Int, maxLines: Int) -> List<String> = { _, _, _ -> emptyList() },
+    /** RUNNER-OUTPUT-1: (session, afterSequence) -> its stream frames after that sequence; null = not offered. */
+    val frames: ((sessionId: String, afterSequence: Long) -> List<com.superiorsoftllc.infantry.protocol.Envelope>)? = null,
     /**
      * RUNNER-TEST-1: forget a session for good (the `session_remove` the owner runs by hand): its record and durable row go, as if it
      * had never run. Returns false for an unknown session; a live one is refused with [IllegalArgumentException].
@@ -264,6 +266,8 @@ class LocalRunnerLink(private val services: LocalRunnerServices) : RunnerLink {
         services.eventsAcked?.let { OrchestratorReply.Ok(it(acked)) } ?: super.events(acked)
     override fun readTranscript(sessionId: String, fromLine: Int, maxLines: Int): OrchestratorReply<List<String>> =
         OrchestratorReply.Ok(services.transcript(sessionId, fromLine, maxLines))
+    override fun readFrames(sessionId: String, afterSequence: Long): OrchestratorReply<List<com.superiorsoftllc.infantry.protocol.Envelope>>? =
+        services.frames?.let { OrchestratorReply.Ok(it(sessionId, afterSequence)) }
 
     override fun answerPrompt(sessionId: String, reply: PromptReply): OrchestratorReply<Boolean> =
         try {

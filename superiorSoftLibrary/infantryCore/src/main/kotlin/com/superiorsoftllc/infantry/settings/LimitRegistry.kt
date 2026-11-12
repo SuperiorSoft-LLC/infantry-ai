@@ -1129,6 +1129,13 @@ object LimitRegistry {
     )
 
     /** RUNNER-TEST-1: how often the test turn's transcript is read while it waits for the answer. */
+    /** RUNNER-OUTPUT-1: how often the orchestrator reads a running remote session's output, so the app chat fills live. */
+    val RUNNERS_OUTPUT_POLL_MS = LimitDef(
+        "limits.runners.outputPollMs", 1_000, "ms",
+        "How often the orchestrator reads the events and output of a session that is running on a remote runner, so its chat fills as the turn goes. Only while such a session runs; one link call per runner and per running session each poll. Longer = cheaper, the text shows later; 0 = off (output then comes with the heartbeat round, limits.runners.heartbeatSec).",
+        min = 0, max = 60_000, zeroMeans = "off",
+    )
+
     val RUNNERS_TEST_POLL_MS = LimitDef(
         "limits.runners.testPollMs", 1_000, "ms",
         "How often `infantry runner test` reads the test session's transcript over the link while it waits for the answer. Shorter = the reply shows sooner, at one link call each poll.",
@@ -1232,7 +1239,7 @@ object LimitRegistry {
         RUNNERS_PAIR_CODE_MIN, RUNNERS_PAIR_ATTEMPTS_PER_HOUR, RUNNERS_CREDENTIAL_ROTATE_DAYS, RUNNERS_LINK_PORT, RUNNERS_UP_START_SEC, RUNNERS_ADVERTISE_HOSTS_MAX, RUNNERS_AUDIT_SHOWN, RUNNERS_GRANT_PROJECTS_MAX, RUNNERS_LINK_CALL_SECONDS, RUNNERS_LINK_CHECK_SECONDS,
         RUNNERS_OUTBOX_MAX, RUNNERS_LOST_AFTER_MIN, RUNNERS_COMMIT_CHECK_SEC, RUNNERS_FORWARD_WAIT_SEC, RUNNERS_FORWARD_TIMEOUT_SEC, RUNNERS_FORWARD_PENDING_MAX,
         RUNNERS_ADD_HOST_TIMEOUT_SEC, RUNNERS_CONNECT_SEC, RUNNERS_CHECK_GIT_SEC, RUNNERS_CHECK_MIN_FREE_MB,
-        RUNNERS_TEST_TURN_SEC, RUNNERS_TEST_POLL_MS, RUNNERS_TEST_REPLY_CHARS, RUNNERS_LEND_SECRETS_MAX,
+        RUNNERS_TEST_TURN_SEC, RUNNERS_TEST_POLL_MS, RUNNERS_OUTPUT_POLL_MS, RUNNERS_TEST_REPLY_CHARS, RUNNERS_LEND_SECRETS_MAX,
         DOWNLOAD_RETRIES, DOWNLOAD_BACKOFF_MS, DOWNLOAD_CONNECT_TIMEOUT_SECONDS, DOWNLOAD_RESPONSE_TIMEOUT_SECONDS, DOWNLOAD_STALL_SECONDS, DOWNLOAD_MAX_MB, DOWNLOAD_REDIRECTS, DOWNLOAD_MOVE_RETRIES,
         PROGRESS_KEEP_FINISHED, PROGRESS_MIN_INTERVAL_MS,
     )

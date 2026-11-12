@@ -172,9 +172,13 @@ class RunnerPoolPinnedTicketE2ETest {
         assertTrue(listed.data.contains("r2"), "the listing names its runner: ${listed.data.take(400)}")
         // And its output is read from the runner on demand when a client asks for the session (`infantry logs <session>` sends this replay).
         orch.client.send(Envelope("replay_request", """{"lastSequence":0}""", sessionId))
-        orch.client.awaitWhere("the runner's stdout line reaches the orchestrator on demand") { f ->
-            f.type == Envelope.STDOUT && f.sessionId == sessionId && f.data.contains("hello from the runner")
+        // RUNNER-OUTPUT-1: as a sequenced chat frame on the orchestrator's own stream (an unsequenced stdout line is drawn by no client).
+        // The runner serves the session's own frames, so the line arrives as the frame type it has on the runner (this fake harness
+        // prints it raw: stdout, as a local session of it shows).
+        val line = orch.client.awaitWhere("the runner's output line reaches the orchestrator as a sequenced stream frame") { f ->
+            (f.type == Envelope.STDOUT || f.type == Envelope.TEXT_DELTA) && f.sessionId == sessionId && f.data.contains("hello from the runner")
         }
+        assertNotNull(line.sequence, "the frame is sequenced, so the app applies and replays it")
     }
 
     @Test
@@ -195,7 +199,7 @@ class RunnerPoolPinnedTicketE2ETest {
         orch.await(what = "the turn the orchestrator sent is in the runner's transcript") {
             orch.client.send(Envelope("replay_request", """{"lastSequence":0}""", sessionId))
             Thread.sleep(500)
-            orch.client.of(Envelope.STDOUT).any { it.sessionId == sessionId && it.data.contains("part two") }
+            orch.client.of(Envelope.TURN).any { it.sessionId == sessionId && it.data.contains("part two") }
         }
         assertTrue(orch.client.of(Envelope.ERROR).none { it.data.contains("unknown session") }, "the orchestrator did not refuse the prompt as an unknown session")
     }
