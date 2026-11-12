@@ -113,4 +113,31 @@ class ExecToolsTest {
         assertEquals("done", st["state"]!!.jsonPrimitive.content)
         assertEquals("5", st["exitCode"]!!.jsonPrimitive.content)
     }
+
+    /**
+     * DEV-WORKTREE-EDIT-1: two automatic merges reached the dev worktree one second apart and ran at once; the losing git process
+     * left the merged files at their old content. Runs that share a serial key must run one at a time, in arrival order, whether
+     * background or foreground; a different key does not wait.
+     */
+    @Test fun `runs with the same serial key never overlap and keep their order`() {
+        val f = File(root, "marks.txt")
+        val key = q(root.path)
+        val bg = { name: String, ms: Int -> obj(run("""{"command":${argv("mark", f.path, name, ms.toString())},"background":true,"serial":$key,"script":"$name"}""").text) }
+        val first = bg("A", 3000)
+        val second = bg("B", 300)
+        assertEquals("queued", second["state"]!!.jsonPrimitive.content, "B must wait behind A")
+        val other = File(root, "other.txt")
+        val fg = run("""{"command":${argv("mark", other.path, "X", "10")},"serial":"another-key"}""")
+        assertFalse(fg.isError, fg.text)
+        assertEquals("X start\nX end", other.readText().trim().replace("\r", ""))
+        assertFalse(f.exists() && "A end" in f.readText(), "a run on another key must not wait for A")
+        // the foreground run on the same key returns only after A and B ended
+        val c = run("""{"command":${argv("mark", f.path, "C", "10")},"serial":$key}""")
+        assertFalse(c.isError, c.text)
+        assertEquals(listOf("A start", "A end", "B start", "B end", "C start", "C end"), f.readLines().filter { it.isNotBlank() })
+        val deadline = System.currentTimeMillis() + 20_000
+        while (events.count { it.first == "exec.done" } < 2 && System.currentTimeMillis() < deadline) Thread.sleep(50)
+        val ids = events.filter { it.first == "exec.done" }.map { obj(it.second)["id"]!!.jsonPrimitive.content }
+        assertEquals(listOf(first["id"]!!.jsonPrimitive.content, second["id"]!!.jsonPrimitive.content), ids)
+    }
 }

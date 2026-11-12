@@ -215,6 +215,11 @@ failure. Result in `input.results[i].json`: `{exitCode, durationMs, stdoutTail, 
 `background = true` answers `{id, state = "running"}`; read it with `infantry_exec_status {id}` or continue from an
 `exec.done` hook.
 
+`serial = "<key>"` queues the run behind every earlier run with the same key: they run one at a time, in arrival
+order, background and foreground alike (a background run answers `state = "queued"` until its turn). Pass it for
+commands that share a resource, e.g. the repository path for every `git` command in one worktree: two `git merge`
+in the same worktree at once leave its files at the old content (DEV-WORKTREE-EDIT-1). A different key never waits.
+
 ```lua
 if not input.results then
   ih.exec{command = input.args.cmd, timeoutSec = 300, script = "check"}

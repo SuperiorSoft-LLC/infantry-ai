@@ -21,6 +21,8 @@ import java.io.File
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
 
 /** SCRIPT-CMD-1: the guard and limits of the process bridge. All data (plugin settings `scripting.exec.*`); a bad value falls back to the default. */
@@ -72,6 +74,8 @@ object CommandSplit {
  * SCRIPT-CMD-1: the Lua process bridge. `infantry_exec` runs a command line as the caller and answers {exitCode, durationMs, stdoutTail,
  * stderrTail, timedOut}; `background=true` answers a run id at once, `infantry_exec_status` reads it and the named event `exec.done`
  * announces its end. Never through a shell (argv runs directly, a string is split); a timeout kills the whole process tree.
+ * DEV-WORKTREE-EDIT-1: `serial = "<key>"` runs the command only after every earlier run with the same key ended (FIFO, foreground and
+ * background alike), so two commands that share a resource (two `git merge` in one worktree) never overlap.
  */
 class ExecTools(
     private val config: (String) -> String?,
@@ -112,13 +116,19 @@ class ExecTools(
     private val runs = ConcurrentHashMap<String, Run>()
     private val pool = Executors.newCachedThreadPool { r -> Thread(r, "exec-bridge").apply { isDaemon = true } }
 
+    /** One FIFO lane per `serial` key: a single worker thread that exists only while the lane has work. */
+    private val lanes = ConcurrentHashMap<String, ThreadPoolExecutor>()
+    private fun lane(key: String) = lanes.computeIfAbsent(key) {
+        ThreadPoolExecutor(0, 1, LANE_IDLE_SEC, TimeUnit.SECONDS, LinkedBlockingQueue()) { r -> Thread(r, "exec-serial").apply { isDaemon = true } }
+    }
+
     val exec: DaemonTool = object : DaemonTool {
         override val name = EXEC
         override val description = "Run a command line as you and get {exitCode, durationMs, stdoutTail, stderrTail, timedOut}. command = argv list (runs directly) or one string (split on spaces/quotes, no shell, no expansion). " +
-            "cwd (default: the project root), env, timeoutSec, stdin. background=true returns a run id at once (read it with $STATUS; event exec.done fires on its end). " +
+            "cwd (default: the project root), env, timeoutSec, stdin. serial=<key>: waits for every earlier run with that key (one at a time, in order; e.g. the repo path for git). background=true returns a run id at once (read it with $STATUS; event exec.done fires on its end). " +
             "Off by default: setting scripting.exec.enabled; allow-list scripting.exec.allow, roles scripting.exec.roles. Open to every role unless those say otherwise."
         override val inputSchema: JsonObject = Json.parseToJsonElement(
-            """{"type":"object","properties":{"command":{"description":"argv array, or one command-line string"},"cwd":{"type":"string"},"env":{"type":"object"},"timeoutSec":{"type":"integer"},"stdin":{"type":"string"},"background":{"type":"boolean"},"script":{"type":"string","description":"label carried in exec.done (the calling script's name)"},"project":{"type":"string"},"progress":{"type":"object","description":"background only: {label, session?, steps?: [names], markers?: true, percentRegex?, stepRegex?}. The daemon reads every output line (##infantry markers; stepRegex groups n,N,name for 'step n/N: name'; percentRegex group 1 = the percent) and drives that session's progress bar; done/fail from the exit code."}},"required":["command"]}""",
+            """{"type":"object","properties":{"command":{"description":"argv array, or one command-line string"},"cwd":{"type":"string"},"env":{"type":"object"},"timeoutSec":{"type":"integer"},"stdin":{"type":"string"},"background":{"type":"boolean"},"script":{"type":"string","description":"label carried in exec.done (the calling script's name)"},"project":{"type":"string"},"serial":{"type":"string","description":"queue key: runs with the same key run one at a time in arrival order (e.g. the repo path for git commands)"},"progress":{"type":"object","description":"background only: {label, session?, steps?: [names], markers?: true, percentRegex?, stepRegex?}. The daemon reads every output line (##infantry markers; stepRegex groups n,N,name for 'step n/N: name'; percentRegex group 1 = the percent) and drives that session's progress bar; done/fail from the exit code."}},"required":["command"]}""",
         ).jsonObject
         override val timeoutMs: Long = 620_000
         override fun call(call: ToolCall): ToolResult = try { runExec(call) } catch (e: Refusal) { ToolResult("$EXEC refused: ${e.message}", true) }
@@ -126,7 +136,7 @@ class ExecTools(
 
     val status: DaemonTool = object : DaemonTool {
         override val name = STATUS
-        override val description = "State of a background $EXEC run: running|done|timeout, exitCode and the output tails once it ended. No id: lists the running and recent jobs {id, label, session, percent, step, elapsedMs, state}. With id and state (a small object): stores the job's state, returned in its next exec.tick."
+        override val description = "State of a background $EXEC run: queued (waiting for its serial key)|running|done|timeout, exitCode and the output tails once it ended. No id: lists the running and recent jobs {id, label, session, percent, step, elapsedMs, state}. With id and state (a small object): stores the job's state, returned in its next exec.tick."
         override val inputSchema: JsonObject = Json.parseToJsonElement("""{"type":"object","properties":{"id":{"type":"string"},"state":{"type":"object"}}}""").jsonObject
         override val annotations: JsonObject = Json.parseToJsonElement("""{"readOnlyHint":true}""").jsonObject
         override fun call(call: ToolCall): ToolResult {
@@ -174,6 +184,7 @@ class ExecTools(
         val stdin = (a["stdin"] as? JsonPrimitive)?.contentOrNull
         val script = (a["script"] as? JsonPrimitive)?.contentOrNull.orEmpty()
         val background = (a["background"] as? JsonPrimitive)?.booleanOrNull == true
+        val serial = (a["serial"] as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
         val run = Run(UUID.randomUUID().toString().take(8), line, script, call.clientSessionId.orEmpty(), project)
         run.label = script.ifBlank { argv[0].substringAfterLast('/').substringAfterLast('\\') }
         val pa = a["progress"] as? JsonObject
@@ -188,12 +199,13 @@ class ExecTools(
                 { report(session, project, it) }, clock,
             )
         }
-        val work = { marks.begin(run.session, run.script.ifBlank { "exec" }, "exec").use { execute(run, argv, cwd, env, timeout, stdin, s.tailChars, role, background) } }
-        if (!background) return ToolResult(work().toString())
+        val work = { marks.begin(run.session, run.script.ifBlank { "exec" }, "exec").use { run.state = "running"; execute(run, argv, cwd, env, timeout, stdin, s.tailChars, role, background) } }
+        if (serial != null) run.state = "queued"
+        if (!background) return ToolResult((if (serial == null) work() else lane(serial).submit(work).get()).toString())
         pruneRuns()
         runs[run.id] = run
-        pool.execute { runCatching(work) }
-        return ToolResult(buildJsonObject { put("id", run.id); put("state", "running") }.toString())
+        (if (serial == null) pool else lane(serial)).execute { runCatching(work) }
+        return ToolResult(buildJsonObject { put("id", run.id); put("state", run.state) }.toString())
     }
 
     private fun execute(run: Run, argv: List<String>, cwd: File, env: Map<String, String>, timeoutSec: Long, stdin: String?, tail: Int, role: String, background: Boolean): JsonObject {
@@ -280,7 +292,7 @@ class ExecTools(
 
     private fun pruneRuns() {
         if (runs.size < MAX_RUNS) return
-        runs.values.filter { it.state != "running" }.take(runs.size - MAX_RUNS + 1).forEach { runs.remove(it.id) }
+        runs.values.filter { it.state != "running" && it.state != "queued" }.take(runs.size - MAX_RUNS + 1).forEach { runs.remove(it.id) }
     }
 
     private class Tail(private val cap: Int) {
@@ -311,6 +323,8 @@ class ExecTools(
         private const val MAX_NEW_LINES = 500
         private const val MAX_LINE = 1000
         private const val MAX_STATE = 4000
+        /** Seconds an idle serial lane keeps its thread before it ends (a new run starts a fresh one). */
+        private const val LANE_IDLE_SEC = 30L
 
         /** Seconds between exec.tick events: setting scripting.exec.tickSec, default 10, 1..3600. */
         fun tickSec(config: (String) -> String?): Long = config("scripting.exec.tickSec")?.trim()?.toLongOrNull()?.takeIf { it in 1L..3600L } ?: 10L
