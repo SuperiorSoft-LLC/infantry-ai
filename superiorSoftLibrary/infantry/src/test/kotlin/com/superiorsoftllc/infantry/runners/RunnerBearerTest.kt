@@ -265,6 +265,13 @@ class RunnerBearerTest {
         runner.close(); orch.close()
     }
 
+    @Test
+    fun `an old runner's detach refusal is explained as a stale image`() {
+        val old = "runner_link_pair refused: this runner is paired with another orchestrator (inf-x); run `infantry runner detach` on the runner first"
+        assertTrue(RunnerPeers.staleHint(old).contains("older than this app"))
+        assertEquals("", RunnerPeers.staleHint("runner_link_pair refused: wrong bearer"))
+    }
+
     private companion object {
         const val PEER = "100.64.0.9"
         val FP = "ab".repeat(32)

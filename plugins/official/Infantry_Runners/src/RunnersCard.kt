@@ -68,7 +68,7 @@ const val RUNNER_UP_COMMAND = "infantry runner up --name <name>"
  * RUNNER-PAIR-1 (step 1 of the owner's 2 steps): the one `docker run` that starts a runner on another machine. Its log prints the
  * endpoint and the bearer to paste into Add runner; nothing else is configured.
  */
-const val RUNNER_DOCKER_COMMAND = "docker run -d --name infantry-runner -e INFANTRY_MODE=runner -e INFANTRY_RUNNER_HOST=<this server's address> " +
+const val RUNNER_DOCKER_COMMAND = "docker run -d --restart unless-stopped --name infantry-runner -e INFANTRY_MODE=runner -e INFANTRY_RUNNER_HOST=<this server's address> " +
     "-p 8790:8790 -v infantry-runner:/data ghcr.io/superiorsoft-llc/infantry-ai:latest"
 
 /** RUNNER-PAIR-1: where the runner prints them. */
