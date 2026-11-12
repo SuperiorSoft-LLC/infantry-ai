@@ -83,6 +83,12 @@ class UpdateService(
     private val exit: () -> Unit,
     /** UPDATE-3: how many agents are working right now (sessions that are [isBusy], background work included). */
     private val runningAgents: () -> Int = { 0 },
+    /** UPDATER-KILLS-WORKERS-1: `update.waitForWorkers` (default on): "Restart now" waits until no agent is working. */
+    private val waitForWorkers: () -> Boolean = { false },
+    /** UPDATER-KILLS-WORKERS-1: called with nothing but the exit pending, so the busy sessions can be saved for [ResumeWorkers] (`update.resumeWorkers`). */
+    private val beforeExit: () -> Unit = {},
+    /** UPDATER-KILLS-WORKERS-1: how often the wait for idle workers looks again. */
+    private val waitPollMs: Long = 5_000,
     private val log: (String) -> Unit = { System.err.println("[infantry-update] $it") },
     /** UPDATER-DEFAULT-1: the wall clock [checkIfDue] measures `updater.checkIntervalHours` with. */
     private val clock: () -> Long = System::currentTimeMillis,
@@ -262,9 +268,20 @@ class UpdateService(
         _state.value = UpdateState.Restarting(ready.update)
         // Off the UI thread: the exit stops the daemon and ends the JVM.
         return scope.launch(Dispatchers.IO) {
+            if (runCatching(waitForWorkers).getOrDefault(false)) {
+                var n = runCatching(runningAgents).getOrDefault(0)
+                while (n > 0) {
+                    _indicator.value = true
+                    _state.value = UpdateState.Message("Update ready: waiting for $n agent${if (n == 1) "" else "s"} to finish, then restarting.")
+                    kotlinx.coroutines.delay(waitPollMs)
+                    n = runCatching(runningAgents).getOrDefault(0)
+                }
+                _state.value = UpdateState.Restarting(ready.update)
+            }
             log("install: launching msiexec for ${ready.installer.file} (via ${MsiHandoff.SCRIPT_NAME})")
             runCatching { handoff(ready.installer) }.fold(
                 onSuccess = {
+                    runCatching(beforeExit)
                     log("installer started; exiting so it can replace the app")
                     exit()
                 },

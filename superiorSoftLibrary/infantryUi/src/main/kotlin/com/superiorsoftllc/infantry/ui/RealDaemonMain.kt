@@ -57,7 +57,7 @@ fun main() = runRealDaemonUi()
 fun runRealDaemonUi(
     logsDir: File? = null,
     stateLock: StateDirLock.Held? = null,
-    updates: ((exit: () -> Unit, runningAgents: () -> Int) -> UpdateService)? = null,
+    updates: ((exit: () -> Unit, runningAgents: () -> Int, busySessions: () -> List<String>) -> UpdateService)? = null,
     /** NS5: a shell app passes its [DaemonLauncher]'s server (own state dir, seeded); null = this build has no daemon. */
     local: LocalServer? = InProcessDaemon(stateLock),
 ) {
@@ -78,7 +78,7 @@ fun runRealDaemonUi(
     if (headless) startLocal()
     if (remote != null) println("[infantry-ui] opening on remote server '${remote.name}' (${remote.url}); this computer's daemon is not started")
 
-    val updater = updates?.invoke({ local?.stop(); exitProcess(0) }, { (local as? InProcessDaemon)?.runningAgents() ?: 0 })
+    val updater = updates?.invoke({ local?.stop(); exitProcess(0) }, { (local as? InProcessDaemon)?.runningAgents() ?: 0 }, { (local as? InProcessDaemon)?.busySessions() ?: emptyList() })
     // UPDATE-1: on start, off the UI thread; a failure is a dismissable card, never a blocked window.
     updater?.check(manual = false)
 
@@ -160,6 +160,7 @@ internal class InProcessDaemon(
         println("[infantry-ui] daemon provider=${started.providerId} at $url")
         daemon = started
         wsUrl = url
+        resumeAfterUpdate(started)
         return LocalEndpoint(url, RemoteAccess.clientToken())
     }
 
@@ -195,6 +196,16 @@ internal class InProcessDaemon(
         override fun observe(listener: (com.superiorsoftllc.infantry.plugin.api.ProgressTask) -> Unit) = p().observe(listener)
         override fun cancel(id: String) = p().cancel(id)
         override fun retry(id: String) = p().retry(id)
+    }
+
+    fun busySessions(): List<String> = daemon?.manager?.list()?.filter { it.isBusy() }?.map { it.id } ?: emptyList()
+
+    /** UPDATER-KILLS-WORKERS-1: after an update restart, resume the sessions that were working (`update.resumeWorkers`, default on). */
+    private fun resumeAfterUpdate(started: InfantryDaemon) {
+        if (infantrySetting("update.resumeWorkers") == "false") return
+        val ids = com.superiorsoftllc.infantry.plugins.official.updater.ResumeWorkers.take(stateDir())
+        for (id in ids) runCatching { started.manager.resume(id, com.superiorsoftllc.infantry.plugins.official.updater.ResumeWorkers.RESUME_PROMPT) }
+            .onFailure { System.err.println("[infantry-ui] could not resume session $id after the update: ${it.message}") }
     }
 
     fun runningAgents(): Int = daemon?.manager?.list()?.count { it.isBusy() } ?: 0
