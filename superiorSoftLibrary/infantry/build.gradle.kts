@@ -172,6 +172,10 @@ tasks.register<JavaExec>("runDaemon") {
     // PERF-2: the same heap caps and GC as the installed app (jvm-caps.txt).
     jvmArgs(infantryJvmCaps)
     systemProperty("infantry.build", rootProject.extra["infantryBuild"] as String) // BUILD-STAMP-1
+    // RUNNER-GREEN-RUN-1: a dev daemon loads the plugins installDist bundles (runner link, harnesses, board...), unsigned
+    // in a repo build, so devTrust as the UI dev runs pass it. Without these two a `gradle run` daemon loaded 0 plugins.
+    systemProperty("infantry.plugins.bundled", layout.buildDirectory.dir("install/infantry/modules").get().asFile.absolutePath)
+    systemProperty("infantry.plugins.devTrust", "true")
 }
 
 
