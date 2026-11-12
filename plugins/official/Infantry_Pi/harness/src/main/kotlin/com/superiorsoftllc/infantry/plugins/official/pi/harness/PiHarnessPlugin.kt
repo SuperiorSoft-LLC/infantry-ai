@@ -46,7 +46,8 @@ class PiHarness internal constructor(
     constructor(host: HarnessHost) : this(
         host,
         { PiCommand.resolveLauncher(host) },
-        PiModels({ PiModels.runListModels(PiCommand.resolveLauncher(host) + "--list-models") }),
+        // RUNNER-GREEN-RUN-1: the Command Code extension too, so a CMD_API_KEY in this environment lists the commandcode/* models.
+        PiModels({ PiModels.runListModels(PiCommand.resolveLauncher(host) + PiExtensions.launchArgs(host.stateDir, PiExtensions.COMMANDCODE) + "--list-models") }),
     )
 
     override val id: String = HARNESS_ID
@@ -64,7 +65,8 @@ class PiHarness internal constructor(
     override fun process(request: HarnessRequest): HarnessProcess {
         val mcp = host.mcpLaunch(emptyMap())
         return HarnessProcess(
-            PiCommand.command(launcher(), request.model, request.sessionId, request.effort) + PiExtensions.launchArgs(host.stateDir, PiExtensions.APPROVAL) + PiExtensions.mcpArgs(host.stateDir, mcp),
+            PiCommand.command(launcher(), request.model, request.sessionId, request.effort) + PiExtensions.launchArgs(host.stateDir, PiExtensions.APPROVAL) +
+                PiExtensions.launchArgs(host.stateDir, PiExtensions.COMMANDCODE) + PiExtensions.mcpArgs(host.stateDir, mcp),
             env = mapOf(PiExtensions.APPROVAL_ENV to request.toolApproval.name) + PiExtensions.mcpEnv(mcp),
         )
     }

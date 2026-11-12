@@ -96,7 +96,8 @@ class PiPluginTest {
     // ---- argv ---------------------------------------------------------------------------------
 
     @Test fun `a one-shot run is pi --mode json with the model, thinking level and session`() {
-        val gate = listOf("-e", File(dir, PiExtensions.APPROVAL).absolutePath)
+        // RUNNER-GREEN-RUN-1: the Command Code provider extension loads on every run (it registers nothing without CMD_API_KEY).
+        val gate = listOf("-e", File(dir, PiExtensions.APPROVAL).absolutePath, "-e", File(dir, PiExtensions.COMMANDCODE).absolutePath)
         assertEquals(listOf("/opt/pi/pi", "--mode", "json") + gate, harness().process(request()).command)
         assertEquals(
             listOf("/opt/pi/pi", "--mode", "json", "--model", "m", "--thinking", "high", "--session", "s-1") + gate,
@@ -105,8 +106,9 @@ class PiPluginTest {
     }
 
     @Test fun `a js entry point runs on the node the daemon resolves, a native pi needs none`() {
-        assertEquals(listOf("/opt/node/bin/node", "/x/cli.js", "--mode", "json", "-e", File(dir, PiExtensions.APPROVAL).absolutePath), harness("/x/cli.js").process(request()).command)
-        assertEquals(listOf("/x/pi.cmd", "--mode", "json", "-e", File(dir, PiExtensions.APPROVAL).absolutePath), harness("/x/pi.cmd").process(request()).command)
+        val ext = listOf("-e", File(dir, PiExtensions.APPROVAL).absolutePath, "-e", File(dir, PiExtensions.COMMANDCODE).absolutePath)
+        assertEquals(listOf("/opt/node/bin/node", "/x/cli.js", "--mode", "json") + ext, harness("/x/cli.js").process(request()).command)
+        assertEquals(listOf("/x/pi.cmd", "--mode", "json") + ext, harness("/x/pi.cmd").process(request()).command)
         assertEquals(listOf("node", "/x/cli.js"), PiCommand.launcherFor("/x/cli.js", node = { "node" }))
     }
 
@@ -250,7 +252,7 @@ class PiPluginTest {
     @Test fun `launch is pi --mode rpc, resumes the provider session and loads the todo extension`() {
         val s = PiSession(FakeHost(dir), { listOf("pi") })
         val p = s.launch(request("m", "prov-1", "low"), emptyMap())
-        assertEquals(listOf("pi", "--mode", "rpc", "--model", "m", "--thinking", "low", "--session", "prov-1", "-e", File(dir, PiExtensions.TODO).absolutePath, "-e", File(dir, PiExtensions.APPROVAL).absolutePath), p.command)
+        assertEquals(listOf("pi", "--mode", "rpc", "--model", "m", "--thinking", "low", "--session", "prov-1", "-e", File(dir, PiExtensions.TODO).absolutePath, "-e", File(dir, PiExtensions.APPROVAL).absolutePath, "-e", File(dir, PiExtensions.COMMANDCODE).absolutePath), p.command)
         assertEquals("DENY", p.env[PiExtensions.APPROVAL_ENV])
         // A different session id does not change the fingerprint (the host resumes), a different model does.
         assertEquals(s.fingerprint(request("m", "a"), emptyMap()), s.fingerprint(request("m", "b"), emptyMap()))

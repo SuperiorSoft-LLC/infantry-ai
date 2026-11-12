@@ -26,6 +26,9 @@ internal object PiExtensions {
     const val MCP = "infantry-mcp.ts"
     const val MCP_ENV = "INFANTRY_PI_MCP"
 
+    /** RUNNER-GREEN-RUN-1: pi has no Command Code provider; this registers `commandcode` from the service's own model list when CMD_API_KEY is set. */
+    const val COMMANDCODE = "infantry-commandcode.ts"
+
     /** The [MCP_ENV] entry for [launch], or nothing when the host grants no MCP launch. */
     fun mcpEnv(launch: HarnessProcess?): Map<String, String> {
         if (launch == null || launch.command.isEmpty()) return emptyMap()
