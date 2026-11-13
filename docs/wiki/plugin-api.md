@@ -404,6 +404,19 @@ directory is the official `Infantry_Cards` daemon half (capabilities `cards.list
 that declares a type owns it. A role may name a card type in its persona; with the plugin gone the role still works and
 the card shows as code.
 
+**Data files in a package (PLUGIN-PKG-FILES-1).** A packaged install (`.ihq`, `infantry plugin install <folder>`, a catalog
+entry) carries `module.json`, the lib folder, the layout folder and the data folders module.json `files` declares:
+
+```json
+"files": ["cards", "roles"]
+```
+
+Each is one top-level folder name (not `lib`, `layout`, `deps` or `META-INF`, compared without case; not a device name).
+Every file under it is packed by the `ihq` Gradle task and by a folder install, covered by the package signature and by the
+same size, entry-count and safe-name checks as the jars, and unpacked into the module folder, so a `cards[].spec` or
+`roles[].persona` path resolves there. A `.jar` or `.class` in a data folder refuses the package: code lives only in the
+lib folder. Rule: `PackageFiles` (`IhqInstaller.kt`).
+
 **Plugin roles (ROLE-PLUGIN-1).** A module can bring roles in module.json `roles` (read by the official `Infantry_Roles`
 daemon half, never by the client):
 
@@ -413,8 +426,8 @@ daemon half, never by the client):
 ```
 
 `id` follows the role-id rule; `persona` is the text itself, or a `.md`/`.txt` path inside the module folder (a missing
-file is reported and the role is not seeded; a packaged install carries only `module.json`, the lib and layout folders, so a
-published plugin writes the persona inline);
+file is reported and the role is not seeded; a packaged plugin lists the folder in module.json `files`, below, so the file
+arrives with the install);
 `cards` / `tools` name preferred card types and tool or capability names, by id, from any module. When the module loads
 (start, install, enable; the daemon publishes the named event `modules.changed`), the role is written to the role
 catalog if its id is free, marked `plugin: <module>`. Until the owner edits it, a newer declaration refreshes it; after an
@@ -699,6 +712,7 @@ Generated for the `infantryPlugins` guard `SdkTypesDocumentedGuardTest`: every p
 
 - `IhqInstaller`: S5: installs a `.ihq` (a zip with `module.json`, the jars under `lib/` <!-- docs-freshness: ignore --> and a jarsigner signature over the whole zip) into the tier folder that [PluginFolders.scan] already reads.
 - `IhqRefusal`
+- `PackageFiles`: PLUGIN-PKG-FILES-1: the rule for a module's declared data folders (module.json `files`), shared by the installer and every place that packs a folder into a package.
 - `IhqResult`
 - `InstallSettings`: S5 (desktop JVM only): the settings of an install, `<plugins root>/install.json`.
 - `NestedDep`: NS3: one `deps/<name>.ihq` of a composition: its own [tier] from its own [signer].

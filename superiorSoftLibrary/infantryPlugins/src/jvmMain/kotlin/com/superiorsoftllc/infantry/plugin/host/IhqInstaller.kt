@@ -64,6 +64,30 @@ data class NestedDep(val name: String, val version: String, val tier: Tier?, val
 private class Refusal(val reason: IhqRefusal, message: String) : Exception(message)
 
 /**
+ * PLUGIN-PKG-FILES-1: the rule for a module's declared data folders (module.json `files`), shared by the installer and every
+ * place that packs a folder into a package. A folder is one top-level name, not reserved; a data file is never code.
+ */
+object PackageFiles {
+    private val NAME = Regex("[A-Za-z0-9][A-Za-z0-9_-]{0,63}")
+    /** The package's own folders, and what the signature lives in. Compared without case (Windows folders are case-blind). */
+    val RESERVED = setOf("lib", "layout", "deps", "meta-inf")
+
+    /** Why [folder] cannot be a data folder, or null when it can. */
+    fun problem(folder: String): String? = when {
+        !NAME.matches(folder) -> "data folder '${folder.take(80)}' is not one plain folder name"
+        folder.lowercase() in RESERVED -> "data folder '$folder' is reserved"
+        folder.uppercase() in IhqInstaller.RESERVED_NAMES -> "data folder '$folder' is a reserved device name"
+        else -> null
+    }
+
+    /** A code file, which only `lib/` may carry. */
+    fun isCode(path: String): Boolean = path.endsWith(".jar", ignoreCase = true) || path.endsWith(".class", ignoreCase = true)
+
+    /** True when [rel] (a `/` path inside the package) is under one of [folders]. */
+    fun under(rel: String, folders: Collection<String>): Boolean = folders.any { rel.startsWith("$it/") }
+}
+
+/**
  * S5: installs a `.ihq` (a zip with `module.json`, the jars under `lib/` and a jarsigner signature over the whole zip) into the
  * tier folder that [PluginFolders.scan] already reads. Everything is checked before anything is visible: the package is
  * unpacked into a `_install-` staging folder under the root (the scan skips `_` folders) and renamed into place, so a failure
@@ -126,12 +150,18 @@ object IhqInstaller {
                 if (entries.size > settings.maxEntries) throw Refusal(IhqRefusal.TOO_MANY_ENTRIES, "${entries.size} entries, the limit is ${settings.maxEntries}")
                 entries.forEach { checkName(it.name) }
                 val payload = entries.filter { !it.name.startsWith("META-INF/") }
+                // PLUGIN-PKG-FILES-1: the data folders module.json declares; the signature still covers every byte (read again below).
+                val dataFolders = declaredFolders(jar)
                 for (e in payload) {
                     val n = e.name
                     fun inFolder(folder: String, ext: String) = n == "$folder/" || (n.startsWith("$folder/") && n.count { it == '/' } == 1 && n.endsWith(ext))
                     val ok = n == "module.json" || n == "lib/" || (n.startsWith("lib/") && (e.isDirectory || n.endsWith(".jar"))) ||
                         inFolder("layout", ".json") || (!nested && inFolder("deps", ".ihq"))
-                    if (!ok) throw Refusal(IhqRefusal.UNEXPECTED_ENTRY, "unexpected entry '$n' (only module.json, lib/*.jar, layout/*.json${if (nested) "" else " and deps/*.ihq"} are allowed)")
+                    if (!ok && PackageFiles.under(n, dataFolders)) {
+                        if (!e.isDirectory && PackageFiles.isCode(n)) throw Refusal(IhqRefusal.UNEXPECTED_ENTRY, "code entry '$n' in a data folder (code goes in lib/)")
+                        continue
+                    }
+                    if (!ok) throw Refusal(IhqRefusal.UNEXPECTED_ENTRY, "unexpected entry '$n' (only module.json, lib/*.jar, layout/*.json${if (nested) "" else ", deps/*.ihq"} and files under the module.json `files` folders are allowed)")
                 }
                 if (payload.none { it.name == "module.json" }) throw Refusal(IhqRefusal.BAD_MANIFEST, "no module.json")
 
@@ -219,11 +249,23 @@ object IhqInstaller {
         root.listFiles { f -> f.isDirectory && f.name.startsWith("_install-") }.orEmpty().forEach { it.deleteRecursively() }
     }
 
-    private val RESERVED_NAMES = setOf("CON", "PRN", "AUX", "NUL") + (1..9).flatMap { listOf("COM$it", "LPT$it") }
+    internal val RESERVED_NAMES = setOf("CON", "PRN", "AUX", "NUL") + (1..9).flatMap { listOf("COM$it", "LPT$it") }
+
+    /**
+     * PLUGIN-PKG-FILES-1: module.json's `files`, read before the payload is checked (the entry list is checked against it); a bad
+     * folder name refuses the package. Unreadable here = no data folders; the full parse after unpacking reports the manifest.
+     */
+    private fun declaredFolders(jar: JarFile): List<String> {
+        val e = jar.getJarEntry("module.json") ?: return emptyList()
+        val m = runCatching { jar.getInputStream(e).use { PluginJson.decodeFromString(ModuleManifest.serializer(), it.readBytes().decodeToString()) } }.getOrNull()
+            ?: return emptyList()
+        m.files.forEach { f -> PackageFiles.problem(f)?.let { throw Refusal(IhqRefusal.BAD_MANIFEST, it) } }
+        return m.files
+    }
 
     private fun checkName(name: String) {
         val bad = name.isEmpty() || name.startsWith("/") || name.contains('\\') || name.contains('\u0000') ||
-            Regex("^[A-Za-z]:").containsMatchIn(name) || name.split('/').any { it == ".." || it == "." }
+            Regex("^[A-Za-z]:").containsMatchIn(name) || name.split('/').any { it == ".." || it == "." || it.substringBefore('.').uppercase() in RESERVED_NAMES }
         if (bad) throw Refusal(IhqRefusal.UNSAFE_ENTRY, "unsafe entry name '${name.take(80)}'")
     }
 

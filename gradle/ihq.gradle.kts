@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
 // S5: packages a plugin module into <Vendor_Module>.ihq (apply with: apply(from = rootProject.file("gradle/ihq.gradle.kts"))).
-// Layout: module.json (its "jar" rewritten to lib/<jar>), lib/<the module's jar>. Run `ihq`; output build/ihq/<name>.ihq.
+// Layout: module.json (its "jar" rewritten to lib/<jar>), lib/<the module's jar>, and the data folders module.json `files` names. Run `ihq`; output build/ihq/<name>.ihq.
 // Reads <projectDir>/module.json and the project's `jar` task. Signing is optional and never uses a key from the repo:
 // pass -Pihq.keystore=<file> -Pihq.alias=<alias> (password in env IHQ_STOREPASS) and jarsigner signs the whole package.
 // The installer (IhqInstaller) decides the tier from the signer; an unsigned .ihq is only accepted if install.json allows it.
@@ -37,6 +37,8 @@ tasks.register<Zip>("ihq") {
     isReproducibleFileOrder = true
     from(ihqManifest.map { ihqDir.get().file("stage/module.json") })
     from(jarTask.map { it.archiveFile }) { into("lib") }
+    // PLUGIN-PKG-FILES-1: the data folders module.json `files` declares go in as they are.
+    (manifest()["files"] as? List<*>).orEmpty().filterIsInstance<String>().forEach { d -> from(layout.projectDirectory.dir(d)) { into(d) } }
     val keystore = providers.gradleProperty("ihq.keystore")
     val alias = providers.gradleProperty("ihq.alias")
     val storePass = providers.environmentVariable("IHQ_STOREPASS")
