@@ -200,7 +200,7 @@ private const val SESSION_REPLAY_GAP_TYPE = "replay_gap"
 
 /** POLICY-1 (docs/POLICY.md): daemon -> client, the active policy (JSON PolicyWire); answers `policy_get` / `policy_set` too. */
 internal const val POLICY_FRAME = "policy"
-private const val SESSION_REPLAY_BUFFER_CAPACITY = 256
+internal const val SESSION_REPLAY_BUFFER_CAPACITY = 256
 private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
 /** STATS-1: one per daemon process, so the per-session resolved-path cache outlives a single connection. */
@@ -220,7 +220,7 @@ private val usageMeter: com.superiorsoftllc.infantry.usagemeter.UsageMeter? by l
 
 /** PROMPT-1: numbers each WebSocket connection, so `prompt_resolved.resolvedBy` names the one that answered. */
 private val promptClientCounter = java.util.concurrent.atomic.AtomicLong()
-private val SESSION_STREAM_FRAME_TYPES = setOf(
+internal val SESSION_STREAM_FRAME_TYPES = setOf(
     Envelope.SESSION,
     Envelope.STATUS,
     Envelope.STDOUT,
@@ -2824,112 +2824,6 @@ private fun com.superiorsoftllc.infantry.protocol.RunPhase.sessionState(): Sessi
     else -> SessionState.IDLE
 }
 
-/** Assign each live session-stream frame exactly one increasing sequence before publishing it. */
-private class SessionFrameSequencer(
-    private val history: SessionHistoryStore? = null,
-    /** RUNNER-UNIFY-3: called after a batch put at least one numbered frame on a stream (wakes a held runner frame pull). */
-    private val onPublished: () -> Unit = {},
-) {
-    private class State {
-        var latestSequence = 0L
-        var evictedCount = 0L
-        val frames = ArrayDeque<Envelope>()
-    }
-
-    private val sessions = ConcurrentHashMap<String, State>()
-
-    fun publish(clients: List<Channel<Envelope>>, frames: List<Envelope>) {
-        val sessionId = frames.firstNotNullOfOrNull { frame ->
-            frame.sessionId?.takeIf { frame.type in SESSION_STREAM_FRAME_TYPES }
-        }
-        if (sessionId == null) {
-            for (frame in frames) for (client in clients) client.trySend(frame)
-            return
-        }
-
-        val state = sessions.computeIfAbsent(sessionId) { State() }
-        synchronized(state) {
-            for (frame in frames) {
-                val published = if (frame.sessionId == sessionId && frame.type in SESSION_STREAM_FRAME_TYPES) {
-                    frame.copy(sequence = ++state.latestSequence).also { sequenced ->
-                        if (state.frames.size >= SESSION_REPLAY_BUFFER_CAPACITY) {
-                            state.frames.removeFirst()
-                            state.evictedCount++
-                        }
-                        state.frames.addLast(sequenced)
-                        history?.record(sequenced)
-                    }
-                } else {
-                    frame
-                }
-                for (client in clients) client.trySend(published)
-            }
-        }
-        runCatching(onPublished)
-    }
-
-    /**
-     * CLI-PTY-5: put [loaded] (a session's kept history) on [sessionId]'s stream before anything live. The frames are numbered
-     * after the dropped ones, so a replay from 0 also answers a gap that says how many older items were dropped.
-     */
-    fun seed(sessionId: String, loaded: SessionHistoryStore.Loaded) {
-        val state = sessions.computeIfAbsent(sessionId) { State() }
-        synchronized(state) {
-            if (state.latestSequence != 0L) return
-            val kept = loaded.frames.takeLast(SESSION_REPLAY_BUFFER_CAPACITY)
-            state.evictedCount = loaded.dropped + (loaded.frames.size - kept.size)
-            state.latestSequence = state.evictedCount
-            for (frame in kept) state.frames.addLast(frame.copy(sequence = ++state.latestSequence))
-        }
-    }
-
-    /** CLI-PTY-5: the session was deleted: its stream and its kept history go. */
-    fun forget(sessionId: String) {
-        sessions.remove(sessionId)
-        history?.forget(sessionId)
-    }
-
-    fun replayAfter(sessionId: String, lastSequence: Long): ReplayBatch? {
-        val state = sessions[sessionId] ?: return null
-        return synchronized(state) {
-            val oldestAvailableSequence = state.frames.firstOrNull()?.sequence
-            val latestAvailableSequence = state.frames.lastOrNull()?.sequence
-            val gap = if (
-                oldestAvailableSequence != null && latestAvailableSequence != null &&
-                lastSequence < oldestAvailableSequence - 1L
-            ) {
-                SessionReplayGapPayload(
-                    requestedAfterSequence = lastSequence,
-                    oldestAvailableSequence = oldestAvailableSequence,
-                    latestAvailableSequence = latestAvailableSequence,
-                    evictedCount = state.evictedCount,
-                )
-            } else {
-                null
-            }
-            ReplayBatch(
-                gap = gap,
-                frames = state.frames.filter { (it.sequence ?: Long.MIN_VALUE) > lastSequence },
-            )
-        }
-    }
-}
-
-@Serializable
-private data class SessionReplayRequestPayload(val lastSequence: Long)
-
-@Serializable
-private data class SessionReplayGapPayload(
-    val requestedAfterSequence: Long,
-    val oldestAvailableSequence: Long,
-    val latestAvailableSequence: Long,
-    val evictedCount: Long,
-)
-
-private data class ReplayBatch(
-    val gap: SessionReplayGapPayload?,
-    val frames: List<Envelope>,
-)
 
 /**
  * How a run ended, in neutral terms.

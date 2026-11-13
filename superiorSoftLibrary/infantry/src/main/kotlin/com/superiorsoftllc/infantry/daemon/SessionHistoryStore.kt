@@ -26,6 +26,10 @@ import java.util.concurrent.TimeUnit
  *
  * Writes go through one background thread, so the publish path never waits on the disk. A file is compacted to its
  * newest [maxFrames] items once it holds [COMPACT_FACTOR] times that many lines. [maxFrames] 0 keeps nothing.
+ *
+ * RUNNER-RESTART-FRAMES-1: beside the chat, each session's highest stream sequence is kept (`<dir>/<sessionId>.seq`, written
+ * by the same thread, whatever [maxFrames] is), so a restarted process continues a session's numbering ([highWater]) instead
+ * of starting again at 1: a runner's orchestrator drops every frame at or below the last sequence it took of a session.
  */
 class SessionHistoryStore(
     private val dir: File,
@@ -33,16 +37,19 @@ class SessionHistoryStore(
     private val json: Json = Json { ignoreUnknownKeys = true; encodeDefaults = false },
 ) {
     /** One session's loaded history: [frames] (unsequenced, oldest first) and how many older items were [dropped]. */
-    data class Loaded(val frames: List<Envelope>, val dropped: Long)
+    data class Loaded(val frames: List<Envelope>, val dropped: Long, val highWater: Long = 0L)
 
     private sealed interface Job {
         data class Append(val sessionId: String, val line: String) : Job
         data class Delete(val sessionId: String) : Job
+        data class Mark(val sessionId: String, val sequence: Long) : Job
         class Flush(val done: java.util.concurrent.CountDownLatch) : Job
     }
 
     private val queue = LinkedBlockingQueue<Job>()
     private val lineCounts = HashMap<String, Int>()
+    /** session -> its highest stream sequence known to this process (read from disk once, then kept current). */
+    private val highWaters = HashMap<String, Long>()
 
     private val writer: Thread by lazy {
         Thread(::drain, "infantry-chat-history").also { it.isDaemon = true; it.start() }
@@ -51,15 +58,41 @@ class SessionHistoryStore(
     /** Record [frame] if it is one a transcript is drawn from; never blocks. */
     fun record(frame: Envelope) {
         val sessionId = frame.sessionId?.takeIf { it.isNotBlank() && safeId(it) } ?: return
+        frame.sequence?.let { mark(sessionId, it) }
         if (maxFrames() <= 0) return
         val kept = keepable(frame) ?: return
         writer
         queue.offer(Job.Append(sessionId, json.encodeToString(Envelope.serializer(), kept.copy(sequence = null))))
     }
 
+    /**
+     * RUNNER-RESTART-FRAMES-1: the highest stream sequence [sessionId] had, in this process or (from its `.seq` file) an earlier
+     * one; 0 when none is known. A new stream numbers after it.
+     */
+    fun highWater(sessionId: String): Long {
+        if (!safeId(sessionId)) return 0L
+        synchronized(highWaters) { highWaters[sessionId]?.let { return it } }
+        val read = readHighWater(sessionId)
+        return synchronized(highWaters) { maxOf(read, highWaters[sessionId] ?: 0L).also { highWaters[sessionId] = it } }
+    }
+
+    private fun mark(sessionId: String, sequence: Long) {
+        val raised = synchronized(highWaters) {
+            val known = highWaters[sessionId] ?: readHighWater(sessionId)
+            (sequence > known).also { highWaters[sessionId] = maxOf(known, sequence) }
+        }
+        if (!raised) return
+        writer
+        queue.offer(Job.Mark(sessionId, sequence))
+    }
+
+    private fun readHighWater(sessionId: String): Long =
+        runCatching { File(dir, sessionId + SEQ_SUFFIX).takeIf { it.isFile }?.readText()?.trim()?.toLongOrNull() }.getOrNull() ?: 0L
+
     /** Forget [sessionId]'s history (the session was deleted). */
     fun forget(sessionId: String) {
         if (!safeId(sessionId)) return
+        synchronized(highWaters) { highWaters.remove(sessionId) }
         writer
         queue.offer(Job.Delete(sessionId))
     }
@@ -89,8 +122,14 @@ class SessionHistoryStore(
             val read = runCatching { readItems(file) }.getOrNull() ?: continue
             if (read.items.isEmpty()) continue
             val kept = read.items.takeLast(max)
-            out[id] = Loaded(kept, read.dropped + (read.items.size - kept.size))
+            out[id] = Loaded(kept, read.dropped + (read.items.size - kept.size), highWater(id))
             synchronized(lineCounts) { lineCounts[id] = read.items.size }
+        }
+        // RUNNER-RESTART-FRAMES-1: a session with a sequence but no kept chat still continues its numbering; a gone one's mark goes.
+        for (file in dir.listFiles { f -> f.isFile && f.name.endsWith(SEQ_SUFFIX) }.orEmpty()) {
+            val id = file.name.removeSuffix(SEQ_SUFFIX)
+            if (id !in known) { runCatching { file.delete() }; continue }
+            if (id !in out) highWater(id).takeIf { it > 0 }?.let { out[id] = Loaded(emptyList(), 0L, it) }
         }
         return out
     }
@@ -134,15 +173,20 @@ class SessionHistoryStore(
             val batch = ArrayList<Job>().apply { add(first); queue.drainTo(this) }
             // Group appends per session, in order, so one file open serves a burst of deltas.
             val pending = LinkedHashMap<String, StringBuilder>()
+            val marks = LinkedHashMap<String, Long>()
             fun writePending() {
                 for ((id, text) in pending) runCatching { append(id, text.toString()) }
                 pending.clear()
+                for ((id, seq) in marks) runCatching { writeMark(id, seq) }
+                marks.clear()
             }
             for (job in batch) when (job) {
                 is Job.Append -> pending.getOrPut(job.sessionId) { StringBuilder() }.append(job.line).append('\n')
+                is Job.Mark -> marks[job.sessionId] = maxOf(job.sequence, marks[job.sessionId] ?: 0L)
                 is Job.Delete -> {
                     writePending()
                     runCatching { File(dir, job.sessionId + SUFFIX).delete() }
+                    runCatching { File(dir, job.sessionId + SEQ_SUFFIX).delete() }
                     synchronized(lineCounts) { lineCounts.remove(job.sessionId) }
                 }
                 is Job.Flush -> { writePending(); job.done.countDown() }
@@ -165,6 +209,15 @@ class SessionHistoryStore(
         if (max > 0 && lines > max.toLong() * COMPACT_FACTOR) compact(file, sessionId, max)
     }
 
+    /** The mark replaces the file whole (temp file, then moved over), so a crash never leaves a torn number. */
+    private fun writeMark(sessionId: String, sequence: Long) {
+        dir.mkdirs()
+        val file = File(dir, sessionId + SEQ_SUFFIX)
+        val tmp = File(dir, sessionId + SEQ_SUFFIX + ".tmp")
+        tmp.writeText(sequence.toString())
+        java.nio.file.Files.move(tmp.toPath(), file.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+    }
+
     private fun countLines(file: File): Int = runCatching { file.useLines { it.count() } }.getOrDefault(0)
 
     /**
@@ -185,6 +238,9 @@ class SessionHistoryStore(
 
     companion object {
         const val SUFFIX = ".jsonl"
+
+        /** RUNNER-RESTART-FRAMES-1: the file holding a session's highest stream sequence. */
+        const val SEQ_SUFFIX = ".seq"
 
         /** A file grows to this many times the kept count before it is compacted (bounds disk and load time). */
         const val COMPACT_FACTOR = 4
