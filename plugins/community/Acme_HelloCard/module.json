@@ -10,6 +10,7 @@
   "implementations": [
     { "registry": "chat.cards", "key": "hello" }
   ],
+  "files": ["cards"],
   "cards": [
     { "type": "hello", "summary": "Greeting box: bold title and one line of text", "spec": "cards/hello.md",
       "images": { "hosts": ["upload.wikimedia.org", "*.gstatic.com"] } }

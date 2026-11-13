@@ -279,6 +279,53 @@ class IhqInstallerTest {
         assertTrue(File(root, "community/Test_Mod/lib/Test_Mod-daemon.jar").isFile)
     }
 
+    private fun withFiles(files: String) = manifest().dropLast(1) + ",\"files\":$files}"
+
+    @Test fun `PLUGIN-PKG-FILES-1 declared data folders are signed and unpacked`() {
+        val ks = key("acme")
+        val p = zip("Test_Mod.ihq", mapOf("module.json" to withFiles("[\"cards\",\"roles\"]").toByteArray(), "lib/Test_Mod.jar" to ByteArray(50) { it.toByte() },
+            "cards/hello.md" to "spec".toByteArray(), "cards/deep/x.json" to "{}".toByteArray(), "roles/agent.md" to "persona".toByteArray()))
+        sign(p, ks, "acme")
+        val r = IhqInstaller.install(p, root, settings = InstallSettings(allowUnsigned = true))
+        assertIs<IhqResult.Installed>(r, r.toString())
+        assertEquals("spec", File(r.dir, "cards/hello.md").readText())
+        assertEquals("{}", File(r.dir, "cards/deep/x.json").readText())
+        assertEquals("persona", File(r.dir, "roles/agent.md").readText())
+        noHalfInstall()
+    }
+
+    @Test fun `PLUGIN-PKG-FILES-1 a data file added after signing is refused`() {
+        val ks = key("acme")
+        val p = zip("Test_Mod.ihq", mapOf("module.json" to withFiles("[\"cards\"]").toByteArray(), "lib/Test_Mod.jar" to ByteArray(50) { it.toByte() }, "cards/a.md" to "a".toByteArray()))
+        sign(p, ks, "acme")
+        val copy = File(tmp, "tampered.ihq")
+        java.util.zip.ZipFile(p).use { src ->
+            ZipOutputStream(copy.outputStream()).use { z ->
+                src.entries().toList().forEach { e -> z.putNextEntry(ZipEntry(e.name)); src.getInputStream(e).use { it.copyTo(z) }; z.closeEntry() }
+                z.putNextEntry(ZipEntry("cards/b.md")); z.write("b".toByteArray()); z.closeEntry()
+            }
+        }
+        assertRefused(IhqInstaller.install(copy, root, settings = InstallSettings(allowUnsigned = true)), IhqRefusal.BAD_SIGNATURE)
+        noHalfInstall()
+    }
+
+    @Test fun `PLUGIN-PKG-FILES-1 undeclared folders, code in a data folder and reserved names are refused`() {
+        val unsigned = InstallSettings(allowUnsigned = true)
+        val jar = "lib/Test_Mod.jar" to ByteArray(50)
+        // A folder module.json does not declare.
+        assertRefused(IhqInstaller.install(zip("a.ihq", mapOf("module.json" to withFiles("[\"cards\"]").toByteArray(), jar, "roles/x.md" to byteArrayOf(1))), root, settings = unsigned), IhqRefusal.UNEXPECTED_ENTRY)
+        // Code hidden in a data folder.
+        for (code in listOf("cards/evil.jar", "cards/x/Evil.CLASS"))
+            assertRefused(IhqInstaller.install(zip("b.ihq", mapOf("module.json" to withFiles("[\"cards\"]").toByteArray(), jar, code to byteArrayOf(1))), root, settings = unsigned), IhqRefusal.UNEXPECTED_ENTRY)
+        // A data folder that is a package folder, a path, or a device name.
+        for (bad in listOf("lib", "LAYOUT", "deps", "META-INF", "a/b", "..", "", "con"))
+            assertRefused(IhqInstaller.install(zip("c.ihq", mapOf("module.json" to withFiles("[\"$bad\"]").toByteArray(), jar)), root, settings = unsigned), IhqRefusal.BAD_MANIFEST)
+        // A device name inside a data folder.
+        assertRefused(IhqInstaller.install(zip("d.ihq", mapOf("module.json" to withFiles("[\"cards\"]").toByteArray(), jar, "cards/NUL.md" to byteArrayOf(1))), root, settings = unsigned), IhqRefusal.UNSAFE_ENTRY)
+        assertFalse(File(root, "community/Test_Mod").exists())
+        noHalfInstall()
+    }
+
     @Test fun `not a zip is refused`() {
         val f = File(tmp, "junk.ihq").also { it.writeText("hello") }
         assertRefused(IhqInstaller.install(f, root), IhqRefusal.NOT_A_ZIP)

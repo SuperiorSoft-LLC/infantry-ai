@@ -12,6 +12,7 @@ import com.superiorsoftllc.infantry.plugin.host.IhqRefusal
 import com.superiorsoftllc.infantry.plugin.host.IhqResult
 import com.superiorsoftllc.infantry.plugin.host.InstallSettings
 import com.superiorsoftllc.infantry.plugin.host.ModulesFile
+import com.superiorsoftllc.infantry.plugin.host.PackageFiles
 import com.superiorsoftllc.infantry.plugin.host.PluginFolders
 import com.superiorsoftllc.infantry.plugin.host.PluginTree
 import com.superiorsoftllc.infantry.plugin.host.SemVer
@@ -916,11 +917,13 @@ class PluginManager(
             .mapNotNull { f -> runCatching { f.inputStream().use { cf.generateCertificate(it) as X509Certificate } }.getOrNull() }
     }
 
+    /** A plugin folder as a package: module.json, lib/, layout/ and (PLUGIN-PKG-FILES-1) the data folders its module.json `files` declares. */
     private fun zipDir(dir: File, out: File): File {
+        val data = readManifest(dir)?.files.orEmpty()
         ZipOutputStream(out.outputStream()).use { z ->
             dir.walkTopDown().filter { it.isFile }.forEach { f ->
                 val rel = f.relativeTo(dir).invariantSeparatorsPath
-                if (rel == "module.json" || rel.startsWith("lib/") || rel.startsWith("layout/")) {
+                if (rel == "module.json" || rel.startsWith("lib/") || rel.startsWith("layout/") || PackageFiles.under(rel, data)) {
                     z.putNextEntry(ZipEntry(rel))
                     f.inputStream().use { it.copyTo(z) }
                     z.closeEntry()

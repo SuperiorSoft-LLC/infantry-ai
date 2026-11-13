@@ -39,8 +39,8 @@ object PluginRoles {
     /**
      * The `role_save` shape of [d]; a blank name is the prettified id, a persona file is read from [dir]. A persona that names a
      * file which is not in the module folder is refused ([IllegalArgumentException]): the role is not seeded until it is there,
-     * rather than seeded with the path as its notes. (A packaged install carries only module.json, lib/ and layout/, so a
-     * published plugin writes the persona inline.)
+     * rather than seeded with the path as its notes. (A packaged install carries the file when module.json `files` names its
+     * folder, PLUGIN-PKG-FILES-1.)
      */
     fun request(d: RoleDeclaration, dir: File?): RoleSave = RoleSave(
         id = d.id.trim(),

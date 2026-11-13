@@ -110,6 +110,8 @@ class InfantryPluginPlugin : Plugin<Project> {
             z.isReproducibleFileOrder = true
             z.from(ihqDir.map { it.file("stage/module.json") })
             listOfNotNull(uiJar, daemonJar, harnessJar).forEach { j -> z.from(j.flatMap { it.archiveFile }) { it.into("lib") } }
+            // PLUGIN-PKG-FILES-1: the data folders module.json `files` declares (card specs, role personas) go in as they are.
+            (module.raw["files"] as? List<*>).orEmpty().filterIsInstance<String>().forEach { d -> z.from(project.layout.projectDirectory.dir(d)) { it.into(d) } }
             val keystore = project.providers.gradleProperty("ihq.keystore")
             val alias = project.providers.gradleProperty("ihq.alias")
             val storePass = project.providers.environmentVariable("IHQ_STOREPASS")

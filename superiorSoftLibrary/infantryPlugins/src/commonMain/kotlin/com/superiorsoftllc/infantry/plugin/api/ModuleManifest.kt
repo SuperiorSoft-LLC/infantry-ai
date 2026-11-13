@@ -157,6 +157,13 @@ data class ModuleManifest(
      * and the id is free, marks it as this module's, never overwrites an owner edit, and shows it disabled while the module is gone.
      */
     val roles: List<RoleDeclaration> = emptyList(),
+    /**
+     * PLUGIN-PKG-FILES-1: the data folders a package carries beside `module.json`, `lib/` and `layout/` (`["cards", "roles"]`):
+     * every file under them is packed, signed and unpacked with the same limits and safe-name checks as `lib/`, so a path the
+     * manifest names (`cards[].spec`, `roles[].persona`) arrives with an installed plugin. A top-level folder name each; `lib`,
+     * `layout`, `deps` and `META-INF` are reserved, and no `.jar` or `.class` may sit in one (code lives only in `lib/`).
+     */
+    val files: List<String> = emptyList(),
 ) {
     /** NS3: the node ids of [fills]. */
     val fillNodes: List<String> get() = fills.map { it.node }

@@ -317,6 +317,23 @@ class PluginManagerServiceTest {
         assertEquals("mine", m.status("Acme_Bare")!!.source)
     }
 
+    @Test fun `PLUGIN-PKG-FILES-1 a folder install carries the data folders module json declares and nothing else`() {
+        val m = manager(noNetwork)
+        val dir = File(tmp, "wip/Acme_Data").also { File(it, "lib").mkdirs(); File(it, "cards/sub").mkdirs(); File(it, "notes").mkdirs(); File(it, "src").mkdirs() }
+        File(dir, "module.json").writeText("""{"name":"Acme_Data","version":"0.1.0","author":"Acme","license":"MIT","entry":"x.Y","jar":"lib/a.jar","files":["cards"],"cards":[{"type":"hello","spec":"cards/hello.md"}]}""")
+        File(dir, "lib/a.jar").writeBytes(ByteArray(50))
+        File(dir, "cards/hello.md").writeText("hello spec")
+        File(dir, "cards/sub/more.txt").writeText("more")
+        File(dir, "notes/private.md").writeText("not declared")
+        File(dir, "src/A.kt").writeText("class A")
+        installOk(m, dir.path)
+        val installed = File(root, "community/Acme_Data")
+        assertEquals("hello spec", File(installed, "cards/hello.md").readText())
+        assertEquals("more", File(installed, "cards/sub/more.txt").readText())
+        assertFalse(File(installed, "notes").exists(), "an undeclared folder is not packed")
+        assertFalse(File(installed, "src").exists())
+    }
+
     @Test fun `a broken signature on a custom package is refused, a user-trusted key is only labelled`() {
         val ks = key("mykey"); trust("mykey", ks, "custom")
         val f = pack("Acme_Signed"); sign(f, ks, "mykey")
