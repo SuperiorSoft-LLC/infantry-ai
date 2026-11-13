@@ -91,8 +91,9 @@ object RunnerLinkSettings {
      * RUNNER-UNIFY-5 (orchestrator side, docs/RUNNER-UNIFY.md 5.4): a runner session's approval card opens from the prompt frame on
      * its pushed stream, through the same prompt store as a local session, and a failed turn's reason is the one its frames carry
      * (the record's `lastError`, the `finished` detail, an `error` frame) instead of a scrape of its transcript. Applies to a session
-     * whose frames are pushed (`runners.pushFrames`); any other session keeps the event relay. CONTINGENCY: `false` (the default
-     * until the live proof) = the outbox event relay and the transcript scrape exactly as before; flipping it takes effect live.
+     * whose frames are pushed (`runners.pushFrames`); any other session keeps the event relay. Default `true` since the live proof on
+     * dev 5d2df5ae (gradle-run app + infantry-runner-test). CONTINGENCY: `false` = the outbox event relay and the transcript scrape
+     * exactly as before; flipping it takes effect live. RUNNER-UNIFY-6 removes the flag.
      */
     const val FRAME_PROMPTS = "runners.framePrompts"
 
@@ -121,7 +122,7 @@ object RunnerLinkSettings {
         val unifiedCommands: Boolean = true,
         val pushFrames: Boolean = false,
         val unifiedDirectory: Boolean = true,
-        val framePrompts: Boolean = false,
+        val framePrompts: Boolean = true,
     ) {
         /** RUNNER-CRED-1: whether this orchestrator lends credentials to runner [name]. */
         fun lendsTo(name: String): Boolean = ANY in lendCredentials || name in lendCredentials
@@ -150,7 +151,7 @@ object RunnerLinkSettings {
         unifiedCommands = runCatching { (Json.parseToJsonElement(stored(UNIFIED_COMMANDS) ?: "true") as JsonPrimitive).booleanOrNull }.getOrNull() ?: true,
         pushFrames = runCatching { (Json.parseToJsonElement(stored(PUSH_FRAMES) ?: "false") as JsonPrimitive).booleanOrNull }.getOrNull() ?: false,
         unifiedDirectory = runCatching { (Json.parseToJsonElement(stored(UNIFIED_DIRECTORY) ?: "true") as JsonPrimitive).booleanOrNull }.getOrNull() ?: true,
-        framePrompts = runCatching { (Json.parseToJsonElement(stored(FRAME_PROMPTS) ?: "false") as JsonPrimitive).booleanOrNull }.getOrNull() ?: false,
+        framePrompts = runCatching { (Json.parseToJsonElement(stored(FRAME_PROMPTS) ?: "true") as JsonPrimitive).booleanOrNull }.getOrNull() ?: true,
     )
 
     private fun string(raw: String?): String =

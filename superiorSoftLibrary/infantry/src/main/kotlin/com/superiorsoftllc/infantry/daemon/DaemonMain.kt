@@ -1125,6 +1125,8 @@ class InfantryDaemon(
                 prompts = pendingPrompts,
                 link = runnerPool::link,
                 projectOf = { id -> remoteMirror.placement(id)?.projectId },
+                // RUNNER-UNIFY-5: a card open at a restart is reopened (the runner holds its prompt and never re-sends a taken frame).
+                store = File(daemonStateDir, "relayed-prompts.json"),
             )
             pendingPrompts.heldElsewhere = promptRelay.heldElsewhere(remoteStarts)
             val forwardGateRef = java.util.concurrent.atomic.AtomicReference<com.superiorsoftllc.infantry.runners.ForwardedFrameGate?>(null)
@@ -2147,6 +2149,8 @@ class InfantryDaemon(
                 announce = DaemonLog::toConsole,
             )
             runnerLinksRef.set(runnerLinkService.links)
+            // RUNNER-UNIFY-5: reopen the relayed cards open at the last stop, now that the paired runners (and so the placed sessions) are known.
+            runCatching { promptRelay.restore { id -> id in runnerPool.remoteSessionIds() } }
             runnerLinkService.lentKeysOf = credentialLender::lentKeys
             runnerLinkService.lentGitOf = credentialLender::lentGit
             // RUNNER-UNIFY-3 (runner side): the orchestrator's held frame pull reads the sessions it started here from this stream.

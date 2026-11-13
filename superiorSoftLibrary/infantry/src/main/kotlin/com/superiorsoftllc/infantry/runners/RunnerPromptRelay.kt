@@ -18,7 +18,10 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
+import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -48,11 +51,23 @@ class RunnerPromptRelay(
     private val projectOf: (sessionId: String) -> String?,
     private val log: (String) -> Unit = { System.err.println(it) },
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+    /**
+     * RUNNER-UNIFY-5: where the cards relayed here and not settled yet are kept, so a restart of this daemon reopens them ([restore]).
+     * The runner holds such a prompt with no timer while this daemon is reachable, and it never sends a frame this daemon already
+     * took again: without this file a card open at a restart strands its session. Null = kept in memory only (tests).
+     */
+    private val store: File? = null,
 ) {
     private data class Pending(val runner: String, val sessionId: String, val reply: PromptReply)
 
     /** Answers not delivered yet, by prompt id. */
     private val undelivered = ConcurrentHashMap<String, Pending>()
+
+    /** RUNNER-UNIFY-5: a relayed card not settled yet (still open here, or answered and not delivered to the runner yet). */
+    @Serializable
+    private data class Held(val promptId: String, val runner: String, val sessionId: String, val payload: String)
+
+    private val held = ConcurrentHashMap<String, Held>()
 
     /** ORCHESTRATOR: one event a runner queued; prompt events are relayed, the others ignored. */
     fun apply(runner: String, event: RunnerEvent) {
@@ -83,10 +98,17 @@ class RunnerPromptRelay(
         }
         // The card is the runner session's: never a prompt naming another session.
         if (request.sessionId != sessionId) return log("[infantry] runner $runner: prompt ${request.promptId.take(40)} names another session; dropped")
+        val id = request.promptId.trim()
+        if (id.isNotEmpty() && held.putIfAbsent(id, Held(id, runner, sessionId, payload)) == null) save()
         // UNDISPATCHED: the card is open in the store before this returns, so a close read right after it (the same batch) finds it.
         scope.launch(start = CoroutineStart.UNDISPATCHED) {
             val reply = runCatching { prompts.relay(request, p.input, projectOf(sessionId)) }
-                .onFailure { log("[infantry] runner $runner: prompt relay failed: ${it.message}") }.getOrNull() ?: return@launch
+                .onFailure { log("[infantry] runner $runner: prompt relay failed: ${it.message}") }.getOrNull()
+            if (reply == null) {
+                // Closed by the runner, or this very card was already shown (a replay): it is settled only when it is not open here.
+                if (prompts.snapshot().none { it.promptId.trim() == id }) settled(id)
+                return@launch
+            }
             deliver(Pending(runner, sessionId, reply))
         }
     }
@@ -94,7 +116,55 @@ class RunnerPromptRelay(
     private fun close(payload: String) {
         val frame = runCatching { json.decodeFromString(PromptResolved.serializer(), payload) }.getOrNull() ?: return
         undelivered.remove(frame.promptId)
+        settled(frame.promptId.trim())
         prompts.closeRelayed(frame)
+    }
+
+    /**
+     * RUNNER-UNIFY-5 (orchestrator side): reopen the cards that were open (or answered and not delivered) when this daemon stopped,
+     * for sessions still placed on a runner ([placed]). The card gets the runner's timer again from now. A prompt the runner closed
+     * meanwhile is closed by its close frame, which this daemon had not taken yet and so reads after the restart; a card of a session
+     * no longer placed is dropped. Returns how many were reopened.
+     */
+    fun restore(placed: (sessionId: String) -> Boolean): Int {
+        val f = store?.takeIf { it.isFile } ?: return 0
+        val kept = runCatching { json.decodeFromString(ListSerializer(Held.serializer()), f.readText()) }.getOrElse {
+            log("[infantry] relayed prompts not restored: ${it.message}"); return 0
+        }
+        var n = 0
+        for (h in kept) {
+            if (!runCatching { placed(h.sessionId) }.getOrDefault(false)) continue
+            open(h.runner, h.sessionId, h.payload)
+            n++
+        }
+        if (n != kept.size) save()
+        if (n > 0) log("[infantry] reopened $n relayed prompt card(s) still open on their runner")
+        return n
+    }
+
+    private fun settled(promptId: String) {
+        if (held.remove(promptId) != null) save()
+    }
+
+    @Synchronized
+    private fun save() {
+        val f = store ?: return
+        runCatching {
+            f.parentFile?.mkdirs()
+            val text = json.encodeToString(ListSerializer(Held.serializer()), held.values.sortedBy { it.promptId })
+            val tmp = File(f.path + ".tmp")
+            tmp.writeText(text)
+            // Windows refuses to replace a file another handle has open (a reader, an indexer): a stale file would reopen an answered
+            // card at the next restart, so fall back to a plain replace, then to writing the file in place.
+            runCatching {
+                java.nio.file.Files.move(tmp.toPath(), f.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.StandardCopyOption.ATOMIC_MOVE)
+            }.recoverCatching {
+                java.nio.file.Files.move(tmp.toPath(), f.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+            }.getOrElse {
+                f.writeText(text)
+                tmp.delete()
+            }
+        }.onFailure { log("[infantry] relayed prompts not saved: ${it.message}") }
     }
 
     /** ORCHESTRATOR: send every answer a runner could not be reached for again (the daemon calls it every heartbeat round). */
@@ -105,6 +175,7 @@ class RunnerPromptRelay(
         when (val r = l?.answerPrompt(p.sessionId, p.reply) ?: OrchestratorReply.Unavailable("runner '${p.runner}' is not paired")) {
             is OrchestratorReply.Ok -> {
                 undelivered.remove(p.reply.promptId)
+                settled(p.reply.promptId.trim())
                 return true
             }
             is OrchestratorReply.Unavailable -> {
