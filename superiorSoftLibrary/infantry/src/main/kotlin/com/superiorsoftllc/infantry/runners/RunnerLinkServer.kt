@@ -102,6 +102,12 @@ class RunnerLinkServer(
     private val log: (String) -> Unit = {},
     /** RUNNER-BEARER-STALE-1: an orchestrator paired here; the runner prints its endpoint, live bearer and 'last paired with' again. */
     private val onPaired: () -> Unit = {},
+    /** RUNNER-UNIFY-3: the pushed stream of the orchestrator's sessions here; null = [F.FRAMES_PULL] is refused as not offered. */
+    private val frameFeed: () -> RunnerFrameFeed? = { null },
+    /** RUNNER-UNIFY-3: the longest a frame pull may be held here (below the orchestrator's link call timeout). */
+    private val pushWaitCapMs: () -> Long = { 0L },
+    /** RUNNER-UNIFY-3: the most frames one answer carries (`limits.runners.pushFramesMax`). */
+    private val pushFramesMax: () -> Int = { 0 },
 ) {
     /** One answer: [type] is [F.REPLY] or [F.ERROR]; [data] is the answer JSON or the reason. */
     data class Answer(val type: String, val data: String) {
@@ -203,11 +209,21 @@ class RunnerLinkServer(
                 for (f in frames) audit.record(seat, "forward:${shownType(f.type)}", "taken session ${f.sessionId.take(SHOWN_TYPE_SIZE)}", null, from)
                 Answer(F.REPLY, F.json.encodeToString(F.ForwardPullAnswer.serializer(), F.ForwardPullAnswer(frames)))
             }
+            // RUNNER-UNIFY-3: the orchestrator's held read of its sessions' frames. Not audited: it is the stream itself, called
+            // again after every answer (as a heartbeat is not); a session it may not read is simply not sent.
+            F.FRAMES_PULL -> {
+                val feed = frameFeed() ?: return refuse(seat, type, null, from, "$type refused: ${F.NOT_OFFERED} this runner offers (contract ${F.CONTRACT})")
+                val r = decode(F.FramesPullRequest.serializer(), data) ?: return refuse(seat, type, null, from, "$type refused: malformed request")
+                val cap = pushFramesMax().coerceAtLeast(1)
+                val max = if (r.max in 1..cap) r.max else cap
+                val answer = feed.pull(r.resumeFrom, r.waitMs.coerceIn(0, pushWaitCapMs().coerceAtLeast(0)), max)
+                Answer(F.REPLY, F.json.encodeToString(F.FramesPullAnswer.serializer(), answer))
+            }
             F.FORWARD_ANSWER -> {
                 val r = decode(F.ForwardAnswerRequest.serializer(), data) ?: return refuse(seat, type, null, from, "$type refused: malformed request")
                 Answer(F.REPLY, F.json.encodeToString(F.ForwardAnswerAck.serializer(), F.ForwardAnswerAck(forwarder?.answer(r) == true)))
             }
-            else -> refuse(seat, type, null, from, "$type refused: not a runner link operation this runner offers (contract ${F.CONTRACT})")
+            else -> refuse(seat, type, null, from, "$type refused: ${F.NOT_OFFERED} this runner offers (contract ${F.CONTRACT})")
         }
     }
 

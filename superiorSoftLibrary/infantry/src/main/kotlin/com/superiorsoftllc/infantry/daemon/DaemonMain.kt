@@ -1478,7 +1478,12 @@ class InfantryDaemon(
 
             // CLI-PTY-5: each session's chat, kept across a restart so a resumed session shows its history at once.
             val chatHistory = SessionHistoryStore(File(daemonStateDir, "chat-history"), { settings.limit(LimitRegistry.CHAT_HISTORY_FRAMES).toInt() })
-            val streamSequencer = SessionFrameSequencer(chatHistory)
+            // RUNNER-UNIFY-3 (runner side): every numbered frame wakes the orchestrator's held frame pull (set once the feed exists).
+            val framePublished = java.util.concurrent.atomic.AtomicReference<() -> Unit> { }
+            val streamSequencer = SessionFrameSequencer(chatHistory) { framePublished.get()() }
+            // RUNNER-UNIFY-3 (orchestrator side): the pushed stream of each paired runner (runners.pushFrames); set once the watch exists.
+            val frameStreamRef = java.util.concurrent.atomic.AtomicReference<com.superiorsoftllc.infantry.runners.RunnerFrameStream?>(null)
+            val remoteStreaming: (String) -> Boolean = { id -> frameStreamRef.get()?.streamingSession(id) == true }
             // RUNNER-OUTPUT-1: a remote session's output on this daemon's own stream (live, replay, get_session), read from its runner.
             val remoteTranscripts = com.superiorsoftllc.infantry.runners.RemoteTranscriptPump(
                 read = { id, from -> runnerPool.runnerOf(id).takeIf { it != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL }?.let { rn -> runnerPool.link(rn)?.readTranscript(id, from, 0) } },
@@ -1914,7 +1919,8 @@ class InfantryDaemon(
                             sessions = { manager.list() + remoteMirror.list() },
                             replay = { id ->
                                 // RUNNER-OUTPUT-1: a remote session's newest output is read from its runner first.
-                                if (runnerPool.runnerOf(id) != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL) remoteTranscripts.pull(id)
+                                // RUNNER-UNIFY-3: a runner that pushes its frames has already put them on this daemon's stream.
+                                if (runnerPool.runnerOf(id) != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL && !remoteStreaming(id)) remoteTranscripts.pull(id)
                                 streamSequencer.replayAfter(id, 0)?.let { batch ->
                                     com.superiorsoftllc.infantry.daemon.plugins.LocalSessionReads.Replay(
                                         batch.gap?.let { json.encodeToString(SessionReplayGapPayload.serializer(), it) }, batch.frames,
@@ -2128,6 +2134,13 @@ class InfantryDaemon(
             runnerLinksRef.set(runnerLinkService.links)
             runnerLinkService.lentKeysOf = credentialLender::lentKeys
             runnerLinkService.lentGitOf = credentialLender::lentGit
+            // RUNNER-UNIFY-3 (runner side): the orchestrator's held frame pull reads the sessions it started here from this stream.
+            val frameFeed = com.superiorsoftllc.infantry.runners.RunnerFrameFeed(
+                sessions = remoteStarts::linkedIds,
+                framesAfter = { id, after -> streamSequencer.replayAfter(id, after)?.frames.orEmpty().filter { it.sessionId == id } },
+            )
+            runnerLinkService.frameFeed = frameFeed
+            framePublished.set(frameFeed::published)
             runnerLinkService.ownLoginOf = { id -> harnessCredentials.mode(id) == com.superiorsoftllc.infantry.harness.credential.HarnessCredential.MODE_SUBSCRIPTION }
             plugins.runnerLinks = runnerLinkService.links
             // RUNNER-POOL-10: the rows of the Runners card (`runner_admin` op `list`): health, workers / cap, paused.
@@ -2194,7 +2207,7 @@ class InfantryDaemon(
                     // chat, a later replay, get_session).
                     if (e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.STATUS ||
                         e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.FINISHED
-                    ) remoteTranscripts.pull(e.sessionId)?.let { System.err.println("[infantry] runner '$runner': output of ${e.sessionId} not read: $it") }
+                    ) if (!remoteStreaming(e.sessionId)) remoteTranscripts.pull(e.sessionId)?.let { System.err.println("[infantry] runner '$runner': output of ${e.sessionId} not read: $it") }
                     // RUNNER-CLAUDE-PROOF-1: an interactive session (claude) never finishes between turns, it comes to rest (IDLE): that ends the turn too.
                     val turnEnded = e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.FINISHED ||
                         (e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.STATUS && e.payload.equals(SessionState.IDLE.name, ignoreCase = true))
@@ -2222,7 +2235,39 @@ class InfantryDaemon(
                 ticketOf = { sid -> boardPorts.ticketOfWorker(sid) },
                 restart = { t, r, p -> boardPorts.restartElsewhere(t, r, p) },
             )
+            // RUNNER-UNIFY-3 (docs/RUNNER-UNIFY.md 5.2), behind runners.pushFrames (default off): each paired runner PUSHES its sessions'
+            // frames (a held runner_link_frames_pull, answered the moment a frame exists). They go on this daemon's stream exactly as the
+            // poll path puts them, plus `status` with its run activity (the "working (0 tool calls)" gap). A state change or a finish
+            // reads the runner's events at once (turn end, board, approval card, mail) instead of at the next poll. Off, or a runner that
+            // cannot push, = the poll path below, unchanged.
+            val pushedState = ConcurrentHashMap<String, String>()
+            val frameStream = com.superiorsoftllc.infantry.runners.RunnerFrameStream(
+                enabled = { settings.runnerLink().pushFrames },
+                sessionsOn = runnerPool::sessionsOn,
+                link = { runner -> runnerPool.link(runner) },
+                takenBefore = remoteMirror::taken,
+                apply = { _, sid, fresh ->
+                    val out = fresh.filter { it.type in com.superiorsoftllc.infantry.runners.RemoteTranscriptPump.RELAYED || it.type == Envelope.STATUS }
+                        .map { Envelope(it.type, it.data, sid, origin = it.origin) }
+                    if (out.isNotEmpty()) streamSequencer.publish(clients, out)
+                    // The poll path keeps its own count of what it took: it reads the shared one again if it serves this session later.
+                    remoteTranscripts.forget(sid)
+                    var moved = fresh.any { it.type == Envelope.EXIT || it.type == Envelope.FINISHED }
+                    for (f in fresh) if (f.type == Envelope.STATUS) {
+                        val state = runCatching { json.parseToJsonElement(f.data).jsonObject["state"]?.jsonPrimitive?.content }.getOrNull() ?: continue
+                        if (pushedState.put(sid, state) != state) moved = true
+                    }
+                    if (moved) runCatching { runnerWatch.tick() }.onFailure { System.err.println("[infantry] runner watch failed: ${it.message}") }
+                },
+                onTaken = remoteMirror::taken,
+                waitMs = { runnerLinkService.pushWaitMs() },
+                maxFrames = { settings.limit(LimitRegistry.RUNNERS_PUSH_FRAMES_MAX).toInt() },
+                idleMs = { settings.limit(LimitRegistry.RUNNERS_PUSH_WAIT_SEC) * 1000L },
+            )
+            frameStreamRef.set(frameStream)
+            runCatching { frameStream.sync(runnerLinksRef.get().paired()) }
             scheduledTicker(settings.limit(LimitRegistry.RUNNERS_HEARTBEAT_SEC) * 1000L) {
+                runCatching { frameStream.sync(runnerLinksRef.get().paired()) }
                 runCatching {
                     val changed = runnerPool.heartbeat(settings.limit(LimitRegistry.RUNNERS_LOST_AFTER_SEC) * 1000L)
                     changed.forEach { println("[infantry] $it") }
@@ -2239,7 +2284,9 @@ class InfantryDaemon(
             // the app chat fills as the turn goes (the heartbeat round alone came every limits.runners.heartbeatSec). Nothing runs = no call.
             val outputPollMs = settings.limit(LimitRegistry.RUNNERS_OUTPUT_POLL_MS)
             if (outputPollMs > 0) scheduledTicker(outputPollMs) {
+                // RUNNER-UNIFY-3: a session whose runner pushes its frames is not polled.
                 val running = runnerPool.remoteSessionIds().filter { id -> remoteMirror.get(id)?.state.let { it == null || it == SessionState.STARTING || it == SessionState.BUSY } }
+                    .filter { id -> !remoteStreaming(id) }
                 if (running.isNotEmpty()) {
                     runCatching { runnerWatch.tick() }.onFailure { System.err.println("[infantry] runner watch failed: ${it.message}") }
                     for (id in running) runCatching { remoteTranscripts.pull(id) }
@@ -2429,6 +2476,7 @@ class InfantryDaemon(
                             remoteForget = remoteMirror::forget,
                             remoteStatus = remoteMirror::status,
                             remoteTranscripts = remoteTranscripts,
+                            remoteStreaming = remoteStreaming,
                             limits = limits,
                             usagePacing = usagePacing,
                             ticketFiles = ticketFilesText?.let { text ->
@@ -2772,7 +2820,11 @@ private fun com.superiorsoftllc.infantry.protocol.RunPhase.sessionState(): Sessi
 }
 
 /** Assign each live session-stream frame exactly one increasing sequence before publishing it. */
-private class SessionFrameSequencer(private val history: SessionHistoryStore? = null) {
+private class SessionFrameSequencer(
+    private val history: SessionHistoryStore? = null,
+    /** RUNNER-UNIFY-3: called after a batch put at least one numbered frame on a stream (wakes a held runner frame pull). */
+    private val onPublished: () -> Unit = {},
+) {
     private class State {
         var latestSequence = 0L
         var evictedCount = 0L
@@ -2808,6 +2860,7 @@ private class SessionFrameSequencer(private val history: SessionHistoryStore? = 
                 for (client in clients) client.trySend(published)
             }
         }
+        runCatching(onPublished)
     }
 
     /**
@@ -3077,6 +3130,8 @@ private suspend fun handleConnection(
     runnerPool: com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool = LocalRunner.pool(manager, agents),
     /** RUNNER-OUTPUT-1: puts a remote session's runner output on [streamSequencer] before a replay is answered (null = none). */
     remoteTranscripts: com.superiorsoftllc.infantry.runners.RemoteTranscriptPump? = null,
+    /** RUNNER-UNIFY-3: whether a remote session's runner pushes its frames (then nothing is read before a replay). */
+    remoteStreaming: (String) -> Boolean = { false },
     /** U1: the plan-limit meters a `limits` request reads. */
     limits: LimitService = LimitService.NONE,
     /** USAGE-PACE (1.119.0): the meters and allowances a `usage_get` request reads. */
@@ -3538,7 +3593,7 @@ private suspend fun handleConnection(
                         // like a local session's (sequenced chat frames). Before, its lines went out as unsequenced stdout, which no client draws.
                         val runnerName = runnerPool.runnerOf(sessionId)
                         val remote = runnerName != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL && manager.get(sessionId) == null
-                        val unread = if (remote) remoteTranscripts?.pull(sessionId) else null
+                        val unread = if (remote && !remoteStreaming(sessionId)) remoteTranscripts?.pull(sessionId) else null
                         val replay = streamSequencer.replayAfter(sessionId, request.lastSequence)
                         if (replay == null) {
                             // CLI-PTY-5: a known session with nothing kept simply has no history yet; only an unknown one is an error.

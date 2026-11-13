@@ -38,8 +38,20 @@ object RunnerLinkWire {
      * 1.9.0 (RUNNER-UNIFY-2): [COMMAND], one owner command on a session this orchestrator started (a turn, attach, interrupt, a queue
      * change, kill, delete), run by the runner's own local binding exactly as a local session runs it. An older runner answers an
      * error for it (the command fails, as it did before).
+     * 1.10.0 (RUNNER-UNIFY-3): [FRAMES_PULL], the runner's sessions' stream frames PUSHED to the orchestrator: a held call the runner
+     * answers the moment one of them publishes a frame (or after [FramesPullRequest.waitMs] with none). Every sequenced frame type
+     * crosses (`session`, `status` with its run activity, turns, text, reasoning, errors, finishes, usage). An older runner answers an
+     * error, and the orchestrator polls it as before.
      */
-    const val CONTRACT = "1.9.0"
+    const val CONTRACT = "1.10.0"
+
+    /**
+     * RUNNER-UNIFY-3 (contract 1.10.0): the stream frames of the sessions [FramesPullRequest.resumeFrom] names (only ones this
+     * orchestrator started here), after the sequence it names for each (0 = every frame still kept), in sequence order per
+     * session. Held up to [FramesPullRequest.waitMs] (capped below the link call timeout) until there is one; answered by
+     * [FramesPullAnswer]. The orchestrator calls again at once, so this is the runner pushing over the link it already dials.
+     */
+    const val FRAMES_PULL = "runner_link_frames_pull"
 
     /**
      * RUNNER-UNIFY-2 (contract 1.9.0): one owner command ([CommandRequest]) on a session this orchestrator started, answered by
@@ -85,6 +97,9 @@ object RunnerLinkWire {
     const val FORWARD_PULL = "runner_link_forward_pull"
     const val FORWARD_ANSWER = "runner_link_forward_answer"
     const val REPLY = "runner_link_reply"
+
+    /** The words every runner's refusal of an operation it does not know starts its reason with (older runners included). */
+    const val NOT_OFFERED = "not a runner link operation"
     const val ERROR = "runner_link_error"
 
     /**
@@ -317,6 +332,14 @@ object RunnerLinkWire {
 
     @Serializable
     data class CheckAnswer(val rows: List<CheckRow> = emptyList())
+
+    /** RUNNER-UNIFY-3: [resumeFrom] maps a session to the last runner sequence the orchestrator holds; [max] bounds the answer (0 = the runner's own bound). */
+    @Serializable
+    data class FramesPullRequest(val resumeFrom: Map<String, Long> = emptyMap(), val waitMs: Long = 0, val max: Int = 0)
+
+    /** RUNNER-UNIFY-3: each frame carries its session id and the runner's sequence; [more] = the bound cut the answer, call again. */
+    @Serializable
+    data class FramesPullAnswer(val frames: List<com.superiorsoftllc.infantry.protocol.Envelope> = emptyList(), val more: Boolean = false)
 
     @Serializable
     data class ForwardPullRequest(val waitMs: Long = 0)

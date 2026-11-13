@@ -1103,6 +1103,20 @@ object LimitRegistry {
         min = 1, zeroIsUnlimited = false,
     )
 
+    /** RUNNER-UNIFY-3: how long one held frame pull (`runners.pushFrames`) waits on the runner for a new frame of its sessions. */
+    val RUNNERS_PUSH_WAIT_SEC = LimitDef(
+        "limits.runners.pushWaitSec", 10, "seconds",
+        "With runners.pushFrames on: how long the orchestrator's held call for a runner's session frames waits there when nothing is new; a frame answers it at once. Capped below limits.runners.linkCallSeconds. Held only while the runner has a session of this orchestrator. Longer = fewer link calls when idle.",
+        min = 1, zeroIsUnlimited = false,
+    )
+
+    /** RUNNER-UNIFY-3: the most session frames one held frame pull carries; the rest follow on the next call at once. */
+    val RUNNERS_PUSH_FRAMES_MAX = LimitDef(
+        "limits.runners.pushFramesMax", 500, "frames",
+        "With runners.pushFrames on: the most session frames one answer from a runner carries (a long catch-up after a reconnect comes in several answers). Fewer = smaller link messages.",
+        min = 1, zeroIsUnlimited = false,
+    )
+
     /** RUNNER-POOL-7: how long a remote worker's forwarded frame waits for its orchestrator's answer. */
     val RUNNERS_FORWARD_TIMEOUT_SEC = LimitDef(
         "limits.runners.forwardTimeoutSec", 300, "seconds",
@@ -1237,7 +1251,7 @@ object LimitRegistry {
         HEALTH_DB_TIMEOUT_SECONDS, HEALTH_BRIEF_ENVIRONMENT, HEALTH_EVENT_LOG_MAX, HEALTH_HEARTBEAT_SECONDS, HEALTH_WATCHDOG_FAILURES, HEALTH_WATCHDOG_INTERVAL_SECONDS, HEALTH_WATCHDOG_TIMEOUT_SECONDS,
         MAIL_WAKE_DEBOUNCE_SECONDS, MAIL_COALESCE_MAX, WATCH_STALL_NUDGES, SCRIPT_RUN_LOG_MAX,
         RUNNERS_PAIR_CODE_MIN, RUNNERS_PAIR_ATTEMPTS_PER_HOUR, RUNNERS_CREDENTIAL_ROTATE_DAYS, RUNNERS_LINK_PORT, RUNNERS_UP_START_SEC, RUNNERS_ADVERTISE_HOSTS_MAX, RUNNERS_AUDIT_SHOWN, RUNNERS_GRANT_PROJECTS_MAX, RUNNERS_LINK_CALL_SECONDS, RUNNERS_LINK_CHECK_SECONDS,
-        RUNNERS_OUTBOX_MAX, RUNNERS_LOST_AFTER_MIN, RUNNERS_COMMIT_CHECK_SEC, RUNNERS_FORWARD_WAIT_SEC, RUNNERS_FORWARD_TIMEOUT_SEC, RUNNERS_FORWARD_PENDING_MAX,
+        RUNNERS_OUTBOX_MAX, RUNNERS_LOST_AFTER_MIN, RUNNERS_COMMIT_CHECK_SEC, RUNNERS_FORWARD_WAIT_SEC, RUNNERS_FORWARD_TIMEOUT_SEC, RUNNERS_FORWARD_PENDING_MAX, RUNNERS_PUSH_WAIT_SEC, RUNNERS_PUSH_FRAMES_MAX,
         RUNNERS_ADD_HOST_TIMEOUT_SEC, RUNNERS_CONNECT_SEC, RUNNERS_CHECK_GIT_SEC, RUNNERS_CHECK_MIN_FREE_MB,
         RUNNERS_TEST_TURN_SEC, RUNNERS_TEST_POLL_MS, RUNNERS_OUTPUT_POLL_MS, RUNNERS_TEST_REPLY_CHARS, RUNNERS_LEND_SECRETS_MAX,
         DOWNLOAD_RETRIES, DOWNLOAD_BACKOFF_MS, DOWNLOAD_CONNECT_TIMEOUT_SECONDS, DOWNLOAD_RESPONSE_TIMEOUT_SECONDS, DOWNLOAD_STALL_SECONDS, DOWNLOAD_MAX_MB, DOWNLOAD_REDIRECTS, DOWNLOAD_MOVE_RETRIES,
