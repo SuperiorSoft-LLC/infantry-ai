@@ -125,6 +125,8 @@ after). Any other agent that wants a card runs `infantry card show <type>` once,
 `AGENT-QUICKREF` gets one line ("rich cards: `infantry card list`"), which is read on demand, not injected. Default
 replies stay plain markdown; nothing tells an agent to consider cards per turn.
 
+Shipped (CARD-3): module.json `cards` (`CardDeclaration`), read through `PluginCatalogReader.loaded()` (DaemonApi 1.57.0) by the official daemon-only plugin `Infantry_Cards`, whose capabilities `cards.list` / `cards.show` answer `infantry card list|show` (one `infantry_capability_call` each; no new tool schema). A `spec` is a file in the module folder or the text itself.
+
 ### 2.4 Addressable cards that update (design now, ship later)
 
 - `id=<cardId>` names a card within ONE session's transcript (no cross-session addressing).

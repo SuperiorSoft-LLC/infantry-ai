@@ -100,6 +100,15 @@ infantry ticket create --title "Short title" --image shot.png
 infantry ticket update <ticket-id> --image shot.png
 ```
 
+**Rich chat cards, only when a reply needs one** (CARD-3)
+
+```
+infantry card list
+infantry card show <type>
+```
+
+Replies stay plain markdown. When a card would really help (headlines, a greeting box, whatever the installed plugins offer), `card list` names the card types (one line each) and `card show` prints what to write: a fenced block with info string `card:<type>` and one JSON object. Any agent may use any installed card; with its plugin gone the block shows as code. No tool schema, no prompt list: zero tokens until you ask.
+
 **Memory and decisions**
 
 ```

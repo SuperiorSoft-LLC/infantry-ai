@@ -597,6 +597,7 @@ RUNNER-POOL-6 (DaemonApi 1.45.0, additive), package `com.superiorsoftllc.infantr
 ### `PluginCatalogReader.kt`
 
 - `CatalogSummary`: One catalog entry's latest compatible version.
+- `LoadedModule`: CARD-3 (DaemonApi 1.57.0): one module loaded on this daemon (daemon half or not): id, tier, module.json, folder; `PluginCatalogReader.loaded()` lists them in load order.
 - `NoPluginCatalog`: A daemon without a plugin manager.
 - `PluginCatalogReader`: PLUGIN-MCP-1 (DaemonApi 1.36.0, additive; docs/PLUGIN-MANAGER.md section 10): a READ-ONLY view of the plugin manager on this host's plugins root, plus [request], the only way an agent asks for an inst
 - `PluginRequestResult`: [questionId] null = no question was raised ([message] says why).

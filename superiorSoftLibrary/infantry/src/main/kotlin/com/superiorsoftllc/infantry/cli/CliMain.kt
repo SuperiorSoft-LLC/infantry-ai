@@ -245,6 +245,7 @@ fun main(args: Array<String>) {
  * infantry ticket start <id>                    start ticket work (never with a spawn): its role/provider/model, its own branch
  * infantry agent-def list|show <id>|enable <id>|disable <id>   the agent registry (AGENT-REGISTRY-1): built-in and plugin agents
  * infantry run-cmd list|save|delete|start|stop|secrets the Run tab's saved commands (RUN-CMD-TOOL-1); see RunCmdCli.USAGE
+ * infantry card list|show <type>               the chat card types the loaded plugins offer, and one's spec (CARD-3)
  * infantry harnesses                            the harnesses (provider ids) a ticket can pin, and each one's models
  * infantry harness-status [--check]            which harness CLIs (claude, opencode, pi) are installed / missing / outdated (--check asks npm for the latest)
  * infantry harness key [<name> [<credential>]] [--clear]     FIRST-RUN-KEYS-1: which harnesses need an API key and which are set; with a name, prompts for the key (stdin, never an argument) and stores it in the keystore
@@ -527,6 +528,7 @@ internal object Cli {
                 "notify" -> notify(stream, parsed, out, err, getenv)
                 "event" -> EventCli.run(stream, parsed.args, parsed.body?.let { if (it == "-") input().use { r -> r.readText() } else it }, out, err, getenv)
                 "tests" -> TestsCli.run(stream, parsed.args, out, err, getenv)
+                "card" -> CardCli.run(stream, parsed.args, out, err, getenv)
                 "tool" -> ToolCli.run(stream, parsed.args, parsed.body?.let { if (it == "-") input().use { r -> r.readText() } else it }, out, err, getenv)
                 "script" -> ScriptCli.run(stream, parsed.args, parsed.body?.let { if (it == "-") input().use { r -> r.readText() } else it } ?: parsed.file?.let { f -> runCatching { File(f).readText() }.getOrNull() }, out, err, getenv)
                 "issue" -> issue(stream, parsed, out, err, getenv)
@@ -5079,6 +5081,10 @@ internal object Cli {
               issue precheck <path>          The issues at or under <path>, open first, with their attempts;
                                              run it before changing a file
 
+            Chat cards (CARD-3):
+              card list                      The card types the loaded plugins offer, one line each
+              card show <type>               What to write for one: a ```card:<type> block and its JSON fields
+
             Daemon and pods:
               submit "<goal>"     Create a pod, print the pod id (--project <id>: its project)
               submit "<goal>"     Create a pod, print the pod id
@@ -6197,6 +6203,7 @@ internal object Cli {
         "notify" -> notifyUsageError(parsed)
         "event" -> EventCli.usageError(parsed.args)
         "tests" -> TestsCli.usageError(parsed.args)
+        "card" -> CardCli.usageError(parsed.args)
         "tool" -> ToolCli.usageError(parsed.args)
         "script" -> ScriptCli.usageError(parsed.args)
         "issue" -> issueUsageError(parsed, getenv)
@@ -6406,7 +6413,7 @@ internal object Cli {
         "submit", "watch", "pods", "runs", "logs", "cancel", "tickets", "board", "ticket", "agents", "send", "inbox",
         "read", "threads", "thread", "waiting", "epics", "stories", "epic", "project", "mcp", "knowledge", "memory", "decision", "pipeline", "notify", "issue",
         "trait", "skill", "role", "ask", "harnesses", "harness-status", "harness", "archive", "harness-install", "image", "session", "remote", "bg", "kill", "usage",
-        "processes", "health", "settings", "agent", "agent-def", "run-cmd", "secret", "event", "tests", "tool", "script", "runner",
+        "processes", "health", "settings", "agent", "agent-def", "run-cmd", "secret", "event", "tests", "card", "tool", "script", "runner",
         "install-cli", "uninstall-cli", "login", "logout", "whoami",
     )
 

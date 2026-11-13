@@ -126,6 +126,9 @@ class DaemonPluginHost private constructor(
     /** UPDATE-ENGINE-1: every resolved module (daemon half or not), as the update engine lists them. */
     @Volatile private var resolvedModules: List<HostUpdates.Module> = emptyList()
 
+    /** CARD-3: the same resolved modules with their folders, as [DaemonApi.plugins] `loaded()` answers them. */
+    @Volatile private var loadedViews: List<com.superiorsoftllc.infantry.daemon.api.plugins.LoadedModule> = emptyList()
+
     /**
      * RUNNER-POOL-6: the orchestrator side's calls to its paired runners ([DaemonApi.runnerLinks]); the daemon sets it once its
      * runner link service exists. Official / core plugins only (a runner binding starts agents on another machine).
@@ -144,6 +147,7 @@ class DaemonPluginHost private constructor(
 
     private fun remember(resolution: Resolution, config: ModulesConfig) {
         resolvedModules = resolution.loaded.mapNotNull { s -> s.manifest?.let { HostUpdates.Module(s.name, s.tier, it, config.setting(s.name).allow.toSet()) } }
+        loadedViews = resolution.loaded.mapNotNull { s -> s.manifest?.let { com.superiorsoftllc.infantry.daemon.api.plugins.LoadedModule(s.name, s.tier.name.lowercase(), it, s.dir?.let(::File)) } }
         // PLUGIN-BRIDGES-1: the capability declarations are compiled from the same resolved set (daemon half or not).
         capabilities.install(resolution.loaded.mapNotNull { s -> s.manifest?.let { s.name to it } })
     }
@@ -887,6 +891,7 @@ class DaemonPluginHost private constructor(
     private fun unloadLocked(id: String): HotOutcome {
         // PLUGIN-BRIDGES-1: an unloaded (disabled, removed) module offers nothing any more; a load or reload declares it again.
         capabilities.dropModule(id)
+        loadedViews = loadedViews.filter { it.id != id }
         val target = loaded.firstOrNull { it.id == id } ?: return HotOutcome(true, "$id has no loaded daemon half")
         // A dependent cannot run without it: they leave first (reverse load order), and are reported.
         val gone = mutableSetOf(id)
@@ -1069,6 +1074,7 @@ class DaemonPluginHost private constructor(
         val id = manifest.name
         refusal(tier, d, setting, id)?.let { statuses[id] = "refused: $it"; return statuses[id] }
         resolvedModules = resolvedModules.filter { it.name != id } + HostUpdates.Module(id, tier, manifest, setting.allow.toSet())
+        loadedViews = loadedViews.filter { it.id != id } + com.superiorsoftllc.infantry.daemon.api.plugins.LoadedModule(id, tier.name.lowercase(), manifest, null)
         capabilities.install(resolvedModules.map { it.name to it.manifest })
         start(id, tier, d, setting, URLClassLoader("plugin-$id", emptyArray(), DaemonPluginHost::class.java.classLoader), manifest.dependencies.map { it.id }) { plugin }
         statuses[id]
@@ -1329,7 +1335,10 @@ class DaemonPluginHost private constructor(
         // PLUGIN-MCP-1: read-only plugin manager view; official / core, or a community module with the grant `plugins.read`.
         override val plugins: com.superiorsoftllc.infantry.daemon.api.plugins.PluginCatalogReader get() {
             check(!p.community || "plugins.read" in p.setting.allow) { "missing grant 'plugins.read' in modules.json" }
-            return hostServices.plugins
+            // CARD-3: `loaded()` comes from this host's own resolution (the manager knows folders, not what loaded).
+            return object : com.superiorsoftllc.infantry.daemon.api.plugins.PluginCatalogReader by hostServices.plugins {
+                override fun loaded() = loadedViews
+            }
         }
         // CMD-1: the run surface; official / core, or a community module with the grant `runs`.
         override val updates: com.superiorsoftllc.infantry.daemon.api.updates.Updates =

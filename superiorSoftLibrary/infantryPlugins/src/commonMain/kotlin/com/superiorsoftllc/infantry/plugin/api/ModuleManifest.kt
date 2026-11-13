@@ -147,6 +147,11 @@ data class ModuleManifest(
      * its own (it ships with the app). The engine reads it for every installed module, 3rd-party ones included.
      */
     val update: UpdateDeclaration? = null,
+    /**
+     * CARD-3 (docs/CARD-REGISTRY.md 2.2-2.3): the chat cards this module brings, as agent-facing descriptors. Read by the daemon
+     * (`infantry card list|show`, the card image allow-list); the client binding is the `chat.cards` entry in [implementations].
+     */
+    val cards: List<CardDeclaration> = emptyList(),
 ) {
     /** NS3: the node ids of [fills]. */
     val fillNodes: List<String> get() = fills.map { it.node }
@@ -158,6 +163,23 @@ data class ModuleManifest(
  */
 @Serializable
 data class FillDeclaration(val node: String, val layout: String? = null, val replaces: String? = null)
+
+/**
+ * CARD-3: one chat card type the module brings. [type] is the fence's `card:<type>`; [summary] one line for `infantry card list`;
+ * [spec] what an agent needs to write the card (`infantry card show <type>`): a path of a text file in the module folder
+ * (`cards/news.md`), else the text itself. [images] the hosts a card image may come from (CARD-IMG-1).
+ */
+@Serializable
+data class CardDeclaration(
+    val type: String,
+    val summary: String = "",
+    val spec: String = "",
+    val images: CardImages? = null,
+)
+
+/** CARD-3: module.json `cards[].images`: the image hosts a card type declares (`*.example.com` matches any subdomain). */
+@Serializable
+data class CardImages(val hosts: List<String> = emptyList())
 
 /** GAP-AUDIT-1 (b): a node the module draws; [overridable] false = locked against every other module. */
 @Serializable
