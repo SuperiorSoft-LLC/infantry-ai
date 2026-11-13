@@ -1106,6 +1106,15 @@ class InfantryDaemon(
                 runnerOf = { id -> runnerPool.runnerOf(id).takeIf { it != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL } },
             )
             for ((id, runner) in remoteMirror.restore()) runnerPool.placed(id, runner)
+            // RUNNER-UNIFY-4 (docs/RUNNER-UNIFY.md 5.3): ONE session directory: this daemon's own sessions plus, for each session placed on
+            // a runner, the record that runner sent in its own `session` frames (its /work/... working dir, harness, state). Behind
+            // runners.unifiedDirectory (default on; false = the mirror's records, as before; read live). The mirror stays the placement index.
+            val sessionDirectory = com.superiorsoftllc.infantry.runners.SessionDirectory(
+                local = manager::list, localGet = manager::get,
+                placed = { runnerPool.remoteSessionIds() }, legacy = remoteMirror::get, placement = remoteMirror::placement,
+                enabled = { settings.runnerLink().unifiedDirectory },
+                store = File(daemonStateDir, "runner-directory.json"),
+            )
             // RUNNER-PROMPT-RELAY-1: a runner session's prompt is shown and answered in the orchestrator's app. Runner side: the prompts of
             // the orchestrator's sessions go to the outbox and run no timer here; orchestrator side: the watch relays them (below).
             val promptRelay = com.superiorsoftllc.infantry.runners.RunnerPromptRelay(
@@ -1437,7 +1446,7 @@ class InfantryDaemon(
                 ticketOf = { ticketId -> orchestratorLink.ticketOf(ticketId).valueOr(null)?.let { it.sessionId to it.projectId } },
                 executor = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "infantry-done-worker-reaper").also { it.isDaemon = true } },
                 onRemoved = {
-                    val pushed = Envelope(Envelope.SESSIONS, json.encodeToString(JsonArray(manager.list().map { json.encodeToJsonElement(SessionRecordSerializer, it) })))
+                    val pushed = Envelope(Envelope.SESSIONS, json.encodeToString(JsonArray(sessionDirectory.list().map { json.encodeToJsonElement(SessionRecordSerializer, it) })))
                     for (client in clients) client.trySend(pushed)
                 },
             )
@@ -1551,7 +1560,7 @@ class InfantryDaemon(
             )
             // CHAT-SENDING-1: one store for every connection, so a resend after a reconnect is recognised.
             val promptSendIds = PromptSendIds { settings.limit(LimitRegistry.CHAT_SENT_IDS_KEPT).toInt() }
-            val ticketStartCharge = TicketStartCharge(spawnGuard, { boardPorts.startMoves() }, { id -> manager.get(id) ?: remoteMirror.get(id) }, manager::setSpawner)
+            val ticketStartCharge = TicketStartCharge(spawnGuard, { boardPorts.startMoves() }, sessionDirectory::get, manager::setSpawner)
             orchestrator.sessionStartedSink = { _, sessionId, parent -> spawnGuard.record(sessionId, parent); manager.setSpawner(sessionId, parent) }
             settings.limitEnvProblems().forEach { println("[infantry] limit ignored: $it") }
             println("[infantry] pod spawn cap=${podSpawnCap ?: settings.limit(LimitRegistry.MAX_PER_POD)} depth=${podSpawnDepth ?: settings.limit(LimitRegistry.MAX_DEPTH)} (cap 0 = unlimited; settings limits.concurrency.*; session-originated spawns only)")
@@ -1795,8 +1804,8 @@ class InfantryDaemon(
                         coreStringSetting = { settings.plainString(it) },
                         notificationSettingsSource = { settings.notificationSettings() },
                         noticeSuppressor = { name, session, ms -> nudgeGate.suppress(name, session, ms) },
-                        // SPAWN-PARAMS-1: a session placed on a remote runner is a session to api.sessions too (session_read, script waits).
-                        remoteSession = { id -> remoteMirror.get(id) },
+                        // SPAWN-PARAMS-1 / RUNNER-UNIFY-4: api.sessions looks a session up in the one directory (session_read, script waits).
+                        sessionOf = sessionDirectory::get,
                         remoteLines = { id, _ ->
                             val name = runnerPool.runnerOf(id)
                             if (name == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL) null
@@ -1843,7 +1852,7 @@ class InfantryDaemon(
                         boardServices = com.superiorsoftllc.infantry.daemon.plugins.LocalBoardServices(
                             // RUNNER-DOCKER-MATRIX-1: a remote worker's forwarded MCP board call (infantry_ticket_get, ...) names its
                             // session; that session is in remoteMirror, not manager, so both are known callers (as for the reads below).
-                            ops = { boardPorts.ops() }, sessions = { manager.list() + remoteMirror.list() }, link = { orchestratorHub.link },
+                            ops = { boardPorts.ops() }, sessions = sessionDirectory::list, link = { orchestratorHub.link },
                             gate = { type, data ->
                                 val envelope = Envelope(type, data)
                                 policies.current.takeIf { !it.isEmpty }?.let { com.superiorsoftllc.infantry.policy.PolicyRuntime.actionRefusal(it, envelope, policies.actionOf(envelope)) }
@@ -1916,7 +1925,7 @@ class InfantryDaemon(
                         agentRegistry = agentRegistry,
                         // RUNTIME-LOAD-5: the sessions read model (host-scoped), with the replay buffer for transcripts.
                         sessionReadModel = com.superiorsoftllc.infantry.daemon.plugins.LocalSessionReads(
-                            sessions = { manager.list() + remoteMirror.list() },
+                            sessions = sessionDirectory::list,
                             replay = { id ->
                                 // RUNNER-OUTPUT-1: a remote session's newest output is read from its runner first.
                                 // RUNNER-UNIFY-3: a runner that pushes its frames has already put them on this daemon's stream.
@@ -1934,7 +1943,7 @@ class InfantryDaemon(
                         ),
                         // RUNTIME-LOAD-6: the host spawn service: depth, concurrency and kill scope keyed by the calling session.
                         spawnService = com.superiorsoftllc.infantry.daemon.plugins.LocalSpawns(
-                            sessions = { manager.list() + remoteMirror.list() },
+                            sessions = sessionDirectory::list,
                             guard = spawnGuard,
                             limit = { def -> if (def == LimitRegistry.MAX_DEPTH && podSpawnDepth != null) podSpawnDepth else settings.limitCap(def) }, // a test pins the depth through podSpawnDepth
                             tickets = { pluginBoardServices!!.tickets },
@@ -2199,7 +2208,7 @@ class InfantryDaemon(
                         if (e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.FINISHED) remoteMirror.finished(e.sessionId)
                         val pushed = Envelope(
                             Envelope.SESSIONS,
-                            json.encodeToString(JsonArray((manager.list() + remoteMirror.list()).map { json.encodeToJsonElement(SessionRecordSerializer, it) })),
+                            json.encodeToString(JsonArray(sessionDirectory.list().map { json.encodeToJsonElement(SessionRecordSerializer, it) })),
                         )
                         for (client in clients) client.trySend(pushed)
                     }
@@ -2216,7 +2225,7 @@ class InfantryDaemon(
                         val placed = remoteMirror.placement(e.sessionId)
                         if (placed?.repoRoot != null && placed.branch != null)
                             com.superiorsoftllc.infantry.daemon.plugins.fetchRunnerTicketBranch(File(placed.repoRoot), placed.branch)
-                        remoteMirror.get(e.sessionId)?.takeIf { it.ticketId != null }?.let { rec ->
+                        sessionDirectory.get(e.sessionId)?.takeIf { it.ticketId != null }?.let { rec ->
                             coreHost?.publishRemoteExit(com.superiorsoftllc.infantry.daemon.plugins.SessionViews.of(rec), e.payload.toIntOrNull())
                         }
                     }
@@ -2246,7 +2255,14 @@ class InfantryDaemon(
                 sessionsOn = runnerPool::sessionsOn,
                 link = { runner -> runnerPool.link(runner) },
                 takenBefore = remoteMirror::taken,
-                apply = { _, sid, fresh ->
+                apply = { runner, sid, fresh ->
+                    // RUNNER-UNIFY-4: the runner's own `session` frames are the record the session directory serves for it.
+                    var record = false
+                    for (f in fresh) if (f.type == Envelope.SESSION && sessionDirectory.accept(runner, sid, f.data)) record = true
+                    if (record && settings.runnerLink().unifiedDirectory) {
+                        val pushed = Envelope(Envelope.SESSIONS, json.encodeToString(JsonArray(sessionDirectory.list().map { json.encodeToJsonElement(SessionRecordSerializer, it) })))
+                        for (client in clients) client.trySend(pushed)
+                    }
                     val out = fresh.filter { it.type in com.superiorsoftllc.infantry.runners.RemoteTranscriptPump.RELAYED || it.type == Envelope.STATUS }
                         .map { Envelope(it.type, it.data, sid, origin = it.origin) }
                     if (out.isNotEmpty()) streamSequencer.publish(clients, out)
@@ -2290,7 +2306,7 @@ class InfantryDaemon(
             val outputPollMs = settings.limit(LimitRegistry.RUNNERS_OUTPUT_POLL_MS)
             if (outputPollMs > 0) scheduledTicker(outputPollMs) {
                 // RUNNER-UNIFY-3: a session whose runner pushes its frames is not polled.
-                val running = runnerPool.remoteSessionIds().filter { id -> remoteMirror.get(id)?.state.let { it == null || it == SessionState.STARTING || it == SessionState.BUSY } }
+                val running = runnerPool.remoteSessionIds().filter { id -> sessionDirectory.get(id)?.state.let { it == null || it == SessionState.STARTING || it == SessionState.BUSY } }
                     .filter { id -> !remoteStreaming(id) }
                 if (running.isNotEmpty()) {
                     runCatching { runnerWatch.tick() }.onFailure { System.err.println("[infantry] runner watch failed: ${it.message}") }
@@ -2476,9 +2492,9 @@ class InfantryDaemon(
                             com.superiorsoftllc.infantry.agents.LayeredSkillStore(store),
                             spawnGuard,
                             runnerPool = runnerPool,
-                            remoteSessions = remoteMirror::list,
+                            sessions = sessionDirectory::list,
                             remotePlaced = remoteMirror::placed,
-                            remoteForget = remoteMirror::forget,
+                            remoteForget = { id -> remoteMirror.forget(id); sessionDirectory.forget(id) },
                             remoteStatus = remoteMirror::status,
                             remoteTranscripts = remoteTranscripts,
                             remoteStreaming = remoteStreaming,
@@ -3180,8 +3196,8 @@ private suspend fun handleConnection(
     policies: com.superiorsoftllc.infantry.policy.PolicyRuntime = com.superiorsoftllc.infantry.policy.PolicyRuntime(emptyList(), { null }, null, java.io.File(".")),
     /** CHAT-SENDING-1: the client message ids of recent prompts, daemon-wide (a resend arrives on a new connection). */
     promptSendIds: PromptSendIds = PromptSendIds { LimitRegistry.CHAT_SENT_IDS_KEPT.default.toInt() },
-    /** RUNNER-E2E-2: the sessions started on remote runners (read-only mirror); the `sessions` answer lists them with the local ones. */
-    remoteSessions: () -> List<SessionRecord> = { emptyList() },
+    /** RUNNER-UNIFY-4: every session of this daemon, wherever it runs (the one session directory); the `sessions` answer lists it. */
+    sessions: () -> List<SessionRecord> = { manager.list() },
     /** RUNNER-SESSION-GHOST-1: records a non-board remote start's placement in the mirror (project, role, harness, model). */
     remotePlaced: (String, com.superiorsoftllc.infantry.runners.RemoteSessionMirror.Placed) -> Unit = { _, _ -> },
     /** RUNNER-SESSION-GHOST-1: a deleted remote session leaves the mirror. */
@@ -3453,7 +3469,7 @@ private suspend fun handleConnection(
     outgoing.trySend(policyEnvelope())
     val policySubscription = policies.onChange { outgoing.trySend(policyEnvelope()) }
     // Manually serialize sessions with SessionRecordSerializer to include computed `live` field
-    val sessionsElements = (manager.list() + remoteSessions()).map { json.encodeToJsonElement(SessionRecordSerializer, it) }
+    val sessionsElements = sessions().map { json.encodeToJsonElement(SessionRecordSerializer, it) }
     val sessionsJson = JsonArray(sessionsElements)
     outgoing.trySend(Envelope(Envelope.SESSIONS, json.encodeToString(sessionsJson)))
     outgoing.trySend(
@@ -3658,7 +3674,7 @@ private suspend fun handleConnection(
                             val id = envelope.sessionId!!
                             // SESSION-UNKNOWN-1: a session only the runner mirror knows (its runner was detached or revoked) is not
                             // local and not placed: say so, never "unknown session".
-                            if (manager.get(id) == null && id !in runnerPool.placedSessionIds() && remoteSessions().any { it.id == id }) {
+                            if (manager.get(id) == null && id !in runnerPool.placedSessionIds() && sessions().any { it.id == id }) {
                                 throw IllegalStateException("session $id lives on a runner that is no longer attached; re-attach that runner, or start the ticket again to get a new session")
                             }
                             // RUNNER-UNIFY-2: through the session's runner, local or remote alike (RUNNER-REMOTE-IO-1 sent remote ones as mail).
@@ -3669,7 +3685,7 @@ private suspend fun handleConnection(
                                 else -> throw IllegalStateException(sent.reason)
                             }
                             plugins.turnAccepted(envelope, caller)
-                            pluginSessionsAck(envelope, manager) ?: sendKey?.let { promptAck(envelope, duplicate = false) }
+                            pluginSessionsAck(envelope, sessions) ?: sendKey?.let { promptAck(envelope, duplicate = false) }
                         } catch (e: RunInFlightException) {
                             sendKey?.let(promptSendIds::release)
                             // 1.96.0: typed, so the client that sent it (its requestId is echoed below) can queue it again.
@@ -3690,7 +3706,7 @@ private suspend fun handleConnection(
                                 throw IllegalStateException("the runner refused the first task: ${sent.reason ?: sent.kind}")
                             }
                             plugins.turnAccepted(envelope, caller)
-                            val pushed = Envelope(Envelope.SESSIONS, json.encodeToString(JsonArray((manager.list() + remoteSessions()).map { json.encodeToJsonElement(SessionRecordSerializer, it) })))
+                            val pushed = Envelope(Envelope.SESSIONS, json.encodeToString(JsonArray(sessions().map { json.encodeToJsonElement(SessionRecordSerializer, it) })))
                             for (client in clients) client.trySend(pushed)
                             null
                         } catch (e: Exception) {
@@ -4109,7 +4125,7 @@ private suspend fun handleConnection(
                         Envelope(Envelope.ERROR, "agent_roster refused: projectId is blank")
                     } else {
                         // RUNNER-DONE-1: a worker on a remote runner is one of the project's agents too (it read "No agents here").
-                        val rosterSessions = manager.list() + remoteSessions()
+                        val rosterSessions = sessions()
                         val rows = roster(
                             projectId,
                             projectAgents(projectId, rosterSessions, agents::get),
@@ -4360,7 +4376,7 @@ private suspend fun handleConnection(
                             // way it has ended, so the runner mirror reads EXITED now, not STARTING until an event that never comes;
                             // `session_remove --force` (kill, then remove) can then remove it. (The mirror goes in RUNNER-UNIFY-4.)
                             if (!held) remoteStatus(id, SessionState.EXITED.name)
-                            pluginSessionsAck(envelope, manager)
+                            pluginSessionsAck(envelope, sessions)
                         } catch (e: Exception) {
                             Envelope(Envelope.ERROR, e.message ?: "kill failed")
                         }
@@ -4368,7 +4384,7 @@ private suspend fun handleConnection(
                 }
 
                 Envelope.SESSIONS -> {
-                    val sessionsElements = (manager.list() + remoteSessions()).map { json.encodeToJsonElement(SessionRecordSerializer, it) }
+                    val sessionsElements = sessions().map { json.encodeToJsonElement(SessionRecordSerializer, it) }
                     val sessionsJson = JsonArray(sessionsElements)
                     Envelope(Envelope.SESSIONS, json.encodeToString(sessionsJson))
                 }
@@ -4498,7 +4514,7 @@ private suspend fun handleConnection(
                     require(sessionId.isNotEmpty()) { "expects a sessionId" }
                     val force = body["force"]?.jsonPrimitive?.contentOrNull == "true"
                     manager.restart(sessionId, force)
-                    pluginSessionsAck(envelope, manager)
+                    pluginSessionsAck(envelope, sessions)
                 } catch (e: IllegalArgumentException) {
                     Envelope(Envelope.ERROR, "session_restart refused: ${e.message ?: "invalid request"}")
                 } catch (e: Exception) {
@@ -4537,7 +4553,7 @@ private suspend fun handleConnection(
                             // Contract 1.26.0: the delete itself gets no direct reply -- every client
                             // (not just the one that asked) hears about it through a fresh `sessions`
                             // push, exactly like any other session-list mutation.
-                            val sessionsElements = (manager.list() + remoteSessions()).map { json.encodeToJsonElement(SessionRecordSerializer, it) }
+                            val sessionsElements = sessions().map { json.encodeToJsonElement(SessionRecordSerializer, it) }
                             val pushed = Envelope(Envelope.SESSIONS, json.encodeToString(JsonArray(sessionsElements)))
                             for (client in clients) client.trySend(pushed)
                             if (wantsDirectAck(envelope)) pushed else null
@@ -4846,9 +4862,9 @@ private suspend fun handleConnection(
  * A plugin tool waits for its own request id, so for those requests (id `plugin:<uuid>`) success is the `sessions` list after the
  * write: the connection handles frames in order, so it is the fence the CLI's MCP server drew with a trailing `sessions` request.
  */
-private fun pluginSessionsAck(envelope: Envelope, manager: SessionManager): Envelope? =
+private fun pluginSessionsAck(envelope: Envelope, sessions: () -> List<SessionRecord>): Envelope? =
     if (wantsDirectAck(envelope)) {
-        Envelope(Envelope.SESSIONS, json.encodeToString(JsonArray(manager.list().map { json.encodeToJsonElement(SessionRecordSerializer, it) })))
+        Envelope(Envelope.SESSIONS, json.encodeToString(JsonArray(sessions().map { json.encodeToJsonElement(SessionRecordSerializer, it) })))
     } else null
 
 private fun splitResume(data: String): Pair<String?, String?> {
