@@ -40,6 +40,7 @@ For how the product works, start with the wiki: [docs/wiki/Architecture.md](docs
 | [docs/AGENT-TASKS-DESIGN.md](docs/AGENT-TASKS-DESIGN.md) | design record (dated) | none |
 | [docs/AI-FRIENDLY-AUDIT.md](docs/AI-FRIENDLY-AUDIT.md) | design record (dated) | none |
 | [docs/ARCH-AUDIT-2026-11.md](docs/ARCH-AUDIT-2026-11.md) | design record (dated 2026-11-07): duplicate and ad-hoc implementations per concern, with their consolidation tickets | none |
+| [docs/CARD-REGISTRY.md](docs/CARD-REGISTRY.md) | design record (dated 2026-11-12): plugin chat cards (fence `card:<type>`, `chat.cards` registry, on-demand agent discovery, safe card images, News Agent), with the ordered ticket list | none |
 | [docs/BLOCKS-INJECTORS.md](docs/BLOCKS-INJECTORS.md) | design record (dated) | [docs/wiki/Architecture.md](docs/wiki/Architecture.md) |
 | [docs/BLOCKS-LAYOUT-DESIGN.md](docs/BLOCKS-LAYOUT-DESIGN.md) | design record (dated) | [docs/wiki/Architecture.md](docs/wiki/Architecture.md) |
 | [docs/CONFIG-AUDIT-2026-11.md](docs/CONFIG-AUDIT-2026-11.md) | design record (dated 2026-11-08): audit of every setting shown in Settings, with reader, effect and verdict | none |
