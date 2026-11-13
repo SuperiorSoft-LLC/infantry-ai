@@ -91,12 +91,15 @@ class RunnerWorktreePathTest {
         assertNotEquals(orchestratorCheckout.canonicalPath, File(runnerPath).canonicalPath)
         assertTrue(reply.branch!!.startsWith("ticket/29cbb634"), reply.branch)
 
-        // The orchestrator's mirror record: the checkout stays the repo root (where the branch is fetched), the worktree is the runner's.
-        val mirror = RemoteSessionMirror(sessionIds = { listOf("s-1") }, clock = { now })
-        mirror.placed("s-1", RemoteSessionMirror.Placed("claude", "sonnet", orchestratorCheckout.path, reply.branch, "29cbb634", reply.worktreePath))
+        // The orchestrator's record before the runner's first frame: the checkout stays the repo root (where the branch is fetched),
+        // the worktree is the runner's, and so is the working dir (never the orchestrator's checkout).
+        val placements = RunnerPlacements(clock = { now })
+        val mirror = SessionDirectory(local = { emptyList() }, localGet = { null }, placed = { listOf("s-1") }, placements = placements)
+        placements.placed("s-1", RunnerPlacements.Placed("claude", "sonnet", orchestratorCheckout.path, reply.branch, "29cbb634", reply.worktreePath))
         val rec = assertNotNull(mirror.get("s-1"))
         assertEquals(runnerPath, rec.worktreePath)
         assertEquals(orchestratorCheckout.path, rec.repoRoot)
+        assertEquals(runnerPath, rec.workingDir)
 
         // `ticket start` labels it with the runner the wire frame names; a local worker prints its path as before.
         val onRunner = rec.copy(runner = "trw1")

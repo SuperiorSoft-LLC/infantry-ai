@@ -65,37 +65,6 @@ object RunnerLinkSettings {
      * that session only). Default `true`; `false` = ignore them and use only this runner's own keys and git access.
      */
     const val ACCEPT_CREDENTIALS = "runner.acceptCredentials"
-    /**
-     * RUNNER-UNIFY-2 (orchestrator side): every owner command on a session (prompt, resume, attach, interrupt, queue, kill, delete)
-     * goes through the runner the session lives on (`RunnerPool.linkFor`). Default `true`. CONTINGENCY: `false` = a session this
-     * daemon holds skips the pool and runs the session manager directly, as before; remote sessions still go to their runner.
-     */
-    const val UNIFIED_COMMANDS = "runners.unifiedCommands"
-    /**
-     * RUNNER-UNIFY-3 (orchestrator side, docs/RUNNER-UNIFY.md 5.2): a remote session's stream frames (chat, reasoning, errors, finishes
-     * AND `status` with its run activity) are pushed by the runner over the link (`runner_link_frames_pull`, a held call answered the
-     * moment a frame is published) instead of read every `limits.runners.outputPollMs`. Default `false`. CONTINGENCY: `false` = the
-     * poll path exactly as before; flipping it takes effect live, with no restart, rebuild or revert. A runner too old to push is
-     * polled as before even when it is `true`.
-     */
-    const val PUSH_FRAMES = "runners.pushFrames"
-    /**
-     * RUNNER-UNIFY-4 (orchestrator side, docs/RUNNER-UNIFY.md 5.3): the session list, header and lookups read ONE directory: this
-     * daemon's own sessions plus, for each session placed on a runner, the record the runner itself sent in its `session` frames
-     * (its real working dir, harness, model, state and error). Default `true` (proven live; RUNNER-UNIFY-6 removes the flag).
-     * CONTINGENCY: `false` = the mirror's records exactly as before; flipping it takes effect live, with no restart, rebuild or revert. A session whose runner has sent no record yet
-     * (pushed frames off, an older runner, the first moment after a start) reads the mirror's record either way.
-     */
-    const val UNIFIED_DIRECTORY = "runners.unifiedDirectory"
-    /**
-     * RUNNER-UNIFY-5 (orchestrator side, docs/RUNNER-UNIFY.md 5.4): a runner session's approval card opens from the prompt frame on
-     * its pushed stream, through the same prompt store as a local session, and a failed turn's reason is the one its frames carry
-     * (the record's `lastError`, the `finished` detail, an `error` frame) instead of a scrape of its transcript. Applies to a session
-     * whose frames are pushed (`runners.pushFrames`); any other session keeps the event relay. Default `true` since the live proof on
-     * dev 5d2df5ae (gradle-run app + infantry-runner-test). CONTINGENCY: `false` = the outbox event relay and the transcript scrape
-     * exactly as before; flipping it takes effect live. RUNNER-UNIFY-6 removes the flag.
-     */
-    const val FRAME_PROMPTS = "runners.framePrompts"
 
     /** The setting text of [ALLOW_PLAIN_TAILNET]; it states the risk. */
     const val ALLOW_PLAIN_TAILNET_TEXT =
@@ -103,7 +72,7 @@ object RunnerLinkSettings {
             "text cross the network unencrypted; anyone on the path can read them and replay the credential to start agents with " +
             "tool permissions on this machine. Only for a private tailnet (Tailscale/WireGuard) you fully control. Default false."
 
-    val KEYS: Set<String> = setOf(ALLOW_PLAIN_TAILNET, PROJECTS, HARNESSES, CLONE_ROOT, ON_LOST, PUSH_ON_COMMIT, ADVERTISE_HOSTS, GIT_NAME, GIT_EMAIL, LEND_CREDENTIALS, GIT_SECRET, ACCEPT_CREDENTIALS, UNIFIED_COMMANDS, PUSH_FRAMES, UNIFIED_DIRECTORY, FRAME_PROMPTS)
+    val KEYS: Set<String> = setOf(ALLOW_PLAIN_TAILNET, PROJECTS, HARNESSES, CLONE_ROOT, ON_LOST, PUSH_ON_COMMIT, ADVERTISE_HOSTS, GIT_NAME, GIT_EMAIL, LEND_CREDENTIALS, GIT_SECRET, ACCEPT_CREDENTIALS)
 
     /** What the runner link reads; [stored] is the raw stored JSON of a key (null = unset). */
     data class Values(
@@ -119,10 +88,6 @@ object RunnerLinkSettings {
         val lendCredentials: List<String> = listOf(ANY),
         val gitSecret: String = "",
         val acceptCredentials: Boolean = true,
-        val unifiedCommands: Boolean = true,
-        val pushFrames: Boolean = false,
-        val unifiedDirectory: Boolean = true,
-        val framePrompts: Boolean = true,
     ) {
         /** RUNNER-CRED-1: whether this orchestrator lends credentials to runner [name]. */
         fun lendsTo(name: String): Boolean = ANY in lendCredentials || name in lendCredentials
@@ -148,10 +113,6 @@ object RunnerLinkSettings {
         lendCredentials = stored(LEND_CREDENTIALS)?.let(::list) ?: listOf(ANY),
         gitSecret = string(stored(GIT_SECRET)),
         acceptCredentials = runCatching { (Json.parseToJsonElement(stored(ACCEPT_CREDENTIALS) ?: "true") as JsonPrimitive).booleanOrNull }.getOrNull() ?: true,
-        unifiedCommands = runCatching { (Json.parseToJsonElement(stored(UNIFIED_COMMANDS) ?: "true") as JsonPrimitive).booleanOrNull }.getOrNull() ?: true,
-        pushFrames = runCatching { (Json.parseToJsonElement(stored(PUSH_FRAMES) ?: "false") as JsonPrimitive).booleanOrNull }.getOrNull() ?: false,
-        unifiedDirectory = runCatching { (Json.parseToJsonElement(stored(UNIFIED_DIRECTORY) ?: "true") as JsonPrimitive).booleanOrNull }.getOrNull() ?: true,
-        framePrompts = runCatching { (Json.parseToJsonElement(stored(FRAME_PROMPTS) ?: "true") as JsonPrimitive).booleanOrNull }.getOrNull() ?: true,
     )
 
     private fun string(raw: String?): String =
@@ -174,10 +135,6 @@ object RunnerLinkSettings {
             LEND_CREDENTIALS to JsonArray(v.lendCredentials.map(::JsonPrimitive)),
             GIT_SECRET to JsonPrimitive(v.gitSecret),
             ACCEPT_CREDENTIALS to JsonPrimitive(v.acceptCredentials),
-            UNIFIED_COMMANDS to JsonPrimitive(v.unifiedCommands),
-            PUSH_FRAMES to JsonPrimitive(v.pushFrames),
-            UNIFIED_DIRECTORY to JsonPrimitive(v.unifiedDirectory),
-            FRAME_PROMPTS to JsonPrimitive(v.framePrompts),
         )
     }
 
@@ -222,22 +179,6 @@ object RunnerLinkSettings {
         ACCEPT_CREDENTIALS -> JsonPrimitive(
             (value as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull
                 ?: throw IllegalArgumentException("setting '$key' must be a JSON boolean (false = ignore the credentials an orchestrator lends)"),
-        )
-        UNIFIED_COMMANDS -> JsonPrimitive(
-            (value as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull
-                ?: throw IllegalArgumentException("setting '$key' must be a JSON boolean (false = this daemon's own sessions skip the runner link, as before RUNNER-UNIFY-2)"),
-        )
-        PUSH_FRAMES -> JsonPrimitive(
-            (value as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull
-                ?: throw IllegalArgumentException("setting '$key' must be a JSON boolean (true = a runner pushes its sessions' frames; false = they are polled, as before RUNNER-UNIFY-3)"),
-        )
-        UNIFIED_DIRECTORY -> JsonPrimitive(
-            (value as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull
-                ?: throw IllegalArgumentException("setting '$key' must be a JSON boolean (true = runner sessions show the runner's own record; false = the mirror's, as before RUNNER-UNIFY-4)"),
-        )
-        FRAME_PROMPTS -> JsonPrimitive(
-            (value as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull
-                ?: throw IllegalArgumentException("setting '$key' must be a JSON boolean (true = a runner session's approval cards and failure reason come from its pushed frames; false = the event relay and the transcript scrape, as before RUNNER-UNIFY-5)"),
         )
         else -> throw IllegalArgumentException("unknown runner link setting '$key'")
     }

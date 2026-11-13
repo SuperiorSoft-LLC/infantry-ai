@@ -182,15 +182,17 @@ class RemoteSpawnTest {
         assertNotNull(r2Manager.get(byProject.id), "the project-folder start runs on r2")
 
         // RUNNER-SESSION-GHOST-1: the app's New agent start records what it pinned, so the session lists with its project and role
-        // (not as a project-less `remote` row nobody in the project may remove), and a deleted one leaves the mirror's list.
-        val mirror = RemoteSessionMirror(sessionIds = { hub.sessionsOn("r2") })
-        val pinned = assertIs<StartedSession.Remote>(LocalRunner.start(hub, oManager, options.copy(role = "backend"), checkout, agentRunner = "r2", remotePlaced = mirror::placed))
+        // (not as a project-less `remote` row nobody in the project may remove), and a deleted one leaves the session list.
+        val placements = RunnerPlacements(placedOn = hub::placedOn)
+        val mirror = SessionDirectory(local = { emptyList() }, localGet = { null }, placed = { hub.sessionsOn("r2") }, placements = placements)
+        val pinned = assertIs<StartedSession.Remote>(LocalRunner.start(hub, oManager, options.copy(role = "backend"), checkout, agentRunner = "r2", remotePlaced = placements::placed))
         val row = assertNotNull(mirror.get(pinned.id))
+        assertEquals("r2", placements.runnerFor(pinned.id), "the placement index names the runner")
         assertEquals("p1", row.projectId)
         assertEquals(agent.id, row.agentId)
         assertEquals("backend", row.role)
         assertEquals(FakeAgentProvider().id, row.provider)
-        hub.forget(pinned.id); mirror.forget(pinned.id)
+        hub.forget(pinned.id); placements.forget(pinned.id); mirror.forget(pinned.id)
         assertTrue(mirror.list().none { it.id == pinned.id }, "a forgotten remote session is no longer listed")
         // A start that ASKS for r2 with nothing to bind there is refused loudly, never answered by a local session.
         val bare = assertFailsWith<IllegalArgumentException> { LocalRunner.start(hub, oManager, SpawnOptions(projectId = "p1", runner = "r2"), checkout) }

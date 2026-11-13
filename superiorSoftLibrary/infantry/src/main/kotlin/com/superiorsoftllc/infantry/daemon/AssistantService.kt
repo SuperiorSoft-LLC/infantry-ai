@@ -29,7 +29,7 @@ object AssistantService {
         manager.list().firstOrNull { it.global }?.let { return it }
         val dir = (manager.assistantDir ?: throw IllegalArgumentException("this daemon has no assistant directory configured")).also { it.mkdirs() }
         val resolved = agents.resolveSpawn(SpawnOptions(role = ROLE))
-        manager.startNew(
+        manager.startNew( // runner-ok: the Assistant is this daemon's own session, never placed on a runner
             prompt = "",
             workingDir = dir,
             providerId = resolved.providerId,

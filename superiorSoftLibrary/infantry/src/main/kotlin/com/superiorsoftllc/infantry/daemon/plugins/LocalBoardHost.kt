@@ -95,10 +95,8 @@ class LocalBoardHost(
     private val gitRemoteOf: (repo: File) -> String? = ::originUrl,
     /** RUNNER-POOL-8: `runners.pushOnCommit`, read at each remote start (the runner pushes the ticket branch after each worker commit). */
     private val pushOnCommit: () -> Boolean = { false },
-    /** RUNNER-UNIFY-2: `runners.unifiedCommands` (false = a session this daemon holds is killed directly, skipping the pool). */
-    private val unifiedCommands: () -> Boolean = { true },
     /** RUNNER-TICKET-ROW-1: told what each remote ticket start pinned (harness, model, checkout, branch), so the board row can show it. */
-    private val remotePlaced: (sessionId: String, info: com.superiorsoftllc.infantry.runners.RemoteSessionMirror.Placed) -> Unit = { _, _ -> },
+    private val remotePlaced: (sessionId: String, info: com.superiorsoftllc.infantry.runners.RunnerPlacements.Placed) -> Unit = { _, _ -> },
 ) : BoardHost {
 
     private val listeners = CopyOnWriteArrayList<BoardSessionListener>()
@@ -150,7 +148,7 @@ class LocalBoardHost(
         )
         // RUNNER-UNIFY-2: the same remote start a session outside the board makes (LocalRunner.startOnRunner).
         val placed = { ref: com.superiorsoftllc.infantry.daemon.api.orchestrator.SessionRef ->
-            com.superiorsoftllc.infantry.runners.RemoteSessionMirror.Placed(request.providerId.orEmpty(), request.model, checkout?.path, ref.branch, request.ticketId, ref.worktreePath, projectId = request.projectId, agentId = request.agentId, role = request.role)
+            com.superiorsoftllc.infantry.runners.RunnerPlacements.Placed(request.providerId.orEmpty(), request.model, checkout?.path, ref.branch, request.ticketId, ref.worktreePath, projectId = request.projectId, agentId = request.agentId, role = request.role)
         }
         return when (val out = com.superiorsoftllc.infantry.daemon.LocalRunner.startOnRunner(pool, runner, spec, checkout, gitRemoteOf, ::gitIdentityOf, { pool.placed(it, runner) }, placed, remotePlaced)) {
             is com.superiorsoftllc.infantry.daemon.LocalRunner.RemoteStart.Refused -> SessionStartResult.Refused(out.reason)
@@ -243,7 +241,7 @@ class LocalBoardHost(
             request.runner?.takeIf { it != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL }?.let { return startRemote(it, request) }
             val manager = sessionManager() ?: return SessionStartResult.Refused(BoardSessions.NO_SESSIONS)
             return try {
-                val record = manager.startNew(
+                val record = manager.startNew( // runner-ok: the board's local start; a remote start goes through LocalRunner.startOnRunner above
                     prompt = request.prompt,
                     workingDir = request.workingDir?.let(::File),
                     branchHint = request.branchHint,
@@ -296,7 +294,7 @@ class LocalBoardHost(
                 com.superiorsoftllc.infantry.daemon.api.orchestrator.SessionCommand.KILL, force = force, by = by, reason = reason,
             )
             val pool = runners ?: return com.superiorsoftllc.infantry.daemon.LocalRunner.execute(manager, sessionId, command).ok
-            return com.superiorsoftllc.infantry.daemon.LocalRunner.command(pool, manager, sessionId, command, runCatching(unifiedCommands).getOrDefault(true)).ok
+            return com.superiorsoftllc.infantry.daemon.LocalRunner.command(pool, sessionId, command).ok
         }
 
         override fun lastAssistantText(sessionId: String): String? = sessionManager()?.lastReply(sessionId)
@@ -305,7 +303,7 @@ class LocalBoardHost(
             val manager = sessionManager() ?: return false
             val record = manager.get(sessionId) ?: return false
             if (!record.live || record.isBusy()) return false
-            return runCatching { manager.resume(sessionId, text, MessageOrigin.Owner) }.isSuccess
+            return runCatching { manager.resume(sessionId, text, MessageOrigin.Owner) }.isSuccess // runner-ok: only a session this daemon holds (manager.get above)
         }
 
         override fun providers() = sessionManager()?.providers.orEmpty().map { it.toInfo() }
@@ -344,7 +342,7 @@ class LocalBoardHost(
         override fun remove(sessionId: String): String? {
             val manager = sessionManager() ?: return BoardSessions.NO_SESSIONS
             return try {
-                manager.delete(sessionId)
+                manager.delete(sessionId) // runner-ok: the board removes a session this daemon's manager holds
                 null
             } catch (e: IllegalArgumentException) {
                 e.message ?: "session not removed"
@@ -396,7 +394,7 @@ class LocalBoardHost(
         override fun isRetryable(outcome: BoardRunOutcome) = RunOutcomes.isRetryable(FinishedPayload.Outcome.valueOf(outcome.name))
         override fun workerProblem(sessionId: String?): String? {
             // RUNNER-E2E-2: a session on a remote runner is carried by that runner (its loss is the runner watch's business), not gone.
-            if (sessionId != null && runners?.runnerOf(sessionId)?.let { it != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL } == true) return null
+            if (sessionId != null && runners?.runnerOf(sessionId)?.let { it != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL } == true) return null // runner-ok: a placed session's loss is the runner watch's business, not a board worker problem
             return TicketWorkerHealth.problem(sessionId?.let { sessionManager()?.get(it) }, sessionId)
         }
 

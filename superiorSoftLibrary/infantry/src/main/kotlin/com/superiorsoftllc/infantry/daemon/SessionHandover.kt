@@ -123,7 +123,7 @@ class SessionHandover(
     private fun settle(sessionId: String, deadline: Long): Boolean {
         while (manager.inFlight(sessionId)) {
             if (System.currentTimeMillis() >= deadline) {
-                runCatching { manager.interrupt(sessionId) }
+                runCatching { manager.interrupt(sessionId) } // runner-ok: the handover runs on a session this daemon holds (manager.inFlight)
                 val grace = System.currentTimeMillis() + INTERRUPT_GRACE_MS
                 while (manager.inFlight(sessionId) && System.currentTimeMillis() < grace) Thread.sleep(pollMs)
                 return false

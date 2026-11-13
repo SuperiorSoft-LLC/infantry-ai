@@ -21,22 +21,19 @@ import java.util.concurrent.ConcurrentHashMap
  * it ([overlay]): the project, agent, role and ticket the start pinned, and the orchestrator checkout the runner's ticket branch is
  * fetched to (where the board row reads its commit tip).
  *
- * CONTINGENCY (`runners.unifiedDirectory`, default on, [enabled], read live): off, or a placed session whose runner has sent no record yet (pushed
- * frames off, an older runner, the moment right after a start), reads the [legacy] record, exactly as before. The received records are
- * kept in [store] so a daemon restart does not fall back to the mirror for sessions whose runner is quiet. Generic: it names no harness.
+ * RUNNER-UNIFY-6: the only path (the flag is gone). A placed session whose runner has sent no record yet (the moment right after a
+ * start, or a runner that is down) is still listed: it reads a minimal record from what the [placements] index knows (the start's
+ * harness, project, role, ticket and the runner's worktree; STARTING, or the last state this daemon recorded), so a session is never
+ * dropped from the list for want of a frame. The received records are kept in [store] so a daemon restart serves them at once.
+ * Generic: it names no harness.
  */
 class SessionDirectory(
     private val local: () -> List<SessionRecord>,
     private val localGet: (String) -> SessionRecord?,
     private val placed: () -> List<String>,
-    private val legacy: (String) -> SessionRecord?,
-    private val placement: (String) -> RemoteSessionMirror.Placed? = { null },
-    private val enabled: () -> Boolean = { true },
+    /** The placement index: what each start pinned, the states this daemon recorded, the owed role briefs (RUNNER-ROLE-1). */
+    private val placements: RunnerPlacements,
     private val store: File? = null,
-    /** RUNNER-ROLE-1: a placed session whose first turn still owes its role brief ([RemoteSessionMirror.owesBrief]). */
-    private val owesBrief: (String) -> Boolean = { false },
-    /** RUNNER-ROLE-1: that first turn was taken ([RemoteSessionMirror.briefed]). */
-    private val markBriefed: (String) -> Unit = {},
 ) {
     @Serializable
     private data class Kept(val runner: String, val record: JsonElement)
@@ -54,17 +51,17 @@ class SessionDirectory(
     fun get(id: String): SessionRecord? = localGet(id) ?: remoteGet(id)
 
     /** The sessions placed on remote runners only. */
-    fun remote(): List<SessionRecord> = placed().mapNotNull(::remoteRecord)
+    fun remote(): List<SessionRecord> = placed().map(::remoteRecord)
 
     /** One session placed on a remote runner; null = not placed (or a local session). */
     fun remoteGet(id: String): SessionRecord? = if (id in placed()) remoteRecord(id) else null
 
-    /** The runner's own record of [id], when one arrived; what the directory serves for it with the flag on. */
+    /** The runner's own record of [id], when one arrived; what the directory serves for it. */
     fun received(id: String): SessionRecord? = received[id]?.record
 
     /**
      * A `session` frame of [runner] about one of the sessions placed there: [data] is the runner's record as it serves it. A frame
-     * that does not decode, or names another session than [sessionId], is ignored (the mirror's record stands). True = taken.
+     * that does not decode, or names another session than [sessionId], is ignored (what was served stands). True = taken.
      */
     fun accept(runner: String, sessionId: String, data: String): Boolean {
         val record = runCatching { codec.decodeFromString(SessionRecordSerializer, data) }.getOrNull() ?: return false
@@ -79,7 +76,7 @@ class SessionDirectory(
      * session counts its own run; a placed one stops owing its brief here, so the next turn goes as typed.
      */
     fun briefed(id: String) {
-        if (localGet(id) == null) markBriefed(id)
+        if (localGet(id) == null) placements.briefed(id)
     }
 
     /** [sessionId] was deleted: the record the runner sent goes too. */
@@ -87,15 +84,32 @@ class SessionDirectory(
         if (received.remove(sessionId) != null) save()
     }
 
-    private fun remoteRecord(id: String): SessionRecord? = rawRemoteRecord(id)?.let { briefState(it, owesBrief(id)) }
+    private fun remoteRecord(id: String): SessionRecord = rawRemoteRecord(id).let { briefState(it, placements.owesBrief(id)) }
 
-    private fun rawRemoteRecord(id: String): SessionRecord? {
-        val r = received[id]?.record
-        if (r == null || !enabled()) return legacy(id)
-        val out = overlay(r, placement(id))
+    private fun rawRemoteRecord(id: String): SessionRecord {
+        val known = placements.known(id)
+        val r = received[id]?.record ?: return placeholder(id, placements.placement(id), known)
+        val out = overlay(r, placements.placement(id))
         // A runner that went quiet sends no more frames: an end this daemon recorded itself (a kill it sent, a runner lost) stands.
-        val l = legacy(id)
-        return if (l != null && l.state in ENDED && out.state !in ENDED) out.copy(state = l.state, lastError = l.lastError ?: out.lastError) else out
+        val ended = known.state?.takeIf { it in ENDED }
+        return if (ended != null && out.state !in ENDED) out.copy(state = ended, lastError = known.failedWhy ?: out.lastError) else out
+    }
+
+    /**
+     * A placed session its runner has sent no record of yet: listed from the placement alone, so it is never lost from the list. Its
+     * working dir is the runner's worktree when the start reply named one (never the orchestrator's checkout: the `C:\` bug).
+     */
+    private fun placeholder(id: String, p: RunnerPlacements.Placed?, known: RunnerPlacements.Known): SessionRecord {
+        val state = known.state ?: com.superiorsoftllc.infantry.session.SessionState.STARTING
+        return SessionRecord(
+            id = id, provider = p?.provider?.takeIf { it.isNotBlank() } ?: RunnerPlacements.REMOTE_PROVIDER, model = p?.model,
+            workingDir = p?.runnerWorktree.orEmpty(), repoRoot = p?.repoRoot, worktreePath = p?.runnerWorktree, worktreeBranch = p?.branch,
+            ticketId = p?.ticketId, projectId = p?.projectId, agentId = p?.agentId, role = p?.role, spawnedAt = known.firstSeen,
+            lastHeartbeat = known.at, state = state,
+            lastError = if (state == com.superiorsoftllc.infantry.session.SessionState.FAILED) known.failedWhy else null,
+            // A ticket start's brief went over the link with the start: the board treats it as briefed (briefState decides the rest).
+            providerSessionId = RunnerPlacements.REMOTE_PROVIDER, runCount = 1,
+        )
     }
 
     /**
@@ -110,7 +124,7 @@ class SessionDirectory(
         else -> r
     }
 
-    private fun overlay(r: SessionRecord, p: RemoteSessionMirror.Placed?): SessionRecord = if (p == null) r else r.copy(
+    private fun overlay(r: SessionRecord, p: RunnerPlacements.Placed?): SessionRecord = if (p == null) r else r.copy(
         projectId = p.projectId ?: r.projectId,
         agentId = p.agentId ?: r.agentId,
         role = p.role ?: r.role,
@@ -142,7 +156,7 @@ class SessionDirectory(
 
     private companion object {
         val codec = Json { ignoreUnknownKeys = true; encodeDefaults = false }
-        /** A placed session not yet run: the mirror's STARTING before the runner's first record, or the runner's own IDLE. */
+        /** A placed session not yet run: STARTING before the runner's first record, or the runner's own IDLE. */
         val AT_REST = setOf(com.superiorsoftllc.infantry.session.SessionState.STARTING, com.superiorsoftllc.infantry.session.SessionState.IDLE)
         val ENDED = setOf(com.superiorsoftllc.infantry.session.SessionState.EXITED, com.superiorsoftllc.infantry.session.SessionState.FAILED, com.superiorsoftllc.infantry.session.SessionState.ORPHANED)
     }

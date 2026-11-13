@@ -391,6 +391,9 @@ class RunnerHub(
 
     override fun runnerOf(sessionId: String): String = sessions[sessionId] ?: RunnerPool.LOCAL
 
+    /** RUNNER-UNIFY-6: the remote runner session [sessionId] was placed on; null = this daemon's own session (or not placed). */
+    fun placedOn(sessionId: String): String? = sessions[sessionId]
+
     /** RUNNER-CRED-1: [inner] with [lend] applied to its starts; a lend that fails lends nothing (the start still goes). */
     private fun lending(name: String, inner: RunnerLink): RunnerLink = object : RunnerLink by inner {
         override fun hello(): OrchestratorReply<RunnerInfo> = when (val r = inner.hello()) {

@@ -83,11 +83,21 @@ class RunnerPromptRelayTest {
             starts.linked("s1")
         }
 
-        /** One watch round: read the runner's outbox, apply every new event on the orchestrator, acknowledge it. */
-        fun pump(): List<RunnerEvent> {
+        /**
+         * One round: RUNNER-UNIFY-6, the pushed frames are the only prompt path. The runner's outbox carries no prompt event any more
+         * (asserted); every pushed prompt frame goes to the orchestrator. Answers the kinds relayed (PROMPT / PROMPT_RESOLVED).
+         */
+        fun pump(): List<String> {
             val events = starts.events(acked.toMap()).filter { it.seq > (acked[it.sessionId] ?: 0) }
-            events.forEach { relay.apply("r1", it); acked[it.sessionId] = it.seq }
-            return events
+            assertTrue(events.none { it.kind == RunnerEvent.PROMPT || it.kind == RunnerEvent.PROMPT_RESOLVED }, "no prompt event in the outbox: $events")
+            events.forEach { acked[it.sessionId] = it.seq }
+            return pushFrames().map {
+                when (it) {
+                    RunnerLinkWire.PROMPT_FRAME -> RunnerEvent.PROMPT
+                    RunnerLinkWire.PROMPT_RESOLVED_FRAME -> RunnerEvent.PROMPT_RESOLVED
+                    else -> it
+                }
+            }
         }
 
         /** RUNNER-UNIFY-5: one pushed batch: every frame the runner published goes to the orchestrator's frame path. */
@@ -109,7 +119,7 @@ class RunnerPromptRelayTest {
         val asker = async { rig.runner.requestApprovalOutcome("s1", "bash", "ls -la /work") }
         waitFor("the runner opened the prompt") { rig.runner.snapshot().isNotEmpty() }
         val onRunner = rig.runner.snapshot().single()
-        assertEquals(listOf(RunnerEvent.PROMPT), rig.pump().map { it.kind }, "the prompt went to the outbox as one event")
+        assertEquals(listOf(RunnerEvent.PROMPT), rig.pump(), "the prompt crossed as one frame")
         waitFor("the orchestrator shows the card") { rig.orchestrator.snapshot().isNotEmpty() }
         val card = rig.orchestrator.snapshot().single()
         assertEquals(onRunner.promptId, card.promptId, "the same prompt id on both sides")
@@ -121,7 +131,7 @@ class RunnerPromptRelayTest {
         val outcome = withTimeout(5_000) { asker.await() }
         assertEquals(Decision.ALLOW_ONCE, outcome.decision, "the owner's answer reached the runner's asker")
         assertFalse(outcome.timedOut)
-        assertEquals(listOf(RunnerEvent.PROMPT_RESOLVED), rig.pump().map { it.kind }, "the runner reports the close")
+        assertEquals(listOf(RunnerEvent.PROMPT_RESOLVED), rig.pump(), "the runner reports the close")
         assertTrue(rig.orchestrator.snapshot().isEmpty())
     }
 
@@ -197,17 +207,17 @@ class RunnerPromptRelayTest {
     }
 
     @Test
-    fun aReplayedPromptEventOpensNoSecondCard() {
+    fun aReplayedPromptFrameOpensNoSecondCard() {
         val rig = Rig()
-        val event = RunnerEvent("s1", 1, RunnerEvent.PROMPT, RunnerPromptEvent("""{"promptId":"x1","sessionId":"s1","kind":"tool_approval","createdAt":1,"tool":"bash"}""", "ls").encode())
-        rig.relay.apply("r1", event)
+        val event = RunnerPromptEvent("""{"promptId":"x1","sessionId":"s1","kind":"tool_approval","createdAt":1,"tool":"bash"}""", "ls").encode()
+        rig.relay.applyFrame("r1", "s1", RunnerLinkWire.PROMPT_FRAME, event)
         runBlocking { waitFor("card") { rig.orchestrator.snapshot().isNotEmpty() } }
-        rig.relay.apply("r1", event)
+        rig.relay.applyFrame("r1", "s1", RunnerLinkWire.PROMPT_FRAME, event)
         Thread.sleep(100)
         assertEquals(1, rig.orchestrator.snapshot().size)
         assertNull(RunnerPromptEvent.decode("not json"))
-        // a prompt naming another session than its event is dropped
-        rig.relay.apply("r1", RunnerEvent("s1", 2, RunnerEvent.PROMPT, RunnerPromptEvent("""{"promptId":"x2","sessionId":"other","kind":"tool_approval","createdAt":1}""").encode()))
+        // a prompt naming another session than its frame is dropped
+        rig.relay.applyFrame("r1", "s1", RunnerLinkWire.PROMPT_FRAME, RunnerPromptEvent("""{"promptId":"x2","sessionId":"other","kind":"tool_approval","createdAt":1}""").encode())
         Thread.sleep(100)
         assertEquals(listOf("x1"), rig.orchestrator.snapshot().map { it.promptId })
     }

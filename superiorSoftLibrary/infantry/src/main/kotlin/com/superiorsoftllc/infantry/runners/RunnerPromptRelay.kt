@@ -4,7 +4,6 @@ package com.superiorsoftllc.infantry.runners
 
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorReply
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.PromptReply
-import com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerLink
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPromptEvent
 import com.superiorsoftllc.infantry.daemon.api.runners.RunnerLinkWire
@@ -29,19 +28,17 @@ import java.util.concurrent.ConcurrentHashMap
  * shown in the orchestrator's app and the owner's answer goes back to the runner. Both halves live in every daemon (a daemon is a
  * runner of its own orchestrator and an orchestrator of its own runners); neither names a harness.
  *
- * RUNNER side ([runnerObserver], [heldElsewhere]): a prompt of a session the orchestrator started ([RemoteStarts.isLinked]) is queued
- * in the outbox as a [RunnerEvent.PROMPT] event, and its close as [RunnerEvent.PROMPT_RESOLVED]. It runs no timer of its own while
- * the orchestrator is reachable; [PendingPrompts.expireHeld] applies `prompts.onTimeout` once the orchestrator read nothing for a
- * whole timer.
+ * RUNNER side ([runnerObserver], [heldElsewhere]): a prompt of a session the orchestrator started ([RemoteStarts.isLinked]) goes on
+ * that session's stream as a [RunnerLinkWire.PROMPT_FRAME] (link-only), and its close as a [RunnerLinkWire.PROMPT_RESOLVED_FRAME]. It
+ * runs no timer of its own while the orchestrator is reachable; [PendingPrompts.expireHeld] applies `prompts.onTimeout` once the
+ * orchestrator read nothing for a whole timer.
  *
- * ORCHESTRATOR side ([apply], [retry]): a [RunnerEvent.PROMPT] event opens the same prompt in this daemon's [prompts] (every client
- * shows the card; the same `prompt_response` answers it; the same rules apply), and its answer goes to the runner with
+ * ORCHESTRATOR side ([applyFrame], [retry]): a pushed prompt frame opens the same prompt in this daemon's [prompts] (every client shows
+ * the card; the same `prompt_response` answers it; the same rules apply), and its answer goes to the runner with
  * [RunnerLink.answerPrompt]. An answer the runner could not be reached for is kept and sent again by [retry] until the runner takes
- * it or reports the prompt closed. [RunnerEvent.PROMPT_RESOLVED] closes the card here.
+ * it or reports the prompt closed. The close frame closes the card here.
  *
- * RUNNER-UNIFY-5 (docs/RUNNER-UNIFY.md 5.4): the same prompt and close also cross as frames on the session's pushed stream
- * ([applyFrame]); an orchestrator on `runners.framePrompts` takes them from there and ignores the events. The event path stays
- * until RUNNER-UNIFY-6 deletes it.
+ * RUNNER-UNIFY-6: the frames are the only path (RUNNER-UNIFY-5 put them on the stream; the outbox prompt events are gone).
  */
 class RunnerPromptRelay(
     private val prompts: PendingPrompts,
@@ -69,18 +66,10 @@ class RunnerPromptRelay(
 
     private val held = ConcurrentHashMap<String, Held>()
 
-    /** ORCHESTRATOR: one event a runner queued; prompt events are relayed, the others ignored. */
-    fun apply(runner: String, event: RunnerEvent) {
-        when (event.kind) {
-            RunnerEvent.PROMPT -> open(runner, event.sessionId, event.payload)
-            RunnerEvent.PROMPT_RESOLVED -> close(event.payload)
-        }
-    }
-
     /**
-     * RUNNER-UNIFY-5 (orchestrator side, behind `runners.framePrompts`): one frame a runner PUSHED on [sessionId]'s stream. A prompt
-     * frame opens the card and its close closes it, exactly as the events do (same payloads, same prompt store). True = it was a
-     * prompt frame (consumed); any other frame type is not this relay's.
+     * RUNNER-UNIFY-5 (orchestrator side): one frame a runner PUSHED on [sessionId]'s stream. A prompt frame opens the card and its
+     * close closes it, through the same prompt store as a local session's. True = it was a prompt frame (consumed); any other frame
+     * type is not this relay's.
      */
     fun applyFrame(runner: String, sessionId: String, type: String, data: String): Boolean {
         when (type) {
@@ -180,7 +169,7 @@ class RunnerPromptRelay(
             }
             is OrchestratorReply.Unavailable -> {
                 // A refused answer (the runner had no such prompt any more, or the session is not ours) is not retried for ever: the
-                // runner's own prompt_resolved event, or the session's end, closes the card.
+                // runner's own close frame, or the session's end, closes the card.
                 if (undelivered.put(p.reply.promptId, p) == null) log("[infantry] runner ${p.runner}: prompt answer not delivered yet (${r.reason}); retried each heartbeat")
                 return false
             }
@@ -191,14 +180,13 @@ class RunnerPromptRelay(
     fun heldElsewhere(starts: RemoteStarts): (String) -> Boolean = starts::isLinked
 
     /**
-     * RUNNER: queues the prompts of the orchestrator's sessions, and their close, in [starts]' outbox. RUNNER-UNIFY-5: the same two
-     * also go on the session's stream as [RunnerLinkWire.PROMPT_FRAME] / [RunnerLinkWire.PROMPT_RESOLVED_FRAME] through [publish]
-     * (the stream sequencer, link-only), so an orchestrator on `runners.framePrompts` reads them with the session's pushed frames.
+     * RUNNER: the prompts of the orchestrator's sessions ([RemoteStarts.isLinked]), and their close, go on the session's stream as
+     * [RunnerLinkWire.PROMPT_FRAME] / [RunnerLinkWire.PROMPT_RESOLVED_FRAME] through [publish] (the stream sequencer, link-only), so the
+     * orchestrator reads them with the session's pushed frames.
      */
     fun runnerObserver(starts: RemoteStarts, publish: (Envelope) -> Unit = {}): PromptObserver = object : PromptObserver {
         override fun opened(request: PromptRequest, fullInput: String?) {
             val payload = RunnerPromptEvent(json.encodeToString(PromptRequest.serializer(), request), fullInput).encode()
-            starts.onPrompt(request.sessionId, payload)
             if (starts.isLinked(request.sessionId)) runCatching { publish(Envelope(RunnerLinkWire.PROMPT_FRAME, payload, request.sessionId)) }
         }
 
@@ -206,7 +194,6 @@ class RunnerPromptRelay(
             // A relayed card closing on the orchestrator is not a runner prompt: only the runner's own sessions are reported.
             if (frame.resolvedBy.startsWith(PendingPrompts.RUNNER_RESOLVED)) return
             val payload = json.encodeToString(PromptResolved.serializer(), frame)
-            starts.onPromptResolved(request.sessionId, payload)
             if (starts.isLinked(request.sessionId)) runCatching { publish(Envelope(RunnerLinkWire.PROMPT_RESOLVED_FRAME, payload, request.sessionId)) }
         }
     }

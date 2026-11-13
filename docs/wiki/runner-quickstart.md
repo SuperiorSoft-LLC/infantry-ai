@@ -234,29 +234,23 @@ keystore answers a render first, its own non-blank key wins over a lent one, and
 Turn it off per runner: on the PC `runners.lendCredentials` lists the runners that get credentials (default `["*"]`, every runner;
 `[]` = none); on the runner `infantry settings set runner.acceptCredentials false` ignores every loan.
 
-Every owner command on a runner session (prompt, resume, attach, interrupt, the chat queue, kill, delete) goes to that runner,
-exactly as a local session's does (RUNNER-UNIFY-2). Contingency on the PC: `infantry settings set runners.unifiedCommands false`
-makes this PC's own sessions skip the runner link and call the session manager directly, as before; runner sessions still go to their runner.
+A runner session is managed exactly as a local one (RUNNER-UNIFY, done in RUNNER-UNIFY-6; there is one path, no setting to choose it):
 
-Live chat from a runner session (RUNNER-UNIFY-3, opt-in): `infantry settings set runners.pushFrames true` on the PC makes each runner
-PUSH its sessions' frames (the chat, reasoning, errors, and the status with its tool-call count) the moment they exist, over the link the
-PC already dials (a held `runner_link_frames_pull` call, `limits.runners.pushWaitSec`), instead of the PC reading them every
-`limits.runners.outputPollMs`. Default `false`. Contingency: set it back to `false`; it takes effect live, no restart or rebuild. A runner
-too old to push (contract below 1.10.0) is polled as before even with it on.
+- Every owner command (prompt, resume, attach, interrupt, the chat queue, kill, delete) goes to the runner the session lives on.
+- The runner PUSHES its sessions' frames (the chat, reasoning, errors, and the status with its tool-call count) the moment they
+  exist, over the link the PC already dials (a held `runner_link_frames_pull` call, `limits.runners.pushWaitSec`). Nothing is polled.
+  A runner too old to push (contract below 1.10.0) is reported once in the daemon log: rebuild its image with the PC's version.
+- The session list, the chat header and every session lookup show a runner session as the runner's own record says (its container
+  working dir such as `/work/...`, its harness, model, state and error). Before its first record arrives the session is still listed,
+  from what the PC pinned at the start (project, role, harness, ticket). The PC keeps where each session runs and how much of its
+  stream it took (`runner-sessions.json` in the state dir, the same file as before) and the last record each runner sent
+  (`runner-directory.json`).
+- An approval card opens from the prompt frame on the pushed stream (contract 1.11.0), through the same prompt store as a local
+  session, and a failed turn shows the reason its frames carry. A card still open when the PC restarts is reopened
+  (`relayed-prompts.json`), so its session is never stranded.
 
-One session list (RUNNER-UNIFY-4, fed by `runners.pushFrames`): `runners.unifiedDirectory` (default `true`) on the PC
-makes the session list, the chat header and every session lookup show a runner session as the runner's own record says (its container
-working dir such as `/work/...`, its harness, model, state and error) instead of a record the PC guessed (which showed the PC's own
-checkout, `C:\...`, as the working dir). The PC keeps only where each session runs, plus the last record each runner sent
-(`runner-directory.json` in the state dir). Contingency: `infantry settings set runners.unifiedDirectory false`; it takes effect live,
-no restart or rebuild.
-
-Approvals and failures on the stream (RUNNER-UNIFY-5, needs `runners.pushFrames`): `runners.framePrompts` (default `true`) on the PC
-makes a runner session's approval card open from the prompt frame on its pushed stream (contract 1.11.0), through the
-same prompt store as a local session, and a failed turn shows the reason its frames carry (the `finished` detail, the record's error)
-instead of a line scraped from its transcript. A card still open when the PC restarts is reopened (`relayed-prompts.json` in the
-state dir), so its session is never stranded. A session whose frames are not pushed keeps the event relay. Contingency:
-`infantry settings set runners.framePrompts false`; it takes effect live, no restart or rebuild.
+The settings `runners.unifiedCommands`, `runners.pushFrames`, `runners.unifiedDirectory`, `runners.framePrompts` and
+`limits.runners.outputPollMs` are gone; a value stored for one of them is ignored.
 
 Claude with a subscription (owner decision): either sign claude in on the runner itself (`docker exec -it infantry-runner claude auth
 login`), or run `claude setup-token` on your PC and store the token as the claude subscription token
@@ -352,8 +346,8 @@ nothing for a remote session). Notes: the full session id is needed (a prefix ge
 RUNNER-OUTPUT-1 (live, gradle runDaemon + runUi, Docker runner, opencode): a remote session's chat now shows in the app as a local
 one does, live while the turn runs, again when the session is selected later, and in `get_session`. The orchestrator reads the
 session's own stream frames from its runner (`runner_link_transcript` with `afterSequence`; an older runner answers lines and is read
-that way) and puts them on its own session stream. This happens on each runner event, on every replay request, and while the turn
-runs, at `limits.runners.outputPollMs` (default 1000 ms, 0 = off). Before, the replay sent the runner's lines as raw stdout, which no
+that way) and puts them on its own session stream. (RUNNER-UNIFY-6: the runner now pushes these frames; the
+read on each event, on each replay and on a timer is gone.) Before, the replay sent the runner's lines as raw stdout, which no
 client draws, and the line read dropped a harness's answer text once it printed a raw line (opencode always does). The session to
 runner index, with its placement, state and read position, is kept in `<state dir>/runner-sessions.json`, so a daemon restart keeps
 the session and its chat.

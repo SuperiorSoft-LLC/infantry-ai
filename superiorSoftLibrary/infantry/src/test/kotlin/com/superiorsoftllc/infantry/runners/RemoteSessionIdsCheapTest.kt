@@ -25,7 +25,8 @@ class RemoteSessionIdsCheapTest {
         val localCalls = AtomicInteger()
         val remoteLookups = AtomicInteger()
         val hub = RunnerHub(countingLocal(localCalls), remotes = { remoteLookups.incrementAndGet(); listOf("r2") })
-        val mirror = RemoteSessionMirror(sessionIds = { hub.remoteSessionIds() })
+        val placements = RunnerPlacements()
+        val mirror = SessionDirectory(local = { emptyList() }, localGet = { null }, placed = { hub.remoteSessionIds() }, placements = placements)
 
         assertEquals(emptyList(), mirror.list().map { it.id })
         assertEquals(0, remoteLookups.get(), "no placed session = no lookup of the paired runners")

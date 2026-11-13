@@ -426,7 +426,7 @@ class MailRouter(
         val resolved = resolution as RecipientResolution.Resolved
 
         val latest = manager.get(resolved.sessionId)
-            ?: return if (remoteSession(resolved.sessionId)) deliverRemote(resolved.sessionId, message, rest)
+            ?: return if (remoteSession(resolved.sessionId)) deliverRemote(resolved.sessionId, message, rest) // runner-ok: mail addressing: a placed session takes its mail through its runner (deliverVia)
             else DeliveryOutcome.Failed("unknown recipient session '${resolved.sessionId}'")
         // BUG-S3: mail addressed to the AGENT (not to one conversation by its session id) follows the agent's current
         // harness. A session at rest on a harness the agent was swapped away from (a cross-harness swap during a run
@@ -501,7 +501,7 @@ class MailRouter(
             val wakeReason = if (replaced != null) "mail-hook-delivered" else "mail"
             val routed = resumeTurn
             if (routed == null) {
-                manager.resume(session.id, turn, source.origin, wakeReason, group.joinToString(",") { it.id })
+                manager.resume(session.id, turn, source.origin, wakeReason, group.joinToString(",") { it.id }) // runner-ok: the in-process delivery of a session this daemon holds; resumeTurn routes by runner
             } else {
                 val result = routed(session.id, turn, source.origin, wakeReason, group.map { it.id })
                 when (result.kind) {
@@ -670,7 +670,7 @@ class MailRouter(
             return RecipientResolution.Resolved(recipient)
         }
         // RUNNER-POOL-8: a session this orchestrator placed on a remote runner (no local record).
-        if (remoteSession(recipient)) return RecipientResolution.Resolved(recipient)
+        if (remoteSession(recipient)) return RecipientResolution.Resolved(recipient) // runner-ok: mail addressing: a placed session is a valid recipient
 
         // Check if it's a known agent profile ID
         val agentProfile = agentProfiles.get(recipient)

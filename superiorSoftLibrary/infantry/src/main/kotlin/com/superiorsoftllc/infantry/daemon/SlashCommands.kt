@@ -98,7 +98,7 @@ internal object SlashCommands {
                 }
                 CommandAction.NATIVE -> {
                     require(session.providerSessionId != null) { "/${command.name} has nothing to act on: this session has not run a turn yet" }
-                    manager.resume(session.id, command.native!!, MessageOrigin.System(SystemKind.SLASH_COMMAND))
+                    manager.resume(session.id, command.native!!, MessageOrigin.System(SystemKind.SLASH_COMMAND)) // runner-ok: a harness-native slash command on a session this daemon holds
                     "${command.name}: the harness's own ${command.native} was started on this session's conversation"
                 }
             }
