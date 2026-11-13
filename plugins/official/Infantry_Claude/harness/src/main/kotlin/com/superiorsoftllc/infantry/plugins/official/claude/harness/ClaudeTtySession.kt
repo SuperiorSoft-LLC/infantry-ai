@@ -36,7 +36,8 @@ import java.util.UUID
  *   debug scrollback (and for the trust question).
  * - **Turn end:** Claude Code's `Stop` hook (a command hook that appends to a per-session events file); an API error the CLI records ends it
  *   as FAILED. `SessionStart` marks the CLI as up, `UserPromptSubmit` that the paste was taken.
- * - **Interrupt:** Esc into the terminal; the process lives on.
+ * - **Interrupt:** Esc into the terminal; the process lives on. A turn stopped before its first reply is dropped by the CLI, which puts
+ *   its prompt back in the input box: Ctrl+C empties the box so the next paste is not joined onto the cancelled request.
  * - **MCP link (CLI-PTY-3):** the daemon's MCP server gets [MCP_PID_FILE_ENV] (a per-session file it writes its pid to). Every
  *   [MCP_CHECK_MS] the pid is checked; a change (up, gone, a new pid up again) is reported with [SessionOutput.mcpState] and nothing else:
  *   no reconnect is made here. Claude has no in-place reconnect API (no harness overrides `reconnectMcp`), so a server that dies stays
@@ -216,6 +217,13 @@ class ClaudeTtySession(
         /** When the screen last changed (the trust answer waits for it to settle). */
         private var lastOutputAt = 0L
         private var interruptedSeen = false
+        /**
+         * INTERRUPT-CONTEXT-1: when the input box was last cleared after a turn stopped before its first reply. Esc that early makes the
+         * interactive claude drop the cancelled prompt from the conversation and put its text back into the input box; a paste then
+         * joins the next prompt onto it ("...No tools.Reply with exactly: next-ok") and the model answers the cancelled request. Ctrl+C
+         * empties the box; the next paste waits [CLEAR_SETTLE_MS] for it.
+         */
+        private var inputClearedAt: Long? = null
         private var initSent = false
         /** FIRST-TURN-1: a sent turn was pasted already (only the first is watched). */
         private var firstTurnSent = false
@@ -412,6 +420,7 @@ class ClaudeTtySession(
                     }
                     turn.abortAt != null && (interruptedSeen || now - turn.abortAt!! >= ABORT_GRACE_MS) -> {
                         out.output(mapper.resultLine()) // G13: an interrupted turn still reports the usage it spent
+                        if (!turn.replied) { key(CTRL_C); inputClearedAt = now }
                         ends += Triple(SessionTurnEnd.INTERRUPTED, null, turn.abortReason)
                         active = null
                     }
@@ -571,6 +580,7 @@ class ClaudeTtySession(
         /** Up = the CLI ran its SessionStart hook a moment ago; without hooks, a while after its first screen. */
         private fun ready(now: Long): Boolean {
             if (trustSeen && !trustEnterDone) return false
+            inputClearedAt?.let { if (now - it < CLEAR_SETTLE_MS) return false }
             startedAt?.let { return now - it >= READY_AFTER_START_MS }
             return firstScreenAt?.let { now - it >= READY_FALLBACK_MS } ?: false
         }
@@ -650,6 +660,8 @@ class ClaudeTtySession(
 
         const val ESC = "\u001b"
         const val ENTER = "\r"
+        /** Ctrl+C at the CLI's prompt: clears a non-empty input box (an empty one only shows a hint; a second press would exit). */
+        const val CTRL_C = "\u0003"
         const val DOWN = "\u001b[B"
         const val PASTE_START = "\u001b[200~"
         const val PASTE_END = "\u001b[201~"
@@ -693,6 +705,8 @@ class ClaudeTtySession(
         /** CLI-PTY-4: how long a Stop seen with no turn open can still end a turn of the CLI's own whose prompt record is read after it. */
         const val STOP_CLAIM_MS = 2_000L
         const val ABORT_GRACE_MS = 3_000L
+        /** INTERRUPT-CONTEXT-1: how long the next paste waits after the input box was cleared. */
+        const val CLEAR_SETTLE_MS = 400L
         const val READY_AFTER_START_MS = 1_500L
         const val READY_FALLBACK_MS = 8_000L
         const val SCREEN_KEEP_CHARS = 32 * 1024

@@ -364,6 +364,39 @@ class ClaudeTtySessionTest {
         assertEquals(listOf(Triple<SessionTurnEnd, Int?, String?>(SessionTurnEnd.INTERRUPTED, null, null)), s.out.ends)
     }
 
+    @Test fun `INTERRUPT-CONTEXT-1 a turn stopped before its first reply clears the input box before the next paste`() {
+        val s = start()
+        up(s)
+        s.c.sendTurn(request("Write a 2000-word essay"))
+        s.c.tick(); now += ClaudeTtySession.PASTE_SETTLE_MS; s.c.tick()
+        event(s, "submit"); s.c.tick()
+        s.c.sendTurn(request("Reply with exactly: next-ok"))
+        s.c.abortTurn()
+        now += ClaudeTtySession.ABORT_GRACE_MS
+        s.c.tick()
+        assertEquals(SessionTurnEnd.INTERRUPTED, s.out.ends.single().first)
+        assertEquals(listOf(ClaudeTtySession.ESC, ClaudeTtySession.CTRL_C), s.out.written.takeLast(2),
+            "the CLI put the cancelled prompt back in the box; Ctrl+C empties it")
+        s.c.tick()
+        assertEquals(ClaudeTtySession.CTRL_C, s.out.written.last(), "the next paste waits for the clear to settle")
+        now += ClaudeTtySession.CLEAR_SETTLE_MS
+        s.c.tick()
+        assertEquals("\u001b[200~Reply with exactly: next-ok\u001b[201~", s.out.written.last())
+    }
+
+    @Test fun `INTERRUPT-CONTEXT-1 a turn stopped after it replied sends no Ctrl+C`() {
+        val s = start()
+        up(s)
+        s.c.sendTurn(request("long job"))
+        s.c.tick(); now += ClaudeTtySession.PASTE_SETTLE_MS; s.c.tick()
+        event(s, "submit"); record(prompt); record(assistant("m1", "partial", 4)); s.c.tick()
+        s.c.abortTurn()
+        record("""{"type":"user","message":{"role":"user","content":[{"type":"text","text":"[Request interrupted by user]"}]}}""")
+        s.c.tick()
+        assertEquals(SessionTurnEnd.INTERRUPTED, s.out.ends.single().first)
+        assertFalse(ClaudeTtySession.CTRL_C in s.out.written, "the CLI kept the prompt in the conversation; the box is empty")
+    }
+
     @Test fun `abort ends INTERRUPTED after the grace even when nothing is recorded`() {
         val s = start()
         up(s)
