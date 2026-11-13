@@ -398,6 +398,25 @@ directory is the official `Infantry_Cards` daemon half (capabilities `cards.list
 that declares a type owns it. A role may name a card type in its persona; with the plugin gone the role still works and
 the card shows as code.
 
+**Plugin roles (ROLE-PLUGIN-1).** A module can bring roles in module.json `roles` (read by the official `Infantry_Roles`
+daemon half, never by the client):
+
+```json
+"roles": [{ "id": "hello-agent", "name": "Hello Agent", "color": "#f59e0b", "icon": "support-agent",
+            "description": "Demo plugin role", "cards": ["hello"], "tools": [] }]
+```
+
+`id` follows the role-id rule; `persona` is the text itself, or a `.md`/`.txt` path inside the module folder (a missing
+file is reported and the role is not seeded; a packaged install carries only `module.json`, `lib/` and `layout/`, so a
+published plugin writes the persona inline);
+`cards` / `tools` name preferred card types and tool or capability names, by id, from any module. When the module loads
+(start, install, enable; the daemon publishes the named event `modules.changed`), the role is written to the role
+catalog if its id is free, marked `plugin: <module>`. Until the owner edits it, a newer declaration refreshes it; after an
+edit (`edited`) it is never rewritten. A built-in id, an owner's own role and a plugin role the owner deleted are never
+taken. With the module gone the role stays and reads `disabled`; reinstalling enables it again. Preferences shape the
+role's first-turn briefing (only the loaded ones are named) and never gate a tool or a card; a custom "hybrid" role sets
+them in the role editor. Type: `RoleDeclaration`.
+
 ### Agent avatar renderers (AVATAR-DOCS-1)
 
 Every agent avatar in the app is drawn by one core composable, `AgentAvatar` (`superiorSoftLibrary/infantryUiCore/src/commonMain/kotlin/com/superiorsoftllc/infantry/ui/AgentAvatarRenderers.kt` holds the seam; `AgentAvatar.kt` holds the composable). A plugin can add an avatar style by registering a renderer under the registry `agent.avatar.renderers`:
@@ -683,6 +702,7 @@ Generated for the `infantryPlugins` guard `SdkTypesDocumentedGuardTest`: every p
 - `BlockDeclaration`: A block named [name] the module adds to slot [slot].
 - `CardDeclaration`: CARD-3: one chat card type the module brings: `type`, `summary`, `spec` (a file in the module folder or the text), `images`.
 - `CardImages`: CARD-3: module.json `cards[].images`: the image hosts a card type declares.
+- `RoleDeclaration`: ROLE-PLUGIN-1: one role the module brings (module.json `roles`): `id`, `name`, `persona` (a file in the module folder or the text), `color`, `icon`, `description`, preferred `cards` and `tools`.
 - `BlockTypeDeclaration`: NS1 / PB1 (6t.2): a block type, `vendor.name` (core's layout primitives are `layout.row` ...).
 - `DaemonCapabilities`: NS3 (1a): `daemon.needs` (refused = the module does not work) and `daemon.wants` (refused = it degrades).
 - `DaemonFrameDeclaration`: DAEMON-PLUGINS-1: one plugin-defined frame; [ownerOnly] frames are refused to a community module.

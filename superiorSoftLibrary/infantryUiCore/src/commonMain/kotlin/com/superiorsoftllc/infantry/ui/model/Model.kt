@@ -152,6 +152,9 @@ data class ConnectionInfo(
     /** ROLE-EDIT-1: a daemon on contract >= 1.108.0 stores a role description and answers `role_delete`; an older one refuses both. */
     val sendsRoleEdit: Boolean get() = contractAtLeast(contract, 1, 108)
 
+    /** ROLE-PLUGIN-1: a daemon on contract >= 1.153.0 stores a role's preferred cards / tools; an older one refuses a `role_save` naming them. */
+    val sendsRolePreferences: Boolean get() = contractAtLeast(contract, 1, 153)
+
     /** ASSISTANT-1 (contract 1.115.0): the daemon has the global Assistant (`assistant` frame, `SessionRecord.global`). */
     val hasAssistant: Boolean get() = contractAtLeast(contract, 1, 115)
 

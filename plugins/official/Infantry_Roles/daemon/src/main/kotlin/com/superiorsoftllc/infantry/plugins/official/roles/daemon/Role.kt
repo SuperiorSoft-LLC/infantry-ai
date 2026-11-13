@@ -35,6 +35,18 @@ data class Role(
     val responseDetail: String = "",
     val responseMaxChars: Int? = null,
     val responseBodyChars: Int? = null,
+    /**
+     * ROLE-PLUGIN-1 (contract 1.153.0): the module that declared this role in its module.json `roles` ("" = none). Saved in the
+     * role file's front matter, so it survives the module's removal.
+     */
+    val plugin: String = "",
+    /** ROLE-PLUGIN-1: [plugin] is not loaded now. Computed at read time, never stored: reinstalling the module enables it again. */
+    val disabled: Boolean = false,
+    /** ROLE-PLUGIN-1: the owner saved this plugin role; the module never rewrites it again. */
+    val edited: Boolean = false,
+    /** ROLE-PLUGIN-1: the card types and tool names the role prefers, by id, from any module. Shape the briefing; never gate. */
+    val cards: List<String> = emptyList(),
+    val tools: List<String> = emptyList(),
 ) {
     companion object {
         /** The accepted `responseDetail` values. */

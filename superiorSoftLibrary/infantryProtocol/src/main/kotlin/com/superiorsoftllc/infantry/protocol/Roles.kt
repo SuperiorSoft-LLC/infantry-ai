@@ -24,6 +24,12 @@ data class RoleSave(
     val icon: String? = null,
     /** ROLE-EDIT-1 (contract 1.108.0): one-line description. Absent/null = keep the stored one; "" = clear it. */
     val description: String? = null,
+    /**
+     * ROLE-PLUGIN-1 (contract 1.153.0): the card types and tool names the role prefers, by id, from any plugin (a custom hybrid
+     * role). Absent/null = keep the stored list; empty = clear it. They shape the role's first-turn briefing and never gate.
+     */
+    val cards: List<String>? = null,
+    val tools: List<String>? = null,
 ) {
     companion object {
         fun decode(text: String): RoleSave = StrictJson.decode(serializer(), text, "role_save payload")

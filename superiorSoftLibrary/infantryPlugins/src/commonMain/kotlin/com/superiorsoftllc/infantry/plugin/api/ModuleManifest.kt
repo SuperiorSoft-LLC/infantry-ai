@@ -152,6 +152,11 @@ data class ModuleManifest(
      * (`infantry card list|show`, the card image allow-list); the client binding is the `chat.cards` entry in [implementations].
      */
     val cards: List<CardDeclaration> = emptyList(),
+    /**
+     * ROLE-PLUGIN-1: the roles this module brings. Infantry_Roles seeds each one into the role catalog when the module is loaded
+     * and the id is free, marks it as this module's, never overwrites an owner edit, and shows it disabled while the module is gone.
+     */
+    val roles: List<RoleDeclaration> = emptyList(),
 ) {
     /** NS3: the node ids of [fills]. */
     val fillNodes: List<String> get() = fills.map { it.node }
@@ -180,6 +185,25 @@ data class CardDeclaration(
 /** CARD-3: module.json `cards[].images`: the image hosts a card type declares (`*.example.com` matches any subdomain). */
 @Serializable
 data class CardImages(val hosts: List<String> = emptyList())
+
+/**
+ * ROLE-PLUGIN-1: one role a module brings (module.json `roles`). [id] follows the role-id rule (`[a-z][a-z0-9-]{0,31}`);
+ * [persona] is the role notes a new session of the role receives: a path of a text file in the module folder
+ * (`roles/news-agent.md`), else the text itself. [color] `#rrggbb` (blank = generated), [icon] an icon key.
+ * [cards] and [tools] are the card types and tool names the role prefers, by id, from any module: they shape the role's
+ * first-turn briefing (only the ones loaded at spawn time are named) and never gate anything.
+ */
+@Serializable
+data class RoleDeclaration(
+    val id: String,
+    val name: String = "",
+    val persona: String = "",
+    val color: String = "",
+    val icon: String = "",
+    val description: String = "",
+    val cards: List<String> = emptyList(),
+    val tools: List<String> = emptyList(),
+)
 
 /** GAP-AUDIT-1 (b): a node the module draws; [overridable] false = locked against every other module. */
 @Serializable

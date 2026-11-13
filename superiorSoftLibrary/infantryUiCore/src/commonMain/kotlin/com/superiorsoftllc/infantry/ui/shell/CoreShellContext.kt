@@ -467,12 +467,15 @@ open class CoreRoles(private val state: AppState, private val controller: Contro
     override val traits: Map<String, List<String>> get() = state.roleTraits
     override val canEdit: Boolean get() = state.connection.sendsRoleEdit
     override val iconsSupported: Boolean get() = state.connection.sendsRoleIcon
+    override val preferencesSupported: Boolean get() = state.connection.sendsRolePreferences
     override fun role(id: String?): Role? = state.role(id)
     override fun profilesFor(roleId: String): List<AgentProfile> = state.profilesFor(roleId)
     override val agents: List<AgentView> get() = state.orderedAgents
     override val agentError: String? get() = state.agentError
     override suspend fun save(id: String, name: String, color: String?, persona: String, icon: String?, description: String?) =
         controller.saveRole(id, name, color, persona, icon, description)
+    override suspend fun save(id: String, name: String, color: String?, persona: String, icon: String?, description: String?, cards: List<String>?, tools: List<String>?) =
+        controller.saveRole(id, name, color, persona, icon, description, cards, tools)
     override suspend fun saveBinding(roleId: String, provider: String?, model: String?, effort: String?) = controller.saveRoleBinding(roleId, provider, model, effort)
     override suspend fun delete(roleId: String) = controller.deleteRole(roleId)
     override suspend fun saveProfile(profile: AgentProfile) = controller.saveProfile(profile)

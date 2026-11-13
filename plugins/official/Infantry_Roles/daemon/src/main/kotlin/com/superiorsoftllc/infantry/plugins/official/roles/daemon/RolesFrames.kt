@@ -37,6 +37,11 @@ object RolesFrames {
     fun rolesDir(api: DaemonApi): File =
         api.env(RoleService.ENV)?.takeIf { it.isNotBlank() }?.let(::File) ?: File(api.stateDir.parentFile.parentFile, "roles")
 
+    /** ROLE-PLUGIN-1: pushes the whole catalog (`roles`) to every client: plugin roles seeded or disabled by a module change. */
+    fun pushAll(api: DaemonApi, service: RoleService) {
+        runCatching { api.boardRuntime.push(listOf(Frame(Envelope.ROLES, json.encodeToString(ListSerializer(Role.serializer()), service.all())))) }
+    }
+
     fun register(api: DaemonApi, service: RoleService) {
         val push = { frame: Frame -> api.boardRuntime.push(listOf(frame)) }
         val environment = { api.services.find(RoleEnvironment::class) }

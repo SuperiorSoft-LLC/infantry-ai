@@ -12,5 +12,9 @@
   ],
   "cards": [
     { "type": "hello", "summary": "Greeting box: bold title and one line of text", "spec": "cards/hello.md" }
+  ],
+  "roles": [
+    { "id": "hello-agent", "name": "Hello Agent", "color": "#f59e0b", "icon": "support-agent", "description": "Demo plugin role: greets with a hello card.",
+      "persona": "You are the Hello Agent, a demo role brought by the Acme_HelloCard plugin.\n\nGreet the user and answer briefly. When a greeting fits, answer with ONE ```card:hello block (run `infantry card show hello`\nonce for its format) plus one plain sentence outside it. Everything else stays plain markdown.", "cards": ["hello"] }
   ]
 }

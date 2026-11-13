@@ -849,6 +849,8 @@ interface RolesContext {
     /** The daemon takes role descriptions and deletes (contract 1.108) / role icons (1.93). */
     val canEdit: Boolean get() = false
     val iconsSupported: Boolean get() = false
+    /** ROLE-PLUGIN-1: the daemon stores a role's preferred cards / tools (contract 1.153). */
+    val preferencesSupported: Boolean get() = false
     fun role(id: String?): Role? = id?.let { wanted -> roles.firstOrNull { it.id == wanted } }
     /** The active project's profiles of [roleId]. */
     fun profilesFor(roleId: String): List<AgentProfile> = emptyList()
@@ -858,6 +860,10 @@ interface RolesContext {
     val agentError: String? get() = null
     suspend fun save(id: String, name: String, color: String?, persona: String, icon: String? = null, description: String? = null): CommandResult =
         CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    /** ROLE-PLUGIN-1: [save] with the role's preferred [cards] / [tools] (null = keep); an older shell drops them. */
+    suspend fun save(
+        id: String, name: String, color: String?, persona: String, icon: String?, description: String?, cards: List<String>?, tools: List<String>?,
+    ): CommandResult = save(id, name, color, persona, icon, description)
     suspend fun saveBinding(roleId: String, provider: String?, model: String?, effort: String?): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
     suspend fun delete(roleId: String): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
     suspend fun saveProfile(profile: AgentProfile): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)

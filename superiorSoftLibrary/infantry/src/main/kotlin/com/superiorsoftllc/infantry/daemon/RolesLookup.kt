@@ -18,6 +18,8 @@ class RolesLookup(private val source: () -> Roles?) {
 
     fun all(): List<RoleRecord> = port()?.all().orEmpty()
     fun role(id: String): RoleRecord? = port()?.role(id)
+    /** ROLE-PLUGIN-1: what a new session of [id] receives at start (the provider's persona plus its additions). */
+    fun briefing(id: String): String? = port()?.let { runCatching { it.briefing(id) }.getOrElse { _ -> it.role(id)?.persona } }
 }
 
 /** AR-4b-ii-a: how core reads a role's binding and trait list, through the ports on every call. No provider = none. */

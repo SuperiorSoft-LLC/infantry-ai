@@ -262,7 +262,8 @@ interface DaemonApi {
         // 1.55.0 (TURNS-SAVED-1, additive): `events.onSessionDeleted`, told only when a session's record is deleted (never on a kill).
         // 1.56.0 (SPAWN-PARAMS-1, additive): `SpawnRequest.provider` / `model` / `toolApproval`, the app Start box's fields.
         // 1.57.0 (CARD-3, additive): `PluginCatalogReader.loaded()` (daemon.api.plugins.LoadedModule): the loaded modules' module.json.
-        const val VERSION = "1.57.0"
+        // 1.58.0 (ROLE-PLUGIN-1, additive): `RoleRecord.plugin|disabled|edited|cards|tools`, `RoleSaveRequest.cards|tools`, `Roles.briefing`.
+        const val VERSION = "1.58.0"
     }
 }
 
