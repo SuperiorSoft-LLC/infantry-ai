@@ -49,6 +49,7 @@ For how the product works, start with the wiki: [docs/wiki/Architecture.md](docs
 | [docs/DAEMON-BOARD-API.md](docs/DAEMON-BOARD-API.md) | design record (dated) | [docs/wiki/daemon-plugin-api.md](docs/wiki/daemon-plugin-api.md) |
 | [docs/DAEMON-CORE.md](docs/DAEMON-CORE.md) | design record (dated) | [docs/wiki/Architecture.md](docs/wiki/Architecture.md) |
 | [docs/RUNNER-POOL.md](docs/RUNNER-POOL.md) | design record (dated) | [docs/wiki/Architecture.md](docs/wiki/Architecture.md) |
+| [docs/RUNNER-UNIFY.md](docs/RUNNER-UNIFY.md) | design record (dated) | [docs/wiki/Architecture.md](docs/wiki/Architecture.md) |
 | [docs/DAEMON-PLUGIN-PLAN.md](docs/DAEMON-PLUGIN-PLAN.md) | design record (dated) | [docs/wiki/daemon-plugin-api.md](docs/wiki/daemon-plugin-api.md) |
 | [docs/DAEMON-PLUGINS.md](docs/DAEMON-PLUGINS.md) | design record (dated) | [docs/wiki/daemon-plugin-api.md](docs/wiki/daemon-plugin-api.md) |
 | [docs/EMPTY-SHELL-DESIGN.md](docs/EMPTY-SHELL-DESIGN.md) | design record (dated) | [docs/wiki/Architecture.md](docs/wiki/Architecture.md) |
