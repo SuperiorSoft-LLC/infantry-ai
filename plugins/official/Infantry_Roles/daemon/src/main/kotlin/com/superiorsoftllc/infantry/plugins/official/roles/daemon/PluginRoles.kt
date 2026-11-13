@@ -36,12 +36,18 @@ object PluginRoles {
         return Outcome(written, problems)
     }
 
-    /** The `role_save` shape of [d]; a blank name is the prettified id, a persona file is read from [dir]. */
+    /**
+     * The `role_save` shape of [d]; a blank name is the prettified id, a persona file is read from [dir]. A persona that names a
+     * file which is not in the module folder is refused ([IllegalArgumentException]): the role is not seeded until it is there,
+     * rather than seeded with the path as its notes. (A packaged install carries only module.json, lib/ and layout/, so a
+     * published plugin writes the persona inline.)
+     */
     fun request(d: RoleDeclaration, dir: File?): RoleSave = RoleSave(
         id = d.id.trim(),
         name = d.name.trim().ifEmpty { RoleCatalog.prettify(d.id.trim()) },
         color = d.color.trim().takeIf { it.isNotEmpty() },
-        persona = persona(d.persona, dir),
+        persona = persona(d.persona, dir)
+            ?: throw IllegalArgumentException("persona file '${d.persona.trim().take(80)}' is not in the module folder (write the persona inline)"),
         icon = d.icon.trim(),
         description = d.description.trim(),
         cards = d.cards,
@@ -49,15 +55,17 @@ object PluginRoles {
     )
 
     /**
-     * [value] as a file inside [dir] when it names one there (never outside it: the canonical path must stay under the folder),
-     * capped at [RoleService.MAX_PERSONA_LENGTH] characters; else the text itself.
+     * [value] as a file inside [dir] when it is a file name (`*.md` / `*.txt`, one line), read from there (never outside it: the
+     * canonical path must stay under the folder), capped at [RoleService.MAX_PERSONA_LENGTH] characters; null when that file is
+     * not there. Any other value is the text itself.
      */
-    fun persona(value: String, dir: File?): String {
+    fun persona(value: String, dir: File?): String? {
         val v = value.trim()
-        if (dir == null || !PERSONA_FILE.matches(v)) return value
+        if (!PERSONA_FILE.matches(v)) return value
+        if (dir == null) return null
         val root = dir.canonicalFile
         val file = File(root, v).canonicalFile
-        if (!file.path.startsWith(root.path + File.separator) || !file.isFile) return value
+        if (!file.path.startsWith(root.path + File.separator) || !file.isFile) return null
         return file.readText(Charsets.UTF_8).take(RoleService.MAX_PERSONA_LENGTH + 1)
     }
 

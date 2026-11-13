@@ -113,8 +113,13 @@ class PluginRolesTest {
         File(folder, "roles/news.md").writeText("Persona from a file.")
         File(dir, "outside.md").writeText("secret")
         assertEquals("Persona from a file.", PluginRoles.persona("roles/news.md", folder))
-        assertEquals("../outside.md", PluginRoles.persona("../outside.md", folder))
+        assertNull(PluginRoles.persona("../outside.md", folder), "a file outside the module folder is never read")
+        assertNull(PluginRoles.persona("roles/missing.md", folder))
         assertEquals("plain text", PluginRoles.persona("plain text", folder))
+        // A missing persona file is reported and the role is not seeded (never seeded with the path as its notes).
+        val out = PluginRoles.sync(service, listOf(module("Acme_News", news.copy(persona = "roles/missing.md"), folder = folder)))
+        assertEquals(1, out.problems.size)
+        assertNull(service.role("news-agent"))
     }
 
     @Test

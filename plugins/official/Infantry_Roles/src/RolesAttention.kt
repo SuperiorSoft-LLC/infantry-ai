@@ -99,10 +99,11 @@ fun RolesPane(deps: RolesDeps, onSessionStarted: () -> Unit, onOpenAgent: (Strin
                         }
                         Text(r.id, color = Palette.Muted, fontFamily = Mono, fontSize = 10.sp, maxLines = 1)
                     }
-                    if (r.source == "CUSTOM") Chip("custom", Palette.Info)
+                    // ROLE-PLUGIN-1: a plugin role's row shows its plugin chip instead, so the name keeps its width.
+                    if (r.source == "CUSTOM" && r.plugin.isEmpty()) Chip("custom", Palette.Info)
                     // ROLE-PLUGIN-1: a plugin's role, and whether its plugin is gone.
-                    if (r.disabled) { Spacer(Modifier.width(4.dp)); Chip("disabled", Palette.Muted, modifier = Modifier.testTag(ROLE_DISABLED_CHIP_TAG_PREFIX + r.id)) }
-                    else if (r.plugin.isNotEmpty()) { Spacer(Modifier.width(4.dp)); Chip("plugin", Palette.Accent, modifier = Modifier.testTag(ROLE_PLUGIN_CHIP_TAG_PREFIX + r.id)) }
+                    if (r.disabled) Chip("disabled", Palette.Muted, modifier = Modifier.testTag(ROLE_DISABLED_CHIP_TAG_PREFIX + r.id))
+                    else if (r.plugin.isNotEmpty()) Chip("plugin", Palette.Accent, modifier = Modifier.testTag(ROLE_PLUGIN_CHIP_TAG_PREFIX + r.id))
                     if (count > 0) { Spacer(Modifier.width(4.dp)); Chip("$count", Palette.Accent) }
                     RoleRowMenu(r, live = deps.link.live, locked = !deps.link.gate("roles.save").allowed, onEdit = { selected = r.id; creating = false; editingId = r.id })
                 }

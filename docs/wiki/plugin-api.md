@@ -403,10 +403,12 @@ daemon half, never by the client):
 
 ```json
 "roles": [{ "id": "hello-agent", "name": "Hello Agent", "color": "#f59e0b", "icon": "support-agent",
-            "description": "Demo plugin role", "persona": "roles/hello-agent.md", "cards": ["hello"], "tools": [] }]
+            "description": "Demo plugin role", "cards": ["hello"], "tools": [] }]
 ```
 
-`id` follows the role-id rule; `persona` is a `.md`/`.txt` path inside the module folder, or else the text itself;
+`id` follows the role-id rule; `persona` is the text itself, or a `.md`/`.txt` path inside the module folder (a missing
+file is reported and the role is not seeded; a packaged install carries only `module.json`, `lib/` and `layout/`, so a
+published plugin writes the persona inline);
 `cards` / `tools` name preferred card types and tool or capability names, by id, from any module. When the module loads
 (start, install, enable; the daemon publishes the named event `modules.changed`), the role is written to the role
 catalog if its id is free, marked `plugin: <module>`. Until the owner edits it, a newer declaration refreshes it; after an
