@@ -42,8 +42,24 @@ object RunnerLinkWire {
      * answers the moment one of them publishes a frame (or after [FramesPullRequest.waitMs] with none). Every sequenced frame type
      * crosses (`session`, `status` with its run activity, turns, text, reasoning, errors, finishes, usage). An older runner answers an
      * error, and the orchestrator polls it as before.
+     * 1.11.0 (RUNNER-UNIFY-5): [PROMPT_FRAME] / [PROMPT_RESOLVED_FRAME], a prompt of a session the orchestrator started, and its
+     * close, as frames on that session's pushed stream (the same payloads as the `prompt` / `prompt_resolved` events, which stay
+     * until RUNNER-UNIFY-6). An older orchestrator ignores the two frame types.
      */
-    const val CONTRACT = "1.10.0"
+    const val CONTRACT = "1.11.0"
+
+    /**
+     * RUNNER-UNIFY-5 (contract 1.11.0): a prompt (a tool approval, a question) of a session the orchestrator started, as a frame on
+     * that session's stream. Data: the [com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPromptEvent] encoding (the
+     * request plus the call's whole input). Link-only: no client of the runner itself is sent it.
+     */
+    const val PROMPT_FRAME = "runner_prompt"
+
+    /** RUNNER-UNIFY-5 (contract 1.11.0): [PROMPT_FRAME]'s close on the runner. Data: the `PromptResolved` JSON. Link-only. */
+    const val PROMPT_RESOLVED_FRAME = "runner_prompt_resolved"
+
+    /** RUNNER-UNIFY-5: the frame types that cross the link but are never sent to (or replayed for) a client. */
+    val LINK_ONLY_FRAMES: Set<String> = setOf(PROMPT_FRAME, PROMPT_RESOLVED_FRAME)
 
     /**
      * RUNNER-UNIFY-3 (contract 1.10.0): the stream frames of the sessions [FramesPullRequest.resumeFrom] names (only ones this
