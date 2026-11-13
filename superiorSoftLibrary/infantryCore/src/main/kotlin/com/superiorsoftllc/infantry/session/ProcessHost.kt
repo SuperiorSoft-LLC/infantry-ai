@@ -121,14 +121,35 @@ object ProcessGuard {
     }
 }
 
-/** Session record to the watch's view of it. */
-fun SessionRecord.watched(): WatchedSession = WatchedSession(
+/**
+ * PROC-REAP-COPY-1: the pids of this session that the daemon of state dir [me] may root its process tracking at: its kept harness
+ * and its running child, each only when THIS daemon recorded it ([KeptProcess.ownerId] / [SessionRecord.ownerId] is [me]) and,
+ * when a start instant was recorded, the live process still has it ([startInstant]). A copied or foreign `sessions.json`, or an
+ * older record with no owner, yields nothing: its pids name processes another daemon (or nobody) owns.
+ */
+fun SessionRecord.ownedRootPids(me: String?, startInstant: (Long) -> Long?): List<Long> {
+    if (me == null) return emptyList()
+    fun live(pid: Long, recorded: Long?) = recorded == null || runCatching { startInstant(pid) }.getOrNull() == recorded
+    val kept = keptProcess?.takeIf { it.ownerId == me && live(it.pid, it.startedAt) }?.pid
+    val child = childPid?.takeIf { ownerId == me && live(it, childStartedAt) }
+    return listOfNotNull(kept, child).distinct()
+}
+
+/**
+ * Session record to the watch's view of it. [roots] defaults to every recorded pid (unchecked; tests and tools); the daemon's
+ * process host passes [ownedRootPids] and [owned] = "this daemon ran the session" (PROC-REAP-COPY-1).
+ */
+fun SessionRecord.watched(
+    roots: List<Long> = listOfNotNull(keptProcess?.pid, childPid).distinct(),
+    owned: Boolean = true,
+): WatchedSession = WatchedSession(
     id = id,
     state = state.name,
     busy = isBusy(),
     hasBgJobs = bgJobs.isNotEmpty(),
     lastActivityAt = lastOutputAt ?: lastHeartbeat,
-    rootPids = listOfNotNull(keptProcess?.pid, childPid).distinct(),
+    rootPids = roots,
+    owned = owned,
     worktreePath = worktreePath,
     ticketId = ticketId,
     keepPids = ProcessGuard.keepPidsOf(this),
@@ -199,7 +220,9 @@ class LocalProcesses(
 
         override val ownerId: String? get() = instanceId
         override fun isProtected(p: ProcInfo) = ProcessGuard.isProtected(p)
-        override fun sessions(): List<WatchedSession> = sessionList().map { it.watched() }
+        override fun sessions(): List<WatchedSession> = sessionList().map { r ->
+            r.watched(r.ownedRootPids(instanceId) { pid -> table.startInstant(pid) }, owned = instanceId != null && r.ownerId == instanceId)
+        }
 
         override fun sessionMembers(sessionId: String): List<ProcInfo> =
             runCatching { containers.members(sessionId).mapNotNull { pid -> source.info(pid) } }.getOrDefault(emptyList())

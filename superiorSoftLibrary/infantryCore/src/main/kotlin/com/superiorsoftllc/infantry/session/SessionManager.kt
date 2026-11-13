@@ -2364,7 +2364,8 @@ class SessionManager(
         override fun process(sessionId: String, pid: Long?) {
             if (pid == null || runs[sessionId] == null) return
             contain(sessionId, pid)
-            update(sessionId) { it.copy(childPid = pid, lastHeartbeat = clock(), isProcessAlive = true) }
+            val started = runCatching { processTable.startInstant(pid) }.getOrNull()
+            update(sessionId) { it.copy(childPid = pid, childStartedAt = started, ownerId = instanceId, lastHeartbeat = clock(), isProcessAlive = true) }
         }
 
         override fun turnEnded(sessionId: String, end: TurnEnd, exitCode: Int?, processExited: Boolean, reason: String?) =
@@ -2378,7 +2379,7 @@ class SessionManager(
 
         override fun keptProcess(sessionId: String, kept: KeptProcess) {
             contain(sessionId, kept.pid)
-            update(sessionId) { it.copy(keptProcess = kept.copy(ownerId = instanceId)) }
+            update(sessionId) { it.copy(keptProcess = kept.copy(ownerId = instanceId), ownerId = instanceId) }
         }
 
         override fun keptProcessEnded(sessionId: String, pid: Long) {

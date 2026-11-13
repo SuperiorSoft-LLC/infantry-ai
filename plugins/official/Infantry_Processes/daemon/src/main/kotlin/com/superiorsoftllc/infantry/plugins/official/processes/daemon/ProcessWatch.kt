@@ -166,7 +166,8 @@ class ProcessWatch(
         if (!on()) return
         val records = sessions()
         ledger.observe(roots(records), members(records))
-        ledger.adopt(records.mapNotNull { r -> r.worktreePath?.let { r.id to it } }.toMap())
+        // PROC-REAP-COPY-1: only a session this daemon ran may claim a process by its worktree path (a copied record names real worktrees).
+        ledger.adopt(records.filter { it.owned }.mapNotNull { r -> r.worktreePath?.let { r.id to it } }.toMap())
         releaseEndedOwnersLock(records)
         val cfg = config()
         val now = clock()
