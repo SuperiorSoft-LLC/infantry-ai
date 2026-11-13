@@ -93,6 +93,32 @@ class InterruptDaemonTest {
         assertEquals("stub-session-1", resumed.getOrNull(resumed.indexOf("--resume") + 1), "spec was $resumed")
     }
 
+    /**
+     * INTERRUPT-ASK-1 (ticket 7a6a68bf): what the stopped turn still flushes after the interrupt (an interactive claude writes its partial
+     * reply only when Esc stops it) stays raw: no chat text, no BUSY status, no new run activity; the session stays at rest.
+     */
+    @Test
+    fun outputTheStoppedTurnFlushesAfterTheInterruptNeverReachesTheChatOrMakesTheSessionBusy() = withDaemon(longTurn()) { fixture, runner ->
+        val client = fixture.client
+        client.await(Envelope.READY)
+        client.send(Envelope(Envelope.PROMPT, "write an essay"))
+        val sessionId = client.awaitWhere("the first turn", 10_000) { it.type == Envelope.TURN }.sessionId!!
+        awaitBusyWithProviderSession(fixture, sessionId)
+        client.send(Envelope(Envelope.INTERRUPT, sessionId))
+        fixture.await(10_000, "the interrupted session to come to rest") { fixture.daemon.manager.get(sessionId)?.state == SessionState.IDLE }
+        val restAt = client.frames.size
+
+        runner.listeners.first().onStdout("""{"type":"text","text":"LATE PARTIAL REPLY"}""")
+        fixture.await(10_000, "the late line on the raw stream") {
+            client.frames.drop(restAt).any { it.type == Envelope.STDOUT && it.sessionId == sessionId && "LATE PARTIAL REPLY" in it.data }
+        }
+
+        val after = client.frames.drop(restAt).filter { it.sessionId == sessionId }
+        assertTrue(after.none { it.type == Envelope.TEXT_DELTA || it.type == Envelope.REASONING }, "no chat text from the stopped turn: $after")
+        assertTrue(after.none { it.type == Envelope.STATUS && "BUSY" in it.data }, "the session is not shown busy again: $after")
+        assertEquals(SessionState.IDLE, fixture.daemon.manager.get(sessionId)?.state)
+    }
+
     @Test
     fun aMessageSentToABusyAgentIsQueuedAndDeliveredWhenItRests() = withDaemon(longTurn()) { fixture, runner ->
         val client = fixture.client
@@ -209,8 +235,11 @@ class InterruptDaemonTest {
         val specs: MutableList<ProcessSpec> = CopyOnWriteArrayList()
         override val id: String = "recording-${inner.id}"
         val processes: List<com.superiorsoftllc.infantry.runner.ScriptedProcess> get() = inner.processes
+        /** Each started process's listener, so a test can deliver a line the process writes late. */
+        val listeners: MutableList<ProcessListener> = CopyOnWriteArrayList()
         override fun start(spec: ProcessSpec, listener: ProcessListener): RunningProcess {
             specs += spec
+            listeners += listener
             return inner.start(spec, listener)
         }
     }
