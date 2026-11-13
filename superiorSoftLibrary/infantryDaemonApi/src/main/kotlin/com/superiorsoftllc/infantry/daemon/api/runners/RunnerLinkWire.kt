@@ -35,8 +35,17 @@ object RunnerLinkWire {
      * 1.8.0 (RUNNER-CRED-1): [StartRequest.credentials], what the orchestrator lends the session (harness key env, the secrets it
      * may render, the git credential of its remote), held in the runner's memory for that session only. An older runner ignores it
      * (and needs its own keys, as before); an older orchestrator sends none.
+     * 1.9.0 (RUNNER-UNIFY-2): [COMMAND], one owner command on a session this orchestrator started (a turn, attach, interrupt, a queue
+     * change, kill, delete), run by the runner's own local binding exactly as a local session runs it. An older runner answers an
+     * error for it (the command fails, as it did before).
      */
-    const val CONTRACT = "1.8.0"
+    const val CONTRACT = "1.9.0"
+
+    /**
+     * RUNNER-UNIFY-2 (contract 1.9.0): one owner command ([CommandRequest]) on a session this orchestrator started, answered by
+     * [CommandAnswer]. A session it did not start answers [CommandAnswer] kind `unknown`, never an error.
+     */
+    const val COMMAND = "runner_link_command"
 
     /**
      * RUNNER-PROMPT-RELAY-1 (contract 1.7.0): the orchestrator's answer to a prompt a session of its own raised on this runner (the
@@ -218,6 +227,23 @@ object RunnerLinkWire {
 
     @Serializable
     data class PromptAnswerAck(val applied: Boolean = false)
+
+    /** RUNNER-UNIFY-2: the fields of a [com.superiorsoftllc.infantry.daemon.api.orchestrator.SessionCommand] for [sessionId]. */
+    @Serializable
+    data class CommandRequest(
+        val sessionId: String,
+        val kind: String,
+        val text: String = "",
+        val wakeReason: String? = null,
+        val force: Boolean = false,
+        val by: String? = null,
+        val reason: String? = null,
+        val maxQueued: Int = 0,
+    )
+
+    /** RUNNER-UNIFY-2: the fields of a [com.superiorsoftllc.infantry.daemon.api.orchestrator.CommandResult]. */
+    @Serializable
+    data class CommandAnswer(val kind: String, val reason: String? = null, val errorType: String = "", val started: Boolean = false)
 
     @Serializable
     data class HealthAnswer(val state: String, val running: Int = 0, val freeSlots: Int = -1, val load: Double? = null)

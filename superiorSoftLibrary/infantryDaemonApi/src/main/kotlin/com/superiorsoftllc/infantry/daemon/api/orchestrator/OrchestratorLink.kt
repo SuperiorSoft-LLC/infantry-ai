@@ -201,16 +201,73 @@ interface RunnerLink {
      */
     fun answerPrompt(sessionId: String, reply: PromptReply): OrchestratorReply<Boolean> = unoffered("answerPrompt")
 
+    /**
+     * RUNNER-UNIFY-2 (1.5.0, docs/RUNNER-UNIFY.md 5.1): one owner command on session [sessionId]: a turn, attach, interrupt, a queue
+     * change, kill or delete ([SessionCommand.kind]). The local binding runs exactly what the daemon ran before for that frame; a remote
+     * binding sends it over the link, where the runner's own local binding runs the same code. Ok carries the [CommandResult] (a refusal
+     * is a VALUE: [CommandResult.REFUSED], [CommandResult.IN_FLIGHT], [CommandResult.UNKNOWN]). Not idempotent for a turn or a queue
+     * add (the caller sends each once). Fail mode on Unavailable: the caller reports the command failed; nothing is retried.
+     */
+    fun command(sessionId: String, command: SessionCommand): OrchestratorReply<CommandResult> = unoffered("command")
+
     companion object {
         /**
          * 1.1.0 (RUNNER-POOL-6): events, readTranscript; StartSpec may name a git remote, SessionRef carries the ticket branch.
          * 1.2.0 (RUNNER-POOL-8): events(acked), a per-session seq kept until acknowledged; StartSpec.pushOnCommit.
          * 1.3.0 (RUNNER-TEST-1): removeSession, so a throwaway test turn leaves no session on the runner.
          * 1.4.0 (RUNNER-PROMPT-RELAY-1): answerPrompt, and the [RunnerEvent.PROMPT] / [RunnerEvent.PROMPT_RESOLVED] event kinds.
+         * 1.5.0 (RUNNER-UNIFY-2): command (turn, attach, interrupt, queue add/remove/force, kill, delete), so a remote session takes
+         * every owner command a local one does.
          */
-        const val CONTRACT_VERSION = "1.4.0"
+        const val CONTRACT_VERSION = "1.5.0"
 
         private fun unoffered(op: String): OrchestratorReply<Nothing> = OrchestratorReply.Unavailable("this runner binding does not offer '$op'")
+    }
+}
+
+/**
+ * RUNNER-UNIFY-2: one owner command on a session ([RunnerLink.command]). [kind] is one of the constants below. [text] is the turn
+ * text ([TURN], [QUEUE_ADD]) or the queued message id ([QUEUE_REMOVE], [QUEUE_FORCE]); [wakeReason] tags a [TURN] (null = an owner
+ * prompt); [force], [by] and [reason] are a [KILL]'s (null [by] = the runner's default, a client kill); [maxQueued] bounds a
+ * [QUEUE_ADD] (the orchestrator's `limits.chat.queueMax`).
+ */
+data class SessionCommand(
+    val kind: String,
+    val text: String = "",
+    val wakeReason: String? = null,
+    val force: Boolean = false,
+    val by: String? = null,
+    val reason: String? = null,
+    val maxQueued: Int = 0,
+) {
+    companion object {
+        const val TURN = "turn"
+        const val ATTACH = "attach"
+        const val INTERRUPT = "interrupt"
+        const val QUEUE_ADD = "queue_add"
+        const val QUEUE_REMOVE = "queue_remove"
+        const val QUEUE_FORCE = "queue_force"
+        const val KILL = "kill"
+        const val DELETE = "delete"
+    }
+}
+
+/**
+ * RUNNER-UNIFY-2: what a [SessionCommand] did. [kind]: [DONE]; [IN_FLIGHT] (a turn is already running: the typed run-in-flight
+ * refusal, so a client can queue it); [REFUSED] ([reason] = the refusal text, null when it had none; [errorType] = its error class
+ * name); [UNKNOWN] (the runner holds no such session, or not one this orchestrator started); [UNAVAILABLE] (no runner answered:
+ * set by the caller's helper, never by a binding). [started] = a [SessionCommand.QUEUE_ADD] ran at once as a turn (nothing was running).
+ */
+data class CommandResult(val kind: String, val reason: String? = null, val errorType: String = "", val started: Boolean = false) {
+    val ok: Boolean get() = kind == DONE
+
+    companion object {
+        const val DONE = "done"
+        const val IN_FLIGHT = "in_flight"
+        const val REFUSED = "refused"
+        const val UNKNOWN = "unknown"
+        const val UNAVAILABLE = "unavailable"
+        val Done = CommandResult(DONE)
     }
 }
 

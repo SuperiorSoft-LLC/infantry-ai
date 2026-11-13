@@ -234,6 +234,10 @@ keystore answers a render first, its own non-blank key wins over a lent one, and
 Turn it off per runner: on the PC `runners.lendCredentials` lists the runners that get credentials (default `["*"]`, every runner;
 `[]` = none); on the runner `infantry settings set runner.acceptCredentials false` ignores every loan.
 
+Every owner command on a runner session (prompt, resume, attach, interrupt, the chat queue, kill, delete) goes to that runner,
+exactly as a local session's does (RUNNER-UNIFY-2). Contingency on the PC: `infantry settings set runners.unifiedCommands false`
+makes this PC's own sessions skip the runner link and call the session manager directly, as before; runner sessions still go to their runner.
+
 Claude with a subscription (owner decision): either sign claude in on the runner itself (`docker exec -it infantry-runner claude auth
 login`), or run `claude setup-token` on your PC and store the token as the claude subscription token
 (`infantry harness key claude oauth`, which prompts for it): in `subscription-login` mode the app lends it as `CLAUDE_CODE_OAUTH_TOKEN`.

@@ -65,6 +65,12 @@ object RunnerLinkSettings {
      * that session only). Default `true`; `false` = ignore them and use only this runner's own keys and git access.
      */
     const val ACCEPT_CREDENTIALS = "runner.acceptCredentials"
+    /**
+     * RUNNER-UNIFY-2 (orchestrator side): every owner command on a session (prompt, resume, attach, interrupt, queue, kill, delete)
+     * goes through the runner the session lives on (`RunnerPool.linkFor`). Default `true`. CONTINGENCY: `false` = a session this
+     * daemon holds skips the pool and runs the session manager directly, as before; remote sessions still go to their runner.
+     */
+    const val UNIFIED_COMMANDS = "runners.unifiedCommands"
 
     /** The setting text of [ALLOW_PLAIN_TAILNET]; it states the risk. */
     const val ALLOW_PLAIN_TAILNET_TEXT =
@@ -72,7 +78,7 @@ object RunnerLinkSettings {
             "text cross the network unencrypted; anyone on the path can read them and replay the credential to start agents with " +
             "tool permissions on this machine. Only for a private tailnet (Tailscale/WireGuard) you fully control. Default false."
 
-    val KEYS: Set<String> = setOf(ALLOW_PLAIN_TAILNET, PROJECTS, HARNESSES, CLONE_ROOT, ON_LOST, PUSH_ON_COMMIT, ADVERTISE_HOSTS, GIT_NAME, GIT_EMAIL, LEND_CREDENTIALS, GIT_SECRET, ACCEPT_CREDENTIALS)
+    val KEYS: Set<String> = setOf(ALLOW_PLAIN_TAILNET, PROJECTS, HARNESSES, CLONE_ROOT, ON_LOST, PUSH_ON_COMMIT, ADVERTISE_HOSTS, GIT_NAME, GIT_EMAIL, LEND_CREDENTIALS, GIT_SECRET, ACCEPT_CREDENTIALS, UNIFIED_COMMANDS)
 
     /** What the runner link reads; [stored] is the raw stored JSON of a key (null = unset). */
     data class Values(
@@ -88,6 +94,7 @@ object RunnerLinkSettings {
         val lendCredentials: List<String> = listOf(ANY),
         val gitSecret: String = "",
         val acceptCredentials: Boolean = true,
+        val unifiedCommands: Boolean = true,
     ) {
         /** RUNNER-CRED-1: whether this orchestrator lends credentials to runner [name]. */
         fun lendsTo(name: String): Boolean = ANY in lendCredentials || name in lendCredentials
@@ -113,6 +120,7 @@ object RunnerLinkSettings {
         lendCredentials = stored(LEND_CREDENTIALS)?.let(::list) ?: listOf(ANY),
         gitSecret = string(stored(GIT_SECRET)),
         acceptCredentials = runCatching { (Json.parseToJsonElement(stored(ACCEPT_CREDENTIALS) ?: "true") as JsonPrimitive).booleanOrNull }.getOrNull() ?: true,
+        unifiedCommands = runCatching { (Json.parseToJsonElement(stored(UNIFIED_COMMANDS) ?: "true") as JsonPrimitive).booleanOrNull }.getOrNull() ?: true,
     )
 
     private fun string(raw: String?): String =
@@ -135,6 +143,7 @@ object RunnerLinkSettings {
             LEND_CREDENTIALS to JsonArray(v.lendCredentials.map(::JsonPrimitive)),
             GIT_SECRET to JsonPrimitive(v.gitSecret),
             ACCEPT_CREDENTIALS to JsonPrimitive(v.acceptCredentials),
+            UNIFIED_COMMANDS to JsonPrimitive(v.unifiedCommands),
         )
     }
 
@@ -179,6 +188,10 @@ object RunnerLinkSettings {
         ACCEPT_CREDENTIALS -> JsonPrimitive(
             (value as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull
                 ?: throw IllegalArgumentException("setting '$key' must be a JSON boolean (false = ignore the credentials an orchestrator lends)"),
+        )
+        UNIFIED_COMMANDS -> JsonPrimitive(
+            (value as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull
+                ?: throw IllegalArgumentException("setting '$key' must be a JSON boolean (false = this daemon's own sessions skip the runner link, as before RUNNER-UNIFY-2)"),
         )
         else -> throw IllegalArgumentException("unknown runner link setting '$key'")
     }

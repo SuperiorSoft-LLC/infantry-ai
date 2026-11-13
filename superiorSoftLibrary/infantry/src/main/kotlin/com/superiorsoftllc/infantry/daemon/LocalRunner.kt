@@ -5,6 +5,7 @@ package com.superiorsoftllc.infantry.daemon
 import com.superiorsoftllc.infantry.agents.AgentProfiles
 import com.superiorsoftllc.infantry.harness.ToolApproval
 import com.superiorsoftllc.infantry.session.ToolApprovals
+import com.superiorsoftllc.infantry.daemon.api.orchestrator.CommandResult
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.LocalRunnerServices
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.MailItem
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.MailResult
@@ -14,6 +15,8 @@ import com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerHealth
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerInfo
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerLink
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool
+import com.superiorsoftllc.infantry.daemon.api.orchestrator.SessionCommand
+import com.superiorsoftllc.infantry.daemon.api.orchestrator.SessionRef
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.StartSpec
 import com.superiorsoftllc.infantry.protocol.MessageOrigin
 import com.superiorsoftllc.infantry.protocol.SpawnOptions
@@ -115,7 +118,63 @@ object LocalRunner {
             }
         },
         answerPrompt = answerPrompt,
+        command = { sessionId, command -> execute(manager, sessionId, command) },
     )
+
+    /**
+     * RUNNER-UNIFY-2: one owner command on a session of THIS runner: the [SessionManager] calls the daemon's frame handlers made
+     * directly before (moved here, not copied), with their exceptions turned into the [CommandResult] the handler turns back into the
+     * same error frame. A turn that finds one running is [CommandResult.IN_FLIGHT] (the typed refusal a client queues on).
+     */
+    fun execute(manager: SessionManager, sessionId: String, command: SessionCommand): CommandResult = try {
+        when (command.kind) {
+            SessionCommand.TURN -> { manager.resume(sessionId, command.text, MessageOrigin.Owner, command.wakeReason); CommandResult.Done }
+            SessionCommand.ATTACH -> { manager.attach(sessionId); CommandResult.Done }
+            SessionCommand.INTERRUPT -> { manager.interrupt(sessionId); CommandResult.Done }
+            SessionCommand.QUEUE_ADD -> CommandResult(CommandResult.DONE, started = manager.queueAdd(sessionId, command.text, command.maxQueued) == null)
+            SessionCommand.QUEUE_REMOVE -> { manager.queueRemove(sessionId, command.text); CommandResult.Done }
+            SessionCommand.QUEUE_FORCE -> { manager.queueForce(sessionId, command.text); CommandResult.Done }
+            // The kill of an id this runner does not hold is refused with the manager's own words, without touching the process host.
+            SessionCommand.KILL -> if (manager.get(sessionId) == null) {
+                CommandResult(CommandResult.REFUSED, "unknown session $sessionId", "IllegalStateException")
+            } else {
+                val by = command.by
+                if (by == null) manager.kill(sessionId, force = command.force, reason = command.reason)
+                else manager.kill(sessionId, command.force, by, command.reason)
+                CommandResult.Done
+            }
+            // SESSION-GHOST-1: an id this runner does not hold is already gone: a clean no-op.
+            SessionCommand.DELETE -> if (manager.get(sessionId) == null) CommandResult(CommandResult.UNKNOWN) else { manager.delete(sessionId); CommandResult.Done }
+            else -> CommandResult(CommandResult.REFUSED, "unknown session command '${command.kind}'", "IllegalArgumentException")
+        }
+    } catch (e: RunInFlightException) {
+        CommandResult(CommandResult.IN_FLIGHT, e.message, e::class.simpleName.orEmpty())
+    } catch (e: Exception) {
+        CommandResult(CommandResult.REFUSED, e.message, e::class.simpleName.orEmpty())
+    }
+
+    /**
+     * RUNNER-UNIFY-2 (docs/RUNNER-UNIFY.md 5.1): an owner command on [sessionId] through the runner it lives on
+     * ([RunnerPool.linkFor]): the local runner for this daemon's own sessions, the paired runner for a remote one. No caller asks which.
+     * CONTINGENCY `runners.unifiedCommands` = false ([unified]): a session this daemon's [manager] holds skips the pool and runs
+     * [execute] directly, as the handlers did before; only the other sessions go by placement.
+     */
+    fun command(pool: RunnerPool, manager: SessionManager, sessionId: String, command: SessionCommand, unified: Boolean = true): CommandResult =
+        command(pool, sessionId, command, unified, held = { manager.get(it) != null }, direct = { id, c -> execute(manager, id, c) })
+
+    /** [command] with the manager's two uses spelled out: [held] (this daemon holds the session) and [direct] ([execute] on it). */
+    fun command(
+        pool: RunnerPool, sessionId: String, command: SessionCommand, unified: Boolean,
+        held: (String) -> Boolean, direct: (String, SessionCommand) -> CommandResult,
+    ): CommandResult {
+        if (!unified && held(sessionId)) return direct(sessionId, command)
+        val runner = pool.runnerOf(sessionId)
+        val link = pool.linkFor(sessionId) ?: return CommandResult(CommandResult.UNAVAILABLE, "runner '$runner' is not connected; the session there is still running")
+        return when (val r = link.command(sessionId, command)) {
+            is OrchestratorReply.Ok -> r.value
+            is OrchestratorReply.Unavailable -> CommandResult(CommandResult.UNAVAILABLE, "runner '$runner' unavailable: ${r.reason}")
+        }
+    }
 
     /** A pool with only the local runner over [manager] (a connection handler's default when the daemon passes none). */
     fun pool(manager: SessionManager, agents: AgentProfiles): RunnerPool = com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerHub(
@@ -249,32 +308,68 @@ object LocalRunner {
         remotePlaced: (String, com.superiorsoftllc.infantry.runners.RemoteSessionMirror.Placed) -> Unit,
     ): StartedSession? {
         if (options?.agentId == null && options?.role == null) return null
-        val link = pool.link(runner) ?: throw IllegalArgumentException("runner '$runner' is not registered, or no runner binding is loaded")
-        val remote = repo?.let { runCatching { com.superiorsoftllc.infantry.daemon.plugins.originUrl(it) }.getOrNull() }
-            ?: throw IllegalArgumentException("runner $runner needs the project's git remote, and ${repo?.path ?: "this project"} has no `origin` remote. Fix: git -C <project folder> remote add origin <url the runner can reach>")
-        val identity = repo?.let { runCatching { com.superiorsoftllc.infantry.daemon.plugins.gitIdentityOf(it) }.getOrNull() }
+        val hub = pool as? com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerHub
         // RUNNER-PAIR-1: the Tool approval a local start of these options would run with (its own override, else this daemon's setting).
-        val approval = ToolApprovals.current(ToolApproval.parse(options?.toolApproval)).mode.wire
-        val spec = startSpec(options, null).copy(gitRemote = remote, gitName = identity?.first, gitEmail = identity?.second, toolApproval = approval, promptRelay = true)
-        return when (val reply = link.startSession(spec)) {
-            is OrchestratorReply.Unavailable -> throw IllegalStateException("runner $runner unavailable: ${reply.reason}")
+        val approval = ToolApprovals.current(ToolApproval.parse(options.toolApproval)).mode.wire
+        val spec = startSpec(options, null).copy(toolApproval = approval, promptRelay = true)
+        val placed = { ref: SessionRef ->
+            com.superiorsoftllc.infantry.runners.RemoteSessionMirror.Placed(
+                options.provider.orEmpty(), options.model, null, ref.branch, null, ref.worktreePath,
+                projectId = options.projectId, agentId = options.agentId, role = options.role,
+            )
+        }
+        val out = startOnRunner(
+            pool, runner, spec, repo,
+            originOf = { com.superiorsoftllc.infantry.daemon.plugins.originUrl(it) },
+            identityOf = { com.superiorsoftllc.infantry.daemon.plugins.gitIdentityOf(it) },
+            index = { id -> (hub ?: throw IllegalStateException("this daemon cannot index a remote session")).placed(id, runner) },
+            placed = placed, remotePlaced = remotePlaced,
+        )
+        return when (out) {
+            is RemoteStart.Unavailable -> throw IllegalStateException(out.reason)
+            is RemoteStart.Refused -> throw IllegalArgumentException(out.reason)
+            is RemoteStart.Started -> StartedSession.Remote(
+                runner,
+                com.superiorsoftllc.infantry.daemon.api.sessions.SessionView(
+                    id = out.id, agentId = options.agentId, role = options.role, provider = options.provider.orEmpty(), model = options.model,
+                    projectId = options.projectId, state = "STARTING", live = true, contextLimit = options.contextLimit, effort = options.effort,
+                ),
+            )
+        }
+    }
+
+    /** RUNNER-UNIFY-2: what [startOnRunner] did. [Unavailable] = the runner did not answer; [Refused] = it, or this daemon, said no. */
+    sealed interface RemoteStart {
+        data class Started(val id: String, val ref: SessionRef) : RemoteStart
+        data class Refused(val reason: String) : RemoteStart
+        data class Unavailable(val reason: String) : RemoteStart
+    }
+
+    /**
+     * RUNNER-UNIFY-2: the ONE remote start, for a ticket (the board) and a session outside the board alike. The runner clones
+     * [checkout]'s git remote ([originOf]) and commits as its git identity ([identityOf]); then the session is indexed on the pool
+     * ([index]) and recorded in the orchestrator's mirror ([placed] -> [remotePlaced]). [spec] carries everything else (ticket,
+     * branch, Tool approval, prompt relay).
+     */
+    fun startOnRunner(
+        pool: RunnerPool, runner: String, spec: StartSpec, checkout: File?,
+        originOf: (File) -> String?, identityOf: (File) -> Pair<String, String>?,
+        index: (String) -> Unit,
+        placed: (SessionRef) -> com.superiorsoftllc.infantry.runners.RemoteSessionMirror.Placed,
+        remotePlaced: (String, com.superiorsoftllc.infantry.runners.RemoteSessionMirror.Placed) -> Unit,
+    ): RemoteStart {
+        val link = pool.link(runner) ?: return RemoteStart.Refused("runner '$runner' is not registered, or no runner binding is loaded")
+        val remote = checkout?.let { runCatching { originOf(it) }.getOrNull() }?.takeIf { it.isNotBlank() }
+            ?: return RemoteStart.Refused("runner $runner needs the project's git remote, and ${checkout?.path ?: "this project"} has no `origin` remote. Fix: git -C <project folder> remote add origin <url the runner can reach>")
+        val identity = runCatching { identityOf(checkout) }.getOrNull()
+        val full = spec.copy(gitRemote = remote).let { s -> identity?.let { (n, e) -> s.copy(gitName = n, gitEmail = e) } ?: s }
+        return when (val reply = link.startSession(full)) {
+            is OrchestratorReply.Unavailable -> RemoteStart.Unavailable("runner $runner unavailable: ${reply.reason}")
             is OrchestratorReply.Ok -> {
-                val id = reply.value.sessionId ?: throw IllegalArgumentException("runner $runner refused the start: ${reply.value.refusal ?: "no session"}")
-                (pool as? com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerHub ?: throw IllegalStateException("this daemon cannot index a remote session")).placed(id, runner)
-                remotePlaced(
-                    id,
-                    com.superiorsoftllc.infantry.runners.RemoteSessionMirror.Placed(
-                        options.provider.orEmpty(), options.model, null, reply.value.branch, null, reply.value.worktreePath,
-                        projectId = options.projectId, agentId = options.agentId, role = options.role,
-                    ),
-                )
-                StartedSession.Remote(
-                    runner,
-                    com.superiorsoftllc.infantry.daemon.api.sessions.SessionView(
-                        id = id, agentId = options.agentId, role = options.role, provider = options.provider.orEmpty(), model = options.model,
-                        projectId = options.projectId, state = "STARTING", live = true, contextLimit = options.contextLimit, effort = options.effort,
-                    ),
-                )
+                val id = reply.value.sessionId ?: return RemoteStart.Refused("runner $runner refused the start: ${reply.value.refusal ?: "no session"}")
+                index(id)
+                remotePlaced(id, placed(reply.value))
+                RemoteStart.Started(id, reply.value)
             }
         }
     }
