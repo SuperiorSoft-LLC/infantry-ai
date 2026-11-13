@@ -136,8 +136,19 @@ class RunnerLinkStore(private val vault: LinkVault, private val random: SecureRa
         /** True once anything was paired on this machine (the link keystore exists); a never-paired daemon opens nothing. */
         fun exists(stateDir: File): Boolean = File(dir(stateDir), Keystore.FILE_NAME).isFile
 
-        /** The daemon's store: a keystore of its own in [dir]. */
-        fun open(stateDir: File): RunnerLinkStore = RunnerLinkStore(LinkVault.OfKeystore(Keystore(dir(stateDir).also { it.mkdirs() })))
+        /** One store per link directory, for the life of the process (see [open]). */
+        private val opened = java.util.concurrent.ConcurrentHashMap<String, RunnerLinkStore>()
+
+        /**
+         * The daemon's store: a keystore of its own in [dir]. RUNNER-PUSH-WAKE-1: the SAME store for the same directory on every
+         * call. A fresh [Keystore] resolves its master key again, and on Windows that is a `powershell.exe` DPAPI child process
+         * (~1 s). The frame stream opens the store on every round (`link` + `call`), so a fresh one per call held every pushed
+         * frame for 1.5-3 s. The keystore re-reads its file on each read, so one instance sees every write.
+         */
+        fun open(stateDir: File): RunnerLinkStore {
+            val dir = dir(stateDir).also { it.mkdirs() }
+            return opened.computeIfAbsent(dir.absoluteFile.normalize().path) { RunnerLinkStore(LinkVault.OfKeystore(Keystore(dir))) }
+        }
 
         fun hash(credential: String): String =
             MessageDigest.getInstance("SHA-256").digest(credential.toByteArray()).joinToString("") { "%02x".format(it) }
