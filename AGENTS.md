@@ -28,7 +28,7 @@ every feature. The CLI is `infantry`; `agenthq` is a deprecated alias for the sa
 9. **Before adding a helper or UI pattern, search for the existing seam.** If none fits, add the generic seam, never
    a local copy. The seams are listed in section 4 ("Shared seams"); the copies found so far and their consolidation
    tickets are in [docs/ARCH-AUDIT-2026-11.md](docs/ARCH-AUDIT-2026-11.md).
-10. **Before adding UI (dialog, modal, form, card), search for the existing component** (section 4, "Shared seams"). A dialog is `AhqAlertDialog` (never a raw Material `AlertDialog`: it registers the modal blur). New UI needs a reason in the ticket, and the done comment lists the components it reused.
+10. **Before adding UI (dialog, modal, form, card), search for the existing component** (section 4, "Shared seams"). A dialog is `AhqAlertDialog` (never a raw Material dialog: it registers the modal blur). New UI needs a reason in the ticket, and the done comment lists the components it reused.
 
 ## 2. Repo layout
 
