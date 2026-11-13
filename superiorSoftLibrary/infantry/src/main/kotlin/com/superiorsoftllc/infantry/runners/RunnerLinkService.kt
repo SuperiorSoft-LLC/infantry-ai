@@ -62,6 +62,13 @@ class RunnerLinkService(
     private val connectIssuer: RunnerConnect.Issuer = RunnerConnect.processIssuer(),
     /** RUNNER-CRED-1 (runner side): where the secrets an orchestrator lends a start are held (memory only); null = none kept. */
     private val lent: LentCredentials? = null,
+    /**
+     * RUNNER-BEARER-STALE-1: where the runner prints its endpoint and live bearer after a rotation or a pairing: the console the
+     * owner reads (`docker logs`), not only the log file. Defaults to [log].
+     */
+    private val announce: (String) -> Unit = log,
+    /** RUNNER-ENDPOINT-1: the process environment (`INFANTRY_RUNNER_HOST`, `INFANTRY_RUNNER_PUBLIC_PORT` from `docker run -e`). */
+    private val env: (String) -> String? = { com.superiorsoftllc.infantry.session.InfantryEnv.get(it) },
 ) : AutoCloseable {
     /** RUNNER-CRED-1 (orchestrator side): the harness ids whose key this app lends runner (name) at each start, for the check. */
     var lentKeysOf: (runner: String) -> Set<String> = { emptySet() }
@@ -153,7 +160,7 @@ class RunnerLinkService(
         store, RunnerAudit(File(dir, RunnerAudit.FILE)), codes = null, settings = settings, runner = { runner }, starts = starts,
         forwarder = forwarder, forwardWaitCapMs = ::forwardWaitMs,
         limit = limit, cloneRoot = ::cloneRootDir, bearer = bearer.takeIf { it.exists() }, lent = lent,
-        ownLogin = { ownLoginOf(it) }, log = log,
+        ownLogin = { ownLoginOf(it) }, log = log, onPaired = { announceBearer("paired") },
     )
 
     private fun serve(store: RunnerLinkStore, t: RunnerLinkTransport) {
@@ -757,29 +764,25 @@ class RunnerLinkService(
      * another space for any project and any harness", owner requirement); a list the owner narrowed is kept as is.
      */
     private fun bearer(name: String?, rotate: Boolean, hosts: String?, advertisePort: String?, allowProjects: String?, allowHarnesses: String?): JsonObject {
-        val advertised = advertisePort?.takeIf { it.isNotBlank() }?.let { p ->
-            p.toIntOrNull()?.takeIf { it in 1..LAST_PORT } ?: throw IllegalArgumentException("--port must be a port number (1-65535), the one the orchestrator reaches this runner on")
-        }
-        val t = transport() ?: throw IllegalArgumentException(NO_TRANSPORT)
+        val advertised = advertisedPort(advertisePort)
+        if (transport() == null) throw IllegalArgumentException(NO_TRANSPORT)
         val store = RunnerLinkStore.open(stateDir)
+        val before = bearer.read()
         val value = bearer.ensure(name, rotate)
         fun ids(csv: String?) = csv?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }
         val current = settings()
         (ids(allowProjects) ?: listOf(RunnerLinkSettings.ANY).takeIf { current.projects.isEmpty() })?.let { grant(RunnerLinkSettings.PROJECTS, it) }
         (ids(allowHarnesses) ?: listOf(RunnerLinkSettings.ANY).takeIf { current.harnesses.isEmpty() })?.let { grant(RunnerLinkSettings.HARNESSES, it) }
         val values = settings()
-        val plain = values.allowPlainTailnet
-        val fingerprint = if (plain) null else t.fingerprint(tls(store))
         // The served link reads the bearer file on every PAIR, so a rotate is live at once; only an unserved link is opened here.
         if (pairing == null) settle()
-        val candidates = RunnerPairLink.candidates(listOfNotNull(hosts), values.advertiseHosts, limit(LimitRegistry.RUNNERS_ADVERTISE_HOSTS_MAX).toInt())
-        val endpointHost = candidates.firstOrNull() ?: UNKNOWN_HOST
-        val port = advertised ?: serving?.port ?: linkPort()
-        val endpoint = "${if (plain) "ws" else "wss"}://$endpointHost:$port"
+        val view = bearerView(store, value, hosts, advertised)
+        // RUNNER-BEARER-STALE-1: a new secret (rotate, rename) makes every bearer printed before it wrong, so print the live one again.
+        if (before != null && before != value) announceBearer("rotated", hosts, advertised)
         return JsonObject(
             ok(
-                "name" to value.name, "endpoint" to endpoint, "bearer" to RunnerBearer.Token(value.name, fingerprint, value.secret).text(),
-                "hostGuessed" to (hosts.isNullOrBlank() && values.advertiseHosts.isEmpty()).toString(),
+                "name" to value.name, "endpoint" to view.endpoint, "bearer" to view.bearer,
+                "hostGuessed" to view.hostGuessed.toString(),
                 "serving" to (serving != null).toString(), "rotated" to rotate.toString(),
                 "pairedWith" to store.orchestrator()?.name,
             ) + mapOf(
@@ -787,6 +790,54 @@ class RunnerLinkService(
                 "harnesses" to JsonArray(values.harnesses.map(::JsonPrimitive)),
             ),
         )
+    }
+
+    private fun advertisedPort(text: String?): Int? = text?.takeIf { it.isNotBlank() }?.let { p ->
+        p.toIntOrNull()?.takeIf { it in 1..LAST_PORT } ?: throw IllegalArgumentException("--port must be a port number (1-65535), the one the orchestrator reaches this runner on")
+    }
+
+    /** What step 1 prints: the endpoint the PC dials, the bearer text, and whether the host is only this machine's own guess. */
+    private data class BearerView(val endpoint: String, val bearer: String, val hostGuessed: Boolean)
+
+    /**
+     * RUNNER-ENDPOINT-1: the endpoint comes from what the owner gave, in order: the flags, the `docker run` env
+     * (`INFANTRY_RUNNER_HOST`, `INFANTRY_RUNNER_PUBLIC_PORT`), `runners.advertiseHosts`, and only then this machine's own addresses
+     * (inside a container that is the bridge address, which the PC cannot reach). The CLI exec, the start banner and the
+     * rotation banner all read it here, so they never disagree.
+     */
+    private fun bearerView(store: RunnerLinkStore, value: RunnerBearer.Value, hosts: String?, advertised: Int?): BearerView {
+        val values = settings()
+        val plain = values.allowPlainTailnet
+        val fingerprint = if (plain) null else transport()?.fingerprint(tls(store))
+        val given = hosts?.takeIf { it.isNotBlank() } ?: env(ENV_HOST)?.takeIf { it.isNotBlank() }
+        val candidates = RunnerPairLink.candidates(listOfNotNull(given), values.advertiseHosts, limit(LimitRegistry.RUNNERS_ADVERTISE_HOSTS_MAX).toInt())
+        val endpointHost = candidates.firstOrNull() ?: UNKNOWN_HOST
+        val port = advertised ?: runCatching { advertisedPort(env(ENV_PUBLIC_PORT)) }.getOrNull() ?: serving?.port ?: linkPort()
+        return BearerView(
+            "${if (plain) "ws" else "wss"}://$endpointHost:$port",
+            RunnerBearer.Token(value.name, fingerprint, value.secret).text(),
+            given == null && values.advertiseHosts.isEmpty(),
+        )
+    }
+
+    /**
+     * RUNNER-BEARER-STALE-1: prints the endpoint, the LIVE bearer and the current 'last paired with' to the runner's console, the
+     * same block the image prints at start, so the newest block in `docker logs` is always the one to paste. Never throws.
+     */
+    private fun announceBearer(why: String, hosts: String? = null, advertised: Int? = null) {
+        runCatching {
+            val value = bearer.read() ?: return
+            val store = RunnerLinkStore.open(stateDir)
+            val view = bearerView(store, value, hosts, advertised)
+            val lines = buildList {
+                add("==== INFANTRY RUNNER ($why): paste these two lines into the app (Settings > Runners > Add runner); earlier blocks are stale ====")
+                add("endpoint: ${view.endpoint}")
+                add("bearer:   ${view.bearer}")
+                store.orchestrator()?.name?.let { add("last paired with orchestrator $it; pasting this bearer in any app pairs it there and replaces that link") }
+                add("==== END INFANTRY RUNNER ====")
+            }
+            lines.forEach(announce)
+        }.onFailure { log("[infantry] runner link: could not print the runner bearer: ${it.message}") }
     }
 
     /**
@@ -907,6 +958,9 @@ class RunnerLinkService(
         private const val SERVE_RETRY_MS = 200L
         /** RUNNER-PAIR-1: the endpoint host printed when no address of this runner is known (set INFANTRY_RUNNER_HOST / --host). */
         const val UNKNOWN_HOST = "<this-server-address>"
+        /** RUNNER-ENDPOINT-1: the address and port the PC dials this runner on, given on `docker run -e` (see docker/entrypoint.sh). */
+        const val ENV_HOST = "INFANTRY_RUNNER_HOST"
+        const val ENV_PUBLIC_PORT = "INFANTRY_RUNNER_PUBLIC_PORT"
         private const val LAST_PORT = 65535
         /** RUNNER-UP-1: the default [mode] when the daemon does not pass one (a bare `both` daemon pairs fine). */
         const val BOTH_MODE = "both"

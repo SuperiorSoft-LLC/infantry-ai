@@ -2122,6 +2122,7 @@ class InfantryDaemon(
                 forwarder = frameForwarder,
                 pump = forwardPump,
                 mode = { deploymentMode.id },
+                announce = DaemonLog::toConsole,
             )
             runnerLinksRef.set(runnerLinkService.links)
             runnerLinkService.lentKeysOf = credentialLender::lentKeys

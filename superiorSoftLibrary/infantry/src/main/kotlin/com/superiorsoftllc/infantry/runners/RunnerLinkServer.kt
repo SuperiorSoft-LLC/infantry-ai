@@ -98,6 +98,8 @@ class RunnerLinkServer(
     private val ownLogin: (harnessId: String) -> Boolean = { false },
     /** RUNNER-REPAIR-1: the runner's log (its container log): a bearer takeover is said there. */
     private val log: (String) -> Unit = {},
+    /** RUNNER-BEARER-STALE-1: an orchestrator paired here; the runner prints its endpoint, live bearer and 'last paired with' again. */
+    private val onPaired: () -> Unit = {},
 ) {
     /** One answer: [type] is [F.REPLY] or [F.ERROR]; [data] is the answer JSON or the reason. */
     data class Answer(val type: String, val data: String) {
@@ -416,6 +418,7 @@ class RunnerLinkServer(
             grantedProjects = grantedProjects, grantedHarnesses = grantedHarnesses, grantRefusal = grantRefusal,
             replacedOrchestrator = previous?.name,
         )
+        runCatching(onPaired)
         return ok(seat, F.PAIR, null, from, F.PairAnswer.serializer(), answer)
     }
 
@@ -579,7 +582,7 @@ class RunnerLinkServer(
 
         private const val NO_CODE = PairCodes.NO_LIVE_CODE
         /** RUNNER-PAIR-1: a PAIR whose code is not this runner's bearer (rotated, or mistyped). */
-        const val WRONG_BEARER = "wrong bearer: it is not this runner's live bearer (it was rotated, or copied wrong); copy the 'bearer:' line the runner prints again (`infantry runner bearer` there shows it)"
+        const val WRONG_BEARER = "wrong bearer: it is not this runner's live bearer (it was rotated, or copied wrong); copy the 'bearer:' line from the NEWEST 'INFANTRY RUNNER' block in the runner's log (it is printed again after every rotation), or run `infantry runner bearer` there"
         private const val SHOWN_TYPE_SIZE = 64
         private const val MS_PER_SECOND = 1_000L
         private const val MB = 1L shl 20
