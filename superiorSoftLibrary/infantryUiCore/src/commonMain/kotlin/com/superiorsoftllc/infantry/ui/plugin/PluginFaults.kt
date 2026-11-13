@@ -84,7 +84,8 @@ object PluginFaults {
      * its current reload generation); any other goes to [hostError]. Returns the module, or null.
      */
     fun handle(error: Throwable, generationOf: (String) -> Int = { generationLookup(it) }): String? {
-        println("[infantry-ui] uncaught UI exception: ${error.stackTraceToString().take(2000)}")
+        // UI-COROUTINE-1: the whole trace in the log (a 2000-char cut hid the caller of the resize freeze); the UI text stays short.
+        println("[infantry-ui] uncaught UI exception: ${error.stackTraceToString()}")
         val module = owner(error)
         if (module != null) record(module, error, generationOf(module)) else hostError.value = error.toString().take(400)
         return module
