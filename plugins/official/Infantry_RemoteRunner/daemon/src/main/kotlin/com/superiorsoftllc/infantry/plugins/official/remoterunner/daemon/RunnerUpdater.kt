@@ -92,7 +92,7 @@ class RunnerUpdater(
     )
 
     fun update(runner: String, report: Report): Outcome {
-        val endpoint = links.endpoint(runner) ?: return Outcome.Failed("no paired runner '$runner'")
+        val endpoint = links.endpoint(runner) ?: return Outcome.Failed("this app keeps no endpoint for runner '$runner' (not paired, or a daemon older than DaemonApi 1.60.0)")
         val (host, port) = hostPort(endpoint) ?: return Outcome.Failed("runner '$runner' has an unreadable endpoint ($endpoint)")
         val manual = { reason: String -> Outcome.Manual(reason, manualCommand(host, port, settings.image.ifBlank { registryTarget() })) }
         if (!isThisMachine(host)) return manual("runner '$runner' runs on $host, which this app cannot update with docker; run this there")
