@@ -4826,6 +4826,21 @@ private suspend fun handleConnection(
                 // DP-5d: a board-family frame is answered by the table its owner registered into; with no handler the
                 // daemon has no board.
                 else -> if (frames.handles(envelope.type)) frames.answer(envelope, direct)
+                // CARD-IMG-1: a frame declared `offLoop` (its handler may block, e.g. a fetch) is answered on an IO worker with the
+                // request's id, so later frames on this connection do not queue behind it.
+                else if (plugins.handlesFrame(envelope.type) && plugins.frameOffLoop(envelope.type)) {
+                    val asked = envelope
+                    session.launch(kotlinx.coroutines.Dispatchers.IO) {
+                        val answer = try {
+                            plugins.answerFrame(asked, caller)
+                        } catch (e: Exception) {
+                            if (e is kotlinx.coroutines.CancellationException) throw e
+                            Envelope(Envelope.ERROR, "${asked.type} failed: ${e.message ?: e::class.simpleName}")
+                        }
+                        answer?.let { outgoing.trySend(if (direct && it.requestId == null) it.copy(requestId = asked.requestId) else it) }
+                    }
+                    null
+                }
                 else if (plugins.handlesFrame(envelope.type)) plugins.answerFrame(envelope, caller)
                 else if (envelope.type in BoardFrames.TYPES) BoardFrames.noBoard(envelope.type)
                 // DP-6: the pipeline frames belong to the Infantry_Board plugin; without it the daemon says so.

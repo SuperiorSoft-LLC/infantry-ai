@@ -375,6 +375,12 @@ data class DaemonFrameDeclaration(
     val ownerOnly: Boolean = false,
     /** RUNNER-POOL-7: `runner` | `orchestrator`; null = the daemon half's [DaemonCapabilities.side]. */
     val side: String? = null,
+    /**
+     * CARD-IMG-1 (DaemonApi 1.59.0): the handler may block (a network fetch), so the daemon answers this frame off the
+     * connection's request loop, on an IO worker, echoing the request id; later frames on the same connection do not wait
+     * for it, and its answer may overtake or trail theirs. False = answered inline, in order.
+     */
+    val offLoop: Boolean = false,
 )
 
 /** DAEMON-PLUGINS-1: a daemon half's limits; null = the host default. [memoryMbHint] is reported, not enforced. */

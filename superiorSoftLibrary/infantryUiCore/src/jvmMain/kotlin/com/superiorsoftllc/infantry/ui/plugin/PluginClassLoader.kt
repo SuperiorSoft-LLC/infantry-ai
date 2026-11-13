@@ -71,7 +71,8 @@ class PluginClassLoader(private val dir: File, jar: File, parent: ClassLoader, f
          * NoClassDefFoundError and Appearance > Avatar style offered only Portrait. Plain data and one fun interface.
          */
         // CARD-2: the chat card seam (ChatCards.kt) is open to every tier, like the avatar seam (owner: cards serve the whole app).
-        val SEAM_TYPES = listOf("AgentAvatarRenderer", "AvatarRequest", "AvatarMotion", "ChatCardRenderer", "ChatCard", "CardState", "ChatCardsKt")
+        // CARD-IMG-1: so is the card image seam (CardImages.kt: rememberCardImage, CardImage); the daemon link it uses stays hidden.
+        val SEAM_TYPES = listOf("AgentAvatarRenderer", "AvatarRequest", "AvatarMotion", "ChatCardRenderer", "ChatCard", "CardState", "ChatCardsKt", "CardImage", "CardImagesKt")
         fun seamAllowed(n: String): Boolean {
             if (!n.startsWith(UI)) return false
             val r = n.removePrefix(UI)

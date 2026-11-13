@@ -155,6 +155,17 @@ Shipped (CARD-3): module.json `cards` (`CardDeclaration`), read through `PluginC
 - A refused or failed image draws the card's own placeholder (source initial badge), never an error.
 - Markdown `![]()` stays unfetched. Privacy: only hosts a card type declared can be hit, and only from the daemon.
 
+Shipped (CARD-IMG-1): frame `card_image {type, url}` (declared `offLoop`, so a slow fetch never holds the connection's request
+loop) answered by `Infantry_Cards` (`CardImageProxy`) with `{ok, mime, base64}` or `{ok:false, refused|failed}`. Besides the
+rules above: port 443 only, no user info, the host must be a name (no IP literal), every address it resolves to must be
+public (no loopback, private, link-local, CGNAT, unique-local, multicast), and every redirect hop passes the same checks
+through the new `DownloadRequest.allowRedirect` (DaemonApi 1.59.0; a checked request always takes the core transport).
+Settings: `cards.images.enabled`, `cards.images.allow`, `limits.cards.imageBytes` (2 MB), `limits.cards.imageCacheMb` (64),
+`limits.cards.imageTtlHours` (24), `limits.cards.imageFetches` (4 at once). The downloader runs with a silent progress
+handle (a thumbnail is not a task on the progress bar). Client: `rememberCardImage(type, url)` returns `CardImage`
+(`Loading`, `Shown`, `Unavailable`) and keeps a small in-window cache. The sample `card:hello` (Acme_HelloCard) shows it:
+an `image` on `upload.wikimedia.org` or `*.gstatic.com` draws a thumbnail, any other host a letter badge.
+
 ### 2.6 News Agent plugin (first consumer)
 
 `plugins/official/Infantry_News` (showcase, D3):

@@ -4,7 +4,9 @@ package com.superiorsoftllc.infantry.plugins.official.cards.daemon
 
 import com.superiorsoftllc.infantry.daemon.api.DaemonApi
 import com.superiorsoftllc.infantry.daemon.api.DaemonPlugin
+import com.superiorsoftllc.infantry.daemon.api.Frame
 import com.superiorsoftllc.infantry.daemon.api.plugins.LoadedModule
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
@@ -12,6 +14,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.put
 import java.io.File
+import java.util.Base64
 
 /**
  * CARD-3 (docs/CARD-REGISTRY.md 2.3): the chat card directory. Every loaded module's module.json `cards` descriptors, offered on
@@ -25,6 +28,27 @@ class CardsDaemonPlugin : DaemonPlugin {
         val maxSpec = { api.config(SPEC_MAX_BYTES_KEY)?.toIntOrNull()?.coerceAtLeast(MIN_SPEC_BYTES) ?: DEFAULT_SPEC_MAX_BYTES }
         api.capabilities.handle(LIST) { list(api.plugins.loaded()) }
         api.capabilities.handle(SHOW) { call -> show(api.plugins.loaded(), (call.args["type"] as? JsonPrimitive)?.contentOrNull, maxSpec()) }
+        // CARD-IMG-1: the safe card image proxy (declared `offLoop`: a fetch never holds the client's request loop).
+        val proxy = CardImageProxy(
+            cacheDir = File(api.stateDir, "card-images"),
+            setting = api::config,
+            hostsOf = { type -> entries(api.plugins.loaded()).firstOrNull { it.type == type }?.hosts },
+            download = api.downloads::download,
+        )
+        api.frames.handle(CardImageProxy.FRAME) { frame, _ -> Frame(CardImageProxy.FRAME, imageAnswer(proxy, frame.data), requestId = frame.requestId) }
+    }
+
+    /** The `card_image` answer for request body [data] (`{type, url}`): `{ok, mime, base64}` or `{ok:false, refused|failed}`. */
+    fun imageAnswer(proxy: CardImageProxy, data: String): String {
+        val o = runCatching { Json.parseToJsonElement(data) as? JsonObject }.getOrNull()
+        fun s(k: String) = (o?.get(k) as? JsonPrimitive)?.contentOrNull
+        return when (val out = if (o == null) CardImageProxy.Outcome.Refused("expects {\"type\", \"url\"}") else proxy.fetch(s("type"), s("url"))) {
+            is CardImageProxy.Outcome.Image -> buildJsonObject {
+                put("ok", true); put("mime", out.mime); put("base64", Base64.getEncoder().encodeToString(out.bytes))
+            }
+            is CardImageProxy.Outcome.Refused -> buildJsonObject { put("ok", false); put("refused", out.reason) }
+            is CardImageProxy.Outcome.Failed -> buildJsonObject { put("ok", false); put("failed", out.reason) }
+        }.toString()
     }
 
     /** One card type as the directory sees it: the first loaded module that declares [type] owns it. */

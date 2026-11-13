@@ -115,7 +115,7 @@ class DaemonPluginHost private constructor(
     private class Registered<T>(val owner: Loaded, val value: T)
     /** RUNNER-POOL-7: [side] is the declaration's `side`, else the daemon half's (`daemon.side`), else runner. */
     private class ToolEntry(val owner: Loaded, val tool: DaemonTool, val action: ActionCatalog.Action, val side: String = FrameSide.RUNNER)
-    private class FrameEntry(val owner: Loaded, val action: ActionCatalog.Action, val ownerOnly: Boolean, val handler: (Frame, Caller) -> Frame?, val side: String = FrameSide.RUNNER)
+    private class FrameEntry(val owner: Loaded, val action: ActionCatalog.Action, val ownerOnly: Boolean, val handler: (Frame, Caller) -> Frame?, val side: String = FrameSide.RUNNER, val offLoop: Boolean = false)
     private class RouteEntry(val owner: Loaded, val method: String, val path: String, val public: Boolean, val handler: (HttpCall) -> HttpReply) {
         /** Non-null for a template path: its segments, a `{name}` one binds a path param. */
         val template: List<String>? = if ('{' in path) path.trim('/').split('/') else null
@@ -437,6 +437,9 @@ class DaemonPluginHost private constructor(
     fun frameActions(): Map<String, ActionCatalog.Action> = frameHandlers.mapValues { it.value.action }
 
     fun handlesFrame(type: String): Boolean = frameHandlers.containsKey(type)
+
+    /** CARD-IMG-1: the plugin frame [type] was declared `offLoop` (its handler may block): answer it off the request loop. */
+    fun frameOffLoop(type: String): Boolean = frameHandlers[type]?.offLoop == true
 
     /**
      * RUNNER-POOL-7: the side of a plugin frame, or of `plugin_tool_call` naming a plugin tool (its declared `side`, else the daemon
@@ -1254,7 +1257,7 @@ class DaemonPluginHost private constructor(
                 val core = ActionCatalog.forFrame(type)
                 check(type !in CORE_FRAMES && (core == null || (!p.community && core.id == decl.action && core.kind == decl.kind))) { "frame '$type' is a core frame" }
                 check(frameHandlers[type] == null) { "frame '$type' is already answered by ${frameHandlers[type]?.owner?.id}" }
-                frameHandlers[type] = FrameEntry(p, ActionCatalog.Action(decl.action, decl.kind, listOf(type)), decl.ownerOnly, handler, FrameSide.of(decl.side ?: d.side))
+                frameHandlers[type] = FrameEntry(p, ActionCatalog.Action(decl.action, decl.kind, listOf(type)), decl.ownerOnly, handler, FrameSide.of(decl.side ?: d.side), decl.offLoop)
             }
         }
         override val routes: Routes = object : Routes {

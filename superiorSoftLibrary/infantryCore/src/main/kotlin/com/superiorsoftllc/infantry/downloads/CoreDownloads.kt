@@ -195,7 +195,8 @@ class CoreDownloads(
     /** Opens through the chosen transport; a plugin transport's non-IO fault falls back to the core one. */
     private fun open(request: DownloadRequest, from: Long): DownloadResponse {
         val wanted = transportSetting().trim()
-        val chosen = if (wanted.isEmpty()) null else transports.lastOrNull { it.first == wanted }
+        // CARD-IMG-1: a request that checks its redirects always takes the core transport, which honours the check.
+        val chosen = if (wanted.isEmpty() || request.allowRedirect != null) null else transports.lastOrNull { it.first == wanted }
         if (chosen != null) {
             try {
                 return chosen.second.open(request.url, request.headers, request.secretHeaders, from)
@@ -205,7 +206,7 @@ class CoreDownloads(
                 onFault(chosen.first, e)
             }
         }
-        return coreTransport.open(request.url, request.headers, request.secretHeaders, from)
+        return coreTransport.open(request.url, request.headers, request.secretHeaders, from, request.allowRedirect)
     }
 
     private fun cancelled(part: File, attempts: Int): DownloadResult {
