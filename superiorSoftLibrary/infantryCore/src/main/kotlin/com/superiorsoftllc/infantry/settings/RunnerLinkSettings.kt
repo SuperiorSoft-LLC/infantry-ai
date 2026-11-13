@@ -79,6 +79,14 @@ object RunnerLinkSettings {
      * polled as before even when it is `true`.
      */
     const val PUSH_FRAMES = "runners.pushFrames"
+    /**
+     * RUNNER-UNIFY-4 (orchestrator side, docs/RUNNER-UNIFY.md 5.3): the session list, header and lookups read ONE directory: this
+     * daemon's own sessions plus, for each session placed on a runner, the record the runner itself sent in its `session` frames
+     * (its real working dir, harness, model, state and error). Default `false`. CONTINGENCY: `false` = the mirror's records exactly
+     * as before; flipping it takes effect live, with no restart, rebuild or revert. A session whose runner has sent no record yet
+     * (pushed frames off, an older runner, the first moment after a start) reads the mirror's record either way.
+     */
+    const val UNIFIED_DIRECTORY = "runners.unifiedDirectory"
 
     /** The setting text of [ALLOW_PLAIN_TAILNET]; it states the risk. */
     const val ALLOW_PLAIN_TAILNET_TEXT =
@@ -86,7 +94,7 @@ object RunnerLinkSettings {
             "text cross the network unencrypted; anyone on the path can read them and replay the credential to start agents with " +
             "tool permissions on this machine. Only for a private tailnet (Tailscale/WireGuard) you fully control. Default false."
 
-    val KEYS: Set<String> = setOf(ALLOW_PLAIN_TAILNET, PROJECTS, HARNESSES, CLONE_ROOT, ON_LOST, PUSH_ON_COMMIT, ADVERTISE_HOSTS, GIT_NAME, GIT_EMAIL, LEND_CREDENTIALS, GIT_SECRET, ACCEPT_CREDENTIALS, UNIFIED_COMMANDS, PUSH_FRAMES)
+    val KEYS: Set<String> = setOf(ALLOW_PLAIN_TAILNET, PROJECTS, HARNESSES, CLONE_ROOT, ON_LOST, PUSH_ON_COMMIT, ADVERTISE_HOSTS, GIT_NAME, GIT_EMAIL, LEND_CREDENTIALS, GIT_SECRET, ACCEPT_CREDENTIALS, UNIFIED_COMMANDS, PUSH_FRAMES, UNIFIED_DIRECTORY)
 
     /** What the runner link reads; [stored] is the raw stored JSON of a key (null = unset). */
     data class Values(
@@ -104,6 +112,7 @@ object RunnerLinkSettings {
         val acceptCredentials: Boolean = true,
         val unifiedCommands: Boolean = true,
         val pushFrames: Boolean = false,
+        val unifiedDirectory: Boolean = false,
     ) {
         /** RUNNER-CRED-1: whether this orchestrator lends credentials to runner [name]. */
         fun lendsTo(name: String): Boolean = ANY in lendCredentials || name in lendCredentials
@@ -131,6 +140,7 @@ object RunnerLinkSettings {
         acceptCredentials = runCatching { (Json.parseToJsonElement(stored(ACCEPT_CREDENTIALS) ?: "true") as JsonPrimitive).booleanOrNull }.getOrNull() ?: true,
         unifiedCommands = runCatching { (Json.parseToJsonElement(stored(UNIFIED_COMMANDS) ?: "true") as JsonPrimitive).booleanOrNull }.getOrNull() ?: true,
         pushFrames = runCatching { (Json.parseToJsonElement(stored(PUSH_FRAMES) ?: "false") as JsonPrimitive).booleanOrNull }.getOrNull() ?: false,
+        unifiedDirectory = runCatching { (Json.parseToJsonElement(stored(UNIFIED_DIRECTORY) ?: "false") as JsonPrimitive).booleanOrNull }.getOrNull() ?: false,
     )
 
     private fun string(raw: String?): String =
@@ -155,6 +165,7 @@ object RunnerLinkSettings {
             ACCEPT_CREDENTIALS to JsonPrimitive(v.acceptCredentials),
             UNIFIED_COMMANDS to JsonPrimitive(v.unifiedCommands),
             PUSH_FRAMES to JsonPrimitive(v.pushFrames),
+            UNIFIED_DIRECTORY to JsonPrimitive(v.unifiedDirectory),
         )
     }
 
@@ -207,6 +218,10 @@ object RunnerLinkSettings {
         PUSH_FRAMES -> JsonPrimitive(
             (value as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull
                 ?: throw IllegalArgumentException("setting '$key' must be a JSON boolean (true = a runner pushes its sessions' frames; false = they are polled, as before RUNNER-UNIFY-3)"),
+        )
+        UNIFIED_DIRECTORY -> JsonPrimitive(
+            (value as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull
+                ?: throw IllegalArgumentException("setting '$key' must be a JSON boolean (true = runner sessions show the runner's own record; false = the mirror's, as before RUNNER-UNIFY-4)"),
         )
         else -> throw IllegalArgumentException("unknown runner link setting '$key'")
     }

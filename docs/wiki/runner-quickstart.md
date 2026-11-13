@@ -244,6 +244,12 @@ PC already dials (a held `runner_link_frames_pull` call, `limits.runners.pushWai
 `limits.runners.outputPollMs`. Default `false`. Contingency: set it back to `false`; it takes effect live, no restart or rebuild. A runner
 too old to push (contract below 1.10.0) is polled as before even with it on.
 
+One session list (RUNNER-UNIFY-4, opt-in, needs `runners.pushFrames`): `infantry settings set runners.unifiedDirectory true` on the PC
+makes the session list, the chat header and every session lookup show a runner session as the runner's own record says (its container
+working dir such as `/work/...`, its harness, model, state and error) instead of a record the PC guessed (which showed the PC's own
+checkout, `C:\...`, as the working dir). The PC keeps only where each session runs, plus the last record each runner sent
+(`runner-directory.json` in the state dir). Default `false`. Contingency: set it back to `false`; it takes effect live, no restart or rebuild.
+
 Claude with a subscription (owner decision): either sign claude in on the runner itself (`docker exec -it infantry-runner claude auth
 login`), or run `claude setup-token` on your PC and store the token as the claude subscription token
 (`infantry harness key claude oauth`, which prompts for it): in `subscription-login` mode the app lends it as `CLAUDE_CODE_OAUTH_TOKEN`.
