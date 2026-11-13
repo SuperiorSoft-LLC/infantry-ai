@@ -2253,9 +2253,14 @@ class InfantryDaemon(
                     // The poll path keeps its own count of what it took: it reads the shared one again if it serves this session later.
                     remoteTranscripts.forget(sid)
                     var moved = fresh.any { it.type == Envelope.EXIT || it.type == Envelope.FINISHED }
+                    // A change of state, run phase or tool (a tool asking for approval stops running) reads the events, so an
+                    // approval card opens while the session waits, not at the next heartbeat.
                     for (f in fresh) if (f.type == Envelope.STATUS) {
-                        val state = runCatching { json.parseToJsonElement(f.data).jsonObject["state"]?.jsonPrimitive?.content }.getOrNull() ?: continue
-                        if (pushedState.put(sid, state) != state) moved = true
+                        val key = runCatching {
+                            val o = json.parseToJsonElement(f.data).jsonObject
+                            "${o["state"]?.jsonPrimitive?.content}|${o["runActivity"]?.jsonObject?.get("state")?.jsonPrimitive?.content}|${o["tool"]?.jsonPrimitive?.content}"
+                        }.getOrNull() ?: continue
+                        if (pushedState.put(sid, key) != key) moved = true
                     }
                     if (moved) runCatching { runnerWatch.tick() }.onFailure { System.err.println("[infantry] runner watch failed: ${it.message}") }
                 },
