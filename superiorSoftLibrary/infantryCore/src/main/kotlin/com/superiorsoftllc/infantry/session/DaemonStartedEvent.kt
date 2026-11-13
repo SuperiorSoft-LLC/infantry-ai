@@ -22,6 +22,14 @@ import kotlinx.serialization.json.buildJsonObject
 object DaemonStartedEvent {
     const val NAME = "daemon.started"
 
+    /**
+     * RESUME-COPY-1: what the event announces. A paused runner (`runners.<name>.paused`) takes no new turns, and that holds at
+     * start too: with [runnerPaused] the cut turns are dropped (the caller logs it), so no script re-prompts them. The orphaned
+     * sessions still go out: they are only named, never prompted.
+     */
+    fun announced(report: ReconcileReport, runnerPaused: Boolean): ReconcileReport =
+        if (runnerPaused) report.copy(cutTurns = emptyList()) else report
+
     fun payload(report: ReconcileReport, get: (String) -> SessionRecord?, starter: (SessionRecord) -> String? = { null }): String {
         val cut = report.cutTurns.distinct().mapNotNull(get)
         val orphaned = report.orphanedIds.distinct().mapNotNull(get)

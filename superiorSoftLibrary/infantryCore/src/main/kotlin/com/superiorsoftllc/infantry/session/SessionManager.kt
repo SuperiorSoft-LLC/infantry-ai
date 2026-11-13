@@ -47,10 +47,16 @@ data class ReconcileReport(
     val cutTurns: List<String> = emptyList(),
     /** RESUME-NOTIFY-1: mid-turn sessions whose child outlived the daemon ([orphaned]): still running, so never re-prompted. */
     val orphanedIds: List<String> = emptyList(),
+    /**
+     * RESUME-COPY-1: mid-turn sessions ANOTHER daemon ran ([SessionManager.isCopied]: a copied state dir). Left out of [cutTurns]
+     * and [orphanedIds], so nothing resumes or prompts them: the conversation they name belongs to the original daemon.
+     */
+    val copied: List<String> = emptyList(),
 ) {
     val total: Int get() = exited + orphaned + unchanged
 
-    override fun toString(): String = "exited=$exited orphaned=$orphaned unchanged=$unchanged reaped=$reaped cutTurns=${cutTurns.size}"
+    override fun toString(): String = "exited=$exited orphaned=$orphaned unchanged=$unchanged reaped=$reaped cutTurns=${cutTurns.size}" +
+        (if (copied.isNotEmpty()) " copied=${copied.size}" else "")
 }
 
 /**
@@ -147,6 +153,12 @@ class SessionManager(
     idleSweepMs: Long = 30_000,
     /** BUG-REAP-OWNER: this state dir's id, stamped on every kept process and required to match before one is reaped. Null = never reap. */
     private val instanceId: String? = null,
+    /**
+     * RESUME-COPY-1: true when [instanceId] was minted by THIS start (no id file, or the dir is a copy of another). Every session
+     * already on disk with no owner was then written by another daemon: [loadAndReconcile] marks it [COPIED_OWNER] so the mark
+     * survives the copy's later restarts. False (an id this dir already had) = an unowned record is an older one of this dir's own.
+     */
+    private val instanceMinted: Boolean = false,
     /**
      * Ticket 66153313: the build limits env of every run (priority, Gradle worker cap, test forks, in-process Kotlin), read
      * per run so a settings change applies to the next launch. Worker sessions only: the owner's own Gradle never sees it.
@@ -976,7 +988,11 @@ class SessionManager(
         var reapedCount = 0
         val cutTurns = ArrayList<String>()
         val orphanedIds = ArrayList<String>()
-        val loaded = loadOrNoSessions()
+        val copied = ArrayList<String>()
+        // RESUME-COPY-1: on a freshly minted id, an unowned record is another daemon's; stamp it so a later restart still knows.
+        val loaded = loadOrNoSessions().map {
+            if (instanceMinted && instanceId != null && it.ownerId == null) it.copy(ownerId = COPIED_OWNER) else it
+        }
         for (loadedRecord in loaded) {
             // BUG-M2-11f: a kept process is either reaped now or already gone; either way the record no longer has one.
             val kept = loadedRecord.keptProcess
@@ -994,6 +1010,11 @@ class SessionManager(
                 persisted.state == SessionState.BUSY ||
                 persisted.state == SessionState.WAITING_INPUT
             val pid = persisted.childPid
+            if (midRun && isCopied(persisted)) {
+                copied += persisted.id
+                println("[infantry] session ${persisted.id.take(8)} was mid-turn under another daemon (owner ${persisted.ownerId}, " +
+                    "copied state dir): it is never resumed or prompted here")
+            }
             when {
                 // The record comes back IDLE and resumable: the next prompt launches and resumes the provider session.
                 reaped -> {
@@ -1013,7 +1034,7 @@ class SessionManager(
                         isProcessAlive = true,
                     )
                     orphaned++
-                    orphanedIds += persisted.id
+                    if (!isCopied(persisted)) orphanedIds += persisted.id
                 }
                 midRun -> {
                     sessions[persisted.id] = persisted.copy(
@@ -1023,7 +1044,7 @@ class SessionManager(
                         isProcessAlive = false,
                     )
                     exited++
-                    cutTurns += persisted.id
+                    if (!isCopied(persisted)) cutTurns += persisted.id
                 }
                 else -> {
                     sessions[persisted.id] = persisted.copy(
@@ -1039,8 +1060,24 @@ class SessionManager(
             if (record.dormant != dormant) sessions[id] = record.copy(dormant = dormant)
         }
         if (loaded.isNotEmpty()) writeAll()
-        return ReconcileReport(exited, orphaned, unchanged, reapedCount, cutTurns, orphanedIds)
+        return ReconcileReport(exited, orphaned, unchanged, reapedCount, cutTurns, orphanedIds, copied)
     } }
+
+    /**
+     * RESUME-COPY-1: true when ANOTHER daemon ran [record]: its [SessionRecord.ownerId] names another instance, or is the
+     * [COPIED_OWNER] mark [loadAndReconcile] stamps on a copied dir's unowned records. Such a session is never resumed or attached
+     * here: its provider conversation (and worktree) belong to the original, whose own harness may be running on it right now.
+     * A record with no owner on a dir that kept its id is an older one of this daemon's own, so it is not copied.
+     */
+    fun isCopied(record: SessionRecord): Boolean = instanceId != null && record.ownerId != null && record.ownerId != instanceId
+
+    private fun refuseCopied(session: SessionRecord, what: String) {
+        if (!isCopied(session)) return
+        val why = "session ${session.id} was run by another daemon (owner ${session.ownerId}; this state dir is a copy): " +
+            "$what refused, so a copy never starts a second harness on the original's conversation"
+        println("[infantry] $why")
+        throw IllegalStateException(why)
+    }
 
     /**
      * BUG-M2-11f: tree-kill [kept] only when it is provably the process this daemon's predecessor kept: the pid is alive
@@ -1280,6 +1317,7 @@ class SessionManager(
     fun resumeHeld(sessionId: String, prompt: String, origin: MessageOrigin = MessageOrigin.Owner, wakeReason: String? = null, wakeRef: String? = null): SessionRecord { return locked {
         val session = sessions[sessionId] ?: error("unknown session $sessionId")
         if (runs.containsKey(sessionId)) throw RunInFlightException(sessionId, "session $sessionId already has a run in flight")
+        refuseCopied(session, "resume")
         busyTwin(sessionId, session.agentId, bindingOf(session))?.let {
             throw RunInFlightException(it.id, bindingPolicy.twinRefusal("resume of $sessionId", session.agentId, bindingOf(session), it))
         }
@@ -1486,6 +1524,8 @@ class SessionManager(
                 providerSessionId = null, runCount = 0, state = SessionState.IDLE,
                 killOutcome = null, lastError = null, lastExitCode = null, childPid = null, keptProcess = null,
                 isProcessAlive = false, lastHeartbeat = clock(),
+                // RESUME-COPY-1: the conversation is dropped, so a copied session has nothing left to fork: it becomes this daemon's.
+                ownerId = if (isCopied(it)) null else it.ownerId,
             )
         }
     } }
@@ -1686,6 +1726,7 @@ class SessionManager(
         if (sessionId in held) throw RunInFlightException(sessionId, "session $sessionId is switching harness; resume it once it has switched")
         val session = sessions[sessionId] ?: throw IllegalArgumentException("unknown session '$sessionId'")
         if (runs.containsKey(sessionId)) throw RunInFlightException(sessionId, "session $sessionId already has a run in flight")
+        refuseCopied(session, "attach")
         val target = lookup(session.provider)
         require(target != null) {
             "session $sessionId runs on provider '${session.provider}', which this daemon is not configured with (configured: ${configured.keys.joinToString()})"

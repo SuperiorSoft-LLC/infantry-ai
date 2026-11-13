@@ -81,7 +81,7 @@ data class SessionRecord(
      * PROC-REAP-COPY-1: the InstanceId of the daemon state dir that last ran a process for this session (stamped with [childPid]
      * and with a kept process). A daemon treats the session's pids and worktree as its own only when this is its own id, so a
      * copied `sessions.json` never makes a daemon track or reap the processes its original's sessions started. Never cleared;
-     * null = an older record (never anybody's to reap).
+     * null = an older record (never anybody's to reap). RESUME-COPY-1: [COPIED_OWNER] = a record a copied dir found unowned.
      */
     @EncodeDefault(EncodeDefault.Mode.NEVER) val ownerId: String? = null,
     /** How many runs this logical session has performed. */
@@ -408,3 +408,9 @@ fun SessionRecord.toWorktreeRef(): WorktreeRef? {
     val base = worktreeBaseRef ?: return null
     return WorktreeRef(id, repo, path, branch, base)
 }
+
+/**
+ * RESUME-COPY-1: the [SessionRecord.ownerId] a daemon on a COPIED state dir (its instance id minted at this start) stamps on a
+ * record that had no owner: another daemon wrote it. Never an instance id, so the session is never this daemon's to resume.
+ */
+const val COPIED_OWNER = "copied"
