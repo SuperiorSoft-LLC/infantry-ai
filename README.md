@@ -23,6 +23,10 @@
 > **Beta.** <!-- shared:beta_line -->Infantry AI is in Beta. It works and we use it every day, but not every part is fully tested yet: you are an early tester. Please report anything that breaks on GitHub.<!-- /shared:beta_line -->  
 > [Report a problem](https://github.com/SuperiorSoft-LLC/infantry-ai/issues)
 
+### Plugins: the Mascot plugin gives agents animated avatars
+
+Everything in Infantry AI beyond the core is a plugin; this screenshot shows the Mascot plugin drawing the agents' avatars. See [Plugins](docs/wiki/Plugins.md) and the [plugin catalog](https://github.com/SuperiorSoft-LLC/infantry-plugins).
+
 <p align="center"><img src="docs/img/plugin-friendly-2026-11-09.png" alt="Infantry AI is plugin friendly: refreshing the plugin source no longer freezes the app" width="900"></p>
 
 <p align="center"><img src="docs/img/infantry-app-2026-11-06.png" alt="Infantry AI desktop: agent cards, the PM's chat and live plan-usage pacing" width="900"></p>
@@ -78,6 +82,25 @@ on your machine or on your own server: your code, keys and agent output never pa
 - **Headless daemon**: the same daemon with no UI, as a plain archive or a Docker image, for a home server or a VM.
 - **Yours**: no Infantry AI cloud; code, keys and agent output stay on your hardware.
 
+## Runners: local and remote, one orchestrator
+
+<p align="center"><img src="docs/img/runners-architecture.png" alt="Architecture diagram: clients connect over one WebSocket to the orchestrator (the daemon), which places each agent session on a local runner or on remote Docker runners; each runner carries its own providers and models" width="900"></p>
+
+<p align="center"><i>Figure: clients talk to one orchestrator; the orchestrator places every agent session on a runner (this machine, or a Docker container anywhere). Agent mail between runners always travels through the orchestrator.</i></p>
+
+A **runner** is where an agent actually runs. The **orchestrator** is the daemon that holds your board, tickets and mail.
+
+- **Clients to orchestrator.** The desktop, web, Android and CLI clients all connect to the orchestrator over one WebSocket.
+- **Placement.** The orchestrator places each session on a runner. In the New agent dialog you pick *Project default*, *This computer*, *Any available runner* or a named runner.
+- **Local runner** is this machine. A **remote runner** is the same daemon in a Docker container on any machine: a home server, a cloud droplet.
+- **Two steps to add one.** `docker run` the runner image, then paste its endpoint into Settings > Runners. See the [runners guide](docs/wiki/runner-quickstart.md).
+- **Local and remote behave the same.** They share one path for prompts, live replies (including thinking and tool calls), task status, restarts and kill, so a remote session feels local.
+- **Each runner has its own providers and models** (Claude Code, opencode, pi, ...), signed in on that runner.
+- **Agent mail goes through the orchestrator.** Agents on different runners message each other via the orchestrator, never runner to runner.
+- **Secured link.** The link is `wss` with a per-runner key; you can Rotate or Detach it. *Update runner* keeps a runner on the app's version (the image `infantry-runner:<tag>` must match the app).
+
+Full guide: [Runners: concepts, setup, update, troubleshooting](docs/wiki/runner-quickstart.md).
+
 ## Try it free with opencode
 
 You can see the whole loop without a paid subscription by using opencode with one of its free models:
@@ -115,6 +138,7 @@ agent CLI harness, is a plugin with a `module.json`. Write your own in a few min
 - [UI plugin API](docs/wiki/plugin-api.md) and [daemon plugin API](docs/wiki/daemon-plugin-api.md): the full references
 - [Scripting](docs/wiki/Scripting.md): the Lua API, hooks, exec, chat notes, progress, the session bridge
 - [Harnesses and providers](docs/wiki/Harnesses.md): the harness API, adding a harness or a provider
+- [Runners](docs/wiki/runner-quickstart.md): local and remote runners, setup, update, troubleshooting
 - [Settings](docs/wiki/Settings.md): scopes and the cost-saving defaults
 - [Licensing](docs/wiki/licensing.md) (draft): core MPL-2.0 vs Apache-2.0 per module, and the compatibility promise
 
@@ -129,6 +153,7 @@ Screenshots the docs link are listed in [docs/img/README.md](docs/img/README.md)
 ## Contents
 
 - [Features](#features) and [Try it free with opencode](#try-it-free-with-opencode)
+- [Runners: local and remote](#runners-local-and-remote-one-orchestrator)
 - [Downloads](#downloads) and [Help us test macOS](#help-us-test-macos)
 - [The clients](#the-clients)
 - [Quickstart](#quickstart)

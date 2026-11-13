@@ -1,5 +1,19 @@
 # Runner quickstart: run an agent on your own server
 
+This is the one page for understanding runners: concepts, setup, update and troubleshooting.
+
+## Concepts
+
+![Runners architecture: clients, one orchestrator, local and remote runners](../img/runners-architecture.png)
+
+- **Orchestrator**: the daemon with your board, tickets and mail (your PC or server). Clients reach it over one WebSocket.
+- **Runner**: a daemon that runs the agent CLIs. The *local* runner is the orchestrator's own machine; a *remote* runner is a Docker container anywhere.
+- **Placement**: each session is placed on a runner: *Project default*, *This computer*, *Any available runner*, or a named runner.
+- **One path**: local and remote share one path for prompts, live replies (thinking and tool calls too), task status, restarts and kill (RUNNER-UNIFY).
+- **Providers and models are per runner** (Claude Code, opencode, pi); each is signed in on its runner.
+- **Mail goes through the orchestrator**: agents on different runners never message each other directly.
+- **Security**: a `wss` link with a per-runner key (Rotate / Detach). The runner image must match the app: see "Troubleshooting" below.
+
 Proven end to end on one machine (RUNNER-E2E-1): a Docker runner paired to an orchestrator, a ticket pinned to that runner,
 the session started on the runner. Design: [RUNNER-POOL](../RUNNER-POOL.md). Server setup: [Run a remote environment](run-a-remote-environment.md).
 
@@ -396,3 +410,12 @@ no spaces or capitals) and shows the rule as you type.
 If the add says "no host of the link answered", it lists what to try: the host:port pair of the link, `docker ps` for the
 published port, and `localhost` + that port. The container log warns when `INFANTRY_RUNNER_HOST` is `host.docker.internal`, or
 when a host is set without `INFANTRY_RUNNER_PUBLIC_PORT`.
+
+## Troubleshooting
+
+| You see | Do |
+|---|---|
+| "older than the app (contract X, the app needs Y): update it" | Settings > Runners > **Update runner** (section 5c). |
+| "no runner image matching this app was found" | Build or pull the image for the app's version/channel (section 0), or set `runners.update.image`. |
+| pi (or another harness) is not signed in on the runner | Log in inside the container: `docker exec -it infantry-runner <harness login command>`. |
+| "no host of the link answered" | Check the published port with `docker ps` (see "Docker Desktop on Windows"). |
