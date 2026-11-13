@@ -10,6 +10,7 @@ Read AGENTS.md first. Facts in these docs come from the code; where an older des
 - [Architecture](docs/wiki/Architecture.md): the three layers, the daemon, the protocol, the request flow from a click to the daemon and back, slots and child plugins, scripting.
 - [Recipes](docs/wiki/recipes/README.md): worked "how to add X" guides with the exact files to touch.
 - [Command line](docs/wiki/CommandLine.md): `infantry` from any terminal after an install (`install-cli` / `uninstall-cli`, what each OS writes).
+- [Runners](docs/wiki/runner-quickstart.md): local and remote runners, placement, setup, update, troubleshooting.
 
 ## Build plugins
 

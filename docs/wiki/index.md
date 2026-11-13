@@ -20,7 +20,7 @@ Every page of this wiki is listed here, one line each. The pages are written fro
 - [Make a plugin](make-a-plugin.md): step by step from the template to a built UI + daemon example.
 - [Publish a plugin](publish-a-plugin.md): package a plugin from its own repo as an `.ihq` and list it in the community registry.
 - [Run a remote environment](run-a-remote-environment.md): start a runner-only daemon (`--mode runner`, Docker) and pair it.
-- [Runner quickstart](runner-quickstart.md): pair a server, pick it for an agent, run a ticket there (proven end to end).
+- [Runners](runner-quickstart.md): concepts (orchestrator, runner, placement), pair a server, update, troubleshooting.
 - [Runner pairing design](RunnerPairing-design.md): RUNNER-PAIR-UX-1 (2026-11-08): today's 12 pairing steps and the one-link flow that replaces them (design record, tickets in backlog).
 - [Agent avatar mascot design](Agent-avatar-mascot-design.md): MASCOT-1 (2026-11-08): where agent avatars are drawn today, a pluggable avatar-renderer seam in UI core, and the material-mascot plugin on top of it (design record, tickets not filed).
 - [UI verify design](UI-verify-design.md): UI-VERIFY-1 (2026-11-08): offscreen shots, test-scoped input, real-clock frame bench, headless web check and an Android CI smoke so workers check the UI without the owner's desktop (design record, tickets not filed).

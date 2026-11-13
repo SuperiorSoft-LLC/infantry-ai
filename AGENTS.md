@@ -148,6 +148,7 @@ Rule 9 in one table. Search here before you write a helper; ticket ids name the 
 
 - [Architecture](docs/wiki/Architecture.md): layers, daemon, protocol, request flow, slots, scripting. Start here.
 - [Recipes](docs/wiki/recipes/README.md): seven worked "how to add X" guides.
+- [Runners](docs/wiki/runner-quickstart.md): local and remote runners, setup, update, troubleshooting.
 - [Plugins](docs/wiki/Plugins.md) and [Make a plugin](docs/wiki/make-a-plugin.md): `module.json`, a built example.
 - [UI plugin API](docs/wiki/plugin-api.md), [Daemon plugin API](docs/wiki/daemon-plugin-api.md), [Harnesses](docs/wiki/Harnesses.md).
 - [Notifications](docs/wiki/Notifications.md): the one notification bus and its presenters.
