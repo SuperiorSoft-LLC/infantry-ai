@@ -21,7 +21,8 @@ import java.time.Duration
  *
  * - Proxy: [proxy] (`downloads.proxy`, `host:port`) when set, else the JVM's [ProxySelector.getDefault] (the
  *   `https.proxyHost` / `http.proxyHost` properties, and the OS proxy with `java.net.useSystemProxies=true`).
- * - Redirects are followed here (up to `limits.downloads.redirects`) so a secret header goes only to the first host.
+ * - Redirects are followed here (up to `limits.downloads.redirects`) so a secret header goes only to the first host; a
+ *   request's redirect check (CARD-IMG-1) is asked before each hop.
  * - `Range: bytes=<from>-` asks for the rest when [open] is given an offset; the answer's status says if it was honoured.
  */
 class HttpDownloadTransport(
@@ -44,7 +45,11 @@ class HttpDownloadTransport(
         return c
     }
 
-    override fun open(url: String, headers: Map<String, String>, secretHeaders: Map<String, String>, from: Long): DownloadResponse {
+    override fun open(url: String, headers: Map<String, String>, secretHeaders: Map<String, String>, from: Long): DownloadResponse =
+        open(url, headers, secretHeaders, from, null)
+
+    /** CARD-IMG-1: [allowRedirect], when set, is asked before each hop; a refused hop fails the open (an IOException). */
+    override fun open(url: String, headers: Map<String, String>, secretHeaders: Map<String, String>, from: Long, allowRedirect: ((String) -> Boolean)?): DownloadResponse {
         val scheme = runCatching { URI(url).scheme }.getOrNull()?.lowercase()
         if (scheme != "http" && scheme != "https") return openFile(if (scheme == "file") File(URI(url)) else File(url), from)
         val first = URI(url)
@@ -68,7 +73,9 @@ class HttpDownloadTransport(
                 resp.body().close()
                 val location = resp.headers().firstValue("Location").orElse(null) ?: throw IOException("HTTP $status from ${target.host} with no Location")
                 if (++hops > maxRedirects) throw IOException("more than $maxRedirects redirects from ${first.host}")
-                target = target.resolve(location)
+                val next = target.resolve(location)
+                if (allowRedirect != null && !allowRedirect(next.toString())) throw IOException("redirect refused: ${target.host} sent it to ${next.host ?: "another place"}")
+                target = next
                 continue
             }
             val length = resp.headers().firstValueAsLong("Content-Length").orElse(-1L)

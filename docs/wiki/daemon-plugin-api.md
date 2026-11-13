@@ -155,6 +155,10 @@ Declare `{ "type": "my_frame", "action": "my.read", "kind": "read" }` in `daemon
 answer. `ownerOnly` frames are refused to a community module. `api.frames.table` registers a typed family (used by
 `Infantry_Board`).
 
+CARD-IMG-1 (1.59.0): add `"offLoop": true` to a frame declaration whose handler may block (a network fetch). The daemon then
+answers it on an IO worker with the request's id, so later frames on the same connection do not queue behind it; its answer
+may overtake or trail theirs. Without it a frame is answered inline, in order. `Infantry_Cards` declares `card_image` this way.
+
 RUNNER-POOL-7 (1.46.0): `side` is `runner` (the default) or `orchestrator`. Set it on one tool or frame declaration, or
 once for the whole daemon half as `daemon.side` (`"side": "orchestrator"` next to `apiAtLeast`). An `orchestrator` frame
 or tool reads or writes orchestrator state (the board, knowledge, roles, scripts): when a worker runs on a remote runner
@@ -256,11 +260,13 @@ Full page: [Progress and downloads](Progress.md).
   `progress.presenter` picks one; a presenter that throws is reported and the core default is used). A failed task
   publishes the named event `progress.failed`.
 - `api.downloads` (`Downloads`): `download(DownloadRequest(url, dest, title, headers, secretHeaders, sha256, maxBytes,
-  progress, progressId, link))` blocks until done and answers a `DownloadResult` (`ok`, `file`, `bytes`, `sha256`,
+  progress, progressId, link, allowRedirect))` blocks until done and answers a `DownloadResult` (`ok`, `file`, `bytes`, `sha256`,
   `attempts`, `status`, `error`, `retryable`, `cancelled`). Retries with backoff, resume, timeouts, the size cap, the hash,
   the temp file and atomic move, the proxy and the progress task are core's. `api.downloads.transport("", transport)`
   registers a `DownloadTransport` (it opens a `DownloadResponse`) that the setting `downloads.transport` can choose; one
-  that throws a non-IO error falls back to the core transport.
+  that throws a non-IO error falls back to the core transport. `allowRedirect` (CARD-IMG-1, 1.59.0) is asked with each
+  redirect target before it is followed (false = the download fails, "redirect refused"); a request that sets it always
+  takes the core transport.
 - A host without them answers `NoProgress` and `NoDownloads`. Both registrations are removed when the plugin unloads.
 
 ## 7. Settings and storage

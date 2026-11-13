@@ -380,7 +380,13 @@ drawing live. With no renderer for the type (plugin off or removed), a body that
 streaming, the card shows as its original code block. A renderer that throws is dropped for the code block and listed
 as its module's fault. Cards are open to every module tier (community included) and every agent role; an
 app-level `ChatBlockRenderers.override("card:<type>", ...)` still wins. Example: `plugins/community/Acme_HelloCard`
-(`card:hello`, body `{"title": "...", "text": "..."}`).
+(`card:hello`, body `{"title": "...", "text": "...", "image": "https://..."}`).
+
+**Card images (CARD-IMG-1).** A renderer never fetches a URL itself. `rememberCardImage(type, url)` asks the daemon
+(`card_image`), which fetches only https URLs on the hosts that card type declared in `cards[].images.hosts` (plus the
+owner's `cards.images.allow`), public addresses only, no cookies or referrer, size cap, image type sniffed, TTL cache. It
+returns a `CardImage`: `Loading`, `Shown(bitmap)` or `Unavailable(reason, refused)`; draw a placeholder (a letter badge) for
+anything but `Shown`, so a refused or failed image never breaks the card. Open to every tier, like `ChatCardRenderer`.
 
 **Card descriptors (CARD-3).** So an agent can find and write a card without paying tokens every turn, the module also
 declares each card type in module.json `cards` (read by the daemon, never by the client):
@@ -407,7 +413,7 @@ daemon half, never by the client):
 ```
 
 `id` follows the role-id rule; `persona` is the text itself, or a `.md`/`.txt` path inside the module folder (a missing
-file is reported and the role is not seeded; a packaged install carries only `module.json`, `lib/` and `layout/`, so a
+file is reported and the role is not seeded; a packaged install carries only `module.json`, the lib and layout folders, so a
 published plugin writes the persona inline);
 `cards` / `tools` name preferred card types and tool or capability names, by id, from any module. When the module loads
 (start, install, enable; the daemon publishes the named event `modules.changed`), the role is written to the role

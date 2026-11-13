@@ -263,7 +263,9 @@ interface DaemonApi {
         // 1.56.0 (SPAWN-PARAMS-1, additive): `SpawnRequest.provider` / `model` / `toolApproval`, the app Start box's fields.
         // 1.57.0 (CARD-3, additive): `PluginCatalogReader.loaded()` (daemon.api.plugins.LoadedModule): the loaded modules' module.json.
         // 1.58.0 (ROLE-PLUGIN-1, additive): `RoleRecord.plugin|disabled|edited|cards|tools`, `RoleSaveRequest.cards|tools`, `Roles.briefing`.
-        const val VERSION = "1.58.0"
+        // 1.59.0 (CARD-IMG-1, additive): `DownloadRequest.allowRedirect` (and the checked `DownloadTransport.open`); module.json
+        // `daemon.frames[].offLoop`: a frame whose handler may block is answered off the connection's request loop.
+        const val VERSION = "1.59.0"
     }
 }
 

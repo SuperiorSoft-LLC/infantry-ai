@@ -3,13 +3,30 @@
   "version": "1.0.0",
   "apiVersion": 2,
   "author": "Infantry AI",
-  "description": "Chat card directory: lists the card types the loaded plugins declare (module.json cards) and gives an agent the spec to write one, on demand (infantry card list / infantry card show <type>). Costs no tokens until called. Daemon half only.",
+  "description": "Chat card directory: lists the card types the loaded plugins declare (module.json cards) and gives an agent the spec to write one, on demand (infantry card list / infantry card show <type>). Costs no tokens until called. Also the safe card image proxy (card_image frame, CARD-IMG-1): a card renderer gets a thumbnail through the daemon, only https, only from hosts the card type declares in its images.hosts (plus the cards.images.allow setting), public addresses only, no cookies or referrer, size cap, image type sniffed, TTL cache. Daemon half only.",
   "tier": "official",
   "sequence": [],
   "daemon": {
     "entry": "com.superiorsoftllc.infantry.plugins.official.cards.daemon.CardsDaemonPlugin",
     "jar": "daemon/build/libs/Infantry_Cards-daemon.jar",
-    "apiAtLeast": "1.57.0"
+    "apiAtLeast": "1.59.0",
+    "frames": [
+      { "type": "card_image", "action": "cards.read", "kind": "read", "offLoop": true }
+    ],
+    "config": [
+      {
+        "node": "infantry.cards.images", "group": "Chat cards", "title": "Card images (thumbnails)", "tab": "Plugins", "order": 960,
+        "keywords": ["card", "image", "thumbnail", "news", "proxy"],
+        "fields": [
+          { "key": "cards.images.enabled", "type": "checkbox", "label": "Show card thumbnails (the daemon fetches them only from hosts the card type declares)", "default": true, "scope": "daemon", "order": 1 },
+          { "key": "cards.images.allow", "type": "text", "label": "Extra image hosts for every card type (comma separated; example.com exact, *.example.com any subdomain)", "default": "", "scope": "daemon", "order": 2 },
+          { "key": "limits.cards.imageBytes", "type": "number", "label": "Largest card image fetched (bytes)", "default": 2097152, "min": 1024, "max": 20971520, "step": 1024, "scope": "daemon", "order": 3 },
+          { "key": "limits.cards.imageCacheMb", "type": "number", "label": "Card image cache size (MB, 0 = no cache)", "default": 64, "min": 0, "max": 4096, "step": 1, "scope": "daemon", "order": 4 },
+          { "key": "limits.cards.imageTtlHours", "type": "number", "label": "Keep a cached card image for (hours, 0 = no cache)", "default": 24, "min": 0, "max": 720, "step": 1, "scope": "daemon", "order": 5 },
+          { "key": "limits.cards.imageFetches", "type": "number", "label": "Card images fetched at once", "default": 4, "min": 1, "max": 32, "step": 1, "scope": "daemon", "order": 6 }
+        ]
+      }
+    ]
   },
   "capabilities": [
     {

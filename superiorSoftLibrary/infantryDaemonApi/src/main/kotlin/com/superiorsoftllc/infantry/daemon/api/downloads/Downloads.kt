@@ -30,6 +30,13 @@ data class DownloadRequest(
     /** The id of the task the downloader starts (blank = assigned); ignored with [progress]. */
     val progressId: String = "",
     val link: String? = null,
+    /**
+     * CARD-IMG-1 (1.59.0, additive): asked before every redirect is followed, with the absolute target URL; false = the
+     * download fails ("redirect refused") instead of following it. Null = every redirect is followed (up to
+     * `limits.downloads.redirects`). A request with a check always goes through the core transport: a plugin transport is
+     * not trusted to honour it.
+     */
+    val allowRedirect: ((target: String) -> Boolean)? = null,
 )
 
 /**
@@ -73,6 +80,14 @@ class DownloadResponse(
 fun interface DownloadTransport {
     /** Opens [url] from byte [from] (0 = the whole body). [secretHeaders] must never be logged nor sent to another host. */
     fun open(url: String, headers: Map<String, String>, secretHeaders: Map<String, String>, from: Long): DownloadResponse
+
+    /**
+     * CARD-IMG-1 (1.59.0): [open] with a redirect check ([DownloadRequest.allowRedirect]): a transport that follows redirects
+     * itself must ask [allowRedirect] before each hop and throw an IOException when it says no. The default ignores it (the
+     * core never hands a checked request to a plugin transport).
+     */
+    fun open(url: String, headers: Map<String, String>, secretHeaders: Map<String, String>, from: Long, allowRedirect: ((String) -> Boolean)?): DownloadResponse =
+        open(url, headers, secretHeaders, from)
 }
 
 /**
