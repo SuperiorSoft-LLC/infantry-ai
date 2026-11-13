@@ -351,6 +351,37 @@ Source: `ui/plugin/config/FieldTypes.kt`. Declare the id in `fieldTypes`, regist
 Declare `{ "registry": "chat.feed.renderers", "key": "user" }` in `implementations`. A config field of type
 `implementation` with `registry` set picks one key. `Infantry_ChatFeed` registers its row renderers this way.
 
+### Chat card renderers (CARD-2)
+
+A reply can carry a card: a fenced block whose info string is `card:<type>` and whose body is one JSON object
+(design: [CARD-REGISTRY](../CARD-REGISTRY.md)). A plugin draws a card type by registering a `ChatCardRenderer` under
+the registry `chat.cards`, key = the card type:
+
+```kotlin
+registrar.implementation(CHAT_CARDS, "hello", HelloCardRenderer)
+```
+
+```json
+"implementations": [{ "registry": "chat.cards", "key": "hello" }]
+```
+
+The seam is `superiorSoftLibrary/infantryUiCore/src/commonMain/kotlin/com/superiorsoftllc/infantry/ui/ChatCards.kt`
+(one commonMain type for desktop, web and Android):
+
+| Type | What it is |
+|---|---|
+| `ChatCardRenderer` | `fun interface` with `@Composable Render(card: ChatCard, modifier: Modifier)`. |
+| `ChatCard` | Plain data: `type` (no `card:` prefix), `id` (the `id=` attribute or null), `body` (the JSON object as text; parse it yourself), `state` (`CardState`; a renderer only sees `COMPLETE`), `updates` (empty until addressable cards ship). New fields come with defaults. |
+| `CardState` | `COMPLETE`, `STREAMING`, `INVALID`. |
+| `chatCardOf(block)`, `Implementations.chatCardRenderer(type)` | Helpers: the card a block carries; the renderer registered for a type. |
+
+Rules: the registry is read when the card is drawn, so installing, enabling, disabling or removing the plugin swaps the
+drawing live. With no renderer for the type (plugin off or removed), a body that is not a JSON object, or a fence still
+streaming, the card shows as its original code block. A renderer that throws is dropped for the code block and listed
+as its module's fault. Cards are open to every module tier (community included) and every agent role; an
+app-level `ChatBlockRenderers.override("card:<type>", ...)` still wins. Example: `plugins/community/Acme_HelloCard`
+(`card:hello`, body `{"title": "...", "text": "..."}`).
+
 ### Agent avatar renderers (AVATAR-DOCS-1)
 
 Every agent avatar in the app is drawn by one core composable, `AgentAvatar` (`superiorSoftLibrary/infantryUiCore/src/commonMain/kotlin/com/superiorsoftllc/infantry/ui/AgentAvatarRenderers.kt` holds the seam; `AgentAvatar.kt` holds the composable). A plugin can add an avatar style by registering a renderer under the registry `agent.avatar.renderers`:

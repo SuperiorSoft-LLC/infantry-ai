@@ -1,0 +1,13 @@
+{
+  "name": "Acme_HelloCard",
+  "version": "1.0.0",
+  "apiVersion": 2,
+  "author": "Acme (example)",
+  "license": "NOASSERTION",
+  "description": "Example chat card (CARD-2): draws a ```card:hello fence, body {\"title\": \"...\", \"text\": \"...\"}, as a bordered card. Any agent may answer with one; with this module off the fence shows as its code block.",
+  "entry": "com.acme.hellocard.HelloCardPlugin",
+  "jar": "build/libs/Acme_HelloCard.jar",
+  "implementations": [
+    { "registry": "chat.cards", "key": "hello" }
+  ]
+}

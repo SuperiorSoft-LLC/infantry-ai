@@ -70,7 +70,8 @@ class PluginClassLoader(private val dir: File, jar: File, parent: ClassLoader, f
          * plugin seam (recipe add-an-avatar-style); hidden, a community-installed Infantry_Mascot was refused at load with
          * NoClassDefFoundError and Appearance > Avatar style offered only Portrait. Plain data and one fun interface.
          */
-        val SEAM_TYPES = listOf("AgentAvatarRenderer", "AvatarRequest", "AvatarMotion")
+        // CARD-2: the chat card seam (ChatCards.kt) is open to every tier, like the avatar seam (owner: cards serve the whole app).
+        val SEAM_TYPES = listOf("AgentAvatarRenderer", "AvatarRequest", "AvatarMotion", "ChatCardRenderer", "ChatCard", "CardState", "ChatCardsKt")
         fun seamAllowed(n: String): Boolean {
             if (!n.startsWith(UI)) return false
             val r = n.removePrefix(UI)
