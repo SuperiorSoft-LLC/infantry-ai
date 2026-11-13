@@ -95,6 +95,8 @@ class LocalBoardHost(
     private val gitRemoteOf: (repo: File) -> String? = ::originUrl,
     /** RUNNER-POOL-8: `runners.pushOnCommit`, read at each remote start (the runner pushes the ticket branch after each worker commit). */
     private val pushOnCommit: () -> Boolean = { false },
+    /** RUNNER-UNIFY-2: `runners.unifiedCommands` (false = a session this daemon holds is killed directly, skipping the pool). */
+    private val unifiedCommands: () -> Boolean = { true },
     /** RUNNER-TICKET-ROW-1: told what each remote ticket start pinned (harness, model, checkout, branch), so the board row can show it. */
     private val remotePlaced: (sessionId: String, info: com.superiorsoftllc.infantry.runners.RemoteSessionMirror.Placed) -> Unit = { _, _ -> },
 ) : BoardHost {
@@ -134,37 +136,33 @@ class LocalBoardHost(
      */
     private fun startRemote(runner: String, request: SessionStart): SessionStartResult {
         val pool = runners ?: return SessionStartResult.Refused("runner $runner: this daemon has no runner pool")
-        val link = pool.link(runner) ?: return SessionStartResult.Refused("runner '$runner' is not registered, or no runner binding is loaded (Infantry_RemoteRunner)")
         val checkout = request.workingDir?.let(::File) ?: defaultRepo
-        val remote = checkout?.let { runCatching { gitRemoteOf(it) }.getOrNull() }?.takeIf { it.isNotBlank() }
-            ?: return SessionStartResult.Refused("runner $runner needs the project's git remote, and ${checkout?.path ?: "this project"} has no `origin` remote. Fix: git -C <project folder> remote add origin <url the runner can reach>")
         val spec = com.superiorsoftllc.infantry.daemon.api.orchestrator.StartSpec(
             startId = "${request.ticketId ?: "spawn"}:${clock()}",
             agentId = request.agentId, role = request.role, projectId = request.projectId, provider = request.providerId,
             model = request.model, effort = request.effort, contextLimit = request.contextLimit, ticketId = request.ticketId,
-            prompt = request.prompt, title = request.title, base = request.baseBranch, branch = request.recordedBranch, gitRemote = remote,
+            prompt = request.prompt, title = request.title, base = request.baseBranch, branch = request.recordedBranch,
             pushOnCommit = runCatching(pushOnCommit).getOrDefault(false),
             // RUNNER-PAIR-1: the Tool approval this daemon's own worker would run with, so the remote one behaves the same.
             toolApproval = com.superiorsoftllc.infantry.session.ToolApprovals.current().mode.wire,
             // RUNNER-DOCKER-MATRIX-1: this daemon relays the runner session's prompts to its app (RUNNER-PROMPT-RELAY-1).
             promptRelay = true,
-        ).let { s -> checkout?.let { runCatching { gitIdentityOf(it) }.getOrNull() }?.let { (n, e) -> s.copy(gitName = n, gitEmail = e) } ?: s }
-        return when (val reply = link.startSession(spec)) {
-            is com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorReply.Unavailable -> SessionStartResult.Refused("runner $runner unavailable: ${reply.reason}")
-            is com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorReply.Ok -> {
-                val ref = reply.value
-                val id = ref.sessionId ?: return SessionStartResult.Refused("runner $runner refused the start: ${ref.refusal ?: "no session"}")
-                pool.placed(id, runner)
-                remotePlaced(id, com.superiorsoftllc.infantry.runners.RemoteSessionMirror.Placed(request.providerId.orEmpty(), request.model, checkout.path, ref.branch, request.ticketId, ref.worktreePath, projectId = request.projectId, agentId = request.agentId, role = request.role))
-                SessionStartResult.Started(
-                    SessionView(
-                        id = id, agentId = request.agentId, role = request.role, provider = request.providerId.orEmpty(), model = request.model,
-                        projectId = request.projectId, state = "STARTING", live = true, ticketId = request.ticketId, worktreeBranch = ref.branch,
-                        contextLimit = request.contextLimit, effort = request.effort,
-                    ),
-                    branch = ref.branch, base = ref.base ?: request.recordedBase,
-                )
-            }
+        )
+        // RUNNER-UNIFY-2: the same remote start a session outside the board makes (LocalRunner.startOnRunner).
+        val placed = { ref: com.superiorsoftllc.infantry.daemon.api.orchestrator.SessionRef ->
+            com.superiorsoftllc.infantry.runners.RemoteSessionMirror.Placed(request.providerId.orEmpty(), request.model, checkout?.path, ref.branch, request.ticketId, ref.worktreePath, projectId = request.projectId, agentId = request.agentId, role = request.role)
+        }
+        return when (val out = com.superiorsoftllc.infantry.daemon.LocalRunner.startOnRunner(pool, runner, spec, checkout, gitRemoteOf, ::gitIdentityOf, { pool.placed(it, runner) }, placed, remotePlaced)) {
+            is com.superiorsoftllc.infantry.daemon.LocalRunner.RemoteStart.Refused -> SessionStartResult.Refused(out.reason)
+            is com.superiorsoftllc.infantry.daemon.LocalRunner.RemoteStart.Unavailable -> SessionStartResult.Refused(out.reason)
+            is com.superiorsoftllc.infantry.daemon.LocalRunner.RemoteStart.Started -> SessionStartResult.Started(
+                SessionView(
+                    id = out.id, agentId = request.agentId, role = request.role, provider = request.providerId.orEmpty(), model = request.model,
+                    projectId = request.projectId, state = "STARTING", live = true, ticketId = request.ticketId, worktreeBranch = out.ref.branch,
+                    contextLimit = request.contextLimit, effort = request.effort,
+                ),
+                branch = out.ref.branch, base = out.ref.base ?: request.recordedBase,
+            )
         }
     }
 
@@ -291,15 +289,14 @@ class LocalBoardHost(
         override fun get(sessionId: String): SessionView? = sessionManager()?.get(sessionId)?.let(SessionViews::of)
         override fun list(): List<SessionView> = sessionManager()?.list().orEmpty().map(SessionViews::of)
 
+        // RUNNER-UNIFY-2: through the session's runner (RunnerPool.linkFor), local or remote alike; an unknown session answers false.
         override fun kill(sessionId: String, force: Boolean, by: String, reason: String?): Boolean {
-            runners?.runnerOf(sessionId)?.takeIf { it != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL }?.let { name ->
-                val link = runners.link(name) ?: return false
-                return link.stopSession(sessionId, reason, force).let { it is com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorReply.Ok && it.value }
-            }
             val manager = sessionManager() ?: return false
-            if (manager.get(sessionId) == null) return false
-            manager.kill(sessionId, force, by, reason)
-            return true
+            val command = com.superiorsoftllc.infantry.daemon.api.orchestrator.SessionCommand(
+                com.superiorsoftllc.infantry.daemon.api.orchestrator.SessionCommand.KILL, force = force, by = by, reason = reason,
+            )
+            val pool = runners ?: return com.superiorsoftllc.infantry.daemon.LocalRunner.execute(manager, sessionId, command).ok
+            return com.superiorsoftllc.infantry.daemon.LocalRunner.command(pool, manager, sessionId, command, runCatching(unifiedCommands).getOrDefault(true)).ok
         }
 
         override fun lastAssistantText(sessionId: String): String? = sessionManager()?.lastReply(sessionId)

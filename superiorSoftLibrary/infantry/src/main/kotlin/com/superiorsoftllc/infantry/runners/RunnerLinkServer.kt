@@ -3,11 +3,13 @@
 package com.superiorsoftllc.infantry.runners
 
 import com.superiorsoftllc.infantry.daemon.FrameGate
+import com.superiorsoftllc.infantry.daemon.api.orchestrator.CommandResult
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.MailItem
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorReply
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.PromptReply
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerHarness
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerLink
+import com.superiorsoftllc.infantry.daemon.api.orchestrator.SessionCommand
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.StartSpec
 import com.superiorsoftllc.infantry.settings.LimitDef
 import com.superiorsoftllc.infantry.settings.LimitRegistry
@@ -147,6 +149,7 @@ class RunnerLinkServer(
             F.CHECK -> check(seat, data, from)
             F.STOP -> stop(seat, data, from)
             F.REMOVE -> remove(seat, data, from)
+            F.COMMAND -> command(seat, data, from)
             F.HEALTH -> read(seat, type, from) { link ->
                 when (val h = link.health()) {
                     is OrchestratorReply.Ok -> F.json.encodeToString(F.HealthAnswer.serializer(), h.value.let { F.HealthAnswer(it.state, it.running, it.freeSlots, it.load) })
@@ -518,6 +521,32 @@ class RunnerLinkServer(
                 ok(seat, F.REMOVE, null, from, F.RemoveAnswer.serializer(), F.RemoveAnswer(reply.value))
             }
             is OrchestratorReply.Unavailable -> refuse(seat, F.REMOVE, null, from, "${F.REMOVE} unavailable: ${reply.reason}")
+        }
+    }
+
+    /**
+     * RUNNER-UNIFY-2 (contract 1.9.0): one owner command on a session this orchestrator started, run by this runner's own local binding
+     * (the code a local session's frame runs). A session it did not start answers `unknown` (a ghost: nothing of its runs here); a
+     * delete that went through also forgets the session's link state, as [F.REMOVE] does.
+     */
+    private fun command(seat: String, data: String, from: String?): Answer {
+        val r = decode(F.CommandRequest.serializer(), data) ?: return refuse(seat, F.COMMAND, null, from, "${F.COMMAND} refused: malformed request")
+        if (starts?.isLinked(r.sessionId) != true) {
+            return ok(
+                seat, F.COMMAND, null, from, F.CommandAnswer.serializer(),
+                F.CommandAnswer(CommandResult.UNKNOWN, "session ${r.sessionId.take(SHOWN_TYPE_SIZE)} was not started by this orchestrator"),
+            )
+        }
+        policy(seat, F.COMMAND, null)?.let { return refuse(seat, F.COMMAND, null, from, "${F.COMMAND} refused: $it") }
+        val link = runner() ?: return refuse(seat, F.COMMAND, null, from, "${F.COMMAND} refused: this runner has no local runner")
+        val command = SessionCommand(r.kind, r.text, r.wakeReason, r.force, r.by, r.reason, r.maxQueued)
+        return when (val reply = link.command(r.sessionId, command)) {
+            is OrchestratorReply.Ok -> {
+                val v = reply.value
+                if (r.kind == SessionCommand.DELETE && v.ok) { starts?.forget(r.sessionId); lent?.release(r.sessionId) }
+                ok(seat, F.COMMAND, null, from, F.CommandAnswer.serializer(), F.CommandAnswer(v.kind, v.reason, v.errorType, v.started))
+            }
+            is OrchestratorReply.Unavailable -> refuse(seat, F.COMMAND, null, from, "${F.COMMAND} unavailable: ${reply.reason}")
         }
     }
 

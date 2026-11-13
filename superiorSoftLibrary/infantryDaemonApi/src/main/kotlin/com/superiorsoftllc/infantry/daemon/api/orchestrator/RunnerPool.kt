@@ -235,6 +235,11 @@ class LocalRunnerServices(
      * answer that does not fit the prompt is refused with [IllegalArgumentException]. Default: no prompts here (false).
      */
     val answerPrompt: (sessionId: String, reply: PromptReply) -> Boolean = { _, _ -> false },
+    /**
+     * RUNNER-UNIFY-2: run one owner command on a session of this runner, exactly as the daemon's frame handler did before (the
+     * refusal as a [CommandResult], never thrown). Default: not offered (Unavailable).
+     */
+    val command: ((sessionId: String, command: SessionCommand) -> CommandResult)? = null,
 )
 
 /** The binding for the runner in this process ([RunnerPool.LOCAL]). */
@@ -275,6 +280,9 @@ class LocalRunnerLink(private val services: LocalRunnerServices) : RunnerLink {
         } catch (e: IllegalArgumentException) {
             OrchestratorReply.Unavailable(e.message ?: "answer refused")
         }
+
+    override fun command(sessionId: String, command: SessionCommand): OrchestratorReply<CommandResult> =
+        services.command?.let { OrchestratorReply.Ok(it(sessionId, command)) } ?: super.command(sessionId, command)
 }
 
 /**
@@ -299,6 +307,12 @@ interface RunnerPool {
 
     /** The runner a session lives on (the session index); [LOCAL] unless a remote start placed it elsewhere. */
     fun runnerOf(sessionId: String): String
+
+    /**
+     * RUNNER-UNIFY-2 (docs/RUNNER-UNIFY.md 5): the link of the runner session [sessionId] lives on: the one way an orchestrator caller
+     * reaches a session. Null = that runner is not connected (unknown, or no binding loaded).
+     */
+    fun linkFor(sessionId: String): RunnerLink? = link(runnerOf(sessionId))
 
     /** LOGS-PREFIX-1: the ids of the sessions placed on a remote runner (the session index); empty when none are tracked. */
     fun placedSessionIds(): Collection<String> = emptyList()

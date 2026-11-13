@@ -2,6 +2,7 @@
 // Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.plugins.official.remoterunner.daemon
 
+import com.superiorsoftllc.infantry.daemon.api.orchestrator.CommandResult
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.MailItem
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.MailResult
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorReply
@@ -11,6 +12,7 @@ import com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerHarness
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerHealth
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerInfo
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerLink
+import com.superiorsoftllc.infantry.daemon.api.orchestrator.SessionCommand
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.SessionRef
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.StartSpec
 import com.superiorsoftllc.infantry.daemon.api.runners.LinkFailure
@@ -119,6 +121,17 @@ class RemoteRunnerLink(private val name: String, private val links: RunnerLinks)
             F.json.encodeToString(F.PromptAnswerRequest.serializer(), F.PromptAnswerRequest(sessionId, reply.promptId, reply.decision, reply.answers, reply.otherText)),
             F.PromptAnswerAck.serializer(),
         ).map { it.applied }
+
+    /** RUNNER-UNIFY-2: an owner command (turn, attach, interrupt, queue, kill, delete), run on the runner as on a local session. */
+    override fun command(sessionId: String, command: SessionCommand): OrchestratorReply<CommandResult> =
+        call(
+            F.COMMAND,
+            F.json.encodeToString(
+                F.CommandRequest.serializer(),
+                F.CommandRequest(sessionId, command.kind, command.text, command.wakeReason, command.force, command.by, command.reason, command.maxQueued),
+            ),
+            F.CommandAnswer.serializer(),
+        ).map { CommandResult(it.kind, it.reason, it.errorType, it.started) }
 
     private fun <T> call(type: String, data: String, serializer: KSerializer<T>): OrchestratorReply<T> {
         val answer = try {

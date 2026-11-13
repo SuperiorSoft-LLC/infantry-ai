@@ -1467,6 +1467,7 @@ class InfantryDaemon(
                 projectDirectory = { id -> id?.let { runCatching { projectStore.get(it).directory }.getOrNull() } },
                 repo = repo, agents = agents, knowledge = knowledge, skills = skillsSource, runners = runnerPool,
                 pushOnCommit = { settings.runnerLink().pushOnCommit },
+                unifiedCommands = { settings.runnerLink().unifiedCommands },
                 remotePlaced = remoteMirror::placed,
                 // IMG-3: a ticket's images live under its project's directory (.infantry/uploads/ticket/).
                 ticketImages = com.superiorsoftllc.infantry.backlog.TicketImages { projectId ->
@@ -3430,6 +3431,13 @@ private suspend fun handleConnection(
     // The session this connection is driving. A first prompt starts a fresh session; later prompts
     // continue it (resume) until it reaches a terminal state, so context carries across turns.
     var active: String? = null
+    // RUNNER-UNIFY-2 (docs/RUNNER-UNIFY.md 5.1): every owner command on a session goes through the runner it lives on
+    // (RunnerPool.linkFor): this daemon's own sessions through the local runner, a remote one over its link. No handler asks which.
+    fun sessionCommand(id: String, command: com.superiorsoftllc.infantry.daemon.api.orchestrator.SessionCommand): com.superiorsoftllc.infantry.daemon.api.orchestrator.CommandResult =
+        LocalRunner.command(runnerPool, manager, id, command, (settings as? SettingsService)?.runnerLink()?.unifiedCommands ?: true)
+    // RUNNER-UNIFY-2: the ONE turn send (an owner prompt, or a remote session's first task); IN_FLIGHT is the typed run-in-flight refusal.
+    fun sendTurn(id: String, text: String, wakeReason: String? = null): com.superiorsoftllc.infantry.daemon.api.orchestrator.CommandResult =
+        sessionCommand(id, com.superiorsoftllc.infantry.daemon.api.orchestrator.SessionCommand(com.superiorsoftllc.infantry.daemon.api.orchestrator.SessionCommand.TURN, text, wakeReason))
     // RUNNER-DONE-1: the agent session the client says it runs in (the CLI and MCP server send INFANTRY_SESSION_ID); read only to
     // decide whether a frame of a session a remote orchestrator started here is forwarded to it.
     val declaredSession = session.call.request.headers[com.superiorsoftllc.infantry.runners.FrameForwarder.SESSION_HEADER]
@@ -3587,20 +3595,18 @@ private suspend fun handleConnection(
                             } else {
                                 envelope.data
                             }
-                            // RUNNER-REMOTE-IO-1: a session on a remote runner takes the prompt through that runner, like mail does.
-                            val remoteId = envelope.sessionId!!
-                            if (manager.get(remoteId) == null && runnerPool.runnerOf(remoteId) != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL) {
-                                val sent = LocalRunner.deliverVia(runnerPool)(remoteId, turn, MessageOrigin.Owner, "", emptyList())
-                                if (sent.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.MailResult.FAILED) throw IllegalStateException("runner refused the prompt: ${sent.reason}")
-                                if (sent.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.MailResult.QUEUED) throw IllegalStateException("runner '${runnerPool.runnerOf(remoteId)}' is busy or unreachable (${sent.reason.ifBlank { "queued" }}); send again")
-                                active = remoteId
-                            } else {
-                                // SESSION-UNKNOWN-1: a session only the runner mirror knows (its runner was detached or revoked) is not
-                                // local and not placed: say so, never "unknown session".
-                                if (manager.get(remoteId) == null && remoteSessions().any { it.id == remoteId }) {
-                                    throw IllegalStateException("session $remoteId lives on a runner that is no longer attached; re-attach that runner, or start the ticket again to get a new session")
-                                }
-                                active = manager.resume(envelope.sessionId!!, turn).id
+                            val id = envelope.sessionId!!
+                            // SESSION-UNKNOWN-1: a session only the runner mirror knows (its runner was detached or revoked) is not
+                            // local and not placed: say so, never "unknown session".
+                            if (manager.get(id) == null && id !in runnerPool.placedSessionIds() && remoteSessions().any { it.id == id }) {
+                                throw IllegalStateException("session $id lives on a runner that is no longer attached; re-attach that runner, or start the ticket again to get a new session")
+                            }
+                            // RUNNER-UNIFY-2: through the session's runner, local or remote alike (RUNNER-REMOTE-IO-1 sent remote ones as mail).
+                            val sent = sendTurn(id, turn)
+                            when (sent.kind) {
+                                com.superiorsoftllc.infantry.daemon.api.orchestrator.CommandResult.DONE -> active = id
+                                com.superiorsoftllc.infantry.daemon.api.orchestrator.CommandResult.IN_FLIGHT -> throw RunInFlightException(id, sent.reason.orEmpty())
+                                else -> throw IllegalStateException(sent.reason)
                             }
                             plugins.turnAccepted(envelope, caller)
                             pluginSessionsAck(envelope, manager) ?: sendKey?.let { promptAck(envelope, duplicate = false) }
@@ -3612,15 +3618,16 @@ private suspend fun handleConnection(
                             sendKey?.let(promptSendIds::release)
                             Envelope(Envelope.ERROR, e.message ?: "resume failed", envelope.sessionId)
                         }
-                    } else if (active?.let { manager.get(it) == null && runnerPool.runnerOf(it) != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL } == true) {
+                    } else if (active?.let { manager.get(it) == null && it in runnerPool.placedSessionIds() } == true) {
                         // RUNNER-SESSION-GHOST-1: the last `new` placed this connection's session on a remote runner. Its first
                         // task goes there as mail (as a plugin spawn's does). Before, the session was not found in [manager] and a
                         // fresh LOCAL session was started instead, while the remote one sat in STARTING with no turn for ever.
                         val remoteId = active!!
                         try {
-                            val sent = LocalRunner.deliverVia(runnerPool)(remoteId, envelope.data, MessageOrigin.Owner, "spawn", emptyList())
-                            if (sent.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.MailResult.FAILED) {
-                                throw IllegalStateException("runner '${runnerPool.runnerOf(remoteId)}' refused the first task: ${sent.reason}")
+                            // RUNNER-UNIFY-2: the same turn send as every prompt; a turn already running there has the task.
+                            val sent = sendTurn(remoteId, envelope.data, "spawn")
+                            if (sent.kind != com.superiorsoftllc.infantry.daemon.api.orchestrator.CommandResult.DONE && sent.kind != com.superiorsoftllc.infantry.daemon.api.orchestrator.CommandResult.IN_FLIGHT) {
+                                throw IllegalStateException("the runner refused the first task: ${sent.reason ?: sent.kind}")
                             }
                             plugins.turnAccepted(envelope, caller)
                             val pushed = Envelope(Envelope.SESSIONS, json.encodeToString(JsonArray((manager.list() + remoteSessions()).map { json.encodeToJsonElement(SessionRecordSerializer, it) })))
@@ -4225,22 +4232,18 @@ private suspend fun handleConnection(
                     val (id, prompt) = splitResume(envelope.data)
                     if (!id.isNullOrBlank() && prompt.isNullOrBlank()) {
                         // CLI-PTY-5: `resume` with no prompt = the owner's "Resume session": attach the CLI, send no turn.
-                        try {
-                            manager.attach(id)
-                            active = id
-                            null
-                        } catch (e: Exception) {
-                            Envelope(Envelope.ERROR, "resume failed: ${e.message ?: e::class.simpleName}", id)
-                        }
+                        val r = sessionCommand(id, com.superiorsoftllc.infantry.daemon.api.orchestrator.SessionCommand(com.superiorsoftllc.infantry.daemon.api.orchestrator.SessionCommand.ATTACH))
+                        if (r.ok) { active = id; null } else Envelope(Envelope.ERROR, "resume failed: ${r.reason ?: r.errorType}", id)
                     } else if (id.isNullOrBlank() || prompt.isNullOrBlank()) {
                         Envelope(Envelope.ERROR, "resume expects '<sessionId>\\n<prompt>'")
                     } else {
-                        try {
-                            active = manager.resume(id, prompt).id
+                        val r = sendTurn(id, prompt)
+                        if (r.ok) {
+                            active = id
                             plugins.turnAccepted(envelope, caller)
                             null
-                        } catch (e: Exception) {
-                            Envelope(Envelope.ERROR, e.message ?: "resume failed", id)
+                        } else {
+                            Envelope(Envelope.ERROR, r.reason ?: "resume failed", id)
                         }
                     }
                 }
@@ -4252,19 +4255,19 @@ private suspend fun handleConnection(
                     if (id.isEmpty() || arg.isBlank()) {
                         Envelope(Envelope.ERROR, "${envelope.type} expects the frame's sessionId and a non-empty data")
                     } else {
-                        try {
-                            when (envelope.type) {
-                                Envelope.QUEUE_ADD -> {
-                                    if (manager.queueAdd(id, arg, ((settings as? SettingsService)?.limit(LimitRegistry.CHAT_QUEUE_MAX) ?: LimitRegistry.CHAT_QUEUE_MAX.default).toInt()) == null) active = id
-                                }
-                                Envelope.QUEUE_REMOVE -> manager.queueRemove(id, arg.trim())
-                                else -> manager.queueForce(id, arg.trim())
-                            }
-                            null
-                        } catch (e: RunInFlightException) {
-                            Envelope(Envelope.ERROR, "$RUN_IN_FLIGHT ${e.sessionId}: ${e.message}")
-                        } catch (e: Exception) {
-                            Envelope(Envelope.ERROR, "${envelope.type} refused: ${e.message ?: e.javaClass.simpleName}")
+                        val command = when (envelope.type) {
+                            Envelope.QUEUE_ADD -> com.superiorsoftllc.infantry.daemon.api.orchestrator.SessionCommand(
+                                com.superiorsoftllc.infantry.daemon.api.orchestrator.SessionCommand.QUEUE_ADD, arg,
+                                maxQueued = ((settings as? SettingsService)?.limit(LimitRegistry.CHAT_QUEUE_MAX) ?: LimitRegistry.CHAT_QUEUE_MAX.default).toInt(),
+                            )
+                            Envelope.QUEUE_REMOVE -> com.superiorsoftllc.infantry.daemon.api.orchestrator.SessionCommand(com.superiorsoftllc.infantry.daemon.api.orchestrator.SessionCommand.QUEUE_REMOVE, arg.trim())
+                            else -> com.superiorsoftllc.infantry.daemon.api.orchestrator.SessionCommand(com.superiorsoftllc.infantry.daemon.api.orchestrator.SessionCommand.QUEUE_FORCE, arg.trim())
+                        }
+                        val r = sessionCommand(id, command)
+                        when (r.kind) {
+                            com.superiorsoftllc.infantry.daemon.api.orchestrator.CommandResult.DONE -> { if (r.started) active = id; null }
+                            com.superiorsoftllc.infantry.daemon.api.orchestrator.CommandResult.IN_FLIGHT -> Envelope(Envelope.ERROR, "$RUN_IN_FLIGHT $id: ${r.reason}")
+                            else -> Envelope(Envelope.ERROR, "${envelope.type} refused: ${r.reason ?: r.errorType}")
                         }
                     }
                 }
@@ -4275,12 +4278,8 @@ private suspend fun handleConnection(
                     if (id.isEmpty()) {
                         Envelope(Envelope.ERROR, "interrupt expects '<sessionId>'")
                     } else {
-                        try {
-                            manager.interrupt(id)
-                            null
-                        } catch (e: Exception) {
-                            Envelope(Envelope.ERROR, e.message ?: "interrupt failed")
-                        }
+                        val r = sessionCommand(id, com.superiorsoftllc.infantry.daemon.api.orchestrator.SessionCommand(com.superiorsoftllc.infantry.daemon.api.orchestrator.SessionCommand.INTERRUPT))
+                        if (r.ok) null else Envelope(Envelope.ERROR, r.reason ?: "interrupt failed")
                     }
                 }
 
@@ -4292,22 +4291,15 @@ private suspend fun handleConnection(
                     } else {
                         try {
                             val force = parts.drop(1).any { it.equals("force", ignoreCase = true) }
-                            // RUNNER-DOCKER-MATRIX-1: a session placed on a remote runner is not in [manager]; the app's
-                            // and the CLI's kill must reach that runner (as the board's kill does), or its harness
-                            // process lives on there while the app shows the session ended.
-                            val runnerName = runnerPool.runnerOf(id)
-                            if (manager.get(id) == null && runnerName != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL) {
-                                val link = runnerPool.link(runnerName) ?: error("runner '$runnerName' is not connected; the session there is still running")
-                                when (val reply = link.stopSession(id, "killed from the app", force)) {
-                                    // RUNNER-SESSION-GHOST-1: stopped, or the runner holds no such session (a ghost: nothing runs
-                                    // there). Either way it has ended, so it reads EXITED now, not STARTING until an event that
-                                    // never comes; `session_remove --force` (kill, then remove) can then remove it.
-                                    is com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorReply.Ok -> remoteStatus(id, SessionState.EXITED.name)
-                                    else -> error("runner '$runnerName' did not stop session $id: $reply")
-                                }
-                            } else {
-                                manager.kill(id, force = force)
-                            }
+                            // RUNNER-UNIFY-2: through the session's runner (RUNNER-DOCKER-MATRIX-1: a remote session's kill must
+                            // reach its runner, or its harness process lives on there while the app shows the session ended).
+                            val held = manager.get(id) != null
+                            val r = sessionCommand(id, com.superiorsoftllc.infantry.daemon.api.orchestrator.SessionCommand(com.superiorsoftllc.infantry.daemon.api.orchestrator.SessionCommand.KILL, force = force))
+                            if (!r.ok && r.kind != com.superiorsoftllc.infantry.daemon.api.orchestrator.CommandResult.UNKNOWN) error(r.reason ?: "kill failed")
+                            // RUNNER-SESSION-GHOST-1: stopped, or the runner holds no such session (a ghost: nothing runs there). Either
+                            // way it has ended, so the runner mirror reads EXITED now, not STARTING until an event that never comes;
+                            // `session_remove --force` (kill, then remove) can then remove it. (The mirror goes in RUNNER-UNIFY-4.)
+                            if (!held) remoteStatus(id, SessionState.EXITED.name)
                             pluginSessionsAck(envelope, manager)
                         } catch (e: Exception) {
                             Envelope(Envelope.ERROR, e.message ?: "kill failed")
@@ -4470,13 +4462,13 @@ private suspend fun handleConnection(
                         try {
                             // SESSION-GHOST-1: an id this daemon does not hold is already gone: a clean no-op, but the
                             // fresh `sessions` push below still goes out so a client holding a ghost row reconciles.
-                            if (manager.get(id) != null) {
-                                manager.delete(id)
-                            } else if (runnerPool.runnerOf(id) != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL) {
-                                // RUNNER-SESSION-GHOST-1: a session on a remote runner is not in [manager]: the delete stops it there
-                                // (best effort; a runner that is down or forgot it cannot keep the row alive) and drops it from the
-                                // pool's index and the mirror, so it leaves the list and nothing respawns it.
-                                runCatching { runnerPool.link(runnerPool.runnerOf(id))?.stopSession(id, "deleted from the app", true) }
+                            // RUNNER-UNIFY-2: through the session's runner; a live one is refused there as here ("kill it first").
+                            val placed = id in runnerPool.placedSessionIds()
+                            val r = sessionCommand(id, com.superiorsoftllc.infantry.daemon.api.orchestrator.SessionCommand(com.superiorsoftllc.infantry.daemon.api.orchestrator.SessionCommand.DELETE))
+                            if (r.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.CommandResult.REFUSED) throw IllegalArgumentException(r.reason ?: r.errorType)
+                            if (placed) {
+                                // RUNNER-SESSION-GHOST-1: a session on a remote runner is dropped from the pool's index and the mirror
+                                // (also when its runner is down or forgot it: that cannot keep the row alive), so it leaves the list.
                                 (runnerPool as? com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerHub)?.forget(id)
                                 remoteForget(id)
                                 remoteTranscripts?.forget(id)
