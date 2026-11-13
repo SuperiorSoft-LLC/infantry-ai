@@ -159,12 +159,38 @@ private fun Modifier.windowDrag(frame: Frame, state: WindowState): Modifier = po
         if (state.placement != WindowPlacement.Floating) return@awaitEachGesture
         val startMouse = MouseInfo.getPointerInfo()?.location ?: return@awaitEachGesture
         val startWin = frame.location
+        val mover = FrameBoundsApplier { frame.setLocation(it.x, it.y) } // UI-COROUTINE-1: never inside this coroutine
         while (true) {
             val event = awaitPointerEvent()
             if (event.changes.none { it.pressed }) break
             val now = MouseInfo.getPointerInfo()?.location ?: break
-            frame.setLocation(startWin.x + now.x - startMouse.x, startWin.y + now.y - startMouse.y)
+            mover.request(Rectangle(startWin.x + now.x - startMouse.x, startWin.y + now.y - startMouse.y, 0, 0))
         }
+    }
+}
+
+/**
+ * UI-COROUTINE-1 (the resize freeze): applies a frame move/resize on a LATER AWT event-queue turn, never inside the
+ * caller. The window drag and edge handles run in Compose pointer coroutines, and Compose can resume them from inside
+ * FlushCoroutineDispatcher.flush (after each render it sends a synthetic pointer move as a scheduled effect). Seen in
+ * the owner's trace: resizeHandle -> frame.validate() -> ComposeContainer.setBounds -> SkiaLayer.reshape ->
+ * Direct3DRedrawer.renderImmediately -> a second flush nested in the first. With an animation going (a busy session's
+ * spinner) the nested flush re-runs the outer batch and clears the list the outer one iterates: ClassCastException
+ * (ChannelSegment -> Boolean), CoroutinesInternalError, ConcurrentModificationException, and a frozen window.
+ * Posting the change runs the reshape from a top-level event. Moves that arrive before the posted turn coalesce:
+ * only the latest bounds are applied.
+ */
+internal class FrameBoundsApplier(
+    private val post: (Runnable) -> Unit = { java.awt.EventQueue.invokeLater(it) },
+    private val apply: (Rectangle) -> Unit,
+) {
+    private var pending: Rectangle? = null
+
+    /** Runs on the UI thread (the pointer coroutine and the posted turn share it), so no lock is needed. */
+    fun request(bounds: Rectangle) {
+        val wasIdle = pending == null
+        pending = bounds
+        if (wasIdle) post(Runnable { pending?.let { pending = null; apply(it) } })
     }
 }
 
@@ -222,13 +248,13 @@ private fun Modifier.resizeHandle(frame: Frame, edge: ResizeEdge): Modifier =
             awaitFirstDown().consume()
             val startMouse = MouseInfo.getPointerInfo()?.location ?: return@awaitEachGesture
             val startBounds = frame.bounds
+            val resizer = FrameBoundsApplier { frame.bounds = it; frame.validate() } // UI-COROUTINE-1: never inside this coroutine
             while (true) {
                 val event = awaitPointerEvent()
                 if (event.changes.none { it.pressed }) break
                 event.changes.forEach { it.consume() }
                 val now = MouseInfo.getPointerInfo()?.location ?: break
-                frame.bounds = resizedBounds(startBounds, edge, now.x - startMouse.x, now.y - startMouse.y, MIN_SIZE.width, MIN_SIZE.height)
-                frame.validate()
+                resizer.request(resizedBounds(startBounds, edge, now.x - startMouse.x, now.y - startMouse.y, MIN_SIZE.width, MIN_SIZE.height))
             }
         }
     }
