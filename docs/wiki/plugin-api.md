@@ -382,6 +382,22 @@ as its module's fault. Cards are open to every module tier (community included) 
 app-level `ChatBlockRenderers.override("card:<type>", ...)` still wins. Example: `plugins/community/Acme_HelloCard`
 (`card:hello`, body `{"title": "...", "text": "..."}`).
 
+**Card descriptors (CARD-3).** So an agent can find and write a card without paying tokens every turn, the module also
+declares each card type in module.json `cards` (read by the daemon, never by the client):
+
+```json
+"cards": [{ "type": "hello", "summary": "Greeting box: bold title and one line of text", "spec": "cards/hello.md",
+            "images": { "hosts": ["*.example.com"] } }]
+```
+
+`type` is the fence's `card:<type>` (lower case, `[a-z][a-z0-9_-]*`); `summary` is the one line `infantry card list`
+prints; `spec` is what `infantry card show <type>` prints: a `.md`/`.txt`/`.json` path inside the module folder, read
+from there, or else the text itself (write the fields and one example fence); `images.hosts` names where the card's
+images may come from (used by the card image proxy, CARD-IMG-1). Types: `CardDeclaration`, `CardImages`. The
+directory is the official `Infantry_Cards` daemon half (capabilities `cards.list`, `cards.show`); the first loaded module
+that declares a type owns it. A role may name a card type in its persona; with the plugin gone the role still works and
+the card shows as code.
+
 ### Agent avatar renderers (AVATAR-DOCS-1)
 
 Every agent avatar in the app is drawn by one core composable, `AgentAvatar` (`superiorSoftLibrary/infantryUiCore/src/commonMain/kotlin/com/superiorsoftllc/infantry/ui/AgentAvatarRenderers.kt` holds the seam; `AgentAvatar.kt` holds the composable). A plugin can add an avatar style by registering a renderer under the registry `agent.avatar.renderers`:
@@ -665,6 +681,8 @@ Generated for the `infantryPlugins` guard `SdkTypesDocumentedGuardTest`: every p
 ### `ModuleManifest.kt`
 
 - `BlockDeclaration`: A block named [name] the module adds to slot [slot].
+- `CardDeclaration`: CARD-3: one chat card type the module brings: `type`, `summary`, `spec` (a file in the module folder or the text), `images`.
+- `CardImages`: CARD-3: module.json `cards[].images`: the image hosts a card type declares.
 - `BlockTypeDeclaration`: NS1 / PB1 (6t.2): a block type, `vendor.name` (core's layout primitives are `layout.row` ...).
 - `DaemonCapabilities`: NS3 (1a): `daemon.needs` (refused = the module does not work) and `daemon.wants` (refused = it degrades).
 - `DaemonFrameDeclaration`: DAEMON-PLUGINS-1: one plugin-defined frame; [ownerOnly] frames are refused to a community module.

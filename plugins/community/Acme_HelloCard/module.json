@@ -9,5 +9,8 @@
   "jar": "build/libs/Acme_HelloCard.jar",
   "implementations": [
     { "registry": "chat.cards", "key": "hello" }
+  ],
+  "cards": [
+    { "type": "hello", "summary": "Greeting box: bold title and one line of text", "spec": "cards/hello.md" }
   ]
 }
