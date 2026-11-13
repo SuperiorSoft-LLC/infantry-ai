@@ -12,6 +12,7 @@ import com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerHealth
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerInfo
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerLink
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPromptEvent
+import com.superiorsoftllc.infantry.daemon.api.runners.RunnerLinkWire
 import com.superiorsoftllc.infantry.prompts.Decision
 import com.superiorsoftllc.infantry.prompts.PendingPrompts
 import com.superiorsoftllc.infantry.prompts.PromptTimeoutPolicy
@@ -64,9 +65,11 @@ class RunnerPromptRelayTest {
         }
         val relay = RunnerPromptRelay(orchestrator, link = { name -> gated.takeIf { name == "r1" } }, projectOf = { "proj" }, log = {})
         private val acked = HashMap<String, Long>()
+        /** RUNNER-UNIFY-5: the frames the runner put on its sessions' stream, not yet taken by the orchestrator. */
+        val frames = java.util.concurrent.CopyOnWriteArrayList<com.superiorsoftllc.infantry.protocol.Envelope>()
 
         init {
-            runner.observer = relay.runnerObserver(starts)
+            runner.observer = relay.runnerObserver(starts) { frames.add(it) }
             runner.heldElsewhere = relay.heldElsewhere(starts)
             starts.linked("s1")
         }
@@ -76,6 +79,13 @@ class RunnerPromptRelayTest {
             val events = starts.events(acked.toMap()).filter { it.seq > (acked[it.sessionId] ?: 0) }
             events.forEach { relay.apply("r1", it); acked[it.sessionId] = it.seq }
             return events
+        }
+
+        /** RUNNER-UNIFY-5: one pushed batch: every frame the runner published goes to the orchestrator's frame path. */
+        fun pushFrames(): List<String> {
+            val batch = frames.toList().also { frames.removeAll(it.toSet()) }
+            batch.forEach { assertTrue(relay.applyFrame("r1", it.sessionId!!, it.type, it.data), "a prompt frame is the relay's") }
+            return batch.map { it.type }
         }
     }
 
@@ -191,5 +201,46 @@ class RunnerPromptRelayTest {
         rig.relay.apply("r1", RunnerEvent("s1", 2, RunnerEvent.PROMPT, RunnerPromptEvent("""{"promptId":"x2","sessionId":"other","kind":"tool_approval","createdAt":1}""").encode()))
         Thread.sleep(100)
         assertEquals(listOf("x1"), rig.orchestrator.snapshot().map { it.promptId })
+    }
+
+    @Test
+    fun framePromptsAnApprovalCrossesAsAStreamFrameAndItsAnswerGoesBack() = runBlocking {
+        val rig = Rig()
+        val asker = async { rig.runner.requestApprovalOutcome("s1", "bash", "ls -la /work") }
+        waitFor("the runner opened the prompt") { rig.runner.snapshot().isNotEmpty() }
+        val onRunner = rig.runner.snapshot().single()
+        assertEquals(listOf(RunnerLinkWire.PROMPT_FRAME), rig.pushFrames(), "the prompt is one frame on the session's stream")
+        // The card is open in the store when applyFrame returns: no wait, so a close in the same batch finds it.
+        val card = rig.orchestrator.snapshot().single()
+        assertEquals(onRunner.promptId, card.promptId, "the same prompt id on both sides")
+        assertEquals("s1", card.sessionId)
+        rig.orchestrator.respond(PromptResponse(card.promptId, decision = Decision.ALLOW_ONCE.wire), "client:1")
+        assertEquals(Decision.ALLOW_ONCE, withTimeout(5_000) { asker.await() }.decision, "the owner's answer reached the runner's asker")
+        assertEquals(listOf(RunnerLinkWire.PROMPT_RESOLVED_FRAME), rig.pushFrames(), "the runner reports the close as a frame")
+        assertTrue(rig.orchestrator.snapshot().isEmpty())
+    }
+
+    @Test
+    fun framePromptsAPromptOpenedAndClosedInOneBatchLeavesNoCard() = runBlocking {
+        val rig = Rig()
+        val asker = async { rig.runner.requestApprovalOutcome("s1", "bash", "ls") }
+        waitFor("open") { rig.runner.snapshot().isNotEmpty() }
+        val id = rig.runner.snapshot().single().promptId
+        rig.runner.respond(PromptResponse(id, decision = Decision.DENY.wire), "client:runner")
+        withTimeout(5_000) { asker.await() }
+        assertEquals(listOf(RunnerLinkWire.PROMPT_FRAME, RunnerLinkWire.PROMPT_RESOLVED_FRAME), rig.pushFrames())
+        assertTrue(rig.orchestrator.snapshot().isEmpty(), "a prompt the runner closed in the same batch is not left open here")
+    }
+
+    @Test
+    fun framePromptsOnlyTheOrchestratorsSessionsCrossAndOtherFramesAreNotTheRelays() = runBlocking {
+        val rig = Rig()
+        val asker = async { rig.runner.requestApprovalOutcome("local-only", "bash", "ls") }
+        waitFor("open") { rig.runner.snapshot().isNotEmpty() }
+        assertTrue(rig.frames.isEmpty(), "a session the orchestrator did not start puts no prompt frame on the link")
+        assertFalse(rig.relay.applyFrame("r1", "s1", com.superiorsoftllc.infantry.protocol.Envelope.STDOUT, "x"))
+        rig.runner.closeAll()
+        runCatching { withTimeout(5_000) { asker.await() } }
+        Unit
     }
 }

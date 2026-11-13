@@ -235,6 +235,10 @@ private val SESSION_STREAM_FRAME_TYPES = setOf(
     Envelope.TURN,
     // Contract 1.13.0: a run's usage is part of its session's replayable stream.
     Envelope.USAGE,
+    // RUNNER-UNIFY-5: a runner session's prompt and its close cross the link on the session's stream (link-only: never sent to,
+    // or replayed for, a client).
+    com.superiorsoftllc.infantry.daemon.api.runners.RunnerLinkWire.PROMPT_FRAME,
+    com.superiorsoftllc.infantry.daemon.api.runners.RunnerLinkWire.PROMPT_RESOLVED_FRAME,
 )
 
 /**
@@ -1122,7 +1126,6 @@ class InfantryDaemon(
                 link = runnerPool::link,
                 projectOf = { id -> remoteMirror.placement(id)?.projectId },
             )
-            pendingPrompts.observer = promptRelay.runnerObserver(remoteStarts)
             pendingPrompts.heldElsewhere = promptRelay.heldElsewhere(remoteStarts)
             val forwardGateRef = java.util.concurrent.atomic.AtomicReference<com.superiorsoftllc.infantry.runners.ForwardedFrameGate?>(null)
             SessionRecordSerializer.runnerOf = runnerPool::runnerOf
@@ -1490,6 +1493,8 @@ class InfantryDaemon(
             // RUNNER-UNIFY-3 (runner side): every numbered frame wakes the orchestrator's held frame pull (set once the feed exists).
             val framePublished = java.util.concurrent.atomic.AtomicReference<() -> Unit> { }
             val streamSequencer = SessionFrameSequencer(chatHistory) { framePublished.get()() }
+            // RUNNER-UNIFY-5 (runner side): the orchestrator's sessions' prompts also go on their stream, link-only (no client is sent them).
+            pendingPrompts.observer = promptRelay.runnerObserver(remoteStarts) { frame -> streamSequencer.publish(emptyList(), listOf(frame)) }
             // RUNNER-UNIFY-3 (orchestrator side): the pushed stream of each paired runner (runners.pushFrames); set once the watch exists.
             val frameStreamRef = java.util.concurrent.atomic.AtomicReference<com.superiorsoftllc.infantry.runners.RunnerFrameStream?>(null)
             val remoteStreaming: (String) -> Boolean = { id -> frameStreamRef.get()?.streamingSession(id) == true }
@@ -1932,7 +1937,8 @@ class InfantryDaemon(
                                 if (runnerPool.runnerOf(id) != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL && !remoteStreaming(id)) remoteTranscripts.pull(id)
                                 streamSequencer.replayAfter(id, 0)?.let { batch ->
                                     com.superiorsoftllc.infantry.daemon.plugins.LocalSessionReads.Replay(
-                                        batch.gap?.let { json.encodeToString(SessionReplayGapPayload.serializer(), it) }, batch.frames,
+                                        batch.gap?.let { json.encodeToString(SessionReplayGapPayload.serializer(), it) },
+                                        batch.frames.filter { it.type !in com.superiorsoftllc.infantry.daemon.api.runners.RunnerLinkWire.LINK_ONLY_FRAMES },
                                     )
                                 }
                             },
@@ -2182,22 +2188,26 @@ class InfantryDaemon(
             // RUNNER-POOL-6: a heartbeat round over the paired runners every limits.runners.heartbeatSec sets up / degraded / down.
             // RUNNER-POOL-8 (docs/RUNNER-POOL.md 3.1): after each round the watch replays the runners' outboxes (deduped by session +
             // seq), pumps the mail of sessions that came to rest or whose runner is back, and handles a runner lost past lostAfterMin.
+            // GREEN-GAP-1 / RUNNER-UNIFY-5: why a runner session FAILED, kept for its failure card (the frames' reason, or the scrape's).
+            val remoteFailed: (String, String) -> Unit = remoteMirror::failed
             val runnerWatch = com.superiorsoftllc.infantry.runners.RunnerWatch(
                 pool = runnerPool,
                 lostAfterMs = { settings.limit(LimitRegistry.RUNNERS_LOST_AFTER_MIN) * 60_000L },
                 restartElsewhere = { settings.runnerLink().restartElsewhere },
                 apply = { runner, e ->
+                    // RUNNER-UNIFY-5: a session whose frames are pushed, on runners.framePrompts, takes its prompts and its failure reason
+                    // from those frames (the frame stream's apply, below); the event relay and the transcript scrape are for the others.
+                    val onFrames = settings.runnerLink().framePrompts && remoteStreaming(e.sessionId)
                     // RUNNER-PROMPT-RELAY-1: a prompt a runner session raised opens here; its close closes the card.
-                    promptRelay.apply(runner, e)
+                    if (!onFrames) promptRelay.apply(runner, e)
                     if (e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.STATUS) remoteMirror.status(e.sessionId, e.payload)
                     // GREEN-GAP-1: a session that FAILED on its runner carries the runner's own error, read from its transcript, so the
-                    // failure card never says "the daemon recorded no reason".
-                    if (e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.STATUS && e.payload.equals(SessionState.FAILED.name, ignoreCase = true)) {
-                        val rn = runnerPool.runnerOf(e.sessionId)
-                        val lines = (runnerPool.link(rn)?.readTranscript(e.sessionId) as? com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorReply.Ok)?.value.orEmpty()
+                    // failure card never says "the daemon recorded no reason". RUNNER-UNIFY-6 deletes it with the flag.
+                    if (!onFrames && e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.STATUS && e.payload.equals(SessionState.FAILED.name, ignoreCase = true)) {
+                        val lines = (runnerPool.linkFor(e.sessionId)?.readTranscript(e.sessionId) as? com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorReply.Ok)?.value.orEmpty()
                         val why = lines.lastOrNull { it.contains("turn failed") }?.substringAfter("turn failed:", "")?.trim()?.takeIf { it.isNotEmpty() }
                             ?: lines.lastOrNull { it.isNotBlank() }?.take(300)
-                        remoteMirror.failed(e.sessionId, why ?: "session failed on runner '$rn'; its transcript holds no error line")
+                        remoteFailed(e.sessionId, why ?: "session failed on runner '$runner'; its transcript holds no error line")
                     }
                     // RUNNER-PROMPT-RELAY-1: a client connected before a runner start never heard of the session (only the connect
                     // frame listed remote sessions), so its prompt card had no agent to show on. Each status or finish of a remote
@@ -2266,6 +2276,12 @@ class InfantryDaemon(
                     val out = fresh.filter { it.type in com.superiorsoftllc.infantry.runners.RemoteTranscriptPump.RELAYED || it.type == Envelope.STATUS }
                         .map { Envelope(it.type, it.data, sid, origin = it.origin) }
                     if (out.isNotEmpty()) streamSequencer.publish(clients, out)
+                    // RUNNER-UNIFY-5 (runners.framePrompts): the approval card opens from the prompt frame, through the same prompt store as a
+                    // local session; a failed turn's reason is the one its frames carry. Off = the event relay and the scrape (the watch).
+                    if (settings.runnerLink().framePrompts) {
+                        for (f in fresh) promptRelay.applyFrame(runner, sid, f.type, f.data)
+                        com.superiorsoftllc.infantry.runners.RunnerFailureReason.of(fresh, sessionDirectory.received(sid))?.let { remoteFailed(sid, it) }
+                    }
                     // The poll path keeps its own count of what it took: it reads the shared one again if it serves this session later.
                     remoteTranscripts.forget(sid)
                     var moved = fresh.any { it.type == Envelope.EXIT || it.type == Envelope.FINISHED }
@@ -3631,7 +3647,7 @@ private suspend fun handleConnection(
                                     ),
                                 )
                             }
-                            for (replayedFrame in replay.frames) outgoing.trySend(replayedFrame)
+                            for (replayedFrame in replay.frames) if (replayedFrame.type !in com.superiorsoftllc.infantry.daemon.api.runners.RunnerLinkWire.LINK_ONLY_FRAMES) outgoing.trySend(replayedFrame)
                         }
                     }
                 }

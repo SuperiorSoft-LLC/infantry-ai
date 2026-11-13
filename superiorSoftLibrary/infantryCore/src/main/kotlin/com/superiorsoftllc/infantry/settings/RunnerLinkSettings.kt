@@ -87,6 +87,14 @@ object RunnerLinkSettings {
      * (pushed frames off, an older runner, the first moment after a start) reads the mirror's record either way.
      */
     const val UNIFIED_DIRECTORY = "runners.unifiedDirectory"
+    /**
+     * RUNNER-UNIFY-5 (orchestrator side, docs/RUNNER-UNIFY.md 5.4): a runner session's approval card opens from the prompt frame on
+     * its pushed stream, through the same prompt store as a local session, and a failed turn's reason is the one its frames carry
+     * (the record's `lastError`, the `finished` detail, an `error` frame) instead of a scrape of its transcript. Applies to a session
+     * whose frames are pushed (`runners.pushFrames`); any other session keeps the event relay. CONTINGENCY: `false` (the default
+     * until the live proof) = the outbox event relay and the transcript scrape exactly as before; flipping it takes effect live.
+     */
+    const val FRAME_PROMPTS = "runners.framePrompts"
 
     /** The setting text of [ALLOW_PLAIN_TAILNET]; it states the risk. */
     const val ALLOW_PLAIN_TAILNET_TEXT =
@@ -113,6 +121,7 @@ object RunnerLinkSettings {
         val unifiedCommands: Boolean = true,
         val pushFrames: Boolean = false,
         val unifiedDirectory: Boolean = true,
+        val framePrompts: Boolean = false,
     ) {
         /** RUNNER-CRED-1: whether this orchestrator lends credentials to runner [name]. */
         fun lendsTo(name: String): Boolean = ANY in lendCredentials || name in lendCredentials
@@ -141,6 +150,7 @@ object RunnerLinkSettings {
         unifiedCommands = runCatching { (Json.parseToJsonElement(stored(UNIFIED_COMMANDS) ?: "true") as JsonPrimitive).booleanOrNull }.getOrNull() ?: true,
         pushFrames = runCatching { (Json.parseToJsonElement(stored(PUSH_FRAMES) ?: "false") as JsonPrimitive).booleanOrNull }.getOrNull() ?: false,
         unifiedDirectory = runCatching { (Json.parseToJsonElement(stored(UNIFIED_DIRECTORY) ?: "true") as JsonPrimitive).booleanOrNull }.getOrNull() ?: true,
+        framePrompts = runCatching { (Json.parseToJsonElement(stored(FRAME_PROMPTS) ?: "false") as JsonPrimitive).booleanOrNull }.getOrNull() ?: false,
     )
 
     private fun string(raw: String?): String =
@@ -166,6 +176,7 @@ object RunnerLinkSettings {
             UNIFIED_COMMANDS to JsonPrimitive(v.unifiedCommands),
             PUSH_FRAMES to JsonPrimitive(v.pushFrames),
             UNIFIED_DIRECTORY to JsonPrimitive(v.unifiedDirectory),
+            FRAME_PROMPTS to JsonPrimitive(v.framePrompts),
         )
     }
 

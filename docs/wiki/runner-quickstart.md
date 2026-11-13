@@ -251,6 +251,12 @@ checkout, `C:\...`, as the working dir). The PC keeps only where each session ru
 (`runner-directory.json` in the state dir). Contingency: `infantry settings set runners.unifiedDirectory false`; it takes effect live,
 no restart or rebuild.
 
+Approvals and failures on the stream (RUNNER-UNIFY-5, opt-in, needs `runners.pushFrames`): `infantry settings set runners.framePrompts
+true` on the PC makes a runner session's approval card open from the prompt frame on its pushed stream (contract 1.11.0), through the
+same prompt store as a local session, and a failed turn shows the reason its frames carry (the `finished` detail, the record's error)
+instead of a line scraped from its transcript. Default `false`. A session whose frames are not pushed keeps the event relay. Contingency:
+set it back to `false`; it takes effect live, no restart or rebuild.
+
 Claude with a subscription (owner decision): either sign claude in on the runner itself (`docker exec -it infantry-runner claude auth
 login`), or run `claude setup-token` on your PC and store the token as the claude subscription token
 (`infantry harness key claude oauth`, which prompts for it): in `subscription-login` mode the app lends it as `CLAUDE_CODE_OAUTH_TOKEN`.
