@@ -447,6 +447,8 @@ infantry waiting off                                      # also clears by itsel
 infantry waiting show
 ```
 
+A user asks why a ticket did not start or why only 1 worker runs? Read [docs/wiki/Usage.md](../../../docs/wiki/Usage.md) (meters, pacing rule, "FULL", override), then run `infantry usage`.
+
 MCP twin: `infantry_waiting` (`mode` on/off/get, `reason`, `untilMinutes`). It expires after the minutes plus a grace. Details: [docs/wiki/Waiting.md](../../../docs/wiki/Waiting.md).
 
 ## 14. Run `infantry` from any terminal (CLI-PATH-1)
