@@ -49,6 +49,33 @@ object RunnerLinkWire {
     const val CONTRACT = "1.11.0"
 
     /**
+     * RUNNER-UPDATE-1: the OLDEST runner contract this orchestrator still drives. RUNNER-UNIFY-6 removed the per-operation fallbacks
+     * (one way to manage a session wherever it runs), so a runner older than this answers "not a runner link operation" halfway
+     * through a session. The pool reads such a runner as `outdated` at pairing and on every heartbeat (each reconnect), refuses
+     * starts on it up front with [OUTDATED_HINT], and the Runners card offers "Update runner". Raise it with [CONTRACT] whenever an
+     * orchestrator path stops speaking an older runner's operations.
+     */
+    const val MIN_RUNNER_CONTRACT = "1.11.0"
+
+    /** RUNNER-UPDATE-1: what an outdated runner's refusal and its Runners row tell the owner to do. */
+    const val OUTDATED_HINT = "update it: Settings > Runners > Update runner"
+
+    /**
+     * RUNNER-UPDATE-1: whether contract [peer] is older than [min] (`major.minor.patch`, compared numerically). A blank or unreadable
+     * [peer] is NOT older: a runner that reported nothing readable is judged by its health, never refused on a guess.
+     */
+    fun contractOlder(peer: String?, min: String): Boolean {
+        fun parts(v: String?): List<Int>? {
+            val p = v?.trim()?.split('.')?.takeIf { it.size == 3 } ?: return null
+            return p.map { it.toIntOrNull() ?: return null }
+        }
+        val p = parts(peer) ?: return false
+        val m = parts(min) ?: return false
+        for (i in 0 until 3) if (p[i] != m[i]) return p[i] < m[i]
+        return false
+    }
+
+    /**
      * RUNNER-UNIFY-5 (contract 1.11.0): a prompt (a tool approval, a question) of a session the orchestrator started, as a frame on
      * that session's stream. Data: the [com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPromptEvent] encoding (the
      * request plus the call's whole input). Link-only: no client of the runner itself is sent it.
@@ -395,6 +422,12 @@ interface RunnerLinks {
 
     /** One `(type, data)` frame to runner [runner]; throws [LinkFailure] when it is not paired or no answer arrives. */
     fun call(runner: String, type: String, data: String): LinkAnswer
+
+    /**
+     * RUNNER-UPDATE-1 (1.60.0, additive): the url runner [runner] was paired at (`wss://host:port`), so a plugin can tell where it
+     * runs (an updater recognises a runner on this machine by its port). Null = not paired, or this daemon keeps no url.
+     */
+    fun endpoint(runner: String): String? = null
 }
 
 object NoRunnerLinks : RunnerLinks {

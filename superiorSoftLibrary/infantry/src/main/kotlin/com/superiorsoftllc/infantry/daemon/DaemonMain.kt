@@ -2172,7 +2172,12 @@ class InfantryDaemon(
                 mapOf(
                     "health" to (e?.state ?: "down"), "workers" to running.toString(), "cap" to settings.runnerMaxWorkers(name).toString(),
                     "paused" to settings.runnerPaused(name).toString(),
-                )
+                ) + if (name == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL) emptyMap() else listOfNotNull(
+                    // RUNNER-UPDATE-1: the contract the runner reported, the oldest the app drives, and the refusal when it is older.
+                    e?.info?.contract?.let { "contract" to it },
+                    "needs" to com.superiorsoftllc.infantry.daemon.api.runners.RunnerLinkWire.MIN_RUNNER_CONTRACT,
+                    runnerPool.outdatedRefusal(name)?.let { "outdated" to it },
+                ).toMap()
             }
             manager.addSessionEndedListener(remoteStarts::forget)
             // RUNNER-POOL-6: a heartbeat round over the paired runners every limits.runners.heartbeatSec sets up / degraded / down.

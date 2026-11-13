@@ -81,6 +81,14 @@ const val RUNNER_BEARER_COMMAND = "docker exec infantry-runner infantry runner b
 const val RUNNERS_OFFLINE = "not connected to the daemon: nothing was sent"
 const val RUNNERS_UNREADABLE = "the daemon's answer could not be read"
 
+/**
+ * RUNNER-UPDATE-1: the frame "Update runner" sends (`{"name"}`, the Infantry_RemoteRunner daemon half answers it at once) and the
+ * status frame it pushes while the update runs and when it ends. [RUNNER_UPDATE_ACTION] gates it.
+ */
+const val RUNNER_UPDATE_FRAME = "runner_update"
+const val RUNNER_UPDATE_STATUS_FRAME = "runner_update_status"
+const val RUNNER_UPDATE_ACTION = "runners.update"
+
 /** One row of the card: what `runner_admin` op `list` answers for a runner. */
 data class RunnerRow(
     val name: String,
@@ -89,6 +97,11 @@ data class RunnerRow(
     val workers: Int,
     val cap: Int,
     val paused: Boolean,
+    /** RUNNER-UPDATE-1: the link contract the runner reported (blank = not heard yet) and the oldest the app drives. */
+    val contract: String = "",
+    val needs: String = "",
+    /** RUNNER-UPDATE-1: the daemon's refusal when the runner is older than the app (null = it is not): the row offers Update runner. */
+    val outdated: String? = null,
 ) {
     /** Enabled for new starts: a paused runner takes none. */
     val enabled: Boolean get() = !paused
@@ -127,9 +140,42 @@ fun parseRunnersList(text: String): RunnersList? {
     fun JsonObject.s(k: String) = text(k)
     return RunnersList(
         enabled = (obj["enabled"] as? JsonPrimitive)?.let { runCatching { it.boolean }.getOrNull() } ?: false,
-        rows = rows.mapNotNull { it as? JsonObject }.map { r -> RunnerRow(r.s("name"), r.s("health").ifBlank { "down" }, r.s("fingerprint"), r.s("workers").toIntOrNull() ?: 0, r.s("cap").toIntOrNull() ?: 0, r.s("paused") == "true") },
+        rows = rows.mapNotNull { it as? JsonObject }.map { r ->
+            RunnerRow(
+                r.s("name"), r.s("health").ifBlank { "down" }, r.s("fingerprint"), r.s("workers").toIntOrNull() ?: 0, r.s("cap").toIntOrNull() ?: 0,
+                r.s("paused") == "true", r.s("contract"), r.s("needs"), r.s("outdated").ifBlank { null },
+            )
+        },
     )
 }
+
+/**
+ * RUNNER-UPDATE-1: one runner's update as the status frames tell it: [state] `running` (at [step]), `updated`, `failed` (the old
+ * runner is back unless [detail] says otherwise) or `manual` ([command] is the one line to run on the runner's machine).
+ */
+data class RunnerUpdateStatus(val name: String, val state: String, val step: String, val detail: String, val command: String? = null) {
+    val running: Boolean get() = state == "running"
+}
+
+/** RUNNER-UPDATE-1: a `runner_update_status` frame's data; null when unreadable. */
+fun parseRunnerUpdateStatus(text: String): RunnerUpdateStatus? {
+    val o = parseObject(text) ?: return null
+    val name = o.text("name").ifBlank { return null }
+    return RunnerUpdateStatus(name, o.text("state"), o.text("step"), o.text("detail"), o.text("command").ifBlank { null })
+}
+
+/** RUNNER-UPDATE-1: the `runner_update` request for [name]. */
+fun updateRequest(name: String): String = JsonObject(mapOf("name" to JsonPrimitive(name))).toString()
+
+/** RUNNER-UPDATE-1: the immediate answer to [updateRequest]: null when it started, else the reason it did not. */
+fun updateRefusal(text: String): String? {
+    val o = parseObject(text) ?: return RUNNERS_UNREADABLE
+    return if (o.okAnswer()) null else o.text("error").ifBlank { RUNNERS_UNREADABLE }
+}
+
+/** RUNNER-UPDATE-1: the row's line for an outdated runner (what it speaks, what the app needs, what to do). */
+fun outdatedLine(r: RunnerRow): String =
+    "older than the app (contract ${r.contract.ifBlank { "unknown" }}, the app needs ${r.needs.ifBlank { "a newer one" }}): update it"
 
 /**
  * RUNNER-LINK-HOST-1: the Name field's live check (the daemon's rule: 1-32 of a-z, 0-9 and '-', starting with a letter or digit);
@@ -347,6 +393,9 @@ fun RunnersRows(
     onOp: (op: String, name: String) -> Unit,
     onCheck: (name: String) -> Unit = {},
     modifier: Modifier = Modifier,
+    /** RUNNER-UPDATE-1: the update of each runner the card has heard of (status frames), and the Update runner action. */
+    updates: Map<String, RunnerUpdateStatus> = emptyMap(),
+    onUpdate: (name: String) -> Unit = {},
 ) {
     if (list == null || !list.enabled) return
     Column(modifier.fillMaxWidth().testTag("runners-rows"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -369,12 +418,51 @@ fun RunnersRows(
                     ActionButton("runners.admin", "Detach", { onOp("detach", r.name) }, Modifier.testTag("runner-detach:${r.name}"))
                 }
             }
+            RunnerUpdateLines(r, updates[r.name], onUpdate)
         }
         if (error != null) Text(error, fontSize = 12.sp, color = Palette.Danger, modifier = Modifier.padding(top = 2.dp).testTag("runners-error"))
     }
 }
 
 private const val FINGERPRINT_SHOWN = 16
+
+/**
+ * RUNNER-UPDATE-1: under a runner's row, the "older than the app" line with Update runner, and the update while it runs and after:
+ * the step with a progress bar, the result, or the one line to run on the runner's machine (with a copy button).
+ */
+@Composable
+fun RunnerUpdateLines(r: RunnerRow, update: RunnerUpdateStatus?, onUpdate: (String) -> Unit) {
+    if (r.outdated == null && update == null) return
+    Column(Modifier.fillMaxWidth().padding(start = 8.dp).testTag("runner-update:${r.name}"), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        if (r.outdated != null) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(outdatedLine(r), fontSize = 12.sp, color = Palette.Warn, modifier = Modifier.weight(1f).testTag("runner-outdated:${r.name}"))
+                ActionButton(
+                    RUNNER_UPDATE_ACTION, "Update runner", { onUpdate(r.name) }, Modifier.testTag("runner-update-button:${r.name}"),
+                    enabled = update?.running != true,
+                )
+            }
+        }
+        when {
+            update == null -> Unit
+            update.running -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ProgressBar(null, Modifier.width(120.dp))
+                Text(update.detail.ifBlank { update.step }, fontSize = 12.sp, color = Palette.Muted, modifier = Modifier.testTag("runner-update-step:${r.name}"))
+            }
+            update.state == "updated" -> Text(update.detail, fontSize = 12.sp, color = Palette.Ok, modifier = Modifier.testTag("runner-update-done:${r.name}"))
+            update.state == "manual" -> {
+                Text(update.detail, fontSize = 12.sp, color = Palette.Muted, modifier = Modifier.testTag("runner-update-manual:${r.name}"))
+                update.command?.let { cmd ->
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(cmd, fontSize = 11.sp, modifier = Modifier.weight(1f, fill = false).testTag("runner-update-command:${r.name}"))
+                        CopyValueButton(cmd, Modifier.testTag("runner-update-copy:${r.name}"))
+                    }
+                }
+            }
+            else -> Text(update.detail, fontSize = 12.sp, color = Palette.Danger, modifier = Modifier.testTag("runner-update-error:${r.name}"))
+        }
+    }
+}
 
 /**
  * RUNNER-ADD-UI-1: the Runners card. Its heading and the "Add runner" button are always drawn, also while runners are off,
@@ -390,6 +478,9 @@ fun RunnersCard(
     modifier: Modifier = Modifier,
     /** RUNNER-PAIR-1: opens the one-step Connect a runner dialog. */
     onConnect: () -> Unit = {},
+    /** RUNNER-UPDATE-1: see [RunnersRows]. */
+    updates: Map<String, RunnerUpdateStatus> = emptyMap(),
+    onUpdate: (name: String) -> Unit = {},
 ) {
     Column(modifier.fillMaxWidth().testTag("runners-card"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -401,7 +492,7 @@ fun RunnersCard(
         if (paired == 0 && list?.enabled != true) RunnersEmptyHint()
         // The rows draw their own error while they are on screen; with runners off (or no answer yet) the card says it.
         val rowsShown = list?.enabled == true
-        RunnersRows(list, if (rowsShown) error else null, onOp, onCheck)
+        RunnersRows(list, if (rowsShown) error else null, onOp, onCheck, updates = updates, onUpdate = onUpdate)
         if (!rowsShown && error != null) Text(error, fontSize = 12.sp, color = Palette.Danger, modifier = Modifier.testTag("runners-error"))
     }
 }
@@ -786,6 +877,8 @@ class RunnersCardBlock : Block("runnersCard", RUNNERS_CARD_NODE) {
         var dialog by remember { mutableStateOf<CardDialog?>(null) }
         /** RUNNER-REPAIR-1: the takeover line the check dialog opened by an add shows; cleared when that dialog closes. */
         var notice by remember { mutableStateOf<String?>(null) }
+        /** RUNNER-UPDATE-1: each runner's update as its status frames tell it (kept after it ends, so the result stays on the row). */
+        var updates by remember { mutableStateOf<Map<String, RunnerUpdateStatus>>(emptyMap()) }
         val coroutines = rememberCoroutineScope()
         /**
          * Sends one request and returns the daemon's answer to THAT request (matched by request id), or null when nothing was sent.
@@ -827,6 +920,17 @@ class RunnersCardBlock : Block("runnersCard", RUNNERS_CARD_NODE) {
         LaunchedEffect(link.live) { if (link.live) refresh() }
         // RUNNER-CARD-STALE-1: the row follows the daemon's verdict without reopening the card (a new runner read `down` until then).
         LaunchedEffect(link.live) { if (link.live) link.frames(RUNNERS_CHANGED_FRAME).collect { refresh() } }
+        // RUNNER-UPDATE-1: an update's steps and result; when it ends, beat the runners and re-list so the row reads its new contract.
+        LaunchedEffect(link.live) {
+            if (link.live) link.frames(RUNNER_UPDATE_STATUS_FRAME).collect { text ->
+                val s = parseRunnerUpdateStatus(text) ?: return@collect
+                updates = updates + (s.name to s)
+                if (!s.running) {
+                    val listed = call(adminRequest("refresh", "")) ?: return@collect
+                    parseRunnersList(listed)?.let { list = it; listError = null }
+                }
+            }
+        }
         RunnersCard(
             list, listError,
             onAdd = { dialog = CardDialog.Add(sending = false) },
@@ -840,6 +944,19 @@ class RunnersCardBlock : Block("runnersCard", RUNNERS_CARD_NODE) {
             onCheck = { name -> coroutines.launch { check(name) } },
             modifier = scope.modifier,
             onConnect = { dialog = CardDialog.Connect(sending = false) },
+            updates = updates,
+            onUpdate = { name ->
+                coroutines.launch {
+                    updates = updates + (name to RunnerUpdateStatus(name, "running", "", "starting the update…"))
+                    val reply = link.request(RUNNER_UPDATE_FRAME, updateRequest(name))
+                    val refusal = when {
+                        reply == null -> RUNNERS_OFFLINE
+                        reply.refused -> runnerFailure(refusalAnswer(reply.data)) ?: reply.data
+                        else -> updateRefusal(reply.data)
+                    }
+                    if (refusal != null) updates = updates + (name to RunnerUpdateStatus(name, "failed", "", refusal))
+                }
+            },
         )
         when (val open = dialog) {
             null -> Unit

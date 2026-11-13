@@ -31,6 +31,9 @@ import kotlinx.serialization.KSerializer
 class RemoteRunnerLink(private val name: String, private val links: RunnerLinks) : RunnerLink {
     override val contractVersion: String get() = F.CONTRACT
 
+    /** RUNNER-UPDATE-1: this binding speaks no per-operation fallbacks, so an older runner is `outdated` (refused up front). */
+    override val minPeerContract: String get() = F.MIN_RUNNER_CONTRACT
+
     /** The orchestrator's session index answers which ticket a session works on; the runner is not asked. */
     override fun ticketIdOf(sessionId: String): String? = null
 

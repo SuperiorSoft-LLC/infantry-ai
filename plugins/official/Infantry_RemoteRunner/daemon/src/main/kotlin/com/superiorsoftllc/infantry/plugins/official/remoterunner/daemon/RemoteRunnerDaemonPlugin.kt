@@ -19,11 +19,37 @@ class RemoteRunnerDaemonPlugin : DaemonPlugin {
     override fun start(api: DaemonApi) {
         api.hooks.runnerLinkTransport(TRANSPORT_ID, WssLinkTransport)
         api.hooks.runnerBinding(BINDING_ID) { name, _ -> RemoteRunnerLink(name, api.runnerLinks) }
+        // RUNNER-UPDATE-1: "Update runner" for a runner older than the app (recreate its local container on the matching image).
+        val updater = RunnerUpdater(
+            api.runnerLinks, ProcessDocker,
+            settingsOf = {
+                RunnerUpdater.Settings(
+                image = api.config(KEY_IMAGE).orEmpty().trim(),
+                registryImage = api.config(KEY_REGISTRY)?.trim()?.ifEmpty { null } ?: RunnerUpdater.DEFAULT_REGISTRY_IMAGE,
+                waitSec = api.config(KEY_WAIT)?.trim()?.toLongOrNull()?.takeIf { it > 0 } ?: RunnerUpdater.DEFAULT_WAIT_SEC,
+                dockerSec = api.config(KEY_DOCKER)?.trim()?.toLongOrNull()?.takeIf { it > 0 } ?: RunnerUpdater.DEFAULT_DOCKER_SEC,
+                )
+            },
+            build = { System.getProperty(BUILD_PROPERTY) },
+            version = { System.getProperty(VERSION_PROPERTY) },
+        )
+        val frame = RunnerUpdateFrame(api, updater)
+        api.frames.handle(RunnerUpdateFrame.TYPE) { f, caller -> frame.handle(f, caller) }
     }
 
     companion object {
         const val TRANSPORT_ID = "wss"
         const val BINDING_ID = "remote"
+
+        /** RUNNER-UPDATE-1: module.json `daemon.config` keys (node `infantry.runners.update`). */
+        const val KEY_IMAGE = "runners.update.image"
+        const val KEY_REGISTRY = "runners.update.registryImage"
+        const val KEY_WAIT = "runners.update.waitSec"
+        const val KEY_DOCKER = "runners.update.dockerSec"
+
+        /** The app's build string and version the launcher sets (`-Dinfantry.build`, `-Dinfantry.version`; BUILD-STAMP-1). */
+        const val BUILD_PROPERTY = "infantry.build"
+        const val VERSION_PROPERTY = "infantry.version"
     }
 }
 

@@ -1,15 +1,73 @@
 {
   "name": "Infantry_RemoteRunner",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "apiVersion": 2,
   "author": "Infantry AI",
-  "description": "Remote runners: the runner link's transport (wss with a pinned self-signed certificate, the runner's listener and the orchestrator's client). Core keeps pairing, credentials, rekey, detach, audit and the allow-lists; this plugin carries the frames and binds paired runners to the runner pool (runnerBinding remote), so a ticket pinned to a runner starts there. Off = this machine serves no runner link and `infantry runner add/pair/rotate/detach` say so. Daemon half only.",
+  "description": "Remote runners: the runner link's transport (wss with a pinned self-signed certificate, the runner's listener and the orchestrator's client). Core keeps pairing, credentials, rekey, detach, audit and the allow-lists; this plugin carries the frames and binds paired runners to the runner pool (runnerBinding remote), so a ticket pinned to a runner starts there. A runner older than the app reads `outdated` and takes no start; `runner_update` (RUNNER-UPDATE-1, the Runners card's Update runner) recreates its local Docker container on the image matching the app (same name, volume, ports, restart policy and env; rollback on failure), or gives the one-line command to run on another machine. Off = this machine serves no runner link and `infantry runner add/pair/rotate/detach` say so. Daemon half only.",
   "tier": "official",
   "sequence": [],
+  "actions": [
+    { "id": "runners.update", "label": "Update a runner that is older than the app", "kind": "write", "frames": ["runner_update"] }
+  ],
   "daemon": {
     "entry": "com.superiorsoftllc.infantry.plugins.official.remoterunner.daemon.RemoteRunnerDaemonPlugin",
     "jar": "daemon/build/libs/Infantry_RemoteRunner-daemon.jar",
-    "apiAtLeast": "1.45.0",
-    "hooks": ["runnerLinkTransport", "runnerBinding"]
+    "apiAtLeast": "1.60.0",
+    "hooks": ["runnerLinkTransport", "runnerBinding"],
+    "frames": [
+      { "type": "runner_update", "action": "runners.update", "kind": "write", "offLoop": true }
+    ],
+    "config": [
+      {
+        "node": "infantry.runners.update",
+        "group": "Runners",
+        "title": "Runner updates",
+        "tab": "Settings",
+        "order": 912,
+        "applies": "Applies to: the Runners card's Update runner, for a runner older than the app.",
+        "keywords": ["runner", "update", "image", "docker", "upgrade", "older", "outdated"],
+        "fields": [
+          {
+            "key": "runners.update.image",
+            "type": "text",
+            "label": "Runner image",
+            "default": "",
+            "scope": "daemon",
+            "order": 1,
+            "placeholder": "empty = the image matching this app",
+            "description": "Empty = the local tag local-<this app's commit> of the repository the runner runs from, then the app's version tag, then the runner's own tag pulled again. Set it to recreate on one exact image."
+          },
+          {
+            "key": "runners.update.registryImage",
+            "type": "text",
+            "label": "Registry image",
+            "default": "ghcr.io/superiorsoft-llc/infantry-ai",
+            "scope": "daemon",
+            "order": 2,
+            "description": "The repository the one-line update command names for a runner on another machine."
+          },
+          {
+            "key": "runners.update.waitSec",
+            "type": "number",
+            "label": "Wait for the runner (s)",
+            "min": 10,
+            "default": 120,
+            "scope": "daemon",
+            "order": 3,
+            "description": "How long the new container has to answer the link before the update is rolled back."
+          },
+          {
+            "key": "runners.update.dockerSec",
+            "type": "number",
+            "label": "Docker call timeout (s)",
+            "min": 10,
+            "default": 600,
+            "scope": "daemon",
+            "order": 4,
+            "description": "The longest one docker call (a pull included) may take."
+          }
+        ]
+      }
+    ]
   }
 }

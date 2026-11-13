@@ -188,6 +188,10 @@ class RunnerLinkService(
             val answer = clientCall(limit, settings, transport).call(r.url, r.fingerprint.ifBlank { null }, store.selfId(), r.credential, type, data, limit(LimitRegistry.RUNNERS_LINK_CALL_SECONDS))
             return LinkAnswer(answer.type, answer.data)
         }
+
+        /** RUNNER-UPDATE-1: the url the runner was paired at (an updater recognises a runner on this machine by its port). */
+        override fun endpoint(runner: String): String? =
+            if (RunnerLinkStore.exists(stateDir)) RunnerLinkStore.open(stateDir).runner(runner)?.url else null
     }
 
     /** The port the paired link is served on, or null while it is not served. */
@@ -226,6 +230,8 @@ class RunnerLinkService(
             )
             "pair_status" -> pairStatus()
             "list" -> list()
+            // RUNNER-UPDATE-1: beat every runner now, then list: after an update the row reads its new contract at once.
+            "refresh" -> { runCatching { settle() }; list() }
             "pair_cancel" -> { closePairing(); ok() }
             "pause", "resume" -> {
                 val name = need("name")

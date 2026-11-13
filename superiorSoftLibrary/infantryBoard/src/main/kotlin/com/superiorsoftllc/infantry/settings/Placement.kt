@@ -18,6 +18,8 @@ data class RunnerEntry(
 ) {
     companion object {
         const val HEALTH_UP = "up"
+        /** RUNNER-UPDATE-1: the pool's `outdated` (RunnerHealth.OUTDATED): it answers, but speaks a contract older than the app needs. */
+        const val HEALTH_OUTDATED = "outdated"
     }
 }
 
@@ -31,6 +33,9 @@ sealed interface PlacementResult {
 object Placement {
     const val LOCAL = "local"
     const val ANY = "any"
+
+    /** RUNNER-UPDATE-1: the fix an outdated runner's refusal names (the same words as RunnerLinkWire.OUTDATED_HINT; a test pins them). */
+    const val OUTDATED_FIX = "update it: Settings > Runners > Update runner"
 
     /**
      * RUNNER-AGENT-1, the one precedence: explicit [ticketPin] > [spawnArg] (a spawn's `runner`) > [agentRunner] (the agent
@@ -64,6 +69,8 @@ object Placement {
             // "local" is always registered, even when the caller passes an empty list.
             return if (want == LOCAL) PlacementResult.Placed(LOCAL) else PlacementResult.Refused("runner '$want' is not registered")
         }
+        // RUNNER-UPDATE-1: an outdated runner says what to do, not only its state.
+        if (entry.health == RunnerEntry.HEALTH_OUTDATED) return PlacementResult.Refused("runner $want is older than the app: $OUTDATED_FIX")
         if (entry.health != RunnerEntry.HEALTH_UP) return PlacementResult.Refused("runner $want is ${entry.health}")
         if (entry.freeSlots <= 0) return PlacementResult.Refused("runner $want is full")
         return PlacementResult.Placed(want)
