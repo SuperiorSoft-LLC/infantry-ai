@@ -34,8 +34,13 @@ team: a ticket board, roles, mail between agents, and shared project knowledge.
 
 ## Setup: macOS and Linux
 
-- The desktop installer is Windows-first today. On macOS and Linux, use the headless server download (a zip or tar.gz
-  with its own Java runtime, nothing else to install) or the Docker image, then connect with the CLI or the Android app.
+- macOS desktop app (beta): an Apple Silicon (arm64) `.dmg` named `InfantryAI-<version>-macos-arm64-beta.dmg`, from the
+  release page. It is unsigned and not notarized (no Apple developer certificate yet), so macOS blocks the first start.
+  To open it the first time: right-click the app and choose **Open**, then **Open** again; or open **System Settings >
+  Privacy & Security** and click **Open Anyway**. Intel Macs are not offered a desktop build.
+- Linux, and anyone who prefers it: use the headless server download (a zip or tar.gz with its own Java runtime, nothing
+  else to install) or the Docker image, then connect with the CLI or the Android app. The Windows app is the main desktop
+  installer.
 - Start the server with `bin/infantry`. Without extra settings it listens on this machine only.
 - To reach it from another device, set a token (at least 32 characters) first: the daemon refuses to listen on the
   network without one. Never expose the raw port to the internet; use a VPN such as Tailscale, an SSH tunnel, or a TLS
@@ -115,7 +120,8 @@ Rules learned shipping Mascot (the avatar plugin). Agents and the Assistant must
 - **opencode lists no slash commands.**
 - **The installed Windows app cannot connect to a remote server yet**; it runs its own daemon. Use the CLI or the Android
   app for a remote one.
-- **macOS and Linux desktop builds are less tested** than Windows.
+- **The macOS desktop app is beta and less tested** than Windows: unsigned, arm64 only, and it needs the first-open steps above.
+  Linux has no desktop installer; use the headless server.
 
 ## Coming next
 
@@ -125,7 +131,7 @@ Rules learned shipping Mascot (the avatar plugin). Agents and the Assistant must
 - A global Assistant popup you can open from anywhere in the app.
 - More polish on the board, roles and knowledge base, driven by daily use.
 - A public GitHub release with a license.
-- **TODO (owner):** iOS app, desktop installers for macOS and Linux, remote connect in the Windows app: planned or not?
+- **TODO (owner):** iOS app, desktop installers for Linux, remote connect in the Windows app: planned or not?
 
 Anything not listed: say it is not on the roadmap yet and point to the issues link.
 
