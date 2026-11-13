@@ -17,7 +17,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.superiorsoftllc.infantry.ui.*
-import com.superiorsoftllc.infantry.ui.model.BuiltInChatMarkdownEngine
 import com.superiorsoftllc.infantry.ui.model.parseChatMarkdownSafely
 import kotlinx.coroutines.launch
 
@@ -87,7 +86,7 @@ private fun HandoffBlock(c: TicketComment) {
     Column(Modifier.fillMaxWidth().background(Palette.Panel, RoundedCornerShape(6.dp)).padding(8.dp).testTag(HANDOFF_TAG), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text("Handoff", color = Palette.Accent, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
         Text(c.time, color = Palette.Muted, fontSize = 10.sp)
-        parseChatMarkdownSafely(BuiltInChatMarkdownEngine, c.body).forEach { DefaultChatBlockRenderer.Render(it) }
+        CommentBody(c.body)
     }
 }
 
@@ -106,7 +105,7 @@ private fun CommentRow(c: TicketComment, onResolve: () -> Unit) {
             Spacer(Modifier.weight(1f))
             if (c.open) TextButton(onClick = onResolve, modifier = Modifier.testTag(COMMENT_RESOLVE_TAG_PREFIX + c.id)) { Text("Resolve", fontSize = 11.sp) }
         }
-        parseChatMarkdownSafely(BuiltInChatMarkdownEngine, c.body).forEach { DefaultChatBlockRenderer.Render(it) }
+        CommentBody(c.body)
     }
 }
 
@@ -158,4 +157,11 @@ private fun NotifyBlock(
             enabled = meta != null && picked != meta.notify.toSet(), modifier = Modifier.testTag(COMMENT_NOTIFY_SAVE_TAG),
         ) { Text("Save notify list", fontSize = 11.sp) }
     }
+}
+
+/** CARD-4: a comment body parses and draws through the window's shared chat engine and renderers (plugin cards, overrides). */
+@Composable
+private fun CommentBody(body: String) {
+    val md = LocalChatMarkdown.current
+    parseChatMarkdownSafely(md.engine, body).forEach { md.renderers.rendererFor(it).Render(it) }
 }
