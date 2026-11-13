@@ -42,6 +42,7 @@ Every page of this wiki is listed here, one line each. The pages are written fro
 - [Notifications](Notifications.md): the ONE notification bus (in-app toasts, OS notifications), presenters a plugin can override, routing settings, the inventory.
 - [CLI login](Login.md): `infantry login|logout|whoami`, the CLI's saved daemon connection (not Claude's `/login`).
 - [Health](Health.md): `infantry health`, the daemon health and environment report (up/down, restarts and why, MCP bridges, OS/shell/ports).
+- [Usage and worker limits](Usage.md): the meters, the pacing rule, why a ticket start is refused ("FULL"), overrides; explain it to a user who asks why only one worker runs.
 - [Waiting flag](Waiting.md): `infantry waiting on|off`, `infantry_waiting`; the "active but waiting" card state and the idle-nudge watcher.
 - [Memory](Memory.md): project knowledge notes, the project / global / role / session scopes, the `infantry_memory` MCP actions (read and write), who may write global notes.
 - [Secrets](Secrets.md): `infantry secret render`, the `{{secret:NAME}}` placeholder, `infantry_secret_render`; fill any text file from saved secrets.
