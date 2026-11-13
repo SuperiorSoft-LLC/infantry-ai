@@ -2688,10 +2688,13 @@ private fun broadcast(
             )
         }
 
-        is SessionEvent.Stdout -> {
+        is SessionEvent.Stdout -> run stdout@{
             // Phase 1 echoed every line into the daemon terminal (and so its log: whole stream-json transcripts). Now a debug setting.
             if (echoStdout()) println("[${event.sessionId.take(8)}] ${event.line}")
             val raw = Envelope(Envelope.STDOUT, event.line, event.sessionId)
+            // INTERRUPT-ASK-1: the session is already at rest; what the stopped turn still flushes (an interactive CLI writes its partial
+            // reply only on the interrupt) stays raw. It never reaches the chat, flips the status back to BUSY or starts a new run activity.
+            if (event.afterInterrupt) return@stdout listOf(raw)
             val taskTodos = claudeTasks.feed(event.sessionId, event.line)
             val normalised = EventNormalizer.normalise(event.line, afterInterrupt = event.afterInterrupt).map { l ->
                 if (taskTodos != null && l is EventNormalizer.Line.Tool && l.todos == null && l.name.startsWith("Task")) l.copy(todos = taskTodos) else l
