@@ -1108,7 +1108,7 @@ class InfantryDaemon(
             for ((id, runner) in remoteMirror.restore()) runnerPool.placed(id, runner)
             // RUNNER-UNIFY-4 (docs/RUNNER-UNIFY.md 5.3): ONE session directory: this daemon's own sessions plus, for each session placed on
             // a runner, the record that runner sent in its own `session` frames (its /work/... working dir, harness, state). Behind
-            // runners.unifiedDirectory (default off = the mirror's records, as before; read live). The mirror stays the placement index.
+            // runners.unifiedDirectory (default on; false = the mirror's records, as before; read live). The mirror stays the placement index.
             val sessionDirectory = com.superiorsoftllc.infantry.runners.SessionDirectory(
                 local = manager::list, localGet = manager::get,
                 placed = { runnerPool.remoteSessionIds() }, legacy = remoteMirror::get, placement = remoteMirror::placement,

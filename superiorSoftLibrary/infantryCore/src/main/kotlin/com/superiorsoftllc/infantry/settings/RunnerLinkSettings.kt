@@ -82,8 +82,8 @@ object RunnerLinkSettings {
     /**
      * RUNNER-UNIFY-4 (orchestrator side, docs/RUNNER-UNIFY.md 5.3): the session list, header and lookups read ONE directory: this
      * daemon's own sessions plus, for each session placed on a runner, the record the runner itself sent in its `session` frames
-     * (its real working dir, harness, model, state and error). Default `false`. CONTINGENCY: `false` = the mirror's records exactly
-     * as before; flipping it takes effect live, with no restart, rebuild or revert. A session whose runner has sent no record yet
+     * (its real working dir, harness, model, state and error). Default `true` (proven live; RUNNER-UNIFY-6 removes the flag).
+     * CONTINGENCY: `false` = the mirror's records exactly as before; flipping it takes effect live, with no restart, rebuild or revert. A session whose runner has sent no record yet
      * (pushed frames off, an older runner, the first moment after a start) reads the mirror's record either way.
      */
     const val UNIFIED_DIRECTORY = "runners.unifiedDirectory"
@@ -112,7 +112,7 @@ object RunnerLinkSettings {
         val acceptCredentials: Boolean = true,
         val unifiedCommands: Boolean = true,
         val pushFrames: Boolean = false,
-        val unifiedDirectory: Boolean = false,
+        val unifiedDirectory: Boolean = true,
     ) {
         /** RUNNER-CRED-1: whether this orchestrator lends credentials to runner [name]. */
         fun lendsTo(name: String): Boolean = ANY in lendCredentials || name in lendCredentials
@@ -140,7 +140,7 @@ object RunnerLinkSettings {
         acceptCredentials = runCatching { (Json.parseToJsonElement(stored(ACCEPT_CREDENTIALS) ?: "true") as JsonPrimitive).booleanOrNull }.getOrNull() ?: true,
         unifiedCommands = runCatching { (Json.parseToJsonElement(stored(UNIFIED_COMMANDS) ?: "true") as JsonPrimitive).booleanOrNull }.getOrNull() ?: true,
         pushFrames = runCatching { (Json.parseToJsonElement(stored(PUSH_FRAMES) ?: "false") as JsonPrimitive).booleanOrNull }.getOrNull() ?: false,
-        unifiedDirectory = runCatching { (Json.parseToJsonElement(stored(UNIFIED_DIRECTORY) ?: "false") as JsonPrimitive).booleanOrNull }.getOrNull() ?: false,
+        unifiedDirectory = runCatching { (Json.parseToJsonElement(stored(UNIFIED_DIRECTORY) ?: "true") as JsonPrimitive).booleanOrNull }.getOrNull() ?: true,
     )
 
     private fun string(raw: String?): String =

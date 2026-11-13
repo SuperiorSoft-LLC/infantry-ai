@@ -21,7 +21,7 @@ import java.util.concurrent.ConcurrentHashMap
  * it ([overlay]): the project, agent, role and ticket the start pinned, and the orchestrator checkout the runner's ticket branch is
  * fetched to (where the board row reads its commit tip).
  *
- * CONTINGENCY (`runners.unifiedDirectory`, [enabled], read live): off, or a placed session whose runner has sent no record yet (pushed
+ * CONTINGENCY (`runners.unifiedDirectory`, default on, [enabled], read live): off, or a placed session whose runner has sent no record yet (pushed
  * frames off, an older runner, the moment right after a start), reads the [legacy] record, exactly as before. The received records are
  * kept in [store] so a daemon restart does not fall back to the mirror for sessions whose runner is quiet. Generic: it names no harness.
  */
@@ -31,7 +31,7 @@ class SessionDirectory(
     private val placed: () -> List<String>,
     private val legacy: (String) -> SessionRecord?,
     private val placement: (String) -> RemoteSessionMirror.Placed? = { null },
-    private val enabled: () -> Boolean = { false },
+    private val enabled: () -> Boolean = { true },
     private val store: File? = null,
 ) {
     @Serializable
