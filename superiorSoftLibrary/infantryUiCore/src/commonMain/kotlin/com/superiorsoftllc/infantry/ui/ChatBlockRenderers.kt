@@ -54,7 +54,11 @@ class ChatBlockRenderers {
 
     fun clear(type: String) { overrides.remove(type) }
 
-    fun rendererFor(block: ChatBlock): ChatBlockRenderer = overrides[chatBlockType(block)] ?: DefaultChatBlockRenderer
+    /** An override wins; a `card:*` block with none goes to the `chat.cards` registry ([ChatCardBlockRenderer], CARD-2); else the default. */
+    fun rendererFor(block: ChatBlock): ChatBlockRenderer {
+        val type = chatBlockType(block)
+        return overrides[type] ?: if (block is ChatBlock.Custom && type.startsWith(CARD_TYPE_PREFIX)) ChatCardBlockRenderer else DefaultChatBlockRenderer
+    }
 }
 
 /** What the chat reads: the engine that parses and the renderers that draw. */
