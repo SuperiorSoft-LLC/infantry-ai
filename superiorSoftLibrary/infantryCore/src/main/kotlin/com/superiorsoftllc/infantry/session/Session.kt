@@ -72,6 +72,18 @@ data class SessionRecord(
      * restarted daemon can probe whether the child outlived it (see [SessionState.ORPHANED]).
      */
     val childPid: Long? = null,
+    /**
+     * PROC-REAP-COPY-1: the OS start instant (epoch millis) of [childPid], read when the run reported it. A watch roots a session
+     * at [childPid] only while the live process still has this instant (a recycled pid has another). Null = an older record.
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val childStartedAt: Long? = null,
+    /**
+     * PROC-REAP-COPY-1: the InstanceId of the daemon state dir that last ran a process for this session (stamped with [childPid]
+     * and with a kept process). A daemon treats the session's pids and worktree as its own only when this is its own id, so a
+     * copied `sessions.json` never makes a daemon track or reap the processes its original's sessions started. Never cleared;
+     * null = an older record (never anybody's to reap).
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val ownerId: String? = null,
     /** How many runs this logical session has performed. */
     val runCount: Int = 0,
     /** How many times this session was explicitly resumed. */

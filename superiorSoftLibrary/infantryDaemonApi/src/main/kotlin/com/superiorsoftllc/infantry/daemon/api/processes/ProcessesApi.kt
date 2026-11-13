@@ -37,6 +37,11 @@ data class WatchedSession(
     val ticketId: String? = null,
     val keepPids: Set<Long> = emptySet(),
     val bgJobPids: List<Long> = emptyList(),
+    /**
+     * PROC-REAP-COPY-1: true when THIS daemon ran a process for the session (its record carries this daemon's instance id). A
+     * session read from a copied or foreign state dir is false: its pids are not roots and its worktree claims no process.
+     */
+    val owned: Boolean = true,
 ) {
     /** The session can run nothing more (exited, failed or orphaned). */
     val ended: Boolean get() = state == "EXITED" || state == "FAILED" || state == "ORPHANED"
