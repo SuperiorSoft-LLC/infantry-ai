@@ -298,6 +298,28 @@ it took and the answer, then stops and removes the session (nothing is left on t
 answer came back; otherwise the error and the last transcript lines say why. A test with a real model harness spends one small
 turn of that account; `echo` spends nothing.
 
+## 5c. A runner older than the app: Update runner (RUNNER-UPDATE-1)
+
+The app and its runners speak one link contract, with no fallbacks for older runners (RUNNER-UNIFY: one way to manage a session).
+At pairing and on every heartbeat the app reads the contract the runner reports. A runner older than
+`RunnerLinkWire.MIN_RUNNER_CONTRACT` reads `outdated`: its row in Settings > Runners says
+"older than the app (contract 1.8.0, the app needs 1.11.0): update it", and a start placed on it is refused at once with
+"runner '<name>' is older than the app ...: update it: Settings > Runners > Update runner" (no session fails halfway).
+
+**Update runner** on that row:
+
+- A runner in Docker on this machine (a local container publishes the runner's link port) is recreated on the image that matches
+  the app: the same container name, volumes (`/data`: logins, pairing, chat history), published ports, restart policy and the env
+  it was started with. The image is `runners.update.image` when set; else the local tag `local-<this app's commit>` of the
+  repository the runner runs from, then the app's version tag, then the runner's own tag pulled again. The old container is
+  renamed `<name>-before-update` and stopped until the new one answers the link with a new enough contract; then it is removed.
+  If the new one does not start, does not answer within `runners.update.waitSec`, or is still too old, it is removed and the old
+  one comes back as it was. No image is deleted. The pairing is in the volume, so the runner re-links without pairing again.
+- A runner on another machine gets the one line to run there (pull, replace the container on the same volume, start), with a
+  copy button.
+
+The row shows each step while it runs and the result when it ends. The settings are under Settings > Runners > Runner updates.
+
 ## 6. Check it ran there
 
 ```

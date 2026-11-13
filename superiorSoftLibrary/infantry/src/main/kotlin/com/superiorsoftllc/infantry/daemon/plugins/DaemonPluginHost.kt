@@ -1362,6 +1362,8 @@ class DaemonPluginHost private constructor(
             if (p.community) com.superiorsoftllc.infantry.daemon.api.runners.NoRunnerLinks else object : com.superiorsoftllc.infantry.daemon.api.runners.RunnerLinks {
                 override fun paired() = this@DaemonPluginHost.runnerLinks.paired()
                 override fun call(runner: String, type: String, data: String) = this@DaemonPluginHost.runnerLinks.call(runner, type, data)
+                // RUNNER-UPDATE-1: forwarded too, else the default (null) hides every paired url from the plugin.
+                override fun endpoint(runner: String) = this@DaemonPluginHost.runnerLinks.endpoint(runner)
             }
 
         override val runs: com.superiorsoftllc.infantry.daemon.api.runs.Runs get() {

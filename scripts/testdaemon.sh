@@ -46,7 +46,9 @@ up)
   export INFANTRY_STATE_DIR="$state" INFANTRY_HOME="$state" INFANTRY_PORT="$port" INFANTRY_PORT_STRICT=true INFANTRY_BIN="$bin" INFANTRY_LIMIT_RUNNERS_LINK_PORT="$link"
   [ -n "$mode" ] && export INFANTRY_MODE="$mode"
   [ -d "$dist/app/resources/modules" ] && export INFANTRY_BUNDLED_MODULES="$(winpath "$dist")/app/resources/modules"
-  nohup "$java" -Xmx768m --add-opens=java.base/java.util=ALL-UNNAMED -Dinfantry.plugins.devTrust=true \
+  # RUNNER-UPDATE-1: the dist's own build stamp (BUILD-STAMP-1), as its launcher passes it; without it the daemon reports "dev".
+  build="$(grep -ho 'Dinfantry\.build=[^"'"'"' ]*' "$dist/bin/infantry" "$dist"/app/*.cfg 2>/dev/null | head -1 | cut -d= -f2)"
+  nohup "$java" -Xmx768m --add-opens=java.base/java.util=ALL-UNNAMED -Dinfantry.plugins.devTrust=true ${build:+"-Dinfantry.build=$build"} \
     -cp "$cp_" com.superiorsoftllc.infantry.daemon.DaemonMainKt >"$log" 2>&1 &
   pid=$!; winpid="$(ps -p "$pid" -W 2>/dev/null | awk 'NR==2{print $4}')"; winpid="${winpid:-$pid}"
   printf 'NAME=%s\nPID=%s\nWINPID=%s\nPORT=%s\nLINK=%s\nSTATE=%s\nDIST=%s\nMODE=%s\n' "$name" "$pid" "$winpid" "$port" "$link" "$state" "$dist" "${mode:-both}" >"$conf"

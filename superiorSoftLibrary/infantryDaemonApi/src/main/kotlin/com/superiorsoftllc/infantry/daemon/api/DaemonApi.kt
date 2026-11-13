@@ -265,7 +265,9 @@ interface DaemonApi {
         // 1.58.0 (ROLE-PLUGIN-1, additive): `RoleRecord.plugin|disabled|edited|cards|tools`, `RoleSaveRequest.cards|tools`, `Roles.briefing`.
         // 1.59.0 (CARD-IMG-1, additive): `DownloadRequest.allowRedirect` (and the checked `DownloadTransport.open`); module.json
         // `daemon.frames[].offLoop`: a frame whose handler may block is answered off the connection's request loop.
-        const val VERSION = "1.59.0"
+        // 1.60.0 (RUNNER-UPDATE-1, additive): `RunnerLinks.endpoint`, `RunnerLink.minPeerContract`, `RunnerHealth.OUTDATED`,
+        // `RunnerLinkWire.MIN_RUNNER_CONTRACT` / `contractOlder`: a runner older than the app is refused up front and can be updated.
+        const val VERSION = "1.60.0"
     }
 }
 

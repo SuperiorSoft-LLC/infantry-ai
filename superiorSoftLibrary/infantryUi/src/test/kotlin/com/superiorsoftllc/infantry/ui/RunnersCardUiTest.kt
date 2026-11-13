@@ -27,6 +27,14 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import com.superiorsoftllc.infantry.plugins.official.runners.RunnersRows
 import com.superiorsoftllc.infantry.plugins.official.runners.adminRequest
 import com.superiorsoftllc.infantry.plugins.official.runners.parseRunnersList
+import com.superiorsoftllc.infantry.plugins.official.runners.RunnerUpdateStatus
+import com.superiorsoftllc.infantry.plugins.official.runners.outdatedLine
+import com.superiorsoftllc.infantry.plugins.official.runners.parseRunnerUpdateStatus
+import com.superiorsoftllc.infantry.plugins.official.runners.updateRefusal
+import com.superiorsoftllc.infantry.plugins.official.runners.updateRequest
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -47,6 +55,46 @@ class RunnersCardUiTest {
         assertEquals(3, list.rows[1].cap)
         assertNull(parseRunnersList("""{"ok":false,"error":"x"}"""))
         assertEquals("""{"op":"pause","name":"r2"}""", adminRequest("pause", "r2"))
+    }
+
+    /** RUNNER-UPDATE-1: a runner older than the app says so on its row, with Update runner and the update's progress and result. */
+    private val outdatedAnswer = """{"ok":true,"enabled":true,"runners":[
+        {"name":"local","health":"up","workers":"0","cap":"1","paused":"false"},
+        {"name":"old","health":"outdated","workers":"0","cap":"1","paused":"false","contract":"1.8.0","needs":"1.11.0",
+         "outdated":"runner 'old' is older than the app (contract 1.8.0, the app needs 1.11.0 or newer): update it: Settings > Runners > Update runner"}]}"""
+
+    @Test
+    fun `an outdated runner row parses its contract and the update status frames parse`() {
+        val row = assertNotNull(parseRunnersList(outdatedAnswer)).rows[1]
+        assertEquals("1.8.0", row.contract)
+        assertEquals("1.11.0", row.needs)
+        assertNotNull(row.outdated)
+        assertNull(assertNotNull(parseRunnersList(answer)).rows[1].outdated)
+        assertEquals("older than the app (contract 1.8.0, the app needs 1.11.0): update it", outdatedLine(row))
+        val s = assertNotNull(parseRunnerUpdateStatus("""{"name":"old","state":"manual","step":"","detail":"elsewhere","command":"docker pull x"}"""))
+        assertEquals("docker pull x", s.command)
+        assertEquals(false, s.running)
+        assertEquals("""{"name":"old"}""", updateRequest("old"))
+        assertNull(updateRefusal("""{"ok":true,"started":true,"name":"old"}"""))
+        assertEquals("only the owner may update a runner", updateRefusal("""{"ok":false,"error":"only the owner may update a runner"}"""))
+    }
+
+    @Test
+    fun `an outdated row shows the older line, Update runner and the update's step, result or command`() = runComposeUiTest {
+        val list = parseRunnersList(outdatedAnswer)
+        var updates by mutableStateOf<Map<String, RunnerUpdateStatus>>(emptyMap())
+        setContent { RunnersRows(list, null, { _, _ -> }, {}, updates = updates) }
+        onNodeWithTag("runner-outdated:old").assertTextContains("older than the app", substring = true)
+        onNodeWithTag("runner-update-button:old").assertIsDisplayed()
+        onAllNodesWithTag("runner-outdated:local").assertCountEquals(0)
+        onAllNodesWithTag("runner-update-button:local").assertCountEquals(0)
+        updates = mapOf("old" to RunnerUpdateStatus("old", "running", "recreate", "recreating old on infantry-runner:local-1"))
+        onNodeWithTag("runner-update-step:old").assertTextContains("recreating", substring = true)
+        updates = mapOf("old" to RunnerUpdateStatus("old", "manual", "", "runs elsewhere", "docker pull img && docker run img"))
+        onNodeWithTag("runner-update-command:old").assertTextContains("docker pull img", substring = true)
+        onNodeWithTag("runner-update-copy:old").assertIsDisplayed()
+        updates = mapOf("old" to RunnerUpdateStatus("old", "failed", "", "no image; the old runner is back as it was"))
+        onNodeWithTag("runner-update-error:old").assertTextContains("old runner is back", substring = true)
     }
 
     @Test

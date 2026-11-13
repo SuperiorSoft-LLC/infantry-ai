@@ -201,6 +201,11 @@ data class RunnerHealth(val state: String, val running: Int = 0, val freeSlots: 
         const val DEGRADED = "degraded"
         const val DRAINING = "draining"
         const val DOWN = "down"
+        /**
+         * RUNNER-UPDATE-1: the runner answers, but speaks a link contract older than its binding drives
+         * ([RunnerLink.minPeerContract]); takes no new starts until it is updated.
+         */
+        const val OUTDATED = "outdated"
     }
 }
 
@@ -406,6 +411,8 @@ class RunnerHub(
         }
 
         override fun startSession(spec: StartSpec): OrchestratorReply<SessionRef> {
+            // RUNNER-UPDATE-1: a runner too old for this binding is refused up front, never halfway through the session.
+            outdatedRefusal(name)?.let { return OrchestratorReply.Ok(SessionRef(refusal = it)) }
             if (spec.credentials != null) return inner.startSession(spec)
             val lent = runCatching { lend(name, spec) }.getOrNull()?.takeIf { !it.isEmpty }
             return inner.startSession(if (lent == null) spec else spec.copy(credentials = lent))
@@ -413,6 +420,16 @@ class RunnerHub(
     }
 
     override fun placedSessionIds(): Collection<String> = sessions.keys.toList()
+
+    /**
+     * RUNNER-UPDATE-1: why runner [name] takes no start because it is too old (its last hello's contract is older than its link's
+     * [RunnerLink.minPeerContract]), or null when it is not.
+     */
+    fun outdatedRefusal(name: String): String? {
+        val beat = beats[name]?.takeIf { it.state == RunnerHealth.OUTDATED } ?: return null
+        val min = link(name)?.minPeerContract ?: return null
+        return outdatedText(name, beat.info?.contract, min)
+    }
 
     /** RUNNER-POOL-7: whether any session placed by this orchestrator lives on runner [runner] (its forwarded frames are pulled only then). */
     fun hasSessionsOn(runner: String): Boolean = runner != RunnerPool.LOCAL && sessions.containsValue(runner)
@@ -470,7 +487,11 @@ class RunnerHub(
             val link = link(name)
             val health = link?.health()?.valueOr(null)
             val info = health?.let { link.hello().valueOr(null) } ?: before?.info
-            val beat = if (health != null) {
+            val min = link?.minPeerContract
+            val beat = if (health != null && info != null && min != null && contractOlder(info.contract, min)) {
+                // RUNNER-UPDATE-1: it answers, but too old for this binding: say so (not "up") so no start reaches it.
+                Beat(now, health, info, RunnerHealth.OUTDATED)
+            } else if (health != null) {
                 val signedIn = info?.harnesses?.any { it.loggedIn } ?: false
                 Beat(now, health, info, if (health.state == RunnerHealth.UP && signedIn) RunnerHealth.UP else RunnerHealth.DEGRADED)
             } else {
@@ -504,6 +525,15 @@ class RunnerHub(
     companion object {
         /** The binding id Infantry_RemoteRunner offers its paired-runner link under. */
         const val REMOTE_BINDING = "remote"
+
+        /** RUNNER-UPDATE-1: [peer] older than [min] (`major.minor.patch`); blank or unreadable is not older. */
+        fun contractOlder(peer: String?, min: String): Boolean =
+            com.superiorsoftllc.infantry.daemon.api.runners.RunnerLinkWire.contractOlder(peer, min)
+
+        /** RUNNER-UPDATE-1: the one wording of an outdated runner's refusal (start, placement, the Runners row). */
+        fun outdatedText(name: String, contract: String?, min: String): String =
+            "runner '$name' is older than the app (contract ${contract?.ifBlank { null } ?: "unknown"}, the app needs $min or newer): " +
+                com.superiorsoftllc.infantry.daemon.api.runners.RunnerLinkWire.OUTDATED_HINT
     }
 }
 

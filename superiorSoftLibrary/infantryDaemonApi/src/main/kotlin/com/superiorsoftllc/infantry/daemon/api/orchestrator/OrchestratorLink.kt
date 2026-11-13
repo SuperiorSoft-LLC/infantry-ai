@@ -128,6 +128,12 @@ interface RunnerLink {
     /** The contract this binding speaks. A caller may log it; it never branches on it. */
     val contractVersion: String get() = CONTRACT_VERSION
 
+    /**
+     * RUNNER-UPDATE-1 (additive): the oldest [RunnerInfo.contract] this binding can drive; null = any (the local binding). The pool
+     * marks a runner whose hello reports an older contract [RunnerHealth.OUTDATED] and refuses starts on it up front.
+     */
+    val minPeerContract: String? get() = null
+
     /** The ticket a session works on, null for none. */
     fun ticketIdOf(sessionId: String): String?
 
