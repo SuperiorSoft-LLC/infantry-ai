@@ -194,6 +194,9 @@ class RemoteStarts(
     /** RUNNER-POOL-7: whether [sessionId] is a session the paired orchestrator started here (with or without a git remote). */
     fun isLinked(sessionId: String): Boolean = sessionId in linked || sessions.containsKey(sessionId)
 
+    /** RUNNER-UNIFY-3: every session the paired orchestrator started here (with or without a git remote), whose frames it is pushed. */
+    fun linkedIds(): Set<String> = linked + sessions.keys
+
     /** Whether [sessionId] was started by the orchestrator over the link. */
     fun isRemote(sessionId: String): Boolean = sessions.containsKey(sessionId)
 

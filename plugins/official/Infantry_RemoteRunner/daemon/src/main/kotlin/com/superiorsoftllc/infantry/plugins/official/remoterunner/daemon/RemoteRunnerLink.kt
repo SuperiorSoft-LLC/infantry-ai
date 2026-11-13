@@ -3,6 +3,7 @@
 package com.superiorsoftllc.infantry.plugins.official.remoterunner.daemon
 
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.CommandResult
+import com.superiorsoftllc.infantry.daemon.api.orchestrator.FramesBatch
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.MailItem
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.MailResult
 import com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorReply
@@ -132,6 +133,22 @@ class RemoteRunnerLink(private val name: String, private val links: RunnerLinks)
             ),
             F.CommandAnswer.serializer(),
         ).map { CommandResult(it.kind, it.reason, it.errorType, it.started) }
+
+    /**
+     * RUNNER-UNIFY-3: the held frame pull. A runner that does not know [F.FRAMES_PULL] (older than contract 1.10.0) answers an error
+     * naming it: that is "not offered" (null), so the orchestrator polls it as before; any other failure is Unavailable.
+     */
+    override fun pullFrames(resumeFrom: Map<String, Long>, waitMs: Long, max: Int): OrchestratorReply<FramesBatch>? {
+        val answer = try {
+            links.call(name, F.FRAMES_PULL, F.json.encodeToString(F.FramesPullRequest.serializer(), F.FramesPullRequest(resumeFrom, waitMs, max)))
+        } catch (e: LinkFailure) {
+            return OrchestratorReply.Unavailable("runner '$name': ${e.message}")
+        }
+        if (answer.type == F.ERROR) {
+            return if (answer.data.contains(F.NOT_OFFERED)) null else OrchestratorReply.Unavailable("runner '$name': ${answer.data}")
+        }
+        return decode(answer.data, F.FramesPullAnswer.serializer()).map { FramesBatch(it.frames, it.more) }
+    }
 
     private fun <T> call(type: String, data: String, serializer: KSerializer<T>): OrchestratorReply<T> {
         val answer = try {

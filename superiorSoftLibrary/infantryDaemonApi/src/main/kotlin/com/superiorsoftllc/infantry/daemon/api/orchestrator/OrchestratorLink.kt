@@ -210,6 +210,17 @@ interface RunnerLink {
      */
     fun command(sessionId: String, command: SessionCommand): OrchestratorReply<CommandResult> = unoffered("command")
 
+    /**
+     * RUNNER-UNIFY-3 (1.6.0, docs/RUNNER-UNIFY.md 5.2): the push half of the one stream. The stream frames of the sessions
+     * [resumeFrom] names (session -> last runner sequence held, 0 = all kept; only sessions this orchestrator started there),
+     * held up to [waitMs] until there is one, at most [max]. Every sequenced frame type, `status` with its run activity included,
+     * each with its session id and the runner's sequence. A caller keeps one such call open per runner (the subscription), so a
+     * frame reaches it the moment it is published; [readFrames] stays the catch-up read of one session. Natural key: (session,
+     * seq); the caller dedupes. Null = not offered (the in-process binding: its frames are this daemon's own broadcast; an older
+     * runner): the caller polls instead. Fail mode on Unavailable: called again from the same [resumeFrom].
+     */
+    fun pullFrames(resumeFrom: Map<String, Long>, waitMs: Long, max: Int): OrchestratorReply<FramesBatch>? = null
+
     companion object {
         /**
          * 1.1.0 (RUNNER-POOL-6): events, readTranscript; StartSpec may name a git remote, SessionRef carries the ticket branch.
@@ -218,12 +229,16 @@ interface RunnerLink {
          * 1.4.0 (RUNNER-PROMPT-RELAY-1): answerPrompt, and the [RunnerEvent.PROMPT] / [RunnerEvent.PROMPT_RESOLVED] event kinds.
          * 1.5.0 (RUNNER-UNIFY-2): command (turn, attach, interrupt, queue add/remove/force, kill, delete), so a remote session takes
          * every owner command a local one does.
+         * 1.6.0 (RUNNER-UNIFY-3): pullFrames, a remote session's stream frames pushed (a held call) instead of polled.
          */
-        const val CONTRACT_VERSION = "1.5.0"
+        const val CONTRACT_VERSION = "1.6.0"
 
         private fun unoffered(op: String): OrchestratorReply<Nothing> = OrchestratorReply.Unavailable("this runner binding does not offer '$op'")
     }
 }
+
+/** RUNNER-UNIFY-3: one answer of [RunnerLink.pullFrames]; [more] = the bound cut it, more frames are waiting. */
+data class FramesBatch(val frames: List<com.superiorsoftllc.infantry.protocol.Envelope>, val more: Boolean = false)
 
 /**
  * RUNNER-UNIFY-2: one owner command on a session ([RunnerLink.command]). [kind] is one of the constants below. [text] is the turn

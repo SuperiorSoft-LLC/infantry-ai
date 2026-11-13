@@ -74,6 +74,9 @@ class RunnerLinkService(
     var lentKeysOf: (runner: String) -> Set<String> = { emptySet() }
     /** RUNNER-CRED-1 (runner side): this runner's owner chose the harness's own login here (see [RunnerLinkServer]'s `ownLogin`). */
     var ownLoginOf: (harnessId: String) -> Boolean = { false }
+
+    /** RUNNER-UNIFY-3 (runner side): the pushed stream of the orchestrator's sessions here; set once the stream sequencer exists. */
+    @Volatile var frameFeed: RunnerFrameFeed? = null
     /** RUNNER-CRED-1 (orchestrator side): the git credential a start in (project) on runner (name) would carry, for the check's `git` row. */
     var lentGitOf: (runner: String, projectId: String?) -> com.superiorsoftllc.infantry.daemon.api.orchestrator.GitCredential? = { _, _ -> null }
 
@@ -161,6 +164,7 @@ class RunnerLinkService(
         forwarder = forwarder, forwardWaitCapMs = ::forwardWaitMs,
         limit = limit, cloneRoot = ::cloneRootDir, bearer = bearer.takeIf { it.exists() }, lent = lent,
         ownLogin = { ownLoginOf(it) }, log = log, onPaired = { announceBearer("paired") },
+        frameFeed = { frameFeed }, pushWaitCapMs = ::pushWaitMs, pushFramesMax = { limit(LimitRegistry.RUNNERS_PUSH_FRAMES_MAX).toInt() },
     )
 
     private fun serve(store: RunnerLinkStore, t: RunnerLinkTransport) {
@@ -888,6 +892,10 @@ class RunnerLinkService(
     /** RUNNER-POOL-7: how long one forward pull waits on the runner: `limits.runners.forwardWaitSec`, kept below the link call timeout. */
     fun forwardWaitMs(): Long =
         minOf(limit(LimitRegistry.RUNNERS_FORWARD_WAIT_SEC), limit(LimitRegistry.RUNNERS_LINK_CALL_SECONDS) / 2).coerceAtLeast(1) * MS_PER_SECOND
+
+    /** RUNNER-UNIFY-3: how long one frame pull is held on this runner: `limits.runners.pushWaitSec`, kept below the link call timeout. */
+    fun pushWaitMs(): Long =
+        minOf(limit(LimitRegistry.RUNNERS_PUSH_WAIT_SEC), limit(LimitRegistry.RUNNERS_LINK_CALL_SECONDS) / 2).coerceAtLeast(1) * MS_PER_SECOND
 
     private fun tls(store: RunnerLinkStore) = LinkTlsMaterial(dir.also { it.mkdirs() }, store.tlsPassword())
     private fun linkPort() = limit(LimitRegistry.RUNNERS_LINK_PORT).toInt()

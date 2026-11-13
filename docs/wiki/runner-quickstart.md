@@ -238,6 +238,12 @@ Every owner command on a runner session (prompt, resume, attach, interrupt, the 
 exactly as a local session's does (RUNNER-UNIFY-2). Contingency on the PC: `infantry settings set runners.unifiedCommands false`
 makes this PC's own sessions skip the runner link and call the session manager directly, as before; runner sessions still go to their runner.
 
+Live chat from a runner session (RUNNER-UNIFY-3, opt-in): `infantry settings set runners.pushFrames true` on the PC makes each runner
+PUSH its sessions' frames (the chat, reasoning, errors, and the status with its tool-call count) the moment they exist, over the link the
+PC already dials (a held `runner_link_frames_pull` call, `limits.runners.pushWaitSec`), instead of the PC reading them every
+`limits.runners.outputPollMs`. Default `false`. Contingency: set it back to `false`; it takes effect live, no restart or rebuild. A runner
+too old to push (contract below 1.10.0) is polled as before even with it on.
+
 Claude with a subscription (owner decision): either sign claude in on the runner itself (`docker exec -it infantry-runner claude auth
 login`), or run `claude setup-token` on your PC and store the token as the claude subscription token
 (`infantry harness key claude oauth`, which prompts for it): in `subscription-login` mode the app lends it as `CLAUDE_CODE_OAUTH_TOKEN`.
