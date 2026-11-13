@@ -75,11 +75,13 @@ class RemoteStarts(
                     val m = v as kotlinx.serialization.json.JsonObject
                     sessions[k] = StartWorktree(str(m["path"]), str(m["branch"]), str(m["base"]), str(m["repoRoot"]))
                 }
+                // RUNNER-RELINK-1: the sessions started with no ticket worktree; optional, so a file from before it still loads.
+                (o["linked"] as? kotlinx.serialization.json.JsonArray)?.forEach { linked += str(it) }
             }.onFailure { log("[infantry] runner: could not read the event outbox ${f.name}: ${it.message}") }
         }
     }
 
-    /** Write the outbox, seq counters and started sessions next to the runner's state; best effort (a failure is logged). */
+    /** Write the outbox, seq counters, started sessions and linked (ticketless) sessions next to the runner's state; best effort (a failure is logged). */
     @Synchronized
     private fun save() {
         val f = persistTo ?: return
@@ -92,6 +94,7 @@ class RemoteStarts(
                 put("sessions", kotlinx.serialization.json.JsonObject(sessions.mapValues { (_, w) ->
                     kotlinx.serialization.json.buildJsonObject { put("path", w.path); put("branch", w.branch); put("base", w.base); put("repoRoot", w.repoRoot) }
                 }))
+                put("linked", kotlinx.serialization.json.JsonArray(linked.sorted().map { kotlinx.serialization.json.JsonPrimitive(it) }))
             }
             f.parentFile?.mkdirs()
             val tmp = File(f.parentFile, f.name + ".tmp")
@@ -188,7 +191,8 @@ class RemoteStarts(
 
     /** RUNNER-POOL-7: session [sessionId] was started over the link (with or without a git remote); its agent frames are forwarded. */
     fun linked(sessionId: String) {
-        linked += sessionId
+        // RUNNER-RELINK-1: persisted, so a runner (container) restart keeps taking prompts for its ticketless sessions.
+        if (linked.add(sessionId)) save()
     }
 
     /** RUNNER-POOL-7: whether [sessionId] is a session the paired orchestrator started here (with or without a git remote). */
@@ -254,8 +258,8 @@ class RemoteStarts(
 
     /** The session ended for good (killed or removed): no more pushes for it. */
     fun forget(sessionId: String) {
-        sessions.remove(sessionId)
-        linked.remove(sessionId)
+        val known = sessions.remove(sessionId) != null
+        if (linked.remove(sessionId) || known) save()
         pushOnCommit.remove(sessionId)
         gitCredentials.remove(sessionId)
     }

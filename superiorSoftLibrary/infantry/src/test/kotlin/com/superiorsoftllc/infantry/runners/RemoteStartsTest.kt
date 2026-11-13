@@ -66,6 +66,35 @@ class RemoteStartsTest {
     }
 
     @Test
+    fun `a session linked without a ticket stays linked after a restart, and a forgotten one stays forgotten`() {
+        // RUNNER-RELINK-1: after a runner container restart every non-ticket session refused prompts ("was not started by this
+        // orchestrator") because the linked set was memory only. It is persisted beside the ticket sessions now.
+        val file = File(dir, "remote-starts.json")
+        fun persisted() = RemoteStarts(cloneRoot = { File(dir, RemoteStarts.DEFAULT_FOLDER) }, outboxMax = { 10 }, log = {}, persistTo = file)
+        val before = persisted()
+        before.linked("app-s1")
+        before.linked("app-s2")
+        before.forget("app-s2")
+        val after = persisted()
+        assertTrue(after.isLinked("app-s1"))
+        assertFalse(after.isLinked("app-s2"))
+        assertEquals(setOf("app-s1"), after.linkedIds())
+        after.onTurnEnd("app-s1", 0)
+        assertEquals(listOf(RunnerEvent.FINISHED to "0"), after.events(0L).map { it.kind to it.payload })
+    }
+
+    @Test
+    fun `an outbox file written before the linked set existed still loads`() {
+        val file = File(dir, "remote-starts.json").also {
+            it.parentFile.mkdirs()
+            it.writeText("""{"seqs":{"s1":"1"},"events":[{"s":"s1","q":"1","k":"STATUS","p":"IDLE"}],"sessions":{}}""")
+        }
+        val starts = RemoteStarts(cloneRoot = { File(dir, RemoteStarts.DEFAULT_FOLDER) }, outboxMax = { 10 }, log = {}, persistTo = file)
+        assertEquals(1, starts.events(0L).size)
+        assertFalse(starts.isLinked("s1"))
+    }
+
+    @Test
     fun `only ticket branches count as pushable`() {
         assertTrue(RemoteStarts.isTicketBranch("ticket/4659b768-remote-work"))
         for (b in listOf("main", "dev", "feature-agenthq-mvp", "ticket/", "ticket/../main", "ticket/a:refs/heads/main", "refs/heads/main", "ticket/a b")) {
