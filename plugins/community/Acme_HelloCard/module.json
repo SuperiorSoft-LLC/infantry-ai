@@ -10,10 +10,14 @@
   "implementations": [
     { "registry": "chat.cards", "key": "hello" }
   ],
-  "files": ["cards"],
+  "files": ["cards", "scripts"],
   "cards": [
     { "type": "hello", "summary": "Greeting box: bold title and one line of text", "spec": "cards/hello.md",
       "images": { "hosts": ["upload.wikimedia.org", "*.gstatic.com"] } }
+  ],
+  "scripts": [
+    { "name": "hello-card-demo", "file": "scripts/hello-card-demo.lua", "description": "Demo: logs a greeting; its hook runs it on the acme.hello event.",
+      "hooks": [ { "id": "greet", "on": "acme.hello", "args": { "name": "hook" } } ] }
   ],
   "roles": [
     { "id": "hello-agent", "name": "Hello Agent", "color": "#f59e0b", "icon": "support-agent", "description": "Demo plugin role: greets with a hello card.",

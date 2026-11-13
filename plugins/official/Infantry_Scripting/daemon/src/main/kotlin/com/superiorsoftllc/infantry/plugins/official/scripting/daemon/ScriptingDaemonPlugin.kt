@@ -21,14 +21,17 @@ class ScriptingDaemonPlugin : DaemonPlugin {
         const val TIMELINE_ITEMS = "timeline_items"
         /** The failures in a row hook-health alerts on by default. */
         const val HEALTH_FAIL_STREAK = 3
+        /** PLUGIN-SCRIPTS-1: the daemon's named event for a change of the loaded module set (ROLE-PLUGIN-1). */
+        const val MODULES_CHANGED = "modules.changed"
     }
 
     private var subscription: AutoCloseable? = null
     private var sessionWatch: AutoCloseable? = null
     private var wakeWatch: AutoCloseable? = null
+    private var modulesWatch: AutoCloseable? = null
     private var timer: java.util.concurrent.ScheduledExecutorService? = null
 
-    override fun stop() { runCatching { timer?.shutdownNow() }; timer = null; runCatching { subscription?.close() }; subscription = null; runCatching { sessionWatch?.close() }; sessionWatch = null; runCatching { wakeWatch?.close() }; wakeWatch = null }
+    override fun stop() { runCatching { timer?.shutdownNow() }; timer = null; runCatching { subscription?.close() }; subscription = null; runCatching { sessionWatch?.close() }; sessionWatch = null; runCatching { wakeWatch?.close() }; wakeWatch = null; runCatching { modulesWatch?.close() }; modulesWatch = null }
 
     override fun start(api: DaemonApi) {
         val engines = ScriptEngines({ api.services.endpoints(ScriptEngineWire.PREFIX) }, { api.config("scripting.defaultEngine")?.takeIf { it.isNotBlank() } ?: "lua" })
@@ -38,7 +41,17 @@ class ScriptingDaemonPlugin : DaemonPlugin {
         runCatching { BundledScripts.seed(globalScripts, File(api.stateDir, "global-scripts-state"), BundledScripts.fromJar { api.log(it) }) { api.log(it) } }
             .onSuccess { if (it.isNotEmpty()) api.log("global scripts seeded: ${it.joinToString()}") }
             .onFailure { api.log("global scripts not seeded: ${it.message}") }
-        val store = ScriptStore({ api.files(it) }, { engines.extensions() }, globalScripts)
+        // PLUGIN-SCRIPTS-1: the scripts other modules declare (module.json `scripts`), seeded now and whenever the loaded set changes.
+        val pluginScripts = PluginScripts(File(api.stateDir, "plugin-scripts"), { runCatching { api.plugins.loaded() }.getOrNull() }, { api.log(it) },
+            { api.config("scripting.plugins.maxScriptBytes")?.trim()?.toLongOrNull()?.takeIf { it in 1_024L..16_777_216L } ?: PluginScripts.DEFAULT_MAX_SCRIPT_BYTES })
+        fun syncPluginScripts() {
+            val outcome = runCatching { pluginScripts.sync() }.getOrElse { api.log("plugin scripts not synced: ${it.message}"); return }
+            outcome.problems.forEach { api.log("plugin script refused: $it") }
+            if (outcome.written.isNotEmpty()) api.log("plugin scripts seeded: ${outcome.written.joinToString()}")
+        }
+        syncPluginScripts()
+        modulesWatch = api.events.subscribe(MODULES_CHANGED) { syncPluginScripts() }
+        val store = ScriptStore({ api.files(it) }, { engines.extensions() }, globalScripts, pluginScripts)
         val aliases = { ScriptAliases.effective(api.config("scripting.aliases")) }
         val maxPhases = { api.config("scripting.maxPhases")?.trim()?.toIntOrNull() ?: 3 }
         // SCRIPT-VIS-1b: the run log is stored in the plugin's own tables (a daemon without storage keeps it in memory only).
@@ -83,7 +96,7 @@ class ScriptingDaemonPlugin : DaemonPlugin {
         api.tools.register(tools.run)
         api.tools.register(tools.api)
         // SCRIPT-5: hooks are data (hooks.json); one subscription on the named-event bus runs them.
-        val hookStore = HookStore({ api.files(it) }, File(api.stateDir, "global-hooks.json"))
+        val hookStore = HookStore({ api.files(it) }, File(api.stateDir, "global-hooks.json"), pluginScripts::hooks)
         val builtinHooks = BuiltinHook.fromJar { api.log(it) }
         val arsenalKnowledge = ArsenalKnowledge({ api.services.find(com.superiorsoftllc.infantry.daemon.api.knowledge.KnowledgeWriter::class) }, store, { api.projects.list().map { it.id } }) { api.log(it) }
         val saveTools = SaveTools(store, hookStore, engines, api::displayStamp, { api.config("scripting.global.writeRoles") ?: SaveTools.DEFAULT_GLOBAL_WRITERS }, { api.projects.list().map { it.id } },

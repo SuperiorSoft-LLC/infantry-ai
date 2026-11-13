@@ -164,6 +164,13 @@ data class ModuleManifest(
      * `layout`, `deps` and `META-INF` are reserved, and no `.jar` or `.class` may sit in one (code lives only in `lib/`).
      */
     val files: List<String> = emptyList(),
+    /**
+     * PLUGIN-SCRIPTS-1: the scripts this module brings (and the hooks that run them). The Scripting plugin installs each one into
+     * its `plugin` scope while the module is loaded (never over an owner's own script, never over an owner edit of the plugin
+     * copy), attaches the declared hooks only while the module is loaded, and keeps the scripts disabled (not deleted) while it
+     * is gone. A packaged install carries the files when [files] names their folder.
+     */
+    val scripts: List<ScriptDeclaration> = emptyList(),
 ) {
     /** NS3: the node ids of [fills]. */
     val fillNodes: List<String> get() = fills.map { it.node }
@@ -210,6 +217,33 @@ data class RoleDeclaration(
     val description: String = "",
     val cards: List<String> = emptyList(),
     val tools: List<String> = emptyList(),
+)
+
+/**
+ * PLUGIN-SCRIPTS-1: one script a module brings (module.json `scripts`). [name] follows the script-name rule (letters, digits,
+ * `_ - .`, at most 64); [file] is a path inside the module folder (`scripts/hello-card-demo.lua`), its extension picks the engine;
+ * [description] one line for `infantry script list`. [hooks] run it on an event while the module is loaded.
+ */
+@Serializable
+data class ScriptDeclaration(
+    val name: String,
+    val file: String,
+    val description: String = "",
+    val hooks: List<ScriptHookDeclaration> = emptyList(),
+)
+
+/**
+ * PLUGIN-SCRIPTS-1: a hook a module declares for one of its [ScriptDeclaration]s. [id] is unique within the module (the live hook
+ * id is `<module>.<id>`); [on] is any hook kind the Scripting plugin knows (`lane enter done`, `ticket.commented`, `every 60s`);
+ * a kind it does not know is refused and the hook not attached. [args] are given to the script; [global] = also run for events
+ * that name no project. A plugin hook runs for each project's events as that project, with no privileges beyond a project hook.
+ */
+@Serializable
+data class ScriptHookDeclaration(
+    val id: String,
+    val on: String,
+    val args: JsonObject? = null,
+    val global: Boolean = false,
 )
 
 /** GAP-AUDIT-1 (b): a node the module draws; [overridable] false = locked against every other module. */

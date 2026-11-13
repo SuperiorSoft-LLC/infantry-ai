@@ -436,6 +436,27 @@ taken. With the module gone the role stays and reads `disabled`; reinstalling en
 role's first-turn briefing (only the loaded ones are named) and never gate a tool or a card; a custom "hybrid" role sets
 them in the role editor. Type: `RoleDeclaration`.
 
+**Plugin scripts (PLUGIN-SCRIPTS-1).** A module can ship Lua scripts, and the hooks that run them, in module.json `scripts`
+(read by the official `Infantry_Scripting` daemon half; list the folder in `files` so a packaged install carries it):
+
+```json
+"files": ["scripts"],
+"scripts": [{ "name": "hello-card-demo", "file": "scripts/hello-card-demo.lua", "description": "Demo: logs a greeting",
+              "hooks": [{ "id": "greet", "on": "acme.hello", "args": { "name": "hook" } }] }]
+```
+
+`name` follows the script-name rule; `file` is a path inside the module folder (its extension picks the engine; a file
+outside the folder, missing or larger than the setting `scripting.plugins.maxScriptBytes` is reported and not installed).
+When the module loads the script is copied into the Scripting plugin's `plugin` scope (`scope=plugin:<module>` in
+`infantry script list`), runnable by any agent or role with `infantry_script_run`. An owner's own project or global script of the
+same name is never touched and wins a lookup by name. Until someone edits the plugin copy (`infantry_script_save scope=plugin`),
+a newer module version refreshes it; after an edit it is kept. Each hook (`on` = any hook kind: `lane enter <lane>`, an
+event name or prefix, `every <N>s`; a `mail.incoming` hook or an unknown kind is refused) is attached as `<module>.<id>`
+while the module is loaded, runs for each project's events as that project (like a global hook) and always runs the
+plugin's own script. With the module uninstalled or disabled its hooks are gone and its scripts stay, listed
+`[disabled: plugin not loaded]` and refused by a run; reinstalling enables both. Plugin scripts get no extra privileges:
+same engines, limits, policy and gates as any script. Types: `ScriptDeclaration`, `ScriptHookDeclaration`.
+
 ### Agent avatar renderers (AVATAR-DOCS-1)
 
 Every agent avatar in the app is drawn by one core composable, `AgentAvatar` (`superiorSoftLibrary/infantryUiCore/src/commonMain/kotlin/com/superiorsoftllc/infantry/ui/AgentAvatarRenderers.kt` holds the seam; `AgentAvatar.kt` holds the composable). A plugin can add an avatar style by registering a renderer under the registry `agent.avatar.renderers`:

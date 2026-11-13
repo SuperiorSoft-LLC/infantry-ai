@@ -8,8 +8,14 @@ import com.superiorsoftllc.infantry.daemon.api.files.ProjectFiles
  * SCRIPT-4: named scripts, per project, read as data from `<project dir>/.infantry/scripts/<name>.<ext>` through the project file
  * surface (`api.files`), the extension picking the engine. A name is one plain segment; nothing outside that folder is reachable.
  */
-class ScriptStore(private val files: (String) -> ProjectFiles, private val extensions: () -> List<String>, val global: GlobalScripts? = null) {
-    /** [scope] is [PROJECT] or [GLOBAL] (SCRIPT-ARSENAL-1). */
+class ScriptStore(
+    private val files: (String) -> ProjectFiles,
+    private val extensions: () -> List<String>,
+    val global: GlobalScripts? = null,
+    /** PLUGIN-SCRIPTS-1: the scripts loaded modules ship; looked up last, after the project and the global scope. */
+    val plugins: PluginScripts? = null,
+) {
+    /** [scope] is [PROJECT], [GLOBAL] (SCRIPT-ARSENAL-1) or `plugin:<module>` (PLUGIN-SCRIPTS-1). */
     data class Script(val name: String, val extension: String, val source: String, val scope: String = PROJECT)
 
     fun read(projectId: String, name: String): Script? {
@@ -17,7 +23,8 @@ class ScriptStore(private val files: (String) -> ProjectFiles, private val exten
         val f = files(projectId)
         for (ext in extensions()) f.get("$DIR/$name.$ext")?.let { return Script(name, ext, it.toString(Charsets.UTF_8)) }
         // SCRIPT-ARSENAL-1: a project script of the same name always wins; only then the app-wide one.
-        return global?.read(name)
+        // PLUGIN-SCRIPTS-1: and only then a script a loaded module ships (a disabled one throws IllegalStateException with the reason).
+        return global?.read(name) ?: plugins?.find(name)
     }
 
     /** True when the project itself stores a script of this name (it shadows a global one). */
@@ -26,7 +33,8 @@ class ScriptStore(private val files: (String) -> ProjectFiles, private val exten
     fun names(projectId: String): List<String> {
         val exts = extensions().toSet()
         val own = files(projectId).list(DIR).map { it.name }.filter { n -> exts.any { n.endsWith(".$it") } }.map { it.substringBeforeLast('.') }
-        return (own + (global?.names() ?: emptyList())).distinct().sorted()
+        val shipped = plugins?.entries().orEmpty().filter { it.enabled }.map { it.name }
+        return (own + (global?.names() ?: emptyList()) + shipped).distinct().sorted()
     }
 
     /** SCRIPT-SAVE-1: one stored script; [savedBy] is from the sidecar `<name>.<ext>.meta.json`. */

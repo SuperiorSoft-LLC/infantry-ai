@@ -35,3 +35,6 @@ tasks.test {
 tasks.jar {
     archiveFileName.set("Acme_HelloCard.jar")
 }
+
+// PLUGIN-SCRIPTS-1: `ihq` packs the sample (module.json, lib/, and the `files` folders cards/ and scripts/) for a real install.
+apply(from = rootProject.file("gradle/ihq.gradle.kts"))
