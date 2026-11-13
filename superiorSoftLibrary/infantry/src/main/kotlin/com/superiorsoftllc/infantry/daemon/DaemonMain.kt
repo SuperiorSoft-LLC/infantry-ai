@@ -1118,6 +1118,8 @@ class InfantryDaemon(
                 placed = { runnerPool.remoteSessionIds() }, legacy = remoteMirror::get, placement = remoteMirror::placement,
                 enabled = { settings.runnerLink().unifiedDirectory },
                 store = File(daemonStateDir, "runner-directory.json"),
+                // RUNNER-ROLE-1: a runner spawn reads never-run until its first turn (with the role brief) is taken.
+                owesBrief = remoteMirror::owesBrief, markBriefed = remoteMirror::briefed,
             )
             // RUNNER-PROMPT-RELAY-1: a runner session's prompt is shown and answered in the orchestrator's app. Runner side: the prompts of
             // the orchestrator's sessions go to the outbox and run no timer here; orchestrator side: the watch relays them (below).
@@ -1400,6 +1402,8 @@ class InfantryDaemon(
                 resumeTurn = LocalRunner.deliverVia(runnerPool),
                 // RUNNER-POOL-8: a session placed on a remote runner takes its mail through that runner (kept queued while it is offline).
                 remoteSession = { sid -> runnerPool.runnerOf(sid) != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL },
+                // RUNNER-ROLE-1: the record of a session on a runner, so its first mail turn carries the role brief as a local one's does.
+                remoteRecord = sessionDirectory::get, remoteBriefed = sessionDirectory::briefed,
             )
             manager.mcpHealFailedSink = { session, tries ->
                 runCatching {
@@ -1977,7 +1981,11 @@ class InfantryDaemon(
                                     }
                                     // RUNNER-AGENT-1: the first task of a remote spawn is mail to its runner.
                                     is StartedSession.Remote -> {
-                                        val r = LocalRunner.deliverVia(runnerPool)(started.id, task, com.superiorsoftllc.infantry.protocol.MessageOrigin.Owner, "spawn", emptyList())
+                                        // RUNNER-ROLE-1: with the role brief, as the local branch above composes it.
+                                        val rec = sessionDirectory.get(started.id)?.takeIf { it.neverRun }
+                                        val turn = rec?.let { pluginFirstTurn(it, task) } ?: task
+                                        val r = LocalRunner.deliverVia(runnerPool)(started.id, turn, com.superiorsoftllc.infantry.protocol.MessageOrigin.Owner, "spawn", emptyList())
+                                        if (rec != null && r.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.MailResult.DELIVERED) sessionDirectory.briefed(started.id)
                                         if (r.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.MailResult.FAILED) throw IllegalStateException(r.reason.ifBlank { null } ?: "the runner refused the first task")
                                     }
                                 }
@@ -2513,8 +2521,9 @@ class InfantryDaemon(
                             spawnGuard,
                             runnerPool = runnerPool,
                             sessions = sessionDirectory::list,
+                            sessionOf = sessionDirectory::get, briefed = sessionDirectory::briefed,
                             remotePlaced = remoteMirror::placed,
-                            remoteForget = { id -> remoteMirror.forget(id); sessionDirectory.forget(id) },
+                            remoteForget = { id -> remoteMirror.forget(id); sessionDirectory.forget(id); manager.forgetPlacedInstance(id) },
                             remoteStatus = remoteMirror::status,
                             remoteTranscripts = remoteTranscripts,
                             remoteStreaming = remoteStreaming,
@@ -3218,6 +3227,10 @@ private suspend fun handleConnection(
     promptSendIds: PromptSendIds = PromptSendIds { LimitRegistry.CHAT_SENT_IDS_KEPT.default.toInt() },
     /** RUNNER-UNIFY-4: every session of this daemon, wherever it runs (the one session directory); the `sessions` answer lists it. */
     sessions: () -> List<SessionRecord> = { manager.list() },
+    /** RUNNER-ROLE-1: one session wherever it runs (the session directory), so a runner session's first turn carries its brief. */
+    sessionOf: (String) -> SessionRecord? = manager::get,
+    /** RUNNER-ROLE-1: a first turn composed with the brief was taken ([com.superiorsoftllc.infantry.runners.SessionDirectory.briefed]). */
+    briefed: (String) -> Unit = {},
     /** RUNNER-SESSION-GHOST-1: records a non-board remote start's placement in the mirror (project, role, harness, model). */
     remotePlaced: (String, com.superiorsoftllc.infantry.runners.RemoteSessionMirror.Placed) -> Unit = { _, _ -> },
     /** RUNNER-SESSION-GHOST-1: a deleted remote session leaves the mirror. */
@@ -3680,11 +3693,13 @@ private suspend fun handleConnection(
                         val sendKey = promptSendIds.keyOf(envelope.sessionId, envelope.requestId)
                         if (sendKey != null && !promptSendIds.claim(sendKey)) promptAck(envelope, duplicate = true) else
                         try {
-                            val named = manager.get(envelope.sessionId!!)
-                            named?.let { launchWarning(manager, it.provider)?.let(outgoing::trySend) }
+                            manager.get(envelope.sessionId!!)?.let { launchWarning(manager, it.provider)?.let(outgoing::trySend) }
+                            // RUNNER-ROLE-1: the session wherever it runs; a runner session bound at rest is never-run too.
+                            val named = sessionOf(envelope.sessionId!!)
                             // A bound-but-never-run session takes its persona and identity with this first turn,
                             // from its OWN binding (not this connection's `new`), as a delivered message does.
-                            val turn = if (named?.neverRun == true) {
+                            val briefing = named?.neverRun == true
+                            val turn = if (briefing) {
                                 // TRAITS-T5: from the session's FROZEN instance, never the live profile.
                                 val instance = manager.instance(named.id)
                                 firstTurn(instance, named.role, named.agentId, envelope.data, knowledge.section(named.projectId, named.role), skillsSource.section(instance))
@@ -3700,7 +3715,7 @@ private suspend fun handleConnection(
                             // RUNNER-UNIFY-2: through the session's runner, local or remote alike (RUNNER-REMOTE-IO-1 sent remote ones as mail).
                             val sent = sendTurn(id, turn)
                             when (sent.kind) {
-                                com.superiorsoftllc.infantry.daemon.api.orchestrator.CommandResult.DONE -> active = id
+                                com.superiorsoftllc.infantry.daemon.api.orchestrator.CommandResult.DONE -> { active = id; if (briefing) briefed(id) }
                                 com.superiorsoftllc.infantry.daemon.api.orchestrator.CommandResult.IN_FLIGHT -> throw RunInFlightException(id, sent.reason.orEmpty())
                                 else -> throw IllegalStateException(sent.reason)
                             }
@@ -3721,7 +3736,14 @@ private suspend fun handleConnection(
                         val remoteId = active!!
                         try {
                             // RUNNER-UNIFY-2: the same turn send as every prompt; a turn already running there has the task.
-                            val sent = sendTurn(remoteId, envelope.data, "spawn")
+                            // RUNNER-ROLE-1: its first turn carries the role brief, composed exactly as a local bound session's.
+                            val rec = sessionOf(remoteId)?.takeIf { it.neverRun }
+                            val turn = rec?.let { r ->
+                                val instance = manager.instance(r.id)
+                                firstTurn(instance, r.role, r.agentId, envelope.data, knowledge.section(r.projectId, r.role), skillsSource.section(instance))
+                            } ?: envelope.data
+                            val sent = sendTurn(remoteId, turn, "spawn")
+                            if (rec != null && sent.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.CommandResult.DONE) briefed(remoteId)
                             if (sent.kind != com.superiorsoftllc.infantry.daemon.api.orchestrator.CommandResult.DONE && sent.kind != com.superiorsoftllc.infantry.daemon.api.orchestrator.CommandResult.IN_FLIGHT) {
                                 throw IllegalStateException("the runner refused the first task: ${sent.reason ?: sent.kind}")
                             }

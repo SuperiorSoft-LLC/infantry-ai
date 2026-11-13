@@ -33,7 +33,7 @@ class RemoteSessionMirror(
         val sessionId: String, val runner: String, val provider: String = "", val model: String? = null, val repoRoot: String? = null,
         val branch: String? = null, val ticketId: String? = null, val runnerWorktree: String? = null, val projectId: String? = null,
         val agentId: String? = null, val role: String? = null, val state: String? = null, val failedWhy: String? = null,
-        val firstSeen: Long? = null, val taken: Long = 0,
+        val firstSeen: Long? = null, val taken: Long = 0, val briefOwed: Boolean = false,
     )
 
     private val runners = ConcurrentHashMap<String, String>()
@@ -45,6 +45,7 @@ class RemoteSessionMirror(
     private val firstSeen = ConcurrentHashMap<String, Long>()
     private val placedAs = ConcurrentHashMap<String, Placed>()
     private val failedWhy = ConcurrentHashMap<String, String>()
+    private val owed: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
     /**
      * RUNNER-TICKET-ROW-1: what the start pinned for [sessionId]: the harness, the effective [model], the orchestrator's checkout
@@ -64,10 +65,17 @@ class RemoteSessionMirror(
         val projectId: String? = null,
         val agentId: String? = null,
         val role: String? = null,
+        /**
+         * RUNNER-ROLE-1: the start carried no first turn (a session outside the board, bound at rest on the runner), so its role
+         * brief (persona, identity, traits, knowledge, skills) is still owed: the orchestrator composes it into the session's first
+         * turn, exactly as for a local bound session. False = the start's prompt already carried it (a ticket start).
+         */
+        val briefOwed: Boolean = false,
     )
 
     fun placed(sessionId: String, info: Placed) {
         placedAs[sessionId] = info
+        if (info.briefOwed) owed.add(sessionId)
         runnerOf(sessionId)?.let { runners[sessionId] = it }
         save()
     }
@@ -94,6 +102,7 @@ class RemoteSessionMirror(
             k.failedWhy?.let { failedWhy[k.sessionId] = it }
             k.firstSeen?.let { firstSeen[k.sessionId] = it }
             takenLines[k.sessionId] = k.taken
+            if (k.briefOwed) owed.add(k.sessionId)
         }
         return kept.associate { it.sessionId to it.runner }
     }
@@ -105,7 +114,7 @@ class RemoteSessionMirror(
             val p = placedAs[id]
             Kept(
                 id, runners.getValue(id), p?.provider.orEmpty(), p?.model, p?.repoRoot, p?.branch, p?.ticketId, p?.runnerWorktree,
-                p?.projectId, p?.agentId, p?.role, seen[id]?.state?.name, failedWhy[id], firstSeen[id], takenLines[id] ?: 0L,
+                p?.projectId, p?.agentId, p?.role, seen[id]?.state?.name, failedWhy[id], firstSeen[id], takenLines[id] ?: 0L, id in owed,
             )
         }
         runCatching {
@@ -118,10 +127,18 @@ class RemoteSessionMirror(
 
     fun placement(sessionId: String): Placed? = placedAs[sessionId]
 
+    /** RUNNER-ROLE-1: [sessionId]'s first turn must still carry its role brief ([Placed.briefOwed]). */
+    fun owesBrief(sessionId: String): Boolean = sessionId in owed
+
+    /** RUNNER-ROLE-1: the runner took [sessionId]'s first turn with its brief; later turns go as typed. */
+    fun briefed(sessionId: String) {
+        if (owed.remove(sessionId)) save()
+    }
+
     /** RUNNER-SESSION-GHOST-1: [sessionId] was deleted: what this mirror kept about it goes too. */
     fun forget(sessionId: String) {
         placedAs.remove(sessionId); seen.remove(sessionId); firstSeen.remove(sessionId); failedWhy.remove(sessionId)
-        runners.remove(sessionId); takenLines.remove(sessionId)
+        runners.remove(sessionId); takenLines.remove(sessionId); owed.remove(sessionId)
         save()
     }
 

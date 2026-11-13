@@ -577,6 +577,20 @@ class SessionManager(
     } }
 
     /**
+     * RUNNER-ROLE-1: freezes the instance of a session this daemon placed on a REMOTE runner (it holds no record of it), resolved
+     * now as a local bind resolves it, so that session's first turn renders the same persona, traits and skills a local one does.
+     * Insert-only like every instance row; an anonymous start writes nothing.
+     */
+    fun freezePlacedInstance(sessionId: String, agentId: String?, role: String?) { locked {
+        freezeInstance(sessionId, clock(), agentId, role, null, null)
+    } }
+
+    /** RUNNER-ROLE-1: a placed session was deleted: its frozen instance goes too ([freezePlacedInstance]). */
+    fun forgetPlacedInstance(sessionId: String) { locked {
+        if (sessions[sessionId] == null) instances.delete(sessionId)
+    } }
+
+    /**
      * Writes the spawn's instance once; an anonymous spawn (no agent, no role) writes nothing, so it has no skills either
      * (K-D11). P10-K13: the effective skill ids for [ticketId] are resolved here, at spawn, and frozen with the row.
      */

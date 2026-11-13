@@ -285,7 +285,7 @@ object LocalRunner {
             if (options?.agentId == null && options?.role == null && asked.isNotEmpty() && asked != RunnerPool.LOCAL) {
                 throw IllegalArgumentException("a session on runner '$runner' needs a role or an agent profile; pick one, or choose the local runner")
             }
-            return startRemote(pool, runner, options, options?.projectId?.let(projectDir) ?: repo, remotePlaced)
+            return startRemote(pool, manager, runner, options, options?.projectId?.let(projectDir) ?: repo, remotePlaced)
         }
         val link = pool.link(RunnerPool.LOCAL) ?: throw IllegalStateException("no '${RunnerPool.LOCAL}' runner")
         // SPAWN-PARAMS-1: the spawn's own Tool approval (null = the global setting); prompts of a local session reach this app.
@@ -304,7 +304,7 @@ object LocalRunner {
      * `origin`) and runs the session in that clone, with no ticket branch; the session is indexed on the pool so mail and kills go there.
      */
     private fun startRemote(
-        pool: RunnerPool, runner: String, options: SpawnOptions?, repo: File?,
+        pool: RunnerPool, manager: SessionManager, runner: String, options: SpawnOptions?, repo: File?,
         remotePlaced: (String, com.superiorsoftllc.infantry.runners.RemoteSessionMirror.Placed) -> Unit,
     ): StartedSession? {
         if (options?.agentId == null && options?.role == null) return null
@@ -316,6 +316,8 @@ object LocalRunner {
             com.superiorsoftllc.infantry.runners.RemoteSessionMirror.Placed(
                 options.provider.orEmpty(), options.model, null, ref.branch, null, ref.worktreePath,
                 projectId = options.projectId, agentId = options.agentId, role = options.role,
+                // RUNNER-ROLE-1: bound at rest with no first turn, so the first turn this daemon sends it carries the role brief.
+                briefOwed = true,
             )
         }
         val out = startOnRunner(
@@ -329,7 +331,8 @@ object LocalRunner {
             is RemoteStart.Unavailable -> throw IllegalStateException(out.reason)
             is RemoteStart.Refused -> throw IllegalArgumentException(out.reason)
             is RemoteStart.Started -> StartedSession.Remote(
-                runner,
+                // RUNNER-ROLE-1: the persona and traits frozen here, as a local bind freezes them, for that first turn.
+                runner.also { manager.freezePlacedInstance(out.id, options.agentId, options.role) },
                 com.superiorsoftllc.infantry.daemon.api.sessions.SessionView(
                     id = out.id, agentId = options.agentId, role = options.role, provider = options.provider.orEmpty(), model = options.model,
                     projectId = options.projectId, state = "STARTING", live = true, contextLimit = options.contextLimit, effort = options.effort,

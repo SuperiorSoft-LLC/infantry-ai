@@ -9,7 +9,9 @@ import kotlinx.serialization.json.Json
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * RUNNER-UNIFY-4: the one session directory serves a runner session as the runner's own `session` frame says (its container working
@@ -83,4 +85,37 @@ class SessionDirectoryTest {
         val (again, _) = fixture(on = true, store = file)
         assertNull(again.received("r1"))
     }
+    /**
+     * RUNNER-ROLE-1: a runner spawn (bound at rest, no first turn) reads never-run until its first turn with the role brief is taken,
+     * whether the directory serves the mirror's record (before the runner's first frame) or the runner's own; then never again, even
+     * while the runner's record still says never-run. The owed flag survives a daemon restart; a ticket start never owes one.
+     */
+    @Test fun `a runner spawn reads never-run until its first turn with the brief is taken, then never again`() {
+        val file = Files.createTempDirectory("dir-brief").resolve("runner-sessions.json").toFile()
+        val mirror = RemoteSessionMirror(sessionIds = { listOf("r1", "t1") }, clock = { 5 }, store = file, runnerOf = { "infantry-runner-test" })
+        mirror.placed("r1", RemoteSessionMirror.Placed("opencode", null, null, null, projectId = "p1", role = "fullstack", briefOwed = true))
+        mirror.placed("t1", RemoteSessionMirror.Placed("opencode", null, null, "ticket/t1", "t1", role = "fullstack"))
+        val dir = SessionDirectory(
+            local = { emptyList() }, localGet = { null }, placed = { listOf("r1", "t1") }, legacy = mirror::get, placement = mirror::placement,
+            owesBrief = mirror::owesBrief, markBriefed = mirror::briefed,
+        )
+        assertTrue(dir.get("r1")!!.neverRun, "before the runner's first frame: the mirror's record, never-run")
+        assertEquals("fullstack", dir.get("r1")!!.role)
+        assertFalse(dir.get("t1")!!.neverRun, "a ticket start's prompt already carried the brief")
+        val atRest = SessionRecord(id = "r1", provider = "opencode", workingDir = "/work", spawnedAt = 1, lastHeartbeat = 1, state = SessionState.IDLE)
+        dir.accept("infantry-runner-test", "r1", frame(atRest))
+        assertTrue(dir.get("r1")!!.neverRun, "the runner's own at-rest record: never-run")
+
+        val restarted = RemoteSessionMirror(sessionIds = { listOf("r1") }, clock = { 5 }, store = file)
+        restarted.restore()
+        assertTrue(restarted.owesBrief("r1"), "the owed brief survives a daemon restart")
+
+        dir.briefed("r1")
+        assertFalse(mirror.owesBrief("r1"))
+        assertFalse(dir.get("r1")!!.neverRun, "the runner's record not yet refreshed never briefs it twice")
+        val reread = RemoteSessionMirror(sessionIds = { listOf("r1") }, clock = { 5 }, store = file)
+        reread.restore()
+        assertFalse(reread.owesBrief("r1"), "briefed is kept too")
+    }
+
 }
