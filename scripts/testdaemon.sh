@@ -46,6 +46,8 @@ up)
   export INFANTRY_STATE_DIR="$state" INFANTRY_HOME="$state" INFANTRY_PORT="$port" INFANTRY_PORT_STRICT=true INFANTRY_BIN="$bin" INFANTRY_LIMIT_RUNNERS_LINK_PORT="$link"
   [ -n "$mode" ] && export INFANTRY_MODE="$mode"
   [ -d "$dist/app/resources/modules" ] && export INFANTRY_BUNDLED_MODULES="$(winpath "$dist")/app/resources/modules"
+  # PLUGIN-SCRIPTS-1: an installDist folder bundles its plugins in modules/ (the dev runDaemon task passes the same folder).
+  [ -d "$dist/modules" ] && export INFANTRY_BUNDLED_MODULES="$(winpath "$dist")/modules"
   # RUNNER-UPDATE-1: the dist's own build stamp (BUILD-STAMP-1), as its launcher passes it; without it the daemon reports "dev".
   build="$(grep -ho 'Dinfantry\.build=[^"'"'"' ]*' "$dist/bin/infantry" "$dist"/app/*.cfg 2>/dev/null | head -1 | cut -d= -f2)"
   nohup "$java" -Xmx768m --add-opens=java.base/java.util=ALL-UNNAMED -Dinfantry.plugins.devTrust=true ${build:+"-Dinfantry.build=$build"} \

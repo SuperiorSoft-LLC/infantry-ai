@@ -8,8 +8,9 @@ The Script Arsenal is the app-wide library of Lua scripts: stored once, usable f
 |---|---|---|
 | project | `<project>/.infantry/scripts/<name>.lua` | that project |
 | global (the Script Arsenal) | the Scripting plugin's state dir, `global-scripts/<name>.lua` (+ a `.meta.json` sidecar) | every project |
+| plugin:`<module>` | the Scripting plugin's state dir, `plugin-scripts/<module>/<name>.lua`, copied from a module's module.json `scripts` | every project, while the module is loaded |
 
-- `infantry_script_run name=X` in any project finds the project's X first, then the global X.
+- `infantry_script_run name=X` in any project finds the project's X first, then the global X, then the X an installed plugin ships.
 - A hook (`infantry_script_hook`) can name a global script the same way.
 - A global script is only source. It runs AS the calling project and agent, with that project's context, fence and permissions. A global script run from project A cannot touch project B.
 - `infantry_script_list` shows both scopes (`scope=project|global`) and marks a global script `SHADOWED by the project copy` and the project copy `shadows the global`.
@@ -66,6 +67,10 @@ Every global script has one generated note in the app's knowledge base (the stor
 `infantry_script_list q=<text>` searches script names, purposes and scenarios across both scopes.
 
 A script header is the comment block at the top: line 1 `-- <name>: <purpose>`, then `Scenario:`, `Args:`, `Hook:`, `Gotchas:` and optionally `Example:`.
+
+## Plugin scripts
+
+A plugin can ship scripts and hooks (module.json `scripts`, see [UI plugin API](plugin-api.md), "Plugin scripts"). They are installed into the `plugin:<module>` scope when the module loads; an unedited copy follows module updates, an edited one (`infantry_script_save scope=plugin name=X source=...`) is kept. A plugin's hooks are listed by `infantry_script_hook action=list` as `<module>.<id>  [plugin: <module>, every project]` while the module is loaded and vanish with it; its scripts stay, marked `[disabled: plugin not loaded]`, until it is back. `infantry_script_delete scope=plugin` is refused: uninstall the plugin instead. `PluginScriptsTest` (in `Infantry_Scripting`) covers the lifecycle. Example: `plugins/community/Acme_HelloCard` ships `hello-card-demo` and the hook `Acme_HelloCard.greet` on the event `acme.hello`.
 
 ## Global hooks
 

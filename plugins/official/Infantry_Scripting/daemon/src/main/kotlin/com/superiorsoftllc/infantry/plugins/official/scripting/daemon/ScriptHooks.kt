@@ -135,7 +135,7 @@ class ScriptHooks(
 
     private fun executeIncoming(project: String, hook: Hook, e: NamedEvent, payload: JsonObject, run: Run): MailVerdict? {
         try {
-            val script = scripts.read(project, hook.script) ?: return failQuiet(project, hook, "no script '${hook.script}' in .infantry/scripts/").let { null }
+            val script = scriptOf(project, hook) ?: return failQuiet(project, hook, "no script '${hook.script}' in .infantry/scripts/").let { null }
             val engine = engines.byExtension(script.extension) ?: return failQuiet(project, hook, "no engine loaded for .${script.extension}").let { null }
             val who = ScriptCaller(hook.ownerSession.orEmpty(), hook.ownerRole.orEmpty())
             hook.to?.let { mark(it, hook) }
@@ -362,7 +362,8 @@ class ScriptHooks(
         var markedSession: String? = null
         var hookTo: String? = null
         try {
-            val script = try { scripts.read(project, hook.script) } catch (ex: IllegalArgumentException) { return fail(project, hook, ticketId, "script name refused: ${ex.message}") }
+            val script = try { scriptOf(project, hook) } catch (ex: IllegalArgumentException) { return fail(project, hook, ticketId, "script name refused: ${ex.message}") }
+                catch (ex: IllegalStateException) { return fail(project, hook, ticketId, ex.message.orEmpty()) }
                 ?: return fail(project, hook, ticketId, "no script '${hook.script}' in .infantry/scripts/")
             val engine = engines.byExtension(script.extension) ?: return fail(project, hook, ticketId, "no engine loaded for .${script.extension}")
             val invoker = invokerOf(project, hook)
@@ -432,6 +433,10 @@ class ScriptHooks(
      * last edited it and never decides the run identity, so a worker's edit (or its session ending) changes nothing.
      * A mail hook (`to` set) is bound to its session and keeps that session's identity.
      */
+    /** PLUGIN-SCRIPTS-1: a plugin's hook runs its own module's script, never a project or global one that shares the name. */
+    private fun scriptOf(project: String, hook: Hook): ScriptStore.Script? =
+        hook.plugin?.let { scripts.plugins?.read(it, hook.script) } ?: if (hook.plugin == null) scripts.read(project, hook.script) else null
+
     internal fun invokerOf(project: String, hook: Hook): ToolInvoker =
         if (hook.to == null) ToolInvoker(Caller(owner = true, project = project), null, null, project, "script:${hook.script}")
         else ToolInvoker(if (hook.ownerIsOwner || hook.ownerSession == null) Caller(owner = true, project = project) else Caller(owner = false, agent = true, activeSession = hook.ownerSession, project = project),

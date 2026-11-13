@@ -74,6 +74,8 @@ data class Hook(
     val global: Boolean = false,
     /** SCRIPT-ARSENAL-2: true = read from the app-wide hook file (an arsenal hook): it runs for EVERY project's events, as that project. Never stored in a project's hooks.json. */
     val arsenal: Boolean = false,
+    /** PLUGIN-SCRIPTS-1: the module that declares this hook (module.json `scripts[].hooks`); attached only while it is loaded, never stored. */
+    val plugin: String? = null,
 ) {
     fun toJson(): JsonObject = buildJsonObject {
         put("id", id); put("on", on.toString()); put("script", script)
@@ -86,7 +88,7 @@ data class Hook(
         if (global) put("global", true)
     }
 
-    fun line(): String = "$id  on $on${to?.let { " to $it" } ?: ""} -> $script${ownerSession?.let { " (edited by $it${ownerRole?.let { r -> "/$r" } ?: ""})" } ?: ""}${if (args.isEmpty()) "" else " $args"}${if (global) "  [global]" else ""}${if (arsenal) "  [arsenal: every project]" else ""}${if (enabled) "" else "  [disabled]"}"
+    fun line(): String = "$id  on $on${to?.let { " to $it" } ?: ""} -> $script${ownerSession?.let { " (edited by $it${ownerRole?.let { r -> "/$r" } ?: ""})" } ?: ""}${if (args.isEmpty()) "" else " $args"}${if (global) "  [global]" else ""}${if (arsenal) "  [arsenal: every project]" else ""}${plugin?.let { "  [plugin: $it, every project]" } ?: ""}${if (enabled) "" else "  [disabled]"}"
 }
 
 /**
@@ -94,7 +96,12 @@ data class Hook(
  * the scripts they name): `{"version":1,"hooks":[{"id":"merge-on-done","on":"lane enter done","script":"on-ticket-done","args":{}}]}`.
  * Read at each event with the file's mtime as the cache key, so an edit on disk or a `script hook add` is seen at once.
  */
-class HookStore(private val files: (String) -> ProjectFiles, private val arsenalFile: java.io.File?) {
+class HookStore(
+    private val files: (String) -> ProjectFiles,
+    private val arsenalFile: java.io.File?,
+    /** PLUGIN-SCRIPTS-1: the hooks loaded modules declare ([PluginScripts.hooks]); read at each call, never written. */
+    private val pluginHooks: () -> List<Hook> = { emptyList() },
+) {
     constructor(files: (String) -> ProjectFiles) : this(files, null)
 
     private data class Cached(val stamp: Pair<Long, Long>?, val hooks: List<Hook>, val error: String?)
@@ -104,7 +111,9 @@ class HookStore(private val files: (String) -> ProjectFiles, private val arsenal
     fun list(projectId: String): List<Hook> {
         val own = load(projectId).hooks
         // SCRIPT-ARSENAL-2: the app-wide hooks run for every project; a project hook of the same id wins (the project opts out by shadowing it).
-        return own + arsenalHooks().filter { g -> own.none { it.id == g.id } }
+        val shared = own + arsenalHooks().filter { g -> own.none { it.id == g.id } }
+        // PLUGIN-SCRIPTS-1: then the loaded modules' hooks (ids `<module>.<id>`); a project or arsenal hook of the same id wins.
+        return shared + runCatching { pluginHooks() }.getOrDefault(emptyList()).filter { h -> shared.none { it.id == h.id } }
     }
 
     /** SCRIPT-ARSENAL-2: only the project's own hooks, without the arsenal ones. */
