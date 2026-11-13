@@ -60,12 +60,20 @@ fun sessionPaneAction(session: SessionRecord, tickets: List<Ticket>): SessionPan
 const val START_DEFAULT_PROMPT = "Start."
 
 /**
- * END-SESSION-1: an ended session (End session, exit, orphaned) that can be resumed shows the Resume splash at once,
- * even while its transcript is on screen; it is not a live chat any more.
+ * END-SESSION-1: an ended session (End session, kill, exit, orphaned) that can be resumed offers Resume at once; it is
+ * not a live chat any more.
  * SESSION-FAIL-VISIBLE-1: a FAILED one never does: it keeps its transcript, with the failure card ([sessionFailure]) on top.
  */
-fun showsResumeSplash(session: SessionRecord, action: SessionPaneAction?): Boolean =
+fun endedResumable(session: SessionRecord, action: SessionPaneAction?): Boolean =
     action is SessionPaneAction.Resume && session.state in setOf(SessionState.EXITED, SessionState.ORPHANED)
+
+/**
+ * KILL-BLANK-1: an ended resumable session that has a transcript on screen ([onScreen]) keeps it, with Resume in a bar
+ * on top: a session killed mid-turn (or ended) never loses what it was asked and did. The Resume splash replaces the
+ * pane only when nothing is on screen.
+ */
+fun showsResumeBar(session: SessionRecord, action: SessionPaneAction?, onScreen: Boolean): Boolean =
+    onScreen && endedResumable(session, action)
 
 /** SESSION-FAIL-VISIBLE-1: the text a failed session's card shows when the daemon recorded no reason. */
 const val SESSION_FAILED_NO_REASON = "The session failed and the daemon recorded no reason; see the lines below."

@@ -67,10 +67,21 @@ class SessionPaneActionTest {
     }
 
     // SESSION-FAIL-VISIBLE-1: FAILED left the splash: a failed session keeps its transcript under the failure card.
-    @Test fun `END-SESSION-1 a session that ends while open shows the Resume splash, a live or failed one does not`() {
+    @Test fun `END-SESSION-1 a session that ends while open offers Resume, a live or failed one does not`() {
         for (st in SessionState.values()) {
             val r = rec(st, psid = "p")
-            assertEquals(st in ENDED_STATES && st != SessionState.FAILED, com.superiorsoftllc.infantry.ui.model.showsResumeSplash(r, sessionPaneAction(r, emptyList())), "state $st")
+            assertEquals(st in ENDED_STATES && st != SessionState.FAILED, com.superiorsoftllc.infantry.ui.model.endedResumable(r, sessionPaneAction(r, emptyList())), "state $st")
+        }
+    }
+
+    // KILL-BLANK-1: a session killed mid-turn ends EXITED with a provider session id; its transcript stays on screen.
+    @Test fun `KILL-BLANK-1 an ended session with a transcript keeps it under a Resume bar, never the splash`() {
+        for (st in SessionState.values()) {
+            val r = rec(st, psid = "p").copy(killOutcome = com.superiorsoftllc.infantry.ui.protocol.KillOutcome.GRACEFUL)
+            val action = sessionPaneAction(r, emptyList())
+            val ended = st in ENDED_STATES && st != SessionState.FAILED
+            assertEquals(ended, com.superiorsoftllc.infantry.ui.model.showsResumeBar(r, action, onScreen = true), "state $st: Resume bar")
+            assertEquals(false, com.superiorsoftllc.infantry.ui.model.showsResumeBar(r, action, onScreen = false), "state $st: bar with nothing on screen")
         }
     }
 
