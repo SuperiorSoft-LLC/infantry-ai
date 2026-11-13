@@ -1125,7 +1125,10 @@ class InfantryDaemon(
                 prompts = pendingPrompts,
                 link = runnerPool::link,
                 projectOf = { id -> remoteMirror.placement(id)?.projectId },
+                // RUNNER-UNIFY-5: a card open at a restart is reopened (the runner holds its prompt and never re-sends a taken frame).
+                store = File(daemonStateDir, "relayed-prompts.json"),
             )
+            runCatching { promptRelay.restore { id -> id in runnerPool.remoteSessionIds() } }
             pendingPrompts.heldElsewhere = promptRelay.heldElsewhere(remoteStarts)
             val forwardGateRef = java.util.concurrent.atomic.AtomicReference<com.superiorsoftllc.infantry.runners.ForwardedFrameGate?>(null)
             SessionRecordSerializer.runnerOf = runnerPool::runnerOf

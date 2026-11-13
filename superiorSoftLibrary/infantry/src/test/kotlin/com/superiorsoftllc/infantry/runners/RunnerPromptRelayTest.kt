@@ -44,7 +44,7 @@ class RunnerPromptRelayTest {
     private val ids = AtomicInteger()
     private val now = AtomicLong(1_000_000L)
 
-    private inner class Rig(timeoutMs: Long = 600_000L, onTimeout: TimeoutAction = TimeoutAction.DENY) {
+    private inner class Rig(timeoutMs: Long = 600_000L, onTimeout: TimeoutAction = TimeoutAction.DENY, val store: java.io.File? = null) {
         val starts = RemoteStarts(cloneRoot = { error("no clone") }, outboxMax = { 100 }, clock = { now.get() })
         val runner = PendingPrompts(
             clock = { now.get() }, newId = { "rp" + ids.incrementAndGet() },
@@ -63,7 +63,16 @@ class RunnerPromptRelayTest {
             override fun answerPrompt(sessionId: String, reply: PromptReply): OrchestratorReply<Boolean> =
                 if (reachable.get()) runnerLink.answerPrompt(sessionId, reply) else OrchestratorReply.Unavailable("down")
         }
-        val relay = RunnerPromptRelay(orchestrator, link = { name -> gated.takeIf { name == "r1" } }, projectOf = { "proj" }, log = {})
+        var relay = RunnerPromptRelay(orchestrator, link = { name -> gated.takeIf { name == "r1" } }, projectOf = { "proj" }, log = {}, store = store)
+        var orchestratorNow = orchestrator
+        val logs = java.util.concurrent.CopyOnWriteArrayList<String>()
+
+        /** RUNNER-UNIFY-5: the orchestrator restarts: a fresh prompt store and relay on the same file; the runner is untouched. */
+        fun restartOrchestrator(placed: (String) -> Boolean = { true }): Int {
+            orchestratorNow = PendingPrompts(newId = { "op" + ids.incrementAndGet() })
+            relay = RunnerPromptRelay(orchestratorNow, link = { name -> gated.takeIf { name == "r1" } }, projectOf = { "proj" }, log = { logs.add(it) }, store = store)
+            return relay.restore(placed)
+        }
         private val acked = HashMap<String, Long>()
         /** RUNNER-UNIFY-5: the frames the runner put on its sessions' stream, not yet taken by the orchestrator. */
         val frames = java.util.concurrent.CopyOnWriteArrayList<com.superiorsoftllc.infantry.protocol.Envelope>()
@@ -239,6 +248,54 @@ class RunnerPromptRelayTest {
         waitFor("open") { rig.runner.snapshot().isNotEmpty() }
         assertTrue(rig.frames.isEmpty(), "a session the orchestrator did not start puts no prompt frame on the link")
         assertFalse(rig.relay.applyFrame("r1", "s1", com.superiorsoftllc.infantry.protocol.Envelope.STDOUT, "x"))
+        rig.runner.closeAll()
+        runCatching { withTimeout(5_000) { asker.await() } }
+        Unit
+    }
+
+    @Test
+    fun framePromptsACardOpenAtAnOrchestratorRestartIsReopenedAndItsAnswerReachesTheRunner() = runBlocking {
+        val file = kotlin.io.path.createTempFile("relayed-prompts", ".json").toFile().also { it.delete(); it.deleteOnExit() }
+        val rig = Rig(store = file)
+        val asker = async { rig.runner.requestApprovalOutcome("s1", "bash", "ls") }
+        waitFor("open") { rig.runner.snapshot().isNotEmpty() }
+        rig.pushFrames()
+        assertEquals(1, rig.orchestratorNow.snapshot().size)
+        // The orchestrator stops with the card open; the runner keeps holding its prompt (no timer while the orchestrator is reachable).
+        assertEquals(1, rig.restartOrchestrator(), "the open card is reopened from the file")
+        val card = rig.orchestratorNow.snapshot().single()
+        rig.orchestratorNow.respond(PromptResponse(card.promptId, decision = Decision.ALLOW_ONCE.wire), "client:1")
+        assertEquals(Decision.ALLOW_ONCE, withTimeout(5_000) { asker.await() }.decision, "the answer after the restart reached the runner")
+        runCatching { waitFor("delivered") { file.readText().trim() == "[]" } }
+        assertEquals("[]", file.readText().trim(), "the file after delivery; relay log: ${rig.logs}")
+        assertEquals(0, rig.restartOrchestrator(), "a delivered answer leaves nothing to reopen")
+    }
+
+    @Test
+    fun framePromptsARestoredCardTheRunnerClosedMeanwhileIsClosedByItsCloseFrame() = runBlocking {
+        val file = kotlin.io.path.createTempFile("relayed-prompts", ".json").toFile().also { it.delete(); it.deleteOnExit() }
+        val rig = Rig(store = file)
+        val asker = async { rig.runner.requestApprovalOutcome("s1", "bash", "ls") }
+        waitFor("open") { rig.runner.snapshot().isNotEmpty() }
+        rig.pushFrames()
+        // While the orchestrator is down the runner closes the prompt; its close frame is read only after the restart.
+        rig.runner.respond(PromptResponse(rig.runner.snapshot().single().promptId, decision = Decision.DENY.wire), "client:runner")
+        withTimeout(5_000) { asker.await() }
+        assertEquals(1, rig.restartOrchestrator())
+        assertEquals(listOf(RunnerLinkWire.PROMPT_RESOLVED_FRAME), rig.pushFrames())
+        assertTrue(rig.orchestratorNow.snapshot().isEmpty(), "the reopened card closes with the runner's close")
+        assertEquals(0, rig.restartOrchestrator(), "and is not reopened again")
+    }
+
+    @Test
+    fun framePromptsACardOfASessionNoLongerPlacedIsNotReopened() = runBlocking {
+        val file = kotlin.io.path.createTempFile("relayed-prompts", ".json").toFile().also { it.delete(); it.deleteOnExit() }
+        val rig = Rig(store = file)
+        val asker = async { rig.runner.requestApprovalOutcome("s1", "bash", "ls") }
+        waitFor("open") { rig.runner.snapshot().isNotEmpty() }
+        rig.pushFrames()
+        assertEquals(0, rig.restartOrchestrator(placed = { false }))
+        assertTrue(rig.orchestratorNow.snapshot().isEmpty())
         rig.runner.closeAll()
         runCatching { withTimeout(5_000) { asker.await() } }
         Unit
