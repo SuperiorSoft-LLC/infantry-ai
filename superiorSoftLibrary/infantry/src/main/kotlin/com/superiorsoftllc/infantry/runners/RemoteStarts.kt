@@ -208,21 +208,6 @@ class RemoteStarts(
     }
 
     /**
-     * RUNNER-PROMPT-RELAY-1: session [sessionId] opened a prompt ([payload] = [com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPromptEvent]
-     * JSON); queued as a [RunnerEvent.PROMPT] event for a session the orchestrator started (with or without a git remote). True = queued.
-     */
-    fun onPrompt(sessionId: String, payload: String): Boolean {
-        if (!isLinked(sessionId)) return false
-        add(sessionId, RunnerEvent.PROMPT, payload)
-        return true
-    }
-
-    /** RUNNER-PROMPT-RELAY-1: a prompt of [sessionId] closed ([payload] = the `prompt_resolved` JSON), so the orchestrator's card closes. */
-    fun onPromptResolved(sessionId: String, payload: String) {
-        if (isLinked(sessionId)) add(sessionId, RunnerEvent.PROMPT_RESOLVED, payload)
-    }
-
-    /**
      * RUNNER-PROMPT-RELAY-1: epoch millis of the orchestrator's last outbox read (it reads every heartbeat while it is reachable); 0 =
      * not since this daemon started. A relayed prompt falls back to the runner's own timer only once this is older than that timer.
      */

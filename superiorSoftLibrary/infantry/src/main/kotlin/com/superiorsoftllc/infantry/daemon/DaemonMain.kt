@@ -1103,30 +1103,27 @@ class InfantryDaemon(
             )
             val runnerPool = com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerHub(localRunnerLink, remotes = { runnerLinksRef.get().paired() },
                 lend = credentialLender::lend, lentKeys = credentialLender::lentKeys)
-            val remoteMirror = com.superiorsoftllc.infantry.runners.RemoteSessionMirror(
-                sessionIds = { runnerPool.remoteSessionIds() }, // BOARD-HANG-2: the index only, never the local hello
-                // RUNNER-OUTPUT-1: kept across a restart, so a session on a runner is not orphaned (its chat, mail and kills still reach it).
+            // RUNNER-UNIFY-6: the placement index of the sessions started on remote runners (runner, start pins, stream resume point).
+            // RUNNER-OUTPUT-1: kept across a restart (runner-sessions.json, format unchanged), so a session on a runner is not orphaned.
+            val placements = com.superiorsoftllc.infantry.runners.RunnerPlacements(
                 store = File(daemonStateDir, "runner-sessions.json"),
-                runnerOf = { id -> runnerPool.runnerOf(id).takeIf { it != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL } },
+                placedOn = runnerPool::placedOn,
             )
-            for ((id, runner) in remoteMirror.restore()) runnerPool.placed(id, runner)
+            for ((id, runner) in placements.restore()) runnerPool.placed(id, runner)
             // RUNNER-UNIFY-4 (docs/RUNNER-UNIFY.md 5.3): ONE session directory: this daemon's own sessions plus, for each session placed on
-            // a runner, the record that runner sent in its own `session` frames (its /work/... working dir, harness, state). Behind
-            // runners.unifiedDirectory (default on; false = the mirror's records, as before; read live). The mirror stays the placement index.
+            // a runner, the record that runner sent in its own `session` frames (its /work/... working dir, harness, state).
             val sessionDirectory = com.superiorsoftllc.infantry.runners.SessionDirectory(
                 local = manager::list, localGet = manager::get,
-                placed = { runnerPool.remoteSessionIds() }, legacy = remoteMirror::get, placement = remoteMirror::placement,
-                enabled = { settings.runnerLink().unifiedDirectory },
+                placed = { runnerPool.remoteSessionIds() }, // BOARD-HANG-2: the index only, never the local hello
+                placements = placements,
                 store = File(daemonStateDir, "runner-directory.json"),
-                // RUNNER-ROLE-1: a runner spawn reads never-run until its first turn (with the role brief) is taken.
-                owesBrief = remoteMirror::owesBrief, markBriefed = remoteMirror::briefed,
             )
             // RUNNER-PROMPT-RELAY-1: a runner session's prompt is shown and answered in the orchestrator's app. Runner side: the prompts of
             // the orchestrator's sessions go to the outbox and run no timer here; orchestrator side: the watch relays them (below).
             val promptRelay = com.superiorsoftllc.infantry.runners.RunnerPromptRelay(
                 prompts = pendingPrompts,
                 link = runnerPool::link,
-                projectOf = { id -> remoteMirror.placement(id)?.projectId },
+                projectOf = { id -> placements.placement(id)?.projectId },
                 // RUNNER-UNIFY-5: a card open at a restart is reopened (the runner holds its prompt and never re-sends a taken frame).
                 store = File(daemonStateDir, "relayed-prompts.json"),
             )
@@ -1327,22 +1324,18 @@ class InfantryDaemon(
                 rule = settings::usagePacing,
                 manual = settings::usageManual,
                 overrides = settings::usageOverrides,
-                // RUNNER-POOL-10: the allowance is per provider ACCOUNT, so a worker on a remote runner counts too (it has no
-                // session record here: its meter comes from the ticket's pinned provider / model, else the first provider).
+                // RUNNER-POOL-10: the allowance is per provider ACCOUNT, so a worker on a remote runner counts too. RUNNER-UNIFY-6: one
+                // path, the session directory, wherever the worker runs; a harness this daemon does not know falls back to the ticket's
+                // pinned provider / model, else the first provider.
                 workerMeters = {
-                    val inProgress = store.tickets.all()
+                    store.tickets.all()
                         .filter { it.status == com.superiorsoftllc.infantry.protocol.TicketStatus.IN_PROGRESS }
-                    val local = inProgress
-                        .mapNotNull { row -> row.sessionId?.takeIf { it.isNotBlank() }?.let(manager::get) }
-                        .filter { it.state !in DEAD_SESSION_STATES }
-                        .map { r -> UsageMeters.meterFor(r.provider, r.model ?: manager.providerFor(r.provider)?.defaultModel()) }
-                    val remote = inProgress
-                        .filter { row -> row.sessionId?.takeIf { it.isNotBlank() }?.let { runnerPool.runnerOf(it) != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL } == true }
-                        .map { row ->
-                            val pid = row.provider ?: manager.providers.firstOrNull()?.id ?: UsageMeters.CLAUDE
-                            UsageMeters.meterFor(pid, row.model ?: manager.providerFor(pid)?.defaultModel())
+                        .mapNotNull { row ->
+                            val r = row.sessionId?.takeIf { it.isNotBlank() }?.let(sessionDirectory::get) ?: return@mapNotNull null
+                            if (r.state in DEAD_SESSION_STATES) return@mapNotNull null
+                            val pid = r.provider.takeIf { manager.providerFor(it) != null } ?: row.provider ?: manager.providers.firstOrNull()?.id ?: UsageMeters.CLAUDE
+                            UsageMeters.meterFor(pid, r.model ?: row.model ?: manager.providerFor(pid)?.defaultModel())
                         }
-                    local + remote
                 },
             )
             // USAGE-CARD-1: the stale limit, backoff and manual floor of the plan meters, read from the settings at every read.
@@ -1382,7 +1375,7 @@ class InfantryDaemon(
             // RUNNER-AGENT-1: the placement view a non-ticket start uses (paused runners, per-runner caps), same as the board's.
             val spawnRunnerEntries = { LocalRunner.placementEntries(runnerPool, settings) }
             val bindFreshSession = { agentId: String ->
-                LocalRunner.start(runnerPool, manager, SpawnOptions(agentId = agentId, projectId = agents.get(agentId)?.projectId), repo, agentRunner = agents.get(agentId)?.runner, defaultRunner = settings.runnersDefault(), entries = spawnRunnerEntries, projectDir = { id -> runCatching { projectStore.get(id).directory }.getOrNull()?.takeIf { it.isNotBlank() }?.let(::File)?.takeIf { it.isDirectory } }, remotePlaced = remoteMirror::placed)?.let { s -> when (s) { is StartedSession.Local -> com.superiorsoftllc.infantry.mailbox.FreshSession.Local(s.record); is StartedSession.Remote -> com.superiorsoftllc.infantry.mailbox.FreshSession.Remote(s.id) } }
+                LocalRunner.start(runnerPool, manager, SpawnOptions(agentId = agentId, projectId = agents.get(agentId)?.projectId), repo, agentRunner = agents.get(agentId)?.runner, defaultRunner = settings.runnersDefault(), entries = spawnRunnerEntries, projectDir = { id -> runCatching { projectStore.get(id).directory }.getOrNull()?.takeIf { it.isNotBlank() }?.let(::File)?.takeIf { it.isDirectory } }, remotePlaced = placements::placed)?.let { s -> when (s) { is StartedSession.Local -> com.superiorsoftllc.infantry.mailbox.FreshSession.Local(s.record); is StartedSession.Remote -> com.superiorsoftllc.infantry.mailbox.FreshSession.Remote(s.id) } }
             }
             val mail = MailRouter(
                 manager, mailbox, agents, mailBase,
@@ -1401,7 +1394,7 @@ class InfantryDaemon(
                 projectRefs = { projectStore.list().map { MailRouter.ProjectRef(it.id, it.name) } },
                 resumeTurn = LocalRunner.deliverVia(runnerPool),
                 // RUNNER-POOL-8: a session placed on a remote runner takes its mail through that runner (kept queued while it is offline).
-                remoteSession = { sid -> runnerPool.runnerOf(sid) != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL },
+                remoteSession = { sid -> runnerPool.runnerOf(sid) != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL }, // runner-ok: mail addressing: MailRouter (core) cannot see the pool; a placed session is a recipient, its turns go over the link
                 // RUNNER-ROLE-1: the record of a session on a runner, so its first mail turn carries the role brief as a local one's does.
                 remoteRecord = sessionDirectory::get, remoteBriefed = sessionDirectory::briefed,
             )
@@ -1485,8 +1478,7 @@ class InfantryDaemon(
                 projectDirectory = { id -> id?.let { runCatching { projectStore.get(it).directory }.getOrNull() } },
                 repo = repo, agents = agents, knowledge = knowledge, skills = skillsSource, runners = runnerPool,
                 pushOnCommit = { settings.runnerLink().pushOnCommit },
-                unifiedCommands = { settings.runnerLink().unifiedCommands },
-                remotePlaced = remoteMirror::placed,
+                remotePlaced = placements::placed,
                 // IMG-3: a ticket's images live under its project's directory (.infantry/uploads/ticket/).
                 ticketImages = com.superiorsoftllc.infantry.backlog.TicketImages { projectId ->
                     runCatching { projectStore.get(projectId) }.getOrNull()?.directory?.takeIf { it.isNotBlank() }?.let(::File)?.takeIf { it.isDirectory }
@@ -1501,17 +1493,6 @@ class InfantryDaemon(
             val streamSequencer = SessionFrameSequencer(chatHistory) { framePublished.get()() }
             // RUNNER-UNIFY-5 (runner side): the orchestrator's sessions' prompts also go on their stream, link-only (no client is sent them).
             pendingPrompts.observer = promptRelay.runnerObserver(remoteStarts) { frame -> streamSequencer.publish(emptyList(), listOf(frame)) }
-            // RUNNER-UNIFY-3 (orchestrator side): the pushed stream of each paired runner (runners.pushFrames); set once the watch exists.
-            val frameStreamRef = java.util.concurrent.atomic.AtomicReference<com.superiorsoftllc.infantry.runners.RunnerFrameStream?>(null)
-            val remoteStreaming: (String) -> Boolean = { id -> frameStreamRef.get()?.streamingSession(id) == true }
-            // RUNNER-OUTPUT-1: a remote session's output on this daemon's own stream (live, replay, get_session), read from its runner.
-            val remoteTranscripts = com.superiorsoftllc.infantry.runners.RemoteTranscriptPump(
-                read = { id, from -> runnerPool.runnerOf(id).takeIf { it != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL }?.let { rn -> runnerPool.link(rn)?.readTranscript(id, from, 0) } },
-                readFrames = { id, after -> runnerPool.runnerOf(id).takeIf { it != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL }?.let { rn -> runnerPool.link(rn)?.readFrames(id, after) } },
-                publish = { frames -> streamSequencer.publish(clients, frames) },
-                takenBefore = remoteMirror::taken,
-                onTaken = remoteMirror::taken,
-            )
             runnerFrames.set { id, after ->
                 streamSequencer.replayAfter(id, after)?.frames.orEmpty().filter { it.sessionId == id && it.type != Envelope.SESSION && it.type != Envelope.STATUS }
             }
@@ -1817,10 +1798,9 @@ class InfantryDaemon(
                         noticeSuppressor = { name, session, ms -> nudgeGate.suppress(name, session, ms) },
                         // SPAWN-PARAMS-1 / RUNNER-UNIFY-4: api.sessions looks a session up in the one directory (session_read, script waits).
                         sessionOf = sessionDirectory::get,
+                        // RUNNER-UNIFY-6: through the session's runner (RunnerPool.linkFor), wherever it runs.
                         remoteLines = { id, _ ->
-                            val name = runnerPool.runnerOf(id)
-                            if (name == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL) null
-                            else (runnerPool.link(name)?.readTranscript(id, 0, 0) as? com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorReply.Ok)?.value
+                            (runnerPool.linkFor(id)?.readTranscript(id, 0, 0) as? com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorReply.Ok)?.value
                         },
                         // CMD-1: api.runs, a cwd-bound child process over the runner (pty and pipes).
                         runService = com.superiorsoftllc.infantry.daemon.plugins.LocalRuns(
@@ -1862,7 +1842,7 @@ class InfantryDaemon(
                         // DP-4a: tickets / epics / board for plugins, over the board built above (host-applied policy and scope).
                         boardServices = com.superiorsoftllc.infantry.daemon.plugins.LocalBoardServices(
                             // RUNNER-DOCKER-MATRIX-1: a remote worker's forwarded MCP board call (infantry_ticket_get, ...) names its
-                            // session; that session is in remoteMirror, not manager, so both are known callers (as for the reads below).
+                            // session; that session is in the placement index, not manager, so both are known callers (as for the reads below).
                             ops = { boardPorts.ops() }, sessions = sessionDirectory::list, link = { orchestratorHub.link },
                             gate = { type, data ->
                                 val envelope = Envelope(type, data)
@@ -1938,9 +1918,7 @@ class InfantryDaemon(
                         sessionReadModel = com.superiorsoftllc.infantry.daemon.plugins.LocalSessionReads(
                             sessions = sessionDirectory::list,
                             replay = { id ->
-                                // RUNNER-OUTPUT-1: a remote session's newest output is read from its runner first.
-                                // RUNNER-UNIFY-3: a runner that pushes its frames has already put them on this daemon's stream.
-                                if (runnerPool.runnerOf(id) != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL && !remoteStreaming(id)) remoteTranscripts.pull(id)
+                                // RUNNER-UNIFY-3/6: a remote session's frames are already on this daemon's stream (pushed by its runner).
                                 streamSequencer.replayAfter(id, 0)?.let { batch ->
                                     com.superiorsoftllc.infantry.daemon.plugins.LocalSessionReads.Replay(
                                         batch.gap?.let { json.encodeToString(SessionReplayGapPayload.serializer(), it) },
@@ -1969,7 +1947,7 @@ class InfantryDaemon(
                                     options,
                                     repo, agentRunner = request.agentId?.let { agents.get(it)?.runner }, defaultRunner = settings.runnersDefault(), entries = spawnRunnerEntries,
                                     projectDir = { id -> runCatching { projectStore.get(id).directory }.getOrNull()?.takeIf { it.isNotBlank() }?.let(::File)?.takeIf { it.isDirectory } },
-                                    remotePlaced = remoteMirror::placed,
+                                    remotePlaced = placements::placed,
                                 ) ?: throw IllegalArgumentException("the daemon could not bind a session for this spawn")
                             },
                             firstTask = { started, task ->
@@ -1977,7 +1955,7 @@ class InfantryDaemon(
                                     is StartedSession.Local -> {
                                         val record = started.record
                                         val turn = if (record.neverRun) pluginFirstTurn(record, task) else task
-                                        manager.resume(record.id, turn)
+                                        manager.resume(record.id, turn) // runner-ok: the Local start result holds this daemon's own record; the Remote branch below goes over the link
                                     }
                                     // RUNNER-AGENT-1: the first task of a remote spawn is mail to its runner.
                                     is StartedSession.Remote -> {
@@ -2200,51 +2178,33 @@ class InfantryDaemon(
             // RUNNER-POOL-6: a heartbeat round over the paired runners every limits.runners.heartbeatSec sets up / degraded / down.
             // RUNNER-POOL-8 (docs/RUNNER-POOL.md 3.1): after each round the watch replays the runners' outboxes (deduped by session +
             // seq), pumps the mail of sessions that came to rest or whose runner is back, and handles a runner lost past lostAfterMin.
-            // GREEN-GAP-1 / RUNNER-UNIFY-5: why a runner session FAILED, kept for its failure card (the frames' reason, or the scrape's).
-            val remoteFailed: (String, String) -> Unit = remoteMirror::failed
             val runnerWatch = com.superiorsoftllc.infantry.runners.RunnerWatch(
                 pool = runnerPool,
                 lostAfterMs = { settings.limit(LimitRegistry.RUNNERS_LOST_AFTER_MIN) * 60_000L },
                 restartElsewhere = { settings.runnerLink().restartElsewhere },
-                apply = { runner, e ->
-                    // RUNNER-UNIFY-5: a session whose frames are pushed, on runners.framePrompts, takes its prompts and its failure reason
-                    // from those frames (the frame stream's apply, below); the event relay and the transcript scrape are for the others.
-                    val onFrames = settings.runnerLink().framePrompts && remoteStreaming(e.sessionId)
-                    // RUNNER-PROMPT-RELAY-1: a prompt a runner session raised opens here; its close closes the card.
-                    if (!onFrames) promptRelay.apply(runner, e)
-                    if (e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.STATUS) remoteMirror.status(e.sessionId, e.payload)
-                    // GREEN-GAP-1: a session that FAILED on its runner carries the runner's own error, read from its transcript, so the
-                    // failure card never says "the daemon recorded no reason". RUNNER-UNIFY-6 deletes it with the flag.
-                    if (!onFrames && e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.STATUS && e.payload.equals(SessionState.FAILED.name, ignoreCase = true)) {
-                        val lines = (runnerPool.linkFor(e.sessionId)?.readTranscript(e.sessionId) as? com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorReply.Ok)?.value.orEmpty()
-                        val why = lines.lastOrNull { it.contains("turn failed") }?.substringAfter("turn failed:", "")?.trim()?.takeIf { it.isNotEmpty() }
-                            ?: lines.lastOrNull { it.isNotBlank() }?.take(300)
-                        remoteFailed(e.sessionId, why ?: "session failed on runner '$runner'; its transcript holds no error line")
-                    }
+                apply = { _, e ->
+                    // RUNNER-UNIFY-6: approval cards and failure reasons come from the session's pushed frames (the frame stream's apply,
+                    // below); the outbox carries only what is not a stream frame: state for the placement index, turn end, branch pushed.
+                    if (e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.STATUS) placements.status(e.sessionId, e.payload)
                     // RUNNER-PROMPT-RELAY-1: a client connected before a runner start never heard of the session (only the connect
                     // frame listed remote sessions), so its prompt card had no agent to show on. Each status or finish of a remote
                     // session pushes the session list, as every other session-list change does. Events are acked, so one push per change.
                     if (e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.STATUS ||
                         e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.FINISHED
                     ) {
-                        if (e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.FINISHED) remoteMirror.finished(e.sessionId)
+                        if (e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.FINISHED) placements.finished(e.sessionId)
                         val pushed = Envelope(
                             Envelope.SESSIONS,
                             json.encodeToString(JsonArray(sessionDirectory.list().map { json.encodeToJsonElement(SessionRecordSerializer, it) })),
                         )
                         for (client in clients) client.trySend(pushed)
                     }
-                    // RUNNER-OUTPUT-1: each status or finish of a remote session puts its new output on this daemon's stream (the app
-                    // chat, a later replay, get_session).
-                    if (e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.STATUS ||
-                        e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.FINISHED
-                    ) if (!remoteStreaming(e.sessionId)) remoteTranscripts.pull(e.sessionId)?.let { System.err.println("[infantry] runner '$runner': output of ${e.sessionId} not read: $it") }
                     // RUNNER-CLAUDE-PROOF-1: an interactive session (claude) never finishes between turns, it comes to rest (IDLE): that ends the turn too.
                     val turnEnded = e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.FINISHED ||
                         (e.kind == com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerEvent.STATUS && e.payload.equals(SessionState.IDLE.name, ignoreCase = true))
                     if (turnEnded) {
                         // RUNNER-TICKET-ROW-1: fetch the runner's pushed branch to the checkout, then tell the board the turn ended.
-                        val placed = remoteMirror.placement(e.sessionId)
+                        val placed = placements.placement(e.sessionId)
                         if (placed?.repoRoot != null && placed.branch != null)
                             com.superiorsoftllc.infantry.daemon.plugins.fetchRunnerTicketBranch(File(placed.repoRoot), placed.branch)
                         sessionDirectory.get(e.sessionId)?.takeIf { it.ticketId != null }?.let { rec ->
@@ -2266,36 +2226,29 @@ class InfantryDaemon(
                 ticketOf = { sid -> boardPorts.ticketOfWorker(sid) },
                 restart = { t, r, p -> boardPorts.restartElsewhere(t, r, p) },
             )
-            // RUNNER-UNIFY-3 (docs/RUNNER-UNIFY.md 5.2), behind runners.pushFrames (default off): each paired runner PUSHES its sessions'
-            // frames (a held runner_link_frames_pull, answered the moment a frame exists). They go on this daemon's stream exactly as the
-            // poll path puts them, plus `status` with its run activity (the "working (0 tool calls)" gap). A state change or a finish
-            // reads the runner's events at once (turn end, board, approval card, mail) instead of at the next poll. Off, or a runner that
-            // cannot push, = the poll path below, unchanged.
+            // RUNNER-UNIFY-3 (docs/RUNNER-UNIFY.md 5.2), the only path since RUNNER-UNIFY-6: each paired runner PUSHES its sessions'
+            // frames (a held runner_link_frames_pull, answered the moment a frame exists). They go on this daemon's stream, `status` with
+            // its run activity included. A state change or a finish reads the runner's events at once (turn end, board, mail).
             val pushedState = ConcurrentHashMap<String, String>()
             val frameStream = com.superiorsoftllc.infantry.runners.RunnerFrameStream(
-                enabled = { settings.runnerLink().pushFrames },
                 sessionsOn = runnerPool::sessionsOn,
                 link = { runner -> runnerPool.link(runner) },
-                takenBefore = remoteMirror::taken,
+                takenBefore = placements::taken,
                 apply = { runner, sid, fresh ->
                     // RUNNER-UNIFY-4: the runner's own `session` frames are the record the session directory serves for it.
                     var record = false
                     for (f in fresh) if (f.type == Envelope.SESSION && sessionDirectory.accept(runner, sid, f.data)) record = true
-                    if (record && settings.runnerLink().unifiedDirectory) {
+                    if (record) {
                         val pushed = Envelope(Envelope.SESSIONS, json.encodeToString(JsonArray(sessionDirectory.list().map { json.encodeToJsonElement(SessionRecordSerializer, it) })))
                         for (client in clients) client.trySend(pushed)
                     }
-                    val out = fresh.filter { it.type in com.superiorsoftllc.infantry.runners.RemoteTranscriptPump.RELAYED || it.type == Envelope.STATUS }
+                    val out = fresh.filter { it.type in com.superiorsoftllc.infantry.runners.RunnerFrameStream.RELAYED || it.type == Envelope.STATUS }
                         .map { Envelope(it.type, it.data, sid, origin = it.origin) }
                     if (out.isNotEmpty()) streamSequencer.publish(clients, out)
-                    // RUNNER-UNIFY-5 (runners.framePrompts): the approval card opens from the prompt frame, through the same prompt store as a
-                    // local session; a failed turn's reason is the one its frames carry. Off = the event relay and the scrape (the watch).
-                    if (settings.runnerLink().framePrompts) {
-                        for (f in fresh) promptRelay.applyFrame(runner, sid, f.type, f.data)
-                        com.superiorsoftllc.infantry.runners.RunnerFailureReason.of(fresh, sessionDirectory.received(sid))?.let { remoteFailed(sid, it) }
-                    }
-                    // The poll path keeps its own count of what it took: it reads the shared one again if it serves this session later.
-                    remoteTranscripts.forget(sid)
+                    // RUNNER-UNIFY-5: the approval card opens from the prompt frame, through the same prompt store as a local session; a
+                    // failed turn's reason is the one its frames carry.
+                    for (f in fresh) promptRelay.applyFrame(runner, sid, f.type, f.data)
+                    com.superiorsoftllc.infantry.runners.RunnerFailureReason.of(fresh, sessionDirectory.received(sid))?.let { placements.failed(sid, it) }
                     var moved = fresh.any { it.type == Envelope.EXIT || it.type == Envelope.FINISHED }
                     // A change of state, run phase or tool (a tool asking for approval stops running) reads the events, so an
                     // approval card opens while the session waits, not at the next heartbeat.
@@ -2308,12 +2261,11 @@ class InfantryDaemon(
                     }
                     if (moved) runCatching { runnerWatch.tick() }.onFailure { System.err.println("[infantry] runner watch failed: ${it.message}") }
                 },
-                onTaken = remoteMirror::taken,
+                onTaken = placements::taken,
                 waitMs = { runnerLinkService.pushWaitMs() },
                 maxFrames = { settings.limit(LimitRegistry.RUNNERS_PUSH_FRAMES_MAX).toInt() },
                 idleMs = { settings.limit(LimitRegistry.RUNNERS_PUSH_WAIT_SEC) * 1000L },
             )
-            frameStreamRef.set(frameStream)
             runCatching { frameStream.sync(runnerLinksRef.get().paired()) }
             scheduledTicker(settings.limit(LimitRegistry.RUNNERS_HEARTBEAT_SEC) * 1000L) {
                 runCatching { frameStream.sync(runnerLinksRef.get().paired()) }
@@ -2328,18 +2280,6 @@ class InfantryDaemon(
                 // session falls back to prompts.onTimeout only once the orchestrator read nothing for its whole timer.
                 runCatching { promptRelay.retry() }
                 runCatching { pendingPrompts.expireHeld(remoteStarts.lastOrchestratorRead) }
-            }
-            // RUNNER-OUTPUT-1: while a remote session's turn runs, its runner's events and output are read at limits.runners.outputPollMs, so
-            // the app chat fills as the turn goes (the heartbeat round alone came every limits.runners.heartbeatSec). Nothing runs = no call.
-            val outputPollMs = settings.limit(LimitRegistry.RUNNERS_OUTPUT_POLL_MS)
-            if (outputPollMs > 0) scheduledTicker(outputPollMs) {
-                // RUNNER-UNIFY-3: a session whose runner pushes its frames is not polled.
-                val running = runnerPool.remoteSessionIds().filter { id -> sessionDirectory.get(id)?.state.let { it == null || it == SessionState.STARTING || it == SessionState.BUSY } }
-                    .filter { id -> !remoteStreaming(id) }
-                if (running.isNotEmpty()) {
-                    runCatching { runnerWatch.tick() }.onFailure { System.err.println("[infantry] runner watch failed: ${it.message}") }
-                    for (id in running) runCatching { remoteTranscripts.pull(id) }
-                }
             }
             // RUNNER-POOL-8: runner side of runners.pushOnCommit: push a ticket branch once its worker committed.
             scheduledTicker(settings.limit(LimitRegistry.RUNNERS_COMMIT_CHECK_SEC) * 1000L) { runCatching { remoteStarts.checkCommits() } }
@@ -2522,11 +2462,9 @@ class InfantryDaemon(
                             runnerPool = runnerPool,
                             sessions = sessionDirectory::list,
                             sessionOf = sessionDirectory::get, briefed = sessionDirectory::briefed,
-                            remotePlaced = remoteMirror::placed,
-                            remoteForget = { id -> remoteMirror.forget(id); sessionDirectory.forget(id); manager.forgetPlacedInstance(id) },
-                            remoteStatus = remoteMirror::status,
-                            remoteTranscripts = remoteTranscripts,
-                            remoteStreaming = remoteStreaming,
+                            remotePlaced = placements::placed,
+                            remoteForget = { id -> placements.forget(id); sessionDirectory.forget(id); frameStream.forget(id); manager.forgetPlacedInstance(id) },
+                            remoteStatus = placements::status,
                             limits = limits,
                             usagePacing = usagePacing,
                             ticketFiles = ticketFilesText?.let { text ->
@@ -3178,10 +3116,6 @@ private suspend fun handleConnection(
     spawnGuard: SpawnGuard = SpawnGuard(manager::get),
     /** RUNNER-POOL-2: the runner pool a `new` console start goes through (default: the local runner over [manager]). */
     runnerPool: com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool = LocalRunner.pool(manager, agents),
-    /** RUNNER-OUTPUT-1: puts a remote session's runner output on [streamSequencer] before a replay is answered (null = none). */
-    remoteTranscripts: com.superiorsoftllc.infantry.runners.RemoteTranscriptPump? = null,
-    /** RUNNER-UNIFY-3: whether a remote session's runner pushes its frames (then nothing is read before a replay). */
-    remoteStreaming: (String) -> Boolean = { false },
     /** U1: the plan-limit meters a `limits` request reads. */
     limits: LimitService = LimitService.NONE,
     /** USAGE-PACE (1.119.0): the meters and allowances a `usage_get` request reads. */
@@ -3231,9 +3165,9 @@ private suspend fun handleConnection(
     sessionOf: (String) -> SessionRecord? = manager::get,
     /** RUNNER-ROLE-1: a first turn composed with the brief was taken ([com.superiorsoftllc.infantry.runners.SessionDirectory.briefed]). */
     briefed: (String) -> Unit = {},
-    /** RUNNER-SESSION-GHOST-1: records a non-board remote start's placement in the mirror (project, role, harness, model). */
-    remotePlaced: (String, com.superiorsoftllc.infantry.runners.RemoteSessionMirror.Placed) -> Unit = { _, _ -> },
-    /** RUNNER-SESSION-GHOST-1: a deleted remote session leaves the mirror. */
+    /** RUNNER-SESSION-GHOST-1: records a non-board remote start's placement in the placement index (project, role, harness, model). */
+    remotePlaced: (String, com.superiorsoftllc.infantry.runners.RunnerPlacements.Placed) -> Unit = { _, _ -> },
+    /** RUNNER-SESSION-GHOST-1: a deleted remote session leaves the placement index. */
     remoteForget: (String) -> Unit = {},
     /** RUNNER-SESSION-GHOST-1: a runner event-less state change of a remote session (a kill from here ends it at once). */
     remoteStatus: (String, String) -> Unit = { _, _ -> },
@@ -3543,7 +3477,7 @@ private suspend fun handleConnection(
     // RUNNER-UNIFY-2 (docs/RUNNER-UNIFY.md 5.1): every owner command on a session goes through the runner it lives on
     // (RunnerPool.linkFor): this daemon's own sessions through the local runner, a remote one over its link. No handler asks which.
     fun sessionCommand(id: String, command: com.superiorsoftllc.infantry.daemon.api.orchestrator.SessionCommand): com.superiorsoftllc.infantry.daemon.api.orchestrator.CommandResult =
-        LocalRunner.command(runnerPool, manager, id, command, (settings as? SettingsService)?.runnerLink()?.unifiedCommands ?: true)
+        LocalRunner.command(runnerPool, id, command)
     // RUNNER-UNIFY-2: the ONE turn send (an owner prompt, or a remote session's first task); IN_FLIGHT is the typed run-in-flight refusal.
     fun sendTurn(id: String, text: String, wakeReason: String? = null): com.superiorsoftllc.infantry.daemon.api.orchestrator.CommandResult =
         sessionCommand(id, com.superiorsoftllc.infantry.daemon.api.orchestrator.SessionCommand(com.superiorsoftllc.infantry.daemon.api.orchestrator.SessionCommand.TURN, text, wakeReason))
@@ -3643,17 +3577,12 @@ private suspend fun handleConnection(
                     )
 
                     else -> {
-                        // RUNNER-OUTPUT-1: a remote session's output is read from its runner onto this daemon's stream first, then replayed
-                        // like a local session's (sequenced chat frames). Before, its lines went out as unsequenced stdout, which no client draws.
-                        val runnerName = runnerPool.runnerOf(sessionId)
-                        val remote = runnerName != com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL && manager.get(sessionId) == null
-                        val unread = if (remote && !remoteStreaming(sessionId)) remoteTranscripts?.pull(sessionId) else null
+                        // RUNNER-UNIFY-6: one replay for every session: a remote session's frames are already on this daemon's stream
+                        // (pushed by its runner), so it replays exactly as a local one.
                         val replay = streamSequencer.replayAfter(sessionId, request.lastSequence)
                         if (replay == null) {
                             // CLI-PTY-5: a known session with nothing kept simply has no history yet; only an unknown one is an error.
-                            if (remote) {
-                                if (unread != null) outgoing.trySend(Envelope(Envelope.ERROR, "runner '$runnerName': $unread", sessionId))
-                            } else if (manager.get(sessionId) == null) outgoing.trySend(Envelope(Envelope.ERROR, "no replay history for session '$sessionId'"))
+                            if (sessionOf(sessionId) == null) outgoing.trySend(Envelope(Envelope.ERROR, "no replay history for session '$sessionId'"))
                         } else {
                             replay.gap?.let { gap ->
                                 outgoing.trySend(
@@ -3786,7 +3715,7 @@ private suspend fun handleConnection(
                                 val origin = spawnOrigin
                                 val timerOverride = spawn?.promptTimeoutOverride()
                                 val created = spawnGuard.admit(origin) { placement ->
-                                    manager.startNew(
+                                    manager.startNew( // runner-ok: the console `new` start of a session on this daemon, under the spawn guard
                                         // P10-K9: the session carries the project its knowledge section names.
                                         prompt = firstTurn(
                                             instance, resolved.role, resolved.agentId, envelope.data,
@@ -3830,7 +3759,7 @@ private suspend fun handleConnection(
                                 } else {
                                     envelope.data
                                 }
-                                active = manager.resume(current.id, turn).id
+                                active = manager.resume(current.id, turn).id // runner-ok: the connection's own session, held by this daemon's manager (manager.get above)
                                 null
                             } catch (e: Exception) {
                                 Envelope(Envelope.ERROR, e.message ?: "resume failed")
@@ -4411,13 +4340,12 @@ private suspend fun handleConnection(
                             val force = parts.drop(1).any { it.equals("force", ignoreCase = true) }
                             // RUNNER-UNIFY-2: through the session's runner (RUNNER-DOCKER-MATRIX-1: a remote session's kill must
                             // reach its runner, or its harness process lives on there while the app shows the session ended).
-                            val held = manager.get(id) != null
                             val r = sessionCommand(id, com.superiorsoftllc.infantry.daemon.api.orchestrator.SessionCommand(com.superiorsoftllc.infantry.daemon.api.orchestrator.SessionCommand.KILL, force = force))
                             if (!r.ok && r.kind != com.superiorsoftllc.infantry.daemon.api.orchestrator.CommandResult.UNKNOWN) error(r.reason ?: "kill failed")
                             // RUNNER-SESSION-GHOST-1: stopped, or the runner holds no such session (a ghost: nothing runs there). Either
-                            // way it has ended, so the runner mirror reads EXITED now, not STARTING until an event that never comes;
-                            // `session_remove --force` (kill, then remove) can then remove it. (The mirror goes in RUNNER-UNIFY-4.)
-                            if (!held) remoteStatus(id, SessionState.EXITED.name)
+                            // way it has ended, so a placed session reads EXITED now, not its last state until a frame that never comes;
+                            // `session_remove --force` (kill, then remove) can then remove it. The placement index ignores an unplaced id.
+                            remoteStatus(id, SessionState.EXITED.name)
                             pluginSessionsAck(envelope, sessions)
                         } catch (e: Exception) {
                             Envelope(Envelope.ERROR, e.message ?: "kill failed")
@@ -4589,7 +4517,6 @@ private suspend fun handleConnection(
                                 // (also when its runner is down or forgot it: that cannot keep the row alive), so it leaves the list.
                                 (runnerPool as? com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerHub)?.forget(id)
                                 remoteForget(id)
-                                remoteTranscripts?.forget(id)
                             }
                             streamSequencer.forget(id)
                             // Contract 1.26.0: the delete itself gets no direct reply -- every client

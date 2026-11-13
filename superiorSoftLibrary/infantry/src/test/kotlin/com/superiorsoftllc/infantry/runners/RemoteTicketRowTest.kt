@@ -26,12 +26,13 @@ class RemoteTicketRowTest {
         git(work, "checkout", "-b", branch); File(work, "h.txt").writeText("h"); git(work, "add", "."); git(work, "commit", "-m", "hello"); git(work, "push", "origin", branch)
         git(work, "checkout", "main"); git(work, "branch", "-D", branch)
 
-        val mirror = RemoteSessionMirror(sessionIds = { listOf("s1") })
-        mirror.placed("s1", RemoteSessionMirror.Placed("claude", "sonnet", work.path, branch, "t1"))
+        val placements = RunnerPlacements()
+        val mirror = SessionDirectory(local = { emptyList() }, localGet = { null }, placed = { listOf("s1") }, placements = placements)
+        placements.placed("s1", RunnerPlacements.Placed("claude", "sonnet", work.path, branch, "t1"))
         val rec = mirror.get("s1")!!
         assertEquals("sonnet", rec.model); assertEquals(work.path, rec.repoRoot); assertEquals("t1", rec.ticketId)
         // RUNNER-DONE-1: the project roster (`agents --live --project`) filters on these; a remote worker read "No agents here".
-        mirror.placed("s1", RemoteSessionMirror.Placed("claude", "sonnet", work.path, branch, "t1", projectId = "p1", agentId = "a1", role = "backend"))
+        placements.placed("s1", RunnerPlacements.Placed("claude", "sonnet", work.path, branch, "t1", projectId = "p1", agentId = "a1", role = "backend"))
         mirror.get("s1")!!.let { assertEquals("p1", it.projectId); assertEquals("a1", it.agentId); assertEquals("backend", it.role) }
         val agents = com.superiorsoftllc.infantry.daemon.projectAgents("p1", mirror.list()) { null }
         assertEquals(listOf("a1"), agents.map { it.agentId }, "the remote worker is one of the project's agents")

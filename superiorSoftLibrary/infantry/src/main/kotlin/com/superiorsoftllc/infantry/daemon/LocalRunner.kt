@@ -156,18 +156,9 @@ object LocalRunner {
     /**
      * RUNNER-UNIFY-2 (docs/RUNNER-UNIFY.md 5.1): an owner command on [sessionId] through the runner it lives on
      * ([RunnerPool.linkFor]): the local runner for this daemon's own sessions, the paired runner for a remote one. No caller asks which.
-     * CONTINGENCY `runners.unifiedCommands` = false ([unified]): a session this daemon's [manager] holds skips the pool and runs
-     * [execute] directly, as the handlers did before; only the other sessions go by placement.
+     * RUNNER-UNIFY-6: the only path (the `runners.unifiedCommands` contingency is gone).
      */
-    fun command(pool: RunnerPool, manager: SessionManager, sessionId: String, command: SessionCommand, unified: Boolean = true): CommandResult =
-        command(pool, sessionId, command, unified, held = { manager.get(it) != null }, direct = { id, c -> execute(manager, id, c) })
-
-    /** [command] with the manager's two uses spelled out: [held] (this daemon holds the session) and [direct] ([execute] on it). */
-    fun command(
-        pool: RunnerPool, sessionId: String, command: SessionCommand, unified: Boolean,
-        held: (String) -> Boolean, direct: (String, SessionCommand) -> CommandResult,
-    ): CommandResult {
-        if (!unified && held(sessionId)) return direct(sessionId, command)
+    fun command(pool: RunnerPool, sessionId: String, command: SessionCommand): CommandResult {
         val runner = pool.runnerOf(sessionId)
         val link = pool.linkFor(sessionId) ?: return CommandResult(CommandResult.UNAVAILABLE, "runner '$runner' is not connected; the session there is still running")
         return when (val r = link.command(sessionId, command)) {
@@ -251,7 +242,7 @@ object LocalRunner {
          * mirror of runner sessions. Without it the session listed as provider `remote` with no project, which no project-scoped
          * caller could remove.
          */
-        remotePlaced: (String, com.superiorsoftllc.infantry.runners.RemoteSessionMirror.Placed) -> Unit = { _, _ -> },
+        remotePlaced: (String, com.superiorsoftllc.infantry.runners.RunnerPlacements.Placed) -> Unit = { _, _ -> },
     ): StartedSession? {
         val wanted = options?.runner?.trim().orEmpty().ifEmpty { agentRunner?.trim().orEmpty() }.ifEmpty { defaultRunner.trim() }
         var runner = RunnerPool.LOCAL
@@ -305,7 +296,7 @@ object LocalRunner {
      */
     private fun startRemote(
         pool: RunnerPool, manager: SessionManager, runner: String, options: SpawnOptions?, repo: File?,
-        remotePlaced: (String, com.superiorsoftllc.infantry.runners.RemoteSessionMirror.Placed) -> Unit,
+        remotePlaced: (String, com.superiorsoftllc.infantry.runners.RunnerPlacements.Placed) -> Unit,
     ): StartedSession? {
         if (options?.agentId == null && options?.role == null) return null
         val hub = pool as? com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerHub
@@ -313,7 +304,7 @@ object LocalRunner {
         val approval = ToolApprovals.current(ToolApproval.parse(options.toolApproval)).mode.wire
         val spec = startSpec(options, null).copy(toolApproval = approval, promptRelay = true)
         val placed = { ref: SessionRef ->
-            com.superiorsoftllc.infantry.runners.RemoteSessionMirror.Placed(
+            com.superiorsoftllc.infantry.runners.RunnerPlacements.Placed(
                 options.provider.orEmpty(), options.model, null, ref.branch, null, ref.worktreePath,
                 projectId = options.projectId, agentId = options.agentId, role = options.role,
                 // RUNNER-ROLE-1: bound at rest with no first turn, so the first turn this daemon sends it carries the role brief.
@@ -351,15 +342,15 @@ object LocalRunner {
     /**
      * RUNNER-UNIFY-2: the ONE remote start, for a ticket (the board) and a session outside the board alike. The runner clones
      * [checkout]'s git remote ([originOf]) and commits as its git identity ([identityOf]); then the session is indexed on the pool
-     * ([index]) and recorded in the orchestrator's mirror ([placed] -> [remotePlaced]). [spec] carries everything else (ticket,
+     * ([index]) and recorded in the orchestrator's placement index ([placed] -> [remotePlaced]). [spec] carries everything else (ticket,
      * branch, Tool approval, prompt relay).
      */
     fun startOnRunner(
         pool: RunnerPool, runner: String, spec: StartSpec, checkout: File?,
         originOf: (File) -> String?, identityOf: (File) -> Pair<String, String>?,
         index: (String) -> Unit,
-        placed: (SessionRef) -> com.superiorsoftllc.infantry.runners.RemoteSessionMirror.Placed,
-        remotePlaced: (String, com.superiorsoftllc.infantry.runners.RemoteSessionMirror.Placed) -> Unit,
+        placed: (SessionRef) -> com.superiorsoftllc.infantry.runners.RunnerPlacements.Placed,
+        remotePlaced: (String, com.superiorsoftllc.infantry.runners.RunnerPlacements.Placed) -> Unit,
     ): RemoteStart {
         val link = pool.link(runner) ?: return RemoteStart.Refused("runner '$runner' is not registered, or no runner binding is loaded")
         val remote = checkout?.let { runCatching { originOf(it) }.getOrNull() }?.takeIf { it.isNotBlank() }

@@ -15,8 +15,8 @@ import kotlin.test.assertTrue
 
 /**
  * RUNNER-UNIFY-3: the pushed stream. The runner's feed answers a held pull the moment a frame is published, only for the sessions the
- * orchestrator names and started there; the orchestrator's subscription applies each frame once, and only while `runners.pushFrames`
- * is on and the runner can push (otherwise the poll path serves it).
+ * orchestrator names and started there; the orchestrator's subscription applies each frame once, while it has a session there
+ * and the runner can push (RUNNER-UNIFY-6: the only path).
  */
 class RunnerFrameStreamTest {
     private fun frame(type: String, sid: String, seq: Long, data: String = "") = Envelope(type, data, sid, sequence = seq)
@@ -61,12 +61,11 @@ class RunnerFrameStreamTest {
         }
     }
 
-    private class Harness(link: FakeLink, var on: Boolean = true) {
+    private class Harness(link: FakeLink, var placed: List<String> = listOf("s1")) {
         val taken = HashMap<String, Long>()
         val applied = mutableListOf<Envelope>()
         val stream = RunnerFrameStream(
-            enabled = { on },
-            sessionsOn = { listOf("s1") },
+            sessionsOn = { placed },
             link = { link },
             takenBefore = { taken[it] ?: 0L },
             apply = { _, _, fresh -> applied += fresh },
@@ -90,14 +89,14 @@ class RunnerFrameStreamTest {
     }
 
     @Test
-    fun `flag off, an older runner or an unreachable one is not streaming, so the poll path serves it`() {
+    fun `no session there, an older runner or an unreachable one is not streaming and nothing is applied`() {
         val link = FakeLink(OrchestratorReply.Ok(FramesBatch(listOf(frame(Envelope.TURN, "s1", 1)))))
-        val h = Harness(link, on = false)
+        val h = Harness(link, placed = emptyList())
         assertFalse(h.stream.round("r1"))
         assertFalse(h.stream.streaming("r1"))
-        assertTrue(link.asked.isEmpty(), "flag off: no link call at all")
+        assertTrue(link.asked.isEmpty(), "no session placed there: no link call at all")
 
-        h.on = true
+        h.placed = listOf("s1")
         link.reply = null // an older runner: not offered
         assertFalse(h.stream.round("r1"))
         assertFalse(h.stream.streaming("r1"))

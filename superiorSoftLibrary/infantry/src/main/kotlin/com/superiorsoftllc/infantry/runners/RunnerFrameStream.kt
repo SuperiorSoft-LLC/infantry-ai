@@ -70,18 +70,18 @@ class RunnerFrameFeed(
 }
 
 /**
- * RUNNER-UNIFY-3 (docs/RUNNER-UNIFY.md 5.2), the ORCHESTRATOR side: the subscription to each paired runner's pushed stream. For
- * every runner ([sync]) one thread keeps a `pullFrames` call open WHILE `runners.pushFrames` is on ([enabled]) and this orchestrator
- * has a session there ([sessionsOn]); each answer is applied at once and the next call goes out at once, so a runner's frame
- * reaches the app in one link round trip instead of at the next `limits.runners.outputPollMs` tick.
+ * RUNNER-UNIFY-3 (docs/RUNNER-UNIFY.md 5.2), the ORCHESTRATOR side: the subscription to each paired runner's pushed stream, the
+ * ONE way a remote session's frames reach this daemon (RUNNER-UNIFY-6 deleted the poll path). For every runner ([sync]) one thread
+ * keeps a `pullFrames` call open while this orchestrator has a session there ([sessionsOn]); each answer is applied at once and the
+ * next call goes out at once, so a runner's frame reaches the app in one link round trip.
  *
- * Resume: each call names, per session, the last runner sequence taken ([takenBefore], the same persisted counter the poll path
- * keeps), so a reconnect or a restart continues where it stopped and frames already taken are dropped ([apply] gets only fresh
- * ones, in sequence order). A runner that does not offer the pull (older than contract 1.10.0) or cannot be reached is not
- * [streaming]: the poll path keeps serving it, so nothing is lost while it is down or when the flag flips.
+ * Resume: each call names, per session, the last runner sequence taken ([takenBefore], persisted in the placement index), so a
+ * reconnect or a restart continues where it stopped and frames already taken are dropped ([apply] gets only fresh ones, in sequence
+ * order). A runner that cannot be reached rests [idleMs] and is asked again: nothing is lost, the frames wait in its own stream.
+ * A runner that does not offer the pull (older than contract 1.10.0) is reported once; the runner image is rebuilt with the
+ * orchestrator (pre-stable: no old-runner fallback).
  */
 class RunnerFrameStream(
-    private val enabled: () -> Boolean,
     private val sessionsOn: (runner: String) -> Collection<String>,
     private val link: (runner: String) -> RunnerLink?,
     private val takenBefore: (sessionId: String) -> Long,
@@ -91,7 +91,7 @@ class RunnerFrameStream(
     private val onTaken: (sessionId: String, taken: Long) -> Unit,
     private val waitMs: () -> Long,
     private val maxFrames: () -> Int,
-    /** How long a loop rests when off, idle, refused or unreachable before it looks again. */
+    /** How long a loop rests when idle, refused or unreachable before it looks again. */
     private val idleMs: () -> Long,
     private val log: (String) -> Unit = { System.err.println(it) },
 ) : AutoCloseable {
@@ -103,7 +103,7 @@ class RunnerFrameStream(
     private val sessionRunner = ConcurrentHashMap<String, String>()
     @Volatile private var closed = false
 
-    /** Whether runner [runner]'s frames are pushed right now (its last pull answered); false = the poll path serves it. */
+    /** Whether runner [runner]'s frames are pushed right now (its last pull answered). */
     fun streaming(runner: String): Boolean = runner in live
 
     /** Whether session [sessionId]'s frames are pushed right now (its runner's last pull answered and named it). */
@@ -123,14 +123,14 @@ class RunnerFrameStream(
 
     /** One round for [runner]: true = it answered (call again at once), false = rest first. Visible for tests. */
     fun round(runner: String): Boolean {
-        val ids = if (enabled()) sessionsOn(runner).toList() else emptyList()
+        val ids = sessionsOn(runner).toList()
         if (ids.isEmpty()) { live.remove(runner); return false }
         val resumeFrom = ids.associateWith { takenBefore(it) }
         for (id in ids) sessionRunner[id] = runner
         when (val reply = link(runner)?.pullFrames(resumeFrom, waitMs(), maxFrames())) {
             null -> {
                 live.remove(runner)
-                if (toldOld.add(runner)) log("[infantry] runner '$runner' does not push session frames (an older runner); its sessions are polled")
+                if (toldOld.add(runner)) log("[infantry] runner '$runner' does not push session frames (an older runner): its sessions' output cannot reach this daemon; rebuild the runner image")
                 return false
             }
             is OrchestratorReply.Unavailable -> { live.remove(runner); return false }
@@ -174,6 +174,14 @@ class RunnerFrameStream(
             }
         }
         live.remove(runner)
+    }
+
+    companion object {
+        /** The stream frame types a runner session's chat is made of; with `status` they are re-published on this daemon's stream. */
+        val RELAYED = setOf(
+            Envelope.TURN, Envelope.TEXT_DELTA, Envelope.REASONING, Envelope.ERROR, Envelope.STDERR, Envelope.STDOUT,
+            Envelope.EXIT, Envelope.FINISHED, Envelope.USAGE,
+        )
     }
 
     override fun close() {

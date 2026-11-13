@@ -1,6 +1,13 @@
 # RUNNER-UNIFY-1: local runner vs remote runner (architect review, 2026-11-12)
 
-Design record (dated). Ticket ee3638c7. Read at dev head 15c16c51. Paths are relative to
+Design record (dated). Ticket ee3638c7.
+
+**Status (RUNNER-UNIFY-6, 2026-11-13): done.** The new paths are the only paths: the poll pump and output ticker, the mirror's record
+synthesis (`RemoteSessionMirror` is now the placement index `runners/RunnerPlacements.kt`, same `runner-sessions.json`), the outbox
+prompt events, the GREEN-GAP-1 transcript scrape and the four `runners.*` flags are deleted. RUNNER-UNIFY-GUARD-1 is strict (baseline 0;
+a line that must act on this daemon's own session carries `// runner-ok: <reason>`). Line numbers below are from the original review.
+
+ Read at dev head 15c16c51. Paths are relative to
 `superiorSoftLibrary/infantry/src/main/kotlin/com/superiorsoftllc/infantry/` unless they start with `plugins/` or `docker/`.
 
 ## Verdict

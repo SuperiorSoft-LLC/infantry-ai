@@ -8,10 +8,14 @@ import kotlin.test.fail
 
 /**
  * RUNNER-UNIFY-GUARD-1 (docs/RUNNER-UNIFY.md): a ratchet on local-vs-remote divergence. Callers should reach a session
- * through `RunnerPool.linkFor(id)` and never branch on where it runs. Today's counts, per kind and file, live in
+ * through `RunnerPool.linkFor(id)` and never branch on where it runs. The counts, per kind and file, live in
  * `runner-unify-baseline.txt` next to this class (test resources). A count that goes UP fails (new divergence); a count
- * that goes DOWN also fails until the baseline is lowered in the same commit, so the ratchet only tightens. When every
- * count is 0 this becomes the strict guard.
+ * that goes DOWN also fails until the baseline is lowered in the same commit, so the ratchet only tightens.
+ *
+ * RUNNER-UNIFY-6: the baseline is 0, so this is the STRICT guard. The runner itself ([runnerFiles]) may call SessionManager and
+ * name the local runner. Anywhere else, a line that must act on this daemon's own session directly (it already checked the
+ * manager holds it, or it is mail addressing in core, which cannot see the pool) carries `// runner-ok: <reason>` on that line;
+ * a marker with no reason does not count.
  */
 class RunnerUnifyRatchetGuardTest {
     private val roots = listOf(
@@ -29,8 +33,16 @@ class RunnerUnifyRatchetGuardTest {
         "managerCall" to Regex("""\b(manager|sessionManager)\.(kill|resume|interrupt|delete|startNew)\("""),
     )
 
-    /** The runner itself may call SessionManager directly and define the placement helpers. */
-    private val runnerFiles = listOf("daemon/LocalRunner.kt", "api/orchestrator/RunnerPool.kt")
+    /**
+     * The runner itself may call SessionManager directly and define the placement helpers: the local runner and its bind
+     * ([SpawnBinding]), the pool, and the runner transport that by definition deals with runners by name (the watch over the
+     * remote runners, the forwarded-frame gate).
+     */
+    private val runnerFiles = listOf(
+        "daemon/LocalRunner.kt", "api/orchestrator/RunnerPool.kt", "daemon/SpawnBinding.kt",
+        "runners/RunnerWatch.kt", "runners/ForwardedFrames.kt",
+    )
+    private val marker = Regex("""//\s*runner-ok:\s*\S""")
 
     private fun counts(): Map<String, Int> {
         val out = sortedMapOf<String, Int>()
@@ -42,6 +54,7 @@ class RunnerUnifyRatchetGuardTest {
                 f.readLines().forEach { raw ->
                     val t = raw.trim()
                     if (t.startsWith("*") || t.startsWith("//") || t.startsWith("/*")) return@forEach
+                    if (marker.containsMatchIn(t)) return@forEach
                     for ((kind, re) in kinds) {
                         val n = re.findAll(t).count()
                         if (n > 0) out.merge("$kind $path", n, Int::plus)

@@ -44,13 +44,12 @@ object BoardWiring {
         ticketImages: TicketImages,
         runners: com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerHub? = null,
         pushOnCommit: () -> Boolean = { false },
-        unifiedCommands: () -> Boolean = { true },
-        remotePlaced: (String, com.superiorsoftllc.infantry.runners.RemoteSessionMirror.Placed) -> Unit = { _, _ -> },
+        remotePlaced: (String, com.superiorsoftllc.infantry.runners.RunnerPlacements.Placed) -> Unit = { _, _ -> },
     ): LocalBoardHost? = events?.let { log ->
         LocalBoardHost(
             store = store, sessionManager = { manager }, baseRef = baseRef, projectDirectory = projectDirectory,
             defaultRepo = repo, eventLog = { log }, agentProfiles = agents, knowledge = knowledge, skills = skills, ticketImages = ticketImages,
-            runners = runners, pushOnCommit = pushOnCommit, unifiedCommands = unifiedCommands, remotePlaced = remotePlaced,
+            runners = runners, pushOnCommit = pushOnCommit, remotePlaced = remotePlaced,
         )
     }
 }

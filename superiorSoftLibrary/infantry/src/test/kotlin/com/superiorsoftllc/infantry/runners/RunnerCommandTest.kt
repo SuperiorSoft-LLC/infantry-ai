@@ -30,8 +30,8 @@ import com.superiorsoftllc.infantry.daemon.api.runners.RunnerLinkWire as F
 
 /**
  * RUNNER-UNIFY-2 (docs/RUNNER-UNIFY.md 5.1): every owner command on a session goes through the runner it lives on. Pins: a local
- * session's command reaches the local link, a placed one the remote link, and nothing else is asked; `runners.unifiedCommands` off
- * runs a held session directly; over the wire the runner runs a command only on a session its orchestrator started (`unknown`
+ * session's command reaches the local link, a placed one the remote link, and nothing else is asked (RUNNER-UNIFY-6: the only path);
+ * over the wire the runner runs a command only on a session its orchestrator started (`unknown`
  * otherwise, never an error), and a delete that went through forgets that session's link state.
  */
 class RunnerCommandTest {
@@ -51,9 +51,7 @@ class RunnerCommandTest {
         h.register("test", RunnerBinding { _, _ -> remote })
         h.placed("s-remote", "box")
     }
-    private val direct = mutableListOf<String>()
-    private fun run(id: String, c: SessionCommand, unified: Boolean = true) =
-        LocalRunner.command(hub, id, c, unified, held = { it == "s-local" }, direct = { sid, _ -> direct += sid; CommandResult.Done })
+    private fun run(id: String, c: SessionCommand) = LocalRunner.command(hub, id, c)
 
     @Test
     fun `a local session's command goes to the local runner, a placed one to its runner`() {
@@ -62,22 +60,12 @@ class RunnerCommandTest {
         assertTrue(run("s-remote", SessionCommand(SessionCommand.TURN, "hi")).ok)
         assertEquals(listOf("s-local" to interrupt), local.got)
         assertEquals(listOf("s-remote" to SessionCommand(SessionCommand.TURN, "hi")), remote.got)
-        assertTrue(direct.isEmpty(), "unified: nothing skips the pool")
-    }
-
-    @Test
-    fun `unifiedCommands off runs a session this daemon holds directly, a remote one still goes to its runner`() {
-        run("s-local", SessionCommand(SessionCommand.KILL, force = true), unified = false)
-        run("s-remote", SessionCommand(SessionCommand.KILL, force = true), unified = false)
-        assertEquals(listOf("s-local"), direct)
-        assertTrue(local.got.isEmpty())
-        assertEquals(listOf("s-remote"), remote.got.map { it.first })
     }
 
     @Test
     fun `a runner that is not connected answers unavailable with its name`() {
         val lonely = RunnerHub(local, remotes = { listOf("box") }).also { it.placed("s-remote", "box") }
-        val r = LocalRunner.command(lonely, "s-remote", SessionCommand(SessionCommand.INTERRUPT), true, held = { false }, direct = { _, _ -> error("not held") })
+        val r = LocalRunner.command(lonely, "s-remote", SessionCommand(SessionCommand.INTERRUPT))
         assertEquals(CommandResult.UNAVAILABLE, r.kind)
         assertTrue(r.reason.orEmpty().contains("'box'"), r.reason)
     }

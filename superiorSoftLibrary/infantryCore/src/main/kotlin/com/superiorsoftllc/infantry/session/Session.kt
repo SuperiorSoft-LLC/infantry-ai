@@ -303,7 +303,7 @@ object SessionRecordSerializer : KSerializer<SessionRecord> {
         val extended = baseObj.toMutableMap().apply {
             put("live", JsonPrimitive(value.live))
             // RUNNER-POOL-4: `local` stays off the wire (older clients decode the default).
-            runnerOf(value.id).takeIf { it != "local" }?.let { put("runner", JsonPrimitive(it)) }
+            runnerOf(value.id).takeIf { it != "local" }?.let { put("runner", JsonPrimitive(it)) } // runner-ok: the wire record names the runner a session lives on (absent for this daemon's own)
             // Contract 1.112.0: whether a TURN is in flight, before the display-only BUSY rewrite below.
             put("turnActive", JsonPrimitive(value.isBusy()))
             if (value.state == SessionState.BUSY) RunPhaseOverlay.phaseOf(value.id)?.let { put("runPhase", JsonPrimitive(it)) }

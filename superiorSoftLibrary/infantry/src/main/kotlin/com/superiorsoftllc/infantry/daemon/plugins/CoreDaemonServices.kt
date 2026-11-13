@@ -123,7 +123,7 @@ class CoreDaemonServices(
         override fun resume(id: String, prompt: String): SessionInfo {
             val record = manager.get(id) ?: error("no session '$id'")
             val turn = if (record.neverRun) firstTurn(record, prompt) else prompt
-            return info(manager.resume(id, turn))
+            return info(manager.resume(id, turn)) // runner-ok: api.sessions.resume on a session this daemon holds (manager.get above)
         }
         override fun restart(id: String) { manager.restart(id) }
         override fun status(id: String): com.superiorsoftllc.infantry.daemon.api.SessionStatus? = sessionOf(id)?.let { com.superiorsoftllc.infantry.session.SessionActivityLog.overlay(it) }?.let {
@@ -132,7 +132,7 @@ class CoreDaemonServices(
         override fun recentLines(id: String, max: Int): List<String> = com.superiorsoftllc.infantry.session.SessionFeed.recent(id, max).ifEmpty {
             if (manager.get(id) != null) emptyList() else remoteLines(id, max)?.takeLast(max.coerceAtLeast(0)).orEmpty()
         }
-        override fun interrupt(id: String): Boolean = manager.get(id)?.let { runCatching { manager.interrupt(id) }.isSuccess } ?: false
+        override fun interrupt(id: String): Boolean = manager.get(id)?.let { runCatching { manager.interrupt(id) }.isSuccess } ?: false // runner-ok: only a session this daemon holds (manager.get first)
         override fun suppressNotice(name: String, sessionId: String?, ms: Long) = noticeSuppressor(name, sessionId, ms)
         override fun setAutomation(id: String, mark: AutomationMark?) { manager.setAutomation(id, mark?.let { SessionAutomation(it.script, it.hookId, it.since) }) }
         override fun reconnectMcp(id: String, force: Boolean): String = manager.reconnectMcp(id, force)
