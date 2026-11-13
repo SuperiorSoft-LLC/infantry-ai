@@ -239,6 +239,47 @@ class RunnerBearerTest {
         runner.close(); orch.close(); orch2.close()
     }
 
+    /**
+     * RUNNER-BEARER-STALE-1 + RUNNER-ENDPOINT-1 (owner, 2026-11-12): `docker logs` gave the right endpoint with a stale bearer, the
+     * exec gave the live bearer with the container's bridge address. Now a bare `infantry runner bearer` (no flags, as the owner runs
+     * it in the container) reads the docker run env, and the live bearer is printed again on every rotation and pairing.
+     */
+    @Test
+    fun `a bare bearer print uses the docker run env, and a rotation or a pairing prints the live bearer again`() {
+        val transport = PortTransport()
+        val env = mapOf(RunnerLinkService.ENV_HOST to "localhost", RunnerLinkService.ENV_PUBLIC_PORT to "18790")
+        val console = mutableListOf<String>()
+        val runner = RunnerLinkService(
+            File(dir, "env-runner"), { it.default }, { settings }, null, { transport }, host = "127.0.0.1", log = {},
+            announce = { console += it }, env = { env[it] },
+        )
+        runner.grant = { key, ids -> settings = if (key == RunnerLinkSettings.PROJECTS) settings.copy(projects = ids) else settings.copy(harnesses = ids) }
+        val orch = service(File(dir, "env-orch"), transport)
+
+        val first = runner.admin(req("op" to "bearer", "name" to "box"))
+        assertEquals("wss://localhost:18790", RunnerLinkService.field(first, "endpoint"), "the env, not this machine's own address")
+        assertEquals("false", RunnerLinkService.field(first, "hostGuessed"))
+        assertTrue(console.isEmpty(), "the first bearer is printed by the start banner, not twice")
+        val exec = runner.admin(req("op" to "bearer"))
+        assertEquals(RunnerLinkService.field(first, "endpoint"), RunnerLinkService.field(exec, "endpoint"), "exec and start banner agree")
+
+        // A rotation: the newest block in the console holds the live bearer.
+        val rotated = runner.admin(req("op" to "bearer", "rotate" to "true"))
+        val live = RunnerLinkService.field(rotated, "bearer")!!
+        assertTrue(live != RunnerLinkService.field(first, "bearer"))
+        assertTrue(console.any { it == "bearer:   $live" }, console.joinToString(" | "))
+        assertTrue(console.any { it == "endpoint: wss://localhost:18790" }, console.joinToString(" | "))
+
+        // A pairing with the live bearer: the block is printed again with the current 'last paired with'.
+        console.clear()
+        val port = transport.served.keys.single()
+        val added = orch.admin(req("op" to "add", "endpoint" to "localhost:$port", "bearer" to live, "orchestratorName" to "pc"))
+        assertEquals("true", RunnerLinkService.field(added, "ok"), added.toString())
+        assertTrue(console.any { it == "bearer:   $live" }, console.joinToString(" | "))
+        assertTrue(console.any { it.startsWith("last paired with orchestrator pc;") }, console.joinToString(" | "))
+        runner.close(); orch.close()
+    }
+
     @Test
     fun `a wrong pin or an unreachable endpoint fails with the reason and the next step, never the secret`() {
         val transport = PortTransport()

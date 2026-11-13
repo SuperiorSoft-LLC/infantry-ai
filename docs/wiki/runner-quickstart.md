@@ -42,8 +42,13 @@ Then create an agent with that runner as its location: the session runs on the s
 
 What to know:
 
-- The bearer is made once, kept in the `infantry-runner` volume, and printed again on every start. It stays valid until you
-  rotate it: `docker exec infantry-runner infantry runner bearer --rotate`. It carries the runner's name and its TLS certificate
+- The bearer is made once, kept in the `infantry-runner` volume, and printed again on every start, after every rotation or
+  rename, and after every pairing (with the current "last paired with" line). Always copy the NEWEST block in the log; an older
+  block may hold a rotated bearer. `docker exec infantry-runner infantry runner bearer` prints the same endpoint and live bearer.
+- The endpoint comes from the `docker run` env: `-e INFANTRY_RUNNER_HOST=<address the PC dials>` and, when you publish another
+  port than 8790 (`-p 18921:8790`), `-e INFANTRY_RUNNER_PUBLIC_PORT=18921`. With no `INFANTRY_RUNNER_HOST` the runner says
+  `localhost` (a Docker on the same PC as the app), never the container's own bridge address, which the PC cannot reach.
+- The bearer stays valid until you rotate it: `docker exec infantry-runner infantry runner bearer --rotate`. It carries the runner's name and its TLS certificate
   pin, so the app checks the certificate before it sends the secret. Treat it like a password.
 - Every project and every harness may run on the runner. Narrow it in the same `docker run` with
   `-e INFANTRY_RUNNER_ALLOW_PROJECTS=<ids>` / `-e INFANTRY_RUNNER_ALLOW_HARNESSES=<ids>`. No harness key or git login goes in the

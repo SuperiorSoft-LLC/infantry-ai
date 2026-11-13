@@ -74,6 +74,9 @@ const val RUNNER_DOCKER_COMMAND = "docker run -d --restart unless-stopped --name
 /** RUNNER-PAIR-1: where the runner prints them. */
 const val RUNNER_LOGS_COMMAND = "docker logs infantry-runner"
 
+/** RUNNER-BEARER-STALE-1: the live endpoint and bearer on demand, on the runner's machine (same values as the newest log block). */
+const val RUNNER_BEARER_COMMAND = "docker exec infantry-runner infantry runner bearer"
+
 /** What the card says when a request never left or its answer could not be read. */
 const val RUNNERS_OFFLINE = "not connected to the daemon: nothing was sent"
 const val RUNNERS_UNREADABLE = "the daemon's answer could not be read"
@@ -409,7 +412,7 @@ fun RunnersEmptyHint(modifier: Modifier = Modifier) {
     Column(modifier.fillMaxWidth().testTag("runners-hint"), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(
             "Run agents on another machine: start a runner there with this one command, then Add runner and paste the endpoint " +
-                "and bearer its log (`$RUNNER_LOGS_COMMAND`) prints.",
+                "and bearer from the newest block its log (`$RUNNER_LOGS_COMMAND`) prints.",
             fontSize = 12.sp, color = Palette.Muted, modifier = Modifier.testTag("runners-hint-text"),
         )
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -473,7 +476,8 @@ fun AddRunnerForm(
     val canConnect = endpoint.isNotBlank() && !sending && (linkMode || (bearer.isNotBlank() && bearerError == null))
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
-            "Paste the endpoint and the bearer the runner printed when it started (`$RUNNER_LOGS_COMMAND` on that machine shows them).",
+            "Paste the endpoint and the bearer from the NEWEST 'INFANTRY RUNNER' block in `$RUNNER_LOGS_COMMAND` on that machine " +
+                "(the runner prints it again after every rotation or pairing), or run `$RUNNER_BEARER_COMMAND` there.",
             fontSize = 12.sp, color = Palette.Muted,
         )
         OutlinedTextField(

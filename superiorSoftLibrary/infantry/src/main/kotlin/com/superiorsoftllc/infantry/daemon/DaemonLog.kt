@@ -34,6 +34,18 @@ object DaemonLog {
         }
     }
 
+    /** The process's own stdout from before [install] (a container's `docker logs`, a terminal); null when none was replaced. */
+    @Volatile private var console: PrintStream? = null
+
+    /**
+     * RUNNER-BEARER-STALE-1: [line] goes to the log AND to the console the owner reads (`docker logs`), for the few lines the owner
+     * is told to look for there (a runner's endpoint and bearer). Everything else stays in the log file only.
+     */
+    fun toConsole(line: String) {
+        println(line)
+        console?.let { synchronized(it) { it.println(line); it.flush() } }
+    }
+
     fun install(stateDir: File, maxFiles: Int = MAX_FILES, maxBytes: Long = MAX_BYTES): AutoCloseable? {
         if (System.err is LogStream) return null
         val dir = dir(stateDir).absoluteFile
@@ -42,6 +54,7 @@ object DaemonLog {
         val prevOut = System.out
         val prevErr = System.err
         val prevHandler = Thread.getDefaultUncaughtExceptionHandler()
+        console = prevOut
         System.setOut(stream)
         System.setErr(stream)
         Thread.setDefaultUncaughtExceptionHandler { t, e ->
@@ -55,6 +68,7 @@ object DaemonLog {
         stream.println("[infantry] ${Instant.now()} daemon log started: ${file(dir, 0)}")
         return AutoCloseable {
             stream.flush()
+            console = null
             System.setOut(prevOut)
             System.setErr(prevErr)
             Thread.setDefaultUncaughtExceptionHandler(prevHandler)

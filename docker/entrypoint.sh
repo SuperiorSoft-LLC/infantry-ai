@@ -153,6 +153,14 @@ runner_bearer_when_ready() {
   infantry "$@" || echo "[entrypoint] could not print the runner bearer; run: docker exec infantry-runner infantry runner bearer"
   echo "==== END INFANTRY RUNNER ===="
 }
+# RUNNER-ENDPOINT-1: the endpoint the PC dials comes from the docker run env, never from the container's own (bridge) address,
+# which the PC cannot reach. With no INFANTRY_RUNNER_HOST the runner is taken to be a local Docker reached as localhost:<published
+# port>. The daemon reads it from its env, so the start banner, `docker exec ... infantry runner bearer` and the banner printed
+# after a rotation or a pairing all show the same endpoint.
+if [ "${INFANTRY_MODE:-}" = "runner" ] && [ -z "${INFANTRY_RUNNER_HOST:-}" ]; then
+  export INFANTRY_RUNNER_HOST=localhost
+  echo "[entrypoint] INFANTRY_RUNNER_HOST is not set: the endpoint says localhost (a Docker on the same PC as the app). On another machine, run with -e INFANTRY_RUNNER_HOST=<its address>"
+fi
 if [ "${INFANTRY_MODE:-}" = "runner" ] && [ "${INFANTRY_RUNNER_PAIRING:-bearer}" != "code" ]; then
   ( runner_bearer_when_ready ) &
 elif [ -n "${INFANTRY_RUNNER_NAME:-}" ]; then
