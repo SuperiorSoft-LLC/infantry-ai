@@ -102,7 +102,7 @@ object RunnerLinkSettings {
             "text cross the network unencrypted; anyone on the path can read them and replay the credential to start agents with " +
             "tool permissions on this machine. Only for a private tailnet (Tailscale/WireGuard) you fully control. Default false."
 
-    val KEYS: Set<String> = setOf(ALLOW_PLAIN_TAILNET, PROJECTS, HARNESSES, CLONE_ROOT, ON_LOST, PUSH_ON_COMMIT, ADVERTISE_HOSTS, GIT_NAME, GIT_EMAIL, LEND_CREDENTIALS, GIT_SECRET, ACCEPT_CREDENTIALS, UNIFIED_COMMANDS, PUSH_FRAMES, UNIFIED_DIRECTORY)
+    val KEYS: Set<String> = setOf(ALLOW_PLAIN_TAILNET, PROJECTS, HARNESSES, CLONE_ROOT, ON_LOST, PUSH_ON_COMMIT, ADVERTISE_HOSTS, GIT_NAME, GIT_EMAIL, LEND_CREDENTIALS, GIT_SECRET, ACCEPT_CREDENTIALS, UNIFIED_COMMANDS, PUSH_FRAMES, UNIFIED_DIRECTORY, FRAME_PROMPTS)
 
     /** What the runner link reads; [stored] is the raw stored JSON of a key (null = unset). */
     data class Values(
@@ -233,6 +233,10 @@ object RunnerLinkSettings {
         UNIFIED_DIRECTORY -> JsonPrimitive(
             (value as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull
                 ?: throw IllegalArgumentException("setting '$key' must be a JSON boolean (true = runner sessions show the runner's own record; false = the mirror's, as before RUNNER-UNIFY-4)"),
+        )
+        FRAME_PROMPTS -> JsonPrimitive(
+            (value as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull
+                ?: throw IllegalArgumentException("setting '$key' must be a JSON boolean (true = a runner session's approval cards and failure reason come from its pushed frames; false = the event relay and the transcript scrape, as before RUNNER-UNIFY-5)"),
         )
         else -> throw IllegalArgumentException("unknown runner link setting '$key'")
     }
