@@ -14,15 +14,20 @@ import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 
-/** AR-4b-ii-b: the [Roles] port over the plugin's own [RoleService]. */
-class ServiceRoles(private val service: RoleService) : Roles {
+/**
+ * AR-4b-ii-b: the [Roles] port over the plugin's own [RoleService]. ROLE-PLUGIN-1: [briefing] is the role's persona plus the
+ * preferred tools and cards that are loaded now ([PluginRoles.briefing]); the default is the persona alone.
+ */
+class ServiceRoles(private val service: RoleService, private val brief: (Role) -> String = { it.persona }) : Roles {
     override fun all(): List<RoleRecord> = service.all().map(::record)
     override fun role(id: String): RoleRecord? = service.role(id)?.let(::record)
+    override fun briefing(id: String): String? = service.role(id)?.let { r -> runCatching { brief(r) }.getOrDefault(r.persona) }
 
     companion object {
         fun record(r: Role) = RoleRecord(
             r.id, r.name, r.color, r.persona, r.source.name, r.icon, r.description,
             r.responseDetail, r.responseMaxChars, r.responseBodyChars,
+            r.plugin, r.disabled, r.edited, r.cards, r.tools,
         )
     }
 }

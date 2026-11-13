@@ -100,6 +100,9 @@ fun RolesPane(deps: RolesDeps, onSessionStarted: () -> Unit, onOpenAgent: (Strin
                         Text(r.id, color = Palette.Muted, fontFamily = Mono, fontSize = 10.sp, maxLines = 1)
                     }
                     if (r.source == "CUSTOM") Chip("custom", Palette.Info)
+                    // ROLE-PLUGIN-1: a plugin's role, and whether its plugin is gone.
+                    if (r.disabled) { Spacer(Modifier.width(4.dp)); Chip("disabled", Palette.Muted, modifier = Modifier.testTag(ROLE_DISABLED_CHIP_TAG_PREFIX + r.id)) }
+                    else if (r.plugin.isNotEmpty()) { Spacer(Modifier.width(4.dp)); Chip("plugin", Palette.Accent, modifier = Modifier.testTag(ROLE_PLUGIN_CHIP_TAG_PREFIX + r.id)) }
                     if (count > 0) { Spacer(Modifier.width(4.dp)); Chip("$count", Palette.Accent) }
                     RoleRowMenu(r, live = deps.link.live, locked = !deps.link.gate("roles.save").allowed, onEdit = { selected = r.id; creating = false; editingId = r.id })
                 }
@@ -152,6 +155,8 @@ private fun RoleDetail(
                 }
                 Text(role.id, color = Palette.Muted, fontFamily = Mono, fontSize = 11.sp)
             }
+            RolePluginChips(role)
+            Spacer(Modifier.width(6.dp))
             Chip(role.source.lowercase().replace('_', ' '), if (role.source == "CUSTOM") Palette.Info else Palette.Muted)
             Spacer(Modifier.width(6.dp))
             OutlinedButton(onClick = { onEditingChange(!editing) }, enabled = deps.link.gate("roles.save").enabled) { Text(if (editing) "Close editor" else "Edit role") }
@@ -410,6 +415,8 @@ private fun RoleEditor(existing: Role?, roles: RolesContext, iconsSupported: Boo
     // ROLE-ICON-1: the chosen icon key; "" = the role kind's default. Saved only when the owner changed it, so an edit
     // of the title alone never rewrites the icon (null on the wire = keep).
     var icon by remember(existing?.id) { mutableStateOf(existing?.icon.orEmpty()) }
+    var cards by remember(existing?.id) { mutableStateOf(existing?.cards.orEmpty().joinToString(", ")) }
+    var tools by remember(existing?.id) { mutableStateOf(existing?.tools.orEmpty().joinToString(", ")) }
     Column(Modifier.fillMaxWidth().padding(if (existing == null) 14.dp else 0.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(if (existing == null) "New role" else "Edit ${existing.name}", color = Palette.Text, fontWeight = FontWeight.SemiBold)
         if (existing == null) {
@@ -422,12 +429,17 @@ private fun RoleEditor(existing: Role?, roles: RolesContext, iconsSupported: Boo
             modifier = Modifier.fillMaxWidth().testTag(ROLE_EDITOR_PERSONA_TAG), textStyle = TextStyle(fontFamily = Mono, fontSize = 12.sp),
         )
         RoleIconPicker(roleId = id.trim(), selected = icon, enabled = iconsSupported, onPick = { icon = it })
+        RolePluginNote(existing)
+        RolePreferenceFields(cards, tools, roles.preferencesSupported, { cards = it }, { tools = it })
         Button(
             modifier = Modifier.testTag(ROLE_EDITOR_SAVE_TAG),
             enabled = id.isNotBlank() && name.isNotBlank(),
             onClick = {
                 val changed = icon.takeIf { it != existing?.icon.orEmpty() }
-                actionScope.launch { if (roles.save(id, name, color, persona, changed) is CommandResult.Sent) onSaved(id.trim()) }
+                // ROLE-PLUGIN-1: preferences only when changed (null = keep) and only to a daemon that stores them.
+                val c = preferenceIds(cards).takeIf { roles.preferencesSupported && it != existing?.cards.orEmpty() }
+                val t = preferenceIds(tools).takeIf { roles.preferencesSupported && it != existing?.tools.orEmpty() }
+                actionScope.launch { if (roles.save(id, name, color, persona, changed, null, c, t) is CommandResult.Sent) onSaved(id.trim()) }
             },
         ) { Text("Save role") }
         Text("The daemon validates it; a refusal appears in the notice strip with the reason.", color = Palette.Muted, fontSize = 10.sp)

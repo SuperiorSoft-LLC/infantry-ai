@@ -36,14 +36,35 @@ import kotlinx.serialization.json.put
 class RolesDaemonPlugin : DaemonPlugin {
     override fun start(api: DaemonApi) {
         // AR-4b-ii-b: the catalog, its frames and the role binding / trait stores are this plugin's; core reads them through the ports.
-        val service = RoleService(RolesFrames.rolesDir(api))
-        api.services.provide(Roles::class, ServiceRoles(service))
+        // ROLE-PLUGIN-1: roles other modules declare (module.json `roles`) are seeded now and whenever the loaded set changes;
+        // one whose module is gone reads disabled, and a role's preferred tools / cards reach its briefing only while loaded.
+        val loaded = { runCatching { api.plugins.loaded() }.getOrNull() }
+        val service = RoleService(RolesFrames.rolesDir(api)) { loaded()?.map { it.id }?.toSet() }
+        val brief = { role: Role ->
+            val modules = loaded().orEmpty()
+            val (cards, offered) = PluginRoles.offered(modules)
+            val tools = offered + runCatching { api.tools.catalog().map { it.name } }.getOrDefault(emptyList())
+            PluginRoles.briefing(role, tools, cards)
+        }
+        api.services.provide(Roles::class, ServiceRoles(service, brief))
+        fun sync(pushAll: Boolean) {
+            val modules = loaded() ?: return
+            val outcome = PluginRoles.sync(service, modules)
+            outcome.problems.forEach { api.log("[roles] plugin role refused: $it") }
+            if (outcome.written.isNotEmpty()) api.log("[roles] plugin roles seeded: ${outcome.written.joinToString()}")
+            if (pushAll) RolesFrames.pushAll(api, service)
+        }
+        sync(pushAll = false)
+        api.events.subscribe(MODULES_CHANGED) { sync(pushAll = true) }
         api.services.provide(RoleBindings::class, StorageRoleBindings(api.storage))
         api.services.provide(RoleTraitLists::class, StorageRoleTraitLists(api.storage))
         RolesFrames.register(api, service)
         listOf(RoleListTool, RoleGetTool, RoleUpdateTool, RoleCreateTool, RoleDeleteTool, SkillListTool, SkillSaveTool, SkillDeleteTool).forEach { api.tools.register(it) }
     }
 }
+
+/** ROLE-PLUGIN-1: the daemon's named event for a change of the loaded module set. */
+private const val MODULES_CHANGED = "modules.changed"
 
 private val json = Json { ignoreUnknownKeys = true }
 private const val ANSWER_TIMEOUT_MS = 45_000L
@@ -96,6 +117,11 @@ private fun shape(
 private val ID = "id" to "The role id, e.g. automation."
 private val PERSONA = "persona" to "The role notes: the instructions every NEW session of this role receives at start. Replaces the stored text."
 private val DESCRIPTION = "description" to "One line describing the role (at most 200 characters); shown in the role editor, never sent to a session."
+// ROLE-PLUGIN-1: a hybrid role's preferences, ids from any plugin; they shape the briefing and never gate.
+private val CARDS = "cards" to "Preferred card types, comma separated (e.g. news). Empty string clears. Named at session start while loaded."
+private val TOOLS = "tools" to "Preferred tool or capability names, comma separated. Empty string clears. Named at session start while loaded."
+
+private fun JsonObject.ids(key: String): List<String>? = string(key)?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }
 
 object RoleListTool : DaemonTool {
     const val NAME = "infantry_role_list"
@@ -114,6 +140,9 @@ object RoleListTool : DaemonTool {
                     put("name", role.name)
                     put("description", role.description)
                     put("source", role.source)
+                    if (role.plugin.isNotEmpty()) { put("plugin", role.plugin); put("disabled", role.disabled); put("edited", role.edited) }
+                    if (role.cards.isNotEmpty()) put("cards", role.cards.joinToString(","))
+                    if (role.tools.isNotEmpty()) put("tools", role.tools.joinToString(","))
                     put("personaChars", role.persona.length)
                 })
             }
@@ -140,12 +169,12 @@ object RoleUpdateTool : DaemonTool {
     const val NAME = "infantry_role_update"
     private val shape = shape(
         false, false,
-        listOf(ID, PERSONA, DESCRIPTION, "name" to "New display name (non-agent caller only).", "color" to "#rrggbb (non-agent caller only).", "icon" to "Icon key (non-agent caller only)."),
+        listOf(ID, PERSONA, DESCRIPTION, CARDS, TOOLS, "name" to "New display name (non-agent caller only).", "color" to "#rrggbb (non-agent caller only).", "icon" to "Icon key (non-agent caller only)."),
         listOf("id"),
     )
     override val name = NAME
     override val description =
-        "Update an existing role's persona (role notes) and/or description. Applies to new sessions only. An agent caller may change " +
+        "Update an existing role's persona (role notes), description and/or preferred cards / tools. Applies to new sessions only. An agent caller may change " +
             "nothing else; a non-agent caller may also rename it (name), recolour it (color #rrggbb) or set its icon."
     override val inputSchema = shape.first
     override val annotations = shape.second
@@ -158,8 +187,8 @@ object RoleUpdateTool : DaemonTool {
         if (call.callerIsAgent() && restricted.isNotEmpty()) {
             return refused("$NAME: an agent may change only persona and description; ${restricted.joinToString()} need a non-agent caller")
         }
-        if (arguments.string("persona") == null && arguments.string("description") == null && restricted.isEmpty()) {
-            return refused("$NAME needs persona and/or description")
+        if (listOf("persona", "description", "cards", "tools").all { arguments.string(it) == null } && restricted.isEmpty()) {
+            return refused("$NAME needs persona, description, cards and/or tools")
         }
         // role_save replaces the persona unless one is sent, so an unnamed field is carried over from the stored role.
         return call.save(RoleSaveRequest(
@@ -169,13 +198,15 @@ object RoleUpdateTool : DaemonTool {
             persona = arguments.string("persona") ?: existing.persona,
             icon = arguments.string("icon"),
             description = arguments.string("description"),
+            cards = arguments.ids("cards"),
+            tools = arguments.ids("tools"),
         ))
     }
 }
 
 object RoleCreateTool : DaemonTool {
     const val NAME = "infantry_role_create"
-    private val shape = shape(false, false, listOf(ID, "name" to "Display name.", PERSONA, DESCRIPTION, "color" to "#rrggbb", "icon" to "Icon key"), listOf("id", "name"))
+    private val shape = shape(false, false, listOf(ID, "name" to "Display name.", PERSONA, DESCRIPTION, CARDS, TOOLS, "color" to "#rrggbb", "icon" to "Icon key"), listOf("id", "name"))
     override val name = NAME
     override val description = "Create a role (non-agent caller only)."
     override val inputSchema = shape.first
@@ -193,6 +224,8 @@ object RoleCreateTool : DaemonTool {
             persona = arguments.string("persona").orEmpty(),
             icon = arguments.string("icon"),
             description = arguments.string("description"),
+            cards = arguments.ids("cards"),
+            tools = arguments.ids("tools"),
         ))
     }
 }

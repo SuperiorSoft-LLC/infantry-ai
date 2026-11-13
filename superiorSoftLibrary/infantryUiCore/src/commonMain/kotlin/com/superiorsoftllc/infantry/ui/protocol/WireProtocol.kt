@@ -844,6 +844,15 @@ data class Role(
     val icon: String = "",
     /** Contract 1.108.0 (ROLE-EDIT-1): a one-line description for the role editor; "" (and every older daemon) = none. */
     val description: String = "",
+    /**
+     * Contract 1.153.0 (ROLE-PLUGIN-1): the plugin module that declared the role ("" = none), whether that module is not loaded
+     * now ([disabled]), whether the owner edited the seeded role ([edited]), and the preferred card types / tool names by id.
+     */
+    val plugin: String = "",
+    val disabled: Boolean = false,
+    val edited: Boolean = false,
+    val cards: List<String> = emptyList(),
+    val tools: List<String> = emptyList(),
 )
 
 /**
@@ -859,6 +868,9 @@ data class RoleSave(
     val icon: String? = null,
     /** Contract 1.108.0: null = keep, "" = clear; sent only to a daemon that knows it. */
     val description: String? = null,
+    /** Contract 1.153.0 (ROLE-PLUGIN-1): preferred card types / tool names; null = keep, empty = clear; sent only to a daemon that knows them. */
+    val cards: List<String>? = null,
+    val tools: List<String>? = null,
 )
 
 /** Contract 1.40.0: what a role runs on; a null field is "no pin" (the daemon default applies at spawn time). */
@@ -2028,11 +2040,14 @@ object WireRequests {
      * would refuse the whole save) and when it is null (keep the stored icon), so an icon-less save is byte-for-byte
      * the pre-1.93.0 payload.
      */
-    fun roleSave(save: RoleSave, withIcon: Boolean, withDescription: Boolean = false): Envelope {
+    fun roleSave(save: RoleSave, withIcon: Boolean, withDescription: Boolean = false, withPreferences: Boolean = false): Envelope {
         val full = Json { encodeDefaults = true }.encodeToJsonElement(RoleSave.serializer(), save) as JsonObject
         // ROLE-EDIT-1: `description` likewise only to a daemon on contract >= 1.108.0, and only when set (null = keep).
         val noIcon = if (withIcon && save.icon != null) full else JsonObject(full - "icon")
-        return Envelope(Envelope.ROLE_SAVE, (if (withDescription && save.description != null) noIcon else JsonObject(noIcon - "description")).toString())
+        val desc = if (withDescription && save.description != null) noIcon else JsonObject(noIcon - "description")
+        // ROLE-PLUGIN-1: `cards` / `tools` only to a daemon on contract >= 1.153.0, and only when set (null = keep).
+        val cards = if (withPreferences && save.cards != null) desc else JsonObject(desc - "cards")
+        return Envelope(Envelope.ROLE_SAVE, (if (withPreferences && save.tools != null) cards else JsonObject(cards - "tools")).toString())
     }
 
     /** ROLE-EDIT-1: delete a custom role (or reset a customised bundled one). */

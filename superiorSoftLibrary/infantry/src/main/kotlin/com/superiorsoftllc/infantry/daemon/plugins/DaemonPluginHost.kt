@@ -128,6 +128,16 @@ class DaemonPluginHost private constructor(
 
     /** CARD-3: the same resolved modules with their folders, as [DaemonApi.plugins] `loaded()` answers them. */
     @Volatile private var loadedViews: List<com.superiorsoftllc.infantry.daemon.api.plugins.LoadedModule> = emptyList()
+        set(value) {
+            val changed = field.map { it.id } != value.map { it.id }
+            field = value
+            // ROLE-PLUGIN-1: the named event `modules.changed` (payload `{"modules":[ids]}`) tells a plugin that reads other modules'
+            // module.json (`loaded()`) to read again; published only when the set of loaded ids changes.
+            if (changed) runCatching {
+                val ids = kotlinx.serialization.json.JsonArray(value.map { kotlinx.serialization.json.JsonPrimitive(it.id) })
+                namedEvents.publish(MODULES_CHANGED_EVENT, kotlinx.serialization.json.JsonObject(mapOf("modules" to ids)).toString(), "core", null, 0)
+            }
+        }
 
     /**
      * RUNNER-POOL-6: the orchestrator side's calls to its paired runners ([DaemonApi.runnerLinks]); the daemon sets it once its
@@ -1424,6 +1434,8 @@ class DaemonPluginHost private constructor(
         const val EVENT_EMIT_TOOL = "infantry_event_emit"
         /** CORE-PROGRESS-DOWNLOAD-1: published when a progress task ends failed (payload: the task, as `progress_task` carries it). */
         const val PROGRESS_FAILED_EVENT = "progress.failed"
+        /** ROLE-PLUGIN-1: published when the set of loaded modules changes (payload `{"modules":[ids]}`). */
+        const val MODULES_CHANGED_EVENT = "modules.changed"
         val EVENT_EMIT_ACTION = ActionCatalog.Action("events.emit", "write", listOf("plugin_tool_call"))
         /** FULLSUITE-2: the built-in full-suite runner tool and its policy action. */
         const val TESTS_TOOL = "infantry_tests"

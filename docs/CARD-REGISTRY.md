@@ -26,7 +26,7 @@ Paths are short: `ui/` = `superiorSoftLibrary/infantryUiCore/src/commonMain/kotl
 | Chat note / chat image | `plugins/official/Infantry_Scripting/daemon/.../ChatNoteTools.kt:42-46`, `plugins/official/Infantry_Chat/daemon/.../ChatImageTool.kt` | Automation rows; out of scope, unchanged. |
 | HTTP for agents | `plugins/official/Infantry_Scripting/daemon/.../FetchBridge.kt:21-53` | `http.fetch`, off by default (`scripting.fetch.enabled`), host allow-list `scripting.fetch.allow`. |
 | Downloads seam | `superiorSoftLibrary/infantryDaemonApi/.../downloads/Downloads.kt` | Daemon-side capped fetch to a file. No general daemon HTTP client yet (HTTP-SEAM-1). |
-| Roles | `superiorSoftLibrary/infantryDaemonApi/.../roles/RoleModel.kt:33-39` | `Roles` is read-only; roles are saved by `role_save` (Infantry_Roles). **Gap: a plugin cannot declare a role in module.json.** |
+| Roles | `superiorSoftLibrary/infantryDaemonApi/.../roles/RoleModel.kt:33-39` | `Roles` is read-only; roles are saved by `role_save` (Infantry_Roles). **Gap: a plugin cannot declare a role in module.json.** Closed by ROLE-PLUGIN-1: module.json `roles` (`RoleDeclaration`), seeded by Infantry_Roles. |
 | First turn | `superiorSoftLibrary/infantryBoard/.../agents/FirstTurnPreamble.kt:36` | persona, traits, knowledge, skills on the first turn only. |
 
 ### Must not change (regression list)

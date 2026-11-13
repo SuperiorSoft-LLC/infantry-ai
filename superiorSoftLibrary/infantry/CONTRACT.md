@@ -27,6 +27,21 @@ A daemon plugin tool runs in the daemon, which cannot open the agent's files. `i
 A client below 1.147.0 sends plain strings and no `client.projectId`: such a tool sees no local files (a path it cannot read is refused as
 "does not exist") and no default project. A daemon below 1.147.0 never lists `localFiles`, and ignores `client.projectId`.
 
+### ROLE-PLUGIN-1 (contract 1.153.0, additive): roles a plugin declares
+
+A module may declare roles in module.json `roles` (docs/wiki/plugin-api.md, "Plugin roles"). The roles plugin seeds each into
+the catalog when the module loads and the id is free. Every `roles` / `role` entry gains:
+
+| Field | Meaning |
+|---|---|
+| `plugin` | the module that declared the role; "" = none |
+| `disabled` | that module is not loaded now (computed, never stored; reinstalling enables it again) |
+| `edited` | the owner saved the seeded role; the module never rewrites it |
+| `cards`, `tools` | preferred card types / tool names by id, from any module; named in a new session's briefing while loaded, never gating |
+
+`role_save` takes `cards` and `tools` (string lists; absent/null = keep, empty = clear). A daemon below 1.153.0 refuses
+them (strict decode): clients send neither to it. Saving a plugin role keeps its `plugin` and sets `edited`.
+
 ### SECRETS-2b (contract 1.152.0, additive + behavioural): project-scoped secrets
 
 A user secret lives in one of two scopes: the **app** scope (shared by every project; every secret saved before 1.152.0 is here) or one

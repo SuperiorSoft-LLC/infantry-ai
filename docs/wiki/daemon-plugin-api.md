@@ -663,7 +663,7 @@ RUNNER-POOL-6 (DaemonApi 1.45.0, additive), package `com.superiorsoftllc.infantr
 ### `RoleModel.kt`
 
 - `RetiredRoleIds`: Role ids renamed by the id redraw (contract 1.90.0): the one table, read by the daemon's `RoleIds` and the roles tools.
-- `RoleRecord`: RUNTIME-LOAD-3: the wire shape of a role (`roles` / `role` frames) and of `role_save`, for the Infantry_Roles daemon half.
+- `RoleRecord`: RUNTIME-LOAD-3: the wire shape of a role (`roles` / `role` frames) and of `role_save`, for the Infantry_Roles daemon half. ROLE-PLUGIN-1 (DaemonApi 1.58.0): `plugin`, `disabled`, `edited`, `cards`, `tools`; `Roles.briefing(id)` is what a new session of the role receives (default: the persona), and `RoleSaveRequest.cards|tools` (null = keep).
 - `RoleSaveRequest`
 - `Roles`: AR-4b (DaemonApi 1.32.0, additive; docs/DAEMON-CORE.md section 8): the read-only role catalog port, a service in the AR-5 registry (`services.find(Roles::class)`).
 

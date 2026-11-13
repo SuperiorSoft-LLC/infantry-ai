@@ -38,8 +38,9 @@ object AgentsWiring {
             store.agents, manager, roleBindings = bindings::binding, roleExists = { roles.role(it) != null || agentRegistry.contains(it) },
             traitExists = { store.traits.get(it) != null }, roleTraits = bindings::traits, trait = store.traits::get,
             requireKnownSkills = { ids -> com.superiorsoftllc.infantry.settings.requireKnownSkills(store, ids, "skillIds") },
-            // ROLE-EDIT-1: a role's (possibly edited) instructions reach every session started for it after the save.
-            rolePersona = { id -> (roles.role(id)?.persona ?: agentRegistry.instructionsOf(id)).let { p -> if (id == AssistantService.ROLE) AssistantService.instructions(p) else p } },
+            // ROLE-EDIT-1: a role's (possibly edited) instructions reach every session started for it after the save; ROLE-PLUGIN-1: as the
+            // provider's briefing (persona + a hybrid role's loaded preferred tools and cards).
+            rolePersona = { id -> (roles.briefing(id) ?: agentRegistry.instructionsOf(id)).let { p -> if (id == AssistantService.ROLE) AssistantService.instructions(p) else p } },
         )
         return Built(agentRegistry, agentModules, agents)
     }

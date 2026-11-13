@@ -134,6 +134,7 @@ fun RoleManagerList(
                 Text(r.name, color = Palette.Text, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                 Chip(r.id)
                 Chip(if (r.source == "CUSTOM") "custom" else "built-in")
+                RolePluginChips(r)
             }
             if (r.description.isNotBlank()) Text(r.description, color = Palette.Muted, fontSize = 11.sp)
             Text("${bindingSummary(bindings[r.id])} · ${traits[r.id].orEmpty().size} traits", color = Palette.Muted, fontSize = 10.sp)
@@ -157,6 +158,8 @@ class RoleFormFields(existing: Role?, binding: RoleBinding?, storedTraits: List<
     var persona by mutableStateOf(existing?.persona.orEmpty())
     var color by mutableStateOf(existing?.color.orEmpty())
     var icon by mutableStateOf(existing?.icon.orEmpty())
+    var cards by mutableStateOf(existing?.cards.orEmpty().joinToString(", "))
+    var tools by mutableStateOf(existing?.tools.orEmpty().joinToString(", "))
     var provider by mutableStateOf(binding?.provider)
     var model by mutableStateOf(binding?.model.orEmpty())
     var effort by mutableStateOf(binding?.effort)
@@ -212,7 +215,10 @@ fun RoleFormFrame(deps: RolesDeps, existing: Role?, onDone: () -> Unit, content:
         scope.launch {
             val iconChanged = f.icon.takeIf { it != existing?.icon.orEmpty() }
             val descChanged = f.description.trim().takeIf { canEdit && it != existing?.description.orEmpty() }
-            val saved = deps.roles.save(f.id, f.name, f.color, f.persona, iconChanged, descChanged)
+            // ROLE-PLUGIN-1: the preferences only when changed (null = keep) and only to a daemon that stores them.
+            val cardsChanged = preferenceIds(f.cards).takeIf { deps.roles.preferencesSupported && it != existing?.cards.orEmpty() }
+            val toolsChanged = preferenceIds(f.tools).takeIf { deps.roles.preferencesSupported && it != existing?.tools.orEmpty() }
+            val saved = deps.roles.save(f.id, f.name, f.color, f.persona, iconChanged, descChanged, cardsChanged, toolsChanged)
             if (saved is CommandResult.Refused) { f.error = saved.reason; return@launch }
             val rid = f.id.trim()
             if (f.provider != binding?.provider || f.model.trim() != binding?.model.orEmpty() || f.effort != binding?.effort) {
@@ -243,6 +249,7 @@ fun RoleFormFrame(deps: RolesDeps, existing: Role?, onDone: () -> Unit, content:
 fun RoleFormTitle(draft: RoleFormDraft, modifier: Modifier = Modifier) {
     val existing = draft.existing
     Text(if (existing == null) "New role" else "Edit ${existing.name}", modifier = modifier, color = Palette.Text, fontWeight = FontWeight.SemiBold)
+    RolePluginNote(existing)
     if (!draft.canEdit) Text("This daemon is older than contract 1.108.0: descriptions and deleting roles are unavailable.", color = Palette.Muted, fontSize = 10.sp)
 }
 
@@ -264,6 +271,7 @@ fun RoleFormIdentity(draft: RoleFormDraft, modifier: Modifier = Modifier) {
     )
     OutlinedTextField(f.color, { f.color = it }, label = { Text("Colour #rrggbb (empty = keep / generated)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
     RoleIconPicker(roleId = f.id.trim(), selected = f.icon, enabled = draft.deps.roles.iconsSupported, onPick = { f.icon = it })
+    RolePreferenceFields(f.cards, f.tools, draft.deps.roles.preferencesSupported, { f.cards = it }, { f.tools = it })
 }
 
 /** Default provider, model and effort. [modifier] goes on the heading. */

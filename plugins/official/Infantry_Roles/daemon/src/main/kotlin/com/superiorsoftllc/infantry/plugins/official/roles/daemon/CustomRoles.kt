@@ -86,8 +86,23 @@ object CustomRoles {
             responseDetail = fields["responseDetail"]?.trim()?.lowercase()?.takeIf { it in Role.DETAILS }.orEmpty(),
             responseMaxChars = fields["responseMaxChars"]?.trim()?.toIntOrNull()?.takeIf { it >= 0 },
             responseBodyChars = fields["responseBodyChars"]?.trim()?.toIntOrNull()?.takeIf { it >= 0 },
+            // ROLE-PLUGIN-1: the declaring module, whether the owner edited it, and the preferred card types / tool names.
+            plugin = fields["plugin"]?.trim()?.takeIf { MODULE.matches(it) }.orEmpty(),
+            edited = fields["edited"]?.trim()?.lowercase() == "true",
+            cards = idList(fields["cards"]),
+            tools = idList(fields["tools"]),
         )
     }
+
+    /** ROLE-PLUGIN-1: a module id as module.json `name` carries it. */
+    val MODULE = Regex("[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")
+
+    /** ROLE-PLUGIN-1: a preferred card type or tool name (front-matter safe: no comma, colon-free beyond `ns:x` is fine). */
+    val PREF_ID = Regex("[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}")
+
+    /** A comma-separated front-matter list of preference ids; an id that is not one is dropped, duplicates once. */
+    fun idList(raw: String?): List<String> =
+        raw.orEmpty().split(',').map { it.trim() }.filter { it.isNotEmpty() && PREF_ID.matches(it) }.distinct()
 
     /** Returns the front-matter text (null when absent) and the body after it. */
     private fun splitFrontMatter(text: String): Pair<String?, String> {

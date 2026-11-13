@@ -83,6 +83,7 @@ A hook says "when this happens, run this script with these fixed args". The `on`
 | `every <N>s` | a timer; minimum `scripting.hooks.minEverySec` (default 10) | `tick`, `at`, `hookId` |
 | any event name | a named event: `ticket.commented`, `merge.done`, `ticket.*`, or your own via `infantry_event_emit` | the event's payload |
 | `progress.failed` | a task of the core progress system failed | the task: `id`, `source`, `title`, `error`, `retryable`, `step` |
+| `modules.changed` | the set of loaded plugin modules changed (install, enable, disable, remove) | `modules`: the loaded module ids |
 | `daemon.started` | once, when the daemon's port is bound after a start | `cutTurns` and `orphaned`: lists of `{sessionId, role, agentId, ticketId, projectId, lastAction, lastOutputAt, starter}` (a key is absent when unknown; `starter` = the ticket's starter, else the spawner); `orphanedIds` |
 | `session.idle` | a session's turn ends and it is at rest | `sessionId`, `state`, `previous`, `role`, `agentId`, `ticketId`, `projectId` |
 | `session.first-turn-timeout` | reserved, not published yet: the first-turn watch lives in the harness, which has no event seam (needs a harness API bump) | none |
