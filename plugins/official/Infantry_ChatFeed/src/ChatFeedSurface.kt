@@ -259,7 +259,18 @@ fun OutputPane(
         }
         return
     }
-    if (com.superiorsoftllc.infantry.ui.model.showsResumeSplash(a.session, paneAction) || a.output.isEmpty() && pending.items.isEmpty() && contributions.none { !it.isStats } && a.chatStatus(Clock.System.now().toEpochMilliseconds()) == null) {
+    val onScreen = a.output.isNotEmpty() || pending.items.isNotEmpty() || contributions.any { !it.isStats } || a.chatStatus(Clock.System.now().toEpochMilliseconds()) != null
+    // KILL-BLANK-1: a killed or ended session keeps its transcript, with Resume on top; the splash only when nothing is on screen.
+    if (paneAction != null && com.superiorsoftllc.infantry.ui.model.showsResumeBar(a.session, paneAction, onScreen)) {
+        Column(Modifier.fillMaxSize()) {
+            SessionEndedBar(paneAction, onApplyStart, onResume)
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                AgentChat(a, roleColor = roleColor, questionSlot = questionSlot, contributions = contributions, floaters = floaters, pending = pending)
+            }
+        }
+        return
+    }
+    if (!onScreen) {
       Column(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f).fillMaxWidth(), Alignment.Center) {
             Box(Modifier.align(Alignment.BottomEnd)) { FloatRow(floaters) }
@@ -282,6 +293,29 @@ fun OutputPane(
         return
     }
     AgentChat(a, roleColor = roleColor, questionSlot = questionSlot, contributions = contributions, floaters = floaters, pending = pending)
+}
+
+/** KILL-BLANK-1: test tag on the ended session's Resume bar above its transcript. */
+const val SESSION_ENDED_BAR_TAG = "session-ended-bar"
+
+/** KILL-BLANK-1: an ended (killed, exited, orphaned) session's bar above its kept transcript: what happened, and Resume. */
+@Composable
+fun SessionEndedBar(
+    action: com.superiorsoftllc.infantry.ui.model.SessionPaneAction,
+    onApplyStart: (com.superiorsoftllc.infantry.ui.model.StartPlan) -> Unit,
+    onResume: (String) -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = ChatSidePadding, vertical = 8.dp)
+            .border(1.dp, Palette.Border, RoundedCornerShape(8.dp))
+            .background(Palette.Raised, RoundedCornerShape(8.dp))
+            .padding(horizontal = 10.dp, vertical = 6.dp)
+            .testTag(SESSION_ENDED_BAR_TAG),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("This session has ended. Resume continues the same conversation.", color = Palette.Muted, fontSize = 12.sp, modifier = Modifier.weight(1f))
+        SessionStartPane(action, onApplyStart, onResume)
+    }
 }
 
 /** SESSION-FAIL-VISIBLE-1: test tag on a failed session's error card. */
