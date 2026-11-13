@@ -849,7 +849,8 @@ class InfantryDaemon(
             val toolApproval = com.superiorsoftllc.infantry.session.ToolApprovalService(store)
             val restoreToolApproval = com.superiorsoftllc.infantry.session.ToolApprovals.install(toolApproval::stored)
             // BUG-REAP-OWNER: no id (unwritable dir) => nothing is ever reaped, which is the safe side.
-            val instanceId = runCatching { InstanceId.loadOrCreate(daemonStateDir) }.getOrNull()
+            val instanceLoaded = runCatching { InstanceId.load(daemonStateDir) }.getOrNull()
+            val instanceId = instanceLoaded?.id
             // SANDBOX-1: every CLI launch goes through the sandbox seam; with limits.sandbox.mode = 0 it is a pass-through.
             val sandboxPlan = com.superiorsoftllc.infantry.runner.SandboxPlan(daemonStateDir)
             val sandboxConfig = {
@@ -911,6 +912,8 @@ class InfantryDaemon(
                 lifecyclePolicy = { com.superiorsoftllc.infantry.session.host.LifecyclePolicy(settings.keepAliveMinutes()) },
                 defaultWorkingDir = workingDir,
                 instanceId = instanceId,
+                // RESUME-COPY-1: a freshly minted id means the sessions on disk were written by another daemon (a copied dir).
+                instanceMinted = instanceLoaded?.minted ?: false,
                 // Ticket 66153313: every worker run gets the build limits (priority, Gradle workers, forks) of the settings.
                 // STALL-1 (ticket 802c64d5): and the watch shims first on PATH (gradle/mvn/npm/yarn/pnpm run watched), unless
                 // the owner turned the forced watch off (`limits.watch.forced` = 0).
@@ -2516,7 +2519,13 @@ class InfantryDaemon(
             server.monitor.subscribe(io.ktor.server.application.ServerReady) {
                 if (daemonStartedSent.compareAndSet(false, true)) {
                     runCatching {
-                        val payload = com.superiorsoftllc.infantry.session.DaemonStartedEvent.payload(reconcileReport, manager::get, restartStarter)
+                        // RESUME-COPY-1: a paused local runner holds at boot too: the cut turns are reported, never re-prompted.
+                        val localPaused = settings.runnerPaused(com.superiorsoftllc.infantry.daemon.api.orchestrator.RunnerPool.LOCAL)
+                        if (localPaused && reconcileReport.cutTurns.isNotEmpty()) {
+                            println("[infantry] runners.local.paused: ${reconcileReport.cutTurns.size} cut turn(s) are not resumed at start")
+                        }
+                        val announced = com.superiorsoftllc.infantry.session.DaemonStartedEvent.announced(reconcileReport, localPaused)
+                        val payload = com.superiorsoftllc.infantry.session.DaemonStartedEvent.payload(announced, manager::get, restartStarter)
                         eventPublisher.daemonStarted(payload)
                         println("[infantry] daemon.started: cutTurns=${reconcileReport.cutTurns.size} orphaned=${reconcileReport.orphanedIds.size}")
                     }.onFailure { System.err.println("[infantry] daemon.started failed: ${it.message}") }

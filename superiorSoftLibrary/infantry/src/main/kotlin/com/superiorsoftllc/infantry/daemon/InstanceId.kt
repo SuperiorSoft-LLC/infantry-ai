@@ -19,7 +19,15 @@ object InstanceId {
     const val FILE_NAME = "instance.id"
     const val PATH_FILE = "instance.path"
 
-    fun loadOrCreate(stateDir: File): String {
+    /**
+     * RESUME-COPY-1: the id and whether this start MINTED it (no id file, or a copy of another dir). A minted id with sessions
+     * already on disk means those sessions were written by another daemon: they are a copy's, never this daemon's to resume.
+     */
+    data class Loaded(val id: String, val minted: Boolean)
+
+    fun loadOrCreate(stateDir: File): String = load(stateDir).id
+
+    fun load(stateDir: File): Loaded {
         val file = File(stateDir, FILE_NAME)
         val pathFile = File(stateDir, PATH_FILE)
         val here = where(stateDir)
@@ -27,14 +35,14 @@ object InstanceId {
         val boundTo = runCatching { pathFile.readText().trim() }.getOrNull()?.takeIf { it.isNotEmpty() }
         if (existing != null && (boundTo == null || boundTo.equals(here, ignoreCase = isWindows))) {
             if (boundTo == null) runCatching { pathFile.writeText(here) }
-            return existing
+            return Loaded(existing, minted = false)
         }
         if (existing != null) println("[infantry] state dir $here is a copy of $boundTo: minting its own instance id")
         val fresh = UUID.randomUUID().toString()
         stateDir.mkdirs()
         file.writeText(fresh)
         runCatching { pathFile.writeText(here) }
-        return fresh
+        return Loaded(fresh, minted = true)
     }
 
     private val isWindows = System.getProperty("os.name").orEmpty().lowercase().contains("win")
