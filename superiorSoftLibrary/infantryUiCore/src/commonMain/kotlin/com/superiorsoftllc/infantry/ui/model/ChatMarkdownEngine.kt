@@ -47,15 +47,18 @@ fun chatBlockType(block: ChatBlock): String = when (block) {
 /**
  * Run [engine]; an engine that fails must never take the chat down, so that message is shown with the built-in engine
  * instead. Anything it throws counts (a StackOverflowError from a plugin too) except OutOfMemoryError, which is
- * not recoverable here and propagates.
+ * not recoverable here and propagates. CARD-1: a `card:<type>` fence in the result becomes a card block ([cardBlocks]).
  */
 fun parseChatMarkdownSafely(engine: ChatMarkdownEngine, text: String, streaming: Boolean = false): List<ChatBlock> =
-    try {
-        engine.parse(text, streaming)
-    } catch (e: Throwable) {
-        if (isUnrecoverableError(e)) throw e
-        BuiltInChatMarkdownEngine.parse(text, streaming)
-    }
+    cardBlocks(
+        try {
+            engine.parse(text, streaming)
+        } catch (e: Throwable) {
+            if (isUnrecoverableError(e)) throw e
+            BuiltInChatMarkdownEngine.parse(text, streaming)
+        },
+        streaming,
+    )
 
 /**
  * The engines a user can pick between. The built-in engine is always present and is the fallback for an unknown or

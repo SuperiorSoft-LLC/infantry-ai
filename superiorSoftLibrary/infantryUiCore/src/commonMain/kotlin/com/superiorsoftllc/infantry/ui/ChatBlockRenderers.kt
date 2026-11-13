@@ -28,6 +28,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.superiorsoftllc.infantry.ui.model.BuiltInChatMarkdownEngine
 import com.superiorsoftllc.infantry.ui.model.ChatBlock
+import com.superiorsoftllc.infantry.ui.model.CARD_TYPE_PREFIX
+import com.superiorsoftllc.infantry.ui.model.CardKeys
 import com.superiorsoftllc.infantry.ui.model.ChatMarkdownEngine
 import com.superiorsoftllc.infantry.ui.model.ChatSpan
 import com.superiorsoftllc.infantry.ui.model.chatBlockType
@@ -95,8 +97,13 @@ object DefaultChatBlockRenderer : ChatBlockRenderer {
                     Text(block.body, color = Palette.Text, fontFamily = Mono, fontSize = 12.sp, modifier = Modifier.horizontalScroll(rememberScrollState()))
                 }
             }
-            // A block type this client has no renderer for: its text, plain.
-            is ChatBlock.Custom -> Text(block.text, color = Palette.Text, fontFamily = Mono, fontSize = 12.sp)
+            // CARD-1: a card with no renderer for its type draws as the original fenced code block, exactly as before.
+            is ChatBlock.Custom -> if (block.type.startsWith(CARD_TYPE_PREFIX) && block.data[CardKeys.LANGUAGE] != null) {
+                Render(ChatBlock.Code(block.data[CardKeys.LANGUAGE].orEmpty(), block.data[CardKeys.CODE].orEmpty()))
+            } else {
+                // A block type this client has no renderer for: its text, plain.
+                Text(block.text, color = Palette.Text, fontFamily = Mono, fontSize = 12.sp)
+            }
         }
     }
 }
