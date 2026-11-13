@@ -116,6 +116,13 @@ class MailRouter(
      * handed to [resumeTurn]; an unreachable runner answers QUEUED, so the mail stays queued until the runner is back.
      */
     private val remoteSession: (sessionId: String) -> Boolean = { false },
+    /**
+     * RUNNER-ROLE-1: the orchestrator's record of a session on a remote runner (the session directory); one that reads
+     * [SessionRecord.neverRun] takes its role brief with its first mail turn, composed exactly as a local session's. Null = none.
+     */
+    private val remoteRecord: (sessionId: String) -> SessionRecord? = { null },
+    /** RUNNER-ROLE-1: that first turn was delivered; the session no longer owes its brief. */
+    private val remoteBriefed: (sessionId: String) -> Unit = {},
 ) : MailDelivery {
 
     /** XPROJ-1: a project as mail addressing sees it. */
@@ -522,15 +529,25 @@ class MailRouter(
     private fun deliverRemote(sessionId: String, message: Message, rest: List<Message>): DeliveryOutcome {
         val routed = resumeTurn ?: return DeliveryOutcome.Failed("recipient '$sessionId' lives on a remote runner and this daemon has no runner pool")
         val source = MailSource.of(message, manager, automationFooter)
-        val group = listOf(message) + rest
+        // RUNNER-ROLE-1: a never-run session takes one message with its brief (no fold), as a local first turn does.
+        val first = remoteRecord(sessionId)?.takeIf { it.neverRun }
+        val folded = if (first != null) emptyList() else rest
+        val group = listOf(message) + folded
         val text = if (group.size > 1) compactTurn(group) else renderTurn(deliveryMode("", sessionId), group, source) { MailSource.of(it, manager, automationFooter) }
-        val result = runCatching { routed(sessionId, text, source.origin, "mail", group.map { it.id }) }
+        val turn = first?.let { s ->
+            val instance = manager.instance(s.id)
+            firstTurn(instance, s.role, s.agentId, text, knowledge.section(s.projectId, s.role), skills.section(instance))
+        } ?: text
+        val result = runCatching { routed(sessionId, turn, source.origin, "mail", group.map { it.id }) }
             .getOrElse { return DeliveryOutcome.Retry("runner of '$sessionId' unreachable: ${it.message}") }
         return when (result.kind) {
             com.superiorsoftllc.infantry.daemon.api.orchestrator.MailResult.QUEUED ->
                 DeliveryOutcome.Retry(result.reason.ifBlank { "recipient '$sessionId' has a run in flight on its runner" })
             com.superiorsoftllc.infantry.daemon.api.orchestrator.MailResult.FAILED -> DeliveryOutcome.Failed("delivery to '$sessionId' failed: ${result.reason}")
-            else -> DeliveryOutcome.Delivered("delivered to $sessionId on its runner", rest.map { it.id })
+            else -> {
+                if (first != null) remoteBriefed(sessionId)
+                DeliveryOutcome.Delivered("delivered to $sessionId on its runner", folded.map { it.id })
+            }
         }
     }
 

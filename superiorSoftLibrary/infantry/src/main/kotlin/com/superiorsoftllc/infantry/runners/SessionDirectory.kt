@@ -33,6 +33,10 @@ class SessionDirectory(
     private val placement: (String) -> RemoteSessionMirror.Placed? = { null },
     private val enabled: () -> Boolean = { true },
     private val store: File? = null,
+    /** RUNNER-ROLE-1: a placed session whose first turn still owes its role brief ([RemoteSessionMirror.owesBrief]). */
+    private val owesBrief: (String) -> Boolean = { false },
+    /** RUNNER-ROLE-1: that first turn was taken ([RemoteSessionMirror.briefed]). */
+    private val markBriefed: (String) -> Unit = {},
 ) {
     @Serializable
     private data class Kept(val runner: String, val record: JsonElement)
@@ -70,18 +74,40 @@ class SessionDirectory(
         return true
     }
 
+    /**
+     * RUNNER-ROLE-1: [id]'s first turn, composed with its brief because its record read [SessionRecord.neverRun], was taken. A local
+     * session counts its own run; a placed one stops owing its brief here, so the next turn goes as typed.
+     */
+    fun briefed(id: String) {
+        if (localGet(id) == null) markBriefed(id)
+    }
+
     /** [sessionId] was deleted: the record the runner sent goes too. */
     fun forget(sessionId: String) {
         if (received.remove(sessionId) != null) save()
     }
 
-    private fun remoteRecord(id: String): SessionRecord? {
+    private fun remoteRecord(id: String): SessionRecord? = rawRemoteRecord(id)?.let { briefState(it, owesBrief(id)) }
+
+    private fun rawRemoteRecord(id: String): SessionRecord? {
         val r = received[id]?.record
         if (r == null || !enabled()) return legacy(id)
         val out = overlay(r, placement(id))
         // A runner that went quiet sends no more frames: an end this daemon recorded itself (a kill it sent, a runner lost) stands.
         val l = legacy(id)
         return if (l != null && l.state in ENDED && out.state !in ENDED) out.copy(state = l.state, lastError = l.lastError ?: out.lastError) else out
+    }
+
+    /**
+     * RUNNER-ROLE-1: a placed session reads [SessionRecord.neverRun] exactly while it owes its brief, so every first-turn site
+     * composes it as it does for a local bound session (one rule, no branch on where the session runs). One that owes nothing is
+     * never read as never-run (a runner record not yet refreshed after the first turn would brief it twice).
+     */
+    private fun briefState(r: SessionRecord, owed: Boolean): SessionRecord = when {
+        owed && r.state in AT_REST ->
+            r.copy(providerSessionId = null, runCount = 0, state = com.superiorsoftllc.infantry.session.SessionState.IDLE)
+        !owed && r.neverRun -> r.copy(runCount = 1)
+        else -> r
     }
 
     private fun overlay(r: SessionRecord, p: RemoteSessionMirror.Placed?): SessionRecord = if (p == null) r else r.copy(
@@ -116,6 +142,8 @@ class SessionDirectory(
 
     private companion object {
         val codec = Json { ignoreUnknownKeys = true; encodeDefaults = false }
+        /** A placed session not yet run: the mirror's STARTING before the runner's first record, or the runner's own IDLE. */
+        val AT_REST = setOf(com.superiorsoftllc.infantry.session.SessionState.STARTING, com.superiorsoftllc.infantry.session.SessionState.IDLE)
         val ENDED = setOf(com.superiorsoftllc.infantry.session.SessionState.EXITED, com.superiorsoftllc.infantry.session.SessionState.FAILED, com.superiorsoftllc.infantry.session.SessionState.ORPHANED)
     }
 }
