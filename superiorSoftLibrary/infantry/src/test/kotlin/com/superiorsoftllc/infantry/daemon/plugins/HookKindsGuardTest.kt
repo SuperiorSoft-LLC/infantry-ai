@@ -44,3 +44,28 @@ class HookKindsGuardTest {
         assertTrue(bad.isEmpty(), "refused hook kinds: $bad")
     }
 }
+
+/**
+ * BROWSER-LOAD-1. Rule: every `api.hooks.<kind>(` an official daemon plugin registers in source is declared in that
+ * plugin's `module.json` `daemon.hooks`. Why: the host refuses an undeclared kind at start() ("hook 'x' is not declared
+ * in daemon.hooks"), taking the whole plugin down. Fix: add the kind to `daemon.hooks` in the module.json named.
+ */
+class UndeclaredHookGuardTest {
+    @Test fun `registered hooks are declared in module json`() {
+        var d: File? = File("").absoluteFile
+        while (d != null && !File(d, "plugins/official").isDirectory) d = d.parentFile
+        val bad = mutableListOf<String>()
+        File(requireNotNull(d), "plugins/official").listFiles { f -> f.isDirectory }!!.forEach { dir ->
+            val mj = File(dir, "module.json").takeIf { it.isFile } ?: return@forEach
+            val top = kotlinx.serialization.json.Json.parseToJsonElement(mj.readText()) as kotlinx.serialization.json.JsonObject
+            val declared = ((top["daemon"] as? kotlinx.serialization.json.JsonObject)?.get("hooks") as? kotlinx.serialization.json.JsonArray)
+                ?.map { it.toString().trim('"') }?.toSet().orEmpty()
+            File(dir, "daemon/src/main").walkTopDown().filter { it.extension == "kt" }.forEach { f ->
+                Regex("""\bhooks\.([a-zA-Z]+)\(""").findAll(f.readText()).map { it.groupValues[1] }
+                    .filter { it in DaemonPluginHost.HOOK_KINDS && it !in declared }
+                    .forEach { bad += "${dir.name}: $it" }
+            }
+        }
+        assertTrue(bad.isEmpty(), "hooks registered but not declared in daemon.hooks: $bad")
+    }
+}

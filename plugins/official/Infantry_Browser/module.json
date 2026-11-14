@@ -10,6 +10,7 @@
     "entry": "com.superiorsoftllc.infantry.plugins.official.browser.daemon.BrowserDaemonPlugin",
     "jar": "daemon/build/libs/Infantry_Browser-daemon.jar",
     "apiAtLeast": "1.59.0",
+    "hooks": ["status"],
     "mcpServers": [
       {
         "name": "browser",
