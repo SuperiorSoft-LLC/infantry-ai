@@ -178,6 +178,17 @@ an `image` on `upload.wikimedia.org` or `*.gstatic.com` draws a thumbnail, any o
   works for claude, opencode and pi alike. No saved sources (owner).
 - Thumbnails: the RSS often has none; v1 uses `media:content` when present, else the source badge. Fetching each
   article's `og:image` is a later setting (cost: one request per item).
+
+Shipped (NEWS-1): `plugins/official/Infantry_News`. Capability `news.headlines {query?, topic?, source?, max?}`: no args =
+top stories, a known `topic` (world, nation, business, technology, entertainment, sports, science, health) = its section
+feed, anything else = the search feed (`source` as `site:<domain>` when it is a domain). The feed is fetched through the
+Downloads seam (silent progress), parsed with DOCTYPE/entities off, and answered as `{title, feed, count, card}`;
+`card` is the finished ```` ```card:news ```` fence, so an agent pastes it as is. Each item carries `icon` (the source's
+site icon via `www.google.com/s2/favicons`, redirecting to `*.gstatic.com`; setting `news.sourceIcons`) as the thumbnail
+fallback, since Google News RSS rarely carries `media:content`. Settings: `news.items` (6), `news.language` (en-US),
+`news.country` (US), `news.sourceIcons`, `limits.news.maxItems` (20), `limits.news.cacheMinutes` (5, an in-memory feed
+cache, nothing saved), `limits.news.feedBytes` (2 MB). The card spec is inline in module.json (no `cards/` folder to
+package); the `news-agent` role (module.json `roles`) carries the instructions in its persona.
 - Role `news-agent`: persona = "fetch with news.headlines, answer with one ```card:news block plus one plain
   sentence". Needs ROLE-PLUGIN-1.
 
