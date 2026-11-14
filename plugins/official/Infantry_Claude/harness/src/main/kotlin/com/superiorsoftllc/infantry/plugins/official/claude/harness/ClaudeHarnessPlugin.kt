@@ -9,7 +9,9 @@ import com.superiorsoftllc.infantry.harness.api.Harness
 import com.superiorsoftllc.infantry.harness.api.HarnessCapability
 import com.superiorsoftllc.infantry.harness.api.HarnessCommandSpec
 import com.superiorsoftllc.infantry.harness.api.HarnessHost
+import com.superiorsoftllc.infantry.harness.api.HarnessMcp
 import com.superiorsoftllc.infantry.harness.api.HarnessModels
+import com.superiorsoftllc.infantry.harness.api.HarnessProcessListener
 import com.superiorsoftllc.infantry.harness.api.HarnessPlugin
 import com.superiorsoftllc.infantry.harness.api.HarnessProcess
 import com.superiorsoftllc.infantry.harness.api.HarnessRegistrar
@@ -77,13 +79,45 @@ class ClaudeHarness internal constructor(
                 executable = executable(),
                 model = ClaudeCommand.effectiveModel(request.model),
                 permissionMode = null,
-                mcpConfigs = ClaudeCommand.mcpConfigs(ClaudeCommand.userMcpConfigs(), mcpCommand, mcpEnv),
+                mcpConfigs = ClaudeCommand.mcpConfigs(ClaudeCommand.userMcpConfigs() + delivery(sessionEnv).configs, mcpCommand, mcpEnv),
+                disallowedTools = delivery(sessionEnv).disallowed,
                 strictMcp = ClaudeCommand.strictMcp(host.setting(ClaudeCommand.USER_MCP_SETTING)),
                 resumeSessionId = request.sessionId,
                 effort = request.effort,
             ),
             env = ClaudeCommand.contextLimitEnv(request.contextLimit),
         )
+    }
+
+    private val claudeMcp = ClaudeMcp(ClaudeMcpRunner { args, dir ->
+        runCli(listOf(executable()) + args, dir)
+    })
+
+    /** MCP-CLAUDE-1: Claude's own servers through `claude mcp ...` only. */
+    override val mcp: HarnessMcp get() = claudeMcp
+
+    /** The plan (infantry + granted servers) as ONE config file in the state dir, plus the tool rules of the denied servers. */
+    private fun delivery(env: Map<String, String>): ClaudeMcpDelivery {
+        val plan = host.mcpServers(env)
+        val json = ClaudeMcp.configJson(plan) { claudeMcp.definition(null, it) }
+        val file = ClaudeMcp.configFile(json, File(host.stateDir, "mcp"))
+        return ClaudeMcpDelivery(listOfNotNull(file), ClaudeMcp.disallowed(plan))
+    }
+
+    private fun runCli(argv: List<String>, dir: String?): Pair<Int, String> {
+        val lines = java.util.Collections.synchronizedList(mutableListOf<String>())
+        val exit = java.util.concurrent.CompletableFuture<Int>()
+        val process = host.start(HarnessProcess(argv, workingDir = dir?.let(::File)), object : HarnessProcessListener {
+            override fun onStdout(line: String) { lines += line }
+            override fun onStderr(line: String) { lines += line }
+            override fun onExit(exitCode: Int) { exit.complete(exitCode) }
+        })
+        process.closeInput()
+        val code = try { exit.get(MCP_CLI_TIMEOUT_SEC, java.util.concurrent.TimeUnit.SECONDS) } catch (e: java.util.concurrent.TimeoutException) {
+            process.killTree()
+            return -1 to "claude ${argv.getOrNull(1)} timed out"
+        }
+        return code to lines.joinToString(System.lineSeparator())
     }
 
     override fun newTranslator(): HarnessTranslator = ClaudeStreamTranslator()
@@ -103,6 +137,8 @@ class ClaudeHarness internal constructor(
     /** RUNNER-CHECK-SIGNIN-1 / RUNNER-LOGIN-1: the runner hello's `loggedIn`, re-read at every hello and Check (a login or a finished setup); the daemon's env. */
     override fun signInProblem(): String? = ClaudeSignIn.problem(System.getenv(), home())
 
+    private companion object { const val MCP_CLI_TIMEOUT_SEC = 30L }
+
     private fun liveIdle(): Int = host.setting(ClaudeCommand.LIVE_IDLE_SETTING)?.trim()?.toIntOrNull()?.takeIf { it >= 0 } ?: 0
 
     private fun interactive(): Boolean = ClaudeCommand.isInteractive(host.setting(ClaudeCommand.MODE_SETTING))
@@ -110,11 +146,11 @@ class ClaudeHarness internal constructor(
     /** the interactive CLI in a terminal (CLI-PTY-1, the default), or headless stream-json when `harness.claude.mode = headless`; decided at every launch. */
     override fun session(): HarnessSession = ClaudeModeSession(
         headless = ClaudeSession(executable, ::mcp, { env -> ClaudeCommand.watchSettings(env) }, idleMinutes = ::liveIdle, stateDir = { host.stateDir },
-            userMcp = { host.setting(ClaudeCommand.USER_MCP_SETTING) }),
+            userMcp = { host.setting(ClaudeCommand.USER_MCP_SETTING) }, delivery = ::delivery),
         interactive = ClaudeTtySession(executable, ::mcp, { env -> ClaudeCommand.watchSettings(env) }, stateDir = { host.stateDir }, idleMinutes = ::liveIdle,
             approvalHookSeconds = { ClaudePermissionHook.timeoutSec(host.setting(ClaudePermissionHook.TIMEOUT_SETTING)) },
             prepareSignIn = { env -> ClaudeSignIn.prepare(System.getenv() + env, home()) },
-            userMcp = { host.setting(ClaudeCommand.USER_MCP_SETTING) },
+            userMcp = { host.setting(ClaudeCommand.USER_MCP_SETTING) }, delivery = ::delivery,
             firstTurn = { ClaudeFirstTurn.of(host.setting(ClaudeFirstTurn.SUBMIT_SETTING), host.setting(ClaudeFirstTurn.REPLY_SETTING)) }),
         mode = { host.setting(ClaudeCommand.MODE_SETTING) },
     )

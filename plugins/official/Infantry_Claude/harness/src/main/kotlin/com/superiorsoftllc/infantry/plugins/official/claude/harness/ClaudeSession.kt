@@ -51,6 +51,8 @@ class ClaudeSession(
     private val pidAlive: (Long) -> Boolean = ::processAlive,
     /** MCP-WALL-1: `harness.claude.userMcpServers` (none = walled, the default; all = claude loads the user's MCP scopes). */
     private val userMcp: () -> String? = { null },
+    /** MCP-CLAUDE-1: the session's plan as ONE config file plus denied tool rules (nothing = infantry only, the old path). */
+    private val delivery: (Map<String, String>) -> ClaudeMcpDelivery = { ClaudeMcpDelivery() },
 ) : HarnessSession {
     override val label: String = "claude"
 
@@ -65,11 +67,13 @@ class ClaudeSession(
     ): List<String> {
         val (mcpCommand, baseMcpEnv) = mcp(env)
         val mcpEnv = baseMcpEnv + extraMcpEnv
+        val plan = delivery(env)
         return ClaudeCommand.command(
             executable = exe,
+            disallowedTools = plan.disallowed,
             model = ClaudeCommand.effectiveModel(request.model),
             permissionMode = ClaudeCommand.permissionMode(request.toolApproval),
-            mcpConfigs = ClaudeCommand.mcpConfigs(ClaudeCommand.userMcpConfigs(), mcpCommand, mcpEnv),
+            mcpConfigs = ClaudeCommand.mcpConfigs(ClaudeCommand.userMcpConfigs() + plan.configs, mcpCommand, mcpEnv),
             strictMcp = ClaudeCommand.strictMcp(userMcp()),
             resumeSessionId = resume,
             effort = request.effort,
@@ -152,6 +156,11 @@ class ClaudeSession(
             val type = record.str("type")
             if (type == "control_request") {
                 controlRequest(record)
+                return
+            }
+            if (type == "system" && record.str("subtype") == "init") {
+                // MCP-CLAUDE-1: the headless init record names every MCP server and its state: the session's server status.
+                ClaudeMcp.initStatuses(record).takeIf { it.isNotEmpty() }?.let { out.mcpServers(it) }
                 return
             }
             if (type == OWN_TURN_RECORD) {
