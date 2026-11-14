@@ -57,6 +57,9 @@ class SessionHost(
         /** The host stopped or killed it on purpose: its exit is not a crash. */
         @Volatile var released = false
 
+        /** STALE-BUSY-1: the OS process has exited; a turn begun on the slot after that has nobody left to end it. */
+        @Volatile var exited = false
+
         /** BUG-M2-11f: host-clock millis since the slot has had no turn; null while a turn is starting or running. */
         @Volatile var idleSince: Long? = null
 
@@ -250,6 +253,10 @@ class SessionHost(
             endTurn(slot, turn, TurnEnd.FAILED, null, e.message ?: e.javaClass.simpleName, processExited = false)
             return
         }
+        if (slot.exited && !turn.ended.get()) {
+            endTurn(slot, turn, TurnEnd.FAILED, null, "the ${slot.adapter.label} process has exited", processExited = true)
+            return
+        }
         if (!turn.ended.get()) slot.process.pid?.let { events.process(slot.sessionId, it) }
     }
 
@@ -264,7 +271,11 @@ class SessionHost(
             if (slot.turn != null) { slot.ownAhead++; false }
             else { slot.turn = Turn(own = true); slot.idleSince = null; true }
         }
-        if (fresh) events.turnStarted(slot.sessionId, reason)
+        if (fresh) {
+            events.turnStarted(slot.sessionId, reason)
+            // STALE-BUSY-1: the process was already gone, so no exit will come to end this turn: end it now, or the session stays BUSY.
+            if (slot.exited) endTurn(slot, slot.turn, TurnEnd.FAILED, null, "the ${slot.adapter.label} process has exited", processExited = true)
+        }
         else events.activity(slot.sessionId, "the ${slot.adapter.label} process began a turn of its own" + reason?.let { ": $it" }.orEmpty())
     }
 
@@ -347,6 +358,7 @@ class SessionHost(
         val label = slot.adapter.label
         slot.keptPid?.let { events.keptProcessEnded(slot.sessionId, it) }
         synchronized(lock) {
+            slot.exited = true
             turn = slot.turn
             if (slots[slot.sessionId] === slot) slots.remove(slot.sessionId)
             if (!slot.released) crashed.add(slot.sessionId)

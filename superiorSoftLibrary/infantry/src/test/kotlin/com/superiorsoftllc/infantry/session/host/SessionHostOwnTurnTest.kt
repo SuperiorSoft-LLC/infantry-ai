@@ -58,4 +58,14 @@ class SessionHostOwnTurnTest {
         adapter.sink.turnEnded(TurnEnd.COMPLETED, 0) // the sent turn
         assertEquals(1, events.of("end").size)
     }
+
+    @Test
+    fun aTurnBegunAfterTheProcessExited_isEndedAtOnce_soTheSessionIsNotLeftBusy() {
+        // STALE-BUSY-1: the exit found no turn open; a late "own turn" from the dead process must not stay open forever.
+        prompt("one")
+        adapter.sink.turnEnded(TurnEnd.COMPLETED, 0)
+        adapter.current.die(1)
+        adapter.sink.turnStarted("late notice")
+        assertEquals(2, events.of("end").size, "the late turn is ended: ${events.log}")
+    }
 }
