@@ -96,6 +96,9 @@ internal fun GuardedBlock(
             val latest by rememberUpdatedState(probe ?: content)
             LaunchedEffect(key, instance) {
                 val error = probeComposition(locals) { latest() }
+                // CARD-LIVE-2: loud, once per block (the verdict is kept per key+instance, so the probe runs once). The key reads
+                // `<plugin>/<mode>/<node>`, for a chat card `<plugin>/card/chatCards/<type>`.
+                if (error != null) println("[infantry-ui] plugin block FAILED, drawing the fallback: block=$key error=${error::class.simpleName}: ${error.message?.take(300)}")
                 OverrideHealth.record(key, instance, if (error == null) OverrideVerdict.Ok else OverrideVerdict.Faulted(error.toString()))
             }
         }
