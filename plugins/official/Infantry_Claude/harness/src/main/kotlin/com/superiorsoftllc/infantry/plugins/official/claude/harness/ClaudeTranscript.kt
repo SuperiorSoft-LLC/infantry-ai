@@ -37,6 +37,12 @@ sealed interface TranscriptSignal {
     /** The CLI recorded that the user interrupted the turn (Esc). */
     data object Interrupted : TranscriptSignal
 
+    /**
+     * HOOK-SHELL-1: the CLI recorded that its turn ended (its `system`/`turn_duration` record, written once per turn whatever the
+     * hooks did). A second turn-end signal beside the Stop hook, so a session whose hooks write nothing still goes back to idle.
+     */
+    data object TurnEnded : TranscriptSignal
+
     /** The CLI gave up on the request (an API error it shows as an assistant message); [text] is its own words. */
     data class ApiError(val text: String) : TranscriptSignal
 }
@@ -81,6 +87,7 @@ class TranscriptMapper(private val sessionId: String, private val prices: List<M
 
     /** G13: the CLI's `compact_boundary` record reaches the meter as the stream-json line headless prints. */
     private fun system(record: JsonObject): List<TranscriptSignal> {
+        if (record.str("subtype") == TURN_DURATION) return listOf(TranscriptSignal.TurnEnded)
         if (record.str("subtype") != "compact_boundary") return emptyList()
         return listOf(TranscriptSignal.Line(buildJsonObject {
             put("type", "system")
@@ -162,6 +169,8 @@ class TranscriptMapper(private val sessionId: String, private val prices: List<M
         /** The model name the CLI gives the messages it writes itself (e.g. after an interrupt); not a model reply. */
         const val SYNTHETIC_MODEL = "<synthetic>"
         const val INTERRUPTED_PREFIX = "[Request interrupted by user"
+        /** The subtype of the `system` record the CLI writes when a turn ends (HOOK-SHELL-1). */
+        const val TURN_DURATION = "turn_duration"
         /** The `origin.kind` of a prompt typed (or pasted) into the terminal; any other kind is one the CLI made itself. */
         const val ORIGIN_HUMAN = "human"
         val USAGE_KEYS = listOf("input_tokens", "output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")

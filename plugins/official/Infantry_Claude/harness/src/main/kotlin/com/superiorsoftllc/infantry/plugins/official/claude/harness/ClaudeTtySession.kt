@@ -193,6 +193,8 @@ class ClaudeTtySession(
         private val lock = Any()
         private val mapper = TranscriptMapper(launch.sessionId)
         private val events = AppendedLines { launch.events }
+        /** HOOK-SHELL-1: an events line was read (the hooks work), or the missing events file was already reported. */
+        private var eventsChecked = false
         private var transcriptFile: File? = null
         private val transcript = AppendedLines(launch.transcriptStart) {
             transcriptFile ?: ClaudeTranscripts.find(configDir, launch.cwd, launch.sessionId)?.also {
@@ -342,6 +344,21 @@ class ClaudeTtySession(
             return true
         }
 
+        /**
+         * HOOK-SHELL-1: hook failures are loud. A turn the transcript shows answered while no events file exists means claude's
+         * command hooks run but write nothing (its Stop never arrives, so the turn would spin on "thinking"): say so once.
+         */
+        private fun checkHooks(now: Long) {
+            if (eventsChecked) return
+            val since = synchronized(lock) { active?.takeIf { it.replied }?.submittedAt } ?: return
+            if (now - since < HOOK_SILENT_MS || launch.events.exists()) return
+            eventsChecked = true
+            out.detail(
+                "interactive claude: its hooks wrote no events file ${HOOK_SILENT_MS / 1000} s into an answered turn (${launch.events.absolutePath}); " +
+                    "the turn end cannot be seen. Hook command: " + ClaudeCommand.eventCommand(EV_STOP, launch.events.absolutePath),
+            )
+        }
+
         override fun onExit(exitCode: Int) {
             running = false
             launch.hookToken?.let { hooks?.unregister(it) }
@@ -361,7 +378,8 @@ class ClaudeTtySession(
         fun tick() {
             val now = clock()
             for (e in events.read()) {
-                when (e.trim().lowercase()) {
+                eventsChecked = true
+                when (ClaudeCommand.eventOf(e)) {
                     EV_START -> synchronized(lock) { if (startedAt == null) startedAt = now }
                     EV_SUBMIT -> synchronized(lock) { active?.takeIf { it.stopAt == null }?.let { it.submitted = true } ?: own("a prompt nobody sent") }
                     EV_STOP -> synchronized(lock) {
@@ -381,6 +399,7 @@ class ClaudeTtySession(
             checkMcp(now)
             var apiError: String? = null
             for (line in transcript.read()) for (signal in mapper.map(line)) onSignal(signal)?.let { apiError = it }
+            checkHooks(now)
             val ends = ArrayList<Triple<SessionTurnEnd, Int?, String?>>()
             val starts = ArrayList<String?>()
             synchronized(lock) {
@@ -484,6 +503,13 @@ class ClaudeTtySession(
                 TranscriptSignal.PromptRecorded -> synchronized(lock) { active?.takeIf { it.stopAt == null }?.let { it.submitted = true } ?: own("a prompt typed in the terminal", specific = true) }
                 is TranscriptSignal.OwnPrompt -> synchronized(lock) { active?.takeIf { it.stopAt == null }?.let { it.submitted = true } ?: own(ownReason(signal.kind), specific = true) }
                 TranscriptSignal.Interrupted -> synchronized(lock) { interruptedSeen = true }
+                // HOOK-SHELL-1: the transcript's own turn end, as the Stop hook would (whichever comes first wins). With no turn open
+                // it ends only a turn of the CLI's own whose prompt was read in this same pass; a late twin of a Stop is ignored.
+                TranscriptSignal.TurnEnded -> synchronized(lock) {
+                    val turn = active
+                    if (turn != null && (turn.submitted || turn.enteredAt != null || turn.own)) turn.stopAt = turn.stopAt ?: clock()
+                    else if (turn == null && ownPending != null) unclaimedStopAt = clock()
+                }
                 is TranscriptSignal.ApiError -> return signal.text
             }
             return null
@@ -704,6 +730,8 @@ class ClaudeTtySession(
         const val PASTE_SETTLE_MS = 400L
         const val SUBMIT_RETRY_MS = 4_000L
         const val STOP_SETTLE_MS = 300L
+        /** HOOK-SHELL-1: how long after an answered turn's submit a missing events file is reported as broken hooks. */
+        const val HOOK_SILENT_MS = 10_000L
         /** CLI-PTY-4: how long a Stop seen with no turn open can still end a turn of the CLI's own whose prompt record is read after it. */
         const val STOP_CLAIM_MS = 2_000L
         const val ABORT_GRACE_MS = 3_000L
