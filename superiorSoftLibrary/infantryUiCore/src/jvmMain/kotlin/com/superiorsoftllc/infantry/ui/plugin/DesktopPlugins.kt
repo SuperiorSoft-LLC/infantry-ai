@@ -164,6 +164,7 @@ object DesktopPlugins {
             capture?.let { slot -> provide(Services.AUDIO_IN) { s -> com.superiorsoftllc.infantry.ui.voice.JvmAudioCapture(s.name, slot, captureLimit, captureLines, say) } }
         }
 
+        PluginFaults.sink = say
         val set = ModuleSet(say, bus, withBundles)
         set.load(resolution, registry(config))
         resolution.log.forEach(say)
