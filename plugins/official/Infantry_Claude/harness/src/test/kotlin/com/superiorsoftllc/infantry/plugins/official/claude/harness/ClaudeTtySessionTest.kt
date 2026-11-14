@@ -107,9 +107,10 @@ class ClaudeTtySessionTest {
         assertEquals("11111111-2222-3333-4444-555555555555", s.argv[s.argv.indexOf("--session-id") + 1])
         assertEquals("bypassPermissions", s.argv[s.argv.indexOf("--permission-mode") + 1])
         assertEquals(1, s.argv.count { it == "--settings" })
-        assertTrue("--strict-mcp-config" in s.argv, "a project .mcp.json must not open its approval dialog: ${s.argv}")
+        assertFalse("--strict-mcp-config" in s.argv, "strict is opt-in: ${s.argv}")
         val settings = Json.parseToJsonElement(s.launch.settings.readText()).jsonObject
         assertEquals("true", settings["skipDangerousModePermissionPrompt"]!!.jsonPrimitive.content)
+        assertEquals("true", settings["enableAllProjectMcpServers"]!!.jsonPrimitive.content, "approves a project .mcp.json without a dialog")
         val hooks = settings["hooks"]!!.jsonObject
         assertTrue(listOf("SessionStart", "UserPromptSubmit", "Stop").all { it in hooks })
         val stop = hooks["Stop"]!!.jsonArray.last().jsonObject["hooks"]!!.jsonArray.first().jsonObject["command"]!!.jsonPrimitive.content

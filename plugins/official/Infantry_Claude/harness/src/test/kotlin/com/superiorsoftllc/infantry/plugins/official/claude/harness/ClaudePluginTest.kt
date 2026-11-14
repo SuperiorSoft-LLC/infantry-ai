@@ -14,29 +14,6 @@ import kotlin.test.assertTrue
  * lines and stream events are the ones the retired core copy produced (ClaudePluginParityTest proved them equal in H7b-2).
  */
 class ClaudePluginTest {
-    @Test
-    fun userScopeMcpConfigKeepsUserServersAndDropsInfantry() {
-        val dir = kotlin.io.path.createTempDirectory("claude-home").toFile()
-        java.io.File(dir, ".claude.json").writeText(
-            """{"mcpServers":{"playwright":{"type":"stdio","command":"x.cmd"},"infantry":{"type":"stdio","command":"old"}}}""",
-        )
-        var written = ""
-        val path = ClaudeCommand.userScopeMcpConfig(configDir = null, home = dir.path, configFile = { written = it; "f.json" })
-        assertEquals("f.json", path)
-        assertTrue("playwright" in written)
-        assertFalse("old" in written)
-    }
-
-    @Test
-    fun userScopeMcpConfigAbsentOrEmptyIsNull() {
-        val dir = kotlin.io.path.createTempDirectory("claude-home").toFile()
-        assertNull(ClaudeCommand.userScopeMcpConfig(configDir = dir.path, home = dir.path, configFile = { "f" }))
-        java.io.File(dir, ".claude.json").writeText("""{"mcpServers":{"infantry":{}}}""")
-        assertNull(ClaudeCommand.userScopeMcpConfig(configDir = dir.path, home = dir.path, configFile = { "f" }))
-        java.io.File(dir, ".claude.json").writeText("not json")
-        assertNull(ClaudeCommand.userScopeMcpConfig(configDir = dir.path, home = dir.path, configFile = { "f" }))
-    }
-
     private val infantryRules = "Bash(infantry:*),PowerShell(infantry:*),Bash(agenthq:*),PowerShell(agenthq:*),mcp__infantry__*"
 
     @Test fun `one-shot argv with every option, in the golden order`() {

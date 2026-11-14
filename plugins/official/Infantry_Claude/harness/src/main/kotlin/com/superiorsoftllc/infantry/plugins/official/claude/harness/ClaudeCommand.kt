@@ -104,27 +104,6 @@ object ClaudeCommand {
         ),
     ).toString()
 
-    /**
-     * The user's own user-scope MCP servers (top-level `mcpServers` of `~/.claude.json`, or `$CLAUDE_CONFIG_DIR/.claude.json`) as a
-     * config file for `--mcp-config`, so `--strict-mcp-config` does not drop them. The `infantry` entry is removed (the daemon's wins).
-     * Null when the file is absent, unreadable or has no other servers.
-     */
-    fun userScopeMcpConfig(
-        configDir: String? = System.getenv("CLAUDE_CONFIG_DIR"),
-        home: String = System.getProperty("user.home"),
-        configFile: (String) -> String = ::configFile,
-        log: (String) -> Unit = {},
-    ): String? {
-        val file = if (configDir.isNullOrBlank()) File(home, ".claude.json") else File(configDir, ".claude.json")
-        if (!file.isFile) return null
-        val servers = runCatching { (Json.parseToJsonElement(file.readText()) as? JsonObject)?.get("mcpServers") as? JsonObject }
-            .getOrElse { log("user-scope MCP config ${file.path} unreadable: ${it.message}"); return null }
-            ?: return null
-        val others = servers.filterKeys { it != MCP_SERVER_NAME }
-        if (others.isEmpty()) return null
-        return configFile(JsonObject(mapOf("mcpServers" to JsonObject(others))).toString())
-    }
-
     /** Whether one `--mcp-config` value (inline JSON or a file) already names an `infantry` server. */
     fun definesInfantry(value: String): Boolean {
         val text = if (value.trimStart().startsWith("{")) value else runCatching { File(value).readText() }.getOrNull() ?: return false
@@ -271,6 +250,8 @@ object ClaudeCommand {
         permissionHook?.let { hooks[ClaudePermissionHook.EVENT] = JsonArray(hooks[ClaudePermissionHook.EVENT].orEmpty() + it) }
         val root = LinkedHashMap<String, kotlinx.serialization.json.JsonElement>()
         if (bypass) root["skipDangerousModePermissionPrompt"] = JsonPrimitive(true)
+        // MCP-USER-2: Claude's own setting approves a project .mcp.json up front, so the PTY shows no approval dialog without --strict-mcp-config.
+        root["enableAllProjectMcpServers"] = JsonPrimitive(true)
         root["showThinkingSummaries"] = JsonPrimitive(true) // CLI-PTY-2: the settings twin of --thinking-display summarized
         root["hooks"] = JsonObject(hooks)
         return JsonObject(root).toString()
