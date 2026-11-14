@@ -239,6 +239,8 @@ object ShellSetupWizard : Block("infantry.shell.setupWizard", "infantry.shell.se
         val state = s.state
         // The session this screen started: the first one that was not there before the spawn.
         val before = remember { state.agents.keys.toSet() }
+        // A refusal comes back as a daemon notice after the send (e.g. "new refused: ..."): any error notice since this screen opened.
+        val since = remember { kotlin.time.Clock.System.now().toEpochMilliseconds() }
         var sent by remember { mutableStateOf(false) }
         var refused by remember { mutableStateOf<String?>(null) }
         LaunchedEffect(Unit) {
@@ -251,7 +253,8 @@ object ShellSetupWizard : Block("infantry.shell.setupWizard", "infantry.shell.se
         }
         val agent = state.agents.values.firstOrNull { it.id !in before && it.session.provider == id }
         val reply = agent?.entries?.filter { it.kind == LineKind.TEXT }?.joinToString("") { it.text }?.trim().orEmpty()
-        val error = refused ?: agent?.lastError ?: agent?.entries?.lastOrNull { it.kind == LineKind.ERROR }?.text
+        val notice = state.notices.lastOrNull { it.at >= since && it.kind == com.superiorsoftllc.infantry.ui.model.NoticeKind.ERROR }?.text
+        val error = refused ?: agent?.lastError ?: agent?.entries?.lastOrNull { it.kind == LineKind.ERROR }?.text ?: notice.takeIf { agent == null }
         Text("Your first agent is starting. It was asked: \"${SetupWizard.HELLO_PROMPT}\"", fontSize = 12.sp, color = Palette.Muted)
         when {
             reply.isNotEmpty() -> {
