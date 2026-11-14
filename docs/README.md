@@ -73,6 +73,7 @@ For how the product works, start with the wiki: [docs/wiki/Architecture.md](docs
 | [docs/STACK-NEUTRAL.md](docs/STACK-NEUTRAL.md) | design record (dated) | none |
 | [docs/STALL.md](docs/STALL.md) | design record (dated) | none |
 | [docs/TOAST-SYSTEM-FINDINGS.md](docs/TOAST-SYSTEM-FINDINGS.md) | design record (dated) | none |
+| [docs/design/MCP-TOOLS.md](docs/design/MCP-TOOLS.md) | design record (dated) | none (proposal, MCP-TOOLS-1 2026-11-14: MCP servers for agents on every harness) |
 
 ## History (findings, measurements and logs; no longer guide work)
 
