@@ -787,3 +787,21 @@ RUNNER-POOL-6 (DaemonApi 1.45.0, additive), package `com.superiorsoftllc.infantr
 - `UsageReport`: The `usage_report` frame (contract 1.119.0).
 - `UsageSet`: The `usage_set` frame (contract 1.121.0), answered by `usage_report`: a meter's manual percent and/or override set or cleared, and/or the pacing rule replaced.
 - `UsageText`: Plain-text rendering of a [UsageReport], shared by `infantry usage` and `infantry_usage`.
+
+## Declaring MCP servers (`daemon.mcpServers`)
+
+MCP-PLUGIN-1: a module's `daemon` block may list MCP servers it offers. The host starts nothing: each server is added to the MCP
+registry (source `plugin`, see `docs/design/MCP-TOOLS.md`) and reaches an agent only through a grant with a purpose (walled by default).
+
+```json
+"daemon": { "mcpServers": [
+  { "name": "playwright", "command": ["npx", "@playwright/mcp"], "envSecrets": { "PW_TOKEN": "pw-token" },
+    "provides": ["browser"], "localOnly": true }
+] }
+```
+
+Schema (a violation refuses the module's daemon half with the reason, via `McpPluginServers.validate`): names unique, also across
+plugins (letters, digits, `_`, `-`; not `infantry`); exactly one of `command` (stdio) or `url` (http); at least one lowercase capability
+tag in `provides`; a credential-looking env or header key (token, secret, password, key, ...) is never a plain value, name a Secrets
+entry in `envSecrets` / `headerSecrets`; `localOnly` servers are never sent to a remote runner. A server whose secret is not set is
+not offered.

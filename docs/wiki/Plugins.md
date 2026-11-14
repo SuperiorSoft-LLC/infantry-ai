@@ -287,3 +287,21 @@ caller's is refused unless `allowCrossProject` is true.
 
 CLI: `infantry run-cmd list | save <id> <cwd|.> "<command line>" [--name N] | delete <id> | start <id> | stop <runId> [--force]`
 (add `--project <id> --cross-project` to act on another project). Lua: `ih.call("infantry_run_command_save", {id = "site", command = "npm run build"})`.
+
+## Declaring MCP servers (`daemon.mcpServers`)
+
+MCP-PLUGIN-1: a module's `daemon` block may list MCP servers it offers. The host starts nothing: each server is added to the MCP
+registry (source `plugin`, see `docs/design/MCP-TOOLS.md`) and reaches an agent only through a grant with a purpose (walled by default).
+
+```json
+"daemon": { "mcpServers": [
+  { "name": "playwright", "command": ["npx", "@playwright/mcp"], "envSecrets": { "PW_TOKEN": "pw-token" },
+    "provides": ["browser"], "localOnly": true }
+] }
+```
+
+Schema (a violation refuses the module's daemon half with the reason, via `McpPluginServers.validate`): names unique, also across
+plugins (letters, digits, `_`, `-`; not `infantry`); exactly one of `command` (stdio) or `url` (http); at least one lowercase capability
+tag in `provides`; a credential-looking env or header key (token, secret, password, key, ...) is never a plain value, name a Secrets
+entry in `envSecrets` / `headerSecrets`; `localOnly` servers are never sent to a remote runner. A server whose secret is not set is
+not offered.

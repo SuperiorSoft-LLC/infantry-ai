@@ -388,11 +388,35 @@ data class DaemonCapabilities(
      */
     val updateSources: List<String> = emptyList(),
     /**
+     * MCP-PLUGIN-1: MCP servers this module offers. The host starts nothing: each is listed in the MCP registry (source `plugin`) and
+     * reaches an agent only through a grant with a purpose (walled by default). A bad declaration refuses the daemon half.
+     */
+    val mcpServers: List<DaemonMcpServerDeclaration> = emptyList(),
+    /**
      * RUNNER-POOL-7 (docs/RUNNER-POOL.md 2.3): the side of every frame and tool of this daemon half, `runner` (the default: answered
      * by the daemon the caller talks to) or `orchestrator` (it reads or writes orchestrator state: a runner forwards it from the
      * workers its remote orchestrator started). A frame's or tool's own `side` wins.
      */
     val side: String? = null,
+)
+
+/**
+ * MCP-PLUGIN-1: one MCP server a module declares. Exactly one of [command] (stdio) or [url] (http). A value that is a credential is
+ * never written here: [envSecrets] / [headerSecrets] map a variable or header to a Secrets entry. [provides] = capability tags
+ * ("browser"), at least one. [localOnly] = never sent to a remote runner.
+ */
+@Serializable
+data class DaemonMcpServerDeclaration(
+    val name: String,
+    val command: List<String> = emptyList(),
+    val workingDir: String? = null,
+    val url: String? = null,
+    val env: Map<String, String> = emptyMap(),
+    val envSecrets: Map<String, String> = emptyMap(),
+    val headers: Map<String, String> = emptyMap(),
+    val headerSecrets: Map<String, String> = emptyMap(),
+    val provides: List<String> = emptyList(),
+    val localOnly: Boolean = false,
 )
 
 /** DAEMON-STORAGE-1: [adopt] = core tables an official module takes over (a community module declaring any is refused). */

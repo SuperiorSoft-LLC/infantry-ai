@@ -748,6 +748,7 @@ Generated for the `infantryPlugins` guard `SdkTypesDocumentedGuardTest`: every p
 - `DaemonCapabilities`: NS3 (1a): `daemon.needs` (refused = the module does not work) and `daemon.wants` (refused = it degrades).
 - `DaemonFrameDeclaration`: DAEMON-PLUGINS-1: one plugin-defined frame; [ownerOnly] frames are refused to a community module.
 - `DaemonPluginLimits`: DAEMON-PLUGINS-1: a daemon half's limits; null = the host default.
+- `DaemonMcpServerDeclaration`: MCP-PLUGIN-1: one MCP server a module declares in `daemon.mcpServers` (name, command or url, env / envSecrets, headers / headerSecrets, provides, localOnly).
 - `DaemonStorageDeclaration`: DAEMON-STORAGE-1: [adopt] = core tables an official module takes over (a community module declaring any is refused).
 - `DaemonToolDeclaration`: DAEMON-PLUGINS-1: one daemon tool: its name, its policy action id and kind, and a one-line description.
 - `DependencyDeclaration`: PLUGINS-2: module [id] (`Vendor_Module`) must be installed, enabled and at a version in [version] (e.g.

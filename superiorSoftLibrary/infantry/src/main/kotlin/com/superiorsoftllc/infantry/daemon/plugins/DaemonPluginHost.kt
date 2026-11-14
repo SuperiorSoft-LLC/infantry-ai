@@ -934,6 +934,7 @@ class DaemonPluginHost private constructor(
      */
     private fun retire(p: Loaded) {
         p.unloading = true
+        com.superiorsoftllc.infantry.mcp.McpPluginServers.shared.drop(p.id)
         dropRegistrations(p)
         p.closeables.forEach { runCatching { it.close() } }
         val stopMs = services.limit(LimitRegistry.PLUGIN_STOP_TIMEOUT_MS)
@@ -1098,6 +1099,11 @@ class DaemonPluginHost private constructor(
         lateinit var p: Loaded
         val guard = PluginGuard(id, loader, cpu, log, hangCeilingMs = services.limit(LimitRegistry.PLUGIN_HANG_CEILING_MS), poolSize = services.limit(LimitRegistry.PLUGIN_POOL_SIZE).toInt(), queueLimit = services.limit(LimitRegistry.PLUGIN_QUEUE_LIMIT).toInt(), timeoutStrikes = services.limit(LimitRegistry.PLUGIN_GUARD_STRIKES).toInt(), cooldownMs = services.limit(LimitRegistry.PLUGIN_GUARD_COOLDOWN_MS), onTripped = { why -> announceTrip(id, why) }, onRecovered = { announceRecovered(id) }, onDisabled = { why -> if (!p.unloading) { val atRunTime = statuses[id] == "loaded"; unregister(p); announceFailure(id, why, if (atRunTime) scheduleAutoReload(id) else "It did not start; it stays down until the daemon restarts or the plugin is reloaded.") } })
         p = Loaded(id, tier, d, setting, guard, loader, dependencies)
+        if (d.mcpServers.isNotEmpty()) {
+            runCatching { com.superiorsoftllc.infantry.mcp.McpPluginServers.shared.declare(id, d.mcpServers.map { it.toInput() }) }.onFailure {
+                statuses[id] = "refused: ${it.message}"; log("[plugins] daemon half of $id refused: ${it.message}"); runCatching { guard.retire(1) }; runCatching { loader.close() }; return
+            }
+        }
         loaded += p
         val api = Api(p)
         val started = p.call("start", services.limit(LimitRegistry.PLUGIN_START_TIMEOUT_MS)) {
@@ -1121,6 +1127,11 @@ class DaemonPluginHost private constructor(
         }
         d.hooks.firstOrNull { it !in HOOK_KINDS }?.let { return "unknown hook kind '$it' (known: ${HOOK_KINDS.joinToString()})" }
         d.tools.firstOrNull { !TOOL_NAME.matches(it.name) }?.let { return "tool name '${it.name}' must match ${TOOL_NAME.pattern}" }
+        // MCP-PLUGIN-1: the declared MCP servers meet the schema and clash with no other plugin's (the registry lists them; no grant, no delivery).
+        if (d.mcpServers.isNotEmpty()) {
+            runCatching { com.superiorsoftllc.infantry.mcp.McpPluginServers.validate(id, d.mcpServers.map { it.toInput() }) }
+                .exceptionOrNull()?.let { return it.message }
+        }
         if (tier != Tier.COMMUNITY) return null
         if (d.storage.adopt.isNotEmpty()) return "a community module may not adopt core tables (daemon.storage.adopt)"
         val allow = setting.allow.toSet()
@@ -1536,3 +1547,8 @@ class DaemonPluginHost private constructor(
         private fun Frame.toFrame() = this
     }
 }
+
+private fun com.superiorsoftllc.infantry.plugin.api.DaemonMcpServerDeclaration.toInput() = com.superiorsoftllc.infantry.protocol.McpServerInput(
+    name = name, command = command, workingDir = workingDir, url = url, env = env, envSecrets = envSecrets,
+    headers = headers, headerSecrets = headerSecrets, provides = provides, localOnly = localOnly,
+)
