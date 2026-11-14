@@ -75,7 +75,10 @@ class HandCursorGuardTest {
         // HARNESS-PLUGIN-4 H5a: +1 Text (ModulesSection harness row) and +1 Icon (HarnessIcon's manifest painter), both display-only.
         // CONTEXT-LIMIT-1: +3 display-only Text and +1 OutlinedTextField (the New agent dialog's context limit: label, placeholder, support note; the field).
         // BUG GUARDS-RED-1: re-baselined to the measured counts (the plugin split and later tickets added display-only Text, fields, icons and dividers; none is clickable, the 19 bypassing imports were fixed, not baselined). DropdownMenu fell 10 -> 1.
-        "Text" to 1546,
+        // ONBOARD-2: +30 display-only Text (guided setup screens: step titles, explanations, harness labels and states, the
+        // first agent's reply; Configuration > Agents install progress/outcome/Node note). Buttons are the wrapped TextButton,
+        // the harness rows use the wrapped clickable. Not included: the 19 Text / 2 OutlinedTextField already over on dev.
+        "Text" to 1576,
         "DropdownMenu" to 1,
         "OutlinedTextField" to 115,
         "BasicTextField" to 6,
