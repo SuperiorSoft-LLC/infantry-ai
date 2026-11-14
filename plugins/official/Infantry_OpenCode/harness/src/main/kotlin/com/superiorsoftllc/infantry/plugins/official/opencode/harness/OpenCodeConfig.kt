@@ -4,6 +4,9 @@ package com.superiorsoftllc.infantry.plugins.official.opencode.harness
 
 import com.superiorsoftllc.infantry.harness.api.ConfigParts
 import com.superiorsoftllc.infantry.harness.api.HarnessProcess
+import com.superiorsoftllc.infantry.harness.api.McpPlan
+import com.superiorsoftllc.infantry.harness.api.McpSource
+import com.superiorsoftllc.infantry.harness.api.McpTransport
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -69,4 +72,31 @@ object OpenCodeConfig {
 
     private fun parse(text: String?): JsonObject? =
         text?.takeIf { it.isNotBlank() }?.let { runCatching { json.parseToJsonElement(it) as? JsonObject }.getOrNull() }
+}
+
+/**
+ * MCP-OPENCODE-1: the plan's non-infantry servers (Infantry-owned, plugin) become `mcp.<name>` entries; every opencode user server in [disable]
+ * is switched off with `enabled:false` (opencode's documented override), so only infantry and the granted servers load. Merged, no file edits.
+ */
+fun OpenCodeConfig.mergePlan(existing: String, plan: McpPlan, disable: Set<String>): String {
+    val root = (runCatching { Json.parseToJsonElement(existing) as? JsonObject }.getOrNull()) ?: JsonObject(emptyMap())
+    val mcp = ((root["mcp"] as? JsonObject) ?: JsonObject(emptyMap())).toMutableMap()
+    val perms = mutableMapOf<String, JsonElement>()
+    for (spec in plan.delivered) {
+        if (spec.name == SERVER_NAME || spec.source == McpSource.HARNESS || spec.name in mcp) continue
+        mcp[spec.name] = when (val t = spec.transport) {
+            is McpTransport.Stdio -> JsonObject(mapOf(
+                "type" to JsonPrimitive("local"), "command" to JsonArray(t.command.map(::JsonPrimitive)),
+                "environment" to JsonObject(t.env.mapValues { JsonPrimitive(it.value) }), "enabled" to JsonPrimitive(true)))
+            is McpTransport.Http -> JsonObject(buildMap {
+                put("type", JsonPrimitive("remote")); put("url", JsonPrimitive(t.url)); put("enabled", JsonPrimitive(true))
+                if (t.headers.isNotEmpty()) put("headers", JsonObject(t.headers.mapValues { JsonPrimitive(it.value) }))
+            })
+        }
+    }
+    for (name in disable) if (name != SERVER_NAME) {
+        val prior = mcp[name] as? JsonObject
+        mcp[name] = JsonObject((prior ?: JsonObject(emptyMap())) + ("enabled" to JsonPrimitive(false)))
+    }
+    return JsonObject(root + ("mcp" to JsonObject(mcp))).toString()
 }

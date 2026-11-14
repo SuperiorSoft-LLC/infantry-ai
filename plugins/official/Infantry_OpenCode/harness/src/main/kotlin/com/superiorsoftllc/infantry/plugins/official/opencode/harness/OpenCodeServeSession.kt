@@ -9,6 +9,7 @@ import com.superiorsoftllc.infantry.harness.api.HarnessProcess
 import com.superiorsoftllc.infantry.harness.api.HarnessRequest
 import com.superiorsoftllc.infantry.harness.api.HarnessSession
 import com.superiorsoftllc.infantry.harness.api.McpState
+import com.superiorsoftllc.infantry.harness.api.McpServerStatus
 import com.superiorsoftllc.infantry.harness.api.SessionConnection
 import com.superiorsoftllc.infantry.harness.api.SessionOutput
 import com.superiorsoftllc.infantry.harness.api.SessionTurnEnd
@@ -64,6 +65,8 @@ class OpenCodeServeSession(
     private val modelFor: (String?) -> String = { OpenCodeCommand.effectiveModel(it) },
     private val http: HttpClient = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).connectTimeout(Duration.ofSeconds(5)).build(),
     private val processEnv: (String) -> String? = System::getenv,
+    /** MCP-OPENCODE-1: the names of opencode's own (user) MCP servers, to switch off unless granted. */
+    private val userServers: () -> List<String> = { emptyList() },
 ) : HarnessSession {
     override val label: String = "opencode"
 
@@ -77,7 +80,8 @@ class OpenCodeServeSession(
         val command = listOf(executable(), "serve", "--port", port.toString(), "--hostname", "127.0.0.1")
         // BUG-PERM-5: the infantry allow rides the inline config, merged into whatever the child would inherit. MCP-1: + mcp.infantry.
         val inherited = env[OpenCodePermissions.CONFIG_CONTENT_ENV] ?: processEnv(OpenCodePermissions.CONFIG_CONTENT_ENV)
-        val served = OpenCodePermissions.serveConfig(request.toolApproval, inherited, host?.mcpLaunch(env))
+        val base = OpenCodePermissions.serveConfig(request.toolApproval, inherited, host?.mcpLaunch(env))
+        val served = host?.let { h -> val plan = h.mcpServers(env); OpenCodeConfig.mergePlan(base, plan, OpenCodeMcp.toDisable(runCatching(userServers).getOrDefault(emptyList()), plan)) } ?: base
         // STALL-2: + the watch plugin (allowAll only: a rewrite must never widen what the session may run).
         val config = if (request.toolApproval == ToolApproval.ALLOW_ALL) {
             val plugin = host?.takeIf { it.watchLauncher(env) != null }?.let { installWatchPlugin(it.stateDir) }
@@ -124,7 +128,9 @@ class OpenCodeServeSession(
         private fun startMcpWatch() {
             Thread({
                 var last: McpState? = null
+                var lastAll: List<McpServerStatus>? = null
                 while (!stopped.get()) {
+                    runCatching { OpenCodeMcp.statusesOf(get("/mcp")) }.getOrNull()?.takeIf { it != lastAll }?.let { lastAll = it; out.mcpServers(it) }
                     runCatching { mcpStateOf(get("/mcp")) }.getOrNull()?.let { now ->
                         if (now != last) { last = now; out.mcpState(now, "opencode reports the infantry MCP server " + now.name.lowercase()) }
                     }
