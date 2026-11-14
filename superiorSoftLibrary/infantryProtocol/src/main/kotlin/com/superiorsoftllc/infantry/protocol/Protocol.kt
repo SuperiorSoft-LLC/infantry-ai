@@ -707,6 +707,10 @@ data class Envelope(
         // an optional `project` (null = the app scope, shared by every project); `secret_state.entries` rows carry `project`.
         // `secret_move` ({name, from?, to?}) moves a secret between scopes on the daemon's side (no value travels).
         const val SECRET_MOVE = "secret_move"
+        // ONBOARD-1: `secret_login` ({name, action: start|input|cancel, text?}) runs the in-app sign-in of the harness whose key secret
+        // is [name] (its declared `authProbe.loginArgv`); `input` writes the code the sign-in page shows to it. Answered and pushed as
+        // `secret_state`, whose rows gain `canLogin`, `loginState` (""/running/done/failed), `loginUrl` and `loginMessage`. Owner only.
+        const val SECRET_LOGIN = "secret_login"
         // PLUGIN-ENDPOINTS-2 (contract 1.138.0): `plugin_secret_get` ({module, field}) reads ONE field of the secret
         // `plugin.<module lowercased>` for the desktop host's EndpointAccess of that module. Owner connection only, refused under
         // a restricted policy, fields `INFANTRY_*` refused. Answered directly (never pushed) by `plugin_secret`

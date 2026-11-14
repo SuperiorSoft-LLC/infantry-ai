@@ -37,6 +37,8 @@ data class HarnessCredential(
     val forMode: String = "",
     /** HARNESS-ALL-1: the model id prefix this key is for (`deepseek/`); empty = every model. Only a launch of such a model warns that it is missing. */
     val modelPrefix: String = "",
+    /** ONBOARD-1: argv the app runs to sign the CLI in (stdin piped for a pasted code); empty = no in-app sign-in. */
+    val loginArgv: List<String> = emptyList(),
 ) {
     /** HARNESS-ALL-1: true when a launch of [model] needs this key (no [modelPrefix], or the model starts with it). */
     fun servesModel(model: String?): Boolean = modelPrefix.isEmpty() || model.orEmpty().startsWith(modelPrefix, ignoreCase = true)

@@ -224,6 +224,8 @@ data class Envelope(
         const val SECRET_DELETE = "secret_delete"
         // Contract 1.152.0 (SECRETS-2b): project-scoped secrets: the three frames above take `project`; `secret_move` ({name, from?, to?}).
         const val SECRET_MOVE = "secret_move"
+        /** ONBOARD-1: start / input / cancel a harness's in-app sign-in; answered and pushed as `secret_state`. */
+        const val SECRET_LOGIN = "secret_login"
         // Contract 1.138.0 (PLUGIN-ENDPOINTS-2): `plugin_secret_get` ({module, field}, owner-only, off under the demo lock) is
         // answered by `plugin_secret` ({module, field, value}); only a module's EndpointAccess asks, and keeps the value to itself.
         const val PLUGIN_SECRET_GET = "plugin_secret_get"
@@ -1067,6 +1069,13 @@ data class SecretRow(
     val lastProbe: Long = 0L,
     /** SECRET-REF-1: the shared secret name this harness key reads from; "" = its own value. */
     val usesSecret: String = "",
+    /** RUNNER-CRED-1 / ONBOARD-1: the auth mode this credential serves; "" = an API key (only those belong on the first-run screen). */
+    val forMode: String = "",
+    /** ONBOARD-1: the harness can be signed in from the app (`secret_login`); that sign-in's state (""/running/done/failed), page and line. */
+    val canLogin: Boolean = false,
+    val loginState: String = "",
+    val loginUrl: String = "",
+    val loginMessage: String = "",
 )
 
 /** Contract 1.135.0 (SECRETS-2): one field of a user secret: its name and a masked tail, never the value. */
@@ -2336,6 +2345,12 @@ object WireRequests {
         Envelope.PLUGIN_SECRET_GET,
         JsonObject(mapOf("module" to JsonPrimitive(module), "field" to JsonPrimitive(field))).toString(),
         requestId = requestId,
+    )
+
+    /** ONBOARD-1: [action] start | input | cancel the in-app sign-in of the harness whose key is [name]; [text] is the pasted code. */
+    fun secretLogin(name: String, action: String, text: String = ""): Envelope = Envelope(
+        Envelope.SECRET_LOGIN,
+        JsonObject(mapOf("name" to JsonPrimitive(name), "action" to JsonPrimitive(action), "text" to JsonPrimitive(text))).toString(),
     )
 
     fun secretDelete(name: String, project: String? = null): Envelope =

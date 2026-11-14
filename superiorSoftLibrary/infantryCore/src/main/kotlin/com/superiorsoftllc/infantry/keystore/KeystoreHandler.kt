@@ -18,6 +18,10 @@ class KnownSecret(
     val loginCommand: String = "", val signedIn: () -> String = { "unknown" }, val lastProbe: () -> Long = { 0L },
     /** SECRET-REF-1: the shared secret this harness key reads from ("" = none). A name, never a value. */
     val usesSecret: () -> String = { "" },
+    /** RUNNER-CRED-1: the auth mode this credential serves ("" = an API key; subscription-login = a token for runners). */
+    val forMode: String = "",
+    /** ONBOARD-1: the harness declares an in-app sign-in; and that sign-in's state now. */
+    val canLogin: Boolean = false, val login: () -> com.superiorsoftllc.infantry.harness.credential.HarnessLoginState = { com.superiorsoftllc.infantry.harness.credential.HarnessLoginState.NONE },
 )
 
 @Serializable
@@ -62,7 +66,17 @@ class SecretRow(
     val loginCommand: String = "", val signedIn: String = "unknown", val lastProbe: Long = 0L,
     /** SECRET-REF-1: the shared secret name this harness key reads from; "" = it holds its own value. */
     val usesSecret: String = "",
+    /** RUNNER-CRED-1 / ONBOARD-1: the auth mode this credential serves; "" = an API key. A first-run screen lists only "". */
+    val forMode: String = "",
+    /** ONBOARD-1: an in-app sign-in exists (`secret_login`), its state (""/running/done/failed), the sign-in page and a plain line. */
+    val canLogin: Boolean = false, val loginState: String = "", val loginUrl: String = "", val loginMessage: String = "",
 )
+
+/** ONBOARD-1 `secret_login`: [action] start | input | cancel the in-app sign-in of the harness whose key is [name]. [text] is never logged. */
+@Serializable
+class SecretLogin(val name: String, val action: String, val text: String = "") {
+    override fun toString(): String = "SecretLogin(name=$name, action=$action)"
+}
 
 /** SECRETS-2: one field of a user secret: its name and a masked tail. */
 @Serializable
@@ -107,6 +121,8 @@ class KeystoreHandler(
     private val restricted: () -> Boolean = { false },
     /** CLAUDE-AUTH-CHOICE-2: re-probes the sign-in of the harness whose key secret is named. */
     private val authCheck: (String) -> Unit = {},
+    /** ONBOARD-1: start / input / cancel the in-app sign-in of the harness whose key secret is named (secret name, action, text). */
+    private val login: (String, String, String) -> Unit = { _, _, _ -> throw IllegalArgumentException("no in-app sign-in here") },
 ) {
     private val base = knownBase
     private val known: List<KnownSecret> get() = base + extraKnown()
@@ -142,11 +158,23 @@ class KeystoreHandler(
                 val req = json.decodeFromString(SecretMove.serializer(), envelope.data)
                 keystore.move(user(req.name), scope(req.from), scope(req.to))
             }
+            Envelope.SECRET_LOGIN -> change(envelope.type) {
+                val req = json.decodeFromString(SecretLogin.serializer(), envelope.data)
+                val secret = known(req.name)
+                require(secret.canLogin) { "${secret.label} has no in-app sign-in" }
+                require(req.action in LOGIN_ACTIONS) { "action must be one of ${LOGIN_ACTIONS.joinToString()}" }
+                login(secret.name, req.action, req.text)
+            }
             Envelope.PLUGIN_SECRET_GET -> return pluginSecret(envelope)
             else -> return null
         }
         if (reply.type == Envelope.SECRET_STATE && envelope.type != Envelope.SECRET_STATUS) push(reply)
         return reply
+    }
+
+    /** ONBOARD-1: pushes the current rows to every client (a state change no frame asked for: an in-app sign-in moved on). */
+    fun pushState() {
+        runCatching { push(Envelope(Envelope.SECRET_STATE, json.encodeToString(SecretState.serializer(), state()))) }
     }
 
     fun state(): SecretState {
@@ -157,7 +185,8 @@ class KeystoreHandler(
             known.map { k ->
                 val info = infos.getValue(k.name)
                 val aliasSet = k.envAlias?.let(env)?.isNotBlank() == true
-                SecretRow(k.name, k.label, info.set, info.tail, importable = aliasSet && !info.set, overriddenByEnv = aliasSet && info.set, help = k.help, authModes = k.authModes, authMode = k.authMode(), loginCommand = k.loginCommand, signedIn = k.signedIn(), lastProbe = k.lastProbe(), usesSecret = k.usesSecret())
+                SecretRow(k.name, k.label, info.set, info.tail, importable = aliasSet && !info.set, overriddenByEnv = aliasSet && info.set, help = k.help, authModes = k.authModes, authMode = k.authMode(), loginCommand = k.loginCommand, signedIn = k.signedIn(), lastProbe = k.lastProbe(), usesSecret = k.usesSecret(), forMode = k.forMode, canLogin = k.canLogin,
+                    loginState = k.login().state, loginUrl = k.login().url, loginMessage = k.login().message)
             },
             keystore.names().filter { it !in builtIn }.map { name ->
                 SecretEntryRow(name, keystore.describe(name).map { SecretFieldRow(it.name, it.tail) })
@@ -229,6 +258,9 @@ class KeystoreHandler(
         fun pluginSecretName(module: String): String = "plugin." + module.lowercase()
 
         val DEFAULT = listOf(KnownSecret(Keystore.UPDATE_TOKEN, "Update token", "INFANTRY_UPDATE_TOKEN"))
+
+        /** ONBOARD-1: the `secret_login` actions. */
+        val LOGIN_ACTIONS = listOf("start", "input", "cancel")
 
         /**
          * SEC-FIX-1 H1(b): the secrets a saved command may hand its run: the user's key/value secrets through [fields], never a

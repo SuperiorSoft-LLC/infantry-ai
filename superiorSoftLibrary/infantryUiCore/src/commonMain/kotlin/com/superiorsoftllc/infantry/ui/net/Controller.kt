@@ -719,6 +719,9 @@ class Controller(
 
     /** CLAUDE-AUTH-CHOICE-2: asks the daemon to re-probe the sign-in of the harness whose key secret is [secretName]; it answers a secret_state. */
     suspend fun checkHarnessAuth(secretName: String): CommandResult = secretFrame(WireRequests.secretStatusCheck(secretName))
+
+    /** ONBOARD-1: start, feed (the code the sign-in page shows) or cancel the in-app sign-in of the harness whose key is [secretName]. */
+    suspend fun harnessLogin(secretName: String, action: String, text: String = ""): CommandResult = secretFrame(WireRequests.secretLogin(secretName, action, text))
     suspend fun setLimit(key: String, value: Long): CommandResult {
         if (!contractAtLeast(_state.value.connection.contract, LimitsSetting.SINCE_MAJOR, LimitsSetting.SINCE_MINOR)) {
             return report(CommandResult.Refused("this daemon has no limit settings (needs contract 1.133.0)"))
