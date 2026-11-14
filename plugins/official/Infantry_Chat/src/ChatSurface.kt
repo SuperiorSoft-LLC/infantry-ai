@@ -630,7 +630,7 @@ fun PromptBox(
                 },
                 minLines = if (expanded) COMPOSER_EXPANDED_LINES else COMPOSER_MIN_LINES,
                 maxLines = if (expanded) COMPOSER_EXPANDED_LINES * 2 else COMPOSER_MAX_LINES,
-                textStyle = TextStyle(fontFamily = Mono, fontSize = 13.sp),
+                textStyle = TextStyle(fontSize = 13.sp),
             )
         }
         // CHAT-MINIMIZE-2: tab-shaped groups hanging from the box's bottom edge, tools left, Stop/Send right.

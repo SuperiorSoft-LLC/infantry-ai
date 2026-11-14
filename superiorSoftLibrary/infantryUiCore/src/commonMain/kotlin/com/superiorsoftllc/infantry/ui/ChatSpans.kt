@@ -35,7 +35,7 @@ fun spansText(spans: List<ChatSpan>): AnnotatedString = buildAnnotatedString {
         is ChatSpan.Text -> append(s.text)
         is ChatSpan.Bold -> withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(s.text) }
         is ChatSpan.Italic -> withStyle(SpanStyle(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)) { append(s.text) }
-        is ChatSpan.InlineCode -> withStyle(SpanStyle(background = Palette.Raised, color = Palette.Accent)) { append(s.text) }
+        is ChatSpan.InlineCode -> withStyle(SpanStyle(fontFamily = Mono, background = Palette.Raised, color = Palette.Accent)) { append(s.text) }
         is ChatSpan.Link -> if (isSafeChatUrl(s.url)) {
             // Opens through the platform LocalUriHandler; the parser only ever yields http/https/mailto, re-checked here.
             withLink(LinkAnnotation.Url(s.url, TextLinkStyles(SpanStyle(color = Palette.Info, textDecoration = TextDecoration.Underline)))) { append(s.label) }

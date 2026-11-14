@@ -67,7 +67,7 @@ internal val UserRow: RowRenderer = RowRenderer(agentSide = false) { row ->
         Column {
             OriginLabel(line.origin)
             CommsCard(commsCardStyle(line.origin), line.at) {
-                if (said.isNotBlank() || images.isEmpty()) Text(said, color = OwnerMessageText, fontFamily = Mono, fontSize = 12.sp)
+                if (said.isNotBlank() || images.isEmpty()) Text(said, color = OwnerMessageText, fontSize = 12.sp)
                 ChatSentImages(images)
             }
         }
@@ -91,9 +91,9 @@ internal val ReasoningRow: RowRenderer = RowRenderer(agentSide = true) { row ->
     ReasoningBlock(when (val i = row.item) { is ChatItem.Reasoning -> i.lines; else -> listOf(row.line()) })
 }
 
-internal val StatusRow: RowRenderer = RowRenderer(agentSide = true) { row -> Text("· ${row.line().text}", color = Palette.Muted, fontFamily = Mono, fontSize = 11.sp) }
-internal val ErrorRow: RowRenderer = RowRenderer(agentSide = true) { row -> Text("! ${row.line().text}", color = Palette.Danger, fontFamily = Mono, fontSize = 12.sp) }
-internal val FinishedRow: RowRenderer = RowRenderer(agentSide = true) { row -> Text("— ${row.line().text}", color = Palette.Info, fontFamily = Mono, fontSize = 11.sp, modifier = Modifier.padding(vertical = 4.dp)) }
+internal val StatusRow: RowRenderer = RowRenderer(agentSide = true) { row -> Text("· ${row.line().text}", color = Palette.Muted, fontSize = 11.sp) }
+internal val ErrorRow: RowRenderer = RowRenderer(agentSide = true) { row -> Text("! ${row.line().text}", color = Palette.Danger, fontSize = 12.sp) }
+internal val FinishedRow: RowRenderer = RowRenderer(agentSide = true) { row -> Text("— ${row.line().text}", color = Palette.Info, fontSize = 11.sp, modifier = Modifier.padding(vertical = 4.dp)) }
 /** UI-LOG-1: stderr and process-exit log lines -- muted monospace. */
 internal val LogRow: RowRenderer = RowRenderer(agentSide = true) { row -> Text(row.line().text, color = Palette.Muted, fontFamily = Mono, fontSize = 12.sp, modifier = Modifier.padding(vertical = 2.dp)) }
 /** UX-WRITE-1: a file write is a change box, inline in the turn where it happened. */

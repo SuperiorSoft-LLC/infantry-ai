@@ -72,7 +72,6 @@ fun ChatTable(table: ChatBlock.Table, modifier: Modifier = Modifier) {
                             Text(
                                 spansText(parseChatInline(row.getOrElse(c) { "" })),
                                 color = Palette.Text,
-                                fontFamily = Mono,
                                 fontSize = 12.sp,
                                 fontWeight = if (r == 0) FontWeight.Bold else null,
                                 textAlign = table.alignments.getOrElse(c) { ColumnAlign.NONE }.textAlign(),

@@ -71,20 +71,19 @@ object DefaultChatBlockRenderer : ChatBlockRenderer {
     @Composable
     override fun Render(block: ChatBlock) {
         when (block) {
-            is ChatBlock.Paragraph -> Text(spansText(block.spans), color = Palette.Text, fontFamily = Mono, fontSize = 12.sp)
+            is ChatBlock.Paragraph -> Text(spansText(block.spans), color = Palette.Text, fontSize = 12.sp)
             is ChatBlock.BulletList -> Column {
-                for ((n, item) in block.items.withIndex()) Text(spansText(listOf<ChatSpan>(ChatSpan.Text(if (block.ordered) "${n + 1}. " else "• ")) + parseChatInline(item)), color = Palette.Text, fontFamily = Mono, fontSize = 12.sp, modifier = Modifier.padding(start = 8.dp))
+                for ((n, item) in block.items.withIndex()) Text(spansText(listOf<ChatSpan>(ChatSpan.Text(if (block.ordered) "${n + 1}. " else "• ")) + parseChatInline(item)), color = Palette.Text, fontSize = 12.sp, modifier = Modifier.padding(start = 8.dp))
             }
             ChatBlock.Rule -> HorizontalDivider(color = Palette.Border)
             is ChatBlock.Quote -> Row(Modifier.height(IntrinsicSize.Min)) {
                 Box(Modifier.width(3.dp).fillMaxHeight().background(Palette.Border))
-                Text(spansText(block.spans), color = Palette.Muted, fontFamily = Mono, fontSize = 12.sp, modifier = Modifier.padding(start = 8.dp))
+                Text(spansText(block.spans), color = Palette.Muted, fontSize = 12.sp, modifier = Modifier.padding(start = 8.dp))
             }
             is ChatBlock.Table -> ChatTable(block)
             is ChatBlock.Heading -> Text(
                 spansText(block.spans),
                 color = Palette.Text,
-                fontFamily = Mono,
                 fontWeight = FontWeight.Bold,
                 fontSize = when (block.level) {
                     1 -> 18.sp
@@ -106,7 +105,7 @@ object DefaultChatBlockRenderer : ChatBlockRenderer {
                 Render(ChatBlock.Code(block.data[CardKeys.LANGUAGE].orEmpty(), block.data[CardKeys.CODE].orEmpty()))
             } else {
                 // A block type this client has no renderer for: its text, plain.
-                Text(block.text, color = Palette.Text, fontFamily = Mono, fontSize = 12.sp)
+                Text(block.text, color = Palette.Text, fontSize = 12.sp)
             }
         }
     }
@@ -124,7 +123,7 @@ object CalloutBlockRenderer : ChatBlockRenderer {
         val tone = if (kind == "warning" || kind == "error") Palette.Danger else Palette.Info
         Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp)).background(Palette.Raised).border(1.dp, tone, RoundedCornerShape(4.dp)).padding(8.dp)) {
             Text(kind.uppercase(), color = tone, fontFamily = Mono, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-            Text(custom.text, color = Palette.Text, fontFamily = Mono, fontSize = 12.sp)
+            Text(custom.text, color = Palette.Text, fontSize = 12.sp)
         }
     }
 }

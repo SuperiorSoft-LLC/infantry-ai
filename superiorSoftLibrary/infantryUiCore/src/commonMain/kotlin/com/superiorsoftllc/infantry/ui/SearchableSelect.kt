@@ -167,7 +167,7 @@ fun <T> SearchableSelect(
                 ) {
                     RadioMark(on, if (on || hovered) Palette.Accent else textColor.copy(alpha = 0.6f))
                     Text(
-                        label(item), fontFamily = Mono, fontSize = 12.sp,
+                        label(item), fontSize = 12.sp,
                         color = if (on) Palette.Accent else textColor, modifier = Modifier.weight(1f),
                     )
                     badge(item)?.let { Text(it, fontSize = 10.sp, color = Palette.Muted) }
