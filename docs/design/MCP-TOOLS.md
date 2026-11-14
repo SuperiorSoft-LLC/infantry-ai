@@ -286,8 +286,8 @@ mcp:
 | Harnesses | all (a stdio server) | Claude only (extension + `--chrome`) |
 | Whose browser | its own browser and profile | the owner's real Chrome and sign-ins |
 | Runners / Docker | yes (headless) | no |
-| Risk | isolated | acts as the owner; a worker click once hit his Chrome (no-synthetic-input rule) |
-| Use for | worker testing (wasm app, demo QA), scraping docs | owner-attended tasks that need his logins |
+| Risk | isolated | acts as the owner; a worker click once hit the owner's Chrome (no-synthetic-input rule) |
+| Use for | worker testing (wasm app, demo QA), scraping docs | owner-attended tasks that need the owner's logins |
 
 - Infantry_Browser, an official plugin, contributes one Playwright spec with `provides: [browser]`, an isolated profile
   per session under the state dir, settings for headless / channel, installed through `Downloads` with progress. It shows
