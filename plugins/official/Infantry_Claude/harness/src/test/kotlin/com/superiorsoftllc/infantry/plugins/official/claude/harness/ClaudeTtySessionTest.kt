@@ -43,7 +43,8 @@ class ClaudeTtySessionTest {
         override fun mcpState(state: McpState, reason: String?) { mcp += state }
         override fun write(text: String): Boolean { written += text; return true }
         override fun closeInput() {}
-        override fun detail(text: String) {}
+        val details = mutableListOf<String>()
+        override fun detail(text: String) { details += text }
         override fun providerSession(id: String) { sessions += id }
         override fun output(line: String) { lines += line }
         override fun turnEnded(end: SessionTurnEnd, exitCode: Int?, reason: String?) { ends += Triple(end, exitCode, reason) }
@@ -112,7 +113,96 @@ class ClaudeTtySessionTest {
         val hooks = settings["hooks"]!!.jsonObject
         assertTrue(listOf("SessionStart", "UserPromptSubmit", "Stop").all { it in hooks })
         val stop = hooks["Stop"]!!.jsonArray.last().jsonObject["hooks"]!!.jsonArray.first().jsonObject["command"]!!.jsonPrimitive.content
-        assertEquals("echo stop>>\"${s.launch.events.absolutePath.replace('\\', '/')}\"", stop)
+        assertEquals("echo stop >> \"${s.launch.events.absolutePath.replace('\\', '/')}\"", stop)
+    }
+
+    @Test fun `HOOK-SHELL-1 the event hook spaces its redirect so PowerShell, cmd and sh all append`() {
+        // PowerShell reads `echo stop>>"f"` as one word: it prints it and writes nothing. Spaced, every shell redirects.
+        assertEquals("echo stop >> \"C:/s/e.events\"", ClaudeCommand.eventCommand("stop", "C:\\s\\e.events"))
+        assertEquals("echo submit >> \"/tmp/a b/e.events\"", ClaudeCommand.eventCommand("submit", "/tmp/a b/e.events"))
+        val hook = ClaudeCommand.eventHook("start", "C:\\s\\e.events")["hooks"]!!.jsonArray.single().jsonObject
+        assertEquals("command", hook["type"]!!.jsonPrimitive.content)
+        assertEquals(ClaudeCommand.eventCommand("start", "C:\\s\\e.events"), hook["command"]!!.jsonPrimitive.content)
+    }
+
+    @Test fun `HOOK-SHELL-1 events written by PowerShell 5_1 (UTF-16LE, BOM), cmd (trailing space) and sh all read`() {
+        val f = File(root, "e.events")
+        val utf16 = java.io.ByteArrayOutputStream().apply {
+            write(byteArrayOf(0xFF.toByte(), 0xFE.toByte())) // the BOM PowerShell 5.1 writes when it creates the file
+            write("start\r\n".toByteArray(Charsets.UTF_16LE)); write("submit\r\n".toByteArray(Charsets.UTF_16LE))
+        }.toByteArray()
+        f.writeBytes(utf16)
+        val lines = AppendedLines { f }
+        assertEquals(listOf("start", "submit"), lines.read().map(ClaudeCommand::eventOf))
+        f.appendBytes("stop\r\n".toByteArray(Charsets.UTF_16LE))
+        assertEquals(listOf("stop"), lines.read().map(ClaudeCommand::eventOf))
+        f.appendText("stop \r\n") // cmd: `echo stop >> f` keeps the space
+        f.appendText("stop\n") // sh / bash
+        assertEquals(listOf("stop", "stop"), lines.read().map(ClaudeCommand::eventOf))
+    }
+
+    @Test fun `HOOK-SHELL-1 a UTF-16 Stop from PowerShell 5_1 ends the turn`() {
+        val s = start()
+        s.c.sendTurn(request("read a.txt"))
+        up(s)
+        s.c.tick()
+        now += ClaudeTtySession.PASTE_SETTLE_MS
+        s.c.tick()
+        s.launch.events.appendBytes("submit\r\n".toByteArray(Charsets.UTF_16LE))
+        record(prompt); record(assistant("m1", "done", 4))
+        s.c.tick()
+        s.launch.events.appendBytes("stop\r\n".toByteArray(Charsets.UTF_16LE))
+        s.c.tick()
+        now += ClaudeTtySession.STOP_SETTLE_MS
+        s.c.tick()
+        assertEquals(listOf(Triple<SessionTurnEnd, Int?, String?>(SessionTurnEnd.COMPLETED, 0, null)), s.out.ends)
+    }
+
+    @Test fun `HOOK-SHELL-1 with hooks that write nothing the transcript's turn_duration ends the turn and the next prompt goes in`() {
+        val s = start()
+        s.c.sendTurn(request("read a.txt"))
+        s.c.onStdout("\u001b[2J welcome")
+        s.c.tick()
+        now += ClaudeTtySession.READY_FALLBACK_MS
+        s.c.tick()
+        now += ClaudeTtySession.PASTE_SETTLE_MS
+        s.c.tick()
+        record(prompt); record(assistant("m1", "done", 4))
+        s.c.tick()
+        assertTrue(s.out.ends.isEmpty(), "still running")
+        record("""{"type":"system","subtype":"turn_duration","durationMs":49,"messageCount":2,"isSidechain":false,"isMeta":false}""")
+        s.c.tick()
+        now += ClaudeTtySession.STOP_SETTLE_MS
+        s.c.tick()
+        assertFalse(s.launch.events.exists(), "no hook ever wrote")
+        assertEquals(listOf(Triple<SessionTurnEnd, Int?, String?>(SessionTurnEnd.COMPLETED, 0, null)), s.out.ends, "the session is idle again")
+        val pasted = s.out.written.size
+        s.c.sendTurn(request("again"))
+        now += ClaudeTtySession.READY_FALLBACK_MS
+        s.c.tick()
+        assertEquals("\u001b[200~again\u001b[201~", s.out.written.drop(pasted).firstOrNull(), "the next prompt is pasted, not queued behind a busy turn")
+    }
+
+    @Test fun `HOOK-SHELL-1 turn_duration is the TurnEnded signal`() {
+        assertEquals(listOf(TranscriptSignal.TurnEnded), TranscriptMapper("s").map("""{"type":"system","subtype":"turn_duration","durationMs":5}"""))
+    }
+
+    @Test fun `HOOK-SHELL-1 an answered turn with no events file says the hooks are broken, once`() {
+        val s = start()
+        s.c.sendTurn(request("read a.txt"))
+        s.c.onStdout("\u001b[2J welcome")
+        s.c.tick()
+        now += ClaudeTtySession.READY_FALLBACK_MS
+        s.c.tick()
+        now += ClaudeTtySession.PASTE_SETTLE_MS
+        s.c.tick()
+        record(prompt); record(assistant("m1", "done", 4))
+        s.c.tick()
+        assertFalse(s.launch.events.exists(), "the hooks wrote nothing")
+        assertTrue(s.out.details.none { "wrote no events file" in it }, "not before the grace")
+        now += ClaudeTtySession.HOOK_SILENT_MS
+        s.c.tick(); s.c.tick()
+        assertEquals(1, s.out.details.count { "wrote no events file" in it }, "${s.out.details}")
     }
 
     @Test fun `a resumed session resumes and asks no bypass switch without bypass mode`() {

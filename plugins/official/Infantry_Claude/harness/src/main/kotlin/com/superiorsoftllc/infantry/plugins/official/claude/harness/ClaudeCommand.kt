@@ -212,15 +212,29 @@ object ClaudeCommand {
         if (strictMcp) add("--strict-mcp-config")
     }
 
-    /** A command hook that appends [event] to [eventsFile]; `echo x>>"file"` means the same in cmd and in a POSIX shell. */
+    /**
+     * A command hook that appends [event] to [eventsFile]. Claude Code runs a hook in bash (POSIX, or Windows with Git Bash) and in
+     * PowerShell on a Windows PC without Git Bash, so the command must mean the same in bash, sh, PowerShell 5.1, pwsh and cmd.
+     * HOOK-SHELL-1: the spaces around `>>` matter: PowerShell reads `echo stop>>"file"` as ONE word, prints it and writes nothing,
+     * exit 0. PowerShell 5.1 appends UTF-16LE and cmd keeps the space before `>>`; [eventOf] reads either.
+     */
     fun eventHook(event: String, eventsFile: String): JsonObject = JsonObject(
         mapOf(
             "hooks" to JsonArray(listOf(JsonObject(mapOf(
                 "type" to JsonPrimitive("command"),
-                "command" to JsonPrimitive("echo $event>>\"${eventsFile.replace('\\', '/')}\""),
+                "command" to JsonPrimitive(eventCommand(event, eventsFile)),
             )))),
         ),
     )
+
+    /** The shell command of [eventHook]: `echo <event> >> "<file>"`, forward slashes so no shell reads a backslash as an escape. */
+    fun eventCommand(event: String, eventsFile: String): String = "echo $event >> \"${eventsFile.replace('\\', '/')}\""
+
+    /**
+     * HOOK-SHELL-1: the event word of one events-file line, whatever shell wrote it: PowerShell 5.1 writes UTF-16LE (NUL bytes, a BOM
+     * on the first line), cmd keeps a trailing space, Windows ends lines with CR. Events are plain ASCII letters; everything else goes.
+     */
+    fun eventOf(line: String): String = line.filter { it in 'a'..'z' || it in 'A'..'Z' }.lowercase()
 
     /**
      * The interactive session's ONE `--settings` file (claude keeps only the last `--settings`, so the watch hooks of [watchSettings] are
