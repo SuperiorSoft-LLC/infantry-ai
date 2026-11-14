@@ -1545,6 +1545,25 @@ class SessionManager(
     @Volatile
     var mcpHealFailedSink: ((SessionRecord, Int) -> Unit)? = null
 
+    /**
+     * MCP-FAIL-1: told ONCE per session and server when a server of the session goes `failed` (name, detail); the daemon posts the notice.
+     * The agent gets its one chat line from the manager itself.
+     */
+    @Volatile
+    var mcpServerFailedSink: ((SessionRecord, String, String?) -> Unit)? = null
+
+    private val mcpFailedSeen = java.util.concurrent.ConcurrentHashMap<String, MutableSet<String>>()
+
+    /** MCP-FAIL-1: the servers of [sessionId] newly `failed` in [statuses] (deduped per session + server); tells the agent, then the sink. */
+    fun noteMcpFailures(sessionId: String, statuses: List<com.superiorsoftllc.infantry.protocol.McpServerStatusView>) {
+        val seen = mcpFailedSeen.computeIfAbsent(sessionId) { java.util.concurrent.ConcurrentHashMap.newKeySet() }
+        statuses.filter { it.state.equals("failed", ignoreCase = true) }.forEach { st ->
+            if (!seen.add(st.name)) return@forEach
+            tellAgent(sessionId, "tool ${st.name} failed${st.detail?.let { ": $it" }.orEmpty()}; report blocked, don't work around it")
+            sessions[sessionId]?.let { rec -> runCatching { mcpServerFailedSink?.invoke(rec, st.name, st.detail) } }
+        }
+    }
+
     /** MCP-RECONNECT-1: record the harness's MCP state for [sessionId] (what the live process reports). */
     fun reportMcpState(sessionId: String, state: String, reason: String? = null) = hostEvents.mcpState(sessionId, state, reason)
 
@@ -2453,6 +2472,7 @@ class SessionManager(
         override fun mcpServers(sessionId: String, statuses: List<com.superiorsoftllc.infantry.protocol.McpServerStatusView>) {
             if (sessions[sessionId]?.mcpServers == statuses) return
             update(sessionId) { it.copy(mcpServers = statuses) }
+            noteMcpFailures(sessionId, statuses)
         }
 
         // PROMPT-4: the adapter calls this on a thread of its own; it blocks until the prompt resolves (turn end included).

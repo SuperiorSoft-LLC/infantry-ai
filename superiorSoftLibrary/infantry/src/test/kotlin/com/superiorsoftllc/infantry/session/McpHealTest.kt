@@ -66,4 +66,21 @@ class McpHealTest {
             m.shutdown()
         }
     }
+
+    /** MCP-FAIL-1: a granted server going failed posts ONE notice and ONE chat line to the agent, deduped per session + server. */
+    @Test fun `a failed mcp server posts one notice and one agent line`() {
+        val m = manager()
+        try {
+            val notices = mutableListOf<String>()
+            m.mcpServerFailedSink = { _, server, detail -> notices += "$server|$detail" }
+            val s = m.startNew("work")
+            val failedView = com.superiorsoftllc.infantry.protocol.McpServerStatusView("playwright", "failed", "spawn error")
+            m.reportMcpServers(s.id, listOf(failedView))
+            m.reportMcpServers(s.id, listOf(failedView.copy(detail = "spawn error again")))
+            assertEquals(listOf("playwright|spawn error"), notices)
+            assertEquals(1, lines.count { it.contains("tool playwright failed") && it.contains("report blocked") }, "agent told once: $lines")
+        } finally {
+            m.shutdown()
+        }
+    }
 }

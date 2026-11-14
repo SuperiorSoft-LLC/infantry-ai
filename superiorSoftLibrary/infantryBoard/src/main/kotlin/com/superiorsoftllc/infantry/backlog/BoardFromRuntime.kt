@@ -98,6 +98,7 @@ object BoardFromRuntime {
                 runCatching { json.decodeFromString(ListSerializer(RoutingRule.serializer()), runtime.routingRules(projectId)) }.getOrDefault(emptyList())
             },
             routingRefused = runtime::routingRefused,
+            mcpPreflight = runtime::mcpPreflight,
             unknownSkills = runtime::unknownSkills,
             handoffMode = {
                 val parsed = runtime.setting(HANDOFF_NOTE)?.let { runCatching { (json.parseToJsonElement(it) as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }.getOrNull() }
