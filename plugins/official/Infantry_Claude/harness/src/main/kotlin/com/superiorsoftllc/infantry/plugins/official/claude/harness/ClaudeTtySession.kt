@@ -101,7 +101,9 @@ class ClaudeTtySession(
             executable = exe,
             model = ClaudeCommand.effectiveModel(request.model),
             permissionMode = ClaudeCommand.permissionMode(request.toolApproval),
-            mcpConfigs = ClaudeCommand.mcpConfigs(ClaudeCommand.userMcpConfigs(), mcpCommand, mcpEnv),
+            mcpConfigs = ClaudeCommand.mcpConfigs(
+                ClaudeCommand.userMcpConfigs() + listOfNotNull(ClaudeCommand.userScopeMcpConfig()), mcpCommand, mcpEnv,
+            ),
             // Always strict here: without it the interactive CLI asks to approve any project .mcp.json it finds (a home folder's
             // counts), a dialog `-p` never shows; strict loads exactly the servers listed (the user's configs and the daemon's).
             strictMcp = true,
