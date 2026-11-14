@@ -59,7 +59,7 @@ data class McpServer(
 
 data class McpTarget(val id: String, val canAdd: Boolean, val canRemove: Boolean, val canEdit: Boolean, val scopes: List<String>, val listing: Boolean, val note: String?)
 
-data class McpGrant(val id: String, val server: String, val scope: String, val target: String, val projectId: String?, val purpose: String, val approvedBy: String)
+data class McpGrant(val id: String, val server: String, val scope: String, val target: String, val projectId: String?, val purpose: String, val approvedBy: String, val approvedAt: Long = 0)
 
 data class McpSnapshot(val servers: List<McpServer>, val targets: List<McpTarget>, val grants: List<McpGrant>) {
     companion object { val Empty = McpSnapshot(emptyList(), emptyList(), emptyList()) }
@@ -86,7 +86,7 @@ fun parseMcpSnapshot(text: String): McpSnapshot {
             McpTarget(it.str("id") ?: "", it.bool("canAdd", false), it.bool("canRemove", false), it.bool("canEdit", false), it.strings("scopes"), it.bool("listing", false), it.str("note"))
         },
         grants = list("grants").map {
-            McpGrant(it.str("id") ?: "", it.str("server") ?: "", it.str("scope") ?: "", it.str("target") ?: "", it.str("projectId"), it.str("purpose") ?: "", it.str("approvedBy") ?: "")
+            McpGrant(it.str("id") ?: "", it.str("server") ?: "", it.str("scope") ?: "", it.str("target") ?: "", it.str("projectId"), it.str("purpose") ?: "", it.str("approvedBy") ?: "", (it["approvedAt"] as? JsonPrimitive)?.longOrNull ?: 0L)
         },
     )
 }
@@ -143,6 +143,40 @@ fun grantSummary(server: McpServer, grants: List<McpGrant>): String {
     val mine = grants.filter { it.server == server.name }
     if (mine.isEmpty()) return "Not granted (walled)"
     return mine.joinToString("; ") { "${it.scope} ${it.target}" }
+}
+
+/** MCP-UI-2: the screen's two tabs. */
+enum class McpTab(val label: String) { SERVERS("Servers"), ASSIGNMENTS("Assignments") }
+
+/** MCP-UI-2: the Assignments filter; a blank field matches everything. [target] matches the grant's target or its scope. */
+data class GrantFilter(val server: String = "", val target: String = "")
+
+/** The grants [f] keeps, newest first. */
+fun filterGrants(grants: List<McpGrant>, f: GrantFilter): List<McpGrant> =
+    grants.filter { (f.server.isBlank() || it.server == f.server) && (f.target.isBlank() || it.target == f.target) }
+        .sortedByDescending { it.approvedAt }
+
+/** MCP-UI-2: a card action in the compact overflow menu. */
+enum class CardAction(val label: String) { GRANT("Grant"), TOGGLE("Toggle"), EDIT("Edit"), REMOVE("Remove") }
+
+/** MCP-UI-2: the actions a compact server card puts in its overflow menu (Test stays visible); read-only groups only grant. */
+fun overflowActions(readOnly: Boolean, owned: Boolean): List<CardAction> =
+    if (readOnly) listOf(CardAction.GRANT)
+    else listOfNotNull(CardAction.GRANT, CardAction.TOGGLE.takeIf { owned }, CardAction.EDIT, CardAction.REMOVE)
+
+/** Epoch millis as `yyyy-MM-dd` (UTC); "" for 0. Pure, so it compiles for wasm. */
+fun grantDate(epochMillis: Long): String {
+    if (epochMillis <= 0) return ""
+    val z = (epochMillis / 86_400_000L) + 719468
+    val era = (z / 146097L)
+    val doe = z - era * 146097
+    val yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365
+    val doy = doe - (365 * yoe + yoe / 4 - yoe / 100)
+    val mp = (5 * doy + 2) / 153
+    val d = doy - (153 * mp + 2) / 5 + 1
+    val mo = if (mp < 10) mp + 3 else mp - 9
+    val y = yoe + era * 400 + if (mo <= 2) 1 else 0
+    return "$y-${mo.toString().padStart(2, '0')}-${d.toString().padStart(2, '0')}"
 }
 
 /** What the grant form holds; [scope]: role | agent | ticket. */
