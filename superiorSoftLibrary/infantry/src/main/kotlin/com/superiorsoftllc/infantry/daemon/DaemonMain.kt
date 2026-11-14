@@ -2588,6 +2588,7 @@ class InfantryDaemon(
                             waitMs = { settings.limit(LimitRegistry.MCP_LIST_WAIT_MS) },
                         ),
                         infantry = { mcpInfantry(emptyMap()) },
+                        pluginSpecs = { com.superiorsoftllc.infantry.mcp.McpPluginServers.shared.specs(mcpSecret) },
                     ),
                     owned = mcpOwned,
                     grants = com.superiorsoftllc.infantry.mcp.McpGrants(
