@@ -23,12 +23,12 @@ fun communityByline(m: ModuleManifest): String = "${m.name} ${m.version} by ${m.
 
 /** PLUGINS-1: marks everything a community module draws; a trust label, not a sandbox. */
 @Composable
-fun CommunityBadge(manifest: ModuleManifest, modifier: Modifier = Modifier) {
+fun CommunityBadge(manifest: ModuleManifest, modifier: Modifier = Modifier, label: String = "Community") {
     Row(
         modifier.padding(horizontal = 8.dp, vertical = 4.dp).testTag(COMMUNITY_BADGE_TAG),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Chip("Community", Palette.Accent)
+        Chip(label, Palette.Accent)
         Text(communityByline(manifest), color = Palette.Muted, fontSize = 11.sp)
     }
 }

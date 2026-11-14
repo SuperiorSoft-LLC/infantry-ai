@@ -59,6 +59,9 @@ data class RegisteredChild(
     val locked: Boolean = false,
     val enabled: Boolean = true,
     val loaded: Boolean = true,
+    /** PLUGIN-TIER-1: with [tier], what [com.superiorsoftllc.infantry.plugin.host.TierLabel] turns into the chip text. */
+    val bundled: Boolean = false,
+    val publisherVerified: Boolean = false,
 )
 
 /**
@@ -111,12 +114,12 @@ object NodeRegistry {
             }
             val module = (tree as? OverrideBlock)?.module ?: t.module
             val m = factory.modules.firstOrNull { it.manifest.name == module }
-            RegisteredChild(t.id, label(t), module, m?.manifest?.version, m?.tier ?: Tier.CORE, t.order, source, by, t.id in CoreShell.locked, enabled = t.id == home || t.id !in off)
+            RegisteredChild(t.id, label(t), module, m?.manifest?.version, m?.tier ?: Tier.CORE, t.order, source, by, t.id in CoreShell.locked, enabled = t.id == home || t.id !in off, bundled = m?.bundled ?: false, publisherVerified = m?.publisherVerified ?: false)
         }
         // A tab its module declares while the module did not load: listed, not drawn.
         val unloaded = if (container == null) emptyList() else factory.statuses.filter { it.state != ModuleState.LOADED }.flatMap { s ->
             s.manifest?.tabs.orEmpty().filter { it.container == container && tabs.none { t -> t.id == it.id } }.map {
-                RegisteredChild(it.id, it.id, s.name, s.manifest?.version, s.tier, null, ChildSource.TAB, locked = it.id in CoreShell.locked, enabled = false, loaded = false)
+                RegisteredChild(it.id, it.id, s.name, s.manifest?.version, s.tier, null, ChildSource.TAB, locked = it.id in CoreShell.locked, enabled = false, loaded = false, bundled = s.bundled, publisherVerified = s.publisherVerified)
             }
         }
         return HostNode(node, title, HostKind.TABS, node in CoreShell.locked, drawn + unloaded)
@@ -144,7 +147,7 @@ object NodeRegistry {
         val locked = c.id in CoreShell.locked
         fun by(module: String, source: ChildSource, over: String? = null): RegisteredChild {
             val m = factory.modules.firstOrNull { it.manifest.name == module }
-            return RegisteredChild(c.id, c.id, module, m?.manifest?.version, m?.tier ?: Tier.CORE, index, source, over, locked)
+            return RegisteredChild(c.id, c.id, module, m?.manifest?.version, m?.tier ?: Tier.CORE, index, source, over, locked, bundled = m?.bundled ?: false, publisherVerified = m?.publisherVerified ?: false)
         }
         return when (c) {
             is InjectedBlock -> by(c.module, ChildSource.INJECTION).copy(enabled = c.id !in off)

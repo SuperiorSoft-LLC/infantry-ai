@@ -57,6 +57,17 @@ object OfficialTrust {
     }
 
     /**
+     * PLUGIN-TIER-1: marks [ModuleCandidate.publisherVerified] on a community-folder module whose jar passes the same
+     * signature check an official module does (pinned Infantry key, signed module.json). A `tier` or `author` string in
+     * module.json alone never marks anything: the claim must be signed.
+     */
+    fun markPublishers(candidates: List<ModuleCandidate>, keys: List<X509Certificate>, pinned: Set<String> = PINNED_FINGERPRINTS): List<ModuleCandidate> =
+        candidates.map { c ->
+            if (c.tier == Tier.COMMUNITY && c.manifest != null && c.dir != null && c.refusal == null &&
+                refusal(c, keys, pinned) == null) c.copy(publisherVerified = true) else c
+        }
+
+    /**
      * Why official module [c] may not load; null = signed by an Infantry key (a cert of [keys] whose fingerprint is
      * [pinned] in the binary) and its module.json is the signed one. [pinned] is overridable for tests only.
      */

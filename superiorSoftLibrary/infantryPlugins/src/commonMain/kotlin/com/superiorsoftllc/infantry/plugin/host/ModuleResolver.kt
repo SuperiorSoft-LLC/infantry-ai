@@ -23,6 +23,10 @@ data class ModuleCandidate(
     val parseError: String? = null,
     /** RUNTIME-2: set by the host when a check outside module.json failed (an official jar not signed by the Infantry key). */
     val refusal: String? = null,
+    /** PLUGIN-TIER-1: shipped inside the app install (the bundled root), not installed by the user. */
+    val bundled: Boolean = false,
+    /** PLUGIN-TIER-1: the host proved the publisher (jar signed by the pinned Infantry key); never read from module.json. */
+    val publisherVerified: Boolean = false,
 )
 
 enum class ModuleState { LOADED, DISABLED, LOCKED, REFUSED }
@@ -37,7 +41,12 @@ data class ModuleStatus(
     val dir: String? = null,
     /** PLUGIN-TREE-2a: the parents that are all off, when that is why this module is not loading; else empty. */
     val heldOffBy: List<String> = emptyList(),
+    /** PLUGIN-TIER-1: see [ModuleCandidate.bundled] / [ModuleCandidate.publisherVerified]; additive, old callers keep false. */
+    val bundled: Boolean = false,
+    val publisherVerified: Boolean = false,
 ) {
+    /** PLUGIN-TIER-1: the label the Modules list shows. */
+    val tierLabel: String get() = TierLabel.of(tier, bundled, publisherVerified)
     val logLine: String get() = "[plugins] $name (${tier.name.lowercase()}): ${state.name.lowercase()}" + (reason?.let { " - $it" } ?: "")
 }
 
@@ -221,7 +230,8 @@ object ModuleResolver {
         }
 
         val loaded = order.map { ModuleStatus(it.manifest!!.name, it.tier, ModuleState.LOADED, null, it.manifest, it.dir) }
-        val statuses = loaded + final.values
+        val marks = candidates.filter { it.manifest != null }.associateBy { it.manifest!!.name }
+        val statuses = (loaded + final.values).map { st -> marks[st.name]?.let { c -> st.copy(bundled = c.bundled, publisherVerified = c.publisherVerified) } ?: st }
         statuses.forEach { log += it.logLine }
 
         val preferences = preferences(loaded, config, log)
@@ -283,5 +293,18 @@ object ModuleResolver {
             at = next
         }
         return path.joinToString(" -> ")
+    }
+}
+
+/** PLUGIN-TIER-1: three labels. Core = bundled with the app; Official = by the app's publisher (proved by signature); Community = the rest. */
+object TierLabel {
+    const val CORE = "Core"
+    const val OFFICIAL = "Official"
+    const val COMMUNITY = "Community"
+
+    fun of(tier: Tier, bundled: Boolean, publisherVerified: Boolean): String = when (tier) {
+        Tier.CORE -> CORE
+        Tier.OFFICIAL -> if (bundled) CORE else OFFICIAL
+        Tier.COMMUNITY -> if (publisherVerified) OFFICIAL else COMMUNITY
     }
 }

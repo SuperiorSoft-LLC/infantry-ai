@@ -124,6 +124,8 @@ data class PluginRow(
     val heldOffBy: List<String> = emptyList(),
     /** MASCOT-LICENSE-1: the loader's refusal reason (the same [ModuleResolver] pass the hosts run); null = not refused. */
     val refused: String? = null,
+    /** PLUGIN-TIER-1: `Core`, `Official` or `Community`: bundled = Core, publisher proved by signature = Official, else Community. */
+    val tierLabel: String = "",
 )
 
 /** [listName] = the catalog's (plugin list's) display name; [latest] is null for a repo entry, which resolves its release at install. */
@@ -415,7 +417,7 @@ class PluginManager(
         val cfg = config()
         val led = ledger().installed
         val cat = runCatching { loaded() }.getOrDefault(emptyList()).flatMap { it.catalog.plugins }
-        val scanned = PluginFolders.scan(root, cfg, bundledRoot)
+        val scanned = com.superiorsoftllc.infantry.plugin.host.OfficialTrust.markPublishers(PluginFolders.scan(root, cfg, bundledRoot), com.superiorsoftllc.infantry.plugin.host.OfficialTrust.infantryKeys(root, bundledRoot))
         val dependents = scanned.filter { c -> c.manifest != null && (cfg.modules[c.folderName]?.enabled ?: (c.tier != Tier.COMMUNITY && c.manifest!!.defaultEnabled)) }
             .flatMap { c -> c.manifest!!.dependencies.map { it.id to c.folderName } }
             .groupBy({ it.first }, { it.second })
@@ -446,6 +448,7 @@ class PluginManager(
                 parents = tree.parentsOf(c.folderName), children = tree.childrenOf(c.folderName),
                 heldOffBy = tree.parentsOf(c.folderName).takeIf { c.folderName in ownOnIds && it.isNotEmpty() && it.none { p -> p in ownOnIds } }.orEmpty(),
                 refused = c.dir?.let { refusedByDir[File(it).canonicalPath] },
+                tierLabel = com.superiorsoftllc.infantry.plugin.host.TierLabel.of(c.tier, bundled || c.bundled, c.publisherVerified),
             )
         }.sortedBy { it.id }
     }

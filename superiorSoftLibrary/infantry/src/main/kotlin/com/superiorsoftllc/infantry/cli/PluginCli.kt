@@ -105,7 +105,7 @@ internal object PluginCli {
                 }
                 val rows = m.list()
                 if (rows.isEmpty()) out.appendLine("no plugins")
-                rows.forEach { out.appendLine("${it.id}  ${it.version}  ${it.cls.label}${if (it.bundled) "/bundled" else ""}  ${it.tier.name.lowercase()}  ${if (it.enabled) "enabled" else "disabled"}  ${it.source ?: "unlisted"}${it.yanked?.let { y -> "  yanked: $y" } ?: ""}") }
+                rows.forEach { out.appendLine("${it.id}  ${it.version}  ${it.cls.label}${if (it.bundled) "/bundled" else ""}  ${it.tierLabel.ifBlank { it.tier.name }.lowercase()}  ${if (it.enabled) "enabled" else "disabled"}  ${it.source ?: "unlisted"}${it.yanked?.let { y -> "  yanked: $y" } ?: ""}") }
                 return 0
             }
             "search" -> {
@@ -155,7 +155,7 @@ internal object PluginCli {
             "remove" -> return show(m.remove(arg ?: return usage("remove needs a plugin id"), purge))
             "status" -> {
                 val row = m.status(arg ?: return usage("status needs a plugin id")) ?: return show(ManagerResult.refused("NOT_INSTALLED", "$arg is not installed"))
-                out.appendLine("${row.id} ${row.version}: ${row.cls.label}${if (row.bundled) " (bundled)" else ""}, ${row.tier.name.lowercase()} tier, ${if (row.enabled) "enabled" else "disabled"}")
+                out.appendLine("${row.id} ${row.version}: ${row.cls.label}${if (row.bundled) " (bundled)" else ""}, ${row.tierLabel.ifBlank { row.tier.name }.lowercase()} tier, ${if (row.enabled) "enabled" else "disabled"}")
                 out.appendLine("source: ${row.source ?: "unlisted"}  licence: ${row.license ?: "not stated"}")
                 row.yanked?.let { out.appendLine("yanked: $it") }
                 out.appendLine("asks for: ${row.requested.joinToString().ifEmpty { "nothing" }}")
