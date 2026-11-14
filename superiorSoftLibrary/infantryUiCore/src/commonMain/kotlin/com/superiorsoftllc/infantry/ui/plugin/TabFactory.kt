@@ -322,7 +322,12 @@ class InfantryModule(
      * a module that never registered through a [UiPlugin] (compiled-in values, compositions).
      */
     val scope: com.superiorsoftllc.infantry.plugin.api.OwnedPluginScope? = null,
-)
+) {
+    /** PLUGIN-TIER-1: set by the host from the resolved status (bundled with the app; publisher proved by signature). */
+    var bundled: Boolean = false
+    var publisherVerified: Boolean = false
+    val tierLabel: String get() = com.superiorsoftllc.infantry.plugin.host.TierLabel.of(tier, bundled, publisherVerified)
+}
 
 /**
  * PLUGINS-1: the entry point of a module loaded at run time (module.json `entry`). It registers its contributions by
@@ -889,7 +894,7 @@ class TabFactory(
         }
         Column {
             top.forEach { (owner, b) -> ModuleTier(byModule[owner]?.tier.isCoreTier()) { ModuleScope(owner) { b.content(context.forModule(services(owner))) } } }
-            if (community) CommunityBadge(module!!.manifest)
+            if (community) CommunityBadge(module!!.manifest, label = module.tierLabel)
             hooks.forEach { it.before?.invoke(own) }
             Box(Modifier.weight(1f)) {
                 // A module's plain Text reads in the app's text colour, like the core panes.
@@ -1053,7 +1058,7 @@ internal fun PanelSectionBody(factory: TabFactory, section: PanelProvider, conte
     val drawn: @Composable () -> Unit = {
         if (badge && module?.tier == Tier.COMMUNITY) {
             Column {
-                CommunityBadge(module.manifest)
+                CommunityBadge(module.manifest, label = module.tierLabel)
                 CompositionLocalProvider(LocalContentColor provides Palette.Text) { ModuleTier(false) { ModuleScope(section.module) { section.content(own) } } }
             }
         } else {

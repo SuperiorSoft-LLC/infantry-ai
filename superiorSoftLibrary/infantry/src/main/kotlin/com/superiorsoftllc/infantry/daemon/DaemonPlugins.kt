@@ -25,6 +25,8 @@ data class PluginStatusWire(
     val harness: String? = null,
     /** H5a: the harness ids it registered (empty when its harness is not loaded). */
     val harnessIds: List<String> = emptyList(),
+    /** PLUGIN-TIER-1: `Core`, `Official` or `Community`; blank from an older daemon (clients fall back to [tier]). */
+    val tierLabel: String = "",
 )
 
 /** PLUGINS-1: `GET /plugins`: the plugins root the daemon scanned, whether a restricted policy locks it, and every module found. */
@@ -58,14 +60,16 @@ object DaemonPlugins {
         val root = PluginFolders.root(stateDir, env, property)
         PluginFolders.recordRoot(stateDir, root) // UI-PLUGIN-BRIDGE-1: a desktop UI on this state dir loads from the same folder
         val config = PluginFolders.config(root, log)
-        val resolution = ModuleResolver.resolve(PluginFolders.scan(root, config, PluginFolders.bundledRoot(env, property)), config, locked)
+        val bundledRoot = PluginFolders.bundledRoot(env, property)
+        val scanned = com.superiorsoftllc.infantry.plugin.host.OfficialTrust.markPublishers(PluginFolders.scan(root, config, bundledRoot), com.superiorsoftllc.infantry.plugin.host.OfficialTrust.infantryKeys(root, bundledRoot))
+        val resolution = ModuleResolver.resolve(scanned, config, locked)
         log("[plugins] daemon root ${root.absolutePath}${if (locked) " (locked)" else ""}: ${resolution.loaded.size} loaded")
         resolution.log.forEach(log)
         onResolved(resolution)
         return PluginsWire(
             root.absolutePath, locked,
             resolution.statuses.map { s ->
-                PluginStatusWire(s.name, s.tier.name.lowercase(), s.state.name.lowercase(), s.reason, s.manifest?.version, s.manifest?.author, s.manifest?.license)
+                PluginStatusWire(s.name, s.tier.name.lowercase(), s.state.name.lowercase(), s.reason, s.manifest?.version, s.manifest?.author, s.manifest?.license, tierLabel = s.tierLabel)
             },
         )
     }

@@ -120,7 +120,7 @@ object PluginFolders {
             loser.copy(refusal = "shadowed by ${winner.dir} ${winner.manifest?.version ?: "?"}" + note(loser) + note(winner))
         val out = mutableListOf<ModuleCandidate>()
         val extra = mutableListOf<ModuleCandidate>()
-        for (b in scanFolders(bundled, listOf(OFFICIAL_FOLDER))) {
+        for (b in scanFolders(bundled, listOf(OFFICIAL_FOLDER)).map { it.copy(bundled = true) }) {
             val i = user.indexOfFirst { key(it) == key(b) && it.refusal == null }
             if (i < 0) { extra += b; continue }
             val u = user[i]

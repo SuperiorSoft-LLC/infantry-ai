@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.superiorsoftllc.infantry.plugin.api.ModuleManifest
 import com.superiorsoftllc.infantry.plugin.api.Tier
+import com.superiorsoftllc.infantry.plugin.host.TierLabel
 import com.superiorsoftllc.infantry.plugin.host.DependencyGraph
 import com.superiorsoftllc.infantry.plugin.host.ModuleChange
 import com.superiorsoftllc.infantry.plugin.host.ModuleState
@@ -255,8 +256,7 @@ private fun ModuleCard(s: ModuleStatus, graph: DependencyGraph, enabled: Boolean
                 )
                 s.manifest?.version?.let { Text(it, color = Palette.Muted, fontSize = 11.sp, maxLines = 1) }
             }
-            val community = s.tier == Tier.COMMUNITY
-            Chip(if (community) "Community" else "Core", if (community) Palette.Accent else Palette.Muted, textModifier = Modifier.testTag(MODULE_TIER_TAG_PREFIX + s.name))
+            Chip(s.tierLabel, if (s.tierLabel == TierLabel.CORE) Palette.Muted else Palette.Accent, textModifier = Modifier.testTag(MODULE_TIER_TAG_PREFIX + s.name))
         }
         s.manifest?.let(::moduleByline)?.let { Text(it, Modifier.testTag(MODULE_BYLINE_TAG_PREFIX + s.name), color = Palette.Muted, fontSize = 11.sp) }
         s.manifest?.description?.takeIf { it.isNotBlank() }?.let { Text(it, color = Palette.Text, fontSize = 11.sp) }

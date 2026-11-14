@@ -141,7 +141,8 @@ object DesktopPlugins {
         val bundled = PluginFolders.bundledRoot(env, property)
         val devTrust = PluginFolders.devTrust(property)
         fun resolve(c: ModulesConfig): Resolution {
-            val candidates = OfficialTrust.check(candidates(root, c, withBundles, bundled), OfficialTrust.infantryKeys(root, bundled), devTrust, say, pinned)
+            val keys = OfficialTrust.infantryKeys(root, bundled)
+            val candidates = OfficialTrust.markPublishers(OfficialTrust.check(candidates(root, c, withBundles, bundled), keys, devTrust, say, pinned), keys, pinned)
             return ModuleResolver.resolve(candidates, c, lockdown, safeMode = safeMode, platform = "desktop")
         }
         say("[plugins] root ${root.absolutePath}${bundled?.let { " (bundled ${it.absolutePath})" } ?: ""}${if (lockdown) " (lockdown on)" else ""}${if (safeMode) " (safe mode: community modules off)" else ""}")
@@ -262,6 +263,7 @@ object DesktopPlugins {
                 val result = if (needs != null) Result.failure(IllegalStateException("dependency $needs is refused")) else
                     builtIn?.let { Result.success(it to null) } ?: runCatching { loadJar(s, svc) }
                 result.onSuccess { (module, loader) ->
+                    module.bundled = s.bundled; module.publisherVerified = s.publisherVerified
                     entries[s.name] = Entry(s.name, module, loader, if (builtIn == null) fingerprint(s) else null, generations)
                     loadedNow += s.name
                 }.onFailure {

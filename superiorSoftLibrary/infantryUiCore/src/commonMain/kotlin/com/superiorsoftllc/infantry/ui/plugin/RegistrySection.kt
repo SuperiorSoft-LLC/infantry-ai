@@ -27,6 +27,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.material3.Text
 import androidx.compose.ui.unit.dp
 import com.superiorsoftllc.infantry.plugin.api.Tier
+import com.superiorsoftllc.infantry.plugin.host.TierLabel
 import com.superiorsoftllc.infantry.ui.Checkbox
 import com.superiorsoftllc.infantry.ui.Chip
 import com.superiorsoftllc.infantry.ui.TextButton
@@ -221,8 +222,8 @@ private fun ChildRow(
         SectionLabel(c.name, if (c.enabled) Palette.Text else Palette.Muted, topGap = false)
         if (c.name != c.id) Chip(c.id)
         Chip(listOfNotNull(c.module, c.version).joinToString(" "), textModifier = Modifier.testTag(REGISTRY_MODULE_TAG_PREFIX + c.id))
-        val community = c.tier == Tier.COMMUNITY
-        Chip(if (community) "Community" else "Core", if (community) Palette.Accent else Palette.Muted, textModifier = Modifier.testTag(REGISTRY_TIER_TAG_PREFIX + c.id))
+        val tierLabel = TierLabel.of(c.tier, c.bundled, c.publisherVerified)
+        Chip(tierLabel, if (tierLabel == TierLabel.CORE) Palette.Muted else Palette.Accent, textModifier = Modifier.testTag(REGISTRY_TIER_TAG_PREFIX + c.id))
         Chip(c.source.label + (c.by?.let { " of $it" } ?: ""), textModifier = Modifier.testTag(REGISTRY_SOURCE_TAG_PREFIX + c.id))
         c.order?.let { Chip("Order $it") }
         if (c.locked) Chip("Locked", Palette.Danger, textModifier = Modifier.testTag(REGISTRY_CHILD_LOCKED_TAG_PREFIX + c.id))
