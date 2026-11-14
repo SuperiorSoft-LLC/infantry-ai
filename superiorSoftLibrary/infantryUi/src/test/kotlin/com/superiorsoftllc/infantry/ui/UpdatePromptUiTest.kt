@@ -39,7 +39,9 @@ import java.util.concurrent.TimeUnit
 import javax.imageio.ImageIO
 import kotlin.test.AfterTest
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlinx.coroutines.flow.first
 
 /**
  * UPDATE-UX-1: the update UI never holds the window. Update closes the prompt and the download shows in a bottom-right
@@ -111,7 +113,8 @@ class UpdatePromptUiTest {
             onNodeWithTag(UPDATE_LATER_CARD_TAG).performClick()
             waitForIdle()
             onNodeWithText("Ready to install 1.0.7").assertDoesNotExist()
-            onNodeWithText("Ready to install v1.0.7").assertExists()
+            // UPDATE-PILL-1: the footer item is the shell status bar's now; its notice flow carries the label.
+            assertEquals("Ready to install v1.0.7", runBlocking { updateNotice(s).first() }?.label)
         }
         Palette.theme = ThemeSettings()
     }
