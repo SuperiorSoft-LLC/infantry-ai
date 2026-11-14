@@ -162,6 +162,8 @@ object ClaudeCommand {
         settings: String? = null,
         /** G2: names a NEW session (`--session-id`); ignored when [resumeSessionId] is set. */
         sessionId: String? = null,
+        /** MCP-CLAUDE-1: tool rules for the servers the plan turns off (`--disallowedTools`). */
+        disallowedTools: List<String> = emptyList(),
     ): List<String> = buildList {
         add(executable)
         add("-p")
@@ -173,6 +175,7 @@ object ClaudeCommand {
         effort?.takeIf { it.isNotBlank() }?.let { add("--effort"); add(it) }
         permissionMode?.takeIf { it.isNotBlank() }?.let { add("--permission-mode"); add(it) }
         allowedTools.takeIf { it.isNotEmpty() }?.let { add("--allowedTools"); add(it.joinToString(",")) }
+        disallowedTools.takeIf { it.isNotEmpty() }?.let { add("--disallowedTools"); add(it.joinToString(",")) }
         permissionPromptTool?.takeIf { it.isNotBlank() }?.let { add("--permission-prompt-tool"); add(it) }
         settings?.takeIf { it.isNotBlank() }?.let { add("--settings"); add(it) }
         mcpConfigs.takeIf { it.isNotEmpty() }?.let {
@@ -211,6 +214,7 @@ object ClaudeCommand {
         effort: String? = null,
         allowedTools: List<String> = allowedTools(),
         settings: String? = null,
+        disallowedTools: List<String> = emptyList(),
     ): List<String> = buildList {
         add(executable)
         resumeSessionId?.takeIf { it.isNotBlank() }?.let { add("--resume"); add(it) }
@@ -221,6 +225,7 @@ object ClaudeCommand {
         add("--thinking-display"); add("summarized")
         permissionMode?.takeIf { it.isNotBlank() }?.let { add("--permission-mode"); add(it) }
         allowedTools.takeIf { it.isNotEmpty() }?.let { add("--allowedTools"); add(it.joinToString(",")) }
+        disallowedTools.takeIf { it.isNotEmpty() }?.let { add("--disallowedTools"); add(it.joinToString(",")) }
         settings?.takeIf { it.isNotBlank() }?.let { add("--settings"); add(it) }
         mcpConfigs.takeIf { it.isNotEmpty() }?.let { add("--mcp-config"); addAll(it) }
         // Strict even with no config listed: it is what keeps a project .mcp.json (and its approval dialog) out.

@@ -70,6 +70,8 @@ class ClaudeTtySession(
     private val firstTurn: () -> ClaudeFirstTurn = { ClaudeFirstTurn() },
     /** MCP-WALL-1: `harness.claude.userMcpServers` (none = walled, the default; all = claude loads the user's MCP scopes). */
     private val userMcp: () -> String? = { null },
+    /** MCP-CLAUDE-1: the session's plan as ONE config file plus denied tool rules (nothing = infantry only, the old path). */
+    private val delivery: (Map<String, String>) -> ClaudeMcpDelivery = { ClaudeMcpDelivery() },
 ) : HarnessSession {
     override val label: String = "claude"
 
@@ -100,12 +102,14 @@ class ClaudeTtySession(
     ): List<String> {
         val (mcpCommand, baseMcpEnv) = mcp(env)
         val mcpEnv = baseMcpEnv + extraMcpEnv
+        val plan = delivery(env)
         return ClaudeCommand.interactiveCommand(
             executable = exe,
+            disallowedTools = plan.disallowed,
             model = ClaudeCommand.effectiveModel(request.model),
             permissionMode = ClaudeCommand.permissionMode(request.toolApproval),
             mcpConfigs = ClaudeCommand.mcpConfigs(
-                ClaudeCommand.userMcpConfigs(), mcpCommand, mcpEnv,
+                ClaudeCommand.userMcpConfigs() + plan.configs, mcpCommand, mcpEnv,
             ),
             // MCP-WALL-1: strict by default (user MCP servers walled); harness.claude.userMcpServers=all or INFANTRY_CLAUDE_STRICT_MCP=0 opens it.
             strictMcp = ClaudeCommand.strictMcp(userMcp()),
