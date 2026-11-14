@@ -27,6 +27,29 @@ A daemon plugin tool runs in the daemon, which cannot open the agent's files. `i
 A client below 1.147.0 sends plain strings and no `client.projectId`: such a tool sees no local files (a path it cannot read is refused as
 "does not exist") and no default project. A daemon below 1.147.0 never lists `localFiles`, and ignores `client.projectId`.
 
+### MCP-REGISTRY-1 (contract 1.154.0, additive): the MCP registry, grants and the walled default
+
+One daemon backend for every MCP server a session can get (design `docs/design/MCP-TOOLS.md`, section 4.2). Payloads are in
+`infantryProtocol/.../McpFrames.kt`; every frame carries one `McpRequest`.
+
+- `mcp_list` -> `mcp_servers` (`McpListAnswer`: `servers` of every source, `targets` with what each can do, `grants`). Sources:
+  `infantry` (the daemon's own server), `infantry_user` (Infantry-owned, stored by the daemon, app or project scope), `plugin`,
+  `harness` (a CLI's own servers, read only through that CLI's official interface and cached per harness and project under
+  `limits.mcp.listTtlMs` / `limits.mcp.listWaitMs`). On a name clash the order is infantry, Infantry-owned, plugin, CLI; the loser is
+  listed with `shadowedBy` and never delivered.
+- `mcp_get` -> `mcp_server`; `mcp_test` -> `mcp_status`; `mcp_add` / `mcp_update` / `mcp_remove` / `mcp_set_enabled` -> `mcp_servers`.
+  A CLI target is routed to that harness's `HarnessMcp`; a CLI that cannot do the change is refused (`error`).
+- `mcp_assign` (`grant`: server, scope `role` | `agent` | `ticket`, target, projectId?, purpose, approvedBy) / `mcp_revoke` (`grantId`)
+  / `mcp_grants` -> `mcp_grants`. Every change pushes `mcp_changed` to every client.
+- `mcp_plan` -> `mcp_plan` (`add`, `deny`, `reasons`): what one session gets. **Walled by default**: a session gets the daemon's own
+  server, and any other server only when a grant names it for the session's role, agent or ticket (within the grant's project). A
+  CLI's own server with no grant is denied; a disabled server is denied; a `localOnly` server never goes to a remote runner.
+- No secret on the wire: servers show env and header keys only; an Infantry-owned server names Secrets entries (`envSecrets`,
+  `headerSecrets`) and a plain value under a credential-like key is refused.
+- Sessions gain `mcpServers` (`[{name, state, detail?, toolCount?}]`), omitted when empty.
+
+A daemon below 1.154.0 answers these frames with `error` (unknown frame).
+
 ### ROLE-PLUGIN-1 (contract 1.153.0, additive): roles a plugin declares
 
 A module may declare roles in module.json `roles` (docs/wiki/plugin-api.md, "Plugin roles"). The roles plugin seeds each into

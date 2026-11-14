@@ -261,6 +261,38 @@ data class Envelope(
         /** MCP-RECONNECT-1: `{"sessionId"}`; reconnects that session's MCP link (`infantry session mcp-reconnect --self`). The answer carries one plain line. */
         const val SESSION_MCP_RECONNECT = "session_mcp_reconnect"
 
+        // MCP-REGISTRY-1 (contract 1.154.0, additive): the MCP registry. Every frame carries one McpRequest (McpFrames.kt).
+        /** client -> daemon: `{target?, projectId?}`; answered by [MCP_SERVERS] (servers of every source, targets, grants). */
+        const val MCP_LIST = "mcp_list"
+        /** client -> daemon: `{name, target?, projectId?}`; answered by [MCP_SERVER] (one McpServerView). */
+        const val MCP_GET = "mcp_get"
+        /** client -> daemon: `{target, scope, projectId?, server}`; an Infantry-owned server or a CLI's own (through that CLI's official command). Answered by [MCP_SERVERS]; pushes [MCP_CHANGED]. */
+        const val MCP_ADD = "mcp_add"
+        /** client -> daemon: `{scope, projectId?, server}`; replaces an Infantry-owned server of the same name. Answered by [MCP_SERVERS]; pushes [MCP_CHANGED]. */
+        const val MCP_UPDATE = "mcp_update"
+        /** client -> daemon: `{name, target, scope?, projectId?}`. Answered by [MCP_SERVERS]; pushes [MCP_CHANGED]. */
+        const val MCP_REMOVE = "mcp_remove"
+        /** client -> daemon: `{name, enabled, scope?, projectId?}` for an Infantry-owned server. Answered by [MCP_SERVERS]; pushes [MCP_CHANGED]. */
+        const val MCP_SET_ENABLED = "mcp_set_enabled"
+        /** client -> daemon: `{name, target?, projectId?}`; answered by [MCP_STATUS] (one McpServerStatusView). */
+        const val MCP_TEST = "mcp_test"
+        /** client -> daemon: `{grant}` (McpGrantInput); the only way an agent gets a server. Answered by [MCP_GRANTS]; pushes [MCP_CHANGED]. */
+        const val MCP_ASSIGN = "mcp_assign"
+        /** client -> daemon: `{grantId}`. Answered by [MCP_GRANTS]; pushes [MCP_CHANGED]. */
+        const val MCP_REVOKE = "mcp_revoke"
+        /** client -> daemon: `{}` lists the grants; daemon -> client: a list of McpGrantView. */
+        const val MCP_GRANTS = "mcp_grants"
+        /** client -> daemon: `{sessionId}` or `{target, projectId, role, agentId, ticketId, remote}`; answered by [MCP_PLAN] (McpPlanView). */
+        const val MCP_PLAN = "mcp_plan"
+        /** daemon -> client: McpListAnswer. */
+        const val MCP_SERVERS = "mcp_servers"
+        /** daemon -> client: one McpServerView. */
+        const val MCP_SERVER = "mcp_server"
+        /** daemon -> client: one McpServerStatusView. */
+        const val MCP_STATUS = "mcp_status"
+        /** daemon -> every client after a change: `{}`; a client re-sends [MCP_LIST]. */
+        const val MCP_CHANGED = "mcp_changed"
+
         // Phase 4 -- worktree isolation.
         const val WORKTREE = "worktree"
         const val WORKTREES = "worktrees"

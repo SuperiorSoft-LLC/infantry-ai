@@ -2560,6 +2560,48 @@ class InfantryDaemon(
                 maxEvents = { LimitRegistry.fromEnv(LimitRegistry.HEALTH_EVENT_LOG_MAX, System::getenv).toInt() },
             )
             healthJournal.begin(ProcessHandle.current().pid(), boundPort, com.superiorsoftllc.infantry.update.BuildInfo.current)
+            // MCP-REGISTRY-1: the ONE MCP registry (every source, CLI lists cached), the Infantry-owned servers and the grants in
+            // <stateDir>/mcp, the walled selection each session's harness is handed (HarnessHost.mcpServers) and the mcp_* frames.
+            com.superiorsoftllc.infantry.mcp.McpService.current = run {
+                val mcpStorage = com.superiorsoftllc.infantry.mcp.FileMcpStorage(java.io.File(daemonStateDir, "mcp"))
+                val mcpSecret: (String, String?) -> String? = { name, project -> keystore.resolve(name, project)?.get(Keystore.VALUE_FIELD) }
+                val mcpOwned = com.superiorsoftllc.infantry.mcp.McpOwnedServers(mcpStorage) { settings.limit(LimitRegistry.MCP_SERVERS_MAX).toInt() }
+                val mcpInfantry: (Map<String, String>) -> com.superiorsoftllc.infantry.harness.api.McpServerSpec? = { env ->
+                    com.superiorsoftllc.infantry.harness.api.McpPlan.infantry(InfantryMcp.launch(env).let { com.superiorsoftllc.infantry.harness.api.HarnessProcess(it.argv, env = it.env) })
+                }
+                val mcpSessionContext: (String) -> com.superiorsoftllc.infantry.mcp.McpSessionContext? = { id ->
+                    manager.get(id)?.let {
+                        com.superiorsoftllc.infantry.mcp.McpSessionContext(it.provider, it.projectId, it.role, it.agentId, it.ticketId, remote = it.runner != "local")
+                    }
+                }
+                com.superiorsoftllc.infantry.mcp.McpService(
+                    registry = com.superiorsoftllc.infantry.mcp.McpRegistry(
+                        owned = mcpOwned,
+                        harnessIds = { harnesses.harnessIds() },
+                        harnessMcp = { harnesses.mcp(it) },
+                        projectDir = { id ->
+                            id?.let { runCatching { projectStore.get(it).directory }.getOrNull() }?.takeIf { it.isNotBlank() } ?: System.getProperty("user.home")
+                        },
+                        secret = mcpSecret,
+                        cache = com.superiorsoftllc.infantry.provider.ListingCache(
+                            ttlMs = { settings.limit(LimitRegistry.MCP_LIST_TTL_MS) },
+                            waitMs = { settings.limit(LimitRegistry.MCP_LIST_WAIT_MS) },
+                        ),
+                        infantry = { mcpInfantry(emptyMap()) },
+                    ),
+                    owned = mcpOwned,
+                    grants = com.superiorsoftllc.infantry.mcp.McpGrants(
+                        mcpStorage,
+                        max = { settings.limit(LimitRegistry.MCP_GRANTS_MAX).toInt() },
+                        purposeChars = { settings.limit(LimitRegistry.MCP_PURPOSE_CHARS).toInt() },
+                    ),
+                    harnessMcp = { harnesses.mcp(it) },
+                    loadsUserMcp = { harnesses.loadsUserMcp(it) },
+                    secret = mcpSecret,
+                    sessionContext = mcpSessionContext,
+                    infantryFor = { mcpInfantry(emptyMap()) },
+                )
+            }
             com.superiorsoftllc.infantry.daemon.health.DaemonHealth.service = com.superiorsoftllc.infantry.daemon.health.HealthService(
                 healthJournal,
                 com.superiorsoftllc.infantry.daemon.health.McpBridgeTracker(healthJournal),
@@ -4424,6 +4466,22 @@ private suspend fun handleConnection(
                     Envelope(Envelope.ERROR, "session_restart refused: ${e.message ?: "invalid request"}")
                 } catch (e: Exception) {
                     Envelope(Envelope.ERROR, "session_restart failed: ${e.message ?: e::class.simpleName}")
+                }
+
+                // MCP-REGISTRY-1: the MCP registry frames, one backend (McpService); a change tells every client to re-read.
+                Envelope.MCP_LIST, Envelope.MCP_GET, Envelope.MCP_ADD, Envelope.MCP_UPDATE, Envelope.MCP_REMOVE, Envelope.MCP_SET_ENABLED,
+                Envelope.MCP_TEST, Envelope.MCP_ASSIGN, Envelope.MCP_REVOKE, Envelope.MCP_GRANTS, Envelope.MCP_PLAN -> try {
+                    val service = com.superiorsoftllc.infantry.mcp.McpService.current ?: throw IllegalStateException("the MCP registry is not running")
+                    val answer = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { service.handle(envelope.type, envelope.data) }
+                    if (answer.changed) {
+                        val changed = Envelope(Envelope.MCP_CHANGED, "{}")
+                        for (client in clients.toList()) client.trySend(changed)
+                    }
+                    Envelope(answer.type, answer.data, envelope.sessionId)
+                } catch (e: IllegalArgumentException) {
+                    Envelope(Envelope.ERROR, "${envelope.type} refused: ${e.message ?: "invalid request"}")
+                } catch (e: Exception) {
+                    Envelope(Envelope.ERROR, "${envelope.type} failed: ${e.message ?: e::class.simpleName}")
                 }
 
                 Envelope.SESSION_MCP_RECONNECT -> try {

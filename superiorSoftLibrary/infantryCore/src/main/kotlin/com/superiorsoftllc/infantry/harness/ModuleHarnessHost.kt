@@ -26,6 +26,8 @@ class HarnessHostServices(
     val resolveCli: (id: String, command: String) -> String? = { _, _ -> null },
     val runner: ProcessRunner = PipedProcessRunner(),
     val mcpLaunch: (sessionEnv: Map<String, String>) -> HarnessProcess? = { null },
+    /** MCP-REGISTRY-1: the walled selection for a session (its env, its infantry entry); null = no registry (the infantry entry alone). */
+    val mcpServers: (sessionEnv: Map<String, String>, infantry: com.superiorsoftllc.infantry.harness.api.McpServerSpec?) -> com.superiorsoftllc.infantry.harness.api.McpPlan? = { _, _ -> null },
     val watchLauncher: (sessionEnv: Map<String, String>) -> String? = { null },
     /** H8b-1: a read-only query on a sqlite file (the daemon's one reader); null = refused / unreadable. */
     val queryDb: (file: File, sql: String, params: List<String>) -> List<Map<String, Any?>>? = { _, _, _ -> null },
@@ -109,6 +111,14 @@ class ModuleHarnessHost(
     fun hookAllowed(kind: String): Boolean = hook(kind)
 
     override fun mcpLaunch(sessionEnv: Map<String, String>): HarnessProcess? = if (hook("mcp")) services.mcpLaunch(sessionEnv) else null
+
+    /** MCP-REGISTRY-1: behind the same `harness.hook.mcp` grant as [mcpLaunch]; the registry's walled plan, else the infantry entry alone. */
+    override fun mcpServers(sessionEnv: Map<String, String>): com.superiorsoftllc.infantry.harness.api.McpPlan {
+        if (!hook("mcp")) return com.superiorsoftllc.infantry.harness.api.McpPlan.EMPTY
+        val infantry = com.superiorsoftllc.infantry.harness.api.McpPlan.infantry(services.mcpLaunch(sessionEnv))
+        return runCatching { services.mcpServers(sessionEnv, infantry) }.getOrNull()
+            ?: com.superiorsoftllc.infantry.harness.api.McpPlan(add = listOfNotNull(infantry))
+    }
 
     override fun watchLauncher(sessionEnv: Map<String, String>): String? = if (hook("watch")) services.watchLauncher(sessionEnv) else null
 

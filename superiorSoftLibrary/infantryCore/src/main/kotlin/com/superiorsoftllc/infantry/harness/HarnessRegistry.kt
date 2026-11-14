@@ -97,6 +97,14 @@ class HarnessRegistry(
     fun signInProblem(harnessId: String): String? =
         runCatching { resolve(harnessId)?.signInProblem() }.getOrNull()
 
+    /** MCP-REGISTRY-1: harness [harnessId]'s official MCP management, or null (none, unknown id, or a throw). */
+    fun mcp(harnessId: String): com.superiorsoftllc.infantry.harness.api.HarnessMcp? =
+        runCatching { resolve(harnessId)?.mcp() }.getOrNull()
+
+    /** MCP-REGISTRY-1: whether harness [harnessId]'s CLI loads the user's own MCP servers itself (false when unknown). */
+    fun loadsUserMcp(harnessId: String): Boolean =
+        runCatching { resolve(harnessId)?.loadsUserMcp() }.getOrNull() ?: false
+
     fun pluginIds(): List<String> = synchronized(lock) { plugins.keys.toList() }
 
     fun resolve(harnessId: String): Harness? = synchronized(lock) {

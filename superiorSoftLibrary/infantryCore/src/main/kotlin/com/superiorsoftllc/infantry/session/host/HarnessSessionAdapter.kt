@@ -77,6 +77,9 @@ interface AdapterSink {
     /** CLI-PTY-3: the harness saw the session's MCP server become [state] (CONNECTED / DISCONNECTED / RECONNECTING). Recorded only. */
     fun mcpState(state: String, reason: String?) {}
 
+    /** MCP-REGISTRY-1: every MCP server of the session as the harness sees it now (replaces the last report). Recorded only. */
+    fun mcpServers(statuses: List<com.superiorsoftllc.infantry.protocol.McpServerStatusView>) {}
+
     /** DENIED-LABEL-1: the harness refused one [tool] call; [prompted] = the owner was asked and did not approve. Default: dropped. */
     fun denied(tool: String, prompted: Boolean) {}
 
@@ -174,6 +177,9 @@ interface HostEvents {
 
     /** CLI-PTY-3: [AdapterSink.mcpState] for [sessionId]. */
     fun mcpState(sessionId: String, state: String, reason: String?) {}
+
+    /** MCP-REGISTRY-1: [AdapterSink.mcpServers] for [sessionId]. */
+    fun mcpServers(sessionId: String, statuses: List<com.superiorsoftllc.infantry.protocol.McpServerStatusView>) {}
 
     /** DENIED-LABEL-1: a tool call the harness refused; recorded as the session's last action and a chat notice. */
     fun denied(sessionId: String, tool: String, prompted: Boolean) {}

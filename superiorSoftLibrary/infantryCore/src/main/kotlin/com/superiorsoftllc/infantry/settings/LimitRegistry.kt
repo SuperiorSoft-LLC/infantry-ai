@@ -826,6 +826,32 @@ object LimitRegistry {
         "MODEL-CATALOG-1: how long ONE `models` request waits for a harness that has never listed its models before it answers that the harness is still listing (and how to pin a model id by hand), while the listing keeps running for the next request. Raise it on a host whose harness CLIs are slow to start; 0 = answer at once, never wait.",
         min = 0, zeroIsUnlimited = false,
     )
+    /** MCP-REGISTRY-1: a CLI's own MCP server list is cached per harness and project ([com.superiorsoftllc.infantry.provider.ListingCache]). */
+    val MCP_LIST_TTL_MS = LimitDef(
+        "limits.mcp.listTtlMs", 120_000, "ms",
+        "MCP-REGISTRY-1: how old a harness CLI's MCP server list may be before the MCP registry serves it anyway and re-reads it in the background (through the CLI's own `mcp list`). Every MCP screen, CLI call and session start asks for the list; 0 = re-read on every request.",
+        min = 0, zeroIsUnlimited = false,
+    )
+    val MCP_LIST_WAIT_MS = LimitDef(
+        "limits.mcp.listWaitMs", 4_000, "ms",
+        "MCP-REGISTRY-1: how long ONE MCP registry request waits for a harness CLI that has never listed its MCP servers before it answers without them (marked as still listing), while the listing keeps running for the next request; 0 = never wait.",
+        min = 0, zeroIsUnlimited = false,
+    )
+    val MCP_SERVERS_MAX = LimitDef(
+        "limits.mcp.serversMax", 200, "servers",
+        "MCP-REGISTRY-1: the most Infantry-owned MCP servers one scope (the app, or one project) may hold; an add past it is refused.",
+        min = 1, zeroIsUnlimited = false,
+    )
+    val MCP_GRANTS_MAX = LimitDef(
+        "limits.mcp.grantsMax", 1_000, "grants",
+        "MCP-REGISTRY-1: the most MCP grants (server + role / agent / ticket + purpose) kept at once; a grant past it is refused until one is revoked.",
+        min = 1, zeroIsUnlimited = false,
+    )
+    val MCP_PURPOSE_CHARS = LimitDef(
+        "limits.mcp.purposeChars", 500, "chars",
+        "MCP-REGISTRY-1: the longest purpose text an MCP grant may carry (why the agent gets the server).",
+        min = 1, zeroIsUnlimited = false,
+    )
     /** ONBOARD-1: how long an in-app harness sign-in (e.g. `claude auth login` from the first-run screen) waits for the owner. */
     val HARNESS_LOGIN_TIMEOUT_MS = LimitDef(
         "limits.harness.loginTimeoutMs", 900_000, "ms",
@@ -1245,6 +1271,7 @@ object LimitRegistry {
         RELATED_BRIEF_TICKETS, RELATED_BRIEF_FILES, RELATED_BRIEF_CHARS, RELATED_BLOCK_TICKETS, RELATED_BLOCK_FILES, RELATED_BLOCK_CHARS,
         PLUGIN_CALL_TIMEOUT_MS, PLUGIN_HANG_CEILING_MS, PLUGIN_GUARD_STRIKES, PLUGIN_GUARD_COOLDOWN_MS, PLUGIN_POOL_SIZE, PLUGIN_QUEUE_LIMIT, PLUGIN_TOOL_TIMEOUT_MS, PLUGIN_TOOL_MAX_TIMEOUT_MS, PLUGIN_CAPABILITY_TIMEOUT_MS, PLUGIN_ROUTE_RATE, PLUGIN_START_TIMEOUT_MS, PLUGIN_STOP_TIMEOUT_MS, PLUGIN_UNLOAD_CHECK_MS, PLUGIN_CATALOG_STALE_MS, PLUGIN_REFRESH_TIMEOUT_MS, PLUGIN_AUTO_RELOAD_ATTEMPTS, PLUGIN_AUTO_RELOAD_DELAY_MS,
         MODELS_CATALOG_TTL_MS, MODELS_CATALOG_WAIT_MS, CLI_ANSWER_TIMEOUT_MS, HARNESS_LOGIN_TIMEOUT_MS,
+        MCP_LIST_TTL_MS, MCP_LIST_WAIT_MS, MCP_SERVERS_MAX, MCP_GRANTS_MAX, MCP_PURPOSE_CHARS,
         RUN_MAX_SECRETS, SECRET_RENDER_MAX_BYTES, KEYSTORE_MAX_FIELDS, KEYSTORE_MAX_SECRETS,
         SANDBOX_MODE, USAGE_QUOTA_HIT_HOLD_MINUTES,
         HEALTH_DB_TIMEOUT_SECONDS, HEALTH_BRIEF_ENVIRONMENT, HEALTH_EVENT_LOG_MAX, HEALTH_HEARTBEAT_SECONDS, HEALTH_WATCHDOG_FAILURES, HEALTH_WATCHDOG_INTERVAL_SECONDS, HEALTH_WATCHDOG_TIMEOUT_SECONDS,

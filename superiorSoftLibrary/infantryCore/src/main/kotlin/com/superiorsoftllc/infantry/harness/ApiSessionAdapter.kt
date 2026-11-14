@@ -110,6 +110,9 @@ internal class ApiSessionAdapter(
         }
         override fun providerSession(id: String) = sink.providerSession(id)
         override fun mcpState(state: McpState, reason: String?) = sink.mcpState(state.name, reason)
+        override fun mcpServers(statuses: List<com.superiorsoftllc.infantry.harness.api.McpServerStatus>) = sink.mcpServers(
+            statuses.map { com.superiorsoftllc.infantry.protocol.McpServerStatusView(it.name, it.state.name.lowercase(), it.detail, it.toolCount) },
+        )
         override fun denied(tool: String, prompted: Boolean) = sink.denied(tool, prompted)
         override fun turnEnded(end: SessionTurnEnd, exitCode: Int?, reason: String?) {
             sink.turnEnded(TurnEnd.valueOf(end.name), exitCode, reason)

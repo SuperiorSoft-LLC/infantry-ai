@@ -34,6 +34,7 @@ object HarnessModulesWiring {
                 executableResolver.resolve(tool).path
             },
             mcpLaunch = { env -> InfantryMcp.launch(env).let { HarnessProcess(it.argv, env = it.env) } },
+            mcpServers = { env, infantry -> com.superiorsoftllc.infantry.mcp.McpService.current?.planForEnv(env, infantry)?.plan },
             watchLauncher = { env -> if (WatchHooks.on(env)) WatchHooks.launcher(infantryBin) ?: "infantry" else null },
             queryDb = { file, sql, params -> com.superiorsoftllc.infantry.stats.ReadOnlyDb.query(file, sql, params) },
             ask = { sessionId, q ->
