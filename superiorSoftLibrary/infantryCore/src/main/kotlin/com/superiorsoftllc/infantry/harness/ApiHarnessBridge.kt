@@ -141,6 +141,16 @@ class ApiCliHarness(
         api.signInProblem()?.takeIf { it.isNotBlank() }
     } catch (t: Throwable) { onFailure(PluginFailure(pluginId, PluginFailurePhase.RUN, t)); null }
 
+    /** MCP-REGISTRY-1: API 2.19 [ApiHarness.mcp]; an older plugin (or a throw) answers null, attributed. */
+    override fun mcp(): com.superiorsoftllc.infantry.harness.api.HarnessMcp? = try {
+        api.mcp
+    } catch (t: Throwable) { onFailure(PluginFailure(pluginId, PluginFailurePhase.RUN, t)); null }
+
+    /** MCP-REGISTRY-1: API 2.19 [ApiHarness.loadsUserMcp]; an older plugin (or a throw) answers false, attributed. */
+    override fun loadsUserMcp(): Boolean = try {
+        api.loadsUserMcp
+    } catch (t: Throwable) { onFailure(PluginFailure(pluginId, PluginFailurePhase.RUN, t)); false }
+
     /** H7b-1: API 2.10 [ApiHarness.mcpToolRule]; a throw is attributed and yields no rule. */
     override fun mcpToolRule(serverName: String): String? = try {
         api.mcpToolRule(serverName)

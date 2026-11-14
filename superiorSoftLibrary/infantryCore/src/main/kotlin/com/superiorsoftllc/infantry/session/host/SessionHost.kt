@@ -498,6 +498,8 @@ class SessionHost(
 
         override fun mcpState(state: String, reason: String?) = events.mcpState(slot.sessionId, state, reason)
 
+        override fun mcpServers(statuses: List<com.superiorsoftllc.infantry.protocol.McpServerStatusView>) = events.mcpServers(slot.sessionId, statuses)
+
         override fun denied(tool: String, prompted: Boolean) = events.denied(slot.sessionId, tool, prompted)
 
         override fun turnEnded(end: TurnEnd, exitCode: Int?, reason: String?) {

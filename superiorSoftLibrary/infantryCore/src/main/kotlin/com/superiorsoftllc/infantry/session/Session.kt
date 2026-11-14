@@ -243,6 +243,11 @@ data class SessionRecord(
     /** CLI-PTY-3: epoch millis of the last change of [mcp]; omitted with it. */
     @EncodeDefault(EncodeDefault.Mode.NEVER) val mcpChangedAt: Long? = null,
     /**
+     * Contract 1.154.0 (MCP-REGISTRY-1): every MCP server of the session as its harness reports it ([com.superiorsoftllc.infantry.session.SessionManager.reportMcpServers]);
+     * omitted when empty. Never a secret: name, state, a short detail and the tool count only.
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val mcpServers: List<com.superiorsoftllc.infantry.protocol.McpServerStatusView> = emptyList(),
+    /**
      * Contract 1.150.0 (CHAT-QUEUE-1): messages held while a turn runs, oldest first. The daemon sends the oldest as the next turn when
      * the session comes to rest; `queue_remove` takes one back, `queue_force` delivers one into the running turn. Persisted; omitted when empty.
      */

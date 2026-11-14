@@ -151,6 +151,7 @@ class DaemonCoreGuardTest {
             "keystore" to "secret storage behind the secrets the plugin API grants",
             "harness" to "the Harness / HarnessPlugin / HarnessRegistry abstraction (its pi, descriptor and install subfolders are not core; claude lives in Infantry_Claude, opencode in Infantry_OpenCode)",
             "runner" to "process-runner and watch mechanism; ToolProfiles are data on top of it",
+            "mcp" to "MCP-REGISTRY-1: the harness-neutral MCP registry, grants and walled per-session selection (names no harness or server)",
         )
 
         /** STAYS: not abstract, but cannot leave yet. Each reason names what holds it; DAEMON-PLUGINS-2 shrinks this list. */

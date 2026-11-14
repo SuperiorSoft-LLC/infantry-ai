@@ -60,6 +60,8 @@ object ActionCatalog {
         a("host.processes.read", READ, E.PROCESSES),
         a("host.processes.reap", DESTRUCTIVE, E.PROCESSES_REAP),
         a("host.health.read", READ, E.HEALTH),
+        // MCP-REGISTRY-1: listing, one server, the grants and a session's plan are reads; a test runs the CLI's own check.
+        a("mcp.read", READ, E.MCP_LIST, E.MCP_GET, E.MCP_GRANTS, E.MCP_PLAN, E.MCP_TEST),
         a("secrets.read", READ, E.SECRET_STATUS),
         // PACE-TREND-1 (b4e46daf): Infantry_Pace answers this frame from its daemon half, so it has no Envelope constant.
         a("pace.read", READ, "pace_get"),
@@ -96,6 +98,9 @@ object ActionCatalog {
         a("agents.swap", WRITE, E.SESSION_SWAP, E.AGENT_SWAP),
         a("agents.profile.save", WRITE, E.AGENT_SAVE),
         a("agents.profile.delete", DESTRUCTIVE, E.AGENT_DELETE),
+        // MCP-REGISTRY-1: adding, editing, enabling and granting MCP servers; removing a server or a grant is destructive.
+        a("mcp.write", WRITE, E.MCP_ADD, E.MCP_UPDATE, E.MCP_SET_ENABLED, E.MCP_ASSIGN),
+        a("mcp.remove", DESTRUCTIVE, E.MCP_REMOVE, E.MCP_REVOKE),
         a("agents.report", WRITE, E.BG_JOB, E.PROGRESS, E.WAITING),
         a("worktrees.remove", DESTRUCTIVE, E.WORKTREE_REMOVE),
         a("repo.set", WRITE, E.REPO),

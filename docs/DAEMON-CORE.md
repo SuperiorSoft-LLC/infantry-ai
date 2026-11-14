@@ -38,7 +38,7 @@ is listed in the guard's reason for its package and moves package-by-package in 
 `DaemonCoreGuardTest` holds the same table as code: a new package fails the build until it is classified, and a package
 that is renamed or deleted must leave the table. Lines in PLUGIN_NOW/PLUGIN_LATER/STAYS are the DAEMON-PLUGINS-2 target list.
 
-**CORE** (stays by definition): `protocol`, `daemon`, `policy`, `settings`, `db`, `keystore`, `harness`, `runner`.
+**CORE** (stays by definition): `protocol`, `daemon`, `policy`, `settings`, `db`, `keystore`, `harness`, `runner`, `mcp` (MCP-REGISTRY-1: the harness-neutral MCP registry, grants and walled per-session selection).
 
 **STAYS in core (reason)**
 | package | reason |

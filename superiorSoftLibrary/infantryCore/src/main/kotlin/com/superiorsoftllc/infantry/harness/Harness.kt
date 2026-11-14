@@ -172,6 +172,12 @@ interface Harness {
     /** RUNNER-CHECK-SIGNIN-1 (API 2.18.0): why this harness's CLI is not signed in here (the fix), or null (signed in, or unknown). Isolated by the implementor. */
     fun signInProblem(): String? = null
 
+    /** MCP-REGISTRY-1 (API 2.19.0): the CLI's own MCP servers through its official commands; null = not visible. Isolated by the implementor. */
+    fun mcp(): com.superiorsoftllc.infantry.harness.api.HarnessMcp? = null
+
+    /** MCP-REGISTRY-1 (API 2.19.0): true = the CLI loads the user's own MCP servers itself (the host only denies). Isolated by the implementor. */
+    fun loadsUserMcp(): Boolean = false
+
     /** HARNESS H7b-1 (API 2.10.0): the argv a run's [approval] adds (a permission-mode flag); empty = none. */
     fun approvalArgs(approval: ToolApproval): List<String> = emptyList()
 
