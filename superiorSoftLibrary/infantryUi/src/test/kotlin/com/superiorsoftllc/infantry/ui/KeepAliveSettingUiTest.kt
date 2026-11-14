@@ -67,6 +67,7 @@ class KeepAliveSettingUiTest {
             val controller = Controller(scope)
             runDesktopComposeUiTest(1700, 1000) {
                 setContent { App(controller, "ws://127.0.0.1:$port/ws", null) }
+                dismissSetupWizard(controller)
                 // The window asks for the setting after `ready`; the daemon's default is 30.
                 waitUntil(timeoutMillis = 20_000) { controller.state.value.keepAliveMinutes == 30 }
 

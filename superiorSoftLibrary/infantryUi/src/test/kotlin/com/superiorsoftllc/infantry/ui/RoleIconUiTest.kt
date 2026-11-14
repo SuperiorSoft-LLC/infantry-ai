@@ -80,6 +80,7 @@ class RoleIconUiTest {
             val controller = Controller(scope)
             runDesktopComposeUiTest(1700, 1000) {
                 setContent { App(controller, "ws://127.0.0.1:$port/ws", null) }
+                dismissSetupWizard(controller)
                 waitUntil(timeoutMillis = daemonWaitMs) { controller.state.value.connection.isLive && controller.state.value.roles.any { it.id == "qa" } }
                 assertEquals(true, controller.state.value.connection.sendsRoleIcon, "the in-process daemon speaks contract 1.93.0")
 

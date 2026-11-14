@@ -71,6 +71,7 @@ class RoleEditUiTest {
             val controller = Controller(scope)
             runDesktopComposeUiTest(1700, 1000) {
                 setContent { App(controller, "ws://127.0.0.1:$port/ws", null) }
+                dismissSetupWizard(controller)
                 waitUntil(timeoutMillis = daemonWaitMs) { controller.state.value.connection.isLive && controller.state.value.roles.any { it.id == "backend" } }
 
                 onNodeWithText("Roles  ^5").performClick()

@@ -66,6 +66,7 @@ class ChatPanelUiTest {
             runDesktopComposeUiTest(1700, 1000) {
                 controller.connect("ws://127.0.0.1:$port/ws", null)
                 waitUntil(timeoutMillis = 20_000) { controller.state.value.connection.isLive }
+                dismissSetupWizard(controller)
                 body(controller)
             }
         } finally {

@@ -60,6 +60,7 @@ internal fun withConfigDialogLink(tabs: TabFactory, contract: String = "1.142.0"
             setContent { App(controller, "ws://127.0.0.1:1/ws", null, tabs = tabs) }
             link.push(Envelope(Envelope.READY, "contract=$contract provider=stub instance=i1"))
             waitUntil(timeoutMillis = 10_000) { controller.state.value.connection.isLive }
+            dismissSetupWizard(controller)
             frames.forEach(link::push)
             waitForIdle()
             waitUntil(timeoutMillis = 10_000) {

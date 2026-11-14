@@ -80,6 +80,7 @@ class BoardProjectScopeUiTest {
             runDesktopComposeUiTest(1700, 1000) {
                 setContent { App(controller, "ws://127.0.0.1:$port/ws", null) }
                 waitUntil(timeoutMillis = 20_000) { controller.state.value.connection.isLive }
+                dismissSetupWizard(controller)
 
                 // Title bar (M2-7): two projects made through the "+" New Project modal; each is selected once made.
                 fun create(name: String) {

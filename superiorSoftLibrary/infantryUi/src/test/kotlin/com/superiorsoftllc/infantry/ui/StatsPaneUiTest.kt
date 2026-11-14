@@ -244,6 +244,7 @@ class StatsPaneUiTest {
                 }
                 link.push(Envelope(Envelope.READY, "contract=1.92.0 provider=stub instance=i1"))
                 waitUntil(timeoutMillis = 10_000) { controller.state.value.connection.isLive }
+                dismissSetupWizard(controller)
                 waitForIdle()
                 assertEquals(null, controller.state.value.selectedId)
                 onNodeWithText("Select an agent to see its session's statistics.").assertExists()

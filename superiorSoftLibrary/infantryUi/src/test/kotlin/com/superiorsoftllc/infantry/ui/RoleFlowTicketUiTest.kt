@@ -91,6 +91,7 @@ class RoleFlowTicketUiTest {
             val controller = Controller(scope)
             runDesktopComposeUiTest(1700, 1000) {
                 setContent { App(controller, "ws://127.0.0.1:$port/ws", null) }
+                dismissSetupWizard(controller)
                 waitUntil(timeoutMillis = daemonWaitMs) { controller.state.value.connection.isLive && controller.state.value.modelCatalog.any { it.provider == "second" } }
 
                 // Create + bind the role (alpha/one, effort high).

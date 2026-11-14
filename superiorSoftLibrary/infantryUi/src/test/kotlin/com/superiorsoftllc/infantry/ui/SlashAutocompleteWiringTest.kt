@@ -88,6 +88,7 @@ class SlashAutocompleteWiringTest {
             runDesktopComposeUiTest(1700, 1000) {
                 setContent { App(controller, "ws://127.0.0.1:$port/ws", null) }
                 waitUntil(timeoutMillis = daemonWaitMs) { controller.state.value.connection.isLive }
+                dismissSetupWizard(controller)
                 onNodeWithContentDescription("New agent").performClick()
                 waitForIdle()
                 onNodeWithText("Task for a NEW agent", substring = true).performTextInput("hello")

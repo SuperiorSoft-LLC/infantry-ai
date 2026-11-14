@@ -126,6 +126,7 @@ class SidebarDeleteUiTest {
                 waitUntil(timeoutMillis = 20_000) {
                     controller.state.value.connection.isLive && controller.state.value.roles.isNotEmpty()
                 }
+                dismissSetupWizard(controller)
 
                 // Spawn two sessions; both finish quickly and settle as history (IDLE) rows.
                 assertSent(runBlocking { controller.spawn("first task") })
@@ -171,6 +172,7 @@ class SidebarDeleteUiTest {
             val controller = Controller(scope)
             runDesktopComposeUiTest(1700, 1000) {
                 setContent { App(controller, "ws://127.0.0.1:$port/ws", null) }
+                dismissSetupWizard(controller)
                 waitUntil(timeoutMillis = 20_000) {
                     controller.state.value.connection.isLive && controller.state.value.roles.isNotEmpty()
                 }

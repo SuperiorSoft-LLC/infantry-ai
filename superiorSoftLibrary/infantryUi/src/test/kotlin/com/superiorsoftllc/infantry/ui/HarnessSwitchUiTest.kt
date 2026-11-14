@@ -109,6 +109,7 @@ class HarnessSwitchUiTest {
             val controller = Controller(scope, agentConfirmMs = daemonWaitMs)
             runDesktopComposeUiTest(1700, 1000) {
                 setContent { App(controller, "ws://127.0.0.1:$port/ws", null) }
+                dismissSetupWizard(controller)
                 waitUntil(timeoutMillis = daemonWaitMs) {
                     val s = controller.state.value
                     s.connection.isLive && s.roles.isNotEmpty() && s.providers.any { it.id == "second" } && s.providers.any { it.id == "third" }

@@ -81,6 +81,7 @@ class RolesProfileModalUiTest {
                 }
                 link.push(Envelope(Envelope.READY, "contract=1.92.0 provider=stub instance=i1"))
                 waitUntil(timeoutMillis = 10_000) { controller.state.value.connection.isLive }
+                dismissSetupWizard(controller)
                 link.push(Envelope(Envelope.ROLES, json.encodeToString(ListSerializer(Role.serializer()), listOf(backend))))
                 link.push(Envelope(Envelope.AGENTS, json.encodeToString(ListSerializer(AgentProfile.serializer()), listOf(existing))))
                 waitUntil(timeoutMillis = 10_000) { onAllNodesWithTag("role-row-name:backend", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }

@@ -156,6 +156,7 @@ class TicketImagesUiTest {
                 CompositionLocalProvider(LocalPlatformHost provides PickingHost(png)) { App(c, "ws://127.0.0.1:$port/ws", null) }
             }
             waitUntil(timeoutMillis = daemonWaitMs) { c.state.value.connection.isLive }
+            dismissSetupWizard(c)
             assertIs<CommandResult.Sent>(runBlocking { c.saveProject("Images project") })
             val project = until("project listed", c) { s -> s.projects.any { it.name == "Images project" } }.projects.single { it.name == "Images project" }
             runBlocking { c.selectProject(project.id) }

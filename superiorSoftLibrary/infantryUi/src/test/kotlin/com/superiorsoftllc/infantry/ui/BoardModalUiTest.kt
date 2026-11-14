@@ -81,6 +81,7 @@ class BoardModalUiTest {
             runDesktopComposeUiTest(1600, 900) {
                 setContent { App(controller, "ws://127.0.0.1:$port/ws", null) }
                 waitUntil(timeoutMillis = 20_000) { controller.state.value.connection.isLive }
+                dismissSetupWizard(controller)
                 body(controller)
             }
         } finally {

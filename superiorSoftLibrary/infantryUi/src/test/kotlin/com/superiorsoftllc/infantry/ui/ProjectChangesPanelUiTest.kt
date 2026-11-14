@@ -82,6 +82,7 @@ class ProjectChangesPanelUiTest {
                 }
                 link.push(Envelope(Envelope.READY, "contract=$contract provider=stub instance=i1"))
                 waitUntil(timeoutMillis = 10_000) { controller.state.value.connection.isLive }
+                dismissSetupWizard(controller)
                 body(link, controller)
             }
         } finally {

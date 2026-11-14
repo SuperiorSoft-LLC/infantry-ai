@@ -59,6 +59,7 @@ class PromptsSkillsModalUiTest {
     private fun ComposeUiTest.goLive(link: LibraryFakeDaemonClient, controller: Controller) {
         link.push(Envelope(Envelope.READY, "contract=1.92.0 provider=stub instance=i1"))
         waitUntil(timeoutMillis = 10_000) { controller.state.value.connection.isLive }
+        dismissSetupWizard(controller)
     }
 
     @Test fun `prompts - the plus icon opens the modal, save adds the prompt, cancel discards, edit pre-fills`() {

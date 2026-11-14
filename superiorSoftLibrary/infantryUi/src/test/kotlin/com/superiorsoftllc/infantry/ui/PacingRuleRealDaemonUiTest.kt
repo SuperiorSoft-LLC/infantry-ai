@@ -87,6 +87,7 @@ class PacingRuleRealDaemonUiTest {
             runDesktopComposeUiTest(1000, 1400) {
                 c.connect("ws://127.0.0.1:$port/ws", null)
                 waitUntil(timeoutMillis = 20_000) { c.state.value.connection.isLive }
+                dismissSetupWizard(c)
                 runBlocking { c.refreshUsage(force = true) }
                 waitUntil(timeoutMillis = 15_000) { c.state.value.usageReport?.meters?.any { it.projectedPercent != null } == true }
                 assertEquals("pace", rule()?.mode)

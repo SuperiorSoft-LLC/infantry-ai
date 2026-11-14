@@ -91,6 +91,7 @@ class TicketModalUiTest {
             runDesktopComposeUiTest(1700, 1000) {
                 setContent { App(controller, "ws://127.0.0.1:$port/ws", null) }
                 waitUntil(timeoutMillis = daemonWaitMs) { controller.state.value.connection.isLive }
+                dismissSetupWizard(controller)
                 onNodeWithTag(NEW_PROJECT_BUTTON_TAG).performClick()
                 onNodeWithTag(NEW_PROJECT_NAME_TAG).performTextInput("Alpha")
                 onNodeWithTag(NEW_PROJECT_CREATE_TAG).performClick()
