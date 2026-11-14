@@ -122,6 +122,7 @@ internal fun assigneeRole(deps: BoardDeps, agentId: String): String? =
         ?: deps.agent(agentId)?.role
 
 /** M2-14: the board's Epic filter anchor, its options (`all`, `none`, then each epic id) and a card's epic chip. */
+const val TICKET_ARCHIVE_TAG_PREFIX = "ticket-archive-"
 const val BOARD_EPIC_FILTER_TAG = "board-epic-filter"
 const val BOARD_EPIC_FILTER_OPTION_TAG_PREFIX = "board-epic-filter-option-"
 /** M2-14: the new-ticket form's Epic picker anchor and its options (`none`, then each epic id). */
@@ -693,6 +694,8 @@ class BoardCardHost internal constructor(
     fun start() = item.onStart()
     suspend fun move(status: String): CommandResult = deps.tickets.move(ticket.id, status)
     fun delete() { scope.launch { deps.tickets.delete(ticket.id) } }
+    /** Reversible clean-up: `infantry_ticket_archive`; the Archive view restores it. */
+    fun archive() { scope.launch { deps.tickets.pluginTool("infantry_ticket_archive", kotlinx.serialization.json.buildJsonObject { put("ids", kotlinx.serialization.json.JsonArray(listOf(kotlinx.serialization.json.JsonPrimitive(ticket.id)))) }) } }
     fun openAgent(sessionId: String) = board.onOpenAgent(sessionId)
     /** EPIC-MOVE-1: the card is ticked for a bulk move. */
     val selected: Boolean get() = board.selection.has(ticket.id)
@@ -852,6 +855,7 @@ fun TicketCardActionsSection(card: BoardCardHost, modifier: Modifier = Modifier)
     val canMove = card.can("board.ticket.move")
     // Start moves the ticket to In progress (ticket_move); the daemon then starts its agent.
     val canStart = card.can("board.ticket.move")
+    val canArchive = card.can("board.archive.write")
     val canDelete = card.can("board.ticket.delete", com.superiorsoftllc.infantry.plugin.api.ActionKind.DESTRUCTIVE)
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
         when (t.status) {
@@ -875,6 +879,7 @@ fun TicketCardActionsSection(card: BoardCardHost, modifier: Modifier = Modifier)
         // TICKET-COMMENTS-1: the full-open modal for this ticket (the inline editor stays).
         val shellBoard = com.superiorsoftllc.infantry.ui.shell.LocalShellContext.current?.board
         if (shellBoard != null) TextButton(onClick = { shellBoard.openTicket(t.id) }, modifier = Modifier.testTag(TICKET_OPEN_TAG_PREFIX + t.id)) { Text("Open", fontSize = 11.sp) }
+        TextButton(onClick = { card.archive() }, enabled = canArchive, modifier = Modifier.testTag(TICKET_ARCHIVE_TAG_PREFIX + t.id)) { Text("Archive", fontSize = 11.sp) }
         if (card.open) TextButton(onClick = { card.delete() }, enabled = canDelete) { Text("Delete", color = Palette.Danger, fontSize = 11.sp) }
     }
 }

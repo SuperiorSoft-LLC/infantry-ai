@@ -9,8 +9,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import com.superiorsoftllc.infantry.ui.TextButton
+import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -40,6 +45,14 @@ fun TicketModal(ticketId: String, onClose: () -> Unit) {
     ) {
         Row(Modifier.fillMaxWidth().background(Palette.Panel).padding(horizontal = 8.dp, vertical = 6.dp)) {
             TextButton(onClick = onClose, modifier = Modifier.testTag(TICKET_MODAL_BACK_TAG)) { Text("← Back", fontSize = 13.sp) }
+            Spacer(Modifier.weight(1f))
+            if (ticket != null) {
+                val scope = rememberCoroutineScope()
+                TextButton(
+                    onClick = { scope.launch { ctx.tickets.pluginTool("infantry_ticket_archive", buildJsonObject { put("ids", JsonArray(listOf(JsonPrimitive(ticket.id)))) }); onClose() } },
+                    enabled = deps.can("board.archive.write"), modifier = Modifier.testTag(TICKET_ARCHIVE_TAG_PREFIX + ticket.id),
+                ) { Text("Archive", fontSize = 13.sp) }
+            }
         }
         HorizontalDivider(color = Palette.Border)
         Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
