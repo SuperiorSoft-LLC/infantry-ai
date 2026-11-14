@@ -38,6 +38,11 @@ class SetupWizardTest {
         assertEquals(false, SetupWizard.needed(report(h("pi", true)), emptyList(), emptyList()))
         val free = listOf(ProviderInfo("opencode", models = listOf("opencode/big-pickle", "opencode/grok-code-free")))
         assertEquals(false, SetupWizard.needed(report(h("opencode", true)), listOf(key("opencode")), free))
+        // The model ids arrive in the `models` frame, or only as the provider's default: both count (the sandbox run's case).
+        val catalog = listOf(com.superiorsoftllc.infantry.ui.protocol.ProviderModels("opencode", "opencode", "OpenCode", listOf("opencode/deepseek-v4.1-flash-free")))
+        assertEquals(false, SetupWizard.needed(report(h("opencode", true)), listOf(key("opencode")), listOf(ProviderInfo("opencode")), catalog))
+        assertEquals(false, SetupWizard.needed(report(h("opencode", true)), listOf(key("opencode")), listOf(ProviderInfo("opencode", defaultModel = "opencode/x-free"))))
+        assertEquals("opencode/deepseek-v4.1-flash-free", SetupWizard.firstModel("opencode", listOf(key("opencode")), listOf(ProviderInfo("opencode")), catalog))
     }
 
     @Test

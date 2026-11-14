@@ -81,7 +81,7 @@ object ShellSetupWizard : Block("infantry.shell.setupWizard", "infantry.shell.se
         LaunchedEffect(asked) { if (!asked) { asked = true; s.controller.checkHarnesses() } }
         val report = state.harnessInstall
         val secrets = state.secrets?.secrets
-        val needed = SetupWizard.needed(report, secrets, state.providers)
+        val needed = SetupWizard.needed(report, secrets, state.providers, state.modelCatalog)
         // Once per app start: opened by itself while nothing can answer.
         var decided by remember { mutableStateOf(false) }
         LaunchedEffect(needed) {
@@ -116,8 +116,8 @@ object ShellSetupWizard : Block("infantry.shell.setupWizard", "infantry.shell.se
             s.controller.refreshModelCatalog()
             if (step == SetupWizard.Step.HARNESS && sawMissing) step = SetupWizard.Step.SIGN_IN
         }
-        LaunchedEffect(step, pick, pickedInstalled, secrets, state.providers) {
-            if (step == SetupWizard.Step.SIGN_IN && pick != null && SetupWizard.credentialOk(pick!!, secrets, state.providers)) step = SetupWizard.Step.FIRST_AGENT
+        LaunchedEffect(step, pick, pickedInstalled, secrets, state.providers, state.modelCatalog) {
+            if (step == SetupWizard.Step.SIGN_IN && pick != null && SetupWizard.credentialOk(pick!!, secrets, state.providers, state.modelCatalog)) step = SetupWizard.Step.FIRST_AGENT
         }
         AhqAlertDialog(
             onDismissRequest = {},
@@ -147,6 +147,8 @@ object ShellSetupWizard : Block("infantry.shell.setupWizard", "infantry.shell.se
                             Text(if (busy) "Installing..." else "Install ${picked?.label ?: ""}".trim())
                         }
                     }
+                    // An optional key never blocks: Continue tries the first agent, which says plainly if it cannot answer.
+                    SetupWizard.Step.SIGN_IN -> TextButton({ step = SetupWizard.Step.FIRST_AGENT }, Modifier.testTag(SETUP_NEXT_TAG)) { Text("Continue") }
                     SetupWizard.Step.FIRST_AGENT -> TextButton({ close() }, Modifier.testTag(SETUP_NEXT_TAG)) { Text("Done") }
                     else -> {}
                 }
@@ -243,7 +245,7 @@ object ShellSetupWizard : Block("infantry.shell.setupWizard", "infantry.shell.se
             if (sent) return@LaunchedEffect
             sent = true
             s.controller.refreshModelCatalog()
-            s.controller.pickModel(PickedModel(id, SetupWizard.firstModel(id, secrets, s.state.providers)))
+            s.controller.pickModel(PickedModel(id, SetupWizard.firstModel(id, secrets, s.state.providers, s.state.modelCatalog)))
             val r = s.controller.spawn(SetupWizard.HELLO_PROMPT)
             if (r is com.superiorsoftllc.infantry.ui.net.CommandResult.Refused) refused = r.reason
         }

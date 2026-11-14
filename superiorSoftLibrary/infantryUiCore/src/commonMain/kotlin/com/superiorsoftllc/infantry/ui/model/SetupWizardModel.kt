@@ -5,6 +5,7 @@ package com.superiorsoftllc.infantry.ui.model
 import com.superiorsoftllc.infantry.ui.protocol.HarnessInstallReport
 import com.superiorsoftllc.infantry.ui.protocol.HarnessInstallStatus
 import com.superiorsoftllc.infantry.ui.protocol.ProviderInfo
+import com.superiorsoftllc.infantry.ui.protocol.ProviderModels
 import com.superiorsoftllc.infantry.ui.protocol.SecretRow
 
 /**
@@ -28,24 +29,31 @@ object SetupWizard {
 
     fun keyRow(id: String, secrets: List<SecretRow>): SecretRow? = secrets.firstOrNull { it.name == "harness.$id.key" }
 
-    fun freeModels(id: String, providers: List<ProviderInfo>): List<String> =
-        providers.firstOrNull { it.id == id }?.models.orEmpty().filter { it.contains("free", ignoreCase = true) }
+    /**
+     * The free models [id] offers: from the `models` frame ([catalog], where the model ids live), the provider's own list and its
+     * default model (opencode's default is a free one).
+     */
+    fun freeModels(id: String, providers: List<ProviderInfo>, catalog: List<ProviderModels> = emptyList()): List<String> {
+        val p = providers.firstOrNull { it.id == id }
+        return (listOfNotNull(p?.defaultModel) + p?.models.orEmpty() + catalog.filter { it.provider == id }.flatMap { it.models })
+            .filter { it.contains("free", ignoreCase = true) }.distinct()
+    }
 
     /** True when [id] can answer without asking the user for anything more. */
-    fun credentialOk(id: String, secrets: List<SecretRow>, providers: List<ProviderInfo>): Boolean {
+    fun credentialOk(id: String, secrets: List<SecretRow>, providers: List<ProviderInfo>, catalog: List<ProviderModels> = emptyList()): Boolean {
         val row = keyRow(id, secrets) ?: return true
-        return row.set || row.signedIn == "true" || row.loginState == LOGIN_DONE || row.usesSecret.isNotBlank() || freeModels(id, providers).isNotEmpty()
+        return row.set || row.signedIn == "true" || row.loginState == LOGIN_DONE || row.usesSecret.isNotBlank() || freeModels(id, providers, catalog).isNotEmpty()
     }
 
     /** The harness ids that can answer now. */
-    fun talkable(report: HarnessInstallReport, secrets: List<SecretRow>, providers: List<ProviderInfo>): List<String> =
-        report.harnesses.filter { installed(it) && credentialOk(it.id, secrets, providers) }.map { it.id }
+    fun talkable(report: HarnessInstallReport, secrets: List<SecretRow>, providers: List<ProviderInfo>, catalog: List<ProviderModels> = emptyList()): List<String> =
+        report.harnesses.filter { installed(it) && credentialOk(it.id, secrets, providers, catalog) }.map { it.id }
 
     /** Whether the setup must open by itself: null while the daemon has not answered yet (never open on a guess). */
-    fun needed(report: HarnessInstallReport?, secrets: List<SecretRow>?, providers: List<ProviderInfo>): Boolean? {
+    fun needed(report: HarnessInstallReport?, secrets: List<SecretRow>?, providers: List<ProviderInfo>, catalog: List<ProviderModels> = emptyList()): Boolean? {
         if (report == null || secrets == null) return null
         if (report.harnesses.isEmpty()) return null
-        return talkable(report, secrets, providers).isEmpty()
+        return talkable(report, secrets, providers, catalog).isEmpty()
     }
 
     /** Where the setup starts: Node only while npm is missing and nothing is installed yet; then the pick; then sign-in. */
@@ -62,11 +70,11 @@ object SetupWizard {
      * The model of the first agent: a free model when the harness has no credential set (so it answers at once), else the
      * provider's default; null = let the daemon pick the provider's default.
      */
-    fun firstModel(id: String, secrets: List<SecretRow>, providers: List<ProviderInfo>): String? {
+    fun firstModel(id: String, secrets: List<SecretRow>, providers: List<ProviderInfo>, catalog: List<ProviderModels> = emptyList()): String? {
         val provider = providers.firstOrNull { it.id == id } ?: return null
         val row = keyRow(id, secrets)
         val hasCredential = row == null || row.set || row.signedIn == "true" || row.loginState == LOGIN_DONE || row.usesSecret.isNotBlank()
-        if (!hasCredential) freeModels(id, providers).firstOrNull()?.let { return it }
+        if (!hasCredential) freeModels(id, providers, catalog).firstOrNull()?.let { return it }
         return provider.defaultModel ?: provider.models?.firstOrNull()
     }
 
