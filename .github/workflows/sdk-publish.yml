@@ -102,6 +102,8 @@ jobs:
           ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.MAVEN_SIGNING_KEY }}
           ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.MAVEN_SIGNING_PASSWORD }}
         run: bash scripts/sdk-central-bundle.sh -Pinfantry.central.sign=true
+      - name: Skip components already on Maven Central (immutable; SDK-PUB-4)
+        run: bash scripts/sdk-central-prune.sh
       - name: Upload to Maven Central
         env:
           MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}

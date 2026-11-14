@@ -40,7 +40,17 @@ while :; do
   case "$state" in
     PUBLISHED) echo "sdk-central-upload: published"; exit 0 ;;
     VALIDATED) [ "$type" = "USER_MANAGED" ] && { echo "sdk-central-upload: validated; release it in the Central Portal"; exit 0; } ;;
-    FAILED) echo "sdk-central-upload: deployment failed:" >&2; printf '%s\n' "$status" >&2; exit 1 ;;
+    FAILED)
+      echo "sdk-central-upload: deployment failed:" >&2; printf '%s\n' "$status" >&2
+      # SDK-PUB-4: one ::error:: line per refused component, so the run page says why.
+      printf '%s' "$status" | python3 -I -c '
+import json, sys
+try: errs = json.load(sys.stdin).get("errors") or {}
+except Exception: errs = {}
+for purl, msgs in errs.items():
+    for m in (msgs if isinstance(msgs, list) else [msgs]): print("::error title=Central refused::%s: %s" % (purl, m))
+' || true
+      exit 1 ;;
   esac
   [ "$waited" -ge "$timeout" ] && { echo "sdk-central-upload: still $state after ${timeout}s; check deployment $id in the Portal" >&2; exit 1; }
   sleep "$poll"; waited=$((waited + poll))
