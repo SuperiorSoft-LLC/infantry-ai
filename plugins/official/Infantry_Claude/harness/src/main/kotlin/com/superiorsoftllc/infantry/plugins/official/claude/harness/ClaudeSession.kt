@@ -71,6 +71,7 @@ class ClaudeSession(
         return ClaudeCommand.command(
             executable = exe,
             disallowedTools = plan.disallowed,
+            chrome = plan.chrome,
             model = ClaudeCommand.effectiveModel(request.model),
             permissionMode = ClaudeCommand.permissionMode(request.toolApproval),
             mcpConfigs = ClaudeCommand.mcpConfigs(ClaudeCommand.userMcpConfigs() + plan.configs, mcpCommand, mcpEnv),

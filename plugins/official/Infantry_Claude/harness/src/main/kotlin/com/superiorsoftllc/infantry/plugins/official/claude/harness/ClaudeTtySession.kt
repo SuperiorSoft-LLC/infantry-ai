@@ -106,6 +106,7 @@ class ClaudeTtySession(
         return ClaudeCommand.interactiveCommand(
             executable = exe,
             disallowedTools = plan.disallowed,
+            chrome = plan.chrome,
             model = ClaudeCommand.effectiveModel(request.model),
             permissionMode = ClaudeCommand.permissionMode(request.toolApproval),
             mcpConfigs = ClaudeCommand.mcpConfigs(
