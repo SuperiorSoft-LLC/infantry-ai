@@ -21,6 +21,12 @@ import androidx.compose.ui.graphics.luminance
 import com.superiorsoftllc.infantry.ui.model.ThemeSettings
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import com.superiorsoftllc.infantry.ui.generated.resources.Res
+import com.superiorsoftllc.infantry.ui.generated.resources.inter_bold
+import com.superiorsoftllc.infantry.ui.generated.resources.inter_medium
+import com.superiorsoftllc.infantry.ui.generated.resources.inter_regular
+import org.jetbrains.compose.resources.Font
 import androidx.compose.ui.unit.sp
 
 /** Neutral tones of one theme mode; the accent is chosen separately (THEME-1). */
@@ -104,6 +110,17 @@ private fun schemeFor(theme: ThemeSettings): ColorScheme {
 val Mono = FontFamily.Monospace
 
 /**
+ * FONT-1: the UI's proportional font (Inter, SIL OFL, bundled under composeResources/font). It is the theme default;
+ * [Mono] is for code, commands, paths, terminal output and diffs only.
+ */
+@Composable
+fun interFamily(): FontFamily = FontFamily(
+    Font(Res.font.inter_regular, FontWeight.Normal),
+    Font(Res.font.inter_medium, FontWeight.Medium),
+    Font(Res.font.inter_bold, FontWeight.Bold),
+)
+
+/**
  * Selected text must stay visible and copyable (ticket d0b9bdcf). Compose's default selection tint is the accent at
  * low alpha, which vanishes on the near-black dark background. The highlight is an accent tint strong enough to read
  * as a block behind the unchanged text colour, and the handles take the accent itself.
@@ -118,7 +135,17 @@ private fun selectionColorsFor(theme: ThemeSettings): TextSelectionColors {
 
 @Composable
 fun InfantryTheme(content: @Composable () -> Unit) {
-    val base = Typography()
+    val inter = interFamily()
+    val base = Typography().let { t ->
+        t.copy(
+            displayLarge = t.displayLarge.copy(fontFamily = inter), displayMedium = t.displayMedium.copy(fontFamily = inter),
+            displaySmall = t.displaySmall.copy(fontFamily = inter), headlineLarge = t.headlineLarge.copy(fontFamily = inter),
+            headlineMedium = t.headlineMedium.copy(fontFamily = inter), headlineSmall = t.headlineSmall.copy(fontFamily = inter),
+            titleLarge = t.titleLarge.copy(fontFamily = inter), titleMedium = t.titleMedium.copy(fontFamily = inter),
+            bodyLarge = t.bodyLarge.copy(fontFamily = inter), labelLarge = t.labelLarge.copy(fontFamily = inter),
+            labelMedium = t.labelMedium.copy(fontFamily = inter),
+        )
+    }
     val theme = Palette.theme
     val scheme = remember(theme) { schemeFor(theme) }
     val selection = remember(theme) { selectionColorsFor(theme) }
@@ -128,12 +155,12 @@ fun InfantryTheme(content: @Composable () -> Unit) {
         // UI-SHAPE-1: Material's outlined text field reads shapes.extraSmall, so it takes the shared field corner.
         shapes = androidx.compose.material3.Shapes(extraSmall = Palette.FieldShape),
         typography = base.copy(
-            bodyMedium = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-            bodySmall = TextStyle(fontSize = 11.sp, lineHeight = 15.sp),
-            labelSmall = TextStyle(fontSize = 10.sp, lineHeight = 13.sp),
-            titleSmall = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+            bodyMedium = TextStyle(fontFamily = inter, fontSize = 13.sp, lineHeight = 18.sp),
+            bodySmall = TextStyle(fontFamily = inter, fontSize = 11.sp, lineHeight = 15.sp),
+            labelSmall = TextStyle(fontFamily = inter, fontSize = 10.sp, lineHeight = 13.sp),
+            titleSmall = TextStyle(fontFamily = inter, fontSize = 13.sp, lineHeight = 18.sp),
         ),
-        content = content,
+        content = { androidx.compose.material3.ProvideTextStyle(TextStyle(fontFamily = inter), content) },
     )
     }
 }
