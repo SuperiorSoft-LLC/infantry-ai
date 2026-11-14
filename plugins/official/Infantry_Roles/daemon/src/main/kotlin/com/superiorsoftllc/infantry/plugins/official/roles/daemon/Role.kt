@@ -47,6 +47,9 @@ data class Role(
     /** ROLE-PLUGIN-1: the card types and tool names the role prefers, by id, from any module. Shape the briefing; never gate. */
     val cards: List<String> = emptyList(),
     val tools: List<String> = emptyList(),
+    /** MCP-SELECT-1c: the MCP servers this role's sessions are granted and why (walled otherwise); synced to the registry's role grants on save. */
+    val mcpServers: List<String> = emptyList(),
+    val mcpPurpose: String = "",
 ) {
     companion object {
         /** The accepted `responseDetail` values. */

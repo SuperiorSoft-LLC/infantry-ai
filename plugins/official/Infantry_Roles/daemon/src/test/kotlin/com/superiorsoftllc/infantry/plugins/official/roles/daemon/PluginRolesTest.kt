@@ -14,6 +14,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 /** ROLE-PLUGIN-1: roles a module declares: seed if absent, never overwrite an owner edit, disabled while the module is gone. */
@@ -147,5 +148,19 @@ class PluginRolesTest {
         service.save(RoleSave(id = "hybrid", name = "Hybrid", persona = "x", cards = emptyList()))
         assertEquals(emptyList(), service.role("hybrid")!!.cards, "an empty list clears")
         assertEquals(listOf("infantry_ticket_get"), service.role("hybrid")!!.tools, "null keeps")
+    }
+
+    @Test
+    fun mcpBlockRoundTripsKeepsClearsAndNeedsAPurpose() {
+        assertEquals(emptyList(), service.role("hybrid")?.mcpServers.orEmpty(), "no block = walled")
+        service.save(RoleSave(id = "hybrid", name = "Hybrid", persona = "x", mcp = listOf("pw", "docs"), mcpPurpose = "UI checks"))
+        val back = RoleService(File(dir, "roles")).role("hybrid")!!
+        assertEquals(listOf("pw", "docs"), back.mcpServers)
+        assertEquals("UI checks", back.mcpPurpose)
+        service.save(RoleSave(id = "hybrid", name = "Hybrid", persona = "y"))
+        assertEquals(listOf("pw", "docs"), service.role("hybrid")!!.mcpServers, "null keeps")
+        assertFailsWith<IllegalArgumentException> { service.save(RoleSave(id = "hybrid", name = "Hybrid", persona = "y", mcp = listOf("pw"), mcpPurpose = " ")) }
+        service.save(RoleSave(id = "hybrid", name = "Hybrid", persona = "y", mcp = emptyList()))
+        assertEquals(emptyList(), service.role("hybrid")!!.mcpServers, "an empty list walls the role again")
     }
 }

@@ -102,6 +102,17 @@ data class McpServerInput(
     val enabled: Boolean = true,
 )
 
+@Serializable
+data class McpDeclareInput(
+    /** `role` | `ticket` | `agent`. */
+    val scope: String,
+    val target: String,
+    val projectId: String? = null,
+    val servers: List<String> = emptyList(),
+    val purpose: String = "",
+    val declaredBy: String = "owner",
+)
+
 /**
  * The payload of every `mcp_*` frame; each frame reads the fields it needs. [target]: [MCP_TARGET_INFANTRY] or a harness id;
  * [projectId]: the project whose servers (and project-scoped Infantry servers) are meant; [scope]: the CLI scope, or `app` / `project`
@@ -118,6 +129,8 @@ data class McpRequest(
     val enabled: Boolean? = null,
     val grant: McpGrantInput? = null,
     val grantId: String? = null,
+    /** MCP-SELECT-1c: a role / ticket / agent `mcp` block to declare. */
+    val declare: McpDeclareInput? = null,
     val sessionId: String? = null,
     val role: String? = null,
     val agentId: String? = null,

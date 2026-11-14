@@ -278,6 +278,8 @@ data class Envelope(
         const val MCP_TEST = "mcp_test"
         /** client -> daemon: `{grant}` (McpGrantInput); the only way an agent gets a server. Answered by [MCP_GRANTS]; pushes [MCP_CHANGED]. */
         const val MCP_ASSIGN = "mcp_assign"
+        /** client -> daemon: `{declare}` (McpDeclareInput): a role / ticket / agent `mcp` block as that target's grants (replaces them). Answered by [MCP_GRANTS]; pushes [MCP_CHANGED]. */
+        const val MCP_DECLARE = "mcp_declare"
         /** client -> daemon: `{grantId}`. Answered by [MCP_GRANTS]; pushes [MCP_CHANGED]. */
         const val MCP_REVOKE = "mcp_revoke"
         /** client -> daemon: `{}` lists the grants; daemon -> client: a list of McpGrantView. */

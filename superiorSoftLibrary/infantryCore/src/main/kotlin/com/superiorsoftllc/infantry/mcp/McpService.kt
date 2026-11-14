@@ -66,6 +66,13 @@ class McpService(
                 grants.grant(r.grant ?: throw IllegalArgumentException("expects a grant {server, scope, target, purpose, approvedBy}"))
                 grantsAnswer(changed = true)
             }
+            Envelope.MCP_DECLARE -> {
+                val d = r.declare ?: throw IllegalArgumentException("expects declare {scope, target, servers, purpose}")
+                McpDeclarations(grants).declare(
+                    McpGrantScope.parse(d.scope), d.target, d.projectId, McpBlock(d.servers, d.purpose), McpDeclarer(d.declaredBy.ifBlank { "owner" }),
+                )
+                grantsAnswer(changed = true)
+            }
             Envelope.MCP_REVOKE -> {
                 val id = need(r.grantId, "grantId")
                 require(grants.revoke(id)) { "no MCP grant '$id'" }

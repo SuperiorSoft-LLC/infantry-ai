@@ -4470,7 +4470,7 @@ private suspend fun handleConnection(
 
                 // MCP-REGISTRY-1: the MCP registry frames, one backend (McpService); a change tells every client to re-read.
                 Envelope.MCP_LIST, Envelope.MCP_GET, Envelope.MCP_ADD, Envelope.MCP_UPDATE, Envelope.MCP_REMOVE, Envelope.MCP_SET_ENABLED,
-                Envelope.MCP_TEST, Envelope.MCP_ASSIGN, Envelope.MCP_REVOKE, Envelope.MCP_GRANTS, Envelope.MCP_PLAN -> try {
+                Envelope.MCP_TEST, Envelope.MCP_ASSIGN, Envelope.MCP_DECLARE, Envelope.MCP_REVOKE, Envelope.MCP_GRANTS, Envelope.MCP_PLAN -> try {
                     val service = com.superiorsoftllc.infantry.mcp.McpService.current ?: throw IllegalStateException("the MCP registry is not running")
                     val answer = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { service.handle(envelope.type, envelope.data) }
                     if (answer.changed) {
