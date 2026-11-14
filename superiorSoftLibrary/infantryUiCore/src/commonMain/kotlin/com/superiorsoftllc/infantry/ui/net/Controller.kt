@@ -773,6 +773,19 @@ class Controller(
         return report(send(WireRequests.harnessInstallStatus(checkLatest)))
     }
 
+    /**
+     * ONBOARD-2: ask the daemon to install the Node.js runtime alone (into its own harness-tools folder). Only offered when its
+     * report says [com.superiorsoftllc.infantry.ui.protocol.HarnessInstallReport.nodeInstallable]; the answer is a normal
+     * `harness_install_result` and the progress is the `harness.install.node` task.
+     */
+    suspend fun installNodeRuntime(): CommandResult {
+        if (_state.value.harnessInstall?.nodeInstallable != true) return report(CommandResult.Refused("this daemon cannot install Node.js itself"))
+        _state.value = _state.value.copy(harnessInstallBusy = true, harnessInstallLog = emptyList())
+        return report(send(WireRequests.harnessInstall(emptyList(), update = false, runtime = true))).also {
+            if (it !is CommandResult.Sent) _state.value = _state.value.copy(harnessInstallBusy = false)
+        }
+    }
+
     /** HARNESS-INSTALL-1: ask the DAEMON to install ([update] = refresh outdated too) [ids] (empty = every missing one) on its own machine. */
     suspend fun installHarnesses(ids: List<String>, update: Boolean): CommandResult {
         if (!contractAtLeast(_state.value.connection.contract, 1, 102)) {

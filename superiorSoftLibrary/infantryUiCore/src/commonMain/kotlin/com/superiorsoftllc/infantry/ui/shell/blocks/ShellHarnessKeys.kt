@@ -89,7 +89,10 @@ object ShellHarnessKeys : Block("infantry.shell.harnessKeys", "infantry.shell.ha
     override fun Render(scope: BlockScope) {
         val s = LocalShell.current
         if (!s.state.connection.isLive || s.ui.showConfig) return
+        // ONBOARD-2: while the guided setup is open, or nothing can answer yet (it opens by itself then), it asks instead.
+        if (s.ui.showSetup) return
         val rows = s.state.secrets?.secrets ?: return
+        if (com.superiorsoftllc.infantry.ui.model.SetupWizard.needed(s.state.harnessInstall, rows, s.state.providers) == true) return
         var skipped by remember { mutableStateOf(runCatching { s.host.uiPref(HARNESS_KEY_SKIP_PREF).orEmpty().split(',').filter { it.isNotBlank() }.toSet() }.getOrDefault(emptySet())) }
         val missing = missingHarnessKeys(rows, skipped)
         // Probe each login once per app start before asking (a login made since the daemon's last probe counts): the answer is a
@@ -142,7 +145,7 @@ object ShellHarnessKeys : Block("infantry.shell.harnessKeys", "infantry.shell.ha
 
 /** One provider row of the first-run keys screen: label, "optional", help, optional subscription sign-in, masked key field. */
 @Composable
-private fun HarnessKeyRow(row: SecretRow, subscription: Boolean, values: MutableMap<String, String>, onUseSubscription: () -> Unit) {
+internal fun HarnessKeyRow(row: SecretRow, subscription: Boolean, values: MutableMap<String, String>, onUseSubscription: () -> Unit) {
     val s = LocalShell.current
     val harnessId = row.name.removePrefix("harness.").removeSuffix(".key")
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {

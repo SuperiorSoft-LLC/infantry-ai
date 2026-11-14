@@ -111,7 +111,7 @@ object CoreShell {
                 "infantry.shell.windowLayer",
                 listOf(
                     ShellConfig, ShellServerUpdate, slot("infantry.shell.roles"), ShellServers,
-                    ShellSwitchError, ShellHarnessKeys, ShellConnect, ShellDropConsent,
+                    ShellSwitchError, ShellSetupWizard, ShellHarnessKeys, ShellConnect, ShellDropConsent,
                 ),
             ).asPlaceholder(),
         ),

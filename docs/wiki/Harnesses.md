@@ -119,6 +119,20 @@ From `Infantry_Pi`:
 `install: { npm, bin }`, how `infantry harness-install` gets it); `icon`; `settings` are the keys the harness may
 read through `host.setting`.
 
+### Installing a harness CLI on a machine with no Node.js (ONBOARD-2)
+
+The npm installer needs Node.js. When npm is missing on Windows, `NodeRuntimeInstaller` puts the official Node.js LTS
+zip (checked against the release's SHA-256 list, fetched through the core downloader) flat into the installer's own
+`harness-tools` folder: no admin prompt, nothing on PATH, and npm's shims run the Node executable beside them. The install
+report says so with `nodeInstallable`; a `harness_install` with `runtime: true` installs Node alone, and any harness
+install puts it in first. Each install is a core progress task (`harness.install.<id>`, `harness.install.node`) that
+Configuration > Agents and the guided setup draw beside the Install button. Other systems keep the printed guidance.
+
+The guided setup (`ShellSetupWizard`) opens on every app start while no installed harness can answer (a key, a
+confirmed login, no key declared, or free models), and from Configuration > Agents > Open guided setup: Node.js,
+pick and install a harness, sign in (`SetupSignIn` is the seam the harness's own login screen fills), then a first
+agent's reply.
+
 ## How the three official harnesses do it
 
 | Harness | Plugin | Hooks | Notes |

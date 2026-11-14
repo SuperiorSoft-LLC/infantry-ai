@@ -841,6 +841,13 @@ class InfantryDaemon(
                 fromModules = { harnessModulesRef.get()?.installables().orEmpty() },
                 fromDescriptors = descriptorInstallables::list,
                 onSampleAdopted = { h -> descriptorInstallables.adopt(h); HarnessDescriptorLoader(descriptorFolder).loadInto(harnesses) },
+                // ONBOARD-2: no Node on the machine = the installer puts the official LTS into harness-tools first, through the
+                // core downloader; every install is a core progress task the clients draw.
+                nodeRuntime = com.superiorsoftllc.infantry.harness.install.NodeRuntimeInstaller(
+                    harnessToolsDir, executableEnvironment,
+                    downloads = { com.superiorsoftllc.infantry.daemon.plugins.DaemonPluginHost.lateDownloads({ pluginHost.get() }, "harness-install") },
+                ),
+                progress = { com.superiorsoftllc.infantry.daemon.plugins.DaemonPluginHost.lateProgress({ pluginHost.get() }, "harness-install") },
             )
             val cliLocations = com.superiorsoftllc.infantry.executables.CliLocationService(
                 executableResolver, executableOverrides, tools = { cliTools(harnesses, harnessModulesRef.get()?.cliTools().orEmpty()) },
@@ -4073,7 +4080,7 @@ private suspend fun handleConnection(
                                     val request = com.superiorsoftllc.infantry.protocol.HarnessInstallRequest.decode(envelope.data)
                                     Envelope(
                                         Envelope.HARNESS_INSTALL_RESULT,
-                                        json.encodeToString(com.superiorsoftllc.infantry.protocol.HarnessInstallResult.serializer(), service.install(request.ids, request.update)),
+                                        json.encodeToString(com.superiorsoftllc.infantry.protocol.HarnessInstallResult.serializer(), service.install(request.ids, request.update, runtime = request.runtime)),
                                     )
                                 }
                             } catch (e: IllegalArgumentException) {

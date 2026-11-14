@@ -2,6 +2,7 @@
 // Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.ui.model
 
+import com.superiorsoftllc.infantry.ui.protocol.HarnessInstallReport
 import com.superiorsoftllc.infantry.ui.protocol.HarnessInstallStatus
 
 /**
@@ -35,4 +36,32 @@ object HarnessInstallSetting {
     fun isUpdate(s: HarnessInstallStatus): Boolean = s.state == "outdated"
 
     private fun versionSuffix(s: HarnessInstallStatus) = s.installedVersion?.let { " $it" }.orEmpty()
+
+    /** ONBOARD-2: the daemon's progress task for one install (`harness.install.<id>`; Node is `harness.install.node`). */
+    const val TASK_PREFIX = "harness.install."
+    const val NODE_ID = "node"
+    fun taskId(id: String): String = TASK_PREFIX + id
+
+    /**
+     * ONBOARD-2: what the last install said about [id], from its log (the `<id>: <result> [- reason]` outcome lines the
+     * model writes), in words: null = no outcome yet. A failure reads "Install failed: <reason>".
+     */
+    fun outcomeFor(id: String, log: List<String>): Outcome? {
+        val line = log.lastOrNull { it.startsWith("$id: ") } ?: return null
+        val rest = line.removePrefix("$id: ")
+        val result = rest.substringBefore(' ').substringBefore('-').trim()
+        val reason = rest.substringAfter(" - ", "").trim()
+        return when (result) {
+            "failed" -> Outcome(false, "Install failed: " + reason.ifEmpty { "no reason given" })
+            "installed", "updated" -> Outcome(true, (if (result == "installed") "Installed" else "Updated") + rest.removePrefix(result).substringBefore(" - ").trimEnd())
+            "skipped" -> Outcome(true, "Nothing to do: " + reason.ifEmpty { "already installed" })
+            else -> Outcome(true, rest)
+        }
+    }
+
+    data class Outcome(val ok: Boolean, val text: String)
+
+    /** ONBOARD-2: shown beside an Install button while the daemon has no npm: the daemon's own words, or a plain fallback. */
+    fun nodeNote(report: HarnessInstallReport): String? =
+        if (report.npmPath != null) null else report.guidance ?: "Node.js is not installed on the machine the daemon runs on, so this cannot be installed yet."
 }
