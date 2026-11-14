@@ -145,4 +145,25 @@ class HarnessLoginsTest {
         val locked = KeystoreHandler(ks, env = { null }, restricted = { true }, extraKnown = { listOf(KnownSecret("harness.claude.key", "x", canLogin = true)) })
         assertEquals(Envelope.ERROR, locked.answer(Envelope(Envelope.SECRET_LOGIN, """{"name":"harness.claude.key","action":"start"}"""))!!.type)
     }
+
+    @Test
+    fun `ONBOARD-3 the sign-in runs the CLI the guided setup installed in the app prefix, not a bare name PATH cannot find`() {
+        val exe = "C:\\Users\\u\\AppData\\Local\\SuperiorSoft\\InfantryAI\\harness-tools\\node_modules\\@anthropic-ai\\claude-code\\bin\\claude.exe"
+        val fake = FakeLogin()
+        val ks = Keystore(Files.createTempDirectory("login-test").toFile(), env = { null }, vault = null)
+        val creds = HarnessCredentials(ks, commandPath = { if (it == "claude") exe else null }) { listOf(claude) }
+        HarnessLogins(creds, verify = { true }, runner = fake, windows = true).start("claude")
+        assertEquals(listOf(exe, "auth", "login"), fake.spec!!.command)
+    }
+
+    @Test
+    fun `ONBOARD-3 launchable argv - native file direct, shim through cmd, js on node, unresolved as before`() {
+        val argv = listOf("claude", "auth", "status")
+        assertEquals(listOf("C:\\t\\claude.exe", "auth", "status"), HarnessCommand.launchable(argv, { "C:\\t\\claude.exe" }, windows = true))
+        assertEquals(listOf("cmd", "/c", "C:\\t\\claude.cmd", "auth", "status"), HarnessCommand.launchable(argv, { "C:\\t\\claude.cmd" }, windows = true))
+        assertEquals(listOf("C:\\t\\node.exe", "C:\\t\\cli.js", "auth", "status"), HarnessCommand.launchable(argv, { if (it == "node") "C:\\t\\node.exe" else "C:\\t\\cli.js" }, windows = true))
+        assertEquals(listOf("cmd", "/c") + argv, HarnessCommand.launchable(argv, { null }, windows = true))
+        assertEquals(argv, HarnessCommand.launchable(argv, { null }, windows = false))
+        assertEquals(listOf("/opt/bin/claude", "auth", "status"), HarnessCommand.launchable(argv, { "/opt/bin/claude" }, windows = false))
+    }
 }

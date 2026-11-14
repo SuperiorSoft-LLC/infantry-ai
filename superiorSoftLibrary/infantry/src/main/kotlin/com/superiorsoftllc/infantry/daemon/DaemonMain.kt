@@ -998,6 +998,10 @@ class InfantryDaemon(
                 (settings.storedDeclared(com.superiorsoftllc.infantry.harness.credential.HarnessCredential.modeSettingOf(id)) as? kotlinx.serialization.json.JsonPrimitive)?.content?.takeIf { it.isNotBlank() }
             }, refSource = { key ->
                 (settings.storedDeclared(key) as? kotlinx.serialization.json.JsonPrimitive)?.content?.takeIf { it.isNotBlank() }
+            }, commandPath = { command ->
+                // ONBOARD-3: a probe / sign-in resolves its CLI as a session launch does (the guided setup's prefix is not on PATH).
+                (cliTools(harnesses, harnessModulesRef.get()?.cliTools().orEmpty()) + com.superiorsoftllc.infantry.executables.CliTools.NODE)
+                    .firstOrNull { command in it.commandNames }?.let { executableResolver.resolve(it).path }
             }, declaredSource = {
                 harnessModulesRef.get()?.credentials().orEmpty() + harnesses?.harnessIds().orEmpty().mapNotNull {
                     (harnesses?.resolve(it) as? com.superiorsoftllc.infantry.harness.descriptor.DescriptorHarness)?.credential
