@@ -1,0 +1,34 @@
+{
+  "name": "Infantry_Docs",
+  "version": "1.0.0",
+  "apiVersion": 2,
+  "author": "Infantry AI",
+  "description": "In-app docs lookup: the user-facing wiki pages ship inside the plugin jar and an agent reads one on demand (infantry docs list / infantry docs show <page>), so an agent in a user's install, with no repo checkout, can explain the app (for example the Usage page: worker limits and pacing). Nothing is loaded into any prompt; the pages cost tokens only when asked for. Daemon half only.",
+  "tier": "official",
+  "sequence": [],
+  "daemon": {
+    "entry": "com.superiorsoftllc.infantry.plugins.official.docs.daemon.DocsDaemonPlugin",
+    "jar": "daemon/build/libs/Infantry_Docs-daemon.jar",
+    "apiAtLeast": "1.59.0"
+  },
+  "capabilities": [
+    {
+      "id": "docs.list",
+      "description": "The bundled docs pages: name and one-line title. docs.show gives the text.",
+      "runs": "daemon",
+      "action": "docs.read",
+      "kind": "read",
+      "params": { "type": "object", "properties": {} },
+      "result": { "type": "object", "properties": { "pages": { "type": "array" } } }
+    },
+    {
+      "id": "docs.show",
+      "description": "One docs page's text (for example usage: why a worker is not running, meters, pacing). Unknown page = an error naming the available ones.",
+      "runs": "daemon",
+      "action": "docs.read",
+      "kind": "read",
+      "params": { "type": "object", "properties": { "page": { "type": "string", "description": "The page name from docs.list (case-insensitive, .md optional)." } }, "required": ["page"] },
+      "result": { "type": "object", "properties": { "page": { "type": "string" }, "title": { "type": "string" }, "text": { "type": "string" } } }
+    }
+  ]
+}
