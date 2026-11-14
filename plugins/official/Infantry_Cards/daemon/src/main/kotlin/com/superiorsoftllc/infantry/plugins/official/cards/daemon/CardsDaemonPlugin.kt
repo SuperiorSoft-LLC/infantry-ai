@@ -24,6 +24,8 @@ import java.util.Base64
  * loaded; a role may name a card type in its persona, and with the plugin gone the fence simply shows as a code block.
  */
 class CardsDaemonPlugin : DaemonPlugin {
+    private val loggedFailures = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap<String, Boolean>())
+
     override fun start(api: DaemonApi) {
         val maxSpec = { api.config(SPEC_MAX_BYTES_KEY)?.toIntOrNull()?.coerceAtLeast(MIN_SPEC_BYTES) ?: DEFAULT_SPEC_MAX_BYTES }
         api.capabilities.handle(LIST) { list(api.plugins.loaded()) }
@@ -35,14 +37,21 @@ class CardsDaemonPlugin : DaemonPlugin {
             hostsOf = { type -> entries(api.plugins.loaded()).firstOrNull { it.type == type }?.hosts },
             download = api.downloads::download,
         )
-        api.frames.handle(CardImageProxy.FRAME) { frame, _ -> Frame(CardImageProxy.FRAME, imageAnswer(proxy, frame.data), requestId = frame.requestId) }
+        api.frames.handle(CardImageProxy.FRAME) { frame, _ -> Frame(CardImageProxy.FRAME, imageAnswer(proxy, frame.data, api::log), requestId = frame.requestId) }
     }
 
     /** The `card_image` answer for request body [data] (`{type, url}`): `{ok, mime, base64}` or `{ok:false, refused|failed}`. */
-    fun imageAnswer(proxy: CardImageProxy, data: String): String {
+    fun imageAnswer(proxy: CardImageProxy, data: String, log: ((String) -> Unit)? = null): String {
         val o = runCatching { Json.parseToJsonElement(data) as? JsonObject }.getOrNull()
         fun s(k: String) = (o?.get(k) as? JsonPrimitive)?.contentOrNull
-        return when (val out = if (o == null) CardImageProxy.Outcome.Refused("expects {\"type\", \"url\"}") else proxy.fetch(s("type"), s("url"))) {
+        val result = if (o == null) CardImageProxy.Outcome.Refused("expects {\"type\", \"url\"}") else proxy.fetch(s("type"), s("url"))
+        // CARD-IMG-2: a refused or failed image is logged once per (type, url, reason), never silent.
+        val why = when (result) { is CardImageProxy.Outcome.Refused -> "refused: ${result.reason}"; is CardImageProxy.Outcome.Failed -> "failed: ${result.reason}"; else -> null }
+        if (why != null) {
+            val k = "${s("type")}|${s("url")}|$why"
+            if (loggedFailures.add(k)) log?.invoke("card image ${s("url")?.take(120)} (card:${s("type")}) $why")
+        }
+        return when (val out = result) {
             is CardImageProxy.Outcome.Image -> buildJsonObject {
                 put("ok", true); put("mime", out.mime); put("base64", Base64.getEncoder().encodeToString(out.bytes))
             }

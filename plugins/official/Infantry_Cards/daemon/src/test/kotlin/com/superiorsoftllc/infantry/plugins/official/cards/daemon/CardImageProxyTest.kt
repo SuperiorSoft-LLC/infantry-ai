@@ -135,7 +135,7 @@ class CardImageProxyTest {
         assertFalse(CardImageProxy.hostMatches("gstatic.com", "*.gstatic.com"))
         assertFalse(CardImageProxy.hostMatches("evilgstatic.com", "*.gstatic.com"))
         assertFalse(CardImageProxy.hostMatches("x.com", "*.com"))
-        assertFalse(CardImageProxy.hostMatches("x.com", "*"))
+        assertTrue(CardImageProxy.hostMatches("ichef.bbci.co.uk", "*")) // CARD-IMG-2: a bare * is any named host
         listOf("10.1.2.3", "172.16.0.1", "192.168.1.1", "127.0.0.1", "169.254.169.254", "100.64.0.1", "0.0.0.0", "::1", "fd00::1", "fe80::1", "::ffff:10.0.0.1")
             .forEach { assertFalse(CardImageProxy.isPublic(InetAddress.getByName(it)), it) }
         assertTrue(CardImageProxy.isPublic(InetAddress.getByName("93.184.216.34")))
