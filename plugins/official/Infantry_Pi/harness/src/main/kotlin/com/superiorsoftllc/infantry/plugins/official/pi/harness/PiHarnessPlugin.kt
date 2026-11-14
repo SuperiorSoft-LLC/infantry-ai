@@ -9,7 +9,9 @@ import com.superiorsoftllc.infantry.harness.api.HARNESS_API_VERSION
 import com.superiorsoftllc.infantry.harness.api.Harness
 import com.superiorsoftllc.infantry.harness.api.HarnessCapability
 import com.superiorsoftllc.infantry.harness.api.HarnessHost
+import com.superiorsoftllc.infantry.harness.api.HarnessMcp
 import com.superiorsoftllc.infantry.harness.api.HarnessModels
+import com.superiorsoftllc.infantry.harness.api.HarnessProcessListener
 import com.superiorsoftllc.infantry.harness.api.HarnessPlugin
 import com.superiorsoftllc.infantry.harness.api.HarnessProcess
 import com.superiorsoftllc.infantry.harness.api.HarnessRegistrar
@@ -63,15 +65,40 @@ class PiHarness internal constructor(
     )
 
     override fun process(request: HarnessRequest): HarnessProcess {
-        val mcp = host.mcpLaunch(emptyMap())
+        val mcp = host.mcpServers(emptyMap())
         return HarnessProcess(
-            PiCommand.command(launcher(), request.model, request.sessionId, request.effort) + PiExtensions.launchArgs(host.stateDir, PiExtensions.APPROVAL) +
+            PiCommand.command(launcher(), request.model, request.sessionId, request.effort) + PiExtensions.denyArgs(mcp) + PiExtensions.launchArgs(host.stateDir, PiExtensions.APPROVAL) +
                 PiExtensions.launchArgs(host.stateDir, PiExtensions.COMMANDCODE) + PiExtensions.mcpArgs(host.stateDir, mcp),
             env = mapOf(PiExtensions.APPROVAL_ENV to request.toolApproval.name) + PiExtensions.mcpEnv(mcp),
         )
     }
 
     override fun newTranslator(): HarnessTranslator = EventStreamTranslator()
+
+    /** MCP-PI-1: pi loads the user's own servers itself; the host only names the ones to turn off ([PiExtensions.denyArgs]). */
+    override val loadsUserMcp: Boolean get() = true
+
+    private val piMcp = PiMcp(PiMcpRunner { args, dir -> runCli(launcher() + args, dir) })
+
+    /** pi's own servers through `pi mcp ...` only; null on a pi without an `mcp` command (detected once by `pi mcp --help`). */
+    private val mcpSupported: Boolean by lazy { runCatching { runCli(launcher() + listOf("mcp", "--help"), null).first == 0 }.getOrDefault(false) }
+    override val mcp: HarnessMcp? get() = if (mcpSupported) piMcp else null
+
+    private fun runCli(argv: List<String>, dir: String?): Pair<Int, String> {
+        val lines = java.util.Collections.synchronizedList(mutableListOf<String>())
+        val exit = java.util.concurrent.CompletableFuture<Int>()
+        val process = host.start(HarnessProcess(argv, workingDir = dir?.let(::File)), object : HarnessProcessListener {
+            override fun onStdout(line: String) { lines += line }
+            override fun onStderr(line: String) { lines += line }
+            override fun onExit(exitCode: Int) { exit.complete(exitCode) }
+        })
+        process.closeInput()
+        val code = try { exit.get(MCP_CLI_TIMEOUT_SEC, java.util.concurrent.TimeUnit.SECONDS) } catch (e: java.util.concurrent.TimeoutException) {
+            process.killTree()
+            return -1 to "pi ${argv.getOrNull(1)} timed out"
+        }
+        return code to lines.joinToString(System.lineSeparator())
+    }
 
     /**
      * EFFORT-1: pi calls the reasoning effort "thinking" and takes `--thinking <level>` (off, minimal, low, medium, high, xhigh, max) in both
@@ -100,5 +127,6 @@ class PiHarness internal constructor(
 
     companion object {
         const val HARNESS_ID = "pi"
+        private const val MCP_CLI_TIMEOUT_SEC = 60L // `pi mcp list` connects to every enabled server
     }
 }

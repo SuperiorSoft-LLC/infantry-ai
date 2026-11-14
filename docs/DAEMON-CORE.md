@@ -63,7 +63,7 @@ plugin); `images` (Infantry_Chat).
 DP-10b: `prompts` is reclassified CORE, not PLUGIN NOW: it is the PROMPT-1 tool-approval round-trip (PendingPrompts, PromptTimeouts, SpawnPromptTimeout; used by session, harness, claude, opencode), not the Infantry_Prompts template library. Only its policy data left: the stored "allow always" rules and the `approval_rules` / `approval_rule_delete` frames are Infantry_Approvals' daemon half (table `infantry_approvals_rules` via `api.storage`), reached by core through the `hooks.approvalRules` port (DaemonApi 1.22.0, additive; `ApprovalRulesHook.match` / `remember`). With the plugin absent there are no stored rules: every prompt asks and ALLOW_ALWAYS degrades to ALLOW_SESSION with no error. Rules stored before this change (settings row `toolApproval.rules`) are not migrated.
 DP-7c: `issues` and `decisions` (stores, handlers, frames) moved to plugins/official/Infantry_Notes/daemon; only the wire DTOs stay in core (infantryProtocol).
 
-DAEMON-PLUGINS-3: `probe` (a one-off provider comparison `main()` and its `probeProvider` Gradle task) was dead and is deleted. `experiments` (the pi tool bridge) cannot move yet, see below.
+DAEMON-PLUGINS-3: `probe` (a one-off provider comparison `main()` and its `probeProvider` Gradle task) was dead and is deleted. `experiments` (the pi tool bridge) was deleted by MCP-PI-1.
 
 **PLUGIN LATER (blocker named)**
 | package | blocker |
@@ -75,7 +75,6 @@ DAEMON-PLUGINS-3: `probe` (a one-off provider comparison `main()` and its `probe
 | `questions`, `attention` | DONE (ATTN-2b / ATTN-2c): core has neither package. Infantry_Attention's daemon half owns the attention store and the owner questions (store, sweep, `question_*` frames, answer mail, connect replay); core keeps `FoundAttention` (package `daemon`), the consumer lookup of the `Attention` service |
 | `triggers` | DaemonApi has `schedule()` but no spawn-with-binding or ticket-transition events |
 | `commands` | DONE (CMD-1): core has no `commands` package. Infantry_Run's daemon half owns the saved commands (`commands.json`), RunManager and the run frames over `api.runs` (DaemonApi 1.31.0, additive: `Runs.start(RunSpec, RunListener)` returns a `RunHandle` with write/resize/terminate/killTree; the cwd is bound to the project's directory and a `..`, absolute or linked escape is refused before anything starts; official tier or the grant `runs`). The owner-credential gate on the run frames stays in core's FrameGate (same action/kind in the module's `daemon.frames`). With the plugin absent the run frames refuse like any unhandled frame |
-| `experiments` | the pi tool bridge hooks `PiLaunchExtras`, `SessionStatsService` taggers and reads `InfantryMcp`/`AccessPolicy` internals; needs a harness launch-extras hook and an MCP tool-exposure surface in DaemonApi |
 | `cli`, `client` | the `infantry` CLI/MCP server and console client are clients of the daemon, not daemon, but import protocol/session/daemon types; they leave with the infantryCore split (section 4) |
 
 Measured coupling (imports between top-level packages, `infantry/src/main`): `daemon` imports 31 packages, `cli` 18, `backlog`

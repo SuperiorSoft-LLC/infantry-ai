@@ -8,6 +8,9 @@ import com.superiorsoftllc.infantry.harness.api.ContextLimitSupport
 import com.superiorsoftllc.infantry.harness.api.HarnessEvent
 import com.superiorsoftllc.infantry.harness.api.HarnessHost
 import com.superiorsoftllc.infantry.harness.api.HarnessProcess
+import com.superiorsoftllc.infantry.harness.api.McpPlan
+import com.superiorsoftllc.infantry.harness.api.McpServerState
+import com.superiorsoftllc.infantry.harness.api.McpServerStatus
 import com.superiorsoftllc.infantry.harness.api.HarnessRequest
 import com.superiorsoftllc.infantry.harness.api.HarnessSession
 import com.superiorsoftllc.infantry.harness.api.SessionConnection
@@ -67,13 +70,20 @@ internal class PiSession(
         val todo = host?.let { PiExtensions.launchArgs(it.stateDir, PiExtensions.TODO) }.orEmpty()
         val approval = host?.let { PiExtensions.launchArgs(it.stateDir, PiExtensions.APPROVAL) }.orEmpty()
         val commandCode = host?.let { PiExtensions.launchArgs(it.stateDir, PiExtensions.COMMANDCODE) }.orEmpty()
-        val mcpLaunch = host?.mcpLaunch(env)
-        val mcp = host?.let { PiExtensions.mcpArgs(it.stateDir, mcpLaunch) }.orEmpty()
-        val mcpEnv = PiExtensions.mcpEnv(mcpLaunch)
-        return HarnessProcess(argv(launcher(), request, resume) + todo + approval + commandCode + mcp, env = mapOf(PiExtensions.APPROVAL_ENV to request.toolApproval.name) + mcpEnv)
+        val plan = host?.mcpServers(env) ?: McpPlan.EMPTY
+        plannedServers = plan.delivered.map { it.name }
+        val mcp = host?.let { PiExtensions.mcpArgs(it.stateDir, plan) }.orEmpty()
+        val mcpEnv = PiExtensions.mcpEnv(plan)
+        return HarnessProcess(argv(launcher(), request, resume) + PiExtensions.denyArgs(plan) + todo + approval + commandCode + mcp, env = mapOf(PiExtensions.APPROVAL_ENV to request.toolApproval.name) + mcpEnv)
     }
 
-    override fun connect(out: SessionOutput): SessionConnection = PiConnection(out)
+    /** MCP-PI-1: the servers the last launch's plan delivers, shown as CONFIGURED (pi gives no per-server status on the wire). */
+    @Volatile private var plannedServers: List<String> = emptyList()
+
+    override fun connect(out: SessionOutput): SessionConnection {
+        if (plannedServers.isNotEmpty()) out.mcpServers(plannedServers.map { McpServerStatus(it, McpServerState.CONFIGURED) })
+        return PiConnection(out)
+    }
 
     private fun argv(launcher: List<String>, request: HarnessRequest, resume: String?): List<String> =
         PiCommand.command(launcher, request.model, resume, request.effort, rpc = true)

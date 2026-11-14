@@ -1,16 +1,16 @@
-// Infantry AI MCP bridge for pi (HARNESS-GAP G6). pi has no MCP client, so this extension starts the session's infantry MCP server
-// (env INFANTRY_PI_MCP = {"command":[...],"env":{...}}, from HarnessHost.mcpLaunch) as a child process, speaks MCP over its stdio
-// (newline-delimited JSON-RPC), and registers every server tool as a pi tool with the same name, schema and description.
-// Without INFANTRY_PI_MCP, or when the server does not answer, no tool is registered and pi runs CLI-only as before.
+// Infantry AI MCP bridge for pi (HARNESS-GAP G6, generalised to a list by MCP-PI-1). pi loads the user's own MCP servers itself; this
+// extension starts the servers the session's MCP plan delivers (env INFANTRY_PI_MCP = {"servers":[{"name","prefix","command":[...],"env":{...}}]},
+// from HarnessHost.mcpServers: infantry plus the granted Infantry-owned and plugin servers) as child processes, speaks MCP over their stdio
+// (newline-delimited JSON-RPC) and registers every tool as a pi tool with the same schema and description. A server with "prefix" gets the name pi
+// gives its own servers' tools (mcp__<server>__<tool>); the infantry server keeps its plain tool names. A legacy single {"command","env"} still works.
+// Without INFANTRY_PI_MCP, or when a server does not answer, that server registers nothing and pi runs without it.
 import { spawn } from "node:child_process"
 
 const TIMEOUT_MS = Number(process.env.INFANTRY_PI_MCP_TIMEOUT_MS || 30000)
+const safe = (s: string) => s.replace(/[^A-Za-z0-9_]/g, "_")
 
-export default async function (pi: any) {
-  let spec: any
-  try { spec = JSON.parse(process.env.INFANTRY_PI_MCP || "") } catch (e) { return }
+async function bridge(pi: any, spec: any) {
   if (!spec || !Array.isArray(spec.command) || spec.command.length === 0) return
-
   let child: any
   try {
     child = spawn(spec.command[0], spec.command.slice(1), { env: { ...process.env, ...(spec.env || {}) }, stdio: ["pipe", "pipe", "ignore"], windowsHide: true })
@@ -49,10 +49,11 @@ export default async function (pi: any) {
   const tools: any[] = listed?.result?.tools || []
   if (listed.error || tools.length === 0) { try { child.kill() } catch (e) {} return }
 
+  const piName = (n: string) => spec.prefix && spec.name ? `mcp__${safe(spec.name)}__${safe(n)}` : n
   for (const tool of tools) {
     pi.registerTool({
-      name: tool.name,
-      label: tool.name,
+      name: piName(tool.name),
+      label: piName(tool.name),
       description: tool.description || tool.name,
       parameters: tool.inputSchema || { type: "object", properties: {} },
       async execute(_toolCallId: string, params: any) {
@@ -64,4 +65,11 @@ export default async function (pi: any) {
     })
   }
   pi.on("session_shutdown", () => { try { child.kill() } catch (e) {} })
+}
+
+export default async function (pi: any) {
+  let parsed: any
+  try { parsed = JSON.parse(process.env.INFANTRY_PI_MCP || "") } catch (e) { return }
+  const specs: any[] = Array.isArray(parsed?.servers) ? parsed.servers : [parsed]
+  await Promise.all(specs.map((spec) => bridge(pi, spec).catch(() => {})))
 }

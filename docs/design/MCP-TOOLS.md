@@ -50,7 +50,7 @@ this is a risk to verify, not a filed bug. The fix is in Claude's own settings: 
 | Claude | `Infantry_Claude/harness/.../ClaudeCommand.kt`, `ClaudeTtySession.kt:103-110` | `--mcp-config` (infantry + `INFANTRY_CLAUDE_MCP_CONFIG`), non-strict by default (MCP-USER-2), `enableAllProjectMcpServers` in `--settings` |
 | opencode | `Infantry_OpenCode/harness/.../OpenCodeConfig.kt`, `OpenCodeServeSession.kt:123-140` | merges `mcp.infantry` into `OPENCODE_CONFIG_CONTENT` (opencode layers it over the user's own config, so the user's servers load); polls `GET /mcp` but reports only `infantry` |
 | pi | `Infantry_Pi/harness/.../PiExtensions.kt:25-43` (`infantry-mcp.ts`, env `INFANTRY_PI_MCP`) | an extension bridges the ONE infantry server into pi tools. Written when pi had no MCP; pi 1.3.0 now has its own (section 2) |
-| pi experiment | `infantry/.../experiments/pitoolbridge/` | older, OFF-by-default bridge writing `.pi/mcp.json`; superseded |
+| pi experiment | (deleted by MCP-PI-1) | was an OFF-by-default bridge writing `.pi/mcp.json`; superseded |
 | Plugin tools | `DaemonTool` (`DaemonApi.kt:478`), module.json `daemon.tools` | served THROUGH the infantry server, so they already reach every harness |
 | Health | `Infantry_Health` (`infantry_health`) | "MCP bridge per session": infantry link only |
 | Role | `Infantry_Roles/.../Role.kt:48-49` `cards`, `tools` | "shape the briefing; never gate". No MCP field |
@@ -181,7 +181,7 @@ New members (all with defaults, so an older plugin keeps working):
 | Infantry_OpenCode | `list` = `GET /mcp` when a serve process is up, else `opencode mcp list` (parsed, ANSI stripped); `add` = `opencode mcp add` only when flags cover the server; `canRemove = canEdit = false` (no official command; Q2) | `OPENCODE_CONFIG_CONTENT`: Infantry + plugin specs, plus `mcp.<name>.enabled: false` for denied ones | widen the existing `GET /mcp` poll to every server |
 | Infantry_Pi | `list`/`test` = `pi mcp list --json`; `add` = `pi mcp add [-l]`; `remove` = `pi mcp remove [-l]`; scopes: global, project (`-l`). Needs pi >= the version with `pi mcp` (detected by `pi mcp --help`, else `mcp = null`) | the user's servers load natively (pi reads them itself). Infantry + plugin specs keep going through `infantry-mcp.ts`, generalised from one server to a list (pi has no per-run config flag, and writing `.pi/mcp.json` into the worktree would dirty the branch). Denied: `--exclude-tools "mcp__<name>__*"`; `none`: `--no-mcp` (Q1) | the extension reports each of its servers; native ones from tool errors |
 
-The pitoolbridge experiment is retired by MCP-PI-1 (its README lists the removal steps).
+The pitoolbridge experiment was deleted by MCP-PI-1.
 
 ### 4.4 Feature plugins
 

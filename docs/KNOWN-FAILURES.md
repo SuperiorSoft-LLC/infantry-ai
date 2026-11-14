@@ -65,7 +65,6 @@ Failing at 5f5b974e but not in the base list (so NOT a known failure; treat as n
 | infantry | `daemon.plugins.BoardApiImportGuardTest` | yes | `no api type imports or names a class of the daemon`: AssertionError at BoardApiImportGuardTest.kt:29 | |
 | infantry | `daemon.plugins.HookKindsGuardTest` | yes | `every official module json hook kind validates`: AssertionError at HookKindsGuardTest.kt:35 | |
 | infantry | `executables.CliLocationsWireTest` | yes | `aHarnessWhoseExecutableIsGoneIsListedUnavailableWithTheReasonAndTriedPath`: NoSuchElementException at CliLocationsWireTest.kt:213 | |
-| infantry | `experiments.pitoolbridge.PiToolBridgeIsolationTest` | yes | `onlyTheRegistrationLineReferencesThePackage`: AssertionError at PiToolBridgeIsolationTest.kt:33 | |
 | infantry | `policy.ActionCatalogCoverageTest` | yes | `the parser sees the dispatch`: AssertionError at ActionCatalogCoverageTest.kt:38 | |
 | infantry | `policy.DemoPresetParityTest` | yes | `the demo preset allows exactly the old allow-list`: AssertionError at DemoPresetParityTest.kt:24 | |
 | infantry | `policy.PolicyActionParityTest` | yes | `every declared frame maps to the declared action`: AssertionError at PolicyActionParityTest.kt:45 | |

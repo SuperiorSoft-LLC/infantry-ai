@@ -472,7 +472,6 @@ as the cheap step first, a parity test over the frame constants.
 | Where | Evidence |
 |---|---|
 | `superiorSoftLibrary/infantry/src/main/kotlin/com/superiorsoftllc/infantry/tokens/` `JsonFileUsageLedger.kt`, `UsageLedger.kt`, `UsageTypes.kt` | No main-code caller; only their own tests use them (an old measurement experiment, `MULTI_AGENT_ROOM`). |
-| `superiorSoftLibrary/infantry/src/main/kotlin/com/superiorsoftllc/infantry/experiments/pitoolbridge/` | An experiment package in core main code, still registered from `DaemonMain.kt`. Keep or move out on purpose. |
 
 No tool finds unused declarations today; the dead-code ticket adds one check.
 
