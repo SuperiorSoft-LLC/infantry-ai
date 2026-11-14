@@ -110,7 +110,10 @@ class ClaudeTtySessionTest {
         assertFalse("--strict-mcp-config" in s.argv, "strict is opt-in: ${s.argv}")
         val settings = Json.parseToJsonElement(s.launch.settings.readText()).jsonObject
         assertEquals("true", settings["skipDangerousModePermissionPrompt"]!!.jsonPrimitive.content)
-        assertEquals("true", settings["enableAllProjectMcpServers"]!!.jsonPrimitive.content, "approves a project .mcp.json without a dialog")
+        assertFalse("enableAllProjectMcpServers" in settings, "no blanket approval")
+        assertEquals(0, settings["enabledMcpjsonServers"]!!.jsonArray.size, "no project server approved by default")
+        val named = Json.parseToJsonElement(ClaudeCommand.ttySettings("e", null, false, approvedMcp = listOf("a", "b"))).jsonObject
+        assertEquals(listOf("a", "b"), named["enabledMcpjsonServers"]!!.jsonArray.map { it.jsonPrimitive.content })
         val hooks = settings["hooks"]!!.jsonObject
         assertTrue(listOf("SessionStart", "UserPromptSubmit", "Stop").all { it in hooks })
         val stop = hooks["Stop"]!!.jsonArray.last().jsonObject["hooks"]!!.jsonArray.first().jsonObject["command"]!!.jsonPrimitive.content
