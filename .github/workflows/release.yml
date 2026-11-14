@@ -175,10 +175,29 @@ jobs:
           else
             echo "::warning::MSI packaging failed unsigned on this runner; publishing the app-image zip only (the in-app updater needs the MSI)"
           fi
+      # STORE-1: the Microsoft Store package (docs/STORE.md), stable tags only, from the app image built above. Its own
+      # artifact and file name (msstore-*), so the GitHub Release (InfantryAI-*) never carries this unsigned MSIX.
+      - name: Build the Microsoft Store package (MSIX)
+        if: ${{ needs.version.outputs.channel == 'stable' }}
+        shell: pwsh
+        env:
+          MSSTORE_IDENTITY_NAME: ${{ vars.MSSTORE_IDENTITY_NAME }}
+          MSSTORE_PUBLISHER: ${{ vars.MSSTORE_PUBLISHER }}
+          MSSTORE_PUBLISHER_DISPLAY_NAME: ${{ vars.MSSTORE_PUBLISHER_DISPLAY_NAME }}
+        run: |
+          $V = '${{ needs.version.outputs.version }}'
+          scripts/msix/package-msix.ps1 -AppImage superiorSoftLibrary/infantryUi/build/compose/binaries/main/app/InfantryAI `
+            -Version '${{ needs.version.outputs.package_version }}' -Out "$env:RUNNER_TEMP/msstore/msstore-$V.msix"
       - uses: actions/upload-artifact@v4
         with:
           name: windows
           path: ${{ runner.temp }}/out/*
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: ${{ needs.version.outputs.channel == 'stable' }}
+        with:
+          name: msstore
+          path: ${{ runner.temp }}/msstore/*.msix
           if-no-files-found: error
 
   android:
@@ -614,6 +633,66 @@ jobs:
             gh release create "$TAG" InfantryAI-* SHA256SUMS "${extra[@]}" "$index" --repo "$GITHUB_REPOSITORY" \
               --target "$SHA" --prerelease --latest=false --title "Infantry AI ${TAG#v} ($CHANNEL)" --generate-notes
           fi
+
+  # STORE-1: submits the MSIX to the Microsoft Store after the GitHub Release is out (so it can never hold the release
+  # back), stable tags only. Credentials only as repository secrets (docs/STORE.md): MSSTORE_TENANT_ID, MSSTORE_SELLER_ID,
+  # MSSTORE_CLIENT_ID, MSSTORE_CLIENT_SECRET, MSSTORE_PRODUCT_ID. While any is missing, or msix.json still holds the
+  # placeholder identity, the job skips with a notice and succeeds.
+  msstore:
+    needs: [version, windows, release]
+    if: ${{ !cancelled() && needs.version.outputs.channel == 'stable' && needs.release.result == 'success' }}
+    runs-on: windows-2022
+    permissions:
+      contents: read
+    env:
+      MSSTORE_TENANT_ID: ${{ secrets.MSSTORE_TENANT_ID }}
+      MSSTORE_SELLER_ID: ${{ secrets.MSSTORE_SELLER_ID }}
+      MSSTORE_CLIENT_ID: ${{ secrets.MSSTORE_CLIENT_ID }}
+      MSSTORE_CLIENT_SECRET: ${{ secrets.MSSTORE_CLIENT_SECRET }}
+      MSSTORE_PRODUCT_ID: ${{ secrets.MSSTORE_PRODUCT_ID }}
+    steps:
+      - id: creds
+        name: Store credentials present?
+        shell: pwsh
+        run: |
+          $missing = @('MSSTORE_TENANT_ID','MSSTORE_SELLER_ID','MSSTORE_CLIENT_ID','MSSTORE_CLIENT_SECRET','MSSTORE_PRODUCT_ID') |
+            Where-Object { -not [Environment]::GetEnvironmentVariable($_) }
+          if ($missing) {
+            Write-Host "::notice::Microsoft Store submission skipped: repository secrets not set ($($missing -join ', ')). See docs/STORE.md."
+            "ready=false" >> $env:GITHUB_OUTPUT
+          } else { "ready=true" >> $env:GITHUB_OUTPUT }
+      - uses: actions/download-artifact@v4
+        if: ${{ steps.creds.outputs.ready == 'true' }}
+        with:
+          name: msstore
+          path: msstore
+      - id: identity
+        name: Package identity is not the placeholder
+        if: ${{ steps.creds.outputs.ready == 'true' }}
+        shell: pwsh
+        run: |
+          $msix = Get-ChildItem msstore/*.msix | Select-Object -First 1
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = [System.IO.Compression.ZipFile]::OpenRead($msix.FullName)
+          try { $xml = [xml](New-Object System.IO.StreamReader(($zip.Entries | Where-Object FullName -eq 'AppxManifest.xml').Open())).ReadToEnd() }
+          finally { $zip.Dispose() }
+          if ($xml.Package.Identity.Name.StartsWith('PLACEHOLDER') -or $xml.Package.Identity.Publisher -eq 'CN=00000000-0000-0000-0000-000000000000') {
+            Write-Host "::notice::Microsoft Store submission skipped: the package still has the placeholder identity (set msix.json or the MSSTORE_* repository variables, docs/STORE.md)."
+            "ready=false" >> $env:GITHUB_OUTPUT
+          } else { "ready=true" >> $env:GITHUB_OUTPUT; "msix=$($msix.FullName)" >> $env:GITHUB_OUTPUT }
+      - uses: microsoft/setup-msstore-cli@v1
+        if: ${{ steps.identity.outputs.ready == 'true' }}
+      - name: Submit to the Microsoft Store
+        if: ${{ steps.identity.outputs.ready == 'true' }}
+        shell: pwsh
+        env:
+          MSIX: ${{ steps.identity.outputs.msix }}
+        run: |
+          msstore reconfigure --tenantId $env:MSSTORE_TENANT_ID --sellerId $env:MSSTORE_SELLER_ID `
+            --clientId $env:MSSTORE_CLIENT_ID --clientSecret $env:MSSTORE_CLIENT_SECRET | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "msstore reconfigure failed (exit $LASTEXITCODE)" }
+          msstore publish $env:MSIX -id $env:MSSTORE_PRODUCT_ID
+          if ($LASTEXITCODE -ne 0) { throw "msstore publish failed (exit $LASTEXITCODE)" }
 
   # DOCKER-1 / DOCKER-IMAGE-1: builds the headless daemon image (also the runner image: INFANTRY_MODE=runner) and pushes it to
   # GHCR with the workflow's own GITHUB_TOKEN: :<version> always, :latest on a stable release, :nightly on a nightly.

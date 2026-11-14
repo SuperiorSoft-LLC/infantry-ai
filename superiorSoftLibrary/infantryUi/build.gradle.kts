@@ -908,6 +908,24 @@ val releaseAssets = tasks.register<JavaExec>("releaseAssets") {
     outputs.upToDateWhen { false }
 }
 
+// STORE-1: the Microsoft Store package (docs/STORE.md). An MSIX packed from createDistributable's app image by
+// scripts/msix/package-msix.ps1 (Windows SDK makeappx), identity from msix/msix.json; unsigned, the Store signs it.
+//   ./gradlew :superiorSoftLibrary:infantryUi:packageMsix -PinfantryVersion=1.5.3 -Pihq.devSign=true
+//   -> build/msix/InfantryAI-<package version>.msix
+// The release workflow runs the script itself on the app image the windows job already built (no second build).
+tasks.register<Exec>("packageMsix") {
+    group = "distribution"
+    description = "STORE-1: packs the app image into build/msix/InfantryAI-<version>.msix for the Microsoft Store (Windows only)."
+    dependsOn("createDistributable")
+    val appImage = layout.buildDirectory.dir("compose/binaries/main/app/InfantryAI")
+    val out = layout.buildDirectory.file("msix/InfantryAI-$infantryPackageVersion.msix")
+    val script = rootProject.file("scripts/msix/package-msix.ps1")
+    onlyIf("the MSIX tools (makeappx) exist only on Windows") { System.getProperty("os.name").startsWith("Windows") }
+    commandLine("powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script.absolutePath,
+        "-AppImage", appImage.get().asFile.absolutePath, "-Version", infantryPackageVersion, "-Out", out.get().asFile.absolutePath)
+    outputs.upToDateWhen { false }
+}
+
 // Refuse a MISSING -PinfantryVersion before packageReleaseMsi spends minutes: the INSTALL-1 check above falls back to
 // 1.0.0 when the property is absent, which is fine for a local package but never for a published release.
 // (An invalid value already fails at configuration, in the INSTALL-1 require.)

@@ -5,6 +5,7 @@ package com.superiorsoftllc.infantry.ui
 import com.superiorsoftllc.infantry.session.infantrySetting
 import com.superiorsoftllc.infantry.plugins.official.updater.MsiHandoff
 import com.superiorsoftllc.infantry.plugins.official.updater.ResumeWorkers
+import com.superiorsoftllc.infantry.plugins.official.updater.StoreInstall
 import com.superiorsoftllc.infantry.plugins.official.updater.UpdateService
 import com.superiorsoftllc.infantry.keystore.Keystore
 import com.superiorsoftllc.infantry.plugins.official.updater.UpdateSettings
@@ -23,8 +24,9 @@ object InstalledUpdates {
 
     fun service(installed: Boolean, stateDir: File?, exit: () -> Unit, runningAgents: () -> Int = { 0 }, busySessions: () -> List<String> = { emptyList() }): UpdateService {
         // UPDATER-DEFAULT-1: resolved again before each check, so a changed setting applies without a restart.
+        // STORE-1: a Microsoft Store (MSIX) install never self-updates: the Store owns its updates (no pill, no MSI handoff).
         val resolve = {
-            UpdateSettings.resolve(installed, version(), stateDir, setting = { infantrySetting(it) },
+            StoreInstall.disabledReason() ?: UpdateSettings.resolve(installed, version(), stateDir, setting = { infantrySetting(it) },
                 keystore = { stateDir?.let { Keystore(it).get(Keystore.UPDATE_TOKEN) } })
         }
         val settings = resolve()

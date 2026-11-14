@@ -49,6 +49,19 @@ class UpdateServiceTest {
     }
 
     @Test
+    fun `a Microsoft Store install never offers an update, even when a newer release exists`() = runBlocking<Unit> {
+        gh.release("v1.0.9", msi = "AgentHQ-1.0.9.msi" to "x".toByteArray())
+        val s = service(settings = StoreInstall.disabledReason { if (it == StoreInstall.PACKAGE_PROPERTY) "msix" else null })
+        assertEquals(false, s.enabled)
+        assertEquals(null, s.check(manual = false))
+        assertEquals(UpdateState.Idle, s.state.value)
+        assertEquals(false, s.toastVisible.value)
+        s.check(manual = true)
+        assertTrue((s.state.value as UpdateState.Message).text.contains("Microsoft Store"))
+        assertTrue(handedOff.isEmpty())
+    }
+
+    @Test
     fun `Update downloads and verifies in the background, Restart now hands the installer over and exits`() = runBlocking<Unit> {
         val bytes = "verified 1.0.4".toByteArray()
         gh.release("v1.0.4", msi = "AgentHQ-1.0.4.msi" to bytes, sha256 = sha256(bytes))
