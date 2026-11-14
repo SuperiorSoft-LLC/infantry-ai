@@ -44,7 +44,6 @@ class HarnessCoreGuardTest {
             "DescriptorOutput.kt" to "descriptor output.format enum wire names (claude/pi stream formats); format names, not adapters",
             "OneShotAdapter.kt" to "one retry guard keyed on the provider id for an empty opencode one-shot; remains until the adapter's retry moves behind the SPI",
             "WatchHooks.kt" to "native background-task harness set and rewrite request tag for the watch mechanism; moves with the watch hook",
-            "PiToolBridgeRegistration.kt" to "experiments package registers launch extras for an id; blocked on a launch-extras SPI (see DaemonCoreGuardTest PLUGIN_LATER)",
         )
     }
 }

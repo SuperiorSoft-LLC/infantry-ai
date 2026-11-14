@@ -20,9 +20,13 @@ import com.superiorsoftllc.infantry.harness.api.EffortSupport
 import com.superiorsoftllc.infantry.harness.api.ContextLimitSupport
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
 import java.nio.file.Files
+import kotlin.coroutines.Continuation
+import kotlin.coroutines.EmptyCoroutineContext
+import kotlin.coroutines.startCoroutine
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -390,5 +394,63 @@ class PiPluginTest {
         c2.onStdout("""{"type":"response","command":"get_session_stats","id":"$id","success":true,"data":{"contextUsage":{"tokens":10}}}""")
         assertTrue(out2.sent("compact").isEmpty())
         assertEquals(SessionTurnEnd.COMPLETED, out2.ends.single().first)
+    }
+
+    // ---- MCP-PI-1 ----
+    /** Runs a suspend block that never actually suspends (the fake runner answers at once). */
+    private fun <T> now(block: suspend () -> T): T {
+        var out: Result<T>? = null
+        block.startCoroutine(Continuation(EmptyCoroutineContext) { out = it })
+        return out!!.getOrThrow()
+    }
+
+    private val listFixture = """
+        {"servers":[
+          {"name":"radius","scope":"global","enabled":true,"exposure":"codemode","transport":"npx -y radius-mcp","state":"connected","tools":["a","b"]},
+          {"name":"docs","scope":"project","enabled":true,"transport":"https://docs.example/mcp","state":"needs-auth","tools":[]},
+          {"name":"broken","scope":"global","enabled":true,"transport":"node x.js","state":"disconnected","tools":[],"error":"spawn failed"},
+          {"name":"off","scope":"global","enabled":false,"transport":"node y.js","state":"disabled","tools":[]}
+        ],"errors":[]}
+    """.trimIndent()
+
+    @Test fun `MCP-PI-1 parses pi mcp list json into listings`() {
+        val l = PiMcp.parseList("noise\n$listFixture")
+        assertEquals(listOf("radius", "docs", "broken", "off"), l.map { it.spec.name })
+        assertEquals(com.superiorsoftllc.infantry.harness.api.McpServerState.CONNECTED, l[0].status.state)
+        assertEquals(2, l[0].status.toolCount)
+        assertEquals("project", l[1].spec.scope)
+        assertIs<com.superiorsoftllc.infantry.harness.api.McpTransport.Http>(l[1].spec.transport)
+        assertEquals(com.superiorsoftllc.infantry.harness.api.McpServerState.NEEDS_AUTH, l[1].status.state)
+        assertEquals(com.superiorsoftllc.infantry.harness.api.McpServerState.FAILED, l[2].status.state)
+        assertEquals("spawn failed", l[2].status.detail)
+        assertEquals(com.superiorsoftllc.infantry.harness.api.McpServerState.DISABLED, l[3].status.state)
+        assertTrue(PiMcp.parseList("not json").isEmpty())
+    }
+
+    @Test fun `MCP-PI-1 add and remove use the official pi mcp commands`() {
+        val spec = com.superiorsoftllc.infantry.harness.api.McpServerSpec(
+            "radius", com.superiorsoftllc.infantry.harness.api.McpTransport.Stdio(listOf("npx", "-y", "r"), mapOf("K" to "v")), com.superiorsoftllc.infantry.harness.api.McpSource.INFANTRY_USER)
+        assertEquals(listOf("mcp", "add", "radius", "-l", "--env", "K=v", "--", "npx", "-y", "r"), PiMcp.addArgs(spec, "project"))
+        val calls = mutableListOf<List<String>>()
+        val mcp = PiMcp(PiMcpRunner { a, _ -> calls += a; 0 to "" })
+        now { mcp.remove("/p", "radius", "project"); mcp.remove("/p", "radius", null) }
+        assertEquals(listOf(listOf("mcp", "remove", "radius", "-l"), listOf("mcp", "remove", "radius")), calls)
+    }
+
+    private fun spec(name: String, source: com.superiorsoftllc.infantry.harness.api.McpSource) =
+        com.superiorsoftllc.infantry.harness.api.McpServerSpec(name, com.superiorsoftllc.infantry.harness.api.McpTransport.Stdio(listOf("/bin/$name")), source)
+
+    @Test fun `MCP-PI-1 no grant means infantry only and a grant adds exactly that server`() {
+        val inf = spec("infantry", com.superiorsoftllc.infantry.harness.api.McpSource.INFANTRY)
+        val none = com.superiorsoftllc.infantry.harness.api.McpPlan(listOf(inf), deny = setOf("radius", "my-docs"))
+        val names = { env: Map<String, String> -> Json.parseToJsonElement(env.getValue(PiExtensions.MCP_ENV)).jsonObject["servers"].toString() }
+        assertTrue(names(PiExtensions.mcpEnv(none)).let { it.contains("\"infantry\"") && !it.contains("radius") })
+        assertEquals(listOf("--exclude-tools", "mcp__my_docs__*,mcp__radius__*"), PiExtensions.denyArgs(none))
+        // granted: a plugin-owned server is bridged (prefixed); a granted pi-native server is not re-sent and not denied.
+        val granted = com.superiorsoftllc.infantry.harness.api.McpPlan(listOf(inf, spec("browser", com.superiorsoftllc.infantry.harness.api.McpSource.PLUGIN), spec("radius", com.superiorsoftllc.infantry.harness.api.McpSource.HARNESS)), deny = setOf("my-docs"))
+        val env = names(PiExtensions.mcpEnv(granted))
+        assertTrue(env.contains("\"browser\"") && env.contains("\"prefix\":true") && !env.contains("radius"))
+        assertEquals(listOf("--exclude-tools", "mcp__my_docs__*"), PiExtensions.denyArgs(granted))
+        assertTrue(PiExtensions.denyArgs(com.superiorsoftllc.infantry.harness.api.McpPlan.EMPTY).isEmpty())
     }
 }

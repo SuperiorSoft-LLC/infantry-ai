@@ -2,7 +2,10 @@
 // Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.plugins.official.pi.harness
 
-import com.superiorsoftllc.infantry.harness.api.HarnessProcess
+import com.superiorsoftllc.infantry.harness.api.INFANTRY_MCP_SERVER
+import com.superiorsoftllc.infantry.harness.api.McpPlan
+import com.superiorsoftllc.infantry.harness.api.McpSource
+import com.superiorsoftllc.infantry.harness.api.McpTransport
 import java.io.File
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
@@ -29,18 +32,32 @@ internal object PiExtensions {
     /** RUNNER-GREEN-RUN-1: pi has no Command Code provider; this registers `commandcode` from the service's own model list when CMD_API_KEY is set. */
     const val COMMANDCODE = "infantry-commandcode.ts"
 
-    /** The [MCP_ENV] entry for [launch], or nothing when the host grants no MCP launch. */
-    fun mcpEnv(launch: HarnessProcess?): Map<String, String> {
-        if (launch == null || launch.command.isEmpty()) return emptyMap()
-        val json = buildJsonObject {
-            put("command", JsonArray(launch.command.map { JsonPrimitive(it) }))
-            put("env", buildJsonObject { launch.env.forEach { (k, v) -> put(k, v) } })
+    /**
+     * MCP-PI-1: the [MCP_ENV] entry for [plan]: a LIST of the stdio servers the extension starts (infantry, Infantry-owned and plugin specs).
+     * pi loads its own servers itself ([PiMcp]), so a HARNESS spec is never in it; an HTTP spec has no child process to bridge.
+     * The infantry server's tools keep their plain names; every other server's tools are registered as pi names them, `mcp__<server>__<tool>`.
+     */
+    fun mcpEnv(plan: McpPlan): Map<String, String> {
+        val servers = plan.delivered.filter { it.source != McpSource.HARNESS }.mapNotNull { spec ->
+            val t = spec.transport as? McpTransport.Stdio ?: return@mapNotNull null
+            buildJsonObject {
+                put("name", spec.name)
+                put("prefix", spec.name != INFANTRY_MCP_SERVER)
+                put("command", JsonArray(t.command.map { JsonPrimitive(it) }))
+                put("env", buildJsonObject { t.env.forEach { (k, v) -> put(k, v) } })
+            }
         }
-        return mapOf(MCP_ENV to json.toString())
+        if (servers.isEmpty()) return emptyMap()
+        return mapOf(MCP_ENV to buildJsonObject { put("servers", JsonArray(servers)) }.toString())
     }
 
-    /** `-e infantry-mcp.ts` only when the host granted an MCP launch. */
-    fun mcpArgs(dir: File, launch: HarnessProcess?): List<String> = if (mcpEnv(launch).isEmpty()) emptyList() else launchArgs(dir, MCP)
+    /** `-e infantry-mcp.ts` only when the plan delivers a server to bridge. */
+    fun mcpArgs(dir: File, plan: McpPlan): List<String> = if (mcpEnv(plan).isEmpty()) emptyList() else launchArgs(dir, MCP)
+
+    /** `--exclude-tools` (pi's documented denylist, MCP tools included) for the user servers the plan turns off; nothing when none. */
+    fun denyArgs(plan: McpPlan): List<String> =
+        plan.deny.filter { it != INFANTRY_MCP_SERVER }.sorted().map(PiMcp::toolPattern).takeIf { it.isNotEmpty() }
+            ?.let { listOf("--exclude-tools", it.joinToString(",")) } ?: emptyList()
 
     fun source(name: String): String =
         requireNotNull(PiExtensions::class.java.getResource("/pi/$name")) { "missing resource /pi/$name" }.readText()

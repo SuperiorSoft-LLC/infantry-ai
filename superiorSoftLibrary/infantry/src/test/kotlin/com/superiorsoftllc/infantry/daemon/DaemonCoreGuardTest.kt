@@ -193,7 +193,6 @@ class DaemonCoreGuardTest {
             "agents" to "blocker: AgentProfiles is wired into MailRouter and SessionManager spawn binding; needs a spawn-binding hook",
             "triggers" to "blocker: DaemonApi has schedule() but no spawn-with-binding or ticket-transition events",
             "cli" to "blocker: the infantry CLI and MCP server import protocol, session and daemon types; needs the infantryCore module split first",
-            "experiments" to "blocker: the pi tool bridge hooks PiLaunchExtras, SessionStatsService taggers and reads InfantryMcp/AccessPolicy internals; needs a harness launch-extras hook and an MCP tool-exposure surface in DaemonApi",
             "client" to "blocker: the console client shares protocol and mailbox types; moves with cli",
         )
     }

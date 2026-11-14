@@ -1233,10 +1233,8 @@ class InfantryDaemon(
                     ?.takeIf { !it.provider.isNullOrBlank() || !it.model.isNullOrBlank() }
                     ?.let { com.superiorsoftllc.infantry.protocol.RoleBinding(role ?: "", it.provider, it.model, it.effort) }
             }
-            // EXPERIMENTS-1: the pi tool bridge (off unless the project setting or the env override says on). Removing it = this line.
             com.superiorsoftllc.infantry.harness.HarnessConfigMerge.pluginMerge = harnesses::mergeConfig
             sessionStats.pluginStats = harnesses::statsSource // HARNESS H5d: plugin harness rows, no harness branch in the service
-            com.superiorsoftllc.infantry.experiments.pitoolbridge.PiToolBridgeRegistration.register({ sandboxConfig().enabled || projectStore.experimentOn(it, "piToolBridge") }, sessionStats)
             // TODO-PROGRESS-1: every pi session loads the daemon's `todowrite` extension (pi has no to-do tool of its own).
             // STALL-2: and the watch hook extension (`tool_call` -> the watched runner) when the session's watch is on.
             CoreHarnessContributions.register()
