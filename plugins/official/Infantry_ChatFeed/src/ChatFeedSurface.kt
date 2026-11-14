@@ -698,7 +698,6 @@ fun ReasoningBlock(lines: List<OutputLine>) {
         Text(
             "Thinking (${lines.size})",
             color = Palette.Muted,
-            fontFamily = Mono,
             fontSize = 11.sp,
             fontWeight = FontWeight.SemiBold,
             // CHAT-SCROLL-1: the header opens THIS block (ACTIVITY-BOX-1 had it toggling the Activity box by mistake).
@@ -708,7 +707,6 @@ fun ReasoningBlock(lines: List<OutputLine>) {
             Text(
                 lines.joinToString("\n") { it.text },
                 color = Palette.Muted,
-                fontFamily = Mono,
                 fontSize = 11.sp,
                 modifier = Modifier.padding(start = 8.dp, top = 2.dp),
             )
@@ -850,7 +848,7 @@ fun ContributionRow(item: TimelineItem) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(if (level == NOTE_LEVEL_WARN) "⚠" else "⚙", color = tint, fontSize = 13.sp, modifier = Modifier.testTag(CONTRIBUTION_MARK_TAG))
             Spacer(Modifier.width(8.dp))
-            Text(item.text.ifBlank { item.label }, color = tint, fontFamily = Mono, fontSize = 12.sp, modifier = Modifier.weight(1f))
+            Text(item.text.ifBlank { item.label }, color = tint, fontSize = 12.sp, modifier = Modifier.weight(1f))
             CardHeaderSlot()
             // SCRIPT-LINE-TS-1: the run's time, top right, same formatter/font as the message cards.
             if (item.at > 0) Text(

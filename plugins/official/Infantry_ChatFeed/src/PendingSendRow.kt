@@ -62,7 +62,7 @@ fun PendingSendRow(p: PendingSend, onRetry: (String) -> Unit, onDiscard: (String
                 // turn it becomes ([UserRow]): `[image: ...]` lines show as thumbnails, never as raw paths.
                 val (said, images) = ChatImageLines.split(p.text)
                 if (said.isNotBlank() || images.isEmpty()) {
-                    Text(said, color = if (p.state == SendState.FAILED) Palette.Muted else Palette.Accent, fontFamily = Mono, fontSize = 12.sp)
+                    Text(said, color = if (p.state == SendState.FAILED) Palette.Muted else Palette.Accent, fontSize = 12.sp)
                 }
                 ChatSentImages(images)
             }
