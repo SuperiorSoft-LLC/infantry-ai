@@ -1,0 +1,17 @@
+{
+  "name": "Infantry_Mcp",
+  "version": "1.0.0",
+  "apiVersion": 2,
+  "author": "Infantry AI",
+  "description": "MCP servers under the owner's control: the agent tool infantry_mcp (list, status, my tools; changes and grants refused to agent sessions) over the MCP registry. The CLI is `infantry mcp`. Daemon half only.",
+  "tier": "official",
+  "sequence": [],
+  "daemon": {
+    "entry": "com.superiorsoftllc.infantry.plugins.official.mcp.daemon.McpDaemonPlugin",
+    "jar": "daemon/build/libs/Infantry_Mcp-daemon.jar",
+    "apiAtLeast": "1.48.0",
+    "tools": [
+      { "name": "infantry_mcp", "action": "mcp.read", "kind": "read", "description": "MCP servers: list every server and its state, status of one, my_tools = what THIS session was handed and why. Changes and grants are for the owner/PM (infantry mcp CLI), never an agent session." }
+    ]
+  }
+}

@@ -431,7 +431,7 @@ internal object Cli {
 
         // `mcp serve` is long-lived and must start even while the daemon is down: each tool call connects on
         // its own and reports an unreachable daemon as a tool error, so it branches off BEFORE the connect.
-        if (command == "mcp") {
+        if (command == "mcp" && parsed.args == listOf("serve")) {
             // P11-C: an optional `.infantry/mcp.json` in the working directory sets project-scoped defaults;
             // flags override it. A bad file stops the server here, with one line, before `initialize`.
             val config = try {
@@ -531,6 +531,7 @@ internal object Cli {
                 "tests" -> TestsCli.run(stream, parsed.args, out, err, getenv)
                 "card" -> CardCli.run(stream, parsed.args, out, err, getenv)
                 "docs" -> DocsCli.run(stream, parsed.args, out, err, getenv)
+                "mcp" -> runBlocking { McpCli.run(stream, parsed.args, parsed.project, parsed.body, parsed.purpose, parsed.jsonOut, out, err, getenv) }
                 "tool" -> ToolCli.run(stream, parsed.args, parsed.body?.let { if (it == "-") input().use { r -> r.readText() } else it }, out, err, getenv)
                 "script" -> ScriptCli.run(stream, parsed.args, parsed.body?.let { if (it == "-") input().use { r -> r.readText() } else it } ?: parsed.file?.let { f -> runCatching { File(f).readText() }.getOrNull() }, out, err, getenv)
                 "issue" -> issue(stream, parsed, out, err, getenv)
@@ -6131,7 +6132,7 @@ internal object Cli {
         "submit" -> if (parsed.args.isEmpty()) "submit requires a goal" else null
         // CLI-PATH-1: the two PATH commands take flags only (`--dir`, `--dry-run`).
         "install-cli", "uninstall-cli" -> if (parsed.args.isEmpty()) null else "$command takes no arguments: ${CliPathCli.USAGE.removePrefix("usage: ")}"
-        "mcp" -> if (parsed.args != listOf("serve")) "mcp needs a subcommand: infantry mcp serve" else null
+        "mcp" -> McpCli.usageError(parsed.args, parsed.body, parsed.purpose)
         "watch" -> if (parsed.args.isEmpty()) "watch requires a pod id" else null
         "runs" -> if (parsed.args.isEmpty()) "runs requires a pod id" else null
         "logs" -> if (parsed.args.isEmpty()) "logs requires a session id (see: infantry runs <podId>)" else null
