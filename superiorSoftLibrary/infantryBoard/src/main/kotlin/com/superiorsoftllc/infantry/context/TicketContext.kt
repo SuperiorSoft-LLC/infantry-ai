@@ -35,6 +35,8 @@ data class ContextInput(
     val reportTo: ReportTo? = null,
     /** IMG-3: the ticket's attached images, as absolute paths; each is listed as `[image: <path>]` in the brief. */
     val images: List<String> = emptyList(),
+    /** MCP-SELECT-1b: the ticket's granted MCP tools, one `<server>: <purpose>` line each; empty = walled, no section. */
+    val mcp: List<String> = emptyList(),
 )
 
 /** BUG-MAIL-2: the session a ticket's worker reports to ([name] is its agent's name, else its role). */

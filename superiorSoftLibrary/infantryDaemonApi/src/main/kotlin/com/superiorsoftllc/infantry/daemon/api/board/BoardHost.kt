@@ -77,6 +77,8 @@ data class StoredTicket(
     val queueRank: Int? = null,
     /** RUNNER-POOL-3: the runner pin `local` | <name> | `any`; null = no pin. */
     val runner: String? = null,
+    /** MCP-SELECT-1b: the ticket's MCP declaration (JSON `{"require":[...]}`); null = none (walled). */
+    val mcp: String? = null,
 )
 
 /** One stored link, read "[ticketId] [type] [relatedId]". */

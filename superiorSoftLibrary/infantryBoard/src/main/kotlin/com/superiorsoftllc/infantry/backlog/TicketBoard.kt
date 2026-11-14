@@ -974,6 +974,13 @@ class TicketBoard(
             parsed.error?.let { throw IllegalArgumentException(it) }
             parsed.value
         }
+        // MCP-SELECT-1b: absent or null keeps the declaration, an empty `require` clears it, entries set it (each needs a server or capability and a purpose).
+        val declaredMcp = request.mcp
+        val mcp = if (declaredMcp == null) existing?.mcp else {
+            val declared = declaredMcp
+            declared.problem()?.let { throw IllegalArgumentException(it) }
+            declared.takeIf { it.require.isNotEmpty() }?.encode()
+        }
         validateExecutorPins(agentId, provider, model)
         // KNOWLEDGE-PTR-1 (C): a save that sets the title or the description rewrites the stored RELATED (auto) block.
         val described = if (title != null || description != null) {
@@ -1010,6 +1017,7 @@ class TicketBoard(
                         contextLimit = contextLimit,
                         effort = effort,
                         runner = runner,
+                        mcp = mcp,
                     ),
                 )
             } else {
@@ -1034,6 +1042,7 @@ class TicketBoard(
                     contextLimit = contextLimit,
                     effort = effort,
                     runner = runner,
+                    mcp = mcp,
                     queuedFor = if (agentId != row.agentId) null else row.queuedFor,
                     queuedAt = if (agentId != row.agentId) null else row.queuedAt,
                 )
@@ -1629,6 +1638,8 @@ class TicketBoard(
         reportTo = reportTo,
         // IMG-3: each attached image's absolute path, listed in the brief so the worker can read it.
         images = row.images.mapNotNull { host.images.absolute(row.projectId, it) },
+        // MCP-SELECT-1b: the MCP servers granted to this ticket and why.
+        mcp = com.superiorsoftllc.infantry.protocol.TicketMcp.stored(row.mcp)?.require.orEmpty().map { r -> "${r.server ?: r.capability}: ${r.purpose.trim()}" },
     )
 
     /**
@@ -2370,6 +2381,7 @@ class TicketBoard(
                 effectiveContextLimit = effectiveContextLimit(row),
                 effort = row.effort,
                 effectiveEffort = effectiveEffort(row),
+                mcp = com.superiorsoftllc.infantry.protocol.TicketMcp.stored(row.mcp),
                 queuedFor = row.queuedFor,
                 queuedAt = row.queuedAt,
                 queuedAgent = row.queuedAgent,

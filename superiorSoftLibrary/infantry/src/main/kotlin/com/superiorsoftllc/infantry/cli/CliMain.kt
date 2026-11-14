@@ -1840,6 +1840,7 @@ internal object Cli {
                 contextLimit = parsed.contextLimit,
                 effort = parsed.effort,
                 runner = parsed.runner,
+                mcp = parsed.mcp,
                 images = images,
             ),
         )
@@ -1977,6 +1978,7 @@ internal object Cli {
                 contextLimit = parsed.contextLimit,
                 effort = parsed.effort,
                 runner = parsed.runner,
+                mcp = parsed.mcp,
                 images = images,
             ),
         )
@@ -2004,6 +2006,7 @@ internal object Cli {
             if (parsed.contextLimit != null) add("context limit ${ticket.contextLimit?.let(com.superiorsoftllc.infantry.session.ContextLimits::label) ?: "-"}")
             if (parsed.effort != null) add("effort ${ticket.effort ?: "-"}")
             if (parsed.runner != null) add("runner ${ticket.runner ?: "-"}")
+            if (parsed.mcp != null) add("mcp ${ticket.mcp?.servers()?.joinToString(",").orEmpty().ifEmpty { "-" }}")
             if (images != null) add("${ticket.images.size} image(s)")
         }
         val linked = linkRelatedTo(stream, ticket, parsed.relatedTo, projectId.orEmpty(), err) ?: return 1
@@ -4891,8 +4894,8 @@ internal object Cli {
               tickets --status <column>      Only that column: backlog, todo, in_progress, pending, done
               tickets --epic <id|prefix> --project <id>   Only that epic's tickets, in board order
               ticket show <id|prefix>        One ticket in full: title, status, agent, links, description
-              ticket create --title <t> [--desc <d> | --desc-file <path> | --desc -] [--project <id>] [--epic <id|prefix>] [--role <id>] [--provider <id>] [--model <id>] [--weight 1-5] [--context-limit 200k|off] [--effort low|medium|high|xhigh|max|off] [--runner local|<name>|any|none] [--image <file>]... [--status todo|backlog]   Save a todo (or backlog) ticket; prints its id
-              ticket update <id|prefix> [--title <t>] [--desc <d> | --desc-file <path> | --desc -] [--epic <id|prefix>] [--role <id>] [--provider <id>] [--model <id>] [--weight 1-5|0] [--context-limit 200k|off] [--effort low|medium|high|xhigh|max|off] [--runner local|<name>|any|none] [--image <file>]... [--remove-image <path>]...   Edit a ticket; flags left out keep their value
+              ticket create --title <t> [--desc <d> | --desc-file <path> | --desc -] [--project <id>] [--epic <id|prefix>] [--role <id>] [--provider <id>] [--model <id>] [--weight 1-5] [--context-limit 200k|off] [--effort low|medium|high|xhigh|max|off] [--runner local|<name>|any|none] [--mcp <server>=<purpose>]... [--image <file>]... [--status todo|backlog]   Save a todo (or backlog) ticket; prints its id
+              ticket update <id|prefix> [--title <t>] [--desc <d> | --desc-file <path> | --desc -] [--epic <id|prefix>] [--role <id>] [--provider <id>] [--model <id>] [--weight 1-5|0] [--context-limit 200k|off] [--effort low|medium|high|xhigh|max|off] [--runner local|<name>|any|none] [--mcp <server>=<purpose>|none]... [--image <file>]... [--remove-image <path>]...   Edit a ticket; flags left out keep their value
                                   --weight: how likely the ticket is to come back wrong, not its size (ROUTING-1 rubric):
                         4-5 touches the wire / contract, the daemon, auth or project scope, concurrency or SSR timing,
                             an Android build, or more than one module
@@ -5288,6 +5291,8 @@ internal object Cli {
         val effort: String? = null,
         /** RUNNER-POOL-3: `--runner` (local | <name> | any; "none" clears it on an update). */
         val runner: String? = null,
+        /** MCP-SELECT-1b: `--mcp <server>=<purpose>` (repeatable) sets the ticket's MCP declaration; `--mcp none` clears it. */
+        val mcp: com.superiorsoftllc.infantry.protocol.TicketMcp? = null,
         // `ask` (PROMPT-5).
         val question: String? = null,
         val options: List<String> = emptyList(),
@@ -5433,6 +5438,8 @@ internal object Cli {
         var contextLimit: Int? = null
         var effort: String? = null
         var runner: String? = null
+        val mcpRequire = mutableListOf<com.superiorsoftllc.infantry.protocol.TicketMcpRequire>()
+        var mcpClear = false
         var question: String? = null
         val options = mutableListOf<String>()
         val images = mutableListOf<String>()
@@ -5791,6 +5798,16 @@ internal object Cli {
                     runner = v
                     i++
                 }
+                // MCP-SELECT-1b: --mcp <server>=<purpose> (repeatable) declares the MCP servers the ticket needs and why; none clears.
+                "--mcp" -> {
+                    val v = flagValue(args, ++i)?.trim() ?: return fail(err, "--mcp expects <server>=<purpose> or none")
+                    if (v.lowercase() == "none") mcpClear = true else {
+                        val at = v.indexOf('=')
+                        if (at <= 0 || v.substring(at + 1).isBlank()) return fail(err, "--mcp expects <server>=<purpose> (a purpose is required: walled by default) or none")
+                        mcpRequire += com.superiorsoftllc.infantry.protocol.TicketMcpRequire(server = v.substring(0, at).trim(), purpose = v.substring(at + 1).trim())
+                    }
+                    i++
+                }
                 // CONTEXT-LIMIT-1: 200000 / 200k / 1m sets, off (or 0) clears.
                 "--context-limit" -> {
                     val parsedLimit = com.superiorsoftllc.infantry.session.ContextLimits.parse(
@@ -6082,6 +6099,7 @@ internal object Cli {
             contextLimit = contextLimit,
             effort = effort,
             runner = runner,
+            mcp = if (mcpClear || mcpRequire.isNotEmpty()) com.superiorsoftllc.infantry.protocol.TicketMcp(mcpRequire.toList()) else null,
             question = question,
             options = options.toList(),
             images = images.toList(),
@@ -6349,9 +6367,9 @@ internal object Cli {
             "update" -> when {
                 blank(1) -> "ticket update requires a ticket id: infantry ticket update <id|prefix> [--title ...] [--desc ...] [--role <id>] [--provider <id>] [--model <id>] [--epic <id|prefix>]"
                 parsed.title == null && parsed.description == null && parsed.role == null &&
-                    parsed.provider == null && parsed.model == null && parsed.weight == null && parsed.contextLimit == null && parsed.effort == null && parsed.runner == null && parsed.epic == null &&
+                    parsed.provider == null && parsed.model == null && parsed.weight == null && parsed.contextLimit == null && parsed.effort == null && parsed.runner == null && parsed.mcp == null && parsed.epic == null &&
                     parsed.images.isEmpty() && parsed.removeImages.isEmpty() && parsed.relatedTo.isEmpty() ->
-                    "ticket update needs something to change: --title, --desc, --role, --provider, --model, --weight, --context-limit, --effort, --runner, --epic, --image, --remove-image or --related-to"
+                    "ticket update needs something to change: --title, --desc, --role, --provider, --model, --weight, --context-limit, --effort, --runner, --mcp, --epic, --image, --remove-image or --related-to"
                 parsed.title?.isBlank() == true -> "ticket update --title cannot be blank"
                 else -> roleUsageError(parsed.role)
             }

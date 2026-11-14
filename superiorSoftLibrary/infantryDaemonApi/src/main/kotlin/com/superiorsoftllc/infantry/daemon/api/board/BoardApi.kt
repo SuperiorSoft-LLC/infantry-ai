@@ -113,6 +113,8 @@ data class TicketInfo(
     /** RUNNER-POOL-3: the ticket's runner pin; null = none. */
     val runner: String? = null,
     val effortSupport: String? = null,
+    /** MCP-SELECT-1b: the ticket's MCP declaration as JSON `{"require":[{"server"|"capability","purpose"}]}`; null = none (walled). */
+    val mcp: String? = null,
     /** AGENT-TASKS-2: the tip and commits-ahead of a todo ticket's kept work (null = none). */
     val workTip: String? = null,
     val workAhead: Int? = null,
@@ -145,6 +147,8 @@ data class TicketDraft(
     val effort: String? = null,
     /** RUNNER-POOL-3: `local` | a runner name | `any`; null = no pin. */
     val runner: String? = null,
+    /** MCP-SELECT-1b: the MCP declaration as JSON (see [TicketInfo.mcp]); null = none. */
+    val mcp: String? = null,
 )
 
 /** An edit: a null field keeps the stored value. [description], when given, replaces the stored one verbatim. */
@@ -166,6 +170,8 @@ data class TicketPatch(
     val effort: String? = null,
     /** RUNNER-POOL-3: a runner pin, or `none` to remove it; null keeps it. */
     val runner: String? = null,
+    /** MCP-SELECT-1b: the MCP declaration as JSON; an empty `require` removes it, null keeps it. A worker cannot set it on its own ticket. */
+    val mcp: String? = null,
 )
 
 @Serializable
