@@ -68,6 +68,8 @@ class ClaudeTtySession(
     private val prepareSignIn: (Map<String, String>) -> Unit = {},
     /** FIRST-TURN-1: the first turn's deadlines ([ClaudeFirstTurn.SUBMIT_SETTING], [ClaudeFirstTurn.REPLY_SETTING]), read at every connect. */
     private val firstTurn: () -> ClaudeFirstTurn = { ClaudeFirstTurn() },
+    /** MCP-WALL-1: `harness.claude.userMcpServers` (none = walled, the default; all = claude loads the user's MCP scopes). */
+    private val userMcp: () -> String? = { null },
 ) : HarnessSession {
     override val label: String = "claude"
 
@@ -105,9 +107,8 @@ class ClaudeTtySession(
             mcpConfigs = ClaudeCommand.mcpConfigs(
                 ClaudeCommand.userMcpConfigs(), mcpCommand, mcpEnv,
             ),
-            // MCP-USER-2: not strict by default, so Claude loads its own user/project/local MCP scopes; the project .mcp.json approval
-            // dialog is answered by the enabledMcpjsonServers setting (MCP-APPROVE-1, per name, default none). INFANTRY_CLAUDE_STRICT_MCP=1 turns strict back on.
-            strictMcp = ClaudeCommand.strictMcp(),
+            // MCP-WALL-1: strict by default (user MCP servers walled); harness.claude.userMcpServers=all or INFANTRY_CLAUDE_STRICT_MCP=0 opens it.
+            strictMcp = ClaudeCommand.strictMcp(userMcp()),
             sessionId = sessionId,
             resumeSessionId = resume,
             effort = request.effort,

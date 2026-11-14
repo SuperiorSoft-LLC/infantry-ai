@@ -49,6 +49,8 @@ class ClaudeSession(
     private val stateDir: (() -> File)? = null,
     /** G12: whether a process id still runs (the MCP server check); a test fakes it. */
     private val pidAlive: (Long) -> Boolean = ::processAlive,
+    /** MCP-WALL-1: `harness.claude.userMcpServers` (none = walled, the default; all = claude loads the user's MCP scopes). */
+    private val userMcp: () -> String? = { null },
 ) : HarnessSession {
     override val label: String = "claude"
 
@@ -68,7 +70,7 @@ class ClaudeSession(
             model = ClaudeCommand.effectiveModel(request.model),
             permissionMode = ClaudeCommand.permissionMode(request.toolApproval),
             mcpConfigs = ClaudeCommand.mcpConfigs(ClaudeCommand.userMcpConfigs(), mcpCommand, mcpEnv),
-            strictMcp = ClaudeCommand.strictMcp(),
+            strictMcp = ClaudeCommand.strictMcp(userMcp()),
             resumeSessionId = resume,
             effort = request.effort,
             streamInput = true,

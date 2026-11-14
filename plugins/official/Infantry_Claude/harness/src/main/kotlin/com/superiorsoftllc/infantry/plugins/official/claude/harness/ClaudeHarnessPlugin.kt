@@ -78,7 +78,7 @@ class ClaudeHarness internal constructor(
                 model = ClaudeCommand.effectiveModel(request.model),
                 permissionMode = null,
                 mcpConfigs = ClaudeCommand.mcpConfigs(ClaudeCommand.userMcpConfigs(), mcpCommand, mcpEnv),
-                strictMcp = ClaudeCommand.strictMcp(),
+                strictMcp = ClaudeCommand.strictMcp(host.setting(ClaudeCommand.USER_MCP_SETTING)),
                 resumeSessionId = request.sessionId,
                 effort = request.effort,
             ),
@@ -109,10 +109,12 @@ class ClaudeHarness internal constructor(
 
     /** the interactive CLI in a terminal (CLI-PTY-1, the default), or headless stream-json when `harness.claude.mode = headless`; decided at every launch. */
     override fun session(): HarnessSession = ClaudeModeSession(
-        headless = ClaudeSession(executable, ::mcp, { env -> ClaudeCommand.watchSettings(env) }, idleMinutes = ::liveIdle, stateDir = { host.stateDir }),
+        headless = ClaudeSession(executable, ::mcp, { env -> ClaudeCommand.watchSettings(env) }, idleMinutes = ::liveIdle, stateDir = { host.stateDir },
+            userMcp = { host.setting(ClaudeCommand.USER_MCP_SETTING) }),
         interactive = ClaudeTtySession(executable, ::mcp, { env -> ClaudeCommand.watchSettings(env) }, stateDir = { host.stateDir }, idleMinutes = ::liveIdle,
             approvalHookSeconds = { ClaudePermissionHook.timeoutSec(host.setting(ClaudePermissionHook.TIMEOUT_SETTING)) },
             prepareSignIn = { env -> ClaudeSignIn.prepare(System.getenv() + env, home()) },
+            userMcp = { host.setting(ClaudeCommand.USER_MCP_SETTING) },
             firstTurn = { ClaudeFirstTurn.of(host.setting(ClaudeFirstTurn.SUBMIT_SETTING), host.setting(ClaudeFirstTurn.REPLY_SETTING)) }),
         mode = { host.setting(ClaudeCommand.MODE_SETTING) },
     )

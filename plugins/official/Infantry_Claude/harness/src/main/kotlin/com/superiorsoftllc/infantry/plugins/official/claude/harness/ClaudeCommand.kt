@@ -83,7 +83,19 @@ object ClaudeCommand {
     /** MCP-APPROVE-1: `INFANTRY_CLAUDE_APPROVED_MCP`: project `.mcp.json` server names approved by the user, commas or newlines; default none. */
     fun approvedProjectMcp(): List<String> = parseMcpConfigs(System.getenv("INFANTRY_CLAUDE_APPROVED_MCP"))
 
-    fun strictMcp(): Boolean =System.getenv("INFANTRY_CLAUDE_STRICT_MCP")?.trim()?.lowercase() in setOf("1", "true", "yes")
+    /** MCP-WALL-1: module setting `harness.claude.userMcpServers`: `none` (default, walled) or `all` (claude also loads the user's own MCP scopes). */
+    const val USER_MCP_SETTING = "harness.claude.userMcpServers"
+
+    /**
+     * MCP-WALL-1: whether a launch passes `--strict-mcp-config` (only the daemon's own servers load). Walled by default; the
+     * [USER_MCP_SETTING] `all` opens it; `INFANTRY_CLAUDE_STRICT_MCP` (1/true/yes strict, 0/false/no open) overrides the setting.
+     */
+    fun strictMcp(setting: String? = null, env: String? = System.getenv("INFANTRY_CLAUDE_STRICT_MCP")): Boolean =
+        when (env?.trim()?.lowercase()) {
+            "1", "true", "yes" -> true
+            "0", "false", "no" -> false
+            else -> setting?.trim()?.lowercase() != "all"
+        }
 
     fun defaultModel(): String? = System.getenv("INFANTRY_CLAUDE_MODEL")?.takeIf { it.isNotBlank() }
 
