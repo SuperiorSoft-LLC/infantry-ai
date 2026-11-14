@@ -65,4 +65,35 @@ class McpModelTest {
         assertNotNull(serverProblem(ServerDraft(name = "")))
         Unit
     }
+
+    private val grants = parseMcpSnapshot("""{"grants":[
+      {"id":"g1","server":"a","scope":"role","target":"dev","purpose":"p","approvedBy":"owner","approvedAt":1700000000000},
+      {"id":"g2","server":"b","scope":"agent","target":"agent-1","purpose":"q","approvedBy":"owner","approvedAt":1800000000000},
+      {"id":"g3","server":"a","scope":"ticket","target":"t1","purpose":"r","approvedBy":"owner"}]}""").grants
+
+    @Test fun `grants filter by server or target and list newest first`() {
+        assertEquals(listOf("g2", "g1", "g3"), filterGrants(grants, GrantFilter()).map { it.id })
+        assertEquals(listOf("g1", "g3"), filterGrants(grants, GrantFilter(server = "a")).map { it.id })
+        assertEquals(listOf("g2"), filterGrants(grants, GrantFilter(target = "agent-1")).map { it.id })
+        assertTrue(filterGrants(grants, GrantFilter(server = "b", target = "dev")).isEmpty())
+    }
+
+    @Test fun `grant dates are utc days and blank when unknown`() {
+        assertEquals("2023-11-14", grantDate(1700000000000))
+        assertEquals("", grantDate(0))
+    }
+
+    @Test fun `compact overflow holds the card actions and read-only groups only grant`() {
+        assertEquals(listOf(CardAction.GRANT, CardAction.TOGGLE, CardAction.EDIT, CardAction.REMOVE), overflowActions(false, true))
+        assertEquals(listOf(CardAction.GRANT, CardAction.EDIT, CardAction.REMOVE), overflowActions(false, false))
+        assertEquals(listOf(CardAction.GRANT), overflowActions(true, false))
+    }
+
+    @Test fun `revoke sends the grant id once`() = runBlocking {
+        val sent = mutableListOf<Pair<String, String>>()
+        val vm = McpViewModel({ t, d -> sent += t to d; McpWire.SERVERS to list }, { null })
+        vm.revoke(grants[0])
+        assertEquals(McpWire.REVOKE, sent[0].first)
+        assertTrue("\"grantId\":\"g1\"" in sent[0].second)
+    }
 }

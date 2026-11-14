@@ -33,7 +33,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.superiorsoftllc.infantry.plugin.api.ActionKind
 import com.superiorsoftllc.infantry.ui.AhqAlertDialog
+import com.superiorsoftllc.infantry.ui.AhqIcons
 import com.superiorsoftllc.infantry.ui.Chip
+import com.superiorsoftllc.infantry.ui.IconAction
+import com.superiorsoftllc.infantry.ui.model.PanelLayout
+import androidx.compose.foundation.layout.BoxWithConstraints
 import com.superiorsoftllc.infantry.ui.DropdownMenuItem
 import com.superiorsoftllc.infantry.ui.InfantryDropdownMenu
 import com.superiorsoftllc.infantry.ui.OutlinedButton
@@ -106,18 +110,29 @@ fun McpScreen(vm: McpViewModel, ctx: ShellContext, roleOptions: List<Pair<String
 
     val targets = vm.snapshot.targets
 
-    Box(Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+    var tab by remember { mutableStateOf(McpTab.SERVERS) }
+    var filter by remember { mutableStateOf(GrantFilter()) }
+
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val compact = PanelLayout.isCompact(maxWidth.value)
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(if (compact) 8.dp else 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("MCP TOOLS", color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.weight(1f))
                 OutlinedButton(onClick = { draft = ServerDraft() }, enabled = canWrite, modifier = Modifier.testTag(MCP_ADD_TAG)) { Text("Add server", fontSize = 11.sp) }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                McpTab.entries.forEach { t ->
+                    OutlinedButton(onClick = { tab = t }, modifier = Modifier.testTag("mcp-tab-${t.name.lowercase()}")) {
+                        Text(if (t == McpTab.ASSIGNMENTS) "${t.label} (${vm.snapshot.grants.size})" else t.label, fontSize = 11.sp, color = if (tab == t) Palette.Text else Palette.Muted, fontWeight = if (tab == t) FontWeight.SemiBold else FontWeight.Normal)
+                    }
+                }
             }
             Text("Walled by default: an agent gets a server only through a grant, with a purpose.", color = Palette.Muted, fontSize = 11.sp)
             if (draft == null && grantDraft == null) vm.error?.let { Text(it, color = Palette.Danger, fontSize = 11.sp, modifier = Modifier.testTag(MCP_ERROR_TAG)) }
             if (vm.loading) Text("Loading MCP servers...", color = Palette.Muted, fontSize = 12.sp)
-            else if (vm.snapshot.servers.isEmpty()) Text("No MCP servers yet. Add one, or install one in your CLI and it appears here.", color = Palette.Muted, fontSize = 12.sp)
+            else if (tab == McpTab.SERVERS && vm.snapshot.servers.isEmpty()) Text("No MCP servers yet. Add one, or install one in your CLI and it appears here.", color = Palette.Muted, fontSize = 12.sp)
 
-            vm.groups.forEach { g ->
+            if (tab == McpTab.SERVERS) vm.groups.forEach { g ->
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 6.dp)) {
                     Text(g.title, color = Palette.Text, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
                     if (g.readOnly) Chip("read-only", Palette.Muted)
@@ -125,7 +140,7 @@ fun McpScreen(vm: McpViewModel, ctx: ShellContext, roleOptions: List<Pair<String
                 g.servers.forEach { s ->
                     val target = targets.firstOrNull { it.id == s.target }
                     ServerCard(
-                        s, vm, g.readOnly, canWrite, live[s.name].orEmpty(),
+                        s, vm, g.readOnly, canWrite, live[s.name].orEmpty(), compact,
                         canEdit = canWrite && (s.owned || target?.canEdit == true),
                         canDelete = canRemove && (s.owned || target?.canRemove == true),
                         onEdit = {
@@ -141,19 +156,7 @@ fun McpScreen(vm: McpViewModel, ctx: ShellContext, roleOptions: List<Pair<String
                 }
             }
 
-            if (vm.snapshot.grants.isNotEmpty()) {
-                Text("Grants", color = Palette.Text, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
-                vm.snapshot.grants.forEach { g ->
-                    Column(Modifier.fillMaxWidth().border(1.dp, Palette.Border, RoundedCornerShape(6.dp)).padding(10.dp).testTag("mcp-grant-${g.id}")) {
-                        Text("${g.server}  ->  ${g.scope} ${g.target}", color = Palette.Text, fontSize = 12.sp)
-                        Text("Purpose: ${g.purpose}", color = Palette.Muted, fontSize = 11.sp)
-                        Text("Approved by ${g.approvedBy}", color = Palette.Muted, fontSize = 10.sp)
-                        OutlinedButton(onClick = { scope.launch { vm.revoke(g) } }, enabled = canRemove, modifier = Modifier.padding(top = 4.dp).testTag("mcp-revoke-${g.id}")) {
-                            Text("Revoke", fontSize = 11.sp, color = Palette.Danger)
-                        }
-                    }
-                }
-            }
+            if (tab == McpTab.ASSIGNMENTS) AssignmentsTab(vm, filter, { filter = it }, canRemove, compact) { scope.launch { vm.revoke(it) } }
         }
 
         vm.pendingRemove?.let { s ->
@@ -230,7 +233,7 @@ fun McpScreen(vm: McpViewModel, ctx: ShellContext, roleOptions: List<Pair<String
 
 @Composable
 private fun ServerCard(
-    s: McpServer, vm: McpViewModel, readOnly: Boolean, canWrite: Boolean, live: String, canEdit: Boolean, canDelete: Boolean,
+    s: McpServer, vm: McpViewModel, readOnly: Boolean, canWrite: Boolean, live: String, compact: Boolean, canEdit: Boolean, canDelete: Boolean,
     onEdit: () -> Unit, onGrant: () -> Unit, onTest: () -> Unit, onToggle: () -> Unit,
 ) {
     val tested = vm.tested[s.key]
@@ -246,6 +249,32 @@ private fun ServerCard(
         s.shadowedBy?.let { Text("Shadowed by $it: never delivered.", color = Palette.Warn, fontSize = 10.sp) }
         Text("Granted to: ${grantSummary(s, vm.snapshot.grants)}", color = Palette.Muted, fontSize = 11.sp)
         live.takeIf { it.isNotEmpty() }?.let { Text("In sessions: $it", color = Palette.Muted, fontSize = 11.sp, maxLines = 2, modifier = Modifier.testTag("mcp-live-${s.name}")) }
+        if (compact) {
+            var open by remember { mutableStateOf(false) }
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                OutlinedButton(onClick = onTest, enabled = canWrite, modifier = Modifier.testTag("mcp-test-${s.name}")) { Text("Test", fontSize = 11.sp) }
+                Box {
+                    IconAction(AhqIcons.MoreVert, "More actions", { open = true }, Modifier.testTag("mcp-more-${s.name}"))
+                    InfantryDropdownMenu(open, { open = false }) {
+                        overflowActions(readOnly, s.owned).forEach { act ->
+                            val label = when (act) {
+                                CardAction.GRANT -> "Grant"
+                                CardAction.TOGGLE -> if (s.enabled) "Disable" else "Enable"
+                                CardAction.EDIT -> "Edit"
+                                CardAction.REMOVE -> "Remove"
+                            }
+                            val allowed = when (act) { CardAction.GRANT, CardAction.TOGGLE -> canWrite; CardAction.EDIT -> canEdit; CardAction.REMOVE -> canDelete }
+                            DropdownMenuItem(
+                                text = { Text(label, fontSize = 12.sp, color = if (act == CardAction.REMOVE) Palette.Danger else Palette.Text) },
+                                enabled = allowed,
+                                onClick = { open = false; when (act) { CardAction.GRANT -> onGrant(); CardAction.TOGGLE -> onToggle(); CardAction.EDIT -> onEdit(); CardAction.REMOVE -> vm.askRemove(s) } },
+                                modifier = Modifier.testTag("mcp-${act.name.lowercase()}-${s.name}"),
+                            )
+                        }
+                    }
+                }
+            }
+        } else
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(top = 4.dp)) {
             OutlinedButton(onClick = onTest, enabled = canWrite, modifier = Modifier.testTag("mcp-test-${s.name}")) { Text("Test", fontSize = 11.sp) }
             OutlinedButton(onClick = onGrant, enabled = canWrite, modifier = Modifier.testTag("mcp-grant-${s.name}")) { Text("Grant", fontSize = 11.sp) }
@@ -254,6 +283,32 @@ private fun ServerCard(
                 OutlinedButton(onClick = onEdit, enabled = canEdit, modifier = Modifier.testTag("mcp-edit-${s.name}")) { Text("Edit", fontSize = 11.sp) }
                 OutlinedButton(onClick = { vm.askRemove(s) }, enabled = canDelete, modifier = Modifier.testTag("mcp-remove-${s.name}")) { Text("Remove", fontSize = 11.sp, color = Palette.Danger) }
             }
+        }
+    }
+}
+
+
+/** MCP-UI-2: every grant (server, target, purpose, approver, date) with revoke, filtered by server or target. */
+@Composable
+private fun AssignmentsTab(vm: McpViewModel, filter: GrantFilter, onFilter: (GrantFilter) -> Unit, canRevoke: Boolean, compact: Boolean, onRevoke: (McpGrant) -> Unit) {
+    val all = vm.snapshot.grants
+    val shown = filterGrants(all, filter)
+    val servers = listOf("" to "All servers") + all.map { it.server }.distinct().sorted().map { it to it }
+    val targets = listOf("" to "All targets") + all.map { it.target }.distinct().sorted().map { it to it }
+    if (compact) {
+        Picker("Server", servers, filter.server, { onFilter(filter.copy(server = it)) }, Modifier.fillMaxWidth())
+        Picker("Target", targets, filter.target, { onFilter(filter.copy(target = it)) }, Modifier.fillMaxWidth())
+    } else Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Picker("Server", servers, filter.server, { onFilter(filter.copy(server = it)) }, Modifier.weight(1f))
+        Picker("Target", targets, filter.target, { onFilter(filter.copy(target = it)) }, Modifier.weight(1f))
+    }
+    if (shown.isEmpty()) Text(if (all.isEmpty()) "No grants yet: every server is walled. Grant one from a server card." else "No grant matches this filter.", color = Palette.Muted, fontSize = 12.sp, modifier = Modifier.testTag("mcp-grants-empty"))
+    shown.forEach { g ->
+        Column(Modifier.fillMaxWidth().border(1.dp, Palette.Border, RoundedCornerShape(6.dp)).padding(10.dp).testTag("mcp-grant-${g.id}"), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text("${g.server}  ->  ${g.scope} ${g.target}", color = Palette.Text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            Text("Purpose: ${g.purpose}", color = Palette.Muted, fontSize = 11.sp)
+            Text("Approved by ${g.approvedBy}" + grantDate(g.approvedAt).let { if (it.isEmpty()) "" else " on $it" }, color = Palette.Muted, fontSize = 10.sp)
+            OutlinedButton(onClick = { onRevoke(g) }, enabled = canRevoke, modifier = Modifier.padding(top = 4.dp).testTag("mcp-revoke-${g.id}")) { Text("Revoke", fontSize = 11.sp, color = Palette.Danger) }
         }
     }
 }
