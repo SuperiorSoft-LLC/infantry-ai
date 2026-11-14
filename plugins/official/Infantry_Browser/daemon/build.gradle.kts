@@ -18,3 +18,6 @@ tasks.jar {
     archiveFileName.set("Infantry_Browser-daemon.jar")
     from(layout.projectDirectory.file("../module.json"))
 }
+
+dependencies { testImplementation(kotlin("test")) }
+tasks.test { useJUnitPlatform() }
