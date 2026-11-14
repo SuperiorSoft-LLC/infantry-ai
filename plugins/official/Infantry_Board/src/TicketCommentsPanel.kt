@@ -121,7 +121,8 @@ private fun Composer(onSend: (String, Boolean) -> Unit) {
         )
         Row(verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked = resolved, onCheckedChange = { resolved = it }, modifier = Modifier.testTag(COMMENT_RESOLVED_TOGGLE_TAG))
-            Text("Post as resolved", color = Palette.Muted, fontSize = 11.sp)
+            // The label toggles too: tapping the words (not just the small box) was a dead click.
+            Text("Post as resolved", color = Palette.Muted, fontSize = 11.sp, modifier = Modifier.clickable { resolved = !resolved })
             Spacer(Modifier.weight(1f))
             Button(
                 onClick = { onSend(text.trim(), resolved); text = ""; resolved = false },
