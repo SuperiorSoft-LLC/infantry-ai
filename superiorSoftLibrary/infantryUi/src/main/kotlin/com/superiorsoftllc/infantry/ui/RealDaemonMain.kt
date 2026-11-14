@@ -336,5 +336,5 @@ internal class PinnedDaemonHost(
     override val logsDir: String? = logsDir?.path
 
     override val updates: UpdatesEntry? =
-        updater?.let { u -> UpdatesEntry(InstalledUpdates.version() ?: "an unknown version") { u.check(manual = true) } }
+        updater?.let { u -> UpdatesEntry(InstalledUpdates.version() ?: "an unknown version", updateNotice(u)) { u.check(manual = true) } }
 }

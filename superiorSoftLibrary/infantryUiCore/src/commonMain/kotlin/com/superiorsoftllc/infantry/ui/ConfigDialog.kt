@@ -1329,13 +1329,17 @@ const val SECRET_NOTE_TAG = "secret-note"
 const val SECRET_PROJECTS_NOTE_TAG = "secret-projects-note"
 
 /** UPDATE-1: Configuration > Updates. [check] asks the installed app's updater to look for a newer release now. */
-class UpdatesEntry(val version: String, val check: () -> Unit) {
+class UpdatesEntry(val version: String, val notice: kotlinx.coroutines.flow.Flow<UpdateNotice?>? = null, val check: () -> Unit) {
     companion object {
         const val TITLE = "Updates"
         const val APPLIES_TO = "New Infantry AI releases on GitHub. Also checked at every start"
     }
 }
 
+/** UPDATE-PILL-1: the update item the status bar shows (null = nothing shown, nothing moves); [ok] draws it in the ok colour, a click runs [onClick]. */
+class UpdateNotice(val label: String, val ok: Boolean, val onClick: () -> Unit)
+
+const val UPDATE_FOOTER_TAG = "update-footer"
 const val UPDATES_VERSION_TAG = "updates-version"
 const val UPDATES_CHECK_TAG = "updates-check"
 const val LOGS_PATH_TAG = "logs-path"

@@ -137,32 +137,27 @@ fun UpdatePrompt(service: UpdateService, notifications: NotificationsRelay = Des
             is UpdateState.Restarting -> UpdateCard(s.indicatorLabel() ?: "", ToastKind.SUCCESS, progress = UpdateProgress.Indeterminate, tag = UPDATE_PROGRESS_TAG)
             UpdateState.Idle -> Unit
         }
-        UpdateFooterButton(service, state, indicator)
     }
 }
 
 /**
- * UPDATE-3: the always-visible footer button, bottom-left; click checks, or opens the prompt when an update is waiting.
+ * UPDATE-3: the footer item's state; UPDATE-PILL-1: drawn inline in the shell's status bar (StatusUpdateNotice), so it
+ * takes no space of its own. Click checks, or opens the prompt when an update is waiting.
  * UPDATE-UX-1: hidden while the bottom-right card shows a download; after "Later" on a ready one it brings the card back.
  */
-@Composable
-private fun UpdateFooterButton(service: UpdateService, state: UpdateState, indicator: Boolean) {
-    if (!service.enabled) return
-    val label = state.footerLabel(InstalledUpdates.version(), indicator) ?: return
-    Box(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 4.dp), contentAlignment = Alignment.BottomStart) {
-        TextButton(
-            onClick = {
-                when (state) {
-                    is UpdateState.Available -> service.openDialog()
-                    is UpdateState.Ready -> service.showIndicator()
-                    is UpdateState.Checking -> Unit
-                    else -> service.check(manual = true)
-                }
-            },
-            modifier = Modifier.testTag(UPDATE_FOOTER_TAG),
-        ) { Text(label, fontSize = 11.sp, color = if (state is UpdateState.Available || state is UpdateState.Ready) Palette.Ok else Palette.Muted) }
+fun updateNotice(service: UpdateService): kotlinx.coroutines.flow.Flow<UpdateNotice?> =
+    kotlinx.coroutines.flow.combine(service.state, service.indicatorVisible) { state, indicator ->
+        if (!service.enabled) return@combine null
+        val label = state.footerLabel(InstalledUpdates.version(), indicator) ?: return@combine null
+        UpdateNotice(label, state is UpdateState.Available || state is UpdateState.Ready) {
+            when (state) {
+                is UpdateState.Available -> service.openDialog()
+                is UpdateState.Ready -> service.showIndicator()
+                is UpdateState.Checking -> Unit
+                else -> service.check(manual = true)
+            }
+        }
     }
-}
 
 /** UPDATE-UX-1: the card's progress bar: none, a known fraction, or a running bar while the size is not known. */
 private sealed interface UpdateProgress {
@@ -225,7 +220,6 @@ const val UPDATE_NOTES_TAG = "update-notes"
 const val UPDATE_NOW_TAG = "update-now"
 const val UPDATE_LATER_TAG = "update-later"
 const val UPDATE_CARD_TAG = "update-card"
-const val UPDATE_FOOTER_TAG = "update-footer"
 const val UPDATE_RUNNING_TAG = "update-running-agents"
 const val UPDATE_CANCEL_TAG = "update-cancel"
 const val UPDATE_ANYWAY_TAG = "update-anyway"

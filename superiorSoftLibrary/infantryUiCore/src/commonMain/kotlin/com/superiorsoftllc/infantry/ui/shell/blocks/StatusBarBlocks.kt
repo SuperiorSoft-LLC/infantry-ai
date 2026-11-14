@@ -15,6 +15,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -132,6 +133,21 @@ object StatusVersionMismatch : Block("versionMismatch", "$FOOTER_NODE.versionMis
  */
 val StatusProcessesBadge: Block = PlaceholderBlock(PROCESSES_BADGE_SLOT, null)
 
+/** UPDATE-PILL-1: the host's update item, inline in the status bar like the processes badge; nothing when there is none. */
+object StatusUpdateNotice : Block("updateNotice", "$FOOTER_NODE.updateNotice") {
+    @Composable
+    override fun Render(scope: BlockScope) {
+        val flow = LocalShell.current.host.updates?.notice ?: return
+        val notice by flow.collectAsState(null)
+        notice?.let {
+            Text(
+                it.label, color = if (it.ok) Palette.Ok else Palette.Muted, fontSize = 11.sp, maxLines = 1, softWrap = false,
+                modifier = scope.modifier.padding(start = 10.dp).clickable(role = Role.Button) { it.onClick() }.testTag(com.superiorsoftllc.infantry.ui.UPDATE_FOOTER_TAG),
+            )
+        }
+    }
+}
+
 /** The shortcut hint only where there is room for it (a phone has no keyboard shortcuts and no width to spare). */
 object StatusShortcutHint : Block("shortcutHint", "$FOOTER_NODE.shortcutHint", Place(weight = 1f, weightFill = false)) {
     @Composable
@@ -181,7 +197,7 @@ object StatusConfigCog : Block("configCog", "$FOOTER_NODE.configCog") {
 val CoreStatusBar = StatusBarBlock(
     FOOTER_NODE,
     listOf(
-        StatusConnStatus, StatusLastFrame, StatusContractWarning, StatusVersionMismatch, StatusProcessesBadge,
+        StatusConnStatus, StatusLastFrame, StatusContractWarning, StatusVersionMismatch, StatusProcessesBadge, StatusUpdateNotice,
         SpacerBlock("$FOOTER_NODE.gap", place = Place(weight = 1f)),
         StatusShortcutHint, StatusBuildStamp, StatusConfigCog,
     ),
