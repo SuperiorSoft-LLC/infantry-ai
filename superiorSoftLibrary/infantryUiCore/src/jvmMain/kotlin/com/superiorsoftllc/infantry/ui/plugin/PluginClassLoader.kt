@@ -72,7 +72,9 @@ class PluginClassLoader(private val dir: File, jar: File, parent: ClassLoader, f
          */
         // CARD-2: the chat card seam (ChatCards.kt) is open to every tier, like the avatar seam (owner: cards serve the whole app).
         // CARD-IMG-1: so is the card image seam (CardImages.kt: rememberCardImage, CardImage); the daemon link it uses stays hidden.
-        val SEAM_TYPES = listOf("AgentAvatarRenderer", "AvatarRequest", "AvatarMotion", "ChatCardRenderer", "ChatCard", "CardState", "ChatCardsKt", "CardImage", "CardImagesKt")
+        // CARD-LIVE-1: a card renderer draws with the shared kit (Palette colours, the Clickables wrappers); hidden, a community-installed
+        // Infantry_News threw NoClassDefFoundError at draw and its card:news block fell back to the code block (not a live-swap fault).
+        val SEAM_TYPES = listOf("AgentAvatarRenderer", "AvatarRequest", "AvatarMotion", "ChatCardRenderer", "ChatCard", "CardState", "ChatCardsKt", "CardImage", "CardImagesKt", "Palette", "ClickablesKt")
         fun seamAllowed(n: String): Boolean {
             if (!n.startsWith(UI)) return false
             val r = n.removePrefix(UI)

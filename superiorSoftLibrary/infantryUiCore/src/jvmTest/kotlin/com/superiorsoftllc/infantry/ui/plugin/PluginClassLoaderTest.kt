@@ -52,7 +52,7 @@ class PluginClassLoaderTest {
     fun `a community loader sees the avatar seam and nothing else in the ui package`() {
         val dir = Files.createTempDirectory("plugin-loader").toFile()
         PluginClassLoader(dir, File(dir, "empty.jar"), javaClass.classLoader, Tier.COMMUNITY).use { loader ->
-            for (name in listOf("AgentAvatarRenderer", "AvatarRequest", "AvatarMotion", "ChatCardRenderer", "ChatCard", "CardState", "ChatCardsKt", "CardImage", "CardImagesKt").map { "com.superiorsoftllc.infantry.ui.$it" })
+            for (name in listOf("AgentAvatarRenderer", "AvatarRequest", "AvatarMotion", "ChatCardRenderer", "ChatCard", "CardState", "ChatCardsKt", "CardImage", "CardImagesKt", "Palette", "ClickablesKt").map { "com.superiorsoftllc.infantry.ui.$it" })
                 assertEquals(name, loader.loadClass(name).name, "$name is part of the plugin surface")
             for (hidden in listOf("PortraitAvatarRenderer", "AgentAvatarRendererFake", "AppKt", "ChatCardBlockRenderer").map { "com.superiorsoftllc.infantry.ui.$it" })
                 assertFailsWith<ClassNotFoundException>("$hidden must stay hidden") { loader.loadClass(hidden) }
