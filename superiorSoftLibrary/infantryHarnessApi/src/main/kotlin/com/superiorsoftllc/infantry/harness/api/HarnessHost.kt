@@ -11,7 +11,7 @@ import java.io.File
  * A call the module did not declare (or, for a community module, was not granted in modules.json) is refused: the
  * getters answer null, [start] throws [SecurityException], [ask] answers [HarnessAnswer.NONE]; each refusal is logged with
  * the module's name. Grants: `harness.cli` ([resolveCli], [start]), `harness.setting:<key>` ([setting]),
- * `harness.hook.mcp` ([mcpLaunch]), `harness.hook.watch` ([watchLauncher]), `harness.hook.ask` ([ask]), `harness.hook.stats` ([queryDb]).
+ * `harness.hook.mcp` ([mcpLaunch], [mcpServers]), `harness.hook.watch` ([watchLauncher]), `harness.hook.ask` ([ask]), `harness.hook.stats` ([queryDb]).
  */
 interface HarnessHost {
     /** The module this host belongs to (module.json `name`). */
@@ -43,6 +43,13 @@ interface HarnessHost {
 
     /** The command that starts the infantry MCP server for a session whose environment is [sessionEnv]; null when not granted. */
     fun mcpLaunch(sessionEnv: Map<String, String>): HarnessProcess?
+
+    /**
+     * 2.19.0: the MCP servers a session whose environment is [sessionEnv] gets: what to deliver ([McpPlan.add]) and what to turn off
+     * ([McpPlan.deny]). Default: the infantry entry alone (from [mcpLaunch], so the same `harness.hook.mcp` grant applies), nothing denied.
+     * [mcpLaunch] stays: it is the infantry entry of this plan.
+     */
+    fun mcpServers(sessionEnv: Map<String, String>): McpPlan = McpPlan(add = listOfNotNull(McpPlan.infantry(mcpLaunch(sessionEnv))))
 
     /** The watched-runner launcher a harness hook rewrites commands to, when watch is ON for that session; else null. */
     fun watchLauncher(sessionEnv: Map<String, String>): String?

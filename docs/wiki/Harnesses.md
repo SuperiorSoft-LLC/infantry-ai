@@ -74,7 +74,7 @@ Core types:
   `terminal(exitCode, stderrTail)`).
 - `HarnessRequest`: prompt, model, session id, effort, `toolApproval`, `contextLimit`, project.
 - `HarnessHost` (from `registrar.host`, never a static): `stateDir` (your own data folder), `setting(key)` (declared
-  keys only), `resolveCli(tool)`, `start(process, listener)`, `mcpLaunch`, `watchLauncher`, `queryDb`, `ask`, `log`.
+  keys only), `resolveCli(tool)`, `start(process, listener)`, `mcpLaunch`, `mcpServers` (2.19: the session's `McpPlan`), `watchLauncher`, `queryDb`, `ask`, `log`.
   Nothing else of the daemon is reachable.
 
 ### Contributions (all optional, default no-op)
@@ -96,6 +96,7 @@ Core types:
 | Config merge | 2.11 | `mergeConfig(existing, ConfigParts(mcp, watchPlugin))` | `config` |
 | Non-stdio sessions (HTTP/SSE) | 2.12 | `SessionOutput.output/diagnostic/requestApproval`, `HarnessSession.connect(out, launched)` | `session` |
 | Sign-in state (runner check) | 2.18 | `signInProblem()` (null = signed in or unknown; cheap, proof only) | none |
+| MCP servers, harness-neutral | 2.19 | `mcp` (`HarnessMcp`: the CLI's own servers through its official commands only), `loadsUserMcp`, `SessionOutput.mcpServers(statuses)` (MCP-SPEC-1; nothing acts on them yet) | `mcp` |
 
 A community plugin must be granted each hook in `modules.json` (`harness.hook.<name>`, plus `harness.code`,
 `harness.cli`, `harness.cli.install`, `harness.setting:<key>` as needed).
@@ -291,6 +292,19 @@ Generated for the `infantryHarnessApi` guard `SdkTypesDocumentedGuardTest`: ever
 - `SessionConnection`: 2.8.0: one launched process's protocol state.
 - `SessionTurnEnd`: 2.8.0: how a persistent turn ended.
 - `WatchContribution`: 2.6.0: [extraArgs] are appended to the harness argv, [env] is added to its environment, [files] are written by the host under the module's own [HarnessHost.stateDir] (relative path -> text; a path tha
+
+### `McpSpec.kt`
+
+2.19.0 (MCP-SPEC-1, design [MCP-TOOLS](../design/MCP-TOOLS.md) section 4.1). Secret values in env and headers never print: `toString` shows their keys only.
+
+- `McpServerSpec`: one MCP server, harness-neutral: name, transport, source, the CLI's own scope label, `provides` tags, `localOnly`.
+- `McpTransport`: how a server is reached: `Stdio(command, env, workingDir)` or `Http(url, headers)`.
+- `McpSource`: where a spec came from: `INFANTRY`, `INFANTRY_USER` (Infantry's own MCP Tools screen), `HARNESS`, `PLUGIN`.
+- `McpServerState`: `CONFIGURED`, `CONNECTED`, `FAILED`, `NEEDS_AUTH`, `PENDING_APPROVAL`, `DISABLED`, `UNKNOWN`.
+- `McpServerStatus`: one server's state, a short detail and its tool count.
+- `McpListing`: one server a CLI lists, with its status.
+- `HarnessMcp`: a CLI's own servers through its official commands or API (`list`, `add`, `remove`, `test`, `canAdd`/`canRemove`/`canEdit`, `scopes`); every member defaults to "cannot".
+- `McpPlan`: one session's servers: `add` (delivered) and `deny` (names turned off; deny wins). `McpPlan.infantry(launch)` builds the infantry entry.
 
 ### `HarnessHost.kt`
 

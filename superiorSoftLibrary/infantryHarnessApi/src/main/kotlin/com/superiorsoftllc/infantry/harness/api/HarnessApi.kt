@@ -92,8 +92,12 @@ import java.io.File
  * 2.18.0 (RUNNER-CHECK-SIGNIN-1, additive): [Harness.signInProblem], why this harness's CLI is not signed in on this machine (the fix, for
  * a user), or null. A runner reports it in its hello, so `runner check` says "not signed in" instead of "signed in" on a machine with no
  * login. A 2.0 - 2.17 plugin keeps the default: null (unknown), and the host keeps judging sign-in by the provider's quota state alone.
+ *
+ * 2.19.0 (MCP-SPEC-1, additive): harness-neutral MCP servers ([McpServerSpec], [McpServerStatus], [McpPlan]). [Harness.mcp] (the CLI's own
+ * servers through its official commands), [Harness.loadsUserMcp], [HarnessHost.mcpServers] (a session's plan) and [SessionOutput.mcpServers]
+ * (per-server state). A 2.0 - 2.18 plugin keeps the defaults: no CLI servers visible, the plan is the infantry entry alone, nothing reported.
  */
-const val HARNESS_API_VERSION: String = "2.18.0"
+const val HARNESS_API_VERSION: String = "2.19.0"
 
 /** What a harness jar ships: registers its harnesses, given the [HarnessHost] scoped to its module. */
 interface HarnessPlugin {
@@ -197,6 +201,18 @@ interface Harness {
      * calls it for every runner hello. A throw is isolated and attributed, and reads as null.
      */
     fun signInProblem(): String? = null
+
+    /**
+     * 2.19.0: this CLI's own MCP servers, reached ONLY through its official commands or API, or null (default = this CLI's servers are not
+     * visible). Run its commands through [HarnessHost]. A throw is isolated and attributed.
+     */
+    val mcp: HarnessMcp? get() = null
+
+    /**
+     * 2.19.0: true = the CLI loads the user's own MCP servers by itself, so the host never re-sends them in a session's [McpPlan.add] and only
+     * names the ones to turn off in [McpPlan.deny]. Default false.
+     */
+    val loadsUserMcp: Boolean get() = false
 }
 
 /**
@@ -305,6 +321,12 @@ interface SessionOutput {
      * session and tells scripts; it never reconnects anything by itself. Default: dropped.
      */
     fun mcpState(state: McpState, reason: String? = null) {}
+
+    /**
+     * 2.19.0: the state of every MCP server of the session, as the live process sees it (generalises [mcpState], which stays the infantry
+     * entry's own report). Report changes only; the host records it on the session. Default: dropped.
+     */
+    fun mcpServers(statuses: List<McpServerStatus>) {}
 
     /**
      * 2.17.0: the harness refused one [tool] call ([prompted] = the owner was asked and did not approve, else Tool approval said no). The host
