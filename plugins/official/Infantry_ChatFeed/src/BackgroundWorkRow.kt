@@ -8,6 +8,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import com.superiorsoftllc.infantry.ui.rememberSteppedFraction
 import com.superiorsoftllc.infantry.ui.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -90,13 +91,7 @@ fun bgHeaderText(w: BgWorkSummary): String {
 @Composable
 fun BackgroundWorkRow(work: BgWorkSummary, now: Long) {
     var open by remember { mutableStateOf(false) }
-    val pulse = rememberInfiniteTransition(label = "chatBg")
-    val alpha by pulse.animateFloat(
-        initialValue = 0.35f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
-        label = "chatBgPulse",
-    )
+    val alpha = 0.35f + 0.65f * rememberSteppedFraction(1800, reverse = true).value
     val header = bgHeaderText(work)
     Column(Modifier.testTag(CHAT_BG_ROW_TAG).padding(vertical = 4.dp)) {
         Row(

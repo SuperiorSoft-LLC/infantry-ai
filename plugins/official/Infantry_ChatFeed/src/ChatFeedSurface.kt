@@ -35,6 +35,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import com.superiorsoftllc.infantry.ui.rememberSteppedFraction
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -643,13 +644,7 @@ private fun ActivityLines(entries: List<com.superiorsoftllc.infantry.ui.model.Ag
 /** Pulsing dot plus the status label. Cleared by the caller when [status] is no longer due. */
 @Composable
 fun ChatStatusRow(status: ChatStatus) {
-    val pulse = rememberInfiniteTransition(label = "chatStatus")
-    val alpha by pulse.animateFloat(
-        initialValue = 0.35f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(700), RepeatMode.Reverse),
-        label = "chatStatusPulse",
-    )
+    val alpha = 0.35f + 0.65f * rememberSteppedFraction(1400, reverse = true).value
     Row(Modifier.testTag(CHAT_STATUS_TAG).padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(8.dp).alpha(alpha).clip(CircleShape).background(Palette.Accent))
         Spacer(Modifier.width(8.dp))

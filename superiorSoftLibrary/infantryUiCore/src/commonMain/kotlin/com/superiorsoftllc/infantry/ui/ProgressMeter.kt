@@ -123,13 +123,11 @@ private fun Bar(fraction: Float?, color: Color, hatched: Boolean = false) {
         }
     } else {
         // Indeterminate: a soft highlight sweeping across the track; no number is drawn or implied.
-        val sweep by rememberInfiniteTransition(label = "shimmer").animateFloat(
-            -0.4f, 1.4f, infiniteRepeatable(tween(1_400, easing = LinearEasing), RepeatMode.Restart), label = "shimmer",
-        )
+        val sweepFraction = rememberSteppedFraction(1_400)
         Canvas(Modifier.fillMaxWidth().height(4.dp).clip(shape)) {
             drawRect(track)
             val w = size.width * 0.35f
-            val x = size.width * sweep - w / 2
+            val x = size.width * (-0.4f + 1.8f * sweepFraction.value) - w / 2
             drawRect(
                 Brush.horizontalGradient(listOf(Color.Transparent, color, Color.Transparent), startX = x, endX = x + w),
                 topLeft = Offset(x, 0f), size = Size(w, size.height),
