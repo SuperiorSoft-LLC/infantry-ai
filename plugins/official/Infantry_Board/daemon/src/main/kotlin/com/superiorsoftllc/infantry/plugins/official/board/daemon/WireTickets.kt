@@ -94,6 +94,7 @@ internal object WireTickets {
             contextLimitSupport = str(limit, "support"),
             effort = str(o, "effort"),
             runner = str(o, "runner"),
+            mcp = (o["mcp"] as? JsonObject)?.toString(),
             effectiveEffort = str(effort, "value"),
             effectiveEffortSource = str(effort, "source"),
             effortSupport = str(effort, "support"),

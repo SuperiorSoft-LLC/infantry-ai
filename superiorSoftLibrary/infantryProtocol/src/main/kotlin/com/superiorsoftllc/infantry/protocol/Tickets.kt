@@ -233,6 +233,8 @@ data class Ticket(
     val effort: String? = null,
     /** EFFORT-1: the effort a start would use with its source and how the effective harness honours it; null only from an older daemon. */
     val effectiveEffort: EffectiveEffort? = null,
+    /** MCP-SELECT-1b: the MCP servers this ticket's worker needs and why (walled by default: none = no grant); null = none declared. */
+    val mcp: TicketMcp? = null,
 )
 
 /**
@@ -435,6 +437,8 @@ data class TicketSave(
     val effort: String? = null,
     /** RUNNER-POOL-3: `local` | a runner name | `any` pins where the ticket starts, [TicketRunner.CLEAR] ("none" or "") removes the pin, absent or null keeps it. */
     val runner: String? = null,
+    /** MCP-SELECT-1b: sets the ticket's MCP declaration; an empty `require` clears it, absent or null keeps it. An entry names a server or a capability and its purpose, or the whole save is refused. */
+    val mcp: TicketMcp? = null,
     /**
      * BACKLOG (contract 1.131.0): on a CREATE only, the column the new ticket enters: [TicketStatus.TODO] (absent or
      * null, the default) or [TicketStatus.BACKLOG]; any other column is refused. On an edit it must be absent: columns
@@ -592,6 +596,39 @@ data class SettingsSet(
 /** AGENT-TASKS-2: the work a todo ticket keeps on its own branch: the branch, its tip commit and the commits ahead of the base. */
 @kotlinx.serialization.Serializable
 data class HasWork(val branch: String, val tip: String, val ahead: Int)
+
+/** MCP-SELECT-1b: one thing a ticket's worker needs: an MCP [server] (registry name) or a [capability], and [purpose], why (required: walled by default). */
+@Serializable
+data class TicketMcpRequire(val server: String? = null, val capability: String? = null, val purpose: String = "")
+
+/** MCP-SELECT-1b: a ticket's `mcp` field, `{"require":[{"server"|"capability","purpose"}]}`; stored as this JSON. */
+@Serializable
+data class TicketMcp(val require: List<TicketMcpRequire> = emptyList()) {
+    /** Why this declaration cannot be stored, or null. */
+    fun problem(): String? = require.firstNotNullOfOrNull { r ->
+        val s = r.server?.trim().orEmpty(); val c = r.capability?.trim().orEmpty()
+        when {
+            (s.isEmpty() && c.isEmpty()) || (s.isNotEmpty() && c.isNotEmpty()) -> "an mcp entry names exactly one of server or capability"
+            r.purpose.isBlank() -> "an mcp entry needs a purpose: why this ticket needs '${s.ifEmpty { c }.take(60)}'"
+            else -> null
+        }
+    }
+
+    /** The entries trimmed, blanks dropped; the servers this ticket asks for. */
+    fun servers(): List<String> = require.mapNotNull { it.server?.trim()?.takeIf { s -> s.isNotEmpty() } }.distinct()
+
+    /** The distinct purposes, in order, as one text. */
+    fun purpose(): String = require.map { it.purpose.trim() }.filter { it.isNotEmpty() }.distinct().joinToString("; ")
+
+    fun encode(): String = JSON.encodeToString(serializer(), this)
+
+    companion object {
+        private val JSON = kotlinx.serialization.json.Json { ignoreUnknownKeys = true; encodeDefaults = false; explicitNulls = false }
+        fun decode(text: String): TicketMcp = JSON.decodeFromString(serializer(), text)
+        /** A stored text as a declaration; null when blank, unreadable or empty. */
+        fun stored(text: String?): TicketMcp? = text?.takeIf { it.isNotBlank() }?.let { runCatching { decode(it) }.getOrNull() }?.takeIf { it.require.isNotEmpty() }
+    }
+}
 
 /** RUNNER-POOL-3: the values of a ticket's `runner` pin (docs/RUNNER-POOL.md section 3). */
 object TicketRunner {

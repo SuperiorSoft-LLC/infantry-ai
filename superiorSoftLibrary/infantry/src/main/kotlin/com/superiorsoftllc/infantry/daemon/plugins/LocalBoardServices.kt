@@ -150,20 +150,28 @@ class LocalBoardServices(
             val save = TicketSave(
                 title = draft.title, description = draft.description, projectId = projectId, epicId = draft.epicId, ticketType = draft.ticketType,
                 agentId = draft.agentId, provider = draft.provider, model = draft.model, weight = draft.weight, images = draft.images, status = draft.status,
-                contextLimit = draft.contextLimit, effort = draft.effort, runner = draft.runner,
+                contextLimit = draft.contextLimit, effort = draft.effort, runner = draft.runner, mcp = draft.mcp?.let { mcpOf(it) ?: return@op BoardResult.Refused("ticket_save refused: mcp is not valid JSON {\"require\":[{\"server\",\"purpose\"}]}") },
             )
             val created = b.save(save)
+            if (created.mcp != null) declareMcp(created, w)?.let { return@op BoardResult.Refused("ticket_save: ticket ${created.id.take(8)} created, but its MCP grants were refused: $it") }
             key?.let { createKeys[it] = created.id }
             BoardResult.Ok(info(created))
         }
 
-        override fun update(id: String, patch: TicketPatch, by: Caller): BoardResult<TicketInfo> = withTicket(Envelope.TICKET_SAVE, id, by) { b, _, t ->
+        override fun update(id: String, patch: TicketPatch, by: Caller): BoardResult<TicketInfo> = withTicket(Envelope.TICKET_SAVE, id, by) { b, w, t ->
+            // MCP-SELECT-1b: the self-grant gate: a worker session never sets mcp on the ticket it works on (walled by default; the owner or the PM grants).
+            if (patch.mcp != null && w.record?.ticketId == t.id) {
+                return@withTicket BoardResult.Refused("ticket_save refused: a worker cannot set mcp on its own ticket ${t.id.take(8)} (walled by default: the owner or the PM grants MCP servers)")
+            }
             val save = TicketSave(
                 id = t.id, title = patch.title, description = patch.description, ticketType = patch.ticketType, epicId = patch.epicId,
                 agentId = patch.agentId, provider = patch.provider, model = patch.model, weight = patch.weight, images = patch.images,
                 contextLimit = patch.contextLimit, effort = patch.effort, runner = patch.runner,
+                mcp = patch.mcp?.let { mcpOf(it) ?: return@withTicket BoardResult.Refused("ticket_save refused: mcp is not valid JSON {\"require\":[{\"server\",\"purpose\"}]}") },
             )
-            BoardResult.Ok(info(b.save(save)))
+            val saved = b.save(save)
+            if (patch.mcp != null) declareMcp(saved, w)?.let { return@withTicket BoardResult.Refused("ticket_save: ticket ${saved.id.take(8)} saved, but its MCP grants were refused: $it") }
+            BoardResult.Ok(info(saved))
         }
 
         override fun move(id: String, status: String?, position: Int?, by: Caller): BoardResult<TicketInfo> =
@@ -272,6 +280,30 @@ class LocalBoardServices(
         }
     }
 
+    /** MCP-SELECT-1b: [json] as a declaration; null when it does not parse (the caller refuses). A blank text is an empty declaration (clears). */
+    private fun mcpOf(json: String): com.superiorsoftllc.infantry.protocol.TicketMcp? =
+        if (json.isBlank()) com.superiorsoftllc.infantry.protocol.TicketMcp() else runCatching { com.superiorsoftllc.infantry.protocol.TicketMcp.decode(json) }.getOrNull()
+
+    /**
+     * MCP-SELECT-1b: the ticket's `mcp` becomes registry grants (target = the ticket), the one source the selection reads. A
+     * declaration replaces the ticket's earlier grants; an empty one removes them. A declare that the registry refuses (an unknown
+     * server, a limit) comes back as the reason: the ticket is saved, the grants are not.
+     */
+    private fun declareMcp(t: Ticket, w: Who): String? {
+        val grants = com.superiorsoftllc.infantry.mcp.McpService.current?.grants ?: return null
+        val mcp = t.mcp
+        val r = w.record
+        val ctx = r?.let { com.superiorsoftllc.infantry.mcp.McpSessionContext(it.provider, it.projectId, it.role, it.agentId, it.ticketId) }
+        val block = com.superiorsoftllc.infantry.mcp.McpBlock(mcp?.servers().orEmpty(), mcp?.purpose().orEmpty())
+        return try {
+            com.superiorsoftllc.infantry.mcp.McpDeclarations(grants).declare(
+                com.superiorsoftllc.infantry.mcp.McpGrantScope.TICKET, t.id, t.projectId, block,
+                com.superiorsoftllc.infantry.mcp.McpDeclarer(r?.let { "session ${it.id}" } ?: "owner", ctx),
+            )
+            null
+        } catch (e: IllegalArgumentException) { e.message ?: "refused" }
+    }
+
     /** The calling session as a ticket's starter: only a session the daemon holds is recorded (a UI move records none). */
     private fun starterOf(w: Who): String? = w.record?.id
 
@@ -355,7 +387,7 @@ class LocalBoardServices(
             contextLimit = t.contextLimit, effectiveContextLimit = t.effectiveContextLimit?.value,
             effectiveContextLimitSource = t.effectiveContextLimit?.source, contextLimitSupport = t.effectiveContextLimit?.support,
             effort = t.effort, effectiveEffort = t.effectiveEffort?.value, effectiveEffortSource = t.effectiveEffort?.source,
-            effortSupport = t.effectiveEffort?.support, runner = t.runner,
+            effortSupport = t.effectiveEffort?.support, runner = t.runner, mcp = t.mcp?.encode(),
         )
 
         fun info(e: Epic) = EpicInfo(e.id, e.projectId, e.name, e.goal, e.storyIds, e.baseBranch)

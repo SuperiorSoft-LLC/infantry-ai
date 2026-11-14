@@ -54,6 +54,7 @@ class TicketContextComposer(
             add("ticket" to core)
             // IMG-3: right after the ticket it illustrates, so the worker reads the images with the brief.
             imagesSection(input.images)?.let { add("images" to it) }
+            mcpSection(input.mcp)?.let { add("mcp" to it) }
             relatedBlock?.let { add("related" to it) }
             if (includeLinked && input.links.isNotEmpty()) {
                 val linkedTickets = input.links.joinToString("\n") { link ->
@@ -87,6 +88,13 @@ class TicketContextComposer(
     companion object {
         /** IMG-3: the heading of the attached-images section; each image follows as `[image: <absolute path>]`. */
         const val IMAGES_HEADING = "Attached images (read each file to see it):"
+
+        /** MCP-SELECT-1b: the heading of the granted-MCP section; each tool follows as `- <server>: <purpose>`. */
+        const val MCP_HEADING = "MCP tools granted to this ticket (use them only for the purpose given):"
+
+        /** MCP-SELECT-1b: the granted-MCP section, or null when the ticket has none (walled). */
+        fun mcpSection(lines: List<String>): String? =
+            lines.takeIf { it.isNotEmpty() }?.joinToString("\n", prefix = MCP_HEADING + "\n") { "- $it" }
 
         /** IMG-3: the attached-images section, or null when the ticket has none. */
         fun imagesSection(paths: List<String>): String? =

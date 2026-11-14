@@ -273,6 +273,19 @@ internal object TicketSave {
         "description" to JsonPrimitive("$EFFORT_HELP Shown on the ticket as effectiveEffort (source ticket / rule / agent / role / default); off clears it on update."),
     )))
 
+    fun JsonObjectBuilder.mcpProp() = put("mcp", buildJsonObject {
+        put("type", JsonPrimitive("object"))
+        put("description", JsonPrimitive("MCP-SELECT-1b: the MCP servers the ticket's worker may use and why: {require:[{server, purpose}]} (server = a registry name, see infantry_mcp). Walled by default: no entry = no MCP server. Every entry needs a purpose. {} / {require:[]} clears it on update. A worker cannot set it on its own ticket."))
+    })
+
+    /** `mcp` as the JSON text the daemon validates and stores; absent = keep (null). */
+    fun mcp(args: JsonObject, tool: String): String? = when (val v = args["mcp"]) {
+        null, is JsonNull -> null
+        is JsonObject -> v.toString()
+        is JsonPrimitive -> v.content.takeIf { it.isNotBlank() } ?: "{}"
+        else -> fail("$tool refused: mcp must be an object {require:[{server, purpose}]}")
+    }
+
     fun JsonObjectBuilder.runnerProp() = put("runner", JsonObject(mapOf(
         "type" to JsonPrimitive("string"),
         "description" to JsonPrimitive("RUNNER-POOL-3: where the ticket starts: local, a registered runner name or any. A named runner that is unknown, down or full refuses the start; none clears the pin on update (then the project's routing rule / runners.default decides)."),
@@ -302,6 +315,7 @@ class TicketCreateTool(private val api: DaemonApi, private val comments: TicketC
             contextLimitProp()
             effortProp()
             runnerProp()
+            mcpProp()
             put("images", pathsProp("Images to attach: local image file paths (png, jpeg, gif or webp, at most 10 MB each; each is uploaded to the project's .infantry/uploads/ticket/), or paths already stored there. A missing, oversized or non-image file refuses the call and nothing is saved. The board shows them as attachments and the started worker's brief lists them."))
             put("status", prop("Column the new ticket enters: todo (default, the current sprint) or backlog (parked, never started until moved to todo)."))
             relatedToProp()
@@ -334,6 +348,7 @@ class TicketCreateTool(private val api: DaemonApi, private val comments: TicketC
             contextLimit = TicketSave.contextLimit(args, tool),
             effort = TicketSave.effort(args, tool),
             runner = ToolArgs.string(args, "runner"),
+            mcp = TicketSave.mcp(args, tool),
             images = images,
             status = ToolArgs.string(args, "status")?.lowercase(),
         )
@@ -370,6 +385,7 @@ class TicketUpdateTool(private val api: DaemonApi, private val comments: TicketC
             contextLimitProp()
             effortProp()
             runnerProp()
+            mcpProp()
             put("images", pathsProp("The ticket's full image list, replacing the stored one ([] removes all): local image files (uploaded, as for ${TicketSave.CREATE}) or paths already under the project's .infantry/uploads/ticket/. Not with addImages / removeImages. A removed image's file is deleted once no ticket references it."))
             put("addImages", pathsProp("Images to ADD to the stored list: local image files (png, jpeg, gif or webp, at most 10 MB each) or stored paths."))
             relatedToProp()
@@ -428,6 +444,7 @@ class TicketUpdateTool(private val api: DaemonApi, private val comments: TicketC
             contextLimit = TicketSave.contextLimit(args, tool),
             effort = TicketSave.effort(args, tool),
             runner = ToolArgs.string(args, "runner"),
+            mcp = TicketSave.mcp(args, tool),
             images = images,
         )
         // TICKET-COMMENTS-2: notify set / add / remove (validated before the ticket is touched); a notify-only call changes nothing else.
@@ -438,7 +455,7 @@ class TicketUpdateTool(private val api: DaemonApi, private val comments: TicketC
             } catch (e: IllegalArgumentException) { return TicketSave.refused("$tool refused: ${e.message}") }
         }
         val noFields = patch.title == null && patch.description == null && patch.agentId == null && patch.provider == null && patch.model == null &&
-            patch.weight == null && patch.contextLimit == null && patch.effort == null && patch.runner == null && patch.images == null
+            patch.weight == null && patch.contextLimit == null && patch.effort == null && patch.runner == null && patch.mcp == null && patch.images == null
         val updated = if ((notifyEdit != null || epicTarget != null) && noFields) epicMoved else TicketSave.result(api.tickets.update(existing.id, patch, WireTickets.by(call)), tool)
         notifyEdit?.let { (set, add, rem) -> comments?.editNotify(existing.id, set, add, rem) }
         if (!relatedTo.isNullOrEmpty()) TicketSave.linkRelatedAsync(api, call, updated, relatedTo, tool, comments)

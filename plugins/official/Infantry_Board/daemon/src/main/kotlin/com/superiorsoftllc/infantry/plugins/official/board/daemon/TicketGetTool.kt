@@ -153,6 +153,8 @@ class TicketGetTool(private val api: DaemonApi, private val comments: TicketComm
             }
             // EFFORT-1: the ticket's reasoning effort and the effective one (source ticket / rule / agent / role / default, the harness's support).
             put("effort", ticket.effort)
+            // MCP-SELECT-1b: the ticket's MCP declaration (walled: absent = none).
+            ticket.mcp?.let { m -> put("mcp", runCatching { Json.parseToJsonElement(m) }.getOrElse { JsonPrimitive(m) }) }
             if (ticket.effectiveEffortSource != null) {
                 put("effectiveEffort", ticket.effectiveEffort)
                 put("effectiveEffortSource", ticket.effectiveEffortSource)
