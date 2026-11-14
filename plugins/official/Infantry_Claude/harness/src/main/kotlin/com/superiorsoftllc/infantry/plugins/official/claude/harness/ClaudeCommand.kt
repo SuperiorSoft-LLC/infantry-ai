@@ -80,7 +80,10 @@ object ClaudeCommand {
 
     fun userMcpConfigs(): List<String> = parseMcpConfigs(System.getenv("INFANTRY_CLAUDE_MCP_CONFIG"))
 
-    fun strictMcp(): Boolean = System.getenv("INFANTRY_CLAUDE_STRICT_MCP")?.trim()?.lowercase() in setOf("1", "true", "yes")
+    /** MCP-APPROVE-1: `INFANTRY_CLAUDE_APPROVED_MCP`: project `.mcp.json` server names approved by the user, commas or newlines; default none. */
+    fun approvedProjectMcp(): List<String> = parseMcpConfigs(System.getenv("INFANTRY_CLAUDE_APPROVED_MCP"))
+
+    fun strictMcp(): Boolean =System.getenv("INFANTRY_CLAUDE_STRICT_MCP")?.trim()?.lowercase() in setOf("1", "true", "yes")
 
     fun defaultModel(): String? = System.getenv("INFANTRY_CLAUDE_MODEL")?.takeIf { it.isNotBlank() }
 
@@ -242,7 +245,10 @@ object ClaudeCommand {
      * [bypass] adds `skipDangerousModePermissionPrompt`, the documented switch for the warning that bypassPermissions shows at start.
      * [permissionHook] (G3) is the `PermissionRequest` entry ([ClaudePermissionHook.entry]).
      */
-    fun ttySettings(eventsFile: String, watchSettings: String?, bypass: Boolean, permissionHook: JsonObject? = null): String {
+    fun ttySettings(
+        eventsFile: String, watchSettings: String?, bypass: Boolean, permissionHook: JsonObject? = null,
+        approvedMcp: List<String> = approvedProjectMcp(),
+    ): String {
         val hooks = LinkedHashMap<String, JsonArray>(TtyJson.hooksOf(watchSettings))
         for ((hook, event) in listOf("SessionStart" to ClaudeTtySession.EV_START, "UserPromptSubmit" to ClaudeTtySession.EV_SUBMIT, "Stop" to ClaudeTtySession.EV_STOP)) {
             hooks[hook] = JsonArray(hooks[hook].orEmpty() + eventHook(event, eventsFile))
@@ -250,8 +256,8 @@ object ClaudeCommand {
         permissionHook?.let { hooks[ClaudePermissionHook.EVENT] = JsonArray(hooks[ClaudePermissionHook.EVENT].orEmpty() + it) }
         val root = LinkedHashMap<String, kotlinx.serialization.json.JsonElement>()
         if (bypass) root["skipDangerousModePermissionPrompt"] = JsonPrimitive(true)
-        // MCP-USER-2: Claude's own setting approves a project .mcp.json up front, so the PTY shows no approval dialog without --strict-mcp-config.
-        root["enableAllProjectMcpServers"] = JsonPrimitive(true)
+        // MCP-APPROVE-1: Claude's own per-name approval list (default empty) replaces the blanket enableAllProjectMcpServers.
+        root["enabledMcpjsonServers"] = JsonArray(approvedMcp.map { JsonPrimitive(it) })
         root["showThinkingSummaries"] = JsonPrimitive(true) // CLI-PTY-2: the settings twin of --thinking-display summarized
         root["hooks"] = JsonObject(hooks)
         return JsonObject(root).toString()

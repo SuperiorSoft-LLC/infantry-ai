@@ -31,7 +31,7 @@ import java.util.UUID
  *   the screen shows the accept option selected); the bypass-permissions warning is turned off by the documented
  *   `skipDangerousModePermissionPrompt` setting in the same file, only when that mode is asked for. `--strict-mcp-config` is off by
  *   default (INFANTRY_CLAUDE_STRICT_MCP=1 adds it); the approval dialog for a project `.mcp.json` (which `-p` never shows) is
- *   answered by the `enableAllProjectMcpServers` setting in the same file.
+ *   answered by the `enabledMcpjsonServers` setting in the same file.
  * - **Input:** each turn is pasted (bracketed paste) and submitted with Enter once the CLI is up; a turn that arrives while another runs waits.
  * - **Output:** the session transcript, read as it grows and mapped to stream-json records ([TranscriptMapper]). The screen is kept only as
  *   debug scrollback (and for the trust question).
@@ -106,7 +106,7 @@ class ClaudeTtySession(
                 ClaudeCommand.userMcpConfigs(), mcpCommand, mcpEnv,
             ),
             // MCP-USER-2: not strict by default, so Claude loads its own user/project/local MCP scopes; the project .mcp.json approval
-            // dialog is answered by the enableAllProjectMcpServers setting. INFANTRY_CLAUDE_STRICT_MCP=1 turns strict back on.
+            // dialog is answered by the enabledMcpjsonServers setting (MCP-APPROVE-1, per name, default none). INFANTRY_CLAUDE_STRICT_MCP=1 turns strict back on.
             strictMcp = ClaudeCommand.strictMcp(),
             sessionId = sessionId,
             resumeSessionId = resume,
