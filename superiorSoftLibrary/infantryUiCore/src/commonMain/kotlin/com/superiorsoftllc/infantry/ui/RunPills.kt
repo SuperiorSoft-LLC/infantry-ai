@@ -80,13 +80,11 @@ private fun RunStateIcon(kind: RunPillKind, color: Color) {
     val m = Modifier.size(10.dp)
     when (kind) {
         RunPillKind.RUNNING, RunPillKind.STARTING -> {
-            val turn by rememberInfiniteTransition(label = "run-pill-spin").animateFloat(
-                0f, 360f, infiniteRepeatable(tween(1000, easing = LinearEasing), RepeatMode.Restart), label = "run-pill-angle",
-            )
+            val turnFraction = rememberSteppedFraction(1000)
             Canvas(m) {
                 val w = size.minDimension * 0.18f
                 drawArc(color.copy(alpha = 0.25f), 0f, 360f, false, style = Stroke(w))
-                drawArc(color, turn, 100f, false, style = Stroke(w, cap = StrokeCap.Round))
+                drawArc(color, turnFraction.value * 360f, 100f, false, style = Stroke(w, cap = StrokeCap.Round))
             }
         }
         RunPillKind.DONE -> Icon(AhqIcons.Check, contentDescription = null, tint = color, modifier = m)
