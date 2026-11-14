@@ -1169,6 +1169,8 @@ data class SessionRecord(
     val lastError: String? = null,
     val worktreePath: String? = null,
     val worktreeBranch: String? = null,
+    /** MCP-STATUS-1: this session's MCP servers and their live state (empty until the harness reports). */
+    val mcpServers: List<McpServerStatusWire> = emptyList(),
     val repoRoot: String? = null,
     val worktreeBaseRef: String? = null,
     /** Contract 1.3.0: the model the spawn named; null = the provider's default. */
@@ -2715,3 +2717,7 @@ data class AgentQueueItem(val ticketId: String, val title: String, val rank: Int
 /** AGENT-TASKS-7: the `agent_queue` answer: the agent's queue after the action, head first. */
 @Serializable
 data class AgentQueueAnswer(val agentId: String, val name: String? = null, val tickets: List<AgentQueueItem> = emptyList(), val message: String? = null)
+
+/** MCP-STATUS-1: one MCP server of a session: [state] is connected / failed / needs_auth / configured ... */
+@Serializable
+data class McpServerStatusWire(val name: String, val state: String, val detail: String? = null, val toolCount: Int? = null)

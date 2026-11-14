@@ -146,6 +146,7 @@ class ClaudeSession(
                 }
             }, "infantry-claude-mcp-watch").apply { isDaemon = true; start() }
         }
+        private val mcpStatus = McpStatusTracker()
         private var active: Turn? = null
         private var staleResults = 0
         /** CLI-PTY-4: turns claude began itself that were still running when a turn was sent; results end them first, in order. */
@@ -160,9 +161,10 @@ class ClaudeSession(
             }
             if (type == "system" && record.str("subtype") == "init") {
                 // MCP-CLAUDE-1: the headless init record names every MCP server and its state: the session's server status.
-                ClaudeMcp.initStatuses(record).takeIf { it.isNotEmpty() }?.let { out.mcpServers(it) }
+                ClaudeMcp.initStatuses(record).takeIf { it.isNotEmpty() }?.let { out.mcpServers(mcpStatus.seed(it)) }
                 return
             }
+            if (type == "assistant" || type == "user") mcpStatus.observe(record)?.let { out.mcpServers(it) }
             if (type == OWN_TURN_RECORD) {
                 // CLI-PTY-4: claude answers with no turn sent (it took up a notice of its own, e.g. a background task that ended): a turn
                 // the host must track like a sent one, ended by its `result` below.

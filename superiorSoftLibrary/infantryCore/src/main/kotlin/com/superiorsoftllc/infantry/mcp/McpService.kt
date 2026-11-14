@@ -34,6 +34,8 @@ class McpService(
     private val sessionContext: (String) -> McpSessionContext? = { null },
     /** The daemon's own server for a session context (the infantry entry of its plan). */
     private val infantryFor: (McpSessionContext) -> McpServerSpec? = { null },
+    /** MCP-STATUS-1: a live session's reported server states. */
+    private val sessionStatuses: (String) -> List<McpServerStatusView> = { emptyList() },
 ) {
     /** One frame's answer: its [type] and JSON [data]; [changed] = something was written, push `mcp_changed`. */
     data class McpAnswer(val type: String, val data: String, val changed: Boolean = false)
@@ -85,7 +87,8 @@ class McpService(
                         harnessId = r.target.takeIf { it != MCP_TARGET_INFANTRY } ?: throw IllegalArgumentException("expects a sessionId, or a harness id as target"),
                         projectId = r.projectId, role = r.role, agentId = r.agentId, ticketId = r.ticketId, remote = r.remote,
                     )
-                McpAnswer(Envelope.MCP_PLAN, JSON.encodeToString(com.superiorsoftllc.infantry.protocol.McpPlanView.serializer(), plan(ctx).view()))
+                McpAnswer(Envelope.MCP_PLAN, JSON.encodeToString(com.superiorsoftllc.infantry.protocol.McpPlanView.serializer(),
+                    plan(ctx).view().let { v -> r.sessionId?.let { sid -> v.copy(status = sessionStatuses(sid).associate { it.name to it.state }) } ?: v }))
             }
             else -> throw IllegalArgumentException("not an MCP frame: $type")
         }

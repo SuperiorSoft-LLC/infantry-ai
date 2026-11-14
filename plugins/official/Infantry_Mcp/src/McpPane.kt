@@ -2,6 +2,7 @@
 // Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.plugins.official.mcp
 
+import com.superiorsoftllc.infantry.ui.protocol.McpServerStatusWire
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -84,11 +85,12 @@ fun McpPane(tab: TabContext) {
         roleOptions = tab.state.roles.map { it.id to it.name },
         agentOptions = tab.state.agents.keys.map { it to it },
         ticketOptions = tab.state.tickets.map { it.id to "${it.id} ${it.title}" },
+        live = liveSessions(tab.state.agents.values.map { it.session.id to it.session.mcpServers }),
     )
 }
 
 @Composable
-fun McpScreen(vm: McpViewModel, ctx: ShellContext, roleOptions: List<Pair<String, String>>, agentOptions: List<Pair<String, String>>, ticketOptions: List<Pair<String, String>>) {
+fun McpScreen(vm: McpViewModel, ctx: ShellContext, roleOptions: List<Pair<String, String>>, agentOptions: List<Pair<String, String>>, ticketOptions: List<Pair<String, String>>, live: Map<String, String> = emptyMap()) {
     val scope = rememberCoroutineScope()
     val link = ctx.link
     val canWrite = link.gate("mcp.write").enabled
@@ -123,7 +125,7 @@ fun McpScreen(vm: McpViewModel, ctx: ShellContext, roleOptions: List<Pair<String
                 g.servers.forEach { s ->
                     val target = targets.firstOrNull { it.id == s.target }
                     ServerCard(
-                        s, vm, g.readOnly, canWrite,
+                        s, vm, g.readOnly, canWrite, live[s.name].orEmpty(),
                         canEdit = canWrite && (s.owned || target?.canEdit == true),
                         canDelete = canRemove && (s.owned || target?.canRemove == true),
                         onEdit = {
@@ -228,7 +230,7 @@ fun McpScreen(vm: McpViewModel, ctx: ShellContext, roleOptions: List<Pair<String
 
 @Composable
 private fun ServerCard(
-    s: McpServer, vm: McpViewModel, readOnly: Boolean, canWrite: Boolean, canEdit: Boolean, canDelete: Boolean,
+    s: McpServer, vm: McpViewModel, readOnly: Boolean, canWrite: Boolean, live: String, canEdit: Boolean, canDelete: Boolean,
     onEdit: () -> Unit, onGrant: () -> Unit, onTest: () -> Unit, onToggle: () -> Unit,
 ) {
     val tested = vm.tested[s.key]
@@ -243,6 +245,7 @@ private fun ServerCard(
         (tested?.second ?: s.detail)?.let { Text(it, color = Palette.Muted, fontSize = 10.sp, maxLines = 2) }
         s.shadowedBy?.let { Text("Shadowed by $it: never delivered.", color = Palette.Warn, fontSize = 10.sp) }
         Text("Granted to: ${grantSummary(s, vm.snapshot.grants)}", color = Palette.Muted, fontSize = 11.sp)
+        live.takeIf { it.isNotEmpty() }?.let { Text("In sessions: $it", color = Palette.Muted, fontSize = 11.sp, maxLines = 2, modifier = Modifier.testTag("mcp-live-${s.name}")) }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(top = 4.dp)) {
             OutlinedButton(onClick = onTest, enabled = canWrite, modifier = Modifier.testTag("mcp-test-${s.name}")) { Text("Test", fontSize = 11.sp) }
             OutlinedButton(onClick = onGrant, enabled = canWrite, modifier = Modifier.testTag("mcp-grant-${s.name}")) { Text("Grant", fontSize = 11.sp) }
@@ -254,3 +257,8 @@ private fun ServerCard(
         }
     }
 }
+
+/** MCP-STATUS-1: server name -> its live state in each running session that reported it, compact (`1234abcd connected, ...`). */
+internal fun liveSessions(sessions: List<Pair<String, List<McpServerStatusWire>>>): Map<String, String> =
+    sessions.flatMap { (id, l) -> l.map { it.name to "${id.takeLast(8)} ${it.state.replace('_', ' ')}" } }
+        .groupBy({ it.first }, { it.second }).mapValues { it.value.joinToString(", ") }

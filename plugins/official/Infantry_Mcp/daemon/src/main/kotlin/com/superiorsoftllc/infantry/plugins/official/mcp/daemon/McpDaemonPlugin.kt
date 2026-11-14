@@ -144,7 +144,8 @@ class McpDaemonPlugin : DaemonPlugin {
             val add = (o["add"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
             val deny = (o["deny"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
             val why = (o["reasons"] as? JsonObject).orEmpty()
-            val lines = mutableListOf("you get: ${add.joinToString(", ").ifEmpty { "(none)" }}")
+            val live = (o["status"] as? JsonObject).orEmpty().mapValues { (it.value as? JsonPrimitive)?.contentOrNull }
+            val lines = mutableListOf("you get: ${add.joinToString(", ") { n -> live[n]?.let { "$n [$it]" } ?: n }.ifEmpty { "(none)" }}")
             if (deny.isNotEmpty()) lines += "skipped: ${deny.joinToString(", ")}"
             why.forEach { (k, v) -> lines += "  $k: ${(v as? JsonPrimitive)?.contentOrNull ?: v}" }
             return lines.joinToString("\n")

@@ -18,6 +18,8 @@ class HealthSources(
     /** The project path, worktree path and branch of the session, else of the project the call is for (null = none applies). */
     val sessionPaths: (sessionId: String?, projectId: String?) -> Triple<String?, String?, String?>,
     val eventTail: Int,
+    /** MCP-STATUS-1: live session id -> its MCP servers as `name:state`. */
+    val mcpServers: () -> Map<String, List<String>> = { emptyMap() },
 )
 
 /** DAEMON-HEALTH-1: builds the live [HealthReport]; the single source for the CLI, the MCP tool and the Lua call. */
@@ -43,6 +45,7 @@ class HealthService(
             plugins = src.plugins().map { (id, status) -> PluginRow(id, if (status == "loaded" || status == "started") "loaded" else status) }.sortedBy { it.id },
             pluginRows = rows - "hooks" - "hookFailures",
             mcp = bridges.rows(),
+            mcpServers = src.mcpServers().map { (id, l) -> McpServersRow(id, l) }.sortedBy { it.sessionId },
             hooks = hooks?.first, hookFailures = hooks?.second,
             freeMemoryMb = Runtime.getRuntime().maxMemory().let { (it - (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory())) / BYTES_PER_MB },
             freeDiskMb = src.stateDir.usableSpace / BYTES_PER_MB,

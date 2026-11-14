@@ -225,3 +225,44 @@ class ClaudeMcp(
 
 /** What one launch gets from the plan: the config files and the denied tool rules. */
 data class ClaudeMcpDelivery(val configs: List<String> = emptyList(), val disallowed: List<String> = emptyList())
+
+/**
+ * MCP-STATUS-1: a session's MCP server status, kept current from the stream. The headless init record seeds it ([seed]); a
+ * `tool_result` with `is_error` on a call to `mcp__<server>__<tool>` marks that server FAILED ([observe]). Returns the new list only when it changed.
+ */
+class McpStatusTracker {
+    private val calls = HashMap<String, String>()
+    private var statuses: List<McpServerStatus> = emptyList()
+
+    @Synchronized
+    fun seed(list: List<McpServerStatus>): List<McpServerStatus> = list.also { statuses = it }
+
+    @Synchronized
+    fun observe(record: JsonObject): List<McpServerStatus>? {
+        val type = (record["type"] as? JsonPrimitive)?.content
+        val blocks = ((record["message"] as? JsonObject)?.get("content") as? JsonArray) ?: return null
+        var changed = false
+        for (b in blocks) {
+            val o = b as? JsonObject ?: continue
+            val kind = (o["type"] as? JsonPrimitive)?.content
+            if (type == "assistant" && kind == "tool_use") {
+                val id = (o["id"] as? JsonPrimitive)?.content ?: continue
+                val name = (o["name"] as? JsonPrimitive)?.content ?: continue
+                server(name)?.let { calls[id] = it }
+            } else if (type == "user" && kind == "tool_result") {
+                val server = calls.remove((o["tool_use_id"] as? JsonPrimitive)?.content ?: continue) ?: continue
+                if ((o["is_error"] as? JsonPrimitive)?.content != "true") continue
+                val detail = "tool call failed"
+                val next = if (statuses.any { it.name == server }) statuses.map { if (it.name == server) it.copy(state = McpServerState.FAILED, detail = detail) else it }
+                else statuses + McpServerStatus(server, McpServerState.FAILED, detail)
+                if (next != statuses) { statuses = next; changed = true }
+            }
+        }
+        return if (changed) statuses else null
+    }
+
+    companion object {
+        /** `mcp__<server>__<tool>` -> server, null for any other tool. */
+        fun server(tool: String): String? = tool.takeIf { it.startsWith("mcp__") }?.removePrefix("mcp__")?.substringBefore("__", "")?.takeIf { it.isNotEmpty() }
+    }
+}

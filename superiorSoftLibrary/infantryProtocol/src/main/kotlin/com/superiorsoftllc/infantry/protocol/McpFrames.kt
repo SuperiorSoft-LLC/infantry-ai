@@ -165,4 +165,6 @@ data class McpPlanView(
     val add: List<String> = emptyList(),
     val deny: List<String> = emptyList(),
     val reasons: Map<String, String> = emptyMap(),
+    /** MCP-STATUS-1: server name -> live state for the asking session (empty until its harness reported). */
+    val status: Map<String, String> = emptyMap(),
 )
