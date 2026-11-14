@@ -180,6 +180,8 @@ object CliTools {
         label = "Node.js",
         commandNames = listOf("node"),
         envVar = "INFANTRY_NODE_EXE",
+        // ONBOARD-2: the runtime NodeRuntimeInstaller unpacks into the harness prefix (only when the machine had none).
+        prefixBin = "node.exe",
         defaults = { e ->
             val home = e.home()
             when (e.os) {

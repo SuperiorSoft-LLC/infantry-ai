@@ -39,6 +39,8 @@ class ShellState(homeTab: String, rightHomeTab: String, flags: UiFlags, url: Str
     var sidebarWidth by mutableStateOf(SidebarWidth.DEFAULT) // M2-9: in-memory only, not persisted (owner's call)
     var showConnect by mutableStateOf(false)
     var showConfig by mutableStateOf(false)
+    // ONBOARD-2: the guided setup, opened by hand (Configuration > Agents); it also opens by itself while nothing can answer.
+    var showSetup by mutableStateOf(false)
     // S6: a dropped .ihq that passed its checks, waiting for the owner's Install or Cancel (the consent dialog).
     var dropPreview by mutableStateOf<com.superiorsoftllc.infantry.ui.shell.DropPreview?>(null)
     // CONFIG-TABS-1: the configuration tab last shown, so the modal reopens where the user left it (while the app runs).

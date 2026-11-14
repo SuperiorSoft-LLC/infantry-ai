@@ -9,6 +9,9 @@ import com.superiorsoftllc.infantry.executables.ExecutableOverrides
 import com.superiorsoftllc.infantry.executables.ExecutableResolver
 import com.superiorsoftllc.infantry.executables.HarnessPrefix
 import com.superiorsoftllc.infantry.executables.HostOs
+import com.superiorsoftllc.infantry.plugin.api.Progress
+import com.superiorsoftllc.infantry.plugin.api.ProgressHandle
+import com.superiorsoftllc.infantry.plugin.api.ProgressSpec
 import com.superiorsoftllc.infantry.protocol.HarnessInstallOutcome
 import com.superiorsoftllc.infantry.protocol.HarnessInstallReport
 import com.superiorsoftllc.infantry.protocol.HarnessInstallResult
@@ -82,6 +85,10 @@ class HarnessInstaller(
     private val fromDescriptors: () -> List<InstallableHarness> = { emptyList() },
     /** Called before a shipped sample's install: copies it into the user's harnesses folder and registers it. */
     private val onSampleAdopted: (InstallableHarness) -> Unit = {},
+    /** ONBOARD-2: installs the Node.js runtime into [prefixDir] when npm is missing; null = never (the guidance is shown). */
+    private val nodeRuntime: NodeRuntimeInstaller? = null,
+    /** ONBOARD-2: the core progress system; each install is a task (`harness.install.<id>`, `harness.install.node`). */
+    private val progress: () -> Progress? = { null },
 ) {
     private val lock = Any()
 
@@ -99,15 +106,31 @@ class HarnessInstaller(
             harnesses = harnesses.map { statusOf(it, checkLatest, npm.path) },
             prefixDir = prefixDir.path,
             npmPath = npm.path,
-            guidance = if (npm.path == null) NODE_GUIDANCE else null,
+            guidance = if (npm.path == null) (if (nodeInstallable()) NODE_AUTO_GUIDANCE else NODE_GUIDANCE) else null,
+            nodeInstallable = npm.path == null && nodeInstallable(),
         )
+    }
+
+    private fun nodeInstallable(): Boolean = nodeRuntime?.supported == true
+
+    /** A progress task for [id] (null when this daemon has no progress system); a failure to start one never blocks the install. */
+    private fun task(id: String, title: String, steps: List<String> = emptyList()): ProgressHandle? =
+        runCatching { progress()?.start(ProgressSpec(title = title, id = TASK_PREFIX + id, steps = steps)) }.getOrNull()
+
+    /** ONBOARD-2: Node.js into the prefix, as its own progress task. Null = done, else the reason. */
+    private fun installNode(note: (String) -> Unit): String? {
+        val runtime = nodeRuntime ?: return NODE_GUIDANCE
+        val handle = task(NODE_ID, "Installing Node.js", NodeRuntimeInstaller.STEPS)
+        val error = runtime.install(handle, note)
+        if (error == null) handle?.done("Node.js installed") else handle?.fail(error)
+        return error
     }
 
     /**
      * Install / update [ids] (empty = everything missing, plus everything outdated when [update]). One run at a time; a
      * second caller waits. An unknown id is an [IllegalArgumentException] and nothing runs.
      */
-    fun install(ids: List<String>, update: Boolean, onLine: (String) -> Unit = {}): HarnessInstallResult = synchronized(lock) {
+    fun install(ids: List<String>, update: Boolean, onLine: (String) -> Unit = {}, runtime: Boolean = false): HarnessInstallResult = synchronized(lock) {
         val harnesses = harnesses()
         val unknown = ids.filter { id -> harnesses.none { it.id == id } }
         require(unknown.isEmpty()) { "unknown harness ${unknown.joinToString()} (installable: ${harnesses.joinToString { it.id }})" }
@@ -115,12 +138,19 @@ class HarnessInstaller(
         val log = ArrayList<String>()
         fun note(line: String) { onLine(line); if (log.size < LOG_CAP) log += line }
 
-        val npm = resolver.resolve(NPM)
+        var npm = resolver.resolve(NPM)
+        // ONBOARD-2: Node first. [runtime] asks for the runtime alone; otherwise it is installed on the way when a CLI needs it.
+        if (runtime) {
+            if (npm.path != null) return HarnessInstallResult(listOf(HarnessInstallOutcome(NODE_ID, "skipped", null, "Node.js is already installed")), log, status())
+            val error = installNode(::note)
+            return HarnessInstallResult(listOf(HarnessInstallOutcome(NODE_ID, if (error == null) "installed" else "failed", null, error)), log, status())
+        }
         val before = harnesses.map { statusOf(it, checkLatest = false, npmPath = npm.path) }
         val targets = before.filter { s ->
             if (ids.isNotEmpty()) s.id in ids else s.state == "missing" || (update && s.state == "outdated")
         }
         val outcomes = ArrayList<HarnessInstallOutcome>()
+        var nodeTried = false
         for (s in targets) {
             if (s.state == "user-managed") {
                 outcomes += HarnessInstallOutcome(s.id, "skipped", s.installedVersion, "user-managed: a path is set in Settings, so Infantry AI never installs or updates it")
@@ -129,6 +159,16 @@ class HarnessInstaller(
             if (s.state != "missing" && !update) {
                 outcomes += HarnessInstallOutcome(s.id, "skipped", s.installedVersion, "already installed")
                 continue
+            }
+            if (npm.path == null && nodeInstallable() && !nodeTried) {
+                nodeTried = true
+                val error = installNode(::note)
+                if (error != null) {
+                    outcomes += HarnessInstallOutcome(NODE_ID, "failed", null, error)
+                } else {
+                    npm = resolver.resolve(NPM)
+                    outcomes += HarnessInstallOutcome(NODE_ID, "installed")
+                }
             }
             val npmPath = npm.path
             if (npmPath == null) {
@@ -144,7 +184,11 @@ class HarnessInstaller(
                     continue
                 }
             }
-            outcomes += runInstall(h, s, npmPath, ::note)
+            val handle = task(h.id, "Installing ${h.tool.label}", listOf(STEP_NPM, STEP_CHECK))
+            handle?.step(STEP_NPM, 0)
+            val outcome = runInstall(h, s, npmPath, ::note)
+            if (outcome.result == "failed") handle?.fail(outcome.message ?: "install failed") else handle?.done("${h.tool.label} ${outcome.version.orEmpty()}".trim())
+            outcomes += outcome
         }
         HarnessInstallResult(outcomes, log, status())
     }
@@ -237,12 +281,23 @@ class HarnessInstaller(
             label = "npm",
             commandNames = listOf("npm"),
             envVar = "INFANTRY_NPM_EXE",
+            // ONBOARD-2: the npm of the runtime NodeRuntimeInstaller unpacked into the prefix.
+            prefixBin = "npm.cmd",
             defaults = { e ->
                 CliTools.NODE.defaults(e).mapNotNull { node ->
                     File(node).parent?.let { e.join(it, if (e.os == HostOs.WINDOWS) "npm.cmd" else "npm") }
                 }
             },
         )
+
+        /** ONBOARD-2: the progress task id prefix; `harness.install.<harness id>` and `harness.install.node`. */
+        const val TASK_PREFIX = "harness.install."
+        const val NODE_ID = "node"
+        private const val STEP_NPM = "Download and install"
+        private const val STEP_CHECK = "Check"
+        const val NODE_AUTO_GUIDANCE =
+            "Node.js is not installed. The agent tools need it, so Infantry AI installs it for you first (about 40 MB, " +
+                "into its own folder, no admin prompt)."
 
         const val NODE_GUIDANCE =
             "Node.js / npm was not found, so the harness CLIs cannot be installed here. Install Node.js 20 or newer " +

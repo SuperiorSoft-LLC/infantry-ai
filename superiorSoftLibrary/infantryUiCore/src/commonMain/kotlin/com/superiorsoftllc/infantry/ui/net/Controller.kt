@@ -776,6 +776,19 @@ class Controller(
         return report(send(WireRequests.harnessInstallStatus(checkLatest)))
     }
 
+    /**
+     * ONBOARD-2: ask the daemon to install the Node.js runtime alone (into its own harness-tools folder). Only offered when its
+     * report says [com.superiorsoftllc.infantry.ui.protocol.HarnessInstallReport.nodeInstallable]; the answer is a normal
+     * `harness_install_result` and the progress is the `harness.install.node` task.
+     */
+    suspend fun installNodeRuntime(): CommandResult {
+        if (_state.value.harnessInstall?.nodeInstallable != true) return report(CommandResult.Refused("this daemon cannot install Node.js itself"))
+        _state.value = _state.value.copy(harnessInstallBusy = true, harnessInstallLog = emptyList())
+        return report(send(WireRequests.harnessInstall(emptyList(), update = false, runtime = true))).also {
+            if (it !is CommandResult.Sent) _state.value = _state.value.copy(harnessInstallBusy = false)
+        }
+    }
+
     /** HARNESS-INSTALL-1: ask the DAEMON to install ([update] = refresh outdated too) [ids] (empty = every missing one) on its own machine. */
     suspend fun installHarnesses(ids: List<String>, update: Boolean): CommandResult {
         if (!contractAtLeast(_state.value.connection.contract, 1, 102)) {
@@ -1757,12 +1770,12 @@ class Controller(
      * M2-7 (New Project modal): create a project (the same `project_save` as [saveProject]) and, once the daemon
      * answers with the new project, select it (the same [selectProject] the picker uses).
      */
-    suspend fun createProject(name: String, directory: String = ""): CommandResult {
+    suspend fun createProject(name: String, directory: String = "", starter: Boolean = false): CommandResult {
         if (name.isBlank()) return report(CommandResult.Refused("a project needs a name"))
         pendingCreatedProject = name.trim()
         val beforeIds = _state.value.projects.map { it.id }.toSet()
         val beforeRefusal = _state.value.projectRefusal
-        val r = report(send(WireRequests.projectSave(name.trim(), null, directory.trim().takeIf { it.isNotEmpty() })))
+        val r = report(send(WireRequests.projectSave(name.trim(), null, directory.trim().takeIf { it.isNotEmpty() }, starter)))
         if (r !is CommandResult.Sent) { pendingCreatedProject = null; return r }
         // One request carries name AND directory, so a refusal creates nothing. Wait for the answer so the form can stay open.
         val answer = withTimeoutOrNull(8_000L) {

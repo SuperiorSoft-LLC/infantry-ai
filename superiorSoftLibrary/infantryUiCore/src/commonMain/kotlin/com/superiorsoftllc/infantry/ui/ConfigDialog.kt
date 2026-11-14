@@ -159,6 +159,8 @@ fun ConfigDialog(
      * [ConfigEntry] tabs and search, as before.  Called with the sections this host has ([ConfigDialogHost.present]).
      */
     plan: ((present: Set<ConfigEntry>) -> ConfigPlan?)? = null,
+    /** ONBOARD-2: reopens the guided setup (null = this host has none). */
+    onOpenSetup: (() -> Unit)? = null,
 ) {
     // VOICE-PLUGIN-1: the host's installable voice plugins (desktop); null = no Plugins tab.
     val voicePlugins = com.superiorsoftllc.infantry.ui.shell.LocalPlatformHost.current.voicePlugins
@@ -215,6 +217,7 @@ fun ConfigDialog(
         onSendTestQuestion, testQuestionReady, serverUpdate, serverMismatch, theme, onTheme, about, modules,
         voicePlugins, present, tab, highlight, promptTimer = promptTimer, onPromptTimer = onPromptTimer,
         plan = generated, tabLabel = tabLabel, highlightKey = highlightKey, harnessModules = harnessModules,
+        onOpenSetup = onOpenSetup,
     )
     // Ticket cb1ceb93: the scroll cue fades into the dialog's own surface.
     val surface = androidx.compose.material3.AlertDialogDefaults.containerColor
@@ -302,6 +305,8 @@ class ConfigDialogHost internal constructor(
     val highlightKey: String? = null,
     /** HARNESS-PLUGIN-4 H5a: reads the daemon's harness state per module for Plugins > Modules; null = not shown. */
     val harnessModules: (suspend () -> Map<String, String>?)? = null,
+    /** ONBOARD-2: reopens the guided setup; null = not offered. */
+    val onOpenSetup: (() -> Unit)? = null,
 ) {
     /** A section shows when its tab is the selected one (the plan's, when a card moved it) and this host has it. */
     fun shows(entry: ConfigEntry): Boolean = entry in present && if (plan != null) plan.tabOf(entry) == tabLabel else entry.tab == tab
@@ -439,7 +444,10 @@ fun ConfigCliLocationsSection(config: ConfigDialogHost, modifier: Modifier = Mod
     val onHarnessCheck = config.onHarnessCheck
     val onHarnessInstall = config.onHarnessInstall
     FlagSection(ConfigEntry.CLI_LOCATIONS, config.highlight, modifier) {
-        CliLocationsSection(config.cliLocations, onCliLocation, harnessInstall, config.harnessInstallBusy, onHarnessInstall)
+        config.onOpenSetup?.let { open ->
+            OutlinedButton(onClick = open, modifier = Modifier.testTag(OPEN_SETUP_TAG)) { Text("Open guided setup") }
+        }
+        CliLocationsSection(config.cliLocations, onCliLocation, harnessInstall, config.harnessInstallBusy, config.harnessInstallLog, onHarnessInstall)
         if (harnessInstall != null && onHarnessCheck != null && onHarnessInstall != null) {
             HarnessInstallControls(harnessInstall, config.harnessInstallBusy, config.harnessInstallLog, onHarnessCheck, onHarnessInstall)
         }
@@ -786,6 +794,7 @@ private fun CliLocationsSection(
     onSave: (id: String, path: String?) -> Unit,
     harness: HarnessInstallReport?,
     harnessBusy: Boolean,
+    harnessLog: List<String>,
     onInstall: ((ids: List<String>, update: Boolean) -> Unit)?,
 ) {
     if (locations == null) {
@@ -793,7 +802,9 @@ private fun CliLocationsSection(
         return
     }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        locations.forEach { location -> CliLocationRow(location, onSave, harness?.harnesses?.firstOrNull { it.id == location.id }, harnessBusy, onInstall) }
+        locations.forEach { location ->
+            CliLocationRow(location, onSave, harness?.harnesses?.firstOrNull { it.id == location.id }, harnessBusy, onInstall, harness?.let(HarnessInstallSetting::nodeNote), harnessLog)
+        }
     }
 }
 
@@ -804,7 +815,10 @@ private fun CliLocationRow(
     check: HarnessInstallStatus?,
     busy: Boolean,
     onInstall: ((ids: List<String>, update: Boolean) -> Unit)?,
+    nodeNote: String? = null,
+    log: List<String> = emptyList(),
 ) {
+    var pressed by remember(location.id) { mutableStateOf(false) }
     // Re-seeded whenever the daemon reports a different override, so a save or clear elsewhere shows here.
     var text by remember(location.id, location.override) { mutableStateOf(CliLocationsSetting.initialText(location)) }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -822,11 +836,25 @@ private fun CliLocationRow(
                 val label = HarnessInstallSetting.action(check)
                 if (label != null && onInstall != null) {
                     TextButton(
-                        onClick = { onInstall(listOf(check.id), HarnessInstallSetting.isUpdate(check)) },
+                        onClick = { pressed = true; onInstall(listOf(check.id), HarnessInstallSetting.isUpdate(check)) },
                         enabled = !busy,
                         modifier = Modifier.testTag(HARNESS_INSTALL_TAG_PREFIX + check.id),
-                    ) { Text(label) }
+                    ) { Text(if (busy && pressed) "Installing..." else label) }
                 }
+            }
+            // ONBOARD-2: an Install press always answers right here (never only in a log at the bottom of the tab): the
+            // running task (Node first when the machine has none), then the outcome in words; before a press, why it needs Node.
+            if (busy && pressed) {
+                com.superiorsoftllc.infantry.ui.progress.ProgressIndicator(HarnessInstallSetting.taskId(HarnessInstallSetting.NODE_ID), Modifier.fillMaxWidth(), hideWhenDone = true)
+                com.superiorsoftllc.infantry.ui.progress.ProgressIndicator(HarnessInstallSetting.taskId(check.id), Modifier.fillMaxWidth(), hideWhenDone = true)
+                Text("Installing ${check.label.ifBlank { check.id }}. This can take a few minutes.", color = Palette.Muted, fontSize = 11.sp, modifier = Modifier.testTag(HARNESS_BUSY_TAG_PREFIX + check.id))
+            } else if (pressed) {
+                HarnessInstallSetting.outcomeFor(check.id, log)?.let { o ->
+                    Text(o.text, color = if (o.ok) Palette.Muted else Palette.Danger, fontSize = 11.sp, modifier = Modifier.testTag(HARNESS_OUTCOME_TAG_PREFIX + check.id))
+                }
+            }
+            if (!busy && check.state == "missing" && nodeNote != null) {
+                Text(nodeNote, color = Palette.Muted, fontSize = 11.sp, modifier = Modifier.testTag(HARNESS_NODE_NOTE_TAG_PREFIX + check.id))
             }
         }
         CliLocationsSetting.triedLines(location).forEach { tried ->
@@ -1452,6 +1480,10 @@ const val HARNESS_INSTALL_TAG_PREFIX = "harness-install-"
 const val HARNESS_CHECK_TAG = "harness-check"
 const val HARNESS_INSTALL_ALL_TAG = "harness-install-all"
 const val HARNESS_LOG_TAG = "harness-log"
+const val HARNESS_BUSY_TAG_PREFIX = "harness-busy-"
+const val HARNESS_OUTCOME_TAG_PREFIX = "harness-outcome-"
+const val HARNESS_NODE_NOTE_TAG_PREFIX = "harness-node-note-"
+const val OPEN_SETUP_TAG = "open-guided-setup"
 
 /**
  * HARNESS-INSTALL-1: check / install-all buttons, Node/npm guidance, and the last install's log. Everything runs on the

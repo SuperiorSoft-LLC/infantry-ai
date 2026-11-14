@@ -36,6 +36,8 @@ class ProjectStore(
      */
     private val persistence: ProjectPersistence = InMemoryProjectPersistence(),
     private val idFactory: () -> String = { "project-" + UUID.randomUUID().toString().take(8) },
+    /** ONBOARD-2: where a starter project's folder is made ([ProjectSave.starter]). */
+    private val projectsRoot: () -> java.io.File = { java.io.File(System.getProperty("user.home"), "Infantry AI") },
 ) : com.superiorsoftllc.infantry.epics.ProjectDirectory {
     /** Insertion ordered, so `list` answers in the order projects were created. */
     private val projects = LinkedHashMap<String, Project>()
@@ -53,7 +55,7 @@ class ProjectStore(
             val name = request.name?.let { checkName(it) }
                 ?: throw IllegalArgumentException("name is required to create a project")
             val goal = request.goal?.let { checkGoal(it) } ?: ""
-            val directory = request.directory?.let { checkDirectory(it) } ?: ""
+            val directory = if (request.starter) starterDirectory(name) else request.directory?.let { checkDirectory(it) } ?: ""
             val created = Project(id = mintId(), name = name, goal = goal, directory = directory)
             projects[created.id] = created
             persist(created)
@@ -70,6 +72,14 @@ class ProjectStore(
         projects[editing] = updated
         persist(updated)
         return updated
+    }
+
+    /** ONBOARD-2: `<projects root>/<name as a folder name>`, made when missing (an existing folder is reused). */
+    private fun starterDirectory(name: String): String {
+        val folder = name.map { if (it.isLetterOrDigit() || it in " -_.") it else '_' }.joinToString("").trim().trimEnd('.').ifEmpty { "project" }
+        val dir = java.io.File(projectsRoot(), folder).absoluteFile
+        require(dir.isDirectory || dir.mkdirs()) { "cannot create the project folder ${dir.path}" }
+        return checkDirectory(dir.path)
     }
 
     /** Project [id]; throws [IllegalArgumentException] when there is none. */

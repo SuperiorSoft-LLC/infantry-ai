@@ -35,6 +35,8 @@ data class HarnessInstallReport(
     /** The npm executable the installer would run; null = Node/npm not found, then [guidance] says what to do. */
     val npmPath: String? = null,
     val guidance: String? = null,
+    /** ONBOARD-2: npm is missing AND this daemon can install the Node.js runtime itself (an install puts it in first). */
+    val nodeInstallable: Boolean = false,
 )
 
 /** The `harness_install_status` payload (empty data = defaults). */
@@ -51,7 +53,12 @@ data class HarnessInstallStatusRequest(val checkLatest: Boolean = false) {
  * outdated too). Naming an id installs/updates exactly that one. Installs are idempotent: an up-to-date CLI is skipped.
  */
 @Serializable
-data class HarnessInstallRequest(val ids: List<String> = emptyList(), val update: Boolean = false) {
+data class HarnessInstallRequest(
+    val ids: List<String> = emptyList(),
+    val update: Boolean = false,
+    /** ONBOARD-2: install only the Node.js runtime (sent only when the report says [HarnessInstallReport.nodeInstallable]). */
+    val runtime: Boolean = false,
+) {
     companion object {
         fun decode(text: String): HarnessInstallRequest =
             if (text.isBlank()) HarnessInstallRequest() else StrictJson.decode(serializer(), text, "harness_install payload")

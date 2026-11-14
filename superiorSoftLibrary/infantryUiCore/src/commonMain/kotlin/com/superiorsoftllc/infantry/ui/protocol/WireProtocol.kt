@@ -1541,6 +1541,8 @@ data class ProjectSave(
     val goal: String? = null,
     val id: String? = null,
     val directory: String? = null,
+    /** ONBOARD-2: the daemon makes the folder (`<home>/Infantry AI/<name>`); left out unless true, so an older daemon never sees it. */
+    val starter: Boolean = false,
 )
 
 /**
@@ -2089,9 +2091,9 @@ object WireRequests {
     fun projectList(): Envelope = Envelope(Envelope.PROJECT_LIST)
 
     /** `project_save` for a CREATE: the daemon mints the id and answers a `project` frame. */
-    fun projectSave(name: String, goal: String? = null, directory: String? = null): Envelope = Envelope(
+    fun projectSave(name: String, goal: String? = null, directory: String? = null, starter: Boolean = false): Envelope = Envelope(
         Envelope.PROJECT_SAVE,
-        json.encodeToString(ProjectSave.serializer(), ProjectSave(name = name, goal = goal, directory = directory)),
+        json.encodeToString(ProjectSave.serializer(), ProjectSave(name = name, goal = goal, directory = directory, starter = starter)),
     )
 
     /** `project_save` for an EDIT of [projectId]: only the name changes; the id (and so everything keyed by it) stays. */
@@ -2260,9 +2262,16 @@ object WireRequests {
         Envelope(Envelope.HARNESS_INSTALL_STATUS, JsonObject(mapOf("checkLatest" to JsonPrimitive(checkLatest))).toString())
 
     /** HARNESS-INSTALL-1 (1.102.0): install (or, with [update], refresh) [ids] on the daemon machine; empty = all missing. */
-    fun harnessInstall(ids: List<String>, update: Boolean): Envelope = Envelope(
+    fun harnessInstall(ids: List<String>, update: Boolean, runtime: Boolean = false): Envelope = Envelope(
         Envelope.HARNESS_INSTALL,
-        JsonObject(mapOf("ids" to kotlinx.serialization.json.JsonArray(ids.map(::JsonPrimitive)), "update" to JsonPrimitive(update))).toString(),
+        JsonObject(
+            buildMap {
+                put("ids", kotlinx.serialization.json.JsonArray(ids.map(::JsonPrimitive)))
+                put("update", JsonPrimitive(update))
+                // ONBOARD-2: only sent when set, so a daemon that predates it (its strict decoder) never sees the key.
+                if (runtime) put("runtime", JsonPrimitive(true))
+            },
+        ).toString(),
     )
 
     /** PROMPT-2 (1.77.0): answer the open prompt [r.promptId]; the daemon answers with a `prompt_resolved` push. */
@@ -2644,6 +2653,8 @@ data class HarnessInstallReport(
     val prefixDir: String = "",
     val npmPath: String? = null,
     val guidance: String? = null,
+    /** ONBOARD-2: npm is missing and the daemon can install the Node.js runtime itself (false = an older daemon, or not this OS). */
+    val nodeInstallable: Boolean = false,
 )
 
 @Serializable

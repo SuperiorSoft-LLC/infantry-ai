@@ -29,6 +29,7 @@ data class HarnessInstallReport(
     val prefixDir: String,
     val npmPath: String? = null,
     val guidance: String? = null,
+    val nodeInstallable: Boolean = false,
 )
 
 @Serializable

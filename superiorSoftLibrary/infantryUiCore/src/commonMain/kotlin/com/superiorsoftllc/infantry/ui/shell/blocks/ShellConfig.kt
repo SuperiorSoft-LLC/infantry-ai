@@ -100,6 +100,7 @@ class ConfigBlock(children: List<Block>, place: Place = Place()) : Block(CONFIG,
             harnessInstallLog = state.harnessInstallLog,
             onHarnessCheck = { latest -> actionScope.launch { controller.checkHarnesses(latest) } },
             onHarnessInstall = { ids, update -> actionScope.launch { controller.installHarnesses(ids, update) } },
+            onOpenSetup = { ui.showConfig = false; ui.showSetup = true },
             toolApproval = state.toolApproval,
             onToolApproval = { mode -> actionScope.launch { controller.setToolApproval(mode) } },
             // ASK-TIMER-2: the prompt timer, under Tool approval (a daemon older than 1.139.0 has none).
