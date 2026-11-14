@@ -1,6 +1,6 @@
 {
   "name": "Infantry_News",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "apiVersion": 2,
   "author": "Infantry AI",
   "license": "Apache-2.0",
@@ -17,8 +17,8 @@
     {
       "type": "news",
       "summary": "News headlines: a list of headline cards (title, source, relative time, thumbnail or source icon, link)",
-      "spec": "News card (Infantry_News): a list of headline cards.\n\nEasiest: call the capability news.headlines (infantry_capability_call, capability \"news.headlines\", args {\"query\"?, \"topic\"?, \"source\"?, \"max\"?}) and paste its `card` field as is: it is the finished fenced block.\n\nBy hand: its own fenced block, info string `card:news`, body ONE JSON object:\n\n```card:news\n{\"title\": \"Top stories\", \"items\": [{\"title\": \"Headline text\", \"source\": \"Reuters\", \"url\": \"https://...\", \"time\": \"2026-11-12T09:30:00Z\", \"image\": \"https://lh3.googleusercontent.com/...\", \"icon\": \"https://www.google.com/s2/favicons?domain=reuters.com&sz=64\"}]}\n```\n\nFields: `title` (heading above the list, optional); `items[]` with `title` and `url` (https) required, `source`, `time` (ISO-8601, shown as \"2h ago\"), `image` (thumbnail; only Google image hosts are fetched, by the daemon), `icon` (source icon). Missing image: the source icon, else a letter badge. Never invent items: use only what news.headlines returned. Keep one plain sentence outside the block.",
-      "images": { "hosts": ["*.googleusercontent.com", "*.gstatic.com", "www.google.com"] }
+      "spec": "News card (Infantry_News): a list of headline cards.\n\nEasiest: call the capability news.headlines (infantry_capability_call, capability \"news.headlines\", args {\"query\"?, \"topic\"?, \"source\"?, \"max\"?}) and paste its `card` field as is: it is the finished fenced block.\n\nBy hand: its own fenced block, info string `card:news`, body ONE JSON object:\n\n```card:news\n{\"title\": \"Top stories\", \"items\": [{\"title\": \"Headline text\", \"source\": \"Reuters\", \"url\": \"https://...\", \"time\": \"2026-11-12T09:30:00Z\", \"image\": \"https://lh3.googleusercontent.com/...\", \"icon\": \"https://www.google.com/s2/favicons?domain=reuters.com&sz=64\"}]}\n```\n\nFields: `title` (heading above the list, optional); `items[]` with `title` and `url` (https) required, `source`, `time` (ISO-8601, shown as \"2h ago\"), `image` (thumbnail; any https image host, fetched by the daemon), `icon` (source icon). Missing image: the source icon, else a letter badge. Never invent items: use only what news.headlines returned. Keep one plain sentence outside the block.",
+      "images": { "hosts": ["*"] }
     }
   ],
   "roles": [

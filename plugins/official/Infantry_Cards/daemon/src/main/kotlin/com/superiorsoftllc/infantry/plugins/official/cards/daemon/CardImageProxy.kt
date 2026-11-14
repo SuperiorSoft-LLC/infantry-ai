@@ -228,6 +228,8 @@ class CardImageProxy(
         /** `example.com` matches only itself; `*.example.com` matches any subdomain (not the bare name). A pattern needs two labels. */
         fun hostMatches(host: String, pattern: String): Boolean {
             val p = pattern.trim().lowercase().trimEnd('.')
+            // CARD-IMG-2: a bare `*` is any named public host (https, no IP literal, public address, size and image checks still apply).
+            if (p == "*") return host.isNotEmpty()
             if (p.startsWith("*.")) {
                 val base = p.removePrefix("*.")
                 if (base.count { it == '.' } < 1 || '*' in base) return false
