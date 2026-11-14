@@ -93,12 +93,24 @@ class HarnessCredentials(
     private val keystore: Keystore,
     /** The stored choice for a harness id (its `harness.<id>.authMode` setting), or null when none was made. */
     private val modeSource: (String) -> String? = { null },
-    /** Runs a probe argv and returns its stdout whatever the exit code (a CLI may exit 1 when signed out); null when it cannot run. */
-    private val probeRunner: (List<String>, String) -> String? = ::runProbe,
+    /**
+     * Runs a probe argv (as the manifest declares it) and returns its stdout whatever the exit code (a CLI may exit 1 when signed
+     * out); null when it cannot run. Null (the default) = the real run: the argv made launchable ([HarnessCommand]) and run.
+     */
+    private val probeRunner: ((List<String>, String) -> String?)? = null,
     /** SECRET-REF-1: the stored value of a `harness.<id>[.<credId>].keyRef` setting key (a shared secret's name), or null when none. */
     private val refSource: (String) -> String? = { null },
+    /**
+     * ONBOARD-3: where a bare command name of a probe / sign-in argv (`claude`) resolves (the daemon's ExecutableResolver: the
+     * app's own harness-tools prefix first, then the default locations, then PATH); null = leave it to the OS's PATH lookup.
+     * On a clean PC the guided setup installs the CLI into that prefix, which is never on PATH.
+     */
+    private val commandPath: (String) -> String? = { null },
     private val declaredSource: () -> List<HarnessCredential>,
 ) {
+    /** ONBOARD-3: the file [command] resolves to, or null when nothing resolves it (the bare name is then run as before). */
+    fun resolveCommand(command: String): String? = runCatching { commandPath(command) }.getOrNull()?.takeIf { it.isNotBlank() }
+
     /** CLAUDE-AUTH-CHOICE-1: the chosen auth mode of [harnessId]: the stored one when the harness offers it, else null (no choice yet). */
     fun mode(harnessId: String): String? {
         val c = declaration(harnessId) ?: return null
@@ -180,7 +192,8 @@ class HarnessCredentials(
     }
 
     private fun probe(argv: List<String>, field: String, scrubEnv: String): Boolean? = try {
-        val out = probeRunner(argv, scrubEnv) ?: return null
+        val run = probeRunner
+        val out = (if (run != null) run(argv, scrubEnv) else runProbe(HarnessCommand.launchable(argv, ::resolveCommand), scrubEnv)) ?: return null
         (kotlinx.serialization.json.Json.parseToJsonElement(out) as? kotlinx.serialization.json.JsonObject)
             ?.get(field)?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content?.toBooleanStrictOrNull() }
     } catch (_: Exception) { null }
@@ -214,13 +227,36 @@ data class AuthStatus(val signedIn: Boolean?, val lastProbe: Long) {
 private const val PROBE_TIMEOUT_SECONDS = 30L
 
 /**
+ * ONBOARD-3: turns a manifest argv (`claude auth login`) into one the OS can start. Its first word goes through [resolve]: a
+ * resolved native file runs directly, a resolved `.cmd`/`.bat` shim through `cmd /c` (CreateProcess cannot start one), a `.js`
+ * entry point on the resolved `node`. Nothing resolved: the bare name, via `cmd /c` on Windows (PATH and PATHEXT), as before.
+ * The argv comes from a manifest, never from a client.
+ */
+object HarnessCommand {
+    fun launchable(
+        argv: List<String>,
+        resolve: (String) -> String?,
+        windows: Boolean = System.getProperty("os.name").orEmpty().startsWith("Windows"),
+    ): List<String> {
+        val first = argv.firstOrNull() ?: return argv
+        val rest = argv.drop(1)
+        val path = resolve(first)
+        return when {
+            path == null -> if (windows) listOf("cmd", "/c") + argv else argv
+            path.endsWith(".js", ignoreCase = true) -> listOf(resolve("node") ?: "node", path) + rest
+            windows && (path.endsWith(".cmd", ignoreCase = true) || path.endsWith(".bat", ignoreCase = true)) -> listOf("cmd", "/c", path) + rest
+            else -> listOf(path) + rest
+        }
+    }
+}
+
+/**
  * Runs [argv] (never a shell), stdin closed, stderr discarded, and returns stdout whatever the exit code; null when it cannot
  * start or outlives [PROBE_TIMEOUT_SECONDS]. The child never sees the harness's API key variable [scrubEnv]: a subscription probe must not bill one.
  */
 internal fun runProbe(argv: List<String>, scrubEnv: String): String? = try {
-    // On Windows an npm-installed CLI is a `.cmd` shim, which CreateProcess cannot start by bare name: go through cmd /c (argv comes from a manifest, never from a client).
-    val windows = System.getProperty("os.name").orEmpty().startsWith("Windows")
-    val b = ProcessBuilder(if (windows) listOf("cmd", "/c") + argv else argv).redirectError(ProcessBuilder.Redirect.DISCARD)
+    // [argv] is already launchable (HarnessCommand.launchable: a resolved file, or `cmd /c` for a shim or a bare name on Windows).
+    val b = ProcessBuilder(argv).redirectError(ProcessBuilder.Redirect.DISCARD)
     b.environment().remove(scrubEnv)
     val p = b.start()
     p.outputStream.close()

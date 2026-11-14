@@ -66,7 +66,8 @@ class HarnessLogins(
             override fun onExit(exitCode: Int) = ended(harnessId, run, exitCode)
         }
         // A subscription sign-in must not see the API key variable (it would bill that account): blanked, as a subscription session is.
-        val argv = if (windows) listOf("cmd", "/c") + c.loginArgv else c.loginArgv
+        // ONBOARD-3: the CLI the guided setup installed lives in the app's prefix, never on PATH: resolve it like a session launch does.
+        val argv = HarnessCommand.launchable(c.loginArgv, credentials::resolveCommand, windows)
         val process = try {
             runner.start(ProcessSpec(argv, env = mapOf(c.env to "")), listener)
         } catch (e: Exception) {
