@@ -86,6 +86,8 @@ public abstract interface class com/superiorsoftllc/infantry/harness/api/Harness
 	public fun getContextLimit ()Lcom/superiorsoftllc/infantry/harness/api/ContextLimitCapability;
 	public fun getEffort ()Lcom/superiorsoftllc/infantry/harness/api/EffortCapability;
 	public abstract fun getId ()Ljava/lang/String;
+	public fun getLoadsUserMcp ()Z
+	public fun getMcp ()Lcom/superiorsoftllc/infantry/harness/api/HarnessMcp;
 	public fun mcpToolRule (Ljava/lang/String;)Ljava/lang/String;
 	public fun mergeConfig (Ljava/lang/String;Lcom/superiorsoftllc/infantry/harness/api/ConfigParts;)Ljava/lang/String;
 	public fun models ()Ljava/util/List;
@@ -93,6 +95,7 @@ public abstract interface class com/superiorsoftllc/infantry/harness/api/Harness
 	public abstract fun process (Lcom/superiorsoftllc/infantry/harness/api/HarnessRequest;)Lcom/superiorsoftllc/infantry/harness/api/HarnessProcess;
 	public fun sandbox (Lcom/superiorsoftllc/infantry/harness/api/SandboxRoots;)Lcom/superiorsoftllc/infantry/harness/api/SandboxContribution;
 	public fun session ()Lcom/superiorsoftllc/infantry/harness/api/HarnessSession;
+	public fun signInProblem ()Ljava/lang/String;
 	public fun stats ()Lcom/superiorsoftllc/infantry/harness/api/HarnessStats;
 	public fun usageSource ()Lcom/superiorsoftllc/infantry/harness/api/HarnessUsageSource;
 	public fun watch (Ljava/util/Map;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/harness/api/WatchContribution;
@@ -103,11 +106,14 @@ public final class com/superiorsoftllc/infantry/harness/api/Harness$DefaultImpls
 	public static fun commands (Lcom/superiorsoftllc/infantry/harness/api/Harness;)Ljava/util/List;
 	public static fun getContextLimit (Lcom/superiorsoftllc/infantry/harness/api/Harness;)Lcom/superiorsoftllc/infantry/harness/api/ContextLimitCapability;
 	public static fun getEffort (Lcom/superiorsoftllc/infantry/harness/api/Harness;)Lcom/superiorsoftllc/infantry/harness/api/EffortCapability;
+	public static fun getLoadsUserMcp (Lcom/superiorsoftllc/infantry/harness/api/Harness;)Z
+	public static fun getMcp (Lcom/superiorsoftllc/infantry/harness/api/Harness;)Lcom/superiorsoftllc/infantry/harness/api/HarnessMcp;
 	public static fun mcpToolRule (Lcom/superiorsoftllc/infantry/harness/api/Harness;Ljava/lang/String;)Ljava/lang/String;
 	public static fun mergeConfig (Lcom/superiorsoftllc/infantry/harness/api/Harness;Ljava/lang/String;Lcom/superiorsoftllc/infantry/harness/api/ConfigParts;)Ljava/lang/String;
 	public static fun models (Lcom/superiorsoftllc/infantry/harness/api/Harness;)Ljava/util/List;
 	public static fun sandbox (Lcom/superiorsoftllc/infantry/harness/api/Harness;Lcom/superiorsoftllc/infantry/harness/api/SandboxRoots;)Lcom/superiorsoftllc/infantry/harness/api/SandboxContribution;
 	public static fun session (Lcom/superiorsoftllc/infantry/harness/api/Harness;)Lcom/superiorsoftllc/infantry/harness/api/HarnessSession;
+	public static fun signInProblem (Lcom/superiorsoftllc/infantry/harness/api/Harness;)Ljava/lang/String;
 	public static fun stats (Lcom/superiorsoftllc/infantry/harness/api/Harness;)Lcom/superiorsoftllc/infantry/harness/api/HarnessStats;
 	public static fun usageSource (Lcom/superiorsoftllc/infantry/harness/api/Harness;)Lcom/superiorsoftllc/infantry/harness/api/HarnessUsageSource;
 	public static fun watch (Lcom/superiorsoftllc/infantry/harness/api/Harness;Ljava/util/Map;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/harness/api/WatchContribution;
@@ -315,6 +321,7 @@ public abstract interface class com/superiorsoftllc/infantry/harness/api/Harness
 	public abstract fun getStateDir ()Ljava/io/File;
 	public abstract fun log (Ljava/lang/String;)V
 	public abstract fun mcpLaunch (Ljava/util/Map;)Lcom/superiorsoftllc/infantry/harness/api/HarnessProcess;
+	public fun mcpServers (Ljava/util/Map;)Lcom/superiorsoftllc/infantry/harness/api/McpPlan;
 	public fun queryDb (Ljava/io/File;Ljava/lang/String;Ljava/util/List;)Ljava/util/List;
 	public static synthetic fun queryDb$default (Lcom/superiorsoftllc/infantry/harness/api/HarnessHost;Ljava/io/File;Ljava/lang/String;Ljava/util/List;ILjava/lang/Object;)Ljava/util/List;
 	public abstract fun resolveCli (Ljava/lang/String;)Ljava/lang/String;
@@ -324,8 +331,31 @@ public abstract interface class com/superiorsoftllc/infantry/harness/api/Harness
 }
 
 public final class com/superiorsoftllc/infantry/harness/api/HarnessHost$DefaultImpls {
+	public static fun mcpServers (Lcom/superiorsoftllc/infantry/harness/api/HarnessHost;Ljava/util/Map;)Lcom/superiorsoftllc/infantry/harness/api/McpPlan;
 	public static fun queryDb (Lcom/superiorsoftllc/infantry/harness/api/HarnessHost;Ljava/io/File;Ljava/lang/String;Ljava/util/List;)Ljava/util/List;
 	public static synthetic fun queryDb$default (Lcom/superiorsoftllc/infantry/harness/api/HarnessHost;Ljava/io/File;Ljava/lang/String;Ljava/util/List;ILjava/lang/Object;)Ljava/util/List;
+}
+
+public abstract interface class com/superiorsoftllc/infantry/harness/api/HarnessMcp {
+	public fun add-BWLJW6A (Ljava/lang/String;Lcom/superiorsoftllc/infantry/harness/api/McpServerSpec;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun getCanAdd ()Z
+	public fun getCanEdit ()Z
+	public fun getCanRemove ()Z
+	public fun getScopes ()Ljava/util/List;
+	public fun list (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun remove-BWLJW6A (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun test (Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/HarnessMcp$DefaultImpls {
+	public static fun add-BWLJW6A (Lcom/superiorsoftllc/infantry/harness/api/HarnessMcp;Ljava/lang/String;Lcom/superiorsoftllc/infantry/harness/api/McpServerSpec;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static fun getCanAdd (Lcom/superiorsoftllc/infantry/harness/api/HarnessMcp;)Z
+	public static fun getCanEdit (Lcom/superiorsoftllc/infantry/harness/api/HarnessMcp;)Z
+	public static fun getCanRemove (Lcom/superiorsoftllc/infantry/harness/api/HarnessMcp;)Z
+	public static fun getScopes (Lcom/superiorsoftllc/infantry/harness/api/HarnessMcp;)Ljava/util/List;
+	public static fun list (Lcom/superiorsoftllc/infantry/harness/api/HarnessMcp;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static fun remove-BWLJW6A (Lcom/superiorsoftllc/infantry/harness/api/HarnessMcp;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static fun test (Lcom/superiorsoftllc/infantry/harness/api/HarnessMcp;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
 public final class com/superiorsoftllc/infantry/harness/api/HarnessModels {
@@ -624,6 +654,108 @@ public final class com/superiorsoftllc/infantry/harness/api/HarnessUsageWindow {
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class com/superiorsoftllc/infantry/harness/api/McpListing {
+	public fun <init> (Lcom/superiorsoftllc/infantry/harness/api/McpServerSpec;Lcom/superiorsoftllc/infantry/harness/api/McpServerStatus;)V
+	public final fun component1 ()Lcom/superiorsoftllc/infantry/harness/api/McpServerSpec;
+	public final fun component2 ()Lcom/superiorsoftllc/infantry/harness/api/McpServerStatus;
+	public final fun copy (Lcom/superiorsoftllc/infantry/harness/api/McpServerSpec;Lcom/superiorsoftllc/infantry/harness/api/McpServerStatus;)Lcom/superiorsoftllc/infantry/harness/api/McpListing;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/harness/api/McpListing;Lcom/superiorsoftllc/infantry/harness/api/McpServerSpec;Lcom/superiorsoftllc/infantry/harness/api/McpServerStatus;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/harness/api/McpListing;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getSpec ()Lcom/superiorsoftllc/infantry/harness/api/McpServerSpec;
+	public final fun getStatus ()Lcom/superiorsoftllc/infantry/harness/api/McpServerStatus;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/McpPlan {
+	public static final field Companion Lcom/superiorsoftllc/infantry/harness/api/McpPlan$Companion;
+	public fun <init> ()V
+	public fun <init> (Ljava/util/List;Ljava/util/Set;)V
+	public synthetic fun <init> (Ljava/util/List;Ljava/util/Set;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/util/List;
+	public final fun component2 ()Ljava/util/Set;
+	public final fun copy (Ljava/util/List;Ljava/util/Set;)Lcom/superiorsoftllc/infantry/harness/api/McpPlan;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/harness/api/McpPlan;Ljava/util/List;Ljava/util/Set;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/harness/api/McpPlan;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAdd ()Ljava/util/List;
+	public final fun getDelivered ()Ljava/util/List;
+	public final fun getDeny ()Ljava/util/Set;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/McpPlan$Companion {
+	public final fun getEMPTY ()Lcom/superiorsoftllc/infantry/harness/api/McpPlan;
+	public final fun infantry (Lcom/superiorsoftllc/infantry/harness/api/HarnessProcess;)Lcom/superiorsoftllc/infantry/harness/api/McpServerSpec;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/McpServerSpec {
+	public fun <init> (Ljava/lang/String;Lcom/superiorsoftllc/infantry/harness/api/McpTransport;Lcom/superiorsoftllc/infantry/harness/api/McpSource;Ljava/lang/String;Ljava/util/Set;Z)V
+	public synthetic fun <init> (Ljava/lang/String;Lcom/superiorsoftllc/infantry/harness/api/McpTransport;Lcom/superiorsoftllc/infantry/harness/api/McpSource;Ljava/lang/String;Ljava/util/Set;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Lcom/superiorsoftllc/infantry/harness/api/McpTransport;
+	public final fun component3 ()Lcom/superiorsoftllc/infantry/harness/api/McpSource;
+	public final fun component4 ()Ljava/lang/String;
+	public final fun component5 ()Ljava/util/Set;
+	public final fun component6 ()Z
+	public final fun copy (Ljava/lang/String;Lcom/superiorsoftllc/infantry/harness/api/McpTransport;Lcom/superiorsoftllc/infantry/harness/api/McpSource;Ljava/lang/String;Ljava/util/Set;Z)Lcom/superiorsoftllc/infantry/harness/api/McpServerSpec;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/harness/api/McpServerSpec;Ljava/lang/String;Lcom/superiorsoftllc/infantry/harness/api/McpTransport;Lcom/superiorsoftllc/infantry/harness/api/McpSource;Ljava/lang/String;Ljava/util/Set;ZILjava/lang/Object;)Lcom/superiorsoftllc/infantry/harness/api/McpServerSpec;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getLocalOnly ()Z
+	public final fun getName ()Ljava/lang/String;
+	public final fun getProvides ()Ljava/util/Set;
+	public final fun getScope ()Ljava/lang/String;
+	public final fun getSource ()Lcom/superiorsoftllc/infantry/harness/api/McpSource;
+	public final fun getTransport ()Lcom/superiorsoftllc/infantry/harness/api/McpTransport;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/McpServerState : java/lang/Enum {
+	public static final field CONFIGURED Lcom/superiorsoftllc/infantry/harness/api/McpServerState;
+	public static final field CONNECTED Lcom/superiorsoftllc/infantry/harness/api/McpServerState;
+	public static final field DISABLED Lcom/superiorsoftllc/infantry/harness/api/McpServerState;
+	public static final field FAILED Lcom/superiorsoftllc/infantry/harness/api/McpServerState;
+	public static final field NEEDS_AUTH Lcom/superiorsoftllc/infantry/harness/api/McpServerState;
+	public static final field PENDING_APPROVAL Lcom/superiorsoftllc/infantry/harness/api/McpServerState;
+	public static final field UNKNOWN Lcom/superiorsoftllc/infantry/harness/api/McpServerState;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/harness/api/McpServerState;
+	public static fun values ()[Lcom/superiorsoftllc/infantry/harness/api/McpServerState;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/McpServerStatus {
+	public fun <init> (Ljava/lang/String;Lcom/superiorsoftllc/infantry/harness/api/McpServerState;Ljava/lang/String;Ljava/lang/Integer;)V
+	public synthetic fun <init> (Ljava/lang/String;Lcom/superiorsoftllc/infantry/harness/api/McpServerState;Ljava/lang/String;Ljava/lang/Integer;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Lcom/superiorsoftllc/infantry/harness/api/McpServerState;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()Ljava/lang/Integer;
+	public final fun copy (Ljava/lang/String;Lcom/superiorsoftllc/infantry/harness/api/McpServerState;Ljava/lang/String;Ljava/lang/Integer;)Lcom/superiorsoftllc/infantry/harness/api/McpServerStatus;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/harness/api/McpServerStatus;Ljava/lang/String;Lcom/superiorsoftllc/infantry/harness/api/McpServerState;Ljava/lang/String;Ljava/lang/Integer;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/harness/api/McpServerStatus;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDetail ()Ljava/lang/String;
+	public final fun getName ()Ljava/lang/String;
+	public final fun getState ()Lcom/superiorsoftllc/infantry/harness/api/McpServerState;
+	public final fun getToolCount ()Ljava/lang/Integer;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/McpSource : java/lang/Enum {
+	public static final field HARNESS Lcom/superiorsoftllc/infantry/harness/api/McpSource;
+	public static final field INFANTRY Lcom/superiorsoftllc/infantry/harness/api/McpSource;
+	public static final field INFANTRY_USER Lcom/superiorsoftllc/infantry/harness/api/McpSource;
+	public static final field PLUGIN Lcom/superiorsoftllc/infantry/harness/api/McpSource;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/harness/api/McpSource;
+	public static fun values ()[Lcom/superiorsoftllc/infantry/harness/api/McpSource;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/McpSpecKt {
+	public static final field INFANTRY_MCP_SERVER Ljava/lang/String;
+}
+
 public final class com/superiorsoftllc/infantry/harness/api/McpState : java/lang/Enum {
 	public static final field CONNECTED Lcom/superiorsoftllc/infantry/harness/api/McpState;
 	public static final field DISCONNECTED Lcom/superiorsoftllc/infantry/harness/api/McpState;
@@ -631,6 +763,39 @@ public final class com/superiorsoftllc/infantry/harness/api/McpState : java/lang
 	public static fun getEntries ()Lkotlin/enums/EnumEntries;
 	public static fun valueOf (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/harness/api/McpState;
 	public static fun values ()[Lcom/superiorsoftllc/infantry/harness/api/McpState;
+}
+
+public abstract interface class com/superiorsoftllc/infantry/harness/api/McpTransport {
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/McpTransport$Http : com/superiorsoftllc/infantry/harness/api/McpTransport {
+	public fun <init> (Ljava/lang/String;Ljava/util/Map;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/util/Map;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/util/Map;
+	public final fun copy (Ljava/lang/String;Ljava/util/Map;)Lcom/superiorsoftllc/infantry/harness/api/McpTransport$Http;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/harness/api/McpTransport$Http;Ljava/lang/String;Ljava/util/Map;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/harness/api/McpTransport$Http;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getHeaders ()Ljava/util/Map;
+	public final fun getUrl ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/harness/api/McpTransport$Stdio : com/superiorsoftllc/infantry/harness/api/McpTransport {
+	public fun <init> (Ljava/util/List;Ljava/util/Map;Ljava/lang/String;)V
+	public synthetic fun <init> (Ljava/util/List;Ljava/util/Map;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/util/List;
+	public final fun component2 ()Ljava/util/Map;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun copy (Ljava/util/List;Ljava/util/Map;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/harness/api/McpTransport$Stdio;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/harness/api/McpTransport$Stdio;Ljava/util/List;Ljava/util/Map;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/harness/api/McpTransport$Stdio;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCommand ()Ljava/util/List;
+	public final fun getEnv ()Ljava/util/Map;
+	public final fun getWorkingDir ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
 }
 
 public final class com/superiorsoftllc/infantry/harness/api/SandboxContribution {
@@ -688,6 +853,7 @@ public abstract interface class com/superiorsoftllc/infantry/harness/api/Session
 	public static synthetic fun denied$default (Lcom/superiorsoftllc/infantry/harness/api/SessionOutput;Ljava/lang/String;ZILjava/lang/Object;)V
 	public abstract fun detail (Ljava/lang/String;)V
 	public fun diagnostic (Ljava/lang/String;)V
+	public fun mcpServers (Ljava/util/List;)V
 	public fun mcpState (Lcom/superiorsoftllc/infantry/harness/api/McpState;Ljava/lang/String;)V
 	public static synthetic fun mcpState$default (Lcom/superiorsoftllc/infantry/harness/api/SessionOutput;Lcom/superiorsoftllc/infantry/harness/api/McpState;Ljava/lang/String;ILjava/lang/Object;)V
 	public fun output (Ljava/lang/String;)V
@@ -704,6 +870,7 @@ public final class com/superiorsoftllc/infantry/harness/api/SessionOutput$Defaul
 	public static fun denied (Lcom/superiorsoftllc/infantry/harness/api/SessionOutput;Ljava/lang/String;Z)V
 	public static synthetic fun denied$default (Lcom/superiorsoftllc/infantry/harness/api/SessionOutput;Ljava/lang/String;ZILjava/lang/Object;)V
 	public static fun diagnostic (Lcom/superiorsoftllc/infantry/harness/api/SessionOutput;Ljava/lang/String;)V
+	public static fun mcpServers (Lcom/superiorsoftllc/infantry/harness/api/SessionOutput;Ljava/util/List;)V
 	public static fun mcpState (Lcom/superiorsoftllc/infantry/harness/api/SessionOutput;Lcom/superiorsoftllc/infantry/harness/api/McpState;Ljava/lang/String;)V
 	public static synthetic fun mcpState$default (Lcom/superiorsoftllc/infantry/harness/api/SessionOutput;Lcom/superiorsoftllc/infantry/harness/api/McpState;Ljava/lang/String;ILjava/lang/Object;)V
 	public static fun output (Lcom/superiorsoftllc/infantry/harness/api/SessionOutput;Ljava/lang/String;)V

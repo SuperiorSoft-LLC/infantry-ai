@@ -79,6 +79,7 @@ A message typed while a session's turn runs is held by the daemon, on the sessio
 - Harness API 2.16.0 (additive): `HarnessCapability.MID_TURN_INPUT` and `SessionConnection.injectInput(text)` (default false = not taken).
 - Harness API 2.17.0 (additive): `SessionOutput.denied(tool, prompted)`, a tool call the harness refused; the host shows "blocked: <tool> denied (...)" on the card (default: dropped).
 - Harness API 2.18.0 (additive, RUNNER-CHECK-SIGNIN-1): `Harness.signInProblem()`, why the CLI is not signed in here (default null = unknown). A runner hello reports the harness `loggedIn=false` when it answers, so `runner check` fails that row with the sign-in fix.
+- Harness API 2.19.0 (additive, MCP-SPEC-1): harness-neutral MCP types (`McpServerSpec`, `McpTransport`, `McpSource`, `McpServerState`, `McpServerStatus`, `McpListing`, `HarnessMcp`, `McpPlan`), `Harness.mcp` (default null), `Harness.loadsUserMcp` (default false), `HarnessHost.mcpServers(sessionEnv)` (default: the infantry entry from `mcpLaunch`), `SessionOutput.mcpServers(statuses)` (default: dropped). No behaviour change yet.
 - DaemonApi 1.39.0 (DEMO-CHECK-1, additive): `whenStarted(block)` runs a plugin's boot work once every daemon half and harness module is in (before the server binds). Demo_Lock seats its demo sessions there (it needs the Roles port and the opencode harness).
 - DaemonApi 1.38.0: `Sessions.queued / queueAdd / queueRemove / queueForce`; the scripting plugin's `session_act` gains `queue_list`, `queue_add`, `queue_remove`, `queue_force`.
 
