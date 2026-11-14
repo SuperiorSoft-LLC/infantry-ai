@@ -1,0 +1,77 @@
+{
+  "name": "Infantry_News",
+  "version": "1.0.0",
+  "apiVersion": 2,
+  "author": "Infantry AI",
+  "license": "Apache-2.0",
+  "description": "News headlines for every agent: the news.headlines capability (Google News RSS, no key: top stories, a topic, a search or one source), the card:news chat card (headline cards with source, time, thumbnail or source icon, and a link) and the News Agent role. Nothing is saved. Any agent may use the capability and the card while this plugin is loaded; without it a card:news block shows as code.",
+  "tier": "official",
+  "sequence": [],
+  "entry": "com.superiorsoftllc.infantry.plugins.official.news.NewsPlugin",
+  "jar": "build/libs/Infantry_News.jar",
+  "buildOrder": 230,
+  "implementations": [
+    { "registry": "chat.cards", "key": "news" }
+  ],
+  "cards": [
+    {
+      "type": "news",
+      "summary": "News headlines: a list of headline cards (title, source, relative time, thumbnail or source icon, link)",
+      "spec": "News card (Infantry_News): a list of headline cards.\n\nEasiest: call the capability news.headlines (infantry_capability_call, capability \"news.headlines\", args {\"query\"?, \"topic\"?, \"source\"?, \"max\"?}) and paste its `card` field as is: it is the finished fenced block.\n\nBy hand: its own fenced block, info string `card:news`, body ONE JSON object:\n\n```card:news\n{\"title\": \"Top stories\", \"items\": [{\"title\": \"Headline text\", \"source\": \"Reuters\", \"url\": \"https://...\", \"time\": \"2026-11-12T09:30:00Z\", \"image\": \"https://lh3.googleusercontent.com/...\", \"icon\": \"https://www.google.com/s2/favicons?domain=reuters.com&sz=64\"}]}\n```\n\nFields: `title` (heading above the list, optional); `items[]` with `title` and `url` (https) required, `source`, `time` (ISO-8601, shown as \"2h ago\"), `image` (thumbnail; only Google image hosts are fetched, by the daemon), `icon` (source icon). Missing image: the source icon, else a letter badge. Never invent items: use only what news.headlines returned. Keep one plain sentence outside the block.",
+      "images": { "hosts": ["*.googleusercontent.com", "*.gstatic.com", "www.google.com"] }
+    }
+  ],
+  "roles": [
+    {
+      "id": "news-agent",
+      "name": "News Agent",
+      "color": "#0ea5e9",
+      "icon": "travel-explore",
+      "description": "Fetches the news you ask for (top stories, a topic, a search, one source) and answers with headline cards.",
+      "persona": "You are the News Agent, a role brought by the Infantry_News plugin. You fetch news the user asks for and show it as headline cards.\n\nFor every news request:\n1. Call the capability news.headlines through infantry_capability_call (CLI: `infantry tool call infantry_capability_call --payload '{\"capability\":\"news.headlines\",\"args\":{...}}'`). Args: `query` (free text search), `topic` (world, nation, business, technology, entertainment, sports, science, health, or any other words), `source` (a site like reuters.com or a name), `max` (how many, default 6). No args = the top stories.\n2. Answer with ONE plain sentence, then the result's `card` field pasted exactly as it is (a ```card:news fenced block). Do not rewrite, reorder or invent headlines; do not repeat them as a list.\n3. If the call fails or returns no items, say so in one plain sentence and suggest a broader query.\n\nNothing is saved between requests; fetch fresh each time.",
+      "cards": ["news"],
+      "tools": ["news.headlines"]
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "news.headlines",
+      "description": "Current news headlines from Google News (no key): top stories with no args, a topic section (world, nation, business, technology, entertainment, sports, science, health), a free-text query, or one source (site:domain). Answers {title, feed, count, card}; `card` is a finished ```card:news block to paste into the reply as is.",
+      "runs": "daemon",
+      "action": "news.read",
+      "kind": "read",
+      "timeoutMs": 30000,
+      "params": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string", "description": "Free-text search, e.g. \"SpaceX launch\"." },
+          "topic": { "type": "string", "description": "A topic: world, nation, business, technology, entertainment, sports, science, health (a section feed), or any other words (searched)." },
+          "source": { "type": "string", "description": "One source: a domain (reuters.com, searched as site:reuters.com) or a name." },
+          "max": { "type": "integer", "description": "How many headlines (default the news.items setting, 6; at most limits.news.maxItems)." }
+        }
+      },
+      "result": { "type": "object", "properties": { "title": { "type": "string" }, "feed": { "type": "string" }, "count": { "type": "integer" }, "card": { "type": "string" } } }
+    }
+  ],
+  "daemon": {
+    "entry": "com.superiorsoftllc.infantry.plugins.official.news.daemon.NewsDaemonPlugin",
+    "jar": "daemon/build/libs/Infantry_News-daemon.jar",
+    "apiAtLeast": "1.59.0",
+    "config": [
+      {
+        "node": "Infantry_News.headlines", "group": "News", "title": "News headlines", "tab": "Plugins", "order": 970,
+        "applies": "Applies to: the news.headlines capability (every agent, the News Agent role).",
+        "keywords": ["news", "headlines", "google", "rss", "feed", "card"],
+        "fields": [
+          { "key": "news.items", "type": "number", "label": "Headlines per answer (when the agent does not say)", "default": 6, "min": 1, "max": 100, "step": 1, "scope": "daemon", "order": 1 },
+          { "key": "news.language", "type": "text", "label": "Language (Google News hl, e.g. en-US, en-GB, de)", "default": "en-US", "scope": "daemon", "order": 2 },
+          { "key": "news.country", "type": "text", "label": "Country edition (Google News gl, e.g. US, GB, DE)", "default": "US", "scope": "daemon", "order": 3 },
+          { "key": "news.sourceIcons", "type": "checkbox", "label": "Show each source's site icon when a headline has no thumbnail (one cached image fetch per source)", "default": true, "scope": "daemon", "order": 4 },
+          { "key": "limits.news.maxItems", "type": "number", "label": "Most headlines one call returns", "default": 20, "min": 1, "max": 100, "step": 1, "scope": "daemon", "order": 5 },
+          { "key": "limits.news.cacheMinutes", "type": "number", "label": "Reuse a fetched feed for (minutes, 0 = always fetch)", "default": 5, "min": 0, "max": 1440, "step": 1, "scope": "daemon", "order": 6 },
+          { "key": "limits.news.feedBytes", "type": "number", "label": "Largest feed read (bytes)", "default": 2097152, "min": 16384, "max": 20971520, "step": 1024, "scope": "daemon", "order": 7 }
+        ]
+      }
+    ]
+  }
+}
