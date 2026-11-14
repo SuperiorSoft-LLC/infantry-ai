@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "apiVersion": 2,
   "author": "Infantry AI",
-  "description": "A browser for agents, by grant only: declares one MCP server (capability browser) that runs Playwright MCP with an isolated, throw-away browser profile (never the owner's Chrome, nothing saved between sessions), headed. Walled by default: it reaches a session only through a grant with a purpose (for example a ticket's mcp.require browser). Shows in MCP Tools as source plugin. Daemon half only.",
+  "description": "A browser for agents, by grant only: declares one MCP server (capability browser) that runs Playwright MCP (your installed Chrome, else Edge, else a downloaded Chromium; env INFANTRY_BROWSER=auto|chrome|msedge|chromium) with an isolated, throw-away browser profile (never the owner's Chrome, nothing saved between sessions), headed. Walled by default: it reaches a session only through a grant with a purpose (for example a ticket's mcp.require browser). Shows in MCP Tools as source plugin. Daemon half only.",
   "tier": "official",
   "sequence": [],
   "daemon": {
@@ -13,8 +13,14 @@
     "mcpServers": [
       {
         "name": "browser",
-        "command": ["npx", "-y", "@playwright/mcp@0.0.85", "--isolated", "--browser", "chromium"],
-        "provides": ["browser"],
+        "command": [
+          "node",
+          "-e",
+          "const fs=require('fs'),p=process.platform,e=process.env;\nconst has=l=>l.some(x=>x&&fs.existsSync(x));\nconst W=[e.PROGRAMFILES,e['PROGRAMFILES(X86)'],e.LOCALAPPDATA];\nconst chrome=p==='win32'?has(W.map(b=>b&&b+'\\Google\\Chrome\\Application\\chrome.exe')):p==='darwin'?has(['/Applications/Google Chrome.app']):has(['/usr/bin/google-chrome','/usr/bin/google-chrome-stable','/opt/google/chrome/chrome']);\nconst edge=p==='win32'?has(W.map(b=>b&&b+'\\Microsoft\\Edge\\Application\\msedge.exe')):p==='darwin'?has(['/Applications/Microsoft Edge.app']):has(['/usr/bin/microsoft-edge','/opt/microsoft/msedge/msedge']);\nlet c=(e.INFANTRY_BROWSER||'auto').toLowerCase();\nif(c==='auto')c=chrome?'chrome':edge?'msedge':'chromium';\nconst r=require('child_process').spawn(p==='win32'?'npx.cmd':'npx',['-y','@playwright/mcp@0.0.85','--isolated','--browser',c],{stdio:'inherit',shell:p==='win32'});\nr.on('exit',x=>process.exit(x||0));"
+        ],
+        "provides": [
+          "browser"
+        ],
         "localOnly": false
       }
     ]
