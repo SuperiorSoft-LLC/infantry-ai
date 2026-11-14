@@ -12,6 +12,10 @@ import java.io.File
 @Serializable
 data class McpBridgeRow(val sessionId: String, val connected: Boolean, val connectedAt: Long, val lastSeen: Long, val reconnects: Int = 0)
 
+/** MCP-STATUS-1: one session's MCP servers, each `name:state` (connected / failed / needs-auth / configured ...). */
+@Serializable
+data class McpServersRow(val sessionId: String, val servers: List<String>)
+
 /** A plugin's row: [status] is `loaded`, `refused: why` or `failed: why` (a plugin PluginGuard disabled keeps its reason). */
 @Serializable
 data class PluginRow(val id: String, val status: String)
@@ -59,6 +63,7 @@ data class HealthReport(
     /** Rows plugins contribute through the existing `status` hook (key -> text). */
     val pluginRows: Map<String, String> = emptyMap(),
     val mcp: List<McpBridgeRow> = emptyList(),
+    val mcpServers: List<McpServersRow> = emptyList(),
     val hooks: Int? = null,
     val hookFailures: Int? = null,
     val freeMemoryMb: Long? = null,
@@ -162,6 +167,7 @@ object HealthText {
         r.pluginRows.forEach { (k, v) -> appendLine("  [$k] $v") }
         appendLine("mcp bridges: ${r.mcp.count { it.connected }} connected, ${r.mcp.count { !it.connected }} dropped")
         r.mcp.forEach { appendLine("  ${it.sessionId}: ${if (it.connected) "connected" else "DROPPED"}, last seen ${age(r.at - it.lastSeen)} ago, ${it.reconnects} reconnect(s)") }
+        r.mcpServers.forEach { appendLine("  ${it.sessionId} servers: ${it.servers.joinToString(", ")}") }
         if (r.hooks != null) appendLine("hooks: ${r.hooks}${r.hookFailures?.let { ", $it with failures" } ?: ""}")
         if (r.freeMemoryMb != null || r.freeDiskMb != null) appendLine("free: memory ${r.freeMemoryMb ?: "?"} MB, disk ${r.freeDiskMb ?: "?"} MB")
         val e = r.environment

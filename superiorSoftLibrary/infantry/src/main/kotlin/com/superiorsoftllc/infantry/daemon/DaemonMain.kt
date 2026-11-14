@@ -2600,6 +2600,7 @@ class InfantryDaemon(
                     secret = mcpSecret,
                     sessionContext = mcpSessionContext,
                     infantryFor = { mcpInfantry(emptyMap()) },
+                    sessionStatuses = { id -> manager.get(id)?.mcpServers.orEmpty() },
                 )
             }
             com.superiorsoftllc.infantry.daemon.health.DaemonHealth.service = com.superiorsoftllc.infantry.daemon.health.HealthService(
@@ -2619,6 +2620,7 @@ class InfantryDaemon(
                             } ?: Triple(null, null, null)
                     },
                     eventTail = LimitRegistry.fromEnv(LimitRegistry.HEALTH_EVENT_LOG_MAX, System::getenv).toInt().coerceAtMost(HEALTH_EVENTS_SHOWN),
+                    mcpServers = { manager.list().filter { it.mcpServers.isNotEmpty() }.associate { r -> r.id to r.mcpServers.map { "${it.name}:${it.state}" } } },
                 ),
             )
             val healthBeat = java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "health-heartbeat").apply { isDaemon = true } }
