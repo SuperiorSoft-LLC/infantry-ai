@@ -374,7 +374,7 @@ class ClaudeTtySessionTest {
         s.c.abortTurn()
         now += ClaudeTtySession.ABORT_GRACE_MS
         s.c.tick()
-        assertEquals(SessionTurnEnd.INTERRUPTED, s.out.ends.single().first)
+        assertEquals(emptyList(), s.out.ends, "INTERRUPT-RACE-1: the queued prompt is its own run; the stale end is not charged to it")
         assertEquals(listOf(ClaudeTtySession.ESC, ClaudeTtySession.CTRL_C), s.out.written.takeLast(2),
             "the CLI put the cancelled prompt back in the box; Ctrl+C empties it")
         s.c.tick()
@@ -406,6 +406,18 @@ class ClaudeTtySessionTest {
         now += ClaudeTtySession.ABORT_GRACE_MS
         s.c.tick()
         assertEquals(SessionTurnEnd.INTERRUPTED, s.out.ends.single().first)
+    }
+
+    @Test fun `a prompt queued during the abort is not charged the stale interrupted end`() {
+        val s = start()
+        up(s)
+        s.c.sendTurn(request("x"))
+        s.c.tick()
+        s.c.abortTurn()
+        s.c.sendTurn(request("next"))
+        now += ClaudeTtySession.ABORT_GRACE_MS
+        s.c.tick()
+        assertEquals(emptyList(), s.out.ends)
     }
 
     @Test fun `an api error the cli records fails the turn with its words`() {
