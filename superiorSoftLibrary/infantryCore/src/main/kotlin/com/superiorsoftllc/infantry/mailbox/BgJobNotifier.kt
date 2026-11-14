@@ -154,19 +154,27 @@ class BgJobNotifier(
     /** True when [job]'s notice should go out now (see DELIVERY above). */
     private fun deliverable(sessionId: String, job: BgJob): Boolean = !(job.attached && runCatching { inTurn(sessionId) }.getOrDefault(false))
 
+    /** BG-WAKE-1: a notice that is NOT sent says so in the daemon log (a silent skip is how a finished job went unheard). */
+    private fun skipped(job: BgJob, kind: String?, why: String) {
+        println("[infantry] bg notice skipped: job ${job.id} kind ${kind ?: "status"}: $why")
+    }
+
     private fun deliver(sessionId: String, job: BgJob, req: MailSendRequest, meter: () -> Unit = WatchMeter::event, kind: String? = null) {
-        if (!deliverable(sessionId, job)) return
+        if (!deliverable(sessionId, job)) { skipped(job, kind, "attached job, its turn saw the end"); return }
         if (dedupe()) {
-            if (skipIfResultRead() && handled.containsKey(job.id)) return
+            if (skipIfResultRead() && handled.containsKey(job.id)) { skipped(job, kind, "result already read"); return }
             // One 'closed output' and one 'finished' notice per job; a 'closed output' notice after the end is stale.
-            if (kind == KIND_EOF && finished.containsKey(job.id)) return
-            if (kind != null && !sentKinds.computeIfAbsent(job.id) { ConcurrentHashMap.newKeySet() }.add(kind)) return
+            if (kind == KIND_EOF && finished.containsKey(job.id)) { skipped(job, kind, "stale after the end"); return }
+            // BG-WAKE-1: a 'vanished' guess after the real end is stale; the real end after a 'vanished' guess is NOT a duplicate.
+            if (kind == KIND_VANISHED && sentKinds[job.id]?.contains(KIND_END) == true) { skipped(job, kind, "the job already reported its real end"); return }
+            if (kind != null && !sentKinds.computeIfAbsent(job.id) { ConcurrentHashMap.newKeySet() }.add(kind)) { skipped(job, kind, "already sent once"); return }
         }
-        if (foldIntoTurn() && kind == KIND_END && runCatching { inTurn(sessionId) }.getOrDefault(false)) {
+        val isEnd = kind == KIND_END || kind == KIND_VANISHED
+        if (foldIntoTurn() && isEnd && runCatching { inTurn(sessionId) }.getOrDefault(false)) {
             parked[job.id] = Parked(sessionId, job, req, kind)
             return
         }
-        if (kind == KIND_END && gate.handled(NudgeGate.BG_DONE, mapOf("sessionId" to sessionId, "jobId" to job.id, "label" to job.label, "subject" to req.subject, "text" to req.body))) return
+        if (isEnd && gate.handled(NudgeGate.BG_DONE, mapOf("sessionId" to sessionId, "jobId" to job.id, "label" to job.label, "subject" to req.subject, "text" to req.body))) return
         meter()
         send(req)
     }
@@ -217,6 +225,17 @@ class BgJobNotifier(
         )
     }
 
+    /**
+     * BG-WAKE-1: the wrapper reported `done` for a job the daemon no longer holds (expired on a stale heartbeat, or a
+     * restart lost it): the end is still told, from what the frame carries. Never a silent drop.
+     */
+    fun doneUnregistered(sessionId: String, jobId: String, exitCode: Int?, tail: List<String>?, bytes: Long?, eof: Boolean?, survivors: List<String>?, marker: String?, pipeNoFail: Boolean?) {
+        println("[infantry] bg done for unregistered job $jobId (session $sessionId): telling the session anyway")
+        val label = finished[jobId]?.label ?: "job $jobId"
+        val job = BgJob(jobId, label, 0L, clock(), notify = com.superiorsoftllc.infantry.session.BgNotify())
+        done(sessionId, job, exitCode, tail, bytes, eof, survivors, marker, pipeNoFail)
+    }
+
     override fun expired(sessionId: String, job: BgJob) {
         if (job.notify == null) return
         ended(sessionId)
@@ -229,7 +248,7 @@ class BgJobNotifier(
         deliver(
             sessionId, job,
             note(sessionId, job, if (code != null) t("job.vanished.subjectExit", job, "exit" to code) else t("job.vanished.subjectUnknown", job), if (code != null) "exit $code" else "exit unknown"),
-            kind = KIND_END,
+            kind = KIND_VANISHED,
         )
     }
 
@@ -284,7 +303,7 @@ class BgJobNotifier(
             if (runCatching { inTurn(p.sessionId) }.getOrDefault(false)) continue
             if (!parked.remove(id, p)) continue
             if (skipIfResultRead() && handled.containsKey(id)) continue
-            if (p.kind == KIND_END && gate.handled(NudgeGate.BG_DONE, mapOf("sessionId" to p.sessionId, "jobId" to id, "label" to p.job.label, "subject" to p.req.subject, "text" to p.req.body))) continue
+            if ((p.kind == KIND_END || p.kind == KIND_VANISHED) && gate.handled(NudgeGate.BG_DONE, mapOf("sessionId" to p.sessionId, "jobId" to id, "label" to p.job.label, "subject" to p.req.subject, "text" to p.req.body))) continue
             WatchMeter.event()
             send(p.req)
         }
@@ -536,6 +555,7 @@ class BgJobNotifier(
     companion object {
         private const val KIND_EOF = "eof"
         private const val KIND_END = "end"
+        private const val KIND_VANISHED = "vanished"
 
         /** A command line that echoes `$?` itself: the watched exit code is the shell's, not the command's. */
         private val WRAPPER_LABEL = Regex("""echo\s+\S*\$\?""")

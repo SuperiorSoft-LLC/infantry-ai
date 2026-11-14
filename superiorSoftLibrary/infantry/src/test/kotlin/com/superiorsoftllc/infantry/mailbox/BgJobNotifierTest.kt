@@ -106,4 +106,26 @@ class BgJobNotifierTest {
         assertEquals(listOf("X+") + BgCli.DEFAULT_PATTERNS, BgCli.patternsFor(p) { null })
         assertEquals(p, BgCli.parse(listOf("run") + p.optionArgs() + listOf("--", "gradlew", "test")))
     }
+
+    /** BG-WAKE-1: the heartbeat went stale (expired), then the wrapper's real `done` arrives: the real end is still told. */
+    @Test
+    fun realDoneAfterStaleExpiry_isStillDelivered() {
+        val log = File.createTempFile("bgn", ".log").apply { deleteOnExit() }
+        val n = notifier()
+        val j = job(log)
+        n.expired("sess-1", j)
+        assertEquals(1, sent.size, "the vanished guess goes out")
+        n.done("sess-1", j, 0, listOf("ok"))
+        assertEquals(2, sent.size, "the real end is not deduped against the guess")
+        assertTrue(sent.last().body.startsWith("task finished: j1 exit 0"), sent.last().body)
+    }
+
+    /** BG-WAKE-1: `done` for a job the daemon no longer holds (dropped on a stale beat) still wakes the session. */
+    @Test
+    fun doneForUnregisteredJob_stillNotifies() {
+        val n = notifier()
+        n.doneUnregistered("sess-1", "gone1", 0, listOf("x"), 3L, true, null, null, null)
+        assertEquals(1, sent.size)
+        assertTrue(sent.single().body.startsWith("task finished: gone1 exit 0"), sent.single().body)
+    }
 }
