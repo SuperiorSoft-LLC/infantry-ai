@@ -421,7 +421,9 @@ class ClaudeTtySession(
                     turn.abortAt != null && (interruptedSeen || now - turn.abortAt!! >= ABORT_GRACE_MS) -> {
                         out.output(mapper.resultLine()) // G13: an interrupted turn still reports the usage it spent
                         if (!turn.replied) { key(CTRL_C); inputClearedAt = now }
-                        ends += Triple(SessionTurnEnd.INTERRUPTED, null, turn.abortReason)
+                        // INTERRUPT-RACE-1: the host settled the interrupted run when the owner pressed Interrupt. A prompt sent
+                        // since is queued here as its own run: this stale end must not be charged to it.
+                        if (queue.isEmpty()) ends += Triple(SessionTurnEnd.INTERRUPTED, null, turn.abortReason)
                         active = null
                     }
                     apiError != null -> {
