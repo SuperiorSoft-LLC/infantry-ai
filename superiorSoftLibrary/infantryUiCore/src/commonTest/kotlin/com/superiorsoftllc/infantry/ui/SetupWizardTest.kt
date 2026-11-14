@@ -32,6 +32,8 @@ class SetupWizardTest {
         assertEquals(true, SetupWizard.needed(report(h("claude", true)), listOf(key("claude")), emptyList()))
         assertEquals(false, SetupWizard.needed(report(h("claude", true)), listOf(key("claude", set = true)), emptyList()))
         assertEquals(false, SetupWizard.needed(report(h("claude", true)), listOf(key("claude", signedIn = "true")), emptyList()))
+        // ONBOARD-1's in-app login finished before the probe caught up.
+        assertEquals(false, SetupWizard.needed(report(h("claude", true)), listOf(key("claude").copy(loginState = "done")), emptyList()))
         // A harness that declares no key, or offers free models, can answer once installed.
         assertEquals(false, SetupWizard.needed(report(h("pi", true)), emptyList(), emptyList()))
         val free = listOf(ProviderInfo("opencode", models = listOf("opencode/big-pickle", "opencode/grok-code-free")))

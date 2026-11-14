@@ -196,7 +196,7 @@ private fun ChoiceCard(title: String, subtitle: String, content: @Composable () 
 
 /** ONBOARD-1: the two ways a subscription harness connects, as two cards: log in with the subscription, or an API key. */
 @Composable
-private fun SignInChoices(row: SecretRow, values: MutableMap<String, String>) {
+internal fun SignInChoices(row: SecretRow, values: MutableMap<String, String>) {
     val name = harnessDisplayName(row)
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {

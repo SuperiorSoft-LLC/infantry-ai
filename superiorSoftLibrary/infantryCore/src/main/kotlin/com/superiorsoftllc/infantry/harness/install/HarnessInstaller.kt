@@ -296,7 +296,7 @@ class HarnessInstaller(
         private const val STEP_NPM = "Download and install"
         private const val STEP_CHECK = "Check"
         const val NODE_AUTO_GUIDANCE =
-            "Node.js is not installed. The agent tools need it, so Infantry AI installs it for you first (about 30 MB, " +
+            "Node.js is not installed. The agent tools need it, so Infantry AI installs it for you first (about 40 MB, " +
                 "into its own folder, no admin prompt)."
 
         const val NODE_GUIDANCE =

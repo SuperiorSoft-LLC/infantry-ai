@@ -162,7 +162,7 @@ object ShellSetupWizard : Block("infantry.shell.setupWizard", "infantry.shell.se
             // The owner's call: install it automatically when it is missing. Started once on this screen; Retry after a failure.
             var started by remember { mutableStateOf(false) }
             LaunchedEffect(Unit) { if (!started && !busy) { started = true; s.controller.installNodeRuntime() } }
-            Text("Installing it for you now: about 30 MB, into Infantry AI's own folder. No admin prompt, nothing else on your PC changes.", fontSize = 12.sp, color = Palette.Muted)
+            Text("Installing it for you now: about 40 MB, into Infantry AI's own folder. No admin prompt, nothing else on your PC changes.", fontSize = 12.sp, color = Palette.Muted)
             ProgressIndicator(HarnessInstallSetting.taskId(HarnessInstallSetting.NODE_ID), Modifier.fillMaxWidth())
             val outcome = HarnessInstallSetting.outcomeFor(HarnessInstallSetting.NODE_ID, s.state.harnessInstallLog)
             if (!busy && outcome != null && !outcome.ok) {
@@ -216,10 +216,11 @@ object ShellSetupWizard : Block("infantry.shell.setupWizard", "infantry.shell.se
         if (row == null) { LaunchedEffect(id) { onSignedIn() }; return }
         val owner = SetupSignIn.content
         if (owner != null) { owner(id, row, onSignedIn); return }
-        // Fallback until the harness's own sign-in screen is plugged in: the first-run keys row, saved as you go.
-        Text("Connect ${row.label.removeSuffix(" API key")} so your agent can answer.", fontSize = 13.sp)
+        // Default: the first-run keys screen's own pieces. A harness with an in-app subscription login (ONBOARD-1) gets its two
+        // choices (log in with the subscription, pasting the code back if the page shows one; or an API key); others the key row.
+        Text("Connect ${harnessDisplayName(row)} so your agent can answer.", fontSize = 13.sp)
         val values = remember { mutableStateMapOf<String, String>() }
-        HarnessKeyRow(row, SUBSCRIPTION_MODE in row.authModes, values) {}
+        if (offersInAppLogin(row)) SignInChoices(row, values) else HarnessKeyRow(row, SUBSCRIPTION_MODE in row.authModes, values) {}
         val s = LocalShell.current
         TextButton({
             val v = values[row.name].orEmpty().trim()

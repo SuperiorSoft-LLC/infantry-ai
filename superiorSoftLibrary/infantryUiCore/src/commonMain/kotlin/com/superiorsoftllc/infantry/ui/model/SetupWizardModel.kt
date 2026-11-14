@@ -34,7 +34,7 @@ object SetupWizard {
     /** True when [id] can answer without asking the user for anything more. */
     fun credentialOk(id: String, secrets: List<SecretRow>, providers: List<ProviderInfo>): Boolean {
         val row = keyRow(id, secrets) ?: return true
-        return row.set || row.signedIn == "true" || row.usesSecret.isNotBlank() || freeModels(id, providers).isNotEmpty()
+        return row.set || row.signedIn == "true" || row.loginState == LOGIN_DONE || row.usesSecret.isNotBlank() || freeModels(id, providers).isNotEmpty()
     }
 
     /** The harness ids that can answer now. */
@@ -65,10 +65,13 @@ object SetupWizard {
     fun firstModel(id: String, secrets: List<SecretRow>, providers: List<ProviderInfo>): String? {
         val provider = providers.firstOrNull { it.id == id } ?: return null
         val row = keyRow(id, secrets)
-        val hasCredential = row == null || row.set || row.signedIn == "true" || row.usesSecret.isNotBlank()
+        val hasCredential = row == null || row.set || row.signedIn == "true" || row.loginState == LOGIN_DONE || row.usesSecret.isNotBlank()
         if (!hasCredential) freeModels(id, providers).firstOrNull()?.let { return it }
         return provider.defaultModel ?: provider.models?.firstOrNull()
     }
+
+    /** ONBOARD-1's in-app sign-in finished (`SecretRow.loginState`); the probe's signedIn may lag behind it. */
+    private const val LOGIN_DONE = "done"
 
     /** The first agent's task: short, so the reply arrives fast and costs next to nothing. */
     const val HELLO_PROMPT = "Say hello in one short sentence and tell me you are ready to help."
