@@ -81,6 +81,9 @@ object SetupWizard {
     /** ONBOARD-1's in-app sign-in finished (`SecretRow.loginState`); the probe's signedIn may lag behind it. */
     private const val LOGIN_DONE = "done"
 
+    /** The project the first agent runs in when the machine has none yet. */
+    const val STARTER_PROJECT = "My first project"
+
     /** The first agent's task: short, so the reply arrives fast and costs next to nothing. */
     const val HELLO_PROMPT = "Say hello in one short sentence and tell me you are ready to help."
 }

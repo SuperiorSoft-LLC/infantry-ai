@@ -246,8 +246,20 @@ object ShellSetupWizard : Block("infantry.shell.setupWizard", "infantry.shell.se
         LaunchedEffect(Unit) {
             if (sent) return@LaunchedEffect
             sent = true
+            fun live() = s.controller.state.value
             s.controller.refreshModelCatalog()
-            s.controller.pickModel(PickedModel(id, SetupWizard.firstModel(id, secrets, s.state.providers, s.state.modelCatalog)))
+            // An agent runs in a project. None selected: the first one there is; none at all: a starter project the daemon makes
+            // in <home>/Infantry AI (zero typing; the user can point it elsewhere later).
+            if (live().activeProjectId == null) {
+                val existing = live().projects.firstOrNull()?.id
+                if (existing != null) s.controller.selectProject(existing)
+                else {
+                    val r = s.controller.createProject(SetupWizard.STARTER_PROJECT, starter = true)
+                    if (r is com.superiorsoftllc.infantry.ui.net.CommandResult.Refused) { refused = r.reason; return@LaunchedEffect }
+                    live().projects.firstOrNull { it.name == SetupWizard.STARTER_PROJECT }?.let { if (live().activeProjectId != it.id) s.controller.selectProject(it.id) }
+                }
+            }
+            s.controller.pickModel(PickedModel(id, SetupWizard.firstModel(id, secrets, live().providers, live().modelCatalog)))
             val r = s.controller.spawn(SetupWizard.HELLO_PROMPT)
             if (r is com.superiorsoftllc.infantry.ui.net.CommandResult.Refused) refused = r.reason
         }

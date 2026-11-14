@@ -169,6 +169,11 @@ data class ProjectSave(
     val goal: String? = null,
     /** Contract 1.36.0: a null [directory] leaves it as it is; an empty one clears it. */
     val directory: String? = null,
+    /**
+     * ONBOARD-2: create the project in a NEW folder the daemon makes under its projects root (`<home>/Infantry AI/<name>`),
+     * for a first agent on a machine with no project yet; [directory] is ignored. Only on a create. Sent only when true.
+     */
+    val starter: Boolean = false,
 ) {
     companion object {
         fun decode(text: String): ProjectSave = StrictJson.decode(serializer(), text, "project_save payload")
