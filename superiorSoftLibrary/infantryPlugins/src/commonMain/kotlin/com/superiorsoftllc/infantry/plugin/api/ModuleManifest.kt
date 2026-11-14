@@ -294,12 +294,15 @@ data class HarnessDeclaration(
 /**
  * CLAUDE-AUTH-CHOICE-2: `harness.authProbe`. [argv] is run (never a shell) and its stdout parsed as JSON; the boolean at [signedInField]
  * says whether the CLI is signed in. [loginCommand] is what the owner types in a terminal to sign in (a headless chat cannot).
+ * ONBOARD-1: [loginArgv] is the same sign-in run BY THE APP (never a shell): stdin piped, so a code the sign-in page shows can be
+ * pasted back from the app's own field; its output's first https link is shown as the sign-in page. Empty = terminal only.
  */
 @Serializable
 data class HarnessAuthProbeDeclaration(
     val argv: List<String>,
     val signedInField: String = "loggedIn",
     val loginCommand: String = "",
+    val loginArgv: List<String> = emptyList(),
 )
 
 /**

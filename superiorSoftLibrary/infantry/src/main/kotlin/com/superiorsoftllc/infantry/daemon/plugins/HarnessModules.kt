@@ -79,7 +79,7 @@ class HarnessModules(
                 l.ids.map { id ->
                     val modes = if (c.id == null) allModes else emptyList()
                     val label = (c.label ?: id).let { n -> c.provider?.takeIf { p -> p.isNotBlank() && !n.contains(p) }?.let { p -> "$n ($p)" } ?: n }
-                    com.superiorsoftllc.infantry.harness.credential.HarnessCredential(id, c.env, label, c.help.orEmpty(), modes, l.declaration.authProbe?.argv.orEmpty(), l.declaration.authProbe?.signedInField ?: "loggedIn", l.declaration.authProbe?.loginCommand.orEmpty(), c.id.orEmpty(), c.forMode?.takeIf { it in allModes }.orEmpty(), c.modelPrefix?.trim().orEmpty())
+                    com.superiorsoftllc.infantry.harness.credential.HarnessCredential(id, c.env, label, c.help.orEmpty(), modes, l.declaration.authProbe?.argv.orEmpty(), l.declaration.authProbe?.signedInField ?: "loggedIn", l.declaration.authProbe?.loginCommand.orEmpty(), c.id.orEmpty(), c.forMode?.takeIf { it in allModes }.orEmpty(), c.modelPrefix?.trim().orEmpty(), if (c.id == null) l.declaration.authProbe?.loginArgv.orEmpty() else emptyList())
                 }
             }
         }
