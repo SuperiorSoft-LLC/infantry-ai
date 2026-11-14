@@ -432,7 +432,7 @@ fun BoardColumnsSection(board: BoardPaneHost, modifier: Modifier = Modifier, car
     val host = LocalPlatformHost.current
     val projectId = board.deps.session.activeProjectId
     val lanes = remember(projectId, host) { LaneCollapse(projectId, host::uiPref, host::saveUiPref) }
-    drag.collapsed = if (compact) emptySet() else lanes.snapshot()
+    drag.collapsed = lanes.snapshot()
     Row(
         modifier.fillMaxWidth().then(if (compact) Modifier.horizontalScroll(columnsScroll) else Modifier).padding(horizontal = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -443,8 +443,8 @@ fun BoardColumnsSection(board: BoardPaneHost, modifier: Modifier = Modifier, car
             val target = hover?.takeIf { it.column == status }
             val refused = target?.plan is DropPlan.NotAllowed
             val shape = RoundedCornerShape(6.dp)
-            // LANE-COLLAPSE-1: only where lanes sit side by side (not the compact, scrolling row).
-            if (!compact && lanes.isCollapsed(status)) {
+            // LANE-COLLAPSE-2: collapsing works in the compact scrolling row too (same saved preference).
+            if (lanes.isCollapsed(status)) {
                 CollapsedLane(status, title, color, tickets.size, target != null, refused, shape, drag) { lanes.toggle(status) }
                 return@forEach
             }
@@ -460,13 +460,11 @@ fun BoardColumnsSection(board: BoardPaneHost, modifier: Modifier = Modifier, car
                     Text(title.uppercase(), color = color, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                     if (refused) Text("can't drop here", color = Palette.Danger, fontSize = 10.sp, modifier = Modifier.padding(end = 6.dp))
                     Chip("${tickets.size}", color)
-                    if (!compact) {
-                        IconAction(
-                            AhqIcons.ChevronLeft, "Collapse lane", { lanes.toggle(status) },
-                            Modifier.padding(start = 4.dp).testTag(BOARD_LANE_COLLAPSE_TAG_PREFIX + status),
-                            style = IconActionStyle.TEXT, compact = true,
-                        )
-                    }
+                    IconAction(
+                        AhqIcons.ChevronLeft, "Collapse lane", { lanes.toggle(status) },
+                        Modifier.padding(start = 4.dp).testTag(BOARD_LANE_COLLAPSE_TAG_PREFIX + status),
+                        style = IconActionStyle.TEXT, compact = true,
+                    )
                 }
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 6.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     // The drop indicator: a line in the gap at the slot the card would land in.
