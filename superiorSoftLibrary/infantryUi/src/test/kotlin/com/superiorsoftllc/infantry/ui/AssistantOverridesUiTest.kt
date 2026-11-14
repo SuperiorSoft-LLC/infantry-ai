@@ -60,6 +60,7 @@ class AssistantOverridesUiTest {
                 // 1.115: the first contract with the Assistant (its title-bar entry shows from there).
                 link.push(Envelope(Envelope.READY, "contract=1.115.0 provider=stub instance=i1"))
                 waitUntil(timeoutMillis = 10_000) { controller.state.value.connection.isLive }
+                dismissSetupWizard(controller)
                 waitForIdle()
                 onNodeWithTag(TITLE_BAR_ASSISTANT_TAG).performClick()
                 waitForIdle()

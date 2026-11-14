@@ -59,6 +59,7 @@ class CenterOverridesUiTest {
                 setContent { App(controller, "ws://127.0.0.1:1/ws", null, tabs = tabs) }
                 link.push(Envelope(Envelope.READY, "contract=1.92.0 provider=stub instance=i1"))
                 waitUntil(timeoutMillis = 10_000) { controller.state.value.connection.isLive }
+                dismissSetupWizard(controller)
                 waitForIdle()
                 body()
             }

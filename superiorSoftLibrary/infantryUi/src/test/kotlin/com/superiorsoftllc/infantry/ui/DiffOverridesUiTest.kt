@@ -71,6 +71,7 @@ class DiffOverridesUiTest {
                 // 1.87: the project checkout's own status (the worktree picker of 1.88 is not needed here).
                 link.push(Envelope(Envelope.READY, "contract=1.87.0 provider=stub instance=i1"))
                 waitUntil(timeoutMillis = 10_000) { controller.state.value.connection.isLive }
+                dismissSetupWizard(controller)
                 link.push(Envelope(Envelope.PROJECTS, json.encodeToString(ListSerializer(Project.serializer()), listOf(Project("p1", "Alpha", directory = "/srv/alpha")))))
                 waitUntil(timeoutMillis = 10_000) { link.sentOf(Envelope.PROJECT_GIT_STATUS).isNotEmpty() }
                 val dirty = ProjectGitStatus(

@@ -113,6 +113,7 @@ class GitPaneOverridesUiTest {
                 setContent { App(controller, "ws://127.0.0.1:1/ws", null, tabs = tabs) }
                 link.push(Envelope(Envelope.READY, "contract=1.92.0 provider=stub instance=i1"))
                 waitUntil(timeoutMillis = 10_000) { controller.state.value.connection.isLive }
+                dismissSetupWizard(controller)
                 link.push(Envelope(Envelope.PROJECTS, json.encodeToString(ListSerializer(Project.serializer()), listOf(Project("p1", "Alpha", directory = "/srv/alpha")))))
                 waitUntil(timeoutMillis = 10_000) { controller.state.value.activeProject?.id == "p1" }
                 val status = ProjectGitStatus(

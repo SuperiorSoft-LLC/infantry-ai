@@ -176,6 +176,7 @@ fun main(args: Array<String>) {
         runDesktopComposeUiTest(1400, 860) {
             setContent { ChromeApp(controller, TabFactory(emptyList()), port) }
             waitUntil(timeoutMillis = 20_000) { controller.state.value.connection.isLive }
+            dismissSetupWizard(controller)
             snap(out, "shell-empty-1400")
             // S4c: Configuration through the core's own entry (ShellConfigEntry, drawn while no module fills the header): the
             // frame and the trust tabs (Secrets / Devices / About) are the core's; the open settings are an empty slot.
@@ -189,6 +190,7 @@ fun main(args: Array<String>) {
     runDesktopComposeUiTest(1400, 860) {
         setContent { App(controller, "ws://127.0.0.1:$port/ws", null, tabs = tabs) }
         waitUntil(timeoutMillis = 20_000) { controller.state.value.connection.isLive }
+        dismissSetupWizard(controller)
         scope.launch { controller.spawn("say hello") }
         waitUntil(timeoutMillis = 20_000) { controller.state.value.agents.isNotEmpty() }
         waitForIdle()
@@ -610,6 +612,7 @@ fun main(args: Array<String>) {
             runDesktopComposeUiTest(width, 860) {
                 setContent { ChromeApp(controller, tabs, port) }
                 waitUntil(timeoutMillis = 20_000) { controller.state.value.connection.isLive }
+                dismissSetupWizard(controller)
                 waitForIdle()
                 snap(out, "settings-5-home-$name")
                 onAllNodesWithTag("center-tab-SETTINGS")[0].performScrollTo().performClick()
@@ -626,6 +629,7 @@ fun main(args: Array<String>) {
                 runDesktopComposeUiTest(width, 860) {
                     setContent { ChromeApp(controller, tabs, port) }
                     waitUntil(timeoutMillis = 20_000) { controller.state.value.connection.isLive }
+                    dismissSetupWizard(controller)
                     waitForIdle()
                     // The sidebar lives in the compact drawer, opened from the title bar's left toggle.
                     if (overlay != "config" && onAllNodesWithTag(DRAWER_TAG).fetchSemanticsNodes().isEmpty()) { onNodeWithTag(TITLE_BAR_TOGGLE_LEFT_TAG).performClick(); waitForIdle(); Thread.sleep(800); waitForIdle() }

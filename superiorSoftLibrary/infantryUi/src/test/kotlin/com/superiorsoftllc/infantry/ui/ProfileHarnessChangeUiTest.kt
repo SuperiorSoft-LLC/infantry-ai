@@ -81,6 +81,7 @@ class ProfileHarnessChangeUiTest {
             val controller = Controller(scope)
             runDesktopComposeUiTest(1700, 1000) {
                 setContent { App(controller, "ws://127.0.0.1:$port/ws", null) }
+                dismissSetupWizard(controller)
                 waitUntil(timeoutMillis = 20_000) {
                     val s = controller.state.value
                     s.connection.isLive && s.roles.isNotEmpty() &&

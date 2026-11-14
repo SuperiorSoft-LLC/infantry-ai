@@ -98,6 +98,7 @@ class EpicsPaneUiTest {
                 }
                 controller.connect("ws://127.0.0.1:$port/ws", null)
                 waitUntil(timeoutMillis = 20_000) { controller.state.value.connection.isLive }
+                dismissSetupWizard(controller)
 
                 assertIs<CommandResult.Sent>(runBlocking { controller.createProject("Alpha") })
                 waitUntil(timeoutMillis = 10_000) { controller.state.value.activeProjectId != null }
@@ -169,6 +170,7 @@ class EpicsPaneUiTest {
                 }
                 controller.connect("ws://127.0.0.1:$port/ws", null)
                 waitUntil(timeoutMillis = 20_000) { controller.state.value.connection.isLive }
+                dismissSetupWizard(controller)
                 assertIs<CommandResult.Sent>(runBlocking { controller.createProject("Alpha") })
                 waitUntil(timeoutMillis = 10_000) { controller.state.value.activeProjectId != null }
                 val alpha = controller.state.value.activeProjectId!!

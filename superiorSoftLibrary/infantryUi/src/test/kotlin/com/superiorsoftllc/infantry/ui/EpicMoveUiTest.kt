@@ -116,6 +116,7 @@ class EpicMoveUiTest {
         runDesktopComposeUiTest(1600, 1000) {
             setContent { App(c, "ws://127.0.0.1:$port/ws", null) }
             waitUntil(timeoutMillis = daemonWaitMs) { c.state.value.connection.isLive }
+            dismissSetupWizard(c)
             assertIs<CommandResult.Sent>(runBlocking { c.saveProject("Epic move") })
             val project = until("project listed", c) { s -> s.projects.any { it.name == "Epic move" } }.projects.single { it.name == "Epic move" }
             runBlocking { c.selectProject(project.id) }

@@ -80,6 +80,7 @@ class IconButtonsUiTest {
             runDesktopComposeUiTest(1700, 1000) {
                 setContent { App(controller, "ws://127.0.0.1:$port/ws", null) }
                 waitUntil(timeoutMillis = 20_000) { controller.state.value.connection.isLive }
+                dismissSetupWizard(controller)
                 onNodeWithContentDescription("New agent").performClick()
                 waitForIdle()
                 onNodeWithText("Task for a NEW agent", substring = true).performTextInput("hello")
@@ -169,6 +170,7 @@ class IconButtonsUiTest {
                 }
                 link.push(Envelope(Envelope.READY, "contract=1.36.0 provider=stub instance=i1"))
                 waitUntil(timeoutMillis = 10_000) { controller.state.value.connection.isLive }
+                dismissSetupWizard(controller)
                 link.push(Envelope(Envelope.PROJECTS, Json.encodeToString(ListSerializer(Project.serializer()), listOf(Project("p1", "Alpha", directory = "/srv/alpha")))))
                 waitUntil(timeoutMillis = 10_000) { iconButtons().isNotEmpty() }
                 assertTrue(iconButtons().all { it.tooltip.isNotBlank() && it.description.isNotBlank() }, "${iconButtons()}")

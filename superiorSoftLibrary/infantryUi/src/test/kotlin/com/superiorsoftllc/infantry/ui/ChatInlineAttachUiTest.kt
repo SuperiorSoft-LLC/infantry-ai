@@ -140,6 +140,7 @@ class ChatInlineAttachUiTest {
         runDesktopComposeUiTest(1600, 1000) {
             setContent { CompositionLocalProvider(LocalPlatformHost provides host) { App(c, "ws://127.0.0.1:$port/ws", null) } }
             waitUntil(timeoutMillis = 20_000) { c.state.value.connection.isLive }
+            dismissSetupWizard(c)
             assertIs<CommandResult.Sent>(runBlocking { c.saveProject("Inline attach") })
             val project = until("project listed", c) { s -> s.projects.any { it.name == "Inline attach" } }.projects.single { it.name == "Inline attach" }
             runBlocking { c.selectProject(project.id) }

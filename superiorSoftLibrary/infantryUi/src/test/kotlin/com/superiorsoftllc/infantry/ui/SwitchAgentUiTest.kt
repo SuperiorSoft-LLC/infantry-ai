@@ -111,6 +111,7 @@ class SwitchAgentUiTest {
             val controller = Controller(scope)
             runDesktopComposeUiTest(1700, 1100) {
                 setContent { App(controller, "ws://127.0.0.1:$port/ws", null) }
+                dismissSetupWizard(controller)
                 waitUntil(timeoutMillis = daemonWaitMs) {
                     val s = controller.state.value
                     s.connection.isLive && s.roles.any { it.id == roleA } && s.roles.any { it.id == roleB } &&

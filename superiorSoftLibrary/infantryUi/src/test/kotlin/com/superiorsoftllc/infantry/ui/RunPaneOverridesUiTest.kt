@@ -97,6 +97,7 @@ class RunPaneOverridesUiTest {
                 setContent { App(controller, "ws://127.0.0.1:1/ws", null, tabs = tabs) }
                 link.push(Envelope(Envelope.READY, "contract=1.94.0 provider=stub instance=i1"))
                 waitUntil(timeoutMillis = 10_000) { controller.state.value.connection.isLive }
+                dismissSetupWizard(controller)
                 link.push(Envelope(Envelope.COMMANDS, """[{"id":"build-web","name":"Build web","argv":["gradlew.bat","build"],"graceMillis":5000}]"""))
                 waitUntil(timeoutMillis = 10_000) { controller.state.value.runs.commands.isNotEmpty() }
                 // Synchronize on the composed UI, not the controller (frontend/ui-test-flake-causes).

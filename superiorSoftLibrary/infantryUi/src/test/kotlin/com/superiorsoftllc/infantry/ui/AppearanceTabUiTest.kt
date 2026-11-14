@@ -122,6 +122,7 @@ class AppearanceTabUiTest {
                 setContent { App(controller, "ws://127.0.0.1:1/ws", null, tabs = tabs) }
                 link.push(Envelope(Envelope.READY, "contract=1.94.0 provider=stub instance=i1"))
                 waitUntil(timeoutMillis = 10_000) { controller.state.value.connection.isLive }
+                dismissSetupWizard(controller)
                 // AVATAR-PICKER-1: one live agent, so its avatar is drawn in the sidebar under the dialog.
                 link.push(Envelope(Envelope.SESSIONS, """[{"id":"s1","provider":"claude","workingDir":"/w","spawnedAt":1,"lastHeartbeat":1,"state":"IDLE"}]"""))
                 waitForIdle()
@@ -241,6 +242,7 @@ class AppearanceTabUiTest {
                 setContent { App(controller, "ws://127.0.0.1:1/ws", null, tabs = current) }
                 link.push(Envelope(Envelope.READY, "contract=1.94.0 provider=stub instance=i1"))
                 waitUntil(timeoutMillis = 10_000) { controller.state.value.connection.isLive }
+                dismissSetupWizard(controller)
                 link.push(Envelope(Envelope.SESSIONS, """[{"id":"s1","provider":"claude","workingDir":"/w","spawnedAt":1,"lastHeartbeat":1,"state":"IDLE"}]"""))
                 waitUntil(timeoutMillis = 10_000) { onAllNodesWithTag("fake-avatar").fetchSemanticsNodes().isNotEmpty() }
                 // Disabled: the style is gone, the portrait draws.
@@ -283,6 +285,7 @@ class AppearanceTabUiTest {
                 setContent { App(controller, "ws://127.0.0.1:1/ws", null, tabs = current) }
                 link.push(Envelope(Envelope.READY, "contract=1.94.0 provider=stub instance=i1"))
                 waitUntil(timeoutMillis = 10_000) { controller.state.value.connection.isLive }
+                dismissSetupWizard(controller)
                 link.push(Envelope(Envelope.SESSIONS, """[{"id":"s1","provider":"claude","workingDir":"/w","spawnedAt":1,"lastHeartbeat":1,"state":"IDLE"}]"""))
                 waitUntil(timeoutMillis = 10_000) { AvatarStyleChoice.chosen == "mascot" }
                 waitUntil(timeoutMillis = 10_000) { onAllNodesWithTag(AVATAR_TAG).fetchSemanticsNodes().isEmpty() }

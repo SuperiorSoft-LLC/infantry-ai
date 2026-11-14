@@ -92,6 +92,7 @@ class UsageLimitsPanelUiTest {
                 }
                 link.push(Envelope(Envelope.READY, "contract=1.59.0 provider=stub instance=i1"))
                 waitUntil(timeoutMillis = 10_000) { controller.state.value.connection.isLive }
+                dismissSetupWizard(controller)
                 link.push(Envelope("limits", limitsJson))
 
                 // One card per provider, under its display name.
@@ -180,6 +181,7 @@ class UsageLimitsPanelUiTest {
                     }
                     link.push(Envelope(Envelope.READY, "contract=1.59.0 provider=stub instance=i1"))
                     waitUntil(timeoutMillis = 10_000) { controller.state.value.connection.isLive }
+                    dismissSetupWizard(controller)
                     link.push(Envelope("limits", staleJson))
                     waitUntil(timeoutMillis = 10_000) { runCatching { onNodeWithTag("limits-stale-claude").assertExists() }.isSuccess }
                     // The last good reading stays: its percents, never "—".

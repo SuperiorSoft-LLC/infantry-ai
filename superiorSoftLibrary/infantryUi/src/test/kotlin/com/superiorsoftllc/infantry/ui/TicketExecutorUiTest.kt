@@ -88,6 +88,7 @@ class TicketExecutorUiTest {
             fun ticket(id: String): Ticket = controller.state.value.tickets.first { it.id == id }
             runDesktopComposeUiTest(1800, 1600) {
                 setContent { App(controller, "ws://127.0.0.1:$port/ws", null) }
+                dismissSetupWizard(controller)
                 waitUntil(timeoutMillis = 20_000) {
                     val s = controller.state.value
                     s.connection.isLive && s.roles.isNotEmpty() && listOf("opencode", "claude").all { h -> s.providers.any { it.id == h } }

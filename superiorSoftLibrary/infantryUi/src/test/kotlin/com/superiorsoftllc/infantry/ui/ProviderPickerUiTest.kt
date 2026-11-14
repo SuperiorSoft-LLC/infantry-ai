@@ -100,6 +100,7 @@ class ProviderPickerUiTest {
             val controller = Controller(scope)
             runDesktopComposeUiTest(1500, 1000) {
                 setContent { App(controller, "ws://127.0.0.1:$port/ws", null) }
+                dismissSetupWizard(controller)
                 waitUntil(timeoutMillis = 20_000) {
                     controller.state.value.connection.isLive &&
                         controller.state.value.roles.isNotEmpty() &&
@@ -162,6 +163,7 @@ class ProviderPickerUiTest {
             val controller = Controller(scope)
             runDesktopComposeUiTest(1500, 1000) {
                 setContent { App(controller, "ws://127.0.0.1:$port/ws", null) }
+                dismissSetupWizard(controller)
                 waitUntil(timeoutMillis = 20_000) {
                     controller.state.value.connection.isLive &&
                         controller.state.value.roles.isNotEmpty() &&

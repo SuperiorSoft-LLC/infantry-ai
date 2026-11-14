@@ -150,6 +150,7 @@ class ChatImageAttachUiTest {
         runDesktopComposeUiTest(1600, 1000) {
             setContent { CompositionLocalProvider(LocalPlatformHost provides host) { App(c, "ws://127.0.0.1:$port/ws", null) } }
             waitUntil(timeoutMillis = 20_000) { c.state.value.connection.isLive }
+            dismissSetupWizard(c)
             assertIs<CommandResult.Sent>(runBlocking { c.saveProject("Chat images") })
             val project = until("project listed", c) { s -> s.projects.any { it.name == "Chat images" } }.projects.single { it.name == "Chat images" }
             runBlocking { c.selectProject(project.id) }

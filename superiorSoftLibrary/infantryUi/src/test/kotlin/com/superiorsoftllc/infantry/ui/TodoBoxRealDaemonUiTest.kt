@@ -87,6 +87,7 @@ class TodoBoxRealDaemonUiTest {
             runDesktopComposeUiTest(1400, 900) {
                 controller.connect("ws://127.0.0.1:$port/ws", null)
                 waitUntil(timeoutMillis = 20_000) { controller.state.value.connection.isLive }
+                dismissSetupWizard(controller)
                 runBlocking { controller.spawn("do the task") }
                 waitUntil(timeoutMillis = 15_000) { controller.state.value.agents.size == 1 }
                 val id = controller.state.value.agents.keys.single()

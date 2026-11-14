@@ -105,6 +105,7 @@ class MemoryPaneOverridesUiTest {
                 setContent { App(controller, "ws://127.0.0.1:1/ws", null, tabs = tabs) }
                 link.push(Envelope(Envelope.READY, "contract=1.94.0 provider=stub instance=i1"))
                 waitUntil(timeoutMillis = 10_000) { controller.state.value.connection.isLive }
+                dismissSetupWizard(controller)
                 link.push(Envelope(Envelope.PROJECTS, json.encodeToString(ListSerializer(Project.serializer()), listOf(Project("p-beta", "Beta")))))
                 waitUntil(timeoutMillis = 10_000) { controller.state.value.projects.size == 1 }
                 scope.launch { controller.selectProject("p-beta") }
