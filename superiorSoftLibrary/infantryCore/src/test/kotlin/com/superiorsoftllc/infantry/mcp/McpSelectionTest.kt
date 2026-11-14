@@ -172,4 +172,21 @@ class McpSelectionTest {
         assertTrue(answer.data.contains("\"deny\":[\"playwright\"]"), answer.data)
         assertNull(svc.registry.find("nope", "p1"))
     }
+
+    @Test
+    fun `MCP-CLI-1 list merges sources, a grant reaches the next plan and a revoke removes it from the next plan`() {
+        val e = com.superiorsoftllc.infantry.protocol.Envelope
+        val svc = service(World(), FakeCli(listOf(cliServer("playwright"))))
+        svc.handle(e.MCP_ADD, """{"target":"infantry","server":{"name":"docs","url":"https://d/mcp"}}""")
+        val list = svc.handle(e.MCP_LIST, """{"projectId":"p1"}""").data
+        assertTrue("\"name\":\"docs\"" in list && "\"name\":\"playwright\"" in list && "\"name\":\"infantry\"" in list, list)
+        val planReq = """{"target":"cli-a","projectId":"p1","role":"backend","agentId":"agent-1","ticketId":"t-1"}"""
+        fun added() = svc.handle(e.MCP_PLAN, planReq).data.substringBefore("\"deny\"")
+        assertFalse("\"docs\"" in added(), "walled by default: ${added()}")
+        val granted = svc.handle(e.MCP_ASSIGN, """{"grant":{"server":"docs","scope":"role","target":"backend","purpose":"read docs","approvedBy":"owner"}}""").data
+        val id = Regex("\"id\":\"([^\"]+)\"").find(granted)!!.groupValues[1]
+        assertTrue("\"docs\"" in added(), added())
+        svc.handle(e.MCP_REVOKE, """{"grantId":"$id"}""")
+        assertFalse("\"docs\"" in added(), added())
+    }
 }
