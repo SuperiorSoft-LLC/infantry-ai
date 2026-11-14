@@ -4344,11 +4344,13 @@ private suspend fun handleConnection(
                         }
                         "done" -> {
                             require(sid != null && req.jobId != null) { "done expects a sessionId and a jobId" }
-                            manager.bgJobDone(sid, req.jobId!!)?.let { job ->
-                                (manager.bgJobListener as? com.superiorsoftllc.infantry.mailbox.BgJobNotifier)?.let { n ->
-                                    runCatching { n.done(sid, job, req.exitCode, req.tail, req.bytes, req.eof, req.survivors, req.marker, req.pipeNoFail) }
-                                        .onFailure { System.err.println("[infantry] bg notify failed for ${job.id}: ${it.message}") }
-                                }
+                            val doneJob = manager.bgJobDone(sid, req.jobId!!)
+                            (manager.bgJobListener as? com.superiorsoftllc.infantry.mailbox.BgJobNotifier)?.let { n ->
+                                // BG-WAKE-1: a job the daemon dropped (stale heartbeat) still ends with a notice.
+                                runCatching {
+                                    if (doneJob != null) n.done(sid, doneJob, req.exitCode, req.tail, req.bytes, req.eof, req.survivors, req.marker, req.pipeNoFail)
+                                    else n.doneUnregistered(sid, req.jobId!!, req.exitCode, req.tail, req.bytes, req.eof, req.survivors, req.marker, req.pipeNoFail)
+                                }.onFailure { System.err.println("[infantry] bg notify failed for ${req.jobId}: ${it.message}") }
                             }
                         }
                         "eof" -> {
