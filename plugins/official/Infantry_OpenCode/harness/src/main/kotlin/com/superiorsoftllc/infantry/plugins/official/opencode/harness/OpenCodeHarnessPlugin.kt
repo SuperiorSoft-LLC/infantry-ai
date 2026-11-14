@@ -10,6 +10,7 @@ import com.superiorsoftllc.infantry.harness.api.Harness
 import com.superiorsoftllc.infantry.harness.api.HarnessCapability
 import com.superiorsoftllc.infantry.harness.api.HarnessCommandSpec
 import com.superiorsoftllc.infantry.harness.api.HarnessHost
+import com.superiorsoftllc.infantry.harness.api.HarnessMcp
 import com.superiorsoftllc.infantry.harness.api.HarnessModels
 import com.superiorsoftllc.infantry.harness.api.HarnessPlugin
 import com.superiorsoftllc.infantry.harness.api.HarnessProcess
@@ -20,6 +21,7 @@ import com.superiorsoftllc.infantry.harness.api.HarnessSession
 import com.superiorsoftllc.infantry.harness.api.HarnessStats
 import com.superiorsoftllc.infantry.harness.api.HarnessTranslator
 import com.superiorsoftllc.infantry.harness.api.ToolApproval
+import java.io.File
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 
@@ -81,7 +83,27 @@ class OpenCodeHarness internal constructor(
 
     override fun mergeConfig(existing: String?, parts: ConfigParts): String = OpenCodeConfig.merge(existing, parts)
 
-    override fun session(): HarnessSession = OpenCodeServeSession(host, executable)
+    private val openCodeMcp = OpenCodeMcp(OpenCodeMcpRunner { args, dir -> runCli(listOf(executable()) + args, dir) })
+
+    /** MCP-OPENCODE-1: opencode's servers, read-only (`opencode mcp list`). */
+    override val mcp: HarnessMcp get() = openCodeMcp
+
+    override val loadsUserMcp: Boolean get() = true
+
+    private fun runCli(argv: List<String>, dir: String?): Pair<Int, String> {
+        val lines = java.util.Collections.synchronizedList(mutableListOf<String>())
+        val exit = CompletableFuture<Int>()
+        val process = host.start(HarnessProcess(argv, workingDir = dir?.let(::File)), object : HarnessProcessListener {
+            override fun onStdout(line: String) { lines += line }
+            override fun onStderr(line: String) { lines += line }
+            override fun onExit(exitCode: Int) { exit.complete(exitCode) }
+        })
+        process.closeInput()
+        val code = try { exit.get(30, TimeUnit.SECONDS) } catch (e: java.util.concurrent.TimeoutException) { process.killTree(); return -1 to "opencode mcp timed out" }
+        return code to lines.joinToString("\n")
+    }
+
+    override fun session(): HarnessSession = OpenCodeServeSession(host, executable, userServers = { openCodeMcp.names() })
 
     override fun stats(): HarnessStats = HarnessStats { psid -> OpenCodeStats.read(host, java.io.File(System.getProperty("user.home")), psid) }
 
