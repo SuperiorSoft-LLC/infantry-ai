@@ -29,11 +29,24 @@ This is Infantry AI as installed: the core only, with no extra plugins. Agent ca
 
 <p align="center"><img src="docs/img/infantry-app-2026-11-06.png" alt="Infantry AI desktop as installed (core only): agent cards, the PM's chat and live plan-usage pacing" width="900"></p>
 
-### Plugins: the Mascot plugin gives agents animated avatars
+### Plugins
 
-Everything in Infantry AI beyond the core is a plugin; this screenshot shows the Mascot plugin drawing the agents' avatars. See [Plugins](docs/wiki/Plugins.md) and the [plugin catalog](https://github.com/SuperiorSoft-LLC/infantry-plugins).
+Everything in Infantry AI beyond the core is a plugin. Each screenshot below shows one plugin running in the app; click a picture to open it full size. See [Plugins](docs/wiki/Plugins.md) and the [plugin catalog](https://github.com/SuperiorSoft-LLC/infantry-plugins).
 
-<p align="center"><img src="docs/img/plugin-friendly-2026-11-09.png" alt="Infantry AI with the Mascot plugin: animated avatars drawn for each agent" width="900"></p>
+<table>
+  <tr>
+    <td align="center" valign="top" width="50%">
+      <b><a href="plugins/official/Infantry_Mascot">Mascot: animated agent avatars</a></b><br>
+      <a href="docs/img/plugin-friendly-2026-11-09.png"><img src="docs/img/plugin-friendly-2026-11-09.png" alt="Infantry AI with the Mascot plugin: animated avatars drawn for each agent" width="100%"></a><br>
+      Draws an animated avatar for each agent.
+    </td>
+    <td align="center" valign="top" width="50%">
+      <b><a href="plugins/official/Infantry_News">News: live headline cards, News Agent role</a></b><br>
+      <a href="docs/img/news-agent-plugin-2026-11-13.png"><img src="docs/img/news-agent-plugin-2026-11-13.png" alt="Infantry AI with the News plugin: a News Agent showing BBC headline cards with thumbnails" width="100%"></a><br>
+      A News Agent shows live headline cards with thumbnails.
+    </td>
+  </tr>
+</table>
 
 <p align="center"><img src="docs/img/infantry-desktop-chat-2026-11-06.png" alt="Infantry AI desktop: PM agent chat with plan-usage limits" width="900"></p>
 
