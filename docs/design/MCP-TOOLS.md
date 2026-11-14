@@ -294,6 +294,7 @@ mcp:
   in MCP Tools under Plugins like any other server.
 - Claude in Chrome stays opt-in: exposed as capability `browser.owner` only when set up, given (`--chrome`) only to a
   ticket that names it with the owner present (Q4).
+- BROWSER-OWNER-1 (built): the Claude plugin lists a virtual server `claude-in-chrome` providing `browser.owner` (never written into the MCP config). Use `browser` (Playwright, isolated, default, all harnesses, runners) for worker testing and scraping; use `browser.owner` only when the task needs the owner's real Chrome and sign-ins AND the owner is at the PC. A ticket gets it only through `mcp.require: [browser.owner]` with a purpose and a grant; at launch the owner is asked "are you at the PC?" and only his yes adds `--chrome` (no yes = the start is refused). If the extension is not set up, the listing reads FAILED with "connect the Claude extension in Chrome" and MCP-FAIL-1's preflight refuses the start with that line. The owner still does every sign-in, payment and secret himself.
 - The owner's own Playwright keeps working (a Claude user server); when both exist, the plugin one wins for `browser`
   unless the role allow-lists the owner's.
 

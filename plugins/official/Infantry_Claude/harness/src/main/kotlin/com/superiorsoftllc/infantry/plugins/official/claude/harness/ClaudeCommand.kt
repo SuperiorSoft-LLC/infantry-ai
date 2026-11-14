@@ -164,9 +164,12 @@ object ClaudeCommand {
         sessionId: String? = null,
         /** MCP-CLAUDE-1: tool rules for the servers the plan turns off (`--disallowedTools`). */
         disallowedTools: List<String> = emptyList(),
+        /** BROWSER-OWNER-1: `--chrome` (Claude in Chrome), only for a confirmed browser.owner grant. */
+        chrome: Boolean = false,
     ): List<String> = buildList {
         add(executable)
         add("-p")
+        if (chrome) add(ClaudeChrome.FLAG)
         if (streamInput) { add("--input-format"); add("stream-json") }
         add("--output-format"); add("stream-json")
         add("--verbose")
@@ -215,8 +218,10 @@ object ClaudeCommand {
         allowedTools: List<String> = allowedTools(),
         settings: String? = null,
         disallowedTools: List<String> = emptyList(),
+        chrome: Boolean = false,
     ): List<String> = buildList {
         add(executable)
+        if (chrome) add(ClaudeChrome.FLAG)
         resumeSessionId?.takeIf { it.isNotBlank() }?.let { add("--resume"); add(it) }
             ?: sessionId?.takeIf { it.isNotBlank() }?.let { add("--session-id"); add(it) }
         model?.takeIf { it.isNotBlank() }?.let { add("--model"); add(it) }

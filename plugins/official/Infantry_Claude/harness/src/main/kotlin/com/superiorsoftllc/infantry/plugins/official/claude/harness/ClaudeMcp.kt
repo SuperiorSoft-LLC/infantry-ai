@@ -30,6 +30,8 @@ fun interface ClaudeMcpRunner {
 class ClaudeMcp(
     private val runner: ClaudeMcpRunner,
     private val windows: Boolean = System.getProperty("os.name").orEmpty().startsWith("Windows"),
+    /** BROWSER-OWNER-1: whether the Claude extension is set up in Chrome; null = Claude in Chrome is not offered. */
+    private val chromeConnected: (() -> Boolean)? = null,
 ) : HarnessMcp {
     override val canAdd: Boolean get() = true
     override val canRemove: Boolean get() = true
@@ -38,10 +40,12 @@ class ClaudeMcp(
 
     override suspend fun list(project: String): List<McpListing> {
         val (code, out) = runner.run(listOf("mcp", "list"), project)
-        return if (code == 0) parseList(out) else emptyList()
+        val servers = if (code == 0) parseList(out) else emptyList()
+        return chromeConnected?.let { servers + ClaudeChrome.listing(it()) } ?: servers
     }
 
     override suspend fun test(project: String, name: String): McpServerStatus {
+        if (name == ClaudeChrome.SERVER) return chromeConnected?.let { ClaudeChrome.listing(it()).status } ?: McpServerStatus(name, McpServerState.UNKNOWN, "not offered")
         val (code, out) = runner.run(listOf("mcp", "get", name), project)
         if (code != 0) return McpServerStatus(name, McpServerState.UNKNOWN, firstLine(out))
         return parseGet(name, out, mask = true)?.second ?: McpServerStatus(name, McpServerState.UNKNOWN, "unreadable `claude mcp get` output")
@@ -192,7 +196,7 @@ class ClaudeMcp(
          * that finds nothing the server is left out (never guessed).
          */
         fun configJson(plan: McpPlan, definition: (String) -> McpServerSpec?): String {
-            val servers = plan.delivered.mapNotNull { spec ->
+            val servers = plan.delivered.filterNot(ClaudeChrome::isChrome).mapNotNull { spec ->
                 val full = if (spec.source == McpSource.HARNESS) definition(spec.name) ?: return@mapNotNull null else spec
                 spec.name to addJson(full)
             }
@@ -224,7 +228,7 @@ class ClaudeMcp(
 }
 
 /** What one launch gets from the plan: the config files and the denied tool rules. */
-data class ClaudeMcpDelivery(val configs: List<String> = emptyList(), val disallowed: List<String> = emptyList())
+data class ClaudeMcpDelivery(val configs: List<String> = emptyList(), val disallowed: List<String> = emptyList(), val chrome: Boolean = false)
 
 /**
  * MCP-STATUS-1: a session's MCP server status, kept current from the stream. The headless init record seeds it ([seed]); a

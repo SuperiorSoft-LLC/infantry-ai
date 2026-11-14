@@ -3,6 +3,7 @@
 package com.superiorsoftllc.infantry.plugins.official.claude.harness
 
 import com.superiorsoftllc.infantry.harness.api.ContextLimitCapability
+import com.superiorsoftllc.infantry.harness.api.HarnessAnswer
 import com.superiorsoftllc.infantry.harness.api.EffortCapability
 import com.superiorsoftllc.infantry.harness.api.HARNESS_API_VERSION
 import com.superiorsoftllc.infantry.harness.api.Harness
@@ -23,6 +24,9 @@ import com.superiorsoftllc.infantry.harness.api.HarnessUsageSource
 import com.superiorsoftllc.infantry.harness.api.ToolApproval
 import com.superiorsoftllc.infantry.harness.api.WatchContribution
 import java.io.File
+import kotlin.coroutines.Continuation
+import kotlin.coroutines.EmptyCoroutineContext
+import kotlin.coroutines.startCoroutine
 
 /**
  * HARNESS H7b-2: Claude Code as a harness module, on the harness API 2.10: the argv ([ClaudeCommand]), the stream reader
@@ -91,7 +95,12 @@ class ClaudeHarness internal constructor(
 
     private val claudeMcp = ClaudeMcp(ClaudeMcpRunner { args, dir ->
         runCli(listOf(executable()) + args, dir)
+    }, chromeConnected = {
+        val win = System.getProperty("os.name").orEmpty().startsWith("Windows")
+        ClaudeChrome.extensionConnected(win, { key -> runCli(listOf("reg", "query", key), null).first == 0 }, { File(it).isFile }, System.getProperty("user.home").orEmpty())
     })
+
+    private val chromeConfirmed: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
 
     /** MCP-CLAUDE-1: Claude's own servers through `claude mcp ...` only. */
     override val mcp: HarnessMcp get() = claudeMcp
@@ -101,7 +110,15 @@ class ClaudeHarness internal constructor(
         val plan = host.mcpServers(env)
         val json = ClaudeMcp.configJson(plan) { claudeMcp.definition(null, it) }
         val file = ClaudeMcp.configFile(json, File(host.stateDir, "mcp"))
-        return ClaudeMcpDelivery(listOfNotNull(file), ClaudeMcp.disallowed(plan))
+        // BROWSER-OWNER-1: a granted Claude in Chrome needs the owner's yes (his question, blocking) before `--chrome`; no yes = the launch throws.
+        val chrome = ClaudeChrome.chromeFor(plan, env[ClaudeCommand.SESSION_ID_ENV], chromeConfirmed) { q ->
+            val sid = env[ClaudeCommand.SESSION_ID_ENV] ?: return@chromeFor HarnessAnswer.NONE
+            val fut = java.util.concurrent.CompletableFuture<HarnessAnswer>() // no coroutines library on the harness path: bridge the suspend call
+            val call: suspend () -> HarnessAnswer = { host.ask(sid, q) }
+            call.startCoroutine(Continuation(EmptyCoroutineContext) { r -> r.fold(fut::complete, fut::completeExceptionally) })
+            fut.get()
+        }
+        return ClaudeMcpDelivery(listOfNotNull(file), ClaudeMcp.disallowed(plan), chrome)
     }
 
     private fun runCli(argv: List<String>, dir: String?): Pair<Int, String> {
