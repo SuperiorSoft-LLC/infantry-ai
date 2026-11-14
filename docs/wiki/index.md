@@ -44,6 +44,7 @@ Every page of this wiki is listed here, one line each. The pages are written fro
 - [Health](Health.md): `infantry health`, the daemon health and environment report (up/down, restarts and why, MCP bridges, OS/shell/ports).
 - [Usage and worker limits](Usage.md): the meters, the pacing rule, why a ticket start is refused ("FULL"), overrides; explain it to a user who asks why only one worker runs.
 - [Waiting flag](Waiting.md): `infantry waiting on|off`, `infantry_waiting`; the "active but waiting" card state and the idle-nudge watcher.
+- [Browser for agents](Browser.md): the `Infantry_Browser` plugin, a walled Playwright MCP server (isolated profile, headed) given by grant with a purpose.
 - [Memory](Memory.md): project knowledge notes, the project / global / role / session scopes, the `infantry_memory` MCP actions (read and write), who may write global notes.
 - [Secrets](Secrets.md): `infantry secret render`, the `{{secret:NAME}}` placeholder, `infantry_secret_render`; fill any text file from saved secrets.
 - [Settings](Settings.md): scopes (app, project, role, session) and the cost-saving defaults.

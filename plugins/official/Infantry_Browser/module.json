@@ -1,0 +1,22 @@
+{
+  "name": "Infantry_Browser",
+  "version": "1.0.0",
+  "apiVersion": 2,
+  "author": "Infantry AI",
+  "description": "A browser for agents, by grant only: declares one MCP server (capability browser) that runs Playwright MCP with an isolated, throw-away browser profile (never the owner's Chrome, nothing saved between sessions), headed. Walled by default: it reaches a session only through a grant with a purpose (for example a ticket's mcp.require browser). Shows in MCP Tools as source plugin. Daemon half only.",
+  "tier": "official",
+  "sequence": [],
+  "daemon": {
+    "entry": "com.superiorsoftllc.infantry.plugins.official.browser.daemon.BrowserDaemonPlugin",
+    "jar": "daemon/build/libs/Infantry_Browser-daemon.jar",
+    "apiAtLeast": "1.59.0",
+    "mcpServers": [
+      {
+        "name": "browser",
+        "command": ["npx", "-y", "@playwright/mcp@0.0.85", "--isolated", "--browser", "chromium"],
+        "provides": ["browser"],
+        "localOnly": false
+      }
+    ]
+  }
+}
