@@ -16,6 +16,14 @@ import kotlin.test.assertTrue
 class ClaudePluginTest {
     private val infantryRules = "Bash(infantry:*),PowerShell(infantry:*),Bash(agenthq:*),PowerShell(agenthq:*),mcp__infantry__*"
 
+    @Test fun `user mcp is walled by default, the setting all opens it, the env overrides`() {
+        assertTrue(ClaudeCommand.strictMcp(null, null))
+        assertTrue(ClaudeCommand.strictMcp("none", null))
+        assertFalse(ClaudeCommand.strictMcp("all", null))
+        assertTrue(ClaudeCommand.strictMcp("all", "1"))
+        assertFalse(ClaudeCommand.strictMcp("none", "0"))
+    }
+
     @Test fun `one-shot argv with every option, in the golden order`() {
         val argv = ClaudeCommand.command(
             executable = "claude", model = "sonnet", permissionMode = "acceptEdits", mcpConfigs = listOf("a.json"),
