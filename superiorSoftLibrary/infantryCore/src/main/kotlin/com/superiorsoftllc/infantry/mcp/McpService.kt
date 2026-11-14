@@ -98,6 +98,29 @@ class McpService(
     fun plan(ctx: McpSessionContext, infantry: McpServerSpec? = infantryFor(ctx)): McpSelectionResult =
         McpSelection.select(registry.catalog(ctx.projectId, ctx.harnessId).entries, grants.list(), ctx, infantry, loadsUserMcp(ctx.harnessId))
 
+    /**
+     * MCP-FAIL-1: why a ticket whose worker would be [ctx] cannot start with [requires], or null when every one is granted and available.
+     * One line naming each missing thing and how to fix it (grant in MCP Tools / install it).
+     */
+    fun preflight(requires: List<com.superiorsoftllc.infantry.protocol.TicketMcpRequire>, ctx: McpSessionContext): String? {
+        val entries = registry.catalog(ctx.projectId, null).entries.filter { it.shadowedBy == null }
+        val granted = grants.list()
+        val problems = requires.mapNotNull { r ->
+            val server = r.server?.trim().orEmpty().ifEmpty { null }
+            val capability = r.capability?.trim().orEmpty().ifEmpty { null }
+            val candidates = if (server != null) entries.filter { it.name == server } else entries.filter { capability in it.provides }
+            val what = server?.let { "server '$it'" } ?: "capability '$capability'"
+            val usable = candidates.filter { it.enabled && it.spec != null && it.status.state != com.superiorsoftllc.infantry.harness.api.McpServerState.FAILED }
+            when {
+                candidates.isEmpty() -> "$what is not installed (add it in MCP Tools)"
+                usable.isEmpty() -> "$what is not available (" + candidates.first().let { it.problem ?: it.status.detail ?: if (!it.enabled) "disabled" else "failed its test" } + "; fix or test it in MCP Tools)"
+                usable.none { e -> granted.any { it.server == e.name && McpSelection.matches(it, ctx) } } -> "$what is not granted to this ticket (grant it in MCP Tools)"
+                else -> null
+            }
+        }
+        return problems.takeIf { it.isNotEmpty() }?.joinToString("; ")?.let { "ticket_start refused: required MCP tool missing: $it" }
+    }
+
     /** [plan] for the session whose environment is [sessionEnv] (its session id); null when the env names no known session. */
     fun planForEnv(sessionEnv: Map<String, String>, infantry: McpServerSpec?): McpSelectionResult? =
         sessionEnv[SESSION_ID_ENV]?.let(sessionContext)?.let { plan(it, infantry) }

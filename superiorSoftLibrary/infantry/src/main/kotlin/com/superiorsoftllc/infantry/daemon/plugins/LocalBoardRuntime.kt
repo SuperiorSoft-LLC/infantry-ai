@@ -66,6 +66,14 @@ class LocalBoardRuntime(
     override fun routingRefused(ticketId: String, projectId: String?, detail: String) {
         attention.raise(kind = AttentionKinds.LAUNCH_BLOCKED, ticketId = ticketId, outcome = "routing_refused", detail = detail)
     }
+    override fun mcpPreflight(ticketId: String, projectId: String?, agentId: String?, mcpJson: String): String? {
+        val service = com.superiorsoftllc.infantry.mcp.McpService.current ?: return null
+        val declared = runCatching { com.superiorsoftllc.infantry.protocol.TicketMcp.decode(mcpJson) }.getOrNull() ?: return null
+        if (declared.require.isEmpty()) return null
+        val role = agentId?.takeIf { it.startsWith("role:") }?.removePrefix("role:")
+        val ctx = com.superiorsoftllc.infantry.mcp.McpSessionContext("", projectId, role, agentId?.takeIf { role == null }, ticketId)
+        return service.preflight(declared.require, ctx)
+    }
     override fun relatedDescription(draft: com.superiorsoftllc.infantry.daemon.api.board.BoardRelatedDraft): String? = related(draft)
     override fun includeLinkedTasksContext(): Boolean? = settings.includeLinkedTasksContext()
     override fun includeSkillsContext(): Boolean? = settings.includeSkillsContext()

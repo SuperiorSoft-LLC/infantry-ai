@@ -1436,6 +1436,14 @@ class InfantryDaemon(
                     detail = "Session ${session.id} (${session.role}) still has its Infantry tools disconnected after $tries reconnect tries. Run: infantry session mcp-reconnect --self from its shell, or restart the session.",
                 )
             }
+            // MCP-FAIL-1: a session's MCP server going FAILED opens one attention card (the agent was told in chat by the manager).
+            manager.mcpServerFailedSink = { session, server, detail ->
+                attentionSvc.raise(
+                    kind = AttentionKinds.STALLED, ticketId = session.ticketId, podId = null, sessionId = session.id,
+                    outcome = "mcp-failed:$server",
+                    detail = "Session ${session.id} (${session.role}): MCP tool $server failed" + detail?.let { ": $it" }.orEmpty() + ". The agent was told to report blocked. Fix or re-grant it in MCP Tools.",
+                )
+            }
             // Story 9.5: triggers -- stored, coalesced, tripped on any non-success, their starts unattended.
             // TRIGGER-NUDGE (contract 1.105.0): a `prompt` action is mail to the target in the trigger's project.
             // DP-5b: triggers hand out through the Tickets API, bound once the board services exist (below).

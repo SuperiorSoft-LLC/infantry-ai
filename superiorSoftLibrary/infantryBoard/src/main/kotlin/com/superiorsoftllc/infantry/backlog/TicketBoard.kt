@@ -159,6 +159,8 @@ class TicketBoard(
      * (ticket, reason) so a lane drain or a trigger retrying the same ticket does not repeat it.
      */
     private val routingRefused: (ticketId: String, projectId: String?, detail: String) -> Unit = { _, _, _ -> },
+    /** MCP-FAIL-1: the reason a start is refused for an unmet `mcp.require` (ticket id, project, agent, mcp JSON), or null. */
+    private val mcpPreflight: (ticketId: String, projectId: String?, agentId: String?, mcpJson: String) -> String? = { _, _, _, _ -> null },
     /**
      * USAGE-PACE (contract 1.121.0): whether one more ticket worker may start on the plan meter (provider, model) spends.
      * An agent's or the daemon's start beyond the allowance is refused with the reason; a human move only warns.
@@ -1227,6 +1229,8 @@ class TicketBoard(
         val assigned = (if (origin == HandOutOrigin.QUEUE_DRAIN) row.queuedAgent else null) ?: row.agentId ?: rule?.setRole?.let { "role:$it" } // AGENT-TASKS-3: a drained ticket runs on the queue's own agent
         val assignment = resolveAssignment(assigned, row.projectId, id)
         if (assignment.refusal != null) return refusedStart(initialTicket, assignment.refusal)
+        // MCP-FAIL-1: a ticket that requires an MCP server or capability that is not granted or not available is not started (loud, one line).
+        row.mcp?.let { json -> mcpPreflight(id, row.projectId, assigned, json)?.let { return refusedStart(initialTicket, it) } }
         // BUG-WT-1: with no repo configured and no explicit pin, a project folder that is a git checkout IS the
         // repo: the ticket gets its own branch and worktree there, never the checkout itself.
         // INSTALL-CWD-1: with project folders on (the installed app), the project's own directory is the folder, and a

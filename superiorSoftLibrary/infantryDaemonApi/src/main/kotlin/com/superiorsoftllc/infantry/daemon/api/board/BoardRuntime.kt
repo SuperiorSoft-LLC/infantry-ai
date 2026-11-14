@@ -37,6 +37,12 @@ interface BoardRuntime {
     /** ROUTING-1: a rule-driven start was refused (the daemon raises an attention item). */
     fun routingRefused(ticketId: String, projectId: String?, detail: String) {}
 
+    /**
+     * MCP-FAIL-1: why a start must be refused because the ticket's `mcp.require` ([mcpJson]) names a server or capability that is not
+     * granted or not available (not installed, disabled, failed its test); null = every requirement is met (or none declared).
+     */
+    fun mcpPreflight(ticketId: String, projectId: String?, agentId: String?, mcpJson: String): String? = null
+
     /** RUNNER-POOL-6 (1.45.0, additive): the runners placement may pick (the pool's view); empty = only `local`. */
     fun runners(): List<BoardRunner> = emptyList()
 
