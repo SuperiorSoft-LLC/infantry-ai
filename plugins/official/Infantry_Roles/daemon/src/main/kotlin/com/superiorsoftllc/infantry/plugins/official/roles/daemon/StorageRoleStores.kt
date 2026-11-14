@@ -27,7 +27,7 @@ class ServiceRoles(private val service: RoleService, private val brief: (Role) -
         fun record(r: Role) = RoleRecord(
             r.id, r.name, r.color, r.persona, r.source.name, r.icon, r.description,
             r.responseDetail, r.responseMaxChars, r.responseBodyChars,
-            r.plugin, r.disabled, r.edited, r.cards, r.tools,
+            r.plugin, r.disabled, r.edited, r.cards, r.tools, r.mcpServers, r.mcpPurpose,
         )
     }
 }

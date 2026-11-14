@@ -99,7 +99,7 @@ object ActionCatalog {
         a("agents.profile.save", WRITE, E.AGENT_SAVE),
         a("agents.profile.delete", DESTRUCTIVE, E.AGENT_DELETE),
         // MCP-REGISTRY-1: adding, editing, enabling and granting MCP servers; removing a server or a grant is destructive.
-        a("mcp.write", WRITE, E.MCP_ADD, E.MCP_UPDATE, E.MCP_SET_ENABLED, E.MCP_ASSIGN),
+        a("mcp.write", WRITE, E.MCP_ADD, E.MCP_UPDATE, E.MCP_SET_ENABLED, E.MCP_ASSIGN, E.MCP_DECLARE),
         a("mcp.remove", DESTRUCTIVE, E.MCP_REMOVE, E.MCP_REVOKE),
         a("agents.report", WRITE, E.BG_JOB, E.PROGRESS, E.WAITING),
         a("worktrees.remove", DESTRUCTIVE, E.WORKTREE_REMOVE),

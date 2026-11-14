@@ -65,6 +65,8 @@ class RoleService(
             edited = stored?.plugin?.isNotEmpty() == true,
             cards = request.cards ?: stored?.cards.orEmpty(),
             tools = request.tools ?: stored?.tools.orEmpty(),
+            mcp = request.mcp?.map { it.trim() }?.filter { it.isNotEmpty() }?.distinct() ?: stored?.mcpServers.orEmpty(),
+            mcpPurpose = request.mcpPurpose?.trim() ?: stored?.mcpPurpose.orEmpty(),
         )
         unmarkRemoved(id)
         return written
@@ -106,7 +108,7 @@ class RoleService(
     private fun normalize(persona: String) = persona.replace("\r\n", "\n").replace('\r', '\n').trim()
 
     /** Validates and writes one role file (the shape [CustomRoles.parse] reads back), reloads, and returns the stored role. */
-    private fun write(request: RoleSave, plugin: String, edited: Boolean, cards: List<String>, tools: List<String>): Role {
+    private fun write(request: RoleSave, plugin: String, edited: Boolean, cards: List<String>, tools: List<String>, mcp: List<String> = catalog.role(request.id.trim())?.mcpServers.orEmpty(), mcpPurpose: String = catalog.role(request.id.trim())?.mcpPurpose.orEmpty()): Role {
         val id = request.id.trim()
         require(RoleIds.isValid(id)) {
             "'${id.take(40)}' is not a role id: a lowercase letter, then up to 31 lowercase letters, digits or '-'"
@@ -141,11 +143,15 @@ class RoleService(
             key to clean
         }
 
+        mcp.firstOrNull { !CustomRoles.PREF_ID.matches(it) }?.let { bad -> throw IllegalArgumentException("mcp entry '${bad.take(40)}' is not a server name") }
+        require(mcpPurpose.none { it.isISOControl() }) { "mcp purpose must be a single line" }
+        require(mcp.isEmpty() || mcpPurpose.isNotBlank()) { "an mcp block needs a purpose: why this role needs ${mcp.joinToString()}" }
+        val mcpLines = (if (mcp.isEmpty()) "" else "mcp: ${mcp.joinToString(", ")}\n") + (if (mcpPurpose.isEmpty()) "" else "mcpPurpose: $mcpPurpose\n")
         val iconLine = if (icon.isEmpty()) "" else "icon: $icon\n"
         val descriptionLine = if (description.isEmpty()) "" else "description: $description\n"
         val pluginLines = if (plugin.isEmpty()) "" else "plugin: $plugin\n" + (if (edited) "edited: true\n" else "")
         val prefLines = prefs.joinToString("") { (key, ids) -> if (ids.isEmpty()) "" else "$key: ${ids.joinToString(", ")}\n" }
-        val text = "---\nname: $name\ncolor: $color\n$iconLine$descriptionLine$pluginLines$prefLines---\n$persona\n"
+        val text = "---\nname: $name\ncolor: $color\n$iconLine$descriptionLine$pluginLines$prefLines$mcpLines---\n$persona\n"
         // Parse it BEFORE touching the disk, so a definition the reader would reject is never written.
         val parsed = CustomRoles.parse(id, text)
         check(parsed.name == name) { "name '$name' would not read back unchanged" }

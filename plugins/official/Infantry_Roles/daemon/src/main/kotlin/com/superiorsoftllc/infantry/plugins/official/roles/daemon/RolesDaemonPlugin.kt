@@ -14,6 +14,7 @@ import com.superiorsoftllc.infantry.daemon.api.roles.Roles
 import com.superiorsoftllc.infantry.daemon.api.roles.RoleRecord
 import com.superiorsoftllc.infantry.daemon.api.roles.RoleSaveRequest
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -88,6 +89,12 @@ private fun ToolCall.save(what: RoleSaveRequest): ToolResult = try {
     when (reply.type) {
         "role" -> {
             val saved = json.decodeFromString(RoleRecord.serializer(), reply.data)
+            // MCP-SELECT-1c: a changed mcp block becomes the registry's role grants (replacing them); a block left alone is not re-declared.
+            val declined = if (what.mcp != null || what.mcpPurpose != null) {
+                val input = """{"declare":{"scope":"role","target":${json.encodeToString(String.serializer(), saved.id)},"servers":${json.encodeToString(ListSerializer(String.serializer()), saved.mcpServers)},"purpose":${json.encodeToString(String.serializer(), saved.mcpPurpose)}}}"""
+                request("mcp_declare", input, timeoutMs = ANSWER_TIMEOUT_MS).takeIf { it.type == "error" }?.data
+            } else null
+            if (declined != null) refused("role '${saved.id}' saved, but its mcp grants were refused: $declined") else
             ToolResult("saved role '${saved.id}' (${saved.persona.length} persona characters); it applies to new sessions of the role, not running ones")
         }
         "error" -> refused(reply.data.ifBlank { "role_save failed" })
@@ -121,6 +128,9 @@ private val DESCRIPTION = "description" to "One line describing the role (at mos
 private val CARDS = "cards" to "Preferred card types, comma separated (e.g. news). Empty string clears. Named at session start while loaded."
 private val TOOLS = "tools" to "Preferred tool or capability names, comma separated. Empty string clears. Named at session start while loaded."
 
+private val MCP = "mcp" to "MCP server names this role's sessions are granted, comma separated (non-agent caller only; walled when empty). Needs mcpPurpose. Empty string clears."
+private val MCP_PURPOSE = "mcpPurpose" to "Why the role needs those MCP servers (non-agent caller only)."
+
 private fun JsonObject.ids(key: String): List<String>? = string(key)?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }
 
 object RoleListTool : DaemonTool {
@@ -143,6 +153,7 @@ object RoleListTool : DaemonTool {
                     if (role.plugin.isNotEmpty()) { put("plugin", role.plugin); put("disabled", role.disabled); put("edited", role.edited) }
                     if (role.cards.isNotEmpty()) put("cards", role.cards.joinToString(","))
                     if (role.tools.isNotEmpty()) put("tools", role.tools.joinToString(","))
+                    if (role.mcpServers.isNotEmpty()) put("mcp", role.mcpServers.joinToString(","))
                     put("personaChars", role.persona.length)
                 })
             }
@@ -169,7 +180,7 @@ object RoleUpdateTool : DaemonTool {
     const val NAME = "infantry_role_update"
     private val shape = shape(
         false, false,
-        listOf(ID, PERSONA, DESCRIPTION, CARDS, TOOLS, "name" to "New display name (non-agent caller only).", "color" to "#rrggbb (non-agent caller only).", "icon" to "Icon key (non-agent caller only)."),
+        listOf(ID, PERSONA, DESCRIPTION, CARDS, TOOLS, MCP, MCP_PURPOSE, "name" to "New display name (non-agent caller only).", "color" to "#rrggbb (non-agent caller only).", "icon" to "Icon key (non-agent caller only)."),
         listOf("id"),
     )
     override val name = NAME
@@ -183,11 +194,11 @@ object RoleUpdateTool : DaemonTool {
         val arguments = call.arguments
         val id = RetiredRoleIds.normalize(arguments.string("id") ?: return refused("$NAME needs an id"))
         val existing = call.fetchAll()?.firstOrNull { it.id == id } ?: return refused("$NAME: unknown role '$id'; ${RoleCreateTool.NAME} makes a new one")
-        val restricted = listOf("name", "color", "icon").filter { arguments.string(it) != null }
+        val restricted = listOf("name", "color", "icon", "mcp", "mcpPurpose").filter { arguments.string(it) != null }
         if (call.callerIsAgent() && restricted.isNotEmpty()) {
-            return refused("$NAME: an agent may change only persona and description; ${restricted.joinToString()} need a non-agent caller")
+            return refused("$NAME: an agent may change only persona and description (never its MCP grants); ${restricted.joinToString()} need a non-agent caller")
         }
-        if (listOf("persona", "description", "cards", "tools").all { arguments.string(it) == null } && restricted.isEmpty()) {
+        if (listOf("persona", "description", "cards", "tools", "mcp", "mcpPurpose").all { arguments.string(it) == null } && restricted.isEmpty()) {
             return refused("$NAME needs persona, description, cards and/or tools")
         }
         // role_save replaces the persona unless one is sent, so an unnamed field is carried over from the stored role.
@@ -200,13 +211,15 @@ object RoleUpdateTool : DaemonTool {
             description = arguments.string("description"),
             cards = arguments.ids("cards"),
             tools = arguments.ids("tools"),
+            mcp = arguments.ids("mcp"),
+            mcpPurpose = arguments.string("mcpPurpose"),
         ))
     }
 }
 
 object RoleCreateTool : DaemonTool {
     const val NAME = "infantry_role_create"
-    private val shape = shape(false, false, listOf(ID, "name" to "Display name.", PERSONA, DESCRIPTION, CARDS, TOOLS, "color" to "#rrggbb", "icon" to "Icon key"), listOf("id", "name"))
+    private val shape = shape(false, false, listOf(ID, "name" to "Display name.", PERSONA, DESCRIPTION, CARDS, TOOLS, MCP, MCP_PURPOSE, "color" to "#rrggbb", "icon" to "Icon key"), listOf("id", "name"))
     override val name = NAME
     override val description = "Create a role (non-agent caller only)."
     override val inputSchema = shape.first
@@ -226,6 +239,8 @@ object RoleCreateTool : DaemonTool {
             description = arguments.string("description"),
             cards = arguments.ids("cards"),
             tools = arguments.ids("tools"),
+            mcp = arguments.ids("mcp"),
+            mcpPurpose = arguments.string("mcpPurpose"),
         ))
     }
 }

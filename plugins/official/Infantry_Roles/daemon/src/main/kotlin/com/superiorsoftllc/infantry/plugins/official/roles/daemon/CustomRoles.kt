@@ -91,6 +91,8 @@ object CustomRoles {
             edited = fields["edited"]?.trim()?.lowercase() == "true",
             cards = idList(fields["cards"]),
             tools = idList(fields["tools"]),
+            mcpServers = idList(fields["mcp"]),
+            mcpPurpose = fields["mcppurpose"]?.trim().orEmpty(),
         )
     }
 

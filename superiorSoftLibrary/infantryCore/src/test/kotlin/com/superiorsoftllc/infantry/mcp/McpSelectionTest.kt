@@ -189,4 +189,22 @@ class McpSelectionTest {
         svc.handle(e.MCP_REVOKE, """{"grantId":"$id"}""")
         assertFalse("\"docs\"" in added(), added())
     }
+
+    @Test
+    fun `MCP-SELECT-1c mcp_declare turns a role block into role grants, an agent override adds, and an empty block walls again`() {
+        val e = com.superiorsoftllc.infantry.protocol.Envelope
+        val svc = service(World(), FakeCli(emptyList()))
+        svc.handle(e.MCP_ADD, """{"target":"infantry","server":{"name":"docs","url":"https://d/mcp"}}""")
+        fun delivered(role: String, agent: String) =
+            svc.handle(e.MCP_PLAN, """{"target":"cli-a","projectId":"p1","role":"$role","agentId":"$agent"}""").data.substringBefore("\"reasons\"")
+        assertFalse("\"docs\"" in delivered("qa", "a-1"), "no block = walled: ")
+        svc.handle(e.MCP_DECLARE, """{"declare":{"scope":"role","target":"qa","servers":["docs"],"purpose":"read docs"}}""")
+        assertTrue("\"docs\"" in delivered("qa", "a-1"))
+        assertFalse("\"docs\"" in delivered("backend", "a-2"), "only that role")
+        svc.handle(e.MCP_DECLARE, """{"declare":{"scope":"agent","target":"a-2","servers":["docs"],"purpose":"demo"}}""")
+        assertTrue("\"docs\"" in delivered("backend", "a-2"), "the agent override adds")
+        svc.handle(e.MCP_DECLARE, """{"declare":{"scope":"role","target":"qa","servers":[]}}""")
+        assertFalse("\"docs\"" in delivered("qa", "a-1"), "an empty block revokes")
+        assertTrue("\"docs\"" in delivered("backend", "a-2"))
+    }
 }

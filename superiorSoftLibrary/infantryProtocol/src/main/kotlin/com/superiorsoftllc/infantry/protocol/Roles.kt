@@ -30,6 +30,9 @@ data class RoleSave(
      */
     val cards: List<String>? = null,
     val tools: List<String>? = null,
+    /** MCP-SELECT-1c: the MCP server names the role is granted and why. Absent/null = keep the stored block; empty servers = walled again. */
+    val mcp: List<String>? = null,
+    val mcpPurpose: String? = null,
 ) {
     companion object {
         fun decode(text: String): RoleSave = StrictJson.decode(serializer(), text, "role_save payload")

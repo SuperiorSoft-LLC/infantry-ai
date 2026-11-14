@@ -32,6 +32,9 @@ data class RoleRecord(
     val edited: Boolean = false,
     val cards: List<String> = emptyList(),
     val tools: List<String> = emptyList(),
+    /** MCP-SELECT-1c (additive): the MCP servers the role is granted ([mcpServers]) and why ([mcpPurpose]); empty = walled. */
+    val mcpServers: List<String> = emptyList(),
+    val mcpPurpose: String = "",
 )
 
 /**
@@ -65,6 +68,9 @@ data class RoleSaveRequest(
     /** ROLE-PLUGIN-1 (1.58.0): preferred card types / tool names; null = keep the stored list, empty = clear it. */
     val cards: List<String>? = null,
     val tools: List<String>? = null,
+    /** MCP-SELECT-1c: MCP server names for the role; null = keep the stored block, empty = clear it. */
+    val mcp: List<String>? = null,
+    val mcpPurpose: String? = null,
 )
 
 /** Role ids renamed by the id redraw (contract 1.90.0): the one table, read by the daemon's `RoleIds` and the roles tools. */
