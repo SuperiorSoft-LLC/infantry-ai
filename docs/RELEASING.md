@@ -259,6 +259,7 @@ asset's SHA-256 against `SHA256SUMS`.
 ### Windows
 
 Windows code signing is still HELD: the MSI is unsigned (SmartScreen will warn).
+The Microsoft Store package (MSIX, signed by the Store) and its secrets: [STORE.md](STORE.md).
 
 ## Windows update notes (UPDATER-1 rc tests)
 

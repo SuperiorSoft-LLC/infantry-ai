@@ -1,0 +1,11 @@
+{
+  "_comment": "STORE-1: the Microsoft Store package identity (developer data, never a user setting). Replace the PLACEHOLDER values with Partner Center > Product identity once the app name is reserved (docs/STORE.md). Gradle -Pmsix.<key>=... or the MSSTORE_* repository variables override each value in CI.",
+  "identityName": "PLACEHOLDER.InfantryAI",
+  "publisher": "CN=00000000-0000-0000-0000-000000000000",
+  "publisherDisplayName": "SuperiorSoft LLC",
+  "displayName": "Infantry AI",
+  "description": "Infantry AI desktop with its own daemon: a command post for coding agents.",
+  "backgroundColor": "transparent",
+  "minVersion": "10.0.17763.0",
+  "maxVersionTested": "10.0.26100.0"
+}

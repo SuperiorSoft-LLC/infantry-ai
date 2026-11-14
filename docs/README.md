@@ -15,6 +15,7 @@ For how the product works, start with the wiki: [docs/wiki/Architecture.md](docs
 | [docs/VISION.md](docs/VISION.md) | current reference | The product vision, in one page. |
 | [docs/GATE.md](docs/GATE.md) | current reference | The bulk QA gate and how to run it. |
 | [docs/RELEASING.md](docs/RELEASING.md) | current reference | How a release build is packaged and published. |
+| [docs/STORE.md](docs/STORE.md) | current reference | Microsoft Store: the MSIX package, its CI submission and the owner-only Partner Center steps. |
 | [docs/INFANTRY-INSTALL.md](docs/INFANTRY-INSTALL.md) | current reference | Installing a production build (desktop plus its own daemon). |
 | [docs/INFANTRY-EVIDENCE-BAR.md](docs/INFANTRY-EVIDENCE-BAR.md) | current reference | What a worker must show before a ticket is done. |
 | [docs/HARNESS-SUPPORT.md](docs/HARNESS-SUPPORT.md) | current reference | Which features each agent harness supports. |
