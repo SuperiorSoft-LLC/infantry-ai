@@ -1297,13 +1297,24 @@ class InfantryDaemon(
                 push = { envelope -> for (client in clients) client.trySend(envelope) },
             )
             // SECRETS-1 / SECRETS-2: the keystore's frames; a restricted policy refuses every change.
+            // ONBOARD-1: in-app harness sign-ins (the first-run "Log in with your subscription"); each change pushes the secret rows.
+            val keystoreFramesRef = java.util.concurrent.atomic.AtomicReference<KeystoreHandler?>(null)
+            val harnessLogins = com.superiorsoftllc.infantry.harness.credential.HarnessLogins(
+                harnessCredentials,
+                timeoutMs = { settings.limit(LimitRegistry.HARNESS_LOGIN_TIMEOUT_MS) },
+                onChange = { keystoreFramesRef.get()?.pushState() },
+            )
             val keystoreFrames = KeystoreHandler(
                 keystore = keystore,
-                extraKnown = { harnessCredentials.declared().map { com.superiorsoftllc.infantry.keystore.KnownSecret(it.secretName, if (it.forMode.isEmpty()) "${it.label} API key" else it.label, help = it.help, authModes = it.authModes, authMode = { harnessCredentials.mode(it.harnessId).orEmpty() }, loginCommand = it.loginCommand, signedIn = { harnessCredentials.authStatus(it.harnessId).word }, lastProbe = { harnessCredentials.authStatus(it.harnessId).lastProbe }, usesSecret = { harnessCredentials.usesSecret(it.harnessId, it.credId).orEmpty() }) } },
+                extraKnown = { harnessCredentials.declared().map { com.superiorsoftllc.infantry.keystore.KnownSecret(it.secretName, if (it.forMode.isEmpty()) "${it.label} API key" else it.label, help = it.help, authModes = it.authModes, authMode = { harnessCredentials.mode(it.harnessId).orEmpty() }, loginCommand = it.loginCommand, signedIn = { harnessCredentials.authStatus(it.harnessId).word }, lastProbe = { harnessCredentials.authStatus(it.harnessId).lastProbe }, usesSecret = { harnessCredentials.usesSecret(it.harnessId, it.credId).orEmpty() }, forMode = it.forMode, canLogin = it.loginArgv.isNotEmpty(), login = { harnessLogins.state(it.harnessId) }) } },
                 authCheck = { secretName -> harnessCredentials.declared().firstOrNull { it.secretName == secretName }?.let { harnessCredentials.checkAuth(it.harnessId) } },
+                login = { secretName, action, text ->
+                    val id = harnessCredentials.declared().firstOrNull { it.secretName == secretName }?.harnessId ?: throw IllegalArgumentException("unknown harness key")
+                    when (action) { "start" -> harnessLogins.start(id); "input" -> harnessLogins.input(id, text); else -> harnessLogins.cancel(id) }
+                },
                 restricted = locked,
                 push = { envelope -> for (client in clients) client.trySend(envelope) },
-            )
+            ).also { keystoreFramesRef.set(it) }
             // P10-K9: the knowledge section's counts, read for a project whenever a first turn renders.
             // BUG-G2e: and the digest itself (what `infantry knowledge` prints), built in-process from the same stores.
             // DP-7b: every first-turn path reads the knowledge through the registry's Knowledge port (registered below, with the plugin host).
@@ -4648,7 +4659,7 @@ private suspend fun handleConnection(
                 // SECRETS-2 (1.135.0): and the user's key/value secrets.
                 Envelope.SECRET_SET, Envelope.SECRET_CLEAR, Envelope.SECRET_IMPORT, Envelope.SECRET_STATUS,
                 Envelope.SECRET_FIELD_SET, Envelope.SECRET_FIELD_DELETE, Envelope.SECRET_DELETE, Envelope.SECRET_MOVE,
-                Envelope.PLUGIN_SECRET_GET -> keystoreFrames.answer(envelope)
+                Envelope.SECRET_LOGIN, Envelope.PLUGIN_SECRET_GET -> keystoreFrames.answer(envelope)
 
                 // POLICY-1 (docs/POLICY.md): read the active policy; the owner switches it (refused while an env pins it).
                 // A switch tells every connection (each its own `policy` frame), this one included, so no direct answer.

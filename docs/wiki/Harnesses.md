@@ -323,3 +323,15 @@ Configuration > Secrets shows `loginCommand` with a Copy button, and a **Check**
 The daemon keeps `signedIn` (`true`, `false` or `unknown`) and `lastProbe` in memory per harness. A subscription session never carries a key:
 the key variable is set to an empty value, so one the daemon inherited cannot reach the harness.
 CLI: `infantry harness auth [<name>]` prints each harness's mode, `signedIn` and last probe; with a name it re-probes first and prints the login command when not signed in.
+
+**In-app login (ONBOARD-1).** `authProbe.loginArgv` (claude: `["claude", "auth", "login"]`) lets the app run the sign-in itself, so a
+new user never needs a terminal. The first-run screen then offers exactly two choices for that harness: *Log in with your Claude
+subscription* and *Use an Anthropic API key*. The client sends `secret_login` (`{name, action: start|input|cancel, text?}`, owner
+only, refused under a restricted policy); the daemon (`HarnessLogins`) runs the argv with stdin piped and the key variable blanked.
+Finding, claude 2.1.x: with a piped stdin `claude auth login` opens the browser itself, prints the sign-in page
+(`If the browser didn't open, visit: <url>`, wrapped in an OSC 8 link) and finishes on its own localhost callback; when the page
+shows a code instead, the line `code#state` written to its stdin completes it (`Invalid code...` when refused). The secret rows carry
+`canLogin`, `loginState` (`running`, `done`, `failed`), `loginUrl` and `loginMessage`; each change is pushed. On exit the probe is
+re-run: only exit 0 with a probe that does not say signed out is `done`. The wait is the setting `limits.harness.loginTimeoutMs`.
+A credential declared `forMode: subscription-login` (claude's `claude setup-token` token) is for remote runners only and is not on the
+first-run screen; it stays in Configuration > Secrets.

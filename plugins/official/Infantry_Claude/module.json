@@ -30,10 +30,10 @@
     "settings": ["harness.claude.liveIdleMinutes", "harness.claude.mode", "harness.claude.approvalHookSeconds", "harness.claude.firstTurnSubmitSeconds", "harness.claude.firstTurnReplySeconds", "harness.claude.authMode"],
     "hooks": ["watch", "mcp", "session", "models", "stats", "usage"],
     "authModes": ["api-key", "subscription-login"],
-    "authProbe": { "argv": ["claude", "auth", "status"], "signedInField": "loggedIn", "loginCommand": "claude auth login" },
-    "credential": { "env": "ANTHROPIC_API_KEY", "label": "Claude Code", "help": "Create an API key in the Anthropic Console (console.anthropic.com). Only needed when you choose API key; a Claude subscription signs in with `claude auth login` instead." },
+    "authProbe": { "argv": ["claude", "auth", "status"], "signedInField": "loggedIn", "loginCommand": "claude auth login", "loginArgv": ["claude", "auth", "login"] },
+    "credential": { "env": "ANTHROPIC_API_KEY", "label": "Claude Code", "help": "Create an API key in the Anthropic Console (console.anthropic.com). Only needed when you choose API key; with a Claude subscription you log in instead." },
     "credentials": [
-      { "id": "oauth", "env": "CLAUDE_CODE_OAUTH_TOKEN", "label": "Claude Code subscription token", "forMode": "subscription-login", "help": "Optional, for remote runners: run `claude setup-token` and paste the token. In subscription mode it signs in a session that has no `claude auth login` of its own (a runner container); a runner set to subscription-login keeps its own login." }
+      { "id": "oauth", "env": "CLAUDE_CODE_OAUTH_TOKEN", "label": "Remote runners: Claude subscription token", "forMode": "subscription-login", "help": "Only for remote runners (a machine or container where nobody can log in): run `claude setup-token` and paste the token. In subscription mode it signs in a session that has no `claude auth login` of its own (a runner container); a runner set to subscription-login keeps its own login." }
     ]
   }
 }

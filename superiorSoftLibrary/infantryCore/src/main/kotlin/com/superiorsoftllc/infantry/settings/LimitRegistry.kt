@@ -826,6 +826,12 @@ object LimitRegistry {
         "MODEL-CATALOG-1: how long ONE `models` request waits for a harness that has never listed its models before it answers that the harness is still listing (and how to pin a model id by hand), while the listing keeps running for the next request. Raise it on a host whose harness CLIs are slow to start; 0 = answer at once, never wait.",
         min = 0, zeroIsUnlimited = false,
     )
+    /** ONBOARD-1: how long an in-app harness sign-in (e.g. `claude auth login` from the first-run screen) waits for the owner. */
+    val HARNESS_LOGIN_TIMEOUT_MS = LimitDef(
+        "limits.harness.loginTimeoutMs", 900_000, "ms",
+        "ONBOARD-1: how long a sign-in started from the app (Log in with your subscription) waits for the owner to finish it in the browser or paste the code before it is stopped; 0 = it waits until cancelled.",
+        min = 0, zeroMeans = "no limit (until cancelled)",
+    )
     /** MODEL-CATALOG-1 / CLI-TIMEOUT-1: how long one CLI request waits for its answer. */
     val CLI_ANSWER_TIMEOUT_MS = LimitDef(
         "limits.cli.answerTimeoutMs", 20_000, "ms",
@@ -1238,7 +1244,7 @@ object LimitRegistry {
         TICKET_FILES_MAX_LINES, TICKET_FILES_RELATED_TOP,
         RELATED_BRIEF_TICKETS, RELATED_BRIEF_FILES, RELATED_BRIEF_CHARS, RELATED_BLOCK_TICKETS, RELATED_BLOCK_FILES, RELATED_BLOCK_CHARS,
         PLUGIN_CALL_TIMEOUT_MS, PLUGIN_HANG_CEILING_MS, PLUGIN_GUARD_STRIKES, PLUGIN_GUARD_COOLDOWN_MS, PLUGIN_POOL_SIZE, PLUGIN_QUEUE_LIMIT, PLUGIN_TOOL_TIMEOUT_MS, PLUGIN_TOOL_MAX_TIMEOUT_MS, PLUGIN_CAPABILITY_TIMEOUT_MS, PLUGIN_ROUTE_RATE, PLUGIN_START_TIMEOUT_MS, PLUGIN_STOP_TIMEOUT_MS, PLUGIN_UNLOAD_CHECK_MS, PLUGIN_CATALOG_STALE_MS, PLUGIN_REFRESH_TIMEOUT_MS, PLUGIN_AUTO_RELOAD_ATTEMPTS, PLUGIN_AUTO_RELOAD_DELAY_MS,
-        MODELS_CATALOG_TTL_MS, MODELS_CATALOG_WAIT_MS, CLI_ANSWER_TIMEOUT_MS,
+        MODELS_CATALOG_TTL_MS, MODELS_CATALOG_WAIT_MS, CLI_ANSWER_TIMEOUT_MS, HARNESS_LOGIN_TIMEOUT_MS,
         RUN_MAX_SECRETS, SECRET_RENDER_MAX_BYTES, KEYSTORE_MAX_FIELDS, KEYSTORE_MAX_SECRETS,
         SANDBOX_MODE, USAGE_QUOTA_HIT_HOLD_MINUTES,
         HEALTH_DB_TIMEOUT_SECONDS, HEALTH_BRIEF_ENVIRONMENT, HEALTH_EVENT_LOG_MAX, HEALTH_HEARTBEAT_SECONDS, HEALTH_WATCHDOG_FAILURES, HEALTH_WATCHDOG_INTERVAL_SECONDS, HEALTH_WATCHDOG_TIMEOUT_SECONDS,

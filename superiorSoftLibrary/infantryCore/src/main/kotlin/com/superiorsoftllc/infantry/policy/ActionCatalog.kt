@@ -152,7 +152,7 @@ object ActionCatalog {
         a("commands.save", WRITE, E.COMMAND_SAVE, E.COMMAND_DELETE),
         a("runs.start", SPAWN, E.RUN_START, E.RUN_ATTACH, E.RUN_RESIZE, E.RUN_INPUT),
         a("runs.stop", DESTRUCTIVE, E.RUN_STOP),
-        a("secrets.save", WRITE, E.SECRET_SET, E.SECRET_CLEAR, E.SECRET_IMPORT, E.SECRET_FIELD_SET, E.SECRET_FIELD_DELETE, E.SECRET_DELETE, E.SECRET_MOVE),
+        a("secrets.save", WRITE, E.SECRET_SET, E.SECRET_CLEAR, E.SECRET_IMPORT, E.SECRET_FIELD_SET, E.SECRET_FIELD_DELETE, E.SECRET_DELETE, E.SECRET_MOVE, E.SECRET_LOGIN),
         a("runners.admin", WRITE, RUNNER_ADMIN),
 
         // PLUGIN-BRIDGES-1: a client hosting its UI halves' capabilities (announce, answer), and their declared events.

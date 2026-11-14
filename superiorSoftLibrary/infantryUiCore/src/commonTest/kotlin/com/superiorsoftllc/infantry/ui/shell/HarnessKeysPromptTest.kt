@@ -73,4 +73,23 @@ class MoreHarnessKeysTest {
         )
         kotlin.test.assertEquals(listOf("harness.opencode.commandcode.key"), com.superiorsoftllc.infantry.ui.shell.blocks.moreHarnessKeys(rows).map { it.name })
     }
+
+    @kotlin.test.Test
+    fun aRunnerOnlySignInTokenIsNotOnTheFirstRunScreen() {
+        // ONBOARD-1: the owner's first-install test saw "Claude Code subscription token (claude setup-token)" under More providers.
+        val rows = listOf(
+            com.superiorsoftllc.infantry.ui.protocol.SecretRow("harness.claude.oauth.key", "Remote runners: Claude subscription token", forMode = "subscription-login"),
+            com.superiorsoftllc.infantry.ui.protocol.SecretRow("harness.opencode.commandcode.key", "Command Code key"),
+        )
+        kotlin.test.assertEquals(listOf("harness.opencode.commandcode.key"), com.superiorsoftllc.infantry.ui.shell.blocks.moreHarnessKeys(rows).map { it.name })
+    }
+
+    @kotlin.test.Test
+    fun theTwoSignInChoicesNeedADaemonThatRunsTheLogin() {
+        val claude = com.superiorsoftllc.infantry.ui.protocol.SecretRow("harness.claude.key", "Claude Code API key", authModes = listOf("api-key", "subscription-login"), loginCommand = "claude auth login")
+        kotlin.test.assertFalse(com.superiorsoftllc.infantry.ui.shell.blocks.offersInAppLogin(claude), "an older daemon: the terminal command row stays")
+        kotlin.test.assertTrue(com.superiorsoftllc.infantry.ui.shell.blocks.offersInAppLogin(claude.copy(canLogin = true)))
+        kotlin.test.assertFalse(com.superiorsoftllc.infantry.ui.shell.blocks.offersInAppLogin(com.superiorsoftllc.infantry.ui.protocol.SecretRow("harness.pi.key", "Pi API key", canLogin = true)))
+        kotlin.test.assertEquals("Claude Code", com.superiorsoftllc.infantry.ui.shell.blocks.harnessDisplayName(claude))
+    }
 }
