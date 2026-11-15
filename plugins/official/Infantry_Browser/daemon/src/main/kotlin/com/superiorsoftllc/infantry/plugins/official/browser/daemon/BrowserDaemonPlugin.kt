@@ -36,8 +36,8 @@ class BrowserDaemonPlugin : DaemonPlugin {
         val cache = BrowserInstall.cacheDir({ api.env(it) ?: System.getenv(it) }, os, System.getProperty("user.home") ?: ".")
         val envOf = { n: String -> api.env(n) ?: System.getenv(n) }
         val choice = (envOf("INFANTRY_BROWSER") ?: "auto").lowercase()
-        if (choice == "chrome" || choice == "msedge" || (choice == "auto" && BrowserInstall.systemBrowser(envOf, os))) { state = "ready"; detail = "system browser"; return }
-        if (BrowserInstall.installed(cache)) { state = "ready"; return }
+        val ch = BrowserInstall.channel(choice, envOf, os)
+        if (ch != "chromium") { state = "ready"; detail = "system browser ($ch)"; return }
         state = "installing"; detail = "downloading ${BrowserInstall.BROWSER}; browser calls fail until it is ready"
         val task = api.progress.start(ProgressSpec(title = "Installing browser (${BrowserInstall.BROWSER})", id = "browser-install"))
         try {
