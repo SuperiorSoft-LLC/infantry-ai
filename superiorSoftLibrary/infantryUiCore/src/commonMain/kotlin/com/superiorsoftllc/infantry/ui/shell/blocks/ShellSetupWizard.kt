@@ -218,19 +218,9 @@ object ShellSetupWizard : Block("infantry.shell.setupWizard", "infantry.shell.se
         if (row == null) { LaunchedEffect(id) { onSignedIn() }; return }
         val owner = SetupSignIn.content
         if (owner != null) { owner(id, row, onSignedIn); return }
-        // Default: the first-run keys screen's own pieces. A harness with an in-app subscription login (ONBOARD-1) gets its two
-        // choices (log in with the subscription, pasting the code back if the page shows one; or an API key); others the key row.
+        // Default: the first-run keys screen's own pieces (the same editor as the agent tools checklist).
         Text("Connect ${harnessDisplayName(row)} so your agent can answer.", fontSize = 13.sp)
-        val values = remember { mutableStateMapOf<String, String>() }
-        if (offersInAppLogin(row)) SignInChoices(row, values) else HarnessKeyRow(row, SUBSCRIPTION_MODE in row.authModes, values) {}
-        val s = LocalShell.current
-        TextButton({
-            val v = values[row.name].orEmpty().trim()
-            if (v.isNotEmpty()) s.actionScope.launch {
-                s.controller.setSecret(row.name, v)
-                if (API_KEY_MODE in row.authModes) s.controller.setHarnessAuthMode(id, API_KEY_MODE)
-            }
-        }, Modifier.testTag(HARNESS_KEY_SAVE_TAG)) { Text("Save key") }
+        HarnessAuthEditor(row)
     }
 
     @Composable

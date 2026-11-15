@@ -134,6 +134,14 @@ confirmed login, no key declared, or free models), and from Configuration > Agen
 pick and install a harness, sign in (`SetupSignIn` is the seam the harness's own login screen fills), then a first
 agent's reply.
 
+Configuration > Agents and the first-run checklist (`ShellHarnessChecklist`) draw one list, `HarnessChecklistView` over
+the `HarnessChecklist` model: every harness in the daemon's install report and provider list, green "Installed
+<version>" or red "Not installed" (with Install, or how to install it by hand), the CLI path field, and for an
+installed harness each declared API-key credential with its state (Signed in, API key set, Needs setup) and a Set up
+button that opens the same sign-in and key pieces as the first-run keys screen. A harness that is not installed is
+never asked for a key. The checklist opens by itself once per device (the `harness.checklist.seen` UI preference, kept
+across updates) once something can answer, and Configuration > Agents > Show first-run checklist reopens it.
+
 ## How the three official harnesses do it
 
 | Harness | Plugin | Hooks | Notes |
