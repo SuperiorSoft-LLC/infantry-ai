@@ -1,0 +1,23 @@
+{
+  "name": "Infantry_Ticker",
+  "version": "1.0.0",
+  "apiVersion": 2,
+  "author": "Infantry AI",
+  "license": "Apache-2.0",
+  "description": "The card:ticker chat card: a value that changes over time (a price, a metric, a count) drawn as the latest value, its change and a sparkline. A sample of an addressable card: an agent posts it with an id, then appends values with op=append and the first card shows them all. Any agent may use it while this plugin is loaded; without it a card:ticker block shows as code.",
+  "tier": "official",
+  "sequence": [],
+  "entry": "com.superiorsoftllc.infantry.plugins.official.ticker.TickerPlugin",
+  "jar": "build/libs/Infantry_Ticker.jar",
+  "buildOrder": 235,
+  "implementations": [
+    { "registry": "chat.cards", "key": "ticker" }
+  ],
+  "cards": [
+    {
+      "type": "ticker",
+      "summary": "A value over time (price, metric, count): latest value, change and a sparkline; append new values to the same card",
+      "spec": "Ticker card (Infantry_Ticker): a value that changes over time.\n\nPost it once with an id, in its own fenced block, info string `card:ticker id=<name>`, body ONE JSON object:\n\n```card:ticker id=acme\n{\"title\": \"ACME\", \"unit\": \"USD\", \"items\": [{\"label\": \"09:30\", \"value\": 101.2}]}\n```\n\nThen, in later replies of the SAME session, add values with `op=append` (only the new items):\n\n```card:ticker id=acme op=append\n{\"items\": [{\"label\": \"09:35\", \"value\": 102.8}]}\n```\n\nThe first card redraws with every value; each update shows as a small muted line. `op=replace` replaces the whole body. Fields: `title` (required), `unit` (optional, shown after the value), `items[]` with `value` (number, required) and `label` (optional, e.g. a time). Never invent values: use only numbers you fetched or measured. Keep one plain sentence outside the block."
+    }
+  ]
+}

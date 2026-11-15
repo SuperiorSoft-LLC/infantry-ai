@@ -378,6 +378,8 @@ fun AgentChat(agent: AgentView, nowProvider: () -> Long = { Clock.System.now().t
     val placement = LocalReasoningPlacement.current
     val output = agent.output
     val rows = remember(output, contributions, placement) { withContributions(placement.chatRows(chatItems(output)), contributions) }
+    // CARD-UPDATE-1: addressed cards fold over the whole transcript (not the shown slice), so a card shows its latest state.
+    val sessionCards = rememberSessionCards(output)
     val ownerRows = remember(rows) { rows.count { it is ChatItem.Line && it.line.kind == LineKind.USER } }
     val total = rows.size
     val pageSize = LocalShellContext.current?.config?.values("infantry.chatfeed")?.int(CHAT_PAGE_SIZE_KEY) ?: CHAT_PAGE_SIZE_DEFAULT
@@ -471,6 +473,7 @@ fun AgentChat(agent: AgentView, nowProvider: () -> Long = { Clock.System.now().t
         // CHAT-COMPACT-1: the Activity chip floats over the transcript's bottom edge: it takes no row of its own.
         Box(Modifier.weight(1f)) {
         SelectionContainer(Modifier.fillMaxSize()) {
+            androidx.compose.runtime.CompositionLocalProvider(LocalSessionCards provides sessionCards) {
             LazyColumn(Modifier.fillMaxSize().padding(horizontal = ChatSidePadding).testTag(CHAT_TRANSCRIPT_TAG), state = list, contentPadding = androidx.compose.foundation.layout.PaddingValues(top = if (searchOpen) CHAT_SEARCH_BAR_ROOM_DP.dp else 10.dp, bottom = 10.dp)) {
                 // CHAT-SCROLL-1: keyed by the row's absolute index, so rows joining above (an older page) or below (new
                 // output) leave the rows on screen where they are.
@@ -494,6 +497,7 @@ fun AgentChat(agent: AgentView, nowProvider: () -> Long = { Clock.System.now().t
                 if (bgWork != null) item(key = CHAT_BG_ROW_TAG) {
                     AgentSideRow(status == null && (sends.isNotEmpty() || startsAgentRun(rows, total, agentSide)), agent.role, agent.id, roleColor, agent.session.state.name) { BackgroundWorkRow(bgWork, now) }
                 }
+            }
             }
         }
         if (searchOpen) Box(Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp)) {
