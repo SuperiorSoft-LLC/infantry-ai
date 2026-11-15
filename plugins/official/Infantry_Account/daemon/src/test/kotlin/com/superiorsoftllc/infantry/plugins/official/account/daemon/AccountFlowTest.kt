@@ -104,7 +104,7 @@ class StubProvider(private val approveAfter: Int = 2) {
         server.createContext("/revoke") { ex -> revoked = true; reply(ex, 200, "{}") }
         server.createContext("/account") { ex ->
             seenAuth += ex.requestHeaders.getFirst("Authorization")
-            reply(ex, 200, """{"user":{"id":"u_1","email":"alice@example.org","name":"Alice"},"plan":{"id":"basic","name":"Basic","status":"active"},"entitlements":[{"id":"widgets","limit":2,"used":1,"attrs":{"size":"s"}}]}""")
+            reply(ex, 200, """{"userId":"u_1","accountId":"a_1","memberRole":"owner","email":"alice@example.org","emailVerified":true,"plan":{"id":"basic","status":"active"},"roles":["member"],"permissions":["core.account.read","widgets.read","widgets.create"],"limits":{"widgets.max":1},"usage":{"widgets":0},"signInMethods":["password"],"reclaimableUntil":1795219200000}""")
         }
         server.start()
     }
@@ -126,7 +126,7 @@ class StubProvider(private val approveAfter: Int = 2) {
          "signIn":{"method":"device_code","deviceAuthorizationUrl":"$base/device","tokenUrl":"$base/token","revokeUrl":"$base/revoke","clientId":"stub-app","scopes":["account"]},
          "accountUrl":"$base/account","billingUrl":"$base/billing","signUpUrl":"$base/signup",
          "consumers":${consumers.joinToString(prefix = "[", postfix = "]") { "\"$it\"" }},
-         "services":[{"id":"widgets","name":"Widgets","entitlement":"widgets"}]}
+         "services":[{"id":"widgets","name":"Widgets","entitlement":"widgets.read"}]}
     """.trimIndent()
 }
 
@@ -175,9 +175,10 @@ class AccountFlowTest {
         assertEquals("Bearer access-first", stub.seenAuth.single(), "the account lookup carried the access token")
         assertTrue(logs.none { "refresh-first" in it || "access-first" in it })
 
-        val ent = s.entitlement("stub", "widgets")
+        assertTrue("\"permissions\":[\"core.account.read\",\"widgets.read\",\"widgets.create\"]" in status, "the hub exposes the account's permissions")
+        assertTrue("\"reclaimableUntil\":1795219200000" in status && "\"widgets.max\":1" in status)
+        val ent = s.entitlement("stub", "widgets.read")
         assertEquals(true, ent["entitled"]!!.jsonPrimitive.content.toBoolean())
-        assertEquals("2", ent["limit"]!!.jsonPrimitive.content)
         assertEquals(false, s.entitlement("stub", "nope")["entitled"]!!.jsonPrimitive.content.toBoolean())
     }
 
@@ -282,7 +283,10 @@ class AccountFlowTest {
         val w = wire(stub.describe())
         assertEquals(setOf("account.status", "account.entitlement", "account.token", "account.sign-in", "account.sign-out"), w.handlers.keys)
         // Sign in as the owner's CLI (a session may not).
-        assertTrue(call(w, "account.sign-in", "session:s1", "provider" to "stub").isFailure)
+        val refused = call(w, "account.sign-in", "session:s1", "provider" to "stub")
+        assertTrue(refused.isFailure)
+        // core's guard disables a plugin on any handler exception but IllegalArgumentException: a refusal must be one.
+        assertTrue(refused.exceptionOrNull() is IllegalArgumentException, refused.exceptionOrNull().toString())
         assertTrue(call(w, "account.sign-in", "script:x", "provider" to "stub").isFailure)
         val started = call(w, "account.sign-in", "cli", "provider" to "stub").getOrThrow().jsonObject
         assertEquals("WDJB-MJHT", started["userCode"]!!.jsonPrimitive.content)
@@ -304,7 +308,7 @@ class AccountFlowTest {
         val status = call(w, "account.status", "session:s1").getOrThrow().toString()
         assertTrue("\"signedIn\":true" in status)
         assertFalse("access-" in status || "refresh-" in status)
-        assertEquals("true", call(w, "account.entitlement", "session:s1", "provider" to "stub", "entitlement" to "widgets").getOrThrow().jsonObject["entitled"]!!.jsonPrimitive.content)
+        assertEquals("true", call(w, "account.entitlement", "session:s1", "provider" to "stub", "entitlement" to "widgets.read").getOrThrow().jsonObject["entitled"]!!.jsonPrimitive.content)
 
         // The UI's routes answer display data only.
         val state = w.routes.getValue("GET state")(HttpCall("GET", "state"))
