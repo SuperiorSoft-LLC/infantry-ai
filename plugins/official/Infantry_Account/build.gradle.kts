@@ -32,6 +32,7 @@ kotlin {
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(compose.material3)
+            implementation(libs.kotlinx.datetime)
         }
         // The ServiceLoader entry is JVM only: on Android the generated module list already names AccountPlugin.
         jvmMain { resources.srcDir("jvmResources") }

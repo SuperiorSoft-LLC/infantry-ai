@@ -32,7 +32,55 @@ data class AccountProvider(
     val services: List<AccountServiceView>,
     val error: String?,
     val flow: AccountFlow?,
-)
+    val permissions: List<String> = emptyList(),
+    val limits: Map<String, String> = emptyMap(),
+    val reclaimableUntil: Long? = null,
+) {
+    /** True once a plan exists on the account (any status). */
+    val hasPlan: Boolean get() = planName != null || planStatus != null
+}
+
+/** Plain words for the permission ids the hosting server sends; an unknown id is shown as it is. */
+object AccountWords {
+    private val permissions = mapOf(
+        "hosting.servers.read" to "Hosting: see your servers",
+        "hosting.servers.create" to "Hosting: create servers",
+        "hosting.servers.power" to "Hosting: start and stop servers",
+        "hosting.servers.destroy" to "Hosting: remove servers",
+    )
+
+    /** What the plan includes, one readable line each: limits first ("Hosting: up to 1 server"), then permissions. */
+    fun included(p: AccountProvider): List<String> {
+        val out = mutableListOf<String>()
+        p.limits["servers.max"]?.toLongOrNull()?.let { out += "Hosting: up to $it server${if (it == 1L) "" else "s"}" }
+        for (id in p.permissions) out += permissions[id] ?: id
+        return out.distinct()
+    }
+
+    fun planLabel(p: AccountProvider): String? = p.planName?.replaceFirstChar { it.uppercase() }
+}
+
+/** One step of the setup guide. */
+data class GuideStep(val title: String, val why: String, val done: Boolean)
+
+/** The guided setup: sign in, choose a plan, add a service. [current] is the first step not done; null when all are. */
+data class AccountGuide(val steps: List<GuideStep>) {
+    val current: Int? get() = steps.indexOfFirst { !it.done }.takeIf { it >= 0 }
+    val complete: Boolean get() = current == null
+
+    companion object {
+        fun of(providers: List<AccountProvider>): AccountGuide {
+            val signedIn = providers.any { it.signedIn }
+            val planOk = providers.any { it.signedIn && it.planStatus == "active" }
+            val service = providers.any { p -> p.signedIn && p.planStatus == "active" && p.services.any { it.entitled } }
+            return AccountGuide(listOf(
+                GuideStep("Sign in or create your SuperiorSoft account", "Your account keeps your plan and services in one place.", signedIn),
+                GuideStep("Choose a plan", "A plan pays for the services you use, like hosting.", planOk),
+                GuideStep("Add a service", "A service is what you actually use, like a hosting server for your site.", service),
+            ))
+        }
+    }
+}
 
 /** Parses the daemon's `GET /plugins/Infantry_Account/state` answer; null when it is not that. */
 object AccountParser {
@@ -53,13 +101,16 @@ object AccountParser {
         return AccountProvider(
             id = id, name = o.str("name") ?: id, signedIn = (o["signedIn"] as? JsonPrimitive)?.booleanOrNull ?: false,
             userName = user?.str("name"), userEmail = user?.str("email"),
-            planName = plan?.str("name"), planStatus = plan?.str("status"),
+            planName = plan?.str("name") ?: plan?.str("id"), planStatus = plan?.str("status"),
             billingUrl = o.str("billingUrl"), signUpUrl = o.str("signUpUrl"),
             services = (o["services"] as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }.mapNotNull { s ->
                 val sid = s.str("id") ?: return@mapNotNull null
                 AccountServiceView(sid, s.str("name") ?: sid, (s["entitled"] as? JsonPrimitive)?.booleanOrNull ?: false)
             },
             error = o.str("error"), flow = flow,
+            permissions = (o["permissions"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull },
+            limits = (o["limits"] as? JsonObject)?.mapNotNull { (k, v) -> (v as? JsonPrimitive)?.contentOrNull?.let { k to it } }.orEmpty().toMap(),
+            reclaimableUntil = (o["reclaimableUntil"] as? JsonPrimitive)?.longOrNull,
         )
     }
 

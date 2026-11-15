@@ -55,4 +55,35 @@ class AccountTabTest {
         assertNull(AccountParser.parse("""{"other":1}"""))
         assertNotNull(AccountParser.parse("""{"providers":[]}"""))
     }
+
+    private fun provider(signedIn: Boolean, status: String? = null, entitled: Boolean = false, planId: String? = null) = AccountParser.parse(
+        """{"providers":[{"id":"x","name":"X","signedIn":$signedIn,${if (planId != null) """"plan":{"id":"$planId","status":"$status"},""" else ""}
+        "permissions":["hosting.servers.read","odd.id"],"limits":{"servers.max":1},"reclaimableUntil":0,
+        "services":[{"id":"h","name":"Hosting","entitled":$entitled}]}]}""",
+    )!!
+
+    @Test
+    fun `the guide walks sign in then plan then service and is complete only when all three hold`() {
+        assertEquals(0, AccountGuide.of(provider(false)).current)
+        assertEquals(1, AccountGuide.of(provider(true)).current)
+        assertEquals(1, AccountGuide.of(provider(true, "past_due", true, "basic")).current)
+        assertEquals(2, AccountGuide.of(provider(true, "active", false, "basic")).current)
+        assertTrue(AccountGuide.of(provider(true, "active", true, "basic")).complete)
+    }
+
+    @Test
+    fun `an active plan reads as its id, with what it includes in plain words`() {
+        val p = provider(true, "active", true, "basic").single()
+        assertEquals("Basic", AccountWords.planLabel(p))
+        assertTrue(p.hasPlan)
+        assertEquals(listOf("Hosting: up to 1 server", "Hosting: see your servers", "odd.id"), AccountWords.included(p))
+        assertEquals(false, provider(true).single().hasPlan)
+    }
+
+    @Test
+    fun `past due and canceled each say their own thing`() {
+        assertNull(planNotice(provider(true, "active", true, "basic").single()))
+        assertTrue("Payment failed" in planNotice(provider(true, "past_due", false, "basic").single())!!)
+        assertTrue("subscription ended" in planNotice(provider(true, "canceled", false, "basic").single())!!)
+    }
 }
