@@ -29,4 +29,17 @@ class RouteGateTest {
         assertEquals(listOf("POST /tickets", "GET /health"), sent, "a refused call never reaches the daemon")
     }
 
+    @Test
+    fun `a query string is ignored by the gate but still sent`() = runBlocking {
+        val config = ModulesConfig(demoLock = DemoLockConfig(allowRoutes = listOf("GET /health")))
+        val sent = mutableListOf<String>()
+        fun access(lock: Boolean) = RouteGate.gated(manifest, lock, config) { route, _ -> sent += route; DaemonReply.Ok(200, "ok") }
+
+        assertEquals(DaemonReply.Ok(200, "ok"), access(false).call("GET /health?refresh=1", null))
+        assertTrue(access(false).call("GET /nope?refresh=1", null) is DaemonReply.Refused)
+        assertEquals(DaemonReply.Ok(200, "ok"), access(true).call("GET /health?refresh=1", null))
+        val locked = access(true).call("POST /tickets?x=1", "{}")
+        assertTrue(locked is DaemonReply.Refused && "lockdown" in locked.reason)
+        assertEquals(listOf("GET /health?refresh=1", "GET /health?refresh=1"), sent)
+    }
 }
