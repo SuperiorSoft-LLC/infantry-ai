@@ -21,13 +21,11 @@ import com.superiorsoftllc.infantry.ui.AhqAlertDialog
 import com.superiorsoftllc.infantry.ui.HarnessChecklistView
 import com.superiorsoftllc.infantry.ui.LocalShell
 import com.superiorsoftllc.infantry.ui.Palette
-import com.superiorsoftllc.infantry.ui.Shell
 import com.superiorsoftllc.infantry.ui.TextButton
 import com.superiorsoftllc.infantry.ui.block.layout.Block
 import com.superiorsoftllc.infantry.ui.block.layout.BlockScope
 import com.superiorsoftllc.infantry.ui.model.HarnessChecklist
 import com.superiorsoftllc.infantry.ui.model.HarnessInstallSetting
-import com.superiorsoftllc.infantry.ui.model.SetupWizard
 import kotlinx.coroutines.launch
 
 const val HARNESS_CHECKLIST_DIALOG_TAG = "harness-checklist-dialog"
@@ -35,19 +33,14 @@ const val HARNESS_CHECKLIST_SUMMARY_TAG = "harness-checklist-summary"
 const val HARNESS_CHECKLIST_DONE_TAG = "harness-checklist-done"
 const val HARNESS_CHECKLIST_RECHECK_TAG = "harness-checklist-recheck"
 
-/** Whether the first-run checklist was already shown on this device (a ui pref, so it survives app updates). */
-internal fun harnessChecklistSeen(s: Shell): Boolean =
-    s.ui.checklistShownThisRun || runCatching { s.host.uiPref(HarnessChecklist.SEEN_PREF) == "1" }.getOrDefault(false)
-
 /**
  * FIRST-RUN-HARNESS-CHECKLIST-1: the first-run agent tools checklist. Says what the daemon detected ("You have Claude Code
  * installed, ..." and what is missing) above the SAME list Configuration > Agents draws ([HarnessChecklistView], without the path
  * fields): install a missing tool, and set up the sign-in or key of an installed one right here.
  *
- * Opens by itself ONCE per device, after the daemon has answered (install report and secrets) and something can already answer
- * (otherwise the guided setup opens first and this follows when it is done); Done remembers it in a ui pref, so an update never
- * shows it again. Configuration > Agents > Show first-run checklist reopens it. While it is pending or open, the "Connect your
- * providers" prompt waits; Done marks the primary keys still missing as skipped there, since the owner just saw them.
+ * CHECKLIST-NO-AUTOOPEN-1 (owner 2026-11-15): never opens by itself ("as long as the user has a means to talk to an agent, it should
+ * not show"; the guided setup handles the nothing-can-answer case). Only Configuration > Agents > Show first-run checklist opens
+ * it. Done marks the primary keys still missing as skipped for the "Connect your providers" prompt.
  */
 object ShellHarnessChecklist : Block("infantry.shell.harnessChecklist", "infantry.shell.harnessChecklist") {
     @Composable
@@ -57,19 +50,13 @@ object ShellHarnessChecklist : Block("infantry.shell.harnessChecklist", "infantr
         if (!state.connection.isLive || s.ui.showConfig || s.ui.showSetup) return
         val report = state.harnessInstall ?: return
         val secrets = state.secrets?.secrets ?: return
-        if (!s.ui.showChecklist) {
-            if (harnessChecklistSeen(s)) return
-            if (SetupWizard.needed(report, secrets, state.providers, state.modelCatalog) != false) return
-            LaunchedEffect(Unit) { s.ui.checklistShownThisRun = true; s.ui.showChecklist = true }
-            return
-        }
+        if (!s.ui.showChecklist) return
         // An install finished anywhere (this window, another one, the CLI): re-read the daemon's report and CLI locations.
         val tasks by s.controller.progressTasks.collectAsState()
         val finished = tasks.filter { it.id.startsWith(HarnessInstallSetting.TASK_PREFIX) && it.finished }.map { it.id to it.updatedAt }.toSet()
         LaunchedEffect(finished) { if (finished.isNotEmpty() && !state.harnessInstallBusy) s.controller.checkHarnesses() }
         val items = HarnessChecklist.items(report, state.providers, state.cliLocations, secrets)
         fun done() {
-            runCatching { s.host.saveUiPref(HarnessChecklist.SEEN_PREF, "1") }
             val skipped = runCatching { s.host.uiPref(HARNESS_KEY_SKIP_PREF).orEmpty().split(',').filter { it.isNotBlank() }.toSet() }.getOrDefault(emptySet())
             val seenMissing = items.flatMap { it.credentials }.filter { it.primary && !it.auth.ok }.map { it.row.name }
             runCatching { s.host.saveUiPref(HARNESS_KEY_SKIP_PREF, (skipped + seenMissing).joinToString(",")) }

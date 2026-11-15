@@ -102,7 +102,4 @@ object HarnessChecklist {
 
     private fun join(parts: List<String>): String =
         if (parts.size <= 1) parts.joinToString() else parts.dropLast(1).joinToString(", ") + " and " + parts.last()
-
-    /** The ui pref that records the first-run checklist was shown on this device (kept across app updates). */
-    const val SEEN_PREF = "harness.checklist.seen"
 }
