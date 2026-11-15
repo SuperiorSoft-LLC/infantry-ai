@@ -93,3 +93,21 @@ then trust that certificate under Local Machine > Trusted People and open the `.
   install on the same machine.
 - The `infantry` CLI launcher sits under `C:\Program Files\WindowsApps\...` and that path changes with each version;
   the daemon rewrites the user PATH entry at every start (CLI-PATH-1), so a new terminal finds the current one.
+
+## Store-review risks and their disposition (STORE-PKG-1)
+
+The owner's choice is MSIX (above). Privacy policy: [docs/legal/PRIVACY.md](legal/PRIVACY.md); its public URL for Partner
+Center is `https://github.com/SuperiorSoft-LLC/infantry-ai/blob/main/docs/legal/PRIVACY.md`.
+
+| # | Risk | Disposition |
+|---|---|---|
+| 1 | Self-updater downloads an MSI | Fixed (STORE-1): `StoreInstall` turns the updater off for `-Dinfantry.package=msix`. |
+| 2 | harness-install runs npm packages; Node.js is separate | Accepted: allowed for full-trust apps; disclosed in the privacy policy and the `runFullTrust` justification. |
+| 3 | Agents spawn shells and child processes | Accepted: declared by `runFullTrust`. |
+| 4 | Loopback port 8797 | Accepted: loopback only, no firewall prompt. To check in the first sideload: web/Android pairing against the packaged daemon. |
+| 5 | HKCU PATH write is virtualized under MSIX | Open: the `infantry` CLI is not on PATH in a Store install; needs an App Execution Alias (separate ticket). |
+| 6 | State dir redirected to the package LocalCache | Accepted: data lives in the package folder and goes with uninstall; no migration from an MSI install. |
+| 7 | `devTrust` launcher flag | Fixed: `package-msix.ps1` refuses a launcher .cfg that sets `infantry.plugins.devTrust` unless `-AllowDevTrust` (local dev-signed sideload only). |
+
+Open: an in-app link to the privacy policy (About/Settings). The config UI has no link field type, so it needs a
+small UI seam the owner has to approve.

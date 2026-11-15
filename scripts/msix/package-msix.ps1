@@ -18,7 +18,8 @@ param(
     [string] $Config,
     [string] $Template,
     [string] $Icon,
-    [string] $MakeAppx = $env:MAKEAPPX
+    [string] $MakeAppx = $env:MAKEAPPX,
+    [switch] $AllowDevTrust
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 3
@@ -61,6 +62,8 @@ Copy-Item -Recurse -Force (Join-Path $AppImage '*') $layout
 
 $layoutCfg = Join-Path $layout 'app\InfantryAI.cfg'
 $lines = [System.Collections.Generic.List[string]](Get-Content $layoutCfg)
+# STORE-PKG-1: a Store build must never trust the throwaway dev signing key (-Dinfantry.plugins.devTrust=true). Only a local sideload test may opt in.
+if (-not $AllowDevTrust -and ($lines | Where-Object { $_ -match 'infantry\.plugins\.devTrust' })) { throw 'STORE-PKG-1: the launcher .cfg sets infantry.plugins.devTrust (a dev-signed build). Build with the real key (-Pihq.keystore), or pass -AllowDevTrust for a local sideload test only.' }
 $at = $lines.IndexOf('[JavaOptions]')
 if ($at -lt 0) { $lines.Add('[JavaOptions]'); $at = $lines.Count - 1 }
 $lines.Insert($at + 1, 'java-options=-Dinfantry.package=msix')
