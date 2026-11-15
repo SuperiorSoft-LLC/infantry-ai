@@ -205,7 +205,8 @@ class ProcessWatch(
         val heavy = ProfileRx.heavyImages(tools)
         val daemons = ProfileRx.daemons(tools)
         val now = clock()
-        val bySession = sessions().associateBy { it.id }
+        val records = sessions()
+        val bySession = records.associateBy { it.id }
         val stuckRx = ProfileRx.stuck(tools)
         val mem = runCatching { os.memory() }.getOrDefault(emptyList())
         val mbByPid = mem.associate { it.pid to it.mb }
@@ -229,7 +230,8 @@ class ProcessWatch(
         val unattributed = candidates.filter { c -> info[c.pid]?.let { ProcessLedger.isHarnessHelper(it.command) } != true }
             .take(UNATTRIBUTED_MAX).map { c ->
                 val p = info[c.pid]
-                val orphan = p != null && !lockAlive && daemons.containsMatchIn(p.command)
+                val live = p?.let { liveJobAncestor(it.pid, it.startedAt, records, info) }
+                val orphan = p != null && live == null && !lockAlive && daemons.containsMatchIn(p.command)
                 val tool = if (orphan) ProfileRx.daemonProfile(p!!.command, tools) else null
                 TrackedProcess(
                     c.pid, p?.command?.let(ProcessLedger::describe) ?: c.image, null, p?.startedAt, c.mb,
@@ -258,7 +260,7 @@ class ProcessWatch(
     @Synchronized
     fun reap(pid: Long): ReapResult {
         if (!on()) return ReapResult.Refused(OFF_REASON)
-        val entry = ledger.get(pid) ?: return ReapResult.Refused("pid $pid was not started by an Infantry AI session; it is never reaped")
+        val entry = ledger.get(pid) ?: return reapUnattributed(pid)
         val owner = sessions().firstOrNull { it.id == entry.sessionId }
         if (entry.root && owner != null && !owner.ended) {
             return ReapResult.Refused("pid $pid is session ${entry.sessionId}'s own harness; kill the session instead")
@@ -267,14 +269,54 @@ class ProcessWatch(
         return kill(entry, view)
     }
 
+    /** PROC-ROGUE-1: a process in no ledger entry may be reaped only as an orphan build daemon with no live job above it; the refusal says why. */
+    private fun reapUnattributed(pid: Long): ReapResult {
+        val view = report().unattributed.firstOrNull { it.pid == pid }
+            ?: return ReapResult.Refused("pid $pid was not started by an Infantry AI session; it is never reaped")
+        if (!view.rogue) {
+            val info = ledger.allProcesses().firstOrNull { it.pid == pid }
+            val live = info?.let { liveJobAncestor(pid, it.startedAt, sessions(), ledger.allProcesses().associateBy { p -> p.pid }) }
+            return ReapResult.Refused(
+                if (live != null) "pid $pid belongs to a live job (ancestor pid $live is still running); reaping it would break that build"
+                else "pid $pid is not an orphan build daemon (not ours, or the gate lock holder is alive); it is never reaped",
+            )
+        }
+        val started = view.startedAt ?: return ReapResult.Refused("pid $pid has no readable start time; refusing to kill a possibly recycled pid")
+        return when (val k = os.kill(pid, started, true)) {
+            is KillResult.Killed -> ReapResult.Reaped(view).also { runCatching { onReaped(view) } }
+            is KillResult.Refused -> ReapResult.Refused("pid $pid: ${k.reason}")
+        }
+    }
+
+    /**
+     * PROC-ROGUE-1: the nearest live ancestor that proves [pid] belongs to running work: a session root or background job,
+     * a ledger entry, the gate-lock holder, or this daemon itself (its exec jobs are its children). Null = nothing alive above it.
+     */
+    private fun liveJobAncestor(pid: Long, startedAt: Long?, records: List<WatchedSession>, all: Map<Long, ProcInfo>): Long? {
+        val live = HashSet<Long>()
+        records.filter { !it.ended }.forEach { live += it.rootPids; live += it.bgJobPids }
+        ledger.entries().forEach { live += it.pid }
+        runCatching { os.gateLock.read()?.pid }.getOrNull()?.let { live += it }
+        live += ProcessHandle.current().pid()
+        var cur = all[pid]?.parentPid
+        var n = 0
+        while (cur != null && n++ < 64) {
+            if (cur in live && (all[cur] != null || cur == ProcessHandle.current().pid())) return cur
+            cur = all[cur]?.parentPid
+        }
+        return null
+    }
+
     /** Reap every rogue entry; returns the ones killed. */
     @Synchronized
     fun reapRogue(): List<TrackedProcess> {
         if (!on()) return emptyList()
-        val rogue = report().rogue
-        return rogue.mapNotNull { view ->
-            val entry = ledger.get(view.pid) ?: return@mapNotNull null
-            (kill(entry, view) as? ReapResult.Reaped)?.process
+        val rep = report()
+        return (rep.rogue + rep.unattributed.filter { it.rogue }).mapNotNull { view ->
+            val entry = ledger.get(view.pid)
+            val r = if (entry != null) kill(entry, view) else reapUnattributed(view.pid)
+            if (r is ReapResult.Refused) log("reap_rogue: pid ${view.pid} not reaped: ${r.reason}")
+            (r as? ReapResult.Reaped)?.process
         }
     }
 

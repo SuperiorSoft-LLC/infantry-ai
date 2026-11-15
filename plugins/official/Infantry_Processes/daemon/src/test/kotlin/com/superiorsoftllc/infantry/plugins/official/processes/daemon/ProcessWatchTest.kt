@@ -298,10 +298,25 @@ class ProcessWatchTest {
         assertEquals(gradleDaemon, rogue.pid)
         assertNull(rogue.sessionId)
         assertTrue(rogue.command.startsWith("java GradleDaemon"))
-        assertTrue(w.reapRogue().isEmpty())
-        assertTrue(os.killed.isEmpty() && gradleDaemon in os.procs)
-        assertIs<ReapResult.Refused>(w.reap(gradleDaemon))
+        // PROC-ROGUE-1: an orphan with nothing alive above it is reapable, by pid and by "reap all rogue".
+        assertEquals(listOf(gradleDaemon), w.reapRogue().map { it.pid })
+        assertTrue(gradleDaemon !in os.procs)
+        os.start(gradleDaemon, 777_777L, "java GradleDaemon 8.5", 6_000, memMb = 900)
         assertTrue(watch(lockAlive = true).report().rogue.isEmpty())
+    }
+
+    @Test fun `a build daemon under a live job is not rogue and a reap is refused with the reason`() {
+        os.start(harness, null, "claude --session", 1_000)
+        session("s1", harness)
+        os.start(900_400L, ProcessHandle.current().pid(), "powershell package-dist.ps1", 2_000, memMb = 50) // an exec job: a child of this daemon
+        os.start(gradleDaemon, 900_400L, "java GradleDaemon 8.5", 6_000, memMb = 900)
+        val w = watch()
+        w.tick()
+        assertTrue(w.report().rogue.none { it.pid == gradleDaemon })
+        val r = w.reap(gradleDaemon)
+        assertTrue(w.reapRogue().none { it.pid == gradleDaemon })
+        assertTrue(gradleDaemon in os.procs)
+        assertIs<ReapResult.Refused>(r)
     }
 
     private val pwNpx = "node C:/npm/bin/npx-cli.js -y @playwright/mcp@latest --browser chrome"
