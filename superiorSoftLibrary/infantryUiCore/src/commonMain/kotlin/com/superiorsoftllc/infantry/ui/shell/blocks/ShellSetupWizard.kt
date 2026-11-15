@@ -172,7 +172,7 @@ object ShellSetupWizard : Block("infantry.shell.setupWizard", "infantry.shell.se
                 TextButton({ s.actionScope.launch { s.controller.installNodeRuntime() } }, Modifier.testTag(SETUP_NODE_RETRY_TAG)) { Text("Try again") }
             }
         } else {
-            Text(report.guidance ?: "Install Node.js 20 or newer from nodejs.org, then press Check again.", fontSize = 12.sp, color = Palette.Muted)
+            Text(report.guidance ?: "Install Node.js from nodejs.org, then press Check again.", fontSize = 12.sp, color = Palette.Muted)
             val uri = androidx.compose.ui.platform.LocalUriHandler.current
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton({ runCatching { uri.openUri("https://nodejs.org/en/download") } }) { Text("Open nodejs.org") }

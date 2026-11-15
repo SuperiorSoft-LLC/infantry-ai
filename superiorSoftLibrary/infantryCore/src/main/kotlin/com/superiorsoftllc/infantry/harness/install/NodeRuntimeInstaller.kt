@@ -93,7 +93,7 @@ class NodeRuntimeInstaller(
         const val STEP_DOWNLOAD = "Download Node.js"
         const val STEP_UNPACK = "Unpack"
         val STEPS = listOf(STEP_FIND, STEP_DOWNLOAD, STEP_UNPACK)
-        const val UNSUPPORTED = "automatic Node.js install is only available on Windows; install Node.js 20 or newer from https://nodejs.org"
+        const val UNSUPPORTED = "automatic Node.js install is only available on Windows; install Node.js from https://nodejs.org (or your package manager)"
         private val json = Json { ignoreUnknownKeys = true }
 
         /** The newest release in nodejs.org's `index.json` that is an LTS and ships a [platform] zip (`win-x64` -> `win-x64-zip`). */

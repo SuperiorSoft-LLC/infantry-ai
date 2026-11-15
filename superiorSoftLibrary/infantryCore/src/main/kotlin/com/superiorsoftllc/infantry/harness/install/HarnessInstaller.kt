@@ -202,7 +202,7 @@ class HarnessInstaller(
             return HarnessInstallOutcome(h.id, "failed", null, "cannot create the install directory ${prefixDir.path}")
         }
         note("[${h.id}] npm install $spec -> ${prefixDir.path}")
-        val argv = listOf(npmPath, "install", "-g", "--prefix", prefixDir.path, "--no-audit", "--no-fund", "--loglevel", "error", spec)
+        val argv = listOf(npmPath, "install", "-g", "--prefix", prefixDir.path, "--no-audit", "--no-fund", "--loglevel", "http", spec)
         val result = runner.run(argv, childEnv(npmPath), INSTALL_TIMEOUT_MS) { note("[${h.id}] $it") }
         if (result.exit != 0) {
             val tail = result.output.lines().filter { it.isNotBlank() }.takeLast(6).joinToString("\n")
@@ -300,8 +300,9 @@ class HarnessInstaller(
                 "into its own folder, no admin prompt)."
 
         const val NODE_GUIDANCE =
-            "Node.js / npm was not found, so the harness CLIs cannot be installed here. Install Node.js 20 or newer " +
-                "(https://nodejs.org, or `winget install OpenJS.NodeJS.LTS`, `brew install node`, `apt install nodejs npm`), " +
+            "Node.js / npm was not found, so the harness CLIs cannot be installed here. Install Node.js " +
+                "(https://nodejs.org, or `winget install OpenJS.NodeJS.LTS`, `brew install node`, `apt install nodejs npm`; " +
+                "the Ubuntu apt package works too), " +
                 "then run the install again. Node is needed only for the harness CLIs, not for Infantry AI. " +
                 "If npm lives somewhere unusual, set its path in INFANTRY_NPM_EXE."
 
