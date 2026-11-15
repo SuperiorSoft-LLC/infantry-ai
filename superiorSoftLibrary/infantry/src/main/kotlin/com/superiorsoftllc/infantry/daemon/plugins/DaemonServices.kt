@@ -21,6 +21,10 @@ interface DaemonServices {
     fun config(module: String, key: String): String?
     fun env(name: String): String?
     fun secret(name: String): String?
+    /** ACCOUNT-SEAM-1: one field of keystore entry [name]; the host passes only the calling module's own entry name. */
+    fun keystoreField(name: String, field: String): String? = null
+    fun setKeystoreField(name: String, field: String, value: String): Unit = throw UnsupportedOperationException("no keystore")
+    fun clearKeystoreField(name: String, field: String): Boolean = false
     /** A limit's effective value (the stored setting, the env, the default: SettingsService.limit). */
     fun limit(def: LimitDef): Long = def.default
     val projects: Projects

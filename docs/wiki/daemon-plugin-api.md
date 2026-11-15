@@ -153,6 +153,22 @@ api.routes.handle("GET", "hello") { call: HttpCall -> HttpReply(200, """{"ok":tr
 - **Routes unmount with the plugin.** An unload, a reload or a disable removes every route the plugin mounted; the path
   answers 404 afterwards.
 
+### Plugin secrets (ACCOUNT-SEAM-1, DaemonApi 1.62.0)
+
+`api.pluginSecrets` (`PluginSecrets`) reads, writes and clears named fields in the calling plugin's OWN keystore entry
+(`plugin.<moduleId>`), encrypted at rest like any keystore secret. The host derives the entry from the module id; there is
+no argument that names another module's entry. Values travel as `SecretValue`, whose `toString` prints `SecretValue(***)`;
+call `reveal()` where the value is needed.
+
+```kotlin
+api.pluginSecrets.set("refresh", SecretValue(token))
+val t = api.pluginSecrets.get("refresh")?.reveal()
+api.pluginSecrets.clear("refresh")
+```
+
+A field name is letters, digits and `_` (not starting with a digit); `INFANTRY_*` is refused. A bad name throws
+an illegal-argument error, a locked keystore refuses the write. `NoPluginSecrets` is the answer of a daemon without a keystore.
+
 ### HTTP client (HTTP-SEAM-1, DaemonApi 1.61.0)
 
 `api.http` is the ONE outgoing HTTP client of the daemon; a plugin never opens its own (`HttpSeamGuardTest`). A file download is
@@ -409,6 +425,7 @@ Generated for the `infantryDaemonApi` guard `SdkTypesDocumentedGuardTest`: every
 
 ### `Http.kt`, `RetryPolicy.kt`
 
+- `PluginSecrets`, `SecretValue`, `NoPluginSecrets`: ACCOUNT-SEAM-1, see [Plugin secrets](#plugin-secrets-account-seam-1-daemonapi-162).
 - `Http`, `HttpSpec`, `HttpResult`, `HttpException`, `NoHttp`, `RetryPolicy`, `Backoff`, `Sleeper`, `RouteCheck`: HTTP-SEAM-1, see [HTTP client](#http-client-http-seam-1-daemonapi-161) and [Routes](#routes-http).
 
 ### `Downloads.kt`
