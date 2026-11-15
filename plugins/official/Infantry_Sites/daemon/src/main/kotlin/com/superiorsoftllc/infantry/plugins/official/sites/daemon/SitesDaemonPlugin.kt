@@ -112,7 +112,7 @@ class SitesDaemonPlugin : DaemonPlugin {
         if (provider == null || provider["signedIn"]?.let { (it as? JsonPrimitive)?.booleanOrNull } != true) return state(SitesException.SIGNED_OUT)
         val entitled = (provider["services"] as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }.firstOrNull { it.str("id") == InfantryProvider.SERVICE }?.get("entitled")?.let { (it as? JsonPrimitive)?.booleanOrNull } == true
         fun reclaim(): Long? = try { service.reclaimableUntil() } catch (e: SitesException) { null }
-        fun JsonObjectBuilder.extras(until: Long?) { signUp?.let { put("signUpUrl", it) }; until?.let { put("reclaimableUntil", it) } }
+        fun JsonObjectBuilder.extras(until: Long?) { signUp?.let { put("signUpUrl", it) }; until?.let { put("reclaimableUntil", it) }; (provider["plan"] as? JsonObject)?.str("status")?.let { put("planStatus", it) } }
         if (!entitled) return state(SitesException.NOT_ENTITLED) { extras(reclaim()) }
         return try {
             val servers = service.list()

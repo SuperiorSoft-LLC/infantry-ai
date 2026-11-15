@@ -97,13 +97,18 @@ fun SitesServers(context: TabContext) {
     var confirmDestroy by remember { mutableStateOf<SiteServer?>(null) }
 
     suspend fun reload() {
+        val before = state?.let { it.state to it.planStatus }
         state = client.load() ?: state
         problem = client.lastProblem
+        // An action error belongs to the state it happened in: a state change clears it.
+        if (state?.let { it.state to it.planStatus } != before) message = null
     }
     fun act(run: suspend () -> String?) {
         scope.launch {
-            message = run()
+            message = null
+            val result = run()
             reload()
+            message = result
         }
     }
     LaunchedEffect(Unit) {
@@ -129,14 +134,14 @@ fun SitesServers(context: TabContext) {
             s.state == "not_configured" -> Text(s.message ?: "No hosting service is configured.", color = Palette.Muted, fontSize = 12.sp, modifier = Modifier.testTag(SITES_EMPTY_TAG))
             s.state == "signed_out" -> CardBox("sites-signed-out") {
                 Text("Infantry AI Hosting", color = Palette.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                Text("Sign in to see and manage your servers. The sign-in code shows in Account > Overview.", color = Palette.Muted, fontSize = 12.sp)
+                Text("Sign in first: Step 1 of Account setup. The sign-in code shows in Account > Overview.", color = Palette.Muted, fontSize = 12.sp)
                 Button({ act { client.startSignIn() } }, Modifier.testTag(SITES_SIGN_IN_TAG)) { Text("Sign in") }
             }
             s.state == "not_entitled" && s.reclaimableUntil != null -> Unit
             s.state == "not_entitled" -> CardBox("sites-not-entitled") {
                 Text("Infantry AI Hosting", color = Palette.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                Text("Your plan does not include hosting yet.", color = Palette.Muted, fontSize = 12.sp)
-                s.signUpUrl?.let { url -> Button({ uri.openUri(url) }, Modifier.testTag(SITES_SUBSCRIBE_TAG)) { Text("Subscribe") } }
+                Text(SitesParser.entitlementText(s.planStatus), color = if (s.planStatus == null || s.planStatus == "active") Palette.Muted else Palette.Warn, fontSize = 12.sp)
+                s.signUpUrl?.let { url -> Button({ uri.openUri(url) }, Modifier.testTag(SITES_SUBSCRIBE_TAG)) { Text(if (s.planStatus == "past_due") "Manage billing" else if (s.planStatus == "canceled") "Resubscribe" else "Subscribe") } }
             }
             s.state == "ready" || s.state == "limit" -> {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {

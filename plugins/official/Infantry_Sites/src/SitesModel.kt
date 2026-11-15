@@ -19,7 +19,7 @@ import kotlinx.serialization.json.jsonObject
 data class SiteServer(val id: String, val name: String, val status: String, val ip: String, val region: String, val size: String, val createdAt: String, val destroyAt: String)
 
 /** What the Servers section draws: [state] is `ready`, `signed_out`, `not_entitled`, `limit`, `not_configured`, `unavailable` or `not_found`. */
-data class SitesState(val state: String, val servers: List<SiteServer>, val limit: Int?, val message: String?, val signUpUrl: String?, val reclaimableUntil: Long? = null)
+data class SitesState(val state: String, val servers: List<SiteServer>, val limit: Int?, val message: String?, val signUpUrl: String?, val reclaimableUntil: Long? = null, val planStatus: String? = null)
 
 object SitesParser {
     fun parse(text: String?): SitesState? {
@@ -27,7 +27,7 @@ object SitesParser {
         val o = runCatching { Json.parseToJsonElement(text).jsonObject }.getOrNull() ?: return null
         val state = o.str("state") ?: return null
         val servers = (o["servers"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonObject)?.let(::server) }
-        return SitesState(state, servers, (o["limit"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull(), o.str("message"), o.str("signUpUrl"), (o["reclaimableUntil"] as? JsonPrimitive)?.contentOrNull?.toLongOrNull())
+        return SitesState(state, servers, (o["limit"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull(), o.str("message"), o.str("signUpUrl"), (o["reclaimableUntil"] as? JsonPrimitive)?.contentOrNull?.toLongOrNull(), o.str("planStatus"))
     }
 
     private fun server(o: JsonObject): SiteServer? {
@@ -39,6 +39,13 @@ object SitesParser {
     fun failure(text: String): Pair<String, String>? {
         val o = runCatching { Json.parseToJsonElement(text).jsonObject }.getOrNull() ?: return "unavailable" to text
         return if ((o["ok"] as? JsonPrimitive)?.booleanOrNull == false) (o.str("state") ?: "unavailable") to (o.str("error") ?: "refused") else null
+    }
+
+    /** Why hosting is unavailable for this plan state. "Does not include hosting" only when the plan is active (or unknown) and still lacks it. */
+    fun entitlementText(planStatus: String?): String = when (planStatus) {
+        "past_due" -> "Payment failed. Update your payment method to keep hosting."
+        "canceled" -> "Your subscription ended."
+        else -> "Your plan does not include hosting yet."
     }
 
     /** What the section says for a refused action; the limit and entitlement texts are fixed. */
