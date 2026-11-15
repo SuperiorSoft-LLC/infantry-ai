@@ -12,7 +12,7 @@ import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * ACCOUNT-1: `infantry account status|login <provider>|logout <provider>`. Each is one `infantry_capability_call` of the
- * `account.status` / `account.signIn` / `account.signOut` capability (whichever plugin declares it answers; the CLI knows no
+ * `account.status` / `account.sign-in` / `account.sign-out` capability (whichever plugin declares it answers; the CLI knows no
  * provider). The CLI never asks for `account.token`, and [redact] drops any token-like key from what it prints.
  */
 internal object AccountCli {
@@ -28,8 +28,8 @@ internal object AccountCli {
 
     fun run(stream: FrameStream, args: List<String>, out: Appendable, err: Appendable, getenv: (String) -> String?): Int = runBlocking {
         val capability = when (args[0]) {
-            "login" -> "account.signIn"
-            "logout" -> "account.signOut"
+            "login" -> "account.sign-in"
+            "logout" -> "account.sign-out"
             else -> "account.status"
         }
         val call = JsonObject(buildMap {
