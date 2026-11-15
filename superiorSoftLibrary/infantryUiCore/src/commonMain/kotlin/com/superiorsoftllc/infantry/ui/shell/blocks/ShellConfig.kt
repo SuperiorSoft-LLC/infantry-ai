@@ -101,6 +101,10 @@ class ConfigBlock(children: List<Block>, place: Place = Place()) : Block(CONFIG,
             onHarnessCheck = { latest -> actionScope.launch { controller.checkHarnesses(latest) } },
             onHarnessInstall = { ids, update -> actionScope.launch { controller.installHarnesses(ids, update) } },
             onOpenSetup = { ui.showConfig = false; ui.showSetup = true },
+            // FIRST-RUN-HARNESS-CHECKLIST-1: every harness with its install and sign-in state; a credential is set up in place.
+            providers = state.providers,
+            harnessAuthEditor = { row -> HarnessAuthEditor(row) },
+            onOpenChecklist = { ui.showConfig = false; ui.showChecklist = true },
             toolApproval = state.toolApproval,
             onToolApproval = { mode -> actionScope.launch { controller.setToolApproval(mode) } },
             // ASK-TIMER-2: the prompt timer, under Tool approval (a daemon older than 1.139.0 has none).

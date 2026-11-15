@@ -41,6 +41,10 @@ class ShellState(homeTab: String, rightHomeTab: String, flags: UiFlags, url: Str
     var showConfig by mutableStateOf(false)
     // ONBOARD-2: the guided setup, opened by hand (Configuration > Agents); it also opens by itself while nothing can answer.
     var showSetup by mutableStateOf(false)
+    // FIRST-RUN-HARNESS-CHECKLIST-1: the agent tools checklist, shown once by itself and reopened from Configuration > Agents.
+    var showChecklist by mutableStateOf(false)
+    // ...and whether it already opened by itself in this run (a host whose ui prefs do not persist still shows it only once).
+    var checklistShownThisRun by mutableStateOf(false)
     // S6: a dropped .ihq that passed its checks, waiting for the owner's Install or Cancel (the consent dialog).
     var dropPreview by mutableStateOf<com.superiorsoftllc.infantry.ui.shell.DropPreview?>(null)
     // CONFIG-TABS-1: the configuration tab last shown, so the modal reopens where the user left it (while the app runs).

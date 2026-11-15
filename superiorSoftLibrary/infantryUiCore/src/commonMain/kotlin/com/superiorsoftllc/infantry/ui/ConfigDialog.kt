@@ -161,6 +161,12 @@ fun ConfigDialog(
     plan: ((present: Set<ConfigEntry>) -> ConfigPlan?)? = null,
     /** ONBOARD-2: reopens the guided setup (null = this host has none). */
     onOpenSetup: (() -> Unit)? = null,
+    /** FIRST-RUN-HARNESS-CHECKLIST-1: the daemon's providers (every harness it knows), for the agent tools list. */
+    providers: List<com.superiorsoftllc.infantry.ui.protocol.ProviderInfo> = emptyList(),
+    /** FIRST-RUN-HARNESS-CHECKLIST-1: sets one credential up in place (the first-run sign-in / key pieces); null = state only. */
+    harnessAuthEditor: (@Composable (SecretRow) -> Unit)? = null,
+    /** FIRST-RUN-HARNESS-CHECKLIST-1: reopens the first-run agent tools checklist; null = not offered. */
+    onOpenChecklist: (() -> Unit)? = null,
 ) {
     // VOICE-PLUGIN-1: the host's installable voice plugins (desktop); null = no Plugins tab.
     val voicePlugins = com.superiorsoftllc.infantry.ui.shell.LocalPlatformHost.current.voicePlugins
@@ -217,7 +223,7 @@ fun ConfigDialog(
         onSendTestQuestion, testQuestionReady, serverUpdate, serverMismatch, theme, onTheme, about, modules,
         voicePlugins, present, tab, highlight, promptTimer = promptTimer, onPromptTimer = onPromptTimer,
         plan = generated, tabLabel = tabLabel, highlightKey = highlightKey, harnessModules = harnessModules,
-        onOpenSetup = onOpenSetup,
+        onOpenSetup = onOpenSetup, providers = providers, harnessAuthEditor = harnessAuthEditor, onOpenChecklist = onOpenChecklist,
     )
     // Ticket cb1ceb93: the scroll cue fades into the dialog's own surface.
     val surface = androidx.compose.material3.AlertDialogDefaults.containerColor
@@ -307,6 +313,10 @@ class ConfigDialogHost internal constructor(
     val harnessModules: (suspend () -> Map<String, String>?)? = null,
     /** ONBOARD-2: reopens the guided setup; null = not offered. */
     val onOpenSetup: (() -> Unit)? = null,
+    /** FIRST-RUN-HARNESS-CHECKLIST-1: the providers, the in-place credential editor and the checklist reopener. */
+    val providers: List<com.superiorsoftllc.infantry.ui.protocol.ProviderInfo> = emptyList(),
+    val harnessAuthEditor: (@Composable (SecretRow) -> Unit)? = null,
+    val onOpenChecklist: (() -> Unit)? = null,
 ) {
     /** A section shows when its tab is the selected one (the plan's, when a card moved it) and this host has it. */
     fun shows(entry: ConfigEntry): Boolean = entry in present && if (plan != null) plan.tabOf(entry) == tabLabel else entry.tab == tab
@@ -444,10 +454,15 @@ fun ConfigCliLocationsSection(config: ConfigDialogHost, modifier: Modifier = Mod
     val onHarnessCheck = config.onHarnessCheck
     val onHarnessInstall = config.onHarnessInstall
     FlagSection(ConfigEntry.CLI_LOCATIONS, config.highlight, modifier) {
-        config.onOpenSetup?.let { open ->
-            OutlinedButton(onClick = open, modifier = Modifier.testTag(OPEN_SETUP_TAG)) { Text("Open guided setup") }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            config.onOpenChecklist?.let { open ->
+                OutlinedButton(onClick = open, modifier = Modifier.testTag(OPEN_CHECKLIST_TAG)) { Text("Show first-run checklist") }
+            }
+            config.onOpenSetup?.let { open ->
+                OutlinedButton(onClick = open, modifier = Modifier.testTag(OPEN_SETUP_TAG)) { Text("Open guided setup") }
+            }
         }
-        CliLocationsSection(config.cliLocations, onCliLocation, harnessInstall, config.harnessInstallBusy, config.harnessInstallLog, onHarnessInstall)
+        CliLocationsSection(config, onCliLocation, onHarnessInstall)
         if (harnessInstall != null && onHarnessCheck != null && onHarnessInstall != null) {
             HarnessInstallControls(harnessInstall, config.harnessInstallBusy, config.harnessInstallLog, onHarnessCheck, onHarnessInstall)
         }
@@ -784,43 +799,36 @@ private fun KeepAliveDropdown(value: Int?, onPick: (Int) -> Unit) {
 }
 
 /**
- * CLIPATH-1: one row per CLI: where the daemon runs it from (path + source, or "not found" with the paths it tried), a
- * path field, Browse (where the platform has a file picker), Save and Clear to default. The row shows the DAEMON's answer:
- * the text field is only what will be sent.
+ * FIRST-RUN-HARNESS-CHECKLIST-1: every agent tool the daemon knows as one card ([HarnessChecklistView]: installed in green or not
+ * installed in red, Install, sign-in state, and the CLIPATH-1 path field), then the other CLIs it launches (git) as plain path rows.
+ * The cards show the DAEMON's answer: a text field is only what will be sent.
  */
 @Composable
 private fun CliLocationsSection(
-    locations: List<CliLocation>?,
+    config: ConfigDialogHost,
     onSave: (id: String, path: String?) -> Unit,
-    harness: HarnessInstallReport?,
-    harnessBusy: Boolean,
-    harnessLog: List<String>,
     onInstall: ((ids: List<String>, update: Boolean) -> Unit)?,
 ) {
-    if (locations == null) {
+    val locations = config.cliLocations
+    val harness = config.harnessInstall
+    val items = com.superiorsoftllc.infantry.ui.model.HarnessChecklist.items(harness, config.providers, locations, config.secrets?.secrets)
+    if (locations == null && items.isEmpty()) {
         Text("Not read from the daemon", color = Palette.Muted, fontSize = 11.sp, modifier = Modifier.testTag(CLI_LOCATIONS_PENDING_TAG))
         return
     }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        locations.forEach { location ->
-            CliLocationRow(location, onSave, harness?.harnesses?.firstOrNull { it.id == location.id }, harnessBusy, onInstall, harness?.let(HarnessInstallSetting::nodeNote), harnessLog)
-        }
+        HarnessChecklistView(
+            items, config.harnessInstallBusy, config.harnessInstallLog, harness?.let(HarnessInstallSetting::nodeNote),
+            onInstall, onSave, config.harnessAuthEditor,
+        )
+        val listed = items.map { it.id }.toSet()
+        locations.orEmpty().filter { it.id !in listed }.forEach { CliLocationRow(it, onSave) }
     }
 }
 
+/** CLIPATH-1: a CLI that is not an agent tool (git): where the daemon runs it from, the paths it tried, and the path field. */
 @Composable
-private fun CliLocationRow(
-    location: CliLocation,
-    onSave: (id: String, path: String?) -> Unit,
-    check: HarnessInstallStatus?,
-    busy: Boolean,
-    onInstall: ((ids: List<String>, update: Boolean) -> Unit)?,
-    nodeNote: String? = null,
-    log: List<String> = emptyList(),
-) {
-    var pressed by remember(location.id) { mutableStateOf(false) }
-    // Re-seeded whenever the daemon reports a different override, so a save or clear elsewhere shows here.
-    var text by remember(location.id, location.override) { mutableStateOf(CliLocationsSetting.initialText(location)) }
+private fun CliLocationRow(location: CliLocation, onSave: (id: String, path: String?) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(location.label, fontWeight = FontWeight.Bold, fontSize = 12.sp)
         Text(
@@ -829,56 +837,10 @@ private fun CliLocationRow(
             fontSize = 11.sp,
             modifier = Modifier.testTag(CLI_STATUS_TAG_PREFIX + location.id),
         )
-        // H5a: [check] comes from the daemon's install report, so its presence is what makes the row installable.
-        if (check != null) {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                Text(HarnessInstallSetting.statusText(check), fontSize = 11.sp, modifier = Modifier.testTag(HARNESS_STATE_TAG_PREFIX + check.id))
-                val label = HarnessInstallSetting.action(check)
-                if (label != null && onInstall != null) {
-                    TextButton(
-                        onClick = { pressed = true; onInstall(listOf(check.id), HarnessInstallSetting.isUpdate(check)) },
-                        enabled = !busy,
-                        modifier = Modifier.testTag(HARNESS_INSTALL_TAG_PREFIX + check.id),
-                    ) { Text(if (busy && pressed) "Installing..." else label) }
-                }
-            }
-            // ONBOARD-2: an Install press always answers right here (never only in a log at the bottom of the tab): the
-            // running task (Node first when the machine has none), then the outcome in words; before a press, why it needs Node.
-            if (busy && pressed) {
-                com.superiorsoftllc.infantry.ui.progress.ProgressIndicator(HarnessInstallSetting.taskId(HarnessInstallSetting.NODE_ID), Modifier.fillMaxWidth(), hideWhenDone = true)
-                com.superiorsoftllc.infantry.ui.progress.ProgressIndicator(HarnessInstallSetting.taskId(check.id), Modifier.fillMaxWidth(), hideWhenDone = true)
-                Text("Installing ${check.label.ifBlank { check.id }}. This can take a few minutes.", color = Palette.Muted, fontSize = 11.sp, modifier = Modifier.testTag(HARNESS_BUSY_TAG_PREFIX + check.id))
-            } else if (pressed) {
-                HarnessInstallSetting.outcomeFor(check.id, log)?.let { o ->
-                    Text(o.text, color = if (o.ok) Palette.Muted else Palette.Danger, fontSize = 11.sp, modifier = Modifier.testTag(HARNESS_OUTCOME_TAG_PREFIX + check.id))
-                }
-            }
-            if (!busy && check.state == "missing" && nodeNote != null) {
-                Text(nodeNote, color = Palette.Muted, fontSize = 11.sp, modifier = Modifier.testTag(HARNESS_NODE_NOTE_TAG_PREFIX + check.id))
-            }
-        }
         CliLocationsSetting.triedLines(location).forEach { tried ->
             Text("tried: $tried", color = Palette.Muted, fontSize = 10.sp)
         }
-        // PATH-PICKER-1: the shared path field; Browse (a native file dialog, off the UI thread) fills it, Save stores it.
-        PathField(
-            text, { text = it }, PathKind.FILE, "${location.label} executable", Modifier.fillMaxWidth(),
-            tag = CLI_FIELD_TAG_PREFIX + location.id, title = "Locate ${location.label}",
-            placeholder = "Absolute path to the ${location.label} executable",
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            val toSave = CliLocationsSetting.pathToSave(text)
-            TextButton(
-                onClick = { onSave(location.id, toSave) },
-                enabled = toSave != null && toSave != location.override,
-                modifier = Modifier.testTag(CLI_SAVE_TAG_PREFIX + location.id),
-            ) { Text("Save") }
-            TextButton(
-                onClick = { text = ""; onSave(location.id, null) },
-                enabled = location.override != null,
-                modifier = Modifier.testTag(CLI_CLEAR_TAG_PREFIX + location.id),
-            ) { Text("Clear to default") }
-        }
+        CliPathControls(location, onSave)
     }
 }
 
@@ -1488,6 +1450,7 @@ const val HARNESS_BUSY_TAG_PREFIX = "harness-busy-"
 const val HARNESS_OUTCOME_TAG_PREFIX = "harness-outcome-"
 const val HARNESS_NODE_NOTE_TAG_PREFIX = "harness-node-note-"
 const val OPEN_SETUP_TAG = "open-guided-setup"
+const val OPEN_CHECKLIST_TAG = "open-harness-checklist"
 
 /**
  * HARNESS-INSTALL-1: check / install-all buttons, Node/npm guidance, and the last install's log. Everything runs on the

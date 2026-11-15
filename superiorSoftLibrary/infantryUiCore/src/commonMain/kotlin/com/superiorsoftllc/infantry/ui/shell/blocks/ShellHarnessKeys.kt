@@ -119,6 +119,9 @@ object ShellHarnessKeys : Block("infantry.shell.harnessKeys", "infantry.shell.ha
         if (s.ui.showSetup) return
         val rows = s.state.secrets?.secrets ?: return
         if (com.superiorsoftllc.infantry.ui.model.SetupWizard.needed(s.state.harnessInstall, rows, s.state.providers, s.state.modelCatalog) == true) return
+        // FIRST-RUN-HARNESS-CHECKLIST-1: the agent tools checklist asks first (it shows the same sign-in pieces); it is pending
+        // until shown once, which needs the daemon's install report.
+        if (s.ui.showChecklist || (s.state.harnessInstall != null && !harnessChecklistSeen(s))) return
         var skipped by remember { mutableStateOf(runCatching { s.host.uiPref(HARNESS_KEY_SKIP_PREF).orEmpty().split(',').filter { it.isNotBlank() }.toSet() }.getOrDefault(emptySet())) }
         val missing = missingHarnessKeys(rows, skipped)
         // Probe each login once per app start before asking (a login made since the daemon's last probe counts): the answer is a
@@ -178,6 +181,33 @@ object ShellHarnessKeys : Block("infantry.shell.harnessKeys", "infantry.shell.ha
             },
             dismissButton = { if (!allDone) TextButton({ close() }, Modifier.testTag(HARNESS_KEY_SKIP_ALL_TAG)) { Text("Skip all") } },
         )
+    }
+}
+
+/**
+ * FIRST-RUN-HARNESS-CHECKLIST-1: sets ONE harness credential up in place, from the first-run keys screen's own pieces: a harness
+ * with an in-app subscription login (ONBOARD-1) gets its two choices (log in, or an API key), any other credential the masked
+ * key row. Save key stores it through the same `setSecret` as Configuration > Secrets (a primary key also sets the harness to its
+ * API-key mode). The guided setup, the agent tools checklist and Configuration > Agents all use this; the key is never shown or logged.
+ */
+@Composable
+internal fun HarnessAuthEditor(row: SecretRow) {
+    val s = LocalShell.current
+    val values = remember(row.name) { mutableStateMapOf<String, String>() }
+    val primary = isPrimaryHarnessKey(row.name)
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (primary && offersInAppLogin(row)) SignInChoices(row, values)
+        else HarnessKeyRow(row, primary && SUBSCRIPTION_MODE in row.authModes, values) {}
+        TextButton({
+            val v = values[row.name].orEmpty().trim()
+            if (v.isNotEmpty()) {
+                values[row.name] = ""
+                s.actionScope.launch {
+                    s.controller.setSecret(row.name, v)
+                    if (primary && API_KEY_MODE in row.authModes) s.controller.setHarnessAuthMode(row.name.removePrefix("harness.").removeSuffix(".key"), API_KEY_MODE)
+                }
+            }
+        }, Modifier.testTag(HARNESS_KEY_SAVE_TAG), enabled = values[row.name].orEmpty().isNotBlank()) { Text("Save key") }
     }
 }
 

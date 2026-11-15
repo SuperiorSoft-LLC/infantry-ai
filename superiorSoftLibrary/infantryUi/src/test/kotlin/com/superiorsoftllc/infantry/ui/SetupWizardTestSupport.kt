@@ -12,7 +12,7 @@ import com.superiorsoftllc.infantry.ui.net.Controller
 /**
  * CI-UI-1: ONBOARD-2's guided setup opens over the shell on every start while no harness can answer, which is the case on a
  * CI machine with no agent CLI installed (a developer machine has one, so it never shows locally). A fixture that drives the
- * shell does what a person does: waits for the daemon's answer, then presses "Not now".
+ * shell does what a person does: waits for the daemon's answer, then presses "Not now" (or Done on the first-run checklist).
  */
 @OptIn(ExperimentalTestApi::class)
 fun ComposeUiTest.dismissSetupWizard(controller: Controller) {
@@ -20,6 +20,12 @@ fun ComposeUiTest.dismissSetupWizard(controller: Controller) {
     waitForIdle()
     if (onAllNodesWithTag(SETUP_WIZARD_TAG_FOR_TESTS).fetchSemanticsNodes().isNotEmpty()) {
         onNodeWithTag("setup-later").performClick()
+        waitForIdle()
+    }
+    // FIRST-RUN-HARNESS-CHECKLIST-1: on a machine where a harness can already answer, the one-time agent tools checklist opens
+    // instead; a person presses Done.
+    if (onAllNodesWithTag("harness-checklist-dialog").fetchSemanticsNodes().isNotEmpty()) {
+        onNodeWithTag("harness-checklist-done").performClick()
         waitForIdle()
     }
 }
