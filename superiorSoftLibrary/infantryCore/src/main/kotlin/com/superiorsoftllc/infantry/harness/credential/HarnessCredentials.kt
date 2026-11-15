@@ -224,7 +224,7 @@ data class AuthStatus(val signedIn: Boolean?, val lastProbe: Long) {
 }
 
 /** How long a sign-in probe may run before it is killed (it is a local status read, so seconds). */
-private const val PROBE_TIMEOUT_SECONDS = 30L
+private val PROBE_TIMEOUT_SECONDS: Long get() = com.superiorsoftllc.infantry.settings.LimitRegistry.HARNESS_PROBE_TIMEOUT_SECONDS.default.toLong()
 
 /**
  * ONBOARD-3: turns a manifest argv (`claude auth login`) into one the OS can start. Its first word goes through [resolve]: a
