@@ -157,6 +157,8 @@ class SitesDaemonPlugin : DaemonPlugin {
             ToolResult("${e.kind}: ${e.message}", isError = true)
         } catch (e: IllegalArgumentException) {
             ToolResult(e.message ?: "bad arguments", isError = true)
+        } catch (e: Exception) {
+            ToolResult("unavailable: could not complete the request (${e::class.simpleName})", isError = true)
         }
     }
 

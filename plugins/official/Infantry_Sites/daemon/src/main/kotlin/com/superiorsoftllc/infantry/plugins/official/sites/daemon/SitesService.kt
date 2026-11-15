@@ -101,7 +101,7 @@ class SitesService(
     }
 
     private fun send(base: String, method: String, path: String, body: String?, extra: Map<String, String>): HttpResult {
-        val token = tokens.token()
+        val token = try { tokens.token() } catch (e: SitesException) { throw e } catch (e: Exception) { throw SitesException(SitesException.UNAVAILABLE, "could not reach the account service") }
         val headers = mutableMapOf("Accept" to "application/json")
         if (body != null) headers["Content-Type"] = "application/json"
         headers += extra
@@ -130,7 +130,12 @@ class SitesService(
             }
             400, 422 -> throw SitesException(SitesException.BAD_REQUEST, reason ?: "the request was refused")
             502 -> throw SitesException(SitesException.UNAVAILABLE, "The hosting provider had a problem. Try again in a minute.")
-            else -> throw SitesException(SitesException.UNAVAILABLE, "the hosting service answered HTTP ${r.status}")
+            // The server's own words win over a bare status: {"error":"not_configured","message":"hosting is not configured on this server"}.
+            else -> {
+                val kind = if (code == "not_configured") SitesException.NOT_CONFIGURED else SitesException.UNAVAILABLE
+                val text = reason ?: code?.replace('_', ' ')
+                throw SitesException(kind, if (text != null) "$text (HTTP ${r.status})" else "the hosting service answered HTTP ${r.status}")
+            }
         }
     }
 

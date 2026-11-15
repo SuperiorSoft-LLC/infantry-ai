@@ -178,6 +178,15 @@ class SitesTest {
     }
 
     @Test
+    fun `a 503 body message and code reach the error text`() {
+        val e = failure(503, """{"error":"not_configured","message":"hosting is not configured on this server"}""") { it.create("a", null) }
+        assertEquals(SitesException.NOT_CONFIGURED, e.kind)
+        assertTrue("hosting is not configured on this server" in e.message!!, e.message)
+        val g = failure(503, "")
+        assertTrue("HTTP 503" in g.message!!)
+    }
+
+    @Test
     fun `429 says slow down and includes Retry-After seconds when present`() {
         stub.retryAfter = "17"
         assertTrue("try again in 17 s" in failure(429, """{"error":"rate_limited"}""").message!!)

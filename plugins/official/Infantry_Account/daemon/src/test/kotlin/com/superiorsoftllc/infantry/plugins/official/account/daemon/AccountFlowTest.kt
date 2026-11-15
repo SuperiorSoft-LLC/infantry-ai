@@ -141,7 +141,7 @@ class AccountFlowTest {
     private fun service(describe: String = stub.describe()) = AccountService(
         http = JdkHttp(), secrets = secrets,
         endpoints = { mapOf("stub" to ServiceEndpoint { op, _ -> check(op == "describe"); describe }) },
-        notify = { title, _, key -> notices += "$key|$title" }, log = { logs += it }, refreshMinutes = { 15 },
+        notify = { title, _, key -> notices += "$key|$title" }, log = { logs += it }, cacheSeconds = { 900 },
         now = { clock }, newId = { "00000000-0000-4000-8000-${(++uuids).toString().padStart(12, '0')}" },
     )
 
@@ -316,6 +316,34 @@ class AccountFlowTest {
         assertTrue("refresh-" !in state.body && "access-" !in state.body && "dev-secret" !in state.body)
         assertEquals(1, Json.parseToJsonElement(state.body).jsonObject["providers"]!!.jsonArray.size)
         assertEquals(400, w.routes.getValue("POST signin")(HttpCall("POST", "signin", body = "{}")).status)
+    }
+
+    @Test
+    fun `a ConnectException on sign-in or status is a plain failed answer with a clear message, not an IOException`() {
+        val dead = object : Http {
+            override fun request(spec: HttpSpec): HttpResult = throw java.net.ConnectException("refused")
+            override fun json(spec: HttpSpec): JsonElement = throw java.net.ConnectException("refused")
+        }
+        val s = AccountService(http = dead, secrets = secrets, endpoints = { mapOf("stub" to ServiceEndpoint { _, _ -> stub.describe() }) },
+            notify = { _, _, _ -> }, log = { logs += it }, cacheSeconds = { 30 }, now = { clock })
+        // core's guard tolerates only IllegalArgumentException; the plugin turns this ISE into one (AccountDaemonPlugin.cap).
+        val e = assertFailsWith<IllegalStateException> { s.signIn("stub") }
+        assertTrue("could not reach the account server" in e.message.orEmpty())
+        secrets.set("acct_stub_refresh", SecretValue("r"))
+        val status = s.status().toString()   // an unreachable server shows in the answer; nothing is thrown
+        assertTrue("account lookup failed" in status, status)
+    }
+
+    @Test
+    fun `the account document is re-read after the cache window and a forced refresh re-reads at once`() {
+        var seconds = 30L
+        val s = AccountService(http = JdkHttp(), secrets = secrets, endpoints = { mapOf("stub" to ServiceEndpoint { _, _ -> stub.describe() }) },
+            notify = { _, _, _ -> }, log = { logs += it }, cacheSeconds = { seconds }, now = { clock })
+        secrets.set("acct_stub_refresh", SecretValue("r"))
+        s.status(); assertEquals(1, stub.seenAuth.size)
+        clock += 10_000; s.status(); assertEquals(1, stub.seenAuth.size, "inside the window: cached")
+        clock += 21_000; s.status(); assertEquals(2, stub.seenAuth.size, "past the window: re-fetched")
+        s.status(refresh = true); assertEquals(3, stub.seenAuth.size, "refresh forces a re-read")
     }
 
     @Test

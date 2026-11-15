@@ -22,10 +22,10 @@
     "config": [
       {
         "node": "infantry.account.service", "group": "Account", "title": "Account", "tab": "Plugins", "order": 920,
-        "applies": "Applies to: how often the Account tab re-reads each provider's account document.",
+        "applies": "Applies to: how long the Account tab keeps each provider's account document.",
         "keywords": ["account", "provider", "sign in", "plan", "billing"],
         "fields": [
-          { "key": "account.refreshMinutes", "type": "number", "label": "Re-read the account every (minutes)", "default": 15, "min": 1, "max": 1440, "step": 1, "scope": "daemon", "order": 1 }
+          { "key": "account.cacheSeconds", "type": "number", "label": "Keep the account document for (seconds)", "default": 30, "min": 0, "max": 3600, "step": 1, "scope": "daemon", "order": 1 }
         ]
       }
     ]
