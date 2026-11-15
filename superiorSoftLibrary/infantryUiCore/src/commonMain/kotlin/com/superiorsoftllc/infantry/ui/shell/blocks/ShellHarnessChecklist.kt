@@ -55,6 +55,10 @@ object ShellHarnessChecklist : Block("infantry.shell.harnessChecklist", "infantr
         val tasks by s.controller.progressTasks.collectAsState()
         val finished = tasks.filter { it.id.startsWith(HarnessInstallSetting.TASK_PREFIX) && it.finished }.map { it.id to it.updatedAt }.toSet()
         LaunchedEffect(finished) { if (finished.isNotEmpty() && !state.harnessInstallBusy) s.controller.checkHarnesses() }
+        // A sign-in is only known after the daemon probed it; probe each login with a probe once when the checklist opens, else a
+        // subscription login made outside the app (Claude Code in ~/.claude) reads "Needs setup" until someone presses Check.
+        val unprobed = secrets.filter { hasAuthProbe(it) && it.lastProbe == 0L }.map { it.name }
+        LaunchedEffect(unprobed) { unprobed.forEach { s.controller.checkHarnessAuth(it) } }
         val items = HarnessChecklist.items(report, state.providers, state.cliLocations, secrets)
         fun done() {
             val skipped = runCatching { s.host.uiPref(HARNESS_KEY_SKIP_PREF).orEmpty().split(',').filter { it.isNotBlank() }.toSet() }.getOrDefault(emptySet())
