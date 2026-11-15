@@ -115,13 +115,11 @@ object ShellHarnessKeys : Block("infantry.shell.harnessKeys", "infantry.shell.ha
     override fun Render(scope: BlockScope) {
         val s = LocalShell.current
         if (!s.state.connection.isLive || s.ui.showConfig) return
-        // ONBOARD-2: while the guided setup is open, or nothing can answer yet (it opens by itself then), it asks instead.
+        // ONBOARD-2 / CHECKLIST-NO-AUTOOPEN-1: never while something can answer (needed == false); the guided setup asks when nothing can.
         if (s.ui.showSetup) return
         val rows = s.state.secrets?.secrets ?: return
-        if (com.superiorsoftllc.infantry.ui.model.SetupWizard.needed(s.state.harnessInstall, rows, s.state.providers, s.state.modelCatalog) == true) return
-        // FIRST-RUN-HARNESS-CHECKLIST-1: the agent tools checklist asks first (it shows the same sign-in pieces); it is pending
-        // until shown once, which needs the daemon's install report.
-        if (s.ui.showChecklist || (s.state.harnessInstall != null && !harnessChecklistSeen(s))) return
+        if (com.superiorsoftllc.infantry.ui.model.SetupWizard.needed(s.state.harnessInstall, rows, s.state.providers, s.state.modelCatalog) != false) return
+        if (s.ui.showChecklist) return
         var skipped by remember { mutableStateOf(runCatching { s.host.uiPref(HARNESS_KEY_SKIP_PREF).orEmpty().split(',').filter { it.isNotBlank() }.toSet() }.getOrDefault(emptySet())) }
         val missing = missingHarnessKeys(rows, skipped)
         // Probe each login once per app start before asking (a login made since the daemon's last probe counts): the answer is a
