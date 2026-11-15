@@ -139,7 +139,8 @@ object AskTool : DaemonTool {
     override fun call(call: ToolCall): ToolResult {
         val arguments = call.arguments
         val session = call.clientSessionId?.trim()?.takeIf { it.isNotEmpty() }
-            ?: return refused("$NAME needs the asking session in INFANTRY_SESSION_ID (set for every session Infantry AI spawns)")
+            // COLD-AGENT-1: say what to do next, not only what is missing (the answer arrives as mail to the asking session).
+            ?: return refused("$NAME needs the asking session in INFANTRY_SESSION_ID (set for every session Infantry AI spawns); an agent Infantry AI did not start has no session for the answer to reach: start the work as an Infantry AI session (infantry_ticket_start, or infantry_spawn) and ask from that session")
         val options = (arguments["options"] as? JsonArray)?.map { element ->
             val option = element as? JsonObject ?: return refused("$NAME: each option is {label, description}")
             buildJsonObject {

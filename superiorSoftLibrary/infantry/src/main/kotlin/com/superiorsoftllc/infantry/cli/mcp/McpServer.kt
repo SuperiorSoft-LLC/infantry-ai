@@ -114,7 +114,11 @@ internal class McpServer(
                     "To put an agent to work on a ticket, pin its role / provider / model (infantry_list_harnesses " +
                     "lists the harnesses and their models), then start it with infantry_ticket_start: the worker " +
                     "runs on the ticket's own branch and the ticket goes In Progress. infantry_spawn alone works " +
-                    "outside the board.",
+                    "outside the board. " +
+                    // COLD-AGENT-1: an agent with no source code finds tools by name; say how they are named.
+                    "Every tool is named infantry_<area>[_<verb>] (areas such as ticket, board, message, ask, script, " +
+                    "secret, run, project); when your client loads tools on demand, search by area. A tool that needs " +
+                    "a project takes projectId; left out, it is the project registered for this folder, if any.",
             )
         }
     }

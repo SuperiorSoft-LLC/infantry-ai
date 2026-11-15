@@ -67,7 +67,7 @@ class TicketContextComposerTest {
         )
 
         val expectedPrompt = "$instructions\n\n$ticketSection\n\n$linkedSection"
-        val infantrySection = "You are running inside Infantry AI. Ticket: T-21. Project: test-project. Infantry AI tickets, agents, mail and project knowledge live in the Infantry AI daemon and are reached with the `infantry` CLI, never through files. See superiorSoftLibrary/infantry/docs/AGENT-QUICKREF.md.\n" + TicketContextComposer.ticketMoveLine("T-21") + "\n" + com.superiorsoftllc.infantry.context.TicketContextComposer.MCP_LINE + "\n" + TicketContextComposer.RELATED_TICKETS_LINE
+        val infantrySection = "You are running inside Infantry AI. Ticket: T-21. Project: test-project. Infantry AI tickets, agents, mail and project knowledge live in the Infantry AI daemon and are reached with the `infantry` CLI, never through files. `infantry --help` lists every command; each infantry_* tool description says what it does.\n" + TicketContextComposer.ticketMoveLine("T-21") + "\n" + com.superiorsoftllc.infantry.context.TicketContextComposer.MCP_LINE + "\n" + TicketContextComposer.RELATED_TICKETS_LINE
         assertEquals("$infantrySection\n\n$teamSection\n\n$expectedPrompt", result.prompt)
         assertEquals(2, result.prompt.substringAfter("\n\n$infantrySection").substringAfterLast("\n\n").lines().size, "one line per link, in input order")
         assertFalse(result.prompt.contains(linkedBody))
@@ -104,7 +104,7 @@ class TicketContextComposerTest {
         )
 
         val expectedTicketSection = ticketSection
-        val infantrySection = "You are running inside Infantry AI. Ticket: Ticket title. Project: test-project. Infantry AI tickets, agents, mail and project knowledge live in the Infantry AI daemon and are reached with the `infantry` CLI, never through files. See superiorSoftLibrary/infantry/docs/AGENT-QUICKREF.md.\n" + TicketContextComposer.ticketMoveLine("Ticket title") + "\n" + com.superiorsoftllc.infantry.context.TicketContextComposer.MCP_LINE + "\n" + TicketContextComposer.RELATED_TICKETS_LINE
+        val infantrySection = "You are running inside Infantry AI. Ticket: Ticket title. Project: test-project. Infantry AI tickets, agents, mail and project knowledge live in the Infantry AI daemon and are reached with the `infantry` CLI, never through files. `infantry --help` lists every command; each infantry_* tool description says what it does.\n" + TicketContextComposer.ticketMoveLine("Ticket title") + "\n" + com.superiorsoftllc.infantry.context.TicketContextComposer.MCP_LINE + "\n" + TicketContextComposer.RELATED_TICKETS_LINE
         assertEquals("$infantrySection\n\n$teamSection\n\n$expectedTicketSection", result.prompt)
         assertEquals(
             listOf(
@@ -245,7 +245,7 @@ class TicketContextComposerTest {
         )
 
         val coreSection = "Title\n\n"
-        val infantrySection = "You are running inside Infantry AI. Ticket: Title. Project: test-project. Infantry AI tickets, agents, mail and project knowledge live in the Infantry AI daemon and are reached with the `infantry` CLI, never through files. See superiorSoftLibrary/infantry/docs/AGENT-QUICKREF.md.\n" + TicketContextComposer.ticketMoveLine("Title") + "\n" + com.superiorsoftllc.infantry.context.TicketContextComposer.MCP_LINE + "\n" + TicketContextComposer.RELATED_TICKETS_LINE
+        val infantrySection = "You are running inside Infantry AI. Ticket: Title. Project: test-project. Infantry AI tickets, agents, mail and project knowledge live in the Infantry AI daemon and are reached with the `infantry` CLI, never through files. `infantry --help` lists every command; each infantry_* tool description says what it does.\n" + TicketContextComposer.ticketMoveLine("Title") + "\n" + com.superiorsoftllc.infantry.context.TicketContextComposer.MCP_LINE + "\n" + TicketContextComposer.RELATED_TICKETS_LINE
         assertEquals("$infantrySection\n\n$teamSection\n\n$coreSection", result.prompt)
         assertEquals(
             listOf(
@@ -328,8 +328,7 @@ class TicketContextComposerTest {
             "- infantry send <role|agentId> \"msg\": message a colleague (queued if they are busy)\n" +
             "- infantry_inbox / infantry_read <id> (your Infantry AI MCP tools): your mail; " +
             "fallback when they are not available: infantry inbox / infantry read <id>\n" +
-            "- infantry mail: every mail command (answer one with --reply-to <id>); infantry --help: every command, grouped. " +
-            "Start here: superiorSoftLibrary/infantry/docs/AGENT-QUICKREF.md, section 0\n" +
+            "- infantry mail: every mail command (answer one with --reply-to <id>); infantry --help: every command, grouped\n" +
             ASK_LINE
 
         val teamSection = teamBlock + "\n" + TicketContextComposer.FINISH_LINE

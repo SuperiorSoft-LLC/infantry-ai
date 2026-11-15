@@ -182,4 +182,15 @@ class McpServeConfigTest {
         val explicitId = Json.parseToJsonElement(explicitText).jsonObject["sessionId"]!!.jsonPrimitive.content
         assertEquals("gamma", fixture.daemon.manager.get(explicitId)!!.projectId)
     }
+
+    /** COLD-AGENT-1: the project registered for a folder is the deepest one whose directory holds it. */
+    @Test
+    fun theProjectForAFolderIsTheDeepestRegisteredAncestor() {
+        val root = Files.createTempDirectory("mcp-folder-project").toFile()
+        val sub = File(root, "app/src").apply { mkdirs() }
+        val projects = listOf("outer" to root.path, "inner" to File(root, "app").path, "blank" to "", "other" to File(root, "elsewhere").path)
+        assertEquals("inner", McpServeConfig.projectForDir(projects, sub))
+        assertEquals("outer", McpServeConfig.projectForDir(projects, root))
+        assertEquals(null, McpServeConfig.projectForDir(projects, root.parentFile))
+    }
 }

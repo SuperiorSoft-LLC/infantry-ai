@@ -157,4 +157,15 @@ class SecretRenderTest {
         assertTrue(s.contains("db#FIELD") && s.contains("ghost: not found in app scope"), s)
         assertFalse(s.contains("APPVAL"))
     }
+
+    /** COLD-AGENT-1: a refusal says why (a built-in name) and where a relative template was looked for. */
+    @Test fun `a refused name keeps its reason and a missing template names its path`() {
+        val r = SecretRenderer({ n, _ -> require(!n.startsWith("harness.")) { "secret '$n' is built in" }; null })
+        val res = r.render(file("h.env", "K={{secret:harness.x.key}}"), File(dir, "h.out"), "p1")
+        assertTrue(res.summary(false).contains("harness.x.key: secret 'harness.x.key' is built in"), res.summary(false))
+        val noRoot = r.renderIn(null, "nope.env", "o.env", null).summary(false)
+        assertTrue(noRoot.contains(File("nope.env").absolutePath) && noRoot.contains("no project folder applies"), noRoot)
+        val inRoot = r.renderIn(dir, "nope.env", "o.env", "p1").summary(false)
+        assertTrue(inRoot.contains(File(dir, "nope.env").absolutePath) && inRoot.contains("inside the project folder ${dir.path}"), inRoot)
+    }
 }

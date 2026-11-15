@@ -35,7 +35,7 @@ class HookTools(
     fun handle(call: ToolCall): ToolResult {
         val a = call.arguments
         fun s(k: String) = (a[k] as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
-        val project = s("project") ?: call.clientProjectId ?: return refuse("needs a project (pass project, or run it from a project session)")
+        val project = s("project") ?: call.clientProjectId ?: return refuse("needs a project (pass project, or run it from a project session; infantry_projects lists the project ids)")
         if (s("scope")?.lowercase() == "global" && s("action")?.lowercase() in setOf("add", "remove")) {
             globalDenied(call)?.let { return refuse(it) }
             return try {

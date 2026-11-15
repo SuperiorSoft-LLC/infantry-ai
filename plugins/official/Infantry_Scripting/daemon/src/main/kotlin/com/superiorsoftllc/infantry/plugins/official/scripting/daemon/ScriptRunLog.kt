@@ -269,7 +269,7 @@ class ScriptRunLog(private val limit: () -> Int = { 200 }, private val clock: ()
         override val annotations: JsonObject = Json.parseToJsonElement("""{"readOnlyHint":true}""").jsonObject
         override fun call(call: ToolCall): ToolResult {
             fun s(k: String) = (call.arguments[k] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
-            val project = s("project") ?: call.clientProjectId ?: return ToolResult("$STATS needs a project (pass project, or run it from a project session)", isError = true)
+            val project = s("project") ?: call.clientProjectId ?: return ToolResult("$STATS needs a project (pass project, or run it from a project session; infantry_projects lists the project ids)", isError = true)
             val session = s("session")
             val n = s("limit")?.toIntOrNull() ?: 20
             val out = buildJsonObject {

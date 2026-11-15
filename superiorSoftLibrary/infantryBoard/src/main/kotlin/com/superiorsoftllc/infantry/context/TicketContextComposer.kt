@@ -36,7 +36,7 @@ class TicketContextComposer(
             com.superiorsoftllc.infantry.ticketfiles.RelatedConfig.MODE_TICKETS
         val includeLinked = switches.includeLinkedTasksContext.value && ticketsMode
         val sections = buildList {
-            add("infantry" to "You are running inside Infantry AI. Ticket: ${input.ticketId}. Project: ${input.projectId ?: "none"}. Infantry AI tickets, agents, mail and project knowledge live in the Infantry AI daemon and are reached with the `infantry` CLI, never through files. See superiorSoftLibrary/infantry/docs/AGENT-QUICKREF.md.\n" + ticketMoveLine(input.ticketId, emptyList(), ticketsMode) + "\n" + MCP_LINE + (if (ticketsMode) "\n" + RELATED_TICKETS_LINE else ""))
+            add("infantry" to "You are running inside Infantry AI. Ticket: ${input.ticketId}. Project: ${input.projectId ?: "none"}. Infantry AI tickets, agents, mail and project knowledge live in the Infantry AI daemon and are reached with the `infantry` CLI, never through files. `infantry --help` lists every command; each infantry_* tool description says what it does.\n" + ticketMoveLine(input.ticketId, emptyList(), ticketsMode) + "\n" + MCP_LINE + (if (ticketsMode) "\n" + RELATED_TICKETS_LINE else ""))
             // ROLE-NOTE-1: the built-in report-by-mail text yields to the project (setting off = neither line; role notes govern).
             val finish = settings.includeFinishInstructions() ?: true
             add("team" to if (finish) ((input.reportTo?.let { TEAM_BLOCK + "\n" + reportToLine(it) } ?: TEAM_BLOCK) + "\n" + FINISH_LINE) else TEAM_BLOCK)
@@ -210,8 +210,7 @@ class TicketContextComposer(
             "- infantry send <role|agentId> \"msg\": message a colleague (queued if they are busy)\n" +
             "- infantry_inbox / infantry_read <id> (your Infantry AI MCP tools): your mail; " +
             "fallback when they are not available: infantry inbox / infantry read <id>\n" +
-            "- infantry mail: every mail command (answer one with --reply-to <id>); infantry --help: every command, grouped. " +
-            "Start here: superiorSoftLibrary/infantry/docs/AGENT-QUICKREF.md, section 0\n" +
+            "- infantry mail: every mail command (answer one with --reply-to <id>); infantry --help: every command, grouped\n" +
             ASK_LINE
     }
 

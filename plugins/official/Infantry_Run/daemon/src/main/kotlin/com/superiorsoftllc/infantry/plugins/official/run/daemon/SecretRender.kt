@@ -85,16 +85,19 @@ class SecretRenderer(
     private val restricted: () -> Boolean = { false },
     private val maxBytes: () -> Long = { DEFAULT_MAX_BYTES },
 ) {
-    fun render(template: File, out: File?, project: String?, allowMissing: Boolean = false, check: Boolean = false): RenderResult {
+    fun render(template: File, out: File?, project: String?, allowMissing: Boolean = false, check: Boolean = false, pathHint: String = ""): RenderResult {
         fun no(why: String, missing: List<String> = emptyList()) = RenderResult(emptyList(), missing, null, why)
         if (restricted()) return no("secrets are locked under a restricted policy")
-        if (!template.isFile) return no("template '${template.name}' is not a file")
+        // COLD-AGENT-1: name the path the template was read from, so a caller sees which folder a relative path meant.
+        if (!template.isFile) return no("template '${template.absolutePath}' is not a file$pathHint")
         if (template.length() > maxBytes()) return no("template '${template.name}' is over limits.secrets.renderMaxBytes (${maxBytes()} bytes)")
         val text = decodeText(template.readBytes())
             ?: return no("'${template.name}' is not a text file (binary or not UTF-8); only text files can be rendered")
         val cache = HashMap<String, Map<String, String>?>()
+        val refused = HashMap<String, String>()
         val r = SecretTemplate.render(text) { name, field ->
-            val fields = cache.getOrPut(name) { try { resolve(name, project) } catch (e: Exception) { null } }
+            // COLD-AGENT-1: a resolver refusal (a built-in name) keeps its reason instead of reading as "not found".
+            val fields = cache.getOrPut(name) { try { resolve(name, project) } catch (e: Exception) { e.message?.let { refused[name] = it }; null } }
             // SECRET-RENDER-2: `{{secret:NAME}}` on a ONE-field secret is that field, whatever the field is called.
             fields?.get(field) ?: if (field == "value" && fields != null && fields.size == 1) fields.values.first() else null
         }
@@ -102,6 +105,7 @@ class SecretRenderer(
             val name = label.substringBefore('#')
             val fields = cache[name]
             when {
+                fields == null && refused[name] != null -> "$name: ${refused[name]}"
                 fields == null -> "$name: not found in ${if (project.isNullOrBlank()) "app scope" else "project or app scope"}"
                 label.contains('#') -> "$label: secret '$name' has no field '${label.substringAfter('#')}' (fields: ${fields.keys.joinToString()})"
                 else -> "$label: secret '$name' has ${fields.size} fields (${fields.keys.joinToString()}); use {{secret:$name#FIELD}}"
@@ -120,7 +124,12 @@ class SecretRenderer(
     /** [render] with paths as a caller wrote them: a relative one is inside [root] (the project folder); absolute when there is none. */
     fun renderIn(root: File?, template: String, out: String?, project: String?, allowMissing: Boolean = false, check: Boolean = false): RenderResult {
         fun file(p: String): File = File(p).let { if (it.isAbsolute || root == null) it else File(root, p) }
-        return render(file(template), out?.let(::file), project, allowMissing, check)
+        val hint = when {
+            File(template).isAbsolute -> ""
+            root == null -> " (a relative path is read inside the project folder, and no project folder applies here: pass project, or an absolute path)"
+            else -> " (a relative path is read inside the project folder ${root.path})"
+        }
+        return render(file(template), out?.let(::file), project, allowMissing, check, hint)
     }
 
     companion object {

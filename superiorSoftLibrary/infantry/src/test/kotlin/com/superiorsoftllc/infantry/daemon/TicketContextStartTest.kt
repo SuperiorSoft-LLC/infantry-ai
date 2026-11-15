@@ -47,7 +47,7 @@ class TicketContextStartTest {
             fixture.client.moveTicket(ticket.id, TicketStatus.IN_PROGRESS)
 
             val prompt = gated.prompts.singleOrNull() ?: error("no prompt reached the provider; got ${gated.prompts}")
-            val infantryPrefix = "You are running inside Infantry AI. Ticket: ${ticket.id}. Project: proj-k0. Infantry AI tickets, agents, mail and project knowledge live in the Infantry AI daemon and are reached with the `infantry` CLI, never through files. See superiorSoftLibrary/infantry/docs/AGENT-QUICKREF.md."
+            val infantryPrefix = "You are running inside Infantry AI. Ticket: ${ticket.id}. Project: proj-k0. Infantry AI tickets, agents, mail and project knowledge live in the Infantry AI daemon and are reached with the `infantry` CLI, never through files. `infantry --help` lists every command; each infantry_* tool description says what it does."
             assertTrue(prompt.startsWith(infantryPrefix), "infantry section goes first: ${prompt.take(120)}")
             assertTrue(prompt.contains(instructions), "the persona is included: ${prompt.take(120)}")
             assertTrue(prompt.contains(title), "the title is verbatim")
