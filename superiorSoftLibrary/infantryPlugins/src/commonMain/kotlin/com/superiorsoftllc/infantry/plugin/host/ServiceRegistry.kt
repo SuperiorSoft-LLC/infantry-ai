@@ -81,10 +81,16 @@ object ConfigReadGate {
 
 /** The daemon rule: a route must be declared, and under the lockdown also allowed by the lock. Null = may call. */
 object RouteGate {
-    fun refusal(route: String, declared: List<String>, demoLock: Boolean, config: ModulesConfig): String? = when {
-        route !in declared -> "route '$route' is not declared in module.json"
-        demoLock && route !in config.demoLock.allowRoutes -> "route '$route' is not allowed under the lockdown"
-        else -> null
+    /** A route's identity is METHOD + PATH: the query string and fragment are not part of it. */
+    fun identity(route: String): String = route.substringBefore('#').substringBefore('?')
+
+    fun refusal(route: String, declared: List<String>, demoLock: Boolean, config: ModulesConfig): String? {
+        val id = identity(route)
+        return when {
+            id !in declared -> "route '$route' is not declared in module.json"
+            demoLock && id !in config.demoLock.allowRoutes -> "route '$route' is not allowed under the lockdown"
+            else -> null
+        }
     }
 
     /** Wraps a platform's raw daemon call in the rule for one module. */
