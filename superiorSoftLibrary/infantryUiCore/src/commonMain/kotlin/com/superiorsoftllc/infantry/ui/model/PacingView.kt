@@ -109,7 +109,15 @@ object PacingView {
 
     /** "2 of 3 running", "2 running · no limit". */
     fun allowanceText(m: MeterUsage): String =
-        m.allowance?.let { "${m.running} of $it running" } ?: "${m.running} running · no limit"
+        m.allowance?.let { "${m.running} of $it workers running" } ?: "${m.running} workers running · no limit"
+
+    /** UI-WORDING-1: the badge words, kept here so the card and its tests share them. */
+    fun slotBadgeText(m: MeterUsage): String = if (m.canStart) "Free slot" else "No free slot"
+
+    /** UI-WORDING-1: one sentence for the tooltip on the badge and on the "N of M workers running" line. */
+    const val SLOT_HELP: String =
+        "Worker slots: how many agents the usage pace allows to run at the same time for this provider. " +
+            "It is not the ticket count or the hook caps."
 
     /** "updated just now" / "updated 4m ago" / "updated 2h ago"; null when the meter has no live read. */
     fun updatedText(updatedAt: Long?, now: Long): String? {
@@ -130,7 +138,7 @@ object PacingView {
     }
 
     /** "override 5 until 3:00 PM"-style text without a clock; the pane adds the time. */
-    fun overrideText(m: MeterUsage): String? = m.override?.let { o -> "override: " + (o.workers?.toString() ?: "no limit") }
+    fun overrideText(m: MeterUsage): String? = m.override?.let { o -> "allowance raised to " + (o.workers?.toString() ?: "no limit") }
 
     /** A percent typed in the manual field, or null when it is not 0..100. */
     fun parsePercent(text: String): Double? = text.trim().removeSuffix("%").trim().toDoubleOrNull()?.takeIf { it in 0.0..100.0 }

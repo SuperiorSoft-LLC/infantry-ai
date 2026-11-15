@@ -7,6 +7,7 @@ import com.superiorsoftllc.infantry.ui.*
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -127,11 +128,15 @@ private fun MeterCard(m: MeterUsage, rule: PacingRule, now: Long, onManual: (() 
             color = Palette.Muted, fontSize = 10.sp,
         )
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(PacingView.allowanceText(m), color = Palette.Text, fontSize = 11.sp, modifier = Modifier.weight(1f).testTag("pacing-allowance-${m.meter}"))
-            Chip(if (m.canStart) "can start" else "full", if (m.canStart) Palette.Ok else Palette.Danger)
+            IconActionTooltipBox(PacingView.SLOT_HELP, describe = false, modifier = Modifier.weight(1f)) { tip ->
+                Text(PacingView.allowanceText(m), color = Palette.Text, fontSize = 11.sp, modifier = tip.testTag("pacing-allowance-${m.meter}"))
+            }
+            IconActionTooltipBox(PacingView.SLOT_HELP, describe = false) { tip ->
+                Box(tip) { Chip(PacingView.slotBadgeText(m), if (m.canStart) Palette.Ok else Palette.Danger) }
+            }
         }
         PacingView.overrideText(m)?.let { o ->
-            Text(o + " · ends in " + untilText(m.override!!.until, now) + " (rule says ${m.ruleAllowance ?: "no limit"})", color = Palette.Accent, fontSize = 10.sp)
+            Text(o + " · ends in " + untilText(m.override!!.until, now) + " (pacing rule says ${m.ruleAllowance ?: "no limit"})", color = Palette.Accent, fontSize = 10.sp)
         }
         PacingView.reasonText(m)?.let { Text(it, color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.testTag("pacing-reason-${m.meter}")) }
         m.warning?.let { Text(it, color = Palette.Muted, fontSize = 10.sp) }
