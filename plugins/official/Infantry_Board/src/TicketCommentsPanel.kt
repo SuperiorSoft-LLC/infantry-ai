@@ -133,7 +133,6 @@ private fun Composer(onSend: (String, Boolean) -> Unit) {
 }
 
 /** "Created by" and the notify picker (multi-select over user-created agents only; Save writes it with the daemon's ticket update). */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun NotifyBlock(
     ticketId: String, meta: TicketCommentMeta?, candidates: List<NotifyAgent>?, api: TicketCommentsApi,
@@ -144,32 +143,28 @@ private fun NotifyBlock(
     Column(Modifier.fillMaxWidth().background(Palette.Panel, RoundedCornerShape(6.dp)).padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         val creator = notifyCreatorLabel(meta?.createdBy)
         if (creator != null) Text("Created by $creator", color = Palette.Text, fontSize = 11.sp, modifier = Modifier.testTag(COMMENT_CREATED_BY_TAG))
-        var editing by remember(ticketId) { mutableStateOf(false) }
-        var menu by remember(ticketId) { mutableStateOf(false) }
-        fun nameOf(id: String) = candidates?.firstOrNull { it.id == id }?.name?.ifBlank { id } ?: id
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(
-                "Notify: " + (if (picked.isEmpty()) "nobody" else picked.joinToString(", ") { nameOf(it) }),
-                color = Palette.Muted, fontSize = 11.sp, maxLines = 2, modifier = Modifier.weight(1f),
-            )
-            TextButton(onClick = { editing = !editing }) { Text(if (editing) "Done" else "Edit", fontSize = 11.sp) }
-        }
-        if (editing) when {
+        Text("Notify on every comment", color = Palette.Muted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+        when {
             candidates == null -> Text("Loading agents…", color = Palette.Muted, fontSize = 11.sp)
             candidates.isEmpty() -> Text("No user-created agents to notify.", color = Palette.Muted, fontSize = 11.sp)
-            else -> {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    picked.forEach { id -> TextButton(onClick = { picked = picked - id }) { Text("${nameOf(id)} ×", fontSize = 11.sp) } }
-                    Box {
-                        TextButton(onClick = { menu = true }) { Text("+ Add", fontSize = 11.sp) }
-                        InfantryDropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                            candidates.filter { it.id !in picked }.forEach { a ->
-                                DropdownMenuItem(
-                                    text = { Text(a.name.ifBlank { a.id }, fontSize = 11.sp) },
-                                    onClick = { picked = picked + a.id; menu = false },
-                                    modifier = Modifier.testTag(COMMENT_NOTIFY_TAG_PREFIX + a.id),
-                                )
+            else -> BoxWithConstraints(Modifier.fillMaxWidth()) {
+                // Columns adapt to the width (about 150dp per cell); a phone gets 1-2, a wide modal 3-4.
+                val cols = (maxWidth / 150.dp).toInt().coerceIn(1, 4)
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    candidates.chunked(cols).forEach { rowAgents ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            rowAgents.forEach { a ->
+                                val on = a.id in picked
+                                Row(
+                                    Modifier.weight(1f).clickable { picked = if (on) picked - a.id else picked + a.id }
+                                        .testTag(COMMENT_NOTIFY_TAG_PREFIX + a.id),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Checkbox(checked = on, onCheckedChange = { picked = if (it) picked + a.id else picked - a.id })
+                                    Text(a.name.ifBlank { a.id }, fontSize = 11.sp, color = Palette.Text, maxLines = 1)
+                                }
                             }
+                            repeat(cols - rowAgents.size) { Spacer(Modifier.weight(1f)) }
                         }
                     }
                 }
