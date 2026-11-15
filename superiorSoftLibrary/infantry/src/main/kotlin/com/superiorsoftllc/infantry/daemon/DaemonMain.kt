@@ -951,6 +951,20 @@ class InfantryDaemon(
             )
             // BUG-M2-11f: a new keep-alive value applies to the processes already kept, not only to the next launch.
             settings.onKeepAliveChanged = manager::lifecyclePolicyChanged
+            // SETTING-EVENT-1: every setting write (any scope) is the named event `setting.changed`; a secret key carries no values.
+            settings.onChanged = { c ->
+                val o = kotlinx.serialization.json.buildJsonObject {
+                    put("key", kotlinx.serialization.json.JsonPrimitive(c.key))
+                    put("oldValue", c.oldValue ?: kotlinx.serialization.json.JsonNull)
+                    put("newValue", c.newValue ?: kotlinx.serialization.json.JsonNull)
+                    put("scope", kotlinx.serialization.json.JsonPrimitive(c.scope))
+                    c.projectId?.let { put("projectId", kotlinx.serialization.json.JsonPrimitive(it)) }
+                    c.changedBy?.let { put("changedBy", kotlinx.serialization.json.JsonPrimitive(it)) }
+                    put("at", kotlinx.serialization.json.JsonPrimitive(c.at))
+                    put("redacted", kotlinx.serialization.json.JsonPrimitive(c.redacted))
+                }
+                pluginHost.get().namedEvents.publish("setting.changed", o.toString(), "daemon")
+            }
             // LIMITS: the model allowlist and the daemon-wide working-session cap, read live.
             // POLICY-1: the active preset's lists apply while the settings (and their env) are empty.
             manager.allowedModels = { settings.allowedModels().takeIf { it.restricts } ?: com.superiorsoftllc.infantry.settings.ModelAllowlist.parse(policies.current.allowedModels.joinToString(",")) }
@@ -4225,6 +4239,8 @@ private suspend fun handleConnection(
 
                 Envelope.SETTINGS_SET -> try {
                     val request = SettingsSet.decode(envelope.data)
+                    // SETTING-EVENT-1: the frame carries no caller; the session it names, else the generic client.
+                    SettingsService.actor.set(request.session?.takeIf { it.isNotBlank() } ?: "client")
                     val scope = com.superiorsoftllc.infantry.settings.SettingScope.parse(request.scope ?: "app")
                     if (scope != com.superiorsoftllc.infantry.settings.SettingScope.APP) {
                         // SETTINGS-SCOPES-1: a scoped write answers with the resolved value, scope and layers of the key.
@@ -4240,6 +4256,8 @@ private suspend fun handleConnection(
                     Envelope(Envelope.ERROR, "settings_set refused: ${e.message ?: "invalid request"}")
                 } catch (e: Exception) {
                     Envelope(Envelope.ERROR, "settings_set failed: ${e.message ?: e::class.simpleName}")
+                } finally {
+                    SettingsService.actor.remove()
                 }
 
                 // CONFIG-8 (contract 1.142.0): the daemon's declared config. Answered by `config_schema` + `config_values`.

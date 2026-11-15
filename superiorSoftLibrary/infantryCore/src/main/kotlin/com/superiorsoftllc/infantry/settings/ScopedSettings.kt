@@ -119,7 +119,9 @@ class ScopedSettings(private val store: InfantryStore, private val settings: Set
             SettingScope.APP -> ""
         }
         val stored: JsonElement = if (value == null) JsonNull else settings.validated(key, value)
+        val before = storedAt(scope, target, key)
         store.settings.put(SettingRow(rowKey(scope, target, key), stored.toString(), System.currentTimeMillis()))
+        settings.notifyChanged(key, before, stored.takeIf { it !is JsonNull }, scope.wire, context.projectId?.takeIf { it.isNotBlank() })
         return resolve(key, context)
     }
 
