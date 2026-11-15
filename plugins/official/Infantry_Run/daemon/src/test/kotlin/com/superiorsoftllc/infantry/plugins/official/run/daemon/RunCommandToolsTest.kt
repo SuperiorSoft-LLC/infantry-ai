@@ -69,6 +69,19 @@ class RunCommandToolsTest {
         assertTrue(secrets("p1", "scope" to "nope").isError)
     }
 
+    @Test fun `the secrets tool lists each field with its exact placeholder`() {
+        val t = RunCommandTools(store, manager, {}, {}, { mapOf("secrete" to "app", "solo" to "app") }, null, { null },
+            { n, _ -> if (n == "secrete") setOf("stripe_secret_key", "stripe_webhook_secret") else setOf("value") })
+            .all().associateBy { it.name }
+        val out = t.getValue("infantry_run_secrets").call(object : ToolCall {
+            override val arguments = JsonObject(emptyMap())
+            override val caller: Caller get() = error("unused")
+            override val clientProjectId: String? = null
+            override fun request(type: String, data: String, sessionId: String?, timeoutMs: Long) = error("unused")
+        }).text
+        assertEquals("secrete  (app)  fields: stripe_secret_key -> {{secret:secrete#stripe_secret_key}}, stripe_webhook_secret -> {{secret:secrete#stripe_webhook_secret}}\nsolo  (app)  {{secret:solo}}", out)
+    }
+
     @Test fun `save then list then delete`() {
         val saved = call("infantry_run_command_save", "p1", "id" to "site", "name" to "Site", "argv" to listOf("echo", "hi"))
         assertFalse(saved.isError, saved.text)

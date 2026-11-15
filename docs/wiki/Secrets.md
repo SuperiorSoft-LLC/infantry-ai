@@ -18,7 +18,7 @@ for a saved command's secrets: the project's own secret first, then the app's. T
 (`SecretTemplate` in `plugins/official/Infantry_Run/daemon/src/main/kotlin/com/superiorsoftllc/infantry/plugins/official/run/daemon/SecretRender.kt`);
 there is no per-format parsing, so quote the placeholder yourself where the format needs quotes.
 
-Configuration shows each secret's placeholder next to it with a Copy button, and a **Render file** card (template, output, Render). The card sends the owner-only `secret_render` frame; an agent connection is refused, and the result shows names and the path only.
+Configuration shows each secret's placeholder next to it with a Copy button, and each field row has its own Copy for `{{secret:NAME#FIELD}}`, and a **Render file** card (template, output, Render). The card sends the owner-only `secret_render` frame; an agent connection is refused, and the result shows names and the path only.
 
 ## Example: `.env`
 
@@ -66,7 +66,7 @@ Template `opencode.tmpl.jsonc`:
 
 The MCP tool `infantry_secret_render` (Lua: `ih.secret_render{ template = "...", out = "..." }`, the `secret_render` alias, or `ih.call("infantry_secret_render", {...})`) takes the same arguments
 (`template`, `out`, `project`, `allowMissing`, `check`) and answers with names and the output path only. A relative path is
-inside the project folder. An agent can render a file but cannot read a value: `infantry_run_secrets` still lists names and
+inside the project folder. An agent can render a file but cannot read a value: `infantry_run_secrets` still lists names (with each field and its exact placeholder) and
 scopes only.
 
 ## Saved commands
@@ -78,3 +78,5 @@ credential file exists only while the command runs.
 ## Policy
 
 A restricted or demo daemon refuses every render, like any other secret use.
+
+A placeholder that is not found gets a hint: `secrete.stripe_secret_key not found. Did you mean {{secret:secrete#stripe_secret_key}}? (fields use NAME#FIELD)`. `.`, `/` and `:` between name and field, and case or `-`/`_` differences in a field, are recognised.

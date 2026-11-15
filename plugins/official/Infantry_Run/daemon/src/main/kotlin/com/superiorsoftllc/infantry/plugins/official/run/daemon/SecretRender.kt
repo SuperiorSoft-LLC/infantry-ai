@@ -28,6 +28,33 @@ object SecretTemplate {
     /** The placeholder a UI shows for secret [name]. */
     fun placeholder(name: String) = "$PLACEHOLDER_OPEN$name}}"
 
+    /** SECRETS-UX-1: the exact placeholder for each field of secret [name] (a one-field secret is just `{{secret:NAME}}`); names only. */
+    fun placeholders(name: String, fieldNames: Collection<String>): List<Pair<String, String>> =
+        if (fieldNames.size <= 1) listOf((fieldNames.firstOrNull() ?: VALUE_FIELD) to placeholder(name))
+        else fieldNames.sorted().map { it to "$PLACEHOLDER_OPEN$name#$it}}" }
+
+    private fun norm(s: String) = s.lowercase().replace("-", "_")
+
+    /** SECRETS-UX-1: the field of [fields] that [wrong] means when only case or `-`/`_` differ, or null. */
+    fun closestField(wrong: String, fields: Collection<String>): String? = fields.firstOrNull { norm(it) == norm(wrong) }
+
+    /**
+     * SECRETS-UX-1: a placeholder name that was not found, read as NAME + separator (`.` `/` `:`) + FIELD of a secret that
+     * exists, e.g. `secrete.stripe_secret_key`. Returns the placeholder to use instead, or null. [fieldsOf] gives a secret's fields.
+     */
+    fun didYouMean(name: String, fieldsOf: (String) -> Map<String, String>?): String? {
+        for (i in name.indices) {
+            if (name[i] !in ".:/") continue
+            val cand = name.substring(0, i).lowercase()
+            if (cand.isEmpty()) continue
+            val fields = fieldsOf(cand)?.keys ?: continue
+            val f = name.substring(i + 1)
+            val match = closestField(f, fields) ?: continue
+            return placeholders(cand, fields).firstOrNull { it.first == match }?.second
+        }
+        return null
+    }
+
     class Ref(val name: String, val field: String) {
         val label: String = if (field == VALUE_FIELD) name else "$name#$field"
     }
@@ -106,8 +133,16 @@ class SecretRenderer(
             val fields = cache[name]
             when {
                 fields == null && refused[name] != null -> "$name: ${refused[name]}"
-                fields == null -> "$name: not found in ${if (project.isNullOrBlank()) "app scope" else "project or app scope"}"
-                label.contains('#') -> "$label: secret '$name' has no field '${label.substringAfter('#')}' (fields: ${fields.keys.joinToString()})"
+                fields == null -> {
+                    val where = if (project.isNullOrBlank()) "app scope" else "project or app scope"
+                    val hint = SecretTemplate.didYouMean(name) { n -> cache.getOrPut(n) { try { resolve(n, project) } catch (e: Exception) { null } } }
+                    if (hint != null) "$label not found. Did you mean $hint? (fields use NAME#FIELD)" else "$name: not found in $where"
+                }
+                label.contains('#') -> {
+                    val wrong = label.substringAfter('#')
+                    val near = SecretTemplate.closestField(wrong, fields.keys)?.let { " Did you mean {{secret:$name#$it}}?" } ?: ""
+                    "$label: secret '$name' has no field '$wrong' (fields: ${fields.keys.joinToString()}).$near"
+                }
                 else -> "$label: secret '$name' has ${fields.size} fields (${fields.keys.joinToString()}); use {{secret:$name#FIELD}}"
             }
         }.joinToString("; ")

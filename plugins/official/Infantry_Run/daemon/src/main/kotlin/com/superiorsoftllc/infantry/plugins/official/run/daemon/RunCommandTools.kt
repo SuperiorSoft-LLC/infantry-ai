@@ -35,6 +35,8 @@ class RunCommandTools(
     /** SECRET-RENDER-1: the renderer and a project's folder (relative template paths are resolved against it). */
     private val renderer: SecretRenderer? = null,
     private val rootOf: (String?) -> java.io.File? = { null },
+    /** SECRETS-UX-1: a secret's field NAMES (never values) in a project's scope, or null. */
+    private val fieldNames: (String, String?) -> Set<String>? = { _, _ -> null },
 ) {
     fun all(): List<DaemonTool> = listOf(
         tool("infantry_run_commands", "List a project's saved Run-tab commands (id, name, cwd, argv, project) and the unassigned ones; default: your project.",
@@ -46,9 +48,9 @@ class RunCommandTools(
                 "renders" to "array of template=out secret-template renders (relative to the command folder) done before each run; outputs are deleted when it ends"), listOf("id"), false) { save(it) },
         tool("infantry_run_command_delete", "Delete a saved command by id.", listOf("id" to "command id", "project" to "project id", "allowCrossProject" to "boolean"), listOf("id"), false) { delete(it) },
         tool("infantry_run_start", "Start a saved command; returns the run id.", listOf("id" to "command id", "project" to "project id", "allowCrossProject" to "boolean"), listOf("id"), false) { start(it) },
-        tool("infantry_run_secrets", "List the secret names a project's saved commands can use and the scope each resolves to (project first, then app). Names only, never a value; secrets are created in Configuration by the owner.",
+        tool("infantry_run_secrets", "List the secrets a project's saved commands can use, the scope each resolves to (project first, then app) and each field with its exact placeholder: {{secret:NAME}} or {{secret:NAME#FIELD}}. Names only, never a value; secrets are created in Configuration by the owner.",
             listOf("project" to "project id (default: yours)", "scope" to "project | app | all (default: all)", "allowCrossProject" to "boolean"), listOf(), true) { secretList(it) },
-        tool("infantry_secret_render", "Render a text file (.env, .json, .yaml, any text) replacing {{secret:NAME}} placeholders with the saved secret values, into an owner-only output file. Returns names and the output path only, never a value. `check` reports found/missing names and writes nothing. A missing secret fails and writes nothing unless allowMissing.",
+        tool("infantry_secret_render", "Render a text file (.env, .json, .yaml, any text) replacing {{secret:NAME}} (or {{secret:NAME#FIELD}} for a multi-field secret) placeholders with the saved secret values, into an owner-only output file. Returns names and the output path only, never a value. `check` reports found/missing names and writes nothing. A missing secret fails and writes nothing unless allowMissing.",
             listOf("template" to "the template file (relative = inside the project folder)", "out" to "output file (required unless check); never the template itself",
                 "project" to "project id for secret scope (default: yours)", "allowMissing" to "boolean: leave unknown placeholders in", "check" to "boolean: report names only, write nothing",
                 "allowCrossProject" to "boolean"), listOf("template"), false) { render(it) },
@@ -69,7 +71,12 @@ class RunCommandTools(
         val project = target(c)
         val rows = secretNames(project).filter { scope == "all" || it.value == scope }.toSortedMap()
         if (rows.isEmpty()) return ToolResult("no secrets" + (project?.let { " for project '$it'" } ?: "") + if (scope == "all") "" else " in scope $scope")
-        return ToolResult(rows.entries.joinToString("\n") { (n, s) -> "$n  ($s)" })
+        return ToolResult(rows.entries.joinToString("\n") { (n, s) ->
+            val fields = fieldNames(n, project)
+            if (fields == null) "$n  ($s)"
+            else if (fields.size <= 1) "$n  ($s)  ${SecretTemplate.placeholder(n)}"
+            else "$n  ($s)  fields: " + SecretTemplate.placeholders(n, fields).joinToString(", ") { "${it.first} -> ${it.second}" }
+        })
     }
 
     /** SECRET-RENDER-1: names and the written path only; the value never leaves the renderer. */

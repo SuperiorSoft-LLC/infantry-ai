@@ -1124,6 +1124,8 @@ private fun SecretEntryCard(entry: SecretEntryRow, editable: Boolean, actions: S
             ) {
                 Text(field.name, fontFamily = Mono, fontSize = 12.sp, color = Palette.Text, modifier = Modifier.weight(1f))
                 Text(field.tail.ifEmpty { "set" }, fontFamily = Mono, color = Palette.Muted, fontSize = 12.sp)
+                // SECRETS-UX-1: this field's own placeholder, one Copy per field.
+                CopyValueButton(secretFieldPlaceholder(entry.name, field.name), Modifier.testTag("$SECRET_FIELD_COPY_TAG-${entry.name}-${field.name}"))
                 if (editable) {
                     TextButton(onClick = { replacing = if (replacing == field.name) null else field.name; draft = "" }, modifier = Modifier.testTag("$SECRET_FIELD_REPLACE_TAG-${entry.name}-${field.name}")) {
                         Text("Replace", fontSize = 12.sp, color = Palette.Text)
@@ -1145,6 +1147,7 @@ private fun SecretEntryCard(entry: SecretEntryRow, editable: Boolean, actions: S
             }
         }
         if (editable) AddFieldRow(entry, actions.setField)
+        Text(SECRET_FIELD_HINT, color = Palette.Muted, fontSize = 11.sp, modifier = Modifier.testTag("$SECRET_FIELD_HINT_TAG-${entry.name}"))
     }
 }
 
@@ -1270,6 +1273,13 @@ const val SECRET_PLACEHOLDER_COPY_TAG = "secret-placeholder-copy"
 
 /** SECRET-RENDER-1: the placeholder for secret [name] (the daemon's `SecretTemplate.PLACEHOLDER_OPEN` syntax; UI core cannot import the plugin). */
 fun secretPlaceholder(name: String): String = "{{secret:$name}}"
+
+/** SECRETS-UX-1: the placeholder for one field of a secret: NAME#FIELD. */
+fun secretFieldPlaceholder(name: String, field: String): String = "{{secret:$name#$field}}"
+
+const val SECRET_FIELD_HINT = "Use {{secret:NAME#FIELD}} in templates; Infantry fills it in when rendering."
+const val SECRET_FIELD_COPY_TAG = "secret-field-copy"
+const val SECRET_FIELD_HINT_TAG = "secret-field-hint"
 const val SECRET_ENTRY_DELETE_CONFIRM_TAG = "secret-entry-delete-confirm"
 const val SECRET_FIELD_TAG = "secret-field"
 const val SECRET_FIELD_REPLACE_TAG = "secret-field-replace"

@@ -168,4 +168,21 @@ class SecretRenderTest {
         val inRoot = r.renderIn(dir, "nope.env", "o.env", "p1").summary(false)
         assertTrue(inRoot.contains(File(dir, "nope.env").absolutePath) && inRoot.contains("inside the project folder ${dir.path}"), inRoot)
     }
+
+    // SECRETS-UX-1
+    @Test fun `a dotted placeholder gets a did-you-mean with the NAME#FIELD syntax`() {
+        val multi = mapOf("secrete" to mapOf("stripe_secret_key" to "k1", "stripe_webhook_secret" to "k2"))
+        val r = SecretRenderer({ n, _ -> multi[n] })
+        val t = file("d.env", "K={{secret:secrete.stripe_secret_key}}\nW={{secret:secrete.stripe_webhook_secret}}\nF={{secret:secrete#STRIPE_SECRET_KEY}}")
+        val s = r.render(t, null, null, check = true).summary(true)
+        assertTrue(s.contains("secrete.stripe_secret_key not found. Did you mean {{secret:secrete#stripe_secret_key}}? (fields use NAME#FIELD)"), s)
+        assertTrue(s.contains("Did you mean {{secret:secrete#stripe_webhook_secret}}?"), s)
+        assertTrue(s.contains("Did you mean {{secret:secrete#stripe_secret_key}}?"), s)
+        assertFalse(s.contains("k1") || s.contains("k2"))
+    }
+
+    @Test fun `placeholders list one per field and a one-field secret is just the name`() {
+        assertEquals(listOf("a" to "{{secret:s#a}}", "b" to "{{secret:s#b}}"), SecretTemplate.placeholders("s", listOf("b", "a")))
+        assertEquals(listOf("value" to "{{secret:s}}"), SecretTemplate.placeholders("s", listOf("value")))
+    }
 }
