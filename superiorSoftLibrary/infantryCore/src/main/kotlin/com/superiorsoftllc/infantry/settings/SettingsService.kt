@@ -41,6 +41,21 @@ class SettingsService(
     @Volatile
     var onKeepAliveChanged: (() -> Unit)? = null
 
+    /** SETTING-EVENT-1: told after every setting write, at any scope; the daemon publishes it as the named event `setting.changed`. */
+    @Volatile
+    var onChanged: ((SettingChange) -> Unit)? = null
+
+    /** Tells [onChanged]. A secret-valued key ([isSecretKey]) never carries its values: they are dropped and `redacted` is set. */
+    fun notifyChanged(key: String, old: JsonElement?, new: JsonElement?, scope: String, projectId: String? = null) {
+        val redact = isSecretKey(key)
+        val change = SettingChange(key, if (redact) null else old, if (redact) null else new, scope, projectId, actor.get(), System.currentTimeMillis(), redact)
+        runCatching { onChanged?.invoke(change) }
+    }
+
+    /** The stored (app scope) value of [key] before a write, or null. */
+    fun storedValue(key: String): JsonElement? =
+        store.settings.get(key)?.value?.let { runCatching { Json.parseToJsonElement(it) }.getOrNull() }?.takeIf { it !is kotlinx.serialization.json.JsonNull }
+
     init {
         runCatching { store.settings.get(DISPLAY_TIME_ZONE)?.value?.let { com.superiorsoftllc.infantry.DisplayZone.set((Json.parseToJsonElement(it) as JsonPrimitive).content) } }
     }
@@ -482,6 +497,7 @@ class SettingsService(
 
     override fun set(key: String, value: JsonElement): JsonObject {
         val stored = validated(key, value)
+        val before = storedValue(key)
         store.settings.put(
             SettingRow(
                 key = key,
@@ -490,6 +506,7 @@ class SettingsService(
             ),
         )
         if (key == KEEP_ALIVE_MINUTES) runCatching { onKeepAliveChanged?.invoke() }
+        notifyChanged(key, before, stored, "app")
         return all()
     }
 
@@ -997,7 +1014,15 @@ class SettingsService(
     }
 
     companion object {
-        const val INCLUDE_LINKED_TASKS_CONTEXT = "context.includeLinkedTasksContext"
+        /** SETTING-EVENT-1: who is writing on this thread (a session id, `client`, a script); set by the entry point around the write. */
+        val actor: ThreadLocal<String?> = ThreadLocal()
+
+        private val SECRET_KEY = Regex("(secret|token|password|passwd|credential|api[-_.]?key|private[-_.]?key)", RegexOption.IGNORE_CASE)
+
+        /** A key whose value must never travel in an event payload (a name test: the settings store has no secret flag). */
+        fun isSecretKey(key: String): Boolean = SECRET_KEY.containsMatchIn(key)
+
+        const val INCLUDE_LINKED_TASKS_CONTEXT ="context.includeLinkedTasksContext"
         const val INCLUDE_SKILLS_CONTEXT = "context.includeSkillsContext"
         const val INCLUDE_FINISH_INSTRUCTIONS = "context.includeFinishInstructions"
         const val SKILL_IDS = "context.skillIds"
@@ -1124,3 +1149,15 @@ class SettingsService(
  */
 fun requireKnownSkills(store: InfantryStore, ids: List<String>, what: String) =
     requireKnownSkills(ids, what) { all -> store.transaction { all.filter { store.skills.get(it) == null } } }
+
+/** SETTING-EVENT-1: one setting write, as the `setting.changed` event carries it. [redacted]: a secret key, so both values are null. */
+data class SettingChange(
+    val key: String,
+    val oldValue: JsonElement?,
+    val newValue: JsonElement?,
+    val scope: String,
+    val projectId: String?,
+    val changedBy: String?,
+    val at: Long,
+    val redacted: Boolean,
+)

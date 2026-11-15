@@ -213,7 +213,7 @@ class ScriptHooks(
         val project = str(payload, "projectId") ?: ticket?.let { str(it, "projectId") }
         val mine = candidates.filter { (p, hook) -> admitsProject(p, hook, project) }
         if (mine.isEmpty()) return
-        val ids = listOfNotNull(ticketId, str(payload, "sessionId"))
+        val ids = listOfNotNull(ticketId, str(payload, "sessionId"), settingKey(e.name, payload))
         val depth = maxOf(e.depth, attributedDepth(ids))
         for ((p, hook) in mine) {
             val tickKey = if (e.name == HookOn.EXEC_TICK || e.name == TIMER_EVENT) "$p/${hook.id}" else null
@@ -293,7 +293,7 @@ class ScriptHooks(
         val list = runCatching { builtins() }.getOrDefault(emptyList())
         if (list.isEmpty()) return
         val off = runCatching { BuiltinHook.off(builtinConfig) }.getOrDefault(emptySet())
-        val ids = listOfNotNull(str(payload, "ticketId"), str(payload, "sessionId"))
+        val ids = listOfNotNull(str(payload, "ticketId"), str(payload, "sessionId"), settingKey(e.name, payload))
         val depth = maxOf(e.depth, attributedDepth(ids))
         val project = str(payload, "projectId")
         for (b in list) {
@@ -467,6 +467,9 @@ class ScriptHooks(
     }
 
     private fun parse(text: String): JsonObject = runCatching { Json.parseToJsonElement(text.ifBlank { "{}" }) as? JsonObject }.getOrNull() ?: JsonObject(emptyMap())
+    /** SETTING-EVENT-1: a `setting.changed` event is attributed by its key, so a hook that writes that key from its own run is that run's child (depth+1). */
+    private fun settingKey(event: String, o: JsonObject) = if (event == "setting.changed") str(o, "key") else null
+
     private fun str(o: JsonObject, k: String) = (o[k] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
 
     private fun flatten(v: Any?): List<String> = when (v) {

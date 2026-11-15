@@ -4,16 +4,19 @@
 --   project (string, optional): project id whose setting and data are read
 --   fill (boolean, false): start todo tickets until in-progress reaches the effective cap
 --   skipMarkers (list, ["[HOLD]","[PARKED]","[Q:"]): todo titles that are never started
--- Hook: on="every 120s"  args {"fill":true}
+-- Hook: on="every 120s"  args {"fill":true}; or on="setting.changed"  args {"fill":true} (SETTING-EVENT-1: raising the cap starts the next todo ticket at once; the event key is checked, other settings are ignored, add global=true to also see app-scope writes)
 -- Gotchas: Precedence: hook arg maxInProgress (lane-one-worker) or baseWorkers (usage-governor) override the setting; otherwise cap = min(limits.workers.maxParallel, project data workers.cap.lowered). Read-only unless fill=true.
 -- Example: infantry_script_run name=worker-cap args={}
 local a = input.args or {}
+-- SETTING-EVENT-1: hooked on setting.changed, only the cap setting matters.
+if a.event and a.event.name == "setting.changed" and a.key ~= "limits.workers.maxParallel" then return end
+local project = a.project or a.projectId
 local function res(i) return input.results and input.results[i] end
 if input.phase == 1 then
-  ih.call("infantry_settings_get", {key = "limits.workers.maxParallel", projectId = a.project})
-  ih.call("infantry_project_config_get", {projectId = a.project})
-  ih.call("infantry_board", {projectId = a.project, columns = "in_progress", limit = 50})
-  if a.fill then ih.call("infantry_board", {projectId = a.project, columns = "todo", limit = 200}) end
+  ih.call("infantry_settings_get", {key = "limits.workers.maxParallel", projectId = project})
+  ih.call("infantry_project_config_get", {projectId = project})
+  ih.call("infantry_board", {projectId = project, columns = "in_progress", limit = 50})
+  if a.fill then ih.call("infantry_board", {projectId = project, columns = "todo", limit = 200}) end
   ih.again()
   return
 end
