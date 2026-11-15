@@ -280,11 +280,11 @@ class AccountFlowTest {
     @Test
     fun `account token is refused to a session, the CLI and a script and allowed to a listed consumer module`() {
         val w = wire(stub.describe())
-        assertEquals(setOf("account.status", "account.entitlement", "account.token", "account.signIn", "account.signOut"), w.handlers.keys)
+        assertEquals(setOf("account.status", "account.entitlement", "account.token", "account.sign-in", "account.sign-out"), w.handlers.keys)
         // Sign in as the owner's CLI (a session may not).
-        assertTrue(call(w, "account.signIn", "session:s1", "provider" to "stub").isFailure)
-        assertTrue(call(w, "account.signIn", "script:x", "provider" to "stub").isFailure)
-        val started = call(w, "account.signIn", "cli", "provider" to "stub").getOrThrow().jsonObject
+        assertTrue(call(w, "account.sign-in", "session:s1", "provider" to "stub").isFailure)
+        assertTrue(call(w, "account.sign-in", "script:x", "provider" to "stub").isFailure)
+        val started = call(w, "account.sign-in", "cli", "provider" to "stub").getOrThrow().jsonObject
         assertEquals("WDJB-MJHT", started["userCode"]!!.jsonPrimitive.content)
         assertFalse("dev-secret" in started.toString())
         // Finish the sign-in on the service side by polling the stub directly through a second service sharing the keystore.

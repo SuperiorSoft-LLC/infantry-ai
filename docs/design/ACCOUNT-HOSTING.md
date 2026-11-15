@@ -140,7 +140,7 @@ Declared by Infantry_Account as daemon capabilities (PLUGIN-BRIDGES-1, `runs: da
 | `account.status` | `provider?` | per provider: `signedIn`, `user` (masked), `plan.status`, `services[]` with `entitled` | anyone (no secrets in it) |
 | `account.entitlement` | `provider`, `entitlement` | `{ entitled, limit, used, attrs }` | anyone |
 | `account.token` | `provider`, `scope?` | `{ accessToken, expiresAt }` | only `plugin:<module>` listed in the provider's `consumers`; refused for sessions, CLI and Lua (an agent never holds a customer token) |
-| `account.signIn` / `account.signOut` | `provider` | the device-code state (`userCode`, `verificationUri`, `expiresAt`) / ok | the Account UI (through its own routes) and the CLI `infantry account login <provider>`; refused to agent sessions |
+| `account.sign-in` / `account.sign-out` | `provider` | the device-code state (`userCode`, `verificationUri`, `expiresAt`) / ok | the Account UI (through its own routes) and the CLI `infantry account login <provider>`; refused to agent sessions |
 
 An agent (the future web developer role) asks `account.status` and the Sites tools; it never gets a token. Every
 customer-affecting action (create, destroy) is a Sites tool with `kind: write` / `destructive`, so policy presets and the

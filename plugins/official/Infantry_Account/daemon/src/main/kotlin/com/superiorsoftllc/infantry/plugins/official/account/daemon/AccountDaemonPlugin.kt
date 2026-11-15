@@ -63,12 +63,12 @@ class AccountDaemonPlugin : DaemonPlugin {
             val (token, expiresAt) = service.accessToken(p.id)
             buildJsonObject { put("accessToken", token.reveal()); put("expiresAt", expiresAt) }
         }
-        cap("account.signIn") { call ->
-            AccountGate.ownerRefusal("account.signIn", call.source)?.let { throw IllegalStateException(it) }
+        cap("account.sign-in") { call ->
+            AccountGate.ownerRefusal("account.sign-in", call.source)?.let { throw IllegalStateException(it) }
             flowJson(service.signIn(call.args.need("provider")))
         }
-        cap("account.signOut") { call ->
-            AccountGate.ownerRefusal("account.signOut", call.source)?.let { throw IllegalStateException(it) }
+        cap("account.sign-out") { call ->
+            AccountGate.ownerRefusal("account.sign-out", call.source)?.let { throw IllegalStateException(it) }
             buildJsonObject { put("wasSignedIn", service.signOut(call.args.need("provider"))) }
         }
 

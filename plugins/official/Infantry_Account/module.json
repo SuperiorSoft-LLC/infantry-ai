@@ -59,7 +59,7 @@
       "result": { "type": "object", "properties": { "accessToken": { "type": "string" }, "expiresAt": { "type": "number" } } }
     },
     {
-      "id": "account.signIn",
+      "id": "account.sign-in",
       "description": "Starts a device-code sign-in (the owner's CLI only): returns the code and the page to open. The daemon polls until it is approved.",
       "runs": "daemon",
       "action": "account.signin",
@@ -68,7 +68,7 @@
       "result": { "type": "object", "properties": { "userCode": { "type": "string" }, "verificationUri": { "type": "string" }, "expiresAt": { "type": "number" } } }
     },
     {
-      "id": "account.signOut",
+      "id": "account.sign-out",
       "description": "Signs out of a provider and forgets its tokens (the owner's CLI only).",
       "runs": "daemon",
       "action": "account.signout",
