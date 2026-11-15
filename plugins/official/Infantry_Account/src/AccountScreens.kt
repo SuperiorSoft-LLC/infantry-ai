@@ -54,6 +54,7 @@ const val ACCOUNT_CARD_TAG_PREFIX = "account-card-"
 const val ACCOUNT_WAIT_POLL_MS = 2_000L
 const val ACCOUNT_IDLE_POLL_MS = 60_000L
 const val ACCOUNT_GUIDE_TAG = "account-guide"
+const val ACCOUNT_CANCEL_TAG = "account-cancel"
 const val ACCOUNT_ERROR_TAG = "account-error"
 const val ACCOUNT_CHECK_NOW_TAG = "account-check-now"
 
@@ -168,69 +169,41 @@ internal fun planNotice(p: AccountProvider): String? = when (p.planStatus) {
     else -> null
 }
 
-/** The guided setup: one bordered card per step, the current one highlighted, finished ones ticked. [focus] is the step a sub-tab needs. */
-@Composable
-private fun GuideCards(live: AccountLive, providers: List<AccountProvider>, focus: Int? = null) {
-    val guide = AccountGuide.of(providers)
-    val scope = rememberCoroutineScope()
-    val uri = LocalUriHandler.current
-    val p = providers.firstOrNull { !it.signedIn } ?: providers.first()
-    val current = guide.current
-    Column(Modifier.testTag(ACCOUNT_GUIDE_TAG), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("Set up your account", color = Palette.Text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-        if (focus != null && current != null && focus >= current) Text("Finish Step ${current + 1} first: ${guide.steps[current].title}.", color = Palette.Warn, fontSize = 12.sp)
-        for ((i, step) in guide.steps.withIndex()) {
-            Column(
-                Modifier.fillMaxWidth().testTag("account-step-${i + 1}")
-                    .background(Palette.Panel, RoundedCornerShape(8.dp))
-                    .border(BorderStroke(if (i == current) 2.dp else 1.dp, if (i == current) Palette.Ok else Palette.Border), RoundedCornerShape(8.dp)).padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text((if (step.done) "[x] " else "[ ] ") + "Step ${i + 1}: ${step.title}", color = if (step.done) Palette.Muted else Palette.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                Text(step.why, color = Palette.Muted, fontSize = 12.sp)
-                val q = providers.firstOrNull { it.signedIn } ?: p
-                if (i == current) when (i) {
-                    0 -> SignInStep(live, p)
-                    1 -> {
-                        planNotice(q)?.let { Text(it, color = Palette.Warn, fontSize = 12.sp) }
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            q.signUpUrl?.let { url -> Button({ uri.openUri(url) }) { Text(if (q.planStatus == "canceled") "Resubscribe" else "Subscribe") } }
-                            q.billingUrl?.takeIf { q.hasPlan }?.let { url -> OutlinedButton({ uri.openUri(url) }) { Text("Manage billing") } }
-                            OutlinedButton({ scope.launch { live.reload(refresh = true) } }) { Text("Check now") }
-                        }
-                    }
-                    else -> {
-                        if (q.services.isEmpty()) Text("No service is offered yet.", color = Palette.Muted, fontSize = 12.sp)
-                        for (s in q.services) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(s.name, color = Palette.Text, fontSize = 12.sp)
-                            if (s.entitled) Chip("Ready", Palette.Ok) else Chip("Not included in your plan", Palette.Muted)
-                        }
-                        Text("Open the service's section in the Account tab to use it.", color = Palette.Muted, fontSize = 12.sp)
-                    }
-                }
-            }
-        }
-    }
-}
+/** The page to open for a pending sign-in: the verification URL with the code attached when it is not already in it. */
+internal fun signInUrl(flow: AccountFlow): String =
+    if (flow.userCode.isBlank() || "user_code=" in flow.verificationUri) flow.verificationUri
+    else flow.verificationUri + (if ('?' in flow.verificationUri) "&" else "?") + "user_code=" + flow.userCode
 
-/** Step 1's body: the Sign in button, then the code and the self-updating "Waiting" state. */
+/**
+ * The one signed-out card (Overview and Billing share it): "Sign in" and a single button. Pressing it opens the browser and the card
+ * then shows the code and a self-updating wait; the section flips to signed in by itself when the browser approves.
+ */
 @Composable
-private fun SignInStep(live: AccountLive, p: AccountProvider) {
+internal fun SignInCard(live: AccountLive, p: AccountProvider) {
     val scope = rememberCoroutineScope()
     val uri = LocalUriHandler.current
     val flow = p.flow
-    if (flow != null && flow.state == "pending") {
-        Text("Enter this code on the sign-in page:", color = Palette.Muted, fontSize = 12.sp)
-        Text(flow.userCode, color = Palette.Text, fontFamily = Mono, fontSize = 26.sp, fontWeight = FontWeight.Bold, modifier = Modifier.testTag(ACCOUNT_CODE_TAG_PREFIX + p.id))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Button({ uri.openUri(flow.verificationUri) }) { Text("Open sign-in page") }
-            OutlinedButton({ scope.launch { live.reload(refresh = true) } }, Modifier.testTag(ACCOUNT_CHECK_NOW_TAG)) { Text("Check now") }
-            Text("Waiting for approval...", color = Palette.Muted, fontSize = 12.sp)
+    CardBox(ACCOUNT_GUIDE_TAG) {
+        Text("Sign in", color = Palette.Text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+        if (flow != null && flow.state == "pending") {
+            Text("Finish signing in in your browser.", color = Palette.Muted, fontSize = 12.sp)
+            Text(flow.userCode, color = Palette.Text, fontFamily = Mono, fontSize = 26.sp, fontWeight = FontWeight.Bold, modifier = Modifier.testTag(ACCOUNT_CODE_TAG_PREFIX + p.id))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                TextButton({ uri.openUri(signInUrl(flow)) }, Modifier.testTag(ACCOUNT_CHECK_NOW_TAG)) { Text("Open the page again", fontSize = 12.sp) }
+                TextButton({ scope.launch { live.act { live.client.signOut(p.id) } } }, Modifier.testTag(ACCOUNT_CANCEL_TAG)) { Text("Cancel", fontSize = 12.sp) }
+                Text("Waiting for approval...", color = Palette.Muted, fontSize = 12.sp)
+            }
+            ProgressBar(null, Modifier.fillMaxWidth())
+        } else {
+            if (flow != null) Text(flow.error ?: "The sign-in ${flow.state}.", color = Palette.Warn, fontSize = 12.sp)
+            else Text("Sign in to see and manage your services.", color = Palette.Muted, fontSize = 12.sp)
+            Button({
+                scope.launch {
+                    live.act { live.client.signIn(p.id) }
+                    live.providers?.firstOrNull { it.id == p.id }?.flow?.takeIf { it.state == "pending" }?.let { uri.openUri(signInUrl(it)) }
+                }
+            }, Modifier.testTag(ACCOUNT_SIGN_IN_TAG_PREFIX + p.id)) { Text(if (flow == null) "Sign in" else "Try again") }
         }
-        ProgressBar(null, Modifier.fillMaxWidth())
-    } else {
-        if (flow != null) Text(flow.error ?: "The sign-in ${flow.state}.", color = Palette.Warn, fontSize = 12.sp)
-        Button({ scope.launch { live.act { live.client.signIn(p.id) } } }, Modifier.testTag(ACCOUNT_SIGN_IN_TAG_PREFIX + p.id)) { Text(if (flow == null) "Sign in" else "Try again") }
     }
 }
 
@@ -240,35 +213,30 @@ fun AccountOverview(context: TabContext) = AccountSection(context) { live, provi
     val scope = rememberCoroutineScope()
     val uri = LocalUriHandler.current
     var confirmOut by remember { mutableStateOf<AccountProvider?>(null) }
-    if (!AccountGuide.of(providers).complete) GuideCards(live, providers)
-    else Text("You're all set. Your plan and services are below.", color = Palette.Ok, fontSize = 13.sp)
+    if (providers.none { it.signedIn }) SignInCard(live, providers.first())
     for (p in providers.filter { it.signedIn }) CardBox(ACCOUNT_CARD_TAG_PREFIX + p.id) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(p.name, color = Palette.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
             Chip("Signed in", Palette.Ok)
-            p.planStatus?.let { Chip(it.replace('_', ' '), planColor(it)) }
         }
         val who = listOfNotNull(p.userName, p.userEmail).joinToString("  ")
         if (who.isNotBlank()) Text(who, color = Palette.Muted, fontSize = 12.sp)
-        AccountWords.planLabel(p)?.let { Text("Plan: $it", color = Palette.Text, fontSize = 12.sp) }
-        planNotice(p)?.let { Text(it, color = Palette.Warn, fontSize = 12.sp) }
         p.error?.let { Text(it, color = Palette.Warn, fontSize = 11.sp) }
-        val included = AccountWords.included(p)
-        if (included.isNotEmpty()) {
-            Text("Your plan includes:", color = Palette.Muted, fontSize = 12.sp)
-            for (line in included) Text("- $line", color = Palette.Text, fontSize = 12.sp)
-        }
-        for (s in p.services) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(s.name, color = Palette.Text, fontSize = 12.sp)
-            when {
-                s.entitled -> Chip("Active", Palette.Ok)
-                p.signUpUrl != null -> TextButton({ uri.openUri(p.signUpUrl) }) { Text(if (p.planStatus == "canceled") "Resubscribe" else "Subscribe", fontSize = 12.sp) }
-                else -> Chip("Not included", Palette.Muted)
+        OutlinedButton({ confirmOut = p }, Modifier.testTag(ACCOUNT_SIGN_OUT_TAG_PREFIX + p.id)) { Text("Sign out") }
+    }
+    for (p in providers.filter { it.signedIn }) {
+        Text("Your services", color = Palette.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        if (p.services.isEmpty()) Text("No service is offered yet.", color = Palette.Muted, fontSize = 12.sp)
+        for (s in p.services) CardBox("account-service-${s.id}") {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(s.name, color = Palette.Text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                if (s.entitled) Chip("Active", Palette.Ok)
             }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton({ scope.launch { live.reload(refresh = true) } }) { Text("Refresh") }
-            OutlinedButton({ confirmOut = p }, Modifier.testTag(ACCOUNT_SIGN_OUT_TAG_PREFIX + p.id)) { Text("Sign out") }
+            if (!s.entitled) {
+                Text("${s.name} needs a plan.", color = Palette.Muted, fontSize = 12.sp)
+                planNotice(p)?.let { Text(it, color = Palette.Warn, fontSize = 12.sp) }
+                p.signUpUrl?.let { url -> Button({ uri.openUri(url) }) { Text(if (p.planStatus == "canceled") "Resubscribe" else "Subscribe") } }
+            }
         }
     }
     confirmOut?.let { p ->
@@ -287,8 +255,7 @@ fun AccountOverview(context: TabContext) = AccountSection(context) { live, provi
 fun AccountBilling(context: TabContext) = AccountSection(context) { live, providers ->
     val uri = LocalUriHandler.current
     if (providers.none { it.signedIn }) {
-        Text("Sign in first: Step 1.", color = Palette.Warn, fontSize = 12.sp, modifier = Modifier.testTag("account-billing-signin-first"))
-        GuideCards(live, providers)
+        SignInCard(live, providers.first())
         return@AccountSection
     }
     for (p in providers.filter { it.signedIn }) CardBox("account-billing-" + p.id) {

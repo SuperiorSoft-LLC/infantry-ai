@@ -60,28 +60,6 @@ object AccountWords {
     fun planLabel(p: AccountProvider): String? = p.planName?.replaceFirstChar { it.uppercase() }
 }
 
-/** One step of the setup guide. */
-data class GuideStep(val title: String, val why: String, val done: Boolean)
-
-/** The guided setup: sign in, choose a plan, add a service. [current] is the first step not done; null when all are. */
-data class AccountGuide(val steps: List<GuideStep>) {
-    val current: Int? get() = steps.indexOfFirst { !it.done }.takeIf { it >= 0 }
-    val complete: Boolean get() = current == null
-
-    companion object {
-        fun of(providers: List<AccountProvider>): AccountGuide {
-            val signedIn = providers.any { it.signedIn }
-            val planOk = providers.any { it.signedIn && it.planStatus == "active" }
-            val service = providers.any { p -> p.signedIn && p.planStatus == "active" && p.services.any { it.entitled } }
-            return AccountGuide(listOf(
-                GuideStep("Sign in or create your SuperiorSoft account", "Your account keeps your plan and services in one place.", signedIn),
-                GuideStep("Choose a plan", "A plan pays for the services you use, like hosting.", planOk),
-                GuideStep("Add a service", "A service is what you actually use, like a hosting server for your site.", service),
-            ))
-        }
-    }
-}
-
 /** Parses the daemon's `GET /plugins/Infantry_Account/state` answer; null when it is not that. */
 object AccountParser {
     fun parse(text: String?): List<AccountProvider>? {
