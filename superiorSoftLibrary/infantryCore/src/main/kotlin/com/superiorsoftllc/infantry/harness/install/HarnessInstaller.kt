@@ -32,11 +32,22 @@ fun interface HarnessProcessRunner {
     fun run(argv: List<String>, env: Map<String, String>, timeoutMillis: Long, onLine: (String) -> Unit): ProcessResult
 }
 
+/**
+ * Puts [extra] into a child's environment. Windows keys are case-sensitive in `ProcessBuilder.environment()`, so a
+ * `Path` put beside an inherited `PATH` leaves two keys and cmd reads the old one: drop every case-variant first.
+ */
+fun mergeEnv(target: MutableMap<String, String>, extra: Map<String, String>) {
+    for ((k, v) in extra) {
+        target.keys.filter { it.equals(k, ignoreCase = true) }.forEach { target.remove(it) }
+        target[k] = v
+    }
+}
+
 /** The real thing: argv child, stdout+stderr merged, killed on timeout. */
 object SystemProcessRunner : HarnessProcessRunner {
     override fun run(argv: List<String>, env: Map<String, String>, timeoutMillis: Long, onLine: (String) -> Unit): ProcessResult {
         val process = try {
-            ProcessBuilder(argv).redirectErrorStream(true).also { it.environment().putAll(env) }.start()
+            ProcessBuilder(argv).redirectErrorStream(true).also { mergeEnv(it.environment(), env) }.start()
         } catch (e: Exception) {
             return ProcessResult(-1, "could not start ${argv.first()}: ${e.message ?: e::class.simpleName}")
         }
@@ -147,7 +158,7 @@ class HarnessInstaller(
         }
         val before = harnesses.map { statusOf(it, checkLatest = false, npmPath = npm.path) }
         val targets = before.filter { s ->
-            if (ids.isNotEmpty()) s.id in ids else s.state == "missing" || (update && s.state == "outdated")
+            if (ids.isNotEmpty()) s.id in ids else s.state == "missing" || s.state == "unknown" || (update && s.state == "outdated")
         }
         val outcomes = ArrayList<HarnessInstallOutcome>()
         var nodeTried = false
@@ -156,7 +167,8 @@ class HarnessInstaller(
                 outcomes += HarnessInstallOutcome(s.id, "skipped", s.installedVersion, "user-managed: a path is set in Settings, so Infantry AI never installs or updates it")
                 continue
             }
-            if (s.state != "missing" && !update) {
+            // A half install (shim present, --version unreadable: state "unknown") is not installed: retry it.
+            if (s.state != "missing" && s.state != "unknown" && !update) {
                 outcomes += HarnessInstallOutcome(s.id, "skipped", s.installedVersion, "already installed")
                 continue
             }
