@@ -356,41 +356,43 @@ fun main(args: Array<String> = emptyArray()) {
         if (it.refuse) exitProcess(2)
     }
     // DAEMON-LOG-1: rolling log file in the state dir (no-op when the desktop already installed its own).
-    DaemonLog.install(stateDir())?.also { System.err.println("[infantry] log file: ${DaemonLog.path(stateDir())}") }
+    // FIRSTINSTALL: install() routes System.out/err into the log file, so every line the owner needs goes through toConsole
+    // (the log file AND the console the process was started from: a terminal, `docker logs`, a redirected daemon.log).
+    DaemonLog.install(stateDir())?.also { DaemonLog.toConsole("[infantry] log file: ${DaemonLog.path(stateDir())}") }
     // BUG-PORT-1-STATEDIR: one daemon per state dir, decided before anything opens the database.
     val stateLock = try {
         StateDirLock.acquire(stateDir())
     } catch (refused: StateDirInUseException) {
-        System.err.println("[infantry] refusing to start: ${refused.message}")
+        DaemonLog.toConsole("[infantry] refusing to start: ${refused.message}")
         exitProcess(2)
     }
     val daemon = try {
         InfantryDaemon.fromEnv()
     } catch (refused: AccessConfigurationException) {
         // Refused before anything was opened: the message names the setting to change.
-        System.err.println("[infantry] refusing to start: ${refused.message}")
+        DaemonLog.toConsole("[infantry] refusing to start: ${refused.message}")
         exitProcess(2)
     } catch (refused: IllegalArgumentException) {
         // RUNNER-POOL-10: an unknown --mode / INFANTRY_MODE / daemon.mode.
-        System.err.println("[infantry] refusing to start: ${refused.message}")
+        DaemonLog.toConsole("[infantry] refusing to start: ${refused.message}")
         exitProcess(2)
     } catch (refused: UnknownComponentProviderException) {
-        System.err.println("[infantry] refusing to start: ${refused.message}")
+        DaemonLog.toConsole("[infantry] refusing to start: ${refused.message}")
         exitProcess(2)
     } catch (refused: PortInUseException) {
         // PORT-1: INFANTRY_PORT_STRICT=true on a taken port. One readable line, no stack trace.
-        System.err.println("[infantry] refusing to start: ${refused.message}")
+        DaemonLog.toConsole("[infantry] refusing to start: ${refused.message}")
         exitProcess(2)
     }
-    println("[infantry] access: ${daemon.policy.describe()}")
-    println("[infantry] mode: ${daemon.deploymentMode.id}")
-    println("[infantry] web: ${daemon.webBundle.describe()}")
-    println(
+    DaemonLog.toConsole("[infantry] access: ${daemon.policy.describe()}")
+    DaemonLog.toConsole("[infantry] mode: ${daemon.deploymentMode.id}")
+    DaemonLog.toConsole("[infantry] web: ${daemon.webBundle.describe()}")
+    DaemonLog.toConsole(
         InfantryBin.resolve()?.let { "[infantry] sessions get the infantry CLI on PATH from $it" }
             ?: "[infantry] WARNING: infantry CLI not found (run installDist or set INFANTRY_BIN); sessions cannot run `infantry knowledge`",
     )
     if (!daemon.policy.loopbackBind) {
-        System.err.println(
+        DaemonLog.toConsole(
             "[infantry] WARNING: bound to ${daemon.host}, which other machines can reach. The bearer token " +
                 "and every frame cross the network in cleartext unless a TLS proxy or tunnel is in front " +
                 "of this daemon (see README, \"Headless server\")."
@@ -404,12 +406,21 @@ fun main(args: Array<String> = emptyArray()) {
         // Taken between the probe and the bind: still one readable line. Ktor wraps the BindException in a
         // JobCancellationException, so the cause chain is searched rather than the thrown type.
         val taken = generateSequence<Throwable>(failed) { it.cause }.firstOrNull { it is java.net.BindException } ?: throw failed
-        System.err.println("[infantry] refusing to start: port ${daemon.port} could not be bound (${taken.message})")
+        DaemonLog.toConsole("[infantry] refusing to start: port ${daemon.port} could not be bound (${taken.message})")
         exitProcess(2)
     }
     stateLock.recordPort(bound)
     Runtime.getRuntime().addShutdownHook(Thread { daemon.releasePortFile(); stateLock.release() })
-    println("[infantry] listening on ws://${daemon.host}:$bound/ws")
+    // FIRSTINSTALL: the ready line says where to connect and how to authenticate, so a first start is never silent.
+    DaemonLog.toConsole("[infantry] listening on ws://${daemon.host}:$bound/ws (health: http://${daemon.host}:$bound/health)")
+    val tokenFile = com.superiorsoftllc.infantry.session.InfantryEnv.get(AccessPolicy.TOKEN_FILE_ENV)
+    DaemonLog.toConsole(
+        when {
+            !daemon.policy.tokenRequired -> "[infantry] connect from this machine only: no token is needed"
+            tokenFile != null -> "[infantry] connect with the bearer token read from $tokenFile"
+            else -> "[infantry] connect with the bearer token from the INFANTRY_TOKEN environment variable"
+        },
+    )
     // Ticket 55d60a5e: the headless daemon only (the desktop app embeds the daemon and never runs main).
     val health = daemon.healthSettings
     if (health.watchdogFailures > 0) {

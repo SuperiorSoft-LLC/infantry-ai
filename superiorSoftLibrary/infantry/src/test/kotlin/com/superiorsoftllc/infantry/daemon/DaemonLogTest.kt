@@ -17,6 +17,15 @@ class DaemonLogTest {
         assertEquals(listOf("infantry.1.log", "infantry.2.log", "infantry.log"), files)
     }
 
+    /** FIRSTINSTALL: after install() the startup banner must be in the log file (and on the console, not checked here). */
+    @Test fun consoleLinesReachTheLogFile() {
+        val state = Files.createTempDirectory("dlog").toFile()
+        val log = DaemonLog.install(state)!!
+        try { DaemonLog.toConsole("[infantry] listening on ws://127.0.0.1:0/ws") } finally { log.close() }
+        val text = DaemonLog.file(DaemonLog.dir(state), 0).readText()
+        assertTrue("listening on ws://127.0.0.1:0/ws" in text, text)
+    }
+
     @Test fun stallProbeOutputReachesTheFile() {
         val state = Files.createTempDirectory("dlog").toFile()
         val log = DaemonLog.install(state)!!
