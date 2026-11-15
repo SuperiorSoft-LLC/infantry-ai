@@ -63,12 +63,11 @@ class AccountTabTest {
     )!!
 
     @Test
-    fun `the guide walks sign in then plan then service and is complete only when all three hold`() {
-        assertEquals(0, AccountGuide.of(provider(false)).current)
-        assertEquals(1, AccountGuide.of(provider(true)).current)
-        assertEquals(1, AccountGuide.of(provider(true, "past_due", true, "basic")).current)
-        assertEquals(2, AccountGuide.of(provider(true, "active", false, "basic")).current)
-        assertTrue(AccountGuide.of(provider(true, "active", true, "basic")).complete)
+    fun `the sign-in page opens with the code attached`() {
+        val f = AccountFlow("pending", "ABCD-EFGH", "https://example.org/signin", 5, null)
+        assertEquals("https://example.org/signin?user_code=ABCD-EFGH", signInUrl(f))
+        assertEquals("https://example.org/signin?user_code=X", signInUrl(f.copy(verificationUri = "https://example.org/signin?user_code=X")))
+        assertEquals("https://example.org/a?b=1&user_code=ABCD-EFGH", signInUrl(f.copy(verificationUri = "https://example.org/a?b=1")))
     }
 
     @Test
