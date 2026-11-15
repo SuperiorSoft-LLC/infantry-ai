@@ -116,7 +116,7 @@ class DaemonPluginHost private constructor(
     /** RUNNER-POOL-7: [side] is the declaration's `side`, else the daemon half's (`daemon.side`), else runner. */
     private class ToolEntry(val owner: Loaded, val tool: DaemonTool, val action: ActionCatalog.Action, val side: String = FrameSide.RUNNER)
     private class FrameEntry(val owner: Loaded, val action: ActionCatalog.Action, val ownerOnly: Boolean, val handler: (Frame, Caller) -> Frame?, val side: String = FrameSide.RUNNER, val offLoop: Boolean = false)
-    private class RouteEntry(val owner: Loaded, val method: String, val path: String, val public: Boolean, val handler: (HttpCall) -> HttpReply) {
+    private class RouteEntry(val owner: Loaded, val method: String, val path: String, val public: Boolean, val handler: (HttpCall) -> HttpReply, val check: com.superiorsoftllc.infantry.daemon.api.RouteCheck? = null) {
         /** Non-null for a template path: its segments, a `{name}` one binds a path param. */
         val template: List<String>? = if ('{' in path) path.trim('/').split('/') else null
     }
@@ -203,6 +203,13 @@ class DaemonPluginHost private constructor(
             proxy = { services.coreSetting(com.superiorsoftllc.infantry.settings.SettingsService.DOWNLOADS_PROXY) },
         ),
         onFault = { id, e -> log("[plugin $id] download transport failed (${e.message ?: e::class.simpleName}); the core transport is used") },
+    )
+
+    /** HTTP-SEAM-1: the ONE outgoing HTTP client (`DaemonApi.http`); numbers are the `limits.http.*` settings. */
+    val http: com.superiorsoftllc.infantry.daemon.api.http.Http = com.superiorsoftllc.infantry.http.CoreHttp(
+        limit = { services.limit(it) },
+        proxy = { services.coreSetting(com.superiorsoftllc.infantry.settings.SettingsService.DOWNLOADS_PROXY) },
+        log = { log("[http] $it") },
     )
 
     /** CORE-PROGRESS-DOWNLOAD-1: a client's cancel / retry of a progress task (frames `progress_cancel` / `progress_retry`). */
@@ -782,6 +789,11 @@ class DaemonPluginHost private constructor(
             if (now - owner.routeWindowStart > 60_000) { owner.routeWindowStart = now; owner.routeCount = 0 }
             if (++owner.routeCount > owner.routeRate && owner.routeRate > 0) return HttpReply(429, "plugin ${owner.id}: more than ${owner.routeRate} requests a minute")
         }
+        entry.check?.let { chk ->
+            // HTTP-SEAM-1: the route's declared auth runs first; fail closed (a throw refuses).
+            val refusal = owner.call("routeCheck(${call.method} ${call.path})") { chk.refusal(call) }.getOrElse { "route check failed" }
+            if (refusal != null) return HttpReply(401, refusal)
+        }
         return owner.call("route(${call.method} ${call.path})") { entry.handler(if (pathParams.isEmpty()) call else call.copy(pathParams = pathParams)) }
             .getOrElse { HttpReply(500, "plugin ${owner.id} failed: ${it.message ?: it::class.simpleName}") }
     }
@@ -1272,7 +1284,9 @@ class DaemonPluginHost private constructor(
             }
         }
         override val routes: Routes = object : Routes {
-            override fun handle(method: String, path: String, handler: (HttpCall) -> HttpReply) {
+            override fun handle(method: String, path: String, handler: (HttpCall) -> HttpReply) = mount(method, path, null, handler)
+            override fun handle(method: String, path: String, check: com.superiorsoftllc.infantry.daemon.api.RouteCheck, handler: (HttpCall) -> HttpReply) = mount(method, path, check, handler)
+            private fun mount(method: String, path: String, check: com.superiorsoftllc.infantry.daemon.api.RouteCheck?, handler: (HttpCall) -> HttpReply) {
                 val m = method.trim().uppercase()
                 require(m in METHODS) { "unknown HTTP method '$method'" }
                 val full: String
@@ -1287,7 +1301,10 @@ class DaemonPluginHost private constructor(
                 }
                 val k = key(m, full)
                 check(routeEntries[k] == null) { "route $m $full is already answered by ${routeEntries[k]?.owner?.id}" }
-                routeEntries[k] = RouteEntry(p, m, full, "$m $full" in d.publicRoutes, handler)
+                val public = "$m $full" in d.publicRoutes
+                // HTTP-SEAM-1: a route answered without the daemon's token must carry its own declared check, else the plugin is refused at load.
+                check(!public || check != null) { "public route '$m $full' declares no auth check: register it with routes.handle(method, path, check, handler)" }
+                routeEntries[k] = RouteEntry(p, m, full, public, handler, check)
             }
         }
         // DP-4a: the board API behind this plugin's grants (community: default deny; bundled / official: trusted).
@@ -1394,6 +1411,8 @@ class DaemonPluginHost private constructor(
             override fun transport(transportId: String, transport: com.superiorsoftllc.infantry.daemon.api.downloads.DownloadTransport): AutoCloseable =
                 this@DaemonPluginHost.downloads.transport(p.id, transport).also { p.closeables += it }
         }
+        // HTTP-SEAM-1: the ONE outgoing HTTP client.
+        override val http: com.superiorsoftllc.infantry.daemon.api.http.Http get() = this@DaemonPluginHost.http
         // AGENT-REGISTRY-1: the agent registry, scoped to this plugin (its own declared ids; enable/disable trusted tiers only).
         override val agents: com.superiorsoftllc.infantry.daemon.api.agents.Agents = object : com.superiorsoftllc.infantry.daemon.api.agents.Agents {
             private val registry get() = hostServices.agentRegistry

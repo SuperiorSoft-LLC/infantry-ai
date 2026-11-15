@@ -12,10 +12,6 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.put
 import java.net.URI
-import java.net.http.HttpClient
-import java.net.http.HttpRequest
-import java.net.http.HttpResponse
-import java.time.Duration
 
 /** SCRIPT-FETCH-1: the guard and limits of the HTTP bridge (plugin settings `scripting.fetch.*`); a bad value falls back to the default. */
 data class FetchSettings(val enabled: Boolean, val allow: List<String>, val maxBytes: Int, val defaultTimeoutSec: Long, val maxTimeoutSec: Long) {
@@ -42,8 +38,9 @@ class FetchBridge(
     /** Secret [name] for [project] as a field map, or null. */
     private val secret: (name: String, project: String?) -> Map<String, String>?,
     private val log: (String) -> Unit,
+    /** HTTP-SEAM-1: `DaemonApi.http`. This bridge is a front door to it: the allow-list and the script-facing shape stay here. */
+    private val http: com.superiorsoftllc.infantry.daemon.api.http.Http,
 ) {
-    private val client: HttpClient = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).connectTimeout(Duration.ofSeconds(10)).build()
 
     fun fetch(args: JsonObject, project: String?): JsonElement {
         val s = FetchSettings.read(config)
@@ -54,44 +51,30 @@ class FetchBridge(
         val method = (str(args["method"]) ?: "GET").uppercase()
         if (method !in METHODS) throw IllegalArgumentException("method must be one of ${METHODS.joinToString(", ")}")
         val timeout = ((args["timeoutSec"] as? JsonPrimitive)?.doubleOrNull?.toLong() ?: s.defaultTimeoutSec).coerceIn(1L, s.maxTimeoutSec)
-        val secretValues = ArrayList<String>()
-        val rb = HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(timeout))
-        (args["headers"] as? JsonObject)?.forEach { (k, v) -> str(v)?.let { rb.header(k, it) } }
+        val secretHeaders = LinkedHashMap<String, String>()
+        val headers = LinkedHashMap<String, String>()
+        (args["headers"] as? JsonObject)?.forEach { (k, v) -> str(v)?.let { headers[k] = it } }
         (args["secretHeaders"] as? JsonObject)?.forEach { (header, ref) ->
             val name = str(ref) ?: throw IllegalArgumentException("secretHeaders.$header must be a secret name")
             val fields = secret(name, project) ?: throw IllegalArgumentException("no secret '$name'")
-            val value = fields["value"] ?: fields.values.singleOrNull() ?: throw IllegalArgumentException("secret '$name' has no single value field")
-            secretValues += value
-            rb.header(header, value)
+            secretHeaders[header] = fields["value"] ?: fields.values.singleOrNull() ?: throw IllegalArgumentException("secret '$name' has no single value field")
         }
         val body = (args["body"] as? JsonPrimitive)?.contentOrNull ?: args["body"]?.takeIf { it !is JsonNull }?.toString()
-        rb.method(method, if (method in BODY_METHODS) HttpRequest.BodyPublishers.ofString(body.orEmpty()) else HttpRequest.BodyPublishers.noBody())
-        val started = System.nanoTime()
-        val resp = client.send(rb.build(), HttpResponse.BodyHandlers.ofInputStream())
-        val (text, truncated) = resp.body().use { readCapped(it, s.maxBytes) }
-        var out = text
-        for (v in secretValues) if (v.isNotEmpty()) out = out.replace(v, "***")
-        log("http.fetch $method ${uri.scheme}://${uri.host}${uri.path.orEmpty()} -> ${resp.statusCode()} ms=${(System.nanoTime() - started) / 1_000_000}")
+        // Redirects are not followed (a redirect target could leave the allow-list) and a script call is never retried.
+        val r = http.request(com.superiorsoftllc.infantry.daemon.api.http.HttpSpec(
+            url = uri.toString(), method = method, headers = headers, secretHeaders = secretHeaders,
+            body = if (method in BODY_METHODS) body.orEmpty() else null,
+            timeoutMs = timeout * MS_PER_SECOND, maxBytes = s.maxBytes.toLong(), maxRedirects = 0,
+            retry = com.superiorsoftllc.infantry.daemon.api.http.RetryPolicy.NONE,
+        ))
+        log("http.fetch $method ${uri.scheme}://${uri.host}${uri.path.orEmpty()} -> ${r.status} ms=${r.elapsedMs}")
         return buildJsonObject {
-            put("status", resp.statusCode())
-            put("headers", buildJsonObject { resp.headers().map().forEach { (k, v) -> put(k, v.joinToString(", ")) } })
-            put("body", out)
-            put("truncated", truncated)
-            if (!truncated) runCatching { Json.parseToJsonElement(out) }.getOrNull()?.takeIf { it is JsonObject || it is kotlinx.serialization.json.JsonArray }?.let { put("json", it) }
+            put("status", r.status)
+            put("headers", buildJsonObject { r.headers.forEach { (k, v) -> put(k, v) } })
+            put("body", r.body)
+            put("truncated", r.truncated)
+            if (!r.truncated) runCatching { Json.parseToJsonElement(r.body) }.getOrNull()?.takeIf { it is JsonObject || it is kotlinx.serialization.json.JsonArray }?.let { put("json", it) }
         }
-    }
-
-    private fun readCapped(input: java.io.InputStream, cap: Int): Pair<String, Boolean> {
-        val buf = java.io.ByteArrayOutputStream()
-        val chunk = ByteArray(8192)
-        while (buf.size() <= cap) {
-            val n = input.read(chunk, 0, minOf(chunk.size, cap + 1 - buf.size()))
-            if (n < 0) break
-            buf.write(chunk, 0, n)
-        }
-        val truncated = buf.size() > cap
-        val bytes = buf.toByteArray().let { if (truncated) it.copyOf(cap) else it }
-        return String(bytes, Charsets.UTF_8) to truncated
     }
 
     /** Appends [query] (name -> string, number, boolean or a list of them) URL-encoded to [url], keeping any query already in it. */
@@ -114,6 +97,7 @@ class FetchBridge(
 
     companion object {
         const val ID = "http.fetch"
+        private const val MS_PER_SECOND = 1_000L
         val METHODS = listOf("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD")
         private val BODY_METHODS = setOf("POST", "PUT", "PATCH", "DELETE")
 

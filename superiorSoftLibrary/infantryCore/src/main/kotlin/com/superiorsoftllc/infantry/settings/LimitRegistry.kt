@@ -1221,6 +1221,41 @@ object LimitRegistry {
         "CORE-PROGRESS-DOWNLOAD-1: a download that receives no byte for this long is broken off and retried (resuming); 0 = never.",
         min = 0, zeroIsUnlimited = true,
     )
+    val HTTP_CONNECT_TIMEOUT_SECONDS = LimitDef(
+        "limits.http.connectTimeoutSeconds", 10, "s",
+        "HTTP-SEAM-1: how long DaemonApi.http waits to connect before the call fails.",
+        min = 1, max = 300, zeroIsUnlimited = false,
+    )
+    val HTTP_TIMEOUT_SECONDS = LimitDef(
+        "limits.http.timeoutSeconds", 30, "s",
+        "HTTP-SEAM-1: how long one DaemonApi.http call may wait for its answer when the caller names no timeout.",
+        min = 1, max = 3_600, zeroIsUnlimited = false,
+    )
+    val HTTP_REDIRECTS = LimitDef(
+        "limits.http.redirects", 5, "count",
+        "HTTP-SEAM-1: how many redirects one DaemonApi.http call follows (a secret header is dropped once a redirect leaves the first host). 0 = follow none.",
+        min = 0, max = 20, zeroIsUnlimited = false,
+    )
+    val HTTP_MAX_RESPONSE_KB = LimitDef(
+        "limits.http.maxResponseKb", 4_096, "KB",
+        "HTTP-SEAM-1: the largest answer body DaemonApi.http reads when the caller names no cap; a larger body is cut and flagged truncated. A file download uses Downloads, not this.",
+        min = 1, zeroIsUnlimited = false,
+    )
+    val HTTP_RETRIES = LimitDef(
+        "limits.http.retries", 2, "count",
+        "HTTP-SEAM-1: how many times DaemonApi.http tries a GET or HEAD again after a transport failure or a 408/425/429/5xx answer. 0 = never retry.",
+        min = 0, max = 20, zeroIsUnlimited = false,
+    )
+    val HTTP_BACKOFF_MS = LimitDef(
+        "limits.http.backoffMs", 250, "ms",
+        "HTTP-SEAM-1: the first wait before a DaemonApi.http retry; each next wait doubles, up to limits.http.backoffMaxMs.",
+        min = 0, zeroIsUnlimited = false,
+    )
+    val HTTP_BACKOFF_MAX_MS = LimitDef(
+        "limits.http.backoffMaxMs", 10_000, "ms",
+        "HTTP-SEAM-1: the longest wait between two DaemonApi.http retries.",
+        min = 0, zeroIsUnlimited = false,
+    )
     val DOWNLOAD_MAX_MB = LimitDef(
         "limits.downloads.maxMb", 2_048, "MB",
         "CORE-PROGRESS-DOWNLOAD-1: the largest file the core downloader accepts when the caller names no cap of its own. 0 = no cap.",
@@ -1282,6 +1317,7 @@ object LimitRegistry {
         RUNNERS_TEST_TURN_SEC, RUNNERS_TEST_POLL_MS, RUNNERS_TEST_REPLY_CHARS, RUNNERS_LEND_SECRETS_MAX,
         DOWNLOAD_RETRIES, DOWNLOAD_BACKOFF_MS, DOWNLOAD_CONNECT_TIMEOUT_SECONDS, DOWNLOAD_RESPONSE_TIMEOUT_SECONDS, DOWNLOAD_STALL_SECONDS, DOWNLOAD_MAX_MB, DOWNLOAD_REDIRECTS, DOWNLOAD_MOVE_RETRIES,
         PROGRESS_KEEP_FINISHED, PROGRESS_MIN_INTERVAL_MS,
+        HTTP_CONNECT_TIMEOUT_SECONDS, HTTP_TIMEOUT_SECONDS, HTTP_REDIRECTS, HTTP_MAX_RESPONSE_KB, HTTP_RETRIES, HTTP_BACKOFF_MS, HTTP_BACKOFF_MAX_MS,
     )
 
     /** A minutes limit as milliseconds; 0 on an unlimited-capable one = [Long.MAX_VALUE] (never reached). */

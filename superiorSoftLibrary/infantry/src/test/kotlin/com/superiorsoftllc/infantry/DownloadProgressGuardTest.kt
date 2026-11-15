@@ -29,6 +29,7 @@ class DownloadProgressGuardTest {
     /** Path suffix -> why it may open its own HTTP client. */
     private val httpAllowed = mapOf(
         "infantryCore/src/main/kotlin/com/superiorsoftllc/infantry/downloads/HttpDownloadTransport.kt" to "THE core download transport",
+        "infantryCore/src/main/kotlin/com/superiorsoftllc/infantry/http/CoreHttp.kt" to "THE core API client behind DaemonApi.http (HTTP-SEAM-1); not a download",
         "infantry/src/main/kotlin/com/superiorsoftllc/infantry/cli/CliMain.kt" to "the CLI's WebSocket and JSON calls to its daemon",
         "infantry/src/main/kotlin/com/superiorsoftllc/infantry/client/ClientMain.kt" to "the client WebSocket",
         "infantry/src/main/kotlin/com/superiorsoftllc/infantry/daemon/AssistantService.kt" to "a local health probe, not a download",
@@ -41,11 +42,9 @@ class DownloadProgressGuardTest {
         "infantryUi/src/main/kotlin/com/superiorsoftllc/infantry/ui/WindowActivation.kt" to "a local single-instance ping",
         "infantryUiCore/src/jvmMain/kotlin/com/superiorsoftllc/infantry/ui/plugin/JvmEndpointAccess.kt" to "a plugin's declared JSON endpoint call",
         "infantryUiCore/src/jvmMain/kotlin/com/superiorsoftllc/infantry/ui/voice/plugin/VoicePluginStore.kt" to "backlog: a UI-side download not yet on the core downloader",
-        "examples/Acme_NewsAgent/daemon/src/main/kotlin/com/acme/newsagent/NewsAgentDaemon.kt" to "an example plugin's feed API call",
         "official/Infantry_Claude/harness/src/main/kotlin/com/superiorsoftllc/infantry/plugins/official/claude/harness/ClaudeStatsUsage.kt" to "a JSON usage API call",
         "official/Infantry_OpenCode/harness/src/main/kotlin/com/superiorsoftllc/infantry/plugins/official/opencode/harness/OpenCodeServeSession.kt" to "the opencode server's HTTP API",
         "official/Infantry_RemoteRunner/daemon/src/main/kotlin/com/superiorsoftllc/infantry/plugins/official/remoterunner/daemon/LinkClient.kt" to "the runner link WebSocket",
-        "official/Infantry_Scripting/daemon/src/main/kotlin/com/superiorsoftllc/infantry/plugins/official/scripting/daemon/FetchBridge.kt" to "http.fetch: API calls (http.download is the file download)",
         "official/Infantry_Updater/androidSrc/AndroidSelfUpdate.kt" to "backlog: the Android self-update download",
         "official/Infantry_Updater/daemon/src/main/kotlin/com/superiorsoftllc/infantry/plugins/official/updater/GitHubReleases.kt" to "release JSON API calls; its file download is the fallback when no core downloader is wired",
         "official/Infantry_Updater/daemon/src/main/kotlin/com/superiorsoftllc/infantry/plugins/official/updater/ServerUpdateCli.kt" to "backlog: the CLI update path (no daemon, so no core downloader)",

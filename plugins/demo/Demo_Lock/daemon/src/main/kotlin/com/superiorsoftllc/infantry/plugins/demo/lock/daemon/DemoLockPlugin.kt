@@ -49,7 +49,8 @@ class DemoLockPlugin : DaemonPlugin {
             if (l.enabled && frame.type in DemoLock.COUNTED_TURNS) l.turnLimit?.record(clientOf(caller, l))
         }
         // Ticket 9bf81983: the demo's public visitor token, so a visitor lands connected (404 when none).
-        api.routes.handle("GET", DemoLock.VISITOR_TOKEN_PATH) {
+        // HTTP-SEAM-1: a public route declares its check: the lock must be on (the token is public by design, only while seated).
+        api.routes.handle("GET", DemoLock.VISITOR_TOKEN_PATH, { if (lock.enabled) null else "demo lock is off" }) {
             val visitor = lock.takeIf { it.enabled }?.publicToken
             if (visitor != null) HttpReply(body = visitor, headers = mapOf("Cache-Control" to "no-store"))
             else HttpReply(status = 404, body = "no demo visitor token")

@@ -79,6 +79,8 @@ interface DaemonApi {
     val tools: Tools
     val frames: Frames
     val routes: Routes
+    /** HTTP-SEAM-1 (1.61.0, additive): the ONE outgoing HTTP client (timeouts, proxy, redirects, size cap, secret headers, retry). */
+    val http: com.superiorsoftllc.infantry.daemon.api.http.Http get() = com.superiorsoftllc.infantry.daemon.api.http.NoHttp
     val hooks: Hooks
 
     /** DP-4a (1.2.0, additive): tickets, epics and the board (docs/DAEMON-BOARD-API.md). A daemon without a board answers Unavailable. */
@@ -267,7 +269,9 @@ interface DaemonApi {
         // `daemon.frames[].offLoop`: a frame whose handler may block is answered off the connection's request loop.
         // 1.60.0 (RUNNER-UPDATE-1, additive): `RunnerLinks.endpoint`, `RunnerLink.minPeerContract`, `RunnerHealth.OUTDATED`,
         // `RunnerLinkWire.MIN_RUNNER_CONTRACT` / `contractOlder`: a runner older than the app is refused up front and can be updated.
-        const val VERSION = "1.60.0"
+        // 1.61.0 (HTTP-SEAM-1, additive): `http` (daemon.api.http.Http, HttpSpec, RetryPolicy, Backoff) and `Routes.handle(.., check, ..)`
+        // (RouteCheck): a public route (`daemon.publicRoutes`) is refused at load unless it declares a check.
+        const val VERSION = "1.61.0"
     }
 }
 
@@ -598,6 +602,20 @@ interface Routes {
      * values in [HttpCall.pathParams]; an exact route wins). Behind the access policy unless declared in `daemon.publicRoutes`.
      */
     fun handle(method: String, path: String, handler: (HttpCall) -> HttpReply)
+
+    /**
+     * HTTP-SEAM-1 (1.61.0, additive): like [handle], with a declared auth [check] that runs BEFORE the handler. A route listed in
+     * `daemon.publicRoutes` (answered without the daemon's bearer token) MUST be registered this way: [handle] on a public route
+     * is refused at load. For a non-public route the check is an extra gate on top of the daemon's auth. The route is removed
+     * when the plugin unloads. A host without the check refuses.
+     */
+    fun handle(method: String, path: String, check: RouteCheck, handler: (HttpCall) -> HttpReply): Unit =
+        throw UnsupportedOperationException("this daemon cannot mount a route with a declared check")
+}
+
+/** HTTP-SEAM-1: a route's own authentication (a webhook signature, a shared secret). Null = pass, else the refusal text (answered 401, the handler never runs). Fail closed: a throw refuses. */
+fun interface RouteCheck {
+    fun refusal(call: HttpCall): String?
 }
 
 // ---- hooks ----------------------------------------------------------------------------------------------------------

@@ -30,6 +30,7 @@ class NewsAgentPluginTest {
     private val cleanup = ArrayList<File>()
     private val json = Json { ignoreUnknownKeys = true }
     private var server: HttpServer? = null
+    private val http = java.net.http.HttpClient.newHttpClient()
 
     @AfterTest
     fun tearDown() {
@@ -90,7 +91,7 @@ class NewsAgentPluginTest {
     @Test
     fun `the news agent is listed, fetches its feed, carries the headlines and can be disabled`() {
         val url = feed()
-        val d = launch(root(""""daemon.code","daemon.tool","daemon.env:ACME_NEWS_FEED_URL","agents.contribute""""), env = { if (it == "ACME_NEWS_FEED_URL") url else null })
+        val d = launch(root(""""daemon.code","daemon.tool","daemon.route","daemon.env:ACME_NEWS_FEED_URL","agents.contribute""""), env = { if (it == "ACME_NEWS_FEED_URL") url else null })
         val tools = d.tools()
         assertTrue(tools.containsAll(listOf("acme_news_fetch", "infantry_agent_list", "infantry_agent_get", "infantry_agent_enable", "infantry_agent_disable")), tools.toString())
 
@@ -102,6 +103,11 @@ class NewsAgentPluginTest {
         val (fetched, fetchErr) = d.call("acme_news_fetch")
         assertFalse(fetchErr, fetched)
         assertEquals("- Kettle boils & sings\n- Toast lands butter-side up", fetched)
+
+        // HTTP-SEAM-1: the example's route is reachable over HTTP (server on port 0) and carries the fetched titles.
+        val route = http.send(java.net.http.HttpRequest.newBuilder(java.net.URI.create("http://${d.connectHost}:${d.port}/plugins/Acme_NewsAgent/headlines")).GET().build(), java.net.http.HttpResponse.BodyHandlers.ofString())
+        assertEquals(200, route.statusCode(), route.body())
+        assertEquals("Kettle boils & sings\nToast lands butter-side up", route.body())
 
         val (got, _) = d.call("infantry_agent_get", """{"id":"acme-news"}""")
         val entry = json.parseToJsonElement(got).jsonObject
@@ -117,7 +123,7 @@ class NewsAgentPluginTest {
 
     @Test
     fun `an agent caller may not disable agents`() {
-        val d = launch(root(""""daemon.code","daemon.tool","agents.contribute""""))
+        val d = launch(root(""""daemon.code","daemon.tool","daemon.route","daemon.env:ACME_NEWS_FEED_URL","agents.contribute""""))
         val id = "call-${System.nanoTime()}"
         d.send(Envelope(DaemonPluginHost.PLUGIN_TOOL_CALL, """{"name":"infantry_agent_disable","arguments":{"id":"pm"},"client":{"sessionId":"s-1"}}""", requestId = id))
         val answer = json.parseToJsonElement(d.client.awaitWhere("disable answer") { it.requestId == id }.data).jsonObject
@@ -127,7 +133,7 @@ class NewsAgentPluginTest {
 
     @Test
     fun `without the agents grant the agent is not listed`() {
-        val d = launch(root(""""daemon.code","daemon.tool""""))
+        val d = launch(root(""""daemon.code","daemon.tool","daemon.route","daemon.env:ACME_NEWS_FEED_URL""""))
         val (list, _) = d.call("infantry_agent_list")
         assertFalse("acme-news" in list, list)
         assertTrue("architect" in list)
