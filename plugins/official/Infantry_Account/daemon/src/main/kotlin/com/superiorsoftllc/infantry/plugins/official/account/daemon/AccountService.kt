@@ -54,7 +54,7 @@ class AccountService(
     private val endpoints: () -> Map<String, ServiceEndpoint>,
     private val notify: (title: String, body: String, dedupeKey: String) -> Unit,
     private val log: (String) -> Unit,
-    private val refreshMinutes: () -> Long,
+    private val cacheSeconds: () -> Long,
     private val now: () -> Long = System::currentTimeMillis,
     private val newId: () -> String = { UUID.randomUUID().toString() },
 ) {
@@ -219,7 +219,7 @@ class AccountService(
     private fun document(p: ProviderDescriptor, force: Boolean): Doc? {
         if (!signedIn(p) || p.accountUrl == null) return null
         val cached = docs[p.id]
-        if (cached != null && !force && cached.fetchedAt + refreshMinutes() * 60_000 > now()) return cached
+        if (cached != null && !force && cached.fetchedAt + cacheSeconds() * 1000 > now()) return cached
         val fresh = try {
             val token = accessToken(p.id).first
             val r = http.request(HttpSpec(p.accountUrl, headers = mapOf("Accept" to "application/json"), secretHeaders = mapOf("Authorization" to "Bearer ${token.reveal()}")))
@@ -311,7 +311,12 @@ class AccountService(
 
     private fun postForm(url: String, fields: List<Pair<String, String>>): Pair<Int, JsonObject?> {
         val body = fields.joinToString("&") { (k, v) -> URLEncoder.encode(k, "UTF-8") + "=" + URLEncoder.encode(v, "UTF-8") }
-        val r = http.request(HttpSpec(url, method = "POST", headers = mapOf("Content-Type" to "application/x-www-form-urlencoded", "Accept" to "application/json"), body = body))
+        // Any transport failure (ConnectException, timeout, TLS...) is one clear answer, never an exception that reaches core's guard.
+        val r = try {
+            http.request(HttpSpec(url, method = "POST", headers = mapOf("Content-Type" to "application/x-www-form-urlencoded", "Accept" to "application/json"), body = body))
+        } catch (e: Exception) {
+            throw IllegalStateException("could not reach the account server")
+        }
         return r.status to runCatching { Json.parseToJsonElement(r.body).jsonObject }.getOrNull()
     }
 

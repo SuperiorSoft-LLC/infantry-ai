@@ -149,7 +149,10 @@ fun AccountOverview(context: TabContext) = AccountSection(context) { live, provi
             Text(flow.error ?: "The sign-in ${flow.state}.", color = Palette.Warn, fontSize = 12.sp)
         }
         if (p.signedIn) {
-            OutlinedButton({ confirmOut = p }, Modifier.testTag(ACCOUNT_SIGN_OUT_TAG_PREFIX + p.id)) { Text("Sign out") }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton({ scope.launch { live.reload(refresh = true) } }) { Text("Refresh") }
+                OutlinedButton({ confirmOut = p }, Modifier.testTag(ACCOUNT_SIGN_OUT_TAG_PREFIX + p.id)) { Text("Sign out") }
+            }
         } else if (flow?.state != "pending") {
             Button({
                 scope.launch {

@@ -50,15 +50,17 @@ class AccountDaemonPlugin : DaemonPlugin {
                 api.notifications.notify(Notification(title, body, NotificationLevel.WARNING, dedupeKey = key, actions = listOf(NotificationAction("open", "Sign in"))))
             },
             log = api::log,
-            refreshMinutes = { api.config("account.refreshMinutes")?.toLongOrNull()?.coerceAtLeast(1) ?: DEFAULT_REFRESH_MINUTES },
+            cacheSeconds = { api.config("account.cacheSeconds")?.toLongOrNull()?.coerceAtLeast(0) ?: DEFAULT_CACHE_SECONDS },
         )
         closers += api.schedule("account-poll", POLL_PERIOD_MS) { service.tick() }
 
-        // A refusal or a failed lookup is the CALLER's problem: core's guard disables a plugin on any handler exception except
-        // IllegalArgumentException, so every refusal leaves here as one and the plugin stays enabled.
+        // A refusal or a failed lookup is the CALLER's problem: core's guard (PluginGuard.kt:163) disables a plugin on any handler exception except
+        // IllegalArgumentException, so every failure (network, JSON, state) leaves here as one and the plugin stays enabled.
         fun cap(id: String, run: (CapabilityCall) -> JsonElement) {
             closers += api.capabilities.handle(id) { call ->
-                try { run(call) } catch (e: IllegalStateException) { throw IllegalArgumentException(e.message ?: e::class.simpleName.orEmpty(), e) }
+                try { run(call) }
+                catch (e: IllegalArgumentException) { throw e }
+                catch (e: Exception) { throw IllegalArgumentException(e.message ?: e::class.simpleName.orEmpty(), e) }
             }
         }
         cap("account.status") { service.status(it.args.str("provider"), refresh = it.args.str("refresh") == "true") }
@@ -79,7 +81,7 @@ class AccountDaemonPlugin : DaemonPlugin {
         }
 
         // The UI half's three routes (relative: /plugins/Infantry_Account/...). Display data only.
-        api.routes.handle("GET", "state") { call -> reply { service.status(refresh = call.query["refresh"] == "1") } }
+        api.routes.handle("GET", "state") { call -> reply { service.status(refresh = call.query["refresh"].let { it == "1" || it == "true" }) } }
         api.routes.handle("POST", "signin") { call -> reply { flowJson(service.signIn(body(call).need("provider"))) } }
         api.routes.handle("POST", "signout") { call -> reply { buildJsonObject { put("wasSignedIn", service.signOut(body(call).need("provider"))) } } }
     }
@@ -113,6 +115,6 @@ class AccountDaemonPlugin : DaemonPlugin {
     companion object {
         const val PROVIDER_PREFIX = "account.provider/"
         const val POLL_PERIOD_MS = 1000L
-        const val DEFAULT_REFRESH_MINUTES = 15L
+        const val DEFAULT_CACHE_SECONDS = 30L
     }
 }
