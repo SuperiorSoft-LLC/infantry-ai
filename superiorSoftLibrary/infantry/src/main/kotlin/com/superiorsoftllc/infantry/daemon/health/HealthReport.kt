@@ -2,6 +2,7 @@
 // Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.daemon.health
 
+import com.superiorsoftllc.infantry.daemon.InfantryBin
 import com.superiorsoftllc.infantry.runner.ToolProfile
 import com.superiorsoftllc.infantry.runner.ToolProfiles
 import kotlinx.serialization.Serializable
@@ -82,7 +83,17 @@ data class HealthReport(
 /** DAEMON-HEALTH-1: the owner's own ports and the free test range, stated once so no agent probes for them. */
 object HealthPorts {
     /** The owner's daemon and UI (8787, 8788) and the PM's MCP pair (8797, 8798): off limits to every agent and test. */
-    val OWNER = listOf(8787, 8788, 8797, 8798)
+    val DEV_OWNER = listOf(8787, 8788, 8797, 8798)
+
+    /**
+     * CLI-POLISH-1: the owner ports are this project's dev rule, so they are data: `INFANTRY_OWNER_PORTS` (comma list,
+     * blank = none) wins; else none on the installed app (it pins [InfantryBin.OWN_URL_ONLY_SETTING]); else the dev list.
+     */
+    fun owner(get: (String) -> String? = { com.superiorsoftllc.infantry.session.infantrySetting(it) }): List<Int> {
+        get("INFANTRY_OWNER_PORTS")?.let { v -> return v.split(',').mapNotNull { it.trim().toIntOrNull() } }
+        return if (get(InfantryBin.OWN_URL_ONLY_SETTING).isNullOrBlank()) DEV_OWNER else emptyList()
+    }
+    val OWNER get() = owner()
     const val TEST_RANGE = "18900-18999"
 }
 
@@ -103,7 +114,7 @@ object EnvironmentProbe {
             os = os.trim(), arch = System.getProperty("os.arch", "?"), shells = shells(os),
             projectPath = projectPath, worktreePath = worktreePath, gitBranch = gitBranch,
             jdk = System.getProperty("java.version", "?"), buildTools = buildTools(worktreePath ?: projectPath),
-            ownerPorts = HealthPorts.OWNER, testPortRange = HealthPorts.TEST_RANGE, harnesses = harnesses, stateDir = stateDir.path,
+            ownerPorts = HealthPorts.owner(), testPortRange = HealthPorts.TEST_RANGE, harnesses = harnesses, stateDir = stateDir.path,
             cliPath = cliPathLine(),
         )
     }
@@ -150,7 +161,7 @@ object EnvironmentProbe {
     /** DAEMON-HEALTH-1: the one-line form injected into a session's start brief. */
     fun briefLine(e: EnvironmentFacts): String =
         "Environment: ${e.os} ${e.arch}; shells: ${e.shells.substringBefore(" (")}/Bash; project ${e.projectPath ?: e.worktreePath ?: "unknown"}; " +
-            "off-limits ports ${e.ownerPorts.joinToString(",")} (test daemons use ${e.testPortRange}). Run `infantry health` instead of probing."
+            (if (e.ownerPorts.isEmpty()) "" else "off-limits ports ${e.ownerPorts.joinToString(",")} (test daemons use ${e.testPortRange}). ") + "Run `infantry health` instead of probing."
 }
 
 /** DAEMON-HEALTH-1: the human text, one source for the CLI, the MCP tool and the Lua call. */
@@ -175,7 +186,7 @@ object HealthText {
         appendLine("  os ${e.os} ${e.arch}; jdk ${e.jdk}" + e.buildTools.entries.joinToString("") { (k, v) -> "; $k $v" })
         appendLine("  shells: ${e.shells}")
         appendLine(if (e.projectPath == null && e.worktreePath == null) "  project: none applies (no session and no project for this call)" else "  project ${e.projectPath ?: "-"}; worktree ${e.worktreePath ?: "-"}; branch ${e.gitBranch ?: "-"}")
-        appendLine("  OWNER ports (off limits): ${e.ownerPorts.joinToString(", ")}; free for test daemons: ${e.testPortRange}")
+        if (e.ownerPorts.isNotEmpty()) appendLine("  OWNER ports (off limits): ${e.ownerPorts.joinToString(", ")}; free for test daemons: ${e.testPortRange}")
         appendLine("  harnesses: ${e.harnesses.joinToString(", ").ifBlank { "none" }}")
         appendLine("  state dir: ${e.stateDir}")
         e.cliPath?.let { appendLine("  CLI: $it") }

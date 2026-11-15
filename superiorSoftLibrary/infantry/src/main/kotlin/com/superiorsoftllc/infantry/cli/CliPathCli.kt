@@ -38,7 +38,7 @@ internal object CliPathCli {
      * The launcher directory to install: `--dir` when given (must hold a launcher), else the directory the CLI runs
      * from. Null with the reason in [err] when neither resolves to a launcher directory.
      */
-    fun launcherDir(dir: String?, getenv: (String) -> String?, err: Appendable): File? {
+    fun launcherDir(dir: String?, getenv: (String) -> String?, err: Appendable, command: String = "install-cli"): File? {
         if (dir != null) {
             val f = File(dir).absoluteFile
             if (!CliPath.holdsLauncher(f.path)) {
@@ -49,7 +49,7 @@ internal object CliPathCli {
         }
         val found = InfantryBin.resolve({ getenv(it) ?: com.superiorsoftllc.infantry.session.infantrySetting(it) })
         if (found == null || !CliPath.holdsLauncher(found.path)) {
-            err.appendLine("error: no Infantry AI launcher found from this command; name its folder: infantry ${"install-cli"} --dir <launcher dir>")
+            err.appendLine("error: no Infantry AI launcher found from this command; name its folder: infantry $command --dir <launcher dir>")
             return null
         }
         return found
@@ -73,7 +73,7 @@ internal object CliPathCli {
             err.appendLine("error: $command takes no arguments; ${USAGE.removePrefix("usage: ")}")
             return 2
         }
-        val launcherDir = launcherDir(dir, getenv, err) ?: return 1
+        val launcherDir = launcherDir(dir, getenv, err, command) ?: return 1
         val store = runCatching { store(getenv) }
             .onFailure { err.appendLine("error: cannot read this machine's PATH: ${it.message}") }
             .getOrNull() ?: return 1

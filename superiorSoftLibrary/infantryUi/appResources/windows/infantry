@@ -5,6 +5,7 @@
 # argument whole. jpackage layout and java order are infantry.cmd's: INFANTRY_JAVA, the bundled runtime's java.exe,
 # JAVA_HOME, then java on PATH; it runs com.superiorsoftllc.infantry.cli.CliMainKt on the app's classpath.
 here=$(cd "$(dirname "$0")" && pwd)
+export INFANTRY_BIN="$here"  # CLI-POLISH-1: install-cli/uninstall-cli find this folder
 app="$here/.."
 # java.exe is a native Windows program: hand it a Windows classpath (cygpath ships with Git Bash).
 cp="$app/*"
