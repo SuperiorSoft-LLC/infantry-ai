@@ -54,7 +54,7 @@ class SaveTools(
             val scope = scopeOf(call) ?: return refuse(SAVE, "scope must be project, global or plugin")
             if (scope == PluginScripts.SCOPE) return editPlugin(call)
             val project = proj(call)
-            if (scope == ScriptStore.PROJECT && project == null) return refuse(SAVE, "needs a project (pass project, or run it from a project session)")
+            if (scope == ScriptStore.PROJECT && project == null) return refuse(SAVE, "needs a project (pass project, or run it from a project session; infantry_projects lists the project ids)")
             if (scope == ScriptStore.GLOBAL) globalDenied(call, SAVE)?.let { return it }
             val name = arg(call, "name")?.trim().orEmpty()
             val source = arg(call, "source") ?: return refuse(SAVE, "needs source")

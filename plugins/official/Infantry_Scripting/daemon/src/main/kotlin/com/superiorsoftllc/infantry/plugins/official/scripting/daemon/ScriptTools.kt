@@ -58,7 +58,7 @@ class ScriptTools(
         val a = call.arguments
         val name = (a["name"] as? JsonPrimitive)?.contentOrNull?.trim().orEmpty()
         val project = (a["project"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() } ?: call.clientProjectId
-            ?: return ToolResult("$RUN needs a project (pass project, or run it from a project session)", isError = true)
+            ?: return ToolResult("$RUN needs a project (pass project, or run it from a project session; infantry_projects lists the project ids)", isError = true)
         val dry = (a["dryRun"] as? JsonPrimitive)?.booleanOrNull == true
         val args: Map<String, Any?> = try {
             when (val raw = a["args"]) {

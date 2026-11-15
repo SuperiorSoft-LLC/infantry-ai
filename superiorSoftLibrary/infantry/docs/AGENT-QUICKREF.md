@@ -304,7 +304,7 @@ Team (scoped to your project):
 - infantry agents --live: who is live in this project
 - infantry send <role|agentId> "msg": message a colleague (queued if they are busy)
 - infantry_inbox / infantry_read <id> (your Infantry AI MCP tools): your mail; fallback when they are not available: infantry inbox / infantry read <id>
-- infantry mail: every mail command (answer one with --reply-to <id>); infantry --help: every command, grouped. Start here: superiorSoftLibrary/infantry/docs/AGENT-QUICKREF.md, section 0
+- infantry mail: every mail command (answer one with --reply-to <id>); infantry --help: every command, grouped
 - The owner WANTS you to ask for real decisions: when a choice has 2-4 real options and their preference matters (design, priority, destructive/irreversible), run `infantry ask --question "..." --option "label|consequence" --recommend <label> --reason "..."` (MCP infantry_ask; --other, --default-after <min>). Always recommend one. Don't ask trivia or what is already decided. It returns an id at once and does not wait: keep working on what doesn't depend on it; the pick arrives as mail (thread question:<id>).
 ```
 

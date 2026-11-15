@@ -101,6 +101,19 @@ internal data class McpServeConfig(
             maxSpawns = flags.maxSpawns ?: file?.maxSpawns,
             allowKillAny = flags.allowKillAny ?: file?.allowKillAny,
         )
+
+        /**
+         * COLD-AGENT-1: the project registered for [dir]: the one whose directory is [dir] or its nearest ancestor (deepest
+         * wins). [projects] is (id, directory). Null when none holds [dir]. Used as the default project only when no flag, no
+         * [RELATIVE_PATH] and no project env var named one, so an agent started in a project folder files into that project.
+         */
+        fun projectForDir(projects: List<Pair<String, String>>, dir: File): String? {
+            fun canon(f: File): File = runCatching { f.canonicalFile }.getOrDefault(f.absoluteFile)
+            val here = canon(dir)
+            return projects.mapNotNull { (id, d) -> d.takeIf { it.isNotBlank() }?.let { id to canon(File(it)) } }
+                .filter { (_, root) -> generateSequence(here) { it.parentFile }.any { it == root } }
+                .maxByOrNull { (_, root) -> root.path.length }?.first
+        }
     }
 }
 

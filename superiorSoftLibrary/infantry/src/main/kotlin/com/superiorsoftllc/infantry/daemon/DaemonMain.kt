@@ -1034,9 +1034,10 @@ class InfantryDaemon(
             })
             harnessCredentialsRef.set(harnessCredentials)
             // SECRETS-2b: the user secret names a run (and a render) in a project can use: the app scope, then the project's own.
+            // COLD-AGENT-1: a harness key is listed nowhere a render cannot use it (KeystoreHandler.isRunSecret).
             val runSecretNames: (String?) -> Map<String, String> = { project -> buildMap {
-                keystore.names().filter { n -> KeystoreHandler.DEFAULT.none { it.name == n } }.forEach { put(it, Keystore.SCOPE_APP) }
-                if (!project.isNullOrBlank()) runCatching { keystore.names(project) }.getOrDefault(emptyList()).forEach { put(it, Keystore.SCOPE_PROJECT) }
+                keystore.names().filter { KeystoreHandler.isRunSecret(it) }.forEach { put(it, Keystore.SCOPE_APP) }
+                if (!project.isNullOrBlank()) runCatching { keystore.names(project) }.getOrDefault(emptyList()).filter { KeystoreHandler.isRunSecret(it) }.forEach { put(it, Keystore.SCOPE_PROJECT) }
             } }
             // RUNNER-CRED-1 (runner side): the secrets an orchestrator lent the sessions it started here, in memory, while the session lives.
             val lentCredentials = com.superiorsoftllc.infantry.runners.LentCredentials(alive = { manager.get(it) != null })

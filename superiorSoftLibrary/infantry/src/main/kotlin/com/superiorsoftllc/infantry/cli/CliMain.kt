@@ -449,11 +449,16 @@ internal object Cli {
                 err.appendLine("error: ${e.message}")
                 return 2
             }
+            // COLD-AGENT-1: no flag, file or env var named a project: use the registered project whose folder holds the cwd,
+            // so an agent the user started in a project folder files tickets there (not on no project's board).
+            val folderProject = if (config.projectId != null || !getenv(AccessPolicy.PROJECT_ID_ENV).isNullOrBlank()) null else projectOfFolder(target, cwd)
+            val defaultProject = config.projectId ?: folderProject
             err.appendLine(
                 "infantry mcp: depth ${narrowing.depth ?: 0}/${narrowing.maxDepth ?: "daemon limits.concurrency.maxDepth"}, max ${narrowing.maxSpawns ?: "daemon limits.concurrency.mcpMaxSpawns"} open spawns, " +
-                    (config.projectId?.let { "project $it" } ?: "no default project"),
+                    (defaultProject?.let { "project $it" + if (folderProject != null) " (registered for this folder)" else "" }
+                        ?: "no default project (pass projectId to tools; infantry_projects lists them)"),
             )
-            val tools = McpTools({ FrameStream.open(target, err) }, narrowing, getenv, defaultProjectId = config.projectId)
+            val tools = McpTools({ FrameStream.open(target, err) }, narrowing, getenv, defaultProjectId = defaultProject)
             // CLI-PTY-3: say which process this server is, so the harness of a live CLI can tell when it dies.
             getenv(com.superiorsoftllc.infantry.harness.api.MCP_PID_FILE_ENV)?.takeIf { it.isNotBlank() }?.let { path ->
                 runCatching { File(path).apply { parentFile?.mkdirs() }.writeText(ProcessHandle.current().pid().toString()) }
@@ -717,7 +722,8 @@ internal object Cli {
         val shape = "infantry ask --question \"...\" --option \"label|description\" [--option ...] [--multi] [--other] [--timeout <sec>]"
         if (callerSession(getenv) == null) {
             return "ask needs the asking session in ${AccessPolicy.SESSION_ID_ENV} (set for every session Infantry AI spawns); " +
-                "there is none, so there is no session to ask for"
+                "there is none. An agent Infantry AI did not start has no session for the answer to reach: start the work as an Infantry AI " +
+                "session (`infantry ticket start <id>`) and ask from that session"
         }
         if (parsed.args.isNotEmpty()) return "ask takes no positional arguments: $shape"
         if (parsed.test) return null
@@ -2615,6 +2621,23 @@ internal object Cli {
 
     private fun agentsProjectId(parsed: ParsedArgs, getenv: (String) -> String?): String =
         parsed.project?.trim() ?: getenv(AccessPolicy.PROJECT_ID_ENV)?.takeIf { it.isNotBlank() } ?: ""
+
+    /**
+     * COLD-AGENT-1: the project registered for [dir] ([McpServeConfig.projectForDir]), or null when none is, or the daemon cannot
+     * be asked (down, refused): `mcp serve` still starts then, with no default project.
+     */
+    private fun projectOfFolder(target: Target, dir: File): String? = try {
+        val stream = FrameStream.open(target, StringBuilder())
+        try {
+            runBlocking {
+                val answer = stream.request(Envelope(Envelope.PROJECT_LIST, ""), Envelope.PROJECTS, "project_list", idempotent = true)
+                val projects = json.decodeFromString(ListSerializer(Project.serializer()), answer.data)
+                McpServeConfig.projectForDir(projects.map { it.id to it.directory }, dir)
+            }
+        } finally { stream.close() }
+    } catch (e: Exception) {
+        null
+    }
 
     /** The id of the only project, or null when there are none or several (or the list cannot be read). */
     private suspend fun soleProjectId(stream: FrameStream): String? = try {
