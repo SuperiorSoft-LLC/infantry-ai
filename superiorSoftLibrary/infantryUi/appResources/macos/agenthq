@@ -5,6 +5,7 @@
 # The daemon puts this directory first on every session's PATH and exports it as INFANTRY_BIN.
 # java: INFANTRY_JAVA, then the bundled runtime's java, then JAVA_HOME, then java on PATH.
 here=$(cd "$(dirname "$0")" && pwd)
+export INFANTRY_BIN="$here"  # CLI-POLISH-1: install-cli/uninstall-cli find this folder
 app="$here/.."
 for java in "$INFANTRY_JAVA" "$here/../../runtime/bin/java" "$here/../../runtime/Contents/Home/bin/java" "${JAVA_HOME:+$JAVA_HOME/bin/java}"; do
   if [ -n "$java" ] && [ -x "$java" ]; then

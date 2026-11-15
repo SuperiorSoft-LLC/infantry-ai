@@ -5,6 +5,8 @@ rem :infantry included), <install>\runtime (the bundled runtime). The daemon put
 rem session's PATH and exports it as INFANTRY_BIN.
 rem java: INFANTRY_JAVA, then the bundled runtime's java.exe, then JAVA_HOME, then java on PATH.
 setlocal
+rem CLI-POLISH-1: name this launcher folder so install-cli/uninstall-cli find it from a terminal.
+set "INFANTRY_BIN=%~dp0"
 set "INFANTRY_APP_DIR=%~dp0.."
 set "INFANTRY_CLI_JAVA="
 if defined INFANTRY_JAVA if exist "%INFANTRY_JAVA%" set "INFANTRY_CLI_JAVA=%INFANTRY_JAVA%"

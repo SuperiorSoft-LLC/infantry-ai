@@ -99,4 +99,26 @@ class CliPathCliTest {
         assertEquals(2, code)
         assertTrue(err.contains("takes no arguments"), err)
     }
+
+    @Test
+    fun `uninstall-cli with no flags finds the launcher folder the shipped launcher names in INFANTRY_BIN`() {
+        run("install-cli")
+        val withBin: (String) -> String? = { n -> if (n == "INFANTRY_BIN") launcher.path else env(n) }
+        val out = StringBuilder()
+        val err = StringBuilder()
+
+        val code = CliPathCli.run("uninstall-cli", emptyList(), null, false, out, err, withBin)
+
+        assertEquals(0, code, err.toString())
+        assertTrue(CliPath.entries(pathFile.readText()).isEmpty(), pathFile.readText())
+    }
+
+    @Test
+    fun `the no-launcher hint names the command that was asked for`() {
+        val err = StringBuilder()
+        val none: (String) -> String? = { n -> if (n == "INFANTRY_BIN") File(temp, "empty").path else null }
+        val dir = CliPathCli.launcherDir(null, none, err, "uninstall-cli")
+        assertEquals(null, dir)
+        assertTrue(err.contains("infantry uninstall-cli --dir"), err.toString())
+    }
 }
