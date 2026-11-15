@@ -81,7 +81,7 @@ fun QuestionHistory(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        q.state, color = if (q.state == "open") Palette.Accent else Palette.Muted, fontSize = 10.sp,
+                        (if (q.state == "stale") "stale: session gone" else q.state), color = if (q.state == "open") Palette.Accent else Palette.Muted, fontSize = 10.sp,
                         fontWeight = FontWeight.Bold, modifier = Modifier.padding(end = 6.dp),
                     )
                     Text(questionAsker(q), color = Palette.Muted, fontSize = 11.sp, modifier = Modifier.weight(1f))

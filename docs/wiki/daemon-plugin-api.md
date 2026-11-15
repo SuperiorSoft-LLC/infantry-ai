@@ -857,3 +857,5 @@ plugins (letters, digits, `_`, `-`; not `infantry`); exactly one of `command` (s
 tag in `provides`; a credential-looking env or header key (token, secret, password, key, ...) is never a plain value, name a Secrets
 entry in `envSecrets` / `headerSecrets`; `localOnly` servers are never sent to a remote runner. A server whose secret is not set is
 not offered.
+
+Lifecycle callbacks (`start`, `stop`, `onSessionClosed`, `schedule`, declared hooks) are listed in [Plugin lifecycle](Plugin-lifecycle.md#lifecycle-callbacks-a-plugin-can-use-attn-stale-1).

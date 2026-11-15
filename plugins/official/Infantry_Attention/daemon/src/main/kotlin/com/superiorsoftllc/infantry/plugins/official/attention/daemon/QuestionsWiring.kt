@@ -80,7 +80,7 @@ internal object QuestionsWiring {
 
         // A session that is killed, removed or restarted can no longer read the answer: its open questions are orphaned.
         api.processes.onSessionClosed { c ->
-            if (c.reason in ORPHANING_CLOSE_REASONS) questions.orphanSession(c.sessionId, c.at)
+            if (c.reason in ORPHANING_CLOSE_REASONS) questions.orphanSession(c.sessionId, c.at, includeAuto = c.reason != "session restarted")
         }
         // Auto-picks are minute-grained; a 15 s sweep.
         // Not at plugin start: the restored sessions are not visible yet, so every question would read as orphaned (CliOwnerQuestionTest).

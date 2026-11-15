@@ -21,6 +21,8 @@ object QuestionStates {
     const val ANSWERED = "answered"
     const val AUTO = "auto"
     const val CANCELLED = "cancelled"
+    /** ATTN-STALE-1: an auto-picked question whose asking session is gone; kept in history, not answerable. */
+    const val STALE = "stale"
 }
 
 /** ATTN-2c: who ended a question (`OwnerQuestion.resolvedBy`). */

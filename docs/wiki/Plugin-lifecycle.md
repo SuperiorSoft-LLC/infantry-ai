@@ -213,3 +213,20 @@ to the soft restart for that change.
 | desktop host (`JvmPlatformHost.swapPlugins`) | `superiorSoftLibrary/infantryUiCore/src/jvmMain/kotlin/com/superiorsoftllc/infantry/ui/shell/JvmPlatformHost.kt` |
 | daemon half unload and leak note | `superiorSoftLibrary/infantry/src/main/kotlin/com/superiorsoftllc/infantry/daemon/plugins/DaemonPluginHost.kt` |
 | Settings > Plugins | `plugins/official/Infantry_Settings/src/PluginsScreen.kt` |
+
+## Lifecycle callbacks a plugin can use (ATTN-STALE-1)
+
+A plugin reacts to the app's life through these generic callbacks; core never names the plugin that uses them.
+
+| Half | Callback | When |
+|---|---|---|
+| UI | `UiPlugin.register(registrar)` | the plugin loads (on app load) |
+| UI | `registrar.observer(name, (PluginEvent) -> Unit)` | a named event arrives (for example `session.ended`, `daemon.started`) |
+| UI | `UiPlugin.stop()` | the plugin unloads (on exit or swap) |
+| Daemon | `DaemonPlugin.start(api)` | the half loads |
+| Daemon | `api.processes.onSessionClosed(listener)` | once per closing session; the reason says killed, removed or restarted |
+| Daemon | `api.schedule(name, ms) { }` | a periodic sweep (the first tick, after load, clears backlog) |
+| Daemon | declared `hooks` in `module.json` (for example `connected`) | a client connects |
+| Daemon | `DaemonPlugin.stop()` | the half unloads |
+
+Infantry_Attention uses them so a question or attention item whose session is gone is closed: an open question is cancelled (`orphaned`), an auto-picked one turns `stale`, an open attention item is acknowledged; the panel greys them and offers Dismiss and Clear stale. No new hook kind was needed.

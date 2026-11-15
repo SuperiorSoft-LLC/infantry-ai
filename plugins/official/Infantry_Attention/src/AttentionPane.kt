@@ -69,6 +69,13 @@ internal fun AttentionPane(state: AppState, attention: AttentionContext, showCha
         if (history.isNotEmpty()) {
             QuestionHistory(history, live = canAnswer, onOverride = onOverride, onShow = onShow, onDismiss = onDismiss, tag = ATTENTION_QUESTIONS_TAG)
         }
+        // ATTN-STALE-1: items of sessions that are gone are greyed with no answer; one action clears them all.
+        val staleItems = state.attention.filter { it.ackedAt == null && it.sessionId != null && it.sessionId !in state.agents }
+        if (staleItems.isNotEmpty()) {
+            TextButton(onClick = { actionScope.launch { staleItems.forEach { attention.ack(it.id) } } }, enabled = canAck) {
+                Text("Clear stale (${staleItems.size})", fontSize = 11.sp)
+            }
+        }
         WatchSection(state, now)
         if (state.attention.isEmpty()) {
             if (state.questions.isNotEmpty()) return
@@ -81,6 +88,7 @@ internal fun AttentionPane(state: AppState, attention: AttentionContext, showCha
         }
         state.attentionNewestFirst.forEach { item ->
             val open = item.ackedAt == null
+            val stale = open && item.sessionId != null && item.sessionId !in state.agents
             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(Palette.Raised).padding(10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Chip(item.kind.replace('_', ' '), if (open) Palette.Accent else Palette.Muted)
@@ -88,7 +96,7 @@ internal fun AttentionPane(state: AppState, attention: AttentionContext, showCha
                     Text(ago(item.at, now) + " ago", color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.weight(1f))
                     if (open) {
                         TextButton(onClick = { actionScope.launch { attention.ack(item.id) } }, enabled = canAck) {
-                            Text("Acknowledge", fontSize = 11.sp)
+                            Text(if (stale) "Dismiss" else "Acknowledge", fontSize = 11.sp)
                         }
                     } else {
                         Text("acknowledged", color = Palette.Muted, fontSize = 10.sp)
