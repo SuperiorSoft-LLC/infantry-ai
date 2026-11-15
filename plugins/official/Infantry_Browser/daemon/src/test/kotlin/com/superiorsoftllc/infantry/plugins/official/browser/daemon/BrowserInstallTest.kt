@@ -24,4 +24,15 @@ class BrowserInstallTest {
         assertEquals(listOf("cmd", "/c", "npx"), BrowserInstall.command("Windows 11").take(3))
         assertEquals("install-browser", BrowserInstall.command("Linux")[3])
     }
+
+    @Test fun channelMatchesLauncher() {
+        val env = { n: String -> if (n == "PROGRAMFILES") "C:/PF" else null }
+        val only = { want: String -> { p: String -> p.replace("\\", "/").endsWith(want) } }
+        assertEquals("chrome", BrowserInstall.channel("auto", env, "Windows 11", only("Google/Chrome/Application/chrome.exe")))
+        assertEquals("msedge", BrowserInstall.channel("auto", env, "Windows 11", only("Microsoft/Edge/Application/msedge.exe")))
+        assertEquals("chromium", BrowserInstall.channel("auto", env, "Windows 11") { false })
+        // forced chrome that is absent falls back like the launcher, never claims system browser
+        assertEquals("chromium", BrowserInstall.channel("chrome", env, "Windows 11") { false })
+        assertEquals("msedge", BrowserInstall.channel("chrome", env, "Windows 11", only("Microsoft/Edge/Application/msedge.exe")))
+    }
 }

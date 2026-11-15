@@ -19,17 +19,20 @@ object BrowserInstall {
         }
     }
 
-    /** True when system Chrome or Edge exists (the launcher in module.json uses it first, so no download is needed). */
-    fun systemBrowser(env: (String) -> String?, os: String): Boolean {
-        val rel = when {
-            os.contains("win", true) -> listOf("Google/Chrome/Application/chrome.exe", "Microsoft/Edge/Application/msedge.exe")
-            else -> emptyList()
-        }
+    /** The channel the launcher in module.json passes as `--browser`; the same rules, so health and launch agree. [exists] tests a path. */
+    fun channel(choice: String, env: (String) -> String?, os: String, exists: (String) -> Boolean = { File(it).exists() }): String {
+        val win = os.contains("win", true)
+        val mac = os.contains("mac", true)
         val bases = listOf("PROGRAMFILES", "PROGRAMFILES(X86)", "LOCALAPPDATA").mapNotNull { env(it) }
-        if (rel.isNotEmpty()) return bases.any { b -> rel.any { File(b, it).isFile } }
-        val abs = if (os.contains("mac", true)) listOf("/Applications/Google Chrome.app", "/Applications/Microsoft Edge.app")
-        else listOf("/usr/bin/google-chrome", "/usr/bin/google-chrome-stable", "/opt/google/chrome/chrome", "/usr/bin/microsoft-edge", "/opt/microsoft/msedge/msedge")
-        return abs.any { File(it).exists() }
+        fun any(winRel: String, abs: List<String>) = if (win) bases.any { exists(File(it, winRel).path) } else abs.any(exists)
+        val chrome = any("Google/Chrome/Application/chrome.exe",
+            if (mac) listOf("/Applications/Google Chrome.app") else listOf("/usr/bin/google-chrome", "/usr/bin/google-chrome-stable", "/opt/google/chrome/chrome"))
+        val edge = any("Microsoft/Edge/Application/msedge.exe",
+            if (mac) listOf("/Applications/Microsoft Edge.app") else listOf("/usr/bin/microsoft-edge", "/opt/microsoft/msedge/msedge"))
+        var c = choice.lowercase()
+        if ((c == "chrome" && !chrome) || (c == "msedge" && !edge)) c = "auto"
+        if (c == "auto") c = if (chrome) "chrome" else if (edge) "msedge" else "chromium"
+        return c
     }
 
     /** True when a chromium build in [cache] holds a chrome executable. */
