@@ -81,6 +81,8 @@ interface DaemonApi {
     val routes: Routes
     /** HTTP-SEAM-1 (1.61.0, additive): the ONE outgoing HTTP client (timeouts, proxy, redirects, size cap, secret headers, retry). */
     val http: com.superiorsoftllc.infantry.daemon.api.http.Http get() = com.superiorsoftllc.infantry.daemon.api.http.NoHttp
+    /** ACCOUNT-SEAM-1 (1.62.0, additive): read, write and clear fields of the module's OWN keystore entry; no other entry is reachable. */
+    val pluginSecrets: com.superiorsoftllc.infantry.daemon.api.pluginsecrets.PluginSecrets get() = com.superiorsoftllc.infantry.daemon.api.pluginsecrets.NoPluginSecrets
     val hooks: Hooks
 
     /** DP-4a (1.2.0, additive): tickets, epics and the board (docs/DAEMON-BOARD-API.md). A daemon without a board answers Unavailable. */
@@ -271,7 +273,8 @@ interface DaemonApi {
         // `RunnerLinkWire.MIN_RUNNER_CONTRACT` / `contractOlder`: a runner older than the app is refused up front and can be updated.
         // 1.61.0 (HTTP-SEAM-1, additive): `http` (daemon.api.http.Http, HttpSpec, RetryPolicy, Backoff) and `Routes.handle(.., check, ..)`
         // (RouteCheck): a public route (`daemon.publicRoutes`) is refused at load unless it declares a check.
-        const val VERSION = "1.61.0"
+        // 1.62.0 (ACCOUNT-SEAM-1, additive): `pluginSecrets` (PluginSecrets, SecretValue): the module's own keystore entry only.
+        const val VERSION = "1.62.0"
     }
 }
 

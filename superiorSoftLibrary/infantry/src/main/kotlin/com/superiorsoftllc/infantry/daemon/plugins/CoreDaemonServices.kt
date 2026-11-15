@@ -103,6 +103,9 @@ class CoreDaemonServices(
     override fun config(module: String, key: String): String? = daemonConfig.value(module, key)
     override fun env(name: String): String? = getenv(name)
     override fun secret(name: String): String? = keystore.get(name)
+    override fun keystoreField(name: String, field: String): String? = keystore.field(name, field)
+    override fun setKeystoreField(name: String, field: String, value: String) = keystore.setField(name, field, value)
+    override fun clearKeystoreField(name: String, field: String): Boolean = keystore.deleteField(name, field)
 
     override val projects: Projects = object : Projects {
         override fun list(): List<ProjectInfo> = projectStore.list().map { ProjectInfo(it.id, it.name, it.directory, it.data["project.description"].orEmpty()) }

@@ -1187,6 +1187,8 @@ class DaemonPluginHost private constructor(
         override fun env(name: String): String? = if (name in d.env) hostServices.env(name) else { log("env $name is not declared in daemon.env: refused"); null }
         override fun secret(name: String): String? = if (name in d.secrets) hostServices.secret(name) else { log("secret $name is not declared in daemon.secrets: refused"); null }
 
+        override val pluginSecrets: com.superiorsoftllc.infantry.daemon.api.pluginsecrets.PluginSecrets by lazy { ScopedPluginSecrets(p.id, hostServices) }
+
         override fun whenStarted(block: () -> Unit) {
             val now = synchronized(startedLock) { if (started) true else { startedQueue += p to block; false } }
             // A live load: the daemon is already up, so run it now, off the thread that is still inside this plugin's start().
