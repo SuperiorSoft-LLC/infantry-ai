@@ -34,6 +34,7 @@ class ChatDaemonPlugin : DaemonPlugin {
         api.tools.register(MailTools.InboxTool)
         api.tools.register(MailTools.ReadTool)
         api.tools.register(MailTools.MessageTool)
+        api.tools.register(AnnounceTool(api.sessions, api.settings))
         api.tools.register(MailTools.ProjectsTool(api))
         ImageFrames.install(api)
         api.tools.register(ChatImageTool(
@@ -361,5 +362,77 @@ object MailTools {
                 else -> refused("$MESSAGE: unexpected answer ${reply.type}")
             }
         }
+    }
+}
+
+/**
+ * ANNOUNCE-ALL-1: one message to every live agent of the sender's project. It is `infantry_message` per recipient (the same `mail_send`
+ * frame, so every mail gate applies), not a new channel. Who may send is the setting [ALLOWED_SETTING] (default owner and pm; the owner
+ * is a caller with no session). Live sessions only: the owner Assistant (a global session), idle-never-run, failed and orphaned
+ * sessions are skipped and counted. Never reaches another project.
+ */
+class AnnounceTool(
+    private val sessions: com.superiorsoftllc.infantry.daemon.api.Sessions,
+    private val settings: com.superiorsoftllc.infantry.daemon.api.processes.PluginSettings?,
+) : DaemonTool {
+    companion object {
+        const val NAME = "infantry_announce"
+        const val ALLOWED_SETTING = "announce.allowedRoles"
+        val DEFAULT_ALLOWED = listOf("owner", "pm")
+        private val LIVE = setOf("IDLE", "BUSY", "STARTING", "WAITING_INPUT")
+        fun allowedRoles(stored: String?): Set<String> {
+            val parsed = stored?.takeIf { it.isNotBlank() }?.let { runCatching { Json.parseToJsonElement(it).jsonArray.mapNotNull { e -> (e as? JsonPrimitive)?.contentOrNull } }.getOrNull() }
+            return (parsed ?: DEFAULT_ALLOWED).map { it.trim().lowercase() }.filter { it.isNotEmpty() }.toSet()
+        }
+    }
+
+    override val name = NAME
+    override val description = "Announce one message to every live agent of your project (one COMMS mail each, like infantry_message). " +
+        "Reply: sent N, skipped M. Only the roles in setting $ALLOWED_SETTING (default owner, pm) may announce."
+    override val inputSchema = buildJsonObject {
+        put("type", "object")
+        put("properties", buildJsonObject {
+            put("body", buildJsonObject { put("type", "string"); put("description", "The announcement.") })
+            put("subject", buildJsonObject { put("type", "string"); put("description", "Optional subject.") })
+            put("project", buildJsonObject { put("type", "string"); put("description", "Project id; only for the owner (no session). Agents announce to their own project.") })
+        })
+        put("required", buildJsonArray { add(JsonPrimitive("body")) })
+        put("additionalProperties", false)
+    }
+    override val annotations = buildJsonObject { put("readOnlyHint", false); put("destructiveHint", false); put("openWorldHint", false) }
+
+    private fun refused(t: String) = ToolResult(t, isError = true)
+
+    override fun call(call: ToolCall): ToolResult {
+        val body = (call.arguments["body"] as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
+            ?: return refused("$NAME needs a body")
+        val subject = (call.arguments["subject"] as? JsonPrimitive)?.contentOrNull?.trim().orEmpty().ifEmpty { "Announcement" }
+        val senderId = call.clientSessionId?.trim()?.takeIf { it.isNotEmpty() }
+        val sender = senderId?.let { sessions.get(it) }
+        if (senderId != null && sender == null) return refused("$NAME refused: unknown sender session '$senderId'")
+        val role = if (sender == null) "owner" else (sender.role ?: "").lowercase()
+        val allowed = allowedRoles(settings?.stored(ALLOWED_SETTING))
+        if (role !in allowed) return refused("$NAME refused: role '${role.ifEmpty { "none" }}' may not announce; allowed: ${allowed.sorted().joinToString(", ")} (setting $ALLOWED_SETTING)")
+        val project = sender?.projectId
+            ?: (call.arguments["project"] as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
+            ?: call.clientProjectId
+            ?: return refused("$NAME refused: no project (pass project)")
+        val inProject = sessions.list().filter { it.projectId == project && !it.global && it.id != senderId }
+        val (live, skipped) = inProject.partition { !it.neverRun && it.state in LIVE }
+        var sent = 0
+        val failed = mutableListOf<String>()
+        for (target in live) {
+            val request = buildJsonObject {
+                put("from", if (senderId == null) "user" else "")
+                put("to", target.id)
+                put("subject", subject)
+                put("body", body)
+                put("allowCrossProject", false)
+            }
+            val reply = runCatching { call.request("mail_send", request.toString(), senderId) }.getOrNull()
+            if (reply?.type == "mail") sent++ else failed += target.id.take(8)
+        }
+        val tail = if (failed.isEmpty()) "" else "; failed ${failed.size}: ${failed.joinToString(",")}"
+        return ToolResult("sent $sent, skipped ${skipped.size}$tail")
     }
 }

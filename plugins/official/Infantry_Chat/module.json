@@ -18,6 +18,7 @@
       { "type": "image_fetch", "action": "images.read", "kind": "read" }
     ],
     "tools": [
+      { "name": "infantry_announce", "action": "mail.send", "kind": "write", "description": "Announce one message to every live agent of your project (owner and pm by default; setting announce.allowedRoles)." },
       { "name": "infantry_inbox", "action": "mail.read", "kind": "read", "description": "List the COMMS mail addressed to you." },
       { "name": "infantry_read", "action": "mail.read", "kind": "read", "description": "Read one message in full and mark it read." },
       { "name": "infantry_message", "action": "mail.send", "kind": "write", "description": "Send COMMS mail to an agent, a role or a session." },
@@ -47,6 +48,14 @@
           "default": false,
           "order": 1,
           "scope": "device"
+        },
+        {
+          "key": "announce.allowedRoles",
+          "type": "text",
+          "label": "Roles that may announce to all agents (JSON list; the owner is \"owner\")",
+          "default": "[\"owner\",\"pm\"]",
+          "order": 2,
+          "scope": "daemon"
         }
       ]
     },
