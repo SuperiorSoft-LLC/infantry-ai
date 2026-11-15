@@ -209,12 +209,12 @@ class SitesTest {
         stub.reclaimableUntil = 1_795_000_000_000L
         stub.forced = 403
         stub.forcedBody = """{"error":"forbidden"}"""
-        val w = wire(mapOf("sites.apiUrl" to stub.base))
+        val w = wire(mapOf("api" to stub.base))
         val st = Json.parseToJsonElement(w.routes.getValue("GET state")(HttpCall("GET", "state")).body).jsonObject
         assertEquals("not_entitled", st["state"]!!.jsonPrimitive.content)
         assertEquals("1795000000000", st["reclaimableUntil"]!!.jsonPrimitive.content)
         // plan not entitled per the account hub too: the same window is read
-        val free = wire(mapOf("sites.apiUrl" to stub.base), entitled = false)
+        val free = wire(mapOf("api" to stub.base), entitled = false)
         val fs = Json.parseToJsonElement(free.routes.getValue("GET state")(HttpCall("GET", "state")).body).jsonObject
         assertEquals("1795000000000", fs["reclaimableUntil"]!!.jsonPrimitive.content)
         // no window: the field is absent
@@ -292,7 +292,9 @@ class SitesTest {
                 "getTools" -> toolsApi
                 "getHttp" -> JdkHttp()
                 "schedule" -> AutoCloseable {}
-                "config" -> config[a[0] as String]
+                // ENDPOINT-ENV-1: the address is the module's endpoint; no user setting ("config") is read for it.
+                "endpoint" -> config[a[0] as String]
+                "getEnvironment" -> "dev"
                 "log" -> null
                 "getModuleId" -> "Infantry_Sites"
                 else -> throw UnsupportedOperationException(m.name)
@@ -312,7 +314,7 @@ class SitesTest {
     @Test
     fun `the provider is registered only when an address is set, and describes the hosting service`() {
         assertTrue(wire(emptyMap()).endpoints.isEmpty(), "unset address: no provider, nothing to call")
-        val w = wire(mapOf("sites.apiUrl" to stub.base, "sites.siteUrl" to "https://plans.example"))
+        val w = wire(mapOf("api" to stub.base, "site" to "https://plans.example"))
         val d = Json.parseToJsonElement(w.endpoints.getValue("account.provider/infantry").call("describe", "{}")).jsonObject
         assertEquals("infantry", d["id"]!!.jsonPrimitive.content)
         assertEquals("Infantry AI Hosting", d["name"]!!.jsonPrimitive.content)
@@ -323,7 +325,7 @@ class SitesTest {
 
     @Test
     fun `agent tools work the API themselves and neither the tools nor the routes ever expose the token`() {
-        val w = wire(mapOf("sites.apiUrl" to stub.base))
+        val w = wire(mapOf("api" to stub.base))
         assertEquals(setOf("infantry_sites_list", "infantry_sites_create", "infantry_sites_start", "infantry_sites_stop", "infantry_sites_destroy"), w.tools.keys)
         val outputs = mutableListOf<String>()
         outputs += callTool(w, "infantry_sites_list").text
@@ -340,17 +342,17 @@ class SitesTest {
 
     @Test
     fun `state is signed out, not entitled or ready, and a limit answer on create reaches the UI as limit`() {
-        val out = wire(mapOf("sites.apiUrl" to stub.base), signedIn = false)
+        val out = wire(mapOf("api" to stub.base), signedIn = false)
         assertEquals("signed_out", Json.parseToJsonElement(out.routes.getValue("GET state")(HttpCall("GET", "state")).body).jsonObject["state"]!!.jsonPrimitive.content)
         assertTrue(callTool(out, "infantry_sites_list").isError)
         assertEquals(emptyList(), stub.calls, "signed out: the API was not called")
 
-        val free = wire(mapOf("sites.apiUrl" to stub.base), entitled = false)
+        val free = wire(mapOf("api" to stub.base), entitled = false)
         val st = Json.parseToJsonElement(free.routes.getValue("GET state")(HttpCall("GET", "state")).body).jsonObject
         assertEquals("not_entitled", st["state"]!!.jsonPrimitive.content)
         assertEquals("https://plans.example/hosting", st["signUpUrl"]!!.jsonPrimitive.content)
 
-        val ready = wire(mapOf("sites.apiUrl" to stub.base))
+        val ready = wire(mapOf("api" to stub.base))
         val rs = Json.parseToJsonElement(ready.routes.getValue("GET state")(HttpCall("GET", "state")).body).jsonObject
         assertEquals("ready", rs["state"]!!.jsonPrimitive.content)
         assertEquals(1, rs["servers"]!!.jsonArray.size)
@@ -369,11 +371,14 @@ class SitesTest {
     @Test
     fun `the UI strings name no cloud vendor or company, only copyright headers do`() {
         val root = generateSequence(File("").absoluteFile) { it.parentFile }.map { File(it, "plugins/official/Infantry_Sites") }.first { it.isDirectory }
+        val endpointAddress = Regex(""""[a-z0-9._-]+": "https?://[^"\s]*",?""")
         val banned = Regex(listOf("digital" + "ocean", "drop" + "let", "str" + "ipe", "superior" + "soft").joinToString("|"), RegexOption.IGNORE_CASE)
         val hits = root.walkTopDown().filter { it.isFile && it.extension in setOf("kt", "json", "kts") && "build" !in it.relativeTo(root).path.split(File.separatorChar) && !it.name.endsWith("Test.kt") }
             .flatMap { f ->
                 f.readLines().withIndex()
                     .filter { (_, line) -> !line.startsWith("// Copyright (c) Superior" + "Soft LLC") }
+                    // ENDPOINT-ENV-1: a module.json `daemon.endpoints` address ("prod": "https://...") is developer data, not a UI string.
+                    .filter { (_, line) -> !(f.name == "module.json" && endpointAddress.matches(line.trim())) }
                     .filter { (_, line) -> banned.containsMatchIn(line.replace("com.superiorsoftllc", "").replace("superiorSoftLibrary", "")) }
                     .map { "${f.name}:${it.index + 1}: ${it.value.trim()}" }
             }.toList()

@@ -53,6 +53,9 @@ env:
   # UPDATER-DEFAULT-1: every gradlew of this workflow bakes this repository into the Updater's manifest (Gradle property
   # infantryUpdateRepo over module.json update.repo), so an installed release checks the releases it came from, fork or not.
   ORG_GRADLE_PROJECT_infantryUpdateRepo: ${{ github.repository }}
+  # ENDPOINT-ENV-1: release and nightly builds (nightly.yml calls this workflow) are prod: plugins reach their prod endpoints
+  # (module.json daemon.endpoints). Gradle property infantryEnv, baked in as -Dinfantry.env.
+  ORG_GRADLE_PROJECT_infantryEnv: prod
 
 jobs:
   version:

@@ -21,7 +21,7 @@
   "daemon": {
     "entry": "com.superiorsoftllc.infantry.plugins.official.sites.daemon.SitesDaemonPlugin",
     "jar": "daemon/build/libs/Infantry_Sites-daemon.jar",
-    "apiAtLeast": "1.62.0",
+    "apiAtLeast": "1.63.0",
     "tools": [
       { "name": "infantry_sites_list", "action": "sites.servers.read", "kind": "read", "description": "List your hosting servers (id, name, status, ip, region, size, createdAt, destroyAt)." },
       { "name": "infantry_sites_create", "action": "sites.servers.create", "kind": "write", "description": "Create a hosting server. Counts against your plan's server limit." },
@@ -29,17 +29,16 @@
       { "name": "infantry_sites_stop", "action": "sites.servers.power", "kind": "write", "description": "Shut down one of your hosting servers." },
       { "name": "infantry_sites_destroy", "action": "sites.servers.destroy", "kind": "destructive", "description": "Permanently destroy one of your hosting servers and its data." }
     ],
-    "config": [
-      {
-        "node": "infantry.sites.service", "group": "Sites", "title": "Hosting service", "tab": "Plugins", "order": 921,
-        "applies": "Applies to: where Infantry AI Hosting lives. Empty = no hosting provider is registered and nothing is called.",
-        "keywords": ["sites", "hosting", "servers"],
-        "fields": [
-          { "key": "sites.apiUrl", "type": "text", "label": "Hosting API address (https)", "default": "", "scope": "daemon", "order": 1 },
-          { "key": "sites.siteUrl", "type": "text", "label": "Hosting site address (plans and billing pages, https)", "default": "", "scope": "daemon", "order": 2 }
-        ]
+    "endpoints": {
+      "api": {
+        "prod": "https://api.superiorsoftllc.tech/api/superiorsoft",
+        "dev": "http://127.0.0.1:18953/api/superiorsoft"
+      },
+      "site": {
+        "prod": "https://superiorsoftllc.tech",
+        "dev": "http://127.0.0.1:18953"
       }
-    ]
+    }
   },
   "tabs": [
     { "id": "infantry.sites", "container": "center" }

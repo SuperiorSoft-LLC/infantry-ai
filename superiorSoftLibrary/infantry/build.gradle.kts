@@ -36,7 +36,7 @@ application {
     // bin dir on every spawned session's PATH (InfantryBin).
     applicationName = "infantry"
     // BUILD-STAMP-1: the build string (root gradle/build-stamp.gradle.kts): `infantry version` prints it, a daemon sends it in `ready`.
-    applicationDefaultJvmArgs = listOf("--add-opens=java.base/java.util=ALL-UNNAMED", "-Dinfantry.build=${rootProject.extra["infantryBuild"]}")
+    applicationDefaultJvmArgs = listOf("--add-opens=java.base/java.util=ALL-UNNAMED", "-Dinfantry.build=${rootProject.extra["infantryBuild"]}", "-Dinfantry.env=${rootProject.extra["infantryEnv"]}")
 }
 
 // RENAME-2: `infantry` is the launcher; `agenthq` stays as a deprecated alias (agents, scripts and prompts still call it).
@@ -172,6 +172,7 @@ tasks.register<JavaExec>("runDaemon") {
     // PERF-2: the same heap caps and GC as the installed app (jvm-caps.txt).
     jvmArgs(infantryJvmCaps)
     systemProperty("infantry.build", rootProject.extra["infantryBuild"] as String) // BUILD-STAMP-1
+    systemProperty("infantry.env", rootProject.extra["infantryEnv"] as String) // ENDPOINT-ENV-1
     // RUNNER-GREEN-RUN-1: a dev daemon loads the plugins installDist bundles (runner link, harnesses, board...), unsigned
     // in a repo build, so devTrust as the UI dev runs pass it. Without these two a `gradle run` daemon loaded 0 plugins.
     systemProperty("infantry.plugins.bundled", layout.buildDirectory.dir("install/infantry/modules").get().asFile.absolutePath)
@@ -524,6 +525,8 @@ val headlessContents: CopySpec = copySpec {
     from(resources.text.fromString(headlessVersion)) { rename { "VERSION" } }
     // BUILD-STAMP-1: the server's build string, read by BuildInfo when no -Dinfantry.build reached the JVM.
     from(resources.text.fromString(rootProject.extra["infantryBuild"] as String)) { rename { "BUILD" } }
+    // ENDPOINT-ENV-1: the build environment, read by BuildEnvironment when no -Dinfantry.env reached the JVM.
+    from(resources.text.fromString(rootProject.extra["infantryEnv"] as String)) { rename { "ENVIRONMENT" } }
     eachFile {
         if (path.endsWith(".sh") || path.endsWith("/bin/infantry") || path.endsWith("/bin/agenthq") || path.contains("/runtime/bin/") || path.contains("/runtime/lib/jspawnhelper")) {
             permissions { unix("rwxr-xr-x") }

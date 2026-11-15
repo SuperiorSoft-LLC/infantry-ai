@@ -166,6 +166,8 @@ configurations.all {
 
 // BUILD-STAMP-1: the build string (root gradle/build-stamp.gradle.kts), shown by the app and sent by its in-process daemon.
 val infantryBuildStamp: String = rootProject.extra["infantryBuild"] as String
+// ENDPOINT-ENV-1: the build environment (root gradle/build-stamp.gradle.kts), baked in as -Dinfantry.env.
+val infantryBuildEnv: String = rootProject.extra["infantryEnv"] as String
 
 // PERF-2: the JVM heap caps shared with :infantry's runDaemon, from one file: infantry/jvm-caps.txt.
 val infantryJvmCaps: List<String> = project(":superiorSoftLibrary:infantry").file("jvm-caps.txt").readLines()
@@ -195,6 +197,7 @@ tasks.register<JavaExec>("runRealDaemon") {
     if (System.getenv("INFANTRY_PORT").isNullOrBlank()) environment("INFANTRY_PORT", "8788")
     jvmArgs(infantryJvmCaps) // PERF-2
     systemProperty("infantry.build", infantryBuildStamp) // BUILD-STAMP-1
+    systemProperty("infantry.env", infantryBuildEnv) // ENDPOINT-ENV-1
     // BUG-BUILD-1: agents run the `infantry` CLI/MCP from :infantry's installDist (InfantryBin), not this classpath.
     // Refresh it on every preview so agents never run an older CLI than the daemon.
     dependsOn(":superiorSoftLibrary:infantry:installDist")
@@ -448,7 +451,7 @@ compose.desktop {
         // UPDATE-1: the running version, compared with the latest GitHub release's tag (UpdateSettings.VERSION_PROPERTY).
         jvmArgs += listOf("-Dinfantry.version=$infantryAppVersion")
         // BUILD-STAMP-1: what Configuration > About and the footer show, and what the in-process daemon sends as `ready` build=.
-        jvmArgs += listOf("-Dinfantry.build=$infantryBuildStamp")
+        jvmArgs += listOf("-Dinfantry.build=$infantryBuildStamp", "-Dinfantry.env=$infantryBuildEnv")
         // PERF-2: heap caps (GC stays G1) for the packaged launcher (jpackage java-options) and `run`; the installed app runs
         // the daemon in this same JVM, so these cover both. Asserted by PackagedJvmCapsTest.
         jvmArgs += infantryJvmCaps
@@ -974,6 +977,7 @@ tasks.register<JavaExec>("runShell") {
     classpath = sourceSets["main"].runtimeClasspath.filter(::isShellJar)
     jvmArgs(infantryJvmCaps) // PERF-2
     systemProperty("infantry.build", infantryBuildStamp) // BUILD-STAMP-1
+    systemProperty("infantry.env", infantryBuildEnv) // ENDPOINT-ENV-1
     argumentProviders += CommandLineArgumentProvider { listOf("--app", shellAppDir.get().absolutePath) }
 }
 
@@ -992,7 +996,7 @@ tasks.register("shellLaunchFiles") {
         val d = out.get().asFile.apply { mkdirs() }
         File(d, "java.txt").writeText(launcher.get().executablePath.asFile.absolutePath)
         fun q(s: String) = "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
-        val lines = infantryJvmCaps + listOf("-Dinfantry.build=$stamp", "-cp", cp.files.joinToString(File.pathSeparator) { it.absolutePath }, "com.superiorsoftllc.infantry.ui.AppMainKt")
+        val lines = infantryJvmCaps + listOf("-Dinfantry.build=$stamp", "-Dinfantry.env=$infantryBuildEnv", "-cp", cp.files.joinToString(File.pathSeparator) { it.absolutePath }, "com.superiorsoftllc.infantry.ui.AppMainKt")
         File(d, "shell.args").writeText(lines.joinToString("\n") { q(it) } + "\n")
     }
 }
@@ -1030,7 +1034,7 @@ tasks.register<Exec>("packageShellMsi") {
         project.copy { from(File(app, "app.json")); into(input.get().dir("shell-app")) }
         dest.get().asFile.deleteRecursively()
         val runtime = tasks.withType<org.jetbrains.compose.desktop.application.tasks.AbstractJLinkTask>().getByName("createRuntimeImage").destinationDir.get().asFile
-        val javaOptions = infantryJvmCaps + listOf("-Dinfantry.version=$infantryAppVersion", "-Dinfantry.build=$infantryBuildStamp", "-Dinfantry.app.dir=\$APPDIR/shell-app")
+        val javaOptions = infantryJvmCaps + listOf("-Dinfantry.version=$infantryAppVersion", "-Dinfantry.build=$infantryBuildStamp", "-Dinfantry.env=$infantryBuildEnv", "-Dinfantry.app.dir=\$APPDIR/shell-app")
         commandLine(
             listOf(
                 jpackage.get().path, "--type", "msi", "--name", name, "--app-version", infantryPackageVersion, "--vendor", "SuperiorSoft LLC",

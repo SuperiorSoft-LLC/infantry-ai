@@ -46,6 +46,20 @@ interface DaemonApi {
     /** A keystore secret the module declared in `daemon.secrets` (community: and was granted); else null. */
     fun secret(name: String): String?
 
+    /**
+     * ENDPOINT-ENV-1 (1.63.0, additive): the build environment this daemon runs in (`dev`, `staging`, `prod`, or any other
+     * name the build was given). Baked in at build time; read-only. The default (a host without it) is `prod`.
+     */
+    val environment: String get() = "prod"
+
+    /**
+     * ENDPOINT-ENV-1 (1.63.0, additive): the address of the service [name] the module declared in `daemon.endpoints`, for
+     * [environment] (the `prod` address when that environment has none); null when undeclared. A developer may override it for
+     * local testing with the environment variable `INFANTRY_ENDPOINT_<MODULE>_<NAME>` (upper case, other characters `_`);
+     * it is never a user setting. The default (a host without endpoints) is null.
+     */
+    fun endpoint(name: String): String? = null
+
     /** Runs [job] every [periodMs] (at least 1 s) under the plugin's limits; close the handle to stop it. */
     fun schedule(name: String, periodMs: Long, job: () -> Unit): AutoCloseable
 
@@ -274,7 +288,8 @@ interface DaemonApi {
         // 1.61.0 (HTTP-SEAM-1, additive): `http` (daemon.api.http.Http, HttpSpec, RetryPolicy, Backoff) and `Routes.handle(.., check, ..)`
         // (RouteCheck): a public route (`daemon.publicRoutes`) is refused at load unless it declares a check.
         // 1.62.0 (ACCOUNT-SEAM-1, additive): `pluginSecrets` (PluginSecrets, SecretValue): the module's own keystore entry only.
-        const val VERSION = "1.62.0"
+        // 1.63.0 (ENDPOINT-ENV-1, additive): `environment` and `endpoint(name)` (module.json `daemon.endpoints`, per build environment).
+        const val VERSION = "1.63.0"
     }
 }
 

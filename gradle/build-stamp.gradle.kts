@@ -40,6 +40,13 @@ val stampTime: java.time.Instant = if (stampPackaging) java.time.Instant.now() e
 val infantryBuild: String = formatBuildStamp(stampVersion, stampTime, stampSha, stampDirty)
 
 extra["infantryBuild"] = infantryBuild
+// ENDPOINT-ENV-1: the build environment (dev | staging | prod, open to more names), baked in as -Dinfantry.env and read by
+// BuildEnvironment; plugins map it to their service addresses (module.json `daemon.endpoints`). -PinfantryEnv, else the
+// INFANTRY_ENV variable at build time, else "dev" (gradle run / runDaemon / a plain local build). The project build script
+// passes its `env` arg (default staging); the tag-triggered release and nightly workflows pass prod.
+val infantryEnv: String = (providers.gradleProperty("infantryEnv").orNull ?: System.getenv("INFANTRY_ENV"))
+    ?.trim()?.lowercase()?.takeIf { Regex("^[a-z0-9][a-z0-9._-]{0,31}$").matches(it) } ?: "dev"
+extra["infantryEnv"] = infantryEnv
 extra["infantryBuildVersion"] = stampVersion
 extra["infantryBuildSha"] = stampSha
 extra["infantryBuildDirty"] = stampDirty

@@ -20,6 +20,8 @@ import com.superiorsoftllc.infantry.settings.LimitDef
 interface DaemonServices {
     fun config(module: String, key: String): String?
     fun env(name: String): String?
+    /** ENDPOINT-ENV-1: the build environment (`DaemonApi.environment`); the process's own by default. */
+    val environment: String get() = com.superiorsoftllc.infantry.update.BuildEnvironment.current
     fun secret(name: String): String?
     /** ACCOUNT-SEAM-1: one field of keystore entry [name]; the host passes only the calling module's own entry name. */
     fun keystoreField(name: String, field: String): String? = null

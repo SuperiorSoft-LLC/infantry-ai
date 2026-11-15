@@ -24,7 +24,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 
-/** The provider descriptor the Account hub reads (`describe`, design 1.3). Empty [apiUrl] = no provider (nothing calls a real server by accident). */
+/** The provider descriptor the Account hub reads (`describe`, design 1.3). No `api` endpoint = no provider (nothing calls a real server by accident). */
 object InfantryProvider {
     const val ID = "infantry"
     const val SERVICE = "hosting"
@@ -60,26 +60,19 @@ object InfantryProvider {
  * go through [SitesService], so no token ever reaches the UI, an agent, a log line or an answer.
  */
 class SitesDaemonPlugin : DaemonPlugin {
-    private val closers = mutableListOf<AutoCloseable>()
     private var published: AutoCloseable? = null
-    private var publishedFor: String? = null
 
     override fun start(api: DaemonApi) {
-        val service = SitesService(api.http, TokenSource { tokenOf(api) }, { api.config("sites.apiUrl").orEmpty() })
-
-        fun syncProvider() {
-            val key = api.config("sites.apiUrl").orEmpty().trim() + "|" + api.config("sites.siteUrl").orEmpty().trim()
-            if (key == publishedFor) return
-            published?.let { runCatching { it.close() } }
-            published = null
-            publishedFor = key
-            val apiUrl = api.config("sites.apiUrl").orEmpty().trim()
-            if (apiUrl.isEmpty() || !SitesService.urlOk(apiUrl)) return
-            val text = InfantryProvider.describe(apiUrl, api.config("sites.siteUrl").orEmpty())
+        // ENDPOINT-ENV-1: where the hosting service lives is developer config (module.json `daemon.endpoints`, picked by the build
+        // environment), never a user setting: a customer signs in and Sites works with zero setup.
+        val service = SitesService(api.http, TokenSource { tokenOf(api) }, { apiUrlOf(api) })
+        val apiUrl = apiUrlOf(api)
+        if (apiUrl.isNotEmpty() && SitesService.urlOk(apiUrl)) {
+            val text = InfantryProvider.describe(apiUrl, api.endpoint(SITE_ENDPOINT).orEmpty())
             published = api.services.publishEndpoint("account.provider/${InfantryProvider.ID}", ServiceEndpoint { op, _ -> if (op == "describe") text else error("unsupported operation '$op'") })
+        } else {
+            api.log("no usable '$API_ENDPOINT' endpoint for environment '${api.environment}' (module.json daemon.endpoints): hosting is not offered")
         }
-        syncProvider()
-        closers += api.schedule("sites-provider", SYNC_PERIOD_MS) { syncProvider() }
 
         api.routes.handle("GET", "state") { reply { stateOf(api, service) } }
         api.routes.handle("POST", "create") { call -> reply { val b = body(call); service.create(b.need("name"), b.str("sshPublicKey"), b.str("idempotencyKey")) } }
@@ -92,9 +85,6 @@ class SitesDaemonPlugin : DaemonPlugin {
     override fun stop() {
         published?.let { runCatching { it.close() } }
         published = null
-        publishedFor = null
-        closers.forEach { runCatching { it.close() } }
-        closers.clear()
     }
 
     // ---- the token: asked from the Account hub as this module; used by SitesService and never returned ---------------
@@ -111,7 +101,7 @@ class SitesDaemonPlugin : DaemonPlugin {
 
     /** What the Servers section draws: the state first (signed out, not entitled...), the servers when ready. No token in it. */
     private fun stateOf(api: DaemonApi, service: SitesService): JsonObject {
-        val apiUrl = api.config("sites.apiUrl").orEmpty().trim()
+        val apiUrl = apiUrlOf(api)
         fun state(s: String, extra: JsonObjectBuilderBlock = {}) = buildJsonObject { put("state", s); extra() }
         // A 401/403 from the hosting API means the cached account document is stale: re-read it so the state does not stay "active".
         fun refreshAccount() { api.capabilities.call("account.status", buildJsonObject { put("provider", InfantryProvider.ID); put("refresh", "true") }) }
@@ -188,8 +178,12 @@ class SitesDaemonPlugin : DaemonPlugin {
     private fun JsonObject.str(key: String): String? = (this[key] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
     private fun JsonObject.need(key: String): String = str(key) ?: throw IllegalArgumentException("'$key' is required")
 
+    private fun apiUrlOf(api: DaemonApi): String = api.endpoint(API_ENDPOINT).orEmpty().trim()
+
     companion object {
-        const val SYNC_PERIOD_MS = 5000L
+        /** module.json `daemon.endpoints` names: the hosting API (with its /api prefix) and the plans/billing site. */
+        const val API_ENDPOINT = "api"
+        const val SITE_ENDPOINT = "site"
     }
 }
 

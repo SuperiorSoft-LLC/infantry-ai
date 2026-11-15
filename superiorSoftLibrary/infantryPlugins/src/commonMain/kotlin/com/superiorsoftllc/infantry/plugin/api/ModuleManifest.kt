@@ -376,6 +376,13 @@ data class DaemonCapabilities(
     val publicRoutes: List<String> = emptyList(),
     /** DAEMON-PLUGINS-1: environment variables the daemon half may read. */
     val env: List<String> = emptyList(),
+    /**
+     * ENDPOINT-ENV-1: the services this daemon half calls, by name, one address per build environment
+     * (`{"api": {"prod": "https://...", "staging": "...", "dev": "http://127.0.0.1:..."}}`). Developer config, never a user
+     * setting: `DaemonApi.endpoint(name)` answers the running environment's address (`prod` when that environment has none).
+     * A prod address that is not https, or an address that is not http(s), refuses the daemon half at load.
+     */
+    val endpoints: Map<String, Map<String, String>> = emptyMap(),
     /** DAEMON-PLUGINS-1: keystore secrets the daemon half may read. */
     val secrets: List<String> = emptyList(),
     /** DAEMON-PLUGINS-1: per-plugin limits; unset fields take the host's defaults. */
