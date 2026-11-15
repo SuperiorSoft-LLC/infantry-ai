@@ -142,7 +142,7 @@ class ScriptingDaemonPlugin : DaemonPlugin {
             { session, project, args -> api.tools.invoke("infantry_progress", args, com.superiorsoftllc.infantry.daemon.api.ToolInvoker(com.superiorsoftllc.infantry.daemon.api.Caller(owner = true, agent = true, activeSession = session), session, null, project, "exec-progress")) },
         )
         // SCRIPT-FETCH-1: capability http.fetch (module.json `capabilities`), off until scripting.fetch.enabled.
-        val fetch = FetchBridge({ api.config(it) }, { name, project -> api.runs.secretFields(name, project) }, { api.log(it) })
+        val fetch = FetchBridge({ api.config(it) }, { name, project -> api.runs.secretFields(name, project) }, { api.log(it) }, api.http)
         api.capabilities.handle(FetchBridge.ID) { call -> fetch.fetch(call.args, call.caller.project) }
         // CORE-PROGRESS-DOWNLOAD-1: the core progress system and downloader for scripts (progress.start / progress.update / http.download).
         val progressBridge = ProgressBridge(api.progress, api.downloads, { api.config(it) }, { name, project -> api.runs.secretFields(name, project) },

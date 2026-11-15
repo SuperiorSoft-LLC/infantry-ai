@@ -13,11 +13,8 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
-import java.net.URI
-import java.net.http.HttpClient
-import java.net.http.HttpRequest
-import java.net.http.HttpResponse
-import java.time.Duration
+import com.superiorsoftllc.infantry.daemon.api.HttpReply
+import com.superiorsoftllc.infantry.daemon.api.http.HttpSpec
 
 /**
  * AGENT-REGISTRY-1 (docs/AGENT-REGISTRY.md section 7): the reference agent plugin. An agent built with no code orchestration at all:
@@ -30,13 +27,17 @@ import java.time.Duration
  */
 class NewsAgentDaemon : DaemonPlugin {
     private var contribution: AutoCloseable? = null
+    @Volatile private var latest: List<String> = emptyList()
 
     override fun start(api: DaemonApi) {
+        // HTTP-SEAM-1: the example route teaches the seam: `GET /plugins/<id>/headlines` answers the last fetched titles. Relative, so it
+        // sits behind the daemon's own auth (no `daemon.publicRoutes` entry); a public route would pass a check as the 3rd argument.
+        api.routes.handle("GET", "headlines") { HttpReply(body = latest.joinToString("\n"), contentType = "text/plain; charset=utf-8") }
         api.tools.register(FetchTool(api) { titles -> brief(api, titles) })
         val everyMinutes = api.agents.get(AGENT)?.definition?.schedule?.everyMinutes ?: 60
         api.schedule("refresh", everyMinutes * 60_000L) {
             val url = api.env(FEED_ENV)?.trim()?.takeIf { it.isNotEmpty() } ?: return@schedule
-            Feed.fetch(url).onSuccess { brief(api, it) }.onFailure { api.log("refresh of $url failed: ${it.message}") }
+            Feed.fetch(api, url).onSuccess { brief(api, it) }.onFailure { api.log("refresh of $url failed: ${it.message}") }
         }
         api.log("started; agent ${AGENT} ${if (api.agents.get(AGENT) != null) "is in the registry" else "is NOT in the registry"}")
     }
@@ -46,6 +47,7 @@ class NewsAgentDaemon : DaemonPlugin {
     /** Re-contributes the agent with [titles] after its declared instructions. */
     @Synchronized
     private fun brief(api: DaemonApi, titles: List<String>) {
+        latest = titles.take(10)
         val declared = api.agents.get(AGENT)?.definition ?: return
         val base = declared.instructions.substringBefore(HEADLINES)
         val withNews = declared.copy(instructions = (base.trimEnd() + "\n\n" + HEADLINES + "\n" + titles.take(10).joinToString("\n") { "- $it" }).take(19_000))
@@ -74,7 +76,7 @@ class NewsAgentDaemon : DaemonPlugin {
                 ?: api.env(FEED_ENV)?.trim()?.takeIf { it.isNotEmpty() }
                 ?: return ToolResult("no feed: pass url, or set $FEED_ENV", isError = true)
             val limit = ((call.arguments["limit"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull() ?: 10).coerceIn(1, 50)
-            return Feed.fetch(url).fold(
+            return Feed.fetch(api, url).fold(
                 onSuccess = { titles ->
                     runCatching { onTitles(titles) }
                     ToolResult(if (titles.isEmpty()) "the feed has no items" else titles.take(limit).joinToString("\n") { "- $it" })
@@ -95,16 +97,11 @@ class NewsAgentDaemon : DaemonPlugin {
 object Feed {
     const val MAX_BYTES = 1_000_000
 
-    private val client: HttpClient by lazy { HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).followRedirects(HttpClient.Redirect.NORMAL).build() }
-
-    fun fetch(url: String): Result<List<String>> = runCatching {
-        val uri = URI(url)
-        require(uri.scheme == "http" || uri.scheme == "https") { "only http and https feeds" }
-        val req = HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(10)).header("Accept", "application/rss+xml, application/atom+xml, text/plain;q=0.8, */*;q=0.5").GET().build()
-        val res = client.send(req, HttpResponse.BodyHandlers.ofInputStream())
-        check(res.statusCode() in 200..299) { "HTTP ${res.statusCode()}" }
-        val bytes = res.body().use { it.readNBytes(MAX_BYTES) }
-        titles(String(bytes, Charsets.UTF_8))
+    /** The fetch goes through `DaemonApi.http`: its timeouts, redirects, size cap and retry are the daemon's `limits.http.*` settings. */
+    fun fetch(api: DaemonApi, url: String): Result<List<String>> = runCatching {
+        val r = api.http.request(HttpSpec(url, headers = mapOf("Accept" to "application/rss+xml, application/atom+xml, text/plain;q=0.8, */*;q=0.5"), maxBytes = MAX_BYTES.toLong()))
+        check(r.ok) { "HTTP ${r.status}" }
+        titles(r.body)
     }
 
     fun titles(text: String): List<String> {

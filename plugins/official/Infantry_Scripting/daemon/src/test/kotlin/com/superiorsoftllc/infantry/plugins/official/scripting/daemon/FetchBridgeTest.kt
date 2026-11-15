@@ -32,7 +32,7 @@ class FetchBridgeTest {
     private val base = "http://127.0.0.1:${server.address.port}"
     private val settings = HashMap<String, String>().apply { put("scripting.fetch.enabled", "true"); put("scripting.fetch.allow", "127.0.0.1") }
     private val logs = ArrayList<String>()
-    private val bridge = FetchBridge({ settings[it] }, { n, _ -> if (n == "tok") mapOf("value" to "s3cr3t-token") else null }, { logs += it })
+    private val bridge = FetchBridge({ settings[it] }, { n, _ -> if (n == "tok") mapOf("value" to "s3cr3t-token") else null }, { logs += it }, TestHttp())
 
     private fun reply(ex: com.sun.net.httpserver.HttpExchange, text: String) {
         val b = text.toByteArray(); ex.sendResponseHeaders(200, b.size.toLong()); ex.responseBody.use { it.write(b) }
@@ -109,4 +109,20 @@ class FetchBridgeTest {
         val b = run("""{"url":"$base/echo?a=1","query":{"q":"a b&c","t":["x","y"],"n":2}}""")["body"]!!.jsonPrimitive.content
         assertTrue(b.endsWith("q=a=1&q=a+b%26c&t=x&t=y&n=2"), b)
     }
+}
+
+/** A stand-in for `DaemonApi.http` (the real client lives in core): a plain JDK call honouring the spec's timeout, cap and secret scrub. */
+private class TestHttp : com.superiorsoftllc.infantry.daemon.api.http.Http {
+    override fun request(spec: com.superiorsoftllc.infantry.daemon.api.http.HttpSpec): com.superiorsoftllc.infantry.daemon.api.http.HttpResult {
+        val rb = java.net.http.HttpRequest.newBuilder(java.net.URI(spec.url)).timeout(java.time.Duration.ofMillis(spec.timeoutMs))
+        (spec.headers + spec.secretHeaders).forEach { (k, v) -> rb.header(k, v) }
+        rb.method(spec.method, if (spec.body != null) java.net.http.HttpRequest.BodyPublishers.ofString(spec.body) else java.net.http.HttpRequest.BodyPublishers.noBody())
+        val resp = java.net.http.HttpClient.newBuilder().followRedirects(java.net.http.HttpClient.Redirect.NEVER).build().send(rb.build(), java.net.http.HttpResponse.BodyHandlers.ofByteArray())
+        val cap = spec.maxBytes.toInt()
+        val bytes = resp.body()
+        var text = String(if (bytes.size > cap) bytes.copyOf(cap) else bytes, Charsets.UTF_8)
+        for (v in spec.secretHeaders.values) text = text.replace(v, "***")
+        return com.superiorsoftllc.infantry.daemon.api.http.HttpResult(resp.statusCode(), resp.headers().map().mapValues { it.value.joinToString(", ") }, text, bytes.size > cap)
+    }
+    override fun json(spec: com.superiorsoftllc.infantry.daemon.api.http.HttpSpec) = throw UnsupportedOperationException()
 }

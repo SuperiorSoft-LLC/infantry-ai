@@ -144,6 +144,37 @@ api.routes.handle("GET", "hello") { call: HttpCall -> HttpReply(200, """{"ok":tr
 - `HttpCall`: `method`, `path`, `query`, `headers`, `body`, `remoteAddress`, `pathParams`. `HttpReply`: `status`,
   `body`, `contentType`, `headers`.
 - A route is rate limited to `limits.plugins.routeRequestsPerMinute` requests a minute (600; 0 = unlimited), then 429.
+- **Auth of a route (HTTP-SEAM-1, DaemonApi 1.61.0).** Every route is behind the daemon's auth unless it is listed in
+  `daemon.publicRoutes`. A public route must declare its own check, as the third argument:
+  `api.routes.handle("POST", "/hooks/{id}", RouteCheck { call -> if (signatureOk(call)) null else "bad signature" }) { ... }`.
+  `RouteCheck.refusal` runs before the handler; a text answers 401 and the handler never runs; a throw refuses too. A public
+  route registered without a check refuses the plugin at load. A check on a non-public route is an extra gate on top of the
+  daemon's auth.
+- **Routes unmount with the plugin.** An unload, a reload or a disable removes every route the plugin mounted; the path
+  answers 404 afterwards.
+
+### HTTP client (HTTP-SEAM-1, DaemonApi 1.61.0)
+
+`api.http` is the ONE outgoing HTTP client of the daemon; a plugin never opens its own (`HttpSeamGuardTest`). A file download is
+`api.downloads`, not this.
+
+```kotlin
+val r = api.http.request(HttpSpec("https://api.example.com/v1/items", secretHeaders = mapOf("Authorization" to "Bearer $token")))
+val json = api.http.json(HttpSpec("https://api.example.com/v1/items"))   // 2xx and JSON, else HttpException
+```
+
+- `HttpSpec`: `url`, `method`, `headers`, `secretHeaders`, `body`, `timeoutMs`, `maxBytes`, `maxRedirects`, `retry`. A zero or null
+  number means the daemon's `limits.http.*` setting (`connectTimeoutSeconds`, `timeoutSeconds`, `redirects`, `maxResponseKb`,
+  `retries`, `backoffMs`, `backoffMaxMs`). The proxy is the `downloads.proxy` setting, else the JVM's.
+- `secretHeaders` (header name to value; read the value with `api.secret`) are sent but never logged, never in an error or in
+  `HttpSpec.toString`, scrubbed from the response body, and dropped when a redirect leaves the first host.
+- `HttpResult`: `status`, `headers`, `body`, `truncated` (the body hit the size cap), `attempts`, `elapsedMs`, `ok`. A non-2xx
+  answer is a result, not an exception; `HttpException` means no answer (offline, a timeout, a bad URL) or, for `json`, a non-2xx,
+  a truncated body or bad JSON.
+- A GET or HEAD is retried on a transport failure or a 408, 425, 429 or 5xx answer; any other method is not, unless `retry` says so.
+  `RetryPolicy` is a pure value (`maxAttempts`, `baseDelayMs`, `maxDelayMs`, `factor`, `jitter`, `retryStatuses`,
+  `shouldRetry`, `delayMs`); `Backoff.run` applies it through a `Sleeper`, so a test passes a fake clock. `NoHttp` is the default
+  of a host without a client.
 
 ### Frames (client protocol)
 
@@ -375,6 +406,10 @@ Test the guard with `Acme_DaemonHello`: the tool argument `sleepMs` blocks on pu
 ## Type index (every other public type)
 
 Generated for the `infantryDaemonApi` guard `SdkTypesDocumentedGuardTest`: every public top-level type of the module is named on this page. Types above are explained in full; the rest are listed by source file with the first line of their KDoc. Read the file for the members.
+
+### `Http.kt`, `RetryPolicy.kt`
+
+- `Http`, `HttpSpec`, `HttpResult`, `HttpException`, `NoHttp`, `RetryPolicy`, `Backoff`, `Sleeper`, `RouteCheck`: HTTP-SEAM-1, see [HTTP client](#http-client-http-seam-1-daemonapi-161) and [Routes](#routes-http).
 
 ### `Downloads.kt`
 
