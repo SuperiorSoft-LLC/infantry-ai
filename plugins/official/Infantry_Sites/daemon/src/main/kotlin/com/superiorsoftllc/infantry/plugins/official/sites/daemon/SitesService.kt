@@ -25,6 +25,7 @@ class SitesException(val kind: String, message: String) : RuntimeException(messa
         const val BAD_REQUEST = "bad_request"
         const val NOT_FOUND = "not_found"
         const val UNAVAILABLE = "unavailable"
+        const val EMAIL_UNVERIFIED = "email_unverified"
     }
 }
 
@@ -85,6 +86,12 @@ class SitesService(
         call("DELETE", HostingRoutes.server(id))
     }
 
+    /** The account's `reclaimableUntil` (epoch ms): set when the paid period ended and the servers are still in the reclaim window; null otherwise. */
+    fun reclaimableUntil(): Long? {
+        val o = call("GET", HostingRoutes.ACCOUNT) as? JsonObject ?: return null
+        return (o["reclaimableUntil"] as? JsonPrimitive)?.contentOrNull?.toLongOrNull()
+    }
+
     private fun call(method: String, path: String, body: String? = null, extra: Map<String, String> = emptyMap()): JsonElement? {
         val base = baseUrl().trim().trimEnd('/')
         if (base.isEmpty()) throw SitesException(SitesException.NOT_CONFIGURED, "no hosting service is configured")
@@ -107,16 +114,22 @@ class SitesService(
 
     private fun answer(r: HttpResult): JsonElement? {
         val json = r.body.takeIf { it.isNotBlank() }?.let { runCatching { Json.parseToJsonElement(it) }.getOrNull() }
+        val code = ((json as? JsonObject)?.get("error") as? JsonPrimitive)?.contentOrNull
         val reason = ((json as? JsonObject)?.get("message") as? JsonPrimitive)?.contentOrNull
         return when (r.status) {
             in 200..299 -> json
             401 -> throw SitesException(SitesException.SIGNED_OUT, "sign in again")
-            403 -> throw SitesException(SitesException.NOT_ENTITLED, "your plan does not include hosting")
+            403 -> if (code == "email_unverified") throw SitesException(SitesException.EMAIL_UNVERIFIED, "Verify your email address to create a server.")
+                   else throw SitesException(SitesException.NOT_ENTITLED, "your plan does not include hosting")
             404 -> throw SitesException(SitesException.NOT_FOUND, "no such server")
-            409 -> if (((json as? JsonObject)?.get("error") as? JsonPrimitive)?.contentOrNull == "scheduled_for_destroy") throw SitesException(SitesException.BAD_REQUEST, reason ?: "this server is scheduled to be destroyed")
+            409 -> if (code == "scheduled_for_destroy") throw SitesException(SitesException.BAD_REQUEST, reason ?: "this server is scheduled to be destroyed")
                    else throw SitesException(SitesException.LIMIT, "you're at your plan's server limit")
-            429 -> throw SitesException(SitesException.UNAVAILABLE, "slow down: too many requests, try again later")
+            429 -> {
+                val secs = r.headers.entries.firstOrNull { it.key.equals("Retry-After", ignoreCase = true) }?.value?.trim()?.toLongOrNull()?.takeIf { it >= 0 }
+                throw SitesException(SitesException.UNAVAILABLE, if (secs != null) "slow down: too many requests, try again in $secs s" else "slow down: too many requests, try again later")
+            }
             400, 422 -> throw SitesException(SitesException.BAD_REQUEST, reason ?: "the request was refused")
+            502 -> throw SitesException(SitesException.UNAVAILABLE, "The hosting provider had a problem. Try again in a minute.")
             else -> throw SitesException(SitesException.UNAVAILABLE, "the hosting service answered HTTP ${r.status}")
         }
     }

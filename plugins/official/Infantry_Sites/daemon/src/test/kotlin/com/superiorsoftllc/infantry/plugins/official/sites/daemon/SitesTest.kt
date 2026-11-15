@@ -60,7 +60,7 @@ private class JdkHttp : Http {
         (spec.headers + spec.secretHeaders).forEach { (k, v) -> b.header(k, v) }
         b.method(spec.method, spec.body?.let { HttpRequest.BodyPublishers.ofString(it) } ?: HttpRequest.BodyPublishers.noBody())
         val r = try { client.send(b.build(), HttpResponse.BodyHandlers.ofString()) } catch (e: Exception) { throw HttpException("no answer") }
-        return HttpResult(r.statusCode(), emptyMap(), r.body())
+        return HttpResult(r.statusCode(), r.headers().map().mapValues { it.value.first() }, r.body())
     }
     override fun json(spec: HttpSpec): JsonElement = Json.parseToJsonElement(request(spec).body)
 }
@@ -74,6 +74,9 @@ private class StubApi {
     val idemKeys = mutableListOf<String?>()
     val bodies = mutableListOf<String>()
     var forced: Int? = null
+    var forcedBody = """{"error":"forced"}"""
+    var retryAfter: String? = null
+    var reclaimableUntil: Long? = null
     var servers = mutableListOf(mapOf("id" to ID1, "name" to "web", "status" to "active", "ip" to "203.0.113.5", "region" to "nyc3", "size" to "s-1vcpu-2gb", "createdAt" to "2026-11-14T10:00:00Z"))
 
     init {
@@ -85,7 +88,7 @@ private class StubApi {
             val f = forced
             val path = ex.requestURI.path
             when {
-                f != null -> reply(ex, f, """{"error":"forced"}""")
+                f != null -> { retryAfter?.let { ex.responseHeaders.add("Retry-After", it) }; reply(ex, f, forcedBody) }
                 ex.requestMethod == "GET" && path == "/hosting/v1/servers" -> reply(ex, 200, Json.encodeToString(JsonArray.serializer(), JsonArray(servers.map { s -> JsonObject(s.mapValues { JsonPrimitive(it.value) }) })))
                 ex.requestMethod == "POST" && path == "/hosting/v1/servers" -> {
                     val name = Json.parseToJsonElement(body).jsonObject["name"]!!.jsonPrimitive.content
@@ -95,6 +98,10 @@ private class StubApi {
                 ex.requestMethod == "DELETE" -> reply(ex, 204, "")
                 else -> reply(ex, 404, "{}")
             }
+        }
+        server.createContext("/core/v1/account") { ex ->
+            calls += "${ex.requestMethod} ${ex.requestURI.path}"
+            reply(ex, 200, """{"reclaimableUntil":${reclaimableUntil ?: "null"}}""")
         }
         server.start()
     }
@@ -143,6 +150,68 @@ class SitesTest {
         assertEquals(SitesException.NOT_ENTITLED, assertFailsWith<SitesException> { s.list() }.kind)
         stub.forced = 401
         assertEquals(SitesException.SIGNED_OUT, assertFailsWith<SitesException> { s.list() }.kind)
+    }
+
+    private fun failure(status: Int, body: String, op: (SitesService) -> Unit = { it.list() }): SitesException {
+        stub.forced = status
+        stub.forcedBody = body
+        return assertFailsWith<SitesException> { op(service()) }
+    }
+
+    @Test
+    fun `403 splits on the error field, email_unverified vs forbidden`() {
+        val e = failure(403, """{"error":"email_unverified","message":"x"}""") { it.create("a", null) }
+        assertEquals(SitesException.EMAIL_UNVERIFIED, e.kind)
+        assertEquals("Verify your email address to create a server.", e.message)
+        assertEquals(SitesException.NOT_ENTITLED, failure(403, """{"error":"forbidden","message":"email_unverified"}""").kind)
+        assertEquals(SitesException.NOT_ENTITLED, failure(403, "").kind)
+    }
+
+    @Test
+    fun `502 provider_error and 500 are unavailable with their own text`() {
+        val e = failure(502, """{"error":"provider_error"}""")
+        assertEquals(SitesException.UNAVAILABLE, e.kind)
+        assertEquals("The hosting provider had a problem. Try again in a minute.", e.message)
+        val g = failure(500, """{"error":"internal"}""")
+        assertEquals(SitesException.UNAVAILABLE, g.kind)
+        assertTrue("HTTP 500" in g.message!!)
+    }
+
+    @Test
+    fun `429 says slow down and includes Retry-After seconds when present`() {
+        stub.retryAfter = "17"
+        assertTrue("try again in 17 s" in failure(429, """{"error":"rate_limited"}""").message!!)
+        stub.retryAfter = null
+        val e = failure(429, """{"error":"rate_limited"}""")
+        assertTrue("slow down" in e.message!! && " s" !in e.message!!)
+        assertEquals(2, stub.calls.count { it == "GET /hosting/v1/servers" }, "one call per attempt, no retry loop")
+    }
+
+    @Test
+    fun `reclaimableUntil is read from the account answer`() {
+        assertNull(service().reclaimableUntil())
+        stub.reclaimableUntil = 1_795_000_000_000L
+        assertEquals(1_795_000_000_000L, service().reclaimableUntil())
+        assertTrue(stub.auth.all { it == "Bearer $TOKEN" })
+    }
+
+    @Test
+    fun `a 403 from the servers list with a reclaim window shows the reclaim state, not only not entitled`() {
+        stub.reclaimableUntil = 1_795_000_000_000L
+        stub.forced = 403
+        stub.forcedBody = """{"error":"forbidden"}"""
+        val w = wire(mapOf("sites.apiUrl" to stub.base))
+        val st = Json.parseToJsonElement(w.routes.getValue("GET state")(HttpCall("GET", "state")).body).jsonObject
+        assertEquals("not_entitled", st["state"]!!.jsonPrimitive.content)
+        assertEquals("1795000000000", st["reclaimableUntil"]!!.jsonPrimitive.content)
+        // plan not entitled per the account hub too: the same window is read
+        val free = wire(mapOf("sites.apiUrl" to stub.base), entitled = false)
+        val fs = Json.parseToJsonElement(free.routes.getValue("GET state")(HttpCall("GET", "state")).body).jsonObject
+        assertEquals("1795000000000", fs["reclaimableUntil"]!!.jsonPrimitive.content)
+        // no window: the field is absent
+        stub.reclaimableUntil = null
+        val none = Json.parseToJsonElement(w.routes.getValue("GET state")(HttpCall("GET", "state")).body).jsonObject
+        assertNull(none["reclaimableUntil"])
     }
 
     @Test

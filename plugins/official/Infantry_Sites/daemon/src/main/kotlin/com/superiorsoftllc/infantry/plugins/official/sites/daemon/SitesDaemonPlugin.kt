@@ -15,6 +15,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonArray
@@ -117,13 +118,16 @@ class SitesDaemonPlugin : DaemonPlugin {
         val signUp = provider?.str("signUpUrl")
         if (provider == null || provider["signedIn"]?.let { (it as? JsonPrimitive)?.booleanOrNull } != true) return state(SitesException.SIGNED_OUT)
         val entitled = (provider["services"] as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }.firstOrNull { it.str("id") == InfantryProvider.SERVICE }?.get("entitled")?.let { (it as? JsonPrimitive)?.booleanOrNull } == true
-        if (!entitled) return state(SitesException.NOT_ENTITLED) { signUp?.let { put("signUpUrl", it) } }
+        fun reclaim(): Long? = try { service.reclaimableUntil() } catch (e: SitesException) { null }
+        fun JsonObjectBuilder.extras(until: Long?) { signUp?.let { put("signUpUrl", it) }; until?.let { put("reclaimableUntil", it) } }
+        if (!entitled) return state(SitesException.NOT_ENTITLED) { extras(reclaim()) }
         return try {
             val ent = (api.capabilities.call("account.entitlement", buildJsonObject { put("provider", InfantryProvider.ID); put("entitlement", InfantryProvider.ENTITLEMENT) }) as? CapabilityResult.Ok)?.value as? JsonObject
             val servers = service.list()
             state("ready") { put("servers", servers); ent?.get("limit")?.let { put("limit", it) } }
         } catch (e: SitesException) {
-            state(e.kind) { put("message", e.message ?: ""); signUp?.let { put("signUpUrl", it) } }
+            val until = if (e.kind == SitesException.NOT_ENTITLED) reclaim() else null
+            state(e.kind) { put("message", e.message ?: ""); extras(until) }
         }
     }
 
@@ -183,4 +187,4 @@ class SitesDaemonPlugin : DaemonPlugin {
     }
 }
 
-private typealias JsonObjectBuilderBlock = kotlinx.serialization.json.JsonObjectBuilder.() -> Unit
+private typealias JsonObjectBuilderBlock = JsonObjectBuilder.() -> Unit

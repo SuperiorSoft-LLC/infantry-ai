@@ -4,6 +4,9 @@ package com.superiorsoftllc.infantry.plugins.official.sites
 
 import com.superiorsoftllc.infantry.plugin.api.DaemonAccess
 import com.superiorsoftllc.infantry.plugin.api.DaemonReply
+import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -16,7 +19,7 @@ import kotlinx.serialization.json.jsonObject
 data class SiteServer(val id: String, val name: String, val status: String, val ip: String, val region: String, val size: String, val createdAt: String, val destroyAt: String)
 
 /** What the Servers section draws: [state] is `ready`, `signed_out`, `not_entitled`, `limit`, `not_configured`, `unavailable` or `not_found`. */
-data class SitesState(val state: String, val servers: List<SiteServer>, val limit: Int?, val message: String?, val signUpUrl: String?)
+data class SitesState(val state: String, val servers: List<SiteServer>, val limit: Int?, val message: String?, val signUpUrl: String?, val reclaimableUntil: Long? = null)
 
 object SitesParser {
     fun parse(text: String?): SitesState? {
@@ -24,7 +27,7 @@ object SitesParser {
         val o = runCatching { Json.parseToJsonElement(text).jsonObject }.getOrNull() ?: return null
         val state = o.str("state") ?: return null
         val servers = (o["servers"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonObject)?.let(::server) }
-        return SitesState(state, servers, (o["limit"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull(), o.str("message"), o.str("signUpUrl"))
+        return SitesState(state, servers, (o["limit"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull(), o.str("message"), o.str("signUpUrl"), (o["reclaimableUntil"] as? JsonPrimitive)?.contentOrNull?.toLongOrNull())
     }
 
     private fun server(o: JsonObject): SiteServer? {
@@ -42,9 +45,24 @@ object SitesParser {
     fun message(state: String, error: String): String = when (state) {
         "limit" -> "You're at your plan's server limit."
         "not_entitled" -> "Your plan does not include hosting."
+        "email_unverified" -> "Verify your email address to create a server."
         "signed_out" -> "Sign in to Infantry AI Hosting first."
         else -> error
     }
+
+    /** A server time as a readable local date ("Nov 21, 2026"). Epoch milliseconds, or an ISO string; blank or unparsable gives null (never the raw value). */
+    fun date(value: String?, zone: TimeZone = TimeZone.currentSystemDefault()): String? {
+        val v = value?.trim().orEmpty()
+        if (v.isEmpty()) return null
+        val instant = v.toLongOrNull()?.let { runCatching { Instant.fromEpochMilliseconds(it) }.getOrNull() }
+            ?: runCatching { Instant.parse(v) }.getOrNull() ?: return null
+        val d = instant.toLocalDateTime(zone).date
+        return "${MONTHS[d.month.ordinal]} ${d.day}, ${d.year}"
+    }
+
+    fun date(epochMs: Long?, zone: TimeZone = TimeZone.currentSystemDefault()): String? = date(epochMs?.toString(), zone)
+
+    private val MONTHS = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 
     private fun JsonObject.str(key: String): String? = (this[key] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
 }

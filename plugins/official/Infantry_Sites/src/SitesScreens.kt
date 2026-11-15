@@ -49,6 +49,7 @@ const val SITES_CREATE_OPEN_TAG = "sites-create-open"
 const val SITES_CREATE_SUBMIT_TAG = "sites-create-submit"
 const val SITES_NAME_TAG = "sites-name"
 const val SITES_KEY_TAG = "sites-ssh-key"
+const val SITES_RECLAIM_TAG = "sites-reclaim-text"
 const val SITES_MESSAGE_TAG = "sites-message"
 const val SITES_ROW_TAG_PREFIX = "sites-server-"
 const val SITES_START_TAG_PREFIX = "sites-start-"
@@ -116,6 +117,13 @@ fun SitesServers(context: TabContext) {
         problem?.let { Text(it, color = Palette.Danger, fontSize = 12.sp) }
         message?.let { Text(it, color = Palette.Warn, fontSize = 12.sp, modifier = Modifier.testTag(SITES_MESSAGE_TAG)) }
         val s = state
+        s?.reclaimableUntil?.let { until ->
+            CardBox("sites-reclaim") {
+                Text("Infantry AI Hosting", color = Palette.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Text("Your subscription ended. Re-subscribe before ${SitesParser.date(until) ?: "the deadline"} to keep your server.", color = Palette.Warn, fontSize = 12.sp, modifier = Modifier.testTag(SITES_RECLAIM_TAG))
+                s.signUpUrl?.let { url -> Button({ uri.openUri(url) }, Modifier.testTag(SITES_SUBSCRIBE_TAG)) { Text("Subscribe") } }
+            }
+        }
         when {
             s == null -> if (problem == null) Text("Loading...", color = Palette.Muted, fontSize = 12.sp)
             s.state == "not_configured" -> Text(s.message ?: "No hosting service is configured.", color = Palette.Muted, fontSize = 12.sp, modifier = Modifier.testTag(SITES_EMPTY_TAG))
@@ -124,6 +132,7 @@ fun SitesServers(context: TabContext) {
                 Text("Sign in to see and manage your servers. The sign-in code shows in Account > Overview.", color = Palette.Muted, fontSize = 12.sp)
                 Button({ act { client.startSignIn() } }, Modifier.testTag(SITES_SIGN_IN_TAG)) { Text("Sign in") }
             }
+            s.state == "not_entitled" && s.reclaimableUntil != null -> Unit
             s.state == "not_entitled" -> CardBox("sites-not-entitled") {
                 Text("Infantry AI Hosting", color = Palette.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                 Text("Your plan does not include hosting yet.", color = Palette.Muted, fontSize = 12.sp)
@@ -156,8 +165,8 @@ fun SitesServers(context: TabContext) {
                         Text(srv.name, color = Palette.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                         Chip(srv.status.ifBlank { "unknown" }, statusColor(srv.status))
                     }
-                    Text(listOf(srv.ip, srv.region, srv.size, srv.createdAt).filter { it.isNotBlank() }.joinToString("   "), color = Palette.Muted, fontSize = 12.sp)
-                    if (srv.destroyAt.isNotBlank()) Text("Will be destroyed on ${srv.destroyAt}", color = Palette.Warn, fontSize = 12.sp)
+                    Text(listOf(srv.ip, srv.region, srv.size, SitesParser.date(srv.createdAt).orEmpty()).filter { it.isNotBlank() }.joinToString("   "), color = Palette.Muted, fontSize = 12.sp)
+                    SitesParser.date(srv.destroyAt)?.let { Text("Will be destroyed on $it", color = Palette.Warn, fontSize = 12.sp) }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         if (srv.status == "active") OutlinedButton({ act { client.power(srv.id, "stop") } }, Modifier.testTag(SITES_STOP_TAG_PREFIX + srv.id)) { Text("Stop") }
                         else OutlinedButton({ act { client.power(srv.id, "start") } }, Modifier.testTag(SITES_START_TAG_PREFIX + srv.id)) { Text("Start") }
