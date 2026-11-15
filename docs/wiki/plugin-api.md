@@ -887,3 +887,5 @@ Generated for the `infantryPlugins` guard `SdkTypesDocumentedGuardTest`: every p
 - `UpdateCredentialRef`: The NAMES under which a source's secret is looked up, in this order: the environment variable [env], then the daemon keystore entry [secret].
 - `UpdateDeclaration`: UPDATE-ENGINE-1 (docs/wiki/Updates.md): a component's update declaration, the `update` object of a module.json (and the `update.source.*` settings for the app itself).
 - `UpdateSourceRef`: Where one component's new versions live.
+
+Lifecycle callbacks (`register`, `stop`, `observer`) are listed in [Plugin lifecycle](Plugin-lifecycle.md#lifecycle-callbacks-a-plugin-can-use-attn-stale-1).

@@ -286,6 +286,22 @@ class OwnerQuestionsTest {
         assertEquals(QuestionStates.CANCELLED, after.get(q.id)!!.state)
     }
 
+    // ATTN-STALE-1: before the fix an auto-picked question of a removed session stayed overridable (state auto) for ever.
+    @Test
+    fun anAutoPickedQuestionOfAGoneSessionTurnsStaleAndCanNoLongerBeAnswered() {
+        var alive = true
+        val questions = service(exists = { alive })
+        val q = questions.ask(worker, ask(defaultAfterMin = 1))
+        now += 60_000L
+        questions.sweep()
+        assertEquals(QuestionStates.AUTO, questions.get(q.id)!!.state)
+        alive = false
+        questions.sweep()
+        assertEquals(QuestionStates.STALE, questions.get(q.id)!!.state)
+        assertEquals("SQLite", questions.get(q.id)!!.answer, "the pick stays in history")
+        assertFailsWith<IllegalArgumentException> { questions.answer(QuestionAnswer(q.id, "Postgres", null)) }
+    }
+
     @Test
     fun theSweepExpiresAnOldQuestionOfAnIdleAskerButNotOfABusyOne() {
         var busy = true

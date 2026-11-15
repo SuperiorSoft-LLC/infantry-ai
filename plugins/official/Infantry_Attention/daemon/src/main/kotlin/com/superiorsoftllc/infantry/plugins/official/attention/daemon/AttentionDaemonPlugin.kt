@@ -57,6 +57,10 @@ class AttentionDaemonPlugin : DaemonPlugin {
         }
         // ATTN-2c: the owner questions (store, sweep, frames, mail, connect replay) live here too.
         QuestionsWiring.install(api)
+        // ATTN-STALE-1: the first sweep (15 s after load, sessions restored) clears the orphan backlog; then every tick.
+        api.schedule("attention-stale-sweep", QuestionsWiring.SWEEP_MS) {
+            store.sweepStale(sessionExists = { (api.sessionReads.find(it, com.superiorsoftllc.infantry.daemon.api.Caller(owner = true)) as? com.superiorsoftllc.infantry.daemon.api.sessions.SessionsResult.Ok)?.value != null })
+        }
         api.routes.handle("GET", "/attention") { HttpReply(200, AttentionJson.listText(store.list()), "application/json") }
     }
 }

@@ -152,13 +152,15 @@ class OwnerQuestions(
      * A session ended (killed, removed, restarted): its open questions can no longer reach the asker, so they are
      * cancelled with [QuestionResolvedBy.ORPHANED] (no mail: nobody is there to read it). Returns the questions closed.
      */
-    fun orphanSession(sessionId: String, now: Long = clock()): List<OwnerQuestion> =
-        orphan(now) { it.sessionId == sessionId }
+    fun orphanSession(sessionId: String, now: Long = clock(), includeAuto: Boolean = false): List<OwnerQuestion> =
+        orphan(now, includeAuto) { it.sessionId == sessionId }
 
-    private fun orphan(now: Long, match: (OwnerQuestion) -> Boolean): List<OwnerQuestion> {
+    private fun orphan(now: Long, includeAuto: Boolean = false, match: (OwnerQuestion) -> Boolean): List<OwnerQuestion> {
         val closed = synchronized(lock) {
-            repository.all().filter { it.state == QuestionStates.OPEN && match(it) }.map {
-                it.copy(state = QuestionStates.CANCELLED, resolvedBy = QuestionResolvedBy.ORPHANED, resolvedAt = now).also(repository::update)
+            repository.all().filter { (it.state == QuestionStates.OPEN || (includeAuto && it.state == QuestionStates.AUTO)) && match(it) }.map {
+                // ATTN-STALE-1: an auto-picked question of a gone session keeps its pick but turns `stale`: no override reaches anyone.
+                if (it.state == QuestionStates.AUTO) it.copy(state = QuestionStates.STALE, resolvedAt = now).also(repository::update)
+                else it.copy(state = QuestionStates.CANCELLED, resolvedBy = QuestionResolvedBy.ORPHANED, resolvedAt = now).also(repository::update)
             }
         }
         closed.forEach(::publish)
@@ -171,7 +173,7 @@ class OwnerQuestions(
      */
     fun sweep(now: Long = clock()): List<OwnerQuestion> {
         val ttlMs = ttlMinutes().let { if (it <= 0) Long.MAX_VALUE else it * MINUTE_MS }
-        orphan(now) { !sessionExists(it.sessionId) || (now - it.createdAt >= ttlMs && !sessionBusy(it.sessionId)) }
+        orphan(now, includeAuto = true) { !sessionExists(it.sessionId) || (it.state == QuestionStates.OPEN && now - it.createdAt >= ttlMs && !sessionBusy(it.sessionId)) }
         val picked = synchronized(lock) {
             repository.all()
                 .filter { it.state == QuestionStates.OPEN && it.defaultAfterMin != null && now >= it.createdAt + it.defaultAfterMin!! * MINUTE_MS }

@@ -54,6 +54,10 @@ class AttentionStore(
         return get(id)?.also(::publish)
     }
 
+    /** ATTN-STALE-1: acknowledges every open item whose session is gone (kept in history, no longer asking for the owner). Returns the count. */
+    fun sweepStale(sessionExists: (String) -> Boolean, at: Long = clock()): Int =
+        list().filter { it.ackedAt == null && it.sessionId != null && !sessionExists(it.sessionId!!) }.count { acknowledge(it.id, at) != null }
+
     private fun get(id: String): AttentionEntry? =
         db.query("SELECT * FROM attention WHERE id = ?", listOf(id)).firstOrNull()?.let(::row)
 
