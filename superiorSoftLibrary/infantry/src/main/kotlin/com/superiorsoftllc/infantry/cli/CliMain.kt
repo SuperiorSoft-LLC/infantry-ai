@@ -531,6 +531,7 @@ internal object Cli {
                 "tests" -> TestsCli.run(stream, parsed.args, out, err, getenv)
                 "card" -> CardCli.run(stream, parsed.args, out, err, getenv)
                 "docs" -> DocsCli.run(stream, parsed.args, out, err, getenv)
+                "account" -> AccountCli.run(stream, parsed.args, out, err, getenv)
                 "mcp" -> runBlocking { McpCli.run(stream, parsed.args, parsed.project, parsed.body, parsed.purpose, parsed.jsonOut, out, err, getenv) }
                 "tool" -> ToolCli.run(stream, parsed.args, parsed.body?.let { if (it == "-") input().use { r -> r.readText() } else it }, out, err, getenv)
                 "script" -> ScriptCli.run(stream, parsed.args, parsed.body?.let { if (it == "-") input().use { r -> r.readText() } else it } ?: parsed.file?.let { f -> runCatching { File(f).readText() }.getOrNull() }, out, err, getenv)
@@ -6226,6 +6227,7 @@ internal object Cli {
         "tests" -> TestsCli.usageError(parsed.args)
         "card" -> CardCli.usageError(parsed.args)
         "docs" -> DocsCli.usageError(parsed.args)
+        "account" -> AccountCli.usageError(parsed.args)
         "tool" -> ToolCli.usageError(parsed.args)
         "script" -> ScriptCli.usageError(parsed.args)
         "issue" -> issueUsageError(parsed, getenv)
@@ -6435,7 +6437,7 @@ internal object Cli {
         "submit", "watch", "pods", "runs", "logs", "cancel", "tickets", "board", "ticket", "agents", "send", "inbox",
         "read", "threads", "thread", "waiting", "epics", "stories", "epic", "project", "mcp", "knowledge", "memory", "decision", "pipeline", "notify", "issue",
         "trait", "skill", "role", "ask", "harnesses", "harness-status", "harness", "archive", "harness-install", "image", "session", "remote", "bg", "kill", "usage",
-        "processes", "health", "settings", "agent", "agent-def", "run-cmd", "secret", "event", "tests", "card", "docs", "tool", "script", "runner",
+        "processes", "health", "settings", "agent", "agent-def", "run-cmd", "secret", "event", "tests", "card", "docs", "account", "tool", "script", "runner",
         "install-cli", "uninstall-cli", "login", "logout", "whoami",
     )
 

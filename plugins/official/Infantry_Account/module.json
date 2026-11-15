@@ -1,0 +1,98 @@
+{
+  "name": "Infantry_Account",
+  "version": "1.0.0",
+  "apiVersion": 2,
+  "author": "Infantry AI",
+  "description": "The Account tab: sign in to any service that registers as an account provider (device code), see your plan and billing, and let permitted plugins ask for entitlements and tokens.",
+  "tier": "official",
+  "sequence": [],
+  "entry": "com.superiorsoftllc.infantry.plugins.official.account.AccountPlugin",
+  "jar": "build/libs/Infantry_Account.jar",
+  "buildOrder": 185,
+  "services": ["daemon"],
+  "routes": [
+    "GET /plugins/Infantry_Account/state",
+    "POST /plugins/Infantry_Account/signin",
+    "POST /plugins/Infantry_Account/signout"
+  ],
+  "daemon": {
+    "entry": "com.superiorsoftllc.infantry.plugins.official.account.daemon.AccountDaemonPlugin",
+    "jar": "daemon/build/libs/Infantry_Account-daemon.jar",
+    "apiAtLeast": "1.62.0",
+    "config": [
+      {
+        "node": "infantry.account.service", "group": "Account", "title": "Account", "tab": "Plugins", "order": 920,
+        "applies": "Applies to: how often the Account tab re-reads each provider's account document.",
+        "keywords": ["account", "provider", "sign in", "plan", "billing"],
+        "fields": [
+          { "key": "account.refreshMinutes", "type": "number", "label": "Re-read the account every (minutes)", "default": 15, "min": 1, "max": 1440, "step": 1, "scope": "daemon", "order": 1 }
+        ]
+      }
+    ]
+  },
+  "capabilities": [
+    {
+      "id": "account.status",
+      "description": "Per provider: signed in, the masked user, the plan status and each service's entitled flag. No secret in it.",
+      "runs": "daemon",
+      "action": "account.read",
+      "kind": "read",
+      "params": { "type": "object", "properties": { "provider": { "type": "string", "description": "One provider id; omit for all." } } },
+      "result": { "type": "object", "properties": { "providers": { "type": "array" } } }
+    },
+    {
+      "id": "account.entitlement",
+      "description": "Whether the signed-in account holds an entitlement of a provider, with its limit, usage and attributes.",
+      "runs": "daemon",
+      "action": "account.read",
+      "kind": "read",
+      "params": { "type": "object", "properties": { "provider": { "type": "string" }, "entitlement": { "type": "string" } }, "required": ["provider", "entitlement"] },
+      "result": { "type": "object", "properties": { "entitled": { "type": "boolean" }, "limit": {}, "used": {}, "attrs": { "type": "object" } } }
+    },
+    {
+      "id": "account.token",
+      "description": "A short-lived access token. Given only to a plugin module the provider lists as a consumer; refused to sessions, the CLI and scripts.",
+      "runs": "daemon",
+      "action": "account.token",
+      "kind": "write",
+      "params": { "type": "object", "properties": { "provider": { "type": "string" } }, "required": ["provider"] },
+      "result": { "type": "object", "properties": { "accessToken": { "type": "string" }, "expiresAt": { "type": "number" } } }
+    },
+    {
+      "id": "account.signIn",
+      "description": "Starts a device-code sign-in (the owner's CLI only): returns the code and the page to open. The daemon polls until it is approved.",
+      "runs": "daemon",
+      "action": "account.signin",
+      "kind": "write",
+      "params": { "type": "object", "properties": { "provider": { "type": "string" } }, "required": ["provider"] },
+      "result": { "type": "object", "properties": { "userCode": { "type": "string" }, "verificationUri": { "type": "string" }, "expiresAt": { "type": "number" } } }
+    },
+    {
+      "id": "account.signOut",
+      "description": "Signs out of a provider and forgets its tokens (the owner's CLI only).",
+      "runs": "daemon",
+      "action": "account.signout",
+      "kind": "destructive",
+      "params": { "type": "object", "properties": { "provider": { "type": "string" } }, "required": ["provider"] },
+      "result": { "type": "object", "properties": { "wasSignedIn": { "type": "boolean" } } }
+    }
+  ],
+  "tabs": [
+    { "id": "infantry.account", "container": "center" },
+    { "id": "infantry.account.overview", "container": "center" },
+    { "id": "infantry.account.billing", "container": "center" }
+  ],
+  "config": [
+    {
+      "node": "infantry.account",
+      "group": "Tabs",
+      "title": "Account sections",
+      "tab": "Appearance",
+      "order": 70,
+      "keywords": ["account", "tabs", "sections", "sub-tabs"],
+      "fields": [
+        { "key": "children.grouped", "type": "checkbox", "label": "Show the Account sections (Overview, Billing and the ones plugins add) inside the Account tab", "default": true }
+      ]
+    }
+  ]
+}
