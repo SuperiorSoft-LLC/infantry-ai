@@ -254,6 +254,8 @@ class SitesTest {
                         put("providers", buildJsonArray {
                             if (signedIn || true) add(buildJsonObject {
                                 put("id", "infantry"); put("signedIn", signedIn); put("signUpUrl", "https://plans.example/hosting")
+                                put("permissions", buildJsonArray { if (entitled) add(kotlinx.serialization.json.JsonPrimitive("hosting.servers.read")) })
+                                put("limits", buildJsonObject { put("servers.max", 2) })
                                 put("services", buildJsonArray { add(buildJsonObject { put("id", "hosting"); put("entitled", entitled) }) })
                             })
                         })

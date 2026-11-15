@@ -37,12 +37,12 @@
       "runs": "daemon",
       "action": "account.read",
       "kind": "read",
-      "params": { "type": "object", "properties": { "provider": { "type": "string", "description": "One provider id; omit for all." } } },
+      "params": { "type": "object", "properties": { "provider": { "type": "string", "description": "One provider id; omit for all." }, "refresh": { "type": "boolean", "description": "Re-read the account document now (after a 401/403 from the service)." } } },
       "result": { "type": "object", "properties": { "providers": { "type": "array" } } }
     },
     {
       "id": "account.entitlement",
-      "description": "Whether the signed-in account holds an entitlement of a provider, with its limit, usage and attributes.",
+      "description": "Whether the signed-in account holds a permission (an id from the account document's permissions list).",
       "runs": "daemon",
       "action": "account.read",
       "kind": "read",

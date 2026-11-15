@@ -28,7 +28,8 @@ import kotlinx.serialization.json.put
 object InfantryProvider {
     const val ID = "infantry"
     const val SERVICE = "hosting"
-    const val ENTITLEMENT = "hosting.servers"
+    /** The account permission this plugin requires to show the page (the account hub checks "permissions include X"). */
+    const val ENTITLEMENT = "hosting.servers.read"
 
     fun describe(apiUrl: String, siteUrl: String): String = buildJsonObject {
         val api = apiUrl.trim().trimEnd('/')
@@ -112,6 +113,8 @@ class SitesDaemonPlugin : DaemonPlugin {
     private fun stateOf(api: DaemonApi, service: SitesService): JsonObject {
         val apiUrl = api.config("sites.apiUrl").orEmpty().trim()
         fun state(s: String, extra: JsonObjectBuilderBlock = {}) = buildJsonObject { put("state", s); extra() }
+        // A 401/403 from the hosting API means the cached account document is stale: re-read it so the state does not stay "active".
+        fun refreshAccount() { api.capabilities.call("account.status", buildJsonObject { put("provider", InfantryProvider.ID); put("refresh", "true") }) }
         if (apiUrl.isEmpty()) return state(SitesException.NOT_CONFIGURED) { put("message", "No hosting service is configured.") }
         val status = (api.capabilities.call("account.status", buildJsonObject { put("provider", InfantryProvider.ID) }) as? CapabilityResult.Ok)?.value as? JsonObject
         val provider = (status?.get("providers") as? JsonArray)?.firstOrNull() as? JsonObject
@@ -122,10 +125,11 @@ class SitesDaemonPlugin : DaemonPlugin {
         fun JsonObjectBuilder.extras(until: Long?) { signUp?.let { put("signUpUrl", it) }; until?.let { put("reclaimableUntil", it) } }
         if (!entitled) return state(SitesException.NOT_ENTITLED) { extras(reclaim()) }
         return try {
-            val ent = (api.capabilities.call("account.entitlement", buildJsonObject { put("provider", InfantryProvider.ID); put("entitlement", InfantryProvider.ENTITLEMENT) }) as? CapabilityResult.Ok)?.value as? JsonObject
             val servers = service.list()
-            state("ready") { put("servers", servers); ent?.get("limit")?.let { put("limit", it) } }
+            val limit = (provider["limits"] as? JsonObject)?.get("servers.max")
+            state("ready") { put("servers", servers); limit?.let { put("limit", it) } }
         } catch (e: SitesException) {
+            if (e.kind == SitesException.NOT_ENTITLED || e.kind == SitesException.SIGNED_OUT) refreshAccount()
             val until = if (e.kind == SitesException.NOT_ENTITLED) reclaim() else null
             state(e.kind) { put("message", e.message ?: ""); extras(until) }
         }

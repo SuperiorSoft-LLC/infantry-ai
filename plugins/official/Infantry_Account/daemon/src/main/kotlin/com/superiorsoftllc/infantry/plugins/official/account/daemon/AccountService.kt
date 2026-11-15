@@ -238,8 +238,9 @@ class AccountService(
         return status == null || status == "active"
     }
 
-    private fun entitlementOf(doc: JsonObject?, id: String): JsonObject? =
-        (doc?.get("entitlements") as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }.firstOrNull { it.str("id") == id }
+    /** Whether the account document's `permissions` list holds [id]. Generic: this hub names no product or permission. */
+    private fun holds(doc: JsonObject?, id: String): Boolean =
+        (doc?.get("permissions") as? JsonArray).orEmpty().any { (it as? JsonPrimitive)?.contentOrNull == id }
 
     private fun providerView(p: ProviderDescriptor, force: Boolean): JsonObject {
         val signedIn = signedIn(p)
@@ -252,18 +253,22 @@ class AccountService(
             put("signedIn", signedIn)
             p.billingUrl?.let { put("billingUrl", it) }
             p.signUpUrl?.let { put("signUpUrl", it) }
-            (json?.get("user") as? JsonObject)?.let { u ->
-                put("user", buildJsonObject {
-                    u.str("name")?.let { put("name", it) }
-                    u.str("email")?.let { put("email", maskEmail(it)) }
-                })
+            json?.str("email")?.let { e -> put("user", buildJsonObject { put("email", maskEmail(e)) }) }
+            // The generic account state, as the server sends it (null / empty before an account exists).
+            json?.let { j ->
+                j.str("accountId")?.let { put("accountId", it) }
+                j.str("memberRole")?.let { put("memberRole", it) }
+                (j["plan"] as? JsonObject)?.let { put("plan", it) }
+                put("permissions", j["permissions"] as? JsonArray ?: JsonArray(emptyList()))
+                (j["limits"] as? JsonObject)?.let { put("limits", it) }
+                (j["usage"] as? JsonObject)?.let { put("usage", it) }
+                j.long("reclaimableUntil")?.let { put("reclaimableUntil", it) }
             }
-            (json?.get("plan") as? JsonObject)?.let { put("plan", it) }
             put("services", buildJsonArray {
                 for (s in p.services) add(buildJsonObject {
                     put("id", s.id)
                     put("name", s.name)
-                    put("entitled", signedIn && planActive(json) && entitlementOf(json, s.entitlement) != null)
+                    put("entitled", signedIn && planActive(json) && holds(json, s.entitlement))
                 })
             })
             doc?.error?.let { put("error", it) }
@@ -288,17 +293,17 @@ class AccountService(
         })
     }
 
-    /** `account.entitlement`. */
+    /** `account.entitlement`: whether the account holds permission [entitlement] (a generic "has permission <id>"). */
     @Synchronized
     fun entitlement(providerId: String, entitlement: String): JsonObject {
         val p = provider(providerId)
         val json = document(p, false)?.json
-        val e = if (signedIn(p) && planActive(json)) entitlementOf(json, entitlement) else null
+        val held = signedIn(p) && planActive(json) && holds(json, entitlement)
         return buildJsonObject {
-            put("entitled", e != null)
-            put("limit", e?.get("limit") ?: JsonNull)
-            put("used", e?.get("used") ?: JsonNull)
-            put("attrs", e?.get("attrs") ?: JsonObject(emptyMap()))
+            put("entitled", held)
+            put("limit", JsonNull)
+            put("used", JsonNull)
+            put("attrs", JsonObject(emptyMap()))
         }
     }
 

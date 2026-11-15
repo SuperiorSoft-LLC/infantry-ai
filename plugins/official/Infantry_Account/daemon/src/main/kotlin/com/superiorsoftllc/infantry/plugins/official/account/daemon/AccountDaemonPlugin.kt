@@ -54,21 +54,27 @@ class AccountDaemonPlugin : DaemonPlugin {
         )
         closers += api.schedule("account-poll", POLL_PERIOD_MS) { service.tick() }
 
-        fun cap(id: String, run: (CapabilityCall) -> JsonElement) { closers += api.capabilities.handle(id) { run(it) } }
-        cap("account.status") { service.status(it.args.str("provider")) }
+        // A refusal or a failed lookup is the CALLER's problem: core's guard disables a plugin on any handler exception except
+        // IllegalArgumentException, so every refusal leaves here as one and the plugin stays enabled.
+        fun cap(id: String, run: (CapabilityCall) -> JsonElement) {
+            closers += api.capabilities.handle(id) { call ->
+                try { run(call) } catch (e: IllegalStateException) { throw IllegalArgumentException(e.message ?: e::class.simpleName.orEmpty(), e) }
+            }
+        }
+        cap("account.status") { service.status(it.args.str("provider"), refresh = it.args.str("refresh") == "true") }
         cap("account.entitlement") { service.entitlement(it.args.need("provider"), it.args.need("entitlement")) }
         cap("account.token") { call ->
             val p = service.provider(call.args.need("provider"))
-            AccountGate.tokenRefusal(call.source, p)?.let { throw IllegalStateException(it) }
+            AccountGate.tokenRefusal(call.source, p)?.let { throw IllegalArgumentException(it) }
             val (token, expiresAt) = service.accessToken(p.id)
             buildJsonObject { put("accessToken", token.reveal()); put("expiresAt", expiresAt) }
         }
         cap("account.sign-in") { call ->
-            AccountGate.ownerRefusal("account.sign-in", call.source)?.let { throw IllegalStateException(it) }
+            AccountGate.ownerRefusal("account.sign-in", call.source)?.let { throw IllegalArgumentException(it) }
             flowJson(service.signIn(call.args.need("provider")))
         }
         cap("account.sign-out") { call ->
-            AccountGate.ownerRefusal("account.sign-out", call.source)?.let { throw IllegalStateException(it) }
+            AccountGate.ownerRefusal("account.sign-out", call.source)?.let { throw IllegalArgumentException(it) }
             buildJsonObject { put("wasSignedIn", service.signOut(call.args.need("provider"))) }
         }
 
