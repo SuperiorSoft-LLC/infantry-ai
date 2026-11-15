@@ -140,6 +140,12 @@ above, the time is stamped when a packaging task runs (else HEAD's commit time),
 - The packaging guard writes `build=` into `BUILD-INFO.txt` and copies each msi/exe/apk to `<outdir>/<sha>/<name>-<build>.<ext>`.
 - Checks: `./gradlew verifyBuildStamp` (format, UTC, dirty flag) and `verifyPackagingStamp` (part of `check` in infantryUi / infantryAndroid).
 
+## Build environment (ENDPOINT-ENV-1)
+
+Release and nightly builds are `prod`: `release.yml` sets `ORG_GRADLE_PROJECT_infantryEnv: prod` (nightly calls it), so plugins
+reach their prod `daemon.endpoints`. A local package is whatever `-PinfantryEnv` says (the project `build` script: its `env`
+arg, default `staging`); without one it is `dev`. See [the daemon plugin API](wiki/daemon-plugin-api.md).
+
 ## What lands on the Release
 
 | Asset | Source |

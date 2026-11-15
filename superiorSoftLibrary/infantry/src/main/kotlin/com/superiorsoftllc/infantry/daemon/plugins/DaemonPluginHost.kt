@@ -1076,6 +1076,7 @@ class DaemonPluginHost private constructor(
         val setting = config.setting(id)
         val dir = File(status.dir ?: return refuse("no folder"))
         refusal(status.tier, d, setting, id)?.let { return refuse(it) }
+        ServiceEndpoints.refusal(d.endpoints)?.let { return refuse(it) }
         val jarPath = d.jar?.takeIf { it.isNotBlank() } ?: return refuse("daemon.entry without daemon.jar")
         val jar = File(dir, jarPath)
         if (!jar.canonicalPath.startsWith(dir.canonicalPath + File.separator)) return refuse("daemon.jar $jarPath is outside the module folder")
@@ -1186,6 +1187,8 @@ class DaemonPluginHost private constructor(
         override fun config(key: String): String? = hostServices.config(p.id, key)
         override fun env(name: String): String? = if (name in d.env) hostServices.env(name) else { log("env $name is not declared in daemon.env: refused"); null }
         override fun secret(name: String): String? = if (name in d.secrets) hostServices.secret(name) else { log("secret $name is not declared in daemon.secrets: refused"); null }
+        override val environment: String get() = hostServices.environment
+        override fun endpoint(name: String): String? = ServiceEndpoints.resolve(d.endpoints, p.id, name, hostServices.environment, hostServices::env)
 
         override val pluginSecrets: com.superiorsoftllc.infantry.daemon.api.pluginsecrets.PluginSecrets by lazy { ScopedPluginSecrets(p.id, hostServices) }
 

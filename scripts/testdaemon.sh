@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) SuperiorSoft LLC
 # TESTDAEMON-START-1: start / stop a scrubbed TEST daemon from a built dist, for live repros (runner pairing etc.).
-#   scripts/testdaemon.sh up   --name <n> [--mode both|runner|orchestrator] [--port <p>] [--dist <dir>] [--timeout <s>] [--state <dir>]
+#   scripts/testdaemon.sh up   --name <n> [--mode both|runner|orchestrator] [--port <p>] [--dist <dir>] [--timeout <s>] [--state <dir>] [--env <name>]
 #   scripts/testdaemon.sh cli  --name <n> -- <infantry args...>     (the CLI pinned to that daemon + its state dir)
 #   scripts/testdaemon.sh down --name <n>                           (kills by PID only, never by image name)
 #   scripts/testdaemon.sh list
@@ -14,10 +14,10 @@ TMPD="${TEMP:-/tmp}"; command -v cygpath >/dev/null 2>&1 && TMPD="$(cygpath -u "
 REG="${TESTDAEMON_REG:-$TMPD/testdaemon}"; mkdir -p "$REG"
 die() { echo "testdaemon: $*" >&2; exit 1; }
 cmd="${1:-}"; shift || true
-name=""; mode=""; port=""; dist=""; statearg=""; tmo=90; rest=()
+name=""; mode=""; port=""; dist=""; statearg=""; tmo=90; envname=""; rest=()
 while [ $# -gt 0 ]; do case "$1" in
   --name) name="$2"; shift 2;; --mode) mode="$2"; shift 2;; --port) port="$2"; shift 2;;
-  --dist) dist="$2"; shift 2;; --state) statearg="$2"; shift 2;; --timeout) tmo="$2"; shift 2;; --) shift; rest=("$@"); break;;
+  --dist) dist="$2"; shift 2;; --state) statearg="$2"; shift 2;; --timeout) tmo="$2"; shift 2;; --env) envname="$2"; shift 2;; --) shift; rest=("$@"); break;;
   *) die "unknown flag '$1' (see the header of $0)";; esac; done
 conf="$REG/$name.env"
 scrub() { for v in $(env | sed -n 's/^\(INFANTRY_[A-Z_0-9]*\|AGENTHQ_[A-Z_0-9]*\|CLAUDE[A-Z_0-9]*\)=.*/\1/p'); do unset "$v"; done; }
@@ -50,7 +50,9 @@ up)
   [ -d "$dist/modules" ] && export INFANTRY_BUNDLED_MODULES="$(winpath "$dist")/modules"
   # RUNNER-UPDATE-1: the dist's own build stamp (BUILD-STAMP-1), as its launcher passes it; without it the daemon reports "dev".
   build="$(grep -ho 'Dinfantry\.build=[^"'"'"' ]*' "$dist/bin/infantry" "$dist"/app/*.cfg 2>/dev/null | head -1 | cut -d= -f2)"
-  nohup "$java" -Xmx768m --add-opens=java.base/java.util=ALL-UNNAMED -Dinfantry.plugins.devTrust=true ${build:+"-Dinfantry.build=$build"} \
+  # ENDPOINT-ENV-1: the build environment (plugins pick their daemon.endpoints from it): --env, else the dist's baked -Dinfantry.env.
+  [ -n "$envname" ] || envname="$(grep -ho 'Dinfantry\.env=[^"'"'"' ]*' "$dist/bin/infantry" "$dist"/app/*.cfg 2>/dev/null | head -1 | cut -d= -f2)"
+  nohup "$java" -Xmx768m --add-opens=java.base/java.util=ALL-UNNAMED -Dinfantry.plugins.devTrust=true ${build:+"-Dinfantry.build=$build"} ${envname:+"-Dinfantry.env=$envname"} \
     -cp "$cp_" com.superiorsoftllc.infantry.daemon.DaemonMainKt >"$log" 2>&1 &
   pid=$!; winpid="$(ps -p "$pid" -W 2>/dev/null | awk 'NR==2{print $4}')"; winpid="${winpid:-$pid}"
   printf 'NAME=%s\nPID=%s\nWINPID=%s\nPORT=%s\nLINK=%s\nSTATE=%s\nDIST=%s\nMODE=%s\n' "$name" "$pid" "$winpid" "$port" "$link" "$state" "$dist" "${mode:-both}" >"$conf"

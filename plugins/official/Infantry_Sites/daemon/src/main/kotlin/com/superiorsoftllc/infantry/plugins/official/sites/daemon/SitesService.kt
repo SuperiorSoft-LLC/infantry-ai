@@ -31,7 +31,7 @@ class SitesException(val kind: String, message: String) : RuntimeException(messa
 
 /**
  * The ONE place for the hosting API's paths (FROZEN route table from the server PM, mounted under the /api prefix of the config). A path change
- * is made here and nowhere else; the base URL comes from the daemon config (`sites.apiUrl`, which includes the prefix).
+ * is made here and nowhere else; the base URL is the module's `api` endpoint (module.json `daemon.endpoints`, which includes the prefix).
  */
 object HostingRoutes {
     const val DEVICE_CODE = "/auth/oauth/device/code"

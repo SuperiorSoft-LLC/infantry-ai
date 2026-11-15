@@ -153,6 +153,26 @@ api.routes.handle("GET", "hello") { call: HttpCall -> HttpReply(200, """{"ok":tr
 - **Routes unmount with the plugin.** An unload, a reload or a disable removes every route the plugin mounted; the path
   answers 404 afterwards.
 
+### Service endpoints per build environment (ENDPOINT-ENV-1, DaemonApi 1.63.0)
+
+Where a service lives is developer config, never a user setting (`NoEndpointUserSettingGuardTest` fails an official plugin
+whose settings ask for an address). A module declares its services in module.json `daemon.endpoints`, one address per build
+environment, and reads them with `api.endpoint(name)`:
+
+```json
+"daemon": { "endpoints": { "api": { "prod": "https://api.example.com/v1", "dev": "http://127.0.0.1:18953/v1" } } }
+```
+
+- **The environment** (`api.environment`) is a plain name baked in at build time (`BuildEnvironment`): the Gradle property
+  `infantryEnv` (or `INFANTRY_ENV` while building), passed to the JVM as `-Dinfantry.env` (the headless archive also carries an
+  `ENVIRONMENT` file). `gradle run` / `runDaemon` and a plain local build are `dev`; the project `build` script passes its
+  `env` arg (default `staging`); release and nightly builds are `prod`. Core knows the names only as strings.
+- **Resolution** (`ServiceEndpoints`): the exact environment, else `prod`, else null.
+- **Load check:** every address must be http(s) and a `prod` address https, or the daemon half is refused with the reason.
+- **Developer override:** `INFANTRY_ENDPOINT_<MODULE>_<NAME>` (upper case, other characters `_`, e.g.
+  `INFANTRY_ENDPOINT_INFANTRY_SITES_API`) replaces one resolved address; `INFANTRY_ENV` at run time replaces the baked
+  environment. Both are for local testing and never appear in Settings.
+
 ### Plugin secrets (ACCOUNT-SEAM-1, DaemonApi 1.62.0)
 
 `api.pluginSecrets` (`PluginSecrets`) reads, writes and clears named fields in the calling plugin's OWN keystore entry
