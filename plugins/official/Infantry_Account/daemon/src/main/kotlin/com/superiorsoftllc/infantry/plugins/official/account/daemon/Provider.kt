@@ -30,8 +30,8 @@ data class ProviderDescriptor(
     val consumers: List<String>,
     val services: List<ProviderService>,
 ) {
-    /** The keystore field of this provider's refresh token (letters, digits, `_`; the id is validated to that alphabet). */
-    val refreshField: String get() = "${id}_refresh"
+    /** The keystore field of this provider's refresh token (letters, digits, `_`; the id is validated to that alphabet). The fixed `acct_` prefix keeps any provider id clear of the host's reserved `INFANTRY_` prefix. */
+    val refreshField: String get() = "acct_${id}_refresh"
 
     companion object {
         private val ID = Regex("[a-z][a-z0-9_]{0,39}")

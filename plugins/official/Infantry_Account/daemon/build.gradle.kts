@@ -13,6 +13,7 @@ kotlin {
 dependencies {
     compileOnly(project(":superiorSoftLibrary:infantryDaemonApi"))
     testImplementation(project(":superiorSoftLibrary:infantryDaemonApi"))
+    testImplementation(project(":superiorSoftLibrary:infantryCore"))
     testImplementation(kotlin("test"))
 }
 
