@@ -175,6 +175,23 @@ class HarnessInstallerTest {
     }
 
     @Test
+    fun aHalfInstalledCliIsRetriedByAPlainInstall() {
+        val (installer, npm, env) = fixture()
+        env.files += env.join(prefix.path, "bin", "opencode") // shim left by a failed postinstall: --version fails
+        val out = installer.install(listOf("opencode"), false).outcomes.single { it.id == "opencode" }
+        assertTrue(out.result == "installed" || out.result == "updated", out.result)
+        assertTrue(npm.calls.any { it.getOrNull(1) == "install" }, "npm ran again")
+    }
+
+    @Test
+    fun mergeEnvReplacesEveryCaseVariantOfTheKey() {
+        val target = mutableMapOf("PATH" to "/old", "Path" to "/older", "HOME" to "/h")
+        mergeEnv(target, mapOf("Path" to "/node:/old"))
+        assertEquals(listOf("Path", "HOME").sorted(), target.keys.sorted())
+        assertEquals("/node:/old", target["Path"])
+    }
+
+    @Test
     fun aCliWhoseVersionCannotBeReadIsUnknownNotMissing() {
         val (installer, _, env) = fixture()
         env.files += env.join(prefix.path, "bin", "claude") // no version registered: --version fails
