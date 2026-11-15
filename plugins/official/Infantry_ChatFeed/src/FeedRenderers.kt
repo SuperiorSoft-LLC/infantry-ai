@@ -74,14 +74,14 @@ internal val UserRow: RowRenderer = RowRenderer(agentSide = false) { row ->
     }
 }
 
-/** The agent's markdown reply in a comms card. */
+/** The agent's markdown reply in a comms card. CARD-UPDATE-1: its addressed cards drawn folded over the session ([LocalSessionCards]). */
 internal val TextRow: RowRenderer = RowRenderer(agentSide = true) { row ->
     val line = row.line()
     CommsCard(AgentReplyCardStyle, line.at) {
         val md = LocalChatMarkdown.current
         val host = LocalPlatformHost.current
         val (shown, images) = if ("![" in line.text) ChatMarkdownImages.split(line.text) { host.fileExists(it) == true } else line.text to emptyList()
-        if (shown.isNotBlank() || images.isEmpty()) ChatBlocks(chatLineBlocks(line.kind, shown, md.engine).orEmpty(), md.renderers)
+        if (shown.isNotBlank() || images.isEmpty()) ChatBlocks(LocalSessionCards.current.apply(line, chatLineBlocks(line.kind, shown, md.engine).orEmpty()), md.renderers)
         ChatSentImages(images)
     }
 }

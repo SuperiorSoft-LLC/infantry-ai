@@ -17,6 +17,13 @@ object CardKeys {
     /** The fence's info string and body, so a client with no renderer for the type redraws the original code block. */
     const val LANGUAGE = "card.language"
     const val CODE = "card.code"
+    /** CARD-UPDATE-1: set by the session fold ([foldCards]): the raw bodies folded into an anchor, as a JSON array of strings. */
+    const val UPDATES = "card.updates"
+    /** CARD-UPDATE-1: [ROLE_UPDATE] on a later fence of an addressed card (drawn as a muted line); absent otherwise. */
+    const val ROLE = "card.role"
+    const val ROLE_UPDATE = "update"
+    /** CARD-UPDATE-1: "false" on an update a limit refused. */
+    const val APPLIED = "card.applied"
 }
 
 private val cardOps = setOf("set", "append", "replace")

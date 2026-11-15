@@ -141,6 +141,15 @@ Shipped (CARD-3): module.json `cards` (`CardDeclaration`), read through `PluginC
   `limits.chat.cardItems`); beyond them the oldest items drop.
 - v1 ships static cards only; the parser already reads `id`/`op` so transcripts written in v1 stay valid.
 
+Shipped (CARD-UPDATE-1): `foldCards` (`ui/model/ChatCardFold.kt`, pure) folds a session's addressed cards; the chat feed
+(`Infantry_ChatFeed`, `SessionCards.kt`) runs it over the whole transcript and `TextRow` applies it per line. The anchor
+gets the folded body plus `card.updates`; a later fence gets `card.role=update` and draws as the muted line
+(`CardUpdateLine`). An `op=set` repeated with the same id replaces; an id reused for another card type is its own card;
+an update past `limits.chat.cardUpdates` or over `limits.chat.cardStateBytes` is not applied (its line says so).
+Settings live on the `infantry.chatfeed` node: `chat.cardUpdateLine`, `limits.chat.cardUpdates` (50),
+`limits.chat.cardItems` (200), `limits.chat.cardStateBytes` (32 KB). Sample: the official plugin `Infantry_Ticker`
+(`card:ticker`: latest value, change, sparkline, every value).
+
 ### 2.5 Images and thumbnails
 
 - The client never fetches a URL from a reply. A card renderer asks for an image only through

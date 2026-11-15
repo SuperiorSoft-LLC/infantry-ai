@@ -53,6 +53,21 @@
           "scope": "device"
         }
       ]
+    },
+    {
+      "node": "infantry.chatfeed",
+      "tab": "Chat",
+      "group": "Chat cards",
+      "order": 30,
+      "title": "Chat cards",
+      "applies": "Applies to: rich cards agents post in the chat. A card with an id draws once with its latest state; later updates to it fold in.",
+      "keywords": ["card", "cards", "update", "append", "ticker", "graph"],
+      "fields": [
+        { "key": "chat.cardUpdateLine", "type": "checkbox", "label": "Show a muted line where an agent updated a card", "default": true, "order": 1, "scope": "device" },
+        { "key": "limits.chat.cardUpdates", "type": "number", "label": "Most updates folded into one card", "default": 50, "min": 1, "max": 10000, "step": 1, "order": 2, "scope": "device" },
+        { "key": "limits.chat.cardItems", "type": "number", "label": "Most items one card keeps (the oldest drop)", "default": 200, "min": 1, "max": 100000, "step": 1, "order": 3, "scope": "device" },
+        { "key": "limits.chat.cardStateBytes", "type": "number", "label": "Largest card state (bytes)", "default": 32768, "min": 1024, "max": 4194304, "step": 1024, "order": 4, "scope": "device" }
+      ]
     }
   ],
   "implementations": [
