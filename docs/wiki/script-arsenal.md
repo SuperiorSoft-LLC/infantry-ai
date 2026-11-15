@@ -75,3 +75,5 @@ A plugin can ship scripts and hooks (module.json `scripts`, see [UI plugin API](
 ## Global hooks
 
 `infantry_script_hook action=add scope=global on=... script=<global script>` stores a hook in the plugin's `global-hooks.json`. It runs for every project's events (timers fire per project), as that project, with the project's context. A project hook with the same id shadows it (the project's way to opt out). Writing or removing one uses the same setting `scripting.global.writeRoles` as global scripts. `infantry_script_hook action=list` shows them marked `[arsenal: every project]`. Deleting a global script is refused while a global hook names it. Example: one `hook-health` global hook on `every 120s` watches every project.
+
+<!-- SETTING-EVENT-1: the `worker-cap` hook on `setting.changed` (args fill=true) is documented in the worker-cap row above and in Scripting.md (hook table). An app-scope write has no project, so the hook must be marked `global` in the project's hooks.json. -->
