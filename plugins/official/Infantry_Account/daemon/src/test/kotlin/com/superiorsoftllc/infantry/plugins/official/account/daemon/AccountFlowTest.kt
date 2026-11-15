@@ -165,8 +165,8 @@ class AccountFlowTest {
         assertEquals(2, stub.polls)
         assertNull(s.flow("stub"), "the flow is over")
 
-        assertEquals("refresh-first", secrets.get("stub_refresh")!!.reveal(), "the refresh token is in the keystore")
-        assertEquals(setOf("stub_refresh"), secrets.fields.keys, "and nothing else is stored")
+        assertEquals("refresh-first", secrets.get("acct_stub_refresh")!!.reveal(), "the refresh token is in the keystore")
+        assertEquals(setOf("acct_stub_refresh"), secrets.fields.keys, "and nothing else is stored")
         val status = s.status().toString()
         assertTrue(status.contains("\"signedIn\":true"))
         assertTrue(status.contains("a***@example.org"), "the e-mail is shown masked")
@@ -188,7 +188,7 @@ class AccountFlowTest {
         assertEquals("access-first", s.accessToken("stub").first.reveal())
         clock += 3_600_000
         assertEquals("access-1", s.accessToken("stub").first.reveal())
-        assertEquals("refresh-rot-1", secrets.get("stub_refresh")!!.reveal())
+        assertEquals("refresh-rot-1", secrets.get("acct_stub_refresh")!!.reveal())
     }
 
     @Test
@@ -199,7 +199,7 @@ class AccountFlowTest {
         stub.refreshError = "invalid_grant"
         val e = assertFailsWith<IllegalStateException> { s.accessToken("stub") }
         assertFalse("refresh" in e.message.orEmpty().lowercase().replace("refresh the", ""), "no token in the message")
-        assertNull(secrets.get("stub_refresh"))
+        assertNull(secrets.get("acct_stub_refresh"))
         assertEquals(listOf("account.signedout.stub|Signed out of Stub Cloud"), notices)
     }
 
@@ -209,11 +209,11 @@ class AccountFlowTest {
         val s = service()
         s.signIn("stub"); clock += 5_000; s.tick()
         assertEquals("denied", s.flow("stub")!!.state)
-        assertNull(secrets.get("stub_refresh"))
+        assertNull(secrets.get("acct_stub_refresh"))
 
         stub.denyDevice = false
         s.signIn("stub"); clock += 5_000; s.tick() // poll 2 approves
-        assertNotNull(secrets.get("stub_refresh"))
+        assertNotNull(secrets.get("acct_stub_refresh"))
         assertTrue(s.signOut("stub"))
         assertTrue(stub.revoked)
         assertTrue(secrets.fields.isEmpty())
@@ -227,7 +227,7 @@ class AccountFlowTest {
         bad(ok.replace("\"id\":\"stub\"", "\"id\":\"Bad-Id\""))
         bad(ok.replace(stub.base + "/token", "http://example.org/token"))
         bad(ok.replace("device_code", "magic"))
-        assertEquals("stub_refresh", ProviderDescriptor.parseText(ok).refreshField)
+        assertEquals("acct_stub_refresh", ProviderDescriptor.parseText(ok).refreshField)
         // A broken provider is skipped, not fatal.
         assertTrue(service(describe = "{}").providers().isEmpty())
         assertTrue(logs.single().startsWith("provider 'stub' skipped"))
@@ -289,7 +289,7 @@ class AccountFlowTest {
         assertFalse("dev-secret" in started.toString())
         // Finish the sign-in on the service side by polling the stub directly through a second service sharing the keystore.
         val s = service(); s.signIn("stub"); clock += 5_000; s.tick(); clock += 5_000; s.tick()
-        assertNotNull(secrets.get("stub_refresh"))
+        assertNotNull(secrets.get("acct_stub_refresh"))
 
         for (source in listOf("session:s1", "cli", "script:x", "plugin:Other_Mod")) {
             val r = call(w, "account.token", source, "provider" to "stub")
