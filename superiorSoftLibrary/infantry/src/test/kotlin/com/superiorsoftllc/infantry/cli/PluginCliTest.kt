@@ -27,7 +27,7 @@ class PluginCliTest {
     private fun pack(): File {
         val f = File(tmp, "Acme_Cli-1.0.0.ihq")
         ZipOutputStream(f.outputStream()).use { z ->
-            z.putNextEntry(ZipEntry("module.json")); z.write("""{"name":"Acme_Cli","version":"1.0.0","entry":"x.Y","jar":"lib/a.jar","services":["net.fetch"]}""".toByteArray()); z.closeEntry()
+            z.putNextEntry(ZipEntry("module.json")); z.write("""{"name":"Acme_Cli","version":"1.0.0","author":"Acme","license":"Apache-2.0","entry":"x.Y","jar":"lib/a.jar","services":["net.fetch"]}""".toByteArray()); z.closeEntry()
             z.putNextEntry(ZipEntry("lib/a.jar")); z.write(ByteArray(64)); z.closeEntry()
         }
         return f

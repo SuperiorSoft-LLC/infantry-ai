@@ -40,7 +40,11 @@ internal object PluginCli {
     fun run(args: List<String>, out: Appendable, err: Appendable, getenv: (String) -> String?): Int {
         val dir = stateDir { getenv(it) ?: com.superiorsoftllc.infantry.session.infantrySetting(it) }
         val root = PluginFolders.root(dir, { getenv(it) })
-        return run(args, out, err, PluginManager(root, dir, PluginFolders.bundledRoot({ getenv(it) })))
+        // BUG FIRSTINSTALL (ticket 97ddfc96): the daemon finds its bundled modules (the official plugins) in the install's
+        // `modules/` folder and records it in a system property; this CLI runs in another JVM with no such property, so it
+        // must resolve the same folder itself, or `plugin list` shows none of the plugins `health` reports as loaded.
+        val bundled = PluginFolders.bundledRoot({ getenv(it) }) ?: com.superiorsoftllc.infantry.daemon.installModules()
+        return run(args, out, err, PluginManager(root, dir, bundled))
     }
 
     fun run(args: List<String>, out: Appendable, err: Appendable, m: PluginManager): Int {
