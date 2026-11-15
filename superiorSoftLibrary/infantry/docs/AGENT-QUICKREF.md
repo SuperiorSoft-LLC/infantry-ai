@@ -472,3 +472,5 @@ infantry health                      # the "CLI:" line: on the PATH, where it po
 - `INFANTRY_CLI_PATH_FILE=<file>` writes the entry into that file instead of the machine's environment: what a
   container, a CI box or a test uses (no test ever changes a real PATH).
 - Page: [Command line](../../../docs/wiki/CommandLine.md).
+
+Sign in to a service that registered as an account provider (Infantry_Account plugin): `infantry account status`, `infantry account login <provider>` (prints a code and URL), `infantry account logout <provider>`. It never prints a token.
