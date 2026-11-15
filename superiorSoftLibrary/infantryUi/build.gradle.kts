@@ -923,6 +923,8 @@ tasks.register<Exec>("packageMsix") {
     onlyIf("the MSIX tools (makeappx) exist only on Windows") { System.getProperty("os.name").startsWith("Windows") }
     commandLine("powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script.absolutePath,
         "-AppImage", appImage.get().asFile.absolutePath, "-Version", infantryPackageVersion, "-Out", out.get().asFile.absolutePath)
+    // STORE-PKG-1: the script refuses a dev-trust launcher unless this local dev-signed build opts in.
+    if (usesDevKey) args("-AllowDevTrust")
     outputs.upToDateWhen { false }
 }
 
