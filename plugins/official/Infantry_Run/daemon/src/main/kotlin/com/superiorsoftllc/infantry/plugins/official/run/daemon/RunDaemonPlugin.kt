@@ -41,7 +41,7 @@ class RunDaemonPlugin : DaemonPlugin {
         )
 
         RunCommandTools(store, manager, { api.events.broadcast(Envelope.COMMANDS, store.registry.specsJson()) }, { api.events.broadcast(it.type, it.data) }, runs::secretNames,
-            renderer, runs::rootOf)
+            renderer, runs::rootOf, { n, p -> runs.secretFields(n, p)?.keys })
             .all().forEach(api.tools::register)
 
         // SECRET-RENDER-1: the Configuration Render file action; owner-only (module.json), answered with names and the path only.
