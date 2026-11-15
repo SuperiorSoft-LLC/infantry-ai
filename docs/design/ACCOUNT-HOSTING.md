@@ -1,6 +1,8 @@
 # ACCOUNT-HOSTING: the Account hub, the website deployer, and our hosting backend
 
-Ticket HOSTING-1 (f9b08f4a), 2026-11-14. Design only, no code. The owner signs this off before any build ticket starts.
+Ticket HOSTING-1 (f9b08f4a), 2026-11-14; updated by HOSTING-2 (ceab264b) the same day with the owner's decisions
+(app names, server side as closed-source SuperiorSoft plugins on the existing Ktor daemon, reusable collections,
+decoupled auth/roles/billing; see section 3 and the "HOSTING-2 changes" list at the end). Design only, no code. The owner signs this off before any build ticket starts.
 Core and SDK seams in section 2 need his OK first (abstract tooling rule). Target: plugin of the week, shippable by the
 weekend of 2026-11-21/22. Related: PLUGIN-TIER-1 (8df4341d, the Official tier by publisher, which these plugins rely on),
 BROWSER-1 (62dd3b3b, the latest official installable plugin, a model for packaging), STORE-SETUP-1 (abc76a76, the Store
@@ -25,20 +27,22 @@ Owner, 2026-11-14 (short form; the full quotes are in the ticket):
        └ Servers: list, create, start/stop/destroy      · capabilities account.status / account.entitlement / account.token
                                                               ^ token (short-lived, per caller)
                                                         Infantry_Sites daemon half
-                                                          · registers provider "superiorsoft" + service "hosting"
+                                                          · registers provider "infantry" + service "hosting"
                                                           · calls OUR backend with the token, never DigitalOcean
                                                                   │ HTTPS
                                                                   v
- Our side (Site project)                       ┌──────────────────────────────────────────────┐
-   superiorsoft site: subscribe page (Stripe   │ Hosting backend (api.<our domain>)            │
-   Checkout), device-confirm page, devices     │ · device-code + token issuer                 │
-   page, "Manage billing" (Stripe portal)      │ · users <-> subscriptions <-> droplets (DB)  │
+ Our side (private repo SuperiorSoft-LLC/       ┌──────────────────────────────────────────────┐
+   webservices) + site: subscribe page (Stripe │ superiorsoft-core + superiorsoft-hosting jars │
+   Checkout), device-confirm page, devices     │ loaded as plugins into the EXISTING remote   │
+   page, "Manage billing" (Stripe portal)      │ Ktor daemon (no new droplet), routes via S2  │
+                                               │ · device-code + token issuer (auth module)   │
+                                               │ · users <-> subscriptions <-> droplets (DB)  │
                                                │ · limits, rate limits, teardown job          │
                 Stripe ── webhooks ──────────> │ · the ONLY holder of the DO API token        │
                                                └──────────────────┬───────────────────────────┘
                                                                   v
-                                                  DigitalOcean team "Superiorsoft Customers"
-                                                  (droplets tagged owner:<userId>)
+                                                  DigitalOcean (OUR one token, droplets
+                                                  tagged owner:<userId>)
 ```
 
 ## 1. Two plugins, one hub
@@ -48,23 +52,25 @@ Owner, 2026-11-14 (short form; the full quotes are in the ticket):
 - Official, signed, installable from the catalog, **not bundled** (so it is labelled Official, not Core, by
   PLUGIN-TIER-1). Separate from every other plugin: it depends on nothing but the SDK, and no plugin is a dependency of it.
 - It owns the top-level **Account** tab and two sections of its own: **Overview** and **Billing**.
-- It knows nothing about hosting, Superiorsoft or DigitalOcean. Everything specific arrives through providers (1.3).
+- It knows nothing about hosting, SuperiorSoft or DigitalOcean. Everything specific arrives through providers (1.3).
 - It holds every credential. Other plugins never see a password, a payment detail or a refresh token; they ask
   "signed in? entitled to X?" and get yes/no, and, if they are an allowed consumer, a short-lived access token.
 
 ### 1.2 Infantry_Sites (the website deployer)
 
 - Official, signed, installable, not bundled. `dependencies: [{ "id": "Infantry_Account", "version": "^1.0" }]`.
-- It registers our provider `superiorsoft` and the service `hosting`, and adds the **Sites** section to the Account tab.
+- It registers our provider `infantry` (shown as "Infantry AI Hosting") and the service `hosting`, and adds the **Sites** section to the Account tab.
 - MVP content of Sites: **Servers** (droplets: status, IP, create up to the limit, start, stop, destroy).
   Later sub-sections: Sites, Domains, Activity.
 - It talks ONLY to our backend, with the token Account gives it. It never holds a DigitalOcean key.
 
-Name: "Infantry_Sites" reads like what the user sees (the tab section). Q8 lets the owner pick another name before code.
+Names (owner, 2026-11-14, decided): everything the app user sees is Infantry-branded: `Infantry_Account`, `Infantry_Sites`,
+provider id `infantry`, display name "Infantry AI Hosting". "SuperiorSoft LLC" appears only on Stripe (checkout, receipts,
+statement descriptor). Server-side code uses SuperiorSoft names (section 3).
 
 ### 1.3 The provider abstraction (what a third-party developer implements)
 
-A provider is a company account (Superiorsoft, Acme). A service is something under that account (hosting, backups).
+A provider is a company account (Infantry AI Hosting, Acme). A service is something under that account (hosting, backups).
 A plugin registers a provider by publishing a string endpoint under the prefix `account.provider/<providerId>`
 (`api.services.publishEndpoint`, the same extension-point pattern `scripting.engine/<lang>` uses today). Operations are
 JSON in, JSON out. The minimum is ONE operation, `describe`; everything else is optional because the hub does the work.
@@ -72,8 +78,8 @@ JSON in, JSON out. The minimum is ONE operation, `describe`; everything else is 
 ```jsonc
 // op "describe" -> the provider descriptor (static data)
 {
-  "id": "superiorsoft",                       // stable, lowercase; the keystore field prefix
-  "name": "Superiorsoft",
+  "id": "infantry",                           // stable, lowercase; the keystore field prefix
+  "name": "Infantry AI Hosting",
   "icon": "cloud",                            // a generic icon key the hub draws (vector, never a glyph)
   "signIn": {                                 // ONE of the supported methods (1.4)
     "method": "device_code",
@@ -101,7 +107,7 @@ The standard account document every provider's `accountUrl` returns (the hub cac
   "user": { "id": "u_123", "email": "a***@gmail.com", "name": "..." },   // shown masked
   "plan": { "id": "hosting-basic", "name": "Hosting Basic", "status": "active" },  // active | past_due | canceled | none
   "entitlements": [
-    { "id": "hosting.servers", "limit": 1, "used": 0, "attrs": { "size": "s-1vcpu-1gb", "regions": ["nyc3"] } }
+    { "id": "hosting.servers", "limit": 1, "used": 0, "attrs": { "size": "s-1vcpu-2gb", "regions": ["nyc3"] } }
   ]
 }
 ```
@@ -191,24 +197,43 @@ Three seams are needed or must land first:
 | # | Seam | Why | Size | Status |
 |---|---|---|---|---|
 | S1 | **Plugin secret write**: `DaemonApi.pluginSecrets` with `get(field)`, `set(field, value)`, `clear(field)`, `fields()`, limited to the module's own secret `plugin.<moduleId>` (the name `KeystoreHandler.pluginSecretName` already defines). Additive, `DaemonApi` minor bump, documented in `daemon-plugin-api.md`. | Today a plugin can only READ a secret the owner typed (`DaemonApi.secret`, `plugin_secret_get` for endpoints). The hub must store the refresh token it receives from a sign-in. Writing to its own keystore entry keeps it encrypted at rest (DPAPI on Windows) and out of plugin storage. | S | **needs owner OK** |
-| S2 | **Daemon HTTP client** (`DaemonApi.http`, HTTP-SEAM-1 d2de18a0, already in the architecture audit) | Both daemon halves make HTTPS calls. `DownloadProgressGuardTest` forbids new raw HTTP clients; copying the Updater's `java.net.http` code would be a local copy (rule 9). | M | planned ticket; must land before ACCOUNT-1, or ACCOUNT-1 adds it |
+| S2 | **HTTP seam** (HTTP-SEAM-1 d2de18a0): a daemon HTTP client (`DaemonApi.http`) AND plugin-owned HTTP routes (a daemon plugin mounts its own paths, incl. unauthenticated ones such as a webhook, under its module prefix) | Client: both app daemon halves make HTTPS calls; `DownloadProgressGuardTest` forbids new raw clients. Routes: the closed-source server plugins (section 3) serve the public API from the existing Ktor daemon. Generic: nothing in it names hosting, Stripe or SuperiorSoft; it is the only server-side piece in the public repo. | M | **needs owner OK** for the routes half; first ticket |
 | S3 | Nested sub-tabs (only if ACCOUNT-1 finds `SubTabs` does not draw a second level) | Sites > Servers / Domains | S | conditional, generic |
 
 Nothing else: no plugin id, provider id or hosting term enters core (rules 1 and 2).
 
 ## 3. The backend (our side)
 
-### 3.1 Where it runs
+### 3.1 Where it runs (owner, 2026-11-14: decided)
 
-- Recommendation: one small service on its own droplet in **our** DigitalOcean team (the one the site uses), reachable at
-  `api.<our domain>`, behind TLS. It is built by the Site project in that project's stack (the product stays stack-neutral;
-  this page fixes the API, not the language). Database: managed Postgres (smallest plan) or SQLite with nightly off-box
-  backup for the MVP (Q6).
-- Customer droplets live in a **separate DO team** ("Superiorsoft Customers"), so a bug or leaked token cannot touch our
-  own servers, and billing is separated.
-- The DO token is a **custom-scoped** token of the customers team (droplet create/read/update/delete, ssh_key, tag,
-  firewall; no billing, no other resource types), held only in the backend's environment / secret store, never in a repo,
-  never in the app, never in a log.
+- **No new droplet.** The backend is a set of **plugins loaded into the remote Ktor daemon that is already running** (the
+  one the site uses). They are daemon plugins like any other, built against the public SDK, and they serve their HTTP
+  API through S2 (HTTP-SEAM-1: a plugin adds its own routes). We use the resources we already pay for.
+- **Closed source.** All server code lives in the private repo `github.com/SuperiorSoft-LLC/webservices`, is built there to
+  jars and deployed only to our server. The public repo holds only the generic mechanism (S2, plus the existing plugin
+  loader). The app plugins (`Infantry_Account`, `Infantry_Sites`) hold no secrets and stay public.
+- **Server-side names are SuperiorSoft** (`superiorsoft-core`, `superiorsoft-hosting`, ...), built to host many services
+  later: one shared base, one module per service, hosting is #1.
+- **Tokens (decided):** the user signs in through us and gets an *Infantry token* (access + refresh) that is only valid
+  against our server. Our server creates, starts, stops and destroys droplets with **our single DigitalOcean token** on
+  the user's behalf. There is no per-user DigitalOcean token. We reuse the DO token and the Stripe test-mode sandbox the
+  owner already has (used before only for testing on another project, never live). The owner injects both as server
+  secrets (environment of the remote daemon / its secret store); **no value is ever written in a repo, ticket, doc or
+  log.** A custom-scoped token and a separate customers team (HOSTING-1's idea) stay recommended before live mode, not
+  before the MVP.
+- Database: the remote daemon's own storage (plugin storage tables) for the MVP, behind the collection kit's storage
+  interface (3.8) so a later move to Postgres touches one adapter.
+- The API paths in 3.2 live under the module prefix (e.g. `/api/superiorsoft/auth/oauth/...`,
+  `/api/superiorsoft/hosting/v1/servers`); the provider descriptor (1.3) carries the full URLs, so the app does not care.
+
+**Risks of the shared process, and their answers:**
+
+| Risk | Answer |
+|---|---|
+| A server plugin crash or leak takes down the site daemon | `PluginGuard` already isolates plugin faults; the hosting module does no heavy work in-process (DO calls are short HTTPS calls, the teardown job is a timer); a per-plugin request timeout and a body-size limit (settings) |
+| The public Stripe webhook path behind the existing proxy | S2 lets a route opt out of daemon auth only when it declares its own check; the webhook route checks the Stripe signature before anything else and is rate limited; the proxy forwards only `/api/superiorsoft/**` to the daemon, nothing of the daemon's admin surface becomes public |
+| Memory headroom on the existing droplet | measure the daemon's resident memory before and after loading the jars (HOSTING-E2E-1 records it); the jars carry no framework beyond what the daemon already ships (Ktor, kotlinx.serialization); if headroom is short, resize the droplet one step rather than add one |
+| Secrets in a shared process | the DO and Stripe secrets are readable only by the modules that need them (`DaemonApi.secret` per module); never in a response, log line or `toString` |
 
 ### 3.2 API (v1, JSON, bearer access token unless noted)
 
@@ -267,11 +292,112 @@ line of defence and for the abuse kill switch.
   our ops mail; an admin kill switch (power off all droplets tagged `owner:<id>`); DO abuse reports forwarded to the
   user with a 24 h reply window (immediate power-off for active attacks).
 
+### 3.6 Private repo layout (`SuperiorSoft-LLC/webservices`)
+
+```
+webservices/
+  settings.gradle.kts            # includes every module below; pins the public Infantry SDK version (SDK BOM)
+  superiorsoft-core/
+    auth/          # identity, tokens, sign-in methods (device code; later email link, OAuth)
+    roles/         # roles and permissions; a declarative rule language other modules reference
+    collections/   # the collection kit (3.8): fields, access, CRUD routes, validation, paging, storage
+    billing/       # Stripe adapter, plans, entitlements (maps a plan to roles and limits)
+    limits/        # quotas and rate limits as data
+    http/          # thin glue over S2: module route prefix, error shape, idempotency keys
+  superiorsoft-hosting/          # service #1: collection `servers`, actions start/stop, DO client, teardown job
+  superiorsoft-<next>/           # a future service: its collections and actions only
+  deploy/                        # build + copy the jars to the server's plugin folder; no secrets in it
+  docs/                          # the API reference
+```
+
+Each `superiorsoft-*` folder is a daemon plugin (its own `module.json`, routes declared). Core is a plugin too, so a
+service declares `dependencies: [{"id": "superiorsoft-core", ...}]` and calls core through its published capabilities,
+never through internal classes.
+
+### 3.7 Module boundaries (decoupled; owner, 2026-11-14)
+
+Dependency direction: `hosting -> billing, collections, roles, auth, limits`; `billing -> roles, limits`;
+`collections -> roles, auth (only the Principal type)`; `auth`, `roles`, `limits` depend on nothing else.
+**None of the core modules knows about hosting** (a guard test in the private repo greps core for `hosting`, `droplet`,
+`digitalocean`).
+
+```kotlin
+// auth: who is calling. Knows nothing about billing, roles or any service.
+interface Auth {
+  fun authenticate(bearer: String): Principal?                   // validates our access token
+  fun signInMethods(): List<SignInMethod>                        // device_code for the MVP
+  fun issue(userId: UserId, scopes: Set<String>, device: String): TokenPair
+  fun refresh(refreshToken: String): TokenPair                   // rotates
+  fun revoke(refreshToken: String)
+}
+data class Principal(val userId: UserId, val scopes: Set<String>, val device: String)
+
+// roles: what a principal may do. Rules are data; modules reference permissions by name.
+interface Roles {
+  fun rolesOf(userId: UserId): Set<RoleId>
+  fun grant(userId: UserId, role: RoleId, source: String)        // source = "billing:<plan>", "admin"
+  fun revoke(userId: UserId, role: RoleId, source: String)
+  fun can(p: Principal, permission: String, resource: Resource? = null): Boolean
+}
+// permissions are strings such as "servers.create"; a role = a set of permissions, declared in JSON config.
+
+// limits: how much. Pure data + counters.
+interface Limits {
+  fun quota(userId: UserId, key: String): Int?                   // e.g. "servers.max"
+  fun rate(key: String, subject: String): RateDecision           // "servers.create", per user, per day
+}
+
+// billing: plans and entitlements. Maps a plan to roles and limits; knows no service.
+interface Billing {
+  fun planOf(userId: UserId): Plan?                              // id, status active|past_due|canceled|none
+  fun onEvent(listener: (BillingEvent) -> Unit)                  // Activated, PastDue, Canceled(graceUntil)
+}
+// plans.json -> { "hosting-basic": { "roles": ["hosting.customer"], "limits": { "servers.max": 1 } } }
+```
+
+A service listens to `BillingEvent`s for its own side effects (hosting powers off on `Canceled` and destroys after
+`graceUntil`). The standard account document (1.3) is assembled by core from `Auth` + `Billing` + `Limits`, plus usage
+counts each service reports through one callback.
+
+### 3.8 The collection kit (Payload-style; owner: "basic crud etc is a fast setup")
+
+A service declares a collection once; the kit gives it list/get/create/update/delete routes, validation, paging,
+storage and owner checks. Only special actions are hand-written.
+
+```kotlin
+val servers = collection("servers") {
+  field("name", Text, required = true, maxLength = 63, pattern = "[a-z0-9-]+")
+  field("dropletId", Long, readOnly = true)
+  field("status", Enum("new", "active", "off", "archive"), readOnly = true)
+  field("ipv4", Text, readOnly = true)
+  field("sshPublicKey", Text, writeOnly = true)
+  ownedBy("userId")                                    // every query filtered by the caller; another user's id = 404
+  access {
+    list("servers.read"); get("servers.read")
+    create("servers.create", quota = "servers.max", rate = "servers.create")
+    update(none)                                       // no generic update for this collection
+    delete("servers.destroy", rate = "servers.destroy")
+  }
+  hooks {
+    beforeCreate { ctx, doc -> doc + ("dropletId" to doClient.create(doc, tag = "owner:${ctx.user}")) }
+    beforeDelete { _, doc -> doClient.destroy(doc["dropletId"]) }
+  }
+  action("start", "servers.power") { _, doc -> doClient.powerOn(doc["dropletId"]) }
+  action("stop", "servers.power") { _, doc -> doClient.shutdown(doc["dropletId"]) }
+}
+```
+
+Generated under the module prefix: `GET /servers?cursor&limit`, `GET /servers/{id}`, `POST /servers` (requires
+`Idempotency-Key`), `PATCH /servers/{id}`, `DELETE /servers/{id}`, `POST /servers/{id}/actions/{name}`. One error shape
+(`{error, message, field?}`), cursor paging with a max page size from a setting, validation from the field list, a
+`Storage` interface (plugin storage for the MVP, Postgres later). `access` names permissions from `roles`, quotas and
+rates from `limits`; the kit never hard-codes a role.
+
 ## 4. Security
 
 | Concern | Design |
 |---|---|
-| Our DO key | only in the backend's secret store; custom-scoped; customers team only; rotated on any suspicion; never sent to the app |
+| Our DO key | one token of ours, only in the remote daemon's secret store (owner-injected); readable only by superiorsoft-hosting; rotated on any suspicion; never sent to the app |
 | App tokens at rest | refresh token in the keystore entry `plugin.infantry_account`, field `<providerId>.refresh` (S1); encrypted with the keystore master key (DPAPI / Keychain / Secret Service, else the documented key file). Access token in memory only |
 | Tokens in transit | HTTPS only; the hub refuses a provider URL that is not `https://` (except `http://localhost` for a developer's own test provider, behind a setting off by default) |
 | Least privilege in the app | the UI never gets a token; `account.token` only to modules in the provider's `consumers`; never to agent sessions, CLI or Lua; tokens never in logs, transcripts, `toString`, notifications or the wire (the `PluginSecret` pattern of masking `toString`) |
@@ -300,35 +426,44 @@ site per server), runner install on the droplet (cloud-init with the runner imag
 to run agents on), more sizes and regions, `api_key` and `oauth_pkce` sign-in for third-party providers, Activity log,
 live mode billing.
 
-## 6. Tickets (small, ordered)
+## 6. Tickets (revised by HOSTING-2; small, ordered)
 
-| # | Id | Project / layer | What | Depends |
-|---|---|---|---|---|
-| 1 | HTTP-SEAM-1 (d2de18a0, exists) | core (SDK) | `DaemonApi.http` | owner OK (already planned) |
-| 2 | ACCOUNT-SEAM-1 | core (SDK), owner OK | S1 `DaemonApi.pluginSecrets` (own entry only), tests, `daemon-plugin-api.md` | - |
-| 3 | HOST-API-1 | Site project | backend: device flow + tokens, `/v1/account`, servers CRUD against DO (customers team), `servers` table, limits, rate limits, Stripe test-mode webhooks, teardown job, health | owner decisions Q1-Q6 |
-| 4 | SITE-HOST-1 | Site project | hosting page + Stripe Checkout (test), device-confirm page, Devices page (revoke), "Manage billing" (portal) | 3 |
-| 5 | ACCOUNT-1 | Infantry_Account (new) | tab + Overview / Billing, provider registry (`account.provider/`), device-code engine, keystore storage, capabilities `account.*`, CLI `infantry account status|login|logout`, notices; proves cross-module and nested sub-tabs in a real window; checks dependency install | 1, 2 |
-| 6 | SITES-1 | Infantry_Sites (new) | provider + service registration, Sites section, Servers list / create / start / stop / destroy, Subscribe and Sign in states, server cache, daemon tools `infantry_sites_servers` (read) and create/action/destroy (`write` / `destructive`) | 3, 5 |
-| 7 | HOSTING-E2E-1 | QA | a real window, a clean profile: install -> subscribe (test card) -> sign in -> create -> SSH in -> stop/start -> destroy -> cancel -> teardown; timed against the 15-minute goal | 4, 6 |
+| # | Id | Repo / layer | What | Depends | Acceptance check |
+|---|---|---|---|---|---|
+| 1 | HTTP-SEAM-1 (d2de18a0, exists) | public core (SDK), owner OK | S2: `DaemonApi.http` client + plugin-owned routes (own prefix; opt out of daemon auth only with a declared check) | owner OK on S2 | an example plugin mounts a route reachable over HTTP in a test on port 0; a route with no auth and no declared check is refused at load; `DownloadProgressGuardTest` green; the seam names no `stripe` / `hosting` / `superiorsoft` |
+| 2 | ACCOUNT-SEAM-1 | public core (SDK), owner OK | S1 `DaemonApi.pluginSecrets` (own entry only), tests, `daemon-plugin-api.md` | owner OK on S1 | a plugin writes, reads and clears its own field; writing another module's entry fails; the value never appears in a log or `toString` (test) |
+| 3 | WS-CORE-1 | private `webservices` | `superiorsoft-core`: auth (device code, tokens, revoke), roles, limits, collection kit, billing (Stripe test-mode adapter, webhooks, plans.json), http glue | 1 | a sample collection of under 20 lines gets the five CRUD routes with paging, validation and owner checks (tests); another user's id returns 404; a replayed Stripe event is a no-op; the guard grep finds no `hosting` / `droplet` / `digitalocean` in core |
+| 4 | WS-HOSTING-1 (replaces HOST-API-1) | private `webservices` | `superiorsoft-hosting`: `servers` collection, start/stop actions, DO client on the owner's token, teardown job on `Canceled` + grace, usage for `/v1/account`, deploy script to the existing daemon | 3 | on the sandbox, through the API with an Infantry token: create -> droplet active with IP, stop, start, destroy; a 2nd create at limit 1 returns 409; a canceled test subscription powers off at once and destroys after a shortened test grace; no secret in the repo (grep) |
+| 5 | ACCOUNT-1 | public `Infantry_Account` (new) | tab + Overview / Billing, provider registry, device-code engine, keystore storage, `account.*` capabilities, CLI `infantry account status|login|logout`, notices; proves cross-module and nested sub-tabs | 1, 2 | in a real window: device-code sign-in against a stub provider ends signed in; the refresh token is in the keystore, not plugin storage; `account.token` is refused to a session and the CLI |
+| 6 | SITES-1 | public `Infantry_Sites` (new) | provider `infantry` ("Infantry AI Hosting") + service `hosting`, Sites > Servers list / create / start / stop / destroy, Subscribe and Sign in states, cache, daemon tools (`write` / `destructive`) | 4 (or its stub), 5 | in a real window against the sandbox: list, create, stop, start, destroy (with confirm) work; no `SuperiorSoft` string anywhere in the app UI; signed out shows Sign in, unsubscribed shows Subscribe |
+| 7 | SITE-HOST-1 (shrunk) | site | the subscribe/pricing page + Stripe Checkout (test mode, merchant "SuperiorSoft LLC"); the device-confirm and Devices pages are thin pages over the core auth API | 3 | a test card completes checkout and the account document then shows plan `active`; the confirm page approves a device code |
+| 8 | HOSTING-E2E-1 | QA | a real window, a clean profile: install -> subscribe (test card) -> sign in -> create -> SSH in -> stop/start -> destroy -> cancel -> teardown; daemon memory before/after loading the server jars | 6, 7 | the whole flow under 15 minutes; memory headroom recorded; no secret in any log |
 
-3 and 4 run in the Site project in parallel with 1, 2 and 5. 6 needs a backend to call: it can start against a stub
-of the documented API and switch to the real one when 3 lands.
+Order: 1 first; then 3 -> 4 (private repo) in parallel with 2 -> 5 -> 6 (public repo); 7 after 3; 8 last.
+6 can start against a stub of the documented API and switch when 4 lands.
 
 ## 7. Owner decisions
 
-1. **Stripe account**: which business entity (Superiorsoft LLC?), test mode now; who creates it (you; a worker never
-   handles payment setup).
-2. **DigitalOcean**: create the separate team "Superiorsoft Customers" and a custom-scoped API token for it (you create
-   it; it goes only into the backend's secret store).
-3. **Teardown grace** after cancel: recommendation 7 days powered off, then destroy, with emails at cancel and 48 h before.
-4. **Droplet size** (one fixed size for the MVP): recommendation Basic 1 vCPU / 2 GB (room for a site plus a runner; check
-   the current DO price) over 1 GB (cheapest, tight for a runner).
-5. **Region**: recommendation one region near most users (NYC3) for the MVP; more later.
-6. **Price**: recommendation a flat monthly price that covers the droplet, Stripe fees and support margin (roughly 2x the
-   droplet's DO price); you set the number.
-7. **Backend hosting**: recommendation its own small droplet in our existing team, built by the Site project; database
-   managed Postgres vs SQLite + backups.
-8. **Names**: plugin names `Infantry_Account` and `Infantry_Sites`, provider id `superiorsoft`, API host `api.<domain>`.
-9. **Seam S1** (plugin secret write) for the owner's OK; S2 is HTTP-SEAM-1, already planned.
-10. **DO terms**: you (or counsel) confirm DO's ToS / AUP allow hosting customer servers under our account before live mode.
+Decided 2026-11-14 (HOSTING-2): app-side names Infantry-branded (SuperiorSoft LLC only on Stripe); server-side names
+SuperiorSoft; backend = plugins on the existing Ktor daemon, no new droplet; server code closed source in
+`SuperiorSoft-LLC/webservices`; one DO token of ours, users hold only Infantry tokens; reuse the existing DO token and
+Stripe sandbox (the owner injects them as server secrets); core modules reusable for future services; collections via a
+kit; auth, roles and billing decoupled. This replaces HOSTING-1's Q1, Q2, Q7 and Q8.
+
+**OPEN (recommendations, waiting on the owner):**
+
+1. **Teardown grace** after cancel: 7 days powered off, then destroy, emails at cancel and 48 h before.
+2. **Droplet size**: Basic 1 vCPU / 2 GB.
+3. **Region**: NYC3 for the MVP.
+4. **Price**: a flat monthly price of roughly 2x the droplet's DO price; you set the number.
+5. **Seams S1 and S2** (S2 now includes plugin-owned HTTP routes) for your OK.
+6. **DO terms**: confirm DO's ToS / AUP allow hosting customer servers under our account before live mode (then consider
+   the custom-scoped token + separate customers team).
+
+## HOSTING-2 changes (2026-11-14)
+
+- Names: provider `superiorsoft` -> `infantry`, shown "Infantry AI Hosting"; SuperiorSoft only on Stripe and server side.
+- 3.1 rewritten: plugins on the existing Ktor daemon, closed source, one DO token, shared-process risks.
+- New 3.6 (private repo layout), 3.7 (auth / roles / limits / billing interfaces), 3.8 (collection kit).
+- S2 widened to plugin-owned routes. Tickets revised: HOST-API-1 replaced by WS-CORE-1 + WS-HOSTING-1, SITE-HOST-1
+  shrunk, an acceptance check per ticket. Owner decisions split into decided and OPEN.
