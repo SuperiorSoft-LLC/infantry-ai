@@ -50,6 +50,8 @@ class RunCommandTools(
         tool("infantry_run_start", "Start a saved command; returns the run id.", listOf("id" to "command id", "project" to "project id", "allowCrossProject" to "boolean"), listOf("id"), false) { start(it) },
         tool("infantry_run_secrets", "List the secrets a project's saved commands can use, the scope each resolves to (project first, then app) and each field with its exact placeholder: {{secret:NAME}} or {{secret:NAME#FIELD}}. Names only, never a value; secrets are created in Configuration by the owner.",
             listOf("project" to "project id (default: yours)", "scope" to "project | app | all (default: all)", "allowCrossProject" to "boolean"), listOf(), true) { secretList(it) },
+        tool("infantry_secret_find", "Find a secret by name or field name; returns placeholders, never values.",
+            listOf("q" to "text to find (case-insensitive, part of a secret or field name)", "project" to "project id (default: yours)", "scope" to "project | app | all (default: all)", "allowCrossProject" to "boolean"), listOf("q"), true) { find(it) },
         tool("infantry_secret_render", "Render a text file (.env, .json, .yaml, any text) replacing {{secret:NAME}} (or {{secret:NAME#FIELD}} for a multi-field secret) placeholders with the saved secret values, into an owner-only output file. Returns names and the output path only, never a value. `check` reports found/missing names and writes nothing. A missing secret fails and writes nothing unless allowMissing.",
             listOf("template" to "the template file (relative = inside the project folder)", "out" to "output file (required unless check); never the template itself",
                 "project" to "project id for secret scope (default: yours)", "allowMissing" to "boolean: leave unknown placeholders in", "check" to "boolean: report names only, write nothing",
@@ -77,6 +79,17 @@ class RunCommandTools(
             else if (fields.size <= 1) "$n  ($s)  ${SecretTemplate.placeholder(n)}"
             else "$n  ($s)  fields: " + SecretTemplate.placeholders(n, fields).joinToString(", ") { "${it.first} -> ${it.second}" }
         })
+    }
+
+    /** SECRETS-FIND-1: search by name or field name; placeholders only. */
+    private fun find(c: ToolCall): ToolResult {
+        crossProjectRefusal(c)?.let { return err(it) }
+        val q = str(c.arguments, "q") ?: return err("q is required")
+        val scope = str(c.arguments, "scope")?.lowercase() ?: "all"
+        if (scope !in setOf("project", "app", "all")) return err("scope is project, app or all")
+        val project = target(c)
+        val rows = secretNames(project).filter { scope == "all" || it.value == scope }
+        return ToolResult(SecretTemplate.find(q, rows) { fieldNames(it, project) })
     }
 
     /** SECRET-RENDER-1: names and the written path only; the value never leaves the renderer. */

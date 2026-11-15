@@ -15,9 +15,10 @@ import java.io.File
  * path only; a value never reaches this process.
  */
 internal object SecretCli {
-    const val USAGE = "infantry secret render <template> --out <file> [--project <id>] [--allow-missing] | infantry secret render <template> --check"
+    const val USAGE = "infantry secret render <template> --out <file> [--project <id>] [--allow-missing] | infantry secret render <template> --check | infantry secret find <text> [--project <id>]"
 
     fun usageError(args: List<String>, out: String?, check: Boolean): String? {
+        if (args.firstOrNull() == "find") return if (args.size == 2) null else "secret find takes one search text: $USAGE"
         if (args.firstOrNull() != "render") return "secret needs a subcommand: $USAGE"
         if (args.size != 2) return "secret render takes one template file: $USAGE"
         if (!check && out == null) return "secret render needs --out <file> (or --check to write nothing): $USAGE"
@@ -29,6 +30,14 @@ internal object SecretCli {
         stdout: Appendable, err: Appendable, getenv: (String) -> String?,
     ): Int = runBlocking {
         val m = LinkedHashMap<String, kotlinx.serialization.json.JsonElement>()
+        if (args[0] == "find") {
+            m["q"] = JsonPrimitive(args[1])
+            project?.let { m["project"] = JsonPrimitive(it) }
+            if (crossProject) m["allowCrossProject"] = JsonPrimitive(true)
+            val r = McpPluginTools(getenv).call(stream, "infantry_secret_find", JsonObject(m))
+            (if (r.isError) err else stdout).appendLine(r.text)
+            return@runBlocking if (r.isError) 1 else 0
+        }
         m["template"] = JsonPrimitive(File(args[1]).absoluteFile.path)
         out?.let { m["out"] = JsonPrimitive(File(it).absoluteFile.path) }
         project?.let { m["project"] = JsonPrimitive(it) }

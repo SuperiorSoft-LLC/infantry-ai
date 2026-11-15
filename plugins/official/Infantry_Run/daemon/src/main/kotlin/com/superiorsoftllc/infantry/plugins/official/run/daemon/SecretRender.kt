@@ -55,6 +55,30 @@ object SecretTemplate {
         return null
     }
 
+    /**
+     * SECRETS-FIND-1: case-insensitive search of secret names AND field names. [names] is name -> scope, [fieldsOf] a secret's
+     * field names. One line per hit: scope, name, field, exact placeholder. Never a value. No hit: the closest names.
+     */
+    fun find(q: String, names: Map<String, String>, fieldsOf: (String) -> Collection<String>?): String {
+        val needle = q.trim().lowercase()
+        if (needle.isEmpty()) return "give some text to find"
+        val hits = ArrayList<String>()
+        for ((n, scope) in names.toSortedMap()) {
+            val fields = fieldsOf(n)
+            val ph = if (fields == null) listOf(VALUE_FIELD to placeholder(n)) else placeholders(n, fields)
+            val multi = fields != null && fields.size > 1
+            val nameHit = needle in n.lowercase()
+            for ((f, p) in ph) {
+                if (nameHit || (multi && needle in f.lowercase())) hits += "$scope  $n" + (if (multi) "  field $f" else "") + "  $p"
+            }
+        }
+        if (hits.isNotEmpty()) return hits.joinToString("\n")
+        val nq = norm(needle)
+        val close = names.keys.sorted().filter { n -> nq.take(3).let { it.isNotEmpty() && norm(n).contains(it) } || norm(n).take(3) == nq.take(3) }
+            .ifEmpty { names.keys.sorted().take(5) }.take(5)
+        return "no secret or field matches '$q'" + if (close.isEmpty()) "" else "; closest names: " + close.joinToString(", ")
+    }
+
     class Ref(val name: String, val field: String) {
         val label: String = if (field == VALUE_FIELD) name else "$name#$field"
     }

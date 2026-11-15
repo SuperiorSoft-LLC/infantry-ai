@@ -46,8 +46,8 @@ class RunCommandToolsTest {
         })
     }
 
-    @Test fun `seven tools are offered`() {
-        assertEquals(setOf("infantry_run_commands", "infantry_run_command_save", "infantry_run_command_delete", "infantry_run_start", "infantry_run_secrets", "infantry_secret_render", "infantry_run_stop"), tools.keys)
+    @Test fun `eight tools are offered`() {
+        assertEquals(setOf("infantry_run_commands", "infantry_run_command_save", "infantry_run_command_delete", "infantry_run_start", "infantry_run_secrets", "infantry_secret_find", "infantry_secret_render", "infantry_run_stop"), tools.keys)
     }
 
     // SECRETS-2b: names and scopes only, the caller's project by default, the cross-project refusal as for the other tools.
@@ -80,6 +80,21 @@ class RunCommandToolsTest {
             override fun request(type: String, data: String, sessionId: String?, timeoutMs: Long) = error("unused")
         }).text
         assertEquals("secrete  (app)  fields: stripe_secret_key -> {{secret:secrete#stripe_secret_key}}, stripe_webhook_secret -> {{secret:secrete#stripe_webhook_secret}}\nsolo  (app)  {{secret:solo}}", out)
+    }
+
+    @Test fun `find matches names and fields and never values`() {
+        val t = RunCommandTools(store, manager, {}, {}, { mapOf("secrete" to "app", "solo" to "project") }, null, { null },
+            { n, _ -> if (n == "secrete") setOf("stripe_secret_key", "stripe_webhook_secret", "other") else setOf("value") }).all().associateBy { it.name }
+        fun find(q: String) = t.getValue("infantry_secret_find").call(object : ToolCall {
+            override val arguments = JsonObject(mapOf("q" to kotlinx.serialization.json.JsonPrimitive(q)))
+            override val caller: Caller get() = error("unused")
+            override val clientProjectId: String? = null
+            override fun request(type: String, data: String, sessionId: String?, timeoutMs: Long) = error("unused")
+        }).text
+        println("FIND stripe:\n" + find("STRIPE")); println("FIND nope:\n" + find("zzz"))
+        assertEquals("app  secrete  field stripe_secret_key  {{secret:secrete#stripe_secret_key}}\napp  secrete  field stripe_webhook_secret  {{secret:secrete#stripe_webhook_secret}}", find("STRIPE"))
+        assertEquals("project  solo  {{secret:solo}}", find("sol"))
+        assertTrue(find("zzz").startsWith("no secret or field matches 'zzz'; closest names: "))
     }
 
     @Test fun `save then list then delete`() {
