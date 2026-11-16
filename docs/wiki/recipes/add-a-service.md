@@ -2,10 +2,15 @@
 
 # Recipe: add your service to the Services hub
 
-The **Services** tab (module `Infantry_Account`) is a generic provider layer. A company plugs a service into it with a
-plugin plus its own web API; the hub signs the user in, shows their plan and permissions, and gives the service's plugin a
-short-lived token. The app's own **Infantry AI Hosting** (module `Infantry_Sites`) is the worked example below, but nothing
-in the hub is about hosting: the hub names no product and no permission.
+The **Services** tab (module `Infantry_Account`) is a generic provider layer. A company plugs a service into it with
+its own bridge plugin plus its own web API; the hub signs the user in, shows their plan and permissions, and gives the
+service's plugin a short-lived token. The hub names no product and no permission. The app's own **Infantry AI Hosting**
+(module `Infantry_Sites`) is used below only as an example of what a bridge can offer, not as code you reuse.
+
+**The model.** A service is the vendor's own bridge plugin plus the vendor's own API. The end user only creates an account
+and subscribes; the bridge does everything else, with zero setup by the user (no keys to paste, no server addresses, no
+tools to install). That is the bar a third-party service should meet. Every vendor builds its own bridge for its own
+service.
 
 This is not the same as [Add a provider](add-provider.md), which adds a group of models to a harness's picker.
 
@@ -170,7 +175,7 @@ creating, changing and paying happen on your website, behind the manage link (st
 ## Step 6: optional agent tools
 
 A tool is declared in `module.json` `daemon.tools` and registered with `api.tools.register`. Hosting has a read tool and
-two SSH tools:
+an exec tool:
 
 ```json
 "tools": [
@@ -183,24 +188,11 @@ A **community** tool name must start with your vendor prefix (the part of the mo
 then `_`: `acme_hosting_list` for `Acme_Hosting`), not `infantry_`. The token stays in the daemon half, and a tool answer
 carries data, never credentials.
 
-**SSH via short-lived certificates** (optional; hosting's pattern):
-
-1. The plugin makes one Ed25519 device key on first need and keeps its seed in its own keystore entry. Only the public
-   line leaves the plugin.
-2. For a command it calls your API: `POST <api>/hosting/v1/servers/{id}/ssh/certificate` with `{"publicKey": "ssh-ed25519 AAAA..."}`.
-3. Your API answers a user certificate plus how to connect:
-
-```json
-{ "certificate": "<openssh user certificate>", "validBefore": 1700000000000,
-  "connection": { "host": "203.0.113.7", "port": 22, "user": "agent", "hostKeyFingerprint": "SHA256:..." } }
-```
-
-4. The plugin keeps the certificate in memory until shortly before `validBefore`, never stores it and never gives it to
-   the agent. The agent gets `exitCode`, `stdout` and `stderr` (capped by settings).
-5. Status map on that route: 400 bad key, 401 sign in again, 403 permission `hosting.servers.ssh` missing, 404 no such
-   server, 409 server not running, 503 SSH not configured yet.
-
-Ids from an agent are checked (hosting requires a UUID) before they reach a URL or a command.
+**Server access and agent tools are yours to build.** If your service gives agents a way to reach a server or another
+resource, you build that in your own plugin, your own way, with your own API routes. The public layer has no shared
+SSH or agent-access seam to reuse. Keep to the same rules as any tool: the token stays in the daemon half, a tool answer
+carries data and never credentials, and ids from an agent are checked before they reach a URL or a command. Hosting's
+`infantry_sites_ssh_exec` is one example of such a tool, not a template to copy.
 
 ## Step 7: billing, subscribe and manage links
 
