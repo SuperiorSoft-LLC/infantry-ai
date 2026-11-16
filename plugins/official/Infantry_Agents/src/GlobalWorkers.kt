@@ -57,6 +57,8 @@ const val GLOBAL_WORKERS_OPEN_SESSION_TAG = "global-workers-open-session"
 const val GLOBAL_WORKERS_TRANSCRIPT_TAG = "global-workers-transcript"
 
 /** The lane of sessions that belong to no project (the Assistant, an off-board spawn). */
+const val GLOBAL_WORKERS_CLOSE_TAG = "global-workers-close"
+const val GLOBAL_WORKERS_EMPTY_TEXT = "No agents are working right now"
 const val NO_PROJECT_LANE = "No project"
 
 /** One lane of the modal: a project (null = none) and its working sessions, newest first. */
@@ -98,14 +100,21 @@ fun GlobalWorkersDialog(
     val lanes = workerLanes(state)
     AhqAlertDialog(
         onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+        confirmButton = {},
         modifier = Modifier.fillMaxSize().padding(28.dp).testTag(GLOBAL_WORKERS_DIALOG_TAG),
         wide = true,
         containerColor = Palette.Panel,
-        title = { Text("Working in every project (${state.workingCount})", color = Palette.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold) },
+        title = {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("Working in every project (${state.workingCount})", color = Palette.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                TextButton(onClick = onDismiss, modifier = Modifier.testTag(GLOBAL_WORKERS_CLOSE_TAG)) { Text("Close") }
+            }
+        },
         text = {
             if (lanes.isEmpty()) {
-                Text("No agents working.", color = Palette.Muted, fontSize = 12.sp, modifier = Modifier.padding(8.dp).testTag(GLOBAL_WORKERS_EMPTY_TAG))
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(GLOBAL_WORKERS_EMPTY_TEXT, color = Palette.Muted, fontSize = 13.sp, modifier = Modifier.testTag(GLOBAL_WORKERS_EMPTY_TAG))
+                }
             } else {
                 Row(Modifier.fillMaxSize().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     lanes.forEach { lane -> WorkerLaneColumn(lane, state, onOpenChat, onRemove, work) }
@@ -148,16 +157,19 @@ fun GlobalWorkerChatDialog(
 ) {
     AhqAlertDialog(
         onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onOpenSession, modifier = Modifier.testTag(GLOBAL_WORKERS_OPEN_SESSION_TAG)) { Text("Open session") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+        confirmButton = {},
         modifier = Modifier.fillMaxSize().padding(28.dp).testTag(GLOBAL_WORKERS_CHAT_TAG),
         wide = true,
         containerColor = Palette.Panel,
         title = {
-            Text(
-                "${agent.role ?: agent.shortId} · $projectName", color = Palette.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
-                maxLines = 1, overflow = TextOverflow.Ellipsis,
-            )
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "${agent.role ?: agent.shortId} · $projectName", color = Palette.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = onOpenSession, modifier = Modifier.testTag(GLOBAL_WORKERS_OPEN_SESSION_TAG)) { Text("Open session") }
+                TextButton(onClick = onDismiss, modifier = Modifier.testTag(GLOBAL_WORKERS_CLOSE_TAG)) { Text("Close") }
+            }
         },
         text = {
             Box(Modifier.fillMaxSize()) {
