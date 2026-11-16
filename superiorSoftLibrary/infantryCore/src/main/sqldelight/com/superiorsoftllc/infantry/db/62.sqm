@@ -1,0 +1,39 @@
+-- ATTN-CHECK-1 (ticket 054ad8be) -- migration v62 -> v63: `owner_questions.state` admits 'stale'.
+-- ATTN-STALE-1 made the Attention plugin's question sweep write state 'stale' (an auto-picked question of a gone session), but
+-- 41.sqm created the table with CHECK (state IN ('open','answered','auto','cancelled')), so every sweep on an upgraded file
+-- failed SQLITE_CONSTRAINT_CHECK and the plugin crash-looped. SQLite cannot alter a CHECK, so the table is REBUILT exactly like
+-- 58.sqm: new table, rows copied verbatim, old dropped, new renamed, index re-created. Column order and the index are exactly
+-- owner_questions.sq's (SchemaMigrationTest). Runs once (the version marker is PRAGMA user_version), inside the migration's transaction.
+--
+-- NEXT MIGRATION: 63.sqm
+
+CREATE TABLE owner_questions_new (
+    id TEXT NOT NULL PRIMARY KEY,
+    project_id TEXT,
+    session_id TEXT NOT NULL,
+    agent_id TEXT,
+    role TEXT,
+    question TEXT NOT NULL,
+    options TEXT NOT NULL,
+    recommended TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    allow_other INTEGER NOT NULL DEFAULT 0,
+    default_after_min INTEGER,
+    state TEXT NOT NULL CHECK (state IN ('open', 'answered', 'auto', 'cancelled', 'stale')),
+    answer TEXT,
+    other_text TEXT,
+    resolved_by TEXT,
+    created_at INTEGER NOT NULL,
+    resolved_at INTEGER,
+    overridden INTEGER NOT NULL DEFAULT 0
+);
+
+INSERT INTO owner_questions_new(id, project_id, session_id, agent_id, role, question, options, recommended, reason, allow_other, default_after_min, state, answer, other_text, resolved_by, created_at, resolved_at, overridden)
+SELECT id, project_id, session_id, agent_id, role, question, options, recommended, reason, allow_other, default_after_min, state, answer, other_text, resolved_by, created_at, resolved_at, overridden FROM owner_questions;
+
+DROP TABLE owner_questions;
+
+ALTER TABLE owner_questions_new RENAME TO owner_questions;
+
+CREATE INDEX IF NOT EXISTS index_owner_questions_on_state_created_at
+    ON owner_questions(state, created_at, id);

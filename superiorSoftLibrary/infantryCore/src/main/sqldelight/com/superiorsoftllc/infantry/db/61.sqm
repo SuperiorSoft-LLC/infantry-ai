@@ -1,7 +1,7 @@
 -- MCP-SELECT-1b (ticket 8c929dc8) -- migration v61 -> v62: `tickets.mcp` / `archived_tickets.mcp`, the ticket's MCP declaration
 -- (JSON {"require":[{"server"|"capability","purpose"}]}). NULL = none (walled by default). Existing rows keep NULL.
 --
--- NEXT MIGRATION: 62.sqm
+-- NEXT MIGRATION: 63.sqm (62 is ATTN-CHECK-1: owner_questions state admits stale)
 
 ALTER TABLE tickets ADD COLUMN mcp TEXT;
 ALTER TABLE archived_tickets ADD COLUMN mcp TEXT;
