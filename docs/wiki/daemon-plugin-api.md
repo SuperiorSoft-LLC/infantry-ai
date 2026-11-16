@@ -153,6 +153,38 @@ api.routes.handle("GET", "hello") { call: HttpCall -> HttpReply(200, """{"ok":tr
 - **Routes unmount with the plugin.** An unload, a reload or a disable removes every route the plugin mounted; the path
   answers 404 afterwards.
 
+#### Opening a public route to its own clients (PLUGIN-AUTH-ORIGIN-1, DaemonApi 1.64.0)
+
+By default the daemon strips `Authorization` before a plugin handler runs, refuses any request with a cross-site
+`Origin` (an `OPTIONS` preflight included), and refuses a Host that is not loopback (or, on a token daemon, not on the
+browser host list). A module whose public routes serve their own clients (an API with its own keys, a web app on another
+origin) can open them in `module.json`:
+
+```json
+"daemon": {
+  "publicRoutes": ["POST /plugins/Acme_Api/v1/orders"],
+  "http": { "passAuthorization": true, "allowedOrigins": ["http://localhost:5173"], "allowNonLoopbackHost": false }
+}
+```
+
+- `passAuthorization`: the handler receives the request's `Authorization` header in `HttpCall.headers`. A request that
+  presents one of the **daemon's** tokens (owner, agent or guest) on such a route is refused 403, so the daemon's token is
+  never forwarded to a plugin and never admits a call there. Your `RouteCheck` does the auth.
+- `allowedOrigins`: exact `scheme://host[:port]` origins (http or https; no `*`, no path). A request from a listed origin
+  is admitted and its reply carries `Access-Control-Allow-Origin: <that origin>` and `Vary: Origin`; an `OPTIONS`
+  preflight from it is answered 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods` (the requested
+  method, when that route exists) and `Access-Control-Allow-Headers` (the requested headers). Any other cross-site origin
+  stays 403. A malformed entry refuses the module at load.
+- `allowNonLoopbackHost`: the routes skip the daemon's Host check, for a daemon behind a reverse proxy that passes the
+  public host name. It opens no origin.
+- Everything defaults to off; a module without the block behaves exactly as before. The block applies **only to the
+  module's `daemon.publicRoutes`**: the daemon's own routes, and every plugin route behind the daemon's token, keep
+  stripping `Authorization` and refusing `Origin`, `OPTIONS` and foreign Hosts. Public routes are core and official only.
+- **Security note.** Opening a route makes it reachable by browsers (and, with `allowNonLoopbackHost`, by DNS-rebinding
+  pages on a loopback daemon). The route's `RouteCheck` is then the only thing between the caller and the handler: check
+  every request, list only origins you control, never `allowedOrigins` an origin that serves untrusted content, and set
+  `apiAtLeast` to `1.64.0` so an older daemon (which strips the header) refuses the module instead of running it unauthenticated.
+
 ### Service endpoints per build environment (ENDPOINT-ENV-1, DaemonApi 1.63.0)
 
 Where a service lives is developer config, never a user setting (`NoEndpointUserSettingGuardTest` fails an official plugin

@@ -374,6 +374,12 @@ data class DaemonCapabilities(
     val routes: List<String> = emptyList(),
     /** DAEMON-PLUGINS-1: routes answered without the bearer token; core/official only. */
     val publicRoutes: List<String> = emptyList(),
+    /**
+     * PLUGIN-AUTH-ORIGIN-1: what this module's PUBLIC routes ([publicRoutes]) open beyond the daemon's defaults. Everything is off
+     * by default; a module without the block behaves exactly as before. Never applies to the daemon's own routes or to a module
+     * route behind the daemon's token.
+     */
+    val http: DaemonHttpDeclaration = DaemonHttpDeclaration(),
     /** DAEMON-PLUGINS-1: environment variables the daemon half may read. */
     val env: List<String> = emptyList(),
     /**
@@ -405,6 +411,21 @@ data class DaemonCapabilities(
      * workers its remote orchestrator started). A frame's or tool's own `side` wins.
      */
     val side: String? = null,
+)
+
+/**
+ * PLUGIN-AUTH-ORIGIN-1: `daemon.http`, per-module opt-ins for its public routes (all default off).
+ * - [passAuthorization]: the route handler receives the request's `Authorization` header (the route does its own auth). A
+ *   request presenting one of the DAEMON's tokens on such a route is refused, so the daemon's token never reaches a plugin.
+ * - [allowedOrigins]: browser origins (`scheme://host[:port]`, exact, no `*`) admitted on those routes; an `OPTIONS` preflight
+ *   from one of them is answered with CORS headers for exactly that origin. Any other cross-site origin stays refused.
+ * - [allowNonLoopbackHost]: the routes skip the daemon's Host check (a reverse proxy that sets the public host name).
+ */
+@Serializable
+data class DaemonHttpDeclaration(
+    val passAuthorization: Boolean = false,
+    val allowedOrigins: List<String> = emptyList(),
+    val allowNonLoopbackHost: Boolean = false,
 )
 
 /**

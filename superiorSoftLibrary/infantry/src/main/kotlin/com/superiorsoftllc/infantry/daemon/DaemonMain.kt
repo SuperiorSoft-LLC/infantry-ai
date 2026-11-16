@@ -2417,7 +2417,10 @@ class InfantryDaemon(
                 install(WebSockets)
                 install(ContentNegotiation) { json() }
                 // Before routing, so a refused request never reaches a handler (the mailbox included).
-                installAccessPolicy(policy, webBundle::isAsset, httpGate = plugins::httpRefusal, publicRoute = plugins::isPublicRoute)
+                installAccessPolicy(
+                    policy, webBundle::isAsset, httpGate = plugins::httpRefusal, publicRoute = plugins::isPublicRoute,
+                    routeOpenings = plugins::routeOpenings,
+                )
                 routing {
                     // DAEMON-PLUGINS-1: each plugin's declared top-level routes, and every plugin's own `/plugins/<id>/...`.
                     for ((method, path) in plugins.topLevelRoutes()) {
@@ -5130,7 +5133,7 @@ private fun scheduledTicker(intervalMillis: Long, task: () -> Unit): AutoCloseab
 }
 
 /** DAEMON-PLUGINS-1: one HTTP request to a plugin route, answered by its plugin ([DaemonPluginHost.answerRoute]); 404 when none. */
-private suspend fun answerPluginRoute(call: io.ktor.server.application.ApplicationCall, plugins: com.superiorsoftllc.infantry.daemon.plugins.DaemonPluginHost) {
+internal suspend fun answerPluginRoute(call: io.ktor.server.application.ApplicationCall, plugins: com.superiorsoftllc.infantry.daemon.plugins.DaemonPluginHost) {
     val request = call.request
     val body = if (request.httpMethod == io.ktor.http.HttpMethod.Get) "" else runCatching { call.receiveText() }.getOrDefault("")
     val reply = plugins.answerRoute(
@@ -5138,8 +5141,10 @@ private suspend fun answerPluginRoute(call: io.ktor.server.application.Applicati
             method = request.httpMethod.value,
             path = request.path(),
             query = request.queryParameters.entries().associate { it.key to it.value.firstOrNull().orEmpty() },
-            headers = request.headers.entries().filter { !it.key.equals(io.ktor.http.HttpHeaders.Authorization, ignoreCase = true) }
-                .associate { it.key to it.value.firstOrNull().orEmpty() },
+            headers = pluginRouteHeaders(
+                request.headers.entries().associate { it.key to it.value.firstOrNull().orEmpty() },
+                passAuthorization = plugins.routeOpenings(request.httpMethod.value, request.path())?.passAuthorization == true,
+            ),
             body = body,
             remoteAddress = request.local.remoteAddress,
         ),
@@ -5147,6 +5152,14 @@ private suspend fun answerPluginRoute(call: io.ktor.server.application.Applicati
     reply.headers.forEach { (k, v) -> call.response.header(k, v) }
     call.respondText(reply.body, io.ktor.http.ContentType.parse(reply.contentType), io.ktor.http.HttpStatusCode.fromValue(reply.status))
 }
+
+/**
+ * The headers a plugin route handler sees: Authorization is dropped (it carries the daemon's token) unless the route's owner
+ * opted in with `daemon.http.passAuthorization` on a public route (PLUGIN-AUTH-ORIGIN-1); the access policy has then already
+ * refused a request presenting one of the daemon's tokens there.
+ */
+internal fun pluginRouteHeaders(headers: Map<String, String>, passAuthorization: Boolean): Map<String, String> =
+    if (passAuthorization) headers else headers.filterKeys { !it.equals(io.ktor.http.HttpHeaders.Authorization, ignoreCase = true) }
 
 /** The `ready` keys core itself sends; a plugin's `ready` hook may not repeat them. */
 private val CORE_READY_KEYS = setOf("provider", "contract", "instance", "since", "build", "notice")

@@ -27,6 +27,24 @@ const val OPEN_PATH = "/health"
 /** Thrown when a configuration would expose the daemon unsafely. The message says what to change. */
 class AccessConfigurationException(message: String) : IllegalStateException(message)
 
+/**
+ * PLUGIN-AUTH-ORIGIN-1: what one PUBLIC route opens beyond the defaults, declared by the route's owner (a plugin's `daemon.http`).
+ * Never given for the daemon's own routes or a route behind the token. [allowedOrigins] are normalised origins
+ * ([AccessPolicy.normalizeOrigin]); [anyHost] skips the Host check; [passAuthorization] hands the route the Authorization header,
+ * and so refuses a request that presents one of the daemon's own tokens there.
+ */
+data class RouteOpenings(
+    val allowedOrigins: Set<String> = emptySet(),
+    val anyHost: Boolean = false,
+    val passAuthorization: Boolean = false,
+) {
+    /** True when [origin] (as the browser sent it) is one of [allowedOrigins]. */
+    fun allowsOrigin(origin: String?): Boolean = origin != null && AccessPolicy.normalizeOrigin(origin)?.let { it in allowedOrigins } == true
+
+    /** True when nothing is opened (the same as no openings at all). */
+    val isEmpty: Boolean get() = allowedOrigins.isEmpty() && !anyHost && !passAuthorization
+}
+
 /** One refused request: the status to answer with and a reason that never contains the token. */
 data class Refusal(val status: HttpStatusCode, val reason: String, val challengeBearer: Boolean = false)
 
@@ -136,7 +154,10 @@ class AccessPolicy private constructor(
         webAsset: Boolean = false,
         /** DAEMON-PLUGINS-1: an official plugin's declared public route (`daemon.publicRoutes`), checked like a bundle file. */
         publicRoute: Boolean = false,
+        /** PLUGIN-AUTH-ORIGIN-1: what the public route's owner opened (only read when [publicRoute]); null = nothing. */
+        openings: RouteOpenings? = null,
     ): Refusal? {
+        if (publicRoute && openings != null && !openings.isEmpty) return checkOpenedRoute(host, origin, authorization, openings)
         if (webAsset || publicRoute) return checkWebAsset(host, origin)
         if (origin != null && path == BROWSER_PATH) return checkBrowser(host, origin, authorization, webSocketProtocols)
         if (origin != null) {
@@ -182,6 +203,47 @@ class AccessPolicy private constructor(
         if (tokenDigest != null && !browserHostAllowed(host)) return hostRefusal()
         if (origin != null && !sameOrigin(origin, host)) return crossOriginRefusal()
         return null
+    }
+
+    /**
+     * PLUGIN-AUTH-ORIGIN-1: a public route whose owner opened it. As [checkWebAsset], except: the Host check is skipped when
+     * [RouteOpenings.anyHost]; a cross-site Origin is admitted when it is one of [RouteOpenings.allowedOrigins]; and a route that
+     * receives the Authorization header refuses the daemon's own tokens, so they never reach a plugin.
+     */
+    private fun checkOpenedRoute(host: String?, origin: String?, authorization: String?, openings: RouteOpenings): Refusal? {
+        hostRefusalUnlessOpened(host, openings)?.let { return it }
+        if (origin != null && !openings.allowsOrigin(origin) && !sameOrigin(origin, host)) return crossOriginRefusal()
+        if (openings.passAuthorization && isDaemonToken(authorization)) {
+            return Refusal(HttpStatusCode.Forbidden, "the daemon's own token is not accepted on this route")
+        }
+        return null
+    }
+
+    /**
+     * PLUGIN-AUTH-ORIGIN-1: an `OPTIONS` CORS preflight for a public route its owner opened: null = answer it with CORS headers
+     * for [origin]; else the refusal (then the request is decided as any other, and an Origin is refused).
+     */
+    fun preflightRefusal(host: String?, origin: String, openings: RouteOpenings): Refusal? {
+        if (!openings.allowsOrigin(origin)) return crossOriginRefusal()
+        return hostRefusalUnlessOpened(host, openings)
+    }
+
+    /** The Host check of a public route ([checkWebAsset]'s), skipped when its owner set [RouteOpenings.anyHost]. */
+    private fun hostRefusalUnlessOpened(host: String?, openings: RouteOpenings): Refusal? {
+        if (openings.anyHost) return null
+        if (tokenDigest == null && !hostNamesLoopback(host)) {
+            return Refusal(HttpStatusCode.Forbidden, "the Host header must name the loopback address (localhost, 127.0.0.1 or [::1])")
+        }
+        if (tokenDigest != null && !browserHostAllowed(host)) return hostRefusal()
+        return null
+    }
+
+    /** PLUGIN-AUTH-ORIGIN-1: true when [authorization] presents one of this daemon's tokens (owner, agent or a guest token). */
+    fun isDaemonToken(authorization: String?): Boolean {
+        if (tokenDigest == null) return false
+        val header = authorization?.trim().orEmpty()
+        if (!header.startsWith(BEARER_PREFIX, ignoreCase = true)) return false
+        return matchesToken(header.substring(BEARER_PREFIX.length).trim())
     }
 
     /**
@@ -358,6 +420,23 @@ class AccessPolicy private constructor(
 
         fun isHookPath(path: String): Boolean = HOOK_PATH.matches(path)
 
+        /**
+         * PLUGIN-AUTH-ORIGIN-1: [origin] as `scheme://host[:port]`, lowercased, default port dropped; null when it is not a plain
+         * http(s) origin (a path, a query, a wildcard, `null`, credentials). Both sides of an allowed-origin match go through it.
+         */
+        fun normalizeOrigin(origin: String): String? {
+            val o = origin.trim().trimEnd('/')
+            if (o.isEmpty() || '*' in o) return null
+            val uri = runCatching { java.net.URI(o) }.getOrNull() ?: return null
+            val scheme = uri.scheme?.lowercase() ?: return null
+            if (scheme != "http" && scheme != "https") return null
+            val h = uri.host?.lowercase() ?: return null
+            if (uri.rawUserInfo != null || !uri.rawPath.isNullOrEmpty() || uri.rawQuery != null || uri.rawFragment != null) return null
+            val defaultPort = runCatching { uri.toURL().defaultPort }.getOrNull() ?: return null
+            val port = if (uri.port < 0 || uri.port == defaultPort) "" else ":${uri.port}"
+            return "$scheme://$h$port"
+        }
+
         /** Validate a bind host and a token together, and build the policy. Throws [AccessConfigurationException]. */
         fun of(
             bindHost: String,
@@ -471,20 +550,44 @@ fun Application.installAccessPolicy(
     httpGate: (method: String, path: String, webAsset: Boolean) -> String? = { _, _, _ -> null },
     /** DAEMON-PLUGINS-1: true for an official plugin's declared public route (answered without the bearer token). */
     publicRoute: (method: String, path: String) -> Boolean = { _, _ -> false },
+    /** PLUGIN-AUTH-ORIGIN-1: what a public route's owner opened (null = nothing). Only asked for a [publicRoute]. */
+    routeOpenings: (method: String, path: String) -> RouteOpenings? = { _, _ -> null },
 ) {
     intercept(ApplicationCallPipeline.Plugins) {
         val path = call.request.path()
         val method = call.request.httpMethod.value
         val protocols = call.request.headers.getAll(HttpHeaders.SecWebSocketProtocol)?.joinToString(",")
         val webAsset = call.request.httpMethod == io.ktor.http.HttpMethod.Get && isWebAsset(path)
+        val origin = call.request.headers[HttpHeaders.Origin]
+        // PLUGIN-AUTH-ORIGIN-1: a CORS preflight for a public route that lists this origin is answered here, for exactly that
+        // origin and the requested method. Anything else falls through and is decided as before (an Origin is refused).
+        val preflightMethod = call.request.headers[HttpHeaders.AccessControlRequestMethod]?.trim()?.uppercase()
+        if (call.request.httpMethod == io.ktor.http.HttpMethod.Options && origin != null && !preflightMethod.isNullOrEmpty() &&
+            publicRoute(preflightMethod, path)
+        ) {
+            val opened = routeOpenings(preflightMethod, path)
+            if (opened != null && policy.preflightRefusal(call.request.headers[HttpHeaders.Host], origin, opened) == null) {
+                call.response.header(HttpHeaders.AccessControlAllowOrigin, origin.trim())
+                call.response.header(HttpHeaders.Vary, HttpHeaders.Origin)
+                call.response.header(HttpHeaders.AccessControlAllowMethods, preflightMethod)
+                call.request.headers[HttpHeaders.AccessControlRequestHeaders]?.takeIf { it.isNotBlank() }
+                    ?.let { call.response.header(HttpHeaders.AccessControlAllowHeaders, it) }
+                call.respond(HttpStatusCode.NoContent)
+                finish()
+                return@intercept
+            }
+        }
+        val isPublic = publicRoute(method, path)
+        val openings = if (isPublic) routeOpenings(method, path) else null
         val refusal = policy.check(
             path = path,
             host = call.request.headers[HttpHeaders.Host],
-            origin = call.request.headers[HttpHeaders.Origin],
+            origin = origin,
             authorization = call.request.headers[HttpHeaders.Authorization],
             webSocketProtocols = protocols,
             webAsset = webAsset,
-            publicRoute = publicRoute(method, path),
+            publicRoute = isPublic,
+            openings = openings,
         )
         if (refusal == null) {
             // DAEMON-PLUGINS-1: a plugin's HTTP gate refuses for every token, the owner's included (a seated lockdown).
@@ -501,6 +604,11 @@ fun Application.installAccessPolicy(
                 return@intercept
             }
             call.attributes.put(ACCESS_TIER, tier)
+            // PLUGIN-AUTH-ORIGIN-1: an admitted request from an allowed origin may read the reply.
+            if (origin != null && openings != null && openings.allowsOrigin(origin)) {
+                call.response.header(HttpHeaders.AccessControlAllowOrigin, origin.trim())
+                call.response.header(HttpHeaders.Vary, HttpHeaders.Origin)
+            }
             // WEB-1: a browser that offered subprotocols fails the handshake unless one is selected. Answer with the
             // plain one only: the bearer subprotocol is never echoed.
             if (path == AccessPolicy.BROWSER_PATH && AccessPolicy.offersWebProtocol(protocols)) {
