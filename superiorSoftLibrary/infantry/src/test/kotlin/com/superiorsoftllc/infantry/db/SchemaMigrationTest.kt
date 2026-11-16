@@ -776,6 +776,41 @@ class SchemaMigrationTest {
     }
 
     /**
+     * ATTN-CHECK-1: a v62 file's owner_questions CHECK refused 'stale' (the Attention sweep's state); 62.sqm rebuilds the table
+     * keeping every row and the index. A fresh file accepts 'stale' too. Reopening is a no-op.
+     */
+    @Test
+    fun `a v62 file rebuilds owner_questions so stale is accepted and keeps its rows`() {
+        val ins = "INSERT INTO owner_questions(id, session_id, question, options, recommended, reason, state, created_at) VALUES "
+        val migrated = newDatabasePath()
+        JdbcSqliteDriver("jdbc:sqlite:$migrated").use { driver ->
+            InfantryDatabase.Schema.migrate(driver, 1, 62)
+            driver.execute(null, "PRAGMA user_version = 62;", 0)
+        }
+        exec(migrated, ins + "('q1', 's1', 'Q?', '[]', 'a', 'r', 'auto', 10), ('q2', 's2', 'Q2?', '[]', 'b', 'r', 'open', 20);")
+        assertFailsWith<java.sql.SQLException>("a v62 file refuses stale (the bug)") {
+            exec(migrated, "UPDATE owner_questions SET state = 'stale' WHERE id = 'q1';")
+        }
+        val before = rows(migrated, "SELECT * FROM owner_questions ORDER BY id;")
+        InfantryDatabaseFactory.open(migrated).close()
+        InfantryDatabaseFactory.open(migrated).close()
+        assertEquals(InfantryDatabase.Schema.version.toString(), rows(migrated, "PRAGMA user_version;").single().single())
+        assertEquals(before, rows(migrated, "SELECT * FROM owner_questions ORDER BY id;"), "rows survive the rebuild")
+        assertTrue((shape(migrated, "owner_questions")["indexes"] as Map<*, *>).keys.contains("index_owner_questions_on_state_created_at"))
+        assertTrue(rows(migrated, "SELECT name FROM sqlite_master WHERE name = 'owner_questions_new';").isEmpty())
+        val fresh = newDatabasePath()
+        InfantryDatabaseFactory.open(fresh).close()
+        for (path in listOf(migrated, fresh)) {
+            if (path == fresh) exec(path, ins + "('q1', 's1', 'Q?', '[]', 'a', 'r', 'auto', 10);")
+            exec(path, "UPDATE owner_questions SET state = 'stale' WHERE id = 'q1';")
+            assertEquals("stale", rows(path, "SELECT state FROM owner_questions WHERE id = 'q1';").single().single())
+            assertFailsWith<java.sql.SQLException>("unknown state still refused ($path)") {
+                exec(path, "UPDATE owner_questions SET state = 'bogus' WHERE id = 'q1';")
+            }
+        }
+    }
+
+    /**
      * TRAITS-T6: 30.sqm (v30 -> v31) REBUILDS `attention` so its `kind` CHECK admits `unreported` (SQLite cannot alter a
      * CHECK). A real v30 file holding an open and an acked item is opened through the factory: both rows must survive
      * byte for byte, the index must be back, the old CHECK must have refused `unreported` before the migration, the new
