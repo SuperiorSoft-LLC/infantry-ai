@@ -66,4 +66,14 @@ class GlobalWorkersTest {
         assertTrue(host.contains("panel(agent.id, controller, m, chat, false, GLOBAL_WORKERS_TRANSCRIPT_TAG)"), "the chat is Infantry_Chat's ChatPanel, by session id")
         assertTrue(host.contains("AgentRow(a, state"), "the lanes reuse the left panel's card")
     }
+
+    @Test
+    fun `Close sits in the header of both modals and the empty state is a centered muted message`() {
+        val src = File(System.getProperty("infantryAgents.moduleJson")).parentFile.resolve("src").resolve("GlobalWorkers.kt").readText()
+        assertEquals(2, src.split("testTag(GLOBAL_WORKERS_CLOSE_TAG)").size - 1, "Close in lanes header and chat header")
+        assertEquals(2, src.split("confirmButton = {},").size - 1, "no footer button in either modal")
+        assertTrue(!src.contains("dismissButton ="), "no footer Close")
+        assertEquals("No agents are working right now", GLOBAL_WORKERS_EMPTY_TEXT)
+        assertTrue(src.contains("contentAlignment = Alignment.Center"), "empty message is centered")
+    }
 }
