@@ -27,11 +27,13 @@
     "endpoints": {
       "api": {
         "prod": "https://api.superiorsoftllc.tech/api/superiorsoft",
-        "dev": "http://127.0.0.1:18953/api/superiorsoft"
+        "dev": "http://127.0.0.1:18953/api/superiorsoft",
+        "staging": "http://127.0.0.1:18953/api/superiorsoft"
       },
       "site": {
         "prod": "https://superiorsoftllc.tech",
-        "dev": "http://127.0.0.1:18953"
+        "dev": "http://127.0.0.1:18953",
+        "staging": "http://localhost:5173"
       }
     }
   },

@@ -6,11 +6,14 @@ package com.superiorsoftllc.infantry.daemon.plugins
  * ENDPOINT-ENV-1: resolves a module's `daemon.endpoints` (service name -> environment -> address) for the running build
  * environment. Generic: core names no service and no address; the table is the module's data.
  *
- * Order: the developer override variable ([overrideVariable]), the exact environment, then `prod`. Addresses are checked at
- * load ([refusal]): every one must be http(s), a `prod` one must be https.
+ * Order: the developer override variable ([overrideVariable]), the exact environment, then (outside prod) `dev`, then `prod`.
+ * M1-OWNER-1: a test build (`staging`, `qa`, ...) whose service has a `dev` entry never falls through to the real service;
+ * `prod` is the last resort only for a service that declares no `dev` address. Addresses are checked at load ([refusal]):
+ * every one must be http(s), a `prod` one must be https.
  */
 object ServiceEndpoints {
     const val PROD = "prod"
+    const val DEV = "dev"
     const val OVERRIDE_PREFIX = "INFANTRY_ENDPOINT_"
 
     /** `INFANTRY_ENDPOINT_<MODULE>_<NAME>`: upper case, every character outside A-Z and 0-9 becomes `_`. */
@@ -21,7 +24,8 @@ object ServiceEndpoints {
     fun resolve(table: Map<String, Map<String, String>>, moduleId: String, name: String, environment: String, env: (String) -> String?): String? {
         env(overrideVariable(moduleId, name))?.trim()?.takeIf { it.isNotEmpty() && isHttp(it) }?.let { return it.trimEnd('/') }
         val byEnv = table[name] ?: return null
-        return (byEnv[environment] ?: byEnv[PROD])?.trim()?.takeIf { it.isNotEmpty() }?.trimEnd('/')
+        val fallback = if (environment == PROD) null else byEnv[DEV]
+        return (byEnv[environment] ?: fallback ?: byEnv[PROD])?.trim()?.takeIf { it.isNotEmpty() }?.trimEnd('/')
     }
 
     /** Why the table cannot load, or null when it is fine. */
