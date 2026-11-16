@@ -59,7 +59,7 @@ https, or http to `127.0.0.1`, `localhost` or `[::1]` (`ProviderDescriptor.urlOk
 
 ## Step 2: publish the provider (`describe`)
 
-Register a string endpoint under the prefix `account.provider/`. The hub asks it for `describe` and reads the JSON. A
+Register a string endpoint under the prefix `account.provider/<id>`. The hub asks it for `describe` and reads the JSON. A
 service with no usable `api` address publishes nothing, so no build calls a real server by accident. From
 `SitesDaemonPlugin.kt`:
 
