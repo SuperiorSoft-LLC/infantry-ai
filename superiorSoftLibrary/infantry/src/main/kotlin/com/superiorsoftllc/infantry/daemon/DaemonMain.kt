@@ -5135,7 +5135,10 @@ private fun scheduledTicker(intervalMillis: Long, task: () -> Unit): AutoCloseab
 /** DAEMON-PLUGINS-1: one HTTP request to a plugin route, answered by its plugin ([DaemonPluginHost.answerRoute]); 404 when none. */
 internal suspend fun answerPluginRoute(call: io.ktor.server.application.ApplicationCall, plugins: com.superiorsoftllc.infantry.daemon.plugins.DaemonPluginHost) {
     val request = call.request
-    val body = if (request.httpMethod == io.ktor.http.HttpMethod.Get) "" else runCatching { call.receiveText() }.getOrDefault("")
+    // CONN-CLOSE-EMPTY-1: read a body only when the request declares one. A bodiless DELETE (python urllib: no Content-Length,
+    // Connection: close) has no body to wait for; receiveText() on it never returns because the client keeps its side open.
+    val hasBody = (request.headers[io.ktor.http.HttpHeaders.ContentLength]?.toLongOrNull() ?: 0L) > 0L || request.headers.contains(io.ktor.http.HttpHeaders.TransferEncoding)
+    val body = if (request.httpMethod == io.ktor.http.HttpMethod.Get || !hasBody) "" else runCatching { call.receiveText() }.getOrDefault("")
     val reply = plugins.answerRoute(
         com.superiorsoftllc.infantry.daemon.api.HttpCall(
             method = request.httpMethod.value,
