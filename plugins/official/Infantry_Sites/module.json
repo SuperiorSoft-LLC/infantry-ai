@@ -20,7 +20,9 @@
     "jar": "daemon/build/libs/Infantry_Sites-daemon.jar",
     "apiAtLeast": "1.63.0",
     "tools": [
-      { "name": "infantry_sites_list", "action": "sites.servers.read", "kind": "read", "description": "List your hosting servers (id, name, status, ip, region, size, createdAt, destroyAt)." }
+      { "name": "infantry_sites_list", "action": "sites.servers.read", "kind": "read", "description": "List your hosting servers (id, name, status, ip, region, size, createdAt, destroyAt)." },
+      { "name": "infantry_sites_ssh_exec", "action": "sites.servers.ssh", "kind": "write", "description": "Run a shell command on one of your hosting servers over SSH (no setup: device key + short-lived certificate)." },
+      { "name": "infantry_sites_ssh_upload", "action": "sites.servers.ssh", "kind": "write", "description": "Write a small text file on one of your hosting servers over SSH." }
     ],
     "endpoints": {
       "api": {
