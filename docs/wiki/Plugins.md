@@ -182,6 +182,9 @@ A community plugin needs no signature. Status today: the pinned key is a placeho
 signing certificate is set, and dev builds run with `-Dinfantry.plugins.devTrust=true`. See `docs/PLUGIN-MANAGER.md`
 and `docs/INFANTRY-INSTALL.md` (section "Official modules and the signing key").
 
+To plug your own company's service (sign-in, plan, resources, agent tools) into the Services tab, follow
+[Add your service to the Services hub](recipes/add-a-service.md).
+
 ## Hello plugin, step by step
 
 `plugins/community/Acme_Hello` is a block under the Board button whose text you change in Settings.
