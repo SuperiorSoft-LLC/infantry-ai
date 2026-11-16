@@ -291,6 +291,7 @@ fun AgentRow(a: AgentView, state: AppState, selected: Boolean, onClick: () -> Un
         modifier.fillMaxWidth().hoverable(hoverSource).clip(shape)
             .then(if (profile != null) Modifier.dropTarget("ticket") { work.assign(it.id, profile) } else Modifier)
             .background(if (selected) Palette.Raised else Palette.Bg)
+            .selectedStripes(selected)
             .then(if (activeStyle != ActiveBorderStyle.NONE) Modifier.activeBorder(activeStyle, shape)
                   else Modifier.border(if (selected) 1.5.dp else 1.dp, if (selected) Palette.Accent else Palette.Border, shape))
             .clickable(onClick = onClick).testTag("agent-row-${a.id}")
