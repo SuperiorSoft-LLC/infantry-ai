@@ -308,8 +308,9 @@ class SitesTest {
     @Test
     fun `agent tools work the API themselves and neither the tools nor the routes ever expose the token`() {
         val w = wire(mapOf("api" to stub.base))
-        // SITES-READONLY-1: the owner removed in-app create/modify 2026-11-15; agents may only list.
-        assertEquals(setOf("infantry_sites_list"), w.tools.keys)
+        // SITES-READONLY-1: the owner removed in-app create/modify 2026-11-15; agents may only list servers.
+        // SITES-SSH-1: plus SSH into them (exec, small upload); still no create/modify/destroy tool.
+        assertEquals(setOf("infantry_sites_list", "infantry_sites_ssh_exec", "infantry_sites_ssh_upload"), w.tools.keys)
         val outputs = mutableListOf<String>()
         outputs += callTool(w, "infantry_sites_list").text
         outputs += w.routes.getValue("GET state")(HttpCall("GET", "state")).body

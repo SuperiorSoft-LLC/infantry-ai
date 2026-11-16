@@ -21,6 +21,7 @@ class PluginToolsDeclaredGuardTest {
     private val references: Map<String, Map<String, String>> = mapOf(
         "Infantry_Agents" to mapOf("infantry_ticket_start" to "invoked/named, a board tool"),
         "Infantry_Approvals" to mapOf("infantry_approvals_rules" to "a database table name"),
+        "Infantry_Sites" to mapOf("infantry_sites_ssh_host_pins" to "a database table name (SITES-SSH-1 host key pins)"),
         "Infantry_Chat" to mapOf("infantry_chat_note" to "invoked through api.tools, a core tool"),
         "Infantry_Lua" to mapOf("infantry_ticket_move" to "named for the script bridge"),
         "Infantry_Scripting" to mapOf(
