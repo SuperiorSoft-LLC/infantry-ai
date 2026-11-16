@@ -75,9 +75,6 @@ class SitesDaemonPlugin : DaemonPlugin {
         }
 
         api.routes.handle("GET", "state") { reply { stateOf(api, service) } }
-        api.routes.handle("POST", "create") { call -> reply { val b = body(call); service.create(b.need("name"), b.str("sshPublicKey"), b.str("idempotencyKey")) } }
-        api.routes.handle("POST", "power") { call -> reply { val b = body(call); service.power(b.need("id"), b.need("action")); ok() } }
-        api.routes.handle("POST", "destroy") { call -> reply { service.destroy(body(call).need("id")); ok() } }
 
         for (t in tools(service)) api.tools.register(t)
     }
@@ -117,7 +114,7 @@ class SitesDaemonPlugin : DaemonPlugin {
         return try {
             val servers = service.list()
             val limit = (provider["limits"] as? JsonObject)?.get("servers.max")
-            state("ready") { put("servers", servers); limit?.let { put("limit", it) } }
+            state("ready") { put("servers", servers); limit?.let { put("limit", it) }; api.endpoint(SITE_ENDPOINT)?.takeIf { it.isNotBlank() }?.let { put("siteUrl", it.trimEnd('/') + "/hosting") } }
         } catch (e: SitesException) {
             if (e.kind == SitesException.NOT_ENTITLED || e.kind == SitesException.SIGNED_OUT) refreshAccount()
             val until = if (e.kind == SitesException.NOT_ENTITLED) reclaim() else null
@@ -125,15 +122,10 @@ class SitesDaemonPlugin : DaemonPlugin {
         }
     }
 
-    // ---- agent tools: write / destructive, declared in module.json `daemon.tools` ------------------------------------
+    // ---- agent tools: read only, declared in module.json `daemon.tools` ------------------------------------
 
     private fun tools(service: SitesService): List<DaemonTool> = listOf(
         tool("infantry_sites_list", "List your hosting servers (id, name, status, ip, region, size, createdAt, destroyAt).", obj(), read = true) { service.list() },
-        tool("infantry_sites_create", "Create a hosting server. Counts against your plan's server limit.",
-            obj("name" to "string", "sshPublicKey" to "string", "idempotencyKey" to "string", required = listOf("name"))) { service.create(it.need("name"), it.str("sshPublicKey"), it.str("idempotencyKey")) },
-        tool("infantry_sites_start", "Power on one of your hosting servers.", obj("id" to "string", required = listOf("id"))) { service.power(it.need("id"), "start"); ok() },
-        tool("infantry_sites_stop", "Shut down one of your hosting servers.", obj("id" to "string", required = listOf("id"))) { service.power(it.need("id"), "stop"); ok() },
-        tool("infantry_sites_destroy", "Permanently destroy one of your hosting servers and its data.", obj("id" to "string", required = listOf("id")), destructive = true) { service.destroy(it.need("id")); ok() },
     )
 
     private fun tool(toolName: String, desc: String, schema: JsonObject, read: Boolean = false, destructive: Boolean = false, run: (JsonObject) -> JsonElement): DaemonTool = object : DaemonTool {

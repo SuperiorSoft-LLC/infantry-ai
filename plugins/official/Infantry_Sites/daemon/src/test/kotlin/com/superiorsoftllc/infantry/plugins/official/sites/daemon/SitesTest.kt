@@ -123,29 +123,19 @@ class SitesTest {
     private fun service(url: String = stub.base) = SitesService(JdkHttp(), TokenSource { TOKEN }, { url })
 
     @Test
-    fun `list create start stop and destroy round-trip against the stub and carry the bearer and an Idempotency-Key`() {
+    fun `list reads the stub and carries the bearer`() {
         val s = service()
         val list = s.list()
         assertEquals(ID1, list.single().jsonObject["id"]!!.jsonPrimitive.content)
         assertEquals("203.0.113.5", list.single().jsonObject["ip"]!!.jsonPrimitive.content)
 
-        val made = s.create("site-1", "ssh-ed25519 AAAAC3Nza key@host")
-        assertEquals("new", made["status"]!!.jsonPrimitive.content)
-        val key = stub.idemKeys.last()
-        assertNotNull(key)
-        assertTrue(SitesService.isUuid(key), "the Idempotency-Key is a UUID")
-        assertTrue("sshPublicKey" in stub.bodies.last())
-
-        s.power(ID1, "start"); s.power(ID1, "stop"); s.destroy(ID1)
-        assertEquals(listOf("GET /hosting/v1/servers", "POST /hosting/v1/servers", "POST /hosting/v1/servers/$ID1/actions/start", "POST /hosting/v1/servers/$ID1/actions/stop", "DELETE /hosting/v1/servers/$ID1"), stub.calls)
+        assertEquals(listOf("GET /hosting/v1/servers"), stub.calls)
         assertTrue(stub.auth.all { it == "Bearer $TOKEN" })
     }
 
     @Test
-    fun `409 is the plan limit, 403 not entitled, 401 signed out`() {
+    fun `403 is not entitled, 401 signed out`() {
         val s = service()
-        stub.forced = 409
-        assertEquals(SitesException.LIMIT, assertFailsWith<SitesException> { s.create("a", null) }.kind)
         stub.forced = 403
         assertEquals(SitesException.NOT_ENTITLED, assertFailsWith<SitesException> { s.list() }.kind)
         stub.forced = 401
@@ -160,7 +150,7 @@ class SitesTest {
 
     @Test
     fun `403 splits on the error field, email_unverified vs forbidden`() {
-        val e = failure(403, """{"error":"email_unverified","message":"x"}""") { it.create("a", null) }
+        val e = failure(403, """{"error":"email_unverified","message":"x"}""")
         assertEquals(SitesException.EMAIL_UNVERIFIED, e.kind)
         assertEquals("Verify your email address to create a server.", e.message)
         assertEquals(SitesException.NOT_ENTITLED, failure(403, """{"error":"forbidden","message":"email_unverified"}""").kind)
@@ -179,7 +169,7 @@ class SitesTest {
 
     @Test
     fun `a 503 body message and code reach the error text`() {
-        val e = failure(503, """{"error":"not_configured","message":"hosting is not configured on this server"}""") { it.create("a", null) }
+        val e = failure(503, """{"error":"not_configured","message":"hosting is not configured on this server"}""")
         assertEquals(SitesException.NOT_CONFIGURED, e.kind)
         assertTrue("hosting is not configured on this server" in e.message!!, e.message)
         val g = failure(503, "")
@@ -224,16 +214,8 @@ class SitesTest {
     }
 
     @Test
-    fun `a malformed id, name or key is refused before any call`() {
+    fun `the service offers no call beyond list`() {
         val s = service()
-        for (bad in listOf("", "1", "../etc", "11111111-1111-4111-8111-11111111111", "11111111-1111-4111-8111-111111111111/x", "not-a-uuid-at-all-really-not-here-1234")) {
-            assertFailsWith<IllegalArgumentException> { s.destroy(bad) }
-            assertFailsWith<IllegalArgumentException> { s.power(bad, "start") }
-        }
-        assertFailsWith<IllegalArgumentException> { s.power(ID1, "power_cycle") }
-        assertFailsWith<IllegalArgumentException> { s.create("Bad_Name!", null) }
-        assertFailsWith<IllegalArgumentException> { s.create("ok", "not a key") }
-        assertFailsWith<IllegalArgumentException> { s.create("ok", null, "not-a-uuid") }
         assertEquals(emptyList(), stub.calls, "the stub saw nothing")
     }
 
@@ -326,22 +308,18 @@ class SitesTest {
     @Test
     fun `agent tools work the API themselves and neither the tools nor the routes ever expose the token`() {
         val w = wire(mapOf("api" to stub.base))
-        assertEquals(setOf("infantry_sites_list", "infantry_sites_create", "infantry_sites_start", "infantry_sites_stop", "infantry_sites_destroy"), w.tools.keys)
+        // SITES-READONLY-1: the owner removed in-app create/modify 2026-11-15; agents may only list.
+        assertEquals(setOf("infantry_sites_list"), w.tools.keys)
         val outputs = mutableListOf<String>()
         outputs += callTool(w, "infantry_sites_list").text
-        outputs += callTool(w, "infantry_sites_create", "name" to "from-agent").text
-        outputs += callTool(w, "infantry_sites_start", "id" to ID1).text
-        outputs += callTool(w, "infantry_sites_stop", "id" to ID1).text
-        outputs += callTool(w, "infantry_sites_destroy", "id" to ID1).text
-        assertTrue(callTool(w, "infantry_sites_destroy", "id" to "nope").isError, "a malformed id is an error result")
         outputs += w.routes.getValue("GET state")(HttpCall("GET", "state")).body
         assertTrue(outputs.none { TOKEN in it }, "no output holds the token")
         assertTrue(stub.auth.isNotEmpty() && stub.auth.all { it == "Bearer $TOKEN" }, "the plugin itself sent the bearer")
-        assertEquals(4, stub.calls.count { it != "GET /hosting/v1/servers" }, "create, start, stop and destroy reached the stub")
+        assertTrue(stub.calls.all { it == "GET /hosting/v1/servers" }, "only reads reached the stub")
     }
 
     @Test
-    fun `state is signed out, not entitled or ready, and a limit answer on create reaches the UI as limit`() {
+    fun `state is signed out, not entitled or ready`() {
         val out = wire(mapOf("api" to stub.base), signedIn = false)
         assertEquals("signed_out", Json.parseToJsonElement(out.routes.getValue("GET state")(HttpCall("GET", "state")).body).jsonObject["state"]!!.jsonPrimitive.content)
         assertTrue(callTool(out, "infantry_sites_list").isError)
@@ -358,10 +336,6 @@ class SitesTest {
         assertEquals(1, rs["servers"]!!.jsonArray.size)
         assertEquals("2", rs["limit"]!!.jsonPrimitive.content)
 
-        stub.forced = 409
-        val r = Json.parseToJsonElement(ready.routes.getValue("POST create")(HttpCall("POST", "create", body = """{"name":"x"}""")).body).jsonObject
-        assertEquals("limit", r["state"]!!.jsonPrimitive.content)
-        assertEquals(400, ready.routes.getValue("POST destroy")(HttpCall("POST", "destroy", body = """{"id":"bad"}""")).status)
 
         val unset = wire(emptyMap())
         assertEquals("not_configured", Json.parseToJsonElement(unset.routes.getValue("GET state")(HttpCall("GET", "state")).body).jsonObject["state"]!!.jsonPrimitive.content)

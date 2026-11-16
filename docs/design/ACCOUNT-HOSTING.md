@@ -24,7 +24,7 @@ Owner, 2026-11-14 (short form; the full quotes are in the ticket):
    ├ Overview   accounts, plans, services     <-route-  · provider registry  (endpoint prefix account.provider/)
    ├ Billing    "Manage" opens provider site            · generic sign-in engines: device code, OAuth+PKCE, API key
    └ Sites      (Infantry_Sites UI half)                · refresh tokens in the keystore (plugin.infantry_account)
-       └ Servers: list, create, start/stop/destroy      · capabilities account.status / account.entitlement / account.token
+       └ Servers: list (read-only)                      · capabilities account.status / account.entitlement / account.token
                                                               ^ token (short-lived, per caller)
                                                         Infantry_Sites daemon half
                                                           · registers provider "infantry" + service "hosting"
@@ -60,7 +60,7 @@ Owner, 2026-11-14 (short form; the full quotes are in the ticket):
 
 - Official, signed, installable, not bundled. `dependencies: [{ "id": "Infantry_Account", "version": "^1.0" }]`.
 - It registers our provider `infantry` (shown as "Infantry AI Hosting") and the service `hosting`, and adds the **Sites** section to the Account tab.
-- MVP content of Sites: **Servers** (droplets: status, IP, create up to the limit, start, stop, destroy).
+- MVP content of Sites: **Servers** (droplets: status Online/Offline/Starting, IP; read-only). Owner 2026-11-15: no in-app create or modify; servers are created and managed on the site (a "Manage servers on the site" button opens it).
   Later sub-sections: Sites, Domains, Activity.
 - It talks ONLY to our backend, with the token Account gives it. It never holds a DigitalOcean key.
 
@@ -416,8 +416,8 @@ rates from `limits`; the kit never hard-codes a role.
    the plugin manager installs dependencies, else the catalog lists both and Sites says "Install Account first").
 2. Account tab > Sites shows "Subscribe" -> the site's hosting page -> Stripe Checkout (test card).
 3. Account tab > Overview > "Sign in" -> device code -> confirm on the site -> signed in, plan Active.
-4. Sites > Servers > "Create server" (name, optional SSH public key) -> droplet `new` -> `active` with its IP in about a
-   minute; start, stop, destroy (destroy behind an `AhqAlertDialog` confirm that names the server).
+4. Create the server on the site (no in-app create, owner 2026-11-15); Sites > Servers lists it read-only: Starting -> Online
+   with its IP in about a minute. Start, stop and destroy are done on the site too.
 5. Cancel in the Stripe portal -> plan canceled, server powered off, destroyed after the grace period.
 
 **Later (in this order of value):** web developer role (an agent that SSHes into the droplet and builds a site; needs

@@ -63,29 +63,6 @@ class SitesService(
         return JsonArray(arr.mapNotNull { (it as? JsonObject)?.let(::server) })
     }
 
-    fun create(name: String, sshPublicKey: String?, idempotencyKey: String? = null): JsonObject {
-        require(NAME.matches(name)) { "name must be 1 to 40 characters: lowercase letters, digits and '-', starting with a letter or digit" }
-        val key = sshPublicKey?.trim()?.takeIf { it.isNotEmpty() }
-        require(key == null || SSH_KEY.matches(key)) { "sshPublicKey must be one line of a public key (ssh-ed25519 AAAA...)" }
-        val idem = idempotencyKey ?: newKey()
-        requireUuid(idem, "idempotencyKey")
-        val payload = buildJsonObject { put("name", name); if (key != null) put("sshPublicKey", key) }
-        val answer = call("POST", HostingRoutes.SERVERS, payload.toString(), mapOf("Idempotency-Key" to idem))
-        return server((answer as? JsonObject)?.let { (it["server"] as? JsonObject) ?: it } ?: JsonObject(emptyMap()))
-    }
-
-    /** [action] is `start`, `stop` or `refresh` (refresh re-reads the real status and ip; poll it after create and start). */
-    fun power(id: String, action: String) {
-        requireUuid(id, "id")
-        require(action == "start" || action == "stop" || action == "refresh") { "action must be start, stop or refresh" }
-        call("POST", HostingRoutes.action(id, action))
-    }
-
-    fun destroy(id: String) {
-        requireUuid(id, "id")
-        call("DELETE", HostingRoutes.server(id))
-    }
-
     /** The account's `reclaimableUntil` (epoch ms): set when the paid period ended and the servers are still in the reclaim window; null otherwise. */
     fun reclaimableUntil(): Long? {
         val o = call("GET", HostingRoutes.ACCOUNT) as? JsonObject ?: return null
@@ -149,8 +126,6 @@ class SitesService(
 
     companion object {
         private val UUID_RE = Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
-        private val NAME = Regex("[a-z0-9][a-z0-9-]{0,39}")
-        private val SSH_KEY = Regex("(ssh-[a-z0-9]+|ecdsa-sha2-[a-z0-9]+|sk-[a-z0-9@.-]+) [A-Za-z0-9+/=]+( [^\\r\\n]*)?")
 
         fun isUuid(v: String) = UUID_RE.matches(v)
         fun requireUuid(v: String, what: String) = require(isUuid(v)) { "$what must be a UUID" }
