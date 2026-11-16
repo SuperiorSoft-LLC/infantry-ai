@@ -13,6 +13,8 @@ import net.i2p.crypto.eddsa.spec.EdDSAPublicKeySpec
 import org.apache.sshd.client.SshClient
 import org.apache.sshd.client.channel.ClientChannelEvent
 import org.apache.sshd.client.keyverifier.ServerKeyVerifier
+import org.apache.sshd.common.SshConstants
+import org.apache.sshd.common.SshException
 import org.apache.sshd.common.config.keys.KeyUtils
 import org.apache.sshd.common.config.keys.PublicKeyEntry
 import org.apache.sshd.common.config.keys.PublicKeyEntryResolver
@@ -100,7 +102,8 @@ class StorageHostKeyPins(private val storage: PluginStorage, private val now: ()
     }
     override fun get(serverId: String): String? = storage.query("SELECT fingerprint FROM $TABLE WHERE server_id = ?", listOf(serverId)).firstOrNull()?.get("fingerprint") as? String
     override fun pin(serverId: String, fingerprint: String) {
-        storage.execute("INSERT INTO $TABLE (server_id, fingerprint, pinned_at) VALUES (?, ?, ?) ON CONFLICT(server_id) DO UPDATE SET fingerprint = excluded.fingerprint, pinned_at = excluded.pinned_at", listOf(serverId, fingerprint, now()))
+        // SSH-DAEMON-1: INSERT OR REPLACE, not an upsert: the daemon's storage check reads `DO UPDATE SET` as a table named SET.
+        storage.execute("INSERT OR REPLACE INTO $TABLE (server_id, fingerprint, pinned_at) VALUES (?, ?, ?)", listOf(serverId, fingerprint, now()))
     }
     companion object { const val TABLE = "infantry_sites_ssh_host_pins" }
 }
@@ -153,27 +156,38 @@ data class SshLimits(val connectTimeoutMs: Long, val execTimeoutMs: Long, val ma
  * key and a user certificate, checks the host key with [HostKeyRule], runs one command and closes. Nothing it returns holds the
  * key or the certificate.
  */
-class SshExec(private val pins: HostKeyPins) {
+class SshExec(private val pins: HostKeyPins, private val log: (String) -> Unit = {}) {
     fun run(serverId: String, keys: KeyPair, cert: SshCert, command: String, stdin: ByteArray?, limits: SshLimits): SshExecResult = withPluginLoader {
         val certKey = parseCert(cert.certificate)
         var refused: String? = null
+        var checkFailed: Throwable? = null
         val client = SshClient.setUpDefaultClient()
         client.serverKeyVerifier = ServerKeyVerifier { _, _, key ->
-            refused = HostKeyRule.check(serverId, fingerprint(key), cert.connection.hostKeyFingerprint, pins)
-            refused == null
+            // SSH-DAEMON-1: an exception thrown here ends the key exchange before any login; keep it, so it is not reported as a refusal.
+            try {
+                refused = HostKeyRule.check(serverId, fingerprint(key), cert.connection.hostKeyFingerprint, pins)
+                refused == null
+            } catch (e: Exception) {
+                checkFailed = e
+                false
+            }
         }
         client.start()
         try {
             val session = try {
                 client.connect(cert.connection.user, cert.connection.host, cert.connection.port).verify(limits.connectTimeoutMs).session
             } catch (e: Exception) {
+                log("ssh connect to ${cert.connection.host}:${cert.connection.port} failed: ${causeChain(e)}")
                 throw SitesException(SitesException.UNAVAILABLE, "could not reach ${cert.connection.host}:${cert.connection.port} over SSH")
             }
             session.use { s ->
                 s.addPublicKeyIdentity(KeyPair(certKey, keys.private))
                 try { s.auth().verify(limits.connectTimeoutMs) } catch (e: Exception) {
+                    log("ssh auth on ${cert.connection.host}:${cert.connection.port} failed: ${causeChain(e)}")
                     refused?.let { throw SitesException(SitesException.HOST_KEY, it) }
-                    throw SitesException(SitesException.AUTH_FAILED, "the server refused the SSH certificate")
+                    checkFailed?.let { throw SitesException(SitesException.UNAVAILABLE, "could not check or pin the server's host key (${summary(it)})") }
+                    if (isAuthRefusal(e)) throw SitesException(SitesException.AUTH_FAILED, "the server refused the SSH certificate")
+                    throw SitesException(SitesException.UNAVAILABLE, "the SSH session to ${cert.connection.host}:${cert.connection.port} failed before login (${summary(e)})")
                 }
                 val out = CappedStream(limits.maxOutputBytes)
                 val err = CappedStream(limits.maxOutputBytes)
@@ -194,6 +208,23 @@ class SshExec(private val pins: HostKeyPins) {
     }
 
     companion object {
+        /** Each cause's class and message, outermost first: the real reason, for the log (MINA puts no key material in them). */
+        fun causeChain(e: Throwable): String = generateSequence(e) { it.cause?.takeIf { c -> c !== it } }.take(MAX_CAUSES)
+            .joinToString(" <- ") { "${it::class.java.name}: ${it.message ?: ""}".trim() }
+
+        private const val MAX_CAUSES = 8
+        private const val MAX_SUMMARY_CHARS = 300
+
+        /** The innermost cause, one line, for an answer: its class and message (no stack trace, no key material). */
+        fun summary(e: Throwable): String {
+            val root = generateSequence(e) { it.cause?.takeIf { c -> c !== it } }.take(MAX_CAUSES).last()
+            return "${root::class.java.simpleName}: ${root.message ?: ""}".trim().take(MAX_SUMMARY_CHARS)
+        }
+
+        /** True only when the server itself turned the login down (no method left); a timeout, a closed session or a kex error is not. */
+        fun isAuthRefusal(e: Throwable): Boolean = generateSequence(e) { it.cause?.takeIf { c -> c !== it } }.take(MAX_CAUSES)
+            .any { it is SshException && it.disconnectCode == SshConstants.SSH2_DISCONNECT_NO_MORE_AUTH_METHODS_AVAILABLE }
+
         fun fingerprint(key: PublicKey): String = KeyUtils.getFingerPrint(key)
 
         fun parseCert(line: String): PublicKey = try {
