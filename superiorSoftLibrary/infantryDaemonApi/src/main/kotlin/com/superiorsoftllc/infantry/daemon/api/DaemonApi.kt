@@ -289,7 +289,9 @@ interface DaemonApi {
         // (RouteCheck): a public route (`daemon.publicRoutes`) is refused at load unless it declares a check.
         // 1.62.0 (ACCOUNT-SEAM-1, additive): `pluginSecrets` (PluginSecrets, SecretValue): the module's own keystore entry only.
         // 1.63.0 (ENDPOINT-ENV-1, additive): `environment` and `endpoint(name)` (module.json `daemon.endpoints`, per build environment).
-        const val VERSION = "1.63.0"
+        // 1.64.0 (PLUGIN-AUTH-ORIGIN-1, additive): module.json `daemon.http` (passAuthorization, allowedOrigins, allowNonLoopbackHost):
+        // a public route may receive `Authorization` in [HttpCall.headers], admit listed origins and answer their CORS preflight.
+        const val VERSION = "1.64.0"
     }
 }
 

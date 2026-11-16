@@ -105,6 +105,14 @@ class DaemonPluginHost private constructor(
         val closeables = CopyOnWriteArrayList<AutoCloseable>()
         /** PLUGIN-HOTSWAP-1: [DaemonApi.scope]; closed right after the plugin's stop. */
         val scope = com.superiorsoftllc.infantry.plugin.api.OwnedPluginScope(id)
+        /** PLUGIN-AUTH-ORIGIN-1: what `daemon.http` opens on this module's public routes; null = nothing (the default). */
+        val routeOpenings: com.superiorsoftllc.infantry.daemon.RouteOpenings? = declared.http.let { h ->
+            com.superiorsoftllc.infantry.daemon.RouteOpenings(
+                allowedOrigins = h.allowedOrigins.mapNotNull { com.superiorsoftllc.infantry.daemon.AccessPolicy.normalizeOrigin(it) }.toSet(),
+                anyHost = h.allowNonLoopbackHost,
+                passAuthorization = h.passAuthorization,
+            ).takeUnless { it.isEmpty }
+        }
         @Volatile var routeWindowStart = 0L
         @Volatile var routeCount = 0
 
@@ -766,6 +774,13 @@ class DaemonPluginHost private constructor(
     /** True when `[method] [path]` is a plugin's declared public route (answered without the bearer token). */
     fun isPublicRoute(method: String, path: String): Boolean = findRoute(method, path)?.first?.let { it.public && !it.owner.guard.disabled } == true
 
+    /**
+     * PLUGIN-AUTH-ORIGIN-1: what the owner of the PUBLIC route `[method] [path]` opened in its `daemon.http` (Authorization header,
+     * allowed origins, any Host); null for a route that is not public, a disabled owner, or a module without the block.
+     */
+    fun routeOpenings(method: String, path: String): com.superiorsoftllc.infantry.daemon.RouteOpenings? =
+        findRoute(method, path)?.first?.takeIf { it.public && !it.owner.guard.disabled }?.owner?.routeOpenings
+
     /** TRIG-2a: the exact route, else the first template route whose segments match; with the bound path params. */
     private fun findRoute(method: String, path: String): Pair<RouteEntry, Map<String, String>>? {
         routeEntries[key(method, path)]?.let { return it to emptyMap() }
@@ -1145,6 +1160,9 @@ class DaemonPluginHost private constructor(
             runCatching { com.superiorsoftllc.infantry.mcp.McpPluginServers.validate(id, d.mcpServers.map { it.toInput() }) }
                 .exceptionOrNull()?.let { return it.message }
         }
+        // PLUGIN-AUTH-ORIGIN-1: every allowed origin is a plain http(s) origin (no wildcard, no path); a bad one refuses the module.
+        d.http.allowedOrigins.firstOrNull { com.superiorsoftllc.infantry.daemon.AccessPolicy.normalizeOrigin(it) == null }
+            ?.let { return "daemon.http.allowedOrigins: '$it' is not an origin (scheme://host[:port], http or https, no wildcard)" }
         if (tier != Tier.COMMUNITY) return null
         if (d.storage.adopt.isNotEmpty()) return "a community module may not adopt core tables (daemon.storage.adopt)"
         val allow = setting.allow.toSet()
