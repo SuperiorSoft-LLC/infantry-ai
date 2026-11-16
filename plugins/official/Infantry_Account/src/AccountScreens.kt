@@ -8,6 +8,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,6 +20,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -97,9 +100,12 @@ internal class AccountLive(val client: AccountClient) {
 /**
  * What every section draws. The layout always renders (the guide, the cards, or a note); a failure is a small card inside it, never the
  * whole view. The section re-reads every [ACCOUNT_WAIT_POLL_MS] while a sign-in waits, else every [ACCOUNT_IDLE_POLL_MS].
+ *
+ * [scrolls] false: the section fills the height and does not scroll, so a child that scrolls by itself (another plugin's dashboard)
+ * gets a bounded height. Nesting it in this scroll measures it with an infinite height, which Compose refuses (SIGNIN-APP-1).
  */
 @Composable
-private fun AccountSection(context: TabContext, content: @Composable (AccountLive, List<AccountProvider>) -> Unit) {
+private fun AccountSection(context: TabContext, scrolls: Boolean = true, content: @Composable ColumnScope.(AccountLive, List<AccountProvider>) -> Unit) {
     val live = remember { AccountLive(AccountClient(context.services.get(Services.DAEMON))) }
     val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) {
@@ -115,7 +121,8 @@ private fun AccountSection(context: TabContext, content: @Composable (AccountLiv
             }
         }
     }
-    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    val layout = if (scrolls) Modifier.fillMaxWidth().verticalScroll(rememberScrollState()) else Modifier.fillMaxSize()
+    Column(layout.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         live.problem?.let { ErrorCard(it) { scope.launch { live.reload(refresh = true) } } }
         live.actionProblem?.let { Text(it, color = Palette.Danger, fontSize = 12.sp) }
         val providers = live.providers
@@ -192,17 +199,25 @@ internal fun canOpenDashboard(p: AccountProvider, loaded: (String) -> Boolean): 
  * card opens that service's own dashboard (a tab its plugin contributes), with a back to the list.
  */
 @Composable
-fun ServicesHub(context: TabContext) = AccountSection(context) { live, providers ->
+fun ServicesHub(context: TabContext) {
+    // Hoisted: an open dashboard scrolls by itself, so the section around it must not (see AccountSection's scrolls).
+    var openId by remember { mutableStateOf<String?>(null) }
+    AccountSection(context, scrolls = openId == null) { live, providers -> ServicesHubBody(live, providers, context, openId) { openId = it } }
+}
+
+@Composable
+private fun ColumnScope.ServicesHubBody(live: AccountLive, providers: List<AccountProvider>, context: TabContext, openId: String?, setOpen: (String?) -> Unit) {
     val factory = com.superiorsoftllc.infantry.ui.LocalTabFactory.current
     val scope = rememberCoroutineScope()
     val uri = LocalUriHandler.current
-    var openId by remember { mutableStateOf<String?>(null) }
     var confirmOut by remember { mutableStateOf<AccountProvider?>(null) }
     val open = providers.firstOrNull { it.id == openId && canOpenDashboard(it) { t -> factory.find(t) != null } }
+    // The opened service signed out or its dashboard went away: back to the (scrolling) list.
+    if (openId != null && open == null) SideEffect { setOpen(null) }
     if (open != null) {
         val tabId = open.dashboardTabId!!
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            TextButton({ openId = null }, Modifier.testTag(SERVICES_BACK_TAG)) { Text("< Services") }
+            TextButton({ setOpen(null) }, Modifier.testTag(SERVICES_BACK_TAG)) { Text("< Services") }
             Text(open.name, color = Palette.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
             Chip("Connected", Palette.Ok)
             Spacer(Modifier.weight(1f))
@@ -210,16 +225,17 @@ fun ServicesHub(context: TabContext) = AccountSection(context) { live, providers
             OutlinedButton({ confirmOut = open }, Modifier.testTag(ACCOUNT_SIGN_OUT_TAG_PREFIX + open.id)) { Text("Sign out") }
         }
         planNotice(open)?.let { Text(it, color = Palette.Warn, fontSize = 12.sp) }
-        Box(Modifier.fillMaxWidth().testTag(SERVICES_DASHBOARD_TAG_PREFIX + open.id)) { factory.Content(tabId, context) }
+        // weight: the dashboard gets the height that is left, a bounded one, so its own scroll works.
+        Box(Modifier.fillMaxWidth().weight(1f).testTag(SERVICES_DASHBOARD_TAG_PREFIX + open.id)) { factory.Content(tabId, context) }
     } else {
-        for (p in providers) ServiceCard(live, p, canOpenDashboard(p) { factory.find(it) != null }) { openId = p.id }
+        for (p in providers) ServiceCard(live, p, canOpenDashboard(p) { factory.find(it) != null }) { setOpen(p.id) }
     }
     confirmOut?.let { p ->
         AhqAlertDialog(
             onDismissRequest = { confirmOut = null },
             title = { Text("Sign out of ${p.name}?") },
             text = { Text("Plugins that use this account stop working until you sign in again.") },
-            confirmButton = { TextButton({ confirmOut = null; openId = null; scope.launch { live.act { live.client.signOut(p.id) } } }) { Text("Sign out") } },
+            confirmButton = { TextButton({ confirmOut = null; setOpen(null); scope.launch { live.act { live.client.signOut(p.id) } } }) { Text("Sign out") } },
             dismissButton = { TextButton({ confirmOut = null }) { Text("Cancel") } },
         )
     }

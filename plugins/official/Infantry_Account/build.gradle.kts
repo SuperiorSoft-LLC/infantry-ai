@@ -39,6 +39,10 @@ kotlin {
         jvmTest { kotlin.srcDir("test") }
         jvmTest.dependencies {
             implementation(kotlin("test"))
+            // SIGNIN-APP-1: the Services hub's layout is checked in a real composition (ServicesHubLayoutTest).
+            @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
+            implementation(compose.uiTest)
+            implementation(compose.desktop.currentOs)
         }
     }
 }

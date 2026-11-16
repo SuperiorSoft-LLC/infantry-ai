@@ -331,6 +331,9 @@ class AccountFlowTest {
         // core's guard tolerates only IllegalArgumentException; the plugin turns this ISE into one (AccountDaemonPlugin.cap).
         val e = assertFailsWith<IllegalStateException> { s.signIn("stub") }
         assertTrue("could not reach the account server" in e.message.orEmpty())
+        // SIGNIN-APP-1: the owner's Services tab said only this; it now names the address and the reason, so a down server is obvious.
+        assertTrue("(ConnectException: refused)" in e.message.orEmpty(), e.message)
+        assertTrue(Regex("at https?://\\S+").containsMatchIn(e.message.orEmpty()), e.message)
         secrets.set("acct_stub_refresh", SecretValue("r"))
         val status = s.status().toString()   // an unreachable server shows in the answer; nothing is thrown
         assertTrue("account lookup failed" in status, status)
