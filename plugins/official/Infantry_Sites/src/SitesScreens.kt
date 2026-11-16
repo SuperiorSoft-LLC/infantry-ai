@@ -124,7 +124,7 @@ fun SitesServers(context: TabContext) {
             s.state == "not_configured" -> Text(s.message ?: "No hosting service is configured.", color = Palette.Muted, fontSize = 12.sp, modifier = Modifier.testTag(SITES_EMPTY_TAG))
             s.state == "signed_out" -> CardBox("sites-signed-out") {
                 Text("Infantry AI Hosting", color = Palette.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                Text("Sign in first: Step 1 of Account setup. The sign-in code shows in Account > Overview.", color = Palette.Muted, fontSize = 12.sp)
+                Text("Sign in from the Services tab.", color = Palette.Muted, fontSize = 12.sp)
                 Button({ act { client.startSignIn() } }, Modifier.testTag(SITES_SIGN_IN_TAG)) { Text("Sign in") }
             }
             s.state == "not_entitled" && s.reclaimableUntil != null -> Unit

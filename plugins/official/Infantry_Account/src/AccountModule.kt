@@ -21,11 +21,7 @@ import kotlinx.serialization.json.JsonPrimitive
 
 /** The Account tab's id: a host tab. A plugin adds a section by declaring a tab whose `parent` is this id (any order above [ACCOUNT_SECTION_ORDER_BASE]). */
 const val ACCOUNT_TAB_ID = "infantry.account"
-const val ACCOUNT_OVERVIEW_TAB_ID = "infantry.account.overview"
-const val ACCOUNT_BILLING_TAB_ID = "infantry.account.billing"
 
-/** Overview is 10 and Billing 20; sections other plugins add sort after them. */
-const val ACCOUNT_SECTION_ORDER_BASE = 20
 
 private fun accountIcon() = tabIcon(
     "account",
@@ -33,23 +29,12 @@ private fun accountIcon() = tabIcon(
     { moveTo(4f, 21f); lineTo(4f, 19f); lineTo(8f, 15f); lineTo(16f, 15f); lineTo(20f, 19f); lineTo(20f, 21f); close() },
 )
 
-/** The Account host tab (centre strip, order 190): it draws only its sections. */
+/** The Services host tab (id and order kept from the Account tab): the list of services and, for a connected one, its dashboard. */
 private fun accountTab() = TabProvider(
     id = ACCOUNT_TAB_ID, container = TabContainers.CENTER, order = 190,
-    title = { "Account" }, icon = accountIcon(), testTag = "center-tab-ACCOUNT",
-) { it.SubTabs(ACCOUNT_TAB_ID) }
-
-private fun overviewTab() = TabProvider(
-    id = ACCOUNT_OVERVIEW_TAB_ID, container = TabContainers.CENTER, order = 10,
-    title = { "Overview" }, icon = accountIcon(), testTag = "center-tab-ACCOUNT-OVERVIEW", parent = ACCOUNT_TAB_ID,
+    title = { "Services" }, icon = accountIcon(), testTag = "center-tab-ACCOUNT",
     routes = listOf("GET state", "POST signin", "POST signout"),
-) { AccountOverview(it) }
-
-private fun billingTab() = TabProvider(
-    id = ACCOUNT_BILLING_TAB_ID, container = TabContainers.CENTER, order = ACCOUNT_SECTION_ORDER_BASE,
-    title = { "Billing" }, icon = accountIcon(), testTag = "center-tab-ACCOUNT-BILLING", parent = ACCOUNT_TAB_ID,
-    routes = listOf("GET state"),
-) { AccountBilling(it) }
+) { ServicesHub(it) }
 
 /**
  * ACCOUNT-1: Infantry_Account (official, installable, not bundled), compiled in on web and Android (D9; the manifest mirrors
@@ -60,25 +45,23 @@ private fun billingTab() = TabProvider(
 val InfantryAccount = InfantryModule(
     ModuleManifest(
         name = "Infantry_Account", version = "1.0.0", author = "Infantry AI",
-        description = "The Account tab: sign in to services that register as account providers.",
-        tabs = listOf(TabDeclaration(ACCOUNT_TAB_ID, TabContainers.CENTER), TabDeclaration(ACCOUNT_OVERVIEW_TAB_ID, TabContainers.CENTER), TabDeclaration(ACCOUNT_BILLING_TAB_ID, TabContainers.CENTER)),
+        description = "The Services tab: sign in to services that register as providers, and open their dashboards.",
+        tabs = listOf(TabDeclaration(ACCOUNT_TAB_ID, TabContainers.CENTER)),
         config = listOf(
             ConfigDeclaration(
                 ACCOUNT_TAB_ID, "Tabs",
-                listOf(ConfigFieldDeclaration(TabGroups.GROUPED, ConfigFieldTypes.CHECKBOX, "Show the Account sections (Overview, Billing and the ones plugins add) inside the Account tab", default = JsonPrimitive(true))),
+                listOf(ConfigFieldDeclaration(TabGroups.GROUPED, ConfigFieldTypes.CHECKBOX, "Show a service's dashboard section inside the Services tab", default = JsonPrimitive(true))),
                 tab = "Appearance", order = 70, title = "Account sections", keywords = listOf("account", "tabs", "sections", "sub-tabs"),
             ),
         ),
     ),
-    listOf(accountTab(), overviewTab(), billingTab()),
+    listOf(accountTab()),
 )
 
 /** The entry of Infantry_Account (module.json `entry`): desktop loads it from its signed jar as a [UiPlugin]; web and Android compile it in as a [ModuleSource]. */
 class AccountPlugin : UiPlugin, ModuleSource {
     override fun register(registrar: UiRegistrar) {
         registrar.tab(accountTab())
-        registrar.tab(overviewTab())
-        registrar.tab(billingTab())
     }
 
     override fun modules(): List<InfantryModule> = listOf(InfantryAccount)

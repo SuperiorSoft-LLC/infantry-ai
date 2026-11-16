@@ -37,6 +37,7 @@ object InfantryProvider {
         put("id", ID)
         put("name", "Infantry AI Hosting")
         put("icon", "cloud")
+        put("description", "Servers for your sites, managed on the Infantry AI Hosting website.")
         put("signIn", buildJsonObject {
             put("method", "device_code")
             put("deviceAuthorizationUrl", "$api${HostingRoutes.DEVICE_CODE}")

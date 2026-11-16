@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "apiVersion": 2,
   "author": "Infantry AI",
-  "description": "The Sites section of the Account tab: your hosting servers (read-only: online or offline) with Infantry AI Hosting, and a tool for agents to list them.",
+  "description": "The Infantry AI Hosting dashboard (opened from the Services tab): your hosting servers (read-only: online or offline) with Infantry AI Hosting, and a tool for agents to list them.",
   "tier": "official",
   "dependencies": [{ "id": "Infantry_Account", "version": "^1.0" }],
   "sequence": [],

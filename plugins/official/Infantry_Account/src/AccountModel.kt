@@ -16,7 +16,7 @@ import kotlinx.serialization.json.longOrNull
 /** The device-code sign-in the daemon is polling for; [state] is `pending`, `denied`, `expired` or `failed`. */
 data class AccountFlow(val state: String, val userCode: String, val verificationUri: String, val expiresAt: Long, val error: String?)
 
-data class AccountServiceView(val id: String, val name: String, val entitled: Boolean)
+data class AccountServiceView(val id: String, val name: String, val entitled: Boolean, val section: String? = null)
 
 /** One provider as the daemon shows it: display data only, never a token. */
 data class AccountProvider(
@@ -35,7 +35,11 @@ data class AccountProvider(
     val permissions: List<String> = emptyList(),
     val limits: Map<String, String> = emptyMap(),
     val reclaimableUntil: Long? = null,
+    val description: String? = null,
 ) {
+    /** The tab id of this service's dashboard (a service's `section`), or null when the provider has none. */
+    val dashboardTabId: String? get() = services.firstNotNullOfOrNull { it.section }
+
     /** True once a plan exists on the account (any status). */
     val hasPlan: Boolean get() = planName != null || planStatus != null
 }
@@ -83,12 +87,13 @@ object AccountParser {
             billingUrl = o.str("billingUrl"), signUpUrl = o.str("signUpUrl"),
             services = (o["services"] as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }.mapNotNull { s ->
                 val sid = s.str("id") ?: return@mapNotNull null
-                AccountServiceView(sid, s.str("name") ?: sid, (s["entitled"] as? JsonPrimitive)?.booleanOrNull ?: false)
+                AccountServiceView(sid, s.str("name") ?: sid, (s["entitled"] as? JsonPrimitive)?.booleanOrNull ?: false, s.str("section"))
             },
             error = o.str("error"), flow = flow,
             permissions = (o["permissions"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull },
             limits = (o["limits"] as? JsonObject)?.mapNotNull { (k, v) -> (v as? JsonPrimitive)?.contentOrNull?.let { k to it } }.orEmpty().toMap(),
             reclaimableUntil = (o["reclaimableUntil"] as? JsonPrimitive)?.longOrNull,
+            description = o.str("description"),
         )
     }
 
