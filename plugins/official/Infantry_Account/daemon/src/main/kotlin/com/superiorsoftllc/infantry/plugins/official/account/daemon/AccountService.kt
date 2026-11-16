@@ -252,6 +252,7 @@ class AccountService(
             put("name", p.name)
             put("icon", p.icon)
             put("signedIn", signedIn)
+            p.description?.let { put("description", it) }
             p.billingUrl?.let { put("billingUrl", it) }
             p.signUpUrl?.let { put("signUpUrl", it) }
             json?.str("email")?.let { e -> put("user", buildJsonObject { put("email", maskEmail(e)) }) }
@@ -269,6 +270,7 @@ class AccountService(
                 for (s in p.services) add(buildJsonObject {
                     put("id", s.id)
                     put("name", s.name)
+                    s.section?.let { put("section", it) }
                     put("entitled", signedIn && planActive(json) && holds(json, s.entitlement))
                 })
             })

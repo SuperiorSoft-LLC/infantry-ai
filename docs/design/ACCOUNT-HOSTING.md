@@ -146,7 +146,14 @@ An agent (the future web developer role) asks `account.status` and the Sites too
 customer-affecting action (create, destroy) is a Sites tool with `kind: write` / `destructive`, so policy presets and the
 approval gate already apply.
 
-### 1.6 The Account tab and its sections
+### 1.6 The Services tab and its dashboards
+
+SERVICES-HUB-1 (2026-11-15): the tab (id `infantry.account` kept) is labelled **Services**. It lists one bordered card per
+registered provider (read from the provider registry, nothing named in the screen): **Sign in** opens the provider's site,
+the card flips to **Connected** by itself, and a Connected card opens that service's own dashboard inside the tab (back to the
+list; Billing and Sign out sit in its header). The dashboard is the tab named by the provider's service `section` in its
+`describe` answer (Sites: `infantry.sites`, the SuperiorSoft Hosting dashboard); no `section`, no dashboard. The Overview and
+Billing sub-tabs are gone; the text below is the earlier design.
 
 Everything here is existing UI seams; nothing new in core:
 
@@ -414,8 +421,8 @@ rates from `limits`; the kit never hard-codes a role.
 
 1. User installs Infantry_Sites from the catalog (Infantry_Account comes with it as its dependency; ACCOUNT-1 checks
    the plugin manager installs dependencies, else the catalog lists both and Sites says "Install Account first").
-2. Account tab > Sites shows "Subscribe" -> the site's hosting page -> Stripe Checkout (test card).
-3. Account tab > Overview > "Sign in" -> device code -> confirm on the site -> signed in, plan Active.
+2. Services > Infantry AI Hosting (dashboard) shows "Subscribe" -> the site's hosting page -> Stripe Checkout (test card).
+3. Services > Infantry AI Hosting > "Sign in" -> device code -> confirm on the site -> signed in, plan Active.
 4. Create the server on the site (no in-app create, owner 2026-11-15); Sites > Servers lists it read-only: Starting -> Online
    with its IP in about a minute. Start, stop and destroy are done on the site too.
 5. Cancel in the Stripe portal -> plan canceled, server powered off, destroyed after the grace period.

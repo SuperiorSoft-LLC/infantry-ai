@@ -9,7 +9,8 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 
 /** One service a provider offers (a section of the Account tab may belong to it): its [entitlement] id is what the hub checks. */
-data class ProviderService(val id: String, val name: String, val entitlement: String)
+/** [section] is the id of the UI tab that is this service's dashboard (opened from the Services list); null = no dashboard. */
+data class ProviderService(val id: String, val name: String, val entitlement: String, val section: String? = null)
 
 /**
  * ACCOUNT-1: a provider as it describes itself (`describe`, the account design doc (docs/design) 1.3). The hub knows nothing else
@@ -19,6 +20,7 @@ data class ProviderDescriptor(
     val id: String,
     val name: String,
     val icon: String,
+    val description: String? = null,
     val clientId: String,
     val scopes: List<String>,
     val deviceAuthorizationUrl: String,
@@ -60,6 +62,7 @@ data class ProviderDescriptor(
                 id = id,
                 name = str(json, "name") ?: id,
                 icon = str(json, "icon") ?: "cloud",
+                description = str(json, "description"),
                 clientId = str(sign, "clientId") ?: throw IllegalArgumentException("no signIn.clientId"),
                 scopes = list(sign, "scopes"),
                 deviceAuthorizationUrl = url(sign, "deviceAuthorizationUrl", true)!!,
@@ -71,7 +74,7 @@ data class ProviderDescriptor(
                 consumers = list(json, "consumers"),
                 services = (json["services"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonObject) }.mapNotNull { s ->
                     val sid = str(s, "id") ?: return@mapNotNull null
-                    ProviderService(sid, str(s, "name") ?: sid, str(s, "entitlement") ?: sid)
+                    ProviderService(sid, str(s, "name") ?: sid, str(s, "entitlement") ?: sid, str(s, "section"))
                 },
             )
         }

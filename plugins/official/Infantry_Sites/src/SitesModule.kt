@@ -36,7 +36,7 @@ private fun sitesTab() = TabProvider(
 val InfantrySites = InfantryModule(
     ModuleManifest(
         name = "Infantry_Sites", version = "1.0.0", author = "Infantry AI",
-        description = "The Sites section of the Account tab: hosting servers.",
+        description = "The Infantry AI Hosting dashboard in the Services tab: hosting servers.",
         tabs = listOf(TabDeclaration(SITES_TAB_ID, TabContainers.CENTER)),
     ),
     listOf(sitesTab()),

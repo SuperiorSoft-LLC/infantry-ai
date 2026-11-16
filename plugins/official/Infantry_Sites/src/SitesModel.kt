@@ -88,7 +88,7 @@ class SitesClient(private val daemon: DaemonAccess?) {
         }
     }
 
-    /** Hands off to Infantry_Account: starts its device-code sign-in; the code shows in Account > Overview. Null when it started. */
+    /** Hands off to Infantry_Account: starts its device-code sign-in; the code shows in the Services tab. Null when it started. */
     suspend fun startSignIn(): String? {
         val d = daemon ?: return "The daemon is not reachable from here."
         val body = JsonObject(mapOf("provider" to JsonPrimitive("infantry"))).toString()
