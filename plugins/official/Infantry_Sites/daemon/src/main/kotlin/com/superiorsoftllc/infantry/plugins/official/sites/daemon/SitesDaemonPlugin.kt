@@ -125,7 +125,7 @@ class SitesDaemonPlugin : DaemonPlugin {
         return try {
             val servers = service.list()
             val limit = (provider["limits"] as? JsonObject)?.get("servers.max")
-            state("ready") { put("servers", servers); limit?.let { put("limit", it) }; api.endpoint(SITE_ENDPOINT)?.takeIf { it.isNotBlank() }?.let { put("siteUrl", it.trimEnd('/') + "/hosting") } }
+            state("ready") { put("servers", servers); limit?.let { put("limit", it) }; api.endpoint(SITE_ENDPOINT)?.takeIf { it.isNotBlank() }?.let { put("siteUrl", it.trimEnd('/') + "/account/servers") } }
         } catch (e: SitesException) {
             if (e.kind == SitesException.NOT_ENTITLED || e.kind == SitesException.SIGNED_OUT) refreshAccount()
             val until = if (e.kind == SitesException.NOT_ENTITLED) reclaim() else null
