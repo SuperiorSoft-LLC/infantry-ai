@@ -19,11 +19,8 @@ import kotlinx.serialization.json.put
 object TicketMovedEvent {
     const val NAME = "ticket.moved"
 
-    fun payload(e: TicketEvent, agentQueueNext: String? = null, projectId: String? = null): String = buildJsonObject {
+    fun payload(e: TicketEvent, agentQueueNext: String? = null): String = buildJsonObject {
         put("ticketId", e.ticketId)
-        // HOOK-LANE-DONE-1: the event names its own project, so a hook never depends on a second ticket read (which can fail or time out
-        // exactly when the daemon moves a ticket itself) to learn whose event it is.
-        projectId?.let { put("projectId", it) }
         put("kind", e.kind)
         e.from?.let { put("from", it) }
         e.to?.let { put("to", it) }
@@ -40,11 +37,6 @@ object TicketMovedEvent {
         page.items.filter { it.queuedAgent == agent }.minByOrNull { it.queueRank ?: Int.MAX_VALUE }?.id
     }.getOrNull()
 
-    /** The ticket's project, read in-process from the board; null when it cannot be read (the hook runner then falls back to its own read). */
-    fun projectOf(api: DaemonApi, ticketId: String): String? = runCatching {
-        ((api.tickets.get(ticketId, Caller(owner = true)) as? BoardResult.Ok)?.value)?.projectId
-    }.getOrNull()
-
     /** Subscribes to the ticket events; the returned handle ends the subscription. */
     fun attach(api: DaemonApi): AutoCloseable {
         // HOOK-DUP-1: the log redelivers an event whose listener call failed or timed out after the publish went out; one seq publishes once.
@@ -52,9 +44,7 @@ object TicketMovedEvent {
         return api.events.onTicket("script-ticket-moved") { e ->
             if (e.isTransition && e.seq > lastSeq) {
                 lastSeq = e.seq
-                val project = projectOf(api, e.ticketId)
-                runCatching { api.events.publish(NAME, payload(e, if (e.to == "done") agentQueueNext(api, e.ticketId) else null, project)) }
-                    .onFailure { System.err.println("[infantry] ticket.moved publish failed for ${e.ticketId} seq ${e.seq}: $it") }
+                runCatching { api.events.publish(NAME, payload(e, if (e.to == "done") agentQueueNext(api, e.ticketId) else null)) }
             }
         }
     }

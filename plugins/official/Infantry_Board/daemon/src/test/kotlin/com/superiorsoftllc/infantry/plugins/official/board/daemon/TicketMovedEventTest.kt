@@ -30,12 +30,6 @@ class TicketMovedEventTest {
         assertFalse(Json.parseToJsonElement(TicketMovedEvent.payload(e)).jsonObject.containsKey("agentQueueNext"))
     }
 
-    @Test fun payloadNamesItsProjectSoHooksNeedNoSecondTicketRead() {
-        val e = TicketEvent(seq = 9, ticketId = "ticket-abc", kind = TicketEvent.DONE, from = "in_progress", to = "done")
-        assertEquals("project-1", Json.parseToJsonElement(TicketMovedEvent.payload(e, projectId = "project-1")).jsonObject["projectId"]!!.jsonPrimitive.content)
-        assertFalse(Json.parseToJsonElement(TicketMovedEvent.payload(e)).jsonObject.containsKey("projectId"))
-    }
-
     @Test fun createdEventHasNoFromAndUpdatesAreNotTransitions() {
         val created = TicketEvent(seq = 1, ticketId = "t", kind = TicketEvent.CREATED, to = "todo")
         assertFalse(Json.parseToJsonElement(TicketMovedEvent.payload(created)).jsonObject.containsKey("from"))
