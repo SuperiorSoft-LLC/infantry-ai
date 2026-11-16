@@ -212,7 +212,11 @@ class ScriptHooks(
         // hook runs only for its own project's events, and an event with no project reaches only hooks marked global.
         val project = str(payload, "projectId") ?: ticket?.let { str(it, "projectId") }
         val mine = candidates.filter { (p, hook) -> admitsProject(p, hook, project) }
-        if (mine.isEmpty()) return
+        if (mine.isEmpty()) {
+            // HOOK-LANE-DONE-1: a hook failure must be loud. A project-less event (the ticket read failed) used to drop here without a trace.
+            if (project == null) log("hooks: event ${e.name} for ${ticketId ?: "-"} has no project (ticket read failed?); ${candidates.size} project hook(s) NOT run: ${candidates.joinToString { "${it.first}/${it.second.id}" }}")
+            return
+        }
         val ids = listOfNotNull(ticketId, str(payload, "sessionId"), settingKey(e.name, payload))
         val depth = maxOf(e.depth, attributedDepth(ids))
         for ((p, hook) in mine) {

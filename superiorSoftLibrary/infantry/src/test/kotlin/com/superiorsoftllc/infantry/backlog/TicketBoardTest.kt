@@ -393,6 +393,7 @@ class TicketBoardTest {
         providerSession: Boolean = true,
         minOutputs: Long = 1,
         sweepFlags: MutableList<String>? = null,
+        seen: MutableList<com.superiorsoftllc.infantry.daemon.api.board.TicketEvent>? = null,
     ): Ticket {
         val store = openStore()
         val runner = ScriptedRunner(autoExit = false, emitSessionId = providerSession)
@@ -410,6 +411,7 @@ class TicketBoardTest {
             exitBehavior = { exitBehavior }, autoDoneMinOutputs = { minOutputs },
         )
         manager.eventSink = { board.localHost?.publish(it) } // the daemon's fourth arm
+        seen?.let { sink -> TicketEventLog(store.database).also { board.events = it }.subscribe("test") { sink += it } }
         val ticket = board.save(TicketSave(title = "Add login", agentId = worker.id)).ticket
         assertEquals("started", board.move(ticket.id, IN_PROGRESS).ticket.start?.reason)
 
@@ -435,6 +437,29 @@ class TicketBoardTest {
             after.lastRun?.detail.orEmpty().contains("moved to done"),
             "the ticket must say why the daemon moved it: '${after.lastRun?.detail}'",
         )
+    }
+
+    /** HOOK-LANE-DONE-1: the daemon's own move to done (a finished worker) emits the same lane event as an explicit move: one transition into done. */
+    @Test
+    fun theAutoDoneMoveEmitsExactlyOneLaneEnterDoneEvent() {
+        val seen = mutableListOf<com.superiorsoftllc.infantry.daemon.api.board.TicketEvent>()
+        val after = ticketAfterRunExits(0, seen = seen)
+
+        assertEquals(DONE, after.status)
+        val intoDone = seen.filter { it.isTransition && it.to == DONE }
+        assertEquals(1, intoDone.size, "exactly one transition into done: $seen")
+        assertEquals(IN_PROGRESS, intoDone.single().from)
+    }
+
+    @Test
+    fun anExplicitMoveToDoneEmitsExactlyOneLaneEnterDoneEvent() {
+        val store = openStore()
+        val board = TicketBoard(store, idFactory = generateSequence(0) { it + 1 }.map { "e$it" }.iterator()::next)
+        val seen = mutableListOf<com.superiorsoftllc.infantry.daemon.api.board.TicketEvent>()
+        TicketEventLog(store.database).also { board.events = it }.subscribe("test") { seen += it }
+        val t = board.save(TicketSave(title = "one")).ticket
+        board.move(TicketMove(t.id, DONE, null, false))
+        assertEquals(1, seen.count { it.isTransition && it.to == DONE }, "$seen")
     }
 
     // --- GAP 855db590: a silent clean exit is not work done -----------------------------------------------
