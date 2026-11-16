@@ -12,6 +12,25 @@ and subscribes; the bridge does everything else, with zero setup by the user (no
 tools to install). That is the bar a third-party service should meet. Every vendor builds its own bridge for its own
 service.
 
+## What Infantry provides
+
+Infantry gives a vendor generic, abstract tools. It names no product, permission or server:
+
+- **The Services hub and provider layer** (module `Infantry_Account`): the Services list, the sign-in flow and the
+  account document cache; your `describe` answer plugs a service in (steps 2 and 3 below).
+- **Device-code sign-in and token storage**: the OAuth device-code flow against your URLs, refresh and revoke, and the
+  refresh token kept in the keystore; your daemon half asks for a short-lived access token (step 4). See
+  [Secrets](../Secrets.md).
+- **Per-environment manifest endpoints**: `module.json` `endpoints` with `prod`, `staging` and `dev` addresses and a
+  developer override (step 1). See [Daemon plugin API](../daemon-plugin-api.md).
+- **The plugin APIs**: the UI half ([UI plugin API](../plugin-api.md)) and the daemon half ([Daemon plugin API](../daemon-plugin-api.md))
+  with agent tools, routes and actions, the shared HTTP seam and storage. See [Make a plugin](../make-a-plugin.md).
+- **Grants and permissions**: a community plugin asks for what it needs (`daemon.code`, `daemon.tool`,
+  `services.provide`) and the user allows it. See [Plugins](../Plugins.md).
+- **Publishing**: the `.ihq` build and the catalog. See [Publish a plugin](../publish-a-plugin.md).
+
+That is the platform's whole part. The bridge, its API and any server access are the vendor's, built their own way.
+
 This is not the same as [Add a provider](add-provider.md), which adds a group of models to a harness's picker.
 
 ## What a service is
