@@ -46,7 +46,7 @@ object InfantryProvider {
             put("scopes", buildJsonArray { add(JsonPrimitive("account")); add(JsonPrimitive("hosting")) })
         })
         put("accountUrl", "$api${HostingRoutes.ACCOUNT}")
-        if (site.isNotEmpty()) { put("billingUrl", "$site/billing"); put("signUpUrl", "$site/hosting") }
+        if (site.isNotEmpty()) { put("billingUrl", "$site/account/billing"); put("signUpUrl", "$site/plans") }
         put("consumers", buildJsonArray { add(JsonPrimitive("Infantry_Sites")) })
         put("services", buildJsonArray {
             add(buildJsonObject { put("id", SERVICE); put("name", "Hosting"); put("entitlement", ENTITLEMENT); put("section", "infantry.sites") })
