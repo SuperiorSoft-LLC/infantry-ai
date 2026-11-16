@@ -83,7 +83,7 @@ class SitesDaemonPlugin : DaemonPlugin {
             servers = { service.list().mapNotNull { it as? JsonObject }.map { (it.str("id") ?: "") to (it.str("name") ?: "") }.filter { it.first.isNotEmpty() } },
             key = DeviceKey({ api.pluginSecrets }),
             certs = CertCache(CertIssuer { id, pub -> service.sshCertificate(id, pub) }),
-            exec = SshExec(pins),
+            exec = SshExec(pins) { api.log(it) },
             limits = { limitsOf(api) },
         )
 

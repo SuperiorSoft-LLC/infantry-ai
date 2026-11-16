@@ -18,6 +18,12 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.apache.sshd.certificate.OpenSshCertificateBuilder
 import org.apache.sshd.common.config.keys.OpenSshCertificate
 import org.apache.sshd.common.config.keys.PublicKeyEntry
+import com.superiorsoftllc.infantry.daemon.api.storage.PluginStorage
+import org.apache.sshd.common.SshConstants
+import org.apache.sshd.common.SshException
+import org.apache.sshd.server.SshServer
+import org.apache.sshd.server.auth.pubkey.PublickeyAuthenticator
+import org.apache.sshd.server.keyprovider.SimpleGeneratorHostKeyProvider
 import java.io.File
 import java.net.InetSocketAddress
 import java.net.Socket
@@ -131,6 +137,85 @@ class SitesSshTest {
         assertTrue(HostKeyRule.check(SID, "SHA256:bbb", "SHA256:ccc", pins)!!.contains("does not match"))
         assertNull(HostKeyRule.check(SID, "SHA256:ccc", "SHA256:ccc", pins), "the hosting service's word replaces an old pin")
         assertEquals("SHA256:ccc", pins.get(SID))
+    }
+
+    // ---- SSH-DAEMON-1: what failed inside the daemon ------------------------------------------------------------------------
+
+    /** A map-backed storage that records each statement; refuses `UPDATE`, the word the daemon's table check misreads in an upsert. */
+    private class RecordingStorage : PluginStorage {
+        val statements = mutableListOf<String>()
+        val rows = linkedMapOf<String, String>()
+        override fun migrate(version: Int, sql: List<String>) { statements += sql }
+        override fun query(sql: String, args: List<Any?>): List<Map<String, Any?>> { statements += sql; return listOfNotNull(rows[args[0]]?.let { mapOf("fingerprint" to it) }) }
+        override fun execute(sql: String, args: List<Any?>): Int {
+            statements += sql
+            require(!Regex("""UPDATE""", RegexOption.IGNORE_CASE).containsMatchIn(sql)) { "table 'SET' is not owned by this module (prefix 'infantry_sites_')" }
+            rows[args[0] as String] = args[1] as String
+            return 1
+        }
+        override fun <T> transaction(block: () -> T): T = block()
+    }
+
+    @Test
+    fun `storage pins are written without an upsert and a re-pin replaces the old one`() {
+        val storage = RecordingStorage()
+        val pins = StorageHostKeyPins(storage)
+        pins.pin(SID, "SHA256:aaa")
+        pins.pin(SID, "SHA256:bbb")
+        assertEquals("SHA256:bbb", pins.get(SID))
+        assertTrue(storage.statements.none { it.contains("ON CONFLICT", ignoreCase = true) }, storage.statements.toString())
+    }
+
+    /** An in-process SSH server on port 0 that turns every login down; its host key is made in memory. */
+    private fun refusingSshd(): SshServer = SshServer.setUpDefaultServer().apply {
+        host = "127.0.0.1"; port = 0
+        keyPairProvider = SimpleGeneratorHostKeyProvider()
+        publickeyAuthenticator = PublickeyAuthenticator { _, _, _ -> false }
+        start()
+    }
+
+    private fun certFor(device: KeyPair, port: Int): SshCert {
+        val ca = DeviceKey.fromSeed(ByteArray(32).also { SecureRandom().nextBytes(it) })
+        val now = Instant.now()
+        return SshCert(issueCert(ca, device.public, now.minusSeconds(60), now.plusSeconds(3600)), now.plusSeconds(3600).toEpochMilli(), SshConnection("127.0.0.1", port, "superiorsoft", null))
+    }
+
+    /** Runs [block] on a thread whose context class loader is not this plugin's, as a daemon tool thread is. */
+    private fun <T> onForeignLoaderThread(block: () -> T): T {
+        var out: Result<T>? = null
+        val t = Thread { out = runCatching(block) }
+        t.contextClassLoader = ClassLoader.getPlatformClassLoader()
+        t.start(); t.join(60_000)
+        return out!!.getOrThrow()
+    }
+
+    @Test
+    fun `a host key check that fails inside the daemon is its own plain error, never auth_failed`() {
+        val sshd = refusingSshd()
+        try {
+            val device = DeviceKey.fromSeed(ByteArray(32).also { SecureRandom().nextBytes(it) })
+            val logs = mutableListOf<String>()
+            val broken = StorageHostKeyPins(object : PluginStorage by RecordingStorage() {
+                override fun execute(sql: String, args: List<Any?>): Int = throw IllegalArgumentException("table 'SET' is not owned by this module (prefix 'infantry_sites_')")
+            })
+            val e = assertFailsWith<SitesException> {
+                onForeignLoaderThread { SshExec(broken) { logs += it }.run(SID, device, certFor(device, sshd.port), "id -un", null, SshLimits(15_000, 15_000, 1024, 1024)) }
+            }
+            assertEquals(SitesException.UNAVAILABLE, e.kind, e.message)
+            assertTrue(e.message!!.contains("host key") && e.message!!.contains("table 'SET'"), e.message)
+            assertTrue(logs.any { it.startsWith("ssh auth on 127.0.0.1:${sshd.port} failed:") }, logs.toString())
+        } finally { sshd.stop(true) }
+    }
+
+    @Test
+    fun `only a no-more-methods refusal counts as auth_failed`() {
+        val refusal = SshException(SshConstants.SSH2_DISCONNECT_NO_MORE_AUTH_METHODS_AVAILABLE, "No more authentication methods available")
+        assertTrue(SshExec.isAuthRefusal(refusal))
+        assertTrue(SshExec.isAuthRefusal(java.io.IOException("wrapped", refusal)))
+        assertFalse(SshExec.isAuthRefusal(SshException("Session is being closed")))
+        assertFalse(SshExec.isAuthRefusal(SshException("[ssh-connection]: Failed (IllegalArgumentException) to execute", IllegalArgumentException("table 'SET'"))))
+        assertFalse(SshExec.isAuthRefusal(java.net.SocketTimeoutException("timeout")))
+        assertEquals("IllegalArgumentException: table 'SET'", SshExec.summary(SshException("outer", IllegalArgumentException("table 'SET'"))))
     }
 
     // ---- the certificate endpoint and its error map ----------------------------------------------------------------------
