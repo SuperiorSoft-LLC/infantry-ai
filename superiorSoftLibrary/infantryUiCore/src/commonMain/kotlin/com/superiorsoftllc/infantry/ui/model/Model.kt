@@ -1019,6 +1019,8 @@ data class AppState(
     /** PROMPT-2: the prompts the card of [sessionId] shows, oldest first; Esc-dismissed questions are left out. */
     fun promptsFor(sessionId: String?): List<com.superiorsoftllc.infantry.ui.protocol.PromptRequestView> =
         if (sessionId == null) emptyList() else openPrompts.filter { it.sessionId == sessionId && it.promptId !in dismissedPrompts }
+    /** WORKERS-GLOBAL-1: the working sessions of every project, newest first: exactly the ones [workingCount] counts. */
+    val workingAgents: List<AgentView> get() = agents.values.filter { it.session.state in WORKING }.sortedByDescending { it.session.spawnedAt }
     val workingCount: Int get() = agents.values.count { it.session.state in WORKING }
     val reviewQueue: List<ReviewEntry> get() = reviewQueueOf(pods, agents)
 

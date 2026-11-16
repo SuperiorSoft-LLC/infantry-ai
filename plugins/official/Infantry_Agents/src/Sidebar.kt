@@ -142,13 +142,16 @@ fun Sidebar(
     showReview: Boolean = true,
     /** AGENT-TASKS-7: what the cards do with tickets (assign by drop or menu, queue actions, open). */
     work: AgentWorkActions = AgentWorkActions.None,
+    /** WORKERS-GLOBAL-1: null (the flag off, the default) keeps the plain Working counter; else a click on it calls this. */
+    onShowWorkers: (() -> Unit)? = null,
 ) {
     // PLUGINS-3: the frame (width, background, tag) is the left panel's; this is Infantry_Agents' section in it.
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(10.dp), horizontalArrangement = Arrangement.SpaceBetween) {
             Counter("Needs input", state.needsInputCount, if (state.needsInputCount > 0) Palette.Accent else Palette.Muted)
             if (showReview) Counter("To review", state.reviewQueue.size, Palette.Info)
-            Counter("Working", state.workingCount, Palette.Ok)
+            if (onShowWorkers == null) Counter("Working", state.workingCount, Palette.Ok)
+            else WorkingCounterButton(state.workingCount, onShowWorkers)
         }
         // AR-7: the left.board slot; Infantry_Board's Board button (order 0) and any module's panel section draw here.
         PanelSlot(Panels.LEFT_BOARD)
@@ -258,7 +261,7 @@ private fun AgentGroupHeader(group: AgentGroup, count: Int) {
 }
 
 @Composable
-private fun Counter(label: String, n: Int, color: Color) {
+internal fun Counter(label: String, n: Int, color: Color) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text("$n", color = color, fontWeight = FontWeight.Bold, fontSize = 13.sp)
         Spacer(Modifier.width(4.dp))
@@ -482,24 +485,33 @@ private fun AgentRowMenu(a: AgentView, state: AppState, revealed: Boolean, onOpe
  */
 @Composable
 fun AgentsSection() {
-    val a = LocalShellContext.current?.agents ?: NoAgents
+    val shell = LocalShellContext.current
+    val a = shell?.agents ?: NoAgents
     val state = a.state ?: return
     val scope = rememberCoroutineScope()
+    // WORKERS-GLOBAL-1: the experimental all-projects Working view, off unless the owner turns the setting on.
+    val globalWorkers = shell?.config?.values(GLOBAL_WORKERS_NODE)?.boolean(GLOBAL_WORKERS_KEY) == true
+    var workersOpen by remember { mutableStateOf(false) }
+    if (!globalWorkers) workersOpen = false
+    val onRemove: (String) -> Unit = { id -> scope.launch { a.remove(id) } }
+    val work = AgentWorkActions(
+        assign = { ticketId, agentId -> scope.launch { a.assignTicket(ticketId, agentId) } },
+        queue = { agentId, action, ticketId, at -> scope.launch { a.agentQueue(agentId, action, ticketId, at) } },
+        open = a::openTicket,
+        unassign = { id -> scope.launch { a.unassignTicket(id) } },
+        resume = { id -> scope.launch { a.resumeSession(id) } },
+    )
+    if (workersOpen) GlobalWorkersHost(state, shell?.header?.controller, onClose = { workersOpen = false }, onSelect = a::select, onRemove = onRemove, work = work)
     Sidebar(
         state, a.visible, a.query, a::setQuery, a.roleFilter, a::setRoleFilter, a.searchFocus,
         onSelect = a::select,
         onNew = a::newAgent,
-        onRemove = { id -> scope.launch { a.remove(id) } },
+        onRemove = onRemove,
         onAssign = { id, projectId -> scope.launch { a.assign(id, projectId) } },
-        work = AgentWorkActions(
-            assign = { ticketId, agentId -> scope.launch { a.assignTicket(ticketId, agentId) } },
-            queue = { agentId, action, ticketId, at -> scope.launch { a.agentQueue(agentId, action, ticketId, at) } },
-            open = a::openTicket,
-            unassign = { id -> scope.launch { a.unassignTicket(id) } },
-            resume = { id -> scope.launch { a.resumeSession(id) } },
-        ),
+        work = work,
         projects = { ProjectsSidebar(state, onDismiss = a::dismissProjectRefusal) },
         showReview = a.reviewLoaded,
+        onShowWorkers = if (globalWorkers) ({ workersOpen = true }) else null,
     )
 }
 
